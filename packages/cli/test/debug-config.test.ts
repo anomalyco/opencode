@@ -4,6 +4,8 @@ import os from "node:os"
 import path from "node:path"
 import { OPENCODE_VERSION } from "../src/version"
 import { redactConfig } from "../src/commands/handlers/debug/redact"
+import { localServiceDirectories } from "@opencode/client/effect/service"
+import { isolatedEnv } from "./fixture/environment"
 
 describe("debug config command", () => {
   test("is included in troubleshooting help", async () => {
@@ -22,6 +24,7 @@ describe("debug config command", () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-debug-config-"))
     const project = path.join(import.meta.dir, "..")
     const registration = path.join(root, "state", "opencode", "service-local.json")
+    const env = isolatedEnv(root)
     const entries = [
       {
         type: "document",
@@ -68,9 +71,15 @@ describe("debug config command", () => {
       await fs.mkdir(path.dirname(registration), { recursive: true })
       await fs.writeFile(
         registration,
-        JSON.stringify({ version: OPENCODE_VERSION, url: server.url.toString(), pid: process.pid, password: "secret" }),
+        JSON.stringify({
+          version: OPENCODE_VERSION,
+          url: server.url.toString(),
+          pid: process.pid,
+          password: "secret",
+          directories: localServiceDirectories(env),
+        }),
       )
-      const result = await cli(["debug", "config"], project, { XDG_STATE_HOME: path.join(root, "state") })
+      const result = await cli(["debug", "config"], project, env)
 
       expect({ exitCode: result.exitCode, stderr: result.stderr }).toEqual({ exitCode: 0, stderr: "" })
       expect(JSON.parse(result.stdout)).toEqual(redactConfig(entries))
@@ -116,7 +125,7 @@ test("redacts URL credentials and credential environment variables without mutat
   expect(input.mcp.remote.url).toBe("https://user:pass@example.com/mcp")
 })
 
-async function cli(args: string[], cwd = path.join(import.meta.dir, ".."), env?: Record<string, string>) {
+async function cli(args: string[], cwd = path.join(import.meta.dir, ".."), env?: NodeJS.ProcessEnv) {
   const child = Bun.spawn([process.execPath, "run", path.join(import.meta.dir, "../src/index.ts"), ...args], {
     cwd,
     env: { ...process.env, ...env },

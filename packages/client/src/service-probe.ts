@@ -1,6 +1,6 @@
 import { homedir } from "node:os"
-import { join } from "node:path"
-import type { DiscoverOptions, Endpoint, Info } from "./service.js"
+import { join, resolve } from "node:path"
+import type { DiscoverOptions, Endpoint, Info, ServiceDirectories } from "./service.js"
 import { defaultEnsureTiming } from "./service-timing.js"
 import { matchesVersion } from "./service-version.js"
 
@@ -40,13 +40,66 @@ export function fallback() {
   return join(process.env["XDG_STATE_HOME"] ?? join(homedir(), ".local", "state"), "opencode", "service.json")
 }
 
+/** Resolve the config and data directories a local service would inherit from this environment. */
+export function localServiceDirectories(env = process.env): ServiceDirectories {
+  const home = homedir()
+  return {
+    config: resolve(env.OPENCODE_CONFIG_DIR || join(env.XDG_CONFIG_HOME || join(home, ".config"), "opencode")),
+    data: resolve(env.XDG_DATA_HOME || join(home, ".local", "share"), "opencode"),
+  }
+}
+
+function matchesDirectories(found: ServiceDirectories | undefined, expected: ServiceDirectories | undefined) {
+  if (expected === undefined) return true
+  return (
+    typeof found?.config === "string" &&
+    typeof found.data === "string" &&
+    resolve(found.config) === resolve(expected.config) &&
+    resolve(found.data) === resolve(expected.data)
+  )
+}
+
+/** A live, unverified owner must not be taken over; a stale registration can be replaced. */
+export async function registrationForDirectories(
+  info: Info | undefined,
+  expected: ServiceDirectories | undefined,
+  timeout?: number,
+) {
+  if (info === undefined || matchesDirectories(info.directories, expected)) return { info }
+  if (!processExists(info.pid)) {
+    // A sandbox can expose the listener while reporting a PID from another namespace.
+    const probe = await probeResult(info, timeout)
+    if (!probe.service?.compatible && !probe.timedOut) return { info: undefined }
+  }
+
+  return {
+    info: undefined,
+    error: new Error(
+      info.directories === undefined
+        ? "The running background service does not report its config and data directories. Run `opencode service stop` from the environment that started it, then try again."
+        : "The background service is running with a different config or data directory. Run `opencode service stop` from the environment that started it, then try again.",
+    ),
+  }
+}
+
+function processExists(pid: number) {
+  if (!Number.isInteger(pid) || pid <= 0) return false
+  try {
+    return process.kill(pid, 0)
+  } catch (error) {
+    // A sandbox may deny signalling a live process. Only ESRCH proves a missing process.
+    return !(error instanceof Error && "code" in error && error.code === "ESRCH")
+  }
+}
+
 /** Whether two registrations describe the same service instance. */
 export function same(left: Info, right: Info) {
   return left.id === right.id && left.version === right.version && left.url === right.url && left.pid === right.pid
 }
 
 /** Ask a registered owner for its health and classify the answer. */
-export async function probeResult(info: Info, timeout = defaultEnsureTiming.requestTimeout) {
+export async function probeResult(info: Info | undefined, timeout = defaultEnsureTiming.requestTimeout) {
+  if (info === undefined) return { service: undefined, timedOut: false }
   const endpoint = {
     url: info.url,
     auth: info.password === undefined ? undefined : { type: "basic", username: "opencode", password: info.password },

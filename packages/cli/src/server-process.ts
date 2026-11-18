@@ -7,6 +7,7 @@ import { Global } from "@opencode/util/global"
 import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_VERSION } from "./version"
 import { AppProcess } from "@opencode/util/process"
 import { randomBytes, randomUUID } from "node:crypto"
+import path from "node:path"
 import { Effect, Option, Redacted, Schema } from "effect"
 import { PersistentPty } from "@opencode/schema/persistent-pty"
 import { HttpServer } from "effect/http"
@@ -69,11 +70,14 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       const foreground = options.mode === "default"
       const serviceOptions = options.mode === "service" ? yield* ServiceConfig.options() : undefined
       const config = options.mode === "service" ? yield* ServiceConfig.read() : {}
+      // The launch directories identify the profile that owns the service settings. Those settings
+      // may explicitly override the server's config directory after the profile has been selected.
+      const directories = { config: path.resolve(global.config), data: path.resolve(global.data) }
       const hostname = options.hostname ?? config.hostname ?? "127.0.0.1"
       const port = options.port ?? config.port ?? (options.mode === "service" ? ServiceConfig.defaultPort() : undefined)
       const findIncumbent =
         serviceOptions !== undefined && port !== undefined
-          ? Service.incumbent({ ...serviceOptions, url: serviceURL(hostname, port) })
+          ? Service.incumbent({ file: serviceOptions.file, directories, url: serviceURL(hostname, port) })
           : undefined
       if (findIncumbent !== undefined && (yield* findIncumbent) !== undefined) return
       // Desktop can launch the service directly without injecting its saved environment.
@@ -160,6 +164,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
                     password,
                     id: instanceID,
                     file: serviceOptions.file,
+                    directories,
                     shutdown,
                   })
                 }),

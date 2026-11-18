@@ -1,10 +1,10 @@
 import { mkdir, rename, rm } from "node:fs/promises"
 import path from "node:path"
 
-// Stands in for a background server from before `/api/info` existed: it owns the registration
-// and the port, but answers every request with 404.
-const [registration, port] = process.argv.slice(2)
-if (registration === undefined || port === undefined) throw new Error("Missing old protocol service arguments")
+// Owns the registration and port for the caller's directories, but has no `/api/info` protocol.
+const [registration, port, config, data] = process.argv.slice(2)
+if (registration === undefined || port === undefined || config === undefined || data === undefined)
+  throw new Error("Missing old protocol service arguments")
 const server = Bun.serve({
   hostname: "127.0.0.1",
   port: Number(port),
@@ -23,6 +23,7 @@ await Bun.write(
     url: `http://127.0.0.1:${server.port}`,
     pid: process.pid,
     password: "old",
+    directories: { config, data },
   }),
 )
 await rename(registration + ".tmp", registration)

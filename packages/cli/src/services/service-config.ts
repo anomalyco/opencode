@@ -1,7 +1,7 @@
 import { Global } from "@opencode/util/global"
 import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "../version"
 import { Hash } from "@opencode/util/hash"
-import { Service } from "@opencode/client/effect/service"
+import { localServiceDirectories, Service } from "@opencode/client/effect/service"
 import { Effect, FileSystem, Option, Schedule, Schema } from "effect"
 import { randomBytes } from "crypto"
 import path from "path"
@@ -142,11 +142,21 @@ export function processEnv(env: Info["env"]) {
 
 export const options = Effect.fnUntraced(function* (input: { readonly checkVersion?: boolean } = {}) {
   const { file, legacyRegistrationFiles } = yield* paths
+  const global = yield* Global.Service
   yield* Effect.forEach(legacyRegistrationFiles, (legacy) => migrateRegistration(legacy, file))
+  const env = processEnv((yield* read()).env)
+  const spawned = localServiceDirectories({ ...process.env, ...env })
   return {
     file,
     version: input.checkVersion ? OPENCODE_VERSION : undefined,
-    env: processEnv((yield* read()).env),
+    directories: {
+      config:
+        env?.OPENCODE_CONFIG_DIR !== undefined || env?.XDG_CONFIG_HOME !== undefined
+          ? spawned.config
+          : path.resolve(global.config),
+      data: env?.XDG_DATA_HOME !== undefined ? spawned.data : path.resolve(global.data),
+    },
+    env,
     command: [...selfCommand(), "serve", "--service"],
   }
 })

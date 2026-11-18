@@ -4,10 +4,18 @@ import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
-import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
+import {
+  decide,
+  fallback,
+  headers,
+  localServiceDirectories,
+  probeResult,
+  registrationForDirectories,
+  same,
+} from "../service-probe.js"
 
 export * from "../service.js"
-export { fallback, headers }
+export { fallback, headers, localServiceDirectories }
 
 // Find, start, and stop the local opencode background service.
 //
@@ -17,7 +25,8 @@ export { fallback, headers }
 
 /** Discover a healthy, compatible local service without starting one. */
 export async function discover(options: DiscoverOptions = {}) {
-  const found = (await registered(options.file)).service
+  const info = await readScoped(options)
+  const found = (await probeResult(info)).service
   if (found?.state !== "ready") return undefined
   if (!found.compatible) return undefined
   if (!matchesVersion(found.version, options)) return undefined
@@ -51,18 +60,19 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
     while (true) {
       if (Date.now() >= deadline)
         throw pool.failure() ?? new Error("Timed out waiting for the background service to start")
-      const registration = await registered(options.file, timing.requestTimeout)
-      if (registration.timedOut && registration.info !== undefined) {
+      const info = await readScoped(options, timing.requestTimeout)
+      const registration = await probeResult(info, timing.requestTimeout)
+      if (registration.timedOut && info !== undefined) {
         timeouts = {
-          info: registration.info,
-          count: timeouts !== undefined && same(timeouts.info, registration.info) ? timeouts.count + 1 : 1,
+          info,
+          count: timeouts !== undefined && same(timeouts.info, info) ? timeouts.count + 1 : 1,
         }
         if (timeouts.count >= 3) {
           announce("missing")
           console.warn("Background service is unresponsive; recovery cannot preserve persistent terminals")
           await PtyHandoff.clear(options.file ?? fallback())
-          await terminate(registration.info, options, timing)
-          pool.evict(registration.info.pid)
+          await terminate(info, options, timing)
+          pool.evict(info.pid)
           pool.recruitNow()
           timeouts = undefined
         }
@@ -81,13 +91,13 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
           announce("version-mismatch", service.version)
           if (service.state !== "ready")
             console.warn("Background service is not ready; replacement cannot preserve persistent terminals")
-          await stop({ file: options.file, pty: decision.pty }).catch(() => undefined)
+          await stop({ file: options.file, pty: decision.pty, directories: options.directories }).catch(() => undefined)
           pool.evict(service.info.pid)
         }
       } else {
         const failed = pool.reap()
         if (failed !== undefined) throw failed
-        if (pool.shouldRecruit(registration.info !== undefined)) {
+        if (pool.shouldRecruit(info !== undefined)) {
           announce("missing")
           pool.add(await spawnContender())
         }
@@ -102,9 +112,17 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
 /** Stop the registered local service. */
 export async function stop(options: StopOptions = {}) {
   const info = await read(options.file)
+  // A deliberate stop can clear an older registration whose directories are unknown.
+  if (info?.directories !== undefined) {
+    const scoped = await registrationForDirectories(info, options.directories, ensureTiming(options).requestTimeout)
+    if (scoped.error) throw scoped.error
+    if (scoped.info === undefined) return
+  }
   // Terminal handoff is best-effort; it must never keep the old service running.
   await (
-    options.pty === "handoff" && info !== undefined
+    options.pty === "handoff" &&
+    info !== undefined &&
+    (options.directories === undefined || info.directories !== undefined)
       ? PtyHandoff.prepare(options.file ?? fallback(), info, defaultEnsureTiming.requestTimeout)
       : PtyHandoff.clear(options.file ?? fallback())
   ).catch((cause: unknown) => console.warn("Failed to prepare persistent terminals for replacement", cause))
@@ -121,10 +139,10 @@ async function read(file?: string) {
   }
 }
 
-async function registered(file?: string, timeout?: number) {
-  const info = await read(file)
-  if (info === undefined) return { info: undefined, service: undefined, timedOut: false }
-  return { info, ...(await probeResult(info, timeout)) }
+async function readScoped(options: DiscoverOptions, timeout?: number) {
+  const { info, error } = await registrationForDirectories(await read(options.file), options.directories, timeout)
+  if (error) throw error
+  return info
 }
 
 function signal(pid: number, name: NodeJS.Signals) {
