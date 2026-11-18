@@ -1,15 +1,18 @@
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Fiber } from "effect"
+import { Deferred, Effect, Fiber, Layer, Stream } from "effect"
 import * as TestClock from "effect/testing/TestClock"
-import { ai } from "../src/effect.js"
+import { ai, Media, VideoClient } from "../src/effect.js"
 import { LLMClient, mergeTransport } from "../src/route.js"
 import { configure } from "../src/providers/openai.js"
+import { XAI } from "../src/providers.js"
 import { dynamicResponse } from "./lib/http.js"
 import { deltaChunk, finishChunk } from "./lib/openai-chunks.js"
 import { sseEvents, sseRaw } from "./lib/sse.js"
 import { it } from "./lib/effect.js"
 
-const model = configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).chat("gpt-4.1-mini")
+const openai = configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" })
+const model = openai.chat("gpt-4.1-mini")
+const video = XAI.configure({ baseURL: "https://api.xai.test/v1", apiKey: "test" }).video("grok-imagine-video-1.5")
 const SSE = { headers: { "content-type": "text/event-stream" } }
 
 const silentServer = dynamicResponse(() => Effect.never)
@@ -169,6 +172,74 @@ describe("HTTP transport timeouts", () => {
 
       expect(merged).toMatchObject({ headers: { a: "b" }, timeout: { total: 3_000, headers: 1_000, chunk: false } })
       expect(mergeTransport({}, undefined)).toEqual({})
+    }),
+  )
+
+  it.effect("applies default and configured timeouts to media routes", () =>
+    Effect.gen(function* () {
+      const videoSilent = VideoClient.layer.pipe(Layer.provideMerge(silentServer))
+
+      const defaultFiber = yield* ai.video
+        .start({ model: video, prompt: "A kite" })
+        .pipe(Effect.provide(videoSilent), Effect.flip, Effect.forkChild({ startImmediately: true }))
+      yield* TestClock.adjust("5 minutes")
+      const defaultError = yield* Fiber.join(defaultFiber)
+      expect(defaultError.reason).toMatchObject({ _tag: "Transport", operation: "request", code: "Timeout" })
+
+      const customFiber = yield* ai.video
+        .start({ model: video, prompt: "A kite", timeout: { headers: 1_000 } })
+        .pipe(Effect.provide(videoSilent), Effect.flip, Effect.forkChild({ startImmediately: true }))
+      yield* TestClock.adjust("1 second")
+      const customError = yield* Fiber.join(customFiber)
+      expect(customError.reason).toMatchObject({ _tag: "Transport", operation: "request", code: "Timeout" })
+
+      const server = yield* stalledServer
+      const bodyFiber = yield* ai.video
+        .start({ model: video, prompt: "A kite" })
+        .pipe(
+          Effect.provide(VideoClient.layer.pipe(Layer.provideMerge(server.layer))),
+          Effect.flip,
+          Effect.forkChild({ startImmediately: true }),
+        )
+      yield* Deferred.await(server.stalled)
+      yield* Effect.yieldNow
+      yield* TestClock.adjust("15 minutes")
+      const bodyError = yield* Fiber.join(bodyFiber)
+      expect(bodyError.reason).toMatchObject({ _tag: "Transport", operation: "read", code: "Timeout" })
+      expect(bodyError.reason.http).toMatchObject({ status: 200 })
+    }),
+  )
+
+  it.effect("applies default timeouts to media URL downloads", () =>
+    Effect.gen(function* () {
+      const headerFiber = yield* Media.url("https://cdn.example.test/clip.mp4")
+        .bytes()
+        .pipe(Effect.provide(silentServer), Effect.flip, Effect.forkChild({ startImmediately: true }))
+      yield* TestClock.adjust("5 minutes")
+      const headerError = yield* Fiber.join(headerFiber)
+      expect(headerError.reason).toMatchObject({ _tag: "Transport", operation: "request", code: "Timeout" })
+
+      const server = yield* stalledServer
+      const streamFiber = yield* Media.url("https://cdn.example.test/clip.mp4")
+        .stream()
+        .pipe(Stream.runDrain, Effect.provide(server.layer), Effect.flip, Effect.forkChild({ startImmediately: true }))
+      yield* Deferred.await(server.stalled)
+      yield* Effect.yieldNow
+      yield* TestClock.adjust("15 minutes")
+      const streamError = yield* Fiber.join(streamFiber)
+      expect(streamError.reason).toMatchObject({ _tag: "Transport", operation: "read", code: "Timeout" })
+      expect(streamError.reason.http).toMatchObject({ status: 200 })
+    }),
+  )
+
+  it.effect("applies request timeout to responses compaction", () =>
+    Effect.gen(function* () {
+      const fiber = yield* ai
+        .compact(ai.request({ model: openai.responses("gpt-5"), prompt: "Hello", timeout: { headers: 1_000 } }))
+        .pipe(Effect.provide(silentServer), Effect.flip, Effect.forkChild({ startImmediately: true }))
+      yield* TestClock.adjust("1 second")
+      const error = yield* Fiber.join(fiber)
+      expect(error.reason).toMatchObject({ _tag: "Transport", operation: "request", code: "Timeout" })
     }),
   )
 })

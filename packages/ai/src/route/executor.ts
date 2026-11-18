@@ -1,4 +1,4 @@
-import { Cause, Effect, Layer, Option, Schema, Stream } from "effect"
+import { Cause, Clock, Duration, Effect, Inspectable, Layer, Pipeable, Schema, Stream } from "effect"
 import {
   FetchHttpClient,
   Headers,
@@ -6,26 +6,46 @@ import {
   HttpClientError,
   HttpClientRequest,
   HttpClientResponse,
+  HttpIncomingMessage,
+  UrlParams,
 } from "effect/http"
-import { HttpContext, HttpRateLimitDetails, AIError, TransportError } from "../schema/index.js"
+import {
+  AIError,
+  DEFAULT_CHUNK_TIMEOUT_MS,
+  DEFAULT_HTTP_TIMEOUT_MS,
+  HttpContext,
+  HttpRateLimitDetails,
+  timeoutConfig,
+  TransportError,
+  type ClientTls,
+  type HttpTimeout,
+  type RequestTimeout,
+} from "../schema/index.js"
 import { classifyProviderFailure, providerErrorMessage } from "../provider-error.js"
+import { concatBytes } from "../utils/bytes.js"
 import {
   composeMiddleware,
   CurrentMiddleware,
+  CurrentTimeout,
   CurrentTls,
   headerDetails,
-  responseHttp,
+  httpError,
+  responseStream,
   Service,
   type HttpMiddleware,
+  type HttpOperation,
   type Interface,
 } from "./executor-service.js"
-import type { ClientTls } from "../schema/options.js"
 
 export {
   composeMiddleware,
   CurrentMiddleware,
+  CurrentTimeout,
   CurrentTls,
+  responseBytes,
   responseHttp,
+  responseStream,
+  responseText,
   Service,
   withMiddleware,
 } from "./executor-service.js"
@@ -150,86 +170,153 @@ export const httpFailure = (input: {
   })
 }
 
-type HttpOperation = "request" | "read"
+const timeoutDuration = (value: HttpTimeout | undefined, fallback = DEFAULT_HTTP_TIMEOUT_MS) =>
+  value === false ? Duration.infinity : Duration.millis(value ?? fallback)
 
-const NativeTransportFailure = Schema.Struct({
-  message: Schema.String,
-  code: Schema.optionalKey(Schema.String),
-  cause: Schema.optionalKey(Schema.Unknown),
-})
-const decodeNativeTransportFailure = Schema.decodeUnknownOption(NativeTransportFailure)
+const timeoutError = (url: string, operation: HttpOperation, message: string, http?: HttpContext) =>
+  new AIError({
+    reason: new TransportError({
+      message,
+      transport: "http",
+      operation,
+      code: "Timeout",
+      url,
+      http,
+    }),
+  })
 
-const nativeTransportFailure = (error: unknown) => {
-  const failure = Option.getOrUndefined(decodeNativeTransportFailure(error))
-  if (!failure) return undefined
-  if (failure.code !== undefined) return failure
-  const cause = Option.getOrUndefined(decodeNativeTransportFailure(failure.cause))
-  if (cause?.code !== undefined) return cause
-  return failure
-}
+const bodyTimeoutError = (response: HttpClientResponse.HttpClientResponse, message: string) =>
+  new HttpClientError.HttpClientError({
+    reason: new HttpClientError.DecodeError({
+      request: response.request,
+      response,
+      cause: new Cause.TimeoutError(message),
+    }),
+  })
 
-// HTTP hooks re-wrap response bodies, so a read failure can arrive as an HttpClientError caused by
-// another HttpClientError. The innermost cause carries the native failure.
-const rootCause = (error: unknown): unknown =>
-  HttpClientError.isHttpClientError(error) && "cause" in error.reason && error.reason.cause !== undefined
-    ? rootCause(error.reason.cause)
-    : error
+const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer =>
+  bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength && bytes.buffer instanceof ArrayBuffer
+    ? bytes.buffer
+    : bytes.slice().buffer
 
-const CONNECTION_LOST = "Connection lost while reading the response"
+const decodeJsonBody = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))
 
-const httpError = (input: {
-  readonly error: unknown
-  readonly request: HttpClientRequest.HttpClientRequest
-  readonly operation: HttpOperation
-  readonly http?: HttpContext
-}) => {
-  const request = HttpClientError.isHttpClientError(input.error) ? input.error.request : input.request
-  const transportError = (failure: { readonly message: string; readonly code?: string | undefined }) =>
-    new AIError({
-      reason: new TransportError({
-        message: failure.message,
-        cause: source,
-        http: input.http,
-        transport: "http",
-        operation: input.operation,
-        code: failure.code,
-        url: request.url,
+// Bounds every body accessor on the response (`stream`, `text`, `arrayBuffer`, `json`, `urlParamsBody`, `formData`)
+// with the chunk and whole-request limits so stalled bodies fail cleanly regardless of how a caller reads them.
+const withBodyTimeouts = (
+  raw: HttpClientResponse.HttpClientResponse,
+  limits: { readonly chunk: Duration.Duration; readonly deadline: number | undefined },
+): Effect.Effect<HttpClientResponse.HttpClientResponse> => {
+  if (!Duration.isFinite(limits.chunk) && limits.deadline === undefined) return Effect.succeed(raw)
+  return Effect.gen(function* () {
+    const chunked = Duration.isFinite(limits.chunk)
+      ? raw.stream.pipe(
+          Stream.timeoutOrElse({
+            duration: limits.chunk,
+            orElse: () => Stream.fail(bodyTimeoutError(raw, "Timed out waiting for response data")),
+          }),
+        )
+      : raw.stream
+    const timedStream =
+      limits.deadline === undefined
+        ? chunked
+        : Stream.unwrap(
+            Effect.gen(function* () {
+              const left = limits.deadline! - (yield* Clock.currentTimeMillis)
+              if (left <= 0) return Stream.fail(bodyTimeoutError(raw, "Timed out waiting for the response to complete"))
+              return chunked.pipe(
+                Stream.interruptWhen(
+                  Effect.sleep(Duration.millis(left)).pipe(
+                    Effect.andThen(
+                      Effect.fail(bodyTimeoutError(raw, "Timed out waiting for the response to complete")),
+                    ),
+                  ),
+                ),
+              )
+            }),
+          )
+    const bytes = yield* Effect.cached(
+      Stream.runCollect(timedStream).pipe(
+        Effect.map((chunks) => concatBytes(chunks)),
+        Effect.catchIf(
+          (error) => error.reason._tag === "EmptyBodyError",
+          () => Effect.succeed(new Uint8Array(0)),
+        ),
+      ),
+    )
+    const text = Effect.map(bytes, (data) => new TextDecoder().decode(data))
+    const arrayBuffer = Effect.map(bytes, toArrayBuffer)
+    const json = Effect.flatMap(text, (body) =>
+      body === ""
+        ? Effect.succeed<Schema.Json>(null)
+        : decodeJsonBody(body).pipe(
+            Effect.mapError(
+              (cause) =>
+                new HttpClientError.HttpClientError({
+                  reason: new HttpClientError.DecodeError({ request: raw.request, response: raw, cause }),
+                }),
+            ),
+          ),
+    )
+    const urlParamsBody = Effect.flatMap(text, (body) =>
+      Effect.try({
+        try: () => UrlParams.fromInput(new URLSearchParams(body)),
+        catch: (cause) =>
+          new HttpClientError.HttpClientError({
+            reason: new HttpClientError.DecodeError({ request: raw.request, response: raw, cause }),
+          }),
       }),
+    )
+    const formData = Effect.gen(function* () {
+      const left =
+        limits.deadline === undefined
+          ? Duration.infinity
+          : Duration.millis(Math.max(0, limits.deadline - (yield* Clock.currentTimeMillis)))
+      const limit = Duration.min(limits.chunk, left)
+      if (!Duration.isFinite(limit)) return yield* raw.formData
+      return yield* raw.formData.pipe(
+        Effect.timeoutOrElse({
+          duration: limit,
+          orElse: () => Effect.fail(bodyTimeoutError(raw, "Timed out waiting for response data")),
+        }),
+      )
     })
-
-  const source = rootCause(input.error)
-  const native = nativeTransportFailure(source)
-  const code = native?.code
-  const detail =
-    code && native?.message && !native.message.includes(code) ? `${code}: ${native.message}` : native?.message
-  const message = detail ?? (input.error instanceof Error ? input.error.message : undefined)
-
-  if (Cause.isTimeoutError(input.error) || Cause.isTimeoutError(source))
-    return transportError({ message: message ?? "HTTP transport timed out", code: code ?? "Timeout" })
-  if (!HttpClientError.isHttpClientError(input.error))
-    return transportError({ message: message ?? "HTTP transport failed", code })
-  // Effect reports every response body read failure as a DecodeError, but the raw byte stream decodes
-  // nothing: provider output parsing happens later and fails as InvalidProviderOutput.
-  if (input.operation === "read" && input.error.reason._tag === "DecodeError")
-    return transportError({ message: detail ? `${CONNECTION_LOST}: ${detail}` : CONNECTION_LOST, code })
-  if (input.error.reason._tag === "TransportError") {
-    return transportError({
-      message: message ?? input.error.reason.description ?? "HTTP transport failed",
-      code: code ?? input.error.reason._tag,
-    })
-  }
-  return transportError({
-    message: message ?? `HTTP transport failed: ${input.error.reason._tag}`,
-    code: code ?? input.error.reason._tag,
+    const wrapped: HttpClientResponse.HttpClientResponse = {
+      [HttpIncomingMessage.TypeId]: HttpIncomingMessage.TypeId,
+      [HttpClientResponse.TypeId]: HttpClientResponse.TypeId,
+      request: raw.request,
+      get url() {
+        return raw.url
+      },
+      status: raw.status,
+      get headers() {
+        return raw.headers
+      },
+      get cookies() {
+        return raw.cookies
+      },
+      get remoteAddress() {
+        return raw.remoteAddress
+      },
+      get upgrade() {
+        return raw.upgrade
+      },
+      stream: timedStream,
+      text,
+      arrayBuffer,
+      json,
+      urlParamsBody,
+      formData,
+      toJSON: () => raw.toJSON(),
+      toString: () => raw.toString(),
+      [Inspectable.NodeInspectSymbol]: () => raw[Inspectable.NodeInspectSymbol](),
+      pipe() {
+        return Pipeable.pipeArguments(wrapped, arguments)
+      },
+    }
+    return wrapped
   })
 }
-
-export const responseStream = (response: HttpClientResponse.HttpClientResponse): Stream.Stream<Uint8Array, AIError> =>
-  response.stream.pipe(
-    Stream.mapError((error) =>
-      httpError({ error, request: response.request, operation: "read", http: responseHttp(response) }),
-    ),
-  )
 
 export const stream = (
   executor: Interface,
@@ -247,28 +334,48 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
   Service,
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient
-    const executeOnce = (request: HttpClientRequest.HttpClientRequest, middleware?: HttpMiddleware) =>
+    const executeOnce = (
+      request: HttpClientRequest.HttpClientRequest,
+      middleware: HttpMiddleware | undefined,
+      timeout: RequestTimeout | undefined,
+    ) =>
       Effect.gen(function* () {
-        if (!middleware)
-          return yield* http.execute(request).pipe(
-            Effect.mapError((error) => httpError({ error, request, operation: "request" })),
-            Effect.flatMap(statusError),
-          )
-
-        const response = yield* middleware(request, (input) =>
-          http
-            .execute(input)
-            .pipe(Effect.mapError((cause) => (cause instanceof Error ? cause : new Error(String(cause))))),
-        ).pipe(Effect.mapError((error) => httpError({ error, request, operation: "request" })))
+        const started = yield* Clock.currentTimeMillis
+        const limits = timeoutConfig(timeout)
+        // Unlike the header and chunk limits, the whole-request budget has no default.
+        const total = limits.total ? Duration.millis(limits.total) : Duration.infinity
+        const headersLimit = Duration.min(timeoutDuration(limits.headers), total)
+        const send = !middleware
+          ? http.execute(request).pipe(Effect.mapError((error) => httpError({ error, request, operation: "request" })))
+          : middleware(request, (input) =>
+              http
+                .execute(input)
+                .pipe(Effect.mapError((cause) => (cause instanceof Error ? cause : new Error(String(cause))))),
+            ).pipe(Effect.mapError((error) => httpError({ error, request, operation: "request" })))
+        const raw = yield* send.pipe(
+          Effect.timeoutOrElse({
+            duration: headersLimit,
+            orElse: () => Effect.fail(timeoutError(request.url, "request", "Timed out waiting for response headers")),
+          }),
+        )
+        const deadline = Duration.isFinite(total) ? started + Duration.toMillis(total) : undefined
+        const response = yield* withBodyTimeouts(raw, {
+          chunk: timeoutDuration(limits.chunk, DEFAULT_CHUNK_TIMEOUT_MS),
+          deadline,
+        })
         return yield* statusError(response)
       })
     return Service.of({
-      // Scoped middleware runs outside per-call middleware. It is cleared while the request runs, so a request a
-      // middleware makes itself isn't wrapped again.
+      // Scoped middleware and timeouts are cleared while the request runs, so a request a middleware makes itself
+      // isn't wrapped again and starts with default timeouts.
       execute: (request, next) =>
         Effect.gen(function* () {
           const middleware = composeMiddleware(yield* CurrentMiddleware, next)
-          return yield* executeOnce(request, middleware).pipe(Effect.provideService(CurrentMiddleware, undefined))
+          const timeout = yield* CurrentTimeout
+          return yield* executeOnce(request, middleware, timeout).pipe(
+            Effect.provideService(CurrentMiddleware, undefined),
+            Effect.provideService(CurrentTimeout, undefined),
+          )
         }),
     })
   }),
@@ -282,6 +389,15 @@ export const fetchLayer = layer.pipe(Layer.provide(FetchHttpClient.layer))
  */
 export const withTls = (execute: Interface["execute"], tls: ClientTls | undefined): Interface["execute"] =>
   tls ? (request, middleware) => execute(request, middleware).pipe(Effect.provideService(CurrentTls, tls)) : execute
+
+/** Sends through `execute` with `timeout` applied to the request and its response body. */
+export const withTimeout = (
+  execute: Interface["execute"],
+  timeout: RequestTimeout | undefined,
+): Interface["execute"] =>
+  timeout === undefined
+    ? execute
+    : (request, middleware) => execute(request, middleware).pipe(Effect.provideService(CurrentTimeout, timeout))
 
 /**
  * Per-call middleware that sends through `fetch` instead of the executor's HTTP client. Executor middleware and

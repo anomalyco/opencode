@@ -18,6 +18,7 @@ import {
   type BaseRequest,
   type HttpOptions,
   type ProviderOptions,
+  type RequestTimeout,
 } from "../schema/index.js"
 import { encodeJson } from "../utils/json.js"
 import { sanitizeSurrogates } from "../utils/sanitize.js"
@@ -33,7 +34,7 @@ export type MediaRequest = BaseRequest<{
 }>
 
 /** What every HTTP exchange of one generation shares. */
-type Exchange = Pick<MediaRequest, "headers" | "http" | "fetch">
+type Exchange = Pick<MediaRequest, "headers" | "timeout" | "http" | "fetch">
 
 /** Deployment inputs every media model factory accepts; provider facades fill these from `configure(...)`. */
 export interface ModelInput {
@@ -343,6 +344,7 @@ const makeTransport = <Request extends MediaRequest>(
       readonly headers: Headers.Headers
       readonly request: AuthInput["request"]
       readonly body?: MediaProtocol.Body
+      readonly timeout?: RequestTimeout
     },
     fetch: typeof globalThis.fetch | undefined,
     execute: Execute,
@@ -356,7 +358,10 @@ const makeTransport = <Request extends MediaRequest>(
       body: encoded.text,
       headers: encoded.headers,
     })
-    const response = yield* RequestExecutor.withTls(execute, call.request.http?.tls)(
+    const response = yield* RequestExecutor.withTimeout(
+      RequestExecutor.withTls(execute, call.request.http?.tls),
+      call.timeout,
+    )(
       encoded.apply(HttpClientRequest.make(call.method)(url).pipe(HttpClientRequest.setHeaders(headers))),
       RequestExecutor.withFetch(fetch),
     )
@@ -376,8 +381,12 @@ const makeTransport = <Request extends MediaRequest>(
       execute: Execute,
     ) {
       yield* rejectUnsupported(input.protocol.id, input.protocol.provider, request, protocol.unsupported)
-      const { headers: merged, http } = mergeTransport({ headers: input.headers, http: request.model.http }, request)
-      const exchange = { headers: merged, http, fetch: request.fetch }
+      const {
+        headers: merged,
+        timeout,
+        http,
+      } = mergeTransport({ headers: input.headers, http: request.model.http }, request)
+      const exchange = { headers: merged, timeout, http, fetch: request.fetch }
       const providerOptions = mergeProviderOptions(request.model.providerOptions, request.providerOptions)
       const headers = Headers.fromInput(merged)
       const prepared =
@@ -385,7 +394,7 @@ const makeTransport = <Request extends MediaRequest>(
           ? request
           : yield* protocol.prepare(request, (path, body) =>
               send(
-                { method: "POST", url: baseURL(path), headers, request: { ...request, http }, body },
+                { method: "POST", url: baseURL(path), headers, request: { ...request, http }, body, timeout },
                 request.fetch,
                 execute,
               ).pipe(Effect.map((sent) => sent.response)),
@@ -403,7 +412,11 @@ const makeTransport = <Request extends MediaRequest>(
         ),
         http?.query,
       )
-      const sent = yield* send({ method: "POST", url, headers, request: resolved, body }, request.fetch, execute)
+      const sent = yield* send(
+        { method: "POST", url, headers, request: resolved, body, timeout },
+        request.fetch,
+        execute,
+      )
       return { response: sent.response, context: { request: resolved, body }, exchange }
     }),
     /**
@@ -426,7 +439,11 @@ const makeTransport = <Request extends MediaRequest>(
       const url = withQuery(/^https?:\/\//.test(path) ? new URL(path) : baseURL(path), exchange.http?.query)
       for (const [key, value] of Object.entries(input.endpoint.query ?? {})) url.searchParams.set(key, value)
       const headers = Headers.fromInput(exchange.headers)
-      return send({ method, url, headers, request: { http: exchange.http } }, exchange.fetch, execute)
+      return send(
+        { method, url, headers, request: { http: exchange.http }, timeout: exchange.timeout },
+        exchange.fetch,
+        execute,
+      )
     },
   }
 }

@@ -11,7 +11,7 @@ import {
 import { ProviderID, type HttpOptions, type AIError, type ProviderOptions } from "../schema/index.js"
 import { Auth } from "./auth.js"
 import { Endpoint } from "./endpoint.js"
-import { RequestExecutorService } from "./executor-service.js"
+import { RequestExecutor } from "./executor.js"
 import { MediaProtocol } from "./media-protocol.js"
 import { MediaRoute, type Execute } from "./media.js"
 
@@ -133,7 +133,8 @@ const transport = (route: Omit<Route, "with" | "model">) => {
   })
   return Effect.fnUntraced(function* (request: DecisionRequest, execute: Execute) {
     if (!route.protocol.inlineMedia) return yield* composed.generate(request, execute)
-    const input = yield* Effect.forEach(request.input, (part) => materialize(part, execute))
+    const timed = RequestExecutor.withTimeout(execute, request.timeout)
+    const input = yield* Effect.forEach(request.input, (part) => materialize(part, timed))
     return yield* composed.generate({ ...request, input }, execute)
   })
 }
@@ -141,7 +142,7 @@ const transport = (route: Omit<Route, "with" | "model">) => {
 const materialize = (part: DecisionPart, execute: Execute) =>
   part.type === "media" && part.media.source.type === "url"
     ? part.media.materialize().pipe(
-        Effect.provideService(RequestExecutorService, { execute }),
+        Effect.provideService(RequestExecutor.Service, { execute }),
         Effect.map((media) => ({ ...part, media })),
       )
     : Effect.succeed(part)

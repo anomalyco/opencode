@@ -176,7 +176,7 @@ const post = <A>(
     const http = RequestExecutor.responseHttp(res)
     const fail = (message: string, cause?: unknown, raw?: string) =>
       new AIError({ reason: new InvalidProviderOutputError({ route, message, body: raw, http, cause }) })
-    const text = yield* res.text.pipe(Effect.mapError((cause) => fail(`Failed to read ${route} response`, cause)))
+    const text = yield* RequestExecutor.responseText(res)
     return yield* Schema.decodeEffect(response)(text).pipe(
       Effect.mapError((cause) => fail(`${route} returned an invalid response`, cause, text)),
     )
