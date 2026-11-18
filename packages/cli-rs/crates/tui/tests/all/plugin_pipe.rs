@@ -117,6 +117,21 @@ pub fn open_on(
     Pipe { harness, root }
 }
 
+fn plugin_files(name: &str, log: &str) -> (opencode_util::temp::TempDir, PathBuf, PathBuf) {
+    let root = opencode_util::temp::tempdir().unwrap();
+    let plugin = root.path().join("config/plugins").join(name);
+    std::fs::create_dir_all(&plugin).unwrap();
+    let log = root.path().join(log);
+    (root, plugin, log)
+}
+
+fn mount_server(root: opencode_util::temp::TempDir, config: Config, server: support::Fake) -> Pipe {
+    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(server)) });
+    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
+    external_with(&harness.tui, external, Some(config));
+    Pipe { harness, root }
+}
+
 /// Copies the plugin directory `from` to `to`, its hidden files left out.
 pub fn copy(from: &Path, to: &Path) {
     std::fs::create_dir_all(to).unwrap();
@@ -2633,10 +2648,7 @@ export default {{ id: "example.ending", setup(api) {{
         "/api/session" => (200, serde_json::json!({ "data": [], "cursor": {} })),
         _ => support::not_found(),
     });
-    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(server)) });
-    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
-    external_with(&harness.tui, external, Some(config));
-    let pipe = Pipe { harness, root };
+    let pipe = mount_server(root, config, server);
     pipe.active("example.ending");
     pipe.settle();
     let (h, scripts) = (&pipe.harness, pipe.scripts());
@@ -3132,10 +3144,7 @@ fn hostile(runtime: impl FnOnce(&Path) -> Option<Config>) {
 #[test]
 fn a_fetch_reply_of_a_mebibyte_arrives_whole() {
     let Some(config) = config() else { return };
-    let root = opencode_util::temp::tempdir().unwrap();
-    let log = root.path().join("fetched");
-    let plugin = root.path().join("config/plugins/large");
-    std::fs::create_dir_all(&plugin).unwrap();
+    let (root, plugin, log) = plugin_files("large", "fetched");
     let module = format!(
         "import {{ appendFileSync }} from \"node:fs\"\nexport default {{ id: \"example.large\", setup(api) {{\n  const carrier = api[Symbol.for(\"opencode.carrier\")]\n  carrier.command({{ name: \"large.fetch\", title: \"large.fetch\" }}, async () => {{\n    const result = await carrier.fetch({{ method: \"GET\", path: \"/api/large\" }})\n    const data = result?.Ok?.data ?? \"\"\n    appendFileSync({log:?}, `${{data.length}} ${{data.slice(0, 3)}} ${{data.slice(-3)}} ${{result?.Ok?.after}}\\n`)\n  }})\n}} }}\n"
     );
@@ -3151,10 +3160,7 @@ fn a_fetch_reply_of_a_mebibyte_arrives_whole() {
         "/api/session" => (200, serde_json::json!({ "data": [], "cursor": {} })),
         _ => support::not_found(),
     });
-    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(server)) });
-    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
-    external_with(&harness.tui, external, Some(config));
-    let pipe = Pipe { harness, root };
+    let pipe = mount_server(root, config, server);
     pipe.active("example.large");
     pipe.harness.tui.keymap.dispatch("large.fetch", None);
     pipe.harness.wait("the fetch ended", || {
@@ -3171,10 +3177,7 @@ fn a_fetch_reply_of_a_mebibyte_arrives_whole() {
 #[test]
 fn a_repeated_reply_in_parts_leaves_nothing_kept() {
     let Some(config) = config() else { return };
-    let root = opencode_util::temp::tempdir().unwrap();
-    let log = root.path().join("fetched");
-    let plugin = root.path().join("config/plugins/twice");
-    std::fs::create_dir_all(&plugin).unwrap();
+    let (root, plugin, log) = plugin_files("twice", "fetched");
     let module = format!(
         "import {{ appendFileSync }} from \"node:fs\"\nexport default {{ id: \"example.twice\", setup(api) {{\n  const carrier = api[Symbol.for(\"opencode.carrier\")]\n  carrier.command({{ name: \"twice.fetch\", title: \"twice.fetch\" }}, async () => {{\n    const result = await carrier.fetch({{ method: \"GET\", path: \"/api/large\" }})\n    await new Promise((resolve) => setTimeout(resolve, 300))\n    appendFileSync({log:?}, `${{result?.Ok?.data?.length}} ${{carrier.pendingFetches()}}\\n`)\n  }})\n}} }}\n"
     );
@@ -3194,10 +3197,7 @@ fn a_repeated_reply_in_parts_leaves_nothing_kept() {
         "/api/session" => (200, serde_json::json!({ "data": [], "cursor": {} })),
         _ => support::not_found(),
     });
-    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(server)) });
-    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
-    external_with(&harness.tui, external, Some(config));
-    let pipe = Pipe { harness, root };
+    let pipe = mount_server(root, config, server);
     pipe.active("example.twice");
     pipe.harness.tui.keymap.dispatch("twice.fetch", None);
     pipe.harness.wait("the server has the request", || {
@@ -3219,10 +3219,7 @@ fn a_repeated_reply_in_parts_leaves_nothing_kept() {
 #[test]
 fn a_fetch_reply_too_large_for_the_js_host_fails() {
     let Some(config) = config() else { return };
-    let root = opencode_util::temp::tempdir().unwrap();
-    let log = root.path().join("fetched");
-    let plugin = root.path().join("config/plugins/huge");
-    std::fs::create_dir_all(&plugin).unwrap();
+    let (root, plugin, log) = plugin_files("huge", "fetched");
     let module = format!(
         "import {{ appendFileSync }} from \"node:fs\"\nexport default {{ id: \"example.huge\", setup(api) {{\n  const carrier = api[Symbol.for(\"opencode.carrier\")]\n  carrier.command({{ name: \"huge.fetch\", title: \"huge.fetch\" }}, async () => {{\n    const result = await carrier.fetch({{ method: \"GET\", path: \"/api/huge\" }})\n    appendFileSync({log:?}, Object.keys(result ?? {{}}).join(\",\") + \"\\n\")\n  }})\n}} }}\n"
     );
@@ -3234,10 +3231,7 @@ fn a_fetch_reply_too_large_for_the_js_host_fails() {
         "/api/session" => (200, serde_json::json!({ "data": [], "cursor": {} })),
         _ => support::not_found(),
     });
-    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(server)) });
-    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
-    external_with(&harness.tui, external, Some(config));
-    let pipe = Pipe { harness, root };
+    let pipe = mount_server(root, config, server);
     pipe.active("example.huge");
     pipe.harness.tui.keymap.dispatch("huge.fetch", None);
     pipe.harness.wait("the fetch ended", || {
@@ -3253,10 +3247,7 @@ fn a_fetch_reply_too_large_for_the_js_host_fails() {
 #[test]
 fn a_fetch_across_a_reload_of_the_registrations_settles() {
     let Some(config) = config() else { return };
-    let root = opencode_util::temp::tempdir().unwrap();
-    let log = root.path().join("fetched");
-    let plugin = root.path().join("config/plugins/gated");
-    std::fs::create_dir_all(&plugin).unwrap();
+    let (root, plugin, log) = plugin_files("gated", "fetched");
     let module = format!(
         "import {{ appendFileSync }} from \"node:fs\"\nexport default {{ id: \"example.gated\", setup(api) {{\n  const carrier = api[Symbol.for(\"opencode.carrier\")]\n  carrier.command({{ name: \"gated.fetch\", title: \"gated.fetch\" }}, async () => {{\n    const pending = carrier.fetch({{ method: \"GET\", path: \"/api/gated\" }})\n    carrier.command({{ name: \"gated.late\", title: \"gated.late\" }}, () => {{}})\n    const result = await pending\n    appendFileSync({log:?}, Object.keys(result ?? {{}}).join(\",\") + \"\\n\")\n  }})\n}} }}\n"
     );
@@ -3274,10 +3265,7 @@ fn a_fetch_across_a_reload_of_the_registrations_settles() {
         "/api/session" => (200, serde_json::json!({ "data": [], "cursor": {} })),
         _ => support::not_found(),
     });
-    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(server)) });
-    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
-    external_with(&harness.tui, external, Some(config));
-    let pipe = Pipe { harness, root };
+    let pipe = mount_server(root, config, server);
     pipe.active("example.gated");
     let h = &pipe.harness;
     h.tui.keymap.dispatch("gated.fetch", None);
@@ -3316,10 +3304,7 @@ fn a_fetch_whose_done_comes_after_the_reload_settles() {
 /// server holds the reply until the reload is on screen.
 fn fetch_across_a_reload_with_a_changed_view(slow: bool) {
     let Some(config) = config() else { return };
-    let root = opencode_util::temp::tempdir().unwrap();
-    let log = root.path().join("fetched");
-    let plugin = root.path().join("config/plugins/viewed");
-    std::fs::create_dir_all(&plugin).unwrap();
+    let (root, plugin, log) = plugin_files("viewed", "fetched");
     let module = format!(
         "import {{ Plugin }} from \"@opencode/plugin/tui\"\n\
          import {{ createSignal }} from \"solid-js\"\n\
@@ -3356,10 +3341,7 @@ fn fetch_across_a_reload_with_a_changed_view(slow: bool) {
         "/api/session" => (200, serde_json::json!({ "data": [], "cursor": {} })),
         _ => support::not_found(),
     });
-    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(server)) });
-    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
-    external_with(&harness.tui, external, Some(config));
-    let pipe = Pipe { harness, root };
+    let pipe = mount_server(root, config, server);
     pipe.active("example.viewed");
     let h = &pipe.harness;
     h.wait_for("viewed before");
@@ -3414,10 +3396,7 @@ fn a_new_build_past_the_early_bound_fails_whatever_spills() {
 /// the host registered it.
 fn new_build_registers_and_fetches(early: bool, notices: usize, manifest_first: bool) {
     let Some(config) = config() else { return };
-    let root = opencode_util::temp::tempdir().unwrap();
-    let log = root.path().join("built");
-    let plugin = root.path().join("config/plugins/build");
-    std::fs::create_dir_all(&plugin).unwrap();
+    let (root, plugin, log) = plugin_files("build", "built");
     let module = |build: &str| {
         format!(
             "import {{ appendFileSync }} from \"node:fs\"\nexport default {{ id: \"example.build\", setup(api) {{\n  const carrier = api[Symbol.for(\"opencode.carrier\")]\n  carrier.command({{ name: \"build.{build}\", title: \"build.{build}\" }}, () => {{}})\n  if ({build:?} === \"one\") return\n  carrier.storage([\"kept\"])\n  void carrier.effect({{ type: \"storage-set\", key: \"kept\", value: JSON.stringify({{ build: \"two\" }}) }}).then(() => appendFileSync({log:?}, \"setup settled\\n\"))\n  const notices = () => {{ for (let index = 0; index < {notices}; index++) carrier.unwatch(`notice${{index}}`) }}\n  const command = () => carrier.command({{ name: \"build.late\", title: \"build.late\" }}, () => appendFileSync({log:?}, \"late\\n\"))\n  const fetched = () => carrier.fetch({{ method: \"GET\", path: \"/api/build\" }}).then((result) => appendFileSync({log:?}, Object.keys(result ?? {{}}).join(\",\") + \" \" + carrier.pendingFetches() + \"\\n\"))\n  const late = () => {{\n    if ({manifest_first}) {{ command(); setTimeout(() => {{ notices(); fetched() }}, 20); return }}\n    notices(); command(); fetched()\n  }}\n  if ({early}) setTimeout(late, 0)\n  else carrier.command({{ name: \"build.go\", title: \"build.go\" }}, late)\n}} }}\n"
@@ -3430,10 +3409,7 @@ fn new_build_registers_and_fetches(early: bool, notices: usize, manifest_first: 
         _ => support::not_found(),
     });
     let requests = server.log();
-    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(server)) });
-    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
-    external_with(&harness.tui, external, Some(config));
-    let pipe = Pipe { harness, root };
+    let pipe = mount_server(root, config, server);
     pipe.active("example.build");
     let (h, scripts) = (&pipe.harness, pipe.scripts());
     let runs = |name: &str| matches!(h.tui.keymap.dispatch(name, None), opentui::keymap::RunResult::Ok);
@@ -3518,10 +3494,7 @@ fn new_build_registers_and_fetches(early: bool, notices: usize, manifest_first: 
 #[test]
 fn a_fetch_of_an_activation_that_ends_settles_once() {
     let Some(config) = config() else { return };
-    let root = opencode_util::temp::tempdir().unwrap();
-    let log = root.path().join("ended");
-    let plugin = root.path().join("config/plugins/ending");
-    std::fs::create_dir_all(&plugin).unwrap();
+    let (root, plugin, log) = plugin_files("ending", "ended");
     let module = format!(
         "import {{ appendFileSync }} from \"node:fs\"\nexport default {{ id: \"example.ending\", setup(api) {{\n  const carrier = api[Symbol.for(\"opencode.carrier\")]\n  carrier.command({{ name: \"ending.fetch\", title: \"ending.fetch\" }}, async () => {{\n    const result = await carrier.fetch({{ method: \"GET\", path: \"/api/held\" }})\n    appendFileSync({log:?}, Object.keys(result ?? {{}}).join(\",\") + \"\\n\")\n  }})\n}} }}\n"
     );
@@ -3541,10 +3514,7 @@ fn a_fetch_of_an_activation_that_ends_settles_once() {
         "/api/session" => (200, serde_json::json!({ "data": [], "cursor": {} })),
         _ => support::not_found(),
     });
-    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(server)) });
-    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
-    external_with(&harness.tui, external, Some(config));
-    let pipe = Pipe { harness, root };
+    let pipe = mount_server(root, config, server);
     pipe.active("example.ending");
     let h = &pipe.harness;
     h.tui.keymap.dispatch("ending.fetch", None);
@@ -3586,10 +3556,7 @@ fn a_snapshot_after_the_new_builds_adoption_never_reaches_it() {
 /// The host changes `old`, `held` while it holds the second build's `Loaded`, else once it registered that build.
 fn snapshot_across_a_new_build(held: bool) {
     let Some(config) = config() else { return };
-    let root = opencode_util::temp::tempdir().unwrap();
-    let log = root.path().join("snapshots");
-    let plugin = root.path().join("config/plugins/snap");
-    std::fs::create_dir_all(&plugin).unwrap();
+    let (root, plugin, log) = plugin_files("snap", "snapshots");
     let first = "export default { id: \"example.snap\", setup(context) {\n  context.storage.store(\"old\", { initial: { n: 0 } })\n} }\n";
     let second = format!(
         "import {{ appendFileSync }} from \"node:fs\"\nexport default {{ id: \"example.snap\", setup(context) {{\n  const carrier = context[Symbol.for(\"opencode.carrier\")]\n  carrier.listen((key) => {{ if (key === \"storage:old\") appendFileSync({log:?}, \"heard\\n\") }})\n  context.keymap.layer(() => ({{ mode: \"global\", commands: [{{ id: \"snap.read\", run: () => appendFileSync({log:?}, `read ${{carrier.read(\"storage:old\")}}\\n`) }}] }}))\n}} }}\n"
@@ -3658,10 +3625,7 @@ fn snapshot_across_a_new_build(held: bool) {
 #[test]
 fn a_fetch_the_host_does_not_take_fails_over_the_pipe() {
     let Some(config) = config() else { return };
-    let root = opencode_util::temp::tempdir().unwrap();
-    let log = root.path().join("fetched");
-    let plugin = root.path().join("config/plugins/refused");
-    std::fs::create_dir_all(&plugin).unwrap();
+    let (root, plugin, log) = plugin_files("refused", "fetched");
     let module = format!(
         "import {{ appendFileSync }} from \"node:fs\"\nexport default {{ id: \"example.refused\", setup(api) {{\n  const carrier = api[Symbol.for(\"opencode.carrier\")]\n  carrier.command({{ name: \"refused.fetch\", title: \"refused.fetch\" }}, async () => {{\n    const result = await carrier.fetch({{ method: \"GET\", path: \"/api/session\" }})\n    appendFileSync({log:?}, Object.keys(result ?? {{}}).join(\",\") + \"\\n\")\n  }})\n}} }}\n"
     );
@@ -3670,10 +3634,7 @@ fn a_fetch_the_host_does_not_take_fails_over_the_pipe() {
         "/api/session" => (200, serde_json::json!({ "data": [], "cursor": {} })),
         _ => support::not_found(),
     });
-    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(server)) });
-    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
-    external_with(&harness.tui, external, Some(config));
-    let pipe = Pipe { harness, root };
+    let pipe = mount_server(root, config, server);
     pipe.active("example.refused");
     let h = &pipe.harness;
     opencode_tui::plugins::host::add(&h.tui, abi::Plugin { id: "probe", setup: crate::plugins::chain }.into());
@@ -3712,10 +3673,7 @@ fn a_fetch_the_host_does_not_take_fails_over_the_pipe() {
 #[test]
 fn a_late_reply_does_not_reach_a_mount_opened_again_over_the_pipe() {
     let Some(config) = config() else { return };
-    let root = opencode_util::temp::tempdir().unwrap();
-    let log = root.path().join("replied");
-    let plugin = root.path().join("config/plugins/owned");
-    std::fs::create_dir_all(&plugin).unwrap();
+    let (root, plugin, log) = plugin_files("owned", "replied");
     let module = format!(
         "import {{ appendFileSync }} from \"node:fs\"\nexport default {{ id: \"example.owned\", setup(api) {{\n  const carrier = api[Symbol.for(\"opencode.carrier\")]\n  carrier.surface(\"owned\", {{ type: \"route\", name: \"owned\" }}, () => ({{ type: \"text\", spans: [{{ text: \"owned route\" }}] }}))\n  const fetch = (name) => async () => {{\n    const result = await carrier.fetch({{ method: \"GET\", path: \"/api/hold\" }}).catch((error) => ({{ [error.name]: error.message }}))\n    appendFileSync({log:?}, name + \" \" + Object.keys(result ?? {{}}).join(\",\") + \" \" + carrier.pendingFetches() + \"\\n\")\n  }}\n  carrier.command({{ name: \"owned.route\", title: \"owned.route\", scope: {{ route: \"owned\" }} }}, fetch(\"route\"))\n  carrier.command({{ name: \"owned.global\", title: \"owned.global\" }}, fetch(\"global\"))\n}} }}\n"
     );
@@ -3799,10 +3757,7 @@ export default {{ id: "example.flooded", setup(api) {{
         "/api/session" => (200, serde_json::json!({ "data": [], "cursor": {} })),
         _ => support::not_found(),
     });
-    let harness = support::mount(80, 30, Deps { route: Route::Home, ..support::deps(Arc::new(server)) });
-    let external = External { config_dir: root.path().join("config"), cwd: root.path().to_path_buf(), dev: Vec::new() };
-    external_with(&harness.tui, external, Some(config));
-    let pipe = Pipe { harness, root };
+    let pipe = mount_server(root, config, server);
     pipe.active("example.flooded");
     let (h, scripts) = (&pipe.harness, pipe.scripts());
     // The answer that asks for the fetch waits, so the fetch's own answer goes once the overflow is full.
@@ -3957,10 +3912,7 @@ export default {{ id: "example.queued", setup(api) {{
 #[test]
 fn a_v2_plugin_reads_a_sessions_pending_inbox() {
     let Some(config) = config() else { return };
-    let root = opencode_util::temp::tempdir().unwrap();
-    let log = root.path().join("pending");
-    let plugin = root.path().join("config/plugins/pending");
-    std::fs::create_dir_all(&plugin).unwrap();
+    let (root, plugin, log) = plugin_files("pending", "pending");
     let module = format!(
         "import {{ appendFileSync }} from \"node:fs\"\nexport default {{ id: \"example.pending\", setup(api) {{\n  api.keymap.layer(() => ({{ mode: \"global\", commands: [{{ id: \"pending.log\", run: async () => {{\n    await api.data.session.pending.sync(\"ses_q\")\n    appendFileSync({log:?}, JSON.stringify(api.data.session.pending.list(\"ses_q\").map((item) => item.id)) + \"\\n\")\n  }} }}] }}))\n}} }}\n"
     );
