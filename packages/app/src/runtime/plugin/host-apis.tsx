@@ -861,12 +861,11 @@ export function createPluginAttachment(apis: HostApis) {
     })
   }
 
-  // Selecting the tab a pane already selects changes nothing, so a New tab view over it would stay: a tab that is
-  // opened shows over that view, as one that becomes the selection does.
+  // Opening the tab a pane already selects changes no selection, so a New tab view over it would stay. The region
+  // hears of the open before the write, while the pane's selection is still the one on screen, and replaces that view
+  // as a tab that becomes the selection does.
   const uncover = (session: SessionRef, key: string) => {
-    const mounted = mountedSession(session) ? region() : undefined
-
-    if (mounted?.newTab(mounted.paneOf(key))) mounted.select(key)
+    if (mountedSession(session)) region()?.opening(key)
   }
 
   const place = (key: string, session: SessionRef, value: string, options: OpenOptions | undefined) => {
@@ -879,9 +878,9 @@ export function createPluginAttachment(apis: HostApis) {
     // A select keeps the narrow-screen view, as a background open does, and shows the tab's pane too.
     if (placement === "select")
       return batch(() => {
+        uncover(session, key)
         layout.panel.append(value, key)
         layout.panel.focus(value, key)
-        uncover(session, key)
         reveal(session, value, key)
       })
     // Lists the opened tab too, so its own fields apply before it is stored. The next preview replaces a transient tab.
@@ -896,11 +895,12 @@ export function createPluginAttachment(apis: HostApis) {
         if (mountedSession(session) && !known.some((entry) => entry.key === key && !entry.tab.transient)) return
       }
 
+      uncover(session, key)
+
       // Pinned tabs are listed without being stored; opening one only selects it.
       if (known.some((entry) => entry.key === key && entry.tab.pinned)) layout.panel.focus(value, key)
       else if (placement === "preview") layout.panel.preview(value, key, transient)
       else layout.panel.open(value, key, transient, first)
-      uncover(session, key)
 
       // A background open keeps the narrow-screen view, but its tab still shows once the window is wide.
       if (!narrow() || options?.background) reveal(session, value, key)

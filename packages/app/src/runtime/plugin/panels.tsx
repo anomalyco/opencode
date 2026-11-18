@@ -413,6 +413,15 @@ export function createRegion(input: {
         input.tabs().setActive(key)
       })
     },
+    /**
+     * A tab is about to open. When its pane already selects it, the open changes no selection, so the New tab the pane
+     * shows over it is replaced here; any other open replaces it by becoming the selection.
+     */
+    opening(key: string) {
+      const pane = paneOfKey(key)
+
+      if (untrack(panes[pane].active) === key) dispatchNewTabs({ type: "open.selected", pane })
+    },
     /** The new tab views of a pane, by id in strip order. */
     newTabs,
     /** The id of the new tab view a pane shows: the chosen one, else the newest while the pane selects no tab. */

@@ -461,6 +461,12 @@ test("context closes the side region only when its button opened it", async ({ p
   await panel.getByRole("button", { name: /^Review/ }).click()
   await expect(panel.locator("#session-side-panel-review-tab")).toHaveAttribute("aria-selected", "true")
   await context.click()
+  // Under a New tab view Context is not what the region shows, so its button shows it rather than closing it unseen.
+  await panel.getByRole("button", { name: "Add tab", exact: true }).click()
+  await expect(newTab).toHaveAttribute("aria-selected", "true")
+  await contextButton.click()
+  await expect(newTab).toHaveCount(0)
+  await expect(context).toHaveAttribute("aria-selected", "true")
   await contextButton.click()
   await expect(context).toHaveCount(0)
   await expect(toggle).toHaveAttribute("aria-expanded", "true")
