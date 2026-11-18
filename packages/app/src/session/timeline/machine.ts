@@ -73,8 +73,8 @@ const DETACHED: FollowState = Object.freeze({ type: "detached", endPending: fals
 
 export const CONTACT_LOST_EVENT: FollowEvent = Object.freeze({ type: "contact.lost" })
 
-export function createFollowState(): FollowState {
-  return FOLLOWING
+export function createFollowState(follow = true): FollowState {
+  return follow ? FOLLOWING : DETACHED
 }
 
 // Returns the same state when nothing changes, so a steady scroll writes no signal.
