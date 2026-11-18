@@ -27,6 +27,8 @@ const MAX_FILES = 20
 /** Entries a session was given that a correction may name, and how much of each is kept to match it. */
 const MAX_GIVEN = 10
 const MAX_GIVEN_TEXT = 2000
+/** Test-like runs a session's publish reminder looks back over. */
+const MAX_TESTS = 50
 /** How long the workspace's list of restricted repositories is reused before Console is asked again. */
 const ANCHORS_MAX_AGE = 60 * 1000
 /** The most repositories a reader's reachable set names, as Console takes it. */
@@ -150,6 +152,10 @@ type Tracked = {
   compactions: number
   /** A compaction ended since the delivered entries were last given. */
   redeliver?: boolean
+  /** Test-like runs and edits, for the publish reminder. */
+  readonly work: { step: number; lastEdit: number; readonly tests: Array<{ step: number; failed: boolean }> }
+  /** The session had its publish reminder. */
+  reminded?: boolean
   task?: string
   /** A given entry the user's latest message may correct, for the next request to point out. */
   nudge?: { readonly entry: OpencodeMemoryPolicy.Given; readonly messageID: string }
@@ -185,6 +191,7 @@ export const make = Effect.fnUntraced(function* (
       shown: new Map(),
       delivered: new Map(),
       compactions: 0,
+      work: { step: 0, lastEdit: -1, tests: [] },
     }
     sessions.delete(sessionID)
     sessions.set(sessionID, found)
@@ -442,6 +449,9 @@ export const make = Effect.fnUntraced(function* (
     yield* ctx.tool.hook("execute.after", (event) => {
       if (event.status !== "completed") return Effect.void
       const files = touched(event.tool, event.input).map((file) => relative(ctx.location.directory, file))
+      const work = tracked(event.sessionID).work
+      work.step++
+      if (event.tool !== "read" && files.length > 0) work.lastEdit = work.step
       if (files.length > 0) {
         const state = tracked(event.sessionID)
         files.forEach((file) => {
@@ -457,8 +467,10 @@ export const make = Effect.fnUntraced(function* (
       })
       // A command still running in the background, or one a signal ended, has no exit code yet.
       if (Option.isNone(shell) || shell.value.output.exitCode === null) return Effect.void
-      if (!policy.failed(shell.value.input.command, shell.value.output.output, shell.value.output.exitCode))
-        return Effect.void
+      const failed = policy.failed(shell.value.input.command, shell.value.output.output, shell.value.output.exitCode)
+      if (policy.test(shell.value.input.command)) work.tests.push({ step: work.step, failed })
+      if (work.tests.length > MAX_TESTS) work.tests.splice(0, work.tests.length - MAX_TESTS)
+      if (!failed) return Effect.void
       const moment = {
         type: "failure" as const,
         command: shell.value.input.command,
@@ -482,6 +494,27 @@ export const make = Effect.fnUntraced(function* (
         deliver(tracked(event.sessionID), entries)
       })
     })
+    // Once its task is done, a session that verified a fix or worked past a dead end is reminded, once, that it may
+    // publish what it learned (the publish audit's WB2: agents publish nothing unprompted). Not while its own work runs
+    // in the background, and not in a subagent's or fork's session, whose parent decides.
+    yield* ctx.session.hook("experimental.idle", (event) =>
+      Effect.gen(function* () {
+        const state = sessions.get(event.sessionID)
+        if (!state || state.reminded || event.background.some((job) => job.sessionID === event.sessionID)) return
+        const lesson = policy.lesson(state.work)
+        if (lesson === undefined) return
+        const session = yield* ctx.session.get({ sessionID: event.sessionID })
+        if (session.parentID !== undefined || session.fork) return
+        state.reminded = true
+        yield* ctx.session.synthetic({
+          sessionID: event.sessionID,
+          id: messageID(event.sessionID, "publish-reminder"),
+          text: policy.reminder(lesson),
+          description: "Memory: the session may publish what it learned",
+          metadata: { source: "console.memory", kind: "publish-reminder", lesson },
+        })
+      }).pipe(Effect.catch((cause) => Effect.logWarning("failed to remind the session to publish", { cause }))),
+    )
     // A compaction drops what was injected from the conversation, and the agent's view of entries with it.
     yield* ctx.event.subscribe({ types: ["session.compaction.ended"] }).pipe(
       Stream.runForEach((event) =>
@@ -640,8 +673,17 @@ export const make = Effect.fnUntraced(function* (
       })
       editor.add({
         name: "publish",
-        description:
-          "Most sessions should publish nothing. Publish only what a teammate's coding agent would want to know before similar work and couldn't work out from the repository, once verified, as it holds for the repository as committed. Never: overviews, task status or progress notes, your uncommitted changes, what README or AGENTS.md says, logs or dumps, secrets, or always/never rules wider than what you verified. Specific title; a self-contained body with exact errors, commands, paths and symbols; paths and errors make it reach sessions on those files and failures. Repo, branch and commit are recorded. If an entry on this subject exists, nothing is published and the answer says which to edit instead.",
+        description: [
+          "Most sessions should publish nothing. Publish only one verified, non-obvious finding that an agent on a DIFFERENT task in this repository would need: a fix you verified (a test that failed now passes), a dead end whose cause you found, or a correction the user made. One claim per entry, under ~400 tokens.",
+          'Body, every line required (use "Avoid" instead of "Verify" for a don\'t-do-this finding):',
+          "Claim: the one fact or rule.",
+          "Applies when: the files, versions, commands or error message where it holds; no broader than what you observed.",
+          "Action: what to do.",
+          "Verify: the command to run and the result to expect. / Avoid: what not to do, and why.",
+          "Anchors: the exact paths, symbols, commands or error text it rests on.",
+          "Evidence: what you ran in this session and what it showed (failing before, passing after).",
+          'Never publish: a repo overview or directory map; task status, progress or a summary of what you changed; what README, AGENTS.md, docs or code comments already say; logs, diffs or config dumps; facts about this machine (what is installed, PATH, local directories); "always/never" rules beyond what you observed. Set paths to the files in Applies when and errors to the exact error messages. If an entry on this subject exists, nothing is published and the answer says which to edit instead.',
+        ].join("\n"),
         input: Schema.Struct({
           kind: KindInput,
           title: Schema.String,

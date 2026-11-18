@@ -63,6 +63,18 @@ export interface Signals {
   readonly injected: { readonly prompt: number; readonly failure: number }
 }
 
+/**
+ * The session's test-like runs and edits, in the order its tools finished, for telling whether it verified a fix or
+ * worked past a dead end.
+ */
+export interface Work {
+  /** Tool calls finished so far; each run and edit is numbered by it. */
+  readonly step: number
+  /** The step of the last file change, or -1 before any. */
+  readonly lastEdit: number
+  readonly tests: ReadonlyArray<{ readonly step: number; readonly failed: boolean }>
+}
+
 /** What a session can tell Console about its work besides the query, as Console's inject and search take it. */
 export interface Context {
   readonly repo?: string
@@ -107,6 +119,15 @@ export interface Policy {
   readonly correction: (message: string, given: ReadonlyArray<Given>) => Given | undefined
   /** The reminder the request after that message gets. */
   readonly nudge: (entry: Given) => string
+  /** Whether a command is a test or build run, the kind that tells whether a fix worked. Runs on every shell command. */
+  readonly test: (command: string) => boolean
+  /**
+   * What, in the session's work, may be worth publishing once its task is done: a verified fix or a dead end worked
+   * past, described for the reminder, or undefined for nothing.
+   */
+  readonly lesson: (work: Work) => string | undefined
+  /** The one reminder a session gets when it would go idle after such work. */
+  readonly reminder: (lesson: string) => string
 }
 
 // Placeholders until the retrieval benchmark and the correction study set them.
@@ -176,6 +197,20 @@ export const initial: Policy = {
       .filter((candidate) => candidate.shared.length >= CORRECTION_TERMS)
       .toSorted((a, b) => b.shared.length - a.shared.length)[0]?.entry
   },
+  test: (command) => TEST.test(command),
+  // The publish audit's WB2 triggers (bench/library/writes): a test-like run failing before the last edit and passing
+  // after it, or several failing runs before a passing one.
+  lesson: (work) => {
+    const passed = work.tests.find((test) => !test.failed && test.step > work.lastEdit)
+    if (passed === undefined) return undefined
+    if (work.tests.some((test) => test.failed && test.step < work.lastEdit))
+      return "verified fix (tests that failed now pass)"
+    if (work.tests.filter((test) => test.failed && test.step < passed.step).length >= 2)
+      return "dead end you worked past (several failing attempts before a passing run)"
+    return undefined
+  },
+  reminder: (lesson) =>
+    `This session had a ${lesson}. If it taught something an agent on a different task in this repository would need, and it isn't already in the code, docs or memory, you may publish it with memory publish, following its template. Most sessions publish nothing; then just say so. Don't change the code any more.`,
   nudge: (entry) =>
     `<memory-correction>The user's last message may correct memory entry ${entry.id} r${entry.revision} "${line(entry.title)}". If it does, fix that entry now with memory \`edit\` (only the changed text, revision ${entry.revision}); otherwise ignore this.</memory-correction>`,
 }
@@ -215,6 +250,10 @@ function within(context: Context): Context {
     ...(context.commands === undefined ? {} : { commands: context.commands }),
   }
 }
+
+/** Test and build runs, as the publish audit counted them, and the other common runners. */
+const TEST =
+  /\b(?:pytest|unittest|cargo (?:test|build)|vitest|jest|bun (?:run )?test|(?:npm|pnpm|yarn)(?: run)? test|go test|tox|make |uv run|python3? -m|mvn test|gradle test)/
 
 /** What test runners, compilers and interpreters print when something failed. */
 const FAILURE =

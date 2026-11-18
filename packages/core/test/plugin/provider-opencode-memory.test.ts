@@ -850,6 +850,63 @@ describe("OpencodePlugin memory", () => {
     ),
   )
 
+  it.effect("reminds a session once, when it would go idle after a verified fix, that it may publish", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        const { host, synthetic } = yield* start(console)
+        const hooks = yield* PluginHooks.Service
+        const idle = (sessionID: Session.ID, background: ReadonlyArray<{ sessionID: Session.ID }> = []) =>
+          hooks.trigger("session", "experimental.idle", { sessionID, background } as never)
+        const fix = (sessionID: Session.ID) =>
+          Effect.gen(function* () {
+            yield* ran(sessionID, "shell", { command: "bun test" }, { exitCode: 1, output: "(fail) dayKey\n 1 fail" })
+            yield* ran(sessionID, "edit", { path: "src/dates.ts", oldString: "a", newString: "b" })
+            yield* ran(sessionID, "shell", { command: "bun test" }, { exitCode: 0, output: " 2 pass\n 0 fail" })
+          })
+
+        // Nothing learned yet: no reminder.
+        const session = yield* host.session.create({})
+        yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 0, output: " 2 pass\n 0 fail" })
+        yield* idle(session.id)
+        expect(synthetic).toEqual([])
+
+        yield* fix(session.id)
+        // While its own shell still runs in the background, the session isn't done.
+        yield* idle(session.id, [{ sessionID: session.id }])
+        expect(synthetic).toEqual([])
+        yield* idle(session.id)
+        expect(synthetic).toMatchObject([
+          {
+            sessionID: session.id,
+            text: OpencodeMemoryPolicy.initial.reminder("verified fix (tests that failed now pass)"),
+            metadata: {
+              source: "console.memory",
+              kind: "publish-reminder",
+              lesson: "verified fix (tests that failed now pass)",
+            },
+          },
+        ])
+        expect(synthetic[0]).not.toHaveProperty("resume")
+        // Once per session.
+        yield* fix(session.id)
+        yield* idle(session.id)
+        expect(synthetic).toHaveLength(1)
+
+        // A subagent's session leaves publishing to its parent.
+        const child = yield* host.session.create({ parentID: session.id })
+        yield* fix(child.id)
+        yield* idle(child.id)
+        expect(synthetic).toHaveLength(1)
+
+        // The publish tool's description is the template the reminder points at.
+        const publish = yield* memoryTool("publish")
+        expect(publish.description.split("\n")[0]).toStartWith("Most sessions should publish nothing.")
+        expect(publish.description).toContain("\nClaim: ")
+        expect(publish.description).toContain("\nVerify: the command to run and the result to expect. / Avoid: ")
+      }),
+    ),
+  )
+
   it.effect("says a rewrite Console merged with the changes since it was read", () =>
     withConsole((console) =>
       Effect.gen(function* () {
@@ -1122,6 +1179,31 @@ describe("OpencodeMemoryPolicy.initial", () => {
     expect(
       OpencodeMemoryPolicy.initial.inject(failure, signals({ injected: { prompt: 1, failure: 2 } }), session()),
     ).toBeUndefined()
+  })
+
+  test("finds a verified fix or a dead end worked past in a session's test runs and edits", () => {
+    const lesson = OpencodeMemoryPolicy.initial.lesson
+    const work = (lastEdit: number, ...tests: Array<[number, boolean]>) => ({
+      step: 10,
+      lastEdit,
+      tests: tests.map(([step, failed]) => ({ step, failed })),
+    })
+    expect(lesson(work(3, [1, true], [5, false]))).toBe("verified fix (tests that failed now pass)")
+    expect(lesson(work(8, [1, true], [2, true], [9, false]))).toBe("verified fix (tests that failed now pass)")
+    // Failing runs, all after the last edit, then a passing one: worked past without a change, a dead end.
+    expect(lesson(work(-1, [1, true], [2, true], [3, false]))).toBe(
+      "dead end you worked past (several failing attempts before a passing run)",
+    )
+    // Passing without a failure first, one failure without an edit before it, or no pass after the last edit: nothing.
+    expect(lesson(work(3, [5, false]))).toBeUndefined()
+    expect(lesson(work(-1, [1, true], [2, false]))).toBeUndefined()
+    expect(lesson(work(6, [1, true], [5, false]))).toBeUndefined()
+    expect(OpencodeMemoryPolicy.initial.test("ACME_DB_URL=memory://test bun test 2>&1 | tail -20")).toBe(true)
+    expect(OpencodeMemoryPolicy.initial.test("uv run pytest -x tests/test_x.py")).toBe(true)
+    expect(OpencodeMemoryPolicy.initial.test("git status && ls src")).toBe(false)
+    expect(OpencodeMemoryPolicy.initial.reminder("verified fix (tests that failed now pass)")).toStartWith(
+      "This session had a verified fix (tests that failed now pass). If it taught something",
+    )
   })
 
   test("counts a command as failed by its exit code, or by its output when a pipe hides the exit code", () => {
