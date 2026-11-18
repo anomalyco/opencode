@@ -2017,6 +2017,7 @@ fn a_dialog_changed_in_place_by_a_later_activation_leaves_no_owner() {
 
 // Expected (big-boi ds-5): over the raw pipe, a handler that shows a dialog surface and focuses its only field gives the
 // field the focus once the JS host's first revision of the dialog came: what the user types is the field's.
+#[cfg(feature = "ts")]
 #[test]
 fn a_dialog_shown_and_focused_over_the_pipe_takes_the_typing() {
     let Some(config) = crate::plugin_pipe::config() else { return };
