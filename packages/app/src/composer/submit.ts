@@ -44,6 +44,43 @@ const switched = new Map<string, string>()
 // the follow-ups sent from its own composer go through different submit machines. A session left out is `server`.
 const statuses = new Map<string, PromptStatusState>()
 
+// Each session's last send, until it has joined the data layer's send chain. A send first builds its request
+// (attachments read, mentions checked), which takes one longer than another, and must still join after the sends made
+// before it. Module-wide for the same reason as `statuses`.
+const joining = new Map<string, Promise<void>>()
+
+/** A send's place in its session's order: `before` is the send made before it, until that one has joined the chain. */
+type Turn = { before: Promise<void> | undefined; joined: () => void }
+
+/**
+ * Runs one send in its session's order. Call it before the first await. `send` builds its request in whatever time
+ * that takes, waits for `before`, puts the request in the data layer's send chain and calls `joined` at once. A send
+ * that ends without joining does not hold the next one back.
+ */
+function inTurn<T>(sessionID: string, send: (turn: Turn) => Promise<T>) {
+  const mine = Promise.withResolvers<void>()
+  const turn = { before: joining.get(sessionID), joined: () => mine.resolve() }
+
+  joining.set(sessionID, mine.promise)
+  void mine.promise.then(() => {
+    if (joining.get(sessionID) === mine.promise) joining.delete(sessionID)
+  })
+  const sending = send(turn)
+
+  void sending.then(turn.joined, turn.joined)
+
+  return sending
+}
+
+/** What a cancelled send fails with: Stop pressed while its request still waited on the gate. */
+const CANCELLED = new Error("The send was cancelled before its request left.")
+
+/**
+ * A send's gate. `open` settles once its request may leave, and rejects with `CANCELLED` when `cancel` is called
+ * first.
+ */
+type Gate = { open: Promise<void>; cancel: () => void }
+
 type ComposerSubmitInput = {
   adapter: ComposerAdapter
   mode: Accessor<"normal" | "shell">
@@ -58,8 +95,8 @@ type ComposerSubmitInput = {
   queueFirst?: (inboxID: string) => void
   clientCommand?: (text: string) => (() => void | Promise<void>) | undefined
   /**
-   * What a prompt or a command waits for before its request goes out, such as the desktop browser attaching to the
-   * session so the first step already lists its tools. It never rejects and is bounded by the plugin host.
+   * What a prompt or a server command waits for before its request goes out: whatever the plugins prepare for the
+   * session's next step. It never rejects and is bounded by the plugin host.
    */
   ready?: (sessionID: string) => Promise<void>
   notify: {
@@ -85,8 +122,46 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
     result.effects.forEach(run)
   }
 
+  // The gate of each send that still waits on it, by attempt.
+  const gates = new Map<number, Gate>()
+
+  // Starts what the send of `attempt` waits for, and tells the machine when it is ready. A send cancelled meanwhile
+  // fails as `CANCELLED` and its late result is one the machine ignores.
+  const openGate = (attempt: number, session: ComposerSession): Gate => {
+    const ready = input.ready?.(session.id)
+    const cancelled = Promise.withResolvers<never>()
+
+    // Nothing may be waiting on it when it is cancelled.
+    void cancelled.promise.catch(() => undefined)
+
+    const gate = {
+      open: ready ? Promise.race([ready, cancelled.promise]) : Promise.resolve(),
+      cancel: () => cancelled.reject(CANCELLED),
+    }
+
+    const settled = () => {
+      if (gates.get(attempt) === gate) gates.delete(attempt)
+      dispatch({ type: "gate.settled", attempt })
+    }
+
+    gates.set(attempt, gate)
+
+    if (ready) void ready.then(settled)
+    else settled()
+
+    return gate
+  }
+
   const run = (effect: ComposerSubmitEffect) => {
     if (effect.type === "done") return effect.done(effect.sent)
+
+    if (effect.type === "send.cancel") {
+      const gate = gates.get(effect.attempt)
+
+      gates.delete(effect.attempt)
+
+      return gate?.cancel()
+    }
 
     if (effect.type === "notify.missing-selection") return input.notify.missingSelection()
 
@@ -151,7 +226,7 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
       input.adapter.beforeSubmit?.()
       const target = input.adapter.state
 
-      void dispatchPrompt(input, effect.session, effect.value)
+      void dispatchPrompt(input, effect.session, effect.value, openGate(effect.attempt, effect.session))
         .settled(() => {
           target.context.updateComment(effect.quote.commentID, { comment: effect.comment })
 
@@ -220,7 +295,8 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
     }
 
     if (effect.type === "handoff") {
-      const prompt = effect.sendFirst ? dispatchPrompt(input, effect.session, effect.value) : undefined
+      const gate = effect.gated ? openGate(effect.attempt, effect.session) : undefined
+      const prompt = effect.sendFirst ? dispatchPrompt(input, effect.session, effect.value, gate) : undefined
 
       void effect.ready
         .then(() => effect.complete?.())
@@ -235,7 +311,7 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
       return
     }
 
-    clearSubmission(input, effect)
+    clearSubmission(input, effect, gates.get(effect.attempt))
   }
 
   // A held send goes through once the Location's agents and models load. One still in the composer ends if the draft
@@ -390,13 +466,16 @@ async function startSession(
 function clearSubmission(
   input: ComposerSubmitInput,
   effect: Extract<ComposerSubmitEffect, { type: "composer.clear" }>,
+  gate: Gate | undefined,
 ) {
   const held = effect.cleared
   const clear = held ? undefined : clearComposer(input, effect.draft, effect.kind.type)
 
-  // A held prompt cleared the composer at Enter, so what it goes back to is read only once the send fails.
-  const restore = () => {
-    const back = clear ?? (held && afterHold(effect.draft, held))
+  // A held prompt cleared the composer at Enter, so what it goes back to is read only once the send fails. A
+  // cancelled send comes back as a cancelled hold does: in front of a draft typed since, not dropped for it.
+  const restore = (cancelled: boolean) => {
+    const cleared = cancelled ? (clear?.cleared ?? held) : held
+    const back = cleared ? afterHold(effect.draft, cleared) : clear
 
     return !!back && restoreSubmission(input, effect, back)
   }
@@ -414,7 +493,7 @@ function clearSubmission(
       effect.value,
       effect.kind.command,
       input.adapter.controls().model.selection.trackSessionCommit,
-      input.ready,
+      gate,
     ).catch((error) => failSubmission(input, effect.session, "command", error, restore, effect.value.id))
 }
 
@@ -538,7 +617,12 @@ function currentSelection(input: ComposerSubmitInput): ComposerSelection | undef
   }
 }
 
-function dispatchPrompt(input: ComposerSubmitInput, session: ComposerSession, value: ComposerSubmission): PromptSend {
+function dispatchPrompt(
+  input: ComposerSubmitInput,
+  session: ComposerSession,
+  value: ComposerSubmission,
+  gate: Gate | undefined,
+): PromptSend {
   // A steer appears in the timeline before the composer clears; queued prompts appear in the queue on admission.
   if (value.delivery === "steer")
     session.handoff.set({
@@ -558,7 +642,7 @@ function dispatchPrompt(input: ComposerSubmitInput, session: ComposerSession, va
 
   updateStatus(session, { type: "dispatched", id: value.id, working })
 
-  const sending = sendPrompt(session, value, input.adapter.controls().model.selection.trackSessionCommit, input.ready).then(
+  const sending = sendPrompt(session, value, input.adapter.controls().model.selection.trackSessionCommit, gate).then(
     () => ({ ok: true as const }),
     (error) => ({ ok: false as const, error }),
   )
@@ -711,40 +795,60 @@ function restoreDraft(
   return true
 }
 
-async function sendShell(session: ComposerSession, value: ComposerSubmission) {
-  await session.api.shell({ sessionID: session.id, id: value.id, command: value.text })
+// A shell command, a server command and a prompt all leave through the session's one send chain, each in its turn, so
+// the server receives them in the order of the Enter presses, whatever each had to build or wait for first.
+function sendShell(session: ComposerSession, value: ComposerSubmission) {
+  return inTurn(session.id, async (turn) => {
+    if (turn.before) await turn.before
+    const sending = session.data.session.sequence(session.id, () =>
+      session.api.shell({ sessionID: session.id, id: value.id, command: value.text }),
+    )
+
+    turn.joined()
+    await sending
+  })
 }
 
-async function sendCommand(
+function sendCommand(
   session: ComposerSession,
   value: ComposerSubmission,
   command: { command: string; arguments: string },
-  track?: ModelSelection["trackSessionCommit"],
-  ready?: ComposerSubmitInput["ready"],
+  track: ModelSelection["trackSessionCommit"] | undefined,
+  gate: Gate | undefined,
 ) {
-  const request = await buildSubmissionRequest(session, value)
+  return inTurn(session.id, async (turn) => {
+    const request = await buildSubmissionRequest(session, value)
 
-  // Like queued prompts, queued commands must not apply the composer's selection to active work. The plugins' gates
-  // run beside it.
-  await Promise.all([
-    ready?.(session.id),
-    value.delivery === "steer" ? applySelection(session, value.selection, track) : undefined,
-  ])
-  await session.api.command({
-    sessionID: session.id,
-    name: command.command,
-    text: command.arguments,
-    files: request.files.map((file) => ({
-      uri: file.uri,
-      name: file.name,
-      description: file.description,
-      mention: file.mention,
-    })),
-    agents: request.agents,
-    skills: request.skills,
-    delivery: value.delivery,
+    if (turn.before) await turn.before
+
+    const sending = session.data.session.sequence(session.id, async () => {
+      // Like queued prompts, queued commands must not apply the composer's selection to active work. What the plugins
+      // prepare runs beside it, and a send cancelled meanwhile stops here.
+      await Promise.all([
+        gate?.open,
+        value.delivery === "steer" ? applySelection(session, value.selection, track) : undefined,
+      ])
+
+      return session.api.command({
+        sessionID: session.id,
+        name: command.command,
+        text: command.arguments,
+        files: request.files.map((file) => ({
+          uri: file.uri,
+          name: file.name,
+          description: file.description,
+          mention: file.mention,
+        })),
+        agents: request.agents,
+        skills: request.skills,
+        delivery: value.delivery,
+      })
+    })
+
+    turn.joined()
+    await sending
+    session.data.session.acceptSend(session.id)
   })
-  session.data.session.acceptSend(session.id)
 }
 
 async function applySelection(
@@ -787,11 +891,21 @@ async function applySelection(
   }
 }
 
-async function sendPrompt(
+function sendPrompt(
   session: ComposerSession,
   value: ComposerSubmission,
   track: ModelSelection["trackSessionCommit"] | undefined,
-  ready: ComposerSubmitInput["ready"],
+  gate: Gate | undefined,
+) {
+  return inTurn(session.id, (turn) => admitPrompt(session, value, track, gate, turn))
+}
+
+async function admitPrompt(
+  session: ComposerSession,
+  value: ComposerSubmission,
+  track: ModelSelection["trackSessionCommit"] | undefined,
+  gate: Gate | undefined,
+  turn: Turn,
 ) {
   const request = await buildSubmissionRequest(session, value)
 
@@ -837,12 +951,17 @@ async function sendPrompt(
       agent: value.selection.agent,
       model: selectionModel(value.selection),
     },
-    // The data layer runs this once the server has created the session, so the plugins' gates see a session that
-    // exists. They run beside the selection's commit, not after it.
-    prepare: () => (committed ??= Promise.all([ready?.(session.id), staged ? undefined : commit()])),
+    // The data layer runs this in the prompt's turn of the send chain. What the plugins prepare runs beside the
+    // selection's commit, not after it, and a send cancelled meanwhile stops here: nothing of it reaches the server.
+    prepare: () => (committed ??= Promise.all([gate?.open, staged ? undefined : commit()])),
   }
 
-  await session.data.session.prompt(admission).catch(() => session.data.session.prompt(admission))
+  if (turn.before) await turn.before
+  const sending = session.data.session.prompt(admission)
+
+  turn.joined()
+  // An admission that fails is tried once more. A cancelled one is not: the person stopped it.
+  await sending.catch((error) => (error === CANCELLED ? Promise.reject(error) : session.data.session.prompt(admission)))
   session.data.session.acceptSend(session.id)
 }
 
@@ -894,12 +1013,14 @@ function failSubmission(
   kind: "shell" | "command" | "prompt",
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- a rejected send is opaque; the notifier formats it
   error: unknown,
-  restore: () => boolean,
+  restore: (cancelled: boolean) => boolean,
   messageID?: string,
 ) {
   if (messageID && session.admitted(messageID)) return true
-  restore()
-  input.notify.failed(kind, error)
+  restore(error === CANCELLED)
+
+  // A cancelled send is what the person asked for, not a failure to report.
+  if (error !== CANCELLED) input.notify.failed(kind, error)
 
   return false
 }

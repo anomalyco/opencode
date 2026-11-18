@@ -1,5 +1,7 @@
-import { describe, expect, jest, test } from "bun:test"
+import { afterEach, describe, expect, jest, test } from "bun:test"
+import type { SessionRef } from "@opencode/plugin/gui"
 import type { ModelSelection } from "@/providers/models/selection"
+import { PROMPT_GATE_TIMEOUT_MS, settlePromptGates } from "@/runtime/plugin/prompt-gate"
 import type { SessionMessageHandoff } from "@/session/handoff"
 import { Skill } from "@opencode/schema/skill"
 import type {
@@ -123,7 +125,20 @@ function session(input: {
   switchModel?: ComposerSession["api"]["switchModel"]
   background?: ComposerSession["background"]
   accept?: () => void
+  /** Requests leave as the data layer's send chain lets them: each once the one before it has settled. */
+  chained?: boolean
 }): ComposerSession {
+  const chain = { last: Promise.resolve() as Promise<unknown> }
+
+  const sequence = <Value,>(_sessionID: string, send: () => Promise<Value>) => {
+    if (!input.chained) return send()
+    const next = chain.last.then(send)
+
+    chain.last = next.catch(() => undefined)
+
+    return next
+  }
+
   return {
     // Unique per test: what this client knows about a session outlives the test that sent to it.
     id: `session-${++sessions.count}`,
@@ -164,22 +179,26 @@ function session(input: {
           input.calls.push("accept-send")
           input.accept?.()
         },
-        // Like the data layer: admit locally, prepare, then send.
-        prompt: async (value) => {
+        sequence,
+        // Like the data layer: admit locally, then prepare and send in the session's send chain.
+        prompt: (value) => {
           input.calls.push("admit")
-          await value.prepare?.()
-          input.calls.push("send")
-          await input.prompt?.(value)
 
-          // The admitted inbox item, as the server returns it.
-          return {
-            id: value.id ?? "msg_admitted",
-            sessionID: value.sessionID,
-            time: { created: 0 },
-            type: "user" as const,
-            payload: { text: value.text },
-            delivery: value.delivery ?? "steer",
-          }
+          return sequence(value.sessionID, async () => {
+            await value.prepare?.()
+            input.calls.push("send")
+            await input.prompt?.(value)
+
+            // The admitted inbox item, as the server returns it.
+            return {
+              id: value.id ?? "msg_admitted",
+              sessionID: value.sessionID,
+              time: { created: 0 },
+              type: "user" as const,
+              payload: { text: value.text },
+              delivery: value.delivery ?? "steer",
+            }
+          })
         },
       },
     },
@@ -215,34 +234,170 @@ describe("Composer submission", () => {
     expect(calls).toContain("admit")
   })
 
-  test("a prompt shows at once and goes out only when what the plugins prepare for it is ready", async () => {
+  // Runs the promise jobs queued so far: more turns than a send's longest chain before its request leaves.
+  const flush = async () => {
+    for (const _ of Array.from({ length: 32 })) await Promise.resolve()
+  }
+
+  const typed = (content: string): Prompt => [{ type: "text", content, start: 0, end: content.length }]
+
+  // A composer of `target` whose sends wait on `ready`, with what it reported as failed.
+  const gated = (
+    target: ComposerSession,
+    ready: (sessionID: string) => Promise<void>,
+    input: { prompt: string; mode?: "normal" | "shell"; calls?: string[] },
+  ) => {
+    const state = createMemoryComposerState({ prompt: input.prompt }).capture()
+    const failures: string[] = []
+    const history: string[] = []
+    const adapter = { ...active(state, target), interrupt: async () => void input.calls?.push("interrupt") }
+
+    const submission = submitInput(
+      adapter,
+      { missingSelection() {}, unqueueable() {}, failed: (kind) => failures.push(kind) },
+      input.mode ?? "normal",
+      () => [{ name: "review" }],
+      history,
+      undefined,
+      () => "steer",
+      ready,
+    )
+
+    return { state, submission, failures, history }
+  }
+
+  test("a prompt shows at once, and its composer takes no other send until what the plugins prepare is ready", async () => {
     const calls: string[] = []
-    const reached = Promise.withResolvers<void>()
     const gate = Promise.withResolvers<void>()
     const sent = Promise.withResolvers<void>()
-    const state = createMemoryComposerState({ prompt: "Hello" }).capture()
     const target = session({ calls, prompt: async () => sent.resolve() })
 
-    const waits = (sessionID: string) => {
-      calls.push(sessionID === target.id ? "gate" : "gate for another session")
-      reached.resolve()
+    const composer = gated(
+      target,
+      (sessionID) => {
+        calls.push(sessionID === target.id ? "gate" : "gate for another session")
 
-      return gate.promise
-    }
-
-    await submitInput(active(state, target), undefined, "normal", () => [], [], undefined, () => "steer", waits).submit(
-      new Event("submit"),
+        return gate.promise
+      },
+      { prompt: "Hello" },
     )
-    await reached.promise
 
-    // More turns than the selection's commit takes, which runs beside the gate.
-    for (const _ of Array.from({ length: 16 })) await Promise.resolve()
-    expect(calls.slice(0, 2)).toEqual(["admit", "gate"])
-    expect(calls).not.toContain("send")
+    const submitted = composer.submission.submit(new Event("submit"))
+    await flush()
+
+    // The prompt is admitted locally and the composer cleared, but nothing has left, and the send is still the
+    // composer's: its view offers Stop for it.
+    expect(calls.filter((call) => call === "gate" || call === "admit" || call === "send")).toEqual(["gate", "admit"])
+    expect(text(composer.state)).toBe("")
+    expect(composer.submission.state().type).toBe("sending")
+
+    // A second Enter, on whatever was typed meanwhile, starts no second send.
+    composer.state.set(typed("again"), 5)
+    await composer.submission.submit(new Event("submit"))
+    expect(calls.filter((call) => call === "gate" || call === "admit")).toEqual(["gate", "admit"])
+    expect(text(composer.state)).toBe("again")
 
     gate.resolve()
+    await submitted
     await sent.promise
-    expect(calls.filter((call) => call === "gate" || call === "send")).toEqual(["gate", "send"])
+    expect(calls.filter((call) => call === "gate" || call === "admit" || call === "send")).toEqual(["gate", "admit", "send"])
+    expect(composer.submission.state()).toEqual({ type: "idle", attempt: 1 })
+  })
+
+  test.each([
+    { name: "a prompt", prompt: "Hello", left: "Hello" },
+    { name: "a prompt, with a draft typed since", prompt: "Hello", edit: "next", left: "Hello\n\nnext" },
+    { name: "a server command", prompt: "/review now", left: "/review now" },
+  ])("Stop while $name waits on the gate cancels that send: nothing reaches the server and its text comes back", async (row) => {
+    const calls: string[] = []
+    const timeline: string[] = []
+    const statuses: ("idle" | "running")[] = []
+    const gate = Promise.withResolvers<void>()
+
+    const target = session({
+      calls,
+      statuses,
+      handoff: { set: () => timeline.push("set"), hold() {}, settle: () => timeline.push("settle"), clear: () => timeline.push("clear") },
+      command: async () => void calls.push("command"),
+    })
+
+    const composer = gated(target, () => gate.promise, { prompt: row.prompt, calls })
+    const submitted = composer.submission.submit(new Event("submit"))
+    await flush()
+    expect(composer.submission.state().type).toBe("sending")
+    expect(text(composer.state)).toBe("")
+
+    if (row.edit) composer.state.set(typed(row.edit), row.edit.length)
+    await composer.submission.stop()
+    await submitted
+    await flush()
+
+    // Neither the request nor an interrupt: the Session was never told of this send.
+    expect(calls.filter((call) => call === "send" || call === "command" || call === "interrupt")).toEqual([])
+    expect(text(composer.state)).toBe(row.left)
+    expect(composer.failures).toEqual([])
+    expect(composer.submission.state()).toEqual({ type: "idle", attempt: 1 })
+    // A prompt that showed in the Session is taken out of it again, and the Session is not left looking busy.
+    expect(timeline).toEqual(row.prompt.startsWith("/") ? [] : ["set", "clear"])
+    expect(statuses.at(-1) ?? "idle").toBe("idle")
+    expect(composer.history).toEqual([`add:${row.prompt}`, `remove:${row.prompt}`])
+
+    // What the send waited for is ready later: the result belongs to a send that no longer exists.
+    gate.resolve()
+    await flush()
+    expect(calls.filter((call) => call === "send" || call === "command")).toEqual([])
+    expect(composer.submission.state()).toEqual({ type: "idle", attempt: 1 })
+  })
+
+  // A session's draft composer and its own composer are two of these. Each press of Enter is one send, and the server
+  // must receive them in that order, whatever each waited for: here the prompt waits on the gate, the server command
+  // on the gate and on the prompt, and the shell command, which has no gate, on both.
+  describe("order", () => {
+    afterEach(() => void jest.useRealTimers())
+
+    test.each(["is ready", "times out"] as const)(
+      "a prompt, a server command and a shell command reach the server in that order when the gate %s",
+      async (how) => {
+        if (how === "times out") jest.useFakeTimers()
+        const calls: string[] = []
+        const gate = Promise.withResolvers<void>()
+
+        const target = session({
+          calls,
+          chained: true,
+          prompt: async () => void calls.push("prompt"),
+          command: async () => void calls.push("command"),
+          shell: async () => void calls.push("shell"),
+        })
+
+        // SAFETY: the gate under test never reads the session.
+        const ref = { key: `server\n${target.id}`, id: target.id } as SessionRef
+        const never = { plugin: "browser", value: { ready: () => new Promise<void>(() => undefined) } }
+
+        const ready = () =>
+          how === "times out" ? settlePromptGates([never], () => true, ref) : gate.promise
+
+        const sends = [
+          gated(target, ready, { prompt: "Hello" }),
+          gated(target, ready, { prompt: "/review now" }),
+          gated(target, ready, { prompt: "ls", mode: "shell" }),
+        ].map((composer) => composer.submission.submit(new Event("submit")))
+
+        await flush()
+        // The shell command has nothing to wait for of its own, and still does not go first.
+        expect(calls.filter((call) => call === "prompt" || call === "command" || call === "shell")).toEqual([])
+
+        if (how === "times out") jest.advanceTimersByTime(PROMPT_GATE_TIMEOUT_MS)
+        gate.resolve()
+        await Promise.all(sends)
+        await flush()
+        expect(calls.filter((call) => call === "prompt" || call === "command" || call === "shell")).toEqual([
+          "prompt",
+          "command",
+          "shell",
+        ])
+      },
+    )
   })
 
   test("marks the session accepted only once the send is admitted", async () => {

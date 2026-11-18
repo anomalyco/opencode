@@ -40,8 +40,11 @@ export type CapturedDraft = {
   sources: { key: string; source: QuoteSource }[]
 }
 
-/** A prompt sent before the composer cleared; `settled` restores the draft through `restore` when it fails. */
-export type PromptSend = { settled: (restore: () => boolean) => Promise<boolean> }
+/**
+ * A prompt sent before the composer cleared; `settled` restores the draft through `restore` when it fails, which
+ * hears whether the send was cancelled rather than refused.
+ */
+export type PromptSend = { settled: (restore: (cancelled: boolean) => boolean) => Promise<boolean> }
 
 /** Settles the caller of `submit` or `submitQuote`; `sent` is false when nothing was sent. */
 export type SubmitDone = (sent: boolean) => void
@@ -49,14 +52,22 @@ export type SubmitDone = (sent: boolean) => void
 /** A held prompt that already shows in its Session's timeline; `cleared` is the composer it left, once cleared. */
 export type ShownHold = { session: ComposerSession; cleared: Prompt | undefined }
 
+/**
+ * What a send waits for before its request may leave: whatever the plugins prepare for a prompt or a server command,
+ * such as attaching to the session. `none` for a send that starts no step, as a shell command. While `pending`,
+ * nothing of the send has reached the server, so Stop cancels the send itself.
+ */
+export type SendGate = "none" | "pending" | "settled"
+
 export type ComposerSubmitState =
   | { type: "idle"; attempt: number }
   // A send pressed while a cold Location loads its agents and models; it goes through once they load. A prompt to a
   // Session shows in its timeline at once and leaves the composer (`shown`); any other send waits in the composer,
   // where an edit cancels it.
   | { type: "held"; attempt: number; snapshot: SubmitSnapshot; shown: ShownHold | undefined; done: SubmitDone }
-  // A client command or a quote runs; neither takes the draft, but the composer submits nothing else meanwhile.
-  | { type: "running"; attempt: number; done: SubmitDone }
+  // A client command or a quote runs; neither takes the draft, but the composer submits nothing else meanwhile. A quote
+  // is a prompt, so it waits on the gate as one does.
+  | { type: "running"; attempt: number; gate: SendGate; done: SubmitDone }
   // Image attachments resolve and, for a new Session, the Session starts. Nothing is sent yet. `cleared` is the
   // composer a shown hold already cleared.
   | {
@@ -79,8 +90,12 @@ export type ComposerSubmitState =
       comments: PromptHistoryComment[]
       cleared: Prompt | undefined
       session: ComposerSession
+      gate: SendGate
       done: SubmitDone
     }
+  // The composer cleared and the send shows in its Session, but its request still waits on the gate. The composer
+  // submits nothing else, so sends leave in the order they were made, and Stop cancels this one.
+  | { type: "sending"; attempt: number; done: SubmitDone }
 
 export type SubmitSnapshot = {
   draft: CapturedDraft
@@ -138,12 +153,19 @@ export type ComposerSubmitEvent =
   | { type: "session.retargeted"; attempt: number; target: ComposerStateTarget; preserveDraft: boolean }
   | { type: "submit.aborted"; attempt: number }
   | { type: "handoff.ready"; attempt: number; prompt: PromptSend | undefined }
+  /** What the send of `attempt` waited for is ready, or timed out: its request may leave. */
+  | { type: "gate.settled"; attempt: number }
 
 export type ComposerSubmitEffect =
   | { type: "done"; done: SubmitDone; sent: boolean }
   | { type: "notify.missing-selection" }
   | { type: "notify.unqueueable" }
   | { type: "interrupt" }
+  /**
+   * Cancels the send of `attempt` before its request leaves: it is removed from its Session, and a draft the composer
+   * already gave up for it comes back.
+   */
+  | { type: "send.cancel"; attempt: number }
   | { type: "submit.retry"; alternate: boolean; first?: boolean; done: SubmitDone }
   /** Shows a held prompt in its Session's timeline and clears the composer it came from. */
   | { type: "hold.show"; attempt: number; session: ComposerSession; snapshot: SubmitSnapshot }
@@ -174,6 +196,8 @@ export type ComposerSubmitEffect =
       value: ComposerSubmission
       /** A prompt shows in the Session as soon as it starts, before the composer clears. */
       sendFirst: boolean
+      /** The send waits on the gate: the driver starts it and reports `gate.settled`. */
+      gated: boolean
       ready: Promise<void>
       complete?: () => Promise<void>
     }
@@ -182,6 +206,7 @@ export type ComposerSubmitEffect =
       draft: CapturedDraft
       value: ComposerSubmission
       kind: SubmissionKind
+      attempt: number
       comments: PromptHistoryComment[]
       session: ComposerSession
       prompt: PromptSend | undefined
@@ -203,12 +228,28 @@ export function transitionComposerSubmit(
 
   if (event.type === "quote") return quote(state, event.snapshot, event.done)
 
-  // Stopping a held send cancels it and leaves the prompt in the composer.
-  if (event.type === "stop")
-    return state.type === "held" ? cancelHold(state, []) : { state, effects: [{ type: "interrupt" }] }
+  if (event.type === "stop") return stop(state)
 
-  // A promoted new-session composer unmounts while its first prompt hands off, so only a held send ends here.
-  if (event.type === "unmounted") return state.type === "held" ? cancelHold(state, []) : unchanged(state)
+  // A promoted new-session composer unmounts while its first prompt hands off, so only a held send ends here. A send
+  // that waits on the gate goes on without its composer.
+  if (event.type === "unmounted") {
+    if (state.type === "held") return cancelHold(state, [])
+
+    return state.type === "sending" ? settle(state, true, []) : unchanged(state)
+  }
+
+  if (event.type === "gate.settled") {
+    if (current(state, "sending", event.attempt)) return settle(state, true, [])
+
+    if (
+      (current(state, "handing-off", event.attempt) || current(state, "running", event.attempt)) &&
+      state.gate === "pending"
+    )
+      return { state: { ...state, gate: "settled" }, effects: [] }
+
+    // A result for a send that was cancelled, or that another one has replaced.
+    return unchanged(state)
+  }
 
   // Only a prompt still in the composer cancels on an edit; a shown one left it, so the composer holds a new draft.
   if (event.type === "hold.changed")
@@ -257,9 +298,11 @@ export function transitionComposerSubmit(
   if (event.type === "session.started") {
     if (!current(state, "preparing", event.attempt)) return unchanged(state)
     const value = { ...state.value, images: event.images }
+    // A shell command starts no step, so nothing prepares for it.
+    const gate: SendGate = state.kind.type === "shell" ? "none" : "pending"
 
     return {
-      state: { ...state, type: "handing-off", value, session: event.session },
+      state: { ...state, type: "handing-off", value, session: event.session, gate },
       effects: [
         // A shown hold recorded it when it left the composer.
         ...(state.cleared ? [] : [{ type: "history.record" as const, prompt: value.prompt, mode: value.mode }]),
@@ -269,6 +312,7 @@ export function transitionComposerSubmit(
           session: event.session,
           value,
           sendFirst: state.kind.type === "prompt",
+          gated: gate === "pending",
           ready: event.ready,
           complete: event.complete,
         },
@@ -297,24 +341,32 @@ export function transitionComposerSubmit(
 
   if (!current(state, "handing-off", event.attempt)) return unchanged(state)
 
-  return settle(state, true, [
-    {
-      type: "composer.clear",
-      draft: state.draft,
-      value: state.value,
-      kind: state.kind,
-      comments: state.comments,
-      session: state.session,
-      prompt: event.prompt,
-      cleared: state.cleared,
-    },
-  ])
+  const clear: ComposerSubmitEffect = {
+    type: "composer.clear",
+    attempt: state.attempt,
+    draft: state.draft,
+    value: state.value,
+    kind: state.kind,
+    comments: state.comments,
+    session: state.session,
+    prompt: event.prompt,
+    cleared: state.cleared,
+  }
+
+  // The composer clears now, as the send already shows in its Session. Its request has not left yet, so the composer
+  // waits with it rather than taking the next send.
+  if (state.gate === "pending")
+    return { state: { type: "sending", attempt: state.attempt, done: state.done }, effects: [clear] }
+
+  return settle(state, true, [clear])
 }
 
 export function composerSubmitView(state: ComposerSubmitState) {
   return {
-    held: state.type === "held",
-    busy: state.type === "held" || state.type === "preparing" || state.type === "handing-off",
+    // Stop and Escape cancel the send rather than interrupt the Session.
+    held: state.type === "held" || state.type === "sending",
+    busy:
+      state.type === "held" || state.type === "preparing" || state.type === "handing-off" || state.type === "sending",
     canSubmit: state.type === "idle",
   }
 }
@@ -324,13 +376,29 @@ export function composerSubmitTarget(state: ComposerSubmitState, attempt: number
   if (current(state, "preparing", attempt) || current(state, "handing-off", attempt)) return state.draft.target
 }
 
+// Stop and Escape. A send whose request has not left yet is cancelled, and nothing of it reaches the server: a held
+// one, and one that waits on the gate. Otherwise they interrupt the Session, never both.
+function stop(state: ComposerSubmitState): ComposerSubmitTransition {
+  if (state.type === "held") return cancelHold(state, [])
+
+  // The composer still has its draft, or gets it back from the send that fails as cancelled.
+  if (state.type === "sending" || (state.type === "handing-off" && state.gate === "pending"))
+    return settle(state, false, [{ type: "send.cancel", attempt: state.attempt }])
+
+  // The quote's own send settles the run once it fails as cancelled.
+  if (state.type === "running" && state.gate === "pending")
+    return { state, effects: [{ type: "send.cancel", attempt: state.attempt }] }
+
+  return { state, effects: [{ type: "interrupt" }] }
+}
+
 function submit(state: ComposerSubmitState, snapshot: SubmitSnapshot, done: SubmitDone): ComposerSubmitTransition {
   if (state.type !== "idle") return { state, effects: [{ type: "done", done, sent: false }] }
   const attempt = state.attempt + 1
 
   if (snapshot.mode === "normal" && snapshot.clientCommand)
     return {
-      state: { type: "running", attempt, done },
+      state: { type: "running", attempt, gate: "none", done },
       effects: [{ type: "command.run", attempt, prompt: snapshot.draft.prompt, run: snapshot.clientCommand }],
     }
 
@@ -427,7 +495,7 @@ function quote(state: ComposerSubmitState, snapshot: QuoteSnapshot, done: Submit
   const attempt = state.attempt + 1
 
   return {
-    state: { type: "running", attempt, done },
+    state: { type: "running", attempt, gate: "pending", done },
     effects: [
       {
         type: "quote.send",
