@@ -105,6 +105,7 @@ export const dict = {
   "command.prompt.mode.shell": "Shell",
   "command.prompt.mode.normal": "Prompt",
   "command.prompt.mode.toggle": "Toggle shell mode",
+  "command.prompt.stop": "Stop session",
   "command.permissions.autoaccept.enable": "Auto-accept permissions",
   "command.permissions.autoaccept.disable": "Stop auto-accepting permissions",
   "command.permissions.autoaccept.project": "Auto-accept permissions for this project",
