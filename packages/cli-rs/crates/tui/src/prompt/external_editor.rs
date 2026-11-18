@@ -22,12 +22,10 @@ pub fn open(tui: &Tui, prompt: &Rc<Inner>) {
         failed(tui, "Set $VISUAL or $EDITOR to open an external editor");
         return;
     };
-    // The editor gets the pasted text, not the `[Pasted ~N lines]` labels (`expandPromptInputPastedText`).
     let snapshot =
         super::paste::expand_prompt(&prompt.snapshot(), |offset| prompt_input::index_at(&prompt.textarea, offset));
     let cwd = working_directory(tui, prompt);
     let weak = Rc::downgrade(prompt);
-    // One program at a time has the terminal (`features::foreground`).
     let released = crate::features::foreground::release(tui, move || {
         let result = edit(&command, snapshot["text"].as_str().unwrap_or_default(), &cwd);
         let Some(prompt) = weak.upgrade() else { return };
@@ -117,7 +115,6 @@ mod tests {
 
     use super::*;
 
-    /// [`realign`] with offsets as a default buffer counts them.
     fn realign_default(content: &str, prompt: &Value) -> Value {
         realign(content, prompt, |index| measure(&content[..index]))
     }
@@ -149,7 +146,6 @@ mod tests {
     fn repeated_mentions_take_the_nearest_occurrences_and_longer_texts_go_first() {
         let part = |start: u32, text: &str| json!({ "uri": "file:///x", "name": "x", "mention": { "start": start, "end": start + measure(text), "text": text } });
         let prompt = json!({ "files": [part(0, "@x"), part(20, "@x"), part(30, "@x.ts")] });
-        // Three "@x" candidates, one inside "@x.ts", which the longer mention protects.
         let next = realign_default("@x @x.ts                @x", &prompt);
         let starts: Vec<u64> =
             next["files"].as_array().unwrap().iter().map(|file| file["mention"]["start"].as_u64().unwrap()).collect();

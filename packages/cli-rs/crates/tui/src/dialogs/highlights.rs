@@ -6,20 +6,17 @@ use serde::Deserialize;
 
 use crate::prelude::*;
 
-/// One highlight of the release notes (`TuiHighlight`).
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 pub struct Highlight {
     pub title: String,
     pub body: String,
 }
 
-/// `DialogHighlights`, centered, in place of any open dialog.
 pub fn show(tui: &Tui, version: &str, items: &[Highlight]) {
     let title = format!("What's new in {version}");
     let items = items.to_vec();
     tui.dialogs.replace(
         move |cx| {
-            // The band and the text use the page theme (TS `overlay`), the frame the dialog surface.
             let overlay = cx.theme.page();
             cx.dialogs.set_centered(true);
             let app = &cx.app;
@@ -29,7 +26,6 @@ pub fn show(tui: &Tui, version: &str, items: &[Highlight]) {
             let list = View::new(app).gap(1).padding_x(DIALOG_INSET).bg(overlay.background.raised.high);
             for item in &items {
                 let body = Text::new(app, "").fg(overlay.text.muted).wrap(WrapMode::Word);
-                // Backticks mark code spans, which stand out from the muted description.
                 body.set_text(
                     item.body
                         .split('`')

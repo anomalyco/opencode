@@ -39,7 +39,6 @@ pub struct Session {
     scroll: scroll::Controls,
     _actions: actions::Actions,
     queued: queued::Queued,
-    /// The `session.composer.top` slot's plugin claims (P.1), and the box they mount in.
     slot: RefCell<opencode_plugin::SlotMount>,
     composer_top: View,
     composer: crate::composer::Composer,
@@ -61,7 +60,6 @@ impl Session {
         let prompt = crate::prompt::editor::mount(tui, Some(&id));
         scroll.follow_submits(&prompt);
         let queued = queued::Queued::new(tui, &id, prompt.weak());
-        // `<Switch>`: the permission, the form, the missing location, or the prompt.
         let rest = View::new(app)
             .column()
             .shrink(0.0)
@@ -87,7 +85,6 @@ impl Session {
                 }
             })
         });
-        // `<Slot path="session.composer.top">` between the dock and the composer (`routes/session/index.tsx:1597`).
         let composer_top = View::new(app).column().shrink(0.0);
         let slot = composer_slot(tui, &composer_top, &id);
         let column = View::new(app)
@@ -97,7 +94,6 @@ impl Session {
             .min_width(0)
             .padding_edge(Edge::Left, 2)
             .padding_edge(Edge::Right, 2)
-            // `paddingBottom={1}` (`routes/session/index.tsx:1518`); T.1's status row used to fill it.
             .padding_edge(Edge::Bottom, 1)
             .child(transcript.root())
             .child(queued.root())
@@ -165,7 +161,6 @@ impl RouteView for Session {
         // and one that opens as the last request goes takes the keys from the prompt shown here.
         if (self.permission.active() || self.form.active() || self.location.active()) != prompting {
             self.prompt.root().visible(prompting);
-            // An open dialog keeps the keys; the prompt takes them when it closes.
             if prompting && tui.dialogs.is_open() {
                 tui.dialogs.refocus(self.prompt.textarea());
             } else if prompting && !self.composer.open() {
@@ -206,7 +201,6 @@ impl RouteView for Session {
     }
 }
 
-/// `<Slot path="session.composer.top">` between the dock and the composer (`routes/session/index.tsx:1597`).
 fn composer_slot(tui: &Tui, parent: &View, id: &SessionID) -> opencode_plugin::SlotMount {
     crate::plugins::host::slot(
         tui,

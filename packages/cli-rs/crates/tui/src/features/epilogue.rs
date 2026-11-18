@@ -15,7 +15,6 @@ const LOGO_LEFT: [&str; 4] =
 const LOGO_RIGHT: [&str; 4] =
     ["             ▄     ", "█▀▀▀ █▀▀█ █▀▀█ █▀▀█", "█___ █__█ █__█ █^^^", "▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀"];
 
-/// The updated version an install recorded (`EpilogueProvider`).
 #[derive(Default)]
 pub struct Epilogue {
     updated_version: RefCell<Option<String>>,
@@ -61,7 +60,6 @@ pub fn print(text: &str) {
     let _ = write(&mut Stdout::default(), &mut std::io::stdout().lock(), text);
 }
 
-/// The console's escape sequences around the write.
 trait Console {
     fn escapes_on(&mut self);
     fn restore(&mut self);

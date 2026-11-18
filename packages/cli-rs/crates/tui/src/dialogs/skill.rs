@@ -47,7 +47,6 @@ enum Load {
     Failed(String),
 }
 
-/// Shows the dialog in `load`'s state. The returned flag clears when this dialog closes.
 fn open(tui: &Tui, load: Load, on_select: OnSelect) -> Rc<Cell<bool>> {
     let alive = Rc::new(Cell::new(true));
     let flag = alive.clone();
@@ -102,7 +101,6 @@ fn open(tui: &Tui, load: Load, on_select: OnSelect) -> Rc<Cell<bool>> {
     alive
 }
 
-/// The rows: names padded to the longest, descriptions on one line.
 fn options(skills: &[SkillInfo]) -> Vec<SelectOption<SkillID>> {
     // `padEnd` counts UTF-16 units; skill names are ASCII identifiers.
     let width = skills.iter().map(|skill| skill.name.0.chars().count()).max().unwrap_or(0);

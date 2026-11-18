@@ -26,7 +26,6 @@ use opencode_ui::toast::Toasts;
 
 use crate::prelude::*;
 
-/// A model with its variant (`ModelSelection`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Selection {
     pub model: Model,
@@ -34,27 +33,22 @@ pub struct Selection {
 }
 
 impl Selection {
-    // `selectionKey`.
     fn key(&self) -> String {
         format!("{}:{}", self.model.key(), model_pref::normalize_variant(self.variant.as_deref()).unwrap_or("default"))
     }
 }
 
-/// The routed session, as [`Local`] reads it.
 pub struct Routed {
     pub id: SessionID,
     pub session: Option<SessionInfo>,
 }
 
-/// The store catalogs [`Local`] reads.
 const CATALOGS: [Catalog; 5] =
     [Catalog::Model, Catalog::Provider, Catalog::Agent, Catalog::Integration, Catalog::Config];
 
-/// The client-local files [`Local`] uses.
 pub struct Files {
     /// The state directory that holds `model.json`.
     pub state: PathBuf,
-    /// TUI storage, for `go-upsell`.
     pub storage: Option<Storage>,
 }
 
@@ -89,32 +83,25 @@ pub struct Local {
     pub(crate) startup_model: RefCell<Option<Model>>,
     watch: RefCell<Option<Watch>>,
     pub(crate) layers: RefCell<Vec<Disposer>>,
-    /// The in-memory `go-upsell` record (`storage.memory`).
     pub(crate) go_memory: RefCell<crate::dialogs::go_upsell::Seen>,
-    /// Opens a URL in the browser; tests replace it.
     pub open_url: RefCell<OpenUrl>,
     pub(crate) this: Weak<Local>,
 }
 
 #[derive(Default)]
 struct State {
-    /// Where the catalog is read from in the store.
     location: Option<Location>,
     preference: Preference,
     ready: bool,
     agent: Option<String>,
-    /// Per session: the agent chosen there, if any (`draftBySession`).
     agent_drafts: HashMap<String, Option<String>>,
-    /// Per agent: the model chosen for a new session (`newSessionModelByLocationAgent`).
     new_session: HashMap<String, Model>,
-    /// Per session and agent: the model chosen there (`selectionBySessionAgent`).
     selections: HashMap<String, HashMap<String, Selection>>,
     /// Per session: the agent and selection key a submit committed, until the session reports them
     /// (`pendingSelectionCommits`).
     commits: HashMap<String, (String, String)>,
 }
 
-/// Posted from the `model.json` watcher thread.
 struct PreferencesChanged;
 
 impl Local {
@@ -165,7 +152,6 @@ impl Local {
         })
     }
 
-    /// Reads the location's catalog, loads `model.json`, and watches `model.json`.
     pub fn load(&self) {
         self.relocate(self.tui_location());
         self.load_preferences();
@@ -187,8 +173,6 @@ impl Local {
         self.read(Catalog::Integration, &location);
     }
 
-    /// Follows the store (`Tui::sync`): the catalog of the location the TUI moved to or whose catalog
-    /// changed, and the drafts of sessions that changed.
     pub fn sync(&self, changes: &Changes) {
         let location = self.tui_location();
         if self.state.borrow().location.as_ref() != Some(&location) {
@@ -213,7 +197,6 @@ impl Local {
         }
     }
 
-    // Reads the catalog of `location` from the store, and asks the store to read what it lacks.
     fn relocate(&self, location: Location) {
         self.state.borrow_mut().location = Some(location.clone());
         self.notify();
@@ -235,7 +218,6 @@ impl Local {
         );
     }
 
-    /// Reads `catalog` again into the store when polled, as a connect does.
     pub(crate) fn reload(
         &self,
         catalog: Catalog,
@@ -254,7 +236,6 @@ impl Local {
         self.data.read(|state| f(state.location(Some(&location))))
     }
 
-    /// Where the TUI works (`location.ref ?? data.location.default()`).
     fn tui_location(&self) -> Location {
         self.tui
             .upgrade()
@@ -262,7 +243,6 @@ impl Local {
             .unwrap_or_else(|| self.data.read(|state| state.default_location().clone()))
     }
 
-    /// The routed session, or `None` on home.
     pub(crate) fn route(&self) -> Option<Routed> {
         let Route::Session { id } = self.tui.upgrade()?.route() else { return None };
         let session = self.data.read(|state| state.session(&id).cloned());
@@ -279,7 +259,6 @@ impl Local {
         self.read(Catalog::UsageLimits, &location);
     }
 
-    /// The location the catalog and the usage limits are read for (`location.ref ?? data.location.default()`).
     pub(crate) fn catalog_location(&self) -> Location {
         let location = self.state.borrow().location.clone();
         location.unwrap_or_else(|| self.tui_location())
@@ -302,7 +281,6 @@ impl Local {
         self.app.request_redraw();
     }
 
-    /// The location the catalog is read from, as a request names it.
     pub(crate) fn location(&self) -> Option<LocationQueryInput> {
         let location = self.state.borrow().location.clone();
         let location = location.unwrap_or_else(|| self.tui_location());
@@ -359,14 +337,10 @@ impl Local {
         }));
     }
 
-    // Catalog reads.
-
-    /// Whether `model.json` has been read.
     pub fn ready(&self) -> bool {
         self.state.borrow().ready
     }
 
-    /// Whether the model list has loaded (`catalogReady`).
     pub fn catalog_ready(&self) -> bool {
         self.catalog(|data| data.is_some_and(|data| data.model.is_some()))
     }
@@ -436,7 +410,6 @@ impl Local {
         }
     }
 
-    /// `useConnected`: some integration has a connection.
     pub fn connected(&self) -> bool {
         self.catalog(|data| {
             data.and_then(|data| data.integration.as_ref())
@@ -456,9 +429,6 @@ impl Local {
         self.models(|models| models.iter().any(|item| is(item, model)))
     }
 
-    // Agents.
-
-    /// The agents a user can pick: not subagents, not hidden.
     pub fn agents(&self) -> Vec<AgentInfo> {
         self.catalog(|data| {
             data.and_then(|data| data.agent.as_ref())
@@ -475,7 +445,6 @@ impl Local {
         let selected = {
             let state = self.state.borrow();
             match self.route() {
-                // An acknowledged draft (`Some(None)`) gives way to the session's agent.
                 Some(routed) => state
                     .agent_drafts
                     .get(&routed.id.0)
@@ -494,7 +463,6 @@ impl Local {
         agents.iter().find(|agent| Some(&agent.id.0) == selected.as_ref()).or(agents.first()).cloned()
     }
 
-    /// `agent.set`: a warning toast for an unknown agent.
     pub fn set_agent(&self, id: &str) {
         if !self.agents().iter().any(|agent| agent.id.0 == id) {
             self.toasts.show(
@@ -542,15 +510,11 @@ impl Local {
         }
     }
 
-    // Models.
-
-    // `configuredModel`.
     fn configured(&self) -> Option<Selection> {
         let choice = self.catalog(|data| data?.config.as_deref().and_then(crate::prompt::metadata::configured))?;
         Some(Selection { model: Model::new(&choice.provider_id, &choice.model_id), variant: choice.variant })
     }
 
-    // `fallbackModel`.
     fn fallback(&self) -> Option<Model> {
         if let Some(startup) = self.startup_model.borrow().clone().filter(|model| self.is_valid(model)) {
             return Some(startup);
@@ -565,7 +529,6 @@ impl Local {
         self.models(|models| models.first().map(|first| Model::new(&first.provider_id.0, &first.id)))
     }
 
-    // `newSessionModel`.
     fn new_session_model(&self) -> Option<Model> {
         let agent = self.agent();
         let chosen = agent
@@ -582,7 +545,6 @@ impl Local {
             .or_else(|| self.fallback().filter(|model| self.is_valid(model)))
     }
 
-    // `preferredSelection`.
     fn preferred(&self, model: &Model) -> Selection {
         let configured = self.agent().and_then(|agent| agent.model);
         let fallback = self.configured();
@@ -603,7 +565,6 @@ impl Local {
         }
     }
 
-    // `durableSelection`.
     fn durable(session: Option<&SessionInfo>) -> Option<Selection> {
         let model = session?.model.as_ref()?;
         Some(Selection {
@@ -612,7 +573,6 @@ impl Local {
         })
     }
 
-    // `sessionSelection`.
     fn session_selection(&self, routed: &Routed) -> Option<Selection> {
         let agent = self.agent()?;
         let session = routed.session.as_ref();
@@ -629,7 +589,6 @@ impl Local {
         self.new_session_model().map(|model| self.preferred(&model))
     }
 
-    /// The model and variant the next prompt uses (`model.selection`).
     pub fn selection(&self) -> Option<Selection> {
         match self.route() {
             Some(routed) => self.session_selection(&routed),
@@ -641,7 +600,6 @@ impl Local {
         self.selection().map(|selection| selection.model)
     }
 
-    /// `model.parsed`: the provider and model names the prompt footer shows.
     pub fn parsed(&self) -> (String, String, bool) {
         let Some(selection) = self.selection() else {
             return ("Connect a provider".into(), "No provider selected".into(), false);
@@ -669,7 +627,6 @@ impl Local {
         }
     }
 
-    // `selectModel`.
     fn select_model(&self, model: &Model) -> bool {
         if let Some(routed) = self.route() {
             let current = self.session_selection(&routed);
@@ -686,7 +643,6 @@ impl Local {
         true
     }
 
-    // `locationAgentKey`: a model chosen for a new session belongs to the location and the agent.
     fn location_agent_key(&self, agent: &str) -> String {
         let location = self.state.borrow().location.clone();
         format!("{}:{agent}", location.unwrap_or_else(|| self.tui_location()).key())
@@ -757,7 +713,6 @@ impl Local {
         state.commits.remove(&id.0);
     }
 
-    /// `model.remember`: keeps the current selection for the current agent in this session.
     fn remember(&self) {
         let (Some(routed), Some(agent), Some(selection)) = (self.route(), self.agent(), self.selection()) else {
             return;
@@ -765,7 +720,6 @@ impl Local {
         self.state.borrow_mut().selections.entry(routed.id.0).or_default().insert(agent.id.0, selection);
     }
 
-    /// `model.set`: selects a model, and with `recent` adds it to the recent models.
     pub fn set(&self, model: &Model, recent: bool) {
         if !self.is_valid(model) || !self.select_model(model) {
             return;
@@ -808,7 +762,6 @@ impl Local {
         self.notify();
     }
 
-    /// `model.cycle`: the next or previous recent model.
     pub fn cycle(&self, direction: i64) {
         let Some(current) = self.selection() else { return };
         let recent: Vec<Model> = self.recent().into_iter().filter(|item| self.is_valid(item)).collect();
@@ -830,7 +783,6 @@ impl Local {
         self.notify();
     }
 
-    /// `model.cycleFavorite`: the next or previous favorite, added to the recent models.
     pub fn cycle_favorite(&self, direction: i64) {
         let favorites: Vec<Model> = self.favorite().into_iter().filter(|item| self.is_valid(item)).collect();
         if favorites.is_empty() {
@@ -864,7 +816,6 @@ impl Local {
         self.notify();
     }
 
-    /// `model.variant.list`: the current model's variant IDs.
     pub fn variants(&self) -> Vec<String> {
         self.selection()
             .and_then(|selection| self.model_info(&selection.model))
@@ -876,7 +827,6 @@ impl Local {
         self.selection().and_then(|selection| selection.variant)
     }
 
-    /// `model.variant.set`: `None` is the default variant.
     pub fn set_variant(&self, value: Option<&str>) {
         let Some(current) = self.selection() else { return };
         if let Some(routed) = self.route() {

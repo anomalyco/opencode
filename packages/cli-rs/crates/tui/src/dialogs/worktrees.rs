@@ -33,7 +33,6 @@ pub enum Selection {
     New { name: String },
 }
 
-/// What a pick runs.
 pub type OnSelect = Rc<dyn Fn(&Tui, Selection)>;
 /// What runs after a list read.
 type Then = Box<dyn FnOnce(&Rc<Workspaces>)>;
@@ -49,11 +48,9 @@ pub struct Props {
 }
 
 thread_local! {
-    /// The open dialog, for `worktree.updated`.
     static OPEN: RefCell<Weak<Workspaces>> = const { RefCell::new(Weak::new()) };
 }
 
-/// Opens the dialog for `props.project_id`.
 pub fn show(tui: &Tui, props: Props) {
     let workspaces = Rc::new(Workspaces {
         tui: tui.weak(),
@@ -67,7 +64,6 @@ pub fn show(tui: &Tui, props: Props) {
     workspaces.reopen(None);
 }
 
-/// `worktree.updated` of the open dialog's project reads the list again.
 pub(crate) fn event(event: &Handled) {
     let Handled::WorktreeUpdated(event) = event else { return };
     let Some(workspaces) = OPEN.with(|open| open.borrow().upgrade()) else { return };
@@ -100,7 +96,6 @@ struct State {
     to_delete: Option<String>,
     removing: Option<String>,
     working: bool,
-    /// The checkout that replaces a deleted current one.
     replacement: Option<String>,
     /// Asked the server to look for worktrees once.
     refreshed: bool,
@@ -111,8 +106,6 @@ impl Workspaces {
         self.tui.upgrade()
     }
 
-    /// `reopen`: starts over with the list kept, as TS mounts a new `DialogWorkspaces` with
-    /// `initialDirectories`. With `removing`, it shows that worktree being deleted and reads nothing.
     fn reopen(self: &Rc<Self>, removing: Option<String>) {
         {
             let mut state = self.state.borrow_mut();
@@ -132,7 +125,6 @@ impl Workspaces {
         }
     }
 
-    /// The store's info for `props.location`.
     fn location_info(&self, tui: &Tui) -> Option<opencode_api::generated::LocationPublicInfo> {
         tui.data.read(|state| state.location(self.props.location.as_ref()).and_then(|data| data.info.clone()))
     }
@@ -228,7 +220,6 @@ impl Workspaces {
         self.show_error() || state.loading || state.project_loading || state.removing.is_some()
     }
 
-    /// `currentDirectory`: the replacement, else the given current directory, else the project's checkout.
     fn current_directory(&self, tui: &Tui) -> Option<String> {
         if let Some(replacement) = self.state.borrow().replacement.clone() {
             return Some(replacement);
@@ -378,7 +369,6 @@ impl Workspaces {
             .collect()
     }
 
-    /// Builds the dialog again if it is still on screen.
     fn rebuild(self: &Rc<Self>) {
         if self.shown.get() || self.pending.get() {
             self.build();
@@ -685,7 +675,6 @@ impl Workspaces {
             .any(|item| item.directory.0 == directory && item.strategy.is_some())
     }
 
-    /// `create`: names a new worktree for the caller.
     fn create(self: &Rc<Self>) {
         let Some(tui) = self.tui() else { return };
         let workspaces = self.clone();
@@ -700,7 +689,6 @@ impl Workspaces {
         }));
     }
 
-    /// `move`: moves the open session to the selected directory.
     fn move_session(&self, option: &SelectOption<Selection>) {
         let Some(tui) = self.tui() else { return };
         let (Route::Session { id }, Selection::Directory { directory, .. }) = (tui.route(), &option.value) else {
@@ -713,7 +701,6 @@ impl Workspaces {
     }
 }
 
-/// The footer actions: move (in a session), new, delete, and refresh.
 fn actions(weak: &Weak<Workspaces>, session: bool) -> Vec<SelectAction<Selection>> {
     let selected = |command: &str, title: &str, run: fn(&Rc<Workspaces>, &SelectOption<Selection>)| {
         SelectAction::new(
@@ -747,7 +734,6 @@ fn actions(weak: &Weak<Workspaces>, session: bool) -> Vec<SelectAction<Selection
     actions
 }
 
-/// `contains`: `directory` is `root` or below it.
 pub(crate) fn contains(root: &str, directory: &str) -> bool {
     contains_in(Flavor::NATIVE, root, directory)
 }

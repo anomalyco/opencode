@@ -17,7 +17,6 @@ pub fn install(tui: &Rc<Tui>) {
     tui.keymap.install("clear", [KeymapLayer::global(vec![command])]);
 }
 
-/// `session.clear`, or `session.new` when `close_tab` is false.
 pub fn clear(tui: &Tui, close_tab: bool) {
     let model = tui.local.current();
     let agent = tui.local.agent();
@@ -35,7 +34,6 @@ pub fn clear(tui: &Tui, close_tab: bool) {
     tui.dialogs.clear();
 }
 
-/// Goes home in the new-session location (the tab strip's `add`).
 pub fn navigate_new(tui: &Tui) {
     let location = new_location(tui);
     crate::features::location::navigate_home(tui, Some(location));

@@ -1,5 +1,4 @@
-//! Diff shortcuts dialog (E.15b, row DLG48, `DiffViewerHelpDialog` in `feature-plugins/system/diff-viewer.tsx`):
-//! the viewer's keys in three groups, centered, read from the keymap when it opens. A host panel of a set height.
+//! TypeScript: `feature-plugins/system/diff-viewer.tsx`.
 
 use opencode_plugin::abi::{Dialog, Host, Layout, Node, Panel, PanelSize, Read, Span, Width};
 
@@ -40,11 +39,9 @@ pub fn open(host: &dyn Host, viewer: &Viewer) {
 
 type Group = (&'static str, Vec<(String, &'static str)>);
 
-/// The rows of each group, with the shortcuts as they are bound now; a command with none says `unbound`.
 fn groups(read: &dyn Read, single: bool, fullscreen: bool, tree: bool) -> Vec<Group> {
     // The first shortcut of each command.
     let first = |ids: &[&str]| ids.iter().filter_map(|id| read.shortcut(id)).collect::<Vec<_>>().join(" / ");
-    // Every shortcut of one command.
     let all = |id: &str| read.shortcuts(id).join(" / ");
     let row = |shortcut: String, label: &'static str| {
         let shortcut = if shortcut.is_empty() { "unbound".to_owned() } else { shortcut };

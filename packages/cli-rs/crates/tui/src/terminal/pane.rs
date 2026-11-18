@@ -33,7 +33,6 @@ struct State {
     restored: bool,
     wants_control: bool,
     exited: bool,
-    /// The box's size less the offset and gutter.
     size: Option<Size>,
     /// The server's size, which the embedded terminal follows.
     canonical: Option<Size>,
@@ -53,7 +52,6 @@ pub struct Pane {
     state: RefCell<State>,
     disposed: Cell<bool>,
     attachment: String,
-    /// The theme's palette as OSC sequences, written to the terminal when it connects and on a theme switch.
     theme: RefCell<Vec<u8>>,
     tui: Weak<Tui>,
 }
@@ -106,8 +104,6 @@ impl Pane {
         &self.root
     }
 
-    /// Takes the page theme in place, as TS's `terminalPalette` follows it: the terminal keeps its screen and gets
-    /// the new palette.
     pub fn restyle(&self, tui: &Tui) {
         let page = tui.page();
         let background = page.background.raised.base;
@@ -127,7 +123,6 @@ impl Pane {
         self.view.borrow().clone().filter(|view| view.is_focused())
     }
 
-    /// `onFocusRequest`: focuses the terminal and claims control.
     pub fn focus(&self) {
         let view = self.view.borrow().clone();
         if let Some(view) = view {
@@ -146,7 +141,6 @@ impl Pane {
         self.send_input(bytes);
     }
 
-    /// Stops the connection; the pane is leaving the frame.
     pub fn dispose(&self) {
         self.disposed.set(true);
         self.socket.borrow_mut().take();
@@ -181,7 +175,6 @@ impl Pane {
                 pane.interact();
             }
         }));
-        // TS composes this with the terminal's own focus handler the same way: a press anywhere claims control.
         self.root.on_mouse(bind!(self, |pane, _, event| if let MouseEventKind::Down(_) = event.kind {
             pane.interact();
         }));
@@ -362,7 +355,6 @@ impl Pane {
         });
     }
 
-    /// Reads the socket on the UI thread, one wake per batch of messages.
     fn receive(self: &Rc<Self>, app: &App, mut incoming: mpsc::Receiver<Incoming>) {
         let weak = Rc::downgrade(self);
         app.spawn(
@@ -386,7 +378,6 @@ impl Pane {
         );
     }
 
-    /// Handles one message; returns whether the socket is still open.
     fn handle(&self, item: Incoming) -> bool {
         let text = match item {
             Incoming::Binary(data) => {
@@ -440,7 +431,6 @@ impl Pane {
         true
     }
 
-    /// The socket ended: the terminal stops taking input, and focus goes back to the session if it was here.
     fn disconnect(&self, failure: Option<&str>) {
         let focused = self.focused().is_some();
         self.view.borrow_mut().take();

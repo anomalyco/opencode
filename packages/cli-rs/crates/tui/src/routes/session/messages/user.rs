@@ -18,9 +18,7 @@ pub struct User {
     images: Images,
     color: Cell<Option<Color>>,
     rendered: RefCell<Option<SessionMessageUser>>,
-    /// The pointer is over the body, which darkens it.
     hover: Rc<Cell<bool>>,
-    /// The message a click opens dialogs for.
     id: Rc<RefCell<String>>,
     /// The box its hover handler restyles. The handler holds it weakly: a widget whose handler holds the widget
     /// is never freed.
@@ -98,7 +96,6 @@ impl User {
         &self.root
     }
 
-    /// Takes the theme of `cx`; the next update paints the rest.
     pub fn restyle(&self, cx: &Context<'_>) {
         let raised = cx.theme.background.raised.base;
         self.text.fg(cx.theme.text.base);
@@ -111,8 +108,6 @@ impl User {
 
     pub fn update(&self, cx: &Context<'_>, message: &SessionMessageUser) {
         message.id.0.clone_into(&mut self.id.borrow_mut());
-        // The bar takes the session's agent color, which changes when the agents load; a prompt still in the inbox
-        // takes the border color.
         let pending = crate::routes::session::queued::delivery(cx.state, cx.session, &message.id.0);
         let color = match pending {
             Some(_) => cx.theme.border.base,
@@ -150,13 +145,11 @@ impl User {
     }
 }
 
-/// The body on the raised surface, darker under the pointer.
 fn paint_body(body: &View, theme: &Theme, hover: bool) {
     let raised = &theme.background.raised.base;
     body.bg(if hover { theme.decrease(raised, 1) } else { *raised });
 }
 
-/// ` label ` on the accent, then ` name ` on a darker raised surface.
 fn chip(cx: &Context<'_>, label: &str, name: &str) -> Text {
     let theme = cx.theme;
     let accent = theme.accent().step(if cx.mode == ThemeMode::Light { 300 } else { 200 });

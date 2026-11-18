@@ -58,14 +58,12 @@ impl Before {
     }
 }
 
-/// Routes the textarea's pastes here and expands a pasted mark on click.
 pub fn connect(inner: &Rc<Inner>) {
     let weak = Rc::downgrade(inner);
     inner.textarea.on_paste(bind!(weak, |prompt, cx, text| {
         // Inserted here, after the file check, not by the textarea.
         cx.prevent_default();
         cx.stop_propagation();
-        // A plugin's composer layer that declares pastes may take it (synthesis 3.8); else the host's route has it.
         if let Some(tui) = prompt.tui.upgrade()
             && tui.router.paste(&*tui, text, opencode_plugin::interact::Pasted::Composer)
         {
@@ -107,7 +105,6 @@ pub fn connect(inner: &Rc<Inner>) {
     });
 }
 
-/// `prompt.paste`: reads the clipboard into the prompt.
 pub fn from_clipboard(prompt: &Rc<Inner>) {
     enqueue(prompt, Job::Clipboard);
 }
@@ -180,7 +177,6 @@ fn read_clipboard(app: &App, done: impl FnOnce(ClipboardOutcome) + 'static) {
     app.read_clipboard_as(&["image/png", "text/plain"], move |_, outcome| done(outcome));
 }
 
-/// `pasteInputText`: files attach; long text collapses into a part; anything else is inserted.
 fn paste_input_text(prompt: &Rc<Inner>, text: String, before: Before) {
     let normalized = strip_ansi(&text).replace("\r\n", "\n").replace('\r', "\n");
     let pasted = normalized.trim().to_owned();
@@ -223,7 +219,6 @@ fn paste_input_text(prompt: &Rc<Inner>, text: String, before: Before) {
     );
 }
 
-/// The text part of `pasteInputText`.
 fn insert(prompt: &Inner, normalized: &str, pasted: &str) {
     let lines = pasted.matches('\n').count() + 1;
     let compact = prompt
@@ -251,7 +246,6 @@ fn insert(prompt: &Inner, normalized: &str, pasted: &str) {
     prompt.textarea.insert(normalized);
 }
 
-/// `pasteText`: `label` at the cursor, marked, standing for `text`.
 fn paste_text(prompt: &Inner, text: &str, label: &str) {
     let textarea = &prompt.textarea;
     let start = textarea.cursor_offset();
@@ -268,7 +262,6 @@ fn paste_text(prompt: &Inner, text: &str, label: &str) {
     prompt.parts.track(mark, Kind::Pasted, pasted.len() - 1);
 }
 
-/// `pasteAttachment`: `[Image N]` or `[PDF N]` at the cursor, marked as a file part with the data URI.
 fn attachment(prompt: &Inner, uri: &str, filename: Option<&str>, path: Option<&str>) -> Result<(), String> {
     let files = prompt.prompt.borrow()["files"].as_array().cloned().unwrap_or_default();
     let label = attach::label(&files, uri, filename)?;
@@ -301,7 +294,6 @@ fn attachment(prompt: &Inner, uri: &str, filename: Option<&str>, path: Option<&s
     Ok(())
 }
 
-/// `expandPastedText`: replaces a paste's mark with its text. Returns whether `mark` was one.
 fn expand(prompt: &Inner, mark: opentui::widget::ExtmarkId) -> bool {
     let textarea = &prompt.textarea;
     let Some(extmark) = textarea.extmark(mark) else { return false };
@@ -312,7 +304,6 @@ fn expand(prompt: &Inner, mark: opentui::widget::ExtmarkId) -> bool {
     true
 }
 
-/// The text a submit sends: each paste's mark replaced by its text (`expandTrackedPastedText`).
 pub fn expanded_text(prompt: &Inner) -> String {
     let textarea = &prompt.textarea;
     let info = prompt.prompt.borrow();
@@ -341,7 +332,6 @@ pub fn clipboard_text(tui: &crate::app::Tui, text: &str) -> String {
     let textarea = &prompt.textarea;
     let range = textarea.view().selection().ok().flatten();
     let info = prompt.prompt.borrow();
-    // A selection spanning other widgets is not indexed relative to this textarea.
     let Some((start, end)) = range.filter(|_| text == textarea.selected_text()) else {
         return expand_placeholders(text, info["pasted"].as_array().map(Vec::as_slice).unwrap_or_default());
     };
@@ -460,7 +450,6 @@ mod tests {
         });
         let expanded = expand_prompt(&prompt, |offset| offset as usize);
         assert_eq!(expanded["text"], "x\ny\nz see @a.ts");
-        // "x\ny\nz" measures 5, the label 17: the mention moves 12 to the left.
         assert_eq!(expanded["files"][0]["mention"]["start"], 10);
         assert_eq!(expanded["files"][0]["mention"]["end"], 15);
     }

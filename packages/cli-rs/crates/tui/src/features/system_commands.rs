@@ -19,7 +19,6 @@ use crate::prelude::*;
 
 const DOCS: &str = "https://opencode.ai/docs";
 
-/// Registers the commands; the caller keeps the returned layers.
 pub fn install(tui: &Rc<Tui>) -> Vec<Disposer> {
     let info = tui.settings.info();
     let command = |id: &str, title: &str, run: fn(&Tui)| {
@@ -28,7 +27,6 @@ pub fn install(tui: &Rc<Tui>) -> Vec<Disposer> {
     let commands = vec![
         command("location.reload", "Reload configuration", reload).palette().slash("reload"),
         command("docs.open", "Open docs", |tui| {
-            // TS ignores a failure here.
             let _ = crate::features::links::open_url(DOCS);
             tui.dialogs.clear();
         })
@@ -43,7 +41,6 @@ pub fn install(tui: &Rc<Tui>) -> Vec<Disposer> {
         })
         .palette(),
         command("terminal.suspend", "Suspend terminal", |tui| {
-            // The time the terminal is away is no animation's.
             opencode_plugin::canvas::handover(&tui.app);
             tui.app.suspend();
         })
@@ -75,9 +72,7 @@ pub fn install(tui: &Rc<Tui>) -> Vec<Disposer> {
     let ids: Vec<String> = commands.iter().filter_map(|c| c.id.clone()).filter(|id| id != "terminal.suspend").collect();
     let layers = [
         KeymapLayer::global(commands),
-        // `appBindingCommands` (`app.tsx:150-186`).
         KeymapLayer::default().bindings(ids),
-        // `appGlobalBindingCommands` (`app.tsx:117`): Ctrl+Z suspends with a form or dialog open too.
         KeymapLayer::global(Vec::new()).bindings(["terminal.suspend"]),
     ];
     install_effects(tui);
@@ -89,13 +84,10 @@ pub fn install(tui: &Rc<Tui>) -> Vec<Disposer> {
         .collect()
 }
 
-/// The mouse mode the terminal starts in: motion tracking for hover, or none with `mouse: false`
-/// (`useMouse: config.mouse`).
 pub fn mouse_tracking(config: &Resolved) -> MouseTracking {
     if config.mouse { MouseTracking::Motion } else { MouseTracking::Off }
 }
 
-/// The configured cursor (`useCursorStyle`): `cursor.style`, else a block, and `cursor.blinking`, else on.
 pub fn cursor(config: &Resolved) -> (opentui::native::CursorStyle, bool) {
     let style = match config.cursor_style {
         CursorStyle::Block => opentui::native::CursorStyle::Block,
@@ -144,7 +136,6 @@ fn install_effects(tui: &Rc<Tui>) {
     });
 }
 
-/// `location.reload`: closes dialogs, then reloads the server configuration with progress toasts.
 fn reload(tui: &Tui) {
     tui.dialogs.clear();
     tui.toasts.show(
@@ -156,7 +147,6 @@ fn reload(tui: &Tui) {
     });
 }
 
-/// One `config.update` of a toggle, then closes dialogs.
 fn write(tui: &Tui, path: &'static [&'static str], value: Value) {
     update(tui, move |draft| set_path(draft, path, value));
     tui.dialogs.clear();
@@ -180,7 +170,6 @@ fn diff_wrap(info: &Info) -> bool {
     info.diffs.as_ref().and_then(|diffs| diffs.wrap).unwrap_or(DiffWrap::Word) == DiffWrap::Word
 }
 
-/// `prompt.paste !== "full"`.
 fn paste_summary(info: &Info) -> bool {
     info.prompt.as_ref().and_then(|prompt| prompt.paste) != Some(PromptPaste::Full)
 }

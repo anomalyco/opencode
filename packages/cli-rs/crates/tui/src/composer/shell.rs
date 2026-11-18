@@ -1,5 +1,4 @@
-//! The Shell tab (`routes/session/composer/shell-tab.tsx`): the session's running shell commands; Enter opens the
-//! shell output dialog and Ctrl+D kills one.
+//! TypeScript: `routes/session/composer/shell-tab.tsx`.
 
 use opencode_api::generated::{LocationQueryInput, SessionMessageShellStatus, ShellRemoveInput};
 use opencode_store::Shell;
@@ -17,7 +16,6 @@ pub(super) struct State {
 }
 
 impl State {
-    /// The effects that keep the selection in range and scroll it into view, centered, when it leaves the box.
     fn settle(&mut self) {
         if self.selected >= self.entries.len() {
             self.selected = self.entries.len().saturating_sub(1);
@@ -111,7 +109,6 @@ fn open(inner: &Inner, tui: &Tui) {
     }
 }
 
-/// The list; returns the footer hints.
 pub(super) fn draw(inner: &Rc<Inner>, tui: &Tui, theme: &Theme) -> Vec<(String, String)> {
     let (entries, selected, offset) = {
         let state = inner.shell.borrow();

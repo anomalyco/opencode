@@ -1,6 +1,4 @@
-//! Skill, notice, and switch messages (E.6b): `SessionSkillMessage`, `SessionNoticeMessageV2`, and
-//! `SessionSwitchMessageV2` (`routes/session/index.tsx:2073-2169`). Each is one line padded 3 from the left; skills
-//! and plain notices take `InlineToolRow`'s two-cell icon.
+//! TypeScript: `routes/session/index.tsx:2073-2169`.
 
 use opencode_api::generated::{ModelInfo, ModelRef};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
@@ -18,21 +16,15 @@ struct Inner {
     tui: Weak<Tui>,
     root: View,
     rendered: RefCell<Option<Line>>,
-    /// The completion heading, recolored on hover.
     heading: RefCell<Option<Text>>,
     hover: Cell<bool>,
 }
 
-/// What a notice row shows.
 #[derive(Clone, Debug, PartialEq)]
 enum Line {
-    /// `InlineToolRow`: an icon in two cells, then the text.
     Inline { icon: &'static str, text: String },
-    /// One muted line.
     Plain(String),
-    /// `↳ Moved to ` then the directory in the info color.
     Moved(String),
-    /// A subagent's or shell's completion: the heading in its state's color, then a muted suffix.
     Completion { heading: String, suffix: String, state: Option<String>, child: Option<String> },
 }
 
@@ -70,7 +62,6 @@ impl Notice {
         &self.0.root
     }
 
-    /// The next update paints the line in the live theme.
     pub fn restyle(&self) {
         self.0.rendered.take();
     }
@@ -106,7 +97,6 @@ impl Notice {
                 ));
             }
             Line::Completion { .. } => {
-                // One text, as TS has it: a line break in the suffix starts under the heading.
                 let text = Text::new(app, "").wrap(WrapMode::None);
                 self.0.root.add(&text);
                 *self.0.heading.borrow_mut() = Some(text);
@@ -191,7 +181,6 @@ fn line(message: &SessionMessageInfo, models: &[ModelInfo], width: usize) -> Lin
     }
 }
 
-/// `switchLabel`: a variant change, or the model's name with its variant.
 fn switch_label(model: &ModelRef, models: &[ModelInfo], previous: Option<&ModelRef>) -> String {
     if let Some(previous) = previous
         && previous.provider_id == model.provider_id
@@ -212,7 +201,6 @@ fn switch_label(model: &ModelRef, models: &[ModelInfo], previous: Option<&ModelR
     format!("Switched model to {}{variant}", display.name)
 }
 
-/// `Locale.truncateWidth`: at most `width` cells, ending in `…` when cut.
 pub fn truncate_width(text: &str, width: usize) -> String {
     if width == 0 {
         return String::new();

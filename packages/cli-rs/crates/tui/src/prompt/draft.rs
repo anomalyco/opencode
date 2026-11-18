@@ -4,15 +4,12 @@
 
 use crate::prelude::*;
 
-/// A saved prompt and its cursor.
 #[derive(Clone, Debug)]
 pub struct Draft {
-    /// The `PromptInfo` shape history uses.
     pub prompt: Value,
     pub cursor: u32,
 }
 
-/// Drafts by session; `None` is home.
 #[derive(Default)]
 pub struct Drafts(RefCell<HashMap<Option<SessionID>, Draft>>);
 

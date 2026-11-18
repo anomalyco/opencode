@@ -1,7 +1,4 @@
-//! The full-screen TUI (T.1): `packages/tui/src/app.tsx` on opentui-rust. Structure: `docs/T.1.md`.
-//!
-//! [`app::Tui`] is the shared context, [`routes`] the screens. Each later step fills its own modules;
-//! a one-line file is a stub that names its step.
+//! TypeScript: `packages/tui/src/app.tsx`.
 
 pub mod app;
 pub mod client_mcp;

@@ -1,6 +1,4 @@
-//! Pane resizing (W04, W05): `ui/pane-resize.ts` and `ui/pane-resize-handle.tsx`. A 2-cell handle over a pane
-//! boundary; a press starts a resize, drags move it, and the release commits the size. A second press within
-//! 300 ms of a click that did not move resets the default.
+//! TypeScript: `ui/pane-resize.ts`, `ui/pane-resize-handle.tsx`.
 
 use std::time::Instant;
 
@@ -15,11 +13,9 @@ type Clamp = Box<dyn Fn(&Tui, i64) -> u16>;
 type FromMouse = Box<dyn Fn(&Tui, u16) -> i64>;
 type Commit = Box<dyn Fn(&Tui, u16)>;
 
-/// What a resize measures: each pane gives its own rules (`createPaneResize` options).
 pub struct Rules {
     pub default: Size,
     pub clamp: Clamp,
-    /// The size a pointer at screen column `x` asks for.
     pub from_mouse: FromMouse,
     pub commit: Commit,
 }
@@ -54,7 +50,6 @@ impl PaneResize {
         }
     }
 
-    /// `size`: the preferred size, clamped to the room there is now.
     pub fn size(&self, tui: &Tui) -> u16 {
         let preferred = self.preferred.get().unwrap_or_else(|| (self.rules.default)(tui));
         (self.rules.clamp)(tui, i64::from(preferred))
@@ -104,7 +99,6 @@ impl PaneResize {
     }
 }
 
-/// The handle (`PaneResizeHandle`): 2 cells wide, its highlight on the left or right cell.
 pub struct Handle {
     tui: Weak<Tui>,
     resize: Rc<PaneResize>,

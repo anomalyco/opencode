@@ -10,11 +10,9 @@ use crate::routes::session::form::{Host, quiet};
 
 pub struct HomeForms {
     host: Host,
-    /// The location whose global forms were read.
     read: RefCell<Option<Location>>,
 }
 
-/// Mounts the overlay on `home`; the home calls [`HomeForms::sync`] on each store change.
 pub fn mount(tui: &Tui, home: &View) -> HomeForms {
     let overlay = View::new(&tui.app)
         .absolute()
@@ -35,7 +33,6 @@ impl HomeForms {
         self.host.restyle();
     }
 
-    /// Whether a form shows; the home prompt is disabled meanwhile.
     pub fn active(&self) -> bool {
         self.host.active()
     }

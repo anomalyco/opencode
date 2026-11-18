@@ -1,29 +1,21 @@
-//! Error details dialog (E.18b): `packages/tui/src/component/dialog-error-details.tsx`.
-//!
-//! E.17b added [`view`] for the MCP dialog's failed servers; the plugin manager (E.18b) adds the `source` path
-//! line under the title.
+//! TypeScript: `packages/tui/src/component/dialog-error-details.tsx`.
 
 use opencode_ui::dialog::{DialogCx, FooterAction, FooterProps, footer};
 
 use crate::prelude::*;
 
-/// `DialogErrorDetails` props.
 #[derive(Clone)]
 pub struct Props {
     pub title: String,
-    /// A path or package shown under the title (TS `FilePath`).
     pub source: Option<String>,
     pub error: String,
     pub context: Option<String>,
     pub diagnostic_ref: Option<String>,
-    /// Escape and the close label run it.
     pub on_back: Rc<dyn Fn()>,
 }
 
-/// The footer drawing, reached weakly from the footer's own action.
 type Hook = RefCell<Option<Weak<dyn Fn()>>>;
 
-/// Builds the details inside the dialog of `cx`.
 pub fn view(tui: &Tui, cx: &Rc<DialogCx>, props: Props) -> View {
     let app = &cx.app;
     let theme = &cx.theme;
@@ -165,7 +157,6 @@ pub fn view(tui: &Tui, cx: &Rc<DialogCx>, props: Props) -> View {
     opencode_ui::dialog::layout_view(cx, &head, &body, Some(&slot), opencode_ui::dialog::DIALOG_INSET, 1)
 }
 
-/// `errorDetails`: the copied text and the investigation prompt.
 pub struct Details {
     pub text: String,
     pub prompt: String,

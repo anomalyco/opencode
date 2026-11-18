@@ -27,29 +27,21 @@ const RECENT_LIMIT: usize = 8;
 thread_local! {
     /// `openSessions` in `app.tsx:555`: the last recent read, shown at once when the dialog reopens.
     static RECENT: RefCell<Vec<SessionInfo>> = const { RefCell::new(Vec::new()) };
-    /// The open dialog, for `worktree.updated`.
     static OPEN: RefCell<Weak<Open>> = const { RefCell::new(Weak::new()) };
 }
 
-/// `worktree.updated` of the project whose worktrees show reads them again (`dialog-open.tsx:135-139`).
 pub(crate) fn event(event: &Handled) {
     let Handled::WorktreeUpdated(event) = event else { return };
     let Some(open) = OPEN.with(|open| open.borrow().upgrade()) else { return };
-    // The select goes when the dialog closes.
     if open.select.borrow().is_some() && open.worktree_project().as_ref() == Some(&event.data.project_id) {
         open.load_worktrees(event.data.project_id.clone());
     }
 }
 
-/// What a row opens.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Target {
     Session(SessionID),
-    Project {
-        directory: String,
-        /// Set for Git projects, which list worktrees.
-        project_id: Option<ProjectID>,
-    },
+    Project { directory: String, project_id: Option<ProjectID> },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -99,7 +91,6 @@ struct Open {
     state: RefCell<State>,
     select: RefCell<Option<Select<Target>>>,
     prompt: RefCell<Option<Prompt>>,
-    /// The loading and error line under the list.
     footer: View,
 }
 
@@ -113,12 +104,10 @@ struct State {
     recent: Option<bool>,
     /// The store's project read: `None` while loading, then whether it succeeded.
     projects: Option<bool>,
-    /// The session an exact ID in the filter names.
     matched: Option<SessionInfo>,
     /// The worktree directories of the open project; `None` while loading.
     worktrees: Option<Vec<String>>,
     refreshed: HashSet<ProjectID>,
-    /// `projectsSelection`: where `left` returns to.
     back: Option<Selection>,
 }
 
@@ -330,7 +319,6 @@ impl Open {
         }
     }
 
-    /// `matched`: reads the session an exact `ses_` ID names.
     fn find_exact(self: &Rc<Self>, value: &str) {
         let Some(tui) = self.tui() else { return };
         let exact =
@@ -471,7 +459,6 @@ impl Open {
         }
     }
 
-    /// `options()`: sessions, then projects.
     fn project_view_options(&self) -> Vec<SelectOption<Target>> {
         let Some(tui) = self.tui() else { return Vec::new() };
         let theme = dialog_theme(&tui);
@@ -491,7 +478,6 @@ impl Open {
                 .chain(state.sessions.iter())
                 .chain(matched)
                 .filter(|session| {
-                    // The session whose exact ID was typed is listed even when it is a child or archived.
                     let exact = Some(&session.id) == matched.map(|matched| &matched.id);
                     if (session.parent_id.is_some() && !exact) || seen.contains(&session.id) {
                         return false;
@@ -576,7 +562,6 @@ impl Open {
         for project in projects
             .iter()
             .filter(|project| project.canonical.as_str() != "/")
-            // Historical project identities can share a checkout; the newest-active one stays.
             .filter(|project| canonicals.insert(project.canonical.0.clone()))
         {
             let directory = project.canonical.as_str();
@@ -659,7 +644,6 @@ impl Open {
         }
     }
 
-    /// `right`: the worktrees of the selected Git project.
     fn show_worktrees(self: &Rc<Self>) {
         let selected = self.select.borrow().as_ref().and_then(Select::selected).map(|option| option.value);
         let Some(Target::Project { directory, project_id: Some(id) }) = selected else { return };
@@ -675,14 +659,12 @@ impl Open {
         });
     }
 
-    /// `left` and Escape in the worktrees: back to the projects as they were.
     fn back(self: &Rc<Self>) {
         let Some(selection) = self.state.borrow_mut().back.clone() else { return };
         let open = self.clone();
         self.defer(move || open.build(selection));
     }
 
-    /// `ctrl+n`: the new worktree prompt.
     fn new_worktree(self: &Rc<Self>) {
         let Some(id) = self.worktree_project() else { return };
         let previous = self.snapshot();
@@ -888,8 +870,6 @@ pub(crate) fn truncate_file_path(value: &str, max: i64) -> String {
     prefix + &selected.join(&separator.to_string())
 }
 
-// `^(\\\\|\/\/)([^\\/]+)[\\/]([^\\/]+)(?:[\\/]|$)`: the leading pair, the server, the share, and where the
-// match ends.
 fn unc_root(value: &str) -> Option<(&str, &str, &str, usize)> {
     let lead = ["\\\\", "//"].into_iter().find(|lead| value.starts_with(lead))?;
     let is_sep = |c: char| c == '/' || c == '\\';
@@ -946,7 +926,6 @@ mod tests {
         assert_eq!(truncate_file_path("/home/user/projects/opencode", 20), "/…/projects/opencode");
         assert_eq!(truncate_file_path("/a/very-long-name.txt", 10), "/…/ve….txt");
         assert_eq!(truncate_file_path("/x", 0), "");
-        // `packages/tui/test/ui/file-path.test.ts`.
         for (path, max, expected) in [
             ("packages\\tui\\src\\ui\\dialog-select.tsx", 22, "…\\ui\\dialog-select.tsx"),
             ("dir/file\\name.ts", 14, "…/file\\name.ts"),

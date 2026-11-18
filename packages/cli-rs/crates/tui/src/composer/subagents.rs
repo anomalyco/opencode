@@ -1,5 +1,4 @@
-//! The Subagents tab (`routes/session/composer/subagents-tab.tsx`): the session's family under its root, running or
-//! not as the filter says, with the current session marked.
+//! TypeScript: `routes/session/composer/subagents-tab.tsx`.
 
 use opencode_api::generated::{SessionInfo, SessionInterruptInput};
 use opencode_store::SessionStatus;
@@ -39,7 +38,6 @@ impl State {
         self.scroll_to_index(next, center);
     }
 
-    /// `scrollToIndex` on a box as tall as its rows, at most five.
     fn scroll_to_index(&mut self, index: usize, center: bool) {
         let len = self.entries.len();
         let height = len.min(super::ROWS);
@@ -59,7 +57,6 @@ impl State {
 /// The entries the filter keeps, then the tab's effect: center on the current session once per activation, keep the
 /// selection in range, and forget it when the tab hides.
 pub(super) fn update(inner: &Rc<Inner>, tui: &Tui) {
-    // A hidden tab reads nothing: every store change syncs the composer, streamed text included.
     if !inner.is_active(Tab::Subagents) {
         let mut state = inner.subagents.borrow_mut();
         state.entries.clear();
@@ -167,7 +164,6 @@ pub(super) fn commands(inner: &Rc<Inner>) -> Vec<TuiCommand> {
     ]
 }
 
-/// The list; returns the footer hints.
 pub(super) fn draw(inner: &Rc<Inner>, tui: &Tui, theme: &Theme) -> Vec<(String, String)> {
     let filter = tui.composer.active.get();
     let (entries, selected, offset) = {

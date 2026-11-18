@@ -1,12 +1,10 @@
-//! Rename dialog (E.10a, row DLG17): `packages/tui/src/component/dialog-session-rename.tsx`. E.11a
-//! wrote it for the session list's rename action; E.10a binds `session.rename` to it.
+//! TypeScript: `packages/tui/src/component/dialog-session-rename.tsx`.
 
 use opencode_api::generated::SessionUpdateInput;
 use opencode_ui::prompt::{PromptProps, prompt};
 
 use crate::prelude::*;
 
-/// `DialogSessionRename.show`: replaces the open dialogs with the rename prompt.
 pub fn show(tui: &Tui, session: SessionID, title: Option<String>) {
     let weak = tui.weak();
     let clear = tui.dialogs.clone();

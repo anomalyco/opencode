@@ -27,9 +27,7 @@ use crate::prelude::*;
 
 /// How long an armed interrupt waits for the second Escape.
 const INTERRUPT_WINDOW: Duration = Duration::from_secs(5);
-/// Clearing a prompt keeps it in history from this many characters on (`DRAFT_RETENTION_MIN_CHARS`).
 const CLEAR_RETENTION_CHARS: usize = 20;
-/// The home prompt's examples (`routes/home.tsx:20-23`); a session's prompt passes none.
 const PLACEHOLDERS: [&str; 3] =
     ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"];
 const SHELL_PLACEHOLDERS: [&str; 3] = ["ls -la", "git status", "pwd"];
@@ -49,15 +47,11 @@ impl Mode {
     }
 }
 
-/// Prompt state the whole app shares: history, drafts, and stashes.
 pub struct Shared {
     pub history: History,
     pub drafts: Drafts,
-    /// Frecency, directory recents, and the home `/cd` location (E.3).
     pub complete: autocomplete::Shared,
-    /// The IDE's file and selection (E.5).
     pub editor: editor_context::Context,
-    /// Stashed prompts (E.4).
     pub stash: super::stash::Stash,
     /// The prompt last mounted, whose pastes a copy expands (E.4).
     pub(crate) current: RefCell<Weak<Inner>>,
@@ -137,7 +131,6 @@ impl Shared {
     }
 }
 
-/// A mounted prompt. Dropping it saves its draft and removes its key layers.
 pub struct Prompt {
     inner: Rc<Inner>,
 }
@@ -147,12 +140,10 @@ pub(crate) type OnSubmit = Rc<dyn Fn(&Tui)>;
 pub struct Inner {
     pub(crate) tui: Weak<Tui>,
     pub(crate) app: App,
-    /// `None` on home: submitting creates the session.
     pub(crate) session: Option<SessionID>,
     pub(crate) textarea: Textarea,
     root: View,
     frame: View,
-    /// The raised box around the textarea, and the half-line under it in the same color.
     body: View,
     edge: View,
     bottom: View,
@@ -160,51 +151,37 @@ pub struct Inner {
     /// The page theme the prompt last painted in, which its marks' styles came from.
     theme: RefCell<Theme>,
     footer: Text,
-    /// The editor context's file, on the footer's right (`prompt.footer.file`, E.5).
     editor_file: Text,
-    /// The editor selection this prompt dismissed (`prompt.editor_context.clear`).
     dismissed: RefCell<Option<String>>,
-    /// The editor context follows this session's directory.
     followed: Cell<bool>,
-    /// The footer row: the location, then the `prompt.footer` slots (E.14).
     footer_row: View,
     location_box: View,
-    /// The location box's width, which the location label shortens to (`truncateFilePath`, E.14).
     location_width: Cell<u16>,
     footer_slots: RefCell<(Option<opencode_plugin::SlotInput>, Vec<opencode_plugin::SlotMount>)>,
-    /// The pointer is over the footer's location (E.20).
     hovered: Cell<bool>,
-    /// The running indicator: the spinner, one cell in from the footer's edge.
     running: View,
     /// The session ran at the last refresh; the keymap conditions read it, as they must not lock the store.
     busy: Cell<bool>,
     /// The scanner, only while the session runs, as `<Show when={busy}>` mounts it; dropping it stops its timer.
     spinner: RefCell<Option<Spinner>>,
     pub(crate) mode: Cell<Mode>,
-    /// The random index of the placeholder example, picked again on entering shell mode.
     pub(crate) placeholder: Cell<usize>,
-    /// The `PromptInfo` being edited; `text` follows the textarea.
     pub(crate) prompt: RefCell<Value>,
     interrupt: Cell<u32>,
     interrupt_timer: Cell<Option<TimerId>>,
     pub(crate) submitting: Cell<bool>,
-    /// Runs when a prompt with text is sent and the composer clears (`onSubmit`).
     pub(crate) on_submit: RefCell<Option<OnSubmit>>,
     pub(crate) catalog: RefCell<Option<Rc<Catalog>>>,
     layers: RefCell<Vec<Disposer>>,
-    /// The mentions' extmarks and the parts they stand for (E.3).
     pub(crate) parts: parts::Parts,
-    /// This prompt's place in the history and the draft it left (E.2).
     pub(crate) history: super::history::Cursor,
     pub(crate) autocomplete: OnceCell<Autocomplete>,
     /// Pastes waiting for files or the clipboard (E.4).
     pub(crate) paste: super::paste::Queue,
-    /// The image previews above the textarea (E.4).
     previews: super::attach::Previews,
     /// `--prompt`, or an Enter pressed before the catalogs loaded, until it is submitted (`home.tsx:68-79`,
     /// `session/index.tsx:623-630`; deviation `P02-early-enter`).
     pub(crate) startup: RefCell<Option<(String, SessionInboxDelivery)>>,
-    /// The worktree staged from `/worktrees` and its progress row (E.11b).
     pub(crate) staging: super::r#move::Move,
     /// `props.disabled`: a home form holds the keys, so a click does not focus the prompt.
     disabled: Cell<bool>,
@@ -281,7 +258,6 @@ impl Prompt {
         self.inner.disabled.set(disabled);
     }
 
-    /// Sets what runs when a prompt with text is sent (`onSubmit`).
     pub fn on_submit(&self, run: impl Fn(&Tui) + 'static) {
         *self.inner.on_submit.borrow_mut() = Some(Rc::new(run));
     }
@@ -307,7 +283,6 @@ impl Drop for Prompt {
     }
 }
 
-/// The textarea on the box's surface, `theme.decrease(theme.background.raised.base)`, with the half-line under it.
 fn paint(theme: &Theme, textarea: &Textarea, body: &View, edge: &View) {
     let background = theme.decrease(&theme.background.raised.base, 1);
     textarea
@@ -319,7 +294,6 @@ fn paint(theme: &Theme, textarea: &Textarea, body: &View, edge: &View) {
     edge.border_color(background);
 }
 
-/// Mounts a prompt for `session`, or for a new session on home.
 pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
     let app = &tui.app;
     let theme = tui.page();
@@ -330,7 +304,6 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         // Core's textarea sets no pointer shape, so the TS TUI keeps the default pointer everywhere.
         .mouse_pointer(MousePointer::DEFAULT)
         .set_keymap(Keymap::new())
-        // `useCursorStyle` (E.20).
         .cursor_style(cursor.0, cursor.1)
         .min_height(1)
         .max_height((height / 3).max(6))
@@ -350,14 +323,12 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         .child(previews.root())
         .child(&textarea)
         .child(&meta);
-    // `border={["left"]}` with `SplitBorder`'s `┃` and a `╹` corner.
     let frame = View::new(app)
         .column()
         .shrink(0.0)
         .border_sides(Sides::LEFT)
         .border_chars(Some(border_chars('┃', '╹', ' ')))
         .child(&body);
-    // The half-line under the prompt: `╹` on the left, then `▀` in the prompt color.
     let edge = View::new(app)
         .height(1)
         .grow(1.0)
@@ -385,8 +356,6 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         .child(&running)
         .child(staging.root())
         .child(&footer);
-    // `prompt/index.tsx:1900-1983`: the location inside `prompt.footer.status`, then `prompt.footer.file`, both
-    // inside `prompt.footer`, whose plugins append their hints.
     let footer_row =
         View::new(app).row().width(Length::percent(100.0)).shrink(0.0).justify(Justify::SpaceBetween).gap(2);
     let root = View::new(app).column().shrink(0.0).child(&frame).child(&bottom).child(&footer_row);
@@ -468,7 +437,6 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         *inner.startup.borrow_mut() = Some((text, SessionInboxDelivery::Steer));
     }
     load_catalog(tui, &inner);
-    // A model, agent, or variant choice (E.16) changes the metadata row.
     let local = tui.local.subscribe(bind!(inner, |inner| if let Some(tui) = inner.tui.upgrade() {
         inner.refresh(&tui);
         inner.submit_startup(&tui);
@@ -483,8 +451,6 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
             editor_context::insert_mention(&inner, &tui, mention);
         }));
     inner.layers.borrow_mut().push(mentions);
-    // `useCursorStyle` and the animations follow the config, as the metadata row's auto-accept mark does; the
-    // footer's shortcuts follow the keybinds.
     let settings = tui.settings.subscribe(bind!(inner, |inner, tui| {
         let cursor = crate::features::system_commands::cursor(&tui.config());
         inner.textarea.cursor_style(cursor.0, cursor.1);
@@ -492,7 +458,6 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         inner.relayout(tui);
     }));
     inner.layers.borrow_mut().push(settings);
-    // The metadata row and the footer follow the terminal size (`useTerminalDimensions`).
     let resize = tui.app.on_resize(bind!(inner, |inner, _, _, _| if let Some(tui) = inner.tui.upgrade() {
         inner.relayout(&tui);
     }));
@@ -515,7 +480,6 @@ impl Inner {
         self.this.upgrade()
     }
 
-    /// Shows `prompt` (a `PromptInfo`), with its mode, as `ref.set` and history do.
     pub(crate) fn restore(&self, prompt: Value) {
         let text = prompt.get("text").and_then(Value::as_str).unwrap_or_default().to_owned();
         let mode = match prompt.get("mode").and_then(Value::as_str) {
@@ -529,8 +493,6 @@ impl Inner {
         self.parts_changed();
     }
 
-    /// `ref.set` with text alone: the history's place and the attachments go, the mode stays, and the cursor goes to
-    /// the end.
     pub(crate) fn set_text(&self, text: &str) {
         self.history.reset();
         let mut prompt = empty_prompt();
@@ -552,7 +514,6 @@ impl Inner {
         self.parts_changed();
     }
 
-    /// Shows the attachments the prompt now has (E.4).
     pub(crate) fn parts_changed(&self) {
         if let Some(tui) = self.tui.upgrade() {
             self.previews.update(&tui, self);
@@ -574,7 +535,6 @@ impl Inner {
         self.reset();
     }
 
-    /// The prompt as history stores it: the `PromptInfo` with the current text and `mode`.
     pub(crate) fn snapshot(&self) -> Value {
         let mut prompt = self.prompt.borrow().clone();
         prompt["text"] = Value::String(self.textarea.text());
@@ -593,14 +553,10 @@ impl Inner {
         opencode_ui::prompt_input::end(&self.textarea)
     }
 
-    /// Whether the composer is on screen: shown with every ancestor. A session hides it for a permission, a form, a
-    /// missing location or the drawer, where TS unmounts it.
     pub(crate) fn shown(&self) -> bool {
         self.textarea.is_shown()
     }
 
-    /// Whether a submit may run: the composer shows, no home form disables it, and its pane owns the input (TS
-    /// `disabled()` in `submit`).
     pub(crate) fn submittable(&self, tui: &Tui) -> bool {
         self.shown() && !self.disabled.get() && crate::frame::session_interactive(tui)
     }
@@ -625,8 +581,6 @@ impl Inner {
         }
     }
 
-    /// The editor selection the prompt shows and sends: none when `prompt.editor` is off or this prompt
-    /// dismissed it (`editorContext`).
     pub(crate) fn editor_context(&self, tui: &Tui) -> Option<Selection> {
         let enabled = tui.config().info.prompt.as_ref().and_then(|prompt| prompt.editor).unwrap_or(true);
         let selection = tui.prompt.editor.selection().filter(|_| enabled)?;
@@ -644,8 +598,6 @@ impl Inner {
             .is_some_and(|session| tui.data.read(|state| state.status(session)) == SessionStatus::Running)
     }
 
-    /// The session's location; on home, the current one (`location.ref`: where home was opened, or where
-    /// `/cd` moved), else the default one.
     pub(crate) fn location(&self, tui: &Tui) -> Location {
         Location::new(self.session_info(tui).map_or_else(
             || {
@@ -664,7 +616,6 @@ impl Inner {
         self.refresh(tui);
     }
 
-    /// Rebuilds the catalog from the store and repaints.
     fn read_catalog(&self, tui: &Tui) {
         let location = self.location(tui);
         let catalog = tui.data.read(|state| Catalog::read(state, &location));
@@ -697,7 +648,6 @@ impl Inner {
         }));
     }
 
-    /// Repaints the border, the metadata row, and the footer from the current state.
     pub(crate) fn refresh(&self, tui: &Tui) {
         let theme = tui.page();
         let catalog = self.catalog.borrow().clone();
@@ -788,7 +738,6 @@ impl Inner {
         self.app.request_redraw();
     }
 
-    /// `placeholderText`: the example cut to the textarea's width (`component/prompt/index.tsx:1617-1629`).
     fn placeholder_text(&self) -> String {
         let (label, examples) = match self.mode.get() {
             Mode::Shell => ("Run a command…", SHELL_PLACEHOLDERS),
@@ -845,7 +794,6 @@ impl Inner {
         });
     }
 
-    /// Mounts the `prompt.footer` slots again when their input changed (E.14).
     fn mount_footer(&self, tui: &Tui) {
         let input = opencode_plugin::SlotInput {
             session_id: self.session.as_ref().map(|session| session.0.clone()),
@@ -879,7 +827,6 @@ impl Inner {
         *slots = (Some(input), mounts);
     }
 
-    /// `session.interrupt`: Escape leaves shell mode, else arms, and a second Escape interrupts.
     fn interrupt(&self, tui: &Tui) {
         if self.mode.get() == Mode::Shell {
             self.set_mode(Mode::Normal);
@@ -924,7 +871,6 @@ fn border_chars(vertical: char, bottom_left: char, horizontal: char) -> [char; 1
     [' ', ' ', bottom_left, ' ', horizontal, vertical, ' ', ' ', ' ', ' ', ' ']
 }
 
-/// Text changes update the prompt; Submit (from `input.submit`) submits.
 fn connect(inner: &Rc<Inner>) {
     inner.textarea.on_change(bind!(inner, |prompt, _, text| {
         prompt.prompt.borrow_mut()["text"] = Value::String(text.to_owned());
@@ -943,7 +889,6 @@ fn connect(inner: &Rc<Inner>) {
 /// The footer's location brightens under the pointer, and a click opens the working directory dialog (E.20,
 /// `useWorkingDirectoryActions`). While a reply runs the footer shows the interrupt hint instead.
 fn connect_location(inner: &Rc<Inner>) {
-    // `onSizeChange` of the status box: the label shortens to the room the footer plugins leave.
     inner.location_box.on_resize(bind!(inner, |prompt, _, rect| {
         let width = rect.width.max(0.0) as u16;
         if prompt.location_width.replace(width) != width
@@ -970,7 +915,6 @@ fn connect_location(inner: &Rc<Inner>) {
     }));
 }
 
-/// Reads the location's catalogs through the store; the prompt repaints as each arrives.
 pub(crate) fn load_catalog(tui: &Tui, inner: &Rc<Inner>) {
     inner.read_catalog(tui);
     for task in metadata::sync(&tui.data, &inner.location(tui)) {
@@ -987,12 +931,10 @@ pub(crate) fn load_catalog(tui: &Tui, inner: &Rc<Inner>) {
     }
 }
 
-/// The skills dialog's pick: an `@skill` mention at the cursor (`prompt.skills`).
 fn insert_skill(prompt: Weak<Inner>) -> crate::dialogs::skill::OnSelect {
     Rc::new(bind!(prompt, |prompt, _, id| parts::insert_skill(&prompt, &id.0)))
 }
 
-/// The prompt's layers (`component/prompt/index.tsx:644-1096`).
 fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
     let target = inner.textarea.id();
     let when = |check: fn(&Inner, &Tui) -> bool| {
@@ -1104,7 +1046,6 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
             super::r#move::COMMAND,
         ]),
         KeymapLayer::default().target(target).bindings(["prompt.paste"]),
-        // Ctrl+C clears a prompt with text; on an empty one it reaches `app.exit`.
         KeymapLayer::default()
             .enabled(when(|prompt, _| !prompt.textarea.text().is_empty()))
             .target(target)
@@ -1134,7 +1075,6 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
     }
 }
 
-/// The prompt's scanner (`spinnerDef`, `component/prompt/index.tsx:1657-1676`).
 fn scanner(color: Color) -> ScannerOptions {
     ScannerOptions { style: ScannerStyle::Blocks, inactive_factor: 0.6, min_alpha: 0.3, ..ScannerOptions::new(color) }
 }

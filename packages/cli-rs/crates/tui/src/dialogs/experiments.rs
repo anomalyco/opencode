@@ -1,7 +1,4 @@
-//! Experiments dialog (E.18a): `packages/tui/src/component/dialog-experiments.tsx`.
-//!
-//! The registry, the dialog, the toggle, and its persistence under `cli.json` `experimental.<id>` are permanent
-//! infrastructure (`packages/tui/AGENTS.md`): keep them when [`EXPERIMENTS`] is empty.
+//! TypeScript: `packages/tui/src/component/dialog-experiments.tsx`.
 
 use opencode_ui::select::select;
 
@@ -54,7 +51,6 @@ fn toggle(tui: &Tui, saving: &Rc<Cell<bool>>, id: &'static str) {
     );
 }
 
-/// `DialogExperiments`, in place of any open dialog.
 pub fn show(tui: &Tui) {
     let weak = tui.weak();
     // Outside the build: a build in a new theme keeps ignoring changes until the write ends.

@@ -11,14 +11,10 @@ use opencode_ui::prompt::{PromptProps, prompt};
 use crate::features::session_links::{self, Links};
 use crate::prelude::*;
 
-/// The keybind name of the host's toggle in a plugin list (P6b): a host action of the select, which no plugin's
-/// action may take.
 const TOGGLE: &str = "plugins.toggle";
 
-/// The panel on screen, which a panel of the same key changes in place.
 pub struct Live {
     key: String,
-    /// The plugin and activation that showed it, which its actions reach.
     owner: Owner,
     cx: Rc<DialogCx>,
     title: View,
@@ -28,7 +24,6 @@ pub struct Live {
     /// The panel as last shown, which a build in a new theme shows again.
     shown: RefCell<abi::Panel>,
     binds: Rc<RefCell<Option<Disposer>>>,
-    /// The texts the body's hover handlers change.
     hovers: RefCell<Vec<Rc<Text>>>,
     /// The session links of the body's Markdown (`/btw` only).
     links: RefCell<Vec<Rc<Links>>>,
@@ -39,12 +34,10 @@ pub struct Live {
 struct Fit {
     scroll: ScrollBox,
     content: View,
-    /// The rows of the body's padding.
     padding: u32,
 }
 
 impl Fit {
-    /// `maxHeight`: the box is as high as the body and its padding, up to 60% of the screen.
     fn apply(&self, app: &App) {
         let height: f32 = self.content.children().iter().map(|child| child.rect().height).sum();
         self.scroll.height((height.ceil() as u32 + self.padding).clamp(1, max_rows(app)));
@@ -52,12 +45,10 @@ impl Fit {
     }
 }
 
-/// The most rows the body takes: 60% of the screen, as it is now.
 fn max_rows(app: &App) -> u32 {
     (u32::from(app.size().1) * 6 / 10).max(8)
 }
 
-/// The plugin and the activation a dialog belongs to ([`opencode_plugin::Registry::live`]).
 type Owner = (String, u64);
 
 /// Shows `dialog` of activation `generation` of plugin `id`, which owns it from now on.
@@ -75,7 +66,6 @@ pub fn show(tui: &Tui, id: &str, generation: u64, dialog: abi::Dialog) {
         abi::Dialog::Dismissable { dialog, dismissed } => {
             *tui.reads.dismissed.borrow_mut() = Some((owner, dismissed));
             show(tui, id, generation, *dialog);
-            // A dialog that did not open (a close) leaves it.
             tui.reads.dismissed.borrow_mut().take();
         }
         abi::Dialog::Select(select) => pick(tui, owner, select),
@@ -97,8 +87,6 @@ pub fn show(tui: &Tui, id: &str, generation: u64, dialog: abi::Dialog) {
                 })
                 .map(|image| (format!("data:application/octet-stream;base64,{}", image.data), image.name))
                 .collect();
-            // The plugin's preview ends with its activation, as its other dialogs do (F16), and has the key `images`;
-            // the host's own previews do neither.
             if !shown.is_empty() {
                 let key = Some(format!("{id}/images"));
                 own(tui, owner, |on_close| {
@@ -117,7 +105,6 @@ pub fn refused(tui: &Tui, id: &str, generation: u64, dialog: abi::Dialog) {
     }
 }
 
-/// Whether plugin `id`'s panel `key` is open.
 pub fn open(tui: &Tui, id: &str, key: &str) -> bool {
     let mine = tui.reads.owner.borrow().as_ref().is_some_and(|(owner, _)| owner == id);
     mine && tui.dialogs.key() == Some(format!("{id}/{key}"))
@@ -196,10 +183,8 @@ fn ask(tui: &Tui, owner: Owner, asked: abi::Prompt) {
     });
 }
 
-/// The rows a plugin prompt's description takes at most.
 const DESCRIPTION_ROWS: u32 = 8;
 
-/// `text` within one node's text ([`opencode_plugin::limits`]).
 fn bounded(text: &str) -> &str {
     &text[..text.floor_char_boundary(opencode_plugin::limits::get().text as usize)]
 }
@@ -213,8 +198,6 @@ pub struct Picker {
     handle: RefCell<Option<opencode_ui::select::Select<String>>>,
 }
 
-/// TS `dialog.select`: picking an option closes the list, then runs the action with the option's value. A select with
-/// a key is the rich one: it stays open as a row is picked, and one shown again under its key changes in place.
 fn pick(tui: &Tui, owner: Owner, select: abi::Select) {
     let keyed = select.key.as_ref().map(|key| format!("{}/{key}", owner.0));
     if let Some(keyed) = &keyed
@@ -229,8 +212,6 @@ fn pick(tui: &Tui, owner: Owner, select: abi::Select) {
                 .map(|action| (action.key.clone(), action.command.clone(), action.rowless, action.primary))
                 .collect()
         };
-        // As do its title, placeholder, size and search (review carbon-5), and P6c's query, filter, focus, note, current
-        // row and whether it has an empty text (carbon's review of P6c, 5 and 6).
         let same = |picker: &Picker| {
             let shown = picker.shown.borrow();
             keys(&shown.actions) == keys(&select.actions)
@@ -264,8 +245,6 @@ fn pick(tui: &Tui, owner: Owner, select: abi::Select) {
     list(tui, owner, select, None);
 }
 
-/// Shows `select` as a new dialog, with the filter and the selected row of `kept`, else those the host's question
-/// about a held build left for this select ([`Reads::kept`](super::host::Reads)).
 fn list(tui: &Tui, owner: Owner, select: abi::Select, kept: Option<(String, Option<String>)>) {
     let keyed = select.key.as_ref().map(|key| format!("{}/{key}", owner.0));
     let left = tui.reads.kept.borrow_mut().take();
@@ -307,7 +286,6 @@ fn list(tui: &Tui, owner: Owner, select: abi::Select, kept: Option<(String, Opti
                 );
                 props.placeholder = shown.placeholder.clone();
                 props.current = shown.current.clone();
-                // The plugin's own rows for a query (P6c): the host filters none and tells it the query.
                 props.skip_filter = shown.query.is_some() || shown.filterless;
                 props.render_filter = !shown.filterless;
                 if shown.query.is_some() {
@@ -328,7 +306,6 @@ fn list(tui: &Tui, owner: Owner, select: abi::Select, kept: Option<(String, Opti
                 }
                 props.focus_target = shown.focus.clone();
                 props.preserve_selection = shown.key.is_some();
-                // The plugin's search lists the rows in place of the host's filter (TS `search`).
                 if let Some(name) = shown.search.clone() {
                     let searched = Rc::downgrade(&picker);
                     props.search = Some(Rc::new(bind!(tui.weak(), |tui, query: &str| {
@@ -398,7 +375,6 @@ fn query(tui: &Tui, picker: &Rc<Picker>) -> Rc<dyn Fn(&str)> {
                 fired.set(None);
                 let Some(picker) = picker.upgrade() else { return };
                 let (owner, action) = (picker.owner.borrow().clone(), picker.shown.borrow().query.clone());
-                // A select closed meanwhile asks for nothing.
                 if let (Some(action), true) = (action, picker.handle.borrow().is_some()) {
                     run(&tui, &owner, &action, Some(&text));
                 }
@@ -407,8 +383,6 @@ fn query(tui: &Tui, picker: &Rc<Picker>) -> Rc<dyn Fn(&str)> {
     }))
 }
 
-/// The host's action on a row that toggles a plugin (synthesis 3.6): `plugins.toggle`, the user's keybind for it
-/// (`enter` by default), whose title says what it does to which plugin from the plugin's state, not from the row.
 fn toggle(tui: &Tui, picker: &Rc<Picker>) -> opencode_ui::select::SelectAction<String> {
     use opencode_ui::select::{Group, SelectAction};
     let target = {
@@ -442,8 +416,6 @@ fn toggle(tui: &Tui, picker: &Rc<Picker>) -> opencode_ui::select::SelectAction<S
         }),
     );
     action.title = Rc::new(move |option| match titled(option) {
-        // The row names the plugin when its title is the plugin's id; else the title does. The question about a held
-        // build names its library itself.
         Some((entry, toggle, title)) => {
             let named = if title == entry.id { String::new() } else { format!(" {}", entry.id) };
             match toggle {
@@ -460,7 +432,6 @@ fn toggle(tui: &Tui, picker: &Rc<Picker>) -> opencode_ui::select::SelectAction<S
 }
 
 impl Picker {
-    /// The plugin the shown row of `value` toggles.
     fn toggled(&self, value: &str) -> Option<String> {
         let shown = self.shown.borrow();
         shown.options.iter().find(|option| option.value == value && !option.disabled)?.toggle.clone()
@@ -470,7 +441,6 @@ impl Picker {
     fn choose(self: &Rc<Self>, tui: &Tui, value: &str) {
         let shown = self.shown.borrow().clone();
         let owner = self.owner.borrow().clone();
-        // The row the user sees: a disabled row of the same value is not on the list.
         let Some(option) = shown.options.iter().find(|option| option.value == value && !option.disabled) else {
             return;
         };
@@ -528,7 +498,6 @@ impl Picker {
                             if tui.dialogs.is_open() || !tui.plugins.live(&owner.0, owner.1) {
                                 return;
                             }
-                            // The filter and the row come back with the list, as the plugin shows it again or as it was.
                             let kept = (filter.clone(), Some(value.clone()));
                             match &then {
                                 Some(action) => {
@@ -547,7 +516,6 @@ impl Picker {
                     tui.toasts.error(format!("Failed to update plugin {}", entry.id));
                     return;
                 }
-                // As the plugin manager: why the setup failed, and the claims mount again either way.
                 Some(Err(error)) => tui.toasts.error(error),
                 Some(Ok(())) => {}
             }
@@ -561,11 +529,8 @@ impl Picker {
     }
 }
 
-/// What the host does for a row that toggles a plugin.
 enum Toggle {
-    /// Disables the plugin when it is active, else enables it.
     Switch(bool),
-    /// Asks to approve or decline the build of the project plugin of this target (rich-plugins 3.9).
     Ask(String),
 }
 
@@ -593,7 +558,6 @@ fn toggled(tui: &Tui, caller: &str, name: &str) -> Option<(opencode_plugin::Entr
     (entry.source != opencode_plugin::Source::Configured).then(|| (entry.clone(), Toggle::Switch(entry.active)))
 }
 
-/// The rows of `select`, in `theme`.
 fn options(theme: &opencode_ui::theme::Theme, select: &abi::Select) -> Vec<SelectOption<String>> {
     select
         .options
@@ -656,7 +620,6 @@ fn actions(tui: &Tui, picker: &Rc<Picker>) -> Vec<opencode_ui::select::SelectAct
                 false => Group::Secondary,
             };
             let on_row = runs(true);
-            // The user's keybind of the name it gives runs it, else its own key.
             let mut item = SelectAction::new(
                 action.command.clone().unwrap_or_else(|| format!("plugin.select.{index}")),
                 action.title.clone(),
@@ -722,13 +685,11 @@ fn usable_key(tui: &Tui, key: &str) -> bool {
         .into_iter()
         .filter_map(|key| keymap.parse_key(key).ok().map(|chord| chord.stroke))
         .collect();
-    // The sequences the keymap registers for the key, not its text: aliases and commas expand as they do there.
     tui.keymap.parse_binding(key).is_ok_and(|bindings| {
         bindings.iter().all(|parts| !parts.is_empty() && parts.iter().all(|part| !closing.contains(&part.stroke)))
     })
 }
 
-/// The select's extra keys: each runs its action with the selected row's value.
 fn binds(tui: &Tui, picker: &Rc<Picker>) -> Vec<TuiCommand> {
     let shown = picker.shown.borrow().clone();
     shown
@@ -753,7 +714,6 @@ fn binds(tui: &Tui, picker: &Rc<Picker>) -> Vec<TuiCommand> {
         .collect()
 }
 
-/// TS `DialogErrorDetails`, drawn by the host's own error view; Back and escape run `back`, or close it.
 fn detail(tui: &Tui, owner: Owner, details: abi::ErrorDetails) {
     let large = DialogOptions::new(DialogSize::Large);
     let dialog = match &details.key {
@@ -789,7 +749,6 @@ fn detail(tui: &Tui, owner: Owner, details: abi::ErrorDetails) {
     });
 }
 
-/// The error of the entry `key` names, or why it is skipped.
 fn plugin_error(tui: &Tui, key: &str) -> Option<String> {
     let entry = tui.plugins.entries().into_iter().find(|entry| entry.key == key)?;
     match entry.status {
@@ -798,8 +757,6 @@ fn plugin_error(tui: &Tui, key: &str) -> Option<String> {
     }
 }
 
-/// TS `dialog.confirm`: `Confirm` runs the action with `true`, `Cancel` and escape with `false`; a dialog that replaces
-/// it runs nothing.
 fn ask_yes(tui: &Tui, owner: Owner, confirm: abi::Confirm) {
     let (size, centered) = (confirm.size.map(dialog_size).unwrap_or_default(), confirm.centered);
     let (weak, answered) = (tui.weak(), owner.clone());
@@ -866,9 +823,6 @@ fn panel(tui: &Tui, owner: Owner, panel: abi::Panel) {
     let mine = tui.reads.owner.borrow().as_ref().is_some_and(|(id, _)| *id == owner.0);
     if mine && tui.dialogs.key().as_deref() == Some(key.as_str()) {
         let live = tui.reads.panel.borrow_mut().take();
-        // A change of what `build` bakes into the widgets builds it again: its close label, its height, whether it is
-        // bare, whether its body bleeds, whether it has a footer row (carbon's review of P6c, 5; final review
-        // carbon-12).
         if let Some(live) = live.filter(|live| live.key == key) {
             let same = {
                 let shown = live.shown.borrow();
@@ -893,7 +847,6 @@ fn panel(tui: &Tui, owner: Owner, panel: abi::Panel) {
     show_panel(tui, owner, panel, key);
 }
 
-/// Shows `panel` under `key` as a new dialog.
 fn show_panel(tui: &Tui, owner: Owner, panel: abi::Panel, key: String) {
     let (centered, size) = (panel.centered, dialog_size(panel.size));
     let options = DialogOptions::new(size).key(key.clone());
@@ -929,7 +882,6 @@ fn build(tui: &Tui, cx: &Rc<DialogCx>, key: String, owner: Owner, panel: abi::Pa
             ..HeaderProps::default()
         },
     );
-    // A set height is at most the screen less 6 rows, as TS's help sets it.
     let set = |app: &App, height: u16| u32::from(height).min(u32::from(app.size().1).saturating_sub(6)).max(1);
     let scroll = ScrollBox::new(app).scrollbars(false).height(panel.height.map_or(1, |height| set(app, height)));
     let content = View::new(app).shrink(0.0);
@@ -939,7 +891,6 @@ fn build(tui: &Tui, cx: &Rc<DialogCx>, key: String, owner: Owner, panel: abi::Pa
     if fitted {
         scroll.add(&content);
     }
-    // `DialogBleed`: the body's background reaches the dialog's edges, and its padding is inside it.
     let body = match panel.bleed {
         true => {
             content.padding_x(DIALOG_INSET).padding_y(1);
@@ -954,7 +905,6 @@ fn build(tui: &Tui, cx: &Rc<DialogCx>, key: String, owner: Owner, panel: abi::Pa
         true => dialog::layout_view(cx, &header, &body, footed.then_some(&footer), DIALOG_INSET, 1),
         false => content.clone(),
     };
-    // A page is the body's most rows, as the screen is now.
     let step = |delta: f64, page: bool| {
         let (scroll, app) = (scroll.clone(), app.clone());
         move |_: Option<&str>, _: Option<&opentui::input::KeyEvent>| {
@@ -979,7 +929,6 @@ fn build(tui: &Tui, cx: &Rc<DialogCx>, key: String, owner: Owner, panel: abi::Pa
             .group("Dialog"),
         ]));
     }
-    // A panel of a set height keeps it.
     let fit = Rc::new(RefCell::new((fitted && panel.height.is_none()).then(|| Fit {
         scroll: scroll.clone(),
         content: content.clone(),
@@ -1027,7 +976,6 @@ fn build(tui: &Tui, cx: &Rc<DialogCx>, key: String, owner: Owner, panel: abi::Pa
 }
 
 impl Live {
-    /// Shows `panel`'s header, actions and keys, and its body when that changed, which keeps where it is scrolled.
     fn update(&self, tui: &Tui, panel: abi::Panel) {
         let theme = &self.cx.theme;
         let refill = self.shown.borrow().body != panel.body;
@@ -1098,7 +1046,6 @@ impl Live {
             })
             .collect();
         let layer = self.cx.keymap.layer(KeymapLayer::new(commands).mode(MODAL_MODE));
-        // The old layer may be the one running the key that showed this panel again.
         let old = self.binds.replace(layer.map_err(|error| log::error!("plugin panel keymap layer: {error}")).ok());
         tui.app.defer(move |_| drop(old));
     }
@@ -1110,7 +1057,6 @@ impl Live {
             log::error!("plugin {}: its panel's body nests too deep or has a size OpenTUI refuses", self.owner.0);
             return;
         }
-        // The body is past the limits on host work: its placeholder (review carbon 2.4).
         if let Err(over) = node::admits(body) {
             self.content.add(&node::add_placeholder(&self.cx.app, &self.cx.theme, &over));
             return;

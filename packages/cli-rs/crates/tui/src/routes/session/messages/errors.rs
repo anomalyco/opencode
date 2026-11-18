@@ -14,7 +14,6 @@ use crate::prelude::*;
 
 const DAY_MS: f64 = 86_400_000.0;
 
-/// `errorMessage` of a structured error: its message, else the error as JSON.
 pub fn message(error: &SessionStructuredError) -> String {
     if !error.message.is_empty() {
         return error.message.clone();
@@ -22,7 +21,6 @@ pub fn message(error: &SessionStructuredError) -> String {
     serde_json::to_string_pretty(error).unwrap_or_else(|_| "unknown error".to_owned())
 }
 
-/// The failure an idle marker carries when the execution failed outside a step.
 pub struct ExecutionError {
     root: View,
     text: Text,
@@ -68,7 +66,6 @@ enum Notice {
     Limit(LimitNotice),
 }
 
-/// `useLimitNotice`'s value.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LimitNotice {
     pub title: String,
@@ -89,7 +86,6 @@ impl StepError {
         &self.root
     }
 
-    /// Takes the theme of `cx`; the next update paints the notice again.
     pub fn restyle(&self, cx: &Context<'_>) {
         self.retry.0.text.fg(cx.theme.text.feedback.warning.base);
         self.rendered.take();
@@ -186,7 +182,6 @@ impl StepError {
     }
 }
 
-/// `⚠ Retrying in 4s · attempt 2 · <error>`, counting down each second, then `Retry due`.
 pub struct Retry(Rc<RetryInner>);
 
 struct RetryInner {
@@ -249,7 +244,6 @@ impl Drop for Retry {
 }
 
 impl RetryInner {
-    /// Draws the line and returns the seconds left.
     fn render(&self) -> u64 {
         let Some(retry) = self.retry.borrow().clone() else { return 0 };
         let seconds = ((retry.at - now()) / 1000.0).ceil().max(0.0) as u64;
@@ -329,7 +323,6 @@ fn limit_notice(
     }
 }
 
-/// `freeLimitReset`: the time when that is today and within a day, else the time and date.
 pub fn free_limit_reset(delay: Option<f64>, base: f64, now: f64) -> Option<String> {
     let delay = delay.filter(|delay| delay.is_finite() && *delay >= 0.0 && *delay <= 7.0 * DAY_MS)?;
     let at = base + delay;
@@ -342,7 +335,6 @@ pub fn free_limit_reset(delay: Option<f64>, base: f64, now: f64) -> Option<Strin
     Some(format!("{time} · {}", date.numeric_date()))
 }
 
-/// `refusalReset`: OpenCode Console names the reset `resetsAt` in the error body.
 fn refusal_reset(body: &str) -> Option<f64> {
     let at = json_string(body, "resetsAt")?;
     time::parse_rfc3339(at).map(|at| at as f64)
@@ -371,7 +363,6 @@ fn json_string<'a>(body: &'a str, key: &str) -> Option<&'a str> {
     None
 }
 
-/// `Date.now()`, on the sim's clock when it sets one.
 pub fn now() -> f64 {
     time::now_ms() as f64
 }
@@ -436,7 +427,6 @@ impl LimitWatch {
     }
 }
 
-/// Puts `recalled` back into an empty prompt, then offers OpenCode Go when `offer` is set.
 fn stopped(tui: &Tui, recalled: Option<String>, offer: Option<Option<String>>) {
     let Some(textarea) = tui.textarea.borrow().clone() else { return };
     if !textarea.text().trim().is_empty() {
@@ -483,7 +473,6 @@ mod tests {
         assert_eq!(free_limit_reset(None, 0.0, 0.0), None);
         assert_eq!(free_limit_reset(Some(-1.0), 0.0, 0.0), None);
         assert_eq!(free_limit_reset(Some(8.0 * DAY_MS), 0.0, 0.0), None);
-        // Over a day away is always the time and the date.
         let far = free_limit_reset(Some(2.0 * DAY_MS), 1_768_478_400_000.0, 1_768_478_400_000.0).unwrap();
         assert!(far.contains(" · "), "{far}");
         // `Locale.time` under Bun puts an ASCII space before AM/PM.
@@ -514,7 +503,6 @@ mod tests {
         for (screen, clock) in rows {
             assert!((clock() - FIXED).abs() < 60_000.0, "{screen}: {}", clock());
         }
-        // A reset a minute away is today: the time alone.
         let reset = free_limit_reset(Some(60_000.0), FIXED, now()).unwrap();
         assert!(!reset.contains(" · "), "{reset}");
     }

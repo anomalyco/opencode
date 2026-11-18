@@ -51,9 +51,7 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
 #[derive(Default)]
 struct Footer {
     input: Option<SlotInput>,
-    /// The session's usage, cost, running subagents and shells.
     last: Option<Last>,
-    /// The usage and the cost as the footer prints them.
     status: Rc<[String]>,
     printed: sidebar_context::Model,
     width: u16,
@@ -83,7 +81,6 @@ struct Keys {
 
 impl Footer {
     fn render(&mut self, read: &dyn abi::Read, input: &SlotInput, changed: &Changed, goals: &Goals) -> Node {
-        // The footer's own size is not its input: the terminal's width is (`changed.size`).
         let same = |last: &SlotInput| last.session_id == input.session_id && last.prompt == input.prompt;
         let fresh = changed.all || !self.input.as_ref().is_some_and(same);
         if fresh {
@@ -198,7 +195,6 @@ fn view(model: &Model, session: &str) -> Node {
     root(busy && shrink, children)
 }
 
-/// `formatContextUsage`: `12.3K (45%)`.
 fn format_usage(usage: Usage) -> String {
     let value = crate::routes::session::messages::compaction::number(usage.tokens);
     match usage.percent {
@@ -207,8 +203,6 @@ fn format_usage(usage: Usage) -> String {
     }
 }
 
-/// `promptFooterLayout`: whether the usage and the shortcuts fit beside the location, which keeps at most 28
-/// columns or half the width.
 fn layout(width: i64, usage: &[String], shortcuts: &[String]) -> (bool, bool) {
     let width = width.max(0);
     let usage = usage.join(" · ");
@@ -235,7 +229,6 @@ mod tests {
     fn layout_like_prompt_footer_layout() {
         let usage = ["12.3K (4%)".to_owned(), "$0.12".to_owned()];
         let commands = ["ctrl+p commands".to_owned()];
-        // 92 wide keeps 28 for the location: 64 left.
         assert_eq!(layout(92, &usage, &commands), (true, true));
         // 40 wide keeps 20: 20 left, enough for the usage only.
         assert_eq!(layout(40, &usage, &commands), (true, false));

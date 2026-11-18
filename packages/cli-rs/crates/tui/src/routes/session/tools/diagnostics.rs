@@ -7,7 +7,6 @@ use serde_json::{Map, Value};
 
 use crate::routes::session::messages::list::Context;
 
-/// One error: its zero-based start and message.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Diagnostic {
     pub line: f64,

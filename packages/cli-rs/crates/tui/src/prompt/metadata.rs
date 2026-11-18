@@ -1,8 +1,4 @@
-//! Prompt metadata (E.2, row P15): the agent, model, and variant the prompt submits with, and the
-//! row under the textarea that shows them (`component/prompt/metadata.tsx`).
-//!
-//! The selection is `Local`'s (`context/local.tsx`); a [`Catalog`] labels it with the location's
-//! agents, models, providers, commands, and branch from the store (F.8).
+//! TypeScript: `component/prompt/metadata.tsx`, `context/local.tsx`.
 
 use opencode_api::generated::{
     AgentInfo, ConfigEntry, ConfigEntryDocumentInfoModel, ModelInfo, ModelRef, ProviderID, ProviderInfo,
@@ -15,10 +11,8 @@ use unicode_width::UnicodeWidthStr;
 
 use super::editor::Mode;
 
-/// The store catalogs the prompt reads.
 const READS: [Read; 6] = [Read::Agent, Read::Model, Read::Provider, Read::Config, Read::Command, Read::Vcs];
 
-/// What the prompt needs to know about a location.
 #[derive(Debug, Default)]
 pub struct Catalog {
     pub agents: Vec<AgentInfo>,
@@ -29,7 +23,6 @@ pub struct Catalog {
     pub branch: Option<String>,
 }
 
-/// A model with its variant (`ModelSelection`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Choice {
     pub provider_id: String,
@@ -47,14 +40,12 @@ impl Choice {
     }
 }
 
-/// The agent and model a submit uses.
 #[derive(Clone, Debug)]
 pub struct Selection {
     pub agent: AgentInfo,
     pub model: Option<Choice>,
 }
 
-/// Asks the store for the catalogs the prompt reads; each task ends when its read is published.
 pub fn sync(data: &Data, location: &Location) -> Vec<Task<()>> {
     READS.iter().map(|read| data.catalog_sync(*read, Some(location))).collect()
 }
@@ -81,7 +72,6 @@ impl Catalog {
         self.models.iter().find(|info| info.provider_id.as_str() == provider && info.id == model)
     }
 
-    /// `model.parsed()`: the model and provider labels.
     pub fn labels(&self, choice: Option<&Choice>) -> (String, String) {
         let Some(choice) = choice else { return ("No provider selected".into(), "Connect a provider".into()) };
         let provider = self
@@ -95,8 +85,6 @@ impl Catalog {
         (model, provider)
     }
 
-    /// `agent.color(id)`: the agent's own color, else a categorical step by its index among the
-    /// visible agents.
     pub fn color(&self, theme: &Theme, id: &str) -> Option<Color> {
         let visible: Vec<_> = self.agents.iter().filter(|agent| !agent.hidden).collect();
         let index = visible.iter().position(|agent| agent.id.as_str() == id);
@@ -105,7 +93,6 @@ impl Catalog {
         {
             return Some(color);
         }
-        // The new designs palette keeps its vivid accent at 400; 200 there is a muted tint.
         let step = 400;
         let mut colors: Vec<Color> = Vec::new();
         for scale in theme.categorical() {
@@ -137,11 +124,9 @@ pub(crate) fn configured(entries: &[ConfigEntry]) -> Option<Choice> {
     })
 }
 
-/// What the row shows.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Display {
     pub agent: Option<String>,
-    /// Permissions are accepted automatically (`--auto` or `session.permissions`).
     pub auto: bool,
     pub model: String,
     pub provider: String,
@@ -151,24 +136,19 @@ pub struct Display {
     pub limit: Option<(String, bool)>,
 }
 
-/// The metadata row (`PromptMetadataRow`).
 pub struct Row {
     text: Text,
 }
 
 impl Row {
     pub fn new(app: &App) -> Self {
-        Self {
-            // An empty row keeps its line, as `<box height={1} />` does.
-            text: Text::new(app, "").truncate(true).wrap(WrapMode::None).min_height(1),
-        }
+        Self { text: Text::new(app, "").truncate(true).wrap(WrapMode::None).min_height(1) }
     }
 
     pub fn root(&self) -> &Text {
         &self.text
     }
 
-    /// Lays the row out for `terminal_width` columns.
     pub fn set(&self, theme: &Theme, mode: Mode, display: &Display, highlight: Color, terminal_width: u16) {
         let spans: Vec<Span> = match mode {
             Mode::Shell => vec![display.agent.clone().unwrap_or_else(|| "Shell".into()).fg(highlight)],
@@ -265,7 +245,6 @@ fn layout(width: usize, terminal_width: u16, display: &Display) -> Display {
     }
 }
 
-/// The row as one line, for measuring (`text(layout)`).
 fn flat(layout: &Display) -> String {
     let mut parts: Vec<&str> = Vec::new();
     if let Some(agent) = &layout.agent {
@@ -332,7 +311,6 @@ mod tests {
         assert_eq!(layout(30, 100, &full).provider, "");
         let narrow = layout(18, 100, &full);
         assert_eq!(narrow.model, "Claude S…");
-        // Below 44 columns the agent and provider go.
         assert_eq!(layout(30, 40, &full).agent, None);
         // `auto` goes first.
         let auto = Display { auto: true, ..full };

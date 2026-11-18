@@ -1,9 +1,4 @@
-//! MCP servers dialog (E.17b, row DLG11): `packages/tui/src/component/dialog-mcp.tsx`.
-//!
-//! "MCP servers": the servers of the current location by name, each with its status as the footer.
-//! Space (`dialog.mcp.toggle`) connects, disconnects, or retries the selected server; the
-//! `mcp.status.changed` event refreshes the list through the store. Enter shows a failed server's
-//! error. A server that needs sign-in through an integration goes to the integration flow (E.17a).
+//! TypeScript: `packages/tui/src/component/dialog-mcp.tsx`.
 
 use opencode_api::generated::{
     ExperimentalMcpConnectInput, ExperimentalMcpDisconnectInput, LocationQueryInput, McpServer, McpServerStatus,
@@ -17,8 +12,6 @@ use super::session_list::dialog_theme;
 
 use crate::prelude::*;
 
-/// Registers `mcp.list` (`/mcps`) and its binding as `app.tsx:158,967-975` do. With a server's name as its input
-/// (the sidebar's MCP section), it opens on that server, and on its error when it failed.
 pub fn install(tui: &Rc<Tui>) {
     let command = TuiCommand::new(
         "mcp.list",
@@ -29,27 +22,17 @@ pub fn install(tui: &Rc<Tui>) {
     .group("Agent")
     .palette()
     .slash("mcps");
-    tui.keymap.install(
-        "mcp",
-        [
-            KeymapLayer::global(vec![command]),
-            // `appGlobalBindingCommands`.
-            KeymapLayer::global(Vec::new()).bindings(["mcp.list"]),
-        ],
-    );
+    tui.keymap
+        .install("mcp", [KeymapLayer::global(vec![command]), KeymapLayer::global(Vec::new()).bindings(["mcp.list"])]);
 }
 
-/// Opens the dialog (`mcp.list`).
 pub fn show(tui: &Tui) {
     show_server(tui, None, false);
 }
 
-/// Opens the dialog on `initial`; with `details`, a failed `initial` opens on its error (the
-/// sidebar's MCP section).
 pub fn show_server(tui: &Tui, initial: Option<String>, details: bool) {
     let mcp = Rc::new(Mcp {
         tui: tui.weak(),
-        // `location.ref ?? data.location.default()`.
         location: crate::features::location::active(tui),
         loading: RefCell::new(HashSet::new()),
         select: RefCell::new(None),
@@ -124,7 +107,6 @@ struct Mcp {
 }
 
 impl Mcp {
-    /// Reads the list when the location has none yet.
     fn load(self: &Rc<Self>) {
         let Some(tui) = self.tui.upgrade() else { return };
         let loaded =
@@ -142,7 +124,6 @@ impl Mcp {
         }
     }
 
-    /// The location's servers by name.
     fn servers(&self) -> Vec<McpServer> {
         let Some(tui) = self.tui.upgrade() else { return Vec::new() };
         let mut servers = tui.data.read(|state| {
@@ -156,7 +137,6 @@ impl Mcp {
         self.servers().into_iter().find(|server| server.name == name)
     }
 
-    /// The selected server (TS `focusedServer`).
     fn focused(&self) -> Option<McpServer> {
         let selected = self.select.borrow().as_ref()?.selected()?;
         self.server(&selected.value)
@@ -170,7 +150,6 @@ impl Mcp {
                 let status = kind(&server.status);
                 let pending = loading.contains(&server.name) || status == "pending";
                 let mut option = SelectOption::new(server.name.clone(), server.name);
-                // TS wraps "Connected ✓" in a bold span, which the row's `<text>` draws plain.
                 option.footer = Some(status_label(status, pending).to_owned());
                 option.footer_color = Some(if pending { theme.text.muted } else { status_color(theme, status) });
                 option
@@ -186,7 +165,6 @@ impl Mcp {
         }
     }
 
-    /// Enter: the integration flow for a sign-in, else the error of a failed server.
     fn select(self: &Rc<Self>, name: &str) {
         let Some(server) = self.server(name) else { return };
         if kind(&server.status) == "needs_auth"
@@ -211,7 +189,6 @@ impl Mcp {
         self.detail(server);
     }
 
-    /// Space: connect or disconnect. The `mcp.status.changed` event refreshes the list.
     fn toggle(self: &Rc<Self>, name: &str) {
         if self.loading.borrow().contains(name) {
             return;
@@ -260,7 +237,6 @@ impl Mcp {
         );
     }
 
-    /// The error view in place of the list; Escape goes back to the list on this server.
     fn detail(self: &Rc<Self>, server: McpServer) {
         let Some(tui) = self.tui.upgrade() else { return };
         let mut context = format!("Status: {}\nConfiguration: mcp.servers.{}", kind(&server.status), server.name);
@@ -289,7 +265,6 @@ impl Mcp {
     }
 }
 
-/// The status name (`status.status`); an unknown member keeps the name it arrived with.
 fn kind(status: &McpServerStatus) -> &str {
     match status {
         McpServerStatus::Connected(_) => "connected",
@@ -309,7 +284,6 @@ fn status_error(status: &McpServerStatus) -> Option<&str> {
     }
 }
 
-/// `focusedError`: a sign-in through an integration is not shown as an error.
 fn focused_error(server: &McpServer) -> Option<&str> {
     if kind(&server.status) == "needs_auth" && server.integration_id.is_some() {
         return None;

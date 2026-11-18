@@ -65,7 +65,6 @@ pub fn layer() -> Layer {
     Layer::default().scope(LayerScope::Surface).priority(1).keys(keys)
 }
 
-/// The action a bind of [`layer`] names.
 pub fn action(bind: &str) -> Option<Action> {
     COMMANDS.iter().find(|(name, ..)| *name == bind).map(|&(.., action)| action)
 }

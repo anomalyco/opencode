@@ -11,7 +11,6 @@ use opencode_store::{Error, Location};
 
 use crate::prelude::*;
 
-/// `retry`'s defaults: three attempts, 500 ms doubling.
 const ATTEMPTS: u32 = 3;
 const DELAY: Duration = Duration::from_millis(500);
 
@@ -20,13 +19,10 @@ pub struct LocationState {
     reference: RefCell<Option<Location>>,
     error: RefCell<Option<Location>>,
     generation: Cell<u64>,
-    /// Where the next home works, from the open dialog or `session.new` (TS `HomeRoute.location`).
     home: RefCell<Option<Location>>,
-    /// The mounted home's own location (TS `route.location`), `None` for the default.
     target: RefCell<Option<Location>>,
     /// The default location the home follows, `None` while it works where [`navigate_home`] sent it.
     followed: RefCell<Option<Location>>,
-    /// The session whose environment was uploaded on this connection.
     uploaded: RefCell<Option<SessionID>>,
 }
 
@@ -35,34 +31,28 @@ pub fn current(tui: &Tui) -> Option<Location> {
     tui.location.reference.borrow().clone()
 }
 
-/// `location.ref ?? data.location.default()`.
 pub fn active(tui: &Tui) -> Location {
     current(tui).unwrap_or_else(|| tui.data.read(|state| state.default_location().clone()))
 }
 
-/// The home route's location: `route.location ?? data.location.default()`.
 pub fn home_target(tui: &Tui) -> Location {
     let target = tui.location.target.borrow().clone();
     target.unwrap_or_else(|| tui.data.read(|state| state.default_location().clone()))
 }
 
-/// Whether [`navigate_home`] asked for a home that has not mounted yet. Home to home still applies it.
 pub(crate) fn pending(tui: &Tui) -> bool {
     tui.location.home.borrow().is_some()
 }
 
-/// The location whose directory the server reported missing (`location.error.location`).
 pub fn error(tui: &Tui) -> Option<Location> {
     tui.location.error.borrow().clone()
 }
 
-/// Goes home to work in `location` (the default location for `None`).
 pub fn navigate_home(tui: &Tui, location: Option<Location>) {
     *tui.location.home.borrow_mut() = location;
     tui.navigate(Route::Home);
 }
 
-/// The home route's location: the one [`navigate_home`] passed, else the default.
 pub fn home(tui: &Tui) {
     let explicit = tui.location.home.borrow_mut().take();
     let default = tui.data.read(|state| state.default_location().clone());
@@ -100,7 +90,6 @@ pub fn session(tui: &Tui, id: &SessionID) {
     }
 }
 
-/// `server.connected`: reads the location again.
 pub(crate) fn reconnected(tui: &Tui) {
     sync(tui, current(tui));
     if let Route::Session { id } = tui.route() {
@@ -130,7 +119,6 @@ fn connected(tui: &Tui) -> bool {
     crate::features::overlays::connected(tui)
 }
 
-/// Reads the location, retrying anything but the server's "location not found".
 fn sync(tui: &Tui, location: Option<Location>) {
     let Some(location) = location else { return };
     let attempt = tui.location.generation.get() + 1;
@@ -142,7 +130,6 @@ fn sync(tui: &Tui, location: Option<Location>) {
         async move {
             let mut tries = 0;
             loop {
-                // The TUI's `location.sync` also reads the config (`context/data.tsx`).
                 let read = async {
                     data.location_sync_info(target.as_ref()).await?;
                     let config = data.catalog_sync(Catalog::Config, target.as_ref());

@@ -1,5 +1,4 @@
-//! Assistant parts (E.6a): text as Markdown (`TextPart`, `message-parts.tsx:173-200`). Tool rows
-//! are `tools::dispatch::Tool` (E.7a).
+//! TypeScript: `message-parts.tsx:173-200`.
 
 use opencode_api::generated::{SessionMessageAssistant, SessionMessageAssistantText};
 use opentui::widget::Markdown;
@@ -29,17 +28,14 @@ impl TextPart {
         &self.root
     }
 
-    /// Takes the theme of `cx` in place: the text and its code views stay.
     pub fn restyle(&self, cx: &Context<'_>) {
         let colors = opencode_ui::markdown::view_colors(cx.theme, cx.syntax);
-        // Markdown builds a claimed fence again in the new theme, at the width it is laid out at.
         let width = self.markdown.rect().width as u16;
         opencode_plugin::claim::with_fence_width(width, || {
             opencode_ui::markdown::restyle(&self.markdown, colors, cx.syntax)
         });
     }
 
-    /// Shows `part` in a row `width` cells wide.
     pub fn update(
         &self,
         message: &SessionMessageAssistant,
@@ -56,7 +52,6 @@ impl TextPart {
     fn show(&self, message: &SessionMessageAssistant, part: &SessionMessageAssistantText, conceal: bool) {
         let text = part.text.trim();
         self.root.visible(!text.is_empty());
-        // `session.markdown` changes in place, as TS's `conceal` prop follows it; the code views stay.
         self.markdown.conceal(conceal);
         // Content goes in before streaming ends, so completion keeps the final tokens. The widget's source is the
         // text shown so far. Read it in place for the bytes `text` keeps (0 replaces them all), and change it only

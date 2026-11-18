@@ -28,7 +28,6 @@ const VIEW_RETRY_DELAY: Duration = Duration::from_millis(250);
 const VIEW_RETRY_MAX_DELAY: Duration = Duration::from_secs(5);
 /// `TAB_PREFETCH_DELAY`: background tabs read their transcripts and requests after this.
 const PREFETCH_DELAY: Duration = Duration::from_millis(300);
-/// How many recently viewed sessions besides the open tabs keep their transcripts (`session-tabs.tsx:140-146`).
 const RETAINED: usize = 3;
 
 /// `createSessionRetention` (`packages/client/src/solid/retention.ts`): the recently viewed roots, newest first,
@@ -40,7 +39,6 @@ struct Retention {
     evicted: HashMap<String, String>,
 }
 
-/// One scope's tabs as `tabs.json` stores them. `unread` stays empty, for older clients that still read it.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Scope {
     #[serde(default)]
@@ -49,7 +47,6 @@ pub struct Scope {
     pub unread: serde_json::Map<String, serde_json::Value>,
 }
 
-/// The whole `tabs` storage key.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Persisted {
     #[serde(default)]
@@ -58,7 +55,6 @@ pub struct Persisted {
     pub cwd: BTreeMap<String, Scope>,
 }
 
-/// What a tab shows besides its title (`status` in `context/session-tabs.tsx`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Status {
     pub unread: Option<Unread>,
@@ -124,7 +120,6 @@ impl Tabs {
         tui.config().tabs.enabled
     }
 
-    /// The open tabs of the configured scope.
     pub fn tabs(&self, tui: &Tui) -> Vec<Tab> {
         let file = self.file.borrow();
         let scope = match tui.config().tabs.scope {
@@ -134,12 +129,10 @@ impl Tabs {
         scope.map(|scope| scope.tabs.clone()).unwrap_or_default()
     }
 
-    /// Whether the new-session slot is the active tab (`newTab`).
     pub fn new_tab(&self) -> bool {
         self.new_tab.get()
     }
 
-    /// The root session of the open session route (`current`).
     pub fn current(&self, tui: &Tui) -> Option<String> {
         match tui.route() {
             Route::Session { id } => Some(tui.data.read(|state| state.root(&id)).0),
@@ -160,13 +153,10 @@ impl Tabs {
         tui.data.read(|state| status(state, &SessionID(session.to_owned()), pulse))
     }
 
-    /// The groups of `session` the reader opened or closed, by group ID (E.8, `sessionTabs.groupExpanded`). They
-    /// outlive the session's view.
     pub fn expanded_groups(&self, session: &str) -> HashMap<String, bool> {
         self.groups.borrow().get(session).cloned().unwrap_or_default()
     }
 
-    /// `sessionTabs.setGroupExpanded` for every group of `session`.
     pub fn set_expanded_groups(&self, session: &str, groups: HashMap<String, bool>) {
         self.groups.borrow_mut().insert(session.to_owned(), groups);
     }
@@ -184,13 +174,11 @@ impl Tabs {
         };
     }
 
-    /// Whether the tab of `session`'s root is open.
     pub(crate) fn is_open(&self, tui: &Tui, session: &str) -> bool {
         let root = tui.data.read(|state| state.root(&SessionID(session.to_owned()))).0;
         self.tabs(tui).iter().any(|tab| tab.session_id == root)
     }
 
-    /// The tabs file, for tests and the P-FILE proof.
     pub fn persisted(&self) -> Persisted {
         self.file.borrow().clone()
     }
@@ -203,7 +191,6 @@ impl Tabs {
     }
 }
 
-/// Loads `tabs.json`, registers the tab commands, and follows the storage directory.
 pub fn install(tui: &Rc<Tui>) {
     *tui.tabs.cwd.borrow_mut() =
         std::env::current_dir().map(|path| path.to_string_lossy().into_owned()).unwrap_or_default();
@@ -498,7 +485,6 @@ fn retain(tui: &Tui) {
         (excluded, evict)
     });
     retention.previous = viewed;
-    // The evictions publish, which may sync the tabs again.
     drop(retention);
     for root in evict {
         tui.data.evict(&SessionID(root));
@@ -519,7 +505,6 @@ fn title_of(tui: &Tui, session: &str, persisted: Option<String>, fallback: Optio
         .or_else(|| info.as_ref().map(crate::dialogs::session_list::title))
 }
 
-/// A server event the tabs follow. Returns whether it navigated away from a deleted session.
 pub(crate) fn event(tui: &Tui, event: &Handled) -> bool {
     match event {
         Handled::SessionDeleted(event) => {
@@ -617,7 +602,6 @@ pub fn open(tui: &Tui, session: &str) {
     });
 }
 
-/// `add`: the new-session page, in the location `session.new_location` picks.
 pub fn add(tui: &Tui) {
     if !Tabs::enabled(tui) {
         return;
@@ -676,7 +660,6 @@ pub fn reorder(tui: &Tui, session: &str, index: usize) {
     });
 }
 
-/// `cycle` and `cycleUnread`.
 fn cycle(tui: &Tui, forward: bool, unread: bool) {
     let open = tui.tabs.tabs(tui);
     let current = tui.tabs.current(tui);
@@ -725,7 +708,6 @@ fn update(tui: &Tui, mutation: impl Fn(&mut Scope) + Send + Sync + 'static) {
     let proxy = tui.app.proxy();
     tui.tabs.writer.get_or_init(|| opencode_local::serial::Serial::new("tabs")).run(move || {
         let Ok(batch) = pending.lock().map(|pending| pending.clone()) else { return };
-        // An earlier job already wrote this one.
         let Some(&(revision, _)) = batch.last() else { return };
         let result = storage.update("tabs", &serde_json::json!({}), |value| {
             let mut file: Persisted = serde_json::from_value(value.clone()).unwrap_or_default();
@@ -760,7 +742,6 @@ fn track(tui: &Tui) {
     };
 }
 
-/// Repaints what shows the tabs.
 fn changed(tui: &Tui) {
     track(tui);
     crate::frame::refresh(tui);
@@ -771,7 +752,6 @@ fn changed(tui: &Tui) {
     prefetch(tui, &Changes::default());
 }
 
-/// `status` over a store snapshot.
 pub fn status(state: &State, session: &SessionID, prompt_pulse: u32) -> Status {
     let root = state.root(session);
     let members: Vec<SessionID> = {

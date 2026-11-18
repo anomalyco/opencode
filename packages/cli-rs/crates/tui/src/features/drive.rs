@@ -1,5 +1,4 @@
-//! The `OPENCODE_DRIVE` UI endpoint (H.4): with the variable set, the TUI runs headless and a simulation driver
-//! controls it over the endpoint, as `app.tsx:276-279` hands the renderer to `Drive.create`.
+//! TypeScript: `app.tsx:276-279`.
 
 use crate::app::{Launch, Tui};
 use opencode_drive::Manifest;
@@ -8,7 +7,6 @@ use opentui::{App, AppOptions};
 use std::net::SocketAddr;
 use std::rc::Rc;
 
-/// The manifest `OPENCODE_DRIVE` names, or `None` when it is unset.
 pub fn manifest() -> Option<opentui::Result<Manifest>> {
     opencode_drive::manifest::resolve(|name| std::env::var(name).ok())
         .map(|manifest| manifest.map_err(opentui::Error::other))
@@ -32,7 +30,6 @@ pub fn run(manifest: Manifest, options: AppOptions, launch: Launch) -> opentui::
     })
 }
 
-/// Serves the endpoint at `addr` for a TUI mounted on a headless app.
 pub fn start(tui: &Rc<Tui>, addr: SocketAddr, version: String) -> std::io::Result<opencode_drive::Server> {
     opencode_drive::start(&tui.app, addr, version)
 }

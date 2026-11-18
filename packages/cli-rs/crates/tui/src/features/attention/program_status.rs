@@ -16,10 +16,8 @@ use crate::prelude::*;
 use crate::tabs::Attention;
 
 const APP: &str = "opencode";
-/// The root record's ID.
 const ROOT: &str = "";
 
-/// A session that needs the user or works (`PendingSession`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Pending {
     pub id: String,
@@ -70,7 +68,6 @@ pub fn sync(tui: &Tui) {
     update(&mut sent, &reports, |record| tui.app.set_program_status(record.status()));
 }
 
-/// Clears the root record, as the TS provider's cleanup does.
 pub fn clear(tui: &Tui) {
     let mut sent = tui.attention.program.borrow_mut();
     send(&mut sent, ROOT, Record::clear(ROOT), |record| tui.app.set_program_status(record.status()));
@@ -139,7 +136,6 @@ fn send(sent: &mut Sent, key: &str, record: Record, deliver: impl FnOnce(&Record
     sent.insert(key.to_owned(), record);
 }
 
-/// `programStatusReports`: the root summary, then one record per session.
 pub fn reports(sessions: &[Pending]) -> IndexMap<String, Record> {
     std::iter::once((ROOT.to_owned(), root(sessions)))
         .chain(sessions.iter().map(|session| {
@@ -204,7 +200,6 @@ fn record_id(id: &str) -> String {
 /// cut with an ellipsis.
 fn clip(input: Option<&str>, bytes: usize) -> Option<String> {
     static CONTROLS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[\x00-\x1f\x7f-\x{9f}]+").unwrap());
-    // JavaScript's `\s`.
     static SPACE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[\s\x{feff}]+").unwrap());
     let text = CONTROLS.replace_all(input.unwrap_or_default(), " ");
     let text = SPACE.replace_all(&text, " ");
@@ -300,7 +295,6 @@ mod tests {
         step(&mut sent, &[working("ses_a", "A")], true);
         step(&mut sent, &[blocked("ses_a", ProgramKind::Permission)], true);
         step(&mut sent, &[], true);
-        // A terminal that did not take a record gets it again next time.
         step(&mut sent, &[working("ses_b", "B")], false);
         step(&mut sent, &[working("ses_b", "B")], true);
         let blocked = ProgramState::Blocked(Some(ProgramKind::Permission));

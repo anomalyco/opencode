@@ -1,5 +1,3 @@
-//! The prompt. Each file belongs to the step that names it.
-
 pub mod attach;
 pub mod autocomplete;
 pub mod draft;

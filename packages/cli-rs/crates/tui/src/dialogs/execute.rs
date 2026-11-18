@@ -12,7 +12,6 @@ use opencode_ui::prompt_input::paste::strip_ansi;
 
 use crate::prelude::*;
 
-/// The open dialog: the call it shows and how to redraw it.
 pub struct Live {
     part: RefCell<SessionMessageAssistantTool>,
     copied: Cell<Option<Copied>>,
@@ -26,7 +25,6 @@ enum Copied {
 }
 
 impl Live {
-    /// Shows the call's new state.
     pub fn set(&self, part: SessionMessageAssistantTool) {
         if *self.part.borrow() == part {
             return;
@@ -96,7 +94,6 @@ fn view(cx: &Rc<DialogCx>, tui: Weak<Tui>, live: &Rc<Live>, page: Theme) -> View
         },
     );
     let scroll = ScrollBox::new(app).scrollbars(false);
-    // The scroll box paints no background of its own; the bleed box around it does.
     let body = View::new(app)
         .bg(page.background.raised.high)
         .margin_edge(Edge::Left, -(DIALOG_INSET as i32))
@@ -184,10 +181,8 @@ fn view(cx: &Rc<DialogCx>, tui: Weak<Tui>, live: &Rc<Live>, page: Theme) -> View
     opencode_ui::dialog::layout_view(cx, &head, &body, Some(&foot), DIALOG_INSET, 0)
 }
 
-/// What the dialog shows of a call.
 struct Shown {
     code: Option<String>,
-    /// The output text, or the error message.
     text: Option<String>,
     /// The output split into its JSON result and the warnings and logs after it.
     highlighted: Option<(String, Option<String>)>,
@@ -252,7 +247,6 @@ impl Shown {
         }
     }
 
-    /// The width of the shared line-number gutter.
     fn digits(&self) -> usize {
         let lines = |text: Option<&str>| text.map_or(0, |text| text.split('\n').count());
         lines(self.code.as_deref())
@@ -273,7 +267,6 @@ impl Shown {
     }
 }
 
-/// The scroll box's content: the code, then the output.
 fn content(app: &App, theme: &Theme, syntax: &SyntaxTheme, shown: &Shown, width: usize) -> View {
     let digits = shown.digits();
     let code_width = width.saturating_sub(digits + 1).max(1);
@@ -354,7 +347,6 @@ fn highlighted(text: &str) -> Option<(String, Option<String>)> {
     Some((opencode_local::jsonc::stringify_pretty(&json), (!rest.is_empty()).then(|| rest.to_owned())))
 }
 
-/// `wrappedRows`: the rows `text` takes when each line breaks every `width` characters.
 fn wrapped_rows(text: Option<&str>, width: usize) -> usize {
     let Some(text) = text.filter(|text| !text.is_empty()) else { return 0 };
     text.split('\n').map(|line| line.chars().count().div_ceil(width.max(1)).max(1)).sum()

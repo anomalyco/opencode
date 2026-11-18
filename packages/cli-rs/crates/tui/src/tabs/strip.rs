@@ -1,5 +1,4 @@
-//! The horizontal tab strip (W01, `HorizontalSessionTabs` in `component/session-tabs.tsx:1275-1790`). One
-//! [`Custom`] widget paints every cell from the TS formulas; it reads the tabs and the store when it paints.
+//! TypeScript: `component/session-tabs.tsx:1275-1790`.
 
 use std::time::{Duration, Instant};
 
@@ -14,7 +13,6 @@ use super::{Attention, Status, Unread};
 
 use crate::prelude::*;
 
-/// The add button, " + ", at the end of the strip.
 const ADD_TAB_WIDTH: usize = 3;
 /// A long title fades out over its last cells.
 pub(super) const FADE_WIDTH: usize = 4;
@@ -36,7 +34,6 @@ pub struct Strip {
     plus: Cell<Option<usize>>,
     pulses: RefCell<HashMap<String, Pulse>>,
     fades: RefCell<HashMap<String, MarkerFade>>,
-    /// The spinner steps of the painted tabs that run, each from 0 when its spinner shows.
     spins: RefCell<HashMap<String, u64>>,
     /// The strip's ticks while a spinner shows and while a pulse moves.
     spin: RefCell<Option<AnimationTick>>,
@@ -79,7 +76,6 @@ pub fn new(app: &App, tui: Weak<Tui>) -> Custom<Strip> {
     })
 }
 
-/// Clears the hover state when the pointer leaves the strip.
 pub fn leave(strip: &Custom<Strip>) {
     strip.update(|strip| {
         strip.hovered = None;
@@ -98,12 +94,10 @@ pub fn forget(strip: &Custom<Strip>) {
     });
 }
 
-/// Whether an unread marker under the strip still fades.
 pub fn fading(strip: &Custom<Strip>, now: Instant) -> bool {
     strip.with(|strip| strip.fades.borrow().values().any(|marker| marker.moving(now)))
 }
 
-/// Feeds each painted tab's status to its unread marker at a store flush.
 pub fn observe(strip: &Custom<Strip>, tui: &Tui) {
     strip.with(|strip| observe_markers(&strip.fades, tui));
 }
@@ -133,17 +127,14 @@ pub(super) fn hold(handle: &RefCell<Option<AnimationTick>>, wanted: bool, start:
     }
 }
 
-/// Moves each spinner that shows by `ticks` steps (`SpinnerRenderable`'s `index += ticks`).
 pub(super) fn step(spins: &RefCell<HashMap<String, u64>>, ticks: u64) {
     spins.borrow_mut().values_mut().for_each(|step| *step += ticks);
 }
 
-/// The spinner's rate: one step per `SPINNER_INTERVAL`, 12.5 a second.
 pub(super) fn spinner_fps() -> f64 {
     1.0 / opencode_ui::motion::SPINNER_INTERVAL.as_secs_f64()
 }
 
-/// The colors shared by every tab.
 pub(super) struct Palette {
     pub unread: Color,
     pub active_number: Color,
@@ -212,11 +203,9 @@ impl MarkerFade {
     }
 
     fn opacity(&self, now: Instant) -> f64 {
-        // `tween`'s default ease is smoothstep.
         self.progress(now).map_or(self.from, |p| self.from + (self.target - self.from) * p * p * (3.0 - 2.0 * p))
     }
 
-    /// Whether the marker still moves and needs frames.
     pub(super) fn moving(&self, now: Instant) -> bool {
         self.progress(now).is_some_and(|progress| progress < 1.0)
     }
@@ -233,8 +222,6 @@ impl MarkerFade {
     }
 }
 
-/// The indicator's glyph (`TabIndicator`'s label) and whether it shows the unread color. A running tab shows its
-/// spinner at `step`, and a `fading` marker keeps its glyph.
 pub(super) fn indicator(
     status: &Status,
     label: &str,
@@ -276,7 +263,6 @@ pub(super) fn fade(color: Color, background: Color, index: usize, length: usize,
     if opacity == 0.0 { color } else { tint(color, background, opacity) }
 }
 
-/// `Locale.takeWidth` over characters.
 pub(super) fn take_width(text: &str, width: usize) -> Vec<char> {
     let mut used = 0;
     text.chars()
@@ -291,8 +277,6 @@ pub(super) fn take_width(text: &str, width: usize) -> Vec<char> {
         .collect()
 }
 
-/// Draws a pulse row from `x`: half blocks for an edge, else a blank on the default foreground, as the TS
-/// renderable sets its cells.
 pub(super) fn paint_pulse(painter: &mut Painter<'_>, x: i32, y: i32, cells: Option<Vec<(Option<char>, Color, Color)>>) {
     for (column, (glyph, fg, bg)) in cells.into_iter().flatten().enumerate() {
         let (glyph, fg) = glyph.map_or((' ', Color::DEFAULT_FOREGROUND), |glyph| (glyph, fg));
@@ -300,7 +284,6 @@ pub(super) fn paint_pulse(painter: &mut Painter<'_>, x: i32, y: i32, cells: Opti
     }
 }
 
-/// Draws `characters` from `x` with one color per character.
 pub(super) fn draw_chars(
     painter: &mut Painter<'_>,
     x: i32,
@@ -316,7 +299,6 @@ pub(super) fn draw_chars(
     }
 }
 
-/// A character's width as a one-character string measures: a control character counts as one column.
 fn char_width(character: char) -> usize {
     character.width().unwrap_or(1)
 }
@@ -565,7 +547,6 @@ impl Component for Strip {
             let style = if self.plus_hovered {
                 Style::new().fg(theme.text.base).bg(theme.background.action.primary.hovered)
             } else {
-                // A transparent background blends an alpha muted token as the TS `<text>` does.
                 Style::new().fg(theme.text.muted).bg(Color::TRANSPARENT)
             };
             painter.text(x as i32, 0, " + ", style);
@@ -687,7 +668,6 @@ mod tests {
         marker.set(&unread(), UNREAD, true, start);
         assert_eq!(marker.color(&unread(), BG, FLASH, start), None, "an unread marker shows the unread color");
         marker.set(&Status::default(), UNREAD, true, start);
-        // Opacity 1 at the start: the full unread color, then a lift toward the flash color near 0.8.
         assert_eq!(marker.color(&Status::default(), BG, FLASH, start), Some(UNREAD));
         assert!(marker.moving(at(100)));
         // smoothstep(0.5) = 0.5: half way at 90 ms, so the marker is a blend of background and unread color.
@@ -697,7 +677,6 @@ mod tests {
         assert_eq!(glyph, "•", "a fading marker keeps its glyph");
         assert!(!marker.moving(at(180)));
         assert_eq!(marker.color(&Status::default(), BG, FLASH, at(180)), None, "gone after 180 ms");
-        // Setting the same target again does not restart the tween.
         marker.set(&Status::default(), UNREAD, true, at(200));
         assert!(!marker.moving(at(201)));
     }

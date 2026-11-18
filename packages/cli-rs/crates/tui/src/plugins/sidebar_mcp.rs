@@ -15,7 +15,6 @@ pub fn plugin() -> abi::Plugin {
     abi::Plugin { id: "opencode.sidebar.mcp", setup }
 }
 
-/// The hidden command a click on the header runs.
 const FOLD: &str = "sidebar.mcp.fold";
 const ROOT: &str = "mcp";
 
@@ -28,7 +27,6 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         let Some(session) = cx.input.slot.as_ref().and_then(|slot| slot.session_id.as_deref()) else {
             return hidden(ROOT);
         };
-        // The servers follow the session's location, the fold the storage.
         let changed = &cx.input.changed;
         if !(changed.all || changed.local || changed.session(session) || !changed.locations.is_empty()) {
             return kept(ROOT);
@@ -47,7 +45,6 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-/// The stored `{ open: true }` (`storage.store("view")`).
 fn open(read: &dyn abi::Read) -> bool {
     read.storage_get("view").and_then(|value| value.get("open")?.as_bool()).unwrap_or(true)
 }

@@ -14,7 +14,6 @@ pub const VERSION: &str = match option_env!("OPENCODE_VERSION") {
     None => "local",
 };
 
-/// The footer drawing, reached weakly from the footer's own action.
 type Hook = RefCell<Option<Weak<dyn Fn()>>>;
 
 /// The rows, in order.
@@ -39,7 +38,6 @@ pub fn entries(tui: &Tui) -> Vec<(&'static str, String)> {
     ]
 }
 
-/// `DialogDebug`, in place of any open dialog.
 pub fn show(tui: &Tui) {
     let rows = entries(tui);
     let weak = tui.weak();
@@ -90,7 +88,6 @@ pub fn show(tui: &Tui) {
                 cx.layer(KeymapLayer::new(vec![
                     TuiCommand::inline("c", move |_, _| {
                         copy(&weak, &copied, &text);
-                        // The layer owns the footer drawing.
                         draw();
                     })
                     .title("Copy debug info")
@@ -157,7 +154,6 @@ fn release() -> String {
     opencode_util::win::os_release().unwrap_or_default()
 }
 
-/// `os.release()`: the kernel release, from `/proc` on Linux, else `uname -r`.
 #[cfg(not(windows))]
 fn release() -> String {
     std::fs::read_to_string("/proc/sys/kernel/osrelease")
@@ -170,7 +166,6 @@ fn release() -> String {
         .unwrap_or_default()
 }
 
-/// `describeTerminal`: the program and version, and the multiplexer.
 pub fn describe_terminal(var: impl Fn(&str) -> Option<String>) -> String {
     let set = |name: &str| var(name).filter(|value| !value.is_empty());
     let program = set("TERM_PROGRAM").or_else(|| set("TERM")).unwrap_or_else(|| "unknown".to_owned());

@@ -1,7 +1,4 @@
-//! The code-mode execute tool (E.7b): `Execute` and `ExecuteCallView`
-//! (`routes/session/index.tsx:3352-3450`). One line for the call, one line per nested tool call
-//! (a click lists its inputs), and the error output under a failed run. A click on the call opens
-//! the execute dialog.
+//! TypeScript: `routes/session/index.tsx:3352-3450`.
 
 use opencode_api::generated::SessionMessageAssistantTool;
 use opencode_ui::tool_info::{ExecuteCall, ExecuteStatus, execute_call_summary, execute_calls};
@@ -52,7 +49,6 @@ impl Execute {
         inner.inline.on_click(move || {
             let (Some(inner), Some(tui)) = (weak.upgrade(), tui.upgrade()) else { return };
             let Some(part) = inner.part.borrow().clone() else { return };
-            // The dialog takes the focus the click is still delivering to.
             let weak = Rc::downgrade(&inner);
             let tui_weak = tui.weak();
             tui.app.defer(move |_| {
@@ -67,7 +63,6 @@ impl Execute {
         &self.0.root
     }
 
-    /// The calls keep their open state; the update that follows shows the output again.
     pub fn restyle(&self, _cx: &Context<'_>) {
         let inner = &self.0;
         inner.inline.restyle();
@@ -154,7 +149,6 @@ impl Execute {
     }
 }
 
-/// `ExecuteCallView`: `› summary`, or `✗` for a failed call; a click lists its inputs.
 struct Call(Rc<CallInner>);
 
 struct CallInner {

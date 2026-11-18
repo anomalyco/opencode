@@ -30,19 +30,14 @@ use viewer::{Memory, Mode, Preview, Showing, Turn, Viewer};
 use crate::prelude::*;
 
 pub const ID: &str = "opencode.diffs";
-/// The full-screen route's name.
 pub const ROUTE: &str = "diff";
-/// The surfaces: the docked panel and the route, which show a viewer, and the file menu over them.
 pub const PANEL: &str = "panel";
 pub const PAGE: &str = "diff";
 pub const MENU: &str = "menu";
-/// The key a plugin's image preview has (`Dialog::Images`).
 const IMAGES: &str = "images";
-/// The nodes the verbs name: the cards, the file tree's scroll, and the fixed edge above the cards.
 const FILES: &str = "files";
 const TREE: &str = "tree";
 const EDGE: &str = "edge";
-/// The commands the viewer's clicks and dialogs run.
 const SOURCE: &str = "opencode.diffs.source";
 const HELP: &str = "opencode.diffs.help";
 const LEAVE: &str = "opencode.diffs.leave";
@@ -60,7 +55,6 @@ const TURNS: [&str; 5] = [
     "server.connected",
 ];
 
-/// What a command of a click or a dialog does to the viewer on screen, with its input.
 type Clicked = fn(&Diffs, &dyn Host, &mut Viewer, Option<&str>);
 
 pub fn plugin() -> abi::Plugin {
@@ -91,7 +85,6 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         (SOURCE, |diffs, host, viewer, _| sources::open(host, viewer, &diffs.memory.borrow())),
         (HELP, |_, host, viewer, _| help::open(host, viewer)),
         (LEAVE, |diffs, host, viewer, _| {
-            // Docked, the press that ran it already gave the panel the focus.
             if !viewer.docked() {
                 viewer.run(host, diffs, keys::Action::Close);
             }
@@ -140,7 +133,6 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
             V2Event::SessionExecutionStarted(event) => Turn::Started(&event.data.session_id.0),
             V2Event::SessionExecutionSucceeded(event) => Turn::Ended(&event.data.session_id.0),
             V2Event::SessionExecutionFailed(event) => Turn::Ended(&event.data.session_id.0),
-            // A shutdown leaves the turn to the restart's recovery: it has not ended (`store/src/connection.rs`).
             V2Event::SessionExecutionInterrupted(event)
                 if event.data.reason == SessionExecutionInterruptedDataReason::Shutdown =>
             {
@@ -173,7 +165,6 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
 }
 
 impl Diffs {
-    /// `diff.open`: closes the session's open viewer, else docks one beside the session, else opens the route.
     fn open(&self, host: &dyn Host) {
         let route = host.route();
         if let abi::Route::Session { id } = &route {
@@ -194,8 +185,6 @@ impl Diffs {
         host.navigate(abi::Route::Plugin { id: ID.to_owned(), name: ROUTE.to_owned() });
     }
 
-    /// Runs `f` on the viewer on screen, which says whether the view may show something new, then brings its tree's
-    /// selection into view.
     fn with_viewer(&self, host: &dyn Host, f: impl FnOnce(&mut Viewer) -> bool) {
         let mut held = self.viewer.borrow_mut();
         let Some(viewer) = held.as_mut() else { return };
@@ -205,7 +194,6 @@ impl Diffs {
         viewer.follow_tree(host);
     }
 
-    /// The events of a mount of the panel or the route `surface`.
     fn handle(&self, host: &dyn Host, surface: &str, event: &Event) -> Handled {
         if let Event::Mount { mounted, .. } = event {
             self.mounted(host, surface, *mounted);
@@ -237,14 +225,11 @@ impl Diffs {
                 }
                 _ => Handled::Pass,
             };
-            // A key, press or step that changes nothing the view shows (a wheel step, a hunk step within the selected
-            // file, the view toggle where split is not available) costs no view.
             viewer.shown() != before
         });
         handled
     }
 
-    /// A press on a file's heading or tree row: the left button picks a row, the right opens the file menu.
     fn pressed(&self, host: &dyn Host, viewer: &mut Viewer, pointer: &abi::interact::Pointer) -> Handled {
         let row =
             pointer.node.strip_prefix("t:").and_then(|id| id.parse::<usize>().ok()).and_then(|id| {
@@ -271,7 +256,6 @@ impl Diffs {
         if !mounted {
             let left = self.mounts.get().saturating_sub(1);
             self.mounts.set(left);
-            // The viewer's dialogs end with it, as TS's close clears them (review carbon-4).
             if left == 0 && self.viewer.borrow_mut().take().is_some() {
                 for key in [sources::KEY, base_branch::KEY, help::KEY, IMAGES] {
                     host.dialog(Dialog::Close { key: key.to_owned() });

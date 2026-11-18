@@ -6,7 +6,6 @@ use opencode_ui::dialog::Dialogs;
 
 use crate::prelude::*;
 
-/// `DialogMessage` for one message of `session`, with `dialog.replace`.
 pub fn show(tui: &Tui, session: SessionID, message: String) {
     let action = |run: fn(&Tui, &Dialogs, &SessionID, &str)| {
         let (weak, session, message) = (tui.weak(), session.clone(), message.clone());
@@ -25,7 +24,6 @@ pub fn show(tui: &Tui, session: SessionID, message: String) {
     tui.dialogs.replace(
         move |cx| {
             let mut props = SelectProps::new("Message Actions", options.clone());
-            // `renderFilter={!newDesigns()}`.
             props.render_filter = false;
             select::select(cx, props).0
         },
@@ -98,7 +96,6 @@ fn text(message: &SessionMessageInfo) -> String {
             })
             .collect::<Vec<_>>()
             .join("\n"),
-        // `"text" in value ? value.text : ""`.
         SessionMessageInfo::Synthetic(message) => message.text.clone(),
         SessionMessageInfo::System(message) => message.text.clone(),
         SessionMessageInfo::Skill(message) => message.text.clone(),

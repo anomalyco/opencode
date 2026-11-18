@@ -57,7 +57,6 @@ impl Panels {
         crate::frame::refresh(tui);
     }
 
-    /// Closes the panel; a focus it had goes to the composer.
     pub fn close(&self, tui: &Tui) {
         if self.current.borrow_mut().take().is_some() {
             crate::frame::refresh(tui);
@@ -69,7 +68,6 @@ impl Panels {
         }
     }
 
-    /// Closes `plugin`'s panel, when it is open.
     pub fn release(&self, tui: &Tui, plugin: &str) {
         if self.current.borrow().as_ref().is_some_and(|target| target.plugin == plugin) {
             self.close(tui);
@@ -88,11 +86,9 @@ impl Panels {
     }
 }
 
-/// The host of the open panel: a focusable box on the raised surface when split, the page when full screen.
 pub struct Host {
     pub root: View,
     target: Target,
-    /// The plugin's panel surface (P2), which mounts into the panel and reads how it shows from the host.
     content: Option<opencode_plugin::PanelMount>,
 }
 
@@ -116,7 +112,6 @@ impl Host {
     }
 }
 
-/// The panel's background, by how it shows.
 fn paint(tui: &Tui, root: &View) {
     let theme = tui.page();
     root.bg(match tui.panels.presentation() {

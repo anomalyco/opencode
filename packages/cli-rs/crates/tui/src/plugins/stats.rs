@@ -1,9 +1,4 @@
-//! `/stats` (E.14, row F11, `feature-plugins/system/stats.tsx`, `stats-data.ts`,
-//! `@opencode/util/activity-calendar`): `stats.open` opens the `stats` plugin route, which reads this year's
-//! usage from `GET /api/experimental/session/stats` each time it mounts, however it was opened, and shows it as a
-//! poster: the token total in large digits, a calendar of active days, the best streak, the active days, and the
-//! sessions. Escape goes back. The route is a contract 2.0 surface (P6a), which draws the 1.x route's page itself: a
-//! scroll whose content is centered.
+//! TypeScript: `feature-plugins/system/stats.tsx`, `stats-data.ts`.
 
 use opencode_api::client::Client;
 use opencode_api::generated::{ExperimentalSessionStatsInput, ExperimentalSessionStatsInputTools, SessionStatsInfo};
@@ -26,10 +21,8 @@ pub fn plugin() -> abi::Plugin {
     abi::Plugin { id: ID, setup }
 }
 
-/// What the route shows: nothing asked yet, the stats, or that they did not load.
 #[derive(Default)]
 struct State {
-    /// The route `stats.open` left, which escape goes back to.
     previous: RefCell<abi::Route>,
     /// The mounts of the route: a remount mounts the next before the last goes.
     mounts: Cell<usize>,
@@ -67,7 +60,6 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
             *mounted.stats.borrow_mut() = None;
             match host.try_fetch(request()) {
                 Ok(id) => mounted.request.set(Some(id)),
-                // A fetch the host did not take ends as a failed reply does.
                 Err(error) => *mounted.stats.borrow_mut() = Some(data(Err(error))),
             }
             return Handled::Pass;
@@ -135,8 +127,6 @@ const DIGITS: [(char, [&str; 5]); 15] = [
 /// The page's scroll, which keeps where it was scrolled while the route shows.
 const PAGE: &str = "page";
 
-/// `content` as the 1.x route showed it (TS `StatsPage`'s container): in a scroll of the whole page, `height` rows,
-/// centered across it and down it, one row in from the top and the bottom.
 fn page(content: Node, height: u16) -> Node {
     let room = Layout { min_height: Some(Width::Cells(height)), ..Layout::default() };
     let centered = Node::column(vec![content]).align(Align::Center).justify(Justify::Center).padding(0, 1).layout(room);
@@ -248,7 +238,6 @@ fn calendar(read: &dyn Read, stats: &SessionStatsInfo, width: u16) -> Node {
     Node::column(rows).align(Align::Center)
 }
 
-/// `Logo`: four rows of the left half in `text.muted` and the right half in bold `text.base`, as wide as fits.
 fn logo(read: &dyn Read, width: u16, height: u16) -> Node {
     use crate::routes::home::{GO_RIGHT, LOGO_LEFT, LOGO_RIGHT};
     let (base, muted, background) =
@@ -305,12 +294,10 @@ fn rgba(color: Color) -> Rgba {
     Rgba::new(color.r, color.g, color.b, color.a)
 }
 
-/// `statsNumber`: compact notation with at most one fraction digit (`12.3K`, `1M`).
 pub fn number(value: f64) -> String {
     const UNITS: [(f64, &str); 5] = [(1.0, ""), (1e3, "K"), (1e6, "M"), (1e9, "B"), (1e12, "T")];
     let round = |value: f64| (value * 10.0).round() / 10.0;
     let mut index = UNITS.iter().rposition(|(scale, _)| value.abs() >= *scale).unwrap_or(0);
-    // A value that rounds up to 1000 of a unit reads as one of the next (`999950` is `1M`).
     if round(value / UNITS[index].0).abs() >= 1000.0 && index + 1 < UNITS.len() {
         index += 1;
     }
@@ -318,8 +305,6 @@ pub fn number(value: f64) -> String {
     format!("{}{}", text.strip_suffix(".0").unwrap_or(&text), UNITS[index].1)
 }
 
-/// `formatRange` of `{ month: "short", year: "numeric" }`: `Jan – Nov 2026`, `Nov 2026`, or
-/// `Dec 2025 – Jan 2026`.
 fn dates(from: f64, to: f64) -> String {
     let date = |time: f64| Zone::Local.at(time as i64).map_or(Date::default(), |date| date.date);
     let (start, end) = (date(from), date(from.max(to - 1.0)));

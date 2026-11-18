@@ -57,7 +57,6 @@ pub fn copy_selection(tui: &Tui) -> bool {
     true
 }
 
-/// [`write`], then shows `message` when it worked.
 pub fn copy(tui: &Tui, text: &str, message: &str) -> bool {
     let written = write(tui, text);
     if written {
@@ -66,8 +65,6 @@ pub fn copy(tui: &Tui, text: &str, message: &str) -> bool {
     written
 }
 
-/// `clipboard.write`: writes `text` to every clipboard destination, or shows an error toast when none took it.
-/// Returns whether one did.
 pub fn write(tui: &Tui, text: &str) -> bool {
     let written = put(&tui.app, text);
     if !written {
@@ -76,8 +73,6 @@ pub fn write(tui: &Tui, text: &str) -> bool {
     written
 }
 
-/// Writes `text` to the clipboard as `clipboard.write` does (`clipboard.ts:55-59`), for callers that report a failure
-/// themselves. Returns whether a destination took it.
 pub fn put(app: &App, text: &str) -> bool {
     // OpenTUI rejects NUL before any destination; host clipboard text cannot hold it.
     let text = text.replace('\0', "");

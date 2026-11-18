@@ -71,7 +71,6 @@ impl Banner {
         &self.0.root
     }
 
-    /// Paints the banner in `theme`; its text paints again on the next update.
     pub fn restyle(&self, theme: &Theme) {
         *self.0.theme.borrow_mut() = theme.clone();
         self.0.root.border_color(theme.background.raised.base);
@@ -79,8 +78,6 @@ impl Banner {
         *self.0.rendered.borrow_mut() = None;
     }
 
-    /// `messages` is the whole list; the banner counts the user messages from the boundary on. `width` is the
-    /// content width.
     pub fn update(
         &self,
         session: &SessionID,
@@ -109,7 +106,6 @@ impl Banner {
 }
 
 impl Inner {
-    /// The body's surface, darker under the pointer.
     fn paint(&self) {
         let theme = self.theme.borrow();
         let raised = theme.background.raised.base;
@@ -157,7 +153,6 @@ impl Inner {
         self.body.add(&Text::new(app, restore).fg(muted));
     }
 
-    /// `DELETE /api/session/{id}/revert`; a failure shows as a toast.
     fn clear(&self) {
         let (Some(tui), Some(session)) = (self.tui.upgrade(), self.session.borrow().clone()) else { return };
         let client = tui.data.client().clone();

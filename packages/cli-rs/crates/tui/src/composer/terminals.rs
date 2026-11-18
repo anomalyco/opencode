@@ -1,5 +1,4 @@
-//! The Terminals tab (`routes/session/composer/terminals-tab.tsx`): the session's terminals and "+ New terminal";
-//! Enter shows the selected one in the right pane, or creates one. `terminal.select` opens the composer here.
+//! TypeScript: `routes/session/composer/terminals-tab.tsx`.
 
 use opencode_api::generated::PersistentPtyInfo;
 use opentui::prelude::Container;
@@ -11,7 +10,6 @@ use crate::prelude::*;
 #[derive(Default)]
 pub(super) struct State {
     entries: Vec<PersistentPtyInfo>,
-    /// The terminal shown in the right pane (`visibleTerminalID`).
     visible: Option<String>,
     /// An index into the entries and the "+ New terminal" row after them.
     selected: Option<usize>,
@@ -30,7 +28,6 @@ pub(super) fn update(inner: &Rc<Inner>, tui: &Tui) {
         state.seen = None;
         return;
     }
-    // The effect selects the shown terminal when the tab shows and whenever the list or the shown one changes.
     let seen = (state.entries.iter().map(|terminal| terminal.id.0.clone()).collect(), state.visible.clone());
     if state.seen.as_ref() != Some(&seen) {
         state.selected = state.entries.iter().position(|terminal| Some(&terminal.id.0) == state.visible.as_ref());
@@ -71,7 +68,6 @@ pub(super) fn commands(inner: &Rc<Inner>) -> Vec<TuiCommand> {
     ]
 }
 
-/// Closes the composer, then shows the selected terminal or creates one.
 fn select(inner: &Rc<Inner>, tui: &Tui) {
     let terminal = {
         let state = inner.terminals.borrow();
@@ -86,7 +82,6 @@ fn select(inner: &Rc<Inner>, tui: &Tui) {
     }
 }
 
-/// The list. The tab has no footer hints.
 pub(super) fn draw(inner: &Rc<Inner>, tui: &Tui, theme: &Theme) -> Vec<(String, String)> {
     let (entries, visible, selected) = {
         let state = inner.terminals.borrow();

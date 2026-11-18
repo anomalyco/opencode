@@ -10,15 +10,12 @@ use opencode_plugin::abi::{Host, Layout, Span, Width, Wrap};
 use super::{Diffs, MENU};
 
 const WIDTH: u16 = 19;
-/// The row's id, which the pointer names.
 const ROW: &str = "row";
 
-/// Opens the menu one row under the cell `x`, `y` of a press (`openFileMenu`).
 pub fn open(host: &dyn Host, x: u16, y: u16) {
     host.overlay(Overlay { surface: MENU.to_owned(), anchor: Anchor::Point { x, y: y + 1 }, width: WIDTH, height: 1 });
 }
 
-/// The menu's one row, for the file it is open on.
 pub fn view(diffs: &Diffs, _: &mut v2::View<'_>) -> Node {
     let held = diffs.viewer.borrow();
     let reviewed = held.as_ref().and_then(|viewer| viewer.menu.map(|file| viewer.is_reviewed(file)));
@@ -35,12 +32,10 @@ pub fn view(diffs: &Diffs, _: &mut v2::View<'_>) -> Node {
         .layout(Layout::default().width(Width::Percent(100.0)).height(Width::Cells(1)))
 }
 
-/// Enter runs the menu.
 pub fn layer() -> Layer {
     Layer::default().keys(vec![Bind::new("return", "run")])
 }
 
-/// The menu's keys and presses: Enter or a left click runs it, a right press closes it.
 pub fn handle(diffs: &Diffs, host: &dyn Host, event: &Event) -> Handled {
     match event {
         Event::Key(key) if key.bind.as_deref() == Some("run") => run(diffs, host),
@@ -61,7 +56,6 @@ fn close(diffs: &Diffs, host: &dyn Host) {
     }
 }
 
-/// The menu's one action: closes it, then toggles the file's mark (`run`).
 fn run(diffs: &Diffs, host: &dyn Host) {
     host.close_overlay(MENU);
     let mut held = diffs.viewer.borrow_mut();

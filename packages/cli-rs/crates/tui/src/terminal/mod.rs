@@ -1,9 +1,4 @@
-//! The terminal pane on the persistent PTY socket (E.13a, rows W06 and A04).
-//!
-//! [`Terminals`] is `context/session-terminals.tsx`: whether the server offers terminals, each session's terminals,
-//! and the selected one per session in the `session-terminal-selection` storage key. The session frame shows the
-//! selected terminal in its right pane ([`pane::Pane`]). The commands are those of `component/session-frame.tsx`:
-//! `terminal.toggle`, `terminal.select`, `terminal.close`, and `session.terminal` (`/terminal`).
+//! TypeScript: `context/session-terminals.tsx`, `component/session-frame.tsx`.
 
 pub mod palette;
 pub mod pane;
@@ -22,7 +17,6 @@ use crate::prelude::*;
 
 const SELECTION: &str = "session-terminal-selection";
 
-/// Shows the composer's terminal list (E.13b's `onTerminalPicker`).
 pub type Picker = Rc<dyn Fn(&Tui)>;
 
 /// Sends bytes to one terminal's input.
@@ -35,7 +29,6 @@ pub struct Terminals {
     /// Focus the next terminal pane, or the session once none is selected, after a focused terminal disconnected.
     restore: Cell<bool>,
     lists: RefCell<HashMap<String, Vec<PersistentPtyInfo>>>,
-    /// `{ sessions: { [sessionID]: ptyID | null } }`.
     selection: RefCell<Value>,
     writers: RefCell<HashMap<String, Writer>>,
     pending: RefCell<HashMap<String, Vec<Vec<u8>>>>,
@@ -73,7 +66,6 @@ impl Terminals {
         self.lists.borrow().get(session).cloned().unwrap_or_default()
     }
 
-    /// The selected terminal, if any, whether or not it is still listed.
     pub fn selected_id(&self, session: &str) -> Option<String> {
         self.selection.borrow()["sessions"][session].as_str().map(str::to_owned)
     }
@@ -84,7 +76,6 @@ impl Terminals {
         self.lists.borrow().get(session)?.iter().any(|terminal| terminal.id.0 == id).then_some(id)
     }
 
-    /// Replaces how sockets open; tests serve fake ones.
     pub fn set_connector(&self, connector: Arc<dyn Connector>) {
         *self.connector.borrow_mut() = connector;
     }
@@ -93,7 +84,6 @@ impl Terminals {
         self.connector.borrow().clone()
     }
 
-    /// Sets how `terminal.select` shows the composer's terminal list (E.13b).
     pub fn set_picker(&self, picker: Option<Picker>) {
         *self.picker.borrow_mut() = picker;
     }
@@ -108,11 +98,9 @@ impl Terminals {
         if let Some(listener) = listener {
             listener(tui);
         }
-        // The sidebar gives the right pane to a terminal that opens (`session-frame.tsx:93-117`).
         tui.app.defer(bind!(tui.weak(), |tui, _| tui.sync_view()));
     }
 
-    /// Whether the pane of `pty` should take focus when it mounts; clears the wish.
     pub(crate) fn take_focus(&self, pty: &str) -> bool {
         let wanted = self.focus.borrow().as_deref() == Some(pty) || self.restore.get();
         if wanted {
@@ -128,7 +116,6 @@ impl Terminals {
         crate::frame::refresh(tui);
     }
 
-    /// Whether the session should get focus back: a focused terminal disconnected and none is selected now.
     pub(crate) fn take_restore(&self, selected: bool) -> bool {
         if !self.restore.get() || selected {
             return false;
@@ -184,7 +171,6 @@ pub fn install_keys(tui: &Rc<Tui>) {
     }));
 }
 
-/// Server events: support on every `server.connected`, and fresh lists when a session's terminals change.
 pub(crate) fn event(tui: &Tui, event: &Handled) {
     let session = match event {
         Handled::ServerConnected(_) => return check(tui),
@@ -198,14 +184,12 @@ pub(crate) fn event(tui: &Tui, event: &Handled) {
     }
 }
 
-/// The session frame of `session` mounted: list its terminals (`createResource` in the frame).
 pub fn session_mounted(tui: &Tui, session: &SessionID) {
     if tui.terminals.available() {
         refresh(tui, session, false, |_| {});
     }
 }
 
-/// Reads whether the server offers terminals; servers that predate the field do.
 fn check(tui: &Tui) {
     let client = tui.data.client().clone();
     tui.app.spawn(
@@ -349,7 +333,6 @@ fn session(tui: &Tui) -> Option<SessionID> {
     }
 }
 
-/// `terminal.toggle`: hides the shown terminal, else shows the newest one, else creates one.
 fn toggle(tui: &Tui) {
     let Some(id) = session(tui) else { return };
     tui.dialogs.clear();
@@ -365,7 +348,6 @@ fn toggle(tui: &Tui) {
     });
 }
 
-/// `terminal.select`: focuses the session and shows the composer's terminal list.
 fn pick(tui: &Tui) {
     let Some(id) = session(tui) else { return };
     tui.dialogs.clear();
@@ -387,7 +369,6 @@ fn close(tui: &Tui) {
     select(tui, &id.0, None, true);
 }
 
-/// `session.terminal` (`/terminal`).
 fn new_terminal(tui: &Tui) {
     let Some(id) = session(tui) else { return };
     tui.dialogs.clear();

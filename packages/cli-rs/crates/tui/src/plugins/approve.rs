@@ -59,7 +59,6 @@ pub(super) fn ask(tui: &Tui, target: &str, back: impl Fn() + 'static) {
 /// The question about `artifact`, found as plugin directory `target`: the library that would run, where it really is
 /// when that is outside the directory, and its hash (bigboi-1, carbon-1).
 fn question(target: &str, artifact: &Artifact, unsaved: Option<&str>) -> String {
-    // A TypeScript plugin's directory is its artifact, even when it is a link to another.
     let inside =
         artifact.script || std::fs::canonicalize(target).is_ok_and(|directory| artifact.path.starts_with(directory));
     let elsewhere = if inside { "" } else { "\nIt is outside this plugin directory." };
@@ -67,8 +66,6 @@ fn question(target: &str, artifact: &Artifact, unsaved: Option<&str>) -> String 
         unsaved.map(|reason| format!("\nYour answer lasts until opencode exits: {reason}.")).unwrap_or_default();
     // The real path as a user would type it: Windows' canonical form starts `\\?\` (`\\?\C:\`, `\\?\UNC\`).
     let path = opencode_util::path::strip_verbatim(&artifact.path.to_string_lossy()).into_owned();
-    // A Luau plugin's approval is its own (spike `luau-spike`): it names the directory's tree as a Luau plugin, and
-    // approves nothing of the directory that runs on the JS host.
     #[cfg(feature = "luau")]
     if opencode_plugin::luau::approves(artifact) {
         return format!(
@@ -144,8 +141,6 @@ mod tests {
         }
     }
 
-    // Expected (review luau-2): a Luau plugin's approval asks about a Luau plugin, with its tree's hash, and the same
-    // directory's TypeScript approval still asks about TypeScript on the JS host.
     #[cfg(feature = "luau")]
     #[test]
     fn a_luau_plugin_is_asked_about_as_one() {

@@ -18,14 +18,12 @@ pub enum Kind {
     Installed,
 }
 
-/// `ClientNotice`: what the CLI's updater found.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ClientNotice {
     pub kind: Kind,
     pub version: String,
 }
 
-/// What a `/update` check found.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Check {
     Notice(ClientNotice),
@@ -41,13 +39,10 @@ pub enum UpdateState {
     Failed(String),
 }
 
-/// The updater (TS `UpdateSource`), called on the UI thread; it reports back through the callbacks.
 pub trait Source {
     /// The TUI talks to a server on another machine (`--server`), whose updates this client cannot install.
     fn remote(&self) -> bool;
-    /// Checks for an update. `installing` reports an install a background check started meanwhile.
     fn check(&self, installing: Box<dyn Fn(String)>, done: Box<dyn FnOnce(Result<Option<Check>, String>)>);
-    /// Installs `version`.
     fn apply(&self, version: &str, done: Box<dyn FnOnce(Result<(), String>)>);
 }
 
@@ -55,7 +50,6 @@ pub trait Source {
 struct Notice {
     kind: Kind,
     version: String,
-    /// `None` for the client, else whether the server is remote.
     server: Option<bool>,
 }
 
@@ -70,7 +64,6 @@ impl Notice {
     }
 }
 
-/// The notification state, on `Tui::updates`.
 #[derive(Default)]
 pub struct Updates {
     source: RefCell<Option<Rc<dyn Source>>>,
@@ -81,16 +74,13 @@ pub struct Updates {
     /// The notice row its hover handler restyles. The handler holds it weakly: a widget whose handler holds the
     /// widget is never freed.
     row: RefCell<Option<Rc<View>>>,
-    /// The row's texts, each fading in, and whether it is the command.
     parts: RefCell<Vec<(FadeInText, bool)>>,
     hovered: Cell<bool>,
-    /// Redraws the open update dialog.
     pub(crate) dialog: RefCell<Option<Weak<dyn Fn()>>>,
     /// Counts dialog openings, so a check of a closed dialog is ignored (TS aborts it).
     pub(crate) generation: Cell<u64>,
 }
 
-/// Installs the updater: `/update` and the server's installation events.
 pub fn set_source(tui: &Rc<Tui>, source: Rc<dyn Source>) {
     *tui.updates.source.borrow_mut() = Some(source);
     let command = TuiCommand::new("opencode.update", bind!(tui, |tui, _, _| open(&tui, Origin::Manual)))
@@ -99,15 +89,8 @@ pub fn set_source(tui: &Rc<Tui>, source: Rc<dyn Source>) {
         .group("System")
         .palette()
         .slash("update");
-    tui.keymap.install(
-        "update",
-        [
-            KeymapLayer::global(vec![command]),
-            // `appBindingCommands`: the configured keybind (`none` by default).
-            KeymapLayer::default().bindings(["opencode.update"]),
-        ],
-    );
-    // For the TUI's lifetime.
+    tui.keymap
+        .install("update", [KeymapLayer::global(vec![command]), KeymapLayer::default().bindings(["opencode.update"])]);
     crate::features::events::subscribe(tui, ["installation.update-available", "installation.updated"], |tui, event| {
         let (kind, version) = match event {
             V2Event::InstallationUpdateAvailable(event) => (Kind::Available, event.data.version.clone()),
@@ -121,7 +104,6 @@ pub fn set_source(tui: &Rc<Tui>, source: Rc<dyn Source>) {
 }
 
 impl Updates {
-    /// What `/update` found or did so far.
     pub fn state(&self) -> Option<UpdateState> {
         self.state.borrow().clone()
     }
@@ -138,7 +120,6 @@ impl Updates {
     }
 }
 
-/// The updater's own result (TS `updater.subscribe`).
 pub fn client_notice(tui: &Tui, notice: ClientNotice) {
     notify(tui, Notice { kind: notice.kind, version: notice.version, server: None });
 }
@@ -197,7 +178,6 @@ pub fn dismiss(tui: &Tui) {
     });
 }
 
-/// Installs the available version.
 pub(crate) fn install(tui: &Tui) {
     let Some(source) = tui.updates.source() else { return };
     let Some(UpdateState::Available(version)) = tui.updates.state.borrow().clone() else { return };
@@ -283,7 +263,6 @@ pub enum Origin {
     Notification,
 }
 
-/// `open`: the update dialog, from `/update` or the home notice.
 pub fn open(tui: &Tui, origin: Origin) {
     if tui.updates.source().is_none() {
         return;
@@ -294,7 +273,6 @@ pub fn open(tui: &Tui, origin: Origin) {
     }
     if let Some(known) = known {
         let active = tui.updates.state.borrow().clone();
-        // The notification can predate an installation through /update.
         let stale = matches!(&active, Some(UpdateState::Installing(_)))
             || matches!(&active, Some(UpdateState::Installed(version)) if *version == known.version);
         if !stale {
@@ -325,7 +303,6 @@ pub fn restyle(tui: &Tui) {
     }
 }
 
-/// Mounts the notice into the home's row (`UpdateNotification`). The row is drawn again on each change.
 pub fn mount(tui: &Tui, home: &View) {
     *tui.updates.slot.borrow_mut() = Some(home.clone());
     tui.updates.hovered.set(false);
@@ -418,7 +395,6 @@ fn render(tui: &Tui) {
     *tui.updates.row.borrow_mut() = Some(row);
 }
 
-/// The width of the logo the home shows at this size (`routes/home.rs` `paint_logo`).
 fn logo_width(width: u16, height: u16) -> u32 {
     match (width, height) {
         (_, height) if height < 12 => 0,

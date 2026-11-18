@@ -1,5 +1,3 @@
-//! The plugin route (T.1): a route a plugin registers, or the missing route screen.
-
 use opencode_plugin::RouteMount;
 
 use super::RouteView;
@@ -40,8 +38,6 @@ impl RouteView for Plugin {
         }
     }
 
-    /// A plugin's route keeps its widgets and their state, its scroll offsets among them; the missing route mounts
-    /// again.
     fn restyle(&self, tui: &Tui) -> bool {
         self.content.as_ref().is_some_and(|content| content.restyle(tui))
     }

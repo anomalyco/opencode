@@ -15,10 +15,8 @@ use crate::prelude::*;
 
 /// The input mode the composer pushes while it is open.
 pub(crate) const MODE: &str = "composer";
-/// `maxHeight={5}` of each tab's list.
 const ROWS: usize = 5;
 
-/// What outlives a session view (`useStorage().memory`): the Subagents tab's filter.
 pub struct Memory {
     active: Cell<bool>,
 }
@@ -49,14 +47,12 @@ impl Tab {
 /// Runs when the composer opens (true) or closes (false), so the session view hides or shows what it replaces.
 pub type OnToggle = Rc<dyn Fn(&Tui, bool)>;
 
-/// The composer of one session view. Dropping it removes its key layers and the terminal picker.
 pub struct Composer(Rc<Inner>);
 
 struct Inner {
     tui: Weak<Tui>,
     session: SessionID,
     root: View,
-    /// The raised panel with its split border.
     panel: View,
     header: View,
     body: View,
@@ -66,7 +62,6 @@ struct Inner {
     /// The session is a child; it shows the composer instead of a prompt while it has no form.
     child: Cell<bool>,
     forms: Cell<bool>,
-    /// A permission request is prompted; the composer hides, whatever opened it (`composerVisible`).
     permissions: Cell<bool>,
     /// The open state and tab list the last refresh applied.
     open: Cell<bool>,
@@ -86,7 +81,6 @@ impl Composer {
         let app = &tui.app;
         let theme = tui.page();
         let header = View::new(app).row().justify(Justify::SpaceBetween).padding_edge(Edge::Left, 1);
-        // A tab's scroll box takes all of its `maxHeight`, whatever the rows.
         let body = View::new(app).column().shrink(0.0).height(ROWS as u32);
         let footer = View::new(app).row().gap(2).padding_edge(Edge::Left, 1).shrink(0.0);
         let panel = View::new(app)
@@ -135,12 +129,10 @@ impl Composer {
         &self.0.root
     }
 
-    /// Whether the composer shows, in place of the permission, form, and prompt.
     pub fn open(&self) -> bool {
         self.0.open.get()
     }
 
-    /// Paints in the page theme again; an open composer draws again, keeping its tab and selection.
     pub fn restyle(&self, tui: &Tui) {
         self.0.paint(&tui.page());
         if self.0.open.get() {
@@ -148,9 +140,6 @@ impl Composer {
         }
     }
 
-    /// Follows the session (`parentID`), its forms, its permission requests, its subagents and shells. `forms` is
-    /// whether the session has a form; `permissions` whether a permission request is prompted; `muted` is whether
-    /// the right pane has focus, which closes the composer (`promptMuted`).
     pub fn sync(&self, tui: &Tui, forms: bool, permissions: bool, muted: bool) {
         let inner = &self.0;
         let child = tui.data.read(|state| state.session(&inner.session).is_some_and(|info| info.parent_id.is_some()));
@@ -221,7 +210,6 @@ impl Inner {
             tab(Tab::Subagents, subagents::commands(self)),
             tab(Tab::Shell, shell::commands(self)),
             tab(Tab::Terminals, terminals::commands(self)),
-            // The session route's command list and its base-mode binding (`routes/session/index.tsx:1399-1407`).
             KeymapLayer::global(vec![child_first]),
             KeymapLayer::default().bindings(["session.child.first"]),
         ];
@@ -255,7 +243,6 @@ impl Inner {
         tui.dialogs.clear();
     }
 
-    /// `setComposer({ open: true, tab })`.
     fn show(self: &Rc<Self>, tui: &Tui, tab: Option<Tab>) {
         self.requested.set(true);
         self.tab.set(tab);
@@ -288,7 +275,6 @@ impl Inner {
         self.open.get() && self.active.get() == tab
     }
 
-    /// Applies the open state and the tab list, updates each tab, and redraws.
     fn refresh(self: &Rc<Self>, tui: &Tui) {
         let open = !self.permissions.get() && (self.requested.get() || (self.child.get() && !self.forms.get()));
         let mut tabs = vec![Tab::Subagents, Tab::Shell];
@@ -296,7 +282,6 @@ impl Inner {
             tabs.push(Tab::Terminals);
         }
         let default = self.tab.get().or_else(|| self.child.get().then_some(Tab::Subagents));
-        // The effect that picks the default tab runs when the composer opens, its tabs change, or the default changes.
         let reset = open && (!self.open.get() || *self.tabs.borrow() != tabs || self.default.get() != default);
         if reset {
             self.active.set(default.filter(|tab| tabs.contains(tab)).unwrap_or(tabs[0]));
@@ -328,7 +313,6 @@ impl Inner {
         tui.app.defer(bind!(tui, |tui, _| tui.sync_view()));
     }
 
-    /// Redraws on the next turn, outside the mouse handler of a row it replaces.
     fn redraw_later(self: &Rc<Self>, tui: &Tui) {
         tui.app.defer(bind!(self, |inner, _| {
             if let Some(tui) = inner.tui.upgrade() {
@@ -408,7 +392,6 @@ impl Inner {
     }
 }
 
-/// How a list row looks: focused (the selection), selected (the current session or shown terminal), or neither.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum RowState {
     Focused,
@@ -416,15 +399,12 @@ enum RowState {
     Base,
 }
 
-/// A row's text: the label, clipped to the width (with `…` when `truncate`), and an optional status on the right.
 struct Label {
     text: String,
     status: Option<String>,
     truncate: bool,
 }
 
-/// One list row: a row box with the action colors and its [`Label`]. `hover` runs when the pointer moves over it,
-/// `click` on release.
 fn row(
     tui: &Tui,
     theme: &Theme,
@@ -456,7 +436,6 @@ fn row(
                 .wrap(WrapMode::None),
         );
     }
-    // `onMouseMove`, not hover: each redraw builds new rows, and a row built under a resting pointer gets a hover enter.
     view.mouse_pointer(MousePointer::POINTER).on_mouse(move |_, event| match event.kind {
         MouseEventKind::Moved => hover(),
         MouseEventKind::Up(_) => click(),
@@ -465,7 +444,6 @@ fn row(
     view
 }
 
-/// The window of `rows` list rows from `offset`, as a scroll box of at most [`ROWS`] rows shows them.
 fn window<T>(rows: &[T], offset: usize) -> std::ops::Range<usize> {
     let start = offset.min(rows.len().saturating_sub(ROWS));
     start..(start + ROWS).min(rows.len())
@@ -476,12 +454,10 @@ fn clamp_offset(y: isize, len: usize) -> usize {
     y.clamp(0, len.saturating_sub(ROWS) as isize) as usize
 }
 
-/// The empty-list line, such as ` No shell commands`.
 fn empty(tui: &Tui, theme: &Theme, text: String) -> Text {
     Text::new(&tui.app, text).fg(theme.text.muted)
 }
 
-/// `SplitBorder`'s `┃` sides.
 fn split_border() -> [char; 11] {
     [' ', ' ', ' ', ' ', ' ', '┃', ' ', ' ', ' ', ' ', ' ']
 }

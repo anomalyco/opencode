@@ -14,7 +14,6 @@ pub struct Patch {
     root: View,
     blocks: RefCell<Vec<BlockTool>>,
     shown: RefCell<Option<Shown>>,
-    /// Restyles the blocks' children in place.
     paints: Paints,
 }
 
@@ -25,14 +24,12 @@ enum Shown {
     Pending { targets: Vec<String>, status: Status, error: Option<String>, common: Common },
 }
 
-/// What every block of the call shares.
 #[derive(Clone, Debug, PartialEq)]
 struct Common {
     permission: bool,
     width: i64,
 }
 
-/// One entry of `parseApplyPatchFiles`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct File {
     pub kind: String,
@@ -55,7 +52,6 @@ impl Patch {
         &self.root
     }
 
-    /// The diffs keep their code and highlight.
     pub fn restyle(&self, cx: &Context<'_>) {
         if let Some(Shown::Pending { status, .. }) = &*self.shown.borrow() {
             for block in self.blocks.borrow().iter() {
@@ -151,7 +147,6 @@ impl Patch {
         *self.shown.borrow_mut() = Some(shown);
     }
 
-    /// A block with a label and a path header, for one file.
     fn block(&self, cx: &Context<'_>, common: &Common, label: &str, path: &str) -> BlockTool {
         let block = BlockTool::new(cx);
         block.set(Block {
@@ -166,7 +161,6 @@ impl Patch {
     }
 }
 
-/// A failed patch's header in the error color and its error muted.
 fn pending_colors(theme: &Theme, failed: bool) -> BlockColors {
     BlockColors { header: failed.then_some(theme.text.feedback.error.base), error: failed.then_some(theme.text.muted) }
 }
@@ -201,7 +195,6 @@ fn shown(cx: &Context<'_>, props: &Props<'_>) -> Shown {
     }
 }
 
-/// The header label of a file by its change.
 fn label(kind: &str) -> &'static str {
     match kind {
         "add" => "# Created",
@@ -210,7 +203,6 @@ fn label(kind: &str) -> &'static str {
     }
 }
 
-/// `parseApplyPatchFiles`: the files that have a type, a path, a patch, and counts.
 pub fn parse_files(value: Option<&Value>) -> Vec<File> {
     value
         .and_then(Value::as_array)
@@ -243,7 +235,6 @@ pub fn parse_files(value: Option<&Value>) -> Vec<File> {
         .collect()
 }
 
-/// The `applied` metadata: each resource with its change type.
 fn applied(value: Option<&Value>) -> Vec<(String, String)> {
     value
         .and_then(Value::as_array)
@@ -257,7 +248,6 @@ fn applied(value: Option<&Value>) -> Vec<(String, String)> {
         .collect()
 }
 
-/// The files a patch names: `/\*\*\* (?:Add|Update|Delete) File: ([^\r\n]+)/g`.
 fn targets(patch: &str) -> Vec<String> {
     let mut targets = Vec::new();
     let mut at = 0;

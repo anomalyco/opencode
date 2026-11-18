@@ -100,7 +100,6 @@ fn dispose(tui: &Tui, layer: Option<Disposer>) {
     }
 }
 
-/// `SessionLocationUnavailable`: `SessionQuestion` with the directory, the explanation, and one action.
 fn view(tui: &Tui, session: &SessionID, directory: &str) -> View {
     let app = &tui.app;
     let theme = tui.page();
@@ -199,7 +198,6 @@ fn choose(tui: &Tui, session: SessionID, directory: String) {
     );
 }
 
-/// A new worktree for the session, then the move.
 fn create(tui: &Tui, session: SessionID, project: ProjectID, name: String) {
     let client = tui.data.client().clone();
     let input = WorktreeCreateInput { project_id: project, name: Some(name), ..WorktreeCreateInput::default() };

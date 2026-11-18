@@ -17,8 +17,6 @@ const ROOT: &str = "limit";
 
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     setup.surface(Surface::new("limit", Place::Slot(Placement::append(slot::SIDEBAR_CONTENT)), |cx| {
-        // The limits and the selected model live in the host's own state (`local`); the selection also follows the
-        // sessions, and the models and providers their location.
         let changed = &cx.input.changed;
         if !(changed.all || changed.local || !changed.sessions.is_empty() || !changed.locations.is_empty()) {
             return kept(ROOT);
@@ -37,7 +35,6 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-/// What remains, and whether it is out or reached.
 fn model(read: &dyn abi::Read) -> Option<(String, bool)> {
     let selected = read.model()?;
     let model = read

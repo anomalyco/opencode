@@ -1,6 +1,4 @@
-//! Compaction messages (E.6b): `CompactionMessage` and `CompactionQueued`
-//! (`routes/session/index.tsx:2171-2251`). A rule with the status in the middle, then the summary or the
-//! failure as Markdown.
+//! TypeScript: `routes/session/index.tsx:2171-2251`.
 
 use opencode_api::generated::{SessionMessageCompaction, TokenUsageInfo};
 use opencode_ui::motion::Spinner;
@@ -19,7 +17,6 @@ pub struct Compaction {
     markdown: Markdown,
     _links: Rc<Links>,
     rendered: RefCell<Option<Rendered>>,
-    /// The theme changed since the label was painted.
     stale: Cell<bool>,
 }
 
@@ -65,7 +62,6 @@ impl Compaction {
         &self.root
     }
 
-    /// Takes the theme of `cx`: the summary restyles in place, and the next update paints the label again.
     pub fn restyle(&self, cx: &Context<'_>) {
         let colors = opencode_ui::markdown::view_colors(cx.theme, cx.syntax);
         opencode_ui::markdown::restyle(&self.markdown, colors, cx.syntax);
@@ -92,11 +88,9 @@ impl Compaction {
         let rendered = Rendered {
             status,
             title: if native { "Provider compaction" } else { "Compaction" },
-            // The compaction request's own usage; the context it leaves shows on the next step.
             usage: (status != Status::Running).then(|| tokens.and_then(usage)).flatten(),
             content: text.trim().to_owned(),
         };
-        // `session.markdown` changes in place; the code views stay.
         self.markdown.conceal(cx.conceal);
         if !self.stale.replace(false) && self.rendered.borrow().as_ref() == Some(&rendered) {
             return;
@@ -175,21 +169,18 @@ pub fn running_last(messages: &[SessionMessageInfo]) -> impl Iterator<Item = &Se
     messages.iter().filter(move |message| !running(message)).chain(messages.iter().filter(running))
 }
 
-/// Two growing top-border boxes around a padded label row.
 fn rule(cx: &Context<'_>) -> (View, View, View) {
     let line = || View::new(cx.app).border(BorderStyle::Single).border_sides(Sides::TOP).grow(1.0);
     let label = View::new(cx.app).row().gap(1).padding_edge(Edge::Left, 1).padding_edge(Edge::Right, 1);
     (line(), label, line())
 }
 
-/// `1.2K in · 300 out`, or nothing when the request used no tokens.
 fn usage(tokens: &TokenUsageInfo) -> Option<String> {
     let input = tokens.input + tokens.cache.read + tokens.cache.write;
     let output = tokens.output + tokens.reasoning;
     (input + output > 0.0).then(|| format!("{} in · {} out", number(input), number(output)))
 }
 
-/// `Locale.number`: `1.2K`, `3.4M`, or the plain number.
 pub fn number(value: f64) -> String {
     if value >= 999_950.0 {
         return format!("{}M", fixed1(value / 1_000_000.0));
@@ -203,7 +194,6 @@ pub fn number(value: f64) -> String {
     format!("{value}")
 }
 
-/// `toFixed(1)`, which rounds a tie up where `{:.1}` rounds it to even.
 fn fixed1(value: f64) -> String {
     format!("{:.1}", (value * 10.0).round() / 10.0)
 }

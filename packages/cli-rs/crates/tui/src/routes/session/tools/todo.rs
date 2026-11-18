@@ -27,7 +27,6 @@ impl Todo {
         &self.root
     }
 
-    /// The update that follows lists the entries again in the new theme.
     pub fn restyle(&self, _cx: &Context<'_>) {
         self.inline.restyle();
         self.block.restyle();
@@ -70,7 +69,6 @@ impl Todo {
     }
 }
 
-/// `TodoItem`: the marker, then the text, colored by status; a cancelled item is struck through.
 pub fn item(app: &App, theme: &Theme, todo: &Item) -> View {
     let fg = match todo.status {
         TodoStatus::InProgress => theme.text.feedback.warning.base,

@@ -9,10 +9,8 @@ use opencode_util::time::Zone;
 
 use crate::prelude::*;
 
-/// What choosing an entry does with it (`{prompt, timestamp}`).
 pub type OnSelect = Rc<dyn Fn(&Value)>;
 
-/// Opens the dialog (`prompt.stash.list`).
 pub fn show(tui: &Tui, on_select: OnSelect) {
     let list = Rc::new(List { tui: tui.weak(), select: RefCell::new(None), to_delete: Cell::new(None) });
     let built = list.clone();
@@ -146,7 +144,6 @@ fn relative_time(timestamp: f64, now: f64) -> String {
     datetime(timestamp)
 }
 
-/// `Locale.datetime`: the short time, then `toLocaleDateString` in en-US.
 fn datetime(timestamp: f64) -> String {
     let date = Zone::Local.at(timestamp as i64).map(|date| date.numeric_date()).unwrap_or_default();
     format!("{} · {date}", crate::dialogs::timeline::time(timestamp))

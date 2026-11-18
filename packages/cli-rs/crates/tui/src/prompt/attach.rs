@@ -1,6 +1,3 @@
-//! Attachments in the TUI prompt (E.4, rows P06 and P10): the image previews above the textarea and
-//! `prompt.images.view`. The pasted-path rules are shared with mini in [`opencode_ui::prompt_input::attach`].
-
 use opentui::native::ImageFit;
 use opentui::widget::ImageView;
 
@@ -10,15 +7,11 @@ use super::editor::Inner;
 
 use crate::prelude::*;
 
-/// The most previews shown above the prompt.
 const VISIBLE: usize = 3;
 
-/// The image previews above the textarea (`prompt.image_preview`): up to three, cropped to their boxes,
-/// then `+N more`. A click opens the image preview dialog.
 pub struct Previews {
     root: View,
     rendered: std::cell::RefCell<Option<Shown>>,
-    /// Restyles the placeholders in place.
     paints: Paints,
 }
 
@@ -44,12 +37,10 @@ impl Previews {
         &self.root
     }
 
-    /// Paints the placeholders in `theme`; the images stay.
     pub fn restyle(&self, theme: &Theme) {
         self.paints.restyle(theme);
     }
 
-    /// Shows the prompt's images when the option is on.
     pub fn update(&self, tui: &Tui, prompt: &Inner) {
         let enabled = tui.settings.info().prompt.and_then(|prompt| prompt.image_preview).unwrap_or(false);
         let height = (tui.app.size().1 / 4).clamp(4, 8);

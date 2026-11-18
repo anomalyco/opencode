@@ -12,15 +12,12 @@ use crate::routes::session::messages::list::Context;
 
 pub struct Edit {
     block: BlockTool,
-    /// The inputs of the diff and diagnostics on screen.
     shown: RefCell<Option<Shown>>,
-    /// Restyles the diff and diagnostics in place.
     paints: Paints,
 }
 
 #[derive(PartialEq)]
 struct Shown {
-    /// The patch's fingerprint.
     patch: u64,
     path: String,
     view: DiffView,
@@ -38,7 +35,6 @@ impl Edit {
         self.block.root()
     }
 
-    /// The diff keeps its code and highlight.
     pub fn restyle(&self, cx: &Context<'_>) {
         self.block.restyle();
         self.paints.restyle(cx.theme);

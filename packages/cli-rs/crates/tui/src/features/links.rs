@@ -56,7 +56,6 @@ pub fn open_on_click(app: &App, text: &Text, url: String) {
     });
 }
 
-/// The hyperlink presented at a cell (`renderer.getLinkAt`).
 pub fn link_at(app: &App, x: u16, y: u16) -> Option<String> {
     let session = app.session();
     let id = session.link_id(i32::from(x), i32::from(y)).ok()??;
@@ -68,7 +67,6 @@ pub fn open_url(input: &str) -> Result<(), String> {
     open(&opencode_ui::open::web_url(input)?)
 }
 
-/// `openPath`: a file or folder in the system's default app.
 pub fn open_path(path: &str) -> Result<(), String> {
     open(path)
 }
@@ -165,7 +163,6 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn an_exited_opener_is_reaped() {
-        // An unreaped child stays in `/proc` as a zombie.
         let id = spawn(std::process::Command::new("true")).unwrap();
         let reaped = (0..500).any(|_| {
             std::thread::sleep(std::time::Duration::from_millis(10));

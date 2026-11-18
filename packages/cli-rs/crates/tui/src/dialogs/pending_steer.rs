@@ -11,7 +11,6 @@ pub fn show(tui: &Tui, session: SessionID, message: String) {
     tui.dialogs.replace(
         move |cx| {
             let mut props = SelectProps::new("Pending steer", options.clone());
-            // `renderFilter={!newDesigns()}`.
             props.render_filter = false;
             let (weak, session, message) = (weak.clone(), session.clone(), message.clone());
             props.on_select = Some(Rc::new(bind!(weak, |tui, option: &SelectOption<Action>| {

@@ -11,7 +11,6 @@ use super::scroll::{Inner, after_layout};
 
 use crate::prelude::*;
 
-/// A message a jump can land on: its ID, its content y, and the scroll top that aligns it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Boundary {
     pub id: String,
@@ -62,21 +61,17 @@ pub fn find_boundary(
     visible.into_iter().rev().find(|item| item.y < scroll_top)
 }
 
-/// `messageNavigationSlack`: the space below the rows that lets `top` become the scroll top.
 pub fn slack(top: f64, viewport: f64, scroll_height: f64, current: f64) -> f64 {
     (top + viewport - (scroll_height - current)).ceil().max(0.0)
 }
 
 impl super::scroll::Controls {
-    /// Jumps to a message, as the timeline and fork dialogs do (`onMove`).
     pub fn jump(&self, tui: &Tui, id: String) {
         self.0.jump(tui, id);
     }
 }
 
 impl Inner {
-    /// `scrollToMessage`: with every row mounted, jumps to the next or previous boundary; at the top,
-    /// loads an older page and tries again.
     pub(super) fn to_message(&self, tui: &Tui, next: bool, user_only: bool) {
         let weak = self.this.clone();
         self.ensure_all_rows(
@@ -112,7 +107,6 @@ impl Inner {
         );
     }
 
-    /// `session.messages_last_user`: the newest user message with text.
     pub(super) fn last_user(&self, tui: &Tui) {
         let Some(session) = self.transcript.session() else { return };
         let id = tui.data.read(|state| {

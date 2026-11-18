@@ -13,7 +13,6 @@ use super::messages::list::{ScrollAnchor, Transcript};
 use crate::dialogs::settings;
 use crate::prelude::*;
 
-/// The scroll and navigation state of one session view.
 pub struct Controls(pub(super) Rc<Inner>);
 
 pub(super) struct Inner {
@@ -71,7 +70,6 @@ impl Controls {
         Self(inner)
     }
 
-    /// Takes the page theme in place.
     pub fn restyle(&self, tui: &Tui) {
         *self.0.theme.borrow_mut() = tui.page();
         self.0.paint();
@@ -212,7 +210,6 @@ impl Inner {
         self.transcript.scroll().scrollbar_colors(theme.border.base, theme.decrease(&theme.background.raised.base, 1));
     }
 
-    /// `session.scrollbar` and the `scroll` section.
     fn configure(&self, info: &Info) {
         let session = info.session.as_ref();
         let scrollbar = session.and_then(|session| session.scrollbar).unwrap_or(false);
@@ -220,8 +217,6 @@ impl Inner {
         let scroll = self.transcript.scroll();
         scroll.scrollbars(scrollbar);
         self.paint();
-        // The viewport's and the bar's one-cell paddings (`viewportOptions`, `verticalScrollbarOptions`).
-        // The wrapper's resizes the viewport, which shows or hides the bar right away.
         let padding = u16::from(scrollbar);
         scroll.content_view().padding_edge(Edge::Right, padding);
         scroll.wrapper_view().padding_edge(Edge::Right, padding);
@@ -346,7 +341,6 @@ impl Inner {
         }
     }
 
-    /// The scroll box's height (`scroll.height`).
     fn height(&self) -> f64 {
         f64::from(self.transcript.scroll().rect().height)
     }
@@ -417,7 +411,6 @@ impl Inner {
         self.update_away();
     }
 
-    /// `toBottom`: the tail again, following the bottom.
     pub(super) fn to_bottom(&self, tui: &Tui) {
         self.clear_navigation();
         self.transcript.to_tail(tui);
@@ -505,7 +498,6 @@ impl Inner {
     }
 }
 
-/// Writes `session.<key>` to `cli.json`; the settings listener applies it.
 fn set(tui: &Tui, key: &'static str, value: Value) {
     settings::update(tui, move |root| settings::set_path(root, &["session", key], value));
 }
@@ -526,7 +518,6 @@ pub(super) fn after_layout(app: &App, continuation: impl FnOnce() + 'static) {
     });
 }
 
-/// `CustomSpeedScroll`: the same distance for every wheel step (`scroll.speed`, 3 by default).
 struct Speed(f64);
 
 impl ScrollAcceleration for Speed {

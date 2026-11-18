@@ -10,7 +10,6 @@ use crate::dialogs::timeline::{prompts, time};
 use crate::prelude::*;
 use crate::prompt::draft::Draft;
 
-/// Called with the highlighted prompt's ID, or `None` for "Full session" (`onMove`).
 pub type OnMove = Rc<dyn Fn(&Tui, Option<String>)>;
 
 /// `DialogFork`. With `message`, it forks before that prompt at once, as the message actions do.
@@ -36,7 +35,6 @@ pub fn show(tui: &Tui, session: SessionID, message: Option<String>, on_move: OnM
             let mut props = SelectProps::new("Fork session", options.clone());
             let on_move = on_move.clone();
 
-            // TS passes no `current`, and `undefined === undefined` marks "Full session" with `●`.
             props.current = Some(None);
             props.on_move = Some(Rc::new(bind!(weak, |tui, option: &SelectOption<Option<String>>| on_move(
                 &tui,
@@ -81,7 +79,6 @@ fn fork(tui: &Tui, session: SessionID, message: Option<String>) {
             if let Some(prompt) = prompt {
                 tui.prompt.drafts.save(Some(&info.id), Draft { prompt, cursor: u32::MAX });
             }
-            // The fork opens with its directory and title known, as `startup` opens a session it read.
             let id = info.id.clone();
             tui.data.remember(info);
             tui.navigate(Route::Session { id });

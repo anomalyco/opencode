@@ -12,29 +12,20 @@ use opencode_local::model_pref::Model;
 
 use crate::prelude::*;
 
-/// The TUI's startup arguments (TS `Args` and `TuiInput.app`).
 #[derive(Clone, Debug)]
 pub struct Args {
-    /// The client version, shown on home (`app.version`).
     pub version: String,
     pub prompt: Option<String>,
     /// `--session` names a session the server does not know: the first new session takes this ID.
     pub new_session_id: Option<SessionID>,
-    /// `--session` when it is forked rather than opened.
     pub session: Option<SessionID>,
-    /// Fork the `--session` or `--continue` session and open the fork.
     pub fork: bool,
     pub agent: Option<String>,
     pub model: Option<String>,
-    /// The server runs on this machine (TS `server.local`).
     pub local: bool,
-    /// The server is the background service (TS `client.restart`), which the reconnecting overlay names.
     pub managed: bool,
-    /// The executable a local server runs, when the client could tell: the JS host runs on its Bun.
     pub server_executable: Option<std::path::PathBuf>,
-    /// `--auto`: permissions that are not denied are accepted (`context/permission.tsx`).
     pub auto: bool,
-    /// The terminal's variables, uploaded to each session on a local server (TS `environment`, G13).
     pub environment: Option<IndexMap<String, String>>,
     /// What the parent tells a client it starts after a plugin crash (P4c).
     pub contain: crate::plugins::contain::Contain,
@@ -60,7 +51,6 @@ impl Default for Args {
     }
 }
 
-/// What later features read from the startup arguments.
 pub struct Startup {
     pub args: Args,
     new_session_id: RefCell<Option<SessionID>>,
@@ -73,7 +63,6 @@ pub struct Startup {
 enum Target {
     Home,
     Session(SessionID),
-    /// `--continue` or `--fork` has not opened its session yet.
     Pending,
 }
 
@@ -173,7 +162,6 @@ pub fn run(tui: &Tui, continue_: bool) {
     }
 }
 
-/// `--continue`: the newest root session of the default location, forked with `--fork`.
 fn continue_latest(tui: &Tui, fork_it: bool) {
     let client = tui.data.client().clone();
     let input = SessionListInput {
@@ -196,7 +184,6 @@ fn continue_latest(tui: &Tui, fork_it: bool) {
     });
 }
 
-/// `session.fork`, then opens the fork.
 fn fork(tui: &Tui, id: SessionID) {
     let client = tui.data.client().clone();
     tui.request(

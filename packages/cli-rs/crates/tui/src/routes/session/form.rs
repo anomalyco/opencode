@@ -22,7 +22,6 @@ use crate::prelude::*;
 pub const FORM_MODE: &str = "form";
 
 thread_local! {
-    /// Answers in progress per form, across remounts; a draft is consumed on take.
     static DRAFTS: RefCell<HashMap<FormID, Draft>> = RefCell::default();
 }
 
@@ -36,11 +35,6 @@ fn truncate(label: &str, max: usize) -> String {
     format!("{}…", head.trim_end())
 }
 
-// ---------------------------------------------------------------------------------------------------------------
-// Hosts
-// ---------------------------------------------------------------------------------------------------------------
-
-/// Keeps the prompt of one form in a region; a new form ID remounts it, as TS keys `<FormPrompt>` by ID.
 pub struct Host {
     tui: Weak<Tui>,
     region: View,
@@ -60,21 +54,18 @@ impl Host {
         self.current.borrow().is_some()
     }
 
-    /// The shown form's editor, when its field takes typing.
     pub fn editor(&self) -> Option<Textarea> {
         let current = self.current.borrow();
         let editor = current.as_ref()?.0.editor.borrow();
         editor.as_ref().map(|(_, textarea)| textarea.clone())
     }
 
-    /// Draws the shown form in the page theme again, keeping its draft and its editor's text.
     pub fn restyle(&self) {
         if let Some(prompt) = &*self.current.borrow() {
             prompt.0.restyle();
         }
     }
 
-    /// Shows `form`, or nothing.
     pub fn show(&self, form: Option<&Form>) {
         let current = self.current.borrow().as_ref().map(|prompt| prompt.0.form.info.id.clone());
         if current.as_ref() == form.map(|form| &form.info.id) {
@@ -138,8 +129,6 @@ impl SessionForms {
             let head = first_form(state, &owners, location.as_ref());
             (owners, location, head)
         });
-        // Read again whenever the owners, the location, or the connection change, as the permissions are; the store
-        // makes a finished read free and reads a failed one again.
         let read = (owners, location);
         let session = changes.session(&self.session) || read.0.iter().any(|id| changes.session(&SessionID(id.clone())));
         if changes.all || session || *self.read.borrow() != read {
@@ -164,7 +153,6 @@ fn first_form(state: &State, owners: &[String], location: Option<&Location>) -> 
         .cloned()
 }
 
-/// Awaits a form or permission read; failures are ignored, as TS ignores them (`.catch(() => undefined)`).
 pub(crate) fn quiet(tui: &Tui, task: opencode_store::Task<()>) {
     tui.app.spawn(task, |_, result| {
         if let Err(error) = result {
@@ -172,10 +160,6 @@ pub(crate) fn quiet(tui: &Tui, task: opencode_store::Task<()>) {
         }
     });
 }
-
-// ---------------------------------------------------------------------------------------------------------------
-// The prompt
-// ---------------------------------------------------------------------------------------------------------------
 
 #[derive(Clone, Debug, Default)]
 struct Draft {
@@ -188,14 +172,12 @@ struct Draft {
     error: String,
 }
 
-/// Which textarea the field shows: the typed answer of a textual field, or the custom row's editor.
 #[derive(Clone, PartialEq, Eq)]
 enum Editor {
     Answer(String),
     Custom(String),
 }
 
-/// The prompt for one form (`FormPrompt`).
 pub struct FormPrompt(Rc<Inner>);
 
 struct Inner {
@@ -210,7 +192,6 @@ struct Inner {
     intercept: RefCell<Option<Disposer>>,
     handlers: RefCell<Vec<HandlerId>>,
     tab_hover: Cell<Option<usize>>,
-    /// Rows the review's answers take, for the scroll hint.
     review_lines: Cell<usize>,
     render_queued: Cell<bool>,
 }
@@ -282,12 +263,9 @@ impl Drop for FormPrompt {
     }
 }
 
-/// What a key handler does: a method on the prompt.
 type Action = fn(&Rc<Inner>);
 
 impl Inner {
-    // Derived state (the TS memos).
-
     fn fields(&self) -> Vec<FormField> {
         visible_fields(&self.form.info.fields, &self.draft.borrow().answers)
     }
@@ -444,8 +422,6 @@ impl Inner {
     fn editor_text(&self) -> Option<String> {
         self.editor.borrow().as_ref().map(|(_, textarea)| textarea.text())
     }
-
-    // Actions (the TS functions).
 
     fn answer(&self, key: &str, value: Option<FormValue>) {
         let optional_multiselect = self
@@ -629,7 +605,6 @@ impl Inner {
         }
         let value = match (&field, is_textual, is_multi) {
             (FormField::Number(_) | FormField::Integer(_), true, _) => {
-                // `Number(text)`: anything that does not parse is NaN, which fails as "Expected a number".
                 Some(FormValue::Number(text.parse().unwrap_or(f64::NAN)))
             }
             (FormField::String(_), true, _) | (_, false, false) => Some(FormValue::String(text.to_owned())),
@@ -771,10 +746,7 @@ impl Inner {
         }));
     }
 
-    // Keys, mode, paste.
-
     fn install(self: &Rc<Self>, tui: &Tui) {
-        // Typing on the custom row opens its editor with the key (`keymap.intercept`).
         *self.intercept.borrow_mut() = Some(tui.keymap.keymap().intercept_key(
             0,
             false,
@@ -814,7 +786,6 @@ impl Inner {
         self.handlers.borrow_mut().extend([paste, resize]);
     }
 
-    /// Whether the prompt takes input: no dialog is open and the form mode is current.
     fn is_live(&self) -> bool {
         self.tui.upgrade().is_some_and(|tui| !tui.dialogs.is_open() && tui.keymap.mode() == FORM_MODE)
     }
@@ -825,7 +796,6 @@ impl Inner {
         self.editor.borrow().as_ref().is_some_and(|(_, textarea)| Some(textarea.id()) == focused)
     }
 
-    /// State changed: redraw and rebuild the layers.
     fn changed(self: &Rc<Self>) {
         self.render();
     }
@@ -1008,9 +978,6 @@ impl Inner {
         }
     }
 
-    // Drawing.
-
-    /// Redraws on the next turn; for changes that arrive inside a widget's own handler.
     fn render_soon(self: &Rc<Self>) {
         if self.render_queued.replace(true) {
             return;
@@ -1032,7 +999,6 @@ impl Inner {
 
     fn render(self: &Rc<Self>) {
         let Some(tui) = self.tui.upgrade() else { return };
-        // Keys follow the state.
         dispose_later(&tui.app, self.layers.take());
         for layer in self.layers() {
             match tui.keymap.layer(layer) {
@@ -1073,7 +1039,6 @@ impl Inner {
         (self.has_custom() && self.draft.borrow().editing).then(|| Editor::Custom(key(&field).to_owned()))
     }
 
-    /// The editor for `kind`, kept across redraws.
     fn textarea(self: &Rc<Self>, tui: &Tui, theme: &Theme, kind: Editor) -> Textarea {
         if let Some((current, textarea)) = self.editor.borrow().as_ref()
             && *current == kind
@@ -1317,7 +1282,6 @@ impl Inner {
         view
     }
 
-    /// Hover selects a row; a click answers with it.
     fn option_mouse(self: &Rc<Self>, item: &View, index: usize) {
         item.on_hover(bind!(self, |inner, _, over| {
             if over && inner.draft.borrow().selected != index {
@@ -1342,8 +1306,6 @@ impl Inner {
         height: u16,
     ) -> ScrollBox {
         let content = View::new(app).column();
-        // The panel is the screen less the host's padding (2 + 2), the border, and the body's (1 + 3) and line's
-        // padding (1).
         let available = usize::from(width).saturating_sub(12).max(1);
         let mut lines = 0;
         for field in fields {
@@ -1370,7 +1332,6 @@ impl Inner {
                 app,
                 vec![
                     Span::styled(name, Style::new().fg(theme.text.muted)),
-                    // Unstyled in TS, which draws it in OpenTUI's default white.
                     Span::styled(" ", Style::new().fg(Color::rgb(255, 255, 255))),
                     Span::styled(value, Style::new().fg(color)),
                 ],

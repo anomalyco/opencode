@@ -1,8 +1,4 @@
-//! The app frame and the session frame (E.12, rows W04 and W05). Layout: `docs/E.12.md`.
-//!
-//! [`Frame`] is the body of `app.tsx:1425-1472`: the vertical tab rail and its resize handle, or the
-//! horizontal strip above the route. [`SessionFrame`] is `component/session-frame.tsx`: the session pane, the
-//! right pane (a plugin panel, else the selected terminal of E.13a; the sidebar is E.14's), and the handle between.
+//! TypeScript: `app.tsx:1425-1472`, `component/session-frame.tsx`.
 
 pub mod layout;
 pub mod resize;
@@ -28,14 +24,12 @@ pub struct Frame {
     main: View,
     /// The column under the routes that holds the `app` slot.
     column: View,
-    /// The `app` slot's claims under the routes, in their own column.
     app: RefCell<Option<(View, Rc<SlotMount>)>>,
     tabs_resize: Rc<PaneResize>,
     pane_resize: Rc<PaneResize>,
     /// The `layout` storage key as last read or written.
     layout: RefCell<Value>,
     session: RefCell<Option<Weak<SessionState>>>,
-    /// Whether the tabs repaint on every frame for a fading unread marker.
     markers: Cell<bool>,
 }
 
@@ -45,7 +39,6 @@ impl Frame {
         let main = View::new(app).column().grow(1.0).basis(Length::Auto).min_height(0);
         let strip = strip::new(app, tui.clone());
         let routes = View::new(app).column().grow(1.0).min_height(0).child(&strip).child(&main);
-        // `<Slot path="app" />` follows the routes' box (`app.tsx:1466`); [`mount_app`] adds it.
         let column = View::new(app).column().grow(1.0).min_width(0).min_height(0).child(&routes);
         let rail = rail::new(app, tui.clone());
         let tabs_resize = PaneResize::new(tabs_rules());
@@ -104,8 +97,6 @@ impl Frame {
         self.session.borrow().as_ref().and_then(Weak::upgrade)
     }
 
-    /// Mounts the plugin panel on screen again where it is, from the plugin's current registration: a reload of its
-    /// registrations replaced the one the mount was of (CT-29).
     pub fn remount_panel(&self, tui: &Tui) {
         let Some(state) = self.session() else { return };
         let Some(old) = state.host.borrow_mut().take() else { return };
@@ -137,7 +128,6 @@ fn pane_rules() -> Rules {
     }
 }
 
-/// Places the frame under the shell, reads `layout`, and registers the pane commands.
 pub fn install(tui: &Rc<Tui>, shell: &View) {
     shell.insert(0, &tui.frame.body);
     if let Some(storage) = tui.storage() {
@@ -172,7 +162,6 @@ pub fn restyle_app(tui: &Tui) {
     }
 }
 
-/// Passes a change batch to the `app` slot's claims.
 pub fn sync_app(tui: &Tui, changes: &opencode_store::Changes) {
     // A claim's handler may remount the slot while it syncs.
     let slot = tui.frame.app.borrow().as_ref().map(|(_, slot)| slot.clone());
@@ -235,7 +224,6 @@ pub fn refresh(tui: &Tui) {
     let rail_width = frame.tabs_resize.size(tui);
     // The split is measured even while a full-screen panel hides the tabs.
     tui.panels.set_width(width - if available(tui) && vertical { i64::from(rail_width) } else { 0 });
-    // A panel closes when its session is no longer the open one.
     if let Some(panel) = tui.panels.current()
         && !matches!(tui.route(), Route::Session { id } if id.0 == panel.session)
     {
@@ -251,7 +239,6 @@ pub fn refresh(tui: &Tui) {
     if let Some(session) = frame.session() {
         session.layout(tui);
     }
-    // The tabs of a hidden strip or rail unmount, with their pulses and spinners.
     if !visible || vertical {
         strip::forget(&frame.strip);
     }
@@ -287,7 +274,6 @@ enum Pane {
     Right,
 }
 
-/// The parts of the open session frame the pane commands reach.
 struct SessionState {
     session: SessionID,
     pane: View,
@@ -307,7 +293,6 @@ pub struct SessionFrame {
 }
 
 impl SessionFrame {
-    /// Wraps the session route's column.
     pub fn new(tui: &Tui, session: &SessionID, column: &View) -> Self {
         let app = &tui.app;
         let pane = View::new(app).column().grow(1.0).basis(0).min_width(0).min_height(0).child(column);
@@ -363,7 +348,6 @@ impl SessionFrame {
         if let Some(pane) = state.terminal.borrow().as_ref() {
             pane.restyle(tui);
         }
-        // A plugin's panel surface takes the theme in place, keeping its mount.
         if state.host.borrow().as_ref().is_some_and(|host| host.restyle(tui)) {
             return;
         }
@@ -377,17 +361,14 @@ impl SessionFrame {
         }
     }
 
-    /// Whether the session pane has the input (`activePane() === "session"`).
     pub fn session_active(&self) -> bool {
         self.state.active.get() == Pane::Session
     }
 }
 
 impl SessionState {
-    /// Mounts the panel `target` in the right pane.
     fn mount_host(&self, tui: &Tui, target: crate::panel::Target) {
         let host = Host::new(tui, target);
-        // `PanelHost`'s `onMouseDown={props.onFocus}`.
         host.root.on_mouse(bind!(tui, |tui, _, event| {
             if matches!(event.kind, MouseEventKind::Down(_))
                 && let Some(session) = tui.frame.session()
@@ -399,14 +380,12 @@ impl SessionState {
         *self.host.borrow_mut() = Some(host);
     }
 
-    /// The right pane and the handle, from the panel state and the room there is.
     fn layout(&self, tui: &Tui) {
         let panel = tui.panels.current().filter(|panel| panel.session == self.session.0);
         let fullscreen = panel.is_some() && tui.panels.presentation() == Presentation::Fullscreen;
         let available = (i64::from(tui.app.size().0) - i64::from(tui.frame.rail_width(tui))).max(0);
         let size = tui.frame.pane_resize.size(tui);
         let host = self.host.borrow().as_ref().map(|host| host.target().clone());
-        // A panel that mounts takes the focus (`PanelHost`'s `onTarget`).
         let mut focus = false;
         if host != panel {
             if let Some(old) = self.host.borrow_mut().take() {
@@ -417,7 +396,6 @@ impl SessionState {
                 focus = true;
             }
         }
-        // A panel that opens closes the terminal pane, and a terminal that opens closes the panel.
         let selected = tui.terminals.selected(&self.session.0);
         let previous = self.shown.replace((panel.clone(), selected.clone()));
         if panel.is_some() && panel != previous.0 {
@@ -457,7 +435,6 @@ impl SessionState {
         let handle = shown && !fullscreen && available >= 3;
         self.handle.visible(handle);
         self.handle.position(Edge::Left, (available - i64::from(size) - 1).max(0) as u16);
-        // Focus needs the pane shown.
         if fullscreen || focus {
             self.focus_right(tui);
         } else if !shown {
@@ -465,12 +442,10 @@ impl SessionState {
         }
     }
 
-    /// Sets the pane with the input; the session pane's views follow it (`InteractivityProvider`, E.14).
     fn set_active(&self, tui: &Tui, pane: Pane) -> Pane {
         let before = self.active.replace(pane);
         if before != pane {
             tui.app.defer(bind!(tui, |tui, _| tui.resync()));
-            // A plugin's panel surface is told it has the input, or lost it.
             crate::plugins::host::local_changed(tui);
         }
         before
@@ -512,17 +487,14 @@ impl Drop for SessionState {
     }
 }
 
-/// The open session's terminal pane (E.13a).
 pub(crate) fn terminal(tui: &Tui) -> Option<Rc<crate::terminal::pane::Pane>> {
     tui.frame.session()?.terminal.borrow().clone()
 }
 
-/// Whether a session frame is open, which the terminal commands need.
 pub(crate) fn terminal_host(tui: &Tui) -> bool {
     tui.frame.session().is_some()
 }
 
-/// Whether the right pane is a terminal (`rightPane() === "terminal"`).
 pub(crate) fn terminal_shown(tui: &Tui) -> bool {
     terminal(tui).is_some()
 }
@@ -546,7 +518,6 @@ pub(crate) fn follow_focus(tui: &Tui) {
     }
 }
 
-/// Focus moved into the right pane, as by a click on the terminal.
 pub(crate) fn right_focused(tui: &Tui) {
     if let Some(session) = tui.frame.session() {
         session.set_active(tui, Pane::Right);
@@ -570,7 +541,6 @@ pub(crate) fn session_interactive(tui: &Tui) -> bool {
     tui.frame.session().is_none_or(|session| session.active.get() == Pane::Session) && !fullscreen_panel(tui)
 }
 
-/// Makes the session pane the active one, for a focus of the composer that does not go through [`focus_session`].
 pub(crate) fn activate_session(tui: &Tui) {
     if let Some(session) = tui.frame.session() {
         session.set_active(tui, Pane::Session);

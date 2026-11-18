@@ -28,7 +28,6 @@ const PAUSE: &str = "prompt.goal.pause";
 const RESUME: &str = "prompt.goal.resume";
 const CLEAR: &str = "prompt.goal.clear";
 
-/// `Goal.State`, the fields the TUI shows.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct Goal {
     pub objective: String,
@@ -51,7 +50,6 @@ pub struct Goals {
     sessions: RefCell<HashMap<String, Tracked>>,
     pending: RefCell<HashMap<RequestId, Pending>>,
     turns: Cell<u64>,
-    /// The session whose goal the panel shows.
     shown: RefCell<Option<String>>,
 }
 
@@ -68,7 +66,6 @@ enum Pending {
 }
 
 impl Goals {
-    /// Registers the events, replies and hidden commands the goals follow.
     pub fn register(self: &Rc<Self>, setup: &mut abi::Setup) {
         let goals = self.clone();
         setup.on_event(&[CHANGED, "server.connected"], move |host, event| goals.event(host, event));
@@ -194,7 +191,6 @@ impl Goals {
             }
             tracked.goal = goal.map(Rc::new);
         }
-        // An open goal panel follows the goal, as the TS dialog's accessor does.
         if self.shown.borrow().as_deref() == Some(session) && host.dialog_open(PANEL) {
             match self.goal(session) {
                 Some(goal) => host.dialog(Dialog::Panel(panel(session, &goal))),
@@ -203,7 +199,6 @@ impl Goals {
         }
     }
 
-    /// `showGoal`: the panel, or how to start a goal.
     fn show(&self, host: &dyn Host, session: &str) {
         let Some(goal) = self.goal(session) else {
             host.toast(Toast::new(Variant::Info, "No goal is set. Start one with /goal <objective>."));
@@ -245,7 +240,6 @@ fn label(goal: &Goal) -> &'static str {
     }
 }
 
-/// `GoalStatus`: `◎ goal` under the prompt; it brightens under the pointer, and a click opens the panel.
 pub fn status(session: &str, goal: &Goal) -> abi::v2::Node {
     abi::v2::Node::text([Span::new(format!("◎ {}", label(goal)))])
         .fg(color(goal))

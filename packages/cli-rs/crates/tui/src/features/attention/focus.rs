@@ -6,7 +6,6 @@
 
 use crate::prelude::*;
 
-/// The terminal focus (`FocusState`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Focus {
     #[default]
@@ -15,7 +14,6 @@ pub enum Focus {
     Blurred,
 }
 
-/// When a notification or sound may go out (`AttentionWhen`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum When {
     Always,
@@ -23,7 +21,6 @@ pub enum When {
     Blurred,
 }
 
-/// Why a request sent nothing (`AttentionNotifySkipReason`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Skip {
     AttentionDisabled,
@@ -45,7 +42,6 @@ pub fn skip(when: When, focus: Focus) -> Option<Skip> {
     }
 }
 
-/// Follows the terminal's focus reports.
 pub fn install(tui: &Tui) {
     tui.app.on_terminal_focus(bind!(tui, |tui, _, focused| tui.attention.focus.set(if focused {
         Focus::Focused

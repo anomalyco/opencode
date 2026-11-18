@@ -24,7 +24,6 @@ const BREATH_SPEED: f64 = 0.0008;
 const PHASE_OFFSET: f64 = 0.29;
 const STILL: f64 = PERIOD * 0.5;
 const FPS: f64 = 30.0;
-/// `logo.ts` `go`, its halves joined by a space.
 const LOGO: [&str; 4] = ["         ", "█▀▀▀ █▀▀█", "█_^█ █__█", "▀▀▀▀ ▀▀▀▀"];
 const LOGO_LEFT_WIDTH: usize = 4;
 const LOGO_WIDTH: usize = 9;
@@ -58,7 +57,6 @@ pub struct Colors {
     pub logo_base: Color,
 }
 
-/// Behind the dialog's text, over the whole dialog and the row above it; the logo is centered on `anchor`'s rows.
 pub struct Art {
     app: App,
     colors: Colors,
@@ -134,7 +132,6 @@ impl Component for Art {
     }
 }
 
-/// One frame at `t` milliseconds into the period: `GoUpsellArtRenderable.renderSelf`.
 pub fn frame(colors: &Colors, t: f64, width: usize, height: usize, raw_logo_y: i64) -> Vec<(char, Style)> {
     let logo_x = width.saturating_sub(LOGO_WIDTH) / 2;
     let logo_y = raw_logo_y.min(height.saturating_sub(LOGO_HEIGHT) as i64).max(0) as usize;
@@ -219,7 +216,6 @@ fn ease(phase: f64) -> f64 {
     envelope * envelope * (3.0 - 2.0 * envelope)
 }
 
-/// The white core (peak) and primary tint (glow) of a logo half-cell at `dist` from the logo's centre.
 fn logo_pulse(heads: &[(f64, f64); 2], dist: f64) -> (f64, f64) {
     let (peak, glow) = heads.iter().fold((0.04, 0.0), |(peak, glow), &(head, eased)| {
         let delta = dist - head;
@@ -269,7 +265,6 @@ mod tests {
         assert_eq!(row(5).trim(), "▀ ▀▀ ▀  ▀");
         assert_eq!(row(6).trim(), "▀▀▀▀ ▀▀▀▀");
         assert_eq!(row(3).trim(), "");
-        // Past the bottom, the logo stays inside the art.
         let low = frame(&colors(), STILL, 40, 12, 20);
         assert_eq!((0..40).map(|x| low[11 * 40 + x].0).collect::<String>().trim(), "▀▀▀▀ ▀▀▀▀");
     }

@@ -21,7 +21,6 @@ pub fn release(tui: &Tui, task: impl FnOnce() + 'static) -> bool {
         return false;
     }
     let slot = Slot(tui.weak());
-    // The time the terminal is away is no animation's.
     opencode_plugin::canvas::handover(&tui.app);
     tui.app.release_terminal(move |_| {
         let _slot = slot;
@@ -45,11 +44,9 @@ impl Drop for Slot {
 /// request gets one reply: a refused or dropped one gets an error.
 pub fn run(tui: &Tui, program: abi::Foreground, alive: Box<dyn Fn() -> bool>, reply: opencode_plugin::Reply) {
     let answer = Answer(Some(reply));
-    // A headless TUI (drive mode) has no terminal to give the program.
     if tui.app.is_headless() {
         return answer.send(Err("no terminal to give the program: the TUI runs headless".to_owned()));
     }
-    // Where the TUI works, when that is a directory here: a remote server's directory may not exist locally.
     let cwd = program
         .cwd
         .clone()
@@ -106,7 +103,6 @@ pub fn on_exit(exited: Option<Exited>) {
     EXITED.set(exited);
 }
 
-/// The reply of an exit `status`.
 fn exit(status: std::process::ExitStatus) -> Value {
     // Only Unix adds the signal.
     #[cfg_attr(not(unix), allow(unused_mut))]

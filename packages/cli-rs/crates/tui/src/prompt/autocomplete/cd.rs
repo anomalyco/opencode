@@ -12,7 +12,6 @@ use crate::prompt::editor::Inner;
 
 pub const COMMAND: &str = "session.cd";
 
-/// The `session.cd` command of a prompt.
 pub fn command(prompt: Weak<Inner>) -> TuiCommand {
     TuiCommand::new(
         COMMAND,
@@ -27,8 +26,6 @@ pub fn command(prompt: Weak<Inner>) -> TuiCommand {
     .slash(Slash::new("cd").arguments())
 }
 
-/// The project whose recents `/cd` keeps: the session's, else the default location's
-/// (`data.location.info()?.project.id`).
 pub fn project(tui: &Tui, prompt: &Inner) -> Option<String> {
     if let Some(session) = prompt.session_info(tui) {
         return Some(session.project_id.0);
@@ -78,7 +75,6 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, input: &str) {
         );
         return;
     };
-    // TS sends the argument as typed; the server resolves it against the session.
     let request = SessionMoveInput { session_id: session, directory: AbsolutePath(input.to_owned()), delivery: None };
     tui.app.spawn(
         async move { client.session_move(&request).await },

@@ -41,7 +41,6 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-/// What the section shows: the usage and the cost, or nothing.
 pub type Model = Option<(Option<Usage>, f64)>;
 
 /// What the section last read for its session. It reads the session again only when its info or status changed,
@@ -56,12 +55,10 @@ pub struct Last {
     models: Option<Vec<ModelInfo>>,
     usage: Option<Usage>,
     from: usize,
-    /// The messages from `from` on, each with a [`mark`] of what [`usage`] reads of it.
     after: Vec<(String, u64)>,
     cost: f64,
     /// The IDs of the session's family at the last cost read.
     family: Vec<String>,
-    /// The family's running members besides the session.
     pub running: usize,
     pub shells: usize,
     pub shown: Option<Model>,
@@ -76,7 +73,6 @@ impl Last {
         &self.session
     }
 
-    /// Reads what changed; `fresh` reads everything.
     pub fn update(&mut self, read: &dyn abi::Read, changed: &Changed, fresh: bool) -> Model {
         let info = fresh || changed.session(&self.session);
         if info {
@@ -86,7 +82,6 @@ impl Last {
                 .map(|info| abi::LocationRef { directory: info.location.directory.0.clone(), workspace: None });
             self.boundary = session.and_then(|info| info.revert).map(|revert| revert.message_id.0);
         }
-        // The cost of a root counts its family's: its members, and a session whose parent is one of them.
         let family = |id: &String| *id == self.session || self.family.contains(id);
         if fresh
             || !changed.locations.is_empty()
@@ -202,8 +197,6 @@ pub fn usage(
     (Some(Usage { tokens: total, percent }), index)
 }
 
-/// A fingerprint of what [`usage`] reads of `message`: whether it is a completed compaction, and an assistant's model
-/// and tokens. A text that streams leaves it as it was.
 fn mark(message: &SessionMessageInfo) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -222,14 +215,12 @@ fn mark(message: &SessionMessageInfo) -> u64 {
     hasher.finish()
 }
 
-/// `Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })`: `$1,234.56`.
 pub fn money(value: f64) -> String {
     let cents = (value.abs() * 100.0).round() as u64;
     let sign = if value < 0.0 { "-" } else { "" };
     format!("{sign}${}.{:02}", grouped((cents / 100) as f64), cents % 100)
 }
 
-/// `toLocaleString()` of a whole number: `12,345`.
 pub fn grouped(value: f64) -> String {
     let digits = format!("{}", value.round() as i64);
     let (sign, digits) = digits.split_at(usize::from(digits.starts_with('-')));
@@ -258,7 +249,6 @@ mod tests {
         assert_eq!(grouped(1234567.0), "1,234,567");
     }
 
-    /// Session `ses_a`, whose family has `ses_b`; `ses_new` is a new child of `ses_b`. Counts the family reads.
     struct Store {
         families: Cell<usize>,
     }
@@ -300,8 +290,6 @@ mod tests {
         }
     }
 
-    // Expected: the cost reads the family again on a change of a member or of a new child of one, and not on a change
-    // of a session outside it.
     #[test]
     fn the_cost_skips_sessions_outside_the_family() {
         let store = Store { families: Cell::new(0) };

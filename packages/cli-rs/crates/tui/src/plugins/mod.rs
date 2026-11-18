@@ -1,5 +1,3 @@
-//! Built-in feature plugins and the plugin host. Each file belongs to the step that names it.
-
 pub mod approve;
 pub mod btw;
 pub mod contain;
