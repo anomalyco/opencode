@@ -351,6 +351,21 @@ describe("ClaudeAgentPlugin deleted sessions", () => {
 })
 
 describe("ClaudeAgentPlugin connection", () => {
+  it.live("connecting stores the folder an account is signed in to", () =>
+    Effect.gen(function* () {
+      yield* addPlugin(FakeIO.make({ claude: FakeClaude.make([], { probes: true }) }))
+      const integrations = yield* Integration.Service
+      yield* integrations.connection.external({
+        integrationID,
+        methodID: Integration.MethodID.make(ClaudeIntegration.METHOD_ID),
+        answer: { [ClaudeProvider.CONFIG_DIR_KEY]: "~/.claude-work" },
+      })
+      const credentials = yield* Credential.Service
+      const [saved] = yield* credentials.list(integrationID)
+      expect(saved?.value).toMatchObject({ metadata: { [ClaudeProvider.CONFIG_DIR_KEY]: "~/.claude-work" } })
+    }),
+  )
+
   it.live("connecting without claude installed asks the user to install it", () =>
     Effect.gen(function* () {
       const claude = FakeClaude.make([])
