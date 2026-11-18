@@ -1,4 +1,4 @@
-// P-TUI version of `E.8/navigate.app.ts`: scrolling and navigation over eight turns the server ran (V06). Page up
+// Scrolling and navigation over eight turns the server ran (V06). Page up
 // shows "Jump to latest", session.first goes to the first message, session.last back to the bottom, and
 // session.messages_last_user aligns the last question with the top. Each reply groups its two reads under
 // "Explored".

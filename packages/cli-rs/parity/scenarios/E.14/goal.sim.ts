@@ -1,4 +1,4 @@
-// P-TUI version of `E.14/goal.app.ts`: the goal under the prompt (F02, DLG45) from the server's goal plugin. `/goal`
+// The goal under the prompt (F02, DLG45) from the server's goal plugin. `/goal`
 // arms the goal and starts its first round, which waits; `◎ goal` shows under the prompt; a click opens the goal
 // dialog with the objective, and `p` pauses it through `/goal pause`. The plugin's `changed` event shows the paused
 // goal in the dialog and the footer. The round ends after the pause, so the reviewer never runs.

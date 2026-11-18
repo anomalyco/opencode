@@ -1,4 +1,4 @@
-// P-TUI version of `E.11a/session-list.app.ts`: two sessions created on the server, then listed over the home
+// Two sessions created on the server, then listed over the home
 // (DLG16): opened with <leader>l, the first delete press marks the row, the second deletes the session on the
 // server. The whole screen is compared except the home's placeholder row.
 import { defineSim } from "../../sim/scenario"

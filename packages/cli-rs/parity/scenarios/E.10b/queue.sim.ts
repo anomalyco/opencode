@@ -1,4 +1,4 @@
-// P-TUI version of `E.10b/queue.app.ts`: queued and steered prompts against the real inbox (V14, DLG38, DLG40,
+// Queued and steered prompts against the real inbox (V14, DLG38, DLG40,
 // DLG41). While the first step waits, one prompt steers and two queue (`<leader>enter`); the dock above the prompt
 // shows them, `<leader>q` opens its dialog, and Enter steers the second queued prompt. A click on the dock opens the
 // dialog; a click on that pending steer and "Move to queue" queues it again; a click on a delivered prompt opens

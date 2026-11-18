@@ -1,4 +1,4 @@
-// P-TUI version of `layout-parity-2/permission-edit.app.ts`: a real `patch` call asks for the edit permission
+// A real `patch` call asks for the edit permission
 // (V11, E.9a), and the dock shows the server's diff, whose added line wraps: the diff's scroll box is as tall as the
 // wrapped rows inline, and fills the prompt in full screen.
 import { defineSim } from "../../sim/scenario"
