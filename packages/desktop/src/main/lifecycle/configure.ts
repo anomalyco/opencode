@@ -7,8 +7,15 @@ import { app } from "electron"
 import { debugBuild, memoryLogInterval } from "@opencode/gui-plugins/debug/options"
 import { APP_ID, APP_NAME, CHANNEL } from "../constants"
 import { remoteDebuggingPort } from "../diagnostics/options"
+import { testRootDirectories } from "../service/registration"
+import { lockHeld } from "./instance-lock"
 
 const testOnboarding = process.env.OPENCODE_TEST_ONBOARDING === "1"
+
+/** The folder this launch keeps its profile and XDG directories under, when it runs apart from the real home. */
+export const testRoot = testOnboarding
+  ? path.join(tmpdir(), `opencode-onboarding-${randomUUID()}`)
+  : process.env.OPENCODE_DESKTOP_TEST_ROOT || undefined
 
 const jsCallStackFeature = "DocumentPolicyIncludeJSCallStacksInCrashReports"
 
@@ -43,7 +50,7 @@ export function configureApplication() {
   if (debugBuild(build) && memoryLogInterval(process.env.OPENCODE_DESKTOP_MEMORY_LOG) !== undefined)
     app.commandLine.appendSwitch("enable-precise-memory-info")
 
-  const testRoot = createTestRoot()
+  if (testRoot) createTestRoot(testRoot)
   app.setPath("userData", testRoot ? path.join(testRoot, "desktop") : path.join(app.getPath("appData"), APP_ID))
 
   if (testRoot) {
@@ -58,18 +65,21 @@ export function configureApplication() {
 
 export function acquireApplicationLock() {
   if (app.requestSingleInstanceLock()) return true
-  app.quit()
+  const held = lockHeld({ packaged: app.isPackaged }, app.getPath("userData"))
+
+  if (held.type === "handover") {
+    app.quit()
+
+    return false
+  }
+
+  // A terminal's stderr is written asynchronously on Windows, so the exit waits for the sentence to be out.
+  process.stderr.write(`${held.message}\n`, () => app.exit(1))
 
   return false
 }
 
-function createTestRoot() {
-  const root = testOnboarding
-    ? path.join(tmpdir(), `opencode-onboarding-${randomUUID()}`)
-    : process.env.OPENCODE_DESKTOP_TEST_ROOT
-
-  if (!root) return undefined
-
+function createTestRoot(root: string) {
   if (testOnboarding) rmSync(root, { recursive: true, force: true })
 
   for (const dir of ["data", "config", "cache", "state", "desktop", "session", "documents"])
@@ -77,10 +87,5 @@ function createTestRoot() {
 
   if (testOnboarding) process.env.OPENCODE_DB = ":memory:"
 
-  process.env.XDG_DATA_HOME = path.join(root, "data")
-  process.env.XDG_CONFIG_HOME = path.join(root, "config")
-  process.env.XDG_CACHE_HOME = path.join(root, "cache")
-  process.env.XDG_STATE_HOME = path.join(root, "state")
-
-  return root
+  Object.assign(process.env, testRootDirectories(root))
 }

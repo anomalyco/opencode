@@ -9,6 +9,7 @@ import { BackgroundServiceMachine } from "./background-service-machine"
 import { cleanStages } from "./cli-stages"
 import { keptStages, serviceVersion, shouldRetryEnsure } from "./cli-version"
 import { DesktopCli } from "./desktop-cli"
+import { localRegistrationFile, servicePort } from "./registration"
 import { SidecarCredentials } from "./sidecar-credentials"
 import { takeSidecarProbe } from "./sidecar-probe"
 
@@ -63,12 +64,12 @@ const ensure = Effect.fn("BackgroundService.ensure")(function* (mode: Background
       file: setup.file,
       version,
       // A fixed port makes a second contender fail to bind and back off; port 0 never collides, so two
-      // services could boot against the same database.
+      // services could boot against the same database. The port is fixed per registration, not per machine.
       command: [
         ...setup.cli.command,
         "serve",
         "--service",
-        ...(setup.isolated ? ["--hostname", "0.0.0.0", "--port", String(0x0c0c)] : []),
+        ...(setup.isolated ? ["--hostname", "0.0.0.0", "--port", String(setup.port)] : []),
       ],
       onStart: (reason, previousVersion) =>
         runFork(Effect.logInfo("v2 CLI background service starting", { reason, previousVersion })),
@@ -99,25 +100,21 @@ const ensure = Effect.fn("BackgroundService.ensure")(function* (mode: Background
 
 const prepare = Effect.fn("BackgroundService.prepare")(function* (mode: BackgroundServiceMachine.ConnectMode) {
   yield* Effect.logInfo("starting v2 background service")
-  const path = yield* Path.Path
   const desktopCli = yield* DesktopCli.Service
   const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
   const cli = yield* desktopCli.resolve
   const version = serviceVersion({ channel: CHANNEL, isolated, mode, version: cli.version })
-
-  if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
   const client = yield* Effect.promise(() => import("@opencode/client/service"))
 
+  // The state directory was settled with the rest of the environment (`preferApplicationEnvironment`).
   const file =
     process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
-      ? path.join(
-          process.env.XDG_STATE_HOME ?? path.join(app.getPath("home"), ".local", "state"),
-          "opencode",
-          "service-local.json",
-        )
+      ? localRegistrationFile({ stateHome: process.env.XDG_STATE_HOME, home: app.getPath("home") })
       : undefined
 
-  return { cli, client, file, isolated, version }
+  const port = servicePort(file ?? client.fallback(), process.env.OPENCODE_DESKTOP_SERVER_PORT)
+
+  return { cli, client, file, isolated, port, version }
 })
 
 const adopt = Effect.fn("BackgroundService.adopt")(function* (

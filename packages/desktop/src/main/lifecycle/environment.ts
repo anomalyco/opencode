@@ -2,12 +2,15 @@ import http from "node:http"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import { app } from "electron"
 import { Effect, Path } from "effect"
+import { protocolClient, registersProtocol } from "../deep-links/registration"
 import { DesktopPaths } from "../paths"
+import { stateHome, testRootDirectories } from "../service/registration"
 import { getUserShell, loadShellEnv } from "../service/shell-env"
 import { registerRendererProtocol, setDockIcon, setProtocolReporter } from "../windows"
 import { scoped } from "../native/logging"
 import { applySpellcheck, spellcheckMenuItems } from "../native/spellcheck"
 import { nativeT } from "../native/translations"
+import { testRoot } from "./configure"
 
 // electron-context-menu attaches to every existing and future window, so it can load once the first
 // window is up instead of holding up startup with its dependency tree.
@@ -45,9 +48,22 @@ export const preferApplicationEnvironment = Effect.gen(function* () {
   const shell = process.platform === "win32" ? null : getUserShell()
   const shellEnv = shell ? yield* loadShellEnv(shell) : null
   yield* Effect.sync(() => {
-    if (!shellEnv?.XDG_STATE_HOME) delete process.env.XDG_STATE_HOME
+    Object.assign(process.env, shellEnv)
+
+    // A test root keeps its directories whatever the shell's startup files export.
+    if (testRoot) Object.assign(process.env, testRootDirectories(testRoot))
+
+    const state = stateHome({
+      isolated: !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1",
+      userData: app.getPath("userData"),
+      testRoot,
+      shell: shellEnv?.XDG_STATE_HOME,
+    })
+
+    if (state) process.env.XDG_STATE_HOME = state
+
+    if (!state) delete process.env.XDG_STATE_HOME
     Object.assign(process.env, {
-      ...shellEnv,
       OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
       OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
       OPENCODE_CLIENT: "desktop",
@@ -59,8 +75,18 @@ export const prepareDesktop = Effect.gen(function* () {
   const path = yield* Path.Path
   const paths = yield* DesktopPaths.resolve
 
-  if (app.isPackaged || process.env.OPENCODE_DESKTOP_DISABLE_PROTOCOL_REGISTRATION !== "1")
-    app.setAsDefaultProtocolClient("opencode")
+  if (
+    registersProtocol({ packaged: app.isPackaged }, process.env.OPENCODE_DESKTOP_REGISTER_PROTOCOL) &&
+    !app.setAsDefaultProtocolClient(
+      ...protocolClient({
+        packaged: app.isPackaged,
+        platform: process.platform,
+        execPath: process.execPath,
+        appPath: app.getAppPath(),
+      }),
+    )
+  )
+    yield* Effect.logWarning("failed to register as the opencode:// handler")
   const runFork = Effect.runForkWith(yield* Effect.context())
   setProtocolReporter((level, message, data) =>
     runFork(scoped("protocol", level === "error" ? Effect.logError(message, data) : Effect.logWarning(message, data))),

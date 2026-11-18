@@ -34,6 +34,26 @@ downloads the published dev CLI, `beta` downloads the beta CLI, and `prod`/`late
 `bun dev` is separate from packaging: it uses local renderer/server mode, the dev app identity, and the CLI source by
 default. `bun dev --download-server <version>` instead downloads that CLI version for local development.
 
+### Next to other OpenCode apps
+
+A source build has the OpenCode Dev identity. It shares one data folder and its single-instance lock with the installed
+OpenCode Dev app and with source builds from other checkouts: `%APPDATA%\ai.opencode.desktop.dev`,
+`~/Library/Application Support/ai.opencode.desktop.dev` or `~/.config/ai.opencode.desktop.dev`. When another app holds
+that lock, `bun dev` prints why it cannot start and exits with code 1. To run several at once, give each its own root:
+
+| Variable                                 | Meaning                                                                                                                             |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `OPENCODE_DESKTOP_TEST_ROOT`             | Folder for this run's profile, service registration, database, config and cache. It starts empty: no providers, config or sessions. |
+| `OPENCODE_DESKTOP_SERVER_PORT`           | Port of the app's own service. By default it is derived from the service's registration file, so each root has its own port.        |
+| `OPENCODE_DESKTOP_REMOTE_DEBUGGING_PORT` | Chromium debugging port. `9222` by default; `0` picks a free port.                                                                  |
+| `OPENCODE_DESKTOP_REGISTER_PROTOCOL`     | `1` makes this build the handler of `opencode://` links. Off by default, so links keep opening the installed app.                   |
+
+With `OPENCODE_DESKTOP_REGISTER_PROTOCOL=1`, Windows registers the Electron binary followed by this checkout's
+`packages/desktop` folder, so a link reaches the running dev app. The next start of an installed app takes the
+registration back. On macOS the handler is a bundle identifier: the dev bundle has the installed OpenCode Dev app's
+(`ai.opencode.desktop.dev`) and declares no URL scheme, so links do not reach a source build. On Linux the handler is
+a desktop file, which a source build does not install, so links do not reach it there either.
+
 ## Beta channel
 
 Every push to the `beta` branch publishes OpenCode Beta (`ai.opencode.desktop.beta`) as version `0.0.0-beta-<run>` to
