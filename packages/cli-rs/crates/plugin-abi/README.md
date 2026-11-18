@@ -146,8 +146,9 @@ A handler that waits for a dialog's answer or a reply can do it in a straight li
 A plugin keeps time on the host's clock, with no thread of its own: `cx.sleep(duration)` waits, and
 `tasks.every(host, period, |cx| …)` ticks until its future gives `ControlFlow::Break`. A timer waits at least
 `MIN_TIMER` (20 ms; a shorter one is lengthened to it), at most `MAX_TIMERS` (32) of a plugin wait at once (one more is
-refused through its reply), and it is owned and cancelled as a fetch is. A tick whose plugin changes nothing on screen
-costs a wake and no frame.
+refused through its reply), and it is owned and cancelled as a fetch is. A mount's timer's reply runs as a call of that
+mount, so an `every` a mount started ends with it. A tick whose plugin changes nothing on screen costs a wake and no
+frame, however long it runs.
 
 ### The source promise of 2.x
 
