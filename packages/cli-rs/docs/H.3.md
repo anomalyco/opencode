@@ -17,8 +17,7 @@ Records go to `$TMPDIR/opencode-parity/{cli,pty}/<name>.<n>-<side>.json`.
 
 ## A scenario
 
-One file in `parity/scenarios/<step>/`. A case whose Rust command does not exist yet sets
-`tsOnly: true`. The runner skips it when one side is `rs`.
+One file in `parity/scenarios/<step>/`.
 
 ```ts
 // parity/scenarios/C.1/models.cli.ts

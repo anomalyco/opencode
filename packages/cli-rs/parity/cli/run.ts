@@ -38,8 +38,6 @@ export type CliCase = {
   // Leaves stdin an open pipe that never sends data, as spawn's default stdio gives a child.
   stdinOpen?: boolean
   timeout?: number
-  // Rust lacks the command so far: the case runs only with `--sides ts,ts`.
-  tsOnly?: boolean
   // Compare only the first lines of stderr, when what follows names each client's own internals (a JS stack
   // trace, the output of a different child process). The case says why.
   stderrLines?: number
@@ -155,7 +153,6 @@ if (import.meta.main) {
   const run = async (file: string) => {
     const value: CliCase = (await import(file)).default
     const name = nameOf(file)
-    if (value.tsOnly && sides.includes("rs")) return { name, skipped: true, report: "" }
     const records = await Promise.all(sides.map((side) => runCli(side, value)))
     await Promise.all(
       records.map((record, index) =>
@@ -165,7 +162,7 @@ if (import.meta.main) {
         ),
       ),
     )
-    return { name, skipped: false, report: diffRecords(records[0], records[1], sides) }
+    return { name, report: diffRecords(records[0], records[1], sides) }
   }
   // A case's timeout bounds that case only if the cases do not all share the CPU: started at once, every case
   // took as long as the whole run, and a TS client compiling the CLI from source under load passed its budget.
@@ -177,13 +174,7 @@ if (import.meta.main) {
     }),
   )
   results.forEach((result) =>
-    console.log(
-      result.skipped
-        ? `skip ${result.name} (tsOnly)`
-        : result.report
-          ? `FAIL ${result.name}\n${result.report}`
-          : `ok   ${result.name}`,
-    ),
+    console.log(result.report ? `FAIL ${result.name}\n${result.report}` : `ok   ${result.name}`),
   )
   process.exit(results.some((result) => result.report) ? 1 : 0)
 }
