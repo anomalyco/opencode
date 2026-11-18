@@ -126,7 +126,8 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   each key there is its `onKeyDown`, through a listener layer of the surface, which takes it with `preventDefault`
   (contract gaps 2); one it does not take goes on to the host's field and keys once the JS host answered, as below.
   Only an `onKeyDown` that can take a key holds one for the JS host's answer (below); a field without one, or with one
-  that only hears keys, holds none, and its typing goes to the host's field at once (cg2-1). TS's `<scrollbox>` draws a scrollbar beside its content
+  that only hears keys, holds none, and its typing goes to the host's field at once (cg2-1). A key it declines goes past
+  the plugin's own commands, which TS's keymap ran before the field's `onKeyDown`, in the state before it ran. TS's `<scrollbox>` draws a scrollbar beside its content
   and a field its placeholder in OpenTUI's color; the contract's scroll and field draw the host's (`P.8/file-browser`).
   Other field events (`onPaste`, `onKeyUp` and the rest) are reported once.
 - **Keys** (CT-11): `renderer.keyInput` is an emitter whose `keypress` listeners hear each key as an OpenTUI key event,
