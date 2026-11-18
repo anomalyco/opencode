@@ -869,20 +869,27 @@ fn js_command(guest: &Rc<Guest>, command: &opencode_plugin_abi::Command, alive: 
     let hold = guest.loaded.holds.contains(&name);
     let entry = format!("{}\u{0}{name}", guest.id());
     let (scripts, aside) = (guest.scripts.clone(), entry.clone());
-    keyed_command(command, move |input, key| {
+    // Disabled (contract ergonomics 2.5), or stepped aside by a key it declined.
+    let enabled = opentui::keymap::Condition::when({
+        let (scripts, activation, name) = (guest.scripts.clone(), Rc::downgrade(&guest.activation), name.clone());
+        move || {
+            activation.upgrade().is_some_and(|activation| activation.enabled(&name))
+                && !scripts.upgrade().is_some_and(|scripts| scripts.stepped_aside(&aside))
+        }
+    });
+    // A key it declines goes on once the JS host answers, as the hold routes it again; the command took it until then.
+    keyed_command(command, enabled, move |input, key| {
         let request = Request::Command { name: name.clone(), input: input.map(str::to_owned) };
         let key = key.and_then(|key| Some(super::Keyed::new(*key, &*scripts.upgrade()?, &entry)));
         called.call_keyed("run-command", request, hold || key.is_some(), (None, alive.clone()), key);
+        opencode_plugin_abi::interact::Handled::Consume
     })
-    .enabled(opentui::keymap::Condition::when({
-        let scripts = guest.scripts.clone();
-        move || !scripts.upgrade().is_some_and(|scripts| scripts.stepped_aside(&aside))
-    }))
 }
 
 /// Registers what the plugin's setup listed, each calling it on the JS host.
 fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>) {
     let manifest = &guest.loaded.manifest;
+    guest.activation.commands(&manifest.commands);
     let disposed = guest.clone();
     setup.on_dispose(move || disposed.dispose());
     let commands: Vec<(opencode_plugin_abi::Scope, TuiCommand)> =

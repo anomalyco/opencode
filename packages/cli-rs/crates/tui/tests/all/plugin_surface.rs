@@ -1540,7 +1540,7 @@ fn a_routes_commands_are_in_the_palette() {
 /// A route whose command panics.
 fn doomed(setup: &mut abi::Setup) -> Result<(), String> {
     let command = abi::Command::new("doomed.panic").scope(abi::Scope::Route("page".into()));
-    setup.command(command, |_, _| panic!("doomed"));
+    setup.command(command, |_, _| -> () { panic!("doomed") });
     setup.surface(v2::Surface::new("page", v2::Place::Route("page".into()), |_| {
         v2::Node::text(vec![abi::Span::new("a doomed page")])
     }));

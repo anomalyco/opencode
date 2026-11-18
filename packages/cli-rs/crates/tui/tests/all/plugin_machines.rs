@@ -48,7 +48,7 @@ fn life(setup: &mut abi::Setup) -> Result<(), String> {
     let flip = |side: &Cell<char>| side.set(if side.get() == 'A' { 'B' } else { 'A' });
     let flipped = side.clone();
     setup.command(command("life.flip", "Life flip"), move |_, _| flip(&flipped));
-    setup.command(command("life.throw", "Life throw"), |_, _| panic!("life command throws"));
+    setup.command(command("life.throw", "Life throw"), |_, _| -> () { panic!("life command throws") });
     // Over the budget of one call (rich plugins 4.4), which TS does not have.
     setup.command(command("life.stall", "Life stall"), |_, _| {
         let end = std::time::Instant::now() + std::time::Duration::from_millis(150);

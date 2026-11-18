@@ -39,6 +39,9 @@
       "input": {
         "$ref": "#/$defs/Handled"
       },
+      "command": {
+        "enum": [null, "pass"]
+      },
       "search": {
         "type": "array",
         "items": {
@@ -2583,6 +2586,9 @@
           "items": {
             "type": "string"
           }
+        },
+        "enabled": {
+          "type": "boolean"
         }
       },
       "required": ["name", "title", "palette"],
@@ -4665,6 +4671,21 @@
             }
           },
           "required": ["type", "surface"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "type": {
+              "const": "set-enabled"
+            }
+          },
+          "required": ["type", "name", "enabled"]
         },
         {
           "type": "object",

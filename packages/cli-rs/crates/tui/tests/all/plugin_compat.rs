@@ -916,6 +916,32 @@ fn measure_the_key_hold() {
     );
 }
 
+// Expected (contract ergonomics 2.5; CT-8, the key hold): a key whose JS command is disabled is bound by nothing on the
+// host, so it reaches the composer in the frame it is typed, with no round trip to the JS host held for it. Enabled,
+// the command takes it; disabled again, the key goes on at once. Neither change reloads the plugin: its activation
+// stays the one it was.
+#[test]
+fn a_disabled_commands_key_is_not_held() {
+    let Some(config) = config() else { return };
+    let (pipe, log) = probe(config);
+    let (harness, tui) = (&pipe.harness, &pipe.harness.tui);
+    let live = || (1..512).find(|generation| tui.plugins.live(PROBE, *generation));
+    let before = live();
+    harness.app.type_text("^");
+    assert_eq!(harness.text(), "^", "the disabled command's key was held");
+    tui.keymap.dispatch("v2probe.caretOn", Some("on"));
+    pipe.settle();
+    harness.app.type_text("^a");
+    pipe.settle();
+    assert_eq!(harness.text(), "^a", "the enabled command did not take its key");
+    tui.keymap.dispatch("v2probe.caretOn", Some("off"));
+    pipe.settle();
+    harness.app.type_text("^");
+    assert_eq!(harness.text(), "^a^", "the key of the command disabled again was held");
+    assert_eq!(calls(&log), [json!({ "caret": true })]);
+    assert_eq!(live(), before, "a change of the command's state reloaded the plugin");
+}
+
 // Expected (the key hold's bound): a JS host that ends while it holds keys releases them at once, the bound key first
 // as declined, even under a hold limit far longer than the test; its command is not sent again.
 #[test]

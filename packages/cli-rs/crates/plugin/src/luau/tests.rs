@@ -1828,7 +1828,9 @@ fn measure_one_call_on_each_carrier() {
         let (_, _, render) = registered.renders().next().unwrap();
         let (_, command) = registered.commands().next().unwrap();
         let rendered = each(rounds, || drop(std::hint::black_box(render(&Nop, &input, &changed))));
-        let ran = each(rounds, || command(&Nop, None));
+        let ran = each(rounds, || {
+            let _ = command(&Nop, None);
+        });
         println!("{name}: render {rendered:?}, command {ran:?}");
     }
     // The C ABI's work on top of the linked call: the request to JSON and back, and the answer to JSON and back.
@@ -2119,6 +2121,37 @@ end)
     let dialogs: Vec<abi::Dialog> = host.dialogs.borrow().iter().map(|(_, dialog)| dialog.clone()).collect();
     let [abi::Dialog::Prompt(prompt)] = dialogs.as_slice() else { panic!("{dialogs:?}") };
     assert_eq!((prompt.value.as_deref(), prompt.description.as_deref()), (Some("luau"), Some("described")));
+    assert_eq!(failure(&registry, "test.luau"), None);
+}
+
+// Expected (contract ergonomics 2.5 on the Luau carrier): a command whose table says `enabled = false` is disabled until
+// `host:setEnabled` enables it, once the call that asked returned; one whose function returns "pass" declines, so its
+// key goes on; one that returns anything else, or nothing, takes it.
+#[test]
+fn a_luau_command_starts_disabled_and_one_declines() {
+    use opentui::keymap::RunResult;
+    let host = host();
+    let init = r#"local plugin = require("@opencode/plugin")
+return plugin.define(function(setup)
+    setup:command({ name = "luau.gated", enabled = false }, function(host) host:toast({ variant = "info", message = "gated" }) end)
+    setup:command({ name = "luau.gate" }, function(host, input) host:setEnabled("luau.gated", input == "on") end)
+    setup:command({ name = "luau.pass" }, function() return "pass" end)
+    setup:command({ name = "luau.other" }, function() return "consume" end)
+end)
+"#;
+    let registry = running(&host, define(&sources(init), None).unwrap().0);
+    let dispatch = |name: &str, input: Option<&str>| {
+        let result = keymap(&host).dispatch(name, input);
+        host.app.advance(Duration::from_millis(1));
+        result
+    };
+    assert_eq!(dispatch("luau.gated", None), RunResult::Disabled);
+    assert_eq!(dispatch("luau.gate", Some("on")), RunResult::Ok);
+    assert_eq!(dispatch("luau.gated", None), RunResult::Ok);
+    assert_eq!((dispatch("luau.pass", None), dispatch("luau.other", None)), (RunResult::Rejected, RunResult::Ok));
+    assert_eq!(dispatch("luau.gate", Some("off")), RunResult::Ok);
+    assert_eq!(dispatch("luau.gated", None), RunResult::Disabled);
+    assert_eq!(said(&host), ["gated"]);
     assert_eq!(failure(&registry, "test.luau"), None);
 }
 

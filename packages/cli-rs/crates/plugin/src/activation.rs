@@ -55,6 +55,9 @@ pub(crate) struct Activation {
     monitor: RefCell<Option<(Rc<crate::contain::Monitor>, crate::contain::Slot)>>,
     /// Its timers that wait (2.3), at most [`abi::MAX_TIMERS`]: the app's timer of each, by request.
     scheduled: RefCell<std::collections::HashMap<abi::RequestId, TimerId>>,
+    /// Its commands, by name, and whether each is enabled now (contract ergonomics 2.5): as its manifest listed them,
+    /// then as [`abi::Host::set_enabled`] set them.
+    commands: RefCell<std::collections::HashMap<String, bool>>,
 }
 
 /// What one [`Activation::step`] did.
@@ -97,6 +100,7 @@ impl Activation {
                 hinted: Cell::new(None),
                 monitor: RefCell::default(),
                 scheduled: RefCell::default(),
+                commands: RefCell::default(),
             }
         })
     }
@@ -111,6 +115,26 @@ impl Activation {
     /// calls, as the monitor counts them; `None` while the host has set no monitor.
     pub(crate) fn spent(&self) -> Option<(std::time::Duration, std::time::Duration)> {
         self.monitor.borrow().as_ref().map(|(monitor, slot)| monitor.spent(*slot))
+    }
+
+    /// Takes the plugin's `commands`, each enabled as it says.
+    pub(crate) fn commands(&self, commands: &[abi::Command]) {
+        let mut known = self.commands.borrow_mut();
+        known.extend(commands.iter().map(|command| (command.name.clone(), command.enabled)));
+    }
+
+    /// Whether its command `name` is enabled: a disabled one binds no key and is in neither the palette nor the slash
+    /// list.
+    pub(crate) fn enabled(&self, name: &str) -> bool {
+        self.commands.borrow().get(name).copied().unwrap_or(true)
+    }
+
+    /// Enables or disables its command `name`; `plugin` names it in the log when it has no such command.
+    pub(crate) fn set_enabled(&self, plugin: &str, name: &str, enabled: bool) {
+        match self.commands.borrow_mut().get_mut(name) {
+            Some(known) => *known = enabled,
+            None => log::warn!("plugin {plugin}: set-enabled of {name:?}, which is not one of its commands"),
+        }
     }
 
     /// Its ID, which no other activation gets.

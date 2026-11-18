@@ -31,6 +31,8 @@ export default Plugin.define({
     const [mode, setMode] = createSignal("ok")
     const [shown, setShown] = createSignal(0)
     let keyArm = "pass"
+    // Whether `^`, bound by `v2probe.caret`, is enabled: `v2probe.caretOn` sets it ("on" or anything else).
+    const [caret, setCaret] = createSignal(false)
     const Commands = () => <text>{`v2probe commands ${context.keymap.commands().length > 0}`}</text>
     log({ setup: true })
     // A command of the base mode, as a layer without `mode` is: it does not run while a dialog has the keyboard.
@@ -64,6 +66,9 @@ export default Plugin.define({
           },
         },
         { id: "v2probe.arm", run: (input?: string) => void (keyArm = String(input)) },
+        // A printable key bound globally by a command whose `enabled` follows a signal (contract ergonomics 2.5).
+        { id: "v2probe.caret", bind: "^", enabled: () => caret(), run: () => log({ caret: true }) },
+        { id: "v2probe.caretOn", run: (input?: string) => void setCaret(input === "on") },
         { id: "v2probe.throw", run: () => void setMode("throw") },
         { id: "v2probe.loop", run: () => void setMode("loop") },
         { id: "v2probe.select", run: () => void setMode("select") },

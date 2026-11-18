@@ -473,6 +473,17 @@ local function tasked(raw)
             run(handler, a, b, c)
         end
     end
+    -- A command that returns "pass" declines the key that ran it, which goes on to whatever else takes it (contract
+    -- ergonomics 2.5); one that waits has taken it.
+    local function commanded(handler)
+        return function(a, b)
+            local ended, result = run(handler, a, b)
+            if ended and result == "pass" then
+                return "pass"
+            end
+            return nil
+        end
+    end
     -- A key or input handler that waits has taken its event.
     local function handled(handler)
         return function(a, b)
@@ -497,7 +508,7 @@ local function tasked(raw)
         route = passed("route"),
         codeBlock = passed("codeBlock"),
         onDispose = passed("onDispose"),
-        command = acting("command", plain),
+        command = acting("command", commanded),
         onEvent = acting("onEvent", plain),
         onRouteMount = acting("onRouteMount", plain),
         -- The slot's input is a table the host fills again for its next call: a task that waits keeps a copy.

@@ -1290,7 +1290,7 @@ fn asking(setup: &mut abi::Setup) -> Result<(), String> {
         let _ = host.try_foreground(abi::Foreground { command: "true".into(), ..abi::Foreground::default() });
     };
     setup.command(abi::Command::new("x.run"), move |host, _| run(host));
-    setup.command(abi::Command::new("x.boom"), move |host, _| {
+    setup.command(abi::Command::new("x.boom"), move |host, _| -> () {
         run(host);
         panic!("boom");
     });
@@ -1508,7 +1508,7 @@ thread_local! {
 fn keeping(setup: &mut abi::Setup) -> Result<(), String> {
     KEPT.set(Some(setup.waker().ok_or("no waker")?));
     let panic = abi::Command::new("keeping.panic");
-    setup.command(panic, |_, _| panic!("keeping command panicked"));
+    setup.command(panic, |_, _| -> () { panic!("keeping command panicked") });
     Ok(())
 }
 
@@ -1534,7 +1534,7 @@ fn fetching(setup: &mut abi::Setup) -> Result<(), String> {
     setup.command(command("fetching.fetch"), |host, _| {
         let _ = host.try_fetch(abi::Fetch::new("GET", "/fetched"));
     });
-    setup.command(command("fetching.panic"), |_, _| panic!("fetching panicked"));
+    setup.command(command("fetching.panic"), |_, _| -> () { panic!("fetching panicked") });
     Ok(())
 }
 
@@ -1593,7 +1593,7 @@ fn lifecycle(setup: &mut abi::Setup) -> Result<(), String> {
     });
     setup.on_reply(|host, _, _| host.toast(abi::Toast::new(abi::Variant::Info, "reply")));
     let panic = abi::Command::new("lifecycle.panic");
-    setup.command(panic, |_, _| panic!("lifecycle command panicked"));
+    setup.command(panic, |_, _| -> () { panic!("lifecycle command panicked") });
     Ok(())
 }
 
@@ -2600,7 +2600,7 @@ fn an_overrun_applies_its_effects_then_fails_an_external_plugin_only() {
 /// A plugin that replaces `home.footer`, draws `rep` fences and has a route; `replacer.panic` panics.
 fn replacer(setup: &mut abi::Setup) -> Result<(), String> {
     let command = abi::Command::new("replacer.panic").title("panic");
-    setup.command(command, |_, _| panic!("replacer fault"));
+    setup.command(command, |_, _| -> () { panic!("replacer fault") });
     setup.slot(abi::Placement::new(abi::SlotKind::Replace, "home.footer"), |_, _, _| {
         abi::Render::Show(abi::Node::text([abi::Span::new("REPLACED")]))
     });
@@ -2754,7 +2754,7 @@ fn fetcher(setup: &mut abi::Setup) -> Result<(), String> {
     setup.command(command("fetcher.fetch"), |host, _| {
         let _ = host.try_fetch(abi::Fetch::new("GET", "/late"));
     });
-    setup.command(command("fetcher.panic"), |_, _| panic!("fetcher fault"));
+    setup.command(command("fetcher.panic"), |_, _| -> () { panic!("fetcher fault") });
     Ok(())
 }
 

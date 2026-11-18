@@ -19,7 +19,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         bumped.borrow_mut()[card] += 1;
     });
     setup.command(command("twin.toast"), |host, _| host.toast(Toast::new(Variant::Info, "the twin says hi")));
-    setup.command(command("twin.throw"), |_, _| panic!("the twin's command threw"));
+    setup.command(command("twin.throw"), |_, _| -> () { panic!("the twin's command threw") });
     let viewed = values.clone();
     let surface = v2::Surface::new("twin", v2::Place::Route("twin".into()), move |cx| view(&viewed.borrow(), cx));
     setup.surface(surface);

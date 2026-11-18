@@ -273,6 +273,60 @@ fn one_source_is_equal_on_every_carrier() {
     }
 }
 
+// Expected (contract ergonomics 2.5): a command's state and a declined key are alike linked, through the byte shims and
+// as a real library. `board.hotkey`, on `ctrl+p`, starts disabled: the key opens the host's palette, which lists no
+// entry of it. Enabled, it takes the key and is listed; made to decline, it runs and the key goes on to the host's
+// palette; disabled again, it neither runs nor is listed.
+#[test]
+fn a_command_is_disabled_and_declines_alike_on_every_carrier() {
+    let script = |run: Run| {
+        let board = open(run);
+        let (app, tui) = (&board.harness.app, &board.harness.tui);
+        let dispatch = |name: &str, input: Option<&str>| {
+            tui.keymap.dispatch(name, input);
+            settle(&board.harness);
+        };
+        let listed = || tui.keymap.commands().iter().any(|command| command.id == "board.hotkey");
+        let mut seen = Vec::new();
+        for (step, gate) in [("disabled", None), ("enabled", Some("on")), ("passing", None), ("off", Some("off"))] {
+            match (step, gate) {
+                ("passing", _) => dispatch("board.passing", None),
+                (_, Some(gate)) => dispatch("board.gate", Some(gate)),
+                _ => {}
+            }
+            let shown = listed();
+            app.press("ctrl+p");
+            settle(&board.harness);
+            let toasts: Vec<String> = std::iter::from_fn(|| {
+                let toast = tui.toasts.current()?;
+                tui.toasts.dismiss();
+                Some(toast.message)
+            })
+            .collect();
+            seen.push((step, shown, tui.dialogs.is_open(), toasts));
+            if tui.dialogs.is_open() {
+                app.press("escape");
+                settle(&board.harness);
+            }
+        }
+        seen
+    };
+    let linked = script(Run::In(Carrier::Linked));
+    let hotkey = |text: &str| vec![text.to_owned()];
+    assert_eq!(
+        linked,
+        [
+            ("disabled", false, true, Vec::new()),
+            ("enabled", true, false, hotkey("hotkey")),
+            ("passing", true, true, hotkey("hotkey passed")),
+            ("off", false, true, Vec::new()),
+        ]
+    );
+    for run in [Run::In(CARRIERS[1]), Run::Library] {
+        assert_eq!(script(run), linked, "{run:?}");
+    }
+}
+
 // Expected (`carrier-equal` for a contained panic, P4c): a panic in a command of the board's route is caught where it
 // happens and fails the plugin once, naming the call, with the same frames, toasts and status linked, through the
 // byte shims, and as a real library; later frames add nothing.

@@ -70,7 +70,7 @@ registers the P.1 surface as data, because widgets and closures cannot cross the
 
 | P.1 (TS `api.*`) | ABI (`opencode_plugin_abi::Setup`) |
 | --- | --- |
-| `layer` (commands, palette, slash and its aliases, keybinds) | `command(Command, run(&dyn Host, input))`; the host builds the keymap layer. A command without `palette` and `slash` is hidden: a click or `Host::dispatch` runs it |
+| `layer` (commands, palette, slash and its aliases, keybinds, `enabled`) | `command(Command, run(&dyn Host, input))`; the host builds the keymap layer. A command without `palette` and `slash` is hidden: a click or `Host::dispatch` runs it. One that is disabled (`Command::disabled`, `Host::set_enabled`) binds no key and is in neither the palette nor the slash list; a run that returns `Handled::Pass` declines the key that ran it, which goes on as if the command were not there |
 | `code_block(language, render)` | `code_block(language, render(&dyn Read, &Fence) -> Fenced)` |
 | `slot(placement, render)` | `slot(Placement, render(&dyn Read, &SlotInput, &Changed) -> Render)` |
 | a slot component's lifetime | `on_mount(Placement, run(&dyn Host, &SlotInput, mounted))` for the claim registered last there: `true` before a mount's first render, `false` as it unmounts |

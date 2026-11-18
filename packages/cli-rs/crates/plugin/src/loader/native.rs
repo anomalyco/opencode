@@ -1198,6 +1198,10 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
         HostRequest::CloseOverlay { surface } => {
             ctx.effects.push(Effect::Input(owners(ctx)?.close_overlay(&surface)));
         }
+        // Setup has no activation yet: a command that starts disabled says so in its `enabled`.
+        HostRequest::SetEnabled { name, enabled } => {
+            ctx.effects.push(Effect::Input(owners(ctx)?.set_enabled(&name, enabled)));
+        }
         HostRequest::Focus { node } => ctx.effects.push(Effect::Input(owners(ctx)?.focus(&node))),
         HostRequest::Blur => ctx.effects.push(Effect::Input(owners(ctx)?.blur())),
         HostRequest::SetMode { mode } => ctx.effects.push(Effect::Input(owners(ctx)?.set_mode(mode.as_deref()))),
@@ -1245,6 +1249,7 @@ fn effect(request: &HostRequest) -> bool {
         | HostRequest::StorageMerge { .. }
         | HostRequest::OpenRoute { .. }
         | HostRequest::Dispatch { .. }
+        | HostRequest::SetEnabled { .. }
         | HostRequest::Attention(_)
         | HostRequest::Navigate { .. }
         | HostRequest::Fetch(_)
@@ -1510,6 +1515,21 @@ impl Guest {
         // A handler answers `null` (O-135): anything else is a contract break.
         if self.request::<()>(export, request).is_some() {
             self.activation.invalidate();
+        }
+    }
+
+    /// Runs a command, which answers `"pass"` to decline the key that ran it (contract ergonomics 2.5) and `null` to
+    /// take it. A call that failed took its key.
+    fn command(self: &Rc<Self>, request: &Request) -> abi::interact::Handled {
+        let answer = self.checked("run-command", request, |answer: &Option<String>| match answer.as_deref() {
+            None | Some("pass") => Ok(()),
+            Some(other) => Err(format!("a command answered {other:?}, where null or \"pass\" is")),
+        });
+        let Some(answer) = answer else { return abi::interact::Handled::Consume };
+        self.activation.invalidate();
+        match answer {
+            Some(_) => abi::interact::Handled::Pass,
+            None => abi::interact::Handled::Consume,
         }
     }
 
@@ -1852,14 +1872,16 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
         disposed.release();
         disposed.activation.dispose();
     });
+    guest.activation.commands(&manifest.commands);
     let commands: Vec<(abi::Scope, TuiCommand)> = manifest
         .commands
         .iter()
         .map(|command| {
             let guest = guest.clone();
             let name = command.name.clone();
-            let run = tui_command(command, move |input| {
-                guest.handle("run-command", &Request::Command { name: name.clone(), input: input.map(str::to_owned) });
+            let enabled = crate::command_enabled(&guest.activation, &name);
+            let run = tui_command(command, enabled, move |input| {
+                guest.command(&Request::Command { name: name.clone(), input: input.map(str::to_owned) })
             });
             (command.scope.clone(), run)
         })
@@ -1975,9 +1997,10 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>, manifest: &Manifest) {
                 Rc::new(move |alive: &Weak<()>| {
                     let command = |command: &abi::Command| {
                         let (guest, alive, name) = (guest.clone(), alive.clone(), command.name.clone());
-                        tui_command(command, move |input| {
+                        let enabled = crate::command_enabled(&guest.activation, &name);
+                        tui_command(command, enabled, move |input| {
                             let request = Request::Command { name: name.clone(), input: input.map(str::to_owned) };
-                            guest.owners.owned_by(&alive, || guest.handle("run-command", &request));
+                            guest.owners.owned_by(&alive, || guest.command(&request))
                         })
                     };
                     routed.iter().map(command).collect()

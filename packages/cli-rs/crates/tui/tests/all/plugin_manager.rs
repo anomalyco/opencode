@@ -175,7 +175,7 @@ fn watcher() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         setup.on_plugins(|host| HEARD.with_borrow_mut(|heard| heard.push(listed(&host.plugins()))));
         let command = Command::new("watch.boom");
-        setup.command(command, |_, _| panic!("the watcher's command panics"));
+        setup.command(command, |_, _| -> () { panic!("the watcher's command panics") });
         Ok(())
     }
     abi::Plugin { id: "test.watch", setup }
@@ -184,7 +184,7 @@ fn watcher() -> abi::Plugin {
 /// A plugin that panics on its command, which the delivery steps fail.
 fn boom() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
-        setup.command(Command::new("boom.boom"), |_, _| panic!("boom"));
+        setup.command(Command::new("boom.boom"), |_, _| -> () { panic!("boom") });
         Ok(())
     }
     abi::Plugin { id: "test.boom", setup }
@@ -301,7 +301,7 @@ impl Backend for Shadow {
             if SHADOW_FAILS.get() {
                 return Err("the manager's setup fails".to_owned());
             }
-            setup.command(Command::new("shadow.boom"), |_, _| panic!("the manager panics"));
+            setup.command(Command::new("shadow.boom"), |_, _| -> () { panic!("the manager panics") });
             setup.command(Command::new("plugins.list"), |host, _| {
                 let message = "the replacement serves /plugins".to_owned();
                 host.dialog(abi::Dialog::Alert(abi::Alert {
@@ -459,7 +459,7 @@ fn the_host_lists_the_plugins_while_the_manager_has_failed_on() {
 /// A built-in whose command panics.
 fn crash() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
-        setup.command(Command::new("crash.boom"), |_, _| panic!("crash"));
+        setup.command(Command::new("crash.boom"), |_, _| -> () { panic!("crash") });
         Ok(())
     }
     abi::Plugin { id: "test.crash", setup }
@@ -646,7 +646,7 @@ fn secrets() -> [abi::Plugin; 2] {
         Err("SECRET-setup /home/user/.token".to_owned())
     }
     fn run(setup: &mut abi::Setup) -> Result<(), String> {
-        setup.command(Command::new("secret.run"), |_, _| panic!("SECRET-run"));
+        setup.command(Command::new("secret.run"), |_, _| -> () { panic!("SECRET-run") });
         Ok(())
     }
     [abi::Plugin { id: "test.setup", setup }, abi::Plugin { id: "test.run", setup: run }]

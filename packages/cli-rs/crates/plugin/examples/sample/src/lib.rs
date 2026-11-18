@@ -90,8 +90,9 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         let after = shown(host.storage_get("list"));
         host.toast(Toast::new(Variant::Success, format!("list {before} then {after}")));
     });
-    setup
-        .command(command("sample.panic", "Panic in the sample plugin", None), |_, _| panic!("sample command panicked"));
+    setup.command(command("sample.panic", "Panic in the sample plugin", None), |_, _| -> () {
+        panic!("sample command panicked")
+    });
     fence::setup(setup)?;
     slot::setup(setup)?;
     home::setup(setup)?;
