@@ -28,4 +28,5 @@ export default {
   "export.success.description": "Сеанс ба {{filename}} захира карда шуд",
   "export.failed.title": "Сеанс содир карда нашуд",
   "export.failed.description": "Ҳангоми содироти сессия хатогӣ рӯй дод",
+  "usage.toggle": "Нишон додан/пинҳон кардани контексти сессия",
 }

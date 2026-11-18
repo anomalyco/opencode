@@ -56,7 +56,8 @@
     position: relative;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    /* Label and chevron are one button, so the chevron sits close, as in the product navs. */
+    gap: 4px;
 
     /* OpenTUI Mono's caps sit 0.325px below its line box's centre; this puts them on the logo's centre. */
     padding: 0 6px 0.65px;
@@ -439,22 +440,6 @@
   }
 }
 
-/* The section word also opens the OpenCode product menu on hover (packages/nav-menus), so hovered, open and pressed it
-   takes the one name fill every OpenCode nav shares (--nav-name-hover), never a darker one; the chevron keeps its own
-   states for the sections menu. */
-[data-site] [data-component="docs-lockup"] [data-slot="word"][data-nav-product] {
-  @media (hover: hover) and (pointer: fine) {
-    &:hover {
-      background: var(--nav-name-hover);
-    }
-  }
-
-  &:active,
-  &[aria-expanded="true"] {
-    background: var(--nav-name-hover);
-  }
-}
-
 /* The logo before the lockup stays a plain link (no fill); its keyboard ring, drawn around the mark
    (site.css), is 2px like the segments'. */
 [data-site]
@@ -465,7 +450,7 @@
 }
 
 /* Settings › Section menu › fan: no panel; each row is a small card on the see-through pop-up
-   surface with the logo fan's ring and tight shadow (logo-fan.css), and the cards spring out one
+   surface with the fan's ring and tight shadow (--fan-shadow, site.css), and the cards spring out one
    after another (docs-lockup.tsx). The rows keep the shared hover tint and active bar. Beside the
    sidebar only; the phone sheet keeps the list. */
 @media (min-width: 60.0625rem) {
@@ -491,7 +476,7 @@
     }
   }
 
-  /* As under the logo fan (logo-fan.css), the docs nav under the cards fades out while they're
+  /* As under the logo menu, the docs nav under the cards fades out while they're
      open, so it doesn't show through the gaps and the see-through cards. */
   [data-site][data-section-menu="fan"]
     [data-component="sidebar"]:has([data-component="docs-lockup"] [data-slot="menu"]:not([hidden]))

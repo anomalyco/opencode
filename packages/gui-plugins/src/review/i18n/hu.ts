@@ -12,4 +12,12 @@ export default {
   noChanges: "Nincs változás",
   "settings.wrapLines.title": "Sorok tördelése",
   "settings.wrapLines.description": "Vízszintes görgetés helyett csavarja be a hosszú sorokat mobil diff-be",
+  "menu.count.one": "{{count}} módosított fájl",
+  "menu.count.other": "{{count}} módosított fájl",
+  "folder.more": "{{count}} · további elemek nincsenek megjelenítve",
+  "folder.failed": "Nem sikerült betölteni a módosításokat",
+  "command.open": "Áttekintés megnyitása",
+  "load.failed": "Nem sikerült betölteni a módosításokat",
+  "load.timeout": "A szerver túl sokáig nem válaszolt",
+  offline: "A szerver nem érhető el",
 }

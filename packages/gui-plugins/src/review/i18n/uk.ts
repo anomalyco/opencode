@@ -17,4 +17,14 @@ export default {
   "settings.wrapLines.title": "Переносити рядки",
   "settings.wrapLines.description":
     "Переносити довгі рядки в мобільні відмінності замість прокручування по горизонталі",
+  "menu.count.one": "Змінено {{count}} файл",
+  "menu.count.few": "Змінено {{count}} файли",
+  "menu.count.many": "Змінено {{count}} файлів",
+  "menu.count.other": "Змінено {{count}} файла",
+  "folder.more": "{{count}} · решту не показано",
+  "folder.failed": "Не вдалося завантажити зміни",
+  "command.open": "Відкрити огляд",
+  "load.failed": "Не вдалося завантажити зміни",
+  "load.timeout": "Сервер не відповідав занадто довго",
+  offline: "Не вдається зв’язатися із сервером",
 }

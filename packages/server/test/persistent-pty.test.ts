@@ -208,7 +208,7 @@ smoke(
   20_000,
 )
 
-it.live("reports renaming as unsupported on a daemon without the rename feature", () =>
+it.live("renames without a feature check and hides unknown terminals", () =>
   Effect.gen(function* () {
     const fixture = yield* testDirectory()
     const daemon = yield* fakeDaemon()
@@ -222,7 +222,7 @@ it.live("reports renaming as unsupported on a daemon without the rename feature"
       fs: { filewatcher: false },
     })
     const base = HttpServer.formatAddress(server.address)
-    const created = yield* request(base, "POST", "/api/experimental/session/ses_old_daemon/terminal", {
+    const created = yield* request(base, "POST", "/api/experimental/session/ses_v8_daemon/terminal", {
       args: [],
       cwd: fixture.root,
       title: "created",
@@ -231,28 +231,19 @@ it.live("reports renaming as unsupported on a daemon without the rename feature"
     const terminal = Schema.decodeUnknownSync(PersistentPty.Info)(created.data)
     expect(terminal.userTitle).toBeNull()
 
-    const response = yield* Effect.promise(async () => {
-      const response = await fetch(new URL(`/api/experimental/persistent-pty/${terminal.id}`, base), {
-        method: "PUT",
-        headers: { authorization: `Basic ${btoa("opencode:secret")}`, "content-type": "application/json" },
-        body: JSON.stringify({ title: "build" }),
-      })
-      return { status: response.status, body: await response.json() }
-    })
+    const renamed = yield* request(base, "PUT", `/api/experimental/persistent-pty/${terminal.id}`, { title: "build" })
+    expect(renamed.data).toMatchObject({ title: "build", userTitle: "build" })
+    expect(daemon.ops).toContain("rename")
+    expect(daemon.ops).not.toContain("list")
 
-    expect(response).toEqual({
-      status: 501,
-      body: {
-        _tag: "PtyFeatureUnsupportedError",
-        feature: "rename",
-        message: "Terminal renaming will be available after OpenCode's terminal service restarts",
-      },
+    const missing = yield* Effect.promise(async () => {
+      const response = await fetch(new URL("/api/experimental/persistent-pty/pty_persistent_99", base), {
+        headers: { authorization: `Basic ${btoa("opencode:secret")}` },
+      })
+      await response.arrayBuffer()
+      return response.status
     })
-    expect(daemon.ops).not.toContain("rename")
-    expect((yield* request(base, "GET", `/api/experimental/persistent-pty/${terminal.id}`)).data).toMatchObject({
-      title: "test",
-      userTitle: null,
-    })
+    expect(missing).toBe(404)
   }),
 )
 
@@ -573,12 +564,11 @@ smoke(
 )
 
 smoke(
-  "migrates a legacy runtime directory on restart and boots fresh when the registration is gone",
+  "boots fresh on restart when the handed-off registration is gone",
   () =>
     Effect.gen(function* () {
       const fixture = yield* testDirectory()
       const scope = yield* Scope.Scope
-      const legacy = path.join(fixture.root, "legacy")
       const options = {
         hostname: "127.0.0.1",
         port: 0,
@@ -586,50 +576,32 @@ smoke(
         app: { version: "test-version" },
         database: { path: fixture.database },
         fs: { filewatcher: false },
+        pty: { root: fixture.directory },
       }
-      const sessionID = Session.ID.make("ses_persistent_pty_migration")
+      const sessionID = Session.ID.make("ses_persistent_pty_gone")
       const originalScope = yield* Scope.fork(scope)
-      const original = yield* ServerProcess.start<never, never>({ ...options, pty: { root: legacy } }).pipe(
+      const original = yield* ServerProcess.start<never, never>(options).pipe(
         Effect.provideService(Scope.Scope, originalScope),
       )
       const base = HttpServer.formatAddress(original.address)
       const first = Schema.decodeUnknownSync(PersistentPty.Info)(
         (yield* request(base, "POST", `/api/experimental/session/${sessionID}/terminal`, {
           command: "/bin/sh",
-          args: ["-c", "stty -echo; printf before-migration; exec cat"],
+          args: ["-c", "stty -echo; printf before-restart; exec cat"],
           cwd: process.cwd(),
-          title: "legacy",
+          title: "first",
           env: {},
         })).data,
       )
-      expect(yield* waitForText(base, first.id, "before-migration")).toContain("before-migration")
-      const legacyHandoff = Schema.decodeUnknownSync(PersistentPty.Handoff)(
+      expect(yield* waitForText(base, first.id, "before-restart")).toContain("before-restart")
+      const handoff = Schema.decodeUnknownSync(PersistentPty.Handoff)(
         (yield* request(base, "POST", "/api/experimental/persistent-pty/handoff")).handoff,
       )
       yield* Scope.close(originalScope, Exit.void)
-
-      const migratedScope = yield* Scope.fork(scope)
-      const migrated = yield* ServerProcess.start<never, never>({
-        ...options,
-        pty: { root: fixture.directory, handoff: legacyHandoff },
-      }).pipe(Effect.provideService(Scope.Scope, migratedScope))
-      const migratedBase = HttpServer.formatAddress(migrated.address)
-      const directory = path.join(fixture.directory, path.basename(legacyHandoff.directory))
-      expect(existsSync(path.join(directory, "service.json"))).toBeTrue()
-      expect(existsSync(path.join(legacyHandoff.directory, "service.json"))).toBeFalse()
-      expect(
-        (yield* request(migratedBase, "GET", `/api/experimental/session/${sessionID}/terminal`)).data,
-      ).toMatchObject([{ id: first.id, pid: first.pid }])
-
-      const handoff = Schema.decodeUnknownSync(PersistentPty.Handoff)(
-        (yield* request(migratedBase, "POST", "/api/experimental/persistent-pty/handoff")).handoff,
-      )
-      expect(handoff.directory).toBe(directory)
-      yield* Scope.close(migratedScope, Exit.void)
       // Simulate macOS purging the registration while the daemon waits for its successor.
-      yield* Effect.promise(() => fs.rm(path.join(directory, "service.json")))
+      yield* Effect.promise(() => fs.rm(path.join(handoff.directory, "service.json")))
 
-      const fresh = yield* ServerProcess.start<never, never>({ ...options, pty: { root: fixture.directory, handoff } })
+      const fresh = yield* ServerProcess.start<never, never>({ ...options, pty: { ...options.pty, handoff } })
       const freshBase = HttpServer.formatAddress(fresh.address)
       expect((yield* request(freshBase, "GET", `/api/experimental/session/${sessionID}/terminal`)).data).toEqual([])
       const second = Schema.decodeUnknownSync(PersistentPty.Info)(

@@ -121,6 +121,7 @@ const it = testEffect(
       LayerNodePlatform.llmClient.replace(llmLayer),
       SessionRunnerModel.node.replace(
         Layer.succeed(SessionRunnerModel.Service, {
+          select: (session) => Effect.fail(new SessionRunnerModel.ModelNotSelectedError({ sessionID: session.id })),
           resolve: () =>
             Effect.succeed(
               SessionRunnerModel.resolved(

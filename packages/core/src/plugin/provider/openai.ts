@@ -7,11 +7,12 @@ import { App } from "../../app.js"
 import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
 import { OauthCallbackPage } from "../../oauth/page.js"
+import { OauthRedirect } from "../../oauth/redirect.js"
 import { Provider } from "../../provider.js"
 import { SessionAffinity } from "../../session/affinity.js"
 import type { PluginInternal } from "../internal.js"
 import { configuredSettings } from "./configured.js"
-import { activeCredential } from "./credential-settings.js"
+import { storedCredential } from "./credential-settings.js"
 import { ProviderRefresh } from "./refresh.js"
 
 const clientID = "app_EMoamEEZ73f0CkXaXp7hrann"
@@ -106,6 +107,7 @@ const browser = (app: App.Info) =>
             Effect.flatMap((value) => exchange(value, redirect, pkce, app)),
             Effect.map((tokens) => credential(browserMethodID, tokens)),
           ),
+          submit: OauthRedirect.submit({ state, callback: code, received: (value) => value }),
         }
       }),
     refresh: (value) => refresh(browserMethodID, value, app),
@@ -239,7 +241,7 @@ export const OpenAIPlugin = define({
     let chatgpt: Credential.OAuth | undefined
 
     const load = Effect.fn("OpenAIPlugin.load")(function* () {
-      const { credential } = yield* activeCredential(ctx, "openai")
+      const { credential } = yield* storedCredential(ctx, "openai")
       const previous = chatgpt
       chatgpt =
         credential?.type === "oauth" &&

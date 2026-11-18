@@ -122,12 +122,12 @@ describe("Claude accounts", () => {
       const claude = FakeClaude.make([
         FakeClaude.expectStartup(),
         FakeClaude.expectTurn(),
-        FakeClaude.expectInterrupt(),
         FakeClaude.expectStartup(),
         limitTurn(),
         FakeClaude.expectInterrupt(),
         FakeClaude.expectStartup(),
         FakeClaude.expectTurn(),
+        FakeClaude.expectInterrupt(),
         FakeClaude.expectInterrupt(),
       ])
       const test = yield* TestSessions.start(claude, TestSessions.storage(), pool)

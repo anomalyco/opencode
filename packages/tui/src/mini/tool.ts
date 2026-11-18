@@ -1342,7 +1342,7 @@ export function toolEntryBody(
       return undefined
     }
 
-    if (commit.phase === "final" && ctx.status === "completed") {
+    if (commit.phase === "final" && ctx.status === "completed" && ctx.meta.status !== "running") {
       const result = taskResult(ctx.output)
       if (result) {
         return markdownBody(result)

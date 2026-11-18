@@ -139,7 +139,7 @@ describe("SkillTool", () => {
               }),
             ).toEqual({
               status: "completed",
-              output: { name: "Effect", directory, output: Skill.toModelOutput(info, [reference]) },
+              output: { directory, content: Skill.toModelOutput(info, [reference]) },
               content: [{ type: "text", text: Skill.toModelOutput(info, [reference]) }],
               metadata: { name: "Effect", directory },
             })

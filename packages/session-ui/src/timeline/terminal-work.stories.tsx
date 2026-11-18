@@ -1,6 +1,6 @@
 import type { SessionMessageAssistant, SessionMessageShell } from "@opencode/client/promise"
 import { Match } from "effect"
-import { createMemo, createSignal } from "solid-js"
+import { createEffect, createMemo, createSignal, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { DataProvider } from "../context/data"
 import { SessionShellMessage } from "../tools/tool-renderer"
@@ -312,15 +312,19 @@ function InteractiveCommandStory(props: {
   existingGroup?: boolean
   tool?: "shell" | "execute" | "subagent"
 }) {
-  const initialPhase: "streaming" | "input" | "running" | "completed" = props.streaming ? "streaming" : "completed"
+  const initialPhase = (): "streaming" | "input" | "running" | "completed" =>
+    props.streaming ? "streaming" : "completed"
 
   const [state, setState] = createStore({
-    phase: initialPhase,
+    phase: initialPhase(),
     started: !props.existingGroup,
     lines: 3,
     sibling: false,
     busy: false,
   })
+
+  createEffect(() => setState("phase", initialPhase()))
+  createEffect(() => setState("started", !props.existingGroup))
 
   const document = createMemo(() => {
     const phase = state.phase
@@ -413,7 +417,11 @@ export const TerminalCommands = {
     streaming: boolean
     existingGroup: boolean
     tool: "shell" | "execute" | "subagent"
-  }) => (args.scenario === "collapsed" ? CollapsedShell.render() : <InteractiveCommandStory {...args} />),
+  }) => (
+    <Show when={args.scenario !== "collapsed"} fallback={<CollapsedShell.render />}>
+      <InteractiveCommandStory {...args} />
+    </Show>
+  ),
 }
 
 export const FixedAndPassed = {

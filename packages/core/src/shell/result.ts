@@ -5,10 +5,11 @@ import type { Shell } from "@opencode/schema/shell"
 
 export type Result = {
   info: Shell.Info
-  capture: { output: string; truncated: boolean } | undefined
+  // `killed` says why a command was killed when no exit code or signal of its own tells, e.g. the process daemon stopped.
+  capture: { output: string; truncated: boolean; killed?: string } | undefined
 }
 
-type Output = { output: string; truncated: boolean; exit?: number; signal?: string; timeout?: boolean }
+type Output = { output: string; truncated: boolean; exit?: number; signal?: string; timeout?: boolean; killed?: string }
 
 const missing = "Shell command output is no longer available."
 export const unavailable: Shell.Output = {
@@ -25,10 +26,29 @@ export function output(result: Result): Output {
     ...(result.info.exit !== undefined ? { exit: result.info.exit } : {}),
     ...(result.info.signal !== undefined ? { signal: result.info.signal } : {}),
     ...(result.info.status === "timeout" ? { timeout: true } : {}),
+    ...(result.capture?.killed !== undefined ? { killed: result.capture.killed } : {}),
   }
 }
 
-export function notice(output: Pick<Output, "exit" | "signal" | "timeout">, timeout?: number) {
+// What the model gets for a command stopped because the user interrupted its call (`message`): the output so far,
+// where the full output is, and the shell ID, even when the output fits (which `output` leaves unsaid). `output` and
+// `notice` are its two parts, so a renderer can show the output like a finished call's, then the notice.
+export function interrupted(result: Result) {
+  const capture = result.capture
+  const stopping = result.info.status === "running" ? "; it is still being stopped" : ""
+  const stopped = `Command interrupted by the user (shell ID: ${result.info.id})${stopping}.`
+  const [output, notice] = !capture
+    ? [unavailable.output, stopped]
+    : capture.truncated
+      ? [capture.output, stopped]
+      : capture.output === "(no output)"
+        ? ["", `[no output; output file: ${result.info.file}]\n\n${stopped}`]
+        : [capture.output.replace(/\n$/, ""), `[full output saved to ${result.info.file}]\n\n${stopped}`]
+  return { output, notice, message: output ? `${output}\n\n${notice}` : notice }
+}
+
+export function notice(output: Pick<Output, "exit" | "signal" | "timeout" | "killed">, timeout?: number) {
+  if (output.killed !== undefined) return output.killed
   if (output.timeout)
     return `Command timed out${timeout ? ` after ${timeout / 1_000} seconds` : ""}. If it needs longer and isn't waiting for input, rerun with a larger timeout.\nExit code: ${exitCode(output)}`
   if (output.signal !== undefined || (output.exit !== undefined && output.exit !== 0))
@@ -48,6 +68,7 @@ export function metadata(output: Output) {
     ...(output.exit !== undefined ? { exit: output.exit } : {}),
     ...(output.signal !== undefined ? { signal: output.signal } : {}),
     ...(output.timeout !== undefined ? { timeout: output.timeout } : {}),
+    ...(output.killed !== undefined ? { killed: true } : {}),
   }
 }
 

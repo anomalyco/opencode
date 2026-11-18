@@ -145,16 +145,22 @@ export function DialogLayout(
     buttons?: JSX.Element
     /** Side padding in cells. Defaults to DIALOG_INSET. */
     inset?: number
-    /** Blank rows between the body and the footer under the "new-designs" experiment. Defaults to 1. */
+    /**
+     * Blank rows between the body and the footer under the "new-designs" experiment. Defaults to 1.
+     * 0 lets a raised `DialogBleed` body meet the footer band.
+     */
     footerGap?: number
   }>,
 ) {
   const inset = () => props.inset ?? DIALOG_INSET
   const newDesigns = useNewDesigns()
+  const footerGap = () => (newDesigns() && props.footer && props.buttons === undefined ? (props.footerGap ?? 1) : 1)
   return (
     <box id={props.id} paddingLeft={inset()} paddingRight={inset()} paddingBottom={1} gap={1}>
       {props.header}
-      <box paddingBottom={newDesigns() && props.footer ? (props.footerGap ?? 1) - 1 : 0}>{props.children}</box>
+      <box paddingBottom={Math.max(0, footerGap() - 1)} marginBottom={Math.min(0, footerGap() - 1)}>
+        {props.children}
+      </box>
       <Show when={props.buttons === undefined} fallback={props.buttons}>
         <Show when={newDesigns() || props.legacyFooter === undefined} fallback={props.legacyFooter}>
           <Show when={props.footer}>

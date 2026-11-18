@@ -35,15 +35,23 @@ export async function writeClipboard(text: string): Promise<boolean> {
   return copied
 }
 
-/** "Copied" feedback for one copy button. Owner cleanup clears its reset timer and drops a write still in flight. */
-export function createCopyFeedback() {
+/** "Copied" feedback for one copy button. Owner cleanup clears the timer and ignores a write still in flight. */
+export function createCopyFeedback(options?: {
+  write: (text: string) => Promise<boolean | void>
+  onError: () => void
+}) {
+  const write = options?.write ?? writeClipboard
+
   const [state, setState] = createSignal(INITIAL_COPY_FEEDBACK_STATE)
   let timer: ReturnType<typeof setTimeout> | undefined
 
   const dispatch = (event: CopyFeedbackEvent) => {
     const next = transitionCopyFeedback(untrack(state), event)
 
-    if (next.state !== untrack(state)) setState(next.state)
+    if (next.state === untrack(state)) return
+    setState(next.state)
+
+    if (event.type === "copy.failed") options?.onError()
     next.effects.forEach(run)
   }
 
@@ -61,8 +69,8 @@ export function createCopyFeedback() {
       return
     }
 
-    void writeClipboard(effect.text).then(
-      (written) => dispatch({ type: written ? "copy.succeeded" : "copy.failed", attempt: effect.attempt }),
+    void Promise.try(() => write(effect.text)).then(
+      (written) => dispatch({ type: written === false ? "copy.failed" : "copy.succeeded", attempt: effect.attempt }),
       () => dispatch({ type: "copy.failed", attempt: effect.attempt }),
     )
   }

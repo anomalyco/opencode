@@ -183,6 +183,8 @@ export interface ToastAction {
 }
 
 export interface ToastOptions {
+  /** Called when the user closes or swipes away the toast. */
+  onDismiss?: () => void
   title?: string
   description?: string
   /** An element, or a render function the toast calls under its own owner, for icons created from imperative code. */
@@ -254,7 +256,11 @@ function publishToast(id: number, options: ToastOptions) {
     className: `toast-v2 toast-v2--${options.variant ?? "default"}`,
     testId: `toast-v2-${id}`,
     unstyled: true,
-    onDismiss: release,
+    onDismiss: () => {
+      const current = selectToastOptions(registry, id)
+      release()
+      current?.onDismiss?.()
+    },
     onAutoClose: release,
   })
 }

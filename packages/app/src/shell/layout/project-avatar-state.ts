@@ -26,9 +26,8 @@ export function useSessionTabAvatarState(
     if (!ctx) return false
 
     const project = projectSettingsKey(ctx.sdk.scope, ctx.data.session.get(sessionId())?.projectID)
-    const requests = sessionRequests(ctx, sessionId(), !!root?.(), settings.permissions.autoApproves(project))
 
-    return !!requests.permission || !!requests.form
+    return attention(ctx, sessionId(), !!root?.(), settings.permissions.autoApproves(project))
   })
 
   const unread = createMemo(
@@ -42,12 +41,7 @@ export function useSessionTabAvatarState(
 
     if (needsAttention()) return false
 
-    if (root?.())
-      return data.session
-        .list()
-        .some((session) => data.session.root(session.id) === sessionId() && sessionBusy(data, session.id))
-
-    return sessionBusy(data, sessionId())
+    return running(data, sessionId(), !!root?.())
   })
 
   return { unread, loading, attention: needsAttention }
@@ -72,6 +66,41 @@ export function sessionRequests(ctx: ServerCtx, sessionId: string, root: boolean
     ),
     form: sessionFormRequest(sessions, data.session.form.list, sessionId),
   }
+}
+
+export type SessionSidebarStatus = "input" | "failed" | "unread" | "running" | "idle"
+
+// The same status the session tab avatar shows, readable for many sessions at once (to filter and sort the sidebar).
+export function sessionStatus(
+  ctx: ServerCtx,
+  sessionId: string,
+  input: { root: boolean; autoApprove: boolean; snapshot?: SessionInfo },
+): SessionSidebarStatus {
+  if (attention(ctx, sessionId, input.root, input.autoApprove)) return "input"
+
+  if (running(ctx.data, sessionId, input.root)) return "running"
+
+  if (ctx.notification.session.unread(sessionId, input.snapshot)) return "unread"
+
+  if ((ctx.data.session.get(sessionId) ?? input.snapshot)?.outcome === "failed") return "failed"
+
+  return "idle"
+}
+
+function attention(ctx: ServerCtx, sessionId: string, root: boolean, autoApprove: boolean) {
+  const requests = sessionRequests(ctx, sessionId, root, autoApprove)
+
+  return !!requests.permission || !!requests.form
+}
+
+// A root runs while any session in its family is busy.
+function running(data: ServerData, sessionId: string, root: boolean) {
+  if (root)
+    return data.session
+      .list()
+      .some((session) => data.session.root(session.id) === sessionId && sessionBusy(data, session.id))
+
+  return sessionBusy(data, sessionId)
 }
 
 export type SessionRequests = ReturnType<typeof sessionRequests>

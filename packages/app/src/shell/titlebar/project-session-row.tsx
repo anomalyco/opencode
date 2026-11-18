@@ -1,4 +1,4 @@
-import { createMemo, createSignal, onCleanup, Show, untrack } from "solid-js"
+import { createMemo, createSignal, onCleanup, Show, untrack, type JSX } from "solid-js"
 import { useQueryClient } from "@tanstack/solid-query"
 import type { SessionInfo } from "@opencode/client/promise"
 import { ActivityRing } from "@opencode/ui/activity-ring"
@@ -27,6 +27,9 @@ import {
   type SessionRenameDialogEffect,
   type SessionRenameDialogEvent,
 } from "./session-rename-dialog-machine"
+import type { Project } from "@/runtime/server/types"
+import { ProjectIcon } from "@/shell/layout/project-icon"
+import { MutedIcon } from "./tab-nav"
 import "./tab-nav.css"
 
 export function ProjectSessionRow(props: {
@@ -34,6 +37,16 @@ export function ProjectSessionRow(props: {
   session: SessionInfo
   openTab: boolean
   active: boolean
+  /** A faint trailing label, such as the server a session belongs to. */
+  label?: string
+  /** Extra nesting steps of 14px, for subagent sessions and nested groups. */
+  depth?: number
+  /** Shows the project avatar in the leading slot, where no project header names it. */
+  project?: Project
+  /** Marks a session whose notifications are muted, in place of its unread dot. */
+  muted?: boolean
+  /** Menu items shown above the row's own. */
+  menuItems?: () => JSX.Element
   onOpen: () => void
 }) {
   const language = useLanguage()
@@ -125,8 +138,16 @@ export function ProjectSessionRow(props: {
         classList={{ "text-v2-text-text-base": props.active, "text-v2-text-text-faint": !props.active }}
         aria-current={props.active ? "page" : undefined}
         title={sessionLabel(props.session)}
+        style={props.depth ? { "padding-inline-start": `calc(2rem + ${props.depth * 14}px)` } : undefined}
         onClick={props.onOpen}
       >
+        <Show when={props.project && !props.openTab ? props.project : undefined}>
+          {(project) => (
+            <span class="absolute start-2 top-1/2 flex size-4 -translate-y-1/2 items-center justify-center">
+              <ProjectIcon project={project()} />
+            </span>
+          )}
+        </Show>
         <Show when={props.openTab}>
           <span
             role="img"
@@ -140,12 +161,24 @@ export function ProjectSessionRow(props: {
         <span class="min-w-0 flex-1 truncate" dir="auto">
           {sessionLabel(props.session)}
         </span>
+        <Show when={props.label}>
+          {(label) => (
+            <span class="max-w-[40%] shrink-0 truncate text-[11px] leading-[var(--line-height-compact)] text-v2-text-text-faint [font-weight:400]">
+              {label()}
+            </span>
+          )}
+        </Show>
         <span class="flex size-4 shrink-0 items-center justify-center">
           <Show
             when={status.loading()}
             fallback={
-              <Show when={status.unread() && !props.active}>
-                <span class="size-1.5 rounded-full bg-v2-text-text-base" />
+              <Show
+                when={!props.muted}
+                fallback={<MutedIcon class="text-v2-icon-icon-faint" />}
+              >
+                <Show when={status.unread() && !props.active}>
+                  <span class="size-1.5 rounded-full bg-v2-text-text-base" />
+                </Show>
               </Show>
             }
           >
@@ -159,6 +192,14 @@ export function ProjectSessionRow(props: {
             if (dialog.active) event.preventDefault()
           }}
         >
+          <Show when={props.menuItems}>
+            {(items) => (
+              <>
+                {items()()}
+                <Menu.Separator />
+              </>
+            )}
+          </Show>
           <Menu.Item
             disabled={!ctx()}
             onSelect={() =>

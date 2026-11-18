@@ -10,15 +10,38 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
   portable_shell_scanner: Schema.Boolean.pipe(optional).annotate({
     description: "Deprecated: the built-in shell permission scanner is now always enabled.",
   }),
+  codemode_vm: Schema.Boolean.pipe(optional).annotate({
+    description: "Deprecated: ignored because Code Mode always runs on the VM.",
+  }),
   all_flags: Schema.Boolean.pipe(optional).annotate({
     description:
       "Turn every feature flag on regardless of the build channel, like OPENCODE_FLAGS=all; explicit per-flag settings still win, and false is not a kill switch.",
+  }),
+  todo: Schema.Boolean.pipe(optional).annotate({
+    description: "Enable the experimental todowrite tool. Defaults to false.",
   }),
   ...Record.map(ConfigFlag.registry, (description) =>
     Schema.Boolean.pipe(optional).annotate({
       description: `${description} Defaults to on in local and dev builds and off in releases.`,
     }),
   ),
+  // The flag also takes settings; an object turns it on.
+  video_generate: Schema.Union([
+    Schema.Boolean,
+    Schema.Struct({
+      model: ConfigModel.Selection.pipe(optional).annotate({
+        description:
+          "Default model for the experimental_video_generate tool when the agent doesn't choose one, as providerID/modelID. Falls back to automatic selection when it isn't available.",
+      }),
+    }),
+  ])
+    .pipe(optional)
+    .annotate({
+      description: `${ConfigFlag.registry.video_generate} Defaults to on in local and dev builds and off in releases. An object turns it on and sets the tool's options.`,
+    }),
+  schedules: Schema.Boolean.pipe(optional).annotate({
+    description: "Deprecated: use experimental.automations.",
+  }),
   part_rows: Schema.Boolean.pipe(optional).annotate({
     description:
       "Write each assistant part as its own session_part row instead of rewriting the whole message on every event. Defaults to false.",

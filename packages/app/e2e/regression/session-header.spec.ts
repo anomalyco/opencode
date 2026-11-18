@@ -512,7 +512,6 @@ test.describe("location", () => {
 
   test("an app launch that never answers releases the Open in controls", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.clock.install()
 
     const mock = await mockWorkspace(page, {
       ...workspace,
@@ -534,6 +533,8 @@ test.describe("location", () => {
     await expectSessionTitle(page, "Location session")
     await page.getByRole("button", { name: "Toggle review", exact: true }).click()
     await expect(page.getByRole("complementary", { name: "Review and files", exact: true })).toBeFocused()
+    // Control the launch timeout, not the page's initial focus and panel animation.
+    await page.clock.install()
     const open = page.getByRole("button", { name: "Open in VS Code", exact: true })
     await open.click()
     await expect(page.getByLabel("Opened paths")).toContainText("Visual Studio Code")

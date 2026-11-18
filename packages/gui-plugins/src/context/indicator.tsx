@@ -75,10 +75,11 @@ export function SessionContextUsage(props: {
 
   const cost = createMemo(() => usd().format(spent()))
 
-  // Spend anywhere in the family keeps the cost visible, even when this session's model is free.
   const showCost = createMemo(() => {
     if (spent() > 0) return true
     const ref = info()?.model ?? messages().findLast((item) => item.type === "assistant")?.model
+
+    if (ref?.providerID === "opencode-go") return false
     const model = ref ? catalogModel(props.session, ref)?.model : undefined
 
     if (!model) return true
