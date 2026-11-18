@@ -1,9 +1,5 @@
-//! Luau plugins (spike `luau-spike`, `steps/luau-spike.md`): a fourth carrier of contract 2.0, beside linked Rust, the
-//! C ABI and the pipe to the JS host. A plugin is a directory with `plugin.toml` and `init.luau`; it runs in process,
-//! on the UI thread, in a Luau VM of its own a activation, on the built-ins' linked path ([`crate::linked`]), so its
-//! calls, reads, effects, ownership and limits are theirs. The carrier adds a sandbox (no file system, `require` held
-//! to the plugin's own files, frozen globals), a CPU-time budget it enforces itself with Luau's interrupt, and a heap
-//! cap. Behind the cargo feature `luau`, on by default (O-178); `OPENCODE_PLUGIN_LUAU=0` turns it off at run time.
+//! Runs each Luau activation in its own sandboxed VM on the UI thread. Modules come from the staged plugin
+//! directory; frozen globals, heap limits and CPU interrupts apply within the VM.
 
 mod bind;
 pub mod client;
@@ -37,8 +33,8 @@ pub const MANIFEST: &str = "plugin.toml";
 /// The configuration file of Luau's require-by-string (aliases), which a plugin's `require` reads inside the plugin.
 pub const LUAURC: &str = ".luaurc";
 
-/// The most a plugin's sources may hold. Compiling takes about 110 times the source in memory, for a moment, outside
-/// the VM's cap (`luau/steps/safety-audit.md` #7): a 1 MiB plugin about 120 MB.
+/// The most a plugin's sources may hold. Compiling takes about 110 times the source in memory, for a moment,
+/// outside the VM's cap: a 1 MiB plugin about 120 MB.
 pub const SOURCES: u64 = 1 << 20;
 
 /// The stack a build compiles on. Luau's parser stops at 1000 levels of nesting, which needs less than 2 MiB.
@@ -70,8 +66,7 @@ pub fn approves(artifact: &Artifact) -> bool {
     artifact.sha256.starts_with(TAG)
 }
 
-/// Whether Luau plugins load: on unless `OPENCODE_PLUGIN_LUAU` turns them off (`0`, `false` or `off`), as
-/// `OPENCODE_PLUGIN_JS` does the JS host ([`crate::turned_off`], O-178).
+/// Luau plugins load unless `OPENCODE_PLUGIN_LUAU` is `0`, `false` or `off`.
 pub fn enabled() -> bool {
     !crate::turned_off(std::env::var_os(FLAG).as_deref())
 }
@@ -257,11 +252,10 @@ pub fn define_with(sources: &Sources, options: Option<&str>, memory: usize) -> R
     Built::new(sources)?.define(options, memory)
 }
 
-/// Luau plugins read and compiled on threads of their own, so no frame waits on a big plugin
-/// (`luau/steps/safety-audit.md` #7). A question answers at once: the build of a target once it is ready, taken by the
-/// asker, or `None` while it is made. A build that ends wakes the UI thread, which asks again. One thread a target
-/// compiles at a time: a save while it runs is compiled next, once, and what the thread made for an older save is
-/// dropped (carbon `ls-3`).
+/// Luau plugins read and compiled on threads of their own, so no frame waits on a big plugin. A question answers at
+/// once: the build of a target once it is ready, taken by the asker, or `None` while it is made. A build that ends
+/// wakes the UI thread, which asks again. One thread a target compiles at a time: a save while it runs is compiled
+/// next, once, and what the thread made for an older save is dropped.
 pub(crate) struct Builds {
     state: Arc<Mutex<HashMap<String, Build>>>,
     wake: Arc<dyn Fn() + Send + Sync>,

@@ -1,6 +1,5 @@
-//! One Luau VM a plugin activation: the sources compiled once a build, the sandbox, `require` by Luau's
-//! require-by-string rules over the plugin's own files, the budget's interrupt and the memory cap
-//! (`steps/luau-spike.md` 1.3, 1.4; `luau/steps/better-audit.md` 2).
+//! One sandboxed VM per activation. Modules resolve within the staged sources. The heap cap and interrupt budget
+//! apply to every plugin call.
 
 use std::cell::{Cell, OnceCell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
@@ -14,18 +13,14 @@ use mlua::{Function, InterruptHandle, Lua, MultiValue, Table, Value, VmState};
 
 use super::Sources;
 
-/// The heap a VM may hold: the content a plugin may hold (O-147).
+/// The heap a VM may hold: the content a plugin may hold.
 pub const MEMORY: usize = 32 << 20;
 
 /// The most of one `print` the log keeps, in bytes of the plugin's text.
 pub(crate) const PRINT: usize = 4 << 10;
 
-/// The collector's pace for a heap of 8 MiB or more (`GOAL_THRESHOLD`, in KB): the heap a VM grows to before a cycle
-/// ends, in percent of the live data, and the step multiplier that reaches it (the fork's `LUA_GCSETGOALLARGE`,
-/// `luau/steps/gc-goal.md`). Luau never collects before it fails an allocation, so at its default of 200 a plugin that
-/// makes garbage runs out of memory with less than half the cap live (`luau/steps/safety-audit.md` #10). Smaller heaps
-/// keep the default goal, so most calls pay nothing. The effective cap of [`MEMORY`] is about 23 MiB live for such a
-/// plugin, against 12.5 MiB at 200 (`luau::tests::measure_the_effective_heap_cap`).
+/// Luau does not collect on allocation failure. Pace collection more aggressively above 8 MiB to leave room for
+/// temporary allocations under the heap cap; smaller heaps keep the default collector settings.
 const GOAL_LARGE: i32 = 115;
 const STEP_MULTIPLIER_LARGE: i32 = 1600;
 const GOAL_THRESHOLD: i32 = 8 * 1024;
@@ -38,11 +33,11 @@ const LUA_GCSETSTEPMULLARGE: std::ffi::c_int = 13;
 
 /// The room a VM's heap must have left under its cap once a call returned, after a full collection: with less, the
 /// plugin is at its cap (it ran out of memory, caught the error, and kept what it held), and every binding would fail
-/// at random from then on. Room, not a share of the cap, so a plugin whose ordinary heap is most of a small cap runs
-/// (carbon `ls-4`; a fresh VM holds about 0.3 MiB). mlua keeps no record that an allocation failed, and wrapping the
-/// sandbox's `pcall` cannot give one: Luau compiles a direct `pcall(...)` or `xpcall(...)` to a fast path that calls
-/// the builtin whatever the global holds (`Compiler.cpp`, `luauPF_pcall`). So a plugin that caught a failed allocation
-/// and kept more room than this is not caught here; its next allocation that fails outside a `pcall` fails it.
+/// at random from then on. Room, not a share of the cap, so a plugin whose ordinary heap is most of a small cap runs.
+/// mlua keeps no record that an allocation failed, and wrapping the sandbox's `pcall` cannot give one: Luau compiles a
+/// direct `pcall(...)` or `xpcall(...)` to a fast path that calls the builtin whatever the global holds
+/// (`Compiler.cpp`, `luauPF_pcall`). So a plugin that caught a failed allocation and kept more room than this is not
+/// caught here; its next allocation that fails outside a `pcall` fails it.
 const ROOM: usize = 64 << 10;
 
 /// The shortest wait before the budget reads a call's CPU time again: a call within a millisecond of its limit is read
@@ -115,8 +110,8 @@ impl Compiled {
 
 /// The `.luaurc` at `path` of plugin `id`, as `require` reads it: a JSON object, written again as compact JSON. Luau
 /// 747 also takes a Luau-syntax config, which it runs on the UI thread in a state of its own, with no memory cap, the
-/// process's `print` and no bound on the table it walks (carbon `ls-1`). Compact JSON always starts `{"` or is `{}`,
-/// which is what mlua takes for JSON, so no config the host did not parse reaches Luau.
+/// process's `print` and no bound on the table it walks. Compact JSON always starts `{"` or is `{}`, which is what
+/// mlua takes for JSON, so no config the host did not parse reaches Luau.
 fn config(id: &str, path: &str, bytes: &[u8]) -> Result<Vec<u8>, String> {
     let config: serde_json::Map<String, serde_json::Value> =
         serde_json::from_slice(bytes).map_err(|error| format!("{id}: {path}: a .luaurc is a JSON object: {error}"))?;
@@ -381,7 +376,7 @@ fn report(id: &str, error: &str, cap: usize) -> String {
 }
 
 /// `text` as one line of at most `most` bytes, with control characters escaped (`\u{1b}`, `\n`): a plugin's error is
-/// kept in `/plugins` and written to the log, so it holds no escape sequence and no megabytes (carbon `ls-4`).
+/// kept in `/plugins` and written to the log, so it holds no escape sequence and no megabytes.
 fn plain(text: &str, most: usize) -> String {
     let end = |text: &str| (0..=most.min(text.len())).rev().find(|end| text.is_char_boundary(*end)).unwrap_or(0);
     let raw = &text[..end(text)];

@@ -1,7 +1,7 @@
-//! The pipe carrier's frames (synthesis 3.3): a length (`u32`, little-endian), a kind byte and the payload. The length
-//! is checked against the kind's cap before anything is allocated, so a header that says 4 GiB costs nothing. A frame
-//! cut short, of an unknown kind or over its cap breaks the stream: nothing after it can be trusted, and the carrier
-//! fails the JS host.
+//! The pipe carrier's frames: a length (`u32`, little-endian), a kind byte and the payload. The length is checked
+//! against the kind's cap before anything is allocated, so a header that says 4 GiB costs nothing. A frame cut short,
+//! of an unknown kind or over its cap breaks the stream: nothing after it can be trusted, and the carrier fails the JS
+//! host.
 
 use std::io::{self, Read, Write};
 
@@ -9,13 +9,12 @@ use std::io::{self, Read, Write};
 pub const CONTROL: u8 = 0;
 /// A revision of a mount's tree: JSON, which may be larger.
 pub const TREE: u8 = 1;
-/// The first bytes of a control message from the JS host too large for one frame (CT-36: a plugin's stored value of
-/// 1 MB): the pieces before a control frame, and that frame's payload, joined, are the message.
+/// Payload fragment. Concatenate consecutive pieces with the following control frame.
 pub const PIECE: u8 = 2;
 
-/// The largest control frame (synthesis 4.3, bigboi's limits).
+/// The largest control frame.
 pub const CONTROL_CAP: usize = 256 << 10;
-/// The largest tree frame: a first open of 410 cards crossed 2.27 MB on the library carrier (P4).
+/// The largest tree frame: a first open of 410 cards crossed 2.27 MB on the library carrier.
 pub const TREE_CAP: usize = 8 << 20;
 
 /// Why a stream of frames broke.

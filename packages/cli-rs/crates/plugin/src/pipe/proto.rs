@@ -1,15 +1,15 @@
 //! The messages of the pipe carrier: contract 2.0's own ([`Request`], [`HostRequest`], [`v2::Node`], [`Manifest`]),
-//! with what a process boundary needs besides (synthesis 3.7, 4.3): a sequence number on every host event, which the JS
-//! host acknowledges on receipt and answers with [`Up::Done`] once its handler returned; a mount generation, a base and
-//! a revision on every tree; a layout epoch, the count of inputs the tree saw; and snapshots the host pushes for the
-//! reads the plugin watches, in order before the event that may read them.
+//! with what a process boundary needs besides: a sequence number on every host event, which the JS host acknowledges
+//! on receipt and answers with [`Up::Done`] once its handler returned; a mount generation, a base and a revision on
+//! every tree; a layout epoch, the count of inputs the tree saw; and snapshots the host pushes for the reads the
+//! plugin watches, in order before the event that may read them.
 
 use opencode_plugin_abi::{Blob, HostRequest, Level, Manifest, Request, v2};
 use serde::{Deserialize, Serialize};
 
 /// The protocol's version, in both hellos.
 pub const VERSION: u32 = 1;
-/// The JS host's first message names it, so a stray print before it is not taken for the protocol (review F4).
+/// Handshake marker distinguishing protocol traffic from stray process output.
 pub const MAGIC: &str = "opencode-js-host";
 
 /// From the host to the JS host. Each message with a `seq` is acknowledged on receipt ([`Up::Ack`]).
@@ -23,7 +23,7 @@ pub enum Down {
         after: u64,
         /// The theme's mode, `dark` or `light`, which the setup context reads.
         theme_mode: String,
-        /// P8: the page theme's colors, which the V2 context's `theme` reads.
+        /// The page theme's colors, which the V2 context's `theme` reads.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         palette: Option<Palette>,
     },
@@ -37,7 +37,7 @@ pub enum Down {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         options: Option<serde_json::Value>,
         setup: bool,
-        /// `dir` is the approved copy of a project's plugin (P8): what its files import must be in it.
+        /// `dir` is the approved copy of a project's plugin: what its files import must be in it.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         confined: bool,
         /// With `setup`: the reads its setup may make at once, as they are now ([`seed`]).
@@ -74,7 +74,7 @@ pub enum Down {
         /// The activation it is for: the load whose setup made it. Another one's never answers it.
         activation: u64,
         call: Request,
-        /// P8: the route as the call starts, when the plugin does not watch it: a handler reads it at once
+        /// The route as the call starts, when the plugin does not watch it: a handler reads it at once
         /// (`ui.router.current()`), where a watch it makes then would answer only after the handler ran.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         route: Option<serde_json::Value>,
@@ -83,7 +83,7 @@ pub enum Down {
         parted: bool,
     },
     /// A piece of the JSON of the result of a reply to `request` of activation `activation`, in base64, which is too
-    /// large for one frame (CT-5): its call follows the pieces, in order, and says it is [`Down::Call::parted`].
+    /// large for one frame: its call follows the pieces, in order, and says it is [`Down::Call::parted`].
     Part { activation: u64, request: opencode_plugin_abi::RequestId, data: String },
     /// A surface of plugin `id` mounted, with its first input. Answered with [`Up::Done`] once its view was sent.
     Mount {
@@ -110,17 +110,17 @@ pub enum Down {
         /// The activation it is for: the load whose setup made it. Another one's never answers it.
         activation: u64,
         mount: v2::MountId,
-        /// It ends as a reload of the plugin's registrations mounts it again (CT-21): the new mount may take its state.
+        /// It ends as a reload of the plugin's registrations mounts it again: the new mount may take its state.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         handover: bool,
         /// Its node that had the focus as it ended: a new mount that takes its state may give it the focus back.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         focused: Option<String>,
     },
-    /// A part fence claim `claim` of plugin `id` draws (contract 2.x, step D): its first sight, which begins the part's
-    /// mount, or a newer revision of it. The JS host answers with a whole revision of the mount ([`Up::Tree`]): its
-    /// tree, a decline (a null node), or the renderer's error; then [`Up::Done`]. One is in flight a mount: a part that
-    /// comes meanwhile is drawn once that one is adopted. [`Down::Unmount`] ends the mount.
+    /// A part fence claim `claim` of plugin `id` draws: its first sight, which begins the part's mount, or a newer
+    /// revision of it. The JS host answers with a whole revision of the mount ([`Up::Tree`]): its tree, a decline
+    /// (a null node), or the renderer's error; then [`Up::Done`]. One is in flight a mount: a part that comes
+    /// meanwhile is drawn once that one is adopted. [`Down::Unmount`] ends the mount.
     Claim {
         seq: u64,
         id: String,
@@ -139,33 +139,30 @@ pub enum Down {
     Snapshot {
         id: String,
         /// The JS host's activation that watches it: a candidate the JS host knows by the plugin's ID before the host
-        /// does never takes the running one's, and one that ended takes none (big-boi's catalog review, final).
+        /// does never takes the running one's, and one that ended takes none.
         #[serde(default)]
         activation: u64,
         key: String,
         value: serde_json::Value,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         error: Option<String>,
-        /// Its value is the [`Down::SnapshotPart`]s of its key before it, joined, and not the one it carries (CT-36).
+        /// Its value is the [`Down::SnapshotPart`]s of its key before it, joined, and not the one it carries.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         parted: bool,
     },
-    /// A piece of the JSON of the value of a read plugin `id` watches under `key`, in base64, which is too large for one
-    /// frame (CT-36: the `sessions` read of 900 sessions): its snapshot follows the pieces, in order, and says it is
-    /// [`Down::Snapshot::parted`].
+    /// Base64 fragment of a watched value. The final snapshot follows its fragments in order.
     SnapshotPart { id: String, activation: u64, key: String, data: String },
     /// What the effects of a call (`c<seq>`), a setup (`setup`) or a batch of the plugin's (`b<seq>`) answered, one
     /// value each ([`HostRequest`]'s results).
     Answered {
         id: String,
         /// The JS host's activation whose effects these answer: a candidate set up for a reload, which the JS host
-        /// knows by the plugin's ID before the host does, never takes the running one's (big-boi's catalog recheck).
+        /// knows by the plugin's ID before the host does, never takes the running one's.
         #[serde(default)]
         activation: u64,
         key: String,
         results: Vec<serde_json::Value>,
-        /// Its results are the [`Down::AnsweredPart`]s of its key before it, joined, and not the ones it carries
-        /// (big-boi's `cg4-1`: a stored value's text answered past a frame).
+        /// Its results are the [`Down::AnsweredPart`]s of its key before it, joined, and not the ones it carries.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         parted: bool,
         /// The results the host could not send, by index, each null here: they did not come, which the JS host tells
@@ -214,9 +211,9 @@ impl Down {
     }
 }
 
-/// The reads a V2 plugin's setup makes before the host could push them (bigboi P8-5): the route and what `info` says
-/// (the location, the terminal's size), as they are as the setup starts, under the keys the compatibility layer reads
-/// them by. TS's setup reads them from its store at once; a watch made in setup answers only after it returned.
+/// The reads a V2 plugin's setup makes before the host could push them: the route and what `info` says (the location,
+/// the terminal's size), as they are as the setup starts, under the keys the compatibility layer reads them by. TS's
+/// setup reads them from its store at once; a watch made in setup answers only after it returned.
 pub(crate) fn seed(
     host: &std::rc::Weak<dyn crate::Host>,
     id: &str,
@@ -235,7 +232,7 @@ pub(crate) fn seed(
     seed
 }
 
-/// The page theme as the JS host holds it (P8): its mode, and each token's color as `#rrggbbaa`.
+/// The page theme as the JS host holds it: its mode, and each token's color as `#rrggbbaa`.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Palette {
     pub mode: String,
@@ -296,14 +293,12 @@ pub enum Up {
         seq: u64,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         effects: Vec<HostRequest>,
-        /// The mount each of `effects` is of where it is another mount's than the call's own (a field's focus, contract
-        /// 2.x step B), else nothing: each applies in the call's order, as that mount's, or nowhere once it closed.
+        /// Per-effect mount overrides. Apply in order; discard effects whose owner closed.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         mounts: Vec<Option<v2::MountId>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         error: Option<String>,
-        /// A command declined (it returned `false`, or it is disabled or gone), or a listener did not take its key
-        /// (it answered other than `consume`): the key that ran it goes on to the host (CT-8, CT-19, contract gaps 2).
+        /// The command or listener declined its key; resume normal host dispatch.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         declined: bool,
     },
@@ -316,8 +311,8 @@ pub enum Up {
         activation: u64,
         seq: u64,
         effects: Vec<HostRequest>,
-        /// The mount they are of, which the JS host knows and the call that ran does not: a field's focus is the mount's
-        /// whose tree holds the field (contract 2.x, step B). They apply to that mount or, once it closed, nowhere.
+        /// The mount they are of, which the JS host knows and the call that ran does not: a field's focus is the
+        /// mount's whose tree holds the field. They apply to that mount or, once it closed, nowhere.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         mount: Option<opencode_plugin_abi::v2::MountId>,
     },
@@ -357,9 +352,9 @@ pub enum Up {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         holds: Vec<String>,
     },
-    /// Plugin `id`'s listener of every key can take a key now (`on`), or only hears it (cg2-1): a `keypress` listener
-    /// of the compat layer, or a field with `onKeyDown` in a surface. The host holds a key for its answer only while it
-    /// can take one.
+    /// Plugin `id`'s listener of every key can take a key now (`on`), or only hears it: a `keypress` listener of
+    /// the compat layer, or a field with `onKeyDown` in a surface. The host holds a key for its answer only while
+    /// it can take one.
     Taking {
         id: String,
         /// The JS host's activation that sent it, by the load whose setup made it ([`Down::Load`]); 0 names none.
@@ -404,7 +399,7 @@ pub struct Revision {
     pub released: Vec<v2::ContentRef>,
     #[serde(default)]
     pub memo: usize,
-    /// A claimed part's renderer threw (contract 2.x, step D): the part falls back to the host's row for its mount.
+    /// A claimed part's renderer threw: the part falls back to the host's row for its mount.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }

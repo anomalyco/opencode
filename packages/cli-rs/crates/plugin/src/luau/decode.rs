@@ -1,21 +1,7 @@
-//! Luau values into the contract's types, read straight off the VM's stack: no `serde_json::Value` between them.
-//!
-//! - **The rules are JSON's, as before:** a table is an array when its keys are `1..n` (`n` its border, holes `null`),
-//!   an object otherwise, and an empty table an empty array, which serde also takes as a struct of defaults. A table
-//!   with the object marker ([`super::json::OBJECT`], `plugin.json.object`) is an object whatever its keys. A whole
-//!   number is an integer, any other a float; `nil` and mlua's `null` are `null`. A function, a thread or userdata
-//!   cannot cross.
-//! - **Two decoders:**
-//!   - [`Slot`] is a serde `Deserializer` over one stack slot, for every type of the contract.
-//!   - The node trees a render returns (`Render`, `Node`, `v2::Node`, their spans, colors and clicks) are built by
-//!     hand. Their enums are internally tagged or untagged, which serde decodes by buffering each value whatever reads
-//!     it. A table the hand decoder does not know in full (an unknown kind or key, a field of the wrong type) is decoded
-//!     again by serde, so its result and its error are serde's. Keys are matched as bytes: a field name is ASCII, so a
-//!     key that names one needs no UTF-8 check, and any other key is serde's.
-//! - **The bounds are charged as the value is read,** before anything is made from it ([`Decode`]). A table that
-//!   appears twice is read twice and charged twice, so the parts bound also stops a DAG of shared tables (O-174). The
-//!   work bound counts each walk of a table by all its slots, empty ones too, and serde's walk again after a hand
-//!   decode gave up: a sparse table shared many times holds few parts, but each walk scans all of it.
+//! Decodes Luau stack values without an intermediate JSON tree. Known node shapes take a fast path; unknown fields,
+//! kinds and types fall back to serde. Charge every table visit, including empty slots and fallback walks, before
+//! allocating. Shared or sparse tables must not bypass the work budget. Unmarked empty tables decode as arrays; the
+//! object marker forces an object.
 
 #![allow(unsafe_code)]
 

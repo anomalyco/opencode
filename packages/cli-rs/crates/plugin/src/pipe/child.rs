@@ -1,10 +1,10 @@
-//! The JS host as a child process, supervised (synthesis 4.3): the UI thread never touches a pipe. The protocol runs
-//! both ways on the child's standard input, one connection ([`channel`], js-stdio): a writer thread drains a bounded
-//! queue into it; a reader thread reads and decodes frames from it into a bounded inbox and wakes the UI thread; a watch
-//! thread names the JS host hung when the oldest event it has not acknowledged is over the limit, and over its memory
-//! budget when its resident set is. Standard output and standard error are the plugins' own: what a plugin writes to
-//! the descriptor itself (`fs.writeSync(1, …)`, which no JS-level redirect reaches) and its prints are logged, and
-//! neither can break the protocol.
+//! The JS host as a child process, supervised: the UI thread never touches a pipe. The protocol runs both ways on the
+//! child's standard input, one connection ([`channel`], js-stdio): a writer thread drains a bounded queue into it; a
+//! reader thread reads and decodes frames from it into a bounded inbox and wakes the UI thread; a watch thread names
+//! the JS host hung when the oldest event it has not acknowledged is over the limit, and over its memory budget when
+//! its resident set is. Standard output and standard error are the plugins' own: what a plugin writes to the
+//! descriptor itself (`fs.writeSync(1, …)`, which no JS-level redirect reaches) and its prints are logged, and neither
+//! can break the protocol.
 //!
 //! What bounds what (S2):
 //!
@@ -37,13 +37,13 @@ use super::wire;
 /// The bounds of one JS host. Starting values, as the other limits of 4.2 and 4.4.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Limits {
-    /// Bytes queued for the child (bigboi: 1 MiB a direction).
+    /// Bytes queued for the child.
     pub queued: usize,
-    /// Ordered messages from the child the UI thread has not taken: 512 (FT-9), as a setup that watches the 128 reads a
+    /// Ordered messages from the child the UI thread has not taken: 512, as a setup that watches the 128 reads a
     /// plugin may sends one message a watch, beside its others, while the UI thread may be busy (the lab's 140 watches
     /// flooded 256 under load). The bytes bound below holds their memory.
     pub ordered: usize,
-    /// Bytes of them (bigboi: 8 MiB in all).
+    /// Bytes of them.
     pub inbox: usize,
     /// Trees from the child the UI thread has not taken, before the reader stops reading (S2: 8).
     pub trees: usize,
@@ -133,9 +133,8 @@ struct Inbox {
     bytes: usize,
     trees: usize,
     /// The unread messages of each plugin's own: every one that names it ([`owner`]), such as its effects, its watches
-    /// and the start of its code that ran for an answer (carbon-5: a flood of watches or logs is a plugin's too). The
-    /// end of that code names no plugin; with the start counted, the plugin's own are still most of a flood of its
-    /// effects and their answers.
+    /// and the start of its code that ran for an answer. The end of that code names no plugin; with the start counted,
+    /// the plugin's own are still most of a flood of its effects and their answers.
     effects: std::collections::HashMap<String, usize>,
     /// The unread bytes of each plugin's own messages, which name it for a flood of bytes.
     sizes: std::collections::HashMap<String, usize>,
@@ -150,7 +149,7 @@ struct Shared {
     inbox: Mutex<Inbox>,
     room: Condvar,
     /// What the JS host owes. It is hung when it owes something and sent nothing for the limit: a queue that moves is
-    /// not a hang, however long, and one handler that runs past the limit is (review bigboi-3).
+    /// not a hang, however long, and one handler that runs past the limit is.
     sent: Mutex<Owed>,
     watch: Condvar,
     /// The last acknowledged sequence.
@@ -158,7 +157,7 @@ struct Shared {
     /// The JS host said the protocol's hello: it started.
     hello: AtomicBool,
     /// The reader waits for the host to take its trees: what the JS host sent after them is not read, so its silence
-    /// is the host's, not the JS host's (FT-1).
+    /// is the host's, not the JS host's.
     held: AtomicBool,
     /// Bytes read from the child, and of them in trees.
     read: AtomicU64,
@@ -173,8 +172,8 @@ struct Shared {
     stray: Mutex<VecDeque<String>>,
     process: Mutex<Option<std::process::Child>>,
     pid: u32,
-    /// The job that holds the child and what it starts; closing it ends them all. It goes when the child is killed, not
-    /// when the `Child` drops, so a drop's grace period stands (review carbon-6).
+    /// The job that holds the child and what it starts; closing it ends them all. It goes when the child is killed,
+    /// not when the `Child` drops, so a drop's grace period stands.
     #[cfg(windows)]
     job: Mutex<Option<opencode_util::win::KillOnCloseJob>>,
 }
@@ -203,7 +202,7 @@ impl Child {
         let mut process = command.spawn()?;
         // The child's end goes with the command: the reader sees the end of the stream once the child's copies close.
         drop(command);
-        // Without its job the child would outlive a client that dies: it is not run then (review bigboi-9).
+        // Without its job the child would outlive a client that dies: it is not run then.
         #[cfg(windows)]
         let job = match opencode_util::win::KillOnCloseJob::new().and_then(|job| job.assign(&process).map(|()| job)) {
             Ok(job) => job,
@@ -404,8 +403,8 @@ fn kill(shared: &Shared) -> Option<std::process::ExitStatus> {
     process.wait().ok()
 }
 
-/// Whether the child exited, without reaping it on Unix: until [`kill`] signalled its group, its ID cannot name another
-/// process (review carbon-6).
+/// Whether the child exited, without reaping it on Unix: until [`kill`] signalled its group, its ID cannot name
+/// another process.
 fn exited(process: &mut std::process::Child) -> bool {
     #[cfg(unix)]
     {
@@ -556,8 +555,8 @@ fn deliver(shared: &Shared, event: Event, bytes: usize) -> bool {
 fn read(shared: &Shared, reader: channel::Reader) {
     let mut input = std::io::BufReader::with_capacity(64 << 10, reader);
     let mut hello = false;
-    // The pieces of a control message too large for one frame, until its control frame (CT-36), within the bytes the
-    // host holds of what it has not taken.
+    // The pieces of a control message too large for one frame, until its control frame, within the bytes the host
+    // holds of what it has not taken.
     let mut pieces = Vec::new();
     loop {
         let frame = wire::read(&mut input);
@@ -579,13 +578,13 @@ fn read(shared: &Shared, reader: channel::Reader) {
         }
         if kind == wire::PIECE || (kind == wire::CONTROL && !pieces.is_empty()) {
             // Each piece is a whole frame, the control frame the rest: a message in pieces is at most its bound in
-            // frames, so each piece may count as progress (big-boi's `cg4-6`: pieces 60 ms apart were a hang).
+            // frames, so each piece may count as progress.
             if kind == wire::PIECE && payload.len() != wire::CONTROL_CAP {
                 let why = format!("the JS host broke the protocol: a piece of {} bytes", payload.len());
                 deliver(shared, gone(ended(shared, &why)), 0);
                 return;
             }
-            // What it joins counts with what the UI thread has not taken, within one bound (big-boi's `cg4-5`).
+            // What it joins counts with what the UI thread has not taken, within one bound.
             let held = lock(&shared.inbox).bytes;
             if held + pieces.len() + payload.len() > shared.limits.inbox {
                 let why = format!(
@@ -738,9 +737,7 @@ const STRAY_LINES: u32 = 10;
 const STRAY_TOTAL: u64 = 64 << 10;
 const STRAY_SHOWN: usize = 200;
 
-/// Logs what the child's plugins write to standard output, which is not the protocol and reaches no terminal (TS sends
-/// it to the terminal; deviation F16): by the plugin whose code ran then, when the JS host marked one, at most
-/// [`STRAY_LINES`] records a second and [`STRAY_TOTAL`] bytes in all, the rest counted.
+/// Logs child stdout under the active plugin’s name. The protocol uses a separate channel.
 fn stray(shared: &Shared, mut stdout: ChildStdout) {
     let mut log = Stray::default();
     let mut buffer = vec![0; 16 << 10];
@@ -1082,9 +1079,6 @@ mod stray_tests {
         records
     }
 
-    // Expected (js-stdio): bytes are recorded by the plugin whose mark comes before them, a `null` mark names nobody, and
-    // the records of several owners in one read are each kept; a mark cut across reads is still one mark, and bytes that
-    // only look like the start of one are a plugin's.
     #[test]
     fn standard_output_is_recorded_by_the_plugin_marked() {
         let osc = b"\x1b]11;rgb:10/20/30\x07".to_vec();
@@ -1119,8 +1113,6 @@ mod stray_tests {
         assert_eq!(total(&found, "a plugin"), 13, "{found:?}");
     }
 
-    // Expected (js-stdio): at most `STRAY_LINES` records a second are logged and `STRAY_TOTAL` bytes in all; what a bound
-    // holds back is counted, said with the next record, and once the total is past, said once.
     #[test]
     fn standard_output_is_logged_within_its_bounds() {
         let mut log = Stray::default();
@@ -1218,10 +1210,6 @@ mod tests {
         })
     }
 
-    // Expected (overflow-flake): a send refused for the queue's bound wakes the host once the writer takes a frame, also
-    // when the child answers nothing it reads, so the host's overflow moves on. Before, only the child's output woke the
-    // host: a full queue whose frames brought no answer, or whose answer came in the same turn as the drain, stranded the
-    // overflow while the child waited for input.
     #[test]
     fn a_full_queue_wakes_the_host_once_it_has_room() {
         let dir = opencode_util::temp::tempdir().unwrap();
@@ -1240,8 +1228,8 @@ mod tests {
         // Its hello woke the host once, which takes it.
         assert!(!take_until(&child, |events| !events.is_empty()).is_empty(), "no hello");
         let payload = vec![b'x'; 1 << 10];
-        // Nothing wakes the host while the queue fills: the count before the refusal is the one the wake must pass, which
-        // the writer may give at once (bigboi's pipe pass).
+        // Nothing wakes the host while the queue fills: the count before the refusal is the one the wake must pass,
+        // which the writer may give at once.
         let before = wakes.load(Ordering::SeqCst);
         // The child's input and the queue fill: the OS pipe's buffer, then the queue's bound.
         let full =
@@ -1254,8 +1242,6 @@ mod tests {
         assert!(wakes.load(Ordering::SeqCst) > before, "the host was not woken when the queue had room");
     }
 
-    // Expected (review F4): a child whose first message is not the protocol's hello is refused, before anything of it
-    // reaches the host.
     #[test]
     fn a_child_that_does_not_say_hello_is_refused() {
         let mut frames = control(&Up::Pong { seq: 1, waiting: false, retiring: false });
@@ -1266,8 +1252,6 @@ mod tests {
         assert_eq!(events.len(), 1, "{events:?}");
     }
 
-    // Expected (CT-36): a control message too large for one frame comes in pieces, the last in a control frame, and reads
-    // as the one message; pieces past the bytes the host holds of what it has not taken end the stream.
     #[test]
     fn a_message_in_pieces_reads_whole_within_its_bound() {
         let log = Up::Log { id: Some("p".into()), level: Level::Info, message: "m".repeat(600 << 10) };
@@ -1293,9 +1277,6 @@ mod tests {
         }
     }
 
-    // Expected (big-boi's `cg4-5`): a message in pieces counts with what the host has not taken: with 300 KiB of messages
-    // unread under a bound of 512 KiB, its first piece of 256 KiB ends the stream, where the pieces had a bound of their
-    // own and only the last frame met the other's.
     #[test]
     fn a_message_in_pieces_counts_with_what_waits_unread() {
         let log = |bytes: usize| Up::Log { id: Some("p".into()), level: Level::Info, message: "m".repeat(bytes) };
@@ -1313,11 +1294,6 @@ mod tests {
         assert!(gone.as_deref().is_some_and(|why| why.contains("a message in pieces")), "{gone:?}");
     }
 
-    // Expected (big-boi's `cg4-6`): a message whose pieces come half the limit apart, longer in all than the limit, is
-    // progress, not a hang: the answer after it comes and nothing was named hung. The row sends each frame once the
-    // reader took the one before and half the limit passed, so the gaps are the row's, not a loaded machine's
-    // (trickle-flake: pieces a fixed 60 ms apart against 165 ms were late under the lane's load). A piece smaller than a
-    // frame breaks the protocol, so a message is a bounded number of pieces.
     #[cfg(unix)]
     #[test]
     fn pieces_that_trickle_in_are_progress() {
@@ -1377,8 +1353,6 @@ mod tests {
         assert!(events.iter().any(|event| matches!(event, Event::Gone(why, _) if why.contains("a piece of 5 bytes"))));
     }
 
-    // Expected (the bound on ordered messages): the bound's worth of messages the host has not taken is held; one more
-    // ends the stream, naming the plugin whose effects were most of them.
     #[test]
     fn ordered_messages_past_the_bound_end_the_stream() {
         let limits = Limits { ordered: 8, ..Limits::default() };
@@ -1402,7 +1376,7 @@ mod tests {
             }
         }
         // The start of the code a plugin runs for the answers of its effects is its own too: a flood of effects with
-        // each answered is still the plugin's (P8). Of the 16 held, 5 are its effects and 5 the starts of its code.
+        // each answered is still the plugin's. Of the 16 held, 5 are its effects and 5 the starts of its code.
         let entered = |id: Option<&str>| control(&Up::Entered { id: id.map(str::to_owned) });
         let mut frames = hello();
         frames.extend(effects("quiet"));
@@ -1417,8 +1391,8 @@ mod tests {
             _ => None,
         });
         assert_eq!(blamed, Some(Some("loud".to_owned())));
-        // Watches and logs name their plugin too (carbon-5), and a flood of bytes is blamed on the plugin whose bytes
-        // are most of them, the one that overflowed counted, though another sent more messages.
+        // Watches and logs name their plugin too, and a flood of bytes is blamed on the plugin whose bytes are most of
+        // them, the one that overflowed counted, though another sent more messages.
         let watch = |id: &str, key: &str| {
             control(&Up::Watch { id: id.to_owned(), activation: 1, key: key.to_owned(), request: HostRequest::Route })
         };
@@ -1444,8 +1418,6 @@ mod tests {
         assert_eq!(blamed, Some(Some("heavy".to_owned())));
     }
 
-    // Expected (the flood of trees, S2): past the bound of trees the host has not taken, the reader stops reading, so
-    // no more are held; once the host takes them, the rest come, every one.
     #[test]
     fn unread_trees_hold_the_reader_back() {
         let limits = Limits { trees: 4, ..Limits::default() };
@@ -1471,8 +1443,6 @@ mod tests {
         assert_eq!(trees(&rest), 16);
     }
 
-    // Expected (4.3, review F9): an acknowledgement is not progress: an event that waits for its answer is late at the
-    // limit though it was acknowledged; one that waits only for its acknowledgement is not.
     #[test]
     fn an_acknowledged_handler_that_never_answers_is_late() {
         let hung = |events: &[Event]| events.iter().any(|event| matches!(event, Event::Hung { seq: 1 }));
@@ -1532,8 +1502,6 @@ mod tests {
         }
     }
 
-    // Expected (FT-1): an answer the JS host sent behind more trees than the host takes unread is not late while the host
-    // does not take them, however long that is: the time is the host's, not the JS host's. Once taken, it is read.
     #[test]
     fn an_answer_behind_unread_trees_is_not_late() {
         let limits = Limits { ack: Duration::from_millis(100), trees: 2, ..Limits::default() };
@@ -1567,9 +1535,6 @@ mod tests {
         assert!(!events.iter().any(|event| matches!(event, Event::Hung { .. })), "{events:?}");
     }
 
-    // Expected: the JS host's start, until its hello, may take the setup's time, not the limit of an event, though the
-    // host owes events sent before it: a machine under load starts Bun and its modules slowly. A start past the setup's
-    // time is a hang.
     #[test]
     fn a_slow_start_is_not_a_hang() {
         for (setup, hung) in [(Duration::from_secs(5), false), (Duration::from_millis(200), true)] {
@@ -1608,9 +1573,6 @@ mod tests {
         std::thread::sleep(Duration::from_secs(30));
     }
 
-    // Expected (review bigboi-9, Linux): a child the client started dies when the client is killed outright, with no
-    // destructor and no reaper, though it is busy and reads nothing (`PR_SET_PDEATHSIG`). The JS host's
-    // descendants are `plugin_pipe`'s row; neither macOS nor Windows runs this.
     #[cfg(target_os = "linux")]
     #[test]
     fn a_busy_child_dies_with_a_client_killed_outright() {
@@ -1637,8 +1599,6 @@ mod tests {
         assert!(state.is_empty() || state.contains(") Z "), "the child {pid} outlived its client: {state}");
     }
 
-    // Expected (review carbon-6): telling that a child exited does not reap it: its ID names it, a zombie, until the
-    // group is signalled and it is waited for.
     #[cfg(target_os = "linux")]
     #[test]
     fn telling_a_child_exited_does_not_reap_it() {
@@ -1653,8 +1613,6 @@ mod tests {
         assert_eq!(process.wait().unwrap().code(), Some(3));
     }
 
-    // Expected (review carbon-9, CM11): messages past the bytes the host has not taken end the stream, however few they
-    // are, and name the plugin whose effects they are.
     #[test]
     fn messages_past_the_inbox_bytes_end_the_stream() {
         let limits = Limits { inbox: 64 << 10, ..Limits::default() };
@@ -1676,7 +1634,6 @@ mod tests {
         }
     }
 
-    // Expected: a send past the bytes the queue holds is refused at once; the child is not waited for.
     #[test]
     fn a_full_queue_refuses() {
         let limits = Limits { queued: 64, ..Limits::default() };

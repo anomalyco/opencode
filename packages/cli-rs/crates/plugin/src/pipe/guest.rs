@@ -23,12 +23,10 @@ use crate::mailbox::Mailbox;
 use crate::surface::{self, Viewed, Viewing};
 use crate::{Definition, ErrorFn, Host, Owners, Setup, behave, keyed_command, route};
 
-/// The reads a plugin watches at most (FT-9: opencode-tokscope watches about 80, a store each of its 64 history shards
-/// and a dozen others). What they push is charged to the plugin's content, which bounds their memory.
+/// Maximum concurrent watches. Snapshot bytes also count against the plugin's content budget.
 const WATCHES: usize = 128;
 /// Frames in a row in which a mount's watched rects changed, with no other cause between, past which the host holds
-/// the plugin's rect pushes until another cause comes (contract 2.x, addition 1, R3): a layout that follows its own
-/// size without end.
+/// the plugin's rect pushes until another cause comes: a layout that follows its own size without end.
 const RECT_ROUNDS: u32 = crate::behave::STALLED;
 
 /// The bytes of a value's JSON and their hash, written without keeping them.
@@ -66,7 +64,7 @@ pub(crate) struct Loaded {
     pub id: String,
     pub target: String,
     pub dir: PathBuf,
-    /// `dir` is a project plugin's approved copy (P8), what its imports must stay in.
+    /// `dir` is a project plugin's approved copy, what its imports must stay in.
     pub confined: bool,
     pub options: Option<String>,
     /// The load whose setup the JS host ran.
@@ -74,15 +72,15 @@ pub(crate) struct Loaded {
     pub manifest: Manifest,
     pub holds: Vec<String>,
     pub effects: RefCell<Option<Vec<HostRequest>>>,
-    /// The reads a handed-over activation watched, which it goes on watching (P8).
+    /// The reads a handed-over activation watched, which it goes on watching.
     pub watches: RefCell<Vec<(String, HostRequest)>>,
-    /// The registry's first activation of the chain a reload handed this JS host's activation on from, whose
-    /// dialogs stay (FT-4).
+    /// The registry's first activation of the chain a reload handed this JS host's activation on from, whose dialogs
+    /// stay.
     pub continues: Option<u64>,
     /// Where the replies to the handed-over activation's requests go, which the new guest keeps ([`Relay`]).
     pub relay: RefCell<Option<Rc<Relay>>>,
-    /// The states the handed-over activation set its commands to after it handed on, which the new guest takes over its
-    /// manifest's (carbon ce-5: a `set-enabled` that came while the reload waited changed the guest that went).
+    /// The states the handed-over activation set its commands to after it handed on, which the new guest takes over
+    /// its manifest's.
     pub states: RefCell<Vec<(String, bool)>>,
 }
 
@@ -154,8 +152,7 @@ pub(crate) fn define(scripts: &Rc<Scripts>, loaded: Rc<Loaded>) -> (Definition, 
             let failed = failure.clone();
             setup.failure(Rc::new(move || failed.borrow().clone()));
             // An activation that sent more than the host keeps before it was registered applies nothing it sent, also
-            // not what its setup registered or asked for in its load: it fails here, before any of it (big-boi's
-            // catalog review: a storage write of its setup persisted).
+            // not what its setup registered or asked for in its load: it fails here, before any of it.
             if scripts.spilled_by(&loaded.id, loaded.seq) {
                 scripts.spill_load(&loaded);
                 return Err(format!(
@@ -163,9 +160,9 @@ pub(crate) fn define(scripts: &Rc<Scripts>, loaded: Rc<Loaded>) -> (Definition, 
                     super::EARLY
                 ));
             }
-            // The setup already ran on the JS host for the first activation and for a reload's handover, which go
-            // on from the chain the handover names; a later activation runs a fresh setup, which owns its own
-            // generation alone, not the dialogs of the activations before it (big-boi's catalog recheck).
+            // The setup already ran on the JS host for the first activation and for a reload's handover, which go on
+            // from the chain the handover names; a later activation runs a fresh setup, which owns its own generation
+            // alone, not the dialogs of the activations before it.
             let effects = loaded.effects.borrow_mut().take();
             let continues = effects.as_ref().and(loaded.continues);
             setup.continues(continues);
@@ -232,10 +229,9 @@ pub(crate) struct Guest {
     /// Where the replies to this activation's requests go.
     relay: RefCell<Rc<Relay>>,
     /// A reload of its registrations handed its activation of the JS host to the guest that replaces it, whose end
-    /// deactivates it; this one's does not (carbon-2: a flag, not a zeroed `js`, as a second reload reads `js`).
+    /// deactivates it; this one's does not.
     handed_over: Cell<bool>,
-    /// The storage keys it may read and write: its manifest's, and the ones it declared since (carbon-2: a V2 store
-    /// made after setup declares its key at once, where it waited for a reload and its first writes failed).
+    /// The storage keys it may read and write: its manifest's, and the ones it declared since.
     keys: RefCell<Vec<String>>,
     /// The registry's activation, which owns the dialogs it asks for.
     generation: u64,
@@ -248,19 +244,19 @@ pub(crate) struct Guest {
     /// The keymap layers of `commands` outside a route, which a change of commands alone replaces.
     layers: RefCell<Vec<Disposer>>,
     activation: Rc<Activation>,
-    /// What it holds of the input (P2): its setup's layers, and its mounts' as its surfaces show.
+    /// What it holds of the input: its setup's layers, and its mounts' as its surfaces show.
     owners: Rc<Owners>,
     viewers: RefCell<Vec<Rc<Viewer>>>,
-    /// Its renderer claims' viewers, as its manifest lists them (contract 2.x, step D).
+    /// Its renderer claims' viewers, as its manifest lists them.
     claims: RefCell<Vec<Rc<ClaimViewer>>>,
     /// A fence over [`FENCE_BYTES`] kept the host's code view, which the log said once.
     over_cap: Cell<bool>,
     /// The reads it watches, by its key, with the value last pushed.
     watches: RefCell<BTreeMap<String, (HostRequest, Option<u64>)>>,
-    /// The bytes of each read last pushed, charged to the plugin's content while it is watched (4.2, phase Pl).
+    /// Bytes charged to each watch for its last pushed snapshot.
     pushed: RefCell<BTreeMap<String, u64>>,
-    /// Why each read that failed last failed, as the JS host was told: a retry that fails the same way tells it nothing
-    /// again (big-boi's `cg4-8` retries a failed read at each refresh).
+    /// Why each read that failed last failed, as the JS host was told: a retry that fails the same way tells it
+    /// nothing again.
     failures: RefCell<BTreeMap<String, String>>,
     watcher: RefCell<Option<Disposer>>,
     disposed: Cell<bool>,
@@ -322,14 +318,8 @@ impl Guest {
         }
     }
 
-    /// The handler of P2's input `to` on the JS host. A paste or a press cannot wait for the handler's answer, so the
-    /// host answers from what the plugin declared: a [`Bind`](opencode_plugin_abi::interact::Bind)'s key, a paste of a
-    /// layer that takes pastes and a pointer event on a node that asks for them are consumed; the others' answer does
-    /// not matter. A key of a listener of every key that can take one now ([`Guest::taking`]) is taken and held as a
-    /// key command's is ([`js_command`]): if the handler did not take it (TS's `preventDefault`), it goes on once the
-    /// JS host answers, below this listener (contract gaps 2). One that cannot only hears it, and it goes on at once
-    /// (cg2-1). A `hold` bind holds the keys after it until the plugin's `release_keys` effect, or
-    /// [`opencode_plugin_abi::interact::HOLD`].
+    /// Dispatches input to the JS handler. The UI cannot wait for its reply when deciding whether a paste or
+    /// pointer press is consumed.
     fn deliver(self: &Rc<Self>, to: To) -> Deliver {
         let guest = Rc::downgrade(self);
         let listener = match to {
@@ -339,8 +329,7 @@ impl Guest {
         Rc::new(move |host: &dyn Host, owner: &Rc<Owner>, event: &Event| {
             let Some(guest) = guest.upgrade().filter(|guest| !guest.ended()) else { return Handled::Pass };
             let Some(scripts) = guest.scripts.upgrade() else { return Handled::Pass };
-            // A setup layer's listener (TS's `keyInput`) only hears what the user types into the composer or another
-            // text input: their typing never waits on the JS host (cg2-1, as FT-14 keeps a global bind off it).
+            // A setup listener may observe text input, but cannot hold it waiting for JS.
             let typed = |key: &opencode_plugin_abi::interact::Key| {
                 matches!(listener, Listener::Layer(_)) && crate::interact::printable(&key.key) && owner.typing()
             };
@@ -372,7 +361,7 @@ impl Guest {
         })
     }
 
-    /// Its listener `listener` can take a key now (`on`), or only hears it (cg2-1).
+    /// Its listener `listener` can take a key now (`on`), or only hears it.
     pub(crate) fn taking(&self, listener: Listener, on: bool) {
         let Some(scripts) = self.scripts.upgrade() else { return };
         let mut taking = scripts.taking.borrow_mut();
@@ -461,8 +450,8 @@ impl Guest {
             return;
         }
         self.effects("setup", effects, false, "setup");
-        // The commands' states are the JS host's now, also when its manifest is the last one's: a setup run again after
-        // a restart, where the last activation had set them otherwise (carbon ce-5).
+        // The commands' states are the JS host's now, also when its manifest is the last one's: a setup run again
+        // after a restart, where the last activation had set them otherwise.
         self.activation.commands(&manifest.commands);
         // A guest that handed its activation to a reload not yet registered changes that reload's registrations: the
         // replacement registers what it carries.
@@ -499,8 +488,8 @@ impl Guest {
             }
             return;
         }
-        // The replacement adopts this activation of the JS host: this guest's end must not deactivate it (review
-        // carbon-2). Its mounts still end on the JS host, which keeps them for the activation (P8).
+        // The replacement adopts this activation of the JS host: this guest's end must not deactivate it. Its mounts
+        // still end on the JS host, which keeps them for the activation.
         let handed = self.js.get();
         self.handed_over.set(true);
         for viewer in self.viewers.borrow().iter() {
@@ -559,7 +548,7 @@ impl Guest {
             .iter()
             .map(|command| (command.scope.clone(), js_command(self, command, None)))
             .collect();
-        // A V2 layer's commands keep to the base mode unless it opts out, as TS's (bigboi P8-4).
+        // A V2 layer's commands keep to the base mode unless it opts out, as TS's.
         let (layers, _) = route::split(commands);
         for layer in layers.into_iter().filter(|layer| !layer.commands.is_empty()) {
             match host.keymap().layer(layer) {
@@ -592,7 +581,7 @@ impl Guest {
             self.fail(format!("{} asked for {} effects at once, over {EFFECTS}", call.export, effects.len()));
             return;
         }
-        // In the call's order, each run as the mount it is of (carbon c2b-1): `dialog.clear()` then a field's focus.
+        // In the call's order, each run as the mount it is of: `dialog.clear()` then a field's focus.
         let mut runs: Vec<(Option<v2::MountId>, Vec<HostRequest>)> = Vec::new();
         for (effect, mount) in effects.into_iter().zip(mounts.into_iter().chain(std::iter::repeat(None))) {
             match runs.last_mut() {
@@ -651,8 +640,8 @@ impl Guest {
     }
 
     /// Applies `effects`, as a call of kind `export` (for the user's input when `user`) would have asked for them, and
-    /// tells the JS host what they answered under `key`. More than [`EFFECTS`] at once fail the plugin: each runs on the
-    /// UI thread (review carbon-8).
+    /// tells the JS host what they answered under `key`. More than [`EFFECTS`] at once fail the plugin: each runs on
+    /// the UI thread.
     pub(crate) fn effects(self: &Rc<Self>, key: &str, effects: Vec<HostRequest>, user: bool, export: &str) {
         if effects.is_empty() || self.ended() {
             return;
@@ -677,8 +666,8 @@ impl Guest {
         let results: Vec<serde_json::Value> = effects
             .into_iter()
             .map(|request| {
-                // A JS plugin keeps its own timers (`setTimeout`). The pipe answers no timer, so it gives no ID for one
-                // whose reply would never come (big-boi tm-3).
+                // A JS plugin keeps its own timers (`setTimeout`). The pipe answers no timer, so it gives no ID for
+                // one whose reply would never come.
                 if matches!(request, HostRequest::Timer { .. }) {
                     log::warn!(
                         "plugin {}: a JS plugin keeps time with setTimeout: the host refuses a timer",
@@ -705,8 +694,8 @@ impl Guest {
         let relay: Rc<dyn Answers> = self.relay.borrow().clone();
         let weak = Rc::downgrade(&relay);
         apply(&self.host, self.id().to_owned(), weak, Some(self.generation), effects);
-        // What they asked for may move the focus or set a mode, which no host change announces: the reads it watches go
-        // again once they applied (P2).
+        // What they asked for may move the focus or set a mode, which no host change announces: the reads it watches
+        // go again once they applied.
         let applied = Rc::downgrade(self);
         crate::defer(&self.host, move |_| {
             if let Some(guest) = applied.upgrade() {
@@ -716,8 +705,8 @@ impl Guest {
         results
     }
 
-    /// The states `effects` set the commands to, which a guest that handed its activation on gives the one that takes it
-    /// over, as the pending load's manifest does not hold them (carbon ce-5).
+    /// The states `effects` set the commands to, which a guest that handed its activation on gives the one that takes
+    /// it over, as the pending load's manifest does not hold them.
     fn carry(&self, effects: &[HostRequest]) {
         let Some(scripts) = self.scripts.upgrade() else { return };
         let loads = scripts.loads.borrow();
@@ -793,7 +782,7 @@ impl Guest {
             }
             return;
         }
-        // A claimed part's: its parts are drawn again, and the one it is for takes it (contract 2.x, step D).
+        // A claimed part's: its parts are drawn again, and the one it is for takes it.
         let claims = self.claims.borrow().clone();
         match claims.iter().find(|claim| claim.has(&tree.mount)) {
             Some(claim) => {
@@ -805,11 +794,11 @@ impl Guest {
         }
     }
 
-    /// A frame's geometry is final and laid out one of its mounts (contract 2.x, addition 1, R2): the rects it watches
-    /// that changed go to the JS host now, in place of a timer after each tree. A node's layout changes
-    /// with no change of the host's data, which is what refreshes the other reads. A push may draw, lay out and push
-    /// again, one round a frame: past [`RECT_ROUNDS`] frames in a row of it with no other cause, the pushes wait for
-    /// one, and the log says so once (R3).
+    /// A frame's geometry is final and laid out one of its mounts: the rects it watches that changed go to the JS
+    /// host now, in place of a timer after each tree. A node's layout changes with no change of the host's data,
+    /// which is what refreshes the other reads. A push may draw, lay out and push again, one round a frame: past
+    /// [`RECT_ROUNDS`] frames in a row of it with no other cause, the pushes wait for one, and the log says so once
+    /// (R3).
     pub(crate) fn laid_out(&self, frame: u64) {
         let (last, rounds) = self.rects.get();
         if rounds > RECT_ROUNDS || self.ended() {
@@ -841,7 +830,7 @@ impl Guest {
     }
 
     /// Pushes the value of `request` under `key` now, and each time it changes. A plugin watches at most [`WATCHES`]
-    /// reads, each evaluated on the UI thread as the host changes (review carbon-8).
+    /// reads, each evaluated on the UI thread as the host changes.
     pub(crate) fn watch(self: &Rc<Self>, key: String, request: HostRequest) {
         if self.ended() {
             return;
@@ -850,7 +839,7 @@ impl Guest {
         if !watches.contains_key(&key) && watches.len() >= WATCHES {
             log::warn!("plugin {}: a watch of {key} is over {WATCHES} reads; it is not watched", self.id());
             drop(watches);
-            // Answered as a failed read, so what waits for it ends (bigboi P8-2).
+            // Answered as a failed read, so what waits for it ends.
             let error = Some(format!("the plugin watches {WATCHES} reads already"));
             let (id, activation) = (self.id().to_owned(), self.js.get());
             self.send(
@@ -867,18 +856,14 @@ impl Guest {
         }
     }
 
-    /// The last value of `key` did not reach the JS host: its next refresh pushes it again, though it did not change
-    /// (big-boi's `cg4-8`: a read refused while the plugin's content room was full stayed failed once room came back).
+    /// The last value of `key` did not reach the JS host: its next refresh pushes it again, though it did not change.
     fn undelivered(&self, key: &str) {
         if let Some((_, last)) = self.watches.borrow_mut().get_mut(key) {
             *last = None;
         }
     }
 
-    /// Pushes the value of the read `key` watches: as a failed read when it is past the content its plugin may hold
-    /// beside what it holds (4.2, phase Pl), or when its snapshot is more than the JS host takes now, in one frame or in
-    /// parts (CT-36), which the plugin reads as nothing, and can ask why; the plugin goes on (review: bound each read).
-    /// What it pushes is charged to its content while it watches it. Whether it went.
+    /// Pushes a watched read. If the snapshot exceeds the plugin or transport budget, push a failed read instead.
     fn push(&self, key: String, value: serde_json::Value) -> bool {
         let bytes = Measure::of(&value).bytes;
         let held = self.pushed.borrow().get(&key).copied().unwrap_or(0);
@@ -894,8 +879,8 @@ impl Guest {
         let error = if bytes as u64 > limits::room(self.id(), limits::Kind::Content, held) {
             Some(format!("the read is {bytes} bytes, past what the plugin may hold"))
         } else {
-            // Sent as it is, a frame the queue refuses would leave the plugin with the value before (bigboi's pipe
-            // sign-off): what goes in neither one frame nor the parts the overflow has room for fails now.
+            // Sent as it is, a frame the queue refuses would leave the plugin with the value before: what goes in
+            // neither one frame nor the parts the overflow has room for fails now.
             let untaken = self.scripts.upgrade().and_then(|scripts| scripts.untaken(&snapshot));
             untaken.map(|size| format!("the read's snapshot is {size} bytes, more than the JS host takes"))
         };
@@ -1039,18 +1024,13 @@ fn stateless(commands: &[opencode_plugin_abi::Command]) -> Vec<opencode_plugin_a
     commands.iter().map(enable).collect()
 }
 
-/// A command of the plugin's, which runs on the JS host; a route's runs for the mount `alive`. A key that runs it holds
-/// the keys after it until the JS host answers, as TS runs a command before the next key. If the command declines (it
-/// returned `false`, or it is disabled), the key goes on to the host, the whole chord that ran it, and this command
-/// passes it on as it comes again, as TS binds no disabled command and lets a declined key fall through (CT-8, CT-19,
-/// ce-4).
+/// Forward the whole chord to the next binding if the JS command declines it.
 fn js_command(guest: &Rc<Guest>, command: &opencode_plugin_abi::Command, alive: Option<Weak<()>>) -> TuiCommand {
     let (called, name) = (guest.clone(), command.name.clone());
     let hold = guest.commands.borrow().1.contains(&name);
     let entry = format!("{}\u{0}{name}", guest.id());
     let scripts = guest.scripts.clone();
-    // Disabled (contract ergonomics 2.5). A key it declined passes it as it runs, not by this condition, which the
-    // palette reads too (ce-4).
+    // Disabled. A key it declined passes it as it runs, not by this condition, which the palette reads too.
     let enabled = crate::command_enabled(&guest.activation, &name);
     // A key it declines goes on once the JS host answers, as the hold routes it again; the command took it until then.
     keyed_command(guest.id(), command, enabled, move |input, key| {
@@ -1094,7 +1074,7 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>) {
         );
         guest.revoked.borrow_mut().extend(subscription);
     }
-    // P2: the layers of setup, each with its own handler, the activation's. Searches answer at once, which the JS host
+    // the layers of setup, each with its own handler, the activation's. Searches answer at once, which the JS host
     // cannot: it registers none.
     for (index, layer) in manifest.layers.iter().enumerate() {
         let deliver = guest.deliver(To::Layer(index));
@@ -1145,8 +1125,6 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>) {
         guest.viewers.borrow_mut().push(viewer.clone());
         setup.surface(place, viewer, commands, fail, calls, &guest.owners, input);
     }
-    // Contract 2.x, step D: its renderer claims, whose views run on the JS host and answer after the frame. Past
-    // [`CLAIMS`] the rest are not taken, which the log says.
     for (index, entry) in manifest.claims.iter().enumerate().take(CLAIMS) {
         let viewer = ClaimViewer::new(guest, index);
         guest.claims.borrow_mut().push(viewer.clone());
@@ -1180,11 +1158,11 @@ pub(crate) struct Viewer {
     /// The plugin and its JS host, which a mount's end is told to after the guest went.
     id: String,
     scripts: Weak<Scripts>,
-    /// The JS host's activation a reload handed over, whose mounts of this surface end with this viewer's (P8).
+    /// The JS host's activation a reload handed over, whose mounts of this surface end with this viewer's.
     handed: Cell<u64>,
     index: usize,
     mounts: RefCell<HashMap<v2::MountId, Mount>>,
-    /// The height each key's mount had with a tree, which a placeholder of a mount of that key keeps (review F1).
+    /// Last rendered height per mount key, for placeholders.
     heights: RefCell<HashMap<String, u16>>,
 }
 
@@ -1193,7 +1171,7 @@ struct Mount {
     /// The JS host was told of the mount.
     started: bool,
     /// The sequence of the mount or input it was told last: its layout epoch. A revision that saw an older one was
-    /// built for another size and is refused (review bigboi-7).
+    /// built for another size and is refused.
     epoch: u64,
     /// The input it was told last, without `full`.
     sent: Option<v2::SurfaceInput>,
@@ -1204,7 +1182,7 @@ struct Mount {
     /// The host's handle of each of the plugin's.
     handles: HashMap<u64, ContentRef>,
     /// The handles of a JS host that ended, which the tree on screen still shows: they go when the next one's first
-    /// tree is offered (review carbon-7).
+    /// tree is offered.
     retired: Vec<ContentRef>,
     /// Something shows: a placeholder or a tree.
     shown: bool,
@@ -1341,10 +1319,10 @@ impl surface::Viewer for Viewer {
         if offered.is_some() {
             self.settle(id, !viewing.input.full);
         }
-        // What changed since the last view is not the JS host's input (P6a): its views run again as what they watch
-        // changes, and an input it is told is a new layout epoch, which a tree in flight would be refused for. A change
-        // of the host's data reaches the plugin only here, as the host watches only its own state: the reads it
-        // watches go again once the view returned (FT-7).
+        // What changed since the last view is not the JS host's input: its views run again as what they watch changes,
+        // and an input it is told is a new layout epoch, which a tree in flight would be refused for. A change of the
+        // host's data reaches the plugin only here, as the host watches only its own state: the reads it watches go
+        // again once the view returned.
         let changed = &viewing.input.changed;
         let data = changed.all
             || !changed.sessions.is_empty()
@@ -1365,10 +1343,10 @@ impl surface::Viewer for Viewer {
             let mount = mounts.entry(id.clone()).or_default();
             (mount.started, mount.sent.clone(), mount.real)
         };
-        // A slot's first view before a solve sees the terminal's size, which stands in for its room: its placeholder
-        // shows, and the JS host hears of the mount once a solve laid that out, with the room as its first input
-        // (contract 2.x, addition 1, R1), so a plugin that sizes itself from it at once sizes right. The surface views
-        // again after that first solve ([`surface::Viewer::waits_for_room`]).
+        // A slot's first view before a solve sees the terminal's size, which stands in for its room: its
+        // placeholder shows, and the JS host hears of the mount once a solve laid that out, with the room as its
+        // first input, so a plugin that sizes itself from it at once sizes right. The surface views again after
+        // that first solve ([`surface::Viewer::waits_for_room`]).
         if !started && viewing.laid.is_none() && viewing.input.slot.is_some() {
             let mut mounts = self.mounts.borrow_mut();
             let mount = mounts.get_mut(id)?;
@@ -1376,7 +1354,7 @@ impl surface::Viewer for Viewer {
             let height = self.heights.borrow().get(&id.key).copied().unwrap_or(0);
             return Some(Viewed { node: Some(placeholder(height)), memo: Some(0), stand_in: true });
         }
-        // The height it was laid out at, not the input's, which stands in the screen's before a solve (review carbon-7).
+        // The height it was laid out at, not the input's, which stands in the screen's before a solve.
         if let (true, Some(laid)) = (real, viewing.laid) {
             self.heights.borrow_mut().insert(id.key.clone(), laid);
         }
@@ -1386,7 +1364,7 @@ impl surface::Viewer for Viewer {
         }
         let mut mounts = self.mounts.borrow_mut();
         let mount = mounts.get_mut(id)?;
-        // A surface that asks for a whole tree refuses one that is not: the JS host builds whole (review carbon-7).
+        // A surface that asks for a whole tree refuses one that is not: the JS host builds whole.
         if let Some(tree) = mount.pending.take_if(|tree| viewing.input.full && !tree.whole) {
             let (rev, adopted) = (tree.rev, mount.adopted);
             drop(mounts);
@@ -1476,7 +1454,7 @@ impl surface::Viewer for Viewer {
             return;
         }
         let running = guest.map(|guest| guest.js.get());
-        // A mount of an activation a reload handed on ends as the reload's replacement mounts its own (CT-21).
+        // A mount of an activation a reload handed on ends as the reload's replacement mounts its own.
         let handover = running.is_none();
         let Some(activation) = running.or(Some(self.handed.get()).filter(|handed| *handed != 0)) else { return };
         if !mount.started {
@@ -1489,18 +1467,17 @@ impl surface::Viewer for Viewer {
     }
 }
 
-/// The renderer claims a plugin on the JS host may hold (contract 2.x, step D, host policy as O-161's): good-fences
-/// registers about 60. TS has no bound.
+/// Maximum renderer claims per JS plugin.
 pub(crate) const CLAIMS: usize = 256;
 
 /// The longest fence code the host sends the JS host: past it, a part would not fit the JS host's frame
 /// ([`super::wire::CONTROL_CAP`]), and the fence keeps the host's code view, which the log says once a plugin.
 pub(crate) const FENCE_BYTES: usize = 256 << 10;
 
-/// A renderer claim of a plugin on the JS host (contract 2.x, step D). A view never waits: it sends the part to the
-/// JS host when the JS host has not seen it, and answers "not yet" ([`crate::claim::Viewed::Pending`]) until the
-/// JS host's tree for the part's mount arrives, which wakes the plugin's parts; the next view takes it. The JS host
-/// draws one part a mount at a time, and the newest part it was sent once the host adopted the last tree.
+/// A renderer claim of a plugin on the JS host. A view never waits: it sends the part to the JS host when the JS
+/// host has not seen it, and answers "not yet" ([`crate::claim::Viewed::Pending`]) until the JS host's tree for the
+/// part's mount arrives, which wakes the plugin's parts; the next view takes it. The JS host draws one part a mount
+/// at a time, and the newest part it was sent once the host adopted the last tree.
 pub(crate) struct ClaimViewer {
     this: Weak<ClaimViewer>,
     guest: Weak<Guest>,
@@ -1509,7 +1486,7 @@ pub(crate) struct ClaimViewer {
     scripts: Weak<Scripts>,
     index: usize,
     mounts: RefCell<HashMap<v2::MountId, ClaimMount>>,
-    /// The JS host's activation the guest handed to a reload: its parts' mounts still end there (carbon c2d-1).
+    /// The JS host's activation the guest handed to a reload: its parts' mounts still end there.
     handed: Cell<u64>,
 }
 
@@ -1587,8 +1564,7 @@ impl ClaimViewer {
 
     /// Ends a part's mount: it is not viewed again, and ends on the JS host too, also one of a guest that handed its
     /// activation to a reload, whose replacement claims its parts in mounts of its own: the JS host would hold the old
-    /// one in flight for good, and its `ping` would never settle (carbon c2d-1). A tree for it that comes later is
-    /// dropped.
+    /// one in flight for good, and its `ping` would never settle. A tree for it that comes later is dropped.
     fn end(&self, id: &v2::MountId) {
         let Some(mount) = self.mounts.borrow_mut().remove(id) else { return };
         if !mount.started {
@@ -1610,9 +1586,9 @@ impl ClaimViewer {
         }
     }
 
-    /// Sends `part` of `mount` to the JS host, unless what the host sent waits in its overflow: then it is sent as it
-    /// is drawn after the overflow drained, oldest first, so a transcript that mounts many fences at once neither
-    /// floods the queue nor loses one (contract 2.x, step D). Meanwhile the host's row or the last tree shows.
+    /// Sends `part` of `mount` to the JS host, unless what the host sent waits in its overflow: then it is sent as
+    /// it is drawn after the overflow drained, oldest first, so a transcript that mounts many fences at once
+    /// neither floods the queue nor loses one. Meanwhile the host's row or the last tree shows.
     fn tell(&self, guest: &Rc<Guest>, id: &v2::MountId, part: &opencode_plugin_abi::claim::Part) {
         let Some(scripts) = guest.scripts.upgrade() else { return };
         if scripts.backed_up() {
@@ -1653,8 +1629,8 @@ impl crate::claim::Viewer for ClaimViewer {
             if !guest.over_cap.replace(true) {
                 log::warn!("plugin {}: a fence of {} bytes keeps the host's code view", guest.id(), fence.code.len());
             }
-            // One that grew past it while a tree was in flight ends its mount on the JS host, which drops that tree and
-            // holds nothing in flight for it (carbon c2d-2).
+            // One that grew past it while a tree was in flight ends its mount on the JS host, which drops that tree
+            // and holds nothing in flight for it.
             self.end(id);
             return Viewed::Returned(None, Some(0));
         }
@@ -1668,7 +1644,7 @@ impl crate::claim::Viewer for ClaimViewer {
             (mount.pending.take(), mount.sent != Some(digest(part)))
         };
         // The renderer threw, or gave what the host cannot read: the part falls back for its mount, which ends on the
-        // JS host ([`ClaimViewer::fell`]); the plugin goes on. No newer part goes to it first (carbon c2d-2).
+        // JS host ([`ClaimViewer::fell`]); the plugin goes on. No newer part goes to it first.
         let tree = match taken.map(|tree| (tree.rev, tree.error, tree.node)) {
             Some((_, Some(error), _)) => {
                 log::warn!("plugin {}: the renderer of part {} threw: {error}", guest.id(), id.key);
@@ -1712,8 +1688,8 @@ impl crate::claim::Viewer for ClaimViewer {
     }
 }
 
-/// A digest of `part`: its JSON as the JS host would read it, hashed as it is written, so no copy of it is made (carbon
-/// c2d-3). Two parts with the same digest are taken for one: 64 bits make another part's the same by chance negligible.
+/// A digest of `part`: its JSON as the JS host would read it, hashed as it is written, so no copy of it is made. Two
+/// parts with the same digest are taken for one: 64 bits make another part's the same by chance negligible.
 fn digest(part: &opencode_plugin_abi::claim::Part) -> u64 {
     use std::hash::Hasher;
     struct Hashing(std::collections::hash_map::DefaultHasher);
@@ -1731,9 +1707,8 @@ fn digest(part: &opencode_plugin_abi::claim::Part) -> u64 {
     hashing.0.finish()
 }
 
-/// What a mount shows before the JS host's first tree: the rows its key had, else one for a transcript part (review F1)
-/// and none for a slot. TS draws a slot's claim in the frame that mounts it, and a claim that draws nothing there, such
-/// as one that only adds key bindings, would otherwise push the slot's neighbours by a row until its tree arrives.
+/// Until the first tree arrives, reserve the key's previous height. A new transcript part gets one row; a new slot
+/// claim gets none.
 fn placeholder(height: u16) -> v2::Node {
     let layout = opencode_plugin_abi::Layout {
         height: Some(opencode_plugin_abi::Width::Cells(height)),
@@ -1770,8 +1745,6 @@ fn rehandle(node: &mut serde_json::Value, handles: &HashMap<u64, ContentRef>) {
 mod tests {
     use super::*;
 
-    // Expected: a content source takes the host's handle, one the mount does not hold takes none the host gave, and
-    // nothing else that holds a number named `content` changes.
     #[test]
     fn content_sources_take_the_hosts_handles() {
         let handles = HashMap::from([(1, ContentRef(41)), (2, ContentRef(42))]);

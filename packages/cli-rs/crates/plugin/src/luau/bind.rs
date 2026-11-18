@@ -1,6 +1,4 @@
-//! What a Luau plugin reaches: `setup`, `read` and `host`, bound onto the linked path's `abi::Setup`, `abi::Read` and
-//! `abi::Host` (`steps/luau-spike.md` 1.2). Tables cross as the contract's own types, through serde, with no JSON
-//! text. A Luau error in any call fails the plugin as a panic of a built-in does: none of the call's effects apply.
+//! Binds Luau setup, reads and effects to the linked SDK. A Luau error fails the call and discards its effects.
 
 use std::any::Any;
 use std::cell::RefCell;
@@ -275,7 +273,7 @@ fn setup_object(plugin: &Rc<Plugin>, lua: &Lua, id: &str, options: Option<&str>)
         setup.command(command, move |host, input| {
             plugin.run(Current::acting(host), |lua| {
                 let value = run.call::<Value>((&plugin.host, input))?;
-                // `"pass"` declines the key that ran it (contract ergonomics 2.5); the prelude's task gives nothing else.
+                // `"pass"` declines the key that ran it; the prelude's task gives nothing else.
                 Ok(optional::<Handled>(lua, value)?.unwrap_or(Handled::Consume))
             })
         });
@@ -643,7 +641,7 @@ fn binding(lua: &Lua, current: &Rc<Slot>, name: &str, host: bool) -> mlua::Resul
             serde_json::json!({ "major": abi.major, "minor": abi.minor, "features": abi.features })
         };
         "hasFeature" => |r, _lua, name: String| r.abi().has_feature(&name);
-        // Contract ergonomics 2.9: the facts no data of the server holds.
+        // The facts no data of the server holds.
         "utcOffset" => |r, _lua, at: f64| r.utc_offset(at as i64);
         "measure" => |r, _lua, text: String| r.measure(&text);
     }

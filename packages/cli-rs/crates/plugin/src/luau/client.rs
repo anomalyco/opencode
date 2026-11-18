@@ -1,9 +1,5 @@
-//! `plugin.client`: the API's requests for a Luau plugin, built from the operations table `script/gen/api.ts` writes
-//! from the generated client (`operations.json`, one row an endpoint: its method, path, input fields and where each
-//! goes, and how its reply reads). The table is parsed once a process; a request is built from the plugin's input
-//! with the encoders the Rust builders use (`opencode_api_types::call`), and sent as a fetch
-//! (`design/contract-ergonomics.md` 2.2 B). The prelude names the operation (`session.inbox.list`), waits for the
-//! reply, and unwraps its `data` where the operation answers in `data`.
+//! Builds Luau client calls from the generated operations table using the Rust client encoders. The prelude unwraps
+//! the reply according to the operation.
 
 use std::collections::HashMap;
 use std::sync::OnceLock;

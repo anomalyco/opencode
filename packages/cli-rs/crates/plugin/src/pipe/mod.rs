@@ -1,25 +1,7 @@
-//! The pipe carrier (rich-plugins synthesis 3.3, 3.7, 4.3; phase P7): contract 2.0 over a process pipe, to one shared
-//! JS host that runs every TypeScript TUI plugin (`host.ts`, on Bun). It is the second timing tier: no frame waits for
-//! the JS host, so what a plugin returns arrives a paint late or more.
-//!
-//! - **Events** carry a sequence. The JS host acknowledges each on receipt and answers a handler with its effects when
-//!   it returned ([`proto::Up::Done`]). Effects apply in that order; a handler that threw has none and fails its
-//!   plugin, as on the other carriers.
-//! - **Trees** are revisions of a mount ([`proto::Revision`]): a generation (the mount's), a base, a new revision and a
-//!   layout epoch. A mount has at most one tree in flight: the host adopts or refuses it, says so, and the JS host
-//!   sends the next. A surface shows a whole adopted revision, a placeholder that keeps the room its key had (none for
-//!   a slot's first mount), or the fallback; never part of one.
-//! - **Reads** are snapshots the host pushes for what the plugin watches, before the event that may read them.
-//! - **Hold:** a command that declares it holds the keys typed after it until its handler returned, or 50 ms.
-//! - **Supervision** ([`child`]): bounded queues, a hang rule on acknowledgements, a memory budget, cleanup of the
-//!   process group. A JS host that ends, hangs or goes over its budget is ended and started again; the plugin whose
-//!   handler ran fails, and the others are set up again, their surfaces keeping their last trees meanwhile. Three ends
-//!   in a minute fail every plugin on it.
-//!
-//! The JS host is on unless `OPENCODE_PLUGIN_JS` turns it off (`0`, `false`, `off`; O-166), and runs once a TypeScript
-//! plugin needs it and [`Config::find`] finds Bun, the local server's opencode binary first: the V2 compatibility layer
-//! (P8, `compat/`) runs today's V2 plugins on it unmodified where their features map. Nothing is looked for or started
-//! while no plugin needs it.
+//! Runs TypeScript plugins on a shared Bun process. No UI frame waits for JS. Apply returned effects in call order,
+//! push watched reads before dependent events, and acknowledge each mount revision before adopting another.
+//! Supervision restarts the process on failure; unaffected plugins retain their last accepted trees while
+//! reactivating.
 
 pub mod child;
 mod guest;
@@ -47,7 +29,7 @@ use proto::{Down, Up};
 
 /// The JS host's source, written to a private directory and run by Bun.
 const SOURCE: &str = include_str!("host.ts");
-/// The V2 compatibility layer the JS host imports (P8), generated from `compat/` by `script/gen/js-host.ts`.
+/// The V2 compatibility layer the JS host imports, generated from `compat/` by `script/gen/js-host.ts`.
 const COMPAT: &str = include_str!("compat.js");
 
 /// The JS host's own `bunfig.toml`: Bun installs nothing a plugin imports (js-no-install).
@@ -106,7 +88,7 @@ impl std::fmt::Debug for Find {
     }
 }
 
-/// Whether `OPENCODE_PLUGIN_JS`, as `value`, turns the JS host off ([`crate::turned_off`], O-166).
+/// Whether `OPENCODE_PLUGIN_JS` disables script plugins.
 pub use crate::turned_off;
 
 impl Config {
@@ -262,9 +244,9 @@ pub fn find(name: &str) -> Option<PathBuf> {
     find_in(name, &std::env::var_os("PATH")?, &directory, home.as_deref())
 }
 
-/// `name` in the entries of `path`, as the client in `directory` finds it (carbon-1): only in an absolute entry, as a
-/// relative or empty one is the working directory, and not inside `directory` (unless that is the home directory,
-/// which is no project): a project's own `bun` would run as soon as the client opened it.
+/// `name` in the entries of `path`, as the client in `directory` finds it: only in an absolute entry, as a relative or
+/// empty one is the working directory, and not inside `directory` (unless that is the home directory, which is no
+/// project): a project's own `bun` would run as soon as the client opened it.
 pub fn find_in(name: &str, path: &std::ffi::OsStr, directory: &Path, home: Option<&Path>) -> Option<PathBuf> {
     found_in(name, path, directory, home).into_iter().next()
 }
@@ -286,10 +268,10 @@ fn outside(path: &Path, directory: &Path, home: Option<&Path>) -> bool {
     Some(&project) == home.map(real).as_ref() || !real(path).starts_with(&project)
 }
 
-/// Bun with the JS host's script in `dir`, its private directory, which it starts in (carbon-1): no `bunfig.toml` (a
-/// `preload`), `.env` or other file of the project it works for is read as Bun starts, and only the variables
-/// [`inherited`] allows reach it. The project's directory is told as data (`OPENCODE_DIRECTORY`). An opencode binary
-/// gets `BUN_BE_BUN=1`, which makes it Bun, and then reads what Bun reads, so the same holds for it.
+/// Bun with the JS host's script in `dir`, its private directory, which it starts in: no `bunfig.toml` (a `preload`),
+/// `.env` or other file of the project it works for is read as Bun starts, and only the variables [`inherited`] allows
+/// reach it. The project's directory is told as data (`OPENCODE_DIRECTORY`). An opencode binary gets `BUN_BE_BUN=1`,
+/// which makes it Bun, and then reads what Bun reads, so the same holds for it.
 ///
 /// Bun's auto-install is off twice over (js-no-install): `--no-install`, which a user's own bunfig cannot turn back on,
 /// and `install.auto = "disable"` in the JS host's own bunfig ([`BUNFIG`]). Without them a plugin that imports a package
@@ -309,9 +291,8 @@ fn command(config: &Config, dir: &Path) -> std::process::Command {
     command
 }
 
-/// The variables of the client's environment the JS host gets (carbon-1): what locates the user, the language, the
-/// temporary directory and the proxy, what names the terminal (FT-8: a plugin that detects it, as it does in the TS
-/// client's process), and the client's own; not Bun's or Node's options, which could load code.
+/// Pass only the environment needed for user paths, locale, terminal and proxy configuration. Node and Bun options
+/// can preload code.
 fn inherited(name: &std::ffi::OsStr) -> bool {
     let name = name.to_string_lossy().to_ascii_uppercase();
     const NAMES: &[&str] = &[
@@ -392,7 +373,7 @@ pub struct Crossed {
     pub started: u64,
     /// Messages the host had no room for, not sent.
     pub refused_sends: u64,
-    /// Claimed parts that waited for the queue to drain before they were sent (contract 2.x, step D).
+    /// Claimed parts that waited for the queue to drain before they were sent.
     pub deferred_parts: u64,
     /// Time the UI thread spent in the carrier's own code: encoding and queueing what it sends, taking what came, and
     /// reading a revision's tree. Not the host's work on the tree, which every carrier has.
@@ -446,7 +427,7 @@ pub(crate) enum Step {
 /// A target's load.
 struct Load {
     dir: PathBuf,
-    /// `dir` is a project plugin's approved copy (P8).
+    /// `dir` is a project plugin's approved copy.
     confined: bool,
     options: Option<String>,
     digest: u64,
@@ -457,9 +438,7 @@ struct Load {
 /// The messages of a plugin's activation the host keeps before it registers it ([`Scripts::keep`]).
 const EARLY: usize = 256;
 
-/// The changes of a plugin's registrations within [`RELOAD_WINDOW`] past which it fails, a change of its commands alone
-/// in place too: registrations that never settle (CT-1: tokscope's page, about 1,000 reloads a second, until the user
-/// left it, as each reload mounted the page again).
+/// Limit registration changes per plugin within [`RELOAD_WINDOW`], including changes to commands alone.
 const RELOADS: usize = 64;
 const RELOAD_WINDOW: Duration = Duration::from_secs(5);
 
@@ -474,10 +453,9 @@ pub(crate) enum Reload {
 }
 
 impl Load {
-    /// Whether the JS host's activation that `loaded` set up, now `js`, runs as this load, so a manifest of it may change
-    /// the load: the load holds `loaded` itself, or what a reload of that activation made of it, not yet registered. A
-    /// manifest of a version this load replaced (another build, a load not answered yet) may not (big-boi's catalog
-    /// review).
+    /// Whether the JS host's activation that `loaded` set up, now `js`, runs as this load, so a manifest of it may
+    /// change the load: the load holds `loaded` itself, or what a reload of that activation made of it, not yet
+    /// registered. A manifest of a version this load replaced (another build, a load not answered yet) may not.
     fn runs(&self, loaded: &Rc<guest::Loaded>, js: u64) -> bool {
         matches!(&self.state, Loading::Loaded(held) if Rc::ptr_eq(held, loaded) || (held.seq == js && held.id == loaded.id))
     }
@@ -515,22 +493,20 @@ struct Call {
     /// It answers the user's input.
     user: bool,
     request: opencode_plugin_abi::Request,
-    /// The input owner of a handler's event (P2): its effects are that mount's, as in process.
+    /// The input owner of a handler's event: its effects are that mount's, as in process.
     owner: Option<Weak<crate::interact::Owner>>,
-    /// The mount the call's requests belong to: a route command's, or the input owner's, which outlives the owner
-    /// (bigboi's freeze pass). What it asks for is that mount's, as in process.
+    /// The mount the call's requests belong to: a route command's, or the input owner's, which outlives the owner.
+    /// What it asks for is that mount's, as in process.
     mount: Option<Weak<()>>,
     /// The key that ran a command, which goes on to the host if the command declines.
     key: Option<Keyed>,
 }
 
 /// Whether `message` settles work the JS host keeps or waits for: a fetch's reply, the answers of a call's or a
-/// batch's effects, which carry a fetch's ID, a cancellation, a sequence skipped, which lets the stream go on, and a
-/// deactivation, which settles what the activation still awaits (big-boi's catalog review: one the full overflow
-/// refused left two of its promises waiting for good), and the host's word on a revision, adopted or refused, without
-/// which the JS host keeps the mount's tree in flight for good and draws it no more (contract 2.x, step D: 300 fences
-/// at once on a small queue lost 53 of them, and the JS host never settled). It is never dropped while the JS host runs
-/// ([`Scripts::settle`]).
+/// batch's effects, which carry a fetch's ID, a cancellation, a sequence skipped, which lets the stream go on, and
+/// a deactivation, which settles what the activation still awaits, and the host's word on a revision, adopted or
+/// refused, without which the JS host keeps the mount's tree in flight for good and draws it no more. It is never
+/// dropped while the JS host runs ([`Scripts::settle`]).
 fn settles(message: &Down) -> bool {
     matches!(
         message,
@@ -546,8 +522,7 @@ fn settles(message: &Down) -> bool {
     )
 }
 
-/// What of a message too large for one frame goes in parts ([`Scripts::split`]): a reply's result (CT-5), a read's
-/// value (CT-36) and what effects answered (a stored value's text, big-boi's `cg4-1`).
+/// Large replies, read snapshots and effect results can be split across frames.
 enum Parted<'a> {
     Reply { activation: u64, request: opencode_plugin_abi::RequestId, result: &'a Result<serde_json::Value, String> },
     Snapshot { id: &'a str, activation: u64, key: &'a str, value: &'a serde_json::Value },
@@ -746,8 +721,7 @@ pub struct Scripts {
     started: RefCell<std::collections::HashSet<u64>>,
     /// Messages the running JS host's queue had no room for yet, in order, and their bytes: they go once it reads.
     overflow: RefCell<(VecDeque<(Down, usize)>, usize)>,
-    /// The guests whose claimed parts the queue refused, oldest first, which draw them again once it drained
-    /// (contract 2.x, step D).
+    /// The guests whose claimed parts the queue refused, oldest first, which draw them again once it drained.
     reoffers: RefCell<Vec<Weak<Guest>>>,
     /// When each plugin's registrations changed after setup, within the last [`RELOAD_WINDOW`] ([`Scripts::reloaded`]).
     reloads: RefCell<HashMap<String, VecDeque<Instant>>>,
@@ -756,7 +730,7 @@ pub struct Scripts {
     /// The plugin whose code the JS host said it runs outside any sequenced work.
     entered: RefCell<Option<String>>,
     reconcile: RefCell<Option<Rc<dyn Fn()>>>,
-    /// What the TypeScript plugins' directories hold, walked off the UI thread (FT-2).
+    /// What the TypeScript plugins' directories hold, walked off the UI thread.
     trees: tree::Trees,
     ends: RefCell<VecDeque<Instant>>,
     /// Why the JS host is not started again.
@@ -770,8 +744,8 @@ pub struct Scripts {
     replayed: RefCell<Past>,
     /// The last key presses, newest last, from which a chord's strokes are put back whole ([`Keyed::chord`]).
     recent: RefCell<VecDeque<KeyEvent>>,
-    /// Each plugin's listeners of every key that can take a key now (cg2-1), as its JS activation said; the others
-    /// only hear a key, which goes on at once. Its JS state's, so it goes with the activation or the JS host.
+    /// Each plugin's listeners of every key that can take a key now, as its JS activation said; the others only
+    /// hear a key, which goes on at once. Its JS state's, so it goes with the activation or the JS host.
     taking: RefCell<HashMap<String, HashSet<proto::Listener>>>,
     /// A key command's hold ran out and the JS host has sent nothing since: a key that runs a JS command goes on at once
     /// as declined, and the command runs late, so typing never waits on a JS host that is stalled.
@@ -788,12 +762,12 @@ pub struct Scripts {
     _intercepts: RefCell<Vec<Disposer>>,
 }
 
-/// The input held for the calls of JS plugins that hold it, one small state machine (ce-3). Each call that holds owns
-/// one entry of `owners` with its own deadline, from just before it is sent until exactly one of: its answer, its
-/// deadline, its refusal, the JS host's end, or the reserved chord. Only that first end decides its key: an answer that
-/// declines, a deadline, a refusal and an end put the key back once; the reserved chord drops it. Whatever ends it
-/// later finds no owner and does nothing. An answered owner's effects apply after the turn, so the input waits for
-/// those too (`settling`), and then goes on, in the order it came.
+/// The input held for the calls of JS plugins that hold it, one small state machine. Each call that holds owns one
+/// entry of `owners` with its own deadline, from just before it is sent until exactly one of: its answer, its
+/// deadline, its refusal, the JS host's end, or the reserved chord. Only that first end decides its key: an answer
+/// that declines, a deadline, a refusal and an end put the key back once; the reserved chord drops it. Whatever
+/// ends it later finds no owner and does nothing. An answered owner's effects apply after the turn, so the input
+/// waits for those too (`settling`), and then goes on, in the order it came.
 #[derive(Default)]
 struct Hold {
     owners: Vec<Owner>,
@@ -804,9 +778,8 @@ struct Hold {
     /// Input put back now, which the intercepts let through.
     replaying: bool,
     /// A plugin's dialog surface just opened and showed no tree of the plugin's yet: the input waits for that tree and
-    /// the focus it asks for (or the mount's end, or [`crate::interact::OPENING`]), so what the user typed as it opened
-    /// is its field's
-    /// (big-boi ds-3). The number tells this wait from an earlier one, and the timer is its deadline.
+    /// the focus it asks for (or the mount's end, or [`crate::interact::OPENING`]), so what the user typed as it
+    /// opened is its field's. The number tells this wait from an earlier one, and the timer is its deadline.
     opening: Option<(u64, TimerId)>,
     openings: u64,
 }
@@ -819,7 +792,7 @@ struct Owner {
     timer: Option<TimerId>,
 }
 
-/// Input a hold keeps, in the order it came (ce-6: a paste waits behind the keys before it).
+/// Input a hold keeps, in the order it came.
 enum Held {
     Key(KeyEvent),
     Paste(String),
@@ -828,12 +801,12 @@ enum Held {
 /// What input put back goes past, and where it was typed.
 #[derive(Clone, Default)]
 struct Past {
-    /// The JS commands that declined it, `<plugin>\0<name>`: each passes it on (ce-4).
+    /// The JS commands that declined it, `<plugin>\0<name>`: each passes it on.
     commands: Vec<String>,
-    /// The listeners of every key that heard it, which the router skips (cg2-5).
+    /// The listeners of every key that heard it, which the router skips.
     heard: Heard,
     /// The plugin mount whose field listener took the input, which the input after it was typed into too: once that
-    /// mount closed (its route left), the input goes with it rather than reach whatever has the focus now (cg2-2).
+    /// mount closed (its route left), the input goes with it rather than reach whatever has the focus now.
     target: Option<Weak<()>>,
 }
 
@@ -872,16 +845,14 @@ impl Hold {
     }
 }
 
-/// The input a hold keeps before it ends its owners rather than drop any (cg2-1): what comes in the same turn still
-/// waits behind it.
+/// The input a hold keeps before it ends its owners rather than drop any: what comes in the same turn still waits
+/// behind it.
 const HELD: usize = 64;
 
 /// The most key presses kept for a chord's strokes ([`Keyed::chord`]).
 const RECENT: usize = 16;
 
-/// The key that ran a JS plugin's command, or that its listener took, and what it goes past if that declines (CT-8,
-/// CT-19, contract gaps 2). A command's key is the whole chord that ran it (`<leader>n`), as taking its last stroke
-/// ended the keymap's pending sequence (ce-4).
+/// Preserve the whole triggering chord and its fallback target if the JS command or listener declines it.
 #[derive(Clone)]
 pub(crate) struct Keyed {
     strokes: Vec<KeyEvent>,
@@ -1104,7 +1075,7 @@ impl Scripts {
     }
 
     /// Holds what the JS host sends, unhandled and in order, while `held`; then handles it. A test closes a mount
-    /// before the JS host's answer to its call applies, however fast the JS host answers (bigboi's ownership pass).
+    /// before the JS host's answer to its call applies, however fast the JS host answers.
     #[doc(hidden)]
     pub fn hold_answers(self: &Rc<Self>, held: bool) {
         let kept = match held {
@@ -1177,7 +1148,7 @@ impl Scripts {
             return Step::Failed(stopped, 0);
         }
         // A staged copy is named by the hash of what it holds, which never changes; another directory's build comes
-        // from a walk off the UI thread, and the plugin starts once the first walk ended (FT-2).
+        // from a walk off the UI thread, and the plugin starts once the first walk ended.
         let build = match confined {
             true => Ok(dir.to_string_lossy().into_owned()),
             false => match self.trees.light(dir) {
@@ -1216,7 +1187,7 @@ impl Scripts {
         );
         drop(loads);
         let options = options.and_then(|options| serde_json::from_str(options).ok());
-        // Nothing of it is set up before the loader knows it is enabled (review carbon-8).
+        // Nothing of it is set up before the loader knows it is enabled.
         let dir = dir.to_string_lossy().into_owned();
         let load = Down::Load {
             seq,
@@ -1290,9 +1261,9 @@ impl Scripts {
         *self.theme.borrow_mut() = Some(now);
     }
 
-    /// Sends `message` and records what its sequence awaits. A full queue is back-pressure, not a fault (review
-    /// bigboi-4): the message waits in the host's overflow, in order, until the JS host reads; past the overflow's bound
-    /// it is refused. A JS host that reads nothing is ended by the progress rule ([`child`]), once.
+    /// Sends `message` and records what its sequence awaits. A full queue is back-pressure, not a fault: the message
+    /// waits in the host's overflow, in order, until the JS host reads; past the overflow's bound it is refused. A JS
+    /// host that reads nothing is ended by the progress rule ([`child`]), once.
     fn send(&self, message: Down, waiting: Option<Waiting>) {
         let seq = message.seq();
         if let (Some(seq), Some(waiting)) = (seq, waiting) {
@@ -1323,10 +1294,8 @@ impl Scripts {
 
     /// Writes `message` to the JS host, after what waits in the overflow.
     fn write(&self, message: &Down) {
-        // One size decision, for the direct send and the overflow alike: what cannot go as one frame goes in parts (a
-        // reply the overflow has room for, CT-5), or is reduced or refused now, in its place, so nothing past a cap is
-        // sent and the overflow never holds a frame the queue would refuse, which a drain would settle behind what came
-        // after it (bigboi's pipe pass).
+        // Apply the same size policy to direct sends and the overflow queue so oversized messages cannot block
+        // later replies.
         let size = json_len(message);
         if !self.fits(size) {
             if let Some(parts) = self.admit(message) {
@@ -1366,8 +1335,8 @@ impl Scripts {
         }
     }
 
-    /// Writes what waits in the overflow while the queue takes it. Once nothing waits, the parts the queue refused are
-    /// drawn again, and sent as they are, oldest first (contract 2.x, step D).
+    /// Writes what waits in the overflow while the queue takes it. Once nothing waits, the parts the queue refused
+    /// are drawn again, and sent as they are, oldest first.
     fn drain(&self) {
         loop {
             let Some((message, size)) = self.overflow.borrow_mut().0.pop_front() else {
@@ -1391,7 +1360,7 @@ impl Scripts {
     fn refuse(&self, message: &Down, size: usize) {
         log::warn!("a message of {size} bytes for the JS host has no room; it is not sent");
         count(|crossed| crossed.refused_sends += 1);
-        // A claimed part is offered again as the queue drains (contract 2.x, step D).
+        // A claimed part is offered again as the queue drains.
         if let Down::Claim { id, mount, .. } = message
             && let Some(guest) = self.guest(id)
         {
@@ -1403,8 +1372,7 @@ impl Scripts {
         // A snapshot goes as a failed read, in its place: the JS host would keep the value before with no error
         // (`docs/plugin-abi.md`, "Timing", reads).
         if let Down::Snapshot { id, activation, key, .. } = message {
-            // Its value was charged as it was pushed: it never reaches the JS host, so its room goes back (bigboi's
-            // pipe sign-off, recheck).
+            // Its value was charged as it was pushed: it never reaches the JS host, so its room goes back.
             if let Some(guest) = self.guest(id) {
                 guest.unpushed(key);
             }
@@ -1421,7 +1389,7 @@ impl Scripts {
         let Some(seq) = seq else { return };
         let waiting = self.waiting.borrow_mut().remove(&seq);
         // A load or a setup the JS host never reads fails: the JS host runs no skipped sequence, so nothing else would
-        // answer it, and the loader would read it as starting for good (bigboi's pipe sign-off).
+        // answer it, and the loader would read it as starting for good.
         let why = || format!("the JS host has no room for a load of {size} bytes");
         match waiting {
             // A key's command the JS host never runs declines its key.
@@ -1440,11 +1408,8 @@ impl Scripts {
         }
     }
 
-    /// Sends `message`, which settles the JS host's work ([`settles`]) and could not go as it is, of `size` bytes: one
-    /// too large for a frame in a form that settles its work as failed (a fetch's reply, the answers of a call's
-    /// effects, carbon-5), after what waits in the overflow, in a reserve as large as the overflow's bound and charged
-    /// its bytes. Past the reserve the JS host reads nothing, and it is ended, which settles all it holds (bigboi's
-    /// ownership pass): such a message is never dropped while the JS host runs.
+    /// Reserve room for replies that settle JS work, even when the normal queue is full. If the reserve fills,
+    /// terminate the host rather than leave a promise unresolved.
     fn settle(&self, message: &Down, size: usize) {
         let kept = match message {
             Down::Call { seq, id, activation, call: Request::Reply { id: reply, .. }, route, .. }
@@ -1456,9 +1421,8 @@ impl Scripts {
                 Down::Call { seq: *seq, id: id.clone(), activation: *activation, call, route, parted: false }
             }
             // A request's ID, a number, is kept: without it the JS host reads an accepted request as refused, which
-            // then runs while its caller retries (bigboi's verification). A read's value goes, named as dropped: a
-            // stored value's text read as null was an empty key, which a store's update then overwrote (big-boi's
-            // `cg4-1`).
+            // then runs while its caller retries. A read's value goes, named as dropped: a stored value's text read as
+            // null was an empty key, which a store's update then overwrote.
             Down::Answered { id, activation, key, results, .. } if !self.sendable(message) => Down::Answered {
                 id: id.clone(),
                 activation: *activation,
@@ -1473,7 +1437,7 @@ impl Scripts {
             other => other.clone(),
         };
         // What cannot go even so is never encoded again, which would refuse it again: the JS host ends, which settles
-        // everything it held (bigboi's verification).
+        // everything it held.
         if !self.sendable(&kept) {
             return self.shut("what settles the JS host's work is larger than a frame it takes");
         }
@@ -1490,13 +1454,7 @@ impl Scripts {
         overflow.0.push_back((kept, bytes));
     }
 
-    /// `message` as the frames it goes in, when it is a reply or a read's snapshot too large for one ([`Scripts::split`])
-    /// whose parts and closing message the overflow has room for now, within its bound ([`child::Limits::inbox`]). What
-    /// goes is measured before anything is built: the JSON is counted, and its parts are its base64, which escapes
-    /// nothing, each in an envelope of one size (big-boi's catalog review). By default a reply or a read whose JSON is
-    /// just under 6 MiB goes while the overflow is empty (8 MiB of parts), less behind a backlog, where one past a frame's
-    /// 256 KiB failed (CT-5: snippets' `/api/skill`, 450 KB; CT-36: the `sessions` read of 900 sessions). One past that
-    /// room is refused as before.
+    /// Split only if every encoded fragment fits in the remaining backlog.
     fn admit(&self, message: &Down) -> Option<Vec<Down>> {
         self.admits(message).then(|| self.split(message)).flatten()
     }
@@ -1568,7 +1526,7 @@ impl Scripts {
     }
 
     /// Ends the JS host that runs now, once, after the current turn: a second cause in the same turn is the same end,
-    /// and an end asked for one JS host never ends the one that replaced it (bigboi's verification).
+    /// and an end asked for one JS host never ends the one that replaced it.
     fn shut(&self, why: &str) {
         let generation = self.generation.get();
         if self.child.borrow().is_none() || self.ending.replace(generation) == generation {
@@ -1604,7 +1562,7 @@ impl Scripts {
         log::trace!("js host -> {}", String::from_utf8_lossy(&payload));
         let wait = match message {
             Down::Load { .. } | Down::Setup { .. } => child::Wait::Setup,
-            // A claimed part's view is owed as a mount's is (contract 2.x, step D): one that never returns is a hang.
+            // A claimed part's view is owed as a mount's is: one that never returns is a hang.
             Down::Call { .. } | Down::Ping { .. } | Down::Mount { .. } | Down::Input { .. } | Down::Claim { .. } => {
                 child::Wait::Answer
             }
@@ -1627,8 +1585,8 @@ impl Scripts {
         true
     }
 
-    /// Whether there is a Bun to run the JS host on, looked for the first time it is asked (O-166): a client whose
-    /// plugins never need the JS host never looks, and starts no process.
+    /// Whether there is a Bun to run the JS host on, looked for the first time it is asked: a client whose plugins
+    /// never need the JS host never looks, and starts no process.
     pub fn runtime(&self) -> bool {
         self.resolved().is_some()
     }
@@ -1843,7 +1801,7 @@ impl Scripts {
             Up::Described { seq, id } => self.answered_load(seq, Loading::Described(seq, id)),
             Up::Entered { id } => *self.entered.borrow_mut() = id,
             Up::Done { seq, effects, mounts, error, declined } => {
-                // A call that threw has no answer for its key: it goes on, as for an end of the JS host (cg2-6).
+                // A call that threw has no answer for its key: it goes on, as for an end of the JS host.
                 let error_seen = error.is_some();
                 self.started.borrow_mut().remove(&seq);
                 let waiting = self.waiting.borrow_mut().remove(&seq);
@@ -1865,7 +1823,7 @@ impl Scripts {
                             guest.done(seq, &call, effects, mounts, error);
                         }
                         // Its hold ends here, once: a declined key comes back, and what it held goes on after the
-                        // effects, which are deferred (review bigboi-5). A key whose deadline passed went on then.
+                        // effects, which are deferred. A key whose deadline passed went on then.
                         self.answered(seq, declined || error_seen);
                     }
                     Some(Waiting::View(_) | Waiting::Ping) | None => {}
@@ -1899,10 +1857,10 @@ impl Scripts {
     }
 
     /// A message of a plugin's own (effects, a watch, a failure, a manifest), routed by the JS host's activation that
-    /// sent it, not by the plugin's ID alone (big-boi's catalog recheck): to the guest that runs that activation; kept
-    /// for the guest it becomes while it is a load the loader has not registered yet; else dropped, as a version the host
-    /// replaced or never took sent it. A new build's first fetch took the replaced guest's relay and never settled, and
-    /// its manifest was refused as the old guest's, and charged to its reloads.
+    /// sent it, not by the plugin's ID alone: to the guest that runs that activation; kept for the guest it becomes
+    /// while it is a load the loader has not registered yet; else dropped, as a version the host replaced or never
+    /// took sent it. A new build's first fetch took the replaced guest's relay and never settled, and its manifest was
+    /// refused as the old guest's, and charged to its reloads.
     fn from_plugin(self: &Rc<Self>, up: Up) {
         let Some((id, activation)) = sender(&up) else { return };
         // An activation that spilled fails as a whole: nothing more of it is applied.
@@ -1943,15 +1901,14 @@ impl Scripts {
             })
     }
 
-    /// Keeps `up` of a plugin the loader has not registered yet, for its activation.
-    /// Keeps a message of an activation not registered yet, up to [`EARLY`] of them and as many bytes as the JS host may
-    /// leave unread ([`child::Limits::inbox`]): the reader's bound let them go as they came here (big-boi's `cg4-5`). The
-    /// activation that sends more spilled,
-    /// and fails as a whole, before anything it sent is applied (big-boi's catalog review): from then on nothing of it
-    /// is kept or applied, a batch of effects of it is answered at once as refused ([`Scripts::refuse_spilled`]), and
-    /// its setup fails instead of registering it, with nothing it sent applied ([`Scripts::spill_load`]). Replaying
-    /// what fit let a fetch leave and then wait for good, or a manifest hand the activation on, and a failure that came
-    /// after missed it.
+    /// Keeps `up` of a plugin the loader has not registered yet, for its activation. Keeps a message of an activation
+    /// not registered yet, up to [`EARLY`] of them and as many bytes as the JS host may leave unread
+    /// ([`child::Limits::inbox`]): the reader's bound let them go as they came here. The activation that sends more
+    /// spilled, and fails as a whole, before anything it sent is applied: from then on nothing of it is kept or
+    /// applied, a batch of effects of it is answered at once as refused ([`Scripts::refuse_spilled`]), and its setup
+    /// fails instead of registering it, with nothing it sent applied ([`Scripts::spill_load`]). Replaying what fit let
+    /// a fetch leave and then wait for good, or a manifest hand the activation on, and a failure that came after
+    /// missed it.
     fn keep(&self, up: Up) {
         let Some((id, activation)) = sender(&up) else { return };
         if self.spilled_by(&id, activation) {
@@ -2025,7 +1982,7 @@ impl Scripts {
 
     /// Whether a reload of the registrations of the activation that `loaded` set up, now `js`, is taken at `now`: only
     /// while its load runs as that activation ([`Load::runs`]), and only then charged to the plugin's reloads, so a
-    /// refused one never counts against the build that replaced it (big-boi's catalog recheck).
+    /// refused one never counts against the build that replaced it.
     pub(crate) fn admit_reload(&self, loaded: &Rc<guest::Loaded>, js: u64, now: Instant) -> Reload {
         let current = self.loads.borrow().get(&loaded.target).is_some_and(|load| load.runs(loaded, js));
         match (current, current && self.reloaded(&loaded.id, now)) {
@@ -2035,9 +1992,9 @@ impl Scripts {
         }
     }
 
-    /// Notes a reload of plugin `id`'s registrations at `now`: whether it is past [`RELOADS`] within [`RELOAD_WINDOW`].
-    /// Counted by the plugin, not by its load, so a new build of it or a restart of the JS host does not start the count
-    /// again within the window (big-boi's catalog review). It holds the reloads of the window alone, at most one past
+    /// Notes a reload of plugin `id`'s registrations at `now`: whether it is past [`RELOADS`] within
+    /// [`RELOAD_WINDOW`]. Counted by the plugin, not by its load, so a new build of it or a restart of the JS host
+    /// does not start the count again within the window. It holds the reloads of the window alone, at most one past
     /// the limit a plugin, and forgets a plugin with none.
     pub(crate) fn reloaded(&self, id: &str, now: Instant) -> bool {
         let mut reloads = self.reloads.borrow_mut();
@@ -2107,7 +2064,7 @@ impl Scripts {
                             (Loading::Failed(format!("setup ended the JS host: {why}")), false);
                     }
                     // Its running version cannot be set up again from files whose new version ended the JS host: it
-                    // fails, once, rather than end the next JS host too (review carbon-3).
+                    // fails, once, rather than end the next JS host too.
                     let running =
                         self.guests.borrow().values().filter_map(Weak::upgrade).find(|guest| guest.target() == target);
                     if let Some(guest) = running {
@@ -2115,7 +2072,7 @@ impl Scripts {
                     }
                 }
                 Some(Waiting::Ping) => {}
-                // No sequenced work ran: the plugin whose code ran for another message, if any (review carbon-3).
+                // No sequenced work ran: the plugin whose code ran for another message, if any.
                 None => {
                     let entered = self.entered.borrow().clone().and_then(|id| self.guest(&id));
                     if let Some(guest) = entered {
@@ -2232,7 +2189,7 @@ impl Scripts {
         let message = Down::Call { seq, id: id.clone(), activation, call: request.clone(), route, parted: false };
         let (guest, bound) = (Rc::downgrade(guest), key.clone());
         let call = Call { guest, plugin: id, activation, export, user, request, owner, mount, key };
-        // The owner is in place before the send: a send refused at once ends it as a refusal, once (ce-3).
+        // The owner is in place before the send: a send refused at once ends it as a refusal, once.
         let stalled = self.stalled.get();
         if (hold || bound.is_some()) && !(stalled && bound.is_some()) {
             self.hold_for(seq, bound.clone());
@@ -2277,9 +2234,8 @@ impl Scripts {
             }
             recent.push_back(key);
         }
-        // The reserved chord is never held: its press ends the hold and drops what it kept, as a terminal's interrupt
-        // drops typed-ahead input, and goes on to the host (synthesis 3.8, review carbon-4). Its release is not held
-        // either, and ends nothing (ce-3). The host's own escape ends the hold before this runs ([`Scripts::escape`]).
+        // The reserved chord cancels the hold and discards buffered input. Its press and release both reach the
+        // host.
         if let Some(host) = self.host.upgrade()
             && crate::interact::reserved(&*host, &crate::interact::key_of(&key).0)
         {
@@ -2294,7 +2250,7 @@ impl Scripts {
     }
 
     /// Keeps `input` behind what the hold keeps, while one holds and nothing is put back now: whether it did. Past
-    /// [`HELD`] the owners end as at their deadline, and the input goes on after the turn, none of it dropped (cg2-1).
+    /// [`HELD`] the owners end as at their deadline, and the input goes on after the turn, none of it dropped.
     fn take(&self, input: Held) -> bool {
         let mut past = self.past();
         // Input while a plugin's dialog that just opened has not focused its field yet waits for that focus; escape does
@@ -2340,8 +2296,7 @@ impl Scripts {
         Past { commands: replayed.commands.clone(), target: replayed.target.clone(), ..Past::default() }
     }
 
-    /// The reserved chord: every owner ends and what was held goes, so an answer after it puts nothing back (ce-3,
-    /// cg2-4).
+    /// The reserved chord: every owner ends and what was held goes, so an answer after it puts nothing back.
     pub(crate) fn escape(&self) {
         let timers: Vec<TimerId> = {
             let mut hold = self.hold.borrow_mut();
@@ -2352,9 +2307,9 @@ impl Scripts {
         self.cancel(timers);
     }
 
-    /// Whether the key put back now goes past command `entry` (`<plugin>\0<name>`), which declined it before, or past
-    /// every command of its plugin (`<plugin>\0`, a key its field declined): the command passes it on as it runs,
-    /// rather than leave the keymap's lists (ce-4).
+    /// Whether the key put back now goes past command `entry` (`<plugin>\0<name>`), which declined it before, or
+    /// past every command of its plugin (`<plugin>\0`, a key its field declined): the command passes it on as it
+    /// runs, rather than leave the keymap's lists.
     pub(crate) fn stepped_aside(&self, entry: &str) -> bool {
         self.replayed
             .borrow()
@@ -2364,8 +2319,7 @@ impl Scripts {
     }
 
     /// Owner `seq` was answered: a declined key comes back, and the input goes on once the call's effects applied,
-    /// after the turn (review bigboi-5). An answer to no owner (its deadline passed, or the chord dropped it) does
-    /// nothing.
+    /// after the turn. An answer to no owner (its deadline passed, or the chord dropped it) does nothing.
     fn answered(&self, seq: u64, declined: bool) {
         let timer = {
             let mut hold = self.hold.borrow_mut();
@@ -2461,7 +2415,7 @@ impl Scripts {
                     break;
                 }
                 let Some((input, past)) = hold.input.pop_front() else { break };
-                // Typed where nothing is now: it goes, rather than reach another widget (cg2-2).
+                // Typed where nothing is now: it goes, rather than reach another widget.
                 if past.orphaned() {
                     continue;
                 }
@@ -2579,7 +2533,7 @@ fn digest(build: &Result<String, String>, options: Option<&str>) -> u64 {
 
 impl Scripts {
     /// The approval artifact of the project plugin `dir`, as a walk off the UI thread last found it, or `None` until
-    /// the first walk ended (FT-2).
+    /// the first walk ended.
     pub(crate) fn tree(&self, dir: &Path) -> Option<Result<crate::loader::approval::Artifact, String>> {
         self.trees.artifact(dir)
     }
@@ -2590,7 +2544,7 @@ impl Scripts {
     }
 
     /// The copy of the approved `artifact` under `root` that the JS host imports, made off the UI thread, or `None`
-    /// until it is (FT-2).
+    /// until it is.
     pub(crate) fn staged(
         &self,
         artifact: &crate::loader::approval::Artifact,
@@ -2612,9 +2566,8 @@ impl Scripts {
     }
 }
 
-/// The page theme's colors, which the V2 context's `theme` reads (P8): its tokens, and the steps of its hue scales as
-/// `hue.<name>.<step>` and `categorical.<index>.<step>` (CT-9), which the context's `theme.hue` and
-/// `theme.categorical` are.
+/// The page theme's colors, which the V2 context's `theme` reads: its tokens, and the steps of its hue scales as
+/// `hue.<name>.<step>` and `categorical.<index>.<step>`, which the context's `theme.hue` and `theme.categorical` are.
 fn palette(host: &dyn Host) -> proto::Palette {
     let theme = host.theme();
     let steps = |name: String, scale: &opencode_ui::theme::Scale| {
@@ -2624,8 +2577,8 @@ fn palette(host: &dyn Host) -> proto::Palette {
     let hues = theme.hues().iter().flat_map(|(name, scale)| steps(format!("hue.{name}"), scale));
     let categorical = theme.categorical().iter().enumerate();
     let categorical = categorical.flat_map(|(index, scale)| steps(format!("categorical.{index}"), scale));
-    // The raised surfaces' tokens that differ from the page's, as `@dialog.<token>` and `@dialog.footer.<token>`, which
-    // the context's `theme.surface(name)` answers (CT-22).
+    // The raised surfaces' tokens that differ from the page's, as `@dialog.<token>` and `@dialog.footer.<token>`,
+    // which the context's `theme.surface(name)` answers.
     let page = theme.list();
     let raised = [
         (opencode_ui::theme::Surface::Dialog, "@dialog"),
@@ -2653,7 +2606,7 @@ fn theme_mode(host: &dyn Host) -> String {
     }
 }
 
-/// What a read the plugin watches is now, as [`HostRequest`]'s result: P2's reads are of its newest mount.
+/// Evaluate the watch as a host read, using the newest live mount for mount-scoped input state.
 pub(crate) fn evaluate(
     host: &Weak<dyn Host>,
     id: &str,
@@ -2661,13 +2614,13 @@ pub(crate) fn evaluate(
     owners: Option<Rc<crate::Owners>>,
     request: &HostRequest,
 ) -> serde_json::Value {
-    // The storage keys its manifest declares, which a watched read of storage names (review carbon-8).
+    // The storage keys its manifest declares, which a watched read of storage names.
     let mut ctx = crate::loader::native::Ctx::new(host.clone(), id, keys);
     (ctx.read_only, ctx.owners) = (true, owners);
     match crate::loader::native::handle(&mut ctx, request.clone()) {
         // A stored value is JSON text: its snapshot carries the JSON itself, not the text quoted again, which escaped
-        // each quote and backslash once more and could double its size past what the JS host takes (big-boi's
-        // `cg4-2`). The layer reads either.
+        // each quote and backslash once more and could double its size past what the JS host takes. The layer reads
+        // either.
         Ok(serde_json::Value::String(text)) if matches!(request, HostRequest::StorageGet { .. }) => {
             serde_json::from_str(&text).unwrap_or(serde_json::Value::String(text))
         }
@@ -2683,8 +2636,6 @@ pub(crate) fn evaluate(
 mod tests {
     use super::*;
 
-    // Expected (big-boi's `cg4-5`): what an activation sends before it is registered is kept within as many bytes as the
-    // JS host may leave unread, not only 256 messages: two of 40 KiB under a bound of 64 KiB spill it.
     #[test]
     fn what_comes_before_registration_is_bounded_by_its_bytes() {
         let mut config = Config::new("bun".into());
@@ -2703,8 +2654,6 @@ mod tests {
         assert!(scripts.spilled_by("p", 1), "kept past its bytes");
     }
 
-    // Expected (CT-5): a reply too large for a frame goes in parts, each a frame, its call last, while the overflow has
-    // room for all of them within its bound; past that room it does not, and is refused as before. Only a reply does.
     #[test]
     fn a_reply_goes_in_parts_only_while_the_overflow_has_room_for_them() {
         let mut config = Config::new("bun".into());
@@ -2732,9 +2681,6 @@ mod tests {
         assert_eq!(scripts.admit(&Down::Ping { seq: 2 }), None, "only a reply goes in parts");
     }
 
-    // Expected (big-boi's catalog review, CT-1): the reload limit counts a plugin, not its load: a new build of it (a
-    // load of another digest at its target) within the window does not start the count again, another plugin has its
-    // own, and past the window it starts again. What it holds is the window's reloads alone, at most one past the limit.
     #[test]
     fn the_reload_limit_counts_a_plugin_across_its_builds() {
         let host: Rc<dyn Host> = crate::tests::host();
@@ -2766,9 +2712,9 @@ mod tests {
         assert_eq!(scripts.reloads.borrow().len(), 1, "a plugin with no reload in the window stays");
     }
 
-    // Expected (big-boi's catalog review, CT-1): a manifest changes its target's load only while that load is the one
-    // the sending activation runs as: its own, what a reload of it made and the loader has not taken yet, or its own
-    // after a restart gave the activation another sequence; not another build's, loaded or still loading.
+    // Expected: a manifest changes its target's load only while that load is the one the sending activation runs as:
+    // its own, what a reload of it made and the loader has not taken yet, or its own after a restart gave the
+    // activation another sequence; not another build's, loaded or still loading.
     /// What load `seq` of plugin `p` at target `t` answered.
     fn loaded(seq: u64) -> Rc<guest::Loaded> {
         Rc::new(guest::Loaded {
@@ -2793,9 +2739,6 @@ mod tests {
         Load { dir: PathBuf::new(), confined: false, options: None, digest: 1, state, registered: true }
     }
 
-    // Expected (big-boi's catalog recheck): a reload the load guard refuses, from a build its load replaced, is not
-    // charged to the plugin's reloads: a hundred of them leave the count at nothing, and the build that runs still takes
-    // its 64 before it churns.
     #[test]
     fn a_refused_reload_is_not_charged() {
         let host: Rc<dyn Host> = crate::tests::host();
@@ -2823,10 +2766,6 @@ mod tests {
         assert!(!load(Loading::Waiting(5)).runs(&own, 3), "another build still loading");
     }
 
-    // Expected (big-boi's catalog review, CT-5): admission measures exactly what goes, before it builds it. With the
-    // default limits and the overflow empty, the largest reply whose built parts and call fit the overflow's 8 MiB
-    // goes and one a byte larger does not; that largest is just under 6 MiB of JSON, the size F16 states (base64 and
-    // the envelopes take the rest); behind a backlog it does not go.
     #[test]
     fn a_reply_at_the_edge_of_the_overflow_goes_and_one_byte_more_does_not() {
         let host: Rc<dyn Host> = crate::tests::host();
@@ -2870,10 +2809,6 @@ mod tests {
         pub(super) static SPLITS: Cell<usize> = const { Cell::new(0) };
     }
 
-    // Expected (bigboi's freeze and ownership passes): what settles the JS host's work waits past a full overflow, in a
-    // reserve charged its bytes: a cancellation, the answers that carry a fetch's ID, and a refused call's skipped
-    // sequence, in order. Another message without a sequence goes; the answers of a call too large for a frame go as
-    // failed ones.
     #[test]
     fn what_settles_the_js_hosts_work_waits_past_a_full_overflow() {
         let mut config = Config::new("bun".into());
@@ -2909,7 +2844,7 @@ mod tests {
             route: None,
             parted: false,
         };
-        // A tree's adoption and its refusal settle what the JS host holds in flight (carbon's step D review).
+        // A tree's adoption and its refusal settle what the JS host holds in flight.
         let mount = opencode_plugin_abi::v2::MountId { surface: "s".into(), key: "k".into(), generation: 1 };
         let adopted = Down::Adopted { id: "p".into(), mount: mount.clone(), rev: 1 };
         let refused = Down::Refused { id: "p".into(), mount, rev: 2, adopted: 1, error: "refused".into() };
@@ -2964,15 +2899,11 @@ mod tests {
         dir
     }
 
-    // Expected (bigboi's verification): a call's answer too large for a frame keeps the IDs of the requests it accepted,
-    // so the JS host never reads an accepted fetch as refused, and drops only what its reads gave. It is measured by the
-    // queue's bound, the limit a send is refused by, not only by the wire's cap: between the two it was resent, refused
-    // and resent again until the UI thread's stack ran out. What cannot go even so ends the JS host, once.
     #[cfg(unix)]
     #[test]
     fn an_answer_too_large_for_a_frame_keeps_its_request_ids() {
         let mut config = Config::new("sh".into());
-        // An overflow too small for its parts, which go when there is room (big-boi's `cg4-1`).
+        // An overflow too small for its parts, which go when there is room.
         (config.limits.queued, config.limits.inbox) = (4 << 10, 6 << 10);
         let host = crate::tests::host();
         let dynamic: Rc<dyn Host> = host.clone();
@@ -3030,8 +2961,6 @@ mod tests {
         assert!(scripts.pid().is_none());
     }
 
-    // Expected (bigboi's verification): an end scheduled for one JS host is that host's: it never ends the one that
-    // replaced it, and two causes in one turn end it once.
     #[cfg(unix)]
     #[test]
     fn a_scheduled_end_never_ends_the_next_js_host() {
@@ -3068,15 +2997,6 @@ mod tests {
         scripts.adopt(Child::spawn(command, limits, move || post(&proxy, id)).unwrap());
     }
 
-    // Expected (bigboi's pipe pass): a model of the pipe's queue. A stream of every kind of message goes to a JS host
-    // that reads nothing at first, so a backlog builds, under a small queue and under the default one: calls, an answer
-    // with a fetch's ID and a large read, its cancellation and a reply behind it, answers and a reply between the queue's
-    // bound and the wire's cap and past the cap, a call past the cap, a plugin's load and a watched read's snapshot each
-    // under and past the cap (bigboi's pipe sign-off). What the JS host reads is what the written rule makes of each, in
-    // the order they were sent: a message that goes as one frame as it is; a reply, in parts that join to its result
-    // (CT-5); an answer, reduced to its scalars; a snapshot, as a failed read; any other, its sequence skipped. Nothing it reads
-    // is past either cap, so an admission answer is never read after its cancellation or reply. A refused load is failed,
-    // as nothing else answers it: the loader reads it failed, not starting.
     #[cfg(unix)]
     #[test]
     fn the_queue_keeps_each_message_in_its_place_and_within_both_caps() {
@@ -3129,12 +3049,11 @@ mod tests {
             ]);
             sent.iter().for_each(|message| scripts.send(message.clone(), None));
             // Two loads as the loader asks for them, 85 and 86, the second's options past the cap; then two snapshots,
-            // the second a read of 262,131 bytes of JSON, past the frame's cap with its envelope, which goes in parts
-            // (CT-36).
+            // the second a read of 262,131 bytes of JSON, past the frame's cap with its envelope, which goes in parts.
             scripts.seq.set(84);
             let plugin = dir.path().join("plugin");
             std::fs::create_dir_all(&plugin).unwrap();
-            // Its build comes from a walk off the UI thread (FT-2), which the first ask starts: the loads go after it.
+            // Its build comes from a walk off the UI thread, which the first ask starts: the loads go after it.
             let _ = scripts.trees.light(&plugin);
             while scripts.walking() {
                 std::thread::sleep(Duration::from_millis(1));
@@ -3171,8 +3090,6 @@ mod tests {
                 .iter()
                 .flat_map(|message| match message {
                     _ if fits(message) => vec![message.clone()],
-                    // A reply, a read or an answer within the overflow's room goes in parts (CT-5, CT-36, big-boi's
-                    // `cg4-1`); the reply's and the read's join to their result and value below.
                     Down::Call { call: Request::Reply { .. }, .. } | Down::Snapshot { .. } | Down::Answered { .. } => {
                         scripts.split(message).unwrap()
                     }
@@ -3251,8 +3168,6 @@ mod tests {
         assert!(failed.is_empty(), "{}", failed.join("\n"));
     }
 
-    // Expected (carbon-1): Bun is found only in an absolute `PATH` entry outside the project the client works in (an
-    // empty or relative entry is that directory); a home directory is no project.
     #[test]
     fn bun_is_never_the_projects_own() {
         let root = opencode_util::temp::tempdir().unwrap();
@@ -3271,10 +3186,6 @@ mod tests {
         assert_eq!(find(&[&project.join("bin")], Some(&project)), Some(project.join("bin").join(&file)));
     }
 
-    // Expected (carbon-1, carbon-6, O-166): the JS host is on unless `OPENCODE_PLUGIN_JS` is `0`, `false` or `off` (any
-    // case); `OPENCODE_BUN` counts only as
-    // an absolute path; Bun starts in the JS host's own directory, reads no `.env` and no project `bunfig.toml`, and gets
-    // of the client's environment only what locates the user and the client.
     #[test]
     fn the_js_host_starts_apart_from_the_project() {
         let vars = |flag: Option<&'static str>, bun: &'static str| {
@@ -3315,7 +3226,7 @@ mod tests {
             assert!(!inherits(name), "{name}");
         }
         assert!(inherits("HOME") && inherits("XDG_CONFIG_HOME") && inherits("OPENCODE_CHANNEL"));
-        // What names the terminal, which a plugin reads to detect it (FT-8).
+        // What names the terminal, which a plugin reads to detect it.
         for name in ["TERM", "TERM_PROGRAM", "COLORTERM", "TMUX", "WT_SESSION", "KITTY_WINDOW_ID", "LC_TERMINAL"] {
             assert!(inherits(name), "{name}");
         }
@@ -3333,9 +3244,6 @@ mod tests {
         assert_eq!(super::command(&opencode, dir).get_current_dir(), Some(dir));
     }
 
-    // Expected (O-166): a JS host on by default costs nothing until a plugin needs it: making its scripts looks for no
-    // Bun, the first [`Scripts::runtime`] looks once, and later ones take that answer. With none found, there is no
-    // runtime, and nothing starts.
     #[test]
     fn bun_is_looked_for_once_a_plugin_needs_the_js_host() {
         let test_host = crate::loader::tests::host();
@@ -3371,9 +3279,6 @@ mod tests {
         }
     }
 
-    // Expected (js-host-runtime): the JS host runs on a local server's opencode binary as Bun when its Bun answers and
-    // is new enough; where the client cannot tell the server's binary, on the first `opencode` on the path that does (a
-    // `mise` shim answers for `mise`); else, and for a remote server, on `bun`; never on a project's own.
     #[cfg(unix)]
     #[test]
     fn the_js_host_runs_on_the_servers_opencode_else_bun() {
@@ -3465,8 +3370,8 @@ mod tests {
         assert_eq!(with(Server::Local(None), &all, Some("/opt/bun/bin/bun"), bundled()), named);
     }
 
-    // The hold (ce-3, ce-4, ce-6, cg2-1, cg2-2, cg2-4, cg2-6): rows of the hold's state machine on a host that routes
-    // its keys to its keymap as the TUI does (`route_keys`), and types what nothing took.
+    // The hold: rows of the hold's state machine on a host that routes its keys to its keymap as the TUI does
+    // (`route_keys`), and types what nothing took.
 
     /// A hold, its host, and what reached the end: each key's stroke and each paste, as typed.
     fn holding() -> (Rc<crate::tests::TestHost>, Rc<Scripts>, Rc<RefCell<Vec<String>>>) {
@@ -3513,7 +3418,6 @@ mod tests {
         std::mem::take(&mut *typed.borrow_mut())
     }
 
-    // Expected (ce-3, 1): a call refused as it is sent declines its key once; its deadline, after, puts back nothing.
     #[test]
     fn a_refused_call_puts_its_key_back_once() {
         let (host, scripts, seen) = holding();
@@ -3526,9 +3430,6 @@ mod tests {
         assert_eq!(typed(&seen), ["%", "a"]);
     }
 
-    // Expected (ce-3, 2): an answer, then the deadline and the JS host's end in the same turn, before the answer's
-    // effects applied: the hold ends once, by the answer. A declined key goes on once, a consumed one never, and the
-    // input waits for the answer's effects.
     #[test]
     fn an_answer_ends_the_hold_whatever_comes_in_its_turn() {
         for declined in [true, false] {
@@ -3545,8 +3446,6 @@ mod tests {
         }
     }
 
-    // Expected (ce-3, 3): a hold without a key, started while a key's command holds, owns nothing of that key: the
-    // command consumed it, and the second's deadline puts back only what was typed.
     #[test]
     fn a_second_hold_never_puts_back_the_first_ones_key() {
         let (host, scripts, seen) = holding();
@@ -3560,8 +3459,6 @@ mod tests {
         assert_eq!(typed(&seen), ["a"]);
     }
 
-    // Expected (ce-3, 4; cg2-4): the reserved chord drops what is held and the key that holds: its answer after puts
-    // back nothing. The chord's release ends no hold that began after it, and is not held.
     #[test]
     fn the_reserved_chord_drops_the_held_input_and_its_answer() {
         let (host, scripts, seen) = holding();
@@ -3581,7 +3478,6 @@ mod tests {
         assert_eq!(typed(&seen), ["z"]);
     }
 
-    // Expected (ce-6, cg2-3): a paste while a key's command holds waits behind the keys before it.
     #[test]
     fn a_paste_waits_behind_the_held_keys() {
         let (host, scripts, seen) = holding();
@@ -3594,8 +3490,6 @@ mod tests {
         assert_eq!(typed(&seen), ["%", "a", "paste bc", "d"]);
     }
 
-    // Expected (cg2-1): past the bound of held input none is dropped: the hold stops waiting for its answer, and the
-    // input goes on in order.
     #[test]
     fn held_input_past_its_bound_goes_on_whole() {
         let (host, scripts, seen) = holding();
@@ -3608,8 +3502,6 @@ mod tests {
         assert_eq!(seen[..3], ["shift+a", "shift+b", "c"]);
     }
 
-    // Expected (cg2-2): what was typed into a mount's field goes with that mount: it never reaches what has the focus
-    // after it closed.
     #[test]
     fn held_input_goes_with_the_mount_it_was_typed_into() {
         let (host, scripts, seen) = holding();
@@ -3625,9 +3517,6 @@ mod tests {
         assert!(typed(&seen).is_empty(), "{:?}", typed(&seen));
     }
 
-    // Expected (cg2-2): a key a field's listener declined goes past its plugin's own commands, which TS's keymap ran
-    // before the field's `onKeyDown`, in the state before the handler ran: the field's handler enabling one (as
-    // file-browser's `escape` enables its `escape` command by blurring the field) does not let it take the key.
     #[test]
     fn a_fields_declined_key_goes_past_its_plugins_commands() {
         let (host, scripts, seen) = holding();
@@ -3652,7 +3541,6 @@ mod tests {
         assert_eq!(ran.get(), 1, "the command takes the key typed after");
     }
 
-    // Expected (cg2-6): a call that threw has no answer for its key: it goes on, with the input after it.
     #[test]
     fn a_call_that_threw_puts_its_key_back() {
         let (host, scripts, seen) = holding();
@@ -3677,8 +3565,6 @@ mod tests {
         assert_eq!(typed(&seen), ["q", "r"]);
     }
 
-    // Expected (ce-4): a chord's command that declines puts the whole chord back, and passes it on as it comes again:
-    // the binding below it of the same chord runs, and none of its strokes is typed.
     #[test]
     fn a_declined_chord_reaches_the_binding_below_it() {
         let (host, scripts, seen) = holding();
