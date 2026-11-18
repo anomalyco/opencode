@@ -3,11 +3,15 @@
 //! `native.rs`) that makes the call and hands the result back to the instruction's frame as the instruction would:
 //! a value pushed, or for a finished `for...of` a jump to its exit, as a finished generator hands its end back
 //! (`Vm::generator_done`). A step that fails forgets the iterator first, so it is not closed afterwards.
+//!
+//! `yield*` and `for await` do the same: a delegated iterator's `next`, `throw` or `return` of the program's, a
+//! delegated generator resumed with a `return` or `throw` request, the sync iterator behind an async-from-sync one
+//! (its step's promise settled once the call returns), and an async open or close that calls the program.
 
 use crate::native::{Frame, Input, NativeOp, Step};
 use crate::object::*;
 use crate::value::{Id, Slot, Value};
-use crate::vm::{Res, Vm};
+use crate::vm::{REQ_RETURN, Reaction, Res, Vm};
 
 /// The steps, by the frame's sub-op.
 const OPEN: u16 = 0;
@@ -16,6 +20,17 @@ const STEP: u16 = 2;
 const REST: u16 = 3;
 const SPREAD: u16 = 4;
 const CLOSE: u16 = 5;
+/// A delegated iterator's `next`, `throw` or `return` for `yield*` or `for await`, or an async iterator's `return`
+/// closing it, called as native code calls: its result is pushed.
+const CALL: u16 = 6;
+/// A `yield*` over a generator suspended at a `yield` that gets a `return` or `throw` request: the generator resumed
+/// with it, its value pushed and the `DelegateResult` after skipped or left through its exit.
+const RESUME: u16 = 7;
+/// A step of an async-from-sync iterator (`for await` or an async generator's `yield*` over a sync iterable): the sync
+/// iterator's method called or its generator resumed, then the step's promise settled from the result.
+const ADAPT: u16 = 8;
+/// `GetAsyncIter` over a value whose `[Symbol.asyncIterator]` or `[Symbol.iterator]` is the program's.
+const ASYNC_OPEN: u16 = 9;
 
 // Slots shared by the steps.
 const IT: usize = 0;
@@ -26,8 +41,34 @@ const SLOT: usize = 2;
 const EXTRA: usize = 3;
 /// The values collected so far (an internal array) for a rest element or a spread; for an open, the source.
 const OUT: usize = 4;
-/// Whether a spread has opened its iterator yet; whether a step's call was counted.
+/// Whether a spread has opened its iterator yet; whether an async open adapts a sync iterator.
 const FLAG: usize = 5;
+
+// The slots of a call (`CALL`): its argument, and whether it has one.
+const ARG: usize = 0;
+const HAS_ARG: usize = 1;
+
+// The slots of a resumed generator (`RESUME`).
+const GEN: usize = 0;
+const MODE: usize = 1;
+const SENT: usize = 2;
+
+// The slots of an async-from-sync step (`ADAPT`): the step's promise, the sync iterator, the request (`REQ_*`), its
+// argument and whether it has one, and how the step goes (`BY_*`).
+const MADE: usize = 0;
+const SYNC: usize = 1;
+const KIND: usize = 2;
+const SYNC_ARG: usize = 3;
+const SYNC_HAS_ARG: usize = 4;
+const HOW: usize = 5;
+/// The sync iterator's method called as native code calls it.
+pub(crate) const BY_UNCOUNTED: usize = 0;
+/// Its `next` called as bytecode calls it.
+pub(crate) const BY_COUNTED: usize = 1;
+/// The sync iterator, a generator, resumed with `next`.
+pub(crate) const BY_RESUME: usize = 2;
+/// Its `return` called to close it, as it lacks the `throw` asked for: the promise is rejected after.
+pub(crate) const BY_CLOSE: usize = 3;
 
 impl Vm<'_> {
     /// Whether `it`, kept with `next` in an iterator record, is stepped through a call the VM makes for it: anything
@@ -67,7 +108,7 @@ impl Vm<'_> {
     }
 
     /// The `[Symbol.iterator]` method opening `v` calls, when it is not one the VM runs itself.
-    fn program_iterator_method(&mut self, v: &Value) -> Option<Value> {
+    pub(crate) fn program_iterator_method(&mut self, v: &Value) -> Option<Value> {
         let Value::Obj(id) = v else { return None };
         if self.walks(v)
             || matches!(
@@ -186,6 +227,102 @@ impl Vm<'_> {
             &slots,
         ))
     }
+
+    /// Whether calling `f` runs code of the program's (or a bound function or tool reference over it), which a frame
+    /// calls; a native is called at once.
+    pub(crate) fn calls_program(&self, f: &Value) -> bool {
+        matches!(f, Value::Obj(id) if self.heap[*id as usize].is_callable()
+            && !matches!(self.heap[*id as usize].kind, Kind::Native { .. }))
+    }
+
+    /// `DelegateCall` or `AsyncClose` calling the iterator's method `m` (see `calls_program`) on `it`, with `arg` if
+    /// any: pushes the frame that calls it and pushes its result for the instruction.
+    pub(crate) fn delegate_by_call(&mut self, m: Value, it: Value, arg: Option<Value>) -> Res {
+        let slots = [arg.unwrap_or_default(), Value::Bool(arg.is_some())];
+        self.enter_native_with(NativeOp::Iteration, CALL, m, it, &slots)
+    }
+
+    /// `DelegateCall` with a `return` (`mode` 1) or `throw` (2) request for the suspended generator `g`: pushes the
+    /// frame that resumes it.
+    pub(crate) fn resume_delegate_by_frame(&mut self, g: Id, mode: u8, sent: Value) -> Res {
+        let slots = [Value::Obj(g), Value::Num(mode as f64), sent];
+        self.enter_native_with(
+            NativeOp::Iteration,
+            RESUME,
+            Value::Undef,
+            Value::Undef,
+            &slots,
+        )
+    }
+
+    /// A step of an async-from-sync iterator over `sync` that calls the program or resumes a generator (`how` is one
+    /// of `BY_*`; `m` the method to call): pushes the frame that takes it and settles `made` after.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn adapt_by_frame(
+        &mut self,
+        how: usize,
+        made: Id,
+        sync: Id,
+        kind: u8,
+        arg: Option<Value>,
+        m: Value,
+    ) -> Res {
+        let slots = [
+            Value::Obj(made),
+            Value::Obj(sync),
+            Value::Num(kind as f64),
+            arg.unwrap_or_default(),
+            Value::Bool(arg.is_some()),
+            Value::Num(how as f64),
+        ];
+        self.enter_native_with(NativeOp::Iteration, ADAPT, m, Value::Undef, &slots)
+    }
+
+    /// Settles the promise `made` of an async-from-sync step from the sync iterator's answer: with the value once it
+    /// resolved (closing the iterator if that fails and it is not done), or rejected with what the step threw.
+    pub(crate) fn settle_from_sync(
+        &mut self,
+        made: Id,
+        sync: Id,
+        kind: u8,
+        step: Result<(Value, bool), Value>,
+    ) -> Result<(), Value> {
+        match step {
+            Ok((v, done)) => {
+                let close = (kind != REQ_RETURN && !done).then_some(sync);
+                let w = self.promise_resolve(v);
+                self.perform_then(w, Reaction::FromSync { made, done, close });
+            }
+            Err(e) => {
+                if self.fatal.is_some() {
+                    return Err(e);
+                }
+                self.reject(made, e);
+            }
+        }
+        Ok(())
+    }
+
+    /// `GetAsyncIter` opening `v` with the program's `method`: its `[Symbol.asyncIterator]`, or with `sync_open` (the
+    /// open's fuel) its `[Symbol.iterator]`, whose iterator is adapted. Pushes the frame that calls it and writes the
+    /// instruction's iterator record.
+    pub(crate) fn open_async_by_call(
+        &mut self,
+        method: Value,
+        v: Value,
+        slot: u32,
+        sync_open: Option<i32>,
+    ) -> Res {
+        let slots = [
+            Value::Undef,
+            Value::Undef,
+            Value::Num(slot as f64),
+            Value::Num(sync_open.unwrap_or(0) as f64),
+            v,
+            Value::Bool(sync_open.is_some()),
+        ];
+        self.enter_native_with(NativeOp::Iteration, ASYNC_OPEN, method, v, &slots)
+    }
 }
 
 /// The step of an iteration frame.
@@ -195,6 +332,10 @@ pub(crate) fn step(vm: &mut Vm, sub: u16, fr: Frame, input: Input) -> Result<Ste
         NEXT | STEP | REST => next_step(vm, sub, fr, input),
         SPREAD => spread_step(vm, fr, input),
         CLOSE => close_step(vm, fr, input),
+        CALL => call_step(vm, fr, input),
+        RESUME => resume_step(vm, fr, input),
+        ADAPT => adapt_step(vm, fr, input),
+        ASYNC_OPEN => async_open_step(vm, fr, input),
         _ => Ok(Step::Done(Value::Undef)),
     }
 }
@@ -492,4 +633,164 @@ fn close_done(
         Err(e) if !quiet || vm.fatal.is_some() => Err(e),
         _ => Ok(Step::DoneEmpty),
     }
+}
+
+/// Calls the frame's callee on its receiver, with its argument if it has one, as `mode` asks. A closure costs the
+/// same either way, so its frame is pushed at once.
+fn call_with_arg(
+    vm: &mut Vm,
+    fr: Frame,
+    this: Slot,
+    arg: Option<Slot>,
+    mode: fn(usize) -> Step,
+) -> Result<Step, Value> {
+    let f = fr.callee(vm);
+    if f.obj()
+        .is_some_and(|id| matches!(vm.heap[id as usize].kind, Kind::Closure(_)))
+    {
+        return match arg {
+            Some(a) => fr.call_slots(vm, f, this, [a]),
+            None => fr.call_slots(vm, f, this, []),
+        };
+    }
+    match arg {
+        Some(a) => fr.call_slots_as(vm, f, this, [a], mode),
+        None => fr.call_slots_as(vm, f, this, [], mode),
+    }
+}
+
+/// A delegated iterator's method: its result goes to the instruction as it is.
+fn call_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
+    match input {
+        Input::Start => {
+            let arg = matches!(fr.get(vm, HAS_ARG), Value::Bool(true)).then(|| fr.slot(vm, ARG));
+            let this = fr.this_slot(vm);
+            call_with_arg(vm, fr, this, arg, Step::CallUncounted)
+        }
+        Input::Returned(r) | Input::Finished(r) => Ok(Step::Done(r.get())),
+        Input::Threw(e) => Err(e),
+    }
+}
+
+/// A delegated generator resumed with a `return` or `throw` request: what it yields or returns goes to the
+/// instruction as a value and a done flag, as `Vm::sync_delegate_step` hands them over.
+fn resume_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
+    let (v, done) = match input {
+        Input::Start => {
+            let g = fr.slot(vm, GEN).obj().unwrap_or(0);
+            let (mode, sent) = (fr.index(vm, MODE) as u8, fr.get(vm, SENT));
+            match crate::builtins::collections::resume_catching(vm, fr, g, mode, sent)? {
+                None => return Ok(Step::Pushed),
+                Some(step) => step,
+            }
+        }
+        Input::Returned(r) => (r.get(), false),
+        Input::Finished(r) => (r.get(), true),
+        Input::Threw(e) => return Err(e),
+    };
+    // The value is pushed; a done one leaves through the following `DelegateResult`'s exit, else it is skipped.
+    let c = caller(vm);
+    let f = &mut vm.frames[c];
+    f.pc = match f.func.code.get(f.pc) {
+        Some(crate::bytecode::Op::DelegateResult(exit, _)) if done => *exit as usize,
+        _ => f.pc + 1,
+    };
+    Ok(Step::Done(v))
+}
+
+/// An async-from-sync step: the sync iterator's answer, or what its step threw, settles the step's promise, which
+/// goes to the instruction.
+fn adapt_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
+    let how = fr.index(vm, HOW);
+    let made = fr.slot(vm, MADE).obj().unwrap_or(0);
+    let sync = fr.slot(vm, SYNC).obj().unwrap_or(0);
+    let kind = fr.index(vm, KIND) as u8;
+    let step = match input {
+        Input::Start if how == BY_RESUME => {
+            let arg = fr.get(vm, SYNC_ARG);
+            match crate::builtins::collections::resume_catching(vm, fr, sync, 0, arg) {
+                Ok(None) => return Ok(Step::Pushed),
+                Ok(Some(step)) => Ok(step),
+                Err(e) => Err(e),
+            }
+        }
+        Input::Start => {
+            let sp = (vm.stack.len() - fr.base()) as u32;
+            vm.handlers_mut().push(crate::vm::Handler {
+                pc: crate::native::THREW as u32,
+                sp,
+            });
+            let arg = matches!(fr.get(vm, SYNC_HAS_ARG), Value::Bool(true))
+                .then(|| fr.slot(vm, SYNC_ARG));
+            let mode = if how == BY_COUNTED {
+                Step::Call
+            } else {
+                Step::CallUncounted
+            };
+            return call_with_arg(vm, fr, fr.slot(vm, SYNC), arg, mode);
+        }
+        Input::Returned(r) => match how {
+            BY_RESUME => Ok((r.get(), false)),
+            BY_CLOSE if r.obj().is_none() => {
+                Err(vm.type_error("Iterator return() result must be an object."))
+            }
+            BY_CLOSE => {
+                Err(vm.type_error("The delegated iterator does not provide a throw() method."))
+            }
+            _ => vm.iter_result_parts(&r.get(), kind),
+        },
+        Input::Finished(r) => Ok((r.get(), true)),
+        Input::Threw(e) => Err(e),
+    };
+    if how == BY_CLOSE {
+        // Closing ends in a rejection either way: with what it threw, or for the missing `throw`.
+        if let Err(e) = step {
+            vm.reject(made, e);
+        }
+        return Ok(Step::Done(Value::Obj(made)));
+    }
+    vm.settle_from_sync(made, sync, kind, step)?;
+    Ok(Step::Done(Value::Obj(made)))
+}
+
+/// An async open: the method returned the iterator, checked as `Vm::open_with` checks it, then kept in the
+/// instruction's iterator record, adapted when it is a sync one.
+fn async_open_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
+    let r = match input {
+        Input::Start => {
+            let (f, src) = (fr.callee(vm), fr.slot(vm, OUT));
+            return fr.call_slots_as(vm, f, src, [], Step::CallUncounted);
+        }
+        Input::Returned(r) => r,
+        Input::Threw(e) => return Err(e),
+        Input::Finished(_) => return Ok(Step::DoneEmpty),
+    };
+    let Value::Obj(id) = r.get() else {
+        return Err(vm.type_error("Iterator method result must be an object."));
+    };
+    let nk = vm.names.next;
+    let next = vm.get_obj(id, nk);
+    if !vm.is_callable(&next) {
+        return Err(vm.type_error("Iterator next must be a function."));
+    }
+    let it = if matches!(fr.get(vm, FLAG), Value::Bool(true)) {
+        vm.fuel(fr.index(vm, EXTRA) as i32);
+        let src = fr.get(vm, OUT);
+        let next = vm.record_next_of(&src, &Value::Obj(id))?;
+        let proto = vm.realm.async_from_sync_proto;
+        Value::Obj(vm.alloc(Obj::new(
+            Some(proto),
+            Kind::AsyncFromSync { sync: id, next },
+        )))
+    } else {
+        // The reference calls the method as bytecode calls it.
+        if !vm.is_closure(&fr.callee(vm).get()) {
+            vm.fuel(crate::vm::NATIVE_FUEL);
+        }
+        Value::Obj(id)
+    };
+    let next = vm.record_next(&it)?;
+    set_caller_slot(vm, fr, 0, Slot::pack(it));
+    set_caller_slot(vm, fr, 1, Slot::pack(next));
+    Ok(Step::DoneEmpty)
 }

@@ -3665,6 +3665,10 @@ impl<'rt> Vm<'rt> {
                             if let Some(step) =
                                 tri!(self.sync_delegate_step(it.get(), kind, received.get()))
                             {
+                                // A generator resumed in a frame hands its answer over itself.
+                                if std::mem::take(&mut self.entered) {
+                                    continue 'outer;
+                                }
                                 match step {
                                     Some((v, done)) => {
                                         self.push(v);
@@ -3685,7 +3689,12 @@ impl<'rt> Vm<'rt> {
                         }
                         let arg = (flags & DELEGATE_NO_ARG == 0).then(|| received.get());
                         let next = self.stack[base + slot as usize + 1].get();
-                        match tri!(self.delegate_call(it.get(), kind, arg, next)) {
+                        let r = tri!(self.delegate_call(it.get(), kind, arg, next));
+                        // A method of the program's runs in a frame, which pushes its result itself.
+                        if std::mem::take(&mut self.entered) {
+                            continue 'outer;
+                        }
+                        match r {
                             Some(r) => self.push(r),
                             None => {
                                 self.stack.push(received);
@@ -3704,7 +3713,11 @@ impl<'rt> Vm<'rt> {
                     Op::GetAsyncIter(slot, ctx) => {
                         self.frames[fi].pc = pc;
                         let v = self.pop();
-                        let it = tri!(self.get_async_iterator(&v, ctx));
+                        let it = tri!(self.get_async_iterator(&v, ctx, slot));
+                        // A method of the program's runs in a frame, which writes the record itself.
+                        if std::mem::take(&mut self.entered) {
+                            continue 'outer;
+                        }
                         let next = tri!(self.record_next(&it));
                         self.stack[base + slot as usize] = Slot::pack(it);
                         self.stack[base + slot as usize + 1] = Slot::pack(next);
@@ -3712,7 +3725,11 @@ impl<'rt> Vm<'rt> {
                     Op::AsyncClose(slot, skip) => {
                         self.frames[fi].pc = pc;
                         let it = std::mem::take(&mut self.stack[base + slot as usize]).get();
-                        match tri!(self.async_close(it)) {
+                        let r = tri!(self.async_close(it));
+                        if std::mem::take(&mut self.entered) {
+                            continue 'outer;
+                        }
+                        match r {
                             Some(r) => self.push(r),
                             None => pc = skip as usize,
                         }

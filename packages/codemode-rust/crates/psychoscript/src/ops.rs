@@ -2,10 +2,11 @@
 
 use crate::builtins::exotic;
 use crate::bytecode::ITER_FOR_OF;
+use crate::iteration::{BY_CLOSE, BY_COUNTED, BY_RESUME, BY_UNCOUNTED};
 use crate::object::*;
 use crate::strings::StrId;
 use crate::value::{Id, Value, num_to_string, str_to_num};
-use crate::vm::{NATIVE_FUEL, REQ_NEXT, REQ_RETURN, Reaction, Res, Vm};
+use crate::vm::{NATIVE_FUEL, REQ_NEXT, REQ_RETURN, Res, Vm};
 
 pub const MAX_STRING_LEN: usize = 1 << 24;
 const UNAWAITED: &str = "This value is an un-awaited Promise; await it first - e.g. `const result = await tools.ns.tool(...)`.";
@@ -1454,7 +1455,9 @@ impl<'rt> Vm<'rt> {
     }
 
     /// A `yield*` step on an iterator the VM runs itself, as a value and a done flag: `Ok(None)` for any other
-    /// iterator, `Ok(Some(None))` when it lacks the `throw` or `return` method asked for.
+    /// iterator, `Ok(Some(None))` when it lacks the `throw` or `return` method asked for. A suspended generator is
+    /// resumed in a frame (`Vm::resume_delegate_by_frame`), which hands its answer to the instruction itself: the
+    /// caller sees `Vm::entered`.
     #[inline(never)]
     pub fn sync_delegate_step(
         &mut self,
@@ -1464,12 +1467,16 @@ impl<'rt> Vm<'rt> {
     ) -> Result<Option<Option<(Value, bool)>>, Value> {
         let Value::Obj(id) = it else { return Ok(None) };
         match &self.heap[id as usize].kind {
-            Kind::Generator(_) => {
+            Kind::Generator(state) => {
                 let mode = match kind {
                     REQ_NEXT => 0,
                     REQ_RETURN => 1,
                     _ => 2,
                 };
+                if matches!(state, GenState::Suspended(_)) {
+                    self.resume_delegate_by_frame(id, mode, received)?;
+                    return Ok(Some(Some((Value::Undef, false))));
+                }
                 Ok(Some(Some(self.resume_generator(id, mode, received)?)))
             }
             Kind::ArrayIter { .. }
@@ -1490,7 +1497,8 @@ impl<'rt> Vm<'rt> {
     }
 
     /// Calls an iterator's `next`, `throw` or `return` for `yield*` or `for await`, returning its result; `None` when
-    /// `throw` or `return` is missing.
+    /// `throw` or `return` is missing. A method of the program's is called by a frame, which pushes the result for
+    /// the instruction itself: the caller sees `Vm::entered`.
     #[inline(never)]
     pub fn delegate_call(
         &mut self,
@@ -1517,6 +1525,10 @@ impl<'rt> Vm<'rt> {
             let name = self.request_name(kind);
             let name = self.atoms.text(name).to_owned();
             return Err(self.type_error(&format!("Iterator {name} must be a function.")));
+        }
+        if self.calls_program(&m) {
+            self.delegate_by_call(m, it, arg)?;
+            return Ok(Some(Value::Undef));
         }
         let args: &[Value] = match &arg {
             Some(a) => std::slice::from_ref(a),
@@ -1547,13 +1559,17 @@ impl<'rt> Vm<'rt> {
         Ok((self.get_obj(*rid, vk), done))
     }
 
-    /// GetIterator with the async hint: `[Symbol.asyncIterator]()`, or the sync iterator adapted.
+    /// GetIterator for `for await` (`ITER_FOR_AWAIT`) or an async generator's `yield*` (`ITER_DELEGATE`), with the
+    /// async hint: `[Symbol.asyncIterator]()`, or the sync iterator adapted. A method of the program's is called by a
+    /// frame, which writes the instruction's iterator record in `slot` itself: the caller sees `Vm::entered`.
     #[inline(never)]
-    /// GetIterator for `for await` (`ITER_FOR_AWAIT`) or an async generator's `yield*` (`ITER_DELEGATE`).
-    pub fn get_async_iterator(&mut self, v: &Value, ctx: u8) -> Res {
+    pub fn get_async_iterator(&mut self, v: &Value, ctx: u8, slot: u32) -> Res {
         if let Value::Obj(id) = v {
             let f = self.get_obj(*id, SYM_ASYNC_ITERATOR);
             if !f.is_nullish() {
+                if self.calls_program(&f) {
+                    return self.open_async_by_call(f, *v, slot, None);
+                }
                 // The reference calls the method as bytecode calls it.
                 let it = self.open_with(&f, v)?;
                 if !self.is_closure(&f) {
@@ -1568,6 +1584,12 @@ impl<'rt> Vm<'rt> {
         if !self.walks(v) && self.is_iterable(v) {
             self.fuel(1);
         }
+        if self.is_iterable(v)
+            && let Some(method) = self.program_iterator_method(v)
+            && self.calls_program(&method)
+        {
+            return self.open_async_by_call(method, *v, slot, Some(open));
+        }
         let Value::Obj(sync) = self.get_iterator_in(v, ctx)? else {
             return Err(self.type_error("Iterator method result must be an object."));
         };
@@ -1580,12 +1602,14 @@ impl<'rt> Vm<'rt> {
         ))))
     }
 
-    /// The promise of an async-from-sync iterator's `next`, `throw` or `return`.
+    /// The promise of an async-from-sync iterator's `next`, `throw` or `return`. A step that calls the program or
+    /// resumes a generator is taken by a frame (`Vm::adapt_by_frame`), which hands the promise to the instruction
+    /// itself: the caller sees `Vm::entered`.
     fn async_from_sync_call(&mut self, sync: Id, next: Value, kind: u8, arg: Option<Value>) -> Res {
         let made = self.new_promise();
         let sv = Value::Obj(sync);
         let step = match kind {
-            REQ_NEXT => self.sync_step(sv, arg, next),
+            REQ_NEXT => self.sync_step(made, sync, arg, next),
             _ => {
                 let name = self.request_name(kind);
                 let m = self.get_obj(sync, name);
@@ -1593,61 +1617,87 @@ impl<'rt> Vm<'rt> {
                     if kind == REQ_RETURN {
                         let r = self.iter_result(arg.unwrap_or_default(), true);
                         self.resolve_promise(made, r);
-                    } else {
-                        let closed = self.iter_close(&sv);
-                        let e = match closed {
-                            Err(e) => e,
-                            Ok(()) => self.type_error(
-                                "The delegated iterator does not provide a throw() method.",
-                            ),
-                        };
-                        self.reject(made, e);
+                        return Ok(Value::Obj(made));
                     }
+                    let rk = self.names.return_;
+                    let ret = match self.heap[sync as usize].kind {
+                        Kind::Generator(_)
+                        | Kind::ArrayIter { .. }
+                        | Kind::MapIter { .. }
+                        | Kind::StrIter { .. }
+                        | Kind::ListIter { .. } => Value::Undef,
+                        _ => self.get_obj(sync, rk),
+                    };
+                    let closed = if self.calls_program(&ret) {
+                        match self.adapt_by_frame(BY_CLOSE, made, sync, kind, None, ret) {
+                            Ok(_) => return Ok(Value::Undef),
+                            Err(e) => Err(e),
+                        }
+                    } else {
+                        self.iter_close(&sv)
+                    };
+                    let e = match closed {
+                        Err(e) => e,
+                        Ok(()) => self.type_error(
+                            "The delegated iterator does not provide a throw() method.",
+                        ),
+                    };
+                    self.reject(made, e);
                     return Ok(Value::Obj(made));
                 }
-                let args: &[Value] = match &arg {
-                    Some(a) => std::slice::from_ref(a),
-                    None => &[],
-                };
-                self.call(&m, sv, args)
-                    .and_then(|r| self.iter_result_parts(&r, kind))
+                if self.calls_program(&m) {
+                    self.adapt_by_frame(BY_UNCOUNTED, made, sync, kind, arg, m)
+                        .map(|_| None)
+                } else {
+                    let args: &[Value] = match &arg {
+                        Some(a) => std::slice::from_ref(a),
+                        None => &[],
+                    };
+                    self.call(&m, sv, args)
+                        .and_then(|r| self.iter_result_parts(&r, kind))
+                        .map(Some)
+                }
             }
         };
-        match step {
-            Ok((v, done)) => {
-                let close = (kind != REQ_RETURN && !done).then_some(sync);
-                let w = self.promise_resolve(v);
-                self.perform_then(w, Reaction::FromSync { made, done, close });
-            }
-            Err(e) => {
-                if self.fatal.is_some() {
-                    return Err(e);
-                }
-                self.reject(made, e);
-            }
-        }
+        let Some(step) = step.transpose() else {
+            return Ok(Value::Undef);
+        };
+        self.settle_from_sync(made, sync, kind, step)?;
         Ok(Value::Obj(made))
     }
 
-    /// One `next` on a sync iterator, as a value and a done flag. The reference's `$vmAsyncFromSync` calls it as
+    /// One `next` on a sync iterator, as a value and a done flag, or `None` once a frame takes it for the promise
+    /// `made` (a call of the program's `next`, a generator resumed). The reference's `$vmAsyncFromSync` calls it as
     /// bytecode calls it, except on an iterator it walks itself: a generator's or helper's native `next` costs its
     /// fifty before the body runs.
     fn sync_step(
         &mut self,
-        it: Value,
+        made: Id,
+        sync: Id,
         arg: Option<Value>,
         next: Value,
-    ) -> Result<(Value, bool), Value> {
-        let generator = matches!(it, Value::Obj(id)
-            if matches!(self.heap[id as usize].kind, Kind::Generator(_) | Kind::IterHelper(_)));
+    ) -> Result<Option<(Value, bool)>, Value> {
+        let it = Value::Obj(sync);
+        let generator = matches!(
+            self.heap[sync as usize].kind,
+            Kind::Generator(_) | Kind::IterHelper(_)
+        );
         if generator {
             self.fuel(NATIVE_FUEL);
         }
-        if next.is_nullish()
-            && let Some(Some(step)) =
+        if next.is_nullish() {
+            if matches!(
+                self.heap[sync as usize].kind,
+                Kind::Generator(GenState::Suspended(_))
+            ) {
+                self.adapt_by_frame(BY_RESUME, made, sync, REQ_NEXT, arg, Value::Undef)?;
+                return Ok(None);
+            }
+            if let Some(Some(step)) =
                 self.sync_delegate_step(it, REQ_NEXT, arg.unwrap_or_default())?
-        {
-            return Ok(step);
+            {
+                return Ok(Some(step));
+            }
         }
         let m = if next.is_nullish() {
             let nk = self.names.next;
@@ -1655,6 +1705,11 @@ impl<'rt> Vm<'rt> {
         } else {
             next
         };
+        if self.calls_program(&m) {
+            let how = if generator { BY_UNCOUNTED } else { BY_COUNTED };
+            self.adapt_by_frame(how, made, sync, REQ_NEXT, arg, m)?;
+            return Ok(None);
+        }
         let args: &[Value] = match &arg {
             Some(a) => std::slice::from_ref(a),
             None => &[],
@@ -1664,10 +1719,12 @@ impl<'rt> Vm<'rt> {
         } else {
             self.call_counted(&m, it, args)?
         };
-        self.iter_result_parts(&r, REQ_NEXT)
+        self.iter_result_parts(&r, REQ_NEXT).map(Some)
     }
 
-    /// Starts closing an async iterator: the result of its `return()`, or `None` when it has none.
+    /// Starts closing an async iterator: the result of its `return()`, or `None` when it has none. A `return` of the
+    /// program's is called by a frame, which pushes the result for the instruction itself: the caller sees
+    /// `Vm::entered`.
     #[inline(never)]
     pub fn async_close(&mut self, it: Value) -> Result<Option<Value>, Value> {
         match it {
@@ -1682,6 +1739,10 @@ impl<'rt> Vm<'rt> {
                 }
                 if !self.is_callable(&m) {
                     return Err(self.type_error("Iterator return must be a function."));
+                }
+                if self.calls_program(&m) {
+                    self.delegate_by_call(m, it, None)?;
+                    return Ok(Some(Value::Undef));
                 }
                 self.call(&m, it, &[]).map(Some)
             }
