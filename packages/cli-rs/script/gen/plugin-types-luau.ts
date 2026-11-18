@@ -238,10 +238,15 @@ function luau(schema: Schema, indent: string): string {
 }
 
 // A table type of `properties`, each optional unless `required` names it.
-function fields(properties: Record<string, Schema>, required: Set<string>, indent: string) {
+function fields(
+  properties: Record<string, Schema>,
+  required: Set<string>,
+  indent: string,
+  params?: Record<string, string>,
+) {
   const inner = indent + "    "
   const lines = Object.entries(properties).map(([name, field]) => {
-    const type = luau(field, inner)
+    const type = params?.[name] ?? luau(field, inner)
     const optional = required.has(name) || type.endsWith("?") || type === "any" ? "" : "?"
     return `${inner}${key(name)}: ${type}${optional},`
   })
@@ -538,6 +543,19 @@ return plugin
 `
 
 // The API's schemas the contract and the reads reached, and what those reach in turn, by Luau name.
+const envelopes = new Map<string, string>()
+function apiType(source: Schema) {
+  const props = source.properties
+  if (props?.id?.$ref !== "#/components/schemas/Event.ID" || !props.type?.enum || !props.data) return luau(source, "")
+  const required = new Set(source.required)
+  if (!required.has("type") || !required.has("data")) return luau(source, "")
+  // Match the whole table, not just its field names: durable versions and optional fields differ.
+  const shape = fields(props, required, "", { type: "Kind", data: "Payload" })
+  const name = envelopes.get(shape) ?? `_Event${envelopes.size + 1}`
+  envelopes.set(shape, name)
+  return `${name}<${luau(props.type, "")}, ${luau(props.data, "")}>`
+}
+
 const written = new Map<string, string>()
 for (
   let pending = [...reached.keys()];
@@ -548,12 +566,15 @@ for (
     const source = reached.get(name)!
     written.set(
       name,
-      [...comment(components[source].description), `export type ${name} = ${luau(components[source], "")}`, ""].join(
+      [...comment(components[source].description), `export type ${name} = ${apiType(components[source])}`, ""].join(
         "\n",
       ),
     )
   }
-const served = [...written.keys()].toSorted().map((name) => written.get(name)!)
+const served = [
+  ...[...envelopes].map(([shape, name]) => `type ${name}<Kind, Payload> = ${shape}\n`),
+  ...[...written.keys()].toSorted().map((name) => written.get(name)!),
+]
 
 const file = `${root}crates/plugin/src/luau/opencode/plugin.luau`
 await Bun.write(

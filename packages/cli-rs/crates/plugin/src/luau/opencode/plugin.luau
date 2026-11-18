@@ -1593,6 +1593,51 @@ export type Wrap = ("word" | "char" | "none")
 
 -- The HTTP API's types (packages/protocol/openapi.json) ---------------------------------------------------------
 
+type _Event1<Kind, Payload> = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: Kind,
+    location: ApiLocationRef?,
+    data: Payload,
+}
+
+type _Event2<Kind, Payload> = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: Kind,
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC77c5abcb68d,
+    },
+    location: ApiLocationRef?,
+    data: Payload,
+}
+
+type _Event3<Kind, Payload> = {
+    id: EventID,
+    created: number,
+    metadata: { [string]: any }?,
+    type: Kind,
+    durable: {
+        aggregateID: string,
+        seq: EventSeq,
+        version: EventVersionEncodedC3ea984aceae,
+    },
+    location: ApiLocationRef?,
+    data: Payload,
+}
+
+type _Event4<Kind, Payload> = {
+    id: EventID,
+    metadata: { [string]: any }?,
+    location: LocationPublicRef?,
+    type: Kind,
+    data: Payload,
+}
+
 export type AbsolutePath = string
 
 export type AgentColor = string
@@ -1613,14 +1658,7 @@ export type AgentInfo = {
     permissions: PermissionRuleset,
 }
 
-export type AgentUpdated = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "agent.updated",
-    location: ApiLocationRef?,
-    data: any,
-}
+export type AgentUpdated = _Event1<"agent.updated", any>
 
 export type ApiLocationRef = {
     directory: AbsolutePath,
@@ -1679,14 +1717,7 @@ export type ArtifactTime = {
     updated: number,
 }
 
-export type ArtifactUpdated = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "artifact.updated",
-    location: ApiLocationRef?,
-    data: any,
-}
+export type ArtifactUpdated = _Event1<"artifact.updated", any>
 
 export type AutomationAction = (AutomationActionPrompt | AutomationActionCode)
 
@@ -1801,14 +1832,7 @@ export type CommandInfo = {
     description: string?,
 }
 
-export type CommandUpdated = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "command.updated",
-    location: ApiLocationRef?,
-    data: any,
-}
+export type CommandUpdated = _Event1<"command.updated", any>
 
 export type ConfigAgentEncoded = {
     model: (string | {
@@ -2075,14 +2099,7 @@ export type ConfigShellOption = {
     acceptable: boolean,
 }
 
-export type ConfigUpdated = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "config.updated",
-    location: ApiLocationRef?,
-    data: any,
-}
+export type ConfigUpdated = _Event1<"config.updated", any>
 
 export type ConfigWarmingEncoded = {
     prompt: string?,
@@ -2151,29 +2168,15 @@ export type CredentialOAuth = {
     metadata: { [string]: any }?,
 }
 
-export type CredentialSwitched = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "credential.switched",
-    location: ApiLocationRef?,
-    data: {
-        integrationID: IntegrationID,
-        credentialID: CredentialID?,
-    },
-}
+export type CredentialSwitched = _Event1<"credential.switched", {
+    integrationID: IntegrationID,
+    credentialID: CredentialID?,
+}>
 
-export type CredentialUpdated = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "credential.updated",
-    location: ApiLocationRef?,
-    data: {
-        integrationID: IntegrationID,
-        credentialID: CredentialID,
-    },
-}
+export type CredentialUpdated = _Event1<"credential.updated", {
+    integrationID: IntegrationID,
+    credentialID: CredentialID,
+}>
 
 export type CredentialValue = (CredentialOAuth | CredentialKey | CredentialExternal)
 
@@ -2185,23 +2188,16 @@ export type EventVersionEncodedC3ea984aceae = number
 
 export type EventVersionEncodedC77c5abcb68d = number
 
-export type ExperimentalMcpEvent = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "experimental.mcp.event",
-    location: ApiLocationRef?,
-    data: {
-        id: string,
-        server: string,
-        name: string,
-        eventId: string,
-        timestamp: string,
-        data: any,
-        cursor: string?,
-        truncated: boolean?,
-    },
-}
+export type ExperimentalMcpEvent = _Event1<"experimental.mcp.event", {
+    id: string,
+    server: string,
+    name: string,
+    eventId: string,
+    timestamp: string,
+    data: any,
+    cursor: string?,
+    truncated: boolean?,
+}>
 
 export type FileDiffInfo = {
     file: string,
@@ -2221,17 +2217,10 @@ export type FileSystemWrite = {
     path: AbsolutePath,
 }
 
-export type FilesystemChanged = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "filesystem.changed",
-    location: ApiLocationRef?,
-    data: {
-        file: string,
-        event: ("add" | "change" | "unlink"),
-    },
-}
+export type FilesystemChanged = _Event1<"filesystem.changed", {
+    file: string,
+    event: ("add" | "change" | "unlink"),
+}>
 
 export type FormAnswer = { [string]: FormValue }
 
@@ -2259,28 +2248,14 @@ export type FormBooleanField1 = {
     default: boolean?,
 }
 
-export type FormCancelled = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "form.cancelled",
-    location: ApiLocationRef?,
-    data: {
-        id: FormID,
-        sessionID: string,
-    },
-}
+export type FormCancelled = _Event1<"form.cancelled", {
+    id: FormID,
+    sessionID: string,
+}>
 
-export type FormCreated = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "form.created",
-    location: ApiLocationRef?,
-    data: {
-        form: FormInfo1,
-    },
-}
+export type FormCreated = _Event1<"form.created", {
+    form: FormInfo1,
+}>
 
 export type FormDetail = {
     id: FormID,
@@ -2415,18 +2390,11 @@ export type FormOption = {
     description: string?,
 }
 
-export type FormReplied = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "form.replied",
-    location: ApiLocationRef?,
-    data: {
-        id: FormID,
-        sessionID: string,
-        answer: FormAnswer1,
-    },
-}
+export type FormReplied = _Event1<"form.replied", {
+    id: FormID,
+    sessionID: string,
+    answer: FormAnswer1,
+}>
 
 export type FormState = ({
     status: "pending",
@@ -2664,27 +2632,13 @@ export type GenerateVideoRunning = {
     status: "running",
 }
 
-export type InstallationUpdateAvailable = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "installation.update-available",
-    location: ApiLocationRef?,
-    data: {
-        version: string,
-    },
-}
+export type InstallationUpdateAvailable = _Event1<"installation.update-available", {
+    version: string,
+}>
 
-export type InstallationUpdated = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "installation.updated",
-    location: ApiLocationRef?,
-    data: {
-        version: string,
-    },
-}
+export type InstallationUpdated = _Event1<"installation.updated", {
+    version: string,
+}>
 
 export type InstructionEntryInfo = {
     key: InstructionEntryKey,
@@ -2825,14 +2779,7 @@ export type IntegrationOAuthMethod = {
     form: FormFields?,
 }
 
-export type IntegrationUpdated = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "integration.updated",
-    location: ApiLocationRef?,
-    data: any,
-}
+export type IntegrationUpdated = _Event1<"integration.updated", any>
 
 export type JobCodeMode = {
     kind: "codemode",
@@ -2899,14 +2846,7 @@ export type LocationPublicRef = {
     directory: AbsolutePath,
 }
 
-export type LocationShutdown = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "location.shutdown",
-    location: ApiLocationRef?,
-    data: any,
-}
+export type LocationShutdown = _Event1<"location.shutdown", any>
 
 export type McpLocalConfigEncoded = {
     type: "local",
@@ -2973,16 +2913,9 @@ export type McpResourceTemplate = {
     mimeType: string?,
 }
 
-export type McpResourcesChanged = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "mcp.resources.changed",
-    location: ApiLocationRef?,
-    data: {
-        server: string,
-    },
-}
+export type McpResourcesChanged = _Event1<"mcp.resources.changed", {
+    server: string,
+}>
 
 export type McpServer = {
     name: string,
@@ -2991,16 +2924,9 @@ export type McpServer = {
     integrationID: IntegrationID?,
 }
 
-export type McpStatusChanged = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "mcp.status.changed",
-    location: ApiLocationRef?,
-    data: {
-        server: string,
-    },
-}
+export type McpStatusChanged = _Event1<"mcp.status.changed", {
+    server: string,
+}>
 
 export type McpStatusConnected = {
     status: "connected",
@@ -3105,14 +3031,7 @@ export type ModelSettings = { [string]: any }
 
 export type ModelType = (("chat" | "decision" | "image" | "video") | string)
 
-export type ModelUpdated = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "model.updated",
-    location: ApiLocationRef?,
-    data: any,
-}
+export type ModelUpdated = _Event1<"model.updated", any>
 
 export type ModelVariant = {
     id: string,
@@ -3123,14 +3042,7 @@ export type ModelVariant = {
 
 export type ModelVariantSettings = { [string]: any }
 
-export type ModelsDevRefreshed = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "models-dev.refreshed",
-    location: ApiLocationRef?,
-    data: any,
-}
+export type ModelsDevRefreshed = _Event1<"models-dev.refreshed", any>
 
 export type MoneyUSD = number
 
@@ -3145,40 +3057,26 @@ export type PairingSession = {
     token: string,
 }
 
-export type PermissionAsked = {
-    id: EventID,
-    created: number,
+export type PermissionAsked = _Event1<"permission.asked", {
+    id: PermissionID,
+    sessionID: SessionID,
+    action: string,
+    resources: { string },
+    save: { string }?,
     metadata: { [string]: any }?,
-    type: "permission.asked",
-    location: ApiLocationRef?,
-    data: {
-        id: PermissionID,
-        sessionID: SessionID,
-        action: string,
-        resources: { string },
-        save: { string }?,
-        metadata: { [string]: any }?,
-        source: PermissionSource?,
-        message: string?,
-    },
-}
+    source: PermissionSource?,
+    message: string?,
+}>
 
 export type PermissionEffect = ("allow" | "deny" | "ask")
 
 export type PermissionID = string
 
-export type PermissionReplied = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "permission.replied",
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        requestID: PermissionID,
-        reply: PermissionReply,
-    },
-}
+export type PermissionReplied = _Event1<"permission.replied", {
+    sessionID: SessionID,
+    requestID: PermissionID,
+    reply: PermissionReply,
+}>
 
 export type PermissionReply = ("once" | "always" | "reject")
 
@@ -3220,17 +3118,10 @@ export type PermissionSource = {
     id: string,
 }
 
-export type PersistentPtyAdded = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "persistent-pty.added",
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        terminal: PersistentPtyInfo,
-    },
-}
+export type PersistentPtyAdded = _Event1<"persistent-pty.added", {
+    sessionID: SessionID,
+    terminal: PersistentPtyInfo,
+}>
 
 export type PersistentPtyHandoff = {
     directory: string,
@@ -3277,17 +3168,10 @@ export type PersistentPtyReadResult = {
     },
 }
 
-export type PersistentPtyRemoved = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "persistent-pty.removed",
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        ptyID: PtyID,
-    },
-}
+export type PersistentPtyRemoved = _Event1<"persistent-pty.removed", {
+    sessionID: SessionID,
+    ptyID: PtyID,
+}>
 
 export type PersistentPtySnapshot = {
     info: PersistentPtyInfo,
@@ -3299,17 +3183,10 @@ export type PersistentPtySnapshot = {
     },
 }
 
-export type PersistentPtyUpdated = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "persistent-pty.updated",
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        terminal: PersistentPtyInfo,
-    },
-}
+export type PersistentPtyUpdated = _Event1<"persistent-pty.updated", {
+    sessionID: SessionID,
+    terminal: PersistentPtyInfo,
+}>
 
 export type PluginFeatures = {
     server: true?,
@@ -3356,14 +3233,7 @@ export type PluginState = ({
     ref: string?,
 })
 
-export type PluginUpdated = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "plugin.updated",
-    location: ApiLocationRef?,
-    data: any,
-}
+export type PluginUpdated = _Event1<"plugin.updated", any>
 
 export type Project = {
     id: ProjectID,
@@ -3395,23 +3265,16 @@ export type ProjectTime = {
     archived: number?,
 }
 
-export type ProjectUpdated = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "project.updated",
-    location: ApiLocationRef?,
-    data: {
-        id: ProjectID,
-        canonical: AbsolutePath,
-        vcs: ProjectVcs?,
-        name: string?,
-        icon: ProjectIcon?,
-        commands: ProjectCommands?,
-        time: ProjectTime,
-        sandboxes: { string },
-    },
-}
+export type ProjectUpdated = _Event1<"project.updated", {
+    id: ProjectID,
+    canonical: AbsolutePath,
+    vcs: ProjectVcs?,
+    name: string?,
+    icon: ProjectIcon?,
+    commands: ProjectCommands?,
+    time: ProjectTime,
+    sandboxes: { string },
+}>
 
 export type ProjectVcs = string
 
@@ -3499,14 +3362,7 @@ export type ProviderRequest = {
 
 export type ProviderSettings = { [string]: any }
 
-export type ProviderUpdated = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "provider.updated",
-    location: ApiLocationRef?,
-    data: any,
-}
+export type ProviderUpdated = _Event1<"provider.updated", any>
 
 export type Pty = {
     id: PtyID,
@@ -3519,39 +3375,18 @@ export type Pty = {
     exitCode: number?,
 }
 
-export type PtyCreated = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "pty.created",
-    location: ApiLocationRef?,
-    data: {
-        info: Pty,
-    },
-}
+export type PtyCreated = _Event1<"pty.created", {
+    info: Pty,
+}>
 
-export type PtyDeleted = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "pty.deleted",
-    location: ApiLocationRef?,
-    data: {
-        id: PtyID,
-    },
-}
+export type PtyDeleted = _Event1<"pty.deleted", {
+    id: PtyID,
+}>
 
-export type PtyExited = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "pty.exited",
-    location: ApiLocationRef?,
-    data: {
-        id: PtyID,
-        exitCode: number,
-    },
-}
+export type PtyExited = _Event1<"pty.exited", {
+    id: PtyID,
+    exitCode: number,
+}>
 
 export type PtyID = string
 
@@ -3560,16 +3395,9 @@ export type PtyTicketConnectToken = {
     expires_in: number,
 }
 
-export type PtyUpdated = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "pty.updated",
-    location: ApiLocationRef?,
-    data: {
-        info: Pty,
-    },
-}
+export type PtyUpdated = _Event1<"pty.updated", {
+    info: Pty,
+}>
 
 export type ReferenceGitSource = {
     type: "git",
@@ -3592,14 +3420,7 @@ export type ReferenceLocalSource = {
 
 export type ReferenceSource = (ReferenceLocalSource | ReferenceGitSource)
 
-export type ReferenceUpdated = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "reference.updated",
-    location: ApiLocationRef?,
-    data: any,
-}
+export type ReferenceUpdated = _Event1<"reference.updated", any>
 
 export type RelativePath = string
 
@@ -3620,221 +3441,82 @@ export type ServerInfo = {
     }?,
 }
 
-export type SessionAgentSelected = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.agent.selected",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        agent: AgentID,
-        previous: AgentID?,
-    },
-}
+export type SessionAgentSelected = _Event2<"session.agent.selected", {
+    sessionID: SessionID,
+    agent: AgentID,
+    previous: AgentID?,
+}>
 
-export type SessionArchived = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.archived",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-    },
-}
+export type SessionArchived = _Event2<"session.archived", {
+    sessionID: SessionID,
+}>
 
-export type SessionCompactionDelta = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.compaction.delta",
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        text: string,
-    },
-}
+export type SessionCompactionDelta = _Event1<"session.compaction.delta", {
+    sessionID: SessionID,
+    text: string,
+}>
 
-export type SessionCompactionEnded = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.compaction.ended",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        reason: ("auto" | "manual"),
-        model: ModelRef?,
-        native: SessionMessageNative?,
-        text: string,
-        cost: MoneyUSD?,
-        tokens: TokenUsageInfo?,
-    },
-}
+export type SessionCompactionEnded = _Event2<"session.compaction.ended", {
+    sessionID: SessionID,
+    reason: ("auto" | "manual"),
+    model: ModelRef?,
+    native: SessionMessageNative?,
+    text: string,
+    cost: MoneyUSD?,
+    tokens: TokenUsageInfo?,
+}>
 
-export type SessionCompactionFailed = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.compaction.failed",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        reason: ("auto" | "manual"),
-        error: SessionStructuredError,
-        inputID: SessionMessageID?,
-        cost: MoneyUSD?,
-        tokens: TokenUsageInfo?,
-    },
-}
+export type SessionCompactionFailed = _Event2<"session.compaction.failed", {
+    sessionID: SessionID,
+    reason: ("auto" | "manual"),
+    error: SessionStructuredError,
+    inputID: SessionMessageID?,
+    cost: MoneyUSD?,
+    tokens: TokenUsageInfo?,
+}>
 
-export type SessionCompactionStarted = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.compaction.started",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        reason: ("auto" | "manual"),
-        inputID: SessionMessageID?,
-    },
-}
+export type SessionCompactionStarted = _Event2<"session.compaction.started", {
+    sessionID: SessionID,
+    reason: ("auto" | "manual"),
+    inputID: SessionMessageID?,
+}>
 
-export type SessionCreated = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.created",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        projectID: ProjectID,
-        location: ApiLocationRef,
-        subpath: RelativePath?,
-        parentID: SessionID?,
-        slug: string,
-        title: string?,
-        agent: AgentID?,
-        model: ModelRef?,
-        metadata: SessionMetadata?,
-        permissions: PermissionRuleset?,
-        version: string,
-    },
-}
+export type SessionCreated = _Event2<"session.created", {
+    sessionID: SessionID,
+    projectID: ProjectID,
+    location: ApiLocationRef,
+    subpath: RelativePath?,
+    parentID: SessionID?,
+    slug: string,
+    title: string?,
+    agent: AgentID?,
+    model: ModelRef?,
+    metadata: SessionMetadata?,
+    permissions: PermissionRuleset?,
+    version: string,
+}>
 
-export type SessionDeleted = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.deleted",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC3ea984aceae,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-    },
-}
+export type SessionDeleted = _Event3<"session.deleted", {
+    sessionID: SessionID,
+}>
 
-export type SessionExecutionFailed = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.execution.failed",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        error: SessionStructuredError,
-    },
-}
+export type SessionExecutionFailed = _Event2<"session.execution.failed", {
+    sessionID: SessionID,
+    error: SessionStructuredError,
+}>
 
-export type SessionExecutionInterrupted = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.execution.interrupted",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        reason: ("user" | "shutdown" | "superseded" | "inactivity"),
-    },
-}
+export type SessionExecutionInterrupted = _Event2<"session.execution.interrupted", {
+    sessionID: SessionID,
+    reason: ("user" | "shutdown" | "superseded" | "inactivity"),
+}>
 
-export type SessionExecutionStarted = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.execution.started",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-    },
-}
+export type SessionExecutionStarted = _Event2<"session.execution.started", {
+    sessionID: SessionID,
+}>
 
-export type SessionExecutionSucceeded = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.execution.succeeded",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-    },
-}
+export type SessionExecutionSucceeded = _Event2<"session.execution.succeeded", {
+    sessionID: SessionID,
+}>
 
 export type SessionForkBoundary = ({
     type: "before",
@@ -3844,55 +3526,24 @@ export type SessionForkBoundary = ({
     messageID: SessionMessageID,
 })
 
-export type SessionForked = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.forked",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC3ea984aceae,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        parentID: SessionID,
-        boundary: SessionForkBoundary,
-        instructions: { [string]: any }?,
-        instructionEntries: InstructionEntrySnapshot?,
-    },
-}
+export type SessionForked = _Event3<"session.forked", {
+    sessionID: SessionID,
+    parentID: SessionID,
+    boundary: SessionForkBoundary,
+    instructions: { [string]: any }?,
+    instructionEntries: InstructionEntrySnapshot?,
+}>
 
 export type SessionID = string
 
-export type SessionIdle = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.idle",
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-    },
-}
+export type SessionIdle = _Event1<"session.idle", {
+    sessionID: SessionID,
+}>
 
-export type SessionInboxCancelled = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.inbox.cancelled",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        inboxID: SessionMessageID,
-    },
-}
+export type SessionInboxCancelled = _Event2<"session.inbox.cancelled", {
+    sessionID: SessionID,
+    inboxID: SessionMessageID,
+}>
 
 export type SessionInboxCompaction = {
     id: SessionMessageID,
@@ -3907,60 +3558,24 @@ export type SessionInboxCompaction = {
 
 export type SessionInboxCompactionPayload = any
 
-export type SessionInboxDelivered = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.inbox.delivered",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        inboxID: SessionMessageID,
-    },
-}
+export type SessionInboxDelivered = _Event2<"session.inbox.delivered", {
+    sessionID: SessionID,
+    inboxID: SessionMessageID,
+}>
 
 export type SessionInboxDelivery = ("steer" | "queue")
 
-export type SessionInboxDeliveryChanged = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.inbox.delivery.changed",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        inboxID: SessionMessageID,
-        delivery: SessionInboxDelivery,
-    },
-}
+export type SessionInboxDeliveryChanged = _Event2<"session.inbox.delivery.changed", {
+    sessionID: SessionID,
+    inboxID: SessionMessageID,
+    delivery: SessionInboxDelivery,
+}>
 
-export type SessionInboxEnqueued = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.inbox.enqueued",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        inboxID: SessionMessageID,
-        item: SessionInboxItem,
-    },
-}
+export type SessionInboxEnqueued = _Event2<"session.inbox.enqueued", {
+    sessionID: SessionID,
+    inboxID: SessionMessageID,
+    item: SessionInboxItem,
+}>
 
 export type SessionInboxInfo = (SessionInboxUser | SessionInboxSynthetic | SessionInboxCompaction | SessionInboxMove)
 
@@ -4070,23 +3685,11 @@ export type SessionInfo = {
     location: LocationPublicRef,
 }
 
-export type SessionInstructionsUpdated = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.instructions.updated",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC3ea984aceae,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        delta: { [string]: (InstructionHash | "removed") },
-        text: string?,
-    },
-}
+export type SessionInstructionsUpdated = _Event3<"session.instructions.updated", {
+    sessionID: SessionID,
+    delta: { [string]: (InstructionHash | "removed") },
+    text: string?,
+}>
 
 export type SessionInterruptResponse = {
     interrupted: boolean,
@@ -4358,166 +3961,63 @@ export type SessionMessagesResponse = {
 
 export type SessionMetadata = { [string]: any }
 
-export type SessionMetadataUpdated = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.metadata.updated",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        metadata: SessionMetadata,
-    },
-}
+export type SessionMetadataUpdated = _Event2<"session.metadata.updated", {
+    sessionID: SessionID,
+    metadata: SessionMetadata,
+}>
 
-export type SessionModelSelected = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.model.selected",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        model: ModelRef,
-        previous: ModelRef?,
-    },
-}
+export type SessionModelSelected = _Event2<"session.model.selected", {
+    sessionID: SessionID,
+    model: ModelRef,
+    previous: ModelRef?,
+}>
 
-export type SessionMoved = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.moved",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        location: ApiLocationRef,
-        projectID: ProjectID,
-        subpath: RelativePath?,
-    },
-}
+export type SessionMoved = _Event2<"session.moved", {
+    sessionID: SessionID,
+    location: ApiLocationRef,
+    projectID: ProjectID,
+    subpath: RelativePath?,
+}>
 
-export type SessionPermissions = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.permissions",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        permissions: PermissionRuleset,
-    },
-}
+export type SessionPermissions = _Event2<"session.permissions", {
+    sessionID: SessionID,
+    permissions: PermissionRuleset,
+}>
 
-export type SessionReasoningDelta = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.reasoning.delta",
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        assistantMessageID: SessionMessageID,
-        ordinal: number,
-        delta: string,
-    },
-}
+export type SessionReasoningDelta = _Event1<"session.reasoning.delta", {
+    sessionID: SessionID,
+    assistantMessageID: SessionMessageID,
+    ordinal: number,
+    delta: string,
+}>
 
-export type SessionReasoningEnded = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.reasoning.ended",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        assistantMessageID: SessionMessageID,
-        ordinal: number,
-        text: string,
-        native: SessionMessageNative?,
-    },
-}
+export type SessionReasoningEnded = _Event2<"session.reasoning.ended", {
+    sessionID: SessionID,
+    assistantMessageID: SessionMessageID,
+    ordinal: number,
+    text: string,
+    native: SessionMessageNative?,
+}>
 
-export type SessionReasoningStarted = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.reasoning.started",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        assistantMessageID: SessionMessageID,
-        ordinal: number,
-        native: SessionMessageNative?,
-    },
-}
+export type SessionReasoningStarted = _Event2<"session.reasoning.started", {
+    sessionID: SessionID,
+    assistantMessageID: SessionMessageID,
+    ordinal: number,
+    native: SessionMessageNative?,
+}>
 
-export type SessionRenamed = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.renamed",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        title: string,
-    },
-}
+export type SessionRenamed = _Event2<"session.renamed", {
+    sessionID: SessionID,
+    title: string,
+}>
 
-export type SessionRetryScheduled = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.retry.scheduled",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        assistantMessageID: SessionMessageID,
-        attempt: number,
-        at: number,
-        error: SessionStructuredError,
-    },
-}
+export type SessionRetryScheduled = _Event2<"session.retry.scheduled", {
+    sessionID: SessionID,
+    assistantMessageID: SessionMessageID,
+    attempt: number,
+    at: number,
+    error: SessionStructuredError,
+}>
 
 export type SessionRevert = {
     messageID: SessionMessageID,
@@ -4526,114 +4026,42 @@ export type SessionRevert = {
     files: { FileDiffInfo }?,
 }
 
-export type SessionRevertCleared = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.revert.cleared",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-    },
-}
+export type SessionRevertCleared = _Event2<"session.revert.cleared", {
+    sessionID: SessionID,
+}>
 
-export type SessionRevertCommitted = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.revert.committed",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        to: SessionMessageID,
-    },
-}
+export type SessionRevertCommitted = _Event2<"session.revert.committed", {
+    sessionID: SessionID,
+    to: SessionMessageID,
+}>
 
-export type SessionRevertStaged = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.revert.staged",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        revert: SessionRevert,
-    },
-}
+export type SessionRevertStaged = _Event2<"session.revert.staged", {
+    sessionID: SessionID,
+    revert: SessionRevert,
+}>
 
-export type SessionShellEnded = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.shell.ended",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
+export type SessionShellEnded = _Event2<"session.shell.ended", {
+    sessionID: SessionID,
+    shell: ShellInfo,
+    output: {
+        output: string,
+        cursor: number,
+        size: number,
+        truncated: boolean,
     },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        shell: ShellInfo,
-        output: {
-            output: string,
-            cursor: number,
-            size: number,
-            truncated: boolean,
-        },
-    },
-}
+}>
 
-export type SessionShellStarted = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.shell.started",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        shell: ShellInfo,
-    },
-}
+export type SessionShellStarted = _Event2<"session.shell.started", {
+    sessionID: SessionID,
+    shell: ShellInfo,
+}>
 
-export type SessionSkillActivated = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.skill.activated",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        id: SkillID,
-        name: SkillName,
-        text: string,
-    },
-}
+export type SessionSkillActivated = _Event2<"session.skill.activated", {
+    sessionID: SessionID,
+    id: SkillID,
+    name: SkillName,
+    text: string,
+}>
 
 export type SessionStatsActivity = {
     date: string,
@@ -4692,121 +4120,54 @@ export type SessionStatsTools = ({
     usage: { SessionStatsToolUsage },
 })
 
-export type SessionStatusUpdated = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.status",
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        status: ApiSessionStatus,
-    },
-}
+export type SessionStatusUpdated = _Event1<"session.status", {
+    sessionID: SessionID,
+    status: ApiSessionStatus,
+}>
 
-export type SessionStepEnded = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.step.ended",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        assistantMessageID: SessionMessageID,
-        finish: ("stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"),
-        rawFinish: string?,
-        native: SessionMessageNative?,
-        cost: MoneyUSD,
-        tokens: TokenUsageInfo,
-        snapshot: SnapshotID?,
-        files: { RelativePath }?,
-    },
-}
+export type SessionStepEnded = _Event2<"session.step.ended", {
+    sessionID: SessionID,
+    assistantMessageID: SessionMessageID,
+    finish: ("stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"),
+    rawFinish: string?,
+    native: SessionMessageNative?,
+    cost: MoneyUSD,
+    tokens: TokenUsageInfo,
+    snapshot: SnapshotID?,
+    files: { RelativePath }?,
+}>
 
-export type SessionStepFailed = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.step.failed",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        assistantMessageID: SessionMessageID,
-        error: SessionStructuredError,
-        finish: "content-filter"?,
-        rawFinish: string?,
-        native: SessionMessageNative?,
-        cost: MoneyUSD?,
-        tokens: TokenUsageInfo?,
-        snapshot: SnapshotID?,
-        files: { RelativePath }?,
-    },
-}
+export type SessionStepFailed = _Event2<"session.step.failed", {
+    sessionID: SessionID,
+    assistantMessageID: SessionMessageID,
+    error: SessionStructuredError,
+    finish: "content-filter"?,
+    rawFinish: string?,
+    native: SessionMessageNative?,
+    cost: MoneyUSD?,
+    tokens: TokenUsageInfo?,
+    snapshot: SnapshotID?,
+    files: { RelativePath }?,
+}>
 
-export type SessionStepFirstToken = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.step.first-token",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        assistantMessageID: SessionMessageID,
-    },
-}
+export type SessionStepFirstToken = _Event2<"session.step.first-token", {
+    sessionID: SessionID,
+    assistantMessageID: SessionMessageID,
+}>
 
-export type SessionStepStarted = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.step.started",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        assistantMessageID: SessionMessageID,
-        agent: AgentID,
-        model: ModelRef,
-        snapshot: SnapshotID?,
-        started: number,
-    },
-}
+export type SessionStepStarted = _Event2<"session.step.started", {
+    sessionID: SessionID,
+    assistantMessageID: SessionMessageID,
+    agent: AgentID,
+    model: ModelRef,
+    snapshot: SnapshotID?,
+    started: number,
+}>
 
-export type SessionStepStreamed = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.step.streamed",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        assistantMessageID: SessionMessageID,
-    },
-}
+export type SessionStepStreamed = _Event2<"session.step.streamed", {
+    sessionID: SessionID,
+    assistantMessageID: SessionMessageID,
+}>
 
 export type SessionStructuredError = {
     type: string,
@@ -4818,259 +4179,111 @@ export type SessionStructuredError = {
     retryAfterMs: number?,
 }
 
-export type SessionSynthetic = {
-    id: EventID,
-    created: number,
+export type SessionSynthetic = _Event2<"session.synthetic", {
+    sessionID: SessionID,
+    text: string,
+    description: string?,
     metadata: { [string]: any }?,
-    type: "session.synthetic",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        text: string,
-        description: string?,
-        metadata: { [string]: any }?,
-    },
-}
+}>
 
-export type SessionTextDelta = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.text.delta",
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        assistantMessageID: SessionMessageID,
-        ordinal: number,
-        delta: string,
-    },
-}
+export type SessionTextDelta = _Event1<"session.text.delta", {
+    sessionID: SessionID,
+    assistantMessageID: SessionMessageID,
+    ordinal: number,
+    delta: string,
+}>
 
-export type SessionTextEnded = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.text.ended",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        assistantMessageID: SessionMessageID,
-        ordinal: number,
-        text: string,
-        native: SessionMessageNative?,
-    },
-}
+export type SessionTextEnded = _Event2<"session.text.ended", {
+    sessionID: SessionID,
+    assistantMessageID: SessionMessageID,
+    ordinal: number,
+    text: string,
+    native: SessionMessageNative?,
+}>
 
-export type SessionTextStarted = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.text.started",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        assistantMessageID: SessionMessageID,
-        ordinal: number,
-    },
-}
+export type SessionTextStarted = _Event2<"session.text.started", {
+    sessionID: SessionID,
+    assistantMessageID: SessionMessageID,
+    ordinal: number,
+}>
 
-export type SessionToolCalled = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.tool.called",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        assistantMessageID: SessionMessageID,
-        id: string,
-        input: { [string]: any },
-        executed: boolean,
-        native: SessionMessageNative?,
-    },
-}
+export type SessionToolCalled = _Event2<"session.tool.called", {
+    sessionID: SessionID,
+    assistantMessageID: SessionMessageID,
+    id: string,
+    input: { [string]: any },
+    executed: boolean,
+    native: SessionMessageNative?,
+}>
 
-export type SessionToolFailed = {
-    id: EventID,
-    created: number,
+export type SessionToolFailed = _Event3<"session.tool.failed", {
+    sessionID: SessionID,
+    assistantMessageID: SessionMessageID,
+    id: string,
+    error: SessionStructuredError,
+    content: { ToolContent }?,
     metadata: { [string]: any }?,
-    type: "session.tool.failed",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC3ea984aceae,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        assistantMessageID: SessionMessageID,
-        id: string,
-        error: SessionStructuredError,
-        content: { ToolContent }?,
-        metadata: { [string]: any }?,
-        executed: boolean,
-        native: SessionMessageNative?,
-    },
-}
+    executed: boolean,
+    native: SessionMessageNative?,
+}>
 
-export type SessionToolInputDelta = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.tool.input.delta",
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        assistantMessageID: SessionMessageID,
-        id: string,
-        delta: string,
-    },
-}
+export type SessionToolInputDelta = _Event1<"session.tool.input.delta", {
+    sessionID: SessionID,
+    assistantMessageID: SessionMessageID,
+    id: string,
+    delta: string,
+}>
 
-export type SessionToolInputEnded = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.tool.input.ended",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        assistantMessageID: SessionMessageID,
-        id: string,
-        text: string,
-    },
-}
+export type SessionToolInputEnded = _Event2<"session.tool.input.ended", {
+    sessionID: SessionID,
+    assistantMessageID: SessionMessageID,
+    id: string,
+    text: string,
+}>
 
-export type SessionToolInputStarted = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.tool.input.started",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        assistantMessageID: SessionMessageID,
-        id: string,
-        name: string,
-    },
-}
+export type SessionToolInputStarted = _Event2<"session.tool.input.started", {
+    sessionID: SessionID,
+    assistantMessageID: SessionMessageID,
+    id: string,
+    name: string,
+}>
 
-export type SessionToolProgress = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.tool.progress",
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        assistantMessageID: SessionMessageID,
-        id: string,
-        metadata: { [string]: any },
-    },
-}
+export type SessionToolProgress = _Event1<"session.tool.progress", {
+    sessionID: SessionID,
+    assistantMessageID: SessionMessageID,
+    id: string,
+    metadata: { [string]: any },
+}>
 
-export type SessionToolSuccess = {
-    id: EventID,
-    created: number,
+export type SessionToolSuccess = _Event3<"session.tool.success", {
+    sessionID: SessionID,
+    assistantMessageID: SessionMessageID,
+    id: string,
+    content: { ToolContent },
     metadata: { [string]: any }?,
-    type: "session.tool.success",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC3ea984aceae,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        assistantMessageID: SessionMessageID,
-        id: string,
-        content: { ToolContent },
-        metadata: { [string]: any }?,
-        executed: boolean,
-        native: SessionMessageNative?,
-    },
-}
+    executed: boolean,
+    native: SessionMessageNative?,
+}>
 
 export type SessionTransferData = {
     info: SessionInfo,
     messages: { SessionMessageInfo },
 }
 
-export type SessionUnarchived = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.unarchived",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-    },
-}
+export type SessionUnarchived = _Event2<"session.unarchived", {
+    sessionID: SessionID,
+}>
 
-export type SessionUsageUpdated = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.usage.updated",
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        cost: MoneyUSD,
-        tokens: TokenUsageInfo,
-    },
-}
+export type SessionUsageUpdated = _Event1<"session.usage.updated", {
+    sessionID: SessionID,
+    cost: MoneyUSD,
+    tokens: TokenUsageInfo,
+}>
 
-export type SessionViewed = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "session.viewed",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        sessionID: SessionID,
-        idle: number,
-    },
-}
+export type SessionViewed = _Event2<"session.viewed", {
+    sessionID: SessionID,
+    idle: number,
+}>
 
 --- Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response.
 export type SessionsCursor = string
@@ -5083,40 +4296,19 @@ export type SessionsResponse = {
     },
 }
 
-export type ShellCreated = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "shell.created",
-    location: ApiLocationRef?,
-    data: {
-        info: ShellInfo,
-    },
-}
+export type ShellCreated = _Event1<"shell.created", {
+    info: ShellInfo,
+}>
 
-export type ShellDeleted = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "shell.deleted",
-    location: ApiLocationRef?,
-    data: {
-        id: ShellID,
-    },
-}
+export type ShellDeleted = _Event1<"shell.deleted", {
+    id: ShellID,
+}>
 
-export type ShellExited = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "shell.exited",
-    location: ApiLocationRef?,
-    data: {
-        id: ShellID,
-        exit: number?,
-        status: ("running" | "exited" | "timeout" | "killed"),
-    },
-}
+export type ShellExited = _Event1<"shell.exited", {
+    id: ShellID,
+    exit: number?,
+    status: ("running" | "exited" | "timeout" | "killed"),
+}>
 
 export type ShellID = string
 
@@ -5150,14 +4342,7 @@ export type SkillInfo = {
 
 export type SkillName = string
 
-export type SkillUpdated = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "skill.updated",
-    location: ApiLocationRef?,
-    data: any,
-}
+export type SkillUpdated = _Event1<"skill.updated", any>
 
 export type SnapshotID = string
 
@@ -5187,52 +4372,24 @@ export type ToolTextContent = {
     text: string,
 }
 
-export type TuiCommandExecute = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "tui.command.execute",
-    location: ApiLocationRef?,
-    data: {
-        command: (("session.list" | "session.new" | "session.interrupt" | "session.background" | "session.compact" | "session.page.up" | "session.page.down" | "session.line.up" | "session.line.down" | "session.half.page.up" | "session.half.page.down" | "session.first" | "session.last" | "prompt.clear" | "prompt.submit" | "agent.cycle") | string),
-    },
-}
+export type TuiCommandExecute = _Event1<"tui.command.execute", {
+    command: (("session.list" | "session.new" | "session.interrupt" | "session.background" | "session.compact" | "session.page.up" | "session.page.down" | "session.line.up" | "session.line.down" | "session.half.page.up" | "session.half.page.down" | "session.first" | "session.last" | "prompt.clear" | "prompt.submit" | "agent.cycle") | string),
+}>
 
-export type TuiPromptAppend = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "tui.prompt.append",
-    location: ApiLocationRef?,
-    data: {
-        text: string,
-    },
-}
+export type TuiPromptAppend = _Event1<"tui.prompt.append", {
+    text: string,
+}>
 
-export type TuiSessionSelect = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "tui.session.select",
-    location: ApiLocationRef?,
-    data: {
-        sessionID: (SessionID & any),
-    },
-}
+export type TuiSessionSelect = _Event1<"tui.session.select", {
+    sessionID: (SessionID & any),
+}>
 
-export type TuiToastShow = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "tui.toast.show",
-    location: ApiLocationRef?,
-    data: {
-        title: string?,
-        message: string,
-        variant: ("info" | "success" | "warning" | "error"),
-        duration: number?,
-    },
-}
+export type TuiToastShow = _Event1<"tui.toast.show", {
+    title: string?,
+    message: string,
+    variant: ("info" | "success" | "warning" | "error"),
+    duration: number?,
+}>
 
 export type UsageLimitsBudget = {
     id: string,
@@ -5289,13 +4446,7 @@ export type V2EventRpc = {
     data: { [string]: any },
 }
 
-export type V2EventServerConnected = {
-    id: EventID,
-    metadata: { [string]: any }?,
-    location: LocationPublicRef?,
-    type: "server.connected",
-    data: any,
-}
+export type V2EventServerConnected = _Event4<"server.connected", any>
 
 export type VcsBase = {
     name: string,
@@ -5310,16 +4461,9 @@ export type VcsBranch = {
 
 export type VcsBranchList = { string }
 
-export type VcsBranchUpdated = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "vcs.branch.updated",
-    location: ApiLocationRef?,
-    data: {
-        branch: string?,
-    },
-}
+export type VcsBranchUpdated = _Event1<"vcs.branch.updated", {
+    branch: string?,
+}>
 
 export type VcsFileStatus = {
     file: string,
@@ -5389,14 +4533,7 @@ export type WebSearchResult = {
     },
 }
 
-export type WebsearchUpdated = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "websearch.updated",
-    location: ApiLocationRef?,
-    data: any,
-}
+export type WebsearchUpdated = _Event1<"websearch.updated", any>
 
 export type WorkspaceID = string
 
@@ -5411,35 +4548,16 @@ export type WorktreeInfo = {
 
 export type WorktreeList = { WorktreeDirectory }
 
-export type WorktreeResolved = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "worktree.resolved",
-    durable: {
-        aggregateID: string,
-        seq: EventSeq,
-        version: EventVersionEncodedC77c5abcb68d,
-    },
-    location: ApiLocationRef?,
-    data: {
-        projectID: ProjectID,
-        directory: AbsolutePath,
-        previous: ProjectID,
-        adopted: { ProjectID }?,
-    },
-}
+export type WorktreeResolved = _Event2<"worktree.resolved", {
+    projectID: ProjectID,
+    directory: AbsolutePath,
+    previous: ProjectID,
+    adopted: { ProjectID }?,
+}>
 
-export type WorktreeUpdated = {
-    id: EventID,
-    created: number,
-    metadata: { [string]: any }?,
-    type: "worktree.updated",
-    location: ApiLocationRef?,
-    data: {
-        projectID: ProjectID,
-    },
-}
+export type WorktreeUpdated = _Event1<"worktree.updated", {
+    projectID: ProjectID,
+}>
 
 -- The plugin's objects -------------------------------------------------------------------------------------------
 
