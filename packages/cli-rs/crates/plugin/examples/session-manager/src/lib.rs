@@ -21,10 +21,14 @@ use grouping::{Group, Mode, Row, Session};
 use i18n::{LOCALES, Locale, Messages};
 use opencode_plugin_abi::interact::{Bind, Event, Handled, Layer, LayerScope};
 use opencode_plugin_abi::task::{Cx, Tasks};
+use opencode_plugin_abi::types::{
+    ProjectListInput, SessionID, SessionListInput, SessionListInputOrder, SessionRemoveInput, SessionUpdateInput,
+    SessionsCursor,
+};
 use opencode_plugin_abi::v2::{self, Scroll, ScrollAlign, Target};
 use opencode_plugin_abi::{
-    Click, Command, Confirm, Edges, Fetch, Host, Layout, Prompt, Read, Route, Setup, Span, TabEdit, Toast, Variant,
-    Waker, Wrap, plugin,
+    Call, Click, Command, Confirm, Edges, Host, Layout, Prompt, Read, Route, Setup, Span, TabEdit, Toast, Variant,
+    Waker, Wrap, client, plugin,
 };
 use serde_json::{Value, json};
 
@@ -191,8 +195,9 @@ async fn refresh(cx: Cx, state: Rc<RefCell<State>>) {
         state.refreshes
     };
     let current = || state.borrow().refreshes == generation;
-    let mut next = cx.fetch(page(None));
-    let projects = cx.fetch(Fetch::new("GET", "/api/project"));
+    // The replies are read as TS reads them, whatever fields they lack.
+    let mut next = cx.call(page(None));
+    let projects = cx.call(client::project_list(&ProjectListInput::default()).cast::<Value>());
     let mut sessions = Vec::new();
     let listed = loop {
         let body = match next.await {
@@ -206,7 +211,7 @@ async fn refresh(cx: Cx, state: Rc<RefCell<State>>) {
         sessions.extend(data.iter().filter_map(Session::from_json));
         let cursor = body.pointer("/cursor/next").and_then(Value::as_str).filter(|next| !next.is_empty());
         match cursor.filter(|_| !data.is_empty()) {
-            Some(cursor) => next = cx.fetch(page(Some(cursor))),
+            Some(cursor) => next = cx.call(page(Some(cursor))),
             None => break projects.await,
         }
     };
@@ -249,8 +254,9 @@ async fn rename(cx: Cx, state: Rc<RefCell<State>>, id: String, prompt: Prompt) {
     let current =
         state.borrow().sessions.iter().find(|session| session.id == id).and_then(|session| session.title.clone());
     if let Some(title) = title.filter(|title| Some(title) != current.as_ref()) {
-        let fetch = Fetch::new("PATCH", format!("/api/session/{id}")).body(json!({ "title": title }));
-        let saved = cx.fetch(fetch).await;
+        let input =
+            SessionUpdateInput { session_id: SessionID(id.clone()), title: Some(title.clone()), ..Default::default() };
+        let saved = cx.send(client::session_update(&input)).await;
         let mut state = state.borrow_mut();
         match saved {
             Ok(_) => {
@@ -271,7 +277,7 @@ async fn remove(cx: Cx, state: Rc<RefCell<State>>, removal: Removal) {
     if cx.confirm(removal.confirm).await == Some(true) {
         let (mut done, mut failed) = (Vec::new(), 0);
         for id in removal.ids {
-            match cx.fetch(Fetch::new("DELETE", format!("/api/session/{id}"))).await {
+            match cx.send(client::session_remove(&SessionRemoveInput { session_id: SessionID(id.clone()) })).await {
                 Err(error) if !not_found(&error) && removal.group.is_none() => {
                     state.borrow_mut().busy = false;
                     return cx.with(|host| host.toast(Toast::new(Variant::Error, error)));
@@ -935,9 +941,11 @@ fn scroll_to(host: &dyn Host, index: usize) {
 }
 
 /// A page of the session list, newest first.
-fn page(cursor: Option<&str>) -> Fetch {
-    let query = [("limit", PAGE_SIZE.to_string()), ("order", "desc".to_owned())];
-    Fetch::new("GET", "/api/session").query(query.into_iter().chain(cursor.map(|cursor| ("cursor", cursor.to_owned()))))
+fn page(cursor: Option<&str>) -> Call<Value> {
+    let order = Some(SessionListInputOrder::Desc);
+    let cursor = cursor.map(|cursor| SessionsCursor(cursor.to_owned()));
+    client::session_list(&SessionListInput { limit: Some(PAGE_SIZE as i64), order, cursor, ..Default::default() })
+        .cast()
 }
 
 /// TS `isNotFound`.

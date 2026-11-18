@@ -17,9 +17,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use i18n::{Locale, Messages};
+use opencode_plugin_abi::types::{SessionID, SessionPromptInput};
 use opencode_plugin_abi::{
-    Action, Command, Dialog, Fetch, Host, Node, Placement, Read, Render, Route, Select, SelectOption, Setup, Span,
-    Toast, Variant, plugin,
+    Action, Command, Dialog, Host, Node, Placement, Read, Render, Route, Select, SelectOption, Setup, Span, Toast,
+    Variant, call, client, plugin,
 };
 use serde_json::{Value, json};
 
@@ -182,8 +183,12 @@ impl State {
             "clear" => t.clear_prompt,
             _ => return,
         };
-        let fetch = Fetch::new("POST", format!("/api/session/{}/prompt", self.session)).body(json!({ "text": prompt }));
-        if let Err(error) = host.try_fetch(fetch) {
+        let input = SessionPromptInput {
+            session_id: SessionID(self.session.clone()),
+            text: prompt.into(),
+            ..Default::default()
+        };
+        if let Err(error) = call::fetch_of(&client::session_prompt(&input)).and_then(|fetch| host.try_fetch(fetch)) {
             toast(host, t, &error, Variant::Error);
         }
     }

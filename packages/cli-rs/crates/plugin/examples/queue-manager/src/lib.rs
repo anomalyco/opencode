@@ -10,8 +10,12 @@
 mod core;
 
 use opencode_plugin_abi::task::Cx;
+use opencode_plugin_abi::types::{
+    SessionID, SessionInboxCancelInput, SessionInboxDelivery, SessionInboxInfo, SessionInboxListInput,
+    SessionMessageID, SessionPromptInput,
+};
 use opencode_plugin_abi::{
-    Alert, Command, Confirm, Fetch, Prompt, Route, Select, SelectOption, Setup, Toast, Variant, plugin,
+    Alert, Command, Confirm, Prompt, Route, Select, SelectOption, Setup, Toast, Variant, client, plugin,
 };
 use serde_json::{Value, json};
 
@@ -31,7 +35,7 @@ async fn open_manager(cx: Cx) {
         let message = "Open a session in the OpenCode v2 terminal UI first, then run /qm.";
         return cx.alert(Alert::new("Queue Manager", message)).await;
     };
-    let manager = Manager { cx, session: id };
+    let manager = Manager { cx, session: SessionID(id) };
     // A list that fails ends the manager, as TS's outer `try` does.
     if let Err(error) = manager.menu().await {
         manager.report(&error).await;
@@ -41,7 +45,7 @@ async fn open_manager(cx: Cx) {
 /// The manager of the session it was opened in.
 struct Manager {
     cx: Cx,
-    session: String,
+    session: SessionID,
 }
 
 impl Manager {
@@ -255,9 +259,14 @@ impl Manager {
         }
         let mut sent = 0;
         while let Some(text) = self.entries().first().cloned() {
-            let fetch = Fetch::new("POST", format!("/api/session/{}/prompt", self.session))
-                .body(json!({ "text": text, "delivery": "queue" }));
-            if let Err(error) = self.cx.fetch(fetch).await.and_then(|_| self.drop_first(&text)) {
+            let input = SessionPromptInput {
+                session_id: self.session.clone(),
+                text: text.clone(),
+                delivery: Some(Some(SessionInboxDelivery::Queue)),
+                ..Default::default()
+            };
+            if let Err(error) = self.cx.send(client::session_prompt(&input)).await.and_then(|()| self.drop_first(&text))
+            {
                 let left = self.entries().len();
                 self.toast(
                     "Partial publish",
@@ -282,20 +291,20 @@ impl Manager {
                 .iter()
                 .enumerate()
                 .map(|(index, item)| {
-                    let kind = item["type"].as_str().unwrap_or_default();
-                    let label = match kind {
-                        "user" | "synthetic" => core::summarize(item["payload"]["text"].as_str().unwrap_or(""), 90),
-                        _ => format!("[{kind}]"),
+                    let label = match item {
+                        SessionInboxInfo::User(user) => core::summarize(&user.payload.text, 90),
+                        SessionInboxInfo::Synthetic(synthetic) => core::summarize(&synthetic.payload.text, 90),
+                        _ => format!("[{}]", item.tag()),
                     };
-                    SelectOption::new(format!("{:03}. {label}", index + 1), item["id"].as_str().unwrap_or(""))
-                        .maybe(item["delivery"].as_str(), SelectOption::description)
+                    SelectOption::new(format!("{:03}. {label}", index + 1), item.id())
+                        .maybe(item.delivery().map(SessionInboxDelivery::as_str), SelectOption::description)
                 })
                 .collect();
             options.push(SelectOption::new("Back", "back"));
             let selected = self.choose(&format!("OpenCode native inbox ({})", items.len()), options).await;
             let Some(selected) = selected.filter(|selected| selected != "back") else { return Ok(()) };
-            let Some(item) = items.iter().find(|item| item["id"].as_str() == Some(selected.as_str())) else { continue };
-            let title = format!("Pending item ({})", item["type"].as_str().unwrap_or_default());
+            let Some(item) = items.iter().find(|item| item.id() == selected) else { continue };
+            let title = format!("Pending item ({})", item.tag());
             let options =
                 vec![SelectOption::new("Cancel this pending item", "cancel"), SelectOption::new("Back", "back")];
             if self.choose(&title, options).await.as_deref() != Some("cancel") {
@@ -306,9 +315,7 @@ impl Manager {
             if !self.confirm("Cancel pending item?", message, ("Cancel item", "Keep")).await {
                 continue;
             }
-            let id = item["id"].as_str().unwrap_or_default();
-            let cancel = Fetch::new("DELETE", format!("/api/session/{}/inbox/{id}", self.session));
-            if let Err(error) = self.cx.fetch(cancel).await {
+            if let Err(error) = self.cancel(item.id()).await {
                 self.report(&error).await;
             }
         }
@@ -320,8 +327,8 @@ impl Manager {
             .inbox()
             .await?
             .iter()
-            .filter(|item| item["type"] == "user" && item["delivery"] == "queue")
-            .filter_map(|item| item["id"].as_str().map(str::to_owned))
+            .filter(|item| matches!(item, SessionInboxInfo::User(user) if user.delivery == SessionInboxDelivery::Queue))
+            .map(|item| item.id().to_owned())
             .collect();
         if ids.is_empty() {
             self.alert("Native inbox", "No queued user prompts to cancel.").await;
@@ -336,8 +343,7 @@ impl Manager {
             return Ok(());
         }
         for (done, id) in ids.iter().enumerate() {
-            let cancel = Fetch::new("DELETE", format!("/api/session/{}/inbox/{id}", self.session));
-            if let Err(error) = self.cx.fetch(cancel).await {
+            if let Err(error) = self.cancel(id).await {
                 self.toast("Partial clear", &format!("{done} cancellations completed before the error."));
                 self.report(&error).await;
                 return Ok(());
@@ -348,9 +354,14 @@ impl Manager {
     }
 
     /// The session's pending inbox items.
-    async fn inbox(&self) -> Result<Vec<Value>, String> {
-        let body = self.cx.fetch(Fetch::new("GET", format!("/api/session/{}/inbox", self.session))).await?;
-        Ok(body.get("data").unwrap_or(&body).as_array().cloned().unwrap_or_default())
+    async fn inbox(&self) -> Result<Vec<SessionInboxInfo>, String> {
+        self.cx.call(client::session_inbox_list(&SessionInboxListInput { session_id: self.session.clone() })).await
+    }
+
+    /// Cancels the pending item `id`.
+    async fn cancel(&self, id: &str) -> Result<(), String> {
+        let input = SessionInboxCancelInput { session_id: self.session.clone(), inbox_id: SessionMessageID(id.into()) };
+        self.cx.send(client::session_inbox_cancel(&input)).await
     }
 
     fn entries(&self) -> Vec<String> {

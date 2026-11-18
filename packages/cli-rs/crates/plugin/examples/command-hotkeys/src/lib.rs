@@ -13,7 +13,8 @@ use std::rc::Rc;
 
 use opencode_plugin_abi::interact::{Bind, Event, Handled, Layer, LayerScope};
 use opencode_plugin_abi::task::{Cx, Tasks};
-use opencode_plugin_abi::{Command, Fetch, Host, Route, Setup, Toast, Variant, plugin};
+use opencode_plugin_abi::types::{LocationQueryInput, RpcCallInput, SessionCommandInput, SessionGetInput, SessionID};
+use opencode_plugin_abi::{Command, Host, Route, Setup, Toast, Variant, client, plugin};
 use serde_json::{Value, json};
 
 const TITLE: &str = "Command Hotkeys";
@@ -92,7 +93,7 @@ impl Runs {
         let (binding, locks) = (binding.clone(), self.locks.clone());
         self.tasks.spawn(host, move |cx| async move {
             let ran = match &binding.action {
-                Action::Command { command, text } => cx.fetch(command_fetch(&session, command, text)).await.map(drop),
+                Action::Command { command, text } => run_command(&cx, &session, command, text).await,
                 Action::GoalToggle => toggle(&cx, &session).await,
             };
             locks.borrow_mut().remove(&lock);
@@ -107,20 +108,22 @@ impl Runs {
 /// in view, in the base mode, ends the run; an answer that the goal already was so is no failure.
 async fn toggle(cx: &Cx, session: &str) -> Result<(), String> {
     let current = || cx.with(|host| host.mode().is_none() && host.route() == Route::Session { id: session.to_owned() });
-    let body = cx.fetch(Fetch::new("GET", format!("/api/session/{session}"))).await?;
+    let info = cx.call(client::session_get(&SessionGetInput { session_id: SessionID(session.to_owned()) })).await?;
     if !current() {
         return Ok(());
     }
-    let directory =
-        body.pointer("/data/location/directory").and_then(Value::as_str).filter(|path| !path.trim().is_empty());
-    let fetch = Fetch::new("POST", "/api/rpc/opencode.goal/get")
-        .query([("location[directory]", directory.ok_or("no directory")?)])
-        .body(json!({ "input": { "sessionID": session } }));
-    let body = cx.fetch(fetch).await?;
+    let directory = Some(info.location.directory.0).filter(|path| !path.trim().is_empty());
+    let input = RpcCallInput {
+        rpc_id: "opencode.goal".to_owned(),
+        method: "get".to_owned(),
+        location: Some(LocationQueryInput { directory: Some(directory.ok_or("no directory")?) }),
+        input: Some(json!({ "sessionID": session })),
+    };
+    let reply = cx.call(client::rpc_call(&input)).await?;
     if !current() {
         return Ok(());
     }
-    let Some(goal) = body.get("output").filter(|goal| !goal.is_null()) else { return Ok(()) };
+    let Some(goal) = reply.output.filter(|goal| !goal.is_null()) else { return Ok(()) };
     let id = goal.get("id").and_then(Value::as_str).filter(|id| !id.trim().is_empty());
     let (text, race) = match (id, goal.get("status").and_then(Value::as_str)) {
         (Some(_), Some("complete")) => return Ok(()),
@@ -128,15 +131,21 @@ async fn toggle(cx: &Cx, session: &str) -> Result<(), String> {
         (Some(_), Some("paused")) => ("resume", "No paused goal to resume."),
         _ => return Err("no goal".to_owned()),
     };
-    match cx.fetch(command_fetch(session, "goal", text)).await {
+    match run_command(cx, session, "goal", text).await {
         Err(error) if !error.contains(race) => Err(error),
         _ => Ok(()),
     }
 }
 
 /// TS `ctx.client.session.command`.
-fn command_fetch(session: &str, name: &str, text: &str) -> Fetch {
-    Fetch::new("POST", format!("/api/session/{session}/command")).body(json!({ "name": name, "text": text }))
+async fn run_command(cx: &Cx, session: &str, name: &str, text: &str) -> Result<(), String> {
+    let input = SessionCommandInput {
+        session_id: SessionID(session.to_owned()),
+        name: name.to_owned(),
+        text: text.to_owned(),
+        ..Default::default()
+    };
+    cx.send(client::session_command(&input)).await
 }
 
 /// TS `parseBindings`: the whole configuration, or `Err` for any fault in it.
