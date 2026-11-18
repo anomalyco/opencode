@@ -94,7 +94,12 @@ export const make = (
     // The system prompt stays in `instructions` here: `/compact` echoes a leading developer message back in its
     // output window, and with `instructions` OpenAI still reads the prefix cached by requests that lead `input`
     // with it.
-    const native = yield* OpenResponses.lowerConversation(folded, adapter)
+    const instructions = ProviderShared.joinText(folded.system)
+    const native = {
+      model: folded.model.id,
+      input: yield* OpenResponses.lowerMessages(folded, adapter),
+      ...(instructions ? { instructions } : {}),
+    }
     const generation = OpenResponses.lowerGeneration(request)
     const tools = folded.tools.length === 0 ? undefined : yield* lowerTools(folded)
     const body = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Body))(
