@@ -1304,6 +1304,16 @@ function App() {
     commands: appCommands(),
   }))
 
+  // Consume pane shortcuts on Home, where SessionFrame is not mounted.
+  Keymap.createLayer(() => ({
+    mode: "global",
+    enabled: () => route.data.type === "home",
+    commands: [
+      { id: "session.sidebar.toggle", title: "Show sidebar", run() {} },
+      { id: "terminal.toggle", title: "Show terminal pane", run() {} },
+    ],
+  }))
+
   Keymap.createLayer(() => ({
     bindings: appBindingCommands,
   }))

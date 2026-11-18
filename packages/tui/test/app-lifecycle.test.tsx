@@ -1388,6 +1388,21 @@ test("ctrl+c dismisses autocomplete and shell mode before exiting", async () => 
   expect(setup.renderer.isDestroyed).toBe(false)
 })
 
+test("pane shortcuts do not type into the prompt before a session exists", async () => {
+  await using setup = await createAppFixture()
+  await setup.ready
+  await setup.waitForFrame((frame) => frame.includes("commands"))
+  await setup.mockInput.typeText("probe-")
+  const before = setup.renderer.currentFocusedEditor?.plainText
+  expect(before?.endsWith("probe-")).toBe(true)
+
+  for (const key of ["b", "t"]) {
+    setup.mockInput.pressKey("x", { ctrl: true })
+    setup.mockInput.pressKey(key)
+    expect(setup.renderer.currentFocusedEditor?.plainText).toBe(before)
+  }
+})
+
 test.skipIf(process.platform === "win32").each(["manual", "select"] as const)(
   "selection copy and pane management respect %s mode in the prompt and terminal pane",
     async (copy) => {
