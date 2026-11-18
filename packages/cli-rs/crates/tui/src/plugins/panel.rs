@@ -64,7 +64,7 @@ type Owner = (String, u64);
 pub fn show(tui: &Tui, id: &str, generation: u64, dialog: abi::Dialog) {
     let owner = (id.to_owned(), generation);
     match dialog {
-        abi::Dialog::Prompt(prompt) => ask(tui, owner, prompt.title, prompt.placeholder, prompt.action),
+        abi::Dialog::Prompt(prompt) => ask(tui, owner, prompt),
         abi::Dialog::Panel(panel) => self::panel(tui, owner, panel),
         abi::Dialog::Close { key } => {
             let mine = || tui.reads.owner.borrow().as_ref().is_some_and(|(owner, _)| owner == id);
@@ -152,8 +152,9 @@ fn own(tui: &Tui, owner: Owner, replace: impl FnOnce(Box<dyn FnOnce()>)) {
     *tui.reads.owner.borrow_mut() = Some(owner);
 }
 
-fn ask(tui: &Tui, owner: Owner, title: String, placeholder: Option<String>, action: abi::Action) {
+fn ask(tui: &Tui, owner: Owner, asked: abi::Prompt) {
     let (weak, clear, confirmed) = (tui.weak(), tui.dialogs.clone(), owner.clone());
+    let abi::Prompt { title, placeholder, value, description, action, .. } = asked;
     own(tui, owner, |on_close| {
         tui.dialogs.replace(
             move |cx| {
@@ -162,11 +163,20 @@ fn ask(tui: &Tui, owner: Owner, title: String, placeholder: Option<String>, acti
                     tui.dialogs.clear();
                     run(&tui, &owner, &action, Some(value));
                 });
+                // TS draws the description as a text of its own above the field (`<text>{description}</text>`), in
+                // OpenTUI's default text color, which no theme sets.
+                let description = description.clone().map(|text| {
+                    Rc::new(move |cx: &DialogCx| {
+                        Text::new(&cx.app, text.as_str()).fg(Color::rgb(255, 255, 255)).as_any()
+                    }) as opencode_ui::prompt::Description
+                });
                 let (view, _) = prompt(
                     cx,
                     PromptProps {
                         title: title.clone(),
                         placeholder: placeholder.clone(),
+                        value: value.clone(),
+                        description,
                         on_confirm: Some(Rc::new(on_confirm)),
                         on_cancel: Some(Rc::new(move || clear.clear())),
                         ..PromptProps::default()
@@ -1016,7 +1026,7 @@ impl Live {
                     .fg("text.muted")
                     .wrap(abi::Wrap::None)
                     .truncate()
-                    .layout(abi::Layout::default().grow().min_width_zero()),
+                    .layout(abi::Layout::default().grow().min_width(0)),
             );
         }
         self.title.clear();

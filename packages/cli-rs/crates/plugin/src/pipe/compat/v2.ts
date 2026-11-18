@@ -844,6 +844,10 @@ export function context(base: Base, carrier: Carrier) {
       clearTimeout(kept.timer)
       parked.delete(slot)
       rendered.set(key(cx), kept.entry)
+      // The host's focus was the ended mount's: the field the plugin focused in the tree it adopts takes it again in the
+      // new one, as TS's renderable never lost it (`P.8/session-manager`'s search, whose keybinds reload as it shows).
+      if (focusedNode && FOCUSABLE.has(focusedNode.tag) && rootOf(focusedNode) === kept.entry.root)
+        void carrier.effect({ type: "focus", node: idOf(focusedNode) }, cx.mount)
       return kept.entry
     }
     // As TS's plugin boundary: the render shows nothing from now on, and one toast says why.
@@ -1128,6 +1132,10 @@ export function context(base: Base, carrier: Carrier) {
           title: command.title ?? name,
           group: command.group,
           slash: command.slash?.name,
+          // Contract ergonomics 2.6: the slash name's other names (TS `slash.aliases`).
+          ...(Array.isArray(command.slash?.aliases) && command.slash.aliases.length
+            ? { aliases: command.slash.aliases.map(String) }
+            : {}),
           keybind: typeof command.bind === "string" ? command.bind : undefined,
           palette: !!command.palette,
           description: command.description,
@@ -1471,11 +1479,17 @@ export function context(base: Base, carrier: Carrier) {
             ...presented(),
           })).then((answer) => (answer === undefined ? undefined : answer === "true"))
         },
-        prompt: (options: Json) => {
-          if (options.value !== undefined) unsupported("ui.dialog.prompt value")
-          if (options.description !== undefined) unsupported("ui.dialog.prompt description")
-          return ask({ type: "prompt", title: options.title, placeholder: options.placeholder })
-        },
+        // Contract ergonomics 2.6: the field's starting text and the line above it, as TS's.
+        prompt: (options: Json) =>
+          ask({
+            type: "prompt",
+            title: options.title,
+            placeholder: options.placeholder,
+            ...(options.value === undefined || options.value === null ? {} : { value: String(options.value) }),
+            ...(options.description === undefined || options.description === null
+              ? {}
+              : { description: String(options.description) }),
+          }),
         async select(options: Json) {
           if (options.actions?.length) unsupported("ui.dialog.select actions")
           const search = options.search

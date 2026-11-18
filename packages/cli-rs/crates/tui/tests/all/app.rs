@@ -33,6 +33,9 @@ const SETTLE: Duration = Duration::from_secs(10);
 
 #[test]
 fn scenarios() {
+    if !support::in_utc() {
+        return;
+    }
     let only = std::env::var("PARITY_SCENARIO").ok();
     let recordings = Recording::all(only.as_deref()).unwrap_or_else(|error| panic!("{error}"));
     assert!(!recordings.is_empty(), "no P-APP recording matches {only:?}");
@@ -101,6 +104,9 @@ enum Swap {
 #[cfg(feature = "ts")]
 #[test]
 fn ports_replay_the_ts_recordings() {
+    if !support::in_utc() {
+        return;
+    }
     let mut failed = Vec::new();
     for (scenario, port) in PORTS {
         let recordings = Recording::all(Some(scenario)).unwrap_or_else(|error| panic!("{error}"));

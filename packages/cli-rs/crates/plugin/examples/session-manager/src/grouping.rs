@@ -1,8 +1,8 @@
 //! TS `src/grouping.ts`: sessions grouped by directory, project or time, as a tree of subsessions, flattened to the
 //! page's rows, and filtered by a search.
 //!
-//! TS reads dates in the local time zone (`Date#getHours`, `setHours(0)`); the SDK has none, so the port reads them in
-//! UTC, which equals TS's where the zone is UTC.
+//! TS reads dates in the local time zone (`Date#getHours`, `setHours(0)`); so does the port, by the host's UTC offset
+//! of each time (`Read::utc_offset`), which `wall` applies: an instant to the local wall clock, in milliseconds.
 
 use std::collections::{HashMap, HashSet};
 
@@ -85,14 +85,15 @@ impl Session {
 
 const DAY: f64 = 86_400_000.0;
 
-/// TS `timeBucket`'s index: today, yesterday, the last 7 days, the last 30, earlier.
-pub fn bucket(time: f64, now: f64) -> usize {
-    let today = (now / DAY).floor() * DAY;
+/// TS `timeBucket`'s index: today, yesterday, the last 7 days, the last 30, earlier, by local midnights.
+pub fn bucket(time: f64, now: f64, wall: &dyn Fn(f64) -> f64) -> usize {
+    let today = (wall(now) / DAY).floor() * DAY;
+    let time = wall(time);
     [today, today - DAY, today - 6.0 * DAY, today - 29.0 * DAY].iter().position(|start| time >= *start).unwrap_or(4)
 }
 
 /// TS `formatAge`: `just now`, `5m ago`, `3h ago`, `2d ago`, else the date.
-pub fn age(time: f64, now: f64, messages: &Messages) -> String {
+pub fn age(time: f64, now: f64, wall: &dyn Fn(f64) -> f64, messages: &Messages) -> String {
     let minutes = ((now - time).max(0.0) / 60_000.0).floor() as u64;
     let (hours, days) = (minutes / 60, minutes / 60 / 24);
     match () {
@@ -100,11 +101,11 @@ pub fn age(time: f64, now: f64, messages: &Messages) -> String {
         _ if minutes < 60 => (messages.minutes)(minutes),
         _ if hours < 24 => (messages.hours)(hours),
         _ if days < 30 => (messages.days)(days),
-        _ => date(time),
+        _ => date(wall(time)),
     }
 }
 
-/// `YYYY-MM-DD` of `time`, in UTC (Howard Hinnant's `civil_from_days`).
+/// `YYYY-MM-DD` of the wall clock `time` (Howard Hinnant's `civil_from_days`).
 fn date(time: f64) -> String {
     let days = (time / DAY).floor() as i64 + 719_468;
     let era = days.div_euclid(146_097);
@@ -145,6 +146,7 @@ pub fn groups(
     mode: Mode,
     children: bool,
     now: f64,
+    wall: &dyn Fn(f64) -> f64,
     label: impl Fn(&str) -> String,
 ) -> Vec<Group> {
     let ids: HashSet<&str> = shown.iter().map(|&index| sessions[index].id.as_str()).collect();
@@ -174,7 +176,7 @@ pub fn groups(
         let key = match mode {
             Mode::Directory => session.directory.clone(),
             Mode::Project => session.project.clone(),
-            _ => bucket(session.time(mode), now).to_string(),
+            _ => bucket(session.time(mode), now, wall).to_string(),
         };
         let node = tree(index, &kids, &by_time);
         match buckets.iter_mut().find(|(known, _)| *known == key) {
@@ -275,15 +277,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn dates_and_buckets_read_as_ts_in_utc() {
+    fn dates_and_buckets_read_as_ts_in_local_time() {
         assert_eq!(date(1_700_200_000_000.0), "2023-11-17");
         assert_eq!(date(0.0), "1970-01-01");
+        let utc = |time: f64| time;
         let now = 1_700_200_000_000.0;
         let buckets: Vec<usize> = [now, now - DAY, now - 3.0 * DAY, now - 20.0 * DAY, now - 40.0 * DAY]
             .into_iter()
-            .map(|time| bucket(time, now))
+            .map(|time| bucket(time, now, &utc))
             .collect();
         assert_eq!(buckets, [0, 1, 2, 3, 4]);
+        // 2023-11-17 05:46 UTC is still the 16th at UTC−8, and an hour before midnight at UTC+2 is yesterday there.
+        let pacific = |time: f64| time - 8.0 * 3_600_000.0;
+        assert_eq!(date(pacific(1_700_200_000_000.0)), "2023-11-16");
+        let east = |time: f64| time + 2.0 * 3_600_000.0;
+        let midnight = 1_700_179_200_000.0 - 2.0 * 3_600_000.0;
+        assert_eq!((bucket(midnight, midnight + 3_600_000.0, &east), bucket(midnight - 3_600_000.0, midnight, &east)), (0, 1));
     }
 
     #[test]

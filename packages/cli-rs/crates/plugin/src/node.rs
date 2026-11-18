@@ -571,8 +571,11 @@ pub(crate) fn lay_out<W: Widget>(widget: &W, layout: &abi::Layout) -> W {
     if let Some(shrink) = layout.shrink {
         widget.shrink(if shrink { 1.0 } else { 0.0 });
     }
-    if layout.min_width_zero {
-        widget.min_width(0);
+    if let Some(width) = layout.min_width {
+        widget.min_width(length(width));
+    }
+    if let Some(width) = layout.max_width {
+        widget.max_width(length(width));
     }
     if let Some(height) = layout.height {
         widget.height(length(height));

@@ -21,7 +21,7 @@ pub fn open(host: &dyn Host, viewer: &Viewer) {
                     Node::text([Span::new(shortcut.clone())])
                         .fg("text.base")
                         .layout(Layout::default().width(Width::Cells(SHORTCUT_WIDTH)).shrink(false)),
-                    Node::text([Span::new(*label)]).fg("text.muted").layout(Layout::default().grow().min_width_zero()),
+                    Node::text([Span::new(*label)]).fg("text.muted").layout(Layout::default().grow().min_width(0)),
                 ])
                 .gap(2)
             });

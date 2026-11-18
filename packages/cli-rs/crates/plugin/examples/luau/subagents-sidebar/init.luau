@@ -55,12 +55,12 @@ local function row(child: Child)
             fg = "text.base",
             wrap = "none",
             truncate = true,
-            layout = { grow = true, shrink = true, min_width_zero = true },
+            layout = { grow = true, shrink = true, min_width = { cells = 0 } },
         }),
         plugin.text(if child.running then "running" else "done", { fg = DIM, wrap = "none", layout = { shrink = false } }),
     }, {
         gap = 1,
-        layout = { min_width_zero = true },
+        layout = { min_width = { cells = 0 } },
         on_click = { action = plugin.command(OPEN, child.id), on = "down" },
     })
 end

@@ -18,6 +18,7 @@ opencode-plugin-abi.workspace = true
 opencode-util.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+unicode-segmentation = "1"
 unicode-width.workspace = true
 opencode-api-types.workspace = true
 # The URLs of git specs, parsed as `new URL` parses them (the npm cache's keys, js-npm).

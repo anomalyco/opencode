@@ -144,7 +144,7 @@ pub const MAX_ROWS: u64 = 1 << 24;
 
 /// Whether every size of `layout` in percent is a finite number of 0 or more.
 pub fn sizes_ok(layout: &abi::Layout) -> bool {
-    [layout.width, layout.height, layout.min_height, layout.max_height]
+    [layout.width, layout.min_width, layout.max_width, layout.height, layout.min_height, layout.max_height]
         .into_iter()
         .flatten()
         .all(|size| !matches!(size, abi::Width::Percent(percent) if !percent.is_finite() || percent < 0.0))
@@ -328,8 +328,8 @@ pub(crate) enum Extra {
     Markdown(opentui::widget::Markdown, Rc<str>),
     Slot(Option<SlotMount>),
     Canvas(Canvas),
-    /// The field, and the value the tree gave it last.
-    Input(Field, RefCell<String>),
+    /// The field, the value the tree gave it last, and the texts it reported as `change` since ([`ECHOES`]).
+    Input(Field, RefCell<String>, Rc<RefCell<Vec<String>>>),
     List(Box<List>),
     /// The code and the text it shows.
     Code(opentui::widget::Code, Rc<str>),
@@ -341,6 +341,10 @@ pub(crate) enum Extra {
     /// has its id now.
     Taken,
 }
+
+/// The most texts a field remembers having reported as `change` and not yet seen again as its tree's value: a
+/// plugin that never sets the value from them (an uncontrolled field) only ever has the latest few compared.
+const ECHOES: usize = 32;
 
 /// An input of one line or many.
 #[derive(Clone)]
@@ -602,7 +606,7 @@ impl Tree {
     /// with that value.
     pub(crate) fn take_drafts(&self, drafts: &mut Drafts) {
         each(&self.nodes, &mut |node| {
-            if let (Some(id), Extra::Input(field, given)) = (node.node.id(), &node.extra) {
+            if let (Some(id), Extra::Input(field, given, _)) = (node.node.id(), &node.extra) {
                 let draft = field.draft();
                 if draft.0 != *given.borrow() {
                     drafts.insert(id.to_owned(), (given.borrow().clone(), draft));
@@ -619,7 +623,7 @@ impl Tree {
             return;
         }
         each(&self.nodes, &mut |node| {
-            if let (Some(id), Extra::Input(field, given)) = (node.node.id(), &node.extra)
+            if let (Some(id), Extra::Input(field, given, _)) = (node.node.id(), &node.extra)
                 && let Some((over, draft)) = drafts.remove(id)
                 && over == *given.borrow()
             {
@@ -1683,7 +1687,7 @@ impl Pass<'_, '_> {
                 if had != lines || laid != layout {
                     // Built again, it keeps what the user typed, where the value stays, and the focus.
                     let built = self.build(new);
-                    let (Extra::Input(was, given), Extra::Input(field, ..)) = (&old.extra, &built.extra) else {
+                    let (Extra::Input(was, given, _), Extra::Input(field, ..)) = (&old.extra, &built.extra) else {
                         unreachable!()
                     };
                     let draft = was.draft();
@@ -1697,12 +1701,21 @@ impl Pass<'_, '_> {
                 }
                 let Node::Input { placeholder: shown, .. } = &old.node else { unreachable!() };
                 let placeholder_changed = shown != placeholder;
-                let Extra::Input(field, given) = &old.extra else { unreachable!() };
-                // The text is the host's: a value the tree did not change leaves what the user typed.
+                let Extra::Input(field, given, reported) = &old.extra else { unreachable!() };
+                // The text is the host's: a value the tree did not change leaves what the user typed. A value the field
+                // reported is the plugin catching up with the user, over the pipe in a tree made before the keys that
+                // followed came, and leaves what they typed since (`P.8/session-manager`'s search lost letters).
                 if *given.borrow() != *value {
-                    field.set(value);
+                    let mut reported = reported.borrow_mut();
+                    match reported.iter().position(|text| text == value) {
+                        Some(at) => drop(reported.drain(..=at)),
+                        None => {
+                            reported.clear();
+                            field.set(value);
+                            count(|work| work.set += 1);
+                        }
+                    }
                     *given.borrow_mut() = value.clone();
-                    count(|work| work.set += 1);
                 }
                 if placeholder_changed {
                     match field {
@@ -2235,14 +2248,22 @@ impl Pass<'_, '_> {
                 paint_field(&field, theme);
                 // With an id, its edits reach the mount's handler. The id stays while the field does: another builds it
                 // again.
+                let reported = Rc::new(RefCell::new(Vec::new()));
                 if let (Some(id), Some(owner)) = (id.clone(), env.owner.cloned()) {
                     let hear = |submit: bool| {
-                        let (node, owner) = (id.clone(), owner.clone());
+                        let (node, owner, reported) = (id.clone(), owner.clone(), reported.clone());
                         move |_: &mut Cx<'_>, text: &str| {
                             let (node, text) = (node.clone(), text.to_owned());
                             let event = match submit {
                                 true => abi::interact::Event::Submit { node, text },
-                                false => abi::interact::Event::Change { node, text },
+                                false => {
+                                    let mut reported = reported.borrow_mut();
+                                    if reported.len() == ECHOES {
+                                        reported.remove(0);
+                                    }
+                                    reported.push(text.clone());
+                                    abi::interact::Event::Change { node, text }
+                                }
                             };
                             if let Some(owner) = owner.upgrade() {
                                 owner.hear(&event);
@@ -2256,7 +2277,7 @@ impl Pass<'_, '_> {
                 }
                 let widget = field.widget();
                 lay_out(&widget, layout);
-                (widget, Extra::Input(field, RefCell::new(value.clone())))
+                (widget, Extra::Input(field, RefCell::new(value.clone()), reported))
             }
             Node::List { row, layout, .. } => {
                 let list = List::new(app, *row);

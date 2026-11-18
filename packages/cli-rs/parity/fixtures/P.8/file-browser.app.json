@@ -19,7 +19,7 @@
  "steps": [
   {"checkpoint":"home","until":"ctrl+p commands","masks":[{"x":36,"y":18,"width":70,"height":1,"reason":"the placeholder example: random in TS and Rust"}],"fixture":"P.8/file-browser/home"},
   {"type":"/files"},
-  {"checkpoint":"slash","until":"Browse, preview, edit","deviation":[{"file":"F16-v2-compat-layer","cells":249}],"fixture":"P.8/file-browser/slash"},
+  {"checkpoint":"slash","until":"Browse, preview, edit","fixture":"P.8/file-browser/slash"},
   {"keys":["enter"]},
   {"checkpoint":"browser","until":"tsconfig.json","deviation":[{"file":"F16-v2-compat-layer","cells":40}],"fixture":"P.8/file-browser/browser"},
   {"keys":["down"]},

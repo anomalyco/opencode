@@ -3,10 +3,9 @@
 //! subsessions as a tree; the keys move a selection through it, fold groups, search in a field, rename a session and
 //! delete one or a whole group, each after asking. The grouping, the subsessions and the language are kept.
 //!
-//! Where it differs from TS: the rename prompt cannot be filled with the session's title or show its directory (a
-//! prompt has a title and a placeholder only), so it shows the title as the placeholder; the search field takes the
-//! focus at the next wake, once the host's tree holds it, so keys typed in the same burst as `/` are lost; dates are
-//! read in UTC; and a command has one slash name, so TS's `/sm` alias is not there.
+//! It draws as TS's: the rename prompt is filled with the session's title under its directory, `/` focuses the search
+//! field the same call shows (the host's focus waits for the view that shows it), dates are local time by the host's
+//! UTC offset of each, and `/sm` is the command's alias.
 
 mod grouping;
 mod i18n;
@@ -82,7 +81,8 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         .description("Browse, rename and delete sessions grouped by directory, project or time")
         .group("Session")
         .palette()
-        .slash("session-manager");
+        .slash("session-manager")
+        .aliases(["sm".to_owned()]);
     let opened = state.clone();
     setup.command(open, move |host, _| {
         if let Route::Plugin { name, .. } = host.route()
@@ -132,13 +132,9 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
     if let Some(waker) = setup.waker() {
         let timer = Timer::start(waker.clone());
         state.borrow_mut().timer = Some(timer.clone());
-        state.borrow_mut().waker = Some(waker);
         setup.on_wake(move |host| {
             {
                 let mut state = page.state.borrow_mut();
-                if std::mem::take(&mut state.focus) && state.searching {
-                    host.focus(SEARCH);
-                }
                 if state.timer.as_ref().is_some_and(Timer::take) {
                     state.refresh();
                 }
@@ -326,10 +322,6 @@ struct State {
     /// The flow a handler asked for, which starts once it returns.
     start: Option<Flow>,
     timer: Option<Timer>,
-    /// Wakes the host for a focus that must wait for the next view: the field shows only once searching.
-    waker: Option<Waker>,
-    /// The search field takes the focus at the next wake.
-    focus: bool,
 }
 
 impl Default for State {
@@ -354,8 +346,6 @@ impl Default for State {
             refreshes: 0,
             start: None,
             timer: None,
-            waker: None,
-            focus: false,
         }
     }
 }
@@ -379,7 +369,6 @@ impl State {
             origin: self.origin.take(),
             refreshes: self.refreshes,
             timer: self.timer.take(),
-            waker: self.waker.take(),
             mode: stored.get("mode").and_then(Value::as_str).and_then(Mode::parse).unwrap_or(Mode::Directory),
             children: stored.get("showChildren") == Some(&Value::Bool(true)),
             locale: stored.get("locale").and_then(Value::as_str).and_then(Locale::parse).unwrap_or(Locale::En),
@@ -399,7 +388,7 @@ impl State {
         }
     }
 
-    fn listed_now(&self) -> Listed {
+    fn listed_now(&self, read: &dyn Read) -> Listed {
         let text = |session: &Session| {
             format!(
                 "{} {} {}",
@@ -416,7 +405,8 @@ impl State {
             Mode::Project => self.projects.get(key).cloned().unwrap_or_else(|| key.to_owned()),
             _ => t.buckets[key.parse::<usize>().unwrap_or(4)].to_owned(),
         };
-        let groups = grouping::groups(&self.sessions, &shown, self.mode, self.children, self.now, label);
+        let wall = |time: f64| time + f64::from(read.utc_offset(time as i64)) * 1000.0;
+        let groups = grouping::groups(&self.sessions, &shown, self.mode, self.children, self.now, &wall, label);
         let rows = grouping::rows(&groups, &self.collapsed);
         Listed { groups, rows }
     }
@@ -473,7 +463,7 @@ impl State {
     }
 
     fn list_key(&mut self, host: &dyn Host, name: &str) -> Handled {
-        let listed = self.listed_now();
+        let listed = self.listed_now(host);
         let index = self.index(&listed).map_or(-1, |index| index as isize);
         let page = (host.info().size.1 as isize - 8).max(1);
         match name {
@@ -508,7 +498,7 @@ impl State {
     }
 
     fn search_key(&mut self, host: &dyn Host, name: &str) -> Handled {
-        let listed = self.listed_now();
+        let listed = self.listed_now(host);
         let index = self.index(&listed).map_or(-1, |index| index as isize);
         let page = (host.info().size.1 as isize - 8).max(1);
         match name {
@@ -581,17 +571,10 @@ impl State {
         }
     }
 
-    /// TS `startSearch`: the field shows, and takes the focus once it does (`focus-input`): a focus asked in this call
-    /// would name a field the host's tree does not hold yet.
+    /// TS `startSearch`: the field shows, and takes the focus as the view that shows it is adopted (`focus-input`).
     fn start_search(&mut self, host: &dyn Host) {
         self.searching = true;
-        match &self.waker {
-            Some(waker) => {
-                self.focus = true;
-                waker.wake();
-            }
-            None => host.focus(SEARCH),
-        }
+        host.focus(SEARCH);
     }
 
     fn finish_search(&mut self, host: &dyn Host) {
@@ -606,7 +589,7 @@ impl State {
 
     /// A click on row `index`: the selected one opens or folds, another is selected.
     fn clicked(&mut self, host: &dyn Host, index: &str) {
-        let listed = self.listed_now();
+        let listed = self.listed_now(host);
         let Ok(index) = index.parse::<usize>() else { return };
         match self.index(&listed) == Some(index) {
             true => self.activate(host, &listed),
@@ -631,7 +614,9 @@ impl State {
         let Some(Row::Session { session, .. }) = self.index(listed).map(|index| &listed.rows[index]) else { return };
         let session = &self.sessions[*session];
         self.busy = true;
-        let prompt = Prompt::ask(self.t().rename_title).placeholder(session.title.clone().unwrap_or_default());
+        let prompt = Prompt::ask(self.t().rename_title)
+            .description(format_path(&session.directory))
+            .value(session.title.clone().unwrap_or_default());
         self.start = Some(Flow::Rename { id: session.id.clone(), prompt });
     }
 
@@ -718,16 +703,16 @@ impl State {
     }
 
     /// The page, as TS's JSX draws it.
-    fn view(&self, _read: &dyn Read) -> v2::Node {
+    fn view(&self, read: &dyn Read) -> v2::Node {
         let t = self.t();
-        let listed = self.listed_now();
+        let listed = self.listed_now(read);
         let count: usize = listed.groups.iter().map(|group| group.count).sum();
         let filtered = !self.query.trim().is_empty();
         let mut rows = vec![self.header(t, count)];
         if self.searching || filtered {
             rows.push(self.search_row(t, count, filtered));
         }
-        rows.push(self.body(t, &listed, filtered));
+        rows.push(self.body(read, t, &listed, filtered));
         rows.push(hints(t));
         v2::Node::column(rows).gap(1).padding_sides(Edges::new(1, 2, 1, 2)).layout(Layout::default().grow())
     }
@@ -772,7 +757,7 @@ impl State {
                 .fg("text.base")
                 .wrap(Wrap::None)
                 .layout(Layout::default().shrink(false)),
-            v2::Node::row(modes).gap(1).layout(Layout::default().shrink(true).min_width_zero()),
+            v2::Node::row(modes).gap(1).layout(Layout::default().shrink(true).min_width(0)),
             v2::Node::column(Vec::new()).layout(Layout::default().grow()),
             v2::Node::text([Span::new(format!("{} · {}", (t.children)(self.children), (t.total)(count)))])
                 .fg("text.muted")
@@ -808,7 +793,7 @@ impl State {
         v2::Node::row(row).gap(1).layout(Layout::default().shrink(false))
     }
 
-    fn body(&self, t: &Messages, listed: &Listed, filtered: bool) -> v2::Node {
+    fn body(&self, read: &dyn Read, t: &Messages, listed: &Listed, filtered: bool) -> v2::Node {
         if self.loading {
             return v2::Node::text([Span::new(t.loading)]).fg("text.muted");
         }
@@ -824,12 +809,13 @@ impl State {
             .rows
             .iter()
             .enumerate()
-            .map(|(index, row)| self.row(t, listed, index, row, selected == Some(index)))
+            .map(|(index, row)| self.row(read, t, listed, index, row, selected == Some(index)))
             .collect();
         v2::Node::scroll(rows).with_id(ROWS).layout(Layout::default().grow())
     }
 
-    fn row(&self, t: &Messages, listed: &Listed, index: usize, row: &Row, selected: bool) -> v2::Node {
+    fn row(&self, read: &dyn Read, t: &Messages, listed: &Listed, index: usize, row: &Row, selected: bool) -> v2::Node {
+        let wall = |time: f64| time + f64::from(read.utc_offset(time as i64)) * 1000.0;
         let click = Click::command("session-manager.row").input(index.to_string());
         let bg = |node: v2::Node| if selected { node.bg("background.raised.high") } else { node };
         match row {
@@ -847,7 +833,7 @@ impl State {
                     .fg("text.base")
                     .wrap(Wrap::None)
                     .truncate()
-                    .layout(Layout::default().grow().shrink(true).min_width_zero()),
+                    .layout(Layout::default().grow().shrink(true).min_width(0)),
                 ])
                 .gap(1)
                 .on_click(click);
@@ -872,7 +858,7 @@ impl State {
                     .fg(if *depth > 0 { "text.muted" } else { "text.base" })
                     .wrap(Wrap::None)
                     .truncate()
-                    .layout(Layout::default().grow().shrink(true).min_width_zero()),
+                    .layout(Layout::default().grow().shrink(true).min_width(0)),
                 ];
                 if self.mode != Mode::Directory && *depth == 0 {
                     // TS's `maxWidth={40}`, which the layout cannot say.
@@ -889,7 +875,7 @@ impl State {
                     self.mode
                 });
                 line.push(
-                    v2::Node::text([Span::new(grouping::age(time, self.now, t))])
+                    v2::Node::text([Span::new(grouping::age(time, self.now, &wall, t))])
                         .fg("text.muted")
                         .wrap(Wrap::None)
                         .layout(Layout::default().shrink(false)),

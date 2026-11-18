@@ -275,6 +275,11 @@ static const char *const COMMANDS[] = {
     "conf.field", "conf.fence", "conf.dialogs", "conf.plugins",
 };
 
+/* The last command, `conf.facts`, has a slash name and an alias (contract ergonomics 2.6). */
+#define FACTS                                                                                                          \
+    "{\"name\":\"conf.facts\",\"title\":\"conf.facts\",\"group\":null,\"slash\":\"conf-facts\",\"keybind\":null,"     \
+    "\"palette\":false,\"aliases\":[\"cf\"]}"
+
 /* The scroll `items` of the surface `rows`, as a verb or a read names it. */
 #define ITEMS "{\"type\":\"node\",\"surface\":\"rows\",\"id\":\"items\"}"
 
@@ -311,6 +316,7 @@ static int32_t create(const opencode_host_api *host, opencode_bytes options, voi
                  index == 0 ? "" : ",", COMMANDS[index], COMMANDS[index]);
         strncat(manifest, command, sizeof manifest - strlen(manifest) - 1);
     }
+    strncat(manifest, "," FACTS, sizeof manifest - strlen(manifest) - 1);
     strncat(manifest,
             "],\"fences\":[],\"slots\":[],\"routes\":[],\"storage\":[\"count\"],\"wake\":true,"
             "\"surfaces\":[{\"name\":\"conf\",\"place\":{\"type\":\"route\",\"name\":\"conf\"}},"
@@ -397,6 +403,25 @@ static void read_plugins(const opencode_host_api *host, const char *said) {
     toast(host, "info", message);
 }
 
+/* `conf.facts` (contract ergonomics 2.6, 2.9): the host's locale, its UTC offset at 0 and its measure of "ab日", then
+ * a prompt filled with a value under a description. */
+static void facts(const opencode_host_api *host) {
+    char answer[512], locale[64] = "", offset[32] = "0", message[192];
+    if (ask(host, "{\"type\":\"info\"}", answer, sizeof answer) == OPENCODE_OK) {
+        string_after(bytes(answer), "\"locale\":\"", locale, sizeof locale);
+    }
+    ask(host, "{\"type\":\"utc-offset\",\"at\":0}", offset, sizeof offset);
+    ask(host, "{\"type\":\"measure\",\"text\":\"ab日\"}", answer, sizeof answer);
+    opencode_bytes measure = bytes(answer);
+    snprintf(message, sizeof message, "facts %s %ld %llu %llu", locale, strtol(offset, NULL, 10),
+             number(measure, "cells"), number(measure, "graphemes"));
+    toast(host, "info", message);
+    ask(host,
+        "{\"type\":\"dialog\",\"dialog\":{\"type\":\"prompt\",\"title\":\"name\",\"value\":\"conf\","
+        "\"description\":\"described\",\"action\":{\"type\":\"command\",\"name\":\"conf.toast\"}}}",
+        NULL, 0);
+}
+
 /* `conf.message` (P6a): a read of one message, and its ID or none. */
 static void read_message(const opencode_host_api *host) {
     char answer[512], id[64], message[96] = "message none";
@@ -472,6 +497,8 @@ static int32_t command(instance *self, opencode_bytes request, opencode_owned *o
         read_message(host);
     } else if (names(request, "conf.plugins")) {
         read_plugins(host, "plugins");
+    } else if (names(request, "conf.facts")) {
+        facts(host);
     } else if (names(request, "conf.read")) {
         int light = OFFERS(host, theme_mode) && host->theme_mode(host->ctx) == OPENCODE_THEME_LIGHT;
         char answer[16];

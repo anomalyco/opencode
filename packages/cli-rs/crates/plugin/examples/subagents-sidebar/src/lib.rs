@@ -147,11 +147,11 @@ fn row(child: &Child) -> Node {
             .fg("text.base")
             .wrap(Wrap::None)
             .truncate()
-            .layout(Layout::default().grow().shrink(true).min_width_zero()),
+            .layout(Layout::default().grow().shrink(true).min_width(0)),
         Node::text([Span::new(state)]).fg(DIM).wrap(Wrap::None).layout(Layout::default().shrink(false)),
     ])
     .gap(1)
-    .layout(Layout::default().min_width_zero())
+    .layout(Layout::default().min_width(0))
     .on_click(Click::command(OPEN).input(child.id.clone()).on_down())
 }
 

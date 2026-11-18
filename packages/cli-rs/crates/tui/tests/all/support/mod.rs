@@ -268,6 +268,28 @@ pub fn still() -> Info {
     Info { animations: Some(false), ..Info::default() }
 }
 
+/// Whether the calling test goes on here: it does when this process runs in UTC (`TZ=UTC`). Elsewhere it runs again, in
+/// a child of this binary with `TZ=UTC`, which this asserts passed, and the caller returns. TS's recorder runs in UTC
+/// (`parity/app/scenarios.test.tsx`), so a time the client or a plugin shows in local time (`Read::utc_offset`,
+/// `Zone::Local`) reads the same on any machine. The zone is read once a process, so it is pinned by the child's
+/// environment, not set in this one.
+pub fn in_utc() -> bool {
+    if std::env::var("TZ").as_deref() == Ok("UTC") {
+        return true;
+    }
+    let name = std::thread::current().name().map(str::to_owned).expect("a test runs on a thread named by its path");
+    let output = std::process::Command::new(std::env::current_exe().expect("the test binary"))
+        .args(["--exact", &name, "--test-threads=1", "--nocapture"])
+        .env("TZ", "UTC")
+        .output()
+        .expect("the test binary runs again");
+    let (stdout, stderr) = (String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    print!("{stdout}");
+    eprint!("{stderr}");
+    assert!(output.status.success() && stdout.contains("1 passed"), "{name} failed in UTC");
+    false
+}
+
 pub fn session_route(id: &str) -> Route {
     Route::Session { id: SessionID(id.into()) }
 }

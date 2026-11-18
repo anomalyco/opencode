@@ -808,6 +808,28 @@ test("a mount a reload begins again adopts the one it ended", async () => {
   expect(text(surface.view(cx(4)))).toBe("run 3")
 })
 
+// Contract ergonomics, step 8: the host's focus was the ended mount's, so the field the plugin focused in a mount a reload
+// begins again asks for it again, for the new mount, as that mount adopts the tree (`P.8/session-manager`'s search,
+// whose layer reloads as the field shows, lost what the user typed). A field not focused asks for nothing.
+test("a mount a reload begins again focuses the field the plugin focused", () => {
+  const fake = host()
+  const ctx = plugin("t.refocus", fake)
+  const refs: Json = {}
+  ctx.ui.slot({ append: "sidebar.content", render: () => h("input", { id: "search", ref: (el: Json) => (refs.search = el) }) })
+  const cx = (generation: number) => ({ mount: { surface: "slot#0", key: "a", generation }, input: { width: 40, height: 10, slot: {} } })
+  const surface = fake.surfaces[0]
+  const focuses = () => fake.effects.filter((effect: Json) => effect.type === "focus").map((effect: Json) => effect.mount.generation)
+  surface.view(cx(1))
+  surface.options.unmount(cx(1).mount, true)
+  surface.view(cx(2))
+  expect(focuses()).toEqual([])
+  refs.search.focus()
+  surface.options.unmount(cx(2).mount, true)
+  surface.view(cx(3))
+  expect(focuses()).toEqual([2, 3])
+  surface.options.unmount(cx(3).mount)
+})
+
 // CT-15: a render that returns a renderable it built itself (opencode-quick-quote's slot marker) draws nothing and says
 // so, where it crashed on `e.children.indexOf`. CT-15, CT-24: a node's `getLayout()`, `width` and `onSizeChange` are the
 // host's layout of it (`Read::rect`), once the host said: the node carries an id from its next view.
@@ -1031,7 +1053,10 @@ test("each dialog settles once, and clear closes it", async () => {
   expect(await prompted).toBeUndefined()
   await turn()
   expect(fake.effects.at(-1).dialog).toEqual({ type: "close", key: "" })
-  expect(fake.warnings()).toContain("t.dialogs: ui.dialog.prompt value is not supported by opencode-native yet")
+  // Contract ergonomics 2.6: a prompt's `value` is the host's field's starting text.
+  const prompt = fake.effects.find((effect: Json) => effect.dialog?.dialog?.type === "prompt").dialog.dialog
+  expect([prompt.title, prompt.value]).toEqual(["Name", "x"])
+  expect(fake.warnings()).toEqual([])
   ctx.ui.dialog.show(() => h("text", { children: "big" }))
   ctx.ui.dialog.set({ size: "large", centered: true })
   ctx.ui.dialog.clear()
@@ -1381,4 +1406,67 @@ test("a code block's renderer declines, throws, and what it cannot draw is repor
     "t.odd: a code block's renderable built outside @opentui/core's classes is not supported by opencode-native yet",
     "t.odd: a code block's default render fg is not supported by opencode-native yet",
   ])
+})
+
+// Contract ergonomics 2.6: a prompt's `value` and `description` reach the host's prompt (session-manager's rename shows
+// the directory above a field holding the old title); a value that is no string is its text, and an unset one is left
+// out.
+test("a prompt carries its value and description", async () => {
+  const fake = host()
+  const ctx = plugin("t.prompt", fake)
+  void ctx.ui.dialog.prompt({ title: "Rename session", description: "/tmp/project", value: "Old title", placeholder: "Title" })
+  await turn()
+  void ctx.ui.dialog.prompt({ title: "Count", value: 3 })
+  await turn()
+  void ctx.ui.dialog.prompt({ title: "Bare" })
+  await turn()
+  const prompts = fake.effects.filter((effect: Json) => effect.dialog?.dialog?.type === "prompt").map((effect: Json) => {
+    const { action: _action, ...prompt } = effect.dialog.dialog
+    return prompt
+  })
+  expect(prompts).toEqual([
+    { type: "prompt", title: "Rename session", placeholder: "Title", value: "Old title", description: "/tmp/project" },
+    { type: "prompt", title: "Count", value: "3" },
+    { type: "prompt", title: "Bare" },
+  ])
+  expect(fake.warnings()).toEqual([])
+})
+
+// Contract ergonomics 2.6: a command's slash aliases (oc-context-grid's `/ctx`, session-manager's `/sm`) go with its
+// slash name; none, or an empty list, adds nothing.
+test("a command's slash aliases go to the host", () => {
+  const fake = host()
+  const ctx = plugin("t.aliases", fake)
+  ctx.keymap.layer(() => ({
+    commands: [
+      { id: "t.manager", title: "Manager", slash: { name: "session-manager", aliases: ["sm", "sessions"] }, run: () => {} },
+      { id: "t.plain", title: "Plain", slash: { name: "plain", aliases: [] }, run: () => {} },
+    ],
+  }))
+  expect(fake.meta.get("t.manager")).toMatchObject({ slash: "session-manager", aliases: ["sm", "sessions"] })
+  expect("aliases" in fake.meta.get("t.plain")).toBe(false)
+})
+
+// Contract ergonomics 2.6: `minWidth` and `maxWidth` are the layout's, in cells or percent, as OpenTUI's (session-manager's
+// directory column, `maxWidth={40}`); neither is reported any more.
+test("a node's minWidth and maxWidth are its layout's", () => {
+  const fake = host()
+  const ctx = plugin("t.widths", fake)
+  ctx.ui.slot({
+    append: "home.footer",
+    render: () =>
+      h("box", {
+        flexDirection: "row",
+        children: [
+          h("text", { maxWidth: 40, minWidth: 0, children: "dir" }),
+          h("text", { maxWidth: "50%", minWidth: 4, children: "title" }),
+        ],
+      }),
+  })
+  const row = view(fake, 0, "a").draw().children[0]
+  expect(row.children.map((child: Json) => child.layout)).toEqual([
+    { min_width: { cells: 0 }, max_width: { cells: 40 } },
+    { min_width: { cells: 4 }, max_width: { percent: 50 } },
+  ])
+  expect(fake.warnings()).toEqual([])
 })

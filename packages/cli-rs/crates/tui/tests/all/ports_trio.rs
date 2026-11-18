@@ -33,6 +33,10 @@ struct Observed {
 /// One row: drives each column of `npm` and `port` with `drive`, which returns what it observed (`None` for a package
 /// without Bun), and holds every column to the first one's.
 fn trio(npm: &str, port: &str, drive: impl Fn(Carrier<'_>) -> Option<Observed>) {
+    // Each column in UTC, as TS records: session-manager's dates and buckets are local time in every column.
+    if !crate::support::in_utc() {
+        return;
+    }
     let observed: Vec<(Carrier<'_>, Observed)> =
         columns(npm, port).into_iter().filter_map(|carrier| Some((carrier, drive(carrier)?))).collect();
     // `PORTS_TRIO_DUMP=1` prints what each column showed and sent.
@@ -592,19 +596,18 @@ fn manager_server(seen: &Seen) -> Option<Reply> {
     }
 }
 
-// Expected: on each column, `/session-manager` opens the page with the sessions grouped by directory, the route's
-// session marked and selected; `j` moves the selection, Tab groups by project, `c` shows the subsessions as a tree,
-// `l` switches to Chinese and back, `/` opens the search row, `r` asks for a new title, `d` asks before it deletes, and
-// enter deletes the session and its subsession and says so. Where a column cannot do what TS does, its row leaves the
-// step out and `steps/ports-trio.md` says why: the ports' prompt has no value or description, so TS's rename prompt,
-// with the directory and the title filled in, is not theirs.
+// Expected: on each column, `/sm` (the command's alias) opens the page with the sessions grouped by directory, the
+// route's session marked and selected; `j` moves the selection, Tab groups by project, `c` shows the subsessions as a
+// tree, `l` switches to Chinese and back, `/` opens the search row and focuses its field, which what follows is typed
+// into, `r` asks for a new title in a prompt filled with the title under the session's directory, `d` asks before it
+// deletes, and enter deletes the session and its subsession and says so.
 #[test]
 fn session_manager_groups_searches_and_deletes_alike_in_ts_rust_and_luau() {
     trio("@0xuwui/opencode-session-manager", "session-manager", |carrier| {
         let h = open_with(&[carrier], 140, manager_server, true, None, None)?;
         h.wait_for("Plan the release");
         h.settle();
-        h.app.type_text("/session-manager");
+        h.app.type_text("/sm");
         h.wait_for("Browse");
         h.app.press("return");
         h.wait_for("Draft the notes");
@@ -626,14 +629,18 @@ fn session_manager_groups_searches_and_deletes_alike_in_ts_rust_and_luau() {
             }
             h.settle();
             steps.push((step.to_owned(), screen(&h)));
+            if step == "search" {
+                h.app.type_text("notes");
+                h.wait_for("1 match");
+                h.settle();
+                steps.push(("typed".to_owned(), screen(&h)));
+            }
         }
         h.app.press("k");
         h.app.press("r");
         h.wait_for("Rename session");
         h.settle();
-        if matches!(carrier, Carrier::Npm(_)) {
-            steps.push(("rename".to_owned(), screen(&h)));
-        }
+        steps.push(("rename".to_owned(), screen(&h)));
         h.app.press("escape");
         h.settle();
         steps.push(("renamed".to_owned(), screen(&h)));

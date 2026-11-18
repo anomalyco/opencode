@@ -505,7 +505,7 @@ fn a_claim_root_shrinks_in_a_row_slot() {
             Node::text([Span::new("abcdefghijklmnop")])
                 .wrap(abi::Wrap::None)
                 .truncate()
-                .layout(Layout::default().shrink(true).min_width_zero()),
+                .layout(Layout::default().shrink(true).min_width(0)),
         )
     });
     let registry = Registry::define(vec![shrink], []);

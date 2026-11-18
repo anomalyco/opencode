@@ -582,7 +582,7 @@ export function claimTree(root: VNode, reading: Reading): Json {
 }
 
 // The props of a node's layout ([`layoutOf`]).
-const LAYOUT = new Set(["width", "height", "minWidth", "minHeight", "maxHeight", "flexGrow", "flexShrink", "margin", "marginX", "marginY", "marginLeft", "marginRight", "marginTop", "marginBottom", "position", "top", "right", "bottom", "left", "zIndex"])
+const LAYOUT = new Set(["width", "height", "minWidth", "maxWidth", "minHeight", "maxHeight", "flexGrow", "flexShrink", "margin", "marginX", "marginY", "marginLeft", "marginRight", "marginTop", "marginBottom", "position", "top", "right", "bottom", "left", "zIndex"])
 
 // A 2.0 tree as the nodes of ABI 1.x a panel dialog's body takes: a scroll is a box (the panel's body scrolls), a code
 // view and a field their text, and the ids go.
@@ -840,9 +840,8 @@ function clickOf(at: VNode, reading: Reading) {
 function layoutOf(props: Json, reading: Reading) {
   const margin = edges(props, "margin")
   const absolute = props.position === "absolute"
-  for (const name of ["maxWidth", "alignSelf", "flexBasis"])
+  for (const name of ["alignSelf", "flexBasis"])
     if (props[name] !== undefined) reading.dropped.add(name)
-  if (props.minWidth !== undefined && props.minWidth !== 0) reading.dropped.add("minWidth")
   const layout = compact({
     width: length(props.width),
     grow: Number(props.flexGrow) > 0 ? true : undefined,
@@ -854,7 +853,9 @@ function layoutOf(props: Json, reading: Reading) {
         : typeof props.width === "number" || typeof props.height === "number"
           ? false
           : undefined,
-    min_width_zero: props.minWidth === 0 ? true : undefined,
+    // Contract ergonomics 2.6: as OpenTUI's, in cells or percent of the parent's.
+    min_width: length(props.minWidth),
+    max_width: length(props.maxWidth),
     height: length(props.height),
     min_height: length(props.minHeight),
     max_height: length(props.maxHeight),

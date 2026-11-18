@@ -228,6 +228,11 @@
     "script": [{ "do": "load" }, { "do": "command", "name": "conf.dialogs" }, { "do": "advance" }, { "do": "observe" }]
   },
   {
+    "transcript": "facts",
+    "about": "the contract ergonomics additions: a command with a slash alias, which reads the host's locale, its UTC offset and its measure of a text, and asks in a prompt filled with a value under a description",
+    "script": [{ "do": "load" }, { "do": "command", "name": "conf.facts" }, { "do": "advance" }, { "do": "observe" }]
+  },
+  {
     "transcript": "claim",
     "about": "a renderer claim (Pr): a tool call shown through the plugin's claim of its tool, its view, and the part's unmount",
     "script": [

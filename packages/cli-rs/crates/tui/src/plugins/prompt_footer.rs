@@ -134,7 +134,7 @@ impl Footer {
 fn view(model: &Model, session: &str) -> Node {
     let text = |spans: Vec<Span>| Node::text(spans).wrap(Wrap::None).layout(Layout::default().shrink(false));
     let root =
-        |shrink: bool, children| Node::row(children).gap(2).layout(Layout::default().shrink(shrink).min_width_zero());
+        |shrink: bool, children| Node::row(children).gap(2).layout(Layout::default().shrink(shrink).min_width(0));
     if model.prompt.shell {
         let label = if model.width < 44 { "shell" } else { "exit shell mode" };
         let hint = Node::text([Span::new("esc ").fg("text.base"), Span::new(label).fg("text.muted")])
@@ -188,7 +188,7 @@ fn view(model: &Model, session: &str) -> Node {
             let lead = if !live.is_empty() || model.goal.is_some() { " · " } else { "" };
             status.push(text(vec![Span::new(format!("{lead}{}", model.status.join(" · "))).fg("text.muted")]));
         }
-        children.push(Node::row(status).layout(Layout::default().shrink(shrink).min_width_zero()));
+        children.push(Node::row(status).layout(Layout::default().shrink(shrink).min_width(0)));
     } else if details && shortcuts {
         children.push(hint(&model.keys.agents, "agents"));
     }

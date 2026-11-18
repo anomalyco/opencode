@@ -9,10 +9,10 @@ use crate::interact::{self, Bind, Button, Dragged, Focused, Handled, Key, Layer,
 use crate::{
     Alert, Attention, Blob, Command, Composer, ComposerEdit, Confirm, ConfirmLabel, Dialog, ErrorDetails, Family,
     Fence, Fenced, Fetch, Foreground, Gutter, HostRequest, Image, ImageBounds, Images, Info, InputTo, KeymapActive,
-    KeymapCommand, KeymapPending, KeymapSlash, Level, Manifest, Member, Metadata, Panel, PanelAction, PanelBind,
-    PanelSize, PluginEntry, PluginOrigin, PluginStatus, Prompt, Render, RenderFence, Request, RequestId, Route, Scope,
-    Select, SelectAction, SelectOption, Session, SessionStatus, SlotClaim, SlotKind, Sound, SoundName, SurfaceClaim,
-    SurfacePlace, Tab, TabEdit, Toast, Unread, Variant, ViewReply, When,
+    KeymapCommand, KeymapPending, KeymapSlash, Level, Manifest, Measure, Member, Metadata, Panel, PanelAction,
+    PanelBind, PanelSize, PluginEntry, PluginOrigin, PluginStatus, Prompt, Render, RenderFence, Request, RequestId,
+    Route, Scope, Select, SelectAction, SelectOption, Session, SessionStatus, SlotClaim, SlotKind, Sound, SoundName,
+    SurfaceClaim, SurfacePlace, Tab, TabEdit, Toast, Unread, Variant, ViewReply, When,
 };
 
 /// The node tree of a render (`render`, `render-fence`, `render-route`) and of a dialog body, beside a surface's keyed
@@ -63,6 +63,7 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
             } {
                 group: nullable(string()), slash: nullable(string()), keybind: nullable(string()),
                 description: nullable(string()), arguments: boolean(), scope: reference("Scope"),
+                aliases: array(string()),
             }),
         ),
         ("Scope", {
@@ -315,6 +316,8 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
                 Setting { name: string() } { },
                 ImageSize { bytes: string() } { },
                 ImageBounds { } { },
+                UtcOffset { at: int64() } { },
+                Measure { text: string() } { },
                 SetSetting { name: string(), value: any() } { },
                 SetTheme { name: string() } { },
                 InstallTheme { name: string(), theme: any() } { },
@@ -381,7 +384,9 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
         (
             "Dialog",
             tagged!(Dialog, "A dialog the host shows.", flat {
-                Prompt(Prompt) { title: string(), action: reference("Action") } { placeholder: nullable(string()) },
+                Prompt(Prompt) { title: string(), action: reference("Action") } {
+                    placeholder: nullable(string()), value: nullable(string()), description: nullable(string()),
+                },
             }, {
                 Close { key: string() } { },
                 Dismissable { dialog: reference("Dialog"), dismissed: reference("Action") } { },
@@ -679,7 +684,13 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
             "Info",
             object!(Info, "The host's version, size and location.", {
                 version: string(), size: pair(uint16(), uint16()), location: reference("LocationRef"),
-            } { failed_plugins: uint64() }),
+            } { failed_plugins: uint64(), locale: nullable(string()) }),
+        ),
+        (
+            "Measure",
+            object!(Measure, "A text as the host's text layout counts it: its cells in a row, and its graphemes.", {
+                cells: uint32(), graphemes: uint32(),
+            } { }),
         ),
         (
             "ImageBounds",
@@ -755,6 +766,8 @@ pub(super) fn messages() -> Value {
         ("setting", nullable(any())),
         ("image-size", nullable(pair(uint32(), uint32()))),
         ("image-bounds", reference("ImageBounds")),
+        ("utc-offset", int32()),
+        ("measure", reference("Measure")),
         ("fetch", reference("RequestId")),
         ("foreground", reference("RequestId")),
         ("*", json!({ "type": "null" })),

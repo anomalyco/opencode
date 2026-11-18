@@ -596,6 +596,7 @@ function context(plugin: Plugin) {
           ...(command.description ? { description: command.description } : {}),
           ...(command.slash?.arguments || command.arguments ? { arguments: true } : {}),
           ...(command.scope ? { scope: command.scope } : {}),
+          ...(command.slash?.aliases?.length ? { aliases: command.slash.aliases } : {}),
         },
       })
     }
@@ -647,7 +648,7 @@ function context(plugin: Plugin) {
       plugin.layers.push({ layer, handler })
     },
     command(command: Json, run: (input?: string) => unknown) {
-      const slash = command.slash ? { name: command.slash, arguments: command.arguments } : undefined
+      const slash = command.slash ? { name: command.slash, arguments: command.arguments, aliases: command.aliases } : undefined
       commands({ commands: [{ ...command, id: command.name, run, bind: command.keybind, slash }] })
       changed(plugin)
     },

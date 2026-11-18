@@ -161,7 +161,7 @@ fn view(cx: &mut v2::View<'_>) -> v2::Node {
         width: (!auto).then_some(abi::Width::Cells(width)),
         height: Some(abi::Width::Cells(height)),
         shrink: Some(false),
-        min_width_zero: loose,
+        min_width: loose.then_some(abi::Width::Cells(0)),
         ..abi::Layout::default()
     };
     let mut row = vec![v2::Node::text(vec![abi::Span::new(MARK)]).layout(abi::Layout::default().shrink(false))];
@@ -1622,7 +1622,7 @@ fn slot_setup(setup: &mut abi::Setup) -> Result<(), String> {
     let view = |_: &mut v2::View<'_>| {
         v2::Node::canvas("badge").layout(abi::Layout {
             grow: true,
-            min_width_zero: true,
+            min_width: Some(abi::Width::Cells(0)),
             height: Some(abi::Width::Cells(2)),
             ..abi::Layout::default()
         })

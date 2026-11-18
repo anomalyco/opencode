@@ -2,8 +2,7 @@
 //! grid of squares colored by an estimate of what filled it (system, user, assistant, tools, other), in the sidebar
 //! and on a page of its own, `/contextgrid`, which escape leaves for the session it was opened from.
 //!
-//! Options: `sidebar: false` leaves the sidebar's grid out. TS's slash alias `/ctx` has no port: a command has one
-//! slash name (the JS host drops it too).
+//! Options: `sidebar: false` leaves the sidebar's grid out. `/ctx` is the command's alias, as in TS.
 
 mod context;
 
@@ -38,7 +37,8 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
         .group("Plugin")
         .description("Show context usage as a grid of squares")
         .palette()
-        .slash(ROUTE);
+        .slash(ROUTE)
+        .aliases(["ctx".to_owned()]);
     setup.command(open, move |host, _| {
         *opened.borrow_mut() = match host.route() {
             Route::Session { id } => Some(id),
