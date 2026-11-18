@@ -16,7 +16,8 @@ write the same value.
   apart.
 - An ID or a key that starts or ends with a dot, holds two in a row, or holds a character other than letters, digits,
   `.`, `_` and `-` cannot name storage: the read or write is refused.
-- A plugin declares 128 keys at most, and a stored value is 256 KiB of JSON at most.
+- A plugin declares 128 keys at most, and a stored value is 4 MiB of JSON at most (CT-36: opencodebar keeps a price
+  list of 1 MB, prompt-search an index of every prompt). TS bounds neither.
 
 ## Reason
 
