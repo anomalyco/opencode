@@ -271,7 +271,9 @@ fn first_mounts_the_head_and_newer_rows_mount_on_the_way_down() {
 
 #[test]
 fn message_navigation_aligns_messages_with_the_top() {
-    let h = open(turns(30), Info::default());
+    let mut messages = turns(30);
+    messages[3]["content"] = json!([{ "type": "reasoning", "text": "thinking only" }]);
+    let h = open(messages, Info::default());
     // A reply's first anchor is its first mounted part, so a closed exploration group does not count
     // (`anchors.messagePositions`). The previous message above the view's top is turn 29's reply,
     // aligned one row above its text.
@@ -300,6 +302,12 @@ fn message_navigation_aligns_messages_with_the_top() {
     }
     let screen = h.wait_for("┃  Question 1\n");
     assert_eq!(Nav::row(&screen, "Question 1"), Some(TOP + 1), "{screen}");
+    for (direction, text) in
+        [("next", "Answer 1 one."), ("next", "Question 2"), ("next", "Question 3"), ("previous", "Question 2")]
+    {
+        let screen = settle(&h, h.dispatch(&format!("session.message.{direction}")));
+        assert_eq!(Nav::row(&screen, text), Some(TOP + 1), "{screen}");
+    }
 }
 
 #[test]
