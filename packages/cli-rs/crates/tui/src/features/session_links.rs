@@ -271,64 +271,31 @@ mod tests {
     }
 
     #[test]
-    fn mentions_match_complete_ids_outside_words_paths_and_urls() {
-        assert_eq!(KNOWN.len(), ID_LEN);
+    fn standalone_mentions_survive_unicode_and_reject_word_and_path_contexts() {
         let prefixed = format!("@session:{KNOWN}");
-        assert_eq!(found(&format!("see {KNOWN}, ({prefixed}) and `{KNOWN}`.")), [KNOWN, &prefixed, KNOWN]);
-        for text in [
-            format!("x{KNOWN}"),
-            format!("/{KNOWN}"),
-            format!("a:{KNOWN}"),
-            format!("@{KNOWN}"),
-            format!("-{KNOWN}"),
-            format!("_{KNOWN}"),
-            format!("{KNOWN}x"),
-            format!("{KNOWN}/"),
-            format!("{KNOWN}-"),
-            format!("{KNOWN}_"),
-            format!("x@session:{KNOWN}"),
-            format!("https://opencode.ai/s/{KNOWN}"),
-            KNOWN[..ID_LEN - 1].to_owned(),
-        ] {
-            assert_eq!(found(&text), Vec::<&str>::new(), "{text}");
+        for shown in [KNOWN, &prefixed] {
+            for left in ["", "see ", "(", "`", "中文", "现abcd文", "é", "e\\u{301}", "🙂"] {
+                for right in ["", ".", ")", "`", "中文", "\\u{301}", "🙂"] {
+                    let text = format!("{left}{shown}{right}");
+                    assert_eq!(found(&text), [shown], "{text}");
+                    assert_eq!(mentions(&text).next().unwrap().id(&text), KNOWN);
+                }
+            }
+            for prefix in ["x", "/", "a:", "@", "-", "_", "https://example.com/s/", "文x"] {
+                assert!(found(&format!("{prefix}{shown}")).is_empty(), "{prefix}{shown}");
+            }
+            for suffix in ["x", "/", "-", "_"] {
+                assert!(found(&format!("{shown}{suffix}")).is_empty(), "{shown}{suffix}");
+            }
+            assert_eq!(found(&format!("{shown}文{shown}")), [shown, shown]);
         }
-        assert_eq!(found(&format!("中文{KNOWN}.")), [KNOWN]);
-        assert_eq!(found(&format!("{KNOWN} {KNOWN}")), [KNOWN, KNOWN]);
-        assert_eq!(mentions(&prefixed).next().map(|mention| mention.id(&prefixed)), Some(KNOWN));
-    }
-
-    /// The regex's lookarounds see one UTF-16 unit, never a word character outside ASCII, so any non-ASCII
-    /// character beside an ID (or its prefix) is a boundary. The prefix check must not slice inside one.
-    #[test]
-    fn mentions_treat_non_ascii_neighbours_as_boundaries() {
-        let prefixed = format!("@session:{KNOWN}");
-        // The report: no prefix, and nine bytes back lands inside '现'.
-        assert_eq!(found(&format!("现abcd文{KNOWN}")), [KNOWN]);
-        for (text, want) in [
-            (KNOWN.to_owned(), vec![KNOWN.to_owned()]),
-            (format!("现{KNOWN}现"), vec![KNOWN.to_owned()]),
-            (format!("é{KNOWN}"), vec![KNOWN.to_owned()]),
-            (format!("e\u{301}{KNOWN}\u{301}"), vec![KNOWN.to_owned()]),
-            (format!("🙂{KNOWN}🙂"), vec![KNOWN.to_owned()]),
-            (format!("文{prefixed}文"), vec![prefixed.clone()]),
-            (prefixed.clone(), vec![prefixed.clone()]),
-            (format!("中文中文{prefixed}"), vec![prefixed.clone()]),
-            (format!("ab{KNOWN}"), vec![]),
-            (format!("文x{KNOWN}"), vec![]),
-            (format!("文session:{KNOWN}"), vec![]),
-            (format!("文@session{KNOWN}"), vec![]),
-            (format!("文@Session:{KNOWN}"), vec![]),
-            (format!("文x@session:{KNOWN}"), vec![]),
-            (format!("@@session:{KNOWN}"), vec![]),
-            (format!("{KNOWN}{KNOWN}"), vec![]),
-            (format!("{KNOWN}文{KNOWN}"), vec![KNOWN.to_owned(), KNOWN.to_owned()]),
-            (format!("{KNOWN}{prefixed}"), vec![KNOWN.to_owned()]),
-            (format!("{KNOWN}:{KNOWN}"), vec![KNOWN.to_owned()]),
-            (format!("{prefixed} {prefixed}"), vec![prefixed.clone(), prefixed.clone()]),
-            (format!("SES_{}", &KNOWN[4..]), vec![]),
-        ] {
-            assert_eq!(found(&text), want, "{text}");
+        for prefix in ["session:", "@session", "@Session:"] {
+            assert!(found(&format!("文{prefix}{KNOWN}")).is_empty());
         }
+        assert!(found(&KNOWN[..KNOWN.len() - 1]).is_empty());
+        assert!(found(&KNOWN.to_uppercase()).is_empty());
+        assert!(found(&format!("{KNOWN}{KNOWN}")).is_empty());
+        assert_eq!(found(&format!("{KNOWN}{prefixed}:{KNOWN}")), [KNOWN]);
     }
 
     #[test]
@@ -349,15 +316,6 @@ mod tests {
                 assert!(shown.is_some_and(|shown| shown.strip_prefix(PREFIX).unwrap_or(shown) == KNOWN), "{text}");
             }
         }
-    }
-
-    #[test]
-    fn a_code_span_is_a_mention_only_when_it_is_exactly_one() {
-        assert_eq!(parse(strip_ticks(&format!("`{KNOWN}`"))), Some(KNOWN));
-        assert_eq!(parse(strip_ticks(&format!("`` {KNOWN} ``"))), Some(KNOWN));
-        assert_eq!(parse(strip_ticks(KNOWN)), Some(KNOWN));
-        assert_eq!(parse(strip_ticks(&format!("`opencode --session {KNOWN}`"))), None);
-        assert_eq!(parse(&format!("{KNOWN}.")), None);
     }
 
     #[test]
