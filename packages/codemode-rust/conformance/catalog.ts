@@ -487,6 +487,29 @@ const boundaryPrograms = [
   `try { keep({ p: Promise.resolve(1) }) } catch (e) { return e.message }`,
   `return JSON.stringify([make("date"), make("url"), make("params"), make("headers"), make("bytes"), make("buffer"), make("regexp")])`,
 ]
+// ---------- host-call arguments (hostargs worker) ----------
+// What an extension function receives under Code Mode's translation: a function is left out (an object's key is
+// skipped, an array's item is null, an argument is undefined, a Map's or Set's entry is undefined), a fulfilled promise
+// is its value, and the call waits for one that hasn't fulfilled, then crosses its arguments again.
+boundaryPrograms.push(
+  `keep({ f() {}, a: [1, () => 2, , 3], m: new Map([["k", () => 1], [() => 2, "v"]]), s: new Set([() => 1, 2]), n: { g: Math.max, b: keep.bind(null), k: keep } }); keep(() => 1); keep([keep]); return 1`,
+  `const later = (v) => (async () => { await null; return v })()
+   keep({ a: Promise.resolve(1), b: [Promise.resolve(2), later(3)], m: new Map([[Promise.resolve("k"), later("v")]]), s: new Set([later(4)]) }); keep(later(5), 6); return 1`,
+  `const inner = (async () => { await null; return [() => 1, "in"] })(); keep({ outer: (async () => { await null; return { inner, f: () => 2 } })() }); return 1`,
+  `try { keep({ p: (async () => { await null; throw new RangeError("late") })() }); return "no" } catch (e) { return [e.name, e.message] }`,
+  `const o = {}; o.p = Promise.resolve(o); try { keep(o) } catch (e) { return e.message }`,
+  `const a = {}; a.p = (async () => { await null; return a })(); try { keep(a) } catch (e) { return e.message }`,
+  `const p = Promise.resolve({ v: 1 }); keep({ a: p, b: [p, p] }); return 1`,
+  `const e = new TypeError("bad", { cause: (async () => { await null; return new Error("root") })() }); e.code = 7; e.fn = () => 1; e.sym = Symbol.iterator; e.later = Promise.resolve(8)
+   keep(e); keep(Object.assign(new Error("m"), { name: "Custom", extra: 1 })); keep(new AggregateError([1], "agg")); const f = new Error("f"); f.name = "RangeError"; keep(f); return 1`,
+  `let o = 1; for (let i = 0; i < 32; i++) o = { o }; keep(o); let p = 1; for (let i = 0; i < 31; i++) p = { p }; keep(Promise.resolve(p)); try { keep(Promise.resolve(o)) } catch (e) { return e.message }`,
+  `try { keep({ t: tools }) } catch (e) { return e.message }`,
+  `return [1, 2].map((x) => keep({ x: (async () => { await null; return x })() }))`,
+  `const log = []; async function f() { log.push("f"); const v = keep((async () => { await null; log.push("v"); return 1 })()); log.push("kept"); return v } const p = f(); log.push("after"); await p; return log`,
+  `function* g() { yield keep((async () => { await null; return 1 })()) } return [...g()]`,
+)
+// ---------- end of host-call arguments ----------
+
 const probe = (kept: Array<unknown>) =>
   Extension.make({
     name: "probe",

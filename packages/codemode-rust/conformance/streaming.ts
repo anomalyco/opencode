@@ -470,8 +470,9 @@ programs.push(
    return [s, ks, JSON.stringify({ h: new Headers({ a: 'b' }) }, ['h', 'z'])]`,
 )
 
-// Crossing to the host: a tool's or search's arguments, and the result, cross as JSON; a promise inside is awaited by
-// the reference's internal walk, a toJSON of the program's is called there, and the call starts once they crossed.
+// Crossing to the host: a tool's or search's arguments cross through toHost (a function left out, a promise awaited, no
+// toJSON called; see conformance/frames/hostargs.ts), and the result as JSON through the reference's internal walk,
+// which awaits a promise inside and calls a toJSON of the program's.
 const later = (v: string) => `new Promise((done) => setTimeout(() => done(${v}), 0))`
 // `S(x)` runs a search whose input holds a promise, which parks the frames it is called from, and logs around it.
 const searching = (expr: string) =>
@@ -622,7 +623,7 @@ const suspensions: Array<string> = [
 
 // Each family of built-ins that run in native frames keeps its own cases in conformance/frames/: expressions to run with
 // `S` (see `searching`), other programs, and suspensions.
-for (const family of ["arrays", "iterators", "collections", "callbacks", "core"]) {
+for (const family of ["arrays", "iterators", "collections", "callbacks", "core", "hostargs"]) {
   const { default: cases } = await import(join(import.meta.dir, "frames", `${family}.ts`))
   const own = cases({ after, during, text })
   programs.push(...own.searches.map(searching), ...own.programs)
