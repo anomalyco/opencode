@@ -263,7 +263,7 @@ fn slash_and_palette_commands_open_settings_and_debug() {
     }
     assert!(screen.contains(&format!("{} (", debug::VERSION)), "{screen}");
     assert!(screen.contains("copy c"), "{screen}");
-    // `TestApp` has no terminal, so the copy fails; the PTY run in the step report shows the success path.
+    // Copy fails in the headless fixture because it has no terminal.
     app.press("c");
     wait_for(&app, "Failed to copy to clipboard");
     assert!(app.text().contains("copy c"));

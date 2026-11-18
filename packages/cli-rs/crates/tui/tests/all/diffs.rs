@@ -570,8 +570,6 @@ fn a_rebuild_at_1000_files_builds_what_it_changes() {
     });
 }
 
-// Expected (viewer-frames): a card's heading, kept through a resize that cuts its path the same, shows the path as cut
-// for the new width once it cuts it otherwise: as a viewer opened at that width does, on both carriers.
 #[test]
 fn a_resize_cuts_a_long_heading_for_the_new_width() {
     on_both(|| {

@@ -228,9 +228,6 @@ fn a_server_without_terminals_lists_none_and_ignores_the_commands() {
     assert!(harness.remotes.lock().unwrap().is_empty());
 }
 
-/// The wheel over the pane scrolls the terminal's history (R3: the embedded terminal reports its viewport). Output
-/// while scrolled back keeps the view on its rows, steps down return to the live screen exactly, and steps the view
-/// cannot take change nothing.
 #[test]
 fn the_wheel_scrolls_the_terminal_history_across_output() {
     let harness = mount(true, None);

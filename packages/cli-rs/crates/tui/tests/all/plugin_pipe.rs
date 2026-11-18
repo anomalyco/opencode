@@ -188,7 +188,7 @@ pub fn settle(harness: &Harness, scripts: &Scripts) {
     settle_app(&harness.app, &harness.tui, scripts);
 }
 
-/// [`settle`] for an app and its TUI outside a [`Harness`] (the P-APP replay).
+/// Wait for the JS host and the app to settle during a replay.
 pub(crate) fn settle_app(app: &TestApp, tui: &Tui, scripts: &Scripts) {
     let begun = Instant::now();
     walked_app(app, scripts);
@@ -1074,9 +1074,6 @@ fn a_refused_revision_is_mended_by_a_whole_one() {
     assert_eq!(pipe.status(twin::ID), Some(Status::Active));
 }
 
-// Expected (`reload-fresh` over the pipe): a changed module loads again on the JS host; the running build stays active
-// and on screen until the new one answered, which then replaces it as a fresh load would: its mount shows the
-// placeholder until its first tree.
 #[test]
 fn a_changed_module_reloads_and_the_running_one_stays_meanwhile() {
     let Some(config) = config() else { return };
@@ -2270,9 +2267,6 @@ fn a_client_whose_plugin_spawns() {
     std::thread::sleep(Duration::from_secs(30));
 }
 
-// Expected (no orphans): a client killed outright, with no destructor and no reaper, while its JS host spins in a
-// plugin's command, leaves nothing that plugin started: neither its child nor one in a session of its own whose parent
-// exited, nor the JS host. Linux only; macOS and Windows do not run it.
 #[cfg(target_os = "linux")]
 #[test]
 fn a_client_killed_outright_leaves_nothing_its_plugins_started() {
@@ -2824,9 +2818,6 @@ fn a_hostile_project_loads_nothing_into_the_js_host() {
     hostile(|_| config());
 }
 
-// Expected (js-host-runtime): the same holds on the opencode binary run as the Bun it embeds (`BUN_BE_BUN=1`), found as
-// the client finds a local server's binary it cannot tell from the process: the first `opencode` on the path that
-// answers as Bun, never the project's own behind a relative entry. Its Bun version is reported, and new enough.
 #[test]
 fn a_hostile_project_loads_nothing_into_the_js_host_on_opencodes_bun() {
     hostile(|project| {

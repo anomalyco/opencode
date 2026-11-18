@@ -361,7 +361,6 @@ fn previews_show_above_the_prompt_and_a_click_opens_the_dialog() {
     assert!(!off.app.text().contains("No preview"));
 }
 
-/// A stash the file cannot take is reported, not only logged (deviation O89-stash-save-toast).
 #[test]
 fn a_failed_stash_save_shows_a_toast() {
     let setup = Setup::new();

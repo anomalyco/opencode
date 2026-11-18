@@ -843,8 +843,6 @@ fn a_double_click_in_the_panel_selects_only_selectable_text() {
     }
 }
 
-// Expected: the deep run's seed 1616 (6,000 seeds), as a fixed row. A press on the panel's label, after a node of the
-// panel took the focus, gives the focus to the panel: the node's own layer no longer holds.
 #[test]
 fn a_press_on_the_panel_label_focuses_the_panel() {
     let trace = [Command::Panel(true), Command::Click, Command::DoubleClickLabel, Command::Keys(vec![Key::Y])];

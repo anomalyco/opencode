@@ -1,4 +1,4 @@
-//! App-wide features that are not a route. Each file belongs to the step that names it.
+//! Application-wide features and terminal services.
 
 pub mod attention;
 pub mod clear;

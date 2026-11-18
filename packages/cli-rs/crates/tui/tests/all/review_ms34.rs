@@ -26,7 +26,6 @@ impl Transport for Server {
         if request.url.path() != LIMITS {
             return self.memory.send(request);
         }
-        // Logged with the rest, so the P-REQ checks see it.
         drop(self.memory.send(request));
         let body = json!({ "location": location(), "data": *self.limits.lock().unwrap() });
         Box::pin(async move { Ok(support::respond(200, &body)) })

@@ -1384,9 +1384,6 @@ fn base(world: &World) -> String {
     format!("{:02x}{:02x}{:02x}", color.r, color.g, color.b)
 }
 
-// Expected (4.2 with 4.11): a theme change views a claim that reads the palette again, with the new palette, and
-// restyles one that does not in place, with no view, nor a view of a revision it declined. A view the new theme declines, or a tree refused twice, shows the
-// host's row in place of the claim's, as any other revision would.
 #[test]
 fn a_claim_that_reads_the_palette_is_viewed_again_in_a_new_theme() {
     for carrier in CARRIERS {

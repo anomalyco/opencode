@@ -485,9 +485,7 @@ fn frame(harness: &Harness, by: Duration) -> Capture {
     harness.app.render()
 }
 
-/// What may want the frame an idle check found wanted, for the report (the row fails under load alone, flakes-10): the
-/// toast that shows, the plugins not active or slow, whether the views took every store flush, and whether the next
-/// frame wants another too.
+/// Describe outstanding frame requests when the idle check fails.
 fn wanting(harness: &Harness) -> String {
     let toast = harness.tui.toasts.current().map(|toast| format!("{:?} {}", toast.title, toast.message));
     let plugins: Vec<String> = harness
@@ -1130,9 +1128,6 @@ thread_local! {
     static TALL: RefCell<Vec<(v2::Cause, u16, u16)>> = const { RefCell::new(Vec::new()) };
 }
 
-// Expected (the client's motion rules): an animating canvas that a frame does not paint, because its scroll shows
-// other rows, is not drawn and asks for no frame; scrolled into view it is drawn in that paint, at its whole size
-// while it shows in part, and animates; scrolled out again it rests within two frames.
 #[test]
 fn an_animating_canvas_out_of_view_rests() {
     TALL.with(|frames| frames.borrow_mut().clear());

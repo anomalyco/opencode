@@ -23,8 +23,7 @@ use opencode_tui::{Args, Deps, Route};
 use opentui::prelude::*;
 use opentui::testing::TestApp;
 
-/// How long a checkpoint waits for its `until` text. Longer than any MS1 screen takes; a screen the Rust TUI
-/// does not draw yet is compared after this.
+/// Maximum wait for checkpoint readiness text.
 const UNTIL: Duration = Duration::from_secs(2);
 /// How long a checkpoint waits for the client to go idle and the frame to settle on the recorded cells. Only a frame
 /// that never matches waits this long.

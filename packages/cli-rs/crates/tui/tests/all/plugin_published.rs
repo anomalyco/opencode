@@ -469,8 +469,6 @@ fn a_prompt_waits_for_an_interrupt_sent_from_an_earlier_composer() {
     assert_eq!(h.wire(), ["POST /api/session/ses_p/interrupt", "POST /api/session/ses_p/prompt"]);
 }
 
-// Expected (deviation O89-slash-after-interrupt): a slash command submitted after an interrupt runs once the server
-// has the interrupt, as a prompt is sent.
 #[test]
 fn a_slash_command_waits_for_a_pending_interrupt() {
     let Some(h) = open_as(&[Carrier::Npm(FORCE_INPUT)], 120, running, false, None) else { return };
@@ -500,8 +498,6 @@ fn a_slash_command_waits_for_a_pending_interrupt() {
     assert_eq!(order, ["/api/session/ses_p/interrupt", "/api/session/ses_p/generate"]);
 }
 
-// Expected (deviation O89-slash-after-interrupt): `/compact` picked from the popup, then from the palette, right after
-// an interrupt runs once the server has the interrupt.
 #[test]
 fn a_slash_command_picked_from_the_popup_or_the_palette_waits_for_a_pending_interrupt() {
     use opencode_ui::keymap::COMMAND_PALETTE_COMMAND;

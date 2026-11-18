@@ -892,10 +892,6 @@ fn a_layout_that_follows_its_own_size_is_held() {
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
 }
 
-// Expected (the key hold's bound): a printable key a JS command binds globally, whose handler stalls the JS host for
-// 1.5 s. The keys after it wait no longer than the hold's limit (50 ms): then the bound key goes on as declined, first,
-// and the keys typed after it, in order. While the JS host is still stalled, the next bound key goes on at once, and its
-// command runs late. The late answers put nothing back, and once the JS host answered, a bound key holds again.
 #[test]
 fn a_stalled_js_host_holds_keys_no_longer_than_the_limit() {
     let Some(config) = config() else { return };
