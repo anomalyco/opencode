@@ -103,12 +103,15 @@ pub struct Slash {
     pub aliases: Vec<String>,
     /// Keeps the slash command in the prompt and passes its raw input to `run`.
     pub arguments: bool,
+    /// The plugin that declared it; `None` for the host's own. A plugin's name or alias that another command holds is
+    /// left out ([`TuiKeymap::commands`]).
+    pub plugin: Option<String>,
 }
 
 impl Slash {
     /// `/name`, without aliases or arguments.
     pub fn new(name: impl Into<String>) -> Self {
-        Self { name: name.into(), aliases: Vec::new(), arguments: false }
+        Self { name: name.into(), aliases: Vec::new(), arguments: false, plugin: None }
     }
 
     pub fn aliases(mut self, aliases: impl IntoIterator<Item = impl Into<String>>) -> Self {
@@ -373,6 +376,8 @@ pub struct TuiKeymap<T> {
     next_mode: Cell<u64>,
     invocation: Rc<RefCell<Option<Invocation>>>,
     format: FormatOptions,
+    /// The plugins' slash names [`Self::commands`] left out and logged, each `(command, name)`, so each logs once.
+    shadowed: RefCell<std::collections::HashSet<(String, String)>>,
     _addons: Vec<Disposer>,
 }
 
@@ -416,6 +421,7 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
             modes: Rc::new(RefCell::new(Vec::new())),
             next_mode: Cell::new(0),
             invocation: Rc::new(RefCell::new(None)),
+            shadowed: RefCell::default(),
             format,
             _addons: addons,
         };
@@ -761,7 +767,37 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
             };
             (place, std::cmp::Reverse(rank))
         });
+        self.unshadow(&mut commands, |id| ranks.get(id).map_or(u64::MAX, |rank| rank.1));
         commands
+    }
+
+    /// Leaves out each plugin slash name or alias another command holds: the host's always, another plugin's when its
+    /// layer registered first. TS keeps both, and the newest layer's wins (deviation `CF1-slash-shadow`).
+    fn unshadow(&self, commands: &mut [CommandView], registered: impl Fn(&str) -> u64) {
+        let mut order: Vec<usize> = (0..commands.len()).filter(|&at| commands[at].slash.is_some()).collect();
+        order.sort_by_key(|&at| {
+            let plugin = commands[at].slash.as_ref().is_some_and(|slash| slash.plugin.is_some());
+            (plugin, plugin.then(|| registered(&commands[at].id)))
+        });
+        let mut taken = std::collections::HashSet::new();
+        for at in order {
+            let command = &mut commands[at];
+            let Some(slash) = command.slash.take() else { continue };
+            let names = std::iter::once(slash.name.clone()).chain(slash.aliases.iter().cloned());
+            let Some(plugin) = &slash.plugin else {
+                taken.extend(names);
+                command.slash = Some(slash);
+                continue;
+            };
+            let (kept, dropped): (Vec<String>, Vec<String>) = names.partition(|name| taken.insert(name.clone()));
+            for name in dropped {
+                if self.shadowed.borrow_mut().insert((command.id.clone(), name.clone())) {
+                    log::warn!("plugin {plugin}: /{name} of {} is another command's; left out", command.id);
+                }
+            }
+            let mut kept = kept.into_iter();
+            command.slash = kept.next().map(|name| Slash { name, aliases: kept.collect(), ..slash });
+        }
     }
 
     /// The first shortcut of a registered command, such as `ctrl+x n`.

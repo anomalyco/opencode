@@ -1095,3 +1095,23 @@ fn an_activation_owns_the_dialogs_of_the_chain_it_goes_on_from() {
     assert_eq!(owned, [false, true, true, true, false]);
     assert!(!registry.owns("q", now), "another plugin's");
 }
+
+// Expected (cf-1): a slash name or alias the prompt could not complete is left out, as TS's prompt completes no name
+// that is empty or has whitespace or a second `/`; an alias stands in for a left-out name, and aliases without a
+// slash name make no slash command.
+#[test]
+fn a_slash_name_the_prompt_cannot_complete_is_left_out() {
+    let names = |command: abi::Command| {
+        let slash = keyed_command("p", &command, Condition::Always, |_, _| abi::interact::Handled::Consume).slash?;
+        assert_eq!(slash.plugin.as_deref(), Some("p"));
+        Some(std::iter::once(slash.name).chain(slash.aliases).collect::<Vec<_>>())
+    };
+    let aliased = |slash: &str, aliases: &[&str]| {
+        abi::Command::new("p.run").slash(slash).aliases(aliases.iter().map(|alias| (*alias).to_owned()))
+    };
+    let bad = ["", " a", "a b", "a\nb", "/sm", "a/b", "a\u{1b}"];
+    assert_eq!(names(aliased("ok", &bad)), Some(vec!["ok".to_owned()]));
+    assert_eq!(names(aliased("", &["sm", "x y"])), Some(vec!["sm".to_owned()]));
+    assert_eq!(names(aliased("", &[])), None);
+    assert_eq!(names(abi::Command::new("p.run").aliases(["sm".to_owned()])), None);
+}

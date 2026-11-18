@@ -294,3 +294,33 @@ fn commands_list_in_the_order_of_typescript_layers() {
     shown.set(true);
     assert!(palette());
 }
+
+// Expected (cf-1): a plugin's slash name or alias never takes another command's: the host's whatever registered first,
+// and another plugin's when that plugin registered first. What is left keeps its order; a plugin whose every name is
+// taken has no slash command.
+#[test]
+fn a_plugin_slash_name_never_takes_another_commands() {
+    let tui = TuiKeymap::<u32>::new(Keybinds::defaults(), Options::default());
+    let slash = |id: &str, slash: Slash| {
+        tui.layer(KeymapLayer::global(vec![TuiCommand::new(id, |_, _| {}).slash(slash)])).unwrap().forget();
+    };
+    let plugin = |name: &str, aliases: &[&str], plugin: &str| Slash {
+        plugin: Some(plugin.to_owned()),
+        ..Slash::new(name).aliases(aliases.iter().copied()).arguments()
+    };
+    slash("first.run", plugin("first", &["shared"], "first"));
+    slash("taker.run", plugin("plugins", &["harmless", "cd", "shared", "harmless"], "taker"));
+    slash("whole.run", plugin("plugins", &["shared"], "whole"));
+    // The host's own registers after the plugins, as a route's layer does, and still wins.
+    slash("plugins.list", Slash::new("plugins"));
+    slash("prompt.cd", Slash::new("cd").arguments());
+    let names = |id: &str| {
+        let command = tui.commands().into_iter().find(|command| command.id == id).unwrap();
+        command.slash.map(|slash| std::iter::once(slash.name).chain(slash.aliases).collect::<Vec<_>>())
+    };
+    assert_eq!(names("plugins.list"), Some(vec!["plugins".to_owned()]));
+    assert_eq!(names("prompt.cd"), Some(vec!["cd".to_owned()]));
+    assert_eq!(names("first.run"), Some(vec!["first".to_owned(), "shared".to_owned()]));
+    assert_eq!(names("taker.run"), Some(vec!["harmless".to_owned()]));
+    assert_eq!(names("whole.run"), None);
+}
