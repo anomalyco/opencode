@@ -18,6 +18,13 @@ const pkg = override === undefined ? resolve(import.meta.dir, "../../codemode") 
 const { Effect, Fiber, Schema } = await import(Bun.resolveSync("effect", join(pkg, "src")))
 const { CodeMode, Extension, Tool, toolError } = await import(join(pkg, "src/index.ts"))
 
+// The reference yields to the host (which is when a stream pulls) once its fuel runs out and `SLICE_MS` (1 ms) of
+// `performance.now()` passed since its last yield; the Rust replay yields at every exhaustion. On a fast machine 10,000
+// fuel can take less than a millisecond, so the busy loops below would record a later yield. A clock that moves a
+// millisecond on every read makes every exhaustion a yield, so recordings don't depend on how fast this machine is.
+let clock = performance.now()
+performance.now = () => (clock += 1)
+
 type Spec = {
   chunks?: Array<string | Array<number>>
   fail?: number
@@ -703,12 +710,25 @@ const suspend = async (code: string) => {
   }
 }
 
-const expected = {
+const recordAll = async () => ({
   programs: await Promise.all(programs.map(record)),
   suspensions: await suspensions.reduce(
     async (done, code) => [...(await done), await suspend(code)],
     Promise.resolve([] as Array<unknown>),
   ),
+})
+// Everything is recorded twice: a recording that differs between the two depends on timing, which CI's freshness
+// check and the Rust replay can't follow, so it fails here instead of being written.
+const expected = await recordAll()
+const again = await recordAll()
+const unstable = (["programs", "suspensions"] as const).flatMap((kind) =>
+  expected[kind].flatMap((entry, i) =>
+    JSON.stringify(entry) === JSON.stringify(again[kind][i]) ? [] : [`${kind}[${i}]: ${(entry as { code: string }).code}`],
+  ),
+)
+if (unstable.length > 0) {
+  console.error(`recordings that differ between two runs (timing-dependent):\n${unstable.join("\n\n")}`)
+  process.exit(1)
 }
 writeFileSync(join(import.meta.dir, "streaming.json"), JSON.stringify(expected, null, 2) + "\n")
 console.log(`${expected.programs.length} programs, ${expected.suspensions.length} suspensions`)
