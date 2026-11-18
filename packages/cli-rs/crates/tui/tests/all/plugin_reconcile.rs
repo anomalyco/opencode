@@ -525,6 +525,12 @@ impl Generator<'_> {
             color: self.chance(60).then(|| self.color()),
             title: self.chance(30).then(|| "title".to_owned()),
             title_align: *self.rng.pick(&[abi::TitleAlign::Left, abi::TitleAlign::Center, abi::TitleAlign::Right]),
+            bottom_title: self.chance(30).then(|| "bottom".to_owned()),
+            bottom_title_align: *self.rng.pick(&[
+                abi::TitleAlign::Left,
+                abi::TitleAlign::Center,
+                abi::TitleAlign::Right,
+            ]),
         }
     }
 
@@ -1431,6 +1437,8 @@ fn p0a_properties_change_as_a_fresh_mount_draws_them() {
         color: Some(abi::Color::from(color)),
         title: Some("title".into()),
         title_align: abi::TitleAlign::Center,
+        bottom_title: Some("bottom".into()),
+        bottom_title_align: abi::TitleAlign::Right,
     };
     let dressed = |dressed: bool| {
         let mut node = v2::Node::column(vec![text()]).with_id("box");

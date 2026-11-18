@@ -52,7 +52,8 @@ export default defineApp({
     { keys: ["down"] },
     { keys: ["j"] },
     { checkpoint: "moved", deviation },
-    // Its search field takes the plugin's focus, which disables its commands; its `onKeyDown` moves the selection.
+    // Its search field takes the plugin's focus, which disables its commands; its `onKeyDown` moves the selection and
+    // takes `down` with `preventDefault`, so the host's field never has it (contract gaps 2).
     { keys: ["ctrl+f"] },
     { keys: ["down"] },
     { checkpoint: "searching", deviation },

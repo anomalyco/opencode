@@ -123,15 +123,16 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   a mount that closed takes nothing. A field in no mount (in a dialog of the plugin's own, removed from its mount, or
   never added) has no focus on the host, which is reported once. While the plugin's focused
   field sits in a route or a panel,
-  each key there is its `onKeyDown`, through a listener layer of the surface: the key also goes on to the host's
-  field and keys, as a listener cannot take it (`preventDefault` says so once in the JS host's log). It would need the
-  contract to answer a listener's key after the JS host does. TS's `<scrollbox>` draws a scrollbar beside its content
+  each key there is its `onKeyDown`, through a listener layer of the surface, which takes it with `preventDefault`
+  (contract gaps 2); one it does not take goes on to the host's field and keys once the JS host answered, as below. TS's `<scrollbox>` draws a scrollbar beside its content
   and a field its placeholder in OpenTUI's color; the contract's scroll and field draw the host's (`P.8/file-browser`).
   Other field events (`onPaste`, `onKeyUp` and the rest) are reported once.
 - **Keys** (CT-11): `renderer.keyInput` is an emitter whose `keypress` listeners hear each key as an OpenTUI key event,
   through one global listener layer the plugin registers with its first listener (a listener after setup reloads its
-  registrations once). `useKeyboard` listens on it while its component lives. As a listener, the plugin cannot take a
-  key: it hears it and the key goes on (`preventDefault` says so once in the log), where TS stops it. It hears keys in
+  registrations once). `useKeyboard` listens on it while its component lives. A listener takes a key with
+  `preventDefault`, as in TS (contract gaps 2). The host holds the key, and the keys after it, until the JS host
+  answers, as for a key a command may decline; a key not taken goes on then, past this listener. So every key a JS
+  plugin listens to is a round trip later than in TS, held at most the hold's limit. It hears keys in
   the base mode only, and none while another plugin's overlay has the focus, as the contract's global layer holds.
   `keyrelease` and `paste` never come.
 - **Dialogs**: `select`, `confirm`, `prompt` and `alert` are the host's, each settled once as TS's are (an answer;
@@ -140,8 +141,9 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   once the JS host answered the query, not in the keystroke's own frame (`P.8/select-search`). A `dialog.set` right
   after `dialog.select`, `alert` or `confirm` sizes and centers it as in TS (contract 2.x, addition 4,
   `P.8/session-time`); one after the dialog showed is reported once. A prompt's `value` and `description` are the
-  contract's (`P.8/session-manager` `rename`). A select's `actions` are reported, not mapped: TS draws them under its
-  rows, so its select is taller, and a centered one sits higher (`P.8/session-time`'s timeline). `ui.dialog.show` shows the plugin's JSX
+  contract's (`P.8/session-manager` `rename`). A select's `actions` are the contract's footer actions, with their
+  keys, side and selection, and the select stays open as one runs (`P.8/session-time`'s timeline); past 4 the rest are
+  reported. `ui.dialog.show` shows the plugin's JSX
   in the host's panel dialog, bare (only the dialog's frame, as TS's), in the size and place `ui.dialog.set` gives, and
   a render that throws closes it. A panel's body is a render tree (`RenderNode`): a `<scrollbox>` in it is a box that does not
   scroll (the scroll keys say so, once), an `<input>` in it is its text, and its colors take the dialog's surface.
@@ -228,9 +230,8 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   draws as TS once the host's layout reaches it (above).
 - **Dialog size**: `dialog.set({ size, centered })` sizes a `ui.dialog.show` dialog, and an `alert`, a `confirm` or a
   `select` it follows right away (above; CT-35's joe-broadhead status alerts are `large`, as in TS).
-- **Border titles**: a box's `title` and `titleAlignment` are the contract border's; its `bottomTitle` and
-  `bottomTitleAlignment` are not drawn, which would need the contract's border to carry a bottom title
-  (CT-26: @juliuskb/opencode-voice's CPU and memory line, `P.8/voice-title`). An `onSizeChange` a plugin sets on the
+- **Border titles**: a box's `title`, `titleAlignment`, `bottomTitle` and `bottomTitleAlignment` are the contract
+  border's (CT-26: @juliuskb/opencode-voice's CPU and memory line, `P.8/voice-title`). An `onSizeChange` a plugin sets on the
   renderable by its ref runs as one set as a prop does, so voice spreads its top title across the panel's width as
   in TS. That row's requests differ: the plugin polls its status RPC on a timer, which runs in real time on the JS
   host, so the replay sends more polls.

@@ -302,6 +302,7 @@ pub fn schema() -> Value {
             object!(Border, "A border on a box's edge.", { } {
                 sides: reference("Sides"), style: reference("BorderStyle"), color: nullable(reference("Color")),
                 title: nullable(string()), title_align: reference("TitleAlign"),
+                bottom_title: nullable(string()), bottom_title_align: reference("TitleAlign"),
             }),
         ),
         (
@@ -907,6 +908,8 @@ mod tests {
             color: Some(Color::from("#ff0000")),
             title: Some("t".into()),
             title_align: TitleAlign::Right,
+            bottom_title: Some("b".into()),
+            bottom_title_align: TitleAlign::Center,
         };
         let nodes = [
             Node::Box {

@@ -34,12 +34,8 @@ export default defineApp({
     { method: "POST", path: "/api/rpc/voice/:method", status: 404, json: { _tag: "NotFound", message: "no such RPC" } },
   ],
   steps: [
-    {
-      checkpoint: "panel",
-      until: "Menu:",
-      // Its bottom title (CPU and memory), which the contract's border does not carry.
-      deviation: [{ file: "F16-v2-compat-layer", cells: 14 }],
-    },
+    // Its bottom title (CPU and memory) is the contract border's (CT-26).
+    { checkpoint: "panel", until: "Menu:" },
   ],
   // It polls its status on a timer, which runs in real time on the JS host: the replay sends more polls, in another
   // order with its settings read.

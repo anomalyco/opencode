@@ -1059,8 +1059,10 @@ function deactivate(plugin: Plugin) {
 
 // Runs one handler as a call: its effects are its own, and a throw has none and fails the plugin.
 function call(seq: number, plugin: Plugin, request: Json) {
-  if (!plugin.active || plugin.failed)
-    return send({ type: "done", seq, ...(request.type === "command" ? { declined: true } : {}) })
+  // A key that ran a command, or that a listener of every key was given: the host holds it until the answer, which
+  // says whether it goes on.
+  const keyed = request.type === "command" || (request.type === "input" && request.event?.type === "key" && !request.event.bind)
+  if (!plugin.active || plugin.failed) return send({ type: "done", seq, ...(keyed ? { declined: true } : {}) })
   plugin.callEffects = []
   plugin.callMounts = []
   plugin.callMount = request.type === "input" && request.to?.type === "surface" ? request.to.mount : undefined
@@ -1106,9 +1108,10 @@ function call(seq: number, plugin: Plugin, request: Json) {
   }
   if (effects.length) plugin.answers.set(`c${seq}`, resolvers)
   // The answer comes once the views the call made due were sent: it is the call's completion, which the host times. A
-  // command that returned `false` declined (TS's "return false to continue"): the host routes the key that ran it on.
+  // command that returned `false` declined (TS's "return false to continue"), and so did a listener that did not answer
+  // "consume" (TS's `preventDefault`, contract gaps 2): the host routes the key on.
   viewAll(plugin)
-  const declined = request.type === "command" && result === false
+  const declined = keyed && (request.type === "command" ? result === false : result !== "consume")
   const named = mounts.some((mount) => mount !== null) ? { mounts } : {}
   sendFor(plugin, { type: "done", seq, effects, ...named, ...(declined ? { declined: true } : {}) }, seq)
 }

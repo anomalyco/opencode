@@ -718,8 +718,9 @@ struct Hold {
 /// The most keys a hold keeps; past it the oldest goes, and the log says so.
 const HELD: usize = 64;
 
-/// The key that ran a JS plugin's command, and the commands it goes past if the command declines: this one and those
-/// that declined it before (CT-8, CT-19). A command is named `<plugin>\0<name>`.
+/// The key that ran a JS plugin's command, or that its listener took, and the commands and listeners it goes past if
+/// that declines: this one and those that declined it before (CT-8, CT-19, contract gaps 2). A command is named
+/// `<plugin>\0<name>`, a listener `<plugin>\0\0<surface or layer>`.
 #[derive(Clone)]
 pub(crate) struct Keyed {
     key: KeyEvent,
@@ -2060,11 +2061,6 @@ impl Scripts {
     /// Whether the key put back now goes past `command` (`<plugin>\0<name>`), which declined it.
     pub(crate) fn stepped_aside(&self, command: &str) -> bool {
         self.aside.borrow().iter().any(|aside| aside == command)
-    }
-
-    /// Whether the key put back now is one a command declined, which the JS plugins' listeners heard already.
-    pub(crate) fn replaying_declined(&self) -> bool {
-        !self.aside.borrow().is_empty()
     }
 
     /// Command `call` declined the key that ran it: the key goes on first of what its hold keeps, past the commands that

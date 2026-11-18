@@ -640,14 +640,19 @@ pub(crate) fn bordered(view: &View, theme: &Theme, border: &abi::Border) {
     })
     .border_sides(sides)
     .border_color(color(theme, border.color.as_ref()).unwrap_or(Color::rgb(255, 255, 255)));
+    // OpenTUI refuses a longer title with an error that ends the TUI; no title that long fits a row anyway.
+    let cut =
+        |title: &String| title[..title.floor_char_boundary(opentui::sys::OT_BUFFER_TEXT_BYTES_MAX as usize)].to_owned();
+    let alignment = |align: abi::TitleAlign| match align {
+        abi::TitleAlign::Left => Alignment::Left,
+        abi::TitleAlign::Center => Alignment::Center,
+        abi::TitleAlign::Right => Alignment::Right,
+    };
     if let Some(title) = &border.title {
-        // OpenTUI refuses a longer title with an error that ends the TUI; no title that long fits a row anyway.
-        let title = &title[..title.floor_char_boundary(opentui::sys::OT_BUFFER_TEXT_BYTES_MAX as usize)];
-        view.title(title).title_alignment(match border.title_align {
-            abi::TitleAlign::Left => Alignment::Left,
-            abi::TitleAlign::Center => Alignment::Center,
-            abi::TitleAlign::Right => Alignment::Right,
-        });
+        view.title(cut(title)).title_alignment(alignment(border.title_align));
+    }
+    if let Some(title) = &border.bottom_title {
+        view.bottom_title(cut(title)).bottom_title_alignment(alignment(border.bottom_title_align));
     }
 }
 
@@ -1045,11 +1050,18 @@ mod tests {
         }
         // A title `T` on a box ten cells wide: a cell in from the left corner, in the middle, a cell in from the right.
         let wide = abi::Layout { width: Some(abi::Width::Cells(10)), ..abi::Layout::default() };
+        // A bottom title `B` the same on the box's last row (CT-26), beside a top title on the left.
         for (align, at) in [(abi::TitleAlign::Left, 2), (abi::TitleAlign::Center, 4), (abi::TitleAlign::Right, 7)] {
             let border = abi::Border::new().title("T").title_align(align);
             let (capture, _, _, _) = draw(content().border(border).layout(wide));
             let row: String = (0..10).map(|x| capture.cell(x, 0).unwrap().symbol.clone()).collect();
             assert_eq!(row.chars().position(|symbol| symbol == 'T'), Some(at), "{align:?}: {row}");
+            let border = abi::Border::new().title("T").bottom_title("B").bottom_title_align(align);
+            let (capture, _, boxed, _) = draw(content().border(border).layout(wide));
+            let row = |y: u32| -> String { (0..10).map(|x| capture.cell(x, y).unwrap().symbol.clone()).collect() };
+            let bottom = row(boxed.height as u32 - 1);
+            assert_eq!(bottom.chars().position(|symbol| symbol == 'B'), Some(at), "{align:?}: {bottom}");
+            assert_eq!(row(0).chars().position(|symbol| symbol == 'T'), Some(2), "{align:?}");
         }
     }
 

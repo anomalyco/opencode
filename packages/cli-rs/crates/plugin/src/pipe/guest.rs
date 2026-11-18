@@ -320,27 +320,44 @@ impl Guest {
         }
     }
 
-    /// The handler of P2's input `to` on the JS host. A key, a paste or a press cannot wait for the handler's answer,
-    /// so the host answers from what the plugin declared: a [`Bind`](opencode_plugin_abi::interact::Bind)'s key, a
-    /// paste of a layer that takes pastes and a pointer event on a node that asks for them are consumed; a key of a
-    /// listener of every key goes on, which the handler only hears; the others' answer does not matter. The handler's
-    /// own answer is advisory (synthesis 3.7). A `hold` bind holds the keys after it until the plugin's `release_keys`
-    /// effect, or [`opencode_plugin_abi::interact::HOLD`].
+    /// The handler of P2's input `to` on the JS host. A paste or a press cannot wait for the handler's answer, so the
+    /// host answers from what the plugin declared: a [`Bind`](opencode_plugin_abi::interact::Bind)'s key, a paste of a
+    /// layer that takes pastes and a pointer event on a node that asks for them are consumed; the others' answer does
+    /// not matter. A key of a listener of every key is taken and held as a key command's is ([`js_command`]): if the
+    /// handler did not take it (TS's `preventDefault`), it goes on once the JS host answers, past this listener
+    /// (contract gaps 2). A `hold` bind holds the keys after it until the plugin's `release_keys` effect, or
+    /// [`opencode_plugin_abi::interact::HOLD`].
     fn deliver(self: &Rc<Self>, to: To) -> Deliver {
         let guest = Rc::downgrade(self);
-        Rc::new(move |_: &dyn Host, owner: &Rc<Owner>, event: &Event| {
+        let listener = match to {
+            To::Surface(surface) => format!("{}\u{0}\u{0}surface {surface}", self.id()),
+            To::Layer(layer) => format!("{}\u{0}\u{0}layer {layer}", self.id()),
+        };
+        Rc::new(move |host: &dyn Host, owner: &Rc<Owner>, event: &Event| {
             let Some(guest) = guest.upgrade().filter(|guest| !guest.ended()) else { return Handled::Pass };
-            // A key a command declined goes on past what heard it already: a listener heard it as it first came.
-            let declined = || guest.scripts.upgrade().is_some_and(|scripts| scripts.replaying_declined());
-            if matches!(event, Event::Key(key) if key.bind.is_none()) && declined() {
-                return Handled::Pass;
-            }
+            let Some(scripts) = guest.scripts.upgrade() else { return Handled::Pass };
+            // A listener's key: taken until the JS host answers, unless this listener declined it already.
+            let listened = match event {
+                Event::Key(key) if key.bind.is_none() => {
+                    if scripts.stepped_aside(&listener) {
+                        return Handled::Pass;
+                    }
+                    host.router().and_then(|router| router.listened())
+                }
+                _ => None,
+            };
             let to = match to {
                 To::Surface(surface) => InputTo::Surface { surface, mount: owner.id().cloned() },
                 To::Layer(layer) => InputTo::Layer { layer },
             };
             let request = Request::Input { to, event: event.clone() };
-            guest.call_for("handle", request, false, (Some(Rc::downgrade(owner)), owner.mounted()));
+            let owning = (Some(Rc::downgrade(owner)), owner.mounted());
+            if let Some(key) = listened {
+                let keyed = super::Keyed::new(key, &scripts, &listener);
+                guest.call_keyed("handle", request, true, owning, Some(keyed));
+                return Handled::Consume;
+            }
+            guest.call_for("handle", request, false, owning);
             match event {
                 Event::Key(key) if key.bind.is_some() => Handled::Consume,
                 Event::Paste { .. } => Handled::Consume,

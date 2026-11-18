@@ -43,9 +43,8 @@ export default defineApp({
     { type: "/time" },
     { checkpoint: "slash", until: "Time: session timeline", masks },
     { keys: ["enter"] },
-    // TS's select draws the plugin's `Close ctrl+a` action under its rows; the layer reports a select's `actions`, so
-    // the host's select is two rows shorter, and centered one row lower. Its size and columns are TS's.
-    { checkpoint: "timeline", until: "3 turns", masks, deviation: [{ file: "F16-v2-compat-layer", cells: 834 }] },
+    // The select draws the plugin's `Close ctrl+a` action under its rows, as TS's (contract gaps 2).
+    { checkpoint: "timeline", until: "3 turns", masks },
     { keys: ["enter"] },
     { checkpoint: "details", until: "Turn details", masks },
   ],

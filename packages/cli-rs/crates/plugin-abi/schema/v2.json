@@ -1764,6 +1764,19 @@
         },
         "title_align": {
           "$ref": "#/$defs/TitleAlign"
+        },
+        "bottom_title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bottom_title_align": {
+          "$ref": "#/$defs/TitleAlign"
         }
       },
       "required": [],

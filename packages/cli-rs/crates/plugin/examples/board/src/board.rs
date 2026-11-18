@@ -34,8 +34,8 @@ use opencode_plugin_abi::interact::{Anchor, Bind, Event, Handled, Interact, Laye
 use opencode_plugin_abi::task::Cx;
 use opencode_plugin_abi::types::SessionMessageAssistantToolState;
 use opencode_plugin_abi::{
-    Action, Command, Confirm, Dialog, Fetch, Host, Layout, Prompt, Rgba, Select, SelectOption, SendError, Setup, Span,
-    Toast, Variant, Width, v2,
+    Action, Border, Command, Confirm, Dialog, Fetch, Host, Layout, Prompt, Rgba, Select, SelectAction, SelectOption,
+    SendError, Setup, Span, TitleAlign, Toast, Variant, Width, v2,
 };
 
 pub const CARDS: usize = 6;
@@ -57,6 +57,8 @@ struct Board {
     said: Vec<String>,
     /// What `board.facts` read of the host, which a row under the header shows.
     facts: Option<String>,
+    /// A box with a top and a bottom border title shows under the header (CT-26).
+    titled: bool,
 }
 
 /// The files: how many `layout` calls ran, the header's width the last one was told, and where the last step landed.
@@ -140,6 +142,31 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         if passes { Handled::Pass } else { Handled::Consume }
     });
     setup.command(command("board.gate"), |host, input| host.set_enabled("board.hotkey", input != Some("off")));
+    // Contract gaps 2: a listener of every key that takes `ctrl+p` while armed, and lets every other key go on.
+    let armed = Rc::new(Cell::new(false));
+    let arming = armed.clone();
+    setup.command(command("board.listen"), move |_, input| arming.set(input != Some("off")));
+    setup.layer(Layer::default().scope(LayerScope::Global).any(), move |host, event| match event {
+        Event::Key(key) if armed.get() && key.key == "ctrl+p" => {
+            host.toast(Toast::new(Variant::Info, "listener took ctrl+p"));
+            Handled::Consume
+        }
+        _ => Handled::Pass,
+    });
+    // A select's footer actions: one on the selected row, one with none; neither closes it.
+    setup.command(command("board.choose"), |host, _| {
+        let options = (0..3).map(|card| SelectOption::new(format!("card {card}"), card.to_string())).collect();
+        let actions = vec![
+            SelectAction::new("Open", Action::command("board.chosen")).key("ctrl+o"),
+            SelectAction::new("Close", Action::command("board.chosen").input("none")).key("ctrl+a").rowless(),
+        ];
+        host.dialog(Dialog::Select(Select::new("Choose", options, Action::command("board.chosen")).actions(actions)));
+    });
+    setup.command(command("board.chosen"), |host, input| {
+        host.toast(Toast::new(Variant::Info, format!("chose {}", input.unwrap_or_default())));
+    });
+    let titled = board.clone();
+    setup.command(command("board.titled"), move |_, _| titled.borrow_mut().titled = true);
     setup.command(command("board.passing"), move |_, _| passing.set(true));
     setup.command(command("board.named"), |host, input| {
         host.toast(Toast::new(Variant::Info, format!("named {}", input.unwrap_or_default())));
@@ -453,7 +480,13 @@ fn view(board: &RefCell<Board>, cx: &mut v2::View<'_>) -> v2::Node {
         let text = v2::Node::text(vec![Span::new(facts)]).with_id("facts").layout(Layout::default().max_width(30));
         v2::Node::column(vec![text]).layout(Layout::default().min_width(50))
     });
-    let rows = [Some(header), facts, Some(meter), Some(cards)].into_iter().flatten().collect();
+    let titled = board.borrow().titled.then(|| {
+        let border = Border::new().title("top").bottom_title("bottom").bottom_title_align(TitleAlign::Right);
+        v2::Node::column(vec![v2::Node::text(vec![Span::new("titled")])])
+            .border(border)
+            .layout(Layout::default().width(Width::Cells(30)))
+    });
+    let rows = [Some(header), facts, titled, Some(meter), Some(cards)].into_iter().flatten().collect();
     v2::Node::column(rows).with_id("board").layout(Layout::default().grow())
 }
 
