@@ -1,4 +1,4 @@
-//! Color blending (`core/color/style.ts`). OpenTUI stores colors as bytes and rounds as `Math.round` does.
+//! Blended channels round to the nearest byte, with ties rounded up.
 
 use opencode_plugin_abi::Rgba;
 

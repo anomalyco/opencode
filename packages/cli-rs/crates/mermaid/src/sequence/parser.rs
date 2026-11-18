@@ -1,5 +1,3 @@
-//! Sequence diagram parser (`sequence/parser.ts`).
-
 use std::sync::LazyLock;
 
 use regex::Regex;

@@ -1,5 +1,4 @@
-//! State diagram layout (`state/layout.ts`). TS shares one bounds object between `bounds` and
-//! `compositeBounds`; here both maps index one arena of boxes, so a move shows through either.
+//! The bounds and composite maps index the same boxes so moves remain visible through either.
 
 use std::collections::{HashMap, HashSet, VecDeque};
 

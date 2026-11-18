@@ -1,5 +1,3 @@
-//! State transition routing (`state/routing.ts`).
-
 use std::collections::{HashMap, HashSet};
 
 use indexmap::IndexMap;

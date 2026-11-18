@@ -1,5 +1,3 @@
-//! Timelines (`packages/merman/src/timeline`): parser and the vertical terminal drawing.
-
 use std::sync::LazyLock;
 
 use regex::Regex;

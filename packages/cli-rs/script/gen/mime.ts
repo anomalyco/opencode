@@ -1,5 +1,4 @@
-// Writes crates/cli/src/run/mime.rs: the extension table of `mime-types`, which `FSUtil.mimeType` uses to type
-// `run -f` attachments (packages/util/src/fs-util.ts). Sorted by extension for a binary search.
+// Generates the extension-to-MIME table used for `run -f` attachments.
 import { createRequire } from "node:module"
 
 const require = createRequire(new URL("../../../util/package.json", import.meta.url).pathname)

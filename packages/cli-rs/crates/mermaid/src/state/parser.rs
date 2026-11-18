@@ -1,5 +1,3 @@
-//! State diagram parser (`state/parser.ts`).
-
 use std::collections::HashSet;
 use std::sync::LazyLock;
 

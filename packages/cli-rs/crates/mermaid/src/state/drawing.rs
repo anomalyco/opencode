@@ -1,5 +1,3 @@
-//! State diagram drawing (`state/drawing.ts`) and its styles (`state/style.ts`).
-
 use super::layout::{
     Layout, NoteBox, create, expand_for_feedback, expand_for_internal_transitions, note_connector_of, separate_external,
 };

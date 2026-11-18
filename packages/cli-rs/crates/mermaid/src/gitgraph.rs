@@ -1,5 +1,3 @@
-//! Git graphs (`packages/merman/src/gitgraph`): parser and the vertical terminal drawing.
-
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 

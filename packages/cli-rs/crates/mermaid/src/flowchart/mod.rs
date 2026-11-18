@@ -1,5 +1,3 @@
-//! Flowcharts (`packages/merman/src/flowchart`).
-
 pub mod drawing;
 pub mod labels;
 pub mod layout;

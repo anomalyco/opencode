@@ -1,5 +1,3 @@
-//! Text measurement and Mermaid line helpers (`core/text.ts`, `core/text-lines.ts`, `core/mermaid.ts`).
-
 use std::sync::LazyLock;
 
 use regex::Regex;

@@ -1,5 +1,3 @@
-//! Grid geometry (`core/geometry.ts`).
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Point {
     pub x: i32,

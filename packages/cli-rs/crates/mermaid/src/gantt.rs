@@ -1,5 +1,4 @@
-//! Gantt charts (`packages/merman/src/gantt`): parser and drawing with the plugin's default options
-//! (track style, thin line, labels on the left, spaced sections, faint track).
+//! Gantt charts with left-aligned labels and a faint track.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;

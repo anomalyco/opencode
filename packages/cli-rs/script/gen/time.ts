@@ -153,7 +153,6 @@ function range(from: number, to: number, step: number) {
   return Array.from({ length: Math.ceil((to - from) / step) }, (_, index) => from + index * step)
 }
 
-// packages/tui/src/util/form.ts
 function validDate(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
   const date = new Date(`${value}T00:00:00.000Z`)

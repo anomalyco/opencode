@@ -1,5 +1,4 @@
-// Writes crates/plugin-abi/schema/v2.json: the JSON Schema of plugin contract 2.0, generated from the Rust types of
-// `opencode_plugin_abi::v2` by its `schema` example (synthesis 4.6: "the schema is generated from the Rust types").
+// Generates the plugin contract schema from its Rust types.
 import { format, resolveConfig } from "prettier"
 
 const root = new URL("../..", import.meta.url).pathname

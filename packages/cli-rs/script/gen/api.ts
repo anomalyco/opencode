@@ -1,5 +1,4 @@
-// Generates crates/api/src/generated and crates/api-types/src/types.rs from ClientApi, with the options of the Promise client
-// (packages/client/script/generate.ts). docs/architecture.md describes what it generates.
+// Generates Rust API types and endpoints from ClientApi.
 import { compile, type Endpoint } from "@opencode/httpapi-codegen"
 import { ClientApi, clientNamespace, groupNames, promiseOmitEndpoints } from "@opencode/protocol/client"
 import { Schema, SchemaAST, SchemaRepresentation } from "effect"

@@ -1,6 +1,3 @@
-//! P-ORACLE for P.3: renders every source of parity/fixtures/P.3/corpus.json (written by
-//! parity/oracle/P.3-mermaid.ts from the TS plugin) and compares each styled line with TS.
-
 use opencode_mermaid::{Palette, Rendered, render};
 use opencode_plugin::node::Reader;
 use opencode_plugin_abi::Rgba;

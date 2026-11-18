@@ -1,5 +1,3 @@
-//! Flowchart drawing (`flowchart/drawing.ts`) and its styles (`flowchart/style.ts`).
-
 use std::collections::{HashMap, HashSet};
 
 use indexmap::IndexMap;

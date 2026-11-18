@@ -1,5 +1,3 @@
-//! Edge routing (`flowchart/routing.ts`).
-
 use std::collections::HashSet;
 use std::rc::Rc;
 

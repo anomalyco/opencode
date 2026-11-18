@@ -1,6 +1,3 @@
-//! P-COMP for P.3: `TextPart`'s Markdown with the Mermaid plugin's renderer, compared cell by cell with
-//! parity/fixtures/P.3/markdown.json (written by parity/component/P.3-markdown.tsx through the TS plugin).
-
 use std::rc::Rc;
 
 use opencode_mermaid::{Palette, Rendered, fenced, render};

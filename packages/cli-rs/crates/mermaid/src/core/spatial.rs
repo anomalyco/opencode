@@ -1,5 +1,3 @@
-//! Cell claims and collision checks (`core/spatial.ts`).
-
 use std::collections::{BTreeMap, BTreeSet};
 
 use indexmap::IndexMap;
