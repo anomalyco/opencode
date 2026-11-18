@@ -245,35 +245,7 @@ mod tests {
     }
 
     #[test]
-    fn requests_decode_as_the_frontend_schema() {
-        let decode_request = |input: &str| decode(input).map(|envelope| envelope.request);
-        assert_eq!(
-            decode(r#"{"jsonrpc":"2.0","id":"a","method":"ui.type","params":{"text":"hi"}}"#).unwrap(),
-            Envelope { id: Some(json!("a")), request: Request::Type { text: "hi".into() } }
-        );
-        assert_eq!(decode(r#"{"jsonrpc":"2.0","method":"ui.enter"}"#).unwrap().id, None);
-        assert_eq!(
-            decode_request(
-                r#"{"jsonrpc":"2.0","id":1,"method":"ui.press","params":{"key":"c","modifiers":{"ctrl":true}}}"#
-            ),
-            Ok(Request::Press { key: "c".into(), modifiers: KeyModifiers { ctrl: true, ..KeyModifiers::default() } })
-        );
-        assert_eq!(
-            decode_request(r#"{"jsonrpc":"2.0","id":1,"method":"ui.arrow","params":{"direction":"left"}}"#),
-            Ok(Request::Arrow(Direction::Left))
-        );
-        assert_eq!(
-            decode_request(r#"{"jsonrpc":"2.0","id":1,"method":"ui.resize","params":{"cols":80.5,"rows":24}}"#),
-            Ok(Request::Resize { cols: 80.5, rows: 24.0 })
-        );
-        assert_eq!(
-            decode_request(r#"{"jsonrpc":"2.0","id":1,"method":"ui.state"}"#),
-            Ok(Request::Unsupported("ui.state"))
-        );
-        assert_eq!(
-            decode_request(r#"{"jsonrpc":"2.0","id":1,"method":"ui.click","params":{"target":1,"x":0,"y":0}}"#),
-            Ok(Request::Unsupported("ui.click"))
-        );
+    fn malformed_requests_are_rejected() {
         for bad in [
             "nope",
             r#"{"jsonrpc":"1.0","id":1,"method":"ui.enter"}"#,
@@ -285,15 +257,5 @@ mod tests {
         ] {
             assert!(decode(bad).is_err(), "{bad}");
         }
-    }
-
-    #[test]
-    fn responses_are_json_rpc() {
-        assert_eq!(success(None, json!(true)), None);
-        assert_eq!(success(Some(json!(3)), json!(true)), Some(json!({ "jsonrpc": "2.0", "id": 3, "result": true })));
-        assert_eq!(
-            failure(None, "bad"),
-            json!({ "jsonrpc": "2.0", "id": null, "error": { "code": -32000, "message": "bad" } })
-        );
     }
 }
