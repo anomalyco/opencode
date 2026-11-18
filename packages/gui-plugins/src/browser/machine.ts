@@ -103,15 +103,16 @@ export type Attachment = {
   /** The person's prompts that wait in the session's inbox, by inbox ID, with how each will be delivered. */
   readonly prompts: Readonly<Record<string, "steer" | "queue">>
   /**
-   * The tab an agent's show request opened the pane on. Its page stays hidden until the delay ends, which runs
-   * (`timing`) from the moment the pane would draw the page, so a click aimed at the chat cannot land in it.
+   * The tab an agent's show request selected: in a closed pane, over another tab, or in a session nobody was looking
+   * at. Its page stays hidden and its pane takes no input until the delay ends, which runs (`timing`) from the moment
+   * the pane shows the tab to the person, so a press already on its way cannot land in it.
    */
   readonly reveal?: { readonly tabID: Browser.TabID; readonly token: number; readonly timing: boolean }
 }
 
 /**
- * What an agent's activity on a tab asks of the pane. `select`: the tab is selected, which opens a closed pane.
- * `onScreen`: the person sees the session now, so the click guard applies and the tab needs no unseen mark.
+ * What an agent's activity on a tab asks of the pane. `select`: the tab is selected, which opens a closed pane, always
+ * behind the click guard. `onScreen`: the person saw the session when the agent asked, so the tab needs no unseen mark.
  * `visible`: the open pane already shows the tab.
  */
 export type Presentation = {
@@ -143,7 +144,7 @@ export type Event =
   | { readonly type: "side.changed"; readonly sessionKey: string; readonly open: boolean; readonly running: boolean }
   | { readonly type: "execution.ended"; readonly sessionKey: string }
   | { readonly type: "activity.seen"; readonly sessionKey: string; readonly tabID: Browser.TabID }
-  /** The pane would now draw the revealed page. */
+  /** The pane now shows the revealed tab to the person: it is the tab on screen, in a window that is not hidden. */
   | { readonly type: "reveal.drawn"; readonly sessionKey: string; readonly token: number }
   | { readonly type: "reveal.elapsed"; readonly sessionKey: string; readonly token: number }
   | {
@@ -771,12 +772,15 @@ function present(state: Open, key: string, attachment: Attachment, request: Pres
   if (!request.select)
     return marked === attachment.unseen && !attachment.held ? { state, effects: [] } : put(state, key, { ...settled, unseen: marked })
   const focus: MachineEffect = { type: "focus-strip-tab", sessionKey: key, tabID: request.tabID }
-
-  // Nobody is looking, so no click can land in the page: the tab waits selected, with its mark.
-  if (!request.onScreen) return put(state, key, { ...settled, unseen: marked }, [focus])
   const token = state.issued + 1
+  const reveal = { token, tabID: request.tabID, timing: false }
 
-  return put(state, key, { ...settled, shown: true, reveal: { token, tabID: request.tabID, timing: false } }, [focus], token)
+  // Nobody was looking when the agent asked: the tab waits selected, with its mark. Its guard waits too, since the
+  // person may be back before the selection lands, or a request kept since then may land in front of them. The delay
+  // starts only when the pane shows them the tab, so it costs nothing until then.
+  if (!request.onScreen) return put(state, key, { ...settled, unseen: marked, reveal }, [focus], token)
+
+  return put(state, key, { ...settled, shown: true, reveal }, [focus], token)
 }
 
 // A kept request lands with the state that makes it possible.

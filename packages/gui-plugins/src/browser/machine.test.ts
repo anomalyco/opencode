@@ -104,7 +104,7 @@ describe("browser pane machine", () => {
 
   const side = (open: boolean): Event => ({ type: "side.changed", sessionKey: key, open, running: true })
 
-  // "open": the tab is selected behind the click guard. "select": selected and marked, with no guard, as nobody is
+  // "open": the tab is selected behind the click guard. "select": selected behind the guard and marked, as nobody was
   // looking. "mark": only the unseen mark. "none": nothing.
   test.each([
     ["a preview with the pane closed", {}, "open"],
@@ -127,7 +127,47 @@ describe("browser pane machine", () => {
     const next = transition(start, { ...activity(start), ...input })
     expect(types(next.effects)).toEqual(expected === "open" || expected === "select" ? ["focus-strip-tab"] : [])
     expect(attachment(next.state)?.unseen).toEqual(expected === "mark" || expected === "select" ? [tabA] : [])
-    expect(revealGuard(next.state, key, tabA) !== undefined).toBe(expected === "open")
+    expect(revealGuard(next.state, key, tabA) !== undefined).toBe(expected === "open" || expected === "select")
+  })
+
+  // Every way an agent's request selects a tab ends behind the guard, whether or not anyone was looking when it asked:
+  // the person may be back before the selection lands.
+  test.each([
+    ["on screen, kept for the inventory", true, "inventory"],
+    ["off screen, kept for the inventory", false, "inventory"],
+    ["on screen, kept for the strip", true, "strip"],
+    ["off screen, kept for the strip", false, "strip"],
+  ] as const)("a show request made %s lands behind the guard", (_label, onScreen, kept) => {
+    const start = kept === "inventory" ? ready() : replay(attach(key, false)).state
+    const listed = kept === "inventory" ? start : transition(start, paneState(start, inventory(tab(tabA)))).state
+    const tabID = kept === "inventory" ? tabB : tabA
+    const early = transition(listed, { ...activity(listed), tabID, onScreen })
+    expect(early.effects).toEqual([])
+    expect(revealGuard(early.state, key, tabID)).toBeUndefined()
+
+    const landed =
+      kept === "inventory"
+        ? transition(early.state, paneState(early.state, inventory(tab(tabA), tab(tabB))))
+        : transition(early.state, { type: "session.located", sessionKey: key, located: true })
+
+    expect(types(landed.effects)).toContain("focus-strip-tab")
+    const token = revealGuard(landed.state, key, tabID)
+    expect(token).toBeDefined()
+    expect(attachment(landed.state)?.unseen).toEqual(onScreen ? [] : [tabID])
+
+    // The guard holds until the pane shows the tab to the person, then for the delay.
+    const drawn = transition(landed.state, { type: "reveal.drawn", sessionKey: key, token: token ?? -1 })
+    expect(drawn.effects).toEqual([{ type: "expire-reveal", sessionKey: key, token: token ?? -1 }])
+    expect(revealGuard(drawn.state, key, tabID)).toBe(token)
+  })
+
+  test("a tab selected while nobody looked keeps its guard through the pane opening for it", () => {
+    const start = ready()
+    const selected = transition(start, { ...activity(start), onScreen: false }).state
+    const opened = transition(selected, side(true)).state
+    expect(revealGuard(opened, key, tabA)).toBeDefined()
+    // Closing the pane ends it: the person's own opening shows the page at once.
+    expect(revealGuard(transition(opened, side(false)).state, key, tabA)).toBeUndefined()
   })
 
   // A prompt waits while this is false, so its first step lists the browser tools. It must never wait on a state
