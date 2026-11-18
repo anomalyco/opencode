@@ -39,12 +39,14 @@ plugin.HIDE = table.freeze({ type = "hide" })
 -- a fetch whose mount closes is not told yet: the host cancels the request and the task stays parked for the rest of
 -- the activation. Start a flow that waits from a command or an event, not from `onMount`, until then.
 
--- What a task's coroutine yields once its function returned, ready for the next; a waiting call yields nothing.
-local ENDED = table.freeze({})
+-- What a task's coroutine yields once its function returned, ready for the next, and what a waiting call yields. Any
+-- other yield is the plugin's own `coroutine.yield`, which fails the task.
+local ENDED, PARK = table.freeze({}), table.freeze({})
 
 -- This chunk runs before the VM is sandboxed, so a global it names is looked up in full at each use: the hot ones are
 -- upvalues.
 local create, resume, yield, running = coroutine.create, coroutine.resume, coroutine.yield, coroutine.running
+local isyieldable = coroutine.isyieldable
 local clone, pack, unpack, select = table.clone, table.pack, table.unpack, select
 
 -- The most tasks a plugin may have parked at once; a waiting call past it fails.
@@ -53,6 +55,8 @@ local PARKED = 256
 -- The coroutines that are tasks: only they may wait.
 local tasks: { [thread]: boolean } = setmetatable({}, { __mode = "k" }) :: any
 local parked = 0
+-- What each parked task lets go of if it ends or fails without its answer: its request's or its dialog's entry.
+local held: { [thread]: () -> () } = {}
 -- A task's coroutine whose last function returned without waiting, kept for the next task.
 local idle: thread? = nil
 
@@ -85,29 +89,43 @@ local function traceback(co: thread, message: any): string
     return table.concat(lines, "\n")
 end
 
--- What resuming task `co` gave: whether its handler ended, and its first result. An error in the task is raised again,
--- with the task's traceback, so the host call fails and the plugin with it.
-local function settle(co: thread, ok: boolean, mark: any, result: any): (boolean, any)
-    if not ok then
-        tasks[co] = nil
-        local built, text = false, nil
-        if mark ~= "not enough memory" then
-            built, text = pcall(traceback, co, mark)
-        end
-        if not built then
-            -- Out of memory, most likely with what the task holds: its stack goes first.
-            coroutine.close(co)
-            fail(tostring(mark))
-        end
-        error(text, 0)
+-- Lets go of what task `co` waited on, if anything: it ended or failed without its answer.
+local function release(co: thread)
+    local let = held[co]
+    if let then
+        held[co] = nil
+        parked -= 1
+        let()
     end
-    if mark == ENDED then
+end
+
+-- What resuming task `co` gave: whether its function ended, and its first result. An error in the task, or a yield of
+-- the plugin's own, is raised again with the task's traceback, so the host call fails and the plugin with it.
+local function settle(co: thread, ok: boolean, mark: any, result: any): (boolean, any)
+    if mark == PARK and ok then
+        return false, nil
+    end
+    release(co)
+    if ok and mark == ENDED then
         if idle == nil then
             idle = co
         end
         return true, result
     end
-    return false, nil
+    tasks[co] = nil
+    if ok then
+        mark = "coroutine.yield in a task: only a waiting call (host:fetch, a dialog, plugin.all) may pause it"
+    end
+    local built, text = false, nil
+    if mark ~= "not enough memory" then
+        built, text = pcall(traceback, co, mark)
+    end
+    if not built then
+        -- Out of memory, most likely with what the task holds: its stack goes first.
+        coroutine.close(co)
+        fail(if type(mark) == "string" then mark else "not enough memory")
+    end
+    error(text, 0)
 end
 
 -- Runs `f(a, b, c)` as a task, on the idle coroutine or a new one: whether it ended without waiting, and its first
@@ -121,25 +139,33 @@ local function run(f, a, b, c): (boolean, any)
     end
     local ok, mark, result = resume(co, f, a, b, c)
     -- Most handlers return without waiting: their worker goes back at once.
-    if ok and mark == ENDED and idle == nil then
+    if ok and mark == ENDED and idle == nil and held[co] == nil then
         idle = co
         return true, result
     end
     return settle(co, ok, mark, result)
 end
 
--- Goes on with parked task `co`, its waiting call returning `...`.
+-- Goes on with parked task `co`, whose entry its waker removed, its waiting call returning `...`.
 local function wake(co: thread, ...)
+    held[co] = nil
     parked -= 1
     settle(co, resume(co, ...))
 end
 
--- The running task, or an error naming waiting call `name` at the plugin's line `level` frames up.
+-- The running task, or an error naming waiting call `name` at the plugin's line `level` frames up: outside a task,
+-- where the task cannot pause (inside a C function such as `table.sort`'s comparator), or past the cap.
 local function task(name: string, level: number): thread
     local co = running()
     if not tasks[co] then
         error(
             `{name} waits, and only a task can: a command's, an event's, a mount's, a layer's or a surface's handler, or plugin.spawn`,
+            level
+        )
+    end
+    if not isyieldable() then
+        error(
+            `{name} cannot wait here: a task cannot pause inside table.sort, string.gsub, xpcall, require or a metamethod`,
             level
         )
     end
@@ -149,10 +175,12 @@ local function task(name: string, level: number): thread
     return co
 end
 
--- Parks the running task until `wake` goes on with it, and returns what `wake` was given.
-local function park(): ...any
+-- Parks task `co` until `wake` goes on with it, and returns what `wake` was given. `let` removes its entry, if the
+-- task ends or fails without its answer.
+local function park(co: thread, let: () -> ()): ...any
     parked += 1
-    return yield()
+    held[co] = let
+    return yield(PARK)
 end
 
 -- Starts `f(...)` as a task of its own, from a handler, from another task or from setup. It runs until it ends or
@@ -182,13 +210,16 @@ function plugin.all(fns: { () -> (any, any) }): ({ any }?, any)
             results[index] = value
             left -= 1
             if left == 0 and waiting then
+                waiting = false
                 wake(co)
             end
         end)
     end
     if left > 0 then
         waiting = true
-        park()
+        park(co, function()
+            waiting = false
+        end)
     end
     if failure ~= nil then
         return nil, failure
@@ -196,16 +227,23 @@ function plugin.all(fns: { () -> (any, any) }): ({ any }?, any)
     return results, nil
 end
 
+-- How many answer commands the dialogs take turns on: dialog `n` answers through `<id>.task.answer.<n % SLOTS>`, so an
+-- answer that runs late, after the next dialog showed, still reaches its own dialog's task. The commands, the
+-- generation from 1 and the close's input are the Rust SDK's tasks' (`task::ANSWERS`).
+local SLOTS = 8
+
 -- The setup object a plugin's setup gets: the host's, with each handler a task, the waiting calls on `host`, and the
--- two hidden commands the dialogs answer through. The reply handler is this module's.
+-- hidden commands the dialogs answer and close through. The reply handler is this module's.
 local function tasked(raw)
     local host = raw.host
     local fetch, foreground, dialog = host.fetch, host.foreground, host.dialog
-    local answer, closed = `{raw.id}.task.answer`, `{raw.id}.task.closed`
+    local closed = `{raw.id}.task.closed`
     -- Requests in flight, by ID, and the dialogs shown by tasks that have not closed, by number, with what they ask.
     local requests: { [number]: thread } = {}
     local dialogs: { [number]: { co: thread, kind: string } } = {}
-    local shown, top = 0, 0
+    -- The dialog each answer command answers for: the last one shown on it.
+    local slots: { [number]: number } = {}
+    local shown = 0
 
     local function request(name: string, send, self, spec): (any, string?)
         local co = task(name, 4)
@@ -214,7 +252,9 @@ local function tasked(raw)
             return nil, why
         end
         requests[id] = co
-        return park()
+        return park(co, function()
+            requests[id] = nil
+        end)
     end
     host.fetch = function(self, spec)
         return request("host:fetch", fetch, self, spec)
@@ -237,20 +277,25 @@ local function tasked(raw)
     -- Shows `spec` as a dialog of `kind` and parks until it is answered (the answer) or closes without one (`nil`).
     local function ask(name: string, self, kind: string, spec): any
         local co = task(name, 4)
+        shown += 1
+        local number = shown
         local shape: { [string]: any } = clone(spec)
         shape.type = kind
+        -- A keyed select stays open on a pick and is replaced in place without its close: the task would never hear.
+        shape.key = nil
         if kind ~= "alert" then
-            shape.action = { type = "command", name = answer }
+            slots[number % SLOTS] = number
+            shape.action = { type = "command", name = `{raw.id}.task.answer.{number % SLOTS}` }
         end
-        shown += 1
-        top = shown
-        dialogs[shown] = { co = co, kind = kind }
+        dialogs[number] = { co = co, kind = kind }
         dialog(self, {
             type = "dismissable",
             dialog = shape,
-            dismissed = { type = "command", name = closed, input = tostring(shown) },
+            dismissed = { type = "command", name = closed, input = tostring(number) },
         })
-        return park()
+        return park(co, function()
+            dialogs[number] = nil
+        end)
     end
     host.select = function(self, spec)
         return ask("host:select", self, "select", spec)
@@ -264,16 +309,20 @@ local function tasked(raw)
     host.alert = function(self, spec)
         ask("host:alert", self, "alert", spec)
     end
-    -- An answer is the dialog's on top: the host closes it and runs its action, then its close.
-    raw.command(raw, { name = answer }, function(_, input: string?)
-        local asked = dialogs[top]
-        if asked then
-            dialogs[top] = nil
-            local value = input or ""
-            wake(asked.co, if asked.kind == "confirm" then value == "true" else value)
-        end
-    end)
-    -- A close of a dialog still unanswered: an escape, the backdrop, another dialog in its place, or an alert's `ok`.
+    -- An answer is for the dialog last shown on its command: the host closes it and runs its action, then its close.
+    for slot = 0, SLOTS - 1 do
+        raw.command(raw, { name = `{raw.id}.task.answer.{slot}` }, function(_, input: string?)
+            local number = slots[slot]
+            local asked = number and dialogs[number]
+            if asked then
+                dialogs[number :: number] = nil
+                local value = input or ""
+                wake(asked.co, if asked.kind == "confirm" then value == "true" else value)
+            end
+        end)
+    end
+    -- A close of a dialog still unanswered: an escape, the backdrop, another dialog in its place, an alert's `ok`, or
+    -- a dialog the host did not show (its own dialog was open).
     raw.command(raw, { name = closed }, function(_, input: string?)
         local number = tonumber(input)
         local asked = number and dialogs[number]

@@ -1508,6 +1508,18 @@ fn asked(host: &TestHost) -> (abi::Dialog, (String, Option<String>)) {
     ((**dialog).clone(), (name, input))
 }
 
+/// The command `dialog`'s answer runs.
+fn answers(dialog: &abi::Dialog) -> String {
+    let action = match dialog {
+        abi::Dialog::Confirm(confirm) => &confirm.action,
+        abi::Dialog::Select(select) => &select.action,
+        abi::Dialog::Prompt { action, .. } => action,
+        other => panic!("{other:?} has no answer"),
+    };
+    let abi::Action::Command { name, .. } = action;
+    name.clone()
+}
+
 /// Runs command `name` of `host`'s keymap with `input`, and the frame after it.
 fn run(host: &TestHost, name: &str, input: Option<&str>) {
     keymap(host).dispatch(name, input);
@@ -1520,8 +1532,6 @@ fn tasking(host: &Rc<TestHost>, body: &str) -> Rc<Registry> {
         format!("local plugin = require(\"@opencode/plugin\")\nreturn plugin.define(function(setup)\n{body}\nend)\n");
     running(host, define(&sources(&init), None).unwrap().0)
 }
-
-const ANSWER: &str = "test.luau.task.answer";
 
 // Expected (await-luau): a command's handler is a task: `host:fetch` parks it and returns the reply as the reply's call
 // goes on with it, over two waits; a failed request returns `nil` and the error. Setup starts a task with
@@ -1578,10 +1588,11 @@ fn a_dialog_answers_its_task_and_an_escape_gives_nil() {
     );
     run(&host, "ask", None);
     let (dialog, closed) = asked(&host);
+    let answer = answers(&dialog);
     let abi::Dialog::Confirm(confirm) = dialog else { panic!("{dialog:?}") };
     assert_eq!((confirm.title.as_str(), confirm.message.as_str()), ("Sure?", "Really"));
     // The host runs the answer, then the close.
-    run(&host, ANSWER, Some("true"));
+    run(&host, &answer, Some("true"));
     run(&host, &closed.0, closed.1.as_deref());
     assert_eq!(said(&host), ["confirm true"]);
     let (dialog, closed) = asked(&host);
@@ -1596,10 +1607,10 @@ fn a_dialog_answers_its_task_and_an_escape_gives_nil() {
     run(&host, "pick", None);
     let (_, replaced) = asked(&host);
     run(&host, "ask", None);
-    let (_, closed) = asked(&host);
+    let (dialog, closed) = asked(&host);
     run(&host, &replaced.0, replaced.1.as_deref());
     assert_eq!(said(&host)[3..], ["pick nil"]);
-    run(&host, ANSWER, Some("false"));
+    run(&host, &answers(&dialog), Some("false"));
     run(&host, &closed.0, closed.1.as_deref());
     assert_eq!(said(&host)[4..], ["confirm false"]);
     assert_eq!(failure(&registry, "test.luau"), None);
@@ -1746,10 +1757,10 @@ end)
     // Disabled while a fetch and a dialog wait.
     run(&host, "wait", None);
     run(&host, "ask", None);
-    let (_, closed) = asked(&host);
+    let (dialog, closed) = asked(&host);
     assert!(registry.set_active(&dynamic(&host), "test.luau", false));
     host.reply();
-    run(&host, ANSWER, Some("true"));
+    run(&host, &answers(&dialog), Some("true"));
     run(&host, &closed.0, closed.1.as_deref());
     assert_eq!(said(&host), ["resumed"]);
     assert_eq!(failure(&registry, "test.luau"), None);
@@ -1860,4 +1871,129 @@ fn a_key_handler_that_waits_takes_its_key() {
     };
     assert_eq!(handler(&Taking, &key("wait")), abi::interact::Handled::Consume);
     assert_eq!(handler(&Taking, &key("pass")), abi::interact::Handled::Pass);
+}
+
+// Expected (await-luau, carbon `al-1`): a waiting call where the task cannot pause (inside `table.sort`'s comparator,
+// a `string.gsub` callback, a `__tostring` or a `require`), caught by the plugin's `pcall`, raises before it asks for
+// anything: no request or dialog is left behind, so a later task's confirm gets its own answer and no stray reply,
+// and the plugin goes on. Inside `xpcall`, which Luau lets a coroutine yield through, the wait is a real one.
+#[test]
+fn a_wait_where_a_task_cannot_pause_raises_and_leaves_nothing_behind() {
+    let init = r#"
+        local plugin = require("@opencode/plugin")
+        local shared = require("@self/shared")
+        return plugin.define(function(setup)
+            local function say(host, text) host:toast({ variant = "info", message = text }) end
+            local function leak(host) host:fetch({ method = "GET", path = "/leaked" }) end
+            setup:command({ name = "corrupt" }, function(host, kind)
+                local ok, err
+                if kind == "sort" then
+                    ok, err = pcall(table.sort, { 2, 1 }, function(a, b) leak(host) return a < b end)
+                elseif kind == "gsub" then
+                    ok, err = pcall(string.gsub, "a", "a", function() leak(host) return "b" end)
+                elseif kind == "tostring" then
+                    ok, err = pcall(tostring, setmetatable({}, { __tostring = function() leak(host) return "x" end }))
+                elseif kind == "xpcall" then
+                    -- Luau's `xpcall` lets a task pause: the wait is a real one.
+                    ok, err = xpcall(function() return host:fetch({ method = "GET", path = "/xpcall" }).name end, debug.traceback)
+                else
+                    shared.host = host
+                    ok, err = pcall(require, "@self/waits")
+                end
+                say(host, `{kind} {tostring(ok)} {tostring(err)}`)
+            end)
+            setup:command({ name = "victim" }, function(host)
+                local answer = host:confirm({ title = "Delete all?", message = "Sure?" })
+                say(host, `victim_got={type(answer)}:{tostring(answer)}`)
+            end)
+        end)
+    "#;
+    let waits =
+        "local shared = require(\"./shared\")\nshared.host:fetch({ method = \"GET\", path = \"/leaked\" })\nreturn {}";
+    let sources = Sources::from_files([
+        ("plugin.toml", "id = \"test.luau\"\ncontract = \"2.0\""),
+        ("init.luau", init),
+        ("shared.luau", "return {}"),
+        ("waits.luau", waits),
+    ]);
+    for kind in ["sort", "gsub", "tostring", "require"] {
+        let host = host();
+        let registry = running(&host, define(&sources, None).unwrap().0);
+        run(&host, "corrupt", Some(kind));
+        let said_first = said(&host);
+        assert!(
+            said_first.len() == 1 && said_first[0].contains("cannot wait here"),
+            "{kind}: {said_first:?}, fetches {}",
+            host.fetches.borrow().len()
+        );
+        run(&host, "victim", None);
+        // Nothing was asked for: no reply can reach the victim.
+        assert!(host.fetches.borrow().is_empty(), "{kind}: a request was sent");
+        let (dialog, closed) = asked(&host);
+        run(&host, &answers(&dialog), Some("false"));
+        run(&host, &closed.0, closed.1.as_deref());
+        assert_eq!(said(&host)[1..], ["victim_got=boolean:false"], "{kind}");
+        assert_eq!(failure(&registry, "test.luau"), None, "{kind}");
+    }
+    // In `xpcall` the task waits, and its reply reaches it, not a task that asked after it.
+    let host = host();
+    let registry = running(&host, define(&sources, None).unwrap().0);
+    run(&host, "corrupt", Some("xpcall"));
+    run(&host, "victim", None);
+    answer(&host, Ok(serde_json::json!({ "name": "/xpcall" })));
+    assert_eq!(said(&host), ["xpcall true /xpcall"]);
+    let (dialog, closed) = asked(&host);
+    run(&host, &answers(&dialog), Some("true"));
+    run(&host, &closed.0, closed.1.as_deref());
+    assert_eq!(said(&host)[1..], ["victim_got=boolean:true"]);
+    assert_eq!(failure(&registry, "test.luau"), None);
+}
+
+// Expected (await-luau, carbon `al-1`): a task that yields by itself (`coroutine.yield`, not a waiting call) fails the
+// plugin with why, and is not taken for a parked task.
+#[test]
+fn a_task_that_yields_by_itself_fails() {
+    let host = host();
+    let registry = tasking(&host, r#"setup:command({ name = "stray" }, function() coroutine.yield("stray") end)"#);
+    run(&host, "stray", None);
+    let error = failure(&registry, "test.luau").expect("the stray yield failed the plugin");
+    assert!(error.contains("coroutine.yield in a task"), "{error}");
+}
+
+// Expected (await-luau, carbon `al-2`): each dialog answers through a command of its own generation, so an answer that
+// runs after the next dialog showed reaches the task that asked; and a select loses its `key`, which would keep it open
+// on a pick.
+#[test]
+fn a_late_answer_reaches_its_own_dialog() {
+    let host = host();
+    let registry = tasking(
+        &host,
+        r#"
+        local function say(host, text) host:toast({ variant = "info", message = text }) end
+        setup:command({ name = "first" }, function(host)
+            say(host, "c1=" .. tostring(host:confirm({ title = "One", message = "first" })))
+        end)
+        setup:command({ name = "second" }, function(host)
+            say(host, "p2=" .. tostring(host:prompt({ title = "Two" })))
+        end)
+        setup:command({ name = "keyed" }, function(host)
+            host:select({ title = "Pick", key = "rich", options = { { title = "One", value = "1" } } })
+        end)
+        "#,
+    );
+    run(&host, "first", None);
+    let (first, first_closed) = asked(&host);
+    run(&host, "second", None);
+    let (_, second_closed) = asked(&host);
+    // Dialog one's answer and close run after dialog two showed.
+    run(&host, &answers(&first), Some("true"));
+    run(&host, &first_closed.0, first_closed.1.as_deref());
+    assert_eq!(said(&host), ["c1=true"]);
+    run(&host, &second_closed.0, second_closed.1.as_deref());
+    assert_eq!(said(&host), ["c1=true", "p2=nil"]);
+    run(&host, "keyed", None);
+    let (dialog, _) = asked(&host);
+    let abi::Dialog::Select(select) = dialog else { panic!("{dialog:?}") };
+    assert_eq!(select.key, None);
+    assert_eq!(failure(&registry, "test.luau"), None);
 }
