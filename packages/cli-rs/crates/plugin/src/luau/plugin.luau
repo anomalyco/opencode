@@ -269,8 +269,9 @@ plugin.client = namespace("")
 local sleeper: ((number) -> (any, string?))? = nil
 local ticked: any = nil
 
--- Waits `ms` milliseconds on the host's clock, at least 20, with no thread: `true`, or `nil` and why the host took no
--- timer (32 of the plugin wait) or cancelled it (`"cancelled"`, its mount closed). Only a task waits.
+-- Waits `ms` milliseconds on the host's clock, at least 20 and a part of one kept, with no thread (`math.huge` waits for
+-- ever): `true`, or `nil` and why the host took no timer (32 of the plugin wait) or cancelled it (`"cancelled"`, its
+-- mount closed). Only a task waits.
 function plugin.sleep(ms: number): (boolean?, string?)
     local sleep = sleeper
     if sleep == nil then
