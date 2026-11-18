@@ -100,7 +100,6 @@ export type PtyCase = {
   graphics?: { cell: number }
   // Compare the request log too; `"writes"` leaves the reads out, for screens whose reads belong to later steps.
   requests?: boolean | "writes"
-  tsOnly?: boolean
   // Runs only with `--sides rs,rs`: Rust behavior the TS client does not share, compared between two Rust runs.
   rsOnly?: boolean
   // As in P-CLI: writes files into the sandbox before the command runs.
@@ -476,10 +475,6 @@ if (import.meta.main) {
   for (const file of files) {
     const value: PtyCase = (await import(file)).default
     const name = nameOf(file)
-    if (value.tsOnly && sides.includes("rs")) {
-      console.log(`skip ${name} (tsOnly)`)
-      continue
-    }
     if (value.rsOnly && sides.includes("ts")) {
       console.log(`skip ${name} (rsOnly: run it with --sides rs,rs)`)
       continue
