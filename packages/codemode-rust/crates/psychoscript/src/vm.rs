@@ -80,6 +80,9 @@ pub struct Frame {
 
 pub const NO_YIELD: u32 = u32::MAX;
 
+/// A `SavedFrame::splits` entry first: the parked frames start with an async generator's, run on its own stack.
+const GENERATOR_FIRST: u32 = u32::MAX;
+
 /// Generator request kinds, as `DelegateCall` and async generator queues number them.
 pub const REQ_NEXT: u8 = 0;
 pub const REQ_THROW: u8 = 1;
@@ -1745,7 +1748,17 @@ impl<'rt> Vm<'rt> {
             return false;
         };
         let flat = std::mem::take(&mut saved.stack);
-        let splits = std::mem::take(&mut saved.splits);
+        let mut splits = std::mem::take(&mut saved.splits);
+        if splits.first().is_some_and(|s| s.0 == GENERATOR_FIRST) {
+            splits.remove(0);
+            // The generator gets the stack it is resumed from as its resumer's, and runs on its own.
+            let resumer = std::mem::take(&mut self.stack);
+            if let FrameKind::Generator(g, _) = first.kind
+                && let Some(s) = self.running_saved(g)
+            {
+                s.stack = resumer;
+            }
+        }
         let below = self.stack.len();
         let hbase = self.handlers.len() as u32;
         first.base = below + 2;
@@ -1800,6 +1813,14 @@ impl<'rt> Vm<'rt> {
                 FrameKind::Async(c) => return Some(c),
                 // A generator resumed from bytecode parks with the frames that resumed it.
                 FrameKind::Generator(g, _) if !f.is_base && !self.is_async_generator(g) => {}
+                // An async generator, which runs from native code, parks as its `await` does.
+                FrameKind::Generator(g, _) if f.is_base && self.is_async_generator(g) => {
+                    self.coroutines.push(Coroutine {
+                        saved: None,
+                        promise: None,
+                    });
+                    return Some(self.coroutines.len() as u32 - 1);
+                }
                 FrameKind::Generator(..) => return None,
                 FrameKind::Native(crate::native::NativeOp::Settle, _) if f.is_base && i == 0 => {
                     self.coroutines.push(Coroutine {
@@ -1823,8 +1844,13 @@ impl<'rt> Vm<'rt> {
             .frames
             .iter()
             .rposition(|f| matches!(f.kind, FrameKind::Async(a) if a == c))
+            .or_else(|| {
+                self.frames.iter().rposition(|f| {
+                    f.is_base && matches!(f.kind, FrameKind::Generator(g, _) if self.is_async_generator(g))
+                })
+            })
             .unwrap_or(0);
-        if self.frames[k + 1..]
+        if self.frames[k..]
             .iter()
             .any(|f| matches!(f.kind, FrameKind::Generator(..)))
         {
@@ -1866,6 +1892,18 @@ impl<'rt> Vm<'rt> {
         (result, is_base)
     }
 
+    /// What a running generator keeps while its frame runs: its resumer's stack.
+    fn running_saved(&mut self, g: Id) -> Option<&mut SavedFrame> {
+        match &mut self.heap[g as usize].kind {
+            Kind::Generator(GenState::Running(s)) => Some(s),
+            Kind::AsyncGenerator(a) => match &mut a.state {
+                GenState::Running(s) => Some(s),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
     /// `park_search` across running generators, whose frames run on stacks of their own: the parked frames' slots
     /// are kept as one segment, the regions below each generator (each in that generator's keeping as its resumer's
     /// stack) followed by the generators' own, with where each generator's starts (`SavedFrame::splits`). A parked
@@ -1895,7 +1933,15 @@ impl<'rt> Vm<'rt> {
         regions.push(std::mem::take(&mut self.stack));
         let mut flat: Vec<Slot> = regions[0].drain(base - 2..).collect();
         self.stack = std::mem::take(&mut regions[0]);
-        let mut splits = Vec::with_capacity(gens.len());
+        let mut splits = Vec::with_capacity(gens.len() + 1);
+        // An async generator parked from its own frame: the VM goes back to its resumer's stack, as its `await` does,
+        // and `GENERATOR_FIRST` marks it.
+        if let FrameKind::Generator(g, _) = first.kind
+            && let Some(s) = self.running_saved(g)
+        {
+            self.stack = std::mem::take(&mut s.stack);
+            splits.push((GENERATOR_FIRST, 0));
+        }
         let mut region = 0;
         for (j, f) in parked.iter_mut().enumerate() {
             if region < gens.len() && gens[region].0 == j {
