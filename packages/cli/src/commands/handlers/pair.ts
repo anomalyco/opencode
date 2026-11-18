@@ -41,12 +41,19 @@ export default Runtime.handler(
           ? [
               "",
               // renderUnicodeCompact separates rows with "\n" on every platform, so splitting on EOL ("\r\n" on Windows) indents only the first row.
-              renderUnicodeCompact(JSON.stringify({ code: pairing.code, urls: remote }), {
-                border: 2,
-              })
-                .split("\n")
-                .map((line) => "  " + line)
-                .join(EOL),
+              // Cap QR payload to the first 8 reachable URLs; hosts with many Docker/VPN interfaces can exceed the QR capacity limit.
+              (() => {
+                try {
+                  return renderUnicodeCompact(JSON.stringify({ code: pairing.code, urls: remote.slice(0, 8) }), {
+                    border: 2,
+                  })
+                    .split("\n")
+                    .map((line) => "  " + line)
+                    .join(EOL)
+                } catch {
+                  return "  (QR code unavailable — too many network interfaces; use a link above)"
+                }
+              })(),
             ]
           : []),
         "",
