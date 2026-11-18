@@ -687,18 +687,18 @@ pub fn run_on(app: App, launch: Launch, started: impl FnOnce(&Rc<Tui>) -> opentu
     // Tests start the editor context with their own source; the real TUI reads the environment.
     crate::prompt::editor_context::start(&tui, crate::prompt::editor_context::Source::from_env());
     let result = app.run();
-    let epilogue = crate::features::epilogue::text(&tui);
+    // As soon as the terminal is restored, as TS does: the teardown below runs with Ctrl+C sending SIGINT again, so a
+    // second press while it runs would end the process before a later summary.
+    if let Some(text) = crate::features::epilogue::text(&tui).filter(|_| result.is_ok()) {
+        crate::features::epilogue::print(&text);
+    }
     // As TS's plugin context on exit: every active plugin is disposed while the TUI is still alive.
     tui.plugins.deactivate_all();
     // Their storage writes reach the disk before the process can exit; UI effects and replies are not waited for.
     crate::plugins::host::flush_storage(&tui);
     drop(tui);
     drop(launch.keep);
-    result?;
-    if let Some(text) = epilogue {
-        crate::features::epilogue::print(&text);
-    }
-    Ok(())
+    result
 }
 
 /// Sends keys to the keymap before any widget, as `opencode_ui::dialog::route_keys` does, with the plugins' rules
