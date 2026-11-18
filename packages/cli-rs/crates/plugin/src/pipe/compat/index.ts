@@ -89,6 +89,7 @@ export const modules: Record<string, Record<string, unknown>> = {
     CodeRenderable,
     ScrollBoxRenderable,
     InputRenderable,
+    isRenderable: (value: unknown) => value instanceof render.VNode,
   }),
   "@opencode/plugin/tui": plugin,
   "@opencode/plugin/rpc": { Rpc },

@@ -930,8 +930,10 @@ test("a built renderable added by a ref draws, and the renderer has a root", () 
   const renderer = ctx.renderer
   expect(["currentFocusedEditor" in renderer, "currentFocusedRenderable" in renderer]).toEqual([true, true])
   expect(typeof renderer.root.add).toBe("function")
-  // The root holds none of the host's renderables, so a search of it finds nothing (CT-40: recap's transcript walk).
+  // The root holds none of the host's renderables, so a search of it finds nothing, which is no renderable (CT-40:
+  // recap's transcript walk).
   expect(renderer.root.findDescendantById("msg_1")).toBeUndefined()
+  expect([undefined, renderer.root, refs.box].map(core.isRenderable)).toEqual([false, false, true])
   expect(renderer.currentFocusedEditor).toBeUndefined()
   expect(fake.warnings()).toEqual([
     "t.built: renderer.root is not supported by opencode-native yet",
