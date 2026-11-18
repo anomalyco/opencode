@@ -23,10 +23,10 @@ import { permissionLayer } from "./lib/permission"
 import { codeModeListings, executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
 
 const toolPaths = [
-  "opencode.artifact_create",
-  "opencode.artifact_read",
-  "opencode.artifact_update",
-  "opencode.artifact_delete",
+  "shuvcode.artifact_create",
+  "shuvcode.artifact_read",
+  "shuvcode.artifact_update",
+  "shuvcode.artifact_delete",
 ]
 
 const buildLayer = (artifactsEnabled: boolean, dir: string) => {
@@ -70,7 +70,7 @@ const callCodeMode = (registry: Tool.Interface, sessionID: Session.ID, name: str
       type: "tool-call",
       id: `call-${name}`,
       name: "execute",
-      input: { code: `return await tools.opencode.${name}(${JSON.stringify(input)})` },
+      input: { code: `return await tools.shuvcode.${name}(${JSON.stringify(input)})` },
     },
   }).pipe(
     Effect.map((result) => {
@@ -154,7 +154,7 @@ describe("experimental.artifacts service and tools", () => {
         const listings = snap.codeModeCatalog ? codeModeListings(snap.codeModeCatalog) : []
         expect(listings.map((item) => item.path)).toEqual(expect.arrayContaining(toolPaths))
         const rawTools = yield* registry.list()
-        const createTool = rawTools.find((item) => item.id === "opencode_artifact_create")
+        const createTool = rawTools.find((item) => item.id === "shuvcode_artifact_create")
         expect(createTool?.description).toContain(
           "Default provider (cloudflare [static, server-code, sqlite, durable-objects]): Artifacts deploy to Cloudflare with SQLite and Durable Objects.",
         )

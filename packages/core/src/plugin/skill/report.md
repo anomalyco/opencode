@@ -4,9 +4,9 @@
   content.
 -->
 
-# Report an opencode Issue
+# Report a shuvcode Issue
 
-Use this skill when the user wants to report an opencode issue or bug. Your job
+Use this skill when the user wants to report a shuvcode issue or bug. Your job
 is to turn the user's problem into a useful GitHub issue with standard
 diagnostics plus the context needed to reproduce and resolve it.
 
@@ -26,7 +26,7 @@ title/body for the user.
 
 Collect these values when possible:
 
-- opencode version: run `opencode --version`.
+- shuvcode version: run `shuvcode --version`.
 - Operating system: run `uname -a` on Unix-like systems, or `ver` on Windows.
 - Terminal: inspect `$TERM`, `$TERM_PROGRAM`, `$COLORTERM`, and any obvious
   terminal app context the user provides.
@@ -34,9 +34,9 @@ Collect these values when possible:
   Windows when relevant.
 - Install/channel context: include whether this appears to be local, dev, beta,
   or release if the version output or environment reveals it.
-- Active plugins: inspect opencode config for configured plugins when possible.
+- Active plugins: inspect shuvcode config for configured plugins when possible.
   Check likely config locations such as `opencode.json`, `opencode.jsonc`,
-  `.opencode/opencode.json`, and `~/.config/opencode/opencode.json`. Record
+  `.opencode/opencode.json`, and `~/.config/shuvcode/opencode.json`. Record
   configured plugin entries, local plugin files under `.opencode/plugin/` or
   `.opencode/plugins/`, and note if plugin status could not be determined.
 
@@ -53,7 +53,7 @@ Capture the details that make the issue actionable:
 - Reproduction steps, ideally minimal and numbered.
 - Relevant logs, stack traces, screenshots, terminal output, or config snippets.
 - Whether the issue is reproducible consistently, intermittently, or only once.
-- Recent changes that may be related, such as updating opencode, changing
+- Recent changes that may be related, such as updating shuvcode, changing
   config, installing a plugin, changing terminal, or switching workspace.
 - Workarounds tried and whether they helped.
 
@@ -72,7 +72,7 @@ otherwise:
 
 ## Environment
 
-- opencode version: <!-- value or Unavailable: reason -->
+- shuvcode version: <!-- value or Unavailable: reason -->
 - OS: <!-- value or Unavailable: reason -->
 - Terminal: <!-- value or Unavailable: reason -->
 - Shell: <!-- value or Unavailable: reason -->
@@ -112,13 +112,14 @@ Examples: `tui: skills dialog crashes outside location provider`,
 Use GitHub CLI from the repository checkout when available:
 
 ```sh
-gh issue create --title "<title>" --body-file <file>
+gh issue create --repo shuv1337/shuvcode --title "<title>" --body-file <file>
 ```
 
 Write the body to a temporary markdown file first so quoting, newlines, logs,
-and code fences are preserved. If the issue belongs in a specific repository,
-use `--repo owner/name`. If labels are obvious and the repo accepts them, add
-`--label bug`; otherwise omit labels rather than guessing.
+and code fences are preserved. Target `shuv1337/shuvcode` by default with
+`--repo shuv1337/shuvcode` unless the issue belongs in another repository
+explicitly named by the user. If labels are obvious and the repo accepts them,
+add `--label bug`; otherwise omit labels rather than guessing.
 
 After publishing, report the created issue URL to the user and mention any
 diagnostics that were unavailable.

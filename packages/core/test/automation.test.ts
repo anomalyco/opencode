@@ -1768,9 +1768,20 @@ describe("Automation", () => {
         expect(yield* bad('await tools.shell({ command: "pwd" })')).toMatchObject({
           reason: "Tool shell cannot be used inside an automation",
         })
-        expect(yield* bad("return await tools.opencode.automation_create({})")).toMatchObject({
-          reason: "Tool opencode.automation_create cannot be used inside an automation",
-        })
+        for (const name of [
+          "automation_create",
+          "automation_pause",
+          "automation_resume",
+          "automation_delete",
+          "session_move",
+          "session_rename",
+          "worktree_create",
+          "worktree_remove",
+        ]) {
+          expect(yield* bad(`return await tools.shuvcode.${name}({})`)).toMatchObject({
+            reason: `Tool shuvcode.${name} cannot be used inside an automation`,
+          })
+        }
         expect(
           yield* Effect.flip(
             automations.create({ sessionID, name: "fast", trigger: every("10 seconds"), action: code("return") }),

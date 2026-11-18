@@ -29,7 +29,7 @@ const names = [
   "automation_pause",
   "automation_resume",
   "automation_delete",
-].map((name) => `opencode.${name}`)
+].map((name) => `shuvcode.${name}`)
 
 const it = testEffect(AppNodeBuilder.build(Tool.node, toolNodeReplacements()))
 
@@ -124,7 +124,7 @@ const call = (registry: Tool.Interface, name: string, input: unknown, session = 
       type: "tool-call",
       id: `call-${name}`,
       name: "execute",
-      input: { code: `return await tools.opencode.${name}(${JSON.stringify(input)})` },
+      input: { code: `return await tools.shuvcode.${name}(${JSON.stringify(input)})` },
     },
   })
 const run = (registry: Tool.Interface, name: string, input: unknown, session = sessionID) =>
@@ -139,7 +139,7 @@ const direct = (registry: Tool.Interface, name: string, input: unknown) =>
       tools.execute({
         sessionID,
         ...toolIdentity,
-        call: { type: "tool-call", id: `call-direct-${name}`, name: `opencode_${name}`, input },
+        call: { type: "tool-call", id: `call-direct-${name}`, name: `shuvcode_${name}`, input },
       }),
     ),
     Effect.map((result) => result.content?.map((part) => (part.type === "text" ? part.text : "")).join("")),

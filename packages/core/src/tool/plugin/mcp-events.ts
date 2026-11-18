@@ -33,7 +33,7 @@ export const Plugin = {
       .transform((editor) => {
         editor.add({
           name: "watch_mcp_event",
-          options: { namespace: "opencode", codemode: true },
+          options: { namespace: "shuvcode", permission: "opencode_watch_mcp_event", codemode: true },
           description:
             "Experimental. Wake this session when an MCP server sends an event, such as a finished job or a new message, instead of polling. Omit event to list the event types connected servers offer and the arguments each takes.",
           input: Schema.Struct({

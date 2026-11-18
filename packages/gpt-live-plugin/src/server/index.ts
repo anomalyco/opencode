@@ -89,7 +89,7 @@ export default Plugin.define({
     await ctx.tool.transform((editor) => {
       editor.namespace({
         name: "gptlive",
-        description: "Control the user's main OpenCode session during a GPT-Live voice call",
+        description: "Control the user's main Shuvcode session during a GPT-Live voice call",
       })
       const tool = (definition: {
         name: string

@@ -11,7 +11,7 @@ export interface HistoryEntry {
 /** Recent conversation, quoted as data so the voice layer has continuity. */
 export function background(
   history: readonly HistoryEntry[],
-  label = "Recent OpenCode coding session history",
+  label = "Recent Shuvcode coding session history",
   tag = "session_history",
   maxBytes = BACKGROUND_MAX_BYTES,
 ): string {

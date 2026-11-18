@@ -43,10 +43,10 @@ const TOOL_LABELS: Record<string, string> = {
   todowrite: "updating its plan",
   skill: "loading a skill",
   patch: "editing code",
-  gptlive_main_send: "handing work to OpenCode",
-  gptlive_main_status: "checking on OpenCode",
+  gptlive_main_send: "handing work to Shuvcode",
+  gptlive_main_status: "checking on Shuvcode",
   gptlive_main_read: "reading the session",
-  gptlive_main_stop: "stopping OpenCode",
+  gptlive_main_stop: "stopping Shuvcode",
   gptlive_main_permissions: "checking permissions",
   gptlive_main_permission_reply: "answering a permission",
   gptlive_end_call: "ending the call",
@@ -257,7 +257,7 @@ export class Bridge {
         else if (data.sessionID === this.mainSessionID) this.onMainEvent(event.type, data)
       }
     } catch (error) {
-      if (!this.abort.signal.aborted) this.events.error(`Lost the OpenCode event stream: ${String(error)}`)
+      if (!this.abort.signal.aborted) this.events.error(`Lost the Shuvcode event stream: ${String(error)}`)
     }
   }
 

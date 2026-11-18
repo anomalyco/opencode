@@ -262,7 +262,7 @@ describe("child sessions inherit parent agent denies", () => {
           type: "tool-call",
           id: "call-move-out",
           name: "execute",
-          input: { code: `return await tools.opencode.session_move(${JSON.stringify({ directory: elsewhere.path })})` },
+          input: { code: `return await tools.shuvcode.session_move(${JSON.stringify({ directory: elsewhere.path })})` },
         },
       })
       expect(moved).toMatchObject({ metadata: { error: true } })

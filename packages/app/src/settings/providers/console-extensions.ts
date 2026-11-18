@@ -69,7 +69,7 @@ export function consoleSkillLink(
 
   const slug = /^skill:\/\/([^/]+)\//.exec(skill.path)?.[1]
 
-  if (!slug || ["opencode", "report", "browser"].includes(skill.id)) return
+  if (!slug || ["shuvcode", "opencode", "report", "browser"].includes(skill.id)) return
 
   if (!workspace) return CONSOLE_URL
 

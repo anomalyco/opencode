@@ -13,7 +13,7 @@ import { eventProducer } from "./fixture/event-server"
 import { advance, drain } from "./lib/clock"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
-import { registerToolPlugin, toolIdentity, toolNodeReplacements } from "./lib/tool"
+import { codeModeListings, registerToolPlugin, toolIdentity, toolNodeReplacements } from "./lib/tool"
 
 const it = testEffect(AppNodeBuilder.build(Tool.node, toolNodeReplacements()))
 const sessionID = Session.ID.make("ses_mcp_events")
@@ -86,7 +86,7 @@ const setup = Effect.fnUntraced(function* (input: { flag?: string } = {}) {
         tools.execute({
           sessionID: session,
           ...toolIdentity,
-          call: { type: "tool-call", id: "call_watch", name: "opencode_watch_mcp_event", input },
+          call: { type: "tool-call", id: "call_watch", name: "shuvcode_watch_mcp_event", input },
         }),
       ),
       Effect.orDie,
@@ -114,7 +114,22 @@ describe("watch_mcp_event", () => {
   it.live("is absent while the mcp_events flag is off", () =>
     Effect.gen(function* () {
       const { registry } = yield* setup({ flag: "-mcp_events" })
-      expect((yield* registry.list()).map((tool) => tool.id)).not.toContain("opencode_watch_mcp_event")
+      expect((yield* registry.list()).map((tool) => tool.id)).not.toContain("shuvcode_watch_mcp_event")
+    }),
+  )
+
+  it.live("hides shuvcode_watch_mcp_event when opencode_watch_mcp_event is denied", () =>
+    Effect.gen(function* () {
+      const { registry } = yield* setup()
+      const allowed = yield* registry.snapshot()
+      expect(
+        allowed.codeModeCatalog ? codeModeListings(allowed.codeModeCatalog).map((tool) => tool.path) : [],
+      ).toContain("shuvcode.watch_mcp_event")
+      const denied = yield* registry.snapshot([{ action: "opencode_watch_mcp_event", resource: "*", effect: "deny" }])
+      expect(denied.definitions.map((tool) => tool.name)).not.toContain("shuvcode_watch_mcp_event")
+      expect(
+        denied.codeModeCatalog ? codeModeListings(denied.codeModeCatalog).map((tool) => tool.path) : [],
+      ).not.toContain("shuvcode.watch_mcp_event")
     }),
   )
 

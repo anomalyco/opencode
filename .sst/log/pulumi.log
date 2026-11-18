@@ -1,0 +1,935 @@
+Created stack 'production'
+Updating (production):
+
+ +  pulumi:pulumi:Stack shuv-desktop-production creating (0s) 
+ +  pulumi:pulumi:Stack shuv-desktop-production creating (0s) (node:3473021) Warning: `--localstorage-file` was provided without a valid path
+ +  pulumi:pulumi:Stack shuv-desktop-production creating (0s) (Use `node --trace-warnings ...` to show where the warning was created)
+ +  pulumi:pulumi:Stack shuv-desktop-production creating (0s) (node:3473021) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ +  sst:cloudflare:StaticSite Desktop creating (0s) 
+ +  sst:sst:LinkRef DesktopLinkRef creating (0s) 
+ +  sst:cloudflare:Kv DesktopAssets creating (0s) 
+ +  command:local:Command DesktopBuilder creating (0s) 
+ +  cloudflare:index:WorkersKvNamespace DesktopAssetsNamespace creating (0s) 
+ +  command:local:Command DesktopBuilder creating (0s) turbo 2.5.6
+ +  command:local:Command DesktopBuilder creating (0s) 
+@ updating....
+ +  command:local:Command DesktopBuilder creating (0s) • Packages in scope: @opencode-ai/desktop
+ +  command:local:Command DesktopBuilder creating (0s) • Running build in 1 packages
+ +  command:local:Command DesktopBuilder creating (0s) • Remote caching disabled
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: cache hit, replaying logs 3c81fa701d48aca1
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: $ ./script/build.ts
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: $ bun run --conditions=browser ./src/index.ts generate
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: 
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: [36m888   |                           e      888~-_   888[39m
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: [36m888___|  e88~~8e  Y88b  /        d8b     888   \  888[39m
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: [36m888   | d888  88b  Y888/        /Y88b    888    | 888[39m
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: [36m888   | 8888__888   Y8/        /  Y88b   888   /  888[39m
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: [36m888   | Y888    ,    Y        /____Y88b  888_-~   888[39m
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: [36m888   |  "88___/    /        /      Y88b 888      888[39m
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: [36m                  _/[39m
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: 
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: [90m@hey-api/openapi-ts v0.88.1[39m
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: 
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: [90m[Job 1] [39m⏳ [36mGenerating from 1 input:[39m
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: [90m[Job 1] [39m[36m  [1] [39m./openapi.json
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: [90m[Job 1] [39m[32m✅ Done![39m Your output is in [96m/home/shuv/repos/forks/shuvcode/packages/sdk/js/src/v2/gen[39m
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/gen/client.gen.ts 19ms (unchanged)
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/gen/client/client.gen.ts 17ms (unchanged)
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/gen/client/index.ts 1ms (unchanged)
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/gen/client/types.gen.ts 7ms (unchanged)
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/gen/client/utils.gen.ts 19ms (unchanged)
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/gen/core/auth.gen.ts 2ms (unchanged)
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/gen/core/bodySerializer.gen.ts 4ms (unchanged)
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/gen/core/params.gen.ts 5ms (unchanged)
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/gen/core/pathSerializer.gen.ts 6ms (unchanged)
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/gen/core/queryKeySerializer.gen.ts 3ms (unchanged)
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/gen/core/serverSentEvents.gen.ts 8ms (unchanged)
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/gen/core/types.gen.ts 3ms (unchanged)
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/gen/core/utils.gen.ts 3ms (unchanged)
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/gen/sdk.gen.ts 28ms (unchanged)
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/gen/types.gen.ts 44ms (unchanged)
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/v2/client.ts 20ms (unchanged)
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/v2/gen/client.gen.ts 3ms
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/v2/gen/client/client.gen.ts 16ms
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/v2/gen/client/index.ts 1ms
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/v2/gen/client/types.gen.ts 6ms
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/v2/gen/client/utils.gen.ts 16ms
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/v2/gen/core/auth.gen.ts 2ms
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/v2/gen/core/bodySerializer.gen.ts 4ms
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/v2/gen/core/params.gen.ts 5ms
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/v2/gen/core/pathSerializer.gen.ts 7ms
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/v2/gen/core/queryKeySerializer.gen.ts 3ms
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/v2/gen/core/serverSentEvents.gen.ts 8ms
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/v2/gen/core/types.gen.ts 3ms
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/v2/gen/core/utils.gen.ts 4ms
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/v2/gen/sdk.gen.ts 47ms
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/v2/gen/types.gen.ts 40ms
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/v2/index.ts 1ms (unchanged)
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/sdk:build: src/v2/server.ts 3ms (unchanged)
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/ui:build: cache hit, replaying logs 9aec9e0113c468a6
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/ui:build: $ vite build
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/ui:build: vite v7.1.4 building for production...
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/ui:build: transforming...
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/ui:build: ✓ 308 modules transformed.
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/ui:build: rendering chunks...
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/ui:build: computing gzip size...
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/ui:build: dist/index.html                     0.52 kB │ gzip:  0.32 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/ui:build: dist/assets/tx-02-DbvgyCYI.woff2   51.66 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/ui:build: dist/assets/geist-DqDwVqnb.woff2   64.05 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/ui:build: dist/assets/index-6-zZCznh.css    117.63 kB │ gzip: 17.70 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/ui:build: dist/assets/index-BW13ZE5n.js     258.76 kB │ gzip: 76.11 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/ui:build: ✓ built in 1.16s
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: cache hit, replaying logs d616a300a8c61ca3
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: $ vite build
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: vite v7.1.4 building for production...
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: transforming...
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: ✓ 1257 modules transformed.
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: rendering chunks...
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: computing gzip size...
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/codeowners-CtwIM3TN.js                      0.55 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/shellsession-DSlzxnCM.js                    0.72 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/tsv-BFtm7NXx.js                             0.74 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/html-derivative-DfCZ6Hio.js                 0.90 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/git-rebase-DeZqv4fp.js                      0.99 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/qmldir-DXd9s5XC.js                          1.01 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/fortran-fixed-form-DefEccfK.js              1.11 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/csv-D5aBhKLr.js                             1.15 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/git-commit-CJPsQObV.js                      1.23 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/xsl-C6UUWSil.js                             1.39 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/dotenv-Bea-FkXq.js                          1.43 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/sparql-BJh4JEw-.js                          1.48 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/ini-Dix3pTmg.js                             1.53 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/docker-DG9neUKd.js                          1.75 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/hxml-CkS3Eie7.js                            1.75 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/desktop-DZfyBMgF.js                         1.84 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/index.html                                         1.84 kB │ gzip:   0.78 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/wenyan-CYFFG9DK.js                          2.16 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/jssm-CWE2S0Z5.js                            2.24 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/reg-Cvyu2Gnx.js                             2.35 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/berry-DhTecnR4.js                           2.37 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/edge-zt3dU95k.js                            2.37 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/diff-jW5kmiru.js                            2.57 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/gleam-BeBqoPwE.js                           2.58 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/erb-CSnAT5Sy.js                             2.61 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/hy-DI6mCUnw.js                              2.65 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/json-B8JryHcM.js                            2.83 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/log-CcaF_xNv.js                             2.86 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/cairo-BYiDgOF2.js                           2.94 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/jsonl-9I_GBd5L.js                           3.02 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/jsonc-CvUCa1o5.js                           3.11 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/logo-D9WQLoKQ.js                            3.13 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/po-LG0lFwH4.js                              3.24 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/json5-Cdatmj9n.js                           3.26 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/mipsasm-yE_Aqo9y.js                         3.26 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/tasl-B9CVvjfG.js                            3.29 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/genie-DSsjfZMX.js                           3.36 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/rel-BlqNHz8k.js                             3.37 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/vala-z59IxkFd.js                            3.37 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/splunk-h-bNAnbk.js                          3.44 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/fluent-Bwo2XpEt.js                          3.61 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/ssh-config-CywOjoXH.js                      3.62 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/jsonnet-XoenQ2oc.js                         3.62 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/kdl-CMbyIXjQ.js                             3.63 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/glsl-BOG9l2nV.js                            3.64 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/hurl-CxQrh4RI.js                            3.66 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/narrat-DXUZ_ZkW.js                          3.68 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/turtle-DpRhbQZY.js                          3.70 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/zenscript-BIAKq-aR.js                       3.92 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/pascal-Sr-XLSE6.js                          4.15 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/nextflow-pQFAKpIi.js                        4.16 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/tcl-Bq9dbVAF.js                             4.43 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/rosmsg-ZkSIzPhc.js                          4.53 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/http-CG3jvXcS.js                            4.55 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/polar-DjOs3GWb.js                           4.68 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/sdbl-CvZs3G9c.js                            4.71 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/fennel-DBMsxtrh.js                          4.77 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/bibtex-DRcCXNgM.js                          4.80 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/llvm-CiYQeg8E.js                            5.04 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/wgsl-CxjTZs-b.js                            5.15 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/gdresource-DjwtOnGx.js                      5.26 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/qml-DmGQGbca.js                             5.34 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/zig-bSFrHQ7n.js                             5.34 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/dax-oldcCaJg.js                             5.37 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/bicep-jWz-hQ8I.js                           5.39 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/xml-BkAJuBCc.js                             5.39 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/awk-CrWgQKhV.js                             5.47 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/coq-BBL5-mG4.js                             5.53 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/jinja-D0mZ3q2r.js                           5.70 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/lean-DMRjqe9u.js                            5.86 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/powerquery-DHf-dtTS.js                      5.91 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/shaderlab-CEJedz68.js                       5.93 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/verilog-LfQUkHDc.js                         5.94 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/cypher-DYQk2G82.js                          5.96 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/vb-4AxSLKIU.js                              6.10 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/red-DR6ZwibK.js                             6.26 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/min-dark-DhfaepVE.js                        6.29 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/gdshader-G7X6ysY3.js                        6.33 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/prisma-Dgf8IN_C.js                          6.33 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/ara-C1--7J61.js                             6.37 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/clojure-KnfDkB_V.js                         6.42 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/postcss-GRRkWn2F.js                         6.42 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/toml-Ms459DBw.js                            6.43 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/solarized-light-DeSzljQz.js                 6.48 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/proto-DryqT1TG.js                           6.53 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/smalltalk-B9IHbYt7.js                       6.59 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/talonscript-eRuyeYHl.js                     6.76 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/solarized-dark-G9yBjKj_.js                  6.84 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/riscv-C5dpdlr7.js                           6.92 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/min-light-6xx0uMgm.js                       6.97 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/soy-BSb8SaP0.js                             6.99 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/scheme-OJppFQF3.js                          7.17 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/hlsl-MKeth5V9.js                            7.27 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/qss-B7NnhfIi.js                             7.48 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/dart-YLd5yyRs.js                            7.82 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/systemd-DKMPPZjB.js                         7.87 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/monokai-BodnsaDQ.js                         7.88 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/regexp-DK-WlHNu.js                          7.99 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/haml-2e0EI6Is.js                            8.27 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/typst-Dfd71gQj.js                           8.39 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/plsql-Dbm3tV2N.js                           8.52 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/vue-html-BFzWhG9R.js                        8.67 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/kotlin-BQy537ds.js                          8.79 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/make-DXVx14cr.js                            8.97 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/andromeeda-BK6gTiwT.js                      8.97 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/ts-tags-C-gylFal.js                         9.00 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/sas-DtSHuIwI.js                             9.07 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/dark-plus-BKPH5PAJ.js                       9.10 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/slack-dark-CWRQmTmo.js                      9.12 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/sass-bfEVHPJ8.js                            9.29 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/plastic-CXnNNlFZ.js                         9.29 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/slack-ochin-DO_ok7XK.js                     9.43 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/tex-BeZWyV5q.js                             9.66 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/jison-B9XHrcYJ.js                           9.69 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/cmake-bh2MLnkv.js                           9.86 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/light-plus-g_Fi9vkG.js                      9.94 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/hcl-B6OePqme.js                            10.06 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/pkl-CRusufhw.js                            10.38 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/beancount-dPJi_gci.js                      10.38 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/dream-maker-DAHQwpwp.js                    10.47 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/raku-BMJwmrCS.js                           10.48 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/yaml-Bopit2L3.js                           10.51 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/rst-D6jr3ue4.js                            10.68 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/elm-BjIDgKzz.js                            10.97 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/github-light-Rcb2q3L5.js                   11.18 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/prolog-9JcfiY6I.js                         11.36 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/terraform-CAp711iT.js                      11.39 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/github-dark-BQV5ugrc.js                    11.40 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/puppet-Di57VbSS.js                         11.44 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/laserwave-si7wuSrt.js                      11.50 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/gherkin-Cl2Fw-_0.js                        11.95 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/wasm-CFi-k9--.js                           12.01 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/hjson-D2jn7IRw.js                          12.06 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/handlebars-CojHdNmS.js                     12.15 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/apache-PcO-DBxQ.js                         12.46 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/vesper--t9w6MWz.js                         12.69 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/bat-B0cHNp6s.js                            12.89 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/fish-BxskpYPN.js                           13.04 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/v-BH76v7br.js                              13.22 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/vitesse-light-gUX51GpB.js                  13.61 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/aurora-x-C0VKFdlO.js                       13.66 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/vitesse-black-B_BYPdvp.js                  13.68 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/vitesse-dark-DOSOf2Sz.js                   13.76 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/luau-BYt3hdDQ.js                           13.85 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/pug-CoOVtr4u.js                            13.85 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/synthwave-84-DRVv-_m_.js                   14.03 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/actionscript-3-BBttMYlr.js                 14.05 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/github-light-default-CQ75esMw.js           14.15 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/github-light-high-contrast-CRF1wyLy.js     14.27 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/clarity-CC_0IFDj.js                        14.28 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/github-dark-dimmed-D1FmiR_p.js             14.43 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/github-dark-default-DLWDM7FH.js            14.43 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/nix-gVK4wDAp.js                            14.57 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/github-dark-high-contrast-BilLoi0o.js      14.59 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/gnuplot-CtW3R_Hz.js                        14.79 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/ayu-dark-_V__kATy.js                       14.95 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/rust-CxuBE0J8.js                           15.07 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/kusto-BY2OSndo.js                          15.17 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/lua-Dvrn0jdw.js                            15.21 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/abap-Dg923wIy.js                           15.86 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/matlab-DzreyMvm.js                         16.09 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/cue-WCin6O4e.js                            16.21 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/solidity-C_qHDKVe.js                       16.24 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/elixir-JolcG37e.js                         16.33 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/kanagawa-wave-0SAlpf0s.js                  17.12 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/kanagawa-lotus-Bwcd7Bvx.js                 17.12 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/kanagawa-dragon-BOvIHJVT.js                17.13 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/move-BvvU7WAr.js                           17.34 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/svelte-C5uCw0k5.js                         17.82 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/graphql-B6XHM4uj.js                        18.01 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/liquid-DFlqVvG0.js                         18.09 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/material-theme-CIJ3cGaW.js                 18.61 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/material-theme-darker-BWg3m1GB.js          18.63 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/material-theme-ocean-CZf9pk28.js           18.63 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/material-theme-lighter-DR8HWMN7.js         18.63 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/material-theme-palenight-BF01YeZy.js       18.63 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/gdscript-AcTSlgpe.js                       18.98 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/groovy-DFxE31Qs.js                         19.18 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/mdc-DzF5mxMU.js                            19.64 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/glimmer-js-BuyKUjfV.js                     20.08 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/glimmer-ts-D9iniPFN.js                     20.08 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/powershell-DXrKVo3G.js                     20.16 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/viml-pbKHW3Ia.js                           20.37 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/nushell-D8DvOySi.js                        20.40 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/snazzy-light-B5llO_gK.js                   20.77 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/dracula-XcYHBZy6.js                        21.06 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/dracula-soft-BPeX9gxW.js                   21.07 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/vue-Bc01QeM_.js                            21.11 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/twig-D2pB6dL5.js                           21.37 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/wit-DDW3hD69.js                            21.47 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/rose-pine-CNAPp7Ve.js                      21.74 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/rose-pine-moon-CMguR-hF.js                 21.75 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/rose-pine-dawn-C5qXXfGP.js                 21.75 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/nim-e2z2kCcq.js                            22.46 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/common-lisp-DXc9XcIM.js                    22.59 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/gruvbox-dark-hard-C37G1gbc.js              22.63 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/gruvbox-dark-soft-eZmcmZ9I.js              22.63 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/gruvbox-light-hard-BYj-vz_3.js             22.63 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/gruvbox-light-soft-BGNwjiRh.js             22.63 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/gruvbox-dark-medium-C3G9m3TV.js            22.64 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/gruvbox-light-medium-BdQlDiiF.js           22.64 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/sql-BbONfI8K.js                            23.41 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/typespec-Cx4NNI1F.js                       23.66 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/cadence-BuaeHeSu.js                        23.67 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/astro-DtPAdMss.js                          24.01 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/apl-DkfyvC6M.js                            24.04 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/templ-ClX7vur3.js                          24.07 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/vhdl-DJCsFYgn.js                           24.27 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/angular-html-D2R1pe45.js                   24.27 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/purescript-BgpM7rDH.js                     24.69 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/one-light-s-s--efq.js                      25.30 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/fsharp-DRAF1jsN.js                         25.31 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/marko-yOVtz6tt.js                          25.44 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/razor-m2P204Z8.js                          25.57 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/system-verilog-Qdm_1g2q.js                 26.21 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/nord-BAu0wM6c.js                           26.72 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/codeql-D164juXQ.js                         26.89 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/scss-DxBkwadj.js                           27.21 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/java-BTDmaRNO.js                           27.22 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/coffee-Bk-z6oI_.js                         27.43 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/pierre-dark-Bl6-D6U7-BXuwtOqb.js           27.89 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/pierre-light-DGEssevQ-dckrK0oj.js          27.90 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/mermaid-7cTodO_4.js                        28.51 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/scala-Dtw19ca_.js                          28.89 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/night-owl-EdP2Hztp.js                      28.91 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/crystal-Bhade0k2.js                        29.39 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/applescript-Ds_W2jPS.js                    29.58 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/julia-COuliEQP.js                          31.07 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/stylus-CIg617SB.js                         31.08 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/poimandres-BrOVMvuE.js                     33.49 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/one-dark-pro-utPxbBbJ.js                   33.79 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/bsl-jNujDQK2.js                            33.87 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/haxe-DVIybFAS.js                           35.17 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/nginx-CODydFub.js                          35.38 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/houston-RHIKkNfR.js                        35.42 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/tokyo-night-BvwC8l2v.js                    35.66 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/erlang-DNeY46SW.js                         37.48 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/cobol-dIXRVV9Y.js                          39.15 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/asm-CTFRnVOM.js                            40.72 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/shellscript-DgJyDXW6.js                    41.48 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/haskell-BfdhR_WN.js                        41.49 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/perl-C95KruZl.js                           43.16 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/d-DVc-yF-l.js                              43.80 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/apex-ByCQ6lpJ.js                           45.90 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/ruby-yDC9Yh9v.js                           45.92 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/go-CPYJReqS.js                             46.78 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/catppuccin-mocha-D9fcC0iT.js               47.25 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/catppuccin-latte-DoBaWTGn.js               47.25 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/catppuccin-frappe-CfssSZMA.js              47.26 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/catppuccin-macchiato-BkAuvdZC.js           47.26 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/ada-CTi7YQtL.js                            48.09 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/css-PZBBrkI0.js                            49.03 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/imba-D-Pk5S0X.js                           49.93 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/tx-02-DbvgyCYI.woff2                       51.66 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/everforest-dark-WOub3wle.js                53.74 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/everforest-light-DCUg8VH8.js               53.75 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/r-B3H3vY3E.js                              55.81 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/wikitext-Bx2qct8O.js                       55.89 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/stata-BKjsT8qe.js                          57.00 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/html-DOf0XnR2.js                           57.25 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/ballerina-a0yOSyc5.js                      58.70 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/markdown-DX-TNHnc.js                       59.34 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/ocaml-DTbn2Hv7.js                          62.45 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/geist-DqDwVqnb.woff2                       64.05 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/mojo-BzW6XcPi.js                           69.29 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/python-B6Ihcp-E.js                         69.96 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/c-BG-tZi7o.js                              72.12 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/latex-D9jBFZvK.js                          72.20 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/vyper-DpazWNpx.js                          74.65 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/hack-Cxa-FaZ4.js                           80.25 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/csharp-QSx153ZP.js                         85.62 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/swift-CFmWZ0jm.js                          86.61 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/fortran-free-form-CxgVQ5YQ.js              87.15 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/racket-CeDx7KO2.js                         92.39 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/less-XNfgnZC7.js                           97.64 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/blade-B_vSu4X3.js                         103.81 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/objective-c-BoaBTdtz.js                   105.42 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/php-DNKSuR81.js                           111.00 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/asciidoc-B28HrxZ9.js                      131.52 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/mdx-C2fqO2XY.js                           136.12 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/objective-cpp-DstR8hNy.js                 171.98 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/javascript-WyGyM1wV.js                    174.83 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/tsx-D6116Ycy.js                           175.54 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/jsx-8cLv2Six.js                           177.80 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/typescript-BqvgUolh.js                    181.08 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/angular-ts-BDmYQnhm.js                    183.84 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/vue-vine-CwoMXd8F.js                      190.22 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/worker-CIuGIwXK.js                        215.64 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/wolfram-pu21K997.js                       262.40 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/cpp-C0lzDePx.js                           626.10 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/emacs-lisp-DMBh55R4.js                    779.86 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/sprite-Fb-TFjRY.svg                       943.96 kB │ gzip: 243.53 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/index-BBDL9LD9.css                        149.93 kB │ gzip:  22.23 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/codeowners-Bp6g37R7.js                      0.55 kB │ gzip:   0.32 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/codeowners-CKT8dJip.js                      0.55 kB │ gzip:   0.32 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/shellsession-BADoaaVG.js                    0.71 kB │ gzip:   0.43 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/shellsession-BhddCRKA.js                    0.71 kB │ gzip:   0.43 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/tsv-B_m7g4N7.js                             0.74 kB │ gzip:   0.34 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/tsv-DYfmKMIW.js                             0.74 kB │ gzip:   0.34 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/html-derivative-ZQ8onl8Z.js                 0.90 kB │ gzip:   0.50 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/html-derivative-BFtXZ54Q.js                 0.90 kB │ gzip:   0.50 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/git-rebase-r7XF79zn.js                      0.98 kB │ gzip:   0.44 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/git-rebase-Bzlpfr7M.js                      0.98 kB │ gzip:   0.44 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/qmldir-C8lEn-DE.js                          1.00 kB │ gzip:   0.45 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/qmldir-DNYHzgow.js                          1.00 kB │ gzip:   0.45 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/fortran-fixed-form-BZjJHVRy.js              1.10 kB │ gzip:   0.54 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/fortran-fixed-form-VBUom2Po.js              1.10 kB │ gzip:   0.54 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/csv-fuZLfV_i.js                             1.14 kB │ gzip:   0.37 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/csv-AZNL9t8Q.js                             1.14 kB │ gzip:   0.37 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/git-commit-F4YmCXRG.js                      1.23 kB │ gzip:   0.53 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/git-commit-BicZTByO.js                      1.23 kB │ gzip:   0.53 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/xsl-CtQFsRM5.js                             1.39 kB │ gzip:   0.52 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/xsl-Btrj9DhN.js                             1.39 kB │ gzip:   0.52 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/dotenv-Da5cRb03.js                          1.42 kB │ gzip:   0.53 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/dotenv-Bf0GLMGc.js                          1.42 kB │ gzip:   0.53 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/sparql-rVzFXLq3.js                          1.48 kB │ gzip:   0.82 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/sparql-CHK3vDkL.js                          1.48 kB │ gzip:   0.82 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/ini-BEwlwnbL.js                             1.53 kB │ gzip:   0.50 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/ini-DOGW4-0C.js                             1.53 kB │ gzip:   0.50 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/docker-BcOcwvcX.js                          1.74 kB │ gzip:   0.60 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/docker-DIG_IqVK.js                          1.74 kB │ gzip:   0.60 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/hxml-Bvhsp5Yf.js                            1.74 kB │ gzip:   0.88 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/hxml-B_SuSTPP.js                            1.74 kB │ gzip:   0.88 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/desktop-BmXAJ9_W.js                         1.83 kB │ gzip:   0.76 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/desktop-Z9LhWKWr.js                         1.83 kB │ gzip:   0.76 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/wenyan-BV7otONQ.js                          2.16 kB │ gzip:   1.09 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/wenyan-8fXatRyt.js                          2.16 kB │ gzip:   1.09 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/jssm-C2t-YnRu.js                            2.24 kB │ gzip:   0.62 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/jssm-BlhucWo7.js                            2.24 kB │ gzip:   0.62 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/reg-C-SQnVFl.js                             2.35 kB │ gzip:   0.70 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/reg-DkqHJyC0.js                             2.35 kB │ gzip:   0.70 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/berry-D08WgyRC.js                           2.36 kB │ gzip:   0.76 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/edge-CKszZCnI.js                            2.36 kB │ gzip:   0.70 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/berry-Bl4jbVdQ.js                           2.36 kB │ gzip:   0.76 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/edge-BkV0erSs.js                            2.36 kB │ gzip:   0.70 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/diff-D97Zzqfu.js                            2.57 kB │ gzip:   0.70 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/diff-BlzBhZx2.js                            2.57 kB │ gzip:   0.70 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/gleam-BspZqrRM.js                           2.58 kB │ gzip:   0.82 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/gleam-B-IqXlZK.js                           2.58 kB │ gzip:   0.82 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/erb-C7QrGF_t.js                             2.61 kB │ gzip:   0.84 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/erb-BOJIQeun.js                             2.61 kB │ gzip:   0.85 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/hy-DFXneXwc.js                              2.65 kB │ gzip:   1.18 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/hy-CTpXmg0M.js                              2.65 kB │ gzip:   1.18 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/json-Cp-IABpG.js                            2.82 kB │ gzip:   0.78 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/json-CjLXzM_z.js                            2.82 kB │ gzip:   0.78 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/log-2UxHyX5q.js                             2.85 kB │ gzip:   0.90 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/log-CbW7hOWU.js                             2.85 kB │ gzip:   0.90 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/cairo-KRGpt6FW.js                           2.94 kB │ gzip:   0.81 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/cairo-C_mOTUpN.js                           2.94 kB │ gzip:   0.81 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/jsonl-DcaNXYhu.js                           3.01 kB │ gzip:   0.79 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/jsonl-CuhIcKDk.js                           3.01 kB │ gzip:   0.79 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/jsonc-Des-eS-w.js                           3.11 kB │ gzip:   0.80 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/jsonc-BYi4HS05.js                           3.11 kB │ gzip:   0.80 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/logo-BtOb2qkB.js                            3.13 kB │ gzip:   1.47 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/logo-BbooMuDm.js                            3.13 kB │ gzip:   1.47 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/po-BTJTHyun.js                              3.24 kB │ gzip:   0.91 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/po-CUhVi7la.js                              3.24 kB │ gzip:   0.91 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/json5-C9tS-k6U.js                           3.25 kB │ gzip:   0.83 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/json5-DE06a0U2.js                           3.25 kB │ gzip:   0.83 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/mipsasm-CKIfxQSi.js                         3.26 kB │ gzip:   1.18 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/mipsasm-BElnB_7Q.js                         3.26 kB │ gzip:   1.18 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/tasl-QIJgUcNo.js                            3.29 kB │ gzip:   0.85 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/tasl-Bl4tsGRM.js                            3.29 kB │ gzip:   0.85 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/genie-D0YGMca9.js                           3.36 kB │ gzip:   1.21 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/genie-CTXGoN_z.js                           3.36 kB │ gzip:   1.21 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/rel-C3B-1QV4.js                             3.37 kB │ gzip:   1.11 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/rel-BIqKdwke.js                             3.37 kB │ gzip:   1.11 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/vala-CsfeWuGM.js                            3.37 kB │ gzip:   1.19 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/vala-B_5xOBNr.js                            3.37 kB │ gzip:   1.19 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/splunk-BtCnVYZw.js                          3.44 kB │ gzip:   1.52 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/splunk-YU1HCmJX.js                          3.44 kB │ gzip:   1.52 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/fluent-C4IJs8-o.js                          3.61 kB │ gzip:   0.90 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/fluent-C1VbA1FI.js                          3.61 kB │ gzip:   0.90 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/ssh-config-_ykCGR6B.js                      3.62 kB │ gzip:   1.60 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/ssh-config-Cpnw3KEt.js                      3.62 kB │ gzip:   1.60 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/jsonnet-DFQXde-d.js                         3.62 kB │ gzip:   1.05 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/jsonnet-DtQdHwK-.js                         3.62 kB │ gzip:   1.05 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/kdl-DV7GczEv.js                             3.63 kB │ gzip:   1.04 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/glsl-DplSGwfg.js                            3.63 kB │ gzip:   1.41 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/glsl-Bk7TyU8J.js                            3.63 kB │ gzip:   1.41 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/hurl-irOxFIW8.js                            3.65 kB │ gzip:   1.16 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/narrat-DRg8JJMk.js                          3.67 kB │ gzip:   1.11 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/narrat-Cy2k80UN.js                          3.67 kB │ gzip:   1.11 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/turtle-BsS91CYL.js                          3.70 kB │ gzip:   0.98 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/turtle-whXsfw69.js                          3.70 kB │ gzip:   0.98 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/zenscript-DVFEvuxE.js                       3.91 kB │ gzip:   1.28 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/zenscript-Dja4fBOE.js                       3.91 kB │ gzip:   1.28 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/nextflow-Bk5OV074.js                        3.94 kB │ gzip:   1.08 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/lean-qliWkHmV.js                            4.07 kB │ gzip:   1.29 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/pascal-D93ZcfNL.js                          4.15 kB │ gzip:   1.67 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/pascal-DYjw0AuS.js                          4.15 kB │ gzip:   1.67 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/nextflow-CUEJCptM.js                        4.16 kB │ gzip:   1.10 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/fish-Bl2oy6fF.js                            4.18 kB │ gzip:   1.32 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/bicep-6nHXG8SA.js                           4.31 kB │ gzip:   1.08 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/tcl-dwOrl1Do.js                             4.43 kB │ gzip:   1.52 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/tcl-B2_VAYrd.js                             4.43 kB │ gzip:   1.52 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/rosmsg-BJDFO7_C.js                          4.52 kB │ gzip:   1.06 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/http-C38VWM-o.js                            4.55 kB │ gzip:   1.12 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/http-jrhK8wxY.js                            4.55 kB │ gzip:   1.12 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/polar-C0HS_06l.js                           4.67 kB │ gzip:   1.12 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/polar-B-qJ3AIy.js                           4.67 kB │ gzip:   1.12 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/sdbl-DVxCFoDh.js                            4.70 kB │ gzip:   2.01 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/sdbl-C5Q1usnU.js                            4.70 kB │ gzip:   2.01 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/fennel-BYunw83y.js                          4.77 kB │ gzip:   1.53 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/fennel-CKW7gc4E.js                          4.77 kB │ gzip:   1.53 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/bibtex-CHM0blh-.js                          4.80 kB │ gzip:   0.83 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/bibtex-DELXwv0g.js                          4.80 kB │ gzip:   0.83 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/llvm-D32k8WzR.js                            5.02 kB │ gzip:   2.00 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/llvm-BtvRca6l.js                            5.04 kB │ gzip:   2.01 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/wgsl-Dx-B1_4e.js                            5.14 kB │ gzip:   1.39 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/wgsl-CECC3vJ5.js                            5.14 kB │ gzip:   1.39 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/gdresource-CUnzuGD_.js                      5.26 kB │ gzip:   1.32 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/gdresource-B7Tvp0Sc.js                      5.26 kB │ gzip:   1.33 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/qml-CHzV51_b.js                             5.34 kB │ gzip:   1.38 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/qml-3beO22l8.js                             5.34 kB │ gzip:   1.38 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/zig-VOosw3JB.js                             5.34 kB │ gzip:   1.55 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/zig-LhWa2ADv.js                             5.34 kB │ gzip:   1.55 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/dax-CEL-wOlO.js                             5.37 kB │ gzip:   2.23 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/dax-B28Cho4e.js                             5.37 kB │ gzip:   2.23 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/bicep-Bmn6On1c.js                           5.38 kB │ gzip:   1.15 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/xml-sdJ4AIDG.js                             5.38 kB │ gzip:   1.21 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/xml-DtyAt_xK.js                             5.38 kB │ gzip:   1.21 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/awk-DMzUqQB5.js                             5.46 kB │ gzip:   1.38 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/awk-UmR4Ublb.js                             5.46 kB │ gzip:   1.38 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/coq-DkFqJrB1.js                             5.53 kB │ gzip:   1.92 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/coq-CxCehFeR.js                             5.53 kB │ gzip:   1.92 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/jinja-BJmZiE_F.js                           5.69 kB │ gzip:   1.40 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/jinja-4LBKfQ-Z.js                           5.69 kB │ gzip:   1.40 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/lean-DP1Csr6i.js                            5.85 kB │ gzip:   1.94 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/powerquery-CEu0bR-o.js                      5.90 kB │ gzip:   1.52 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/powerquery-CC1XieQO.js                      5.90 kB │ gzip:   1.52 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/shaderlab-Dg9Lc6iA.js                       5.92 kB │ gzip:   2.08 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/shaderlab-DNkMdb2B.js                       5.92 kB │ gzip:   2.08 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/verilog-BQ8w6xss.js                         5.93 kB │ gzip:   1.89 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/verilog-D5iownw6.js                         5.93 kB │ gzip:   1.89 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/cypher-COkxafJQ.js                          5.96 kB │ gzip:   1.73 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/cypher-BM7Pwunj.js                          5.96 kB │ gzip:   1.73 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/vb-D17OF-Vu.js                              6.09 kB │ gzip:   2.34 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/vb-BVDm3zBt.js                              6.09 kB │ gzip:   2.34 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/red-bN70gL4F.js                             6.26 kB │ gzip:   1.60 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/min-dark-CafNBF8u.js                        6.29 kB │ gzip:   1.71 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/gdshader-DkwncUOv.js                        6.33 kB │ gzip:   1.73 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/gdshader-MbeiIFWW.js                        6.33 kB │ gzip:   1.73 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/prisma-Dd19v3D-.js                          6.33 kB │ gzip:   1.39 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/prisma-C0hJlfqX.js                          6.33 kB │ gzip:   1.39 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/ara-BRHolxvo.js                             6.36 kB │ gzip:   1.81 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/ara-D6vCOKVX.js                             6.36 kB │ gzip:   1.81 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/clojure-P80f7IUj.js                         6.41 kB │ gzip:   1.42 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/clojure-Bb2-3A0I.js                         6.41 kB │ gzip:   1.42 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/postcss-CXtECtnM.js                         6.42 kB │ gzip:   1.91 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/postcss-BSGhOJ4k.js                         6.42 kB │ gzip:   1.91 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/toml-vGWfd6FD.js                            6.43 kB │ gzip:   1.28 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/toml-Btlk-g9G.js                            6.43 kB │ gzip:   1.28 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/solarized-light-L9t79GZl.js                 6.48 kB │ gzip:   1.73 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/proto-DyJlTyXw.js                           6.52 kB │ gzip:   1.41 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/proto-DIGPV07t.js                           6.52 kB │ gzip:   1.41 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/smalltalk-BERRCDM3.js                       6.59 kB │ gzip:   1.62 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/smalltalk-GKfhTxrk.js                       6.59 kB │ gzip:   1.62 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/talonscript-CkByrt1z.js                     6.76 kB │ gzip:   1.49 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/talonscript-bksoRmW6.js                     6.76 kB │ gzip:   1.49 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/solarized-dark-DXbdFlpD.js                  6.85 kB │ gzip:   1.80 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/riscv-BM1_JUlF.js                           6.91 kB │ gzip:   1.98 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/riscv-s6spwTFp.js                           6.91 kB │ gzip:   1.98 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/min-light-CTRr51gU.js                       6.97 kB │ gzip:   1.89 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/soy-B_7ge1HE.js                             6.98 kB │ gzip:   1.66 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/soy-Brmx7dQM.js                             6.98 kB │ gzip:   1.66 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/scheme-C98Dy4si.js                          7.17 kB │ gzip:   2.05 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/scheme-ByM66cy_.js                          7.17 kB │ gzip:   2.05 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/hlsl-D3lLCCz7.js                            7.26 kB │ gzip:   2.19 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/hlsl-Pefxhtaj.js                            7.26 kB │ gzip:   2.19 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/qss-IeuSbFQv.js                             7.47 kB │ gzip:   2.58 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/qss-BZsEMKxJ.js                             7.47 kB │ gzip:   2.58 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/dart-CF10PKvl.js                            7.81 kB │ gzip:   1.91 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/dart-DArdxSyj.js                            7.81 kB │ gzip:   1.91 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/systemd-4A_iFExJ.js                         7.87 kB │ gzip:   2.55 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/systemd-C1FfcI00.js                         7.87 kB │ gzip:   2.55 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/monokai-D4h5O-jR.js                         7.88 kB │ gzip:   1.91 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/regexp-CDVJQ6XC.js                          7.99 kB │ gzip:   1.42 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/regexp-BW_zLBm-.js                          7.99 kB │ gzip:   1.42 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/haml-AZXGPtNI.js                            8.26 kB │ gzip:   1.81 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/haml-B8DHNrY2.js                            8.26 kB │ gzip:   1.81 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/typst-DHCkPAjA.js                           8.39 kB │ gzip:   1.67 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/typst-D2RORpaG.js                           8.39 kB │ gzip:   1.67 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/plsql-ChMvpjG-.js                           8.51 kB │ gzip:   3.00 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/plsql-Bd6NdBJI.js                           8.51 kB │ gzip:   3.00 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/vue-html-BsD9fJC1.js                        8.67 kB │ gzip:   1.77 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/vue-html-DAAvJJDi.js                        8.67 kB │ gzip:   1.78 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/kotlin-BdnUsdx6.js                          8.79 kB │ gzip:   2.13 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/kotlin-DwKqsDKK.js                          8.79 kB │ gzip:   2.13 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/ts-tags-B9XN6NYQ.js                         8.95 kB │ gzip:   1.22 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/ts-tags-zn1MmPIZ.js                         8.95 kB │ gzip:   1.23 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/make-CHLpvVh8.js                            8.96 kB │ gzip:   1.77 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/make-s9FKP0VE.js                            8.96 kB │ gzip:   1.77 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/andromeeda-C-Jbm3Hp.js                      8.98 kB │ gzip:   2.35 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/sas-cz2c8ADy.js                             9.06 kB │ gzip:   3.81 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/sas-BZeeyq_z.js                             9.06 kB │ gzip:   3.81 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/dark-plus-eOWES_5F.js                       9.10 kB │ gzip:   2.10 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/slack-dark-BthQWCQV.js                      9.12 kB │ gzip:   1.97 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/sass-Cj5Yp3dK.js                            9.29 kB │ gzip:   2.49 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/sass-CIfQ9yqV.js                            9.29 kB │ gzip:   2.49 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/plastic-3e1v2bzS.js                         9.30 kB │ gzip:   1.98 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/slack-ochin-DqwNpetd.js                     9.43 kB │ gzip:   2.10 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/tex-B5i3u9ba.js                             9.53 kB │ gzip:   3.02 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/tex-Cppo0RY3.js                             9.65 kB │ gzip:   3.05 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/jison-BCRtk9Os.js                           9.69 kB │ gzip:   1.86 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/jison-wvAkD_A8.js                           9.69 kB │ gzip:   1.85 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/cmake-D1j8_8rp.js                           9.86 kB │ gzip:   3.37 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/cmake-Cv5ljclQ.js                           9.86 kB │ gzip:   3.37 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/light-plus-B7mTdjB0.js                      9.94 kB │ gzip:   2.27 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/hcl-BWvSN4gD.js                            10.05 kB │ gzip:   1.93 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/hcl-shhv74hy.js                            10.05 kB │ gzip:   1.93 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/beancount-BoKiGodi.js                      10.13 kB │ gzip:   1.39 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/pkl-u5AG7uiY.js                            10.37 kB │ gzip:   1.38 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/beancount-k_qm7-4y.js                      10.37 kB │ gzip:   1.44 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/dream-maker-BtqSS_iP.js                    10.47 kB │ gzip:   2.25 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/dream-maker-DBhfoDN-.js                    10.47 kB │ gzip:   2.25 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/raku-DXvB9xmW.js                           10.47 kB │ gzip:   2.94 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/raku-CPccoUN1.js                           10.47 kB │ gzip:   2.94 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/cadence-D2CYqzqI.js                        10.51 kB │ gzip:   2.13 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/yaml-Buea-lGh.js                           10.51 kB │ gzip:   2.27 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/yaml-B92AUxDB.js                           10.51 kB │ gzip:   2.27 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/rst-DKdxLoXm.js                            10.67 kB │ gzip:   2.42 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/rst-B0xPkSld.js                            10.67 kB │ gzip:   2.42 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/elm-DbKCFpqz.js                            10.97 kB │ gzip:   2.12 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/elm-BX_9EnK8.js                            10.97 kB │ gzip:   2.12 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/github-light-DAi9KRSo.js                   11.18 kB │ gzip:   2.51 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/prolog-CbFg5uaA.js                         11.36 kB │ gzip:   3.83 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/prolog-bSi0SE3D.js                         11.36 kB │ gzip:   3.83 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/terraform-BETggiCN.js                      11.39 kB │ gzip:   2.51 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/terraform-Ba94thAr.js                      11.39 kB │ gzip:   2.51 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/github-dark-DHJKELXO.js                    11.41 kB │ gzip:   2.55 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/puppet-BMWR74SV.js                         11.44 kB │ gzip:   2.11 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/puppet-ja2MI9-b.js                         11.44 kB │ gzip:   2.11 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/laserwave-DUszq2jm.js                      11.50 kB │ gzip:   2.58 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/gherkin-DyxjwDmM.js                        11.95 kB │ gzip:   5.05 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/gherkin-DQeIZrj7.js                        11.95 kB │ gzip:   5.05 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/wasm-MzD3tlZU.js                           12.01 kB │ gzip:   2.19 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/wasm-LUzQYg3H.js                           12.01 kB │ gzip:   2.19 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/hjson-D5-asLiD.js                          12.05 kB │ gzip:   1.64 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/hjson-BEMFYqr7.js                          12.05 kB │ gzip:   1.64 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/handlebars-YebKLiTq.js                     12.15 kB │ gzip:   2.38 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/handlebars-BL8al0AC.js                     12.15 kB │ gzip:   2.38 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/apache-Pmp26Uib.js                         12.46 kB │ gzip:   3.72 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/apache-CCUDgqAf.js                         12.46 kB │ gzip:   3.72 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/luau-irsrSlf-.js                           12.69 kB │ gzip:   3.05 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/vesper-DU1UobuO.js                         12.69 kB │ gzip:   1.97 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/bat-BkioyH1T.js                            12.89 kB │ gzip:   3.22 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/bat-Dcnh2ot_.js                            12.89 kB │ gzip:   3.22 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/fish-BvzEVeQv.js                           13.04 kB │ gzip:   1.74 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/v-BcVCzyr7.js                              13.21 kB │ gzip:   2.74 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/v-DljmTZ5-.js                              13.23 kB │ gzip:   2.75 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/vitesse-light-CVO1_9PV.js                  13.62 kB │ gzip:   3.04 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/aurora-x-D-2ljcwZ.js                       13.66 kB │ gzip:   2.28 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/vitesse-black-Bkuqu6BP.js                  13.68 kB │ gzip:   3.06 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/vitesse-dark-D0r3Knsf.js                   13.76 kB │ gzip:   3.06 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/pug-Ch9lOoSd.js                            13.84 kB │ gzip:   2.58 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/luau-CXu1NL6O.js                           13.84 kB │ gzip:   3.13 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/pug-CGlum2m_.js                            13.84 kB │ gzip:   2.58 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/synthwave-84-CbfX1IO0.js                   14.04 kB │ gzip:   2.87 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/actionscript-3-CfeIJUat.js                 14.05 kB │ gzip:   2.58 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/actionscript-3-LjD3sNyx.js                 14.05 kB │ gzip:   2.58 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/clarity-CHh-QcGE.js                        14.10 kB │ gzip:   2.39 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/github-light-default-D7oLnXFd.js           14.16 kB │ gzip:   3.04 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/github-light-high-contrast-BfjtVDDH.js     14.28 kB │ gzip:   3.02 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/clarity-D53aC0YG.js                        14.28 kB │ gzip:   2.46 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/github-dark-dimmed-DH5Ifo-i.js             14.43 kB │ gzip:   3.13 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/github-dark-default-Cuk6v7N8.js            14.44 kB │ gzip:   3.13 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/nix-BbRYJGeE.js                            14.57 kB │ gzip:   2.20 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/github-dark-high-contrast-E3gJ1_iC.js      14.60 kB │ gzip:   3.09 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/nix-BepWV7mh.js                            14.75 kB │ gzip:   2.26 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/gnuplot-DdkO51Og.js                        14.78 kB │ gzip:   3.27 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/gnuplot-BBjkHhdK.js                        14.78 kB │ gzip:   3.27 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/ayu-dark-Cv9koXgw.js                       14.95 kB │ gzip:   3.08 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/rust-B1yitclQ.js                           15.07 kB │ gzip:   2.72 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/rust-DJErdhjk.js                           15.07 kB │ gzip:   2.72 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/kusto-BvAqAH-y.js                          15.17 kB │ gzip:   3.92 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/kusto-w7PrLrBe.js                          15.17 kB │ gzip:   3.92 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/lua-BbnMAYS6.js                            15.21 kB │ gzip:   3.09 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/lua-tkfysgZP.js                            15.21 kB │ gzip:   3.09 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/abap-BdImnpbu.js                           15.85 kB │ gzip:   5.91 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/abap-BXYWi5l2.js                           15.85 kB │ gzip:   5.91 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/matlab-D7o27uSR.js                         16.09 kB │ gzip:   3.06 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/matlab-BQKM-LA_.js                         16.09 kB │ gzip:   3.06 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/cue-D82EKSYY.js                            16.20 kB │ gzip:   2.06 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/cue-nzsbQn5T.js                            16.20 kB │ gzip:   2.06 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/solidity-BbcW6ACK.js                       16.24 kB │ gzip:   3.12 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/solidity-Dg9HnkEx.js                       16.24 kB │ gzip:   3.12 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/elixir-Cc7HHYVZ.js                         16.32 kB │ gzip:   2.80 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/elixir-CDX3lj18.js                         16.32 kB │ gzip:   2.80 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/move-BkPM1oy1.js                           17.07 kB │ gzip:   3.06 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/kanagawa-wave-DWedfzmr.js                  17.12 kB │ gzip:   2.93 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/kanagawa-lotus-CfQXZHmo.js                 17.13 kB │ gzip:   2.93 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/kanagawa-dragon-CkXjmgJE.js                17.13 kB │ gzip:   2.95 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/move-Bu9oaDYs.js                           17.33 kB │ gzip:   3.08 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/svelte-Dt5jNKfG.js                         17.81 kB │ gzip:   3.04 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/svelte-3Dk4HxPD.js                         17.81 kB │ gzip:   3.03 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/graphql-Caa12_AY.js                        18.00 kB │ gzip:   2.52 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/graphql-ChdNCCLP.js                        18.00 kB │ gzip:   2.52 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/liquid-DFk8BABL.js                         18.09 kB │ gzip:   3.16 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/liquid-DYVedYrR.js                         18.09 kB │ gzip:   3.16 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/material-theme-D5KoaKCx.js                 18.62 kB │ gzip:   3.11 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/material-theme-darker-BfHTSMKl.js          18.63 kB │ gzip:   3.11 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/material-theme-ocean-CyktbL80.js           18.63 kB │ gzip:   3.14 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/material-theme-lighter-B0m2ddpp.js         18.63 kB │ gzip:   3.11 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/material-theme-palenight-Csfq5Kiy.js       18.64 kB │ gzip:   3.13 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/gdscript-DTMYz4Jt.js                       18.98 kB │ gzip:   3.74 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/gdscript-CU1B2r8a.js                       18.99 kB │ gzip:   3.74 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/groovy-gcz8RCvz.js                         19.18 kB │ gzip:   3.60 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/groovy-DjMbfbx0.js                         19.18 kB │ gzip:   3.60 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/mdc-Cpja7t1H.js                            19.63 kB │ gzip:   6.66 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/mdc-DUICxH0z.js                            19.63 kB │ gzip:   6.67 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/nushell-I3RK9BU8.js                        19.80 kB │ gzip:   4.94 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/glimmer-js-Dz9X99Cm.js                     20.07 kB │ gzip:   2.95 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/glimmer-ts-aQ3p29eY.js                     20.07 kB │ gzip:   2.94 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/glimmer-js-Rg0-pVw9.js                     20.07 kB │ gzip:   2.95 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/glimmer-ts-U6CK756n.js                     20.07 kB │ gzip:   2.94 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/powershell-Dpen1YoG.js                     20.15 kB │ gzip:   4.07 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/powershell-DdRAnR4Z.js                     20.15 kB │ gzip:   4.07 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/viml-CJc9bBzg.js                           20.37 kB │ gzip:   6.73 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/viml-3ZODU9FQ.js                           20.37 kB │ gzip:   6.73 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/nushell-C-sUppwS.js                        20.40 kB │ gzip:   5.18 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/snazzy-light-Bw305WKR.js                   20.77 kB │ gzip:   3.83 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/vue-BEetzCYT.js                            21.06 kB │ gzip:   2.69 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/vue-CCoi5OLL.js                            21.06 kB │ gzip:   2.69 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/dracula-BzJJZx-M.js                        21.07 kB │ gzip:   4.00 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/dracula-soft-BXkSAIEj.js                   21.08 kB │ gzip:   4.04 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/twig-B_ULif71.js                           21.36 kB │ gzip:   3.87 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/twig-CO9l9SDP.js                           21.36 kB │ gzip:   3.89 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/wit-5i3qLPDT.js                            21.47 kB │ gzip:   2.89 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/wit-MEd50GYB.js                            21.47 kB │ gzip:   2.89 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/rose-pine-BHrmToEH.js                      21.74 kB │ gzip:   3.87 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/rose-pine-moon-NleAzG8P.js                 21.75 kB │ gzip:   3.89 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/rose-pine-dawn-CnK8MTSM.js                 21.75 kB │ gzip:   3.89 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/nim-IFkVVqAN.js                            22.46 kB │ gzip:   3.16 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/nim-CVrawwO9.js                            22.46 kB │ gzip:   3.16 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/common-lisp-Cg-RD9OK.js                    22.58 kB │ gzip:   6.06 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/common-lisp-v102bg8X.js                    22.58 kB │ gzip:   6.06 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/gruvbox-dark-hard-CFHQjOhq.js              22.63 kB │ gzip:   4.18 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/gruvbox-dark-soft-CVdnzihN.js              22.63 kB │ gzip:   4.17 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/gruvbox-light-hard-CH1njM8p.js             22.64 kB │ gzip:   4.18 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/gruvbox-light-soft-hJgmCMqR.js             22.64 kB │ gzip:   4.18 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/gruvbox-dark-medium-GsRaNv29.js            22.64 kB │ gzip:   4.18 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/gruvbox-light-medium-DRw_LuNl.js           22.64 kB │ gzip:   4.18 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/sql-BLtJtn59.js                            23.41 kB │ gzip:   7.40 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/sql-CKXjX23X.js                            23.41 kB │ gzip:   7.40 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/typespec-Df68jz8_.js                       23.66 kB │ gzip:   2.56 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/typespec-D-U9oe5c.js                       23.66 kB │ gzip:   2.56 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/cadence-Bv_4Rxtq.js                        23.67 kB │ gzip:   3.67 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/templ-Dh73Zvim.js                          24.00 kB │ gzip:   5.38 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/astro-CjFzhNUq.js                          24.01 kB │ gzip:   7.54 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/astro-CbQHKStN.js                          24.01 kB │ gzip:   7.55 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/apl-e980N3t4.js                            24.04 kB │ gzip:   4.20 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/apl-dKokRX4l.js                            24.04 kB │ gzip:   4.20 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/templ-W15q3VgB.js                          24.06 kB │ gzip:   5.40 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/vhdl-CeAyd5Ju.js                           24.26 kB │ gzip:   3.87 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/vhdl-Bmgbkl_-.js                           24.26 kB │ gzip:   3.87 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/angular-html-Bbf3ZyxA.js                   24.29 kB │ gzip:   4.01 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/angular-html-CU67Zn6k.js                   24.29 kB │ gzip:   4.01 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/purescript-CklMAg4u.js                     24.69 kB │ gzip:   3.25 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/purescript-CxgsQa43.js                     24.69 kB │ gzip:   3.25 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/fsharp-JpbdA51a.js                         25.29 kB │ gzip:   4.12 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/one-light-PoHY5YXO.js                      25.30 kB │ gzip:   3.68 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/fsharp-CXgrBDvD.js                         25.31 kB │ gzip:   4.13 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/marko-DIP14Aik.js                          25.33 kB │ gzip:   3.55 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/marko-CPi9NSCl.js                          25.44 kB │ gzip:   3.57 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/razor-CNXmhs1n.js                          25.56 kB │ gzip:   3.44 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/razor-WgofotgN.js                          25.56 kB │ gzip:   3.44 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/system-verilog-CnnmHF94.js                 26.20 kB │ gzip:   4.85 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/system-verilog-rKNYENrf.js                 26.20 kB │ gzip:   4.85 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/nord-Ddv68eIx.js                           26.72 kB │ gzip:   4.40 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/codeql-DsOJ9woJ.js                         26.88 kB │ gzip:   3.79 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/codeql-DXd8ggn3.js                         26.88 kB │ gzip:   3.79 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/scss-OYdSNvt2.js                           27.20 kB │ gzip:   4.20 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/scss-Dk05w39G.js                           27.20 kB │ gzip:   4.20 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/java-CylS5w8V.js                           27.22 kB │ gzip:   4.26 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/java-B2AjWfgk.js                           27.22 kB │ gzip:   4.26 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/coffee-JUOWOZUj.js                         27.42 kB │ gzip:   6.35 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/coffee-Ch7k5sss.js                         27.42 kB │ gzip:   6.35 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/pierre-dark-BXuwtOqb.js                    27.89 kB │ gzip:   4.52 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/pierre-light-dckrK0oj.js                   27.90 kB │ gzip:   4.46 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/mermaid-DKYwYmdq.js                        28.50 kB │ gzip:   3.55 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/mermaid-DrapLM8U.js                        28.50 kB │ gzip:   3.55 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/scala-C151Ov-r.js                          28.88 kB │ gzip:   3.94 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/scala-CWwlNtab.js                          28.88 kB │ gzip:   3.94 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/night-owl-C39BiMTA.js                      28.91 kB │ gzip:   5.16 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/crystal-DVs0tusA.js                        29.39 kB │ gzip:   4.44 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/crystal-tKQVLTB8.js                        29.39 kB │ gzip:   4.45 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/applescript-Co6uUVPk.js                    29.57 kB │ gzip:   5.93 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/applescript-Dd26Nb5t.js                    29.57 kB │ gzip:   5.93 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/julia-353pQ8cl.js                          31.07 kB │ gzip:   4.33 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/julia-C8NyazO9.js                          31.07 kB │ gzip:   4.33 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/stylus-BEDo0Tqx.js                         31.07 kB │ gzip:   7.99 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/stylus-CHekGIgu.js                         31.07 kB │ gzip:   7.99 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/poimandres-CS3Unz2-.js                     33.49 kB │ gzip:   5.50 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/one-dark-pro-DVMEJ2y_.js                   33.79 kB │ gzip:   5.52 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/bsl-BO_Y6i37.js                            33.87 kB │ gzip:   8.35 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/bsl-C4qeDxuX.js                            33.87 kB │ gzip:   8.35 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/haxe-CzTSHFRz.js                           35.16 kB │ gzip:   5.91 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/haxe-n0Q_eay_.js                           35.16 kB │ gzip:   5.91 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/nginx-DknmC5AR.js                          35.37 kB │ gzip:   4.43 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/nginx-XmDIhN78.js                          35.37 kB │ gzip:   4.43 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/houston-DnULxvSX.js                        35.42 kB │ gzip:   5.78 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/tokyo-night-hegEt444.js                    35.67 kB │ gzip:   6.24 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/erlang-wwlo35G_.js                         37.48 kB │ gzip:   4.41 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/erlang-DsQrWhSR.js                         37.48 kB │ gzip:   4.40 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/cobol-CCPHrsME.js                          39.14 kB │ gzip:  10.87 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/cobol-nwyudZeR.js                          39.15 kB │ gzip:  10.87 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/asm-D_Q5rh1f.js                            40.72 kB │ gzip:   8.21 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/asm-CbVMAfFB.js                            40.72 kB │ gzip:   8.21 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/shellscript-Yzrsuije.js                    41.48 kB │ gzip:   6.09 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/shellscript-CE-5zpiL.js                    41.48 kB │ gzip:   6.09 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/haskell-Df6bDoY_.js                        41.49 kB │ gzip:   6.44 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/haskell-DtebQ3Kv.js                        41.49 kB │ gzip:   6.44 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/perl-g0D2lH3a.js                           43.16 kB │ gzip:   4.67 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/perl-C0TMdlhV.js                           43.16 kB │ gzip:   4.67 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/d-85-TOEBH.js                              43.80 kB │ gzip:   8.47 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/d-TG9YRPoI.js                              43.80 kB │ gzip:   8.47 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/apex-DhZLUxFE.js                           45.90 kB │ gzip:   6.66 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/ruby-W1VRIm2Q.js                           45.91 kB │ gzip:   5.68 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/ruby-BvKwtOVI.js                           45.91 kB │ gzip:   5.68 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/apex-C7Pw0Ztw.js                           46.12 kB │ gzip:   6.68 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/go-Dn2_MT6a.js                             46.78 kB │ gzip:   5.18 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/go-BYCC9JQ2.js                             46.78 kB │ gzip:   5.18 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/catppuccin-mocha-D87Tk5Gz.js               47.26 kB │ gzip:   8.00 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/catppuccin-latte-C9dUb6Cb.js               47.26 kB │ gzip:   8.00 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/catppuccin-frappe-DFWUc33u.js              47.26 kB │ gzip:   8.02 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/catppuccin-macchiato-DQyhUUbL.js           47.26 kB │ gzip:   8.01 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/ada-bCR0ucgS.js                            48.08 kB │ gzip:   6.03 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/ada-DeReRNhg.js                            48.08 kB │ gzip:   6.03 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/css-DPfMkruS.js                            49.02 kB │ gzip:  11.85 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/css-BSK200cd.js                            49.02 kB │ gzip:  11.85 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/imba-DGztddWO.js                           49.93 kB │ gzip:   9.46 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/imba-z_cUhu9e.js                           49.93 kB │ gzip:   9.46 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/everforest-dark-BgDCqdQA.js                53.75 kB │ gzip:   8.42 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/everforest-light-C8M2exoo.js               53.75 kB │ gzip:   8.42 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/r-DiinP2Uv.js                              55.81 kB │ gzip:  15.13 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/r-BfG_C0qz.js                              55.81 kB │ gzip:  15.13 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/wikitext-BhOHFoWU.js                       55.89 kB │ gzip:   4.76 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/wikitext-BaRWL9sq.js                       55.89 kB │ gzip:   4.76 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/markdown-B_HjzqPZ.js                       55.95 kB │ gzip:   5.49 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/stata-BH5u7GGu.js                          56.99 kB │ gzip:  12.36 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/stata-BJqnY-gO.js                          56.99 kB │ gzip:  12.37 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/html-B8pBdPMQ.js                           57.25 kB │ gzip:  11.69 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/html-GMplVEZG.js                           57.25 kB │ gzip:  11.69 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/ballerina-BFfxhgS-.js                      58.69 kB │ gzip:   8.15 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/ballerina-BMbY-1wP.js                      58.69 kB │ gzip:   8.15 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/markdown-Cvjx9yec.js                       59.34 kB │ gzip:   5.64 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/ocaml-C0hk2d4L.js                          62.45 kB │ gzip:   5.02 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/ocaml-BvBP9Lm0.js                          62.45 kB │ gzip:   5.02 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/mojo-1DNp92w6.js                           69.29 kB │ gzip:   9.18 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/mojo-Dz6zCmiK.js                           69.29 kB │ gzip:   9.18 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/latex-DyVrc4Oz.js                          69.40 kB │ gzip:   5.99 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/python-B6aJPvgy.js                         69.95 kB │ gzip:   9.13 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/python-DgE28U1V.js                         69.95 kB │ gzip:   9.13 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/c-BIGW1oBm.js                              72.11 kB │ gzip:  10.51 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/c-CyUOlKFr.js                              72.11 kB │ gzip:  10.51 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/latex-BUKiar2Z.js                          72.19 kB │ gzip:   6.62 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/vyper-CDx5xZoG.js                          74.65 kB │ gzip:  10.74 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/vyper-B6NKdirK.js                          74.65 kB │ gzip:  10.74 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/hack-D_o3P2UH.js                           80.23 kB │ gzip:  26.20 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/hack-CaT9iCJl.js                           80.24 kB │ gzip:  26.21 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/csharp-CHadp7IV.js                         85.59 kB │ gzip:  10.19 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/csharp-CX12Zw3r.js                         85.62 kB │ gzip:  10.20 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/swift-ByDN_Krv.js                          86.40 kB │ gzip:  14.60 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/swift-Dg5xB15N.js                          86.61 kB │ gzip:  14.70 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/asciidoc-CdggvHu8.js                       87.06 kB │ gzip:   7.17 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/fortran-free-form-D22FLkUw.js              87.15 kB │ gzip:  10.92 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/fortran-free-form-xZZnushS.js              87.15 kB │ gzip:  10.92 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/racket-BqYA7rlc.js                         92.39 kB │ gzip:  15.02 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/racket-CzHBKLyy.js                         92.39 kB │ gzip:  15.02 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/less-B1dDrJ26.js                           97.63 kB │ gzip:  14.70 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/less-C76OjOdF.js                           97.63 kB │ gzip:  14.70 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/blade-B2ZbN0F_.js                         103.80 kB │ gzip:  28.14 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/blade-DVc8C-J4.js                         103.80 kB │ gzip:  28.14 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/objective-c-DXmwc3jG.js                   105.41 kB │ gzip:  23.33 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/objective-c-sgtl-PdD.js                   105.41 kB │ gzip:  23.33 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/php-Gk5eUrPQ.js                           111.00 kB │ gzip:  28.52 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/php-CDn_0X-4.js                           111.00 kB │ gzip:  28.52 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/asciidoc-Dv7Oe6Be.js                      131.51 kB │ gzip:   9.34 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/mdx-Cmh6b_Ma.js                           136.11 kB │ gzip:  23.35 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/mdx-BWRhHdFl.js                           136.11 kB │ gzip:  23.35 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/objective-cpp-CLxacb5B.js                 171.97 kB │ gzip:  30.62 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/objective-cpp-BTQ37cYs.js                 171.97 kB │ gzip:  30.62 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/javascript-BMMyXqK5.js                    174.82 kB │ gzip:  16.51 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/javascript-wDzz0qaB.js                    174.83 kB │ gzip:  16.51 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/tsx-COt5Ahok.js                           175.54 kB │ gzip:  16.51 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/tsx-Dio8iE-N.js                           175.54 kB │ gzip:  16.51 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/jsx-g9-lgVsj.js                           177.79 kB │ gzip:  16.61 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/jsx-BGEKFWBk.js                           177.79 kB │ gzip:  16.61 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/typescript-DlfHMoPT.js                    181.07 kB │ gzip:  16.03 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/typescript-BPQ3VLAy.js                    181.08 kB │ gzip:  16.04 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/angular-ts-C26w9mnW.js                    183.82 kB │ gzip:  16.63 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/angular-ts-BwZT4LLn.js                    183.82 kB │ gzip:  16.63 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/vue-vine-CCdTUzyM.js                      190.22 kB │ gzip:  18.07 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/vue-vine-_Ih-lPRR.js                      190.22 kB │ gzip:  18.07 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/wolfram-lXgVvXCa.js                       262.39 kB │ gzip:  77.14 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/wolfram-CmMaIVaG.js                       262.39 kB │ gzip:  77.14 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/wasm-CG6Dc4jp.js                          622.34 kB │ gzip: 230.29 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/cpp-CofmeUqb.js                           626.08 kB │ gzip:  44.82 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/cpp-C28rag7_.js                           626.08 kB │ gzip:  44.82 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/emacs-lisp-C9XAeP06.js                    779.85 kB │ gzip: 196.03 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/emacs-lisp-fXIB3QbG.js                    779.85 kB │ gzip: 196.03 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: dist/assets/index-COiR2By_.js                       2,182.42 kB │ gzip: 629.35 kB
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: 
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: (!) Some chunks are larger than 500 kB after minification. Consider:
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: - Using dynamic import() to code-split the application
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: - Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+ +  command:local:Command DesktopBuilder creating (0s) @opencode-ai/desktop:build: ✓ built in 2.97s
+ +  command:local:Command DesktopBuilder creating (0s) 
+ +  command:local:Command DesktopBuilder creating (0s)  Tasks:    3 successful, 3 total
+ +  command:local:Command DesktopBuilder creating (0s) Cached:    3 cached, 3 total
+ +  command:local:Command DesktopBuilder creating (0s)   Time:    179ms >>> FULL TURBO
+ +  command:local:Command DesktopBuilder creating (0s) 
+ +  command:local:Command DesktopBuilder created (0.43s) 
+ +  cloudflare:index:WorkersKvNamespace DesktopAssetsNamespace created (0.91s) 
+@ updating....
+ +  pulumi-nodejs:dynamic:Resource DesktopAssetFiles.sst.cloudflare.KvPairs creating (0s) 
+@ updating.......
+ +  pulumi-nodejs:dynamic:Resource DesktopAssetFiles.sst.cloudflare.KvPairs created (4s) 
+ +  sst:cloudflare:Worker DesktopRouter creating (0s) 
+ +  pulumi-nodejs:dynamic:Resource DesktopRouterZoneLookup.sst.cloudflare.ZoneLookup creating (0s) 
+ +  cloudflare:index:WorkersScript DesktopRouterScript creating (0s) 
+@ updating....
+ +  pulumi-nodejs:dynamic:Resource DesktopRouterZoneLookup.sst.cloudflare.ZoneLookup created (0.34s) 
+@ updating....
+ +  cloudflare:index:WorkersScript DesktopRouterScript created (1s) 
+ +  cloudflare:index:WorkersCustomDomain DesktopRouterDomain creating (0s) 
+ +  pulumi-nodejs:dynamic:Resource DesktopRouterUrl.sst.cloudflare.WorkerUrl creating (0s) 
+ +  cloudflare:index:WorkersCustomDomain DesktopRouterDomain created (0.51s) 
+@ updating......
+ +  pulumi-nodejs:dynamic:Resource DesktopRouterUrl.sst.cloudflare.WorkerUrl created (3s) 
+ +  pulumi:pulumi:Stack shuv-desktop-production created (11s) 3 messages
+Diagnostics:
+  pulumi:pulumi:Stack (shuv-desktop-production):
+    (node:3473021) Warning: `--localstorage-file` was provided without a valid path
+    (Use `node --trace-warnings ...` to show where the warning was created)
+    (node:3473021) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+
+Outputs:
+    _protect: true
+
+Resources:
+    + 12 created
+
+Duration: 12s
+

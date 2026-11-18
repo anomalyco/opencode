@@ -102,7 +102,7 @@ export const Plugin = {
       Effect.sync(() => {
         event.system.push(
           SystemPart.make(
-            "When you create a worktree outside the current working directory and intend to use it as your primary working directory, consider using `execute` to call `tools.opencode.session_move` and make the worktree the session's working directory.",
+            "When you create a worktree outside the current working directory and intend to use it as your primary working directory, consider using `execute` to call `tools.shuvcode.session_move` and make the worktree the session's working directory.",
           ),
         )
       })
@@ -112,9 +112,9 @@ export const Plugin = {
     yield* ctx.tool
       .transform((draft) => {
         draft.namespace({
-          name: "opencode",
+          name: "shuvcode",
           description:
-            "Tools for managing OpenCode itself, such as working with sessions and worktrees, searching the available models, and reading MCP resources.",
+            "Tools for managing Shuvcode itself, such as working with sessions and worktrees, searching the available models, and reading MCP resources.",
         })
         draft.add({
           name: "session_rename",
@@ -122,7 +122,7 @@ export const Plugin = {
             "Rename a session, or omit sessionID to rename the current session. Use a short, specific title that summarizes the work being done.",
           input: RenameInput,
           output: RenameOutput,
-          options: { namespace: "opencode", codemode: true },
+          options: { namespace: "shuvcode", codemode: true },
           execute: (input, context) => {
             const sessionID = input.sessionID ?? context.sessionID
             const title = input.title.trim()
@@ -142,7 +142,7 @@ export const Plugin = {
             "Move a session to another directory, or omit sessionID to move the current session. The current session moves at the next safe boundary; do not run destination-dependent tools in the same execute call.",
           input: MoveInput,
           output: MoveOutput,
-          options: { namespace: "opencode", codemode: true, pinned: true },
+          options: { namespace: "shuvcode", codemode: true, pinned: true },
           execute: (input, context) =>
             Effect.gen(function* () {
               const sessionID = input.sessionID ?? context.sessionID
@@ -178,7 +178,7 @@ export const Plugin = {
           description: "Create a named worktree. Returns its directory.",
           input: WorktreeCreateInput,
           output: Worktree.Info,
-          options: { namespace: "opencode", codemode: true, pinned: true },
+          options: { namespace: "shuvcode", codemode: true, pinned: true },
           execute: (input) =>
             ctx.worktree.create({ projectID: ctx.location.project.id, name: input.name }).pipe(
               Effect.map((output) => ({ output, content: `Created worktree in ${output.directory}.` })),
@@ -192,7 +192,7 @@ export const Plugin = {
           description: "List a repository's worktrees.",
           input: Schema.Struct({}),
           output: Schema.Struct({ worktrees: Worktree.List }),
-          options: { namespace: "opencode", codemode: true, pinned: true },
+          options: { namespace: "shuvcode", codemode: true, pinned: true },
           execute: () =>
             ctx.worktree.list({ projectID: ctx.location.project.id }).pipe(
               Effect.map((worktrees) => ({ output: { worktrees } })),
@@ -205,7 +205,7 @@ export const Plugin = {
             "Remove a worktree. The repository location selects configuration; directory identifies the worktree to remove.",
           input: WorktreeRemoveInput,
           output: WorktreeRemoveOutput,
-          options: { namespace: "opencode", codemode: true, pinned: true, permission: "edit" },
+          options: { namespace: "shuvcode", codemode: true, pinned: true, permission: "edit" },
           execute: (input, context) =>
             Effect.gen(function* () {
               // Removing a worktree deletes files, so it requires the same approval as editing them.
@@ -237,7 +237,7 @@ export const Plugin = {
             "Search the models available to use. Use this to turn a model name the user mentions into an exact reference for a tool that takes a model. Check your own provider first.",
           input: ModelsInput,
           output: ModelsOutput,
-          options: { namespace: "opencode", codemode: true },
+          options: { namespace: "shuvcode", codemode: true },
           execute: (input, context) =>
             Effect.gen(function* () {
               const offset = input.offset ?? 0

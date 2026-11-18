@@ -1,0 +1,210 @@
+
+  .sst/platform/sst.config.1765314567864.mjs ───────────────────────────── 83.1kb ─ 100.0%
+   ├ .sst/platform/src/components/component.ts ─────────────────────────── 14.2kb ── 17.0%
+   │  └ .sst/platform/src/components/linkable.ts
+   │     └ .sst/platform/src/components/index.ts
+   │        └ sst.desktop.config.ts
+   │           └ eval.ts
+   ├ .sst/platform/src/components/cloudflare/worker.ts ──────────────────── 9.3kb ── 11.2%
+   │  └ .sst/platform/src/components/cloudflare/index.ts
+   │     └ .sst/platform/src/components/index.ts
+   │        └ sst.desktop.config.ts
+   │           └ eval.ts
+   ├ .sst/platform/src/components/cloudflare/static-site.ts ─────────────── 5.5kb ─── 6.7%
+   │  └ .sst/platform/src/components/cloudflare/index.ts
+   │     └ .sst/platform/src/components/index.ts
+   │        └ sst.desktop.config.ts
+   │           └ eval.ts
+   ├ .sst/platform/src/components/link.ts ───────────────────────────────── 4.2kb ─── 5.1%
+   │  └ .sst/platform/src/auto/run.ts
+   │     └ eval.ts
+   ├ .sst/platform/src/components/cloudflare/dns.ts ─────────────────────── 2.8kb ─── 3.4%
+   │  └ .sst/platform/src/components/cloudflare/index.ts
+   │     └ .sst/platform/src/components/index.ts
+   │        └ sst.desktop.config.ts
+   │           └ eval.ts
+   ├ .sst/platform/src/components/rpc/rpc.ts ────────────────────────────── 2.8kb ─── 3.3%
+   │  └ .sst/platform/src/components/cloudflare/worker.ts
+   │     └ .sst/platform/src/components/cloudflare/index.ts
+   │        └ .sst/platform/src/components/index.ts
+   │           └ sst.desktop.config.ts
+   │              └ eval.ts
+   ├ .sst/platform/src/components/base/base-static-site.ts ──────────────── 2.7kb ─── 3.2%
+   │  └ .sst/platform/src/components/cloudflare/static-site.ts
+   │     └ .sst/platform/src/components/cloudflare/index.ts
+   │        └ .sst/platform/src/components/index.ts
+   │           └ sst.desktop.config.ts
+   │              └ eval.ts
+   ├ .sst/platform/src/components/base/base-ssr-site.ts ─────────────────── 2.7kb ─── 3.2%
+   │  └ .sst/platform/src/components/aws/ssr-site.ts
+   │     └ .sst/platform/src/components/aws/svelte-kit.ts
+   │        └ .sst/platform/src/components/aws/index.ts
+   │           └ .sst/platform/src/components/index.ts
+   │              └ sst.desktop.config.ts
+   │                 └ eval.ts
+   ├ .sst/platform/src/components/cloudflare/ssr-site.ts ────────────────── 2.7kb ─── 3.2%
+   │  └ .sst/platform/src/components/cloudflare/experimental/solid-start.ts
+   │     └ .sst/platform/src/components/cloudflare/experimental/index.ts
+   │        └ .sst/platform/src/components/cloudflare/index.ts
+   │           └ .sst/platform/src/components/index.ts
+   │              └ sst.desktop.config.ts
+   │                 └ eval.ts
+   ├ .sst/platform/src/components/linkable.ts ───────────────────────────── 2.6kb ─── 3.2%
+   │  └ .sst/platform/src/components/index.ts
+   │     └ sst.desktop.config.ts
+   │        └ eval.ts
+   ├ .sst/platform/src/components/base/base-site.ts ─────────────────────── 2.2kb ─── 2.6%
+   │  └ .sst/platform/src/components/cloudflare/static-site.ts
+   │     └ .sst/platform/src/components/cloudflare/index.ts
+   │        └ .sst/platform/src/components/index.ts
+   │           └ sst.desktop.config.ts
+   │              └ eval.ts
+   ├ .sst/platform/src/components/cloudflare/experimental/static-site.ts ── 2.1kb ─── 2.5%
+   │  └ .sst/platform/src/components/cloudflare/experimental/index.ts
+   │     └ .sst/platform/src/components/cloudflare/index.ts
+   │        └ .sst/platform/src/components/index.ts
+   │           └ sst.desktop.config.ts
+   │              └ eval.ts
+   ├ .sst/platform/src/components/cloudflare/experimental/solid-start.ts ── 2.0kb ─── 2.4%
+   │  └ .sst/platform/src/components/cloudflare/experimental/index.ts
+   │     └ .sst/platform/src/components/cloudflare/index.ts
+   │        └ .sst/platform/src/components/index.ts
+   │           └ sst.desktop.config.ts
+   │              └ eval.ts
+   ├ .sst/platform/src/auto/run.ts ──────────────────────────────────────── 1.9kb ─── 2.2%
+   │  └ eval.ts
+   ├ .sst/platform/src/components/cloudflare/providers/worker-url.ts ────── 1.7kb ─── 2.0%
+   │  └ .sst/platform/src/components/cloudflare/worker.ts
+   │     └ .sst/platform/src/components/cloudflare/index.ts
+   │        └ .sst/platform/src/components/index.ts
+   │           └ sst.desktop.config.ts
+   │              └ eval.ts
+   ├ .sst/platform/src/components/cloudflare/providers/kv-data.ts ───────── 1.7kb ─── 2.0%
+   │  └ .sst/platform/src/components/cloudflare/static-site.ts
+   │     └ .sst/platform/src/components/cloudflare/index.ts
+   │        └ .sst/platform/src/components/index.ts
+   │           └ sst.desktop.config.ts
+   │              └ eval.ts
+   ├ .sst/platform/src/components/cloudflare/d1.ts ──────────────────────── 1.7kb ─── 2.0%
+   │  └ .sst/platform/src/components/cloudflare/index.ts
+   │     └ .sst/platform/src/components/index.ts
+   │        └ sst.desktop.config.ts
+   │           └ eval.ts
+   ├ .sst/platform/src/components/cloudflare/kv.ts ──────────────────────── 1.6kb ─── 1.9%
+   │  └ .sst/platform/src/components/cloudflare/index.ts
+   │     └ .sst/platform/src/components/index.ts
+   │        └ sst.desktop.config.ts
+   │           └ eval.ts
+   ├ .sst/platform/src/components/cloudflare/experimental/astro.ts ──────── 1.6kb ─── 1.9%
+   │  └ .sst/platform/src/components/cloudflare/experimental/index.ts
+   │     └ .sst/platform/src/components/cloudflare/index.ts
+   │        └ .sst/platform/src/components/index.ts
+   │           └ sst.desktop.config.ts
+   │              └ eval.ts
+   ├ .sst/platform/src/components/naming.ts ─────────────────────────────── 1.6kb ─── 1.9%
+   │  └ .sst/platform/src/components/component.ts
+   │     └ .sst/platform/src/components/linkable.ts
+   │        └ .sst/platform/src/components/index.ts
+   │           └ sst.desktop.config.ts
+   │              └ eval.ts
+   ├ .sst/platform/src/components/cloudflare/bucket.ts ──────────────────── 1.6kb ─── 1.9%
+   │  └ .sst/platform/src/components/cloudflare/index.ts
+   │     └ .sst/platform/src/components/index.ts
+   │        └ sst.desktop.config.ts
+   │           └ eval.ts
+   ├ .sst/platform/src/components/cloudflare/providers/zone-lookup.ts ───── 1.4kb ─── 1.7%
+   │  └ .sst/platform/src/components/cloudflare/worker.ts
+   │     └ .sst/platform/src/components/cloudflare/index.ts
+   │        └ .sst/platform/src/components/index.ts
+   │           └ sst.desktop.config.ts
+   │              └ eval.ts
+   ├ .sst/platform/src/components/cloudflare/cron.ts ────────────────────── 1.3kb ─── 1.6%
+   │  └ .sst/platform/src/components/cloudflare/index.ts
+   │     └ .sst/platform/src/components/index.ts
+   │        └ sst.desktop.config.ts
+   │           └ eval.ts
+   ├ .sst/platform/src/components/cloudflare/queue.ts ───────────────────── 1.1kb ─── 1.3%
+   │  └ .sst/platform/src/components/cloudflare/index.ts
+   │     └ .sst/platform/src/components/index.ts
+   │        └ sst.desktop.config.ts
+   │           └ eval.ts
+   ├ .sst/platform/src/components/cloudflare/auth.ts ────────────────────── 1.1kb ─── 1.3%
+   │  └ .sst/platform/src/components/cloudflare/index.ts
+   │     └ .sst/platform/src/components/index.ts
+   │        └ sst.desktop.config.ts
+   │           └ eval.ts
+   ├ .sst/platform/src/components/cloudflare/helpers/fetch.ts ───────────── 1.1kb ─── 1.3%
+   │  └ .sst/platform/src/components/cloudflare/providers/zone-lookup.ts
+   │     └ .sst/platform/src/components/cloudflare/worker.ts
+   │        └ .sst/platform/src/components/cloudflare/index.ts
+   │           └ .sst/platform/src/components/index.ts
+   │              └ sst.desktop.config.ts
+   │                 └ eval.ts
+   ├ .sst/platform/src/components/cloudflare/helpers/worker-builder.ts ──── 840b ──── 1.0%
+   │  └ .sst/platform/src/components/cloudflare/cron.ts
+   │     └ .sst/platform/src/components/cloudflare/index.ts
+   │        └ .sst/platform/src/components/index.ts
+   │           └ sst.desktop.config.ts
+   │              └ eval.ts
+   ├ sst.desktop.config.ts ──────────────────────────────────────────────── 754b ──── 0.9%
+   │  └ eval.ts
+   ├ .sst/platform/src/components/aws/helpers/site-builder.ts ───────────── 732b ──── 0.9%
+   │  └ .sst/platform/src/components/base/base-static-site.ts
+   │     └ .sst/platform/src/components/cloudflare/static-site.ts
+   │        └ .sst/platform/src/components/cloudflare/index.ts
+   │           └ .sst/platform/src/components/index.ts
+   │              └ sst.desktop.config.ts
+   │                 └ eval.ts
+   ├ .sst/platform/src/util/semaphore.ts ────────────────────────────────── 482b ──── 0.6%
+   │  └ .sst/platform/src/components/aws/helpers/site-builder.ts
+   │     └ .sst/platform/src/components/base/base-static-site.ts
+   │        └ .sst/platform/src/components/cloudflare/static-site.ts
+   │           └ .sst/platform/src/components/cloudflare/index.ts
+   │              └ .sst/platform/src/components/index.ts
+   │                 └ sst.desktop.config.ts
+   │                    └ eval.ts
+   ├ .sst/platform/src/components/cloudflare/providers/dns-record.ts ────── 468b ──── 0.5%
+   │  └ .sst/platform/src/components/cloudflare/dns.ts
+   │     └ .sst/platform/src/components/cloudflare/index.ts
+   │        └ .sst/platform/src/components/index.ts
+   │           └ sst.desktop.config.ts
+   │              └ eval.ts
+   ├ .sst/platform/src/components/cloudflare/index.ts ───────────────────── 363b ──── 0.4%
+   │  └ .sst/platform/src/components/index.ts
+   │     └ sst.desktop.config.ts
+   │        └ eval.ts
+   ├ <define:$cli> ──────────────────────────────────────────────────────── 273b ──── 0.3%
+   │  └ eval.ts
+   ├ .sst/platform/src/shim/run.js ──────────────────────────────────────── 216b ──── 0.3%
+   ├ <define:$app> ──────────────────────────────────────────────────────── 202b ──── 0.2%
+   │  └ eval.ts
+   ├ .sst/platform/src/components/cloudflare/experimental/index.ts ──────── 154b ──── 0.2%
+   │  └ .sst/platform/src/components/cloudflare/index.ts
+   │     └ .sst/platform/src/components/index.ts
+   │        └ sst.desktop.config.ts
+   │           └ eval.ts
+   ├ .sst/platform/src/components/cloudflare/binding.ts ─────────────────── 134b ──── 0.2%
+   │  └ .sst/platform/src/components/cloudflare/index.ts
+   │     └ .sst/platform/src/components/index.ts
+   │        └ sst.desktop.config.ts
+   │           └ eval.ts
+   ├ .sst/platform/src/util/fs.ts ───────────────────────────────────────── 133b ──── 0.2%
+   │  └ .sst/platform/src/components/cloudflare/experimental/solid-start.ts
+   │     └ .sst/platform/src/components/cloudflare/experimental/index.ts
+   │        └ .sst/platform/src/components/cloudflare/index.ts
+   │           └ .sst/platform/src/components/index.ts
+   │              └ sst.desktop.config.ts
+   │                 └ eval.ts
+   ├ .sst/platform/src/components/error.ts ──────────────────────────────── 107b ──── 0.1%
+   │  └ .sst/platform/src/auto/run.ts
+   │     └ eval.ts
+   ├ eval.ts ─────────────────────────────────────────────────────────────── 83b ──── 0.1%
+   ├ .sst/platform/src/components/cloudflare/account-id.ts ───────────────── 68b ──── 0.1%
+   │  └ .sst/platform/src/components/cloudflare/index.ts
+   │     └ .sst/platform/src/components/index.ts
+   │        └ sst.desktop.config.ts
+   │           └ eval.ts
+   ├ .sst/platform/src/config.ts ─────────────────────────────────────────── 44b ──── 0.1%
+   └ .sst/platform/src/components/index.ts ───────────────────────────────── 31b ──── 0.0%
+      └ sst.desktop.config.ts
+         └ eval.ts

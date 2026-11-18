@@ -103,7 +103,7 @@ describe("instructions", () => {
   })
   test("tool labels", () => {
     expect(toolLabel("edit")).toBe("editing code")
-    expect(toolLabel("gptlive_main_send")).toBe("handing work to OpenCode")
+    expect(toolLabel("gptlive_main_send")).toBe("handing work to Shuvcode")
     expect(toolLabel("mcp_custom_thing")).toBe("using mcp custom thing")
   })
 })

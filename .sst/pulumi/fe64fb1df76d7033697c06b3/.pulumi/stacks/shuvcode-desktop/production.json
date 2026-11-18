@@ -1,0 +1,146 @@
+{
+    "version": 3,
+    "checkpoint": {
+        "stack": "organization/shuvcode-desktop/production",
+        "latest": {
+            "manifest": {
+                "time": "2025-12-09T12:51:32.361368249-08:00",
+                "magic": "77be084e65c763fde87b290a0a6ba5aaacad687cde41d20d76768df34b0db77a",
+                "version": "v3.146.0"
+            },
+            "secrets_providers": {
+                "type": "passphrase",
+                "state": {
+                    "salt": "v1:RyVLTavm9Qo=:v1:4FYh4pZW3R5IBA1R:B/IJR37/ay8FO6GyRFq6Rz4aMVVdeQ=="
+                }
+            },
+            "resources": [
+                {
+                    "urn": "urn:pulumi:production::shuvcode-desktop::pulumi:pulumi:Stack::shuvcode-desktop-production",
+                    "custom": false,
+                    "type": "pulumi:pulumi:Stack",
+                    "created": "2025-12-09T20:51:30.632960528Z",
+                    "modified": "2025-12-09T20:51:30.632960528Z",
+                    "sourcePosition": "project:///../../platform/node_modules/@pulumi/runtime/stack.ts#38,23"
+                },
+                {
+                    "urn": "urn:pulumi:production::shuvcode-desktop::sst:sst:LinkRef::DesktopLinkRef",
+                    "custom": false,
+                    "type": "sst:sst:LinkRef",
+                    "parent": "urn:pulumi:production::shuvcode-desktop::pulumi:pulumi:Stack::shuvcode-desktop-production",
+                    "created": "2025-12-09T20:51:31.11479054Z",
+                    "modified": "2025-12-09T20:51:31.11479054Z",
+                    "sourcePosition": "project:///../../../file:/home/shuv/repos/forks/shuvcode/.sst/platform/src/components/link.ts#25,7"
+                },
+                {
+                    "urn": "urn:pulumi:production::shuvcode-desktop::sst:cloudflare:StaticSite::Desktop",
+                    "custom": false,
+                    "type": "sst:cloudflare:StaticSite",
+                    "parent": "urn:pulumi:production::shuvcode-desktop::pulumi:pulumi:Stack::shuvcode-desktop-production",
+                    "created": "2025-12-09T20:51:31.115053132Z",
+                    "modified": "2025-12-09T20:51:31.115053132Z",
+                    "sourcePosition": "project:///../../../file:/home/shuv/repos/forks/shuvcode/.sst/platform/src/components/cloudflare/static-site.ts#254,5"
+                },
+                {
+                    "urn": "urn:pulumi:production::shuvcode-desktop::pulumi:providers:cloudflare::default_6_10_0",
+                    "custom": true,
+                    "id": "158339f9-0500-42aa-a182-0d3e631a0b1b",
+                    "type": "pulumi:providers:cloudflare",
+                    "inputs": {
+                        "__internal": {},
+                        "version": "6.10.0"
+                    },
+                    "outputs": {
+                        "version": "6.10.0"
+                    },
+                    "created": "2025-12-09T20:51:31.165693356Z",
+                    "modified": "2025-12-09T20:51:31.165693356Z"
+                },
+                {
+                    "urn": "urn:pulumi:production::shuvcode-desktop::sst:cloudflare:StaticSite$sst:cloudflare:Kv::DesktopAssets",
+                    "custom": false,
+                    "type": "sst:cloudflare:Kv",
+                    "parent": "urn:pulumi:production::shuvcode-desktop::sst:cloudflare:StaticSite::Desktop",
+                    "created": "2025-12-09T20:51:31.165947408Z",
+                    "modified": "2025-12-09T20:51:31.165947408Z",
+                    "sourcePosition": "project:///../../../file:/home/shuv/repos/forks/shuvcode/.sst/platform/src/components/cloudflare/kv.ts#57,5"
+                },
+                {
+                    "urn": "urn:pulumi:production::shuvcode-desktop::pulumi:providers:command::default_1_0_1",
+                    "custom": true,
+                    "id": "2d604283-6596-4aeb-a952-3b5b318c651c",
+                    "type": "pulumi:providers:command",
+                    "inputs": {
+                        "__internal": {},
+                        "version": "1.0.1"
+                    },
+                    "outputs": {
+                        "version": "1.0.1"
+                    },
+                    "created": "2025-12-09T20:51:31.177385054Z",
+                    "modified": "2025-12-09T20:51:31.177385054Z"
+                },
+                {
+                    "urn": "urn:pulumi:production::shuvcode-desktop::sst:cloudflare:StaticSite$sst:cloudflare:Kv$cloudflare:index/workersKvNamespace:WorkersKvNamespace::DesktopAssetsNamespace",
+                    "custom": true,
+                    "id": "1262819d520c426ab0e7dedfe863a6c0",
+                    "type": "cloudflare:index/workersKvNamespace:WorkersKvNamespace",
+                    "inputs": {
+                        "accountId": "771240435fb4f1407f2b4669085dc79d",
+                        "title": "shuvcode-desktop-production-desktopassetsnamespace-rkxktuon"
+                    },
+                    "outputs": {
+                        "accountId": "771240435fb4f1407f2b4669085dc79d",
+                        "id": "1262819d520c426ab0e7dedfe863a6c0",
+                        "supportsUrlEncoding": true,
+                        "title": "shuvcode-desktop-production-desktopassetsnamespace-rkxktuon"
+                    },
+                    "parent": "urn:pulumi:production::shuvcode-desktop::sst:cloudflare:StaticSite$sst:cloudflare:Kv::DesktopAssets",
+                    "provider": "urn:pulumi:production::shuvcode-desktop::pulumi:providers:cloudflare::default_6_10_0::158339f9-0500-42aa-a182-0d3e631a0b1b",
+                    "propertyDependencies": {
+                        "accountId": [],
+                        "title": []
+                    },
+                    "created": "2025-12-09T20:51:32.361305768Z",
+                    "modified": "2025-12-09T20:51:32.361305768Z",
+                    "sourcePosition": "project:///../../../file:/home/shuv/repos/forks/shuvcode/.sst/platform/src/components/cloudflare/kv.ts#66,14",
+                    "ignoreChanges": [
+                        "title"
+                    ]
+                }
+            ],
+            "pending_operations": [
+                {
+                    "resource": {
+                        "urn": "urn:pulumi:production::shuvcode-desktop::sst:cloudflare:StaticSite$command:local:Command::DesktopBuilder",
+                        "custom": true,
+                        "type": "command:local:Command",
+                        "inputs": {
+                            "addPreviousOutputInEnv": true,
+                            "create": "bun turbo build",
+                            "dir": "/home/shuv/repos/forks/shuvcode/packages/desktop",
+                            "environment": {},
+                            "triggers": [
+                                "1765313491021"
+                            ],
+                            "update": "bun turbo build"
+                        },
+                        "parent": "urn:pulumi:production::shuvcode-desktop::sst:cloudflare:StaticSite::Desktop",
+                        "provider": "urn:pulumi:production::shuvcode-desktop::pulumi:providers:command::default_1_0_1::2d604283-6596-4aeb-a952-3b5b318c651c",
+                        "propertyDependencies": {
+                            "addPreviousOutputInEnv": [],
+                            "create": [],
+                            "dir": [],
+                            "environment": [],
+                            "triggers": [],
+                            "update": []
+                        },
+                        "sourcePosition": "project:///../../platform/node_modules/@pulumi/local/command.ts#317,9"
+                    },
+                    "type": "creating"
+                }
+            ],
+            "metadata": {}
+        }
+    }
+}

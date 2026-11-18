@@ -100,4 +100,5 @@ test("skills link to Console only for virtual skills while signed in, except the
   expect(consoleSkillLink(deploy, workspace, false)).toBeUndefined()
   expect(consoleSkillLink({ id: "deploy", path: "/home/me/.skills/deploy/SKILL.md" }, workspace, true)).toBeUndefined()
   expect(consoleSkillLink({ id: "report", path: "skill://report/SKILL.md" }, workspace, true)).toBeUndefined()
+  expect(consoleSkillLink({ id: "shuvcode", path: "skill://shuvcode/SKILL.md" }, workspace, true)).toBeUndefined()
 })

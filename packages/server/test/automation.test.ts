@@ -229,7 +229,7 @@ it.live("runs due automations in standalone ServerProcess.start without lifecycl
         trigger: { type: "at", at: "in 150 millis" },
         action: {
           type: "code",
-          code: 'const models = await tools.opencode.models({}); console.log("models=" + models.total); return { state: { total: models.total } }',
+          code: 'const models = await tools.shuvcode.models({}); console.log("models=" + models.total); return { state: { total: models.total } }',
         },
       })
       expect(created.status).toBe("active")

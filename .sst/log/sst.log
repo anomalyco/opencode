@@ -1,0 +1,59 @@
+time=2025-12-09T13:09:25.400-08:00 level=INFO msg="checking for pulumi" path=/home/shuv/.config/sst/bin/pulumi
+time=2025-12-09T13:09:25.461-08:00 level=INFO msg="checking for bun" path=/home/shuv/.config/sst/bin/bun
+time=2025-12-09T13:09:25.462-08:00 level=INFO msg="initializing project" version=3.17.23
+time=2025-12-09T13:09:25.462-08:00 level=INFO msg="esbuild building" out=/home/shuv/repos/forks/shuvcode/.sst/platform/sst.config.1765314565462.mjs
+time=2025-12-09T13:09:25.464-08:00 level=INFO msg="esbuild built" outfile=/home/shuv/repos/forks/shuvcode/.sst/platform/sst.config.1765314565462.mjs
+time=2025-12-09T13:09:25.464-08:00 level=INFO msg="evaluating config"
+time=2025-12-09T13:09:25.479-08:00 level=INFO msg="config evaluated"
+time=2025-12-09T13:09:25.479-08:00 level=INFO msg="checking platform"
+time=2025-12-09T13:09:25.479-08:00 level=INFO msg="loading home"
+time=2025-12-09T13:09:25.479-08:00 level=INFO msg="cloudflare account selected" account=771240435fb4f1407f2b4669085dc79d
+time=2025-12-09T13:09:25.891-08:00 level=INFO msg="found existing bucket" bucket=sst-state
+time=2025-12-09T13:09:25.891-08:00 level=INFO msg="loaded config" app=shuv-desktop stage=production
+time=2025-12-09T13:09:25.891-08:00 level=INFO msg="initializing ui" isTTY=false
+time=2025-12-09T13:09:25.892-08:00 level=INFO msg="server port assigned" port=13557
+time=2025-12-09T13:09:25.892-08:00 level=INFO msg="running stack command" service=project.run cmd=deploy
+time=2025-12-09T13:09:25.892-08:00 level=INFO msg="INFO locking app=shuv-desktop stage=production"
+time=2025-12-09T13:09:25.892-08:00 level=INFO msg="INFO getting data key=lock app=shuv-desktop stage=production"
+time=2025-12-09T13:09:25.892-08:00 level=INFO msg=starting service=server
+time=2025-12-09T13:09:25.892-08:00 level=INFO msg=server service=server addr=0.0.0.0:13557
+time=2025-12-09T13:09:26.600-08:00 level=INFO msg="INFO putting update app=shuv-desktop stage=production"
+time=2025-12-09T13:09:27.036-08:00 level=INFO msg="INFO getting passphrase app=shuv-desktop stage=production"
+time=2025-12-09T13:09:27.369-08:00 level=INFO msg="INFO passphrase not found, setting passphrase app=shuv-desktop stage=production"
+time=2025-12-09T13:09:27.864-08:00 level=INFO msg="INFO pulling state app=shuv-desktop stage=production out=/home/shuv/repos/forks/shuvcode/.sst/pulumi/fe64fb0d68fb2022c3f5b6d8/.pulumi/stacks/shuv-desktop/production.json"
+time=2025-12-09T13:09:28.616-08:00 level=INFO msg="got previous deployment" service=project.run updateID=fe64fb0d68fb2022c3f5b6d8
+time=2025-12-09T13:09:28.616-08:00 level=INFO msg="esbuild building" out=/home/shuv/repos/forks/shuvcode/.sst/platform/sst.config.1765314567864.mjs
+time=2025-12-09T13:09:28.632-08:00 level=INFO msg="esbuild built" outfile=/home/shuv/repos/forks/shuvcode/.sst/platform/sst.config.1765314567864.mjs
+time=2025-12-09T13:09:28.635-08:00 level=INFO msg="built sst.config.ts" service=project.run updateID=fe64fb0d68fb2022c3f5b6d8 to=/home/shuv/repos/forks/shuvcode/.sst/platform/sst.config.1765314567864.mjs
+time=2025-12-09T13:09:28.636-08:00 level=INFO msg="tracked files" service=project.run updateID=fe64fb0d68fb2022c3f5b6d8
+time=2025-12-09T13:09:28.636-08:00 level=INFO msg="INFO getting data key=secret app=shuv-desktop stage=_fallback"
+time=2025-12-09T13:09:28.636-08:00 level=INFO msg="INFO getting data key=secret app=shuv-desktop stage=production"
+time=2025-12-09T13:09:29.262-08:00 level=INFO msg="starting pulumi" service=project.run updateID=fe64fb0d68fb2022c3f5b6d8 args="[/home/shuv/.config/sst/bin/pulumi up --yes -f --stack organization/shuv-desktop/production --non-interactive --event-log /home/shuv/repos/forks/shuvcode/.sst/pulumi/fe64fb0d68fb2022c3f5b6d8/eventlog.json]"
+time=2025-12-09T13:09:30.365-08:00 level=INFO msg="INFO pushing partial state updateID=fe64fb0d68fb2022c3f5b6d8"
+time=2025-12-09T13:09:30.865-08:00 level=INFO msg="INFO pushing partial state updateID=fe64fb0d68fb2022c3f5b6d8"
+time=2025-12-09T13:09:30.945-08:00 level=INFO msg="rpc request" method=POST url=/rpc
+time=2025-12-09T13:09:30.946-08:00 level=INFO msg="building function" runtime=worker functionID=DesktopRouter
+time=2025-12-09T13:09:30.946-08:00 level=INFO msg="loader info" loader=map[]
+time=2025-12-09T13:09:30.954-08:00 level=INFO msg="function built" runtime=worker functionID=DesktopRouter
+time=2025-12-09T13:09:31.368-08:00 level=INFO msg="INFO pushing partial state updateID=fe64fb0d68fb2022c3f5b6d8"
+time=2025-12-09T13:09:32.154-08:00 level=INFO msg="INFO pushing partial state updateID=fe64fb0d68fb2022c3f5b6d8"
+time=2025-12-09T13:09:36.387-08:00 level=INFO msg="INFO pushing partial state updateID=fe64fb0d68fb2022c3f5b6d8"
+time=2025-12-09T13:09:36.931-08:00 level=INFO msg="INFO pushing partial state updateID=fe64fb0d68fb2022c3f5b6d8"
+time=2025-12-09T13:09:37.892-08:00 level=INFO msg="INFO pushing partial state updateID=fe64fb0d68fb2022c3f5b6d8"
+time=2025-12-09T13:09:38.558-08:00 level=INFO msg="INFO pushing partial state updateID=fe64fb0d68fb2022c3f5b6d8"
+time=2025-12-09T13:09:41.200-08:00 level=INFO msg="INFO pushing partial state updateID=fe64fb0d68fb2022c3f5b6d8"
+time=2025-12-09T13:09:41.220-08:00 level=INFO msg="pulumi exited" service=project.run updateID=fe64fb0d68fb2022c3f5b6d8 err=<nil>
+time=2025-12-09T13:09:41.220-08:00 level=INFO msg="eof and exited" service=project.run updateID=fe64fb0d68fb2022c3f5b6d8 eofs=0
+time=2025-12-09T13:09:41.220-08:00 level=INFO msg="eof and exited" service=project.run updateID=fe64fb0d68fb2022c3f5b6d8 eofs=1
+time=2025-12-09T13:09:41.220-08:00 level=INFO msg="breaking out of tail loop" service=project.run updateID=fe64fb0d68fb2022c3f5b6d8
+time=2025-12-09T13:09:41.220-08:00 level=INFO msg="parsing state" service=project.run updateID=fe64fb0d68fb2022c3f5b6d8
+time=2025-12-09T13:09:41.226-08:00 level=INFO msg="generating types" root=/home/shuv/repos/forks/shuvcode
+time=2025-12-09T13:09:41.258-08:00 level=INFO msg="canceling partial" service=project.run updateID=fe64fb0d68fb2022c3f5b6d8
+time=2025-12-09T13:09:41.258-08:00 level=INFO msg="waiting for partial to exit" service=project.run updateID=fe64fb0d68fb2022c3f5b6d8
+time=2025-12-09T13:09:41.745-08:00 level=INFO msg="INFO pushing eventlog updateID=fe64fb0d68fb2022c3f5b6d8"
+time=2025-12-09T13:09:41.745-08:00 level=INFO msg="INFO pushing snapshot updateID=fe64fb0d68fb2022c3f5b6d8"
+time=2025-12-09T13:09:42.995-08:00 level=INFO msg="INFO putting update app=shuv-desktop stage=production"
+time=2025-12-09T13:09:43.539-08:00 level=INFO msg="done running stack command" service=project.run updateID=fe64fb0d68fb2022c3f5b6d8 resources=15
+time=2025-12-09T13:09:43.540-08:00 level=INFO msg="INFO unlocking app=shuv-desktop stage=production"
+time=2025-12-09T13:09:43.892-08:00 level=INFO msg="shutting down server" service=server
+time=2025-12-09T13:09:43.892-08:00 level=INFO msg="server done" service=server

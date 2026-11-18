@@ -1,0 +1,8 @@
+[
+  {
+    "name": "cloudflare",
+    "package": "@pulumi/cloudflare",
+    "version": "6.10.0",
+    "alias": "cloudflare"
+  }
+]

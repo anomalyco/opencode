@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "dependencies": {
+    "@aws-sdk/client-cloudfront": "3.478.0",
+    "@aws-sdk/client-cloudwatch-logs": "3.478.0",
+    "@aws-sdk/client-ecr": "3.478.0",
+    "@aws-sdk/client-lambda": "3.478.0",
+    "@aws-sdk/client-rds-data": "3.478.0",
+    "@aws-sdk/client-route-53": "3.478.0",
+    "@aws-sdk/client-s3": "3.478.0",
+    "@aws-sdk/client-ssm": "3.478.0",
+    "@aws-sdk/client-sts": "3.478.0",
+    "@aws-sdk/middleware-retry": "3.374.0",
+    "@pulumi/aws": "6.66.2",
+    "@pulumi/cloudflare": "6.10.0",
+    "@pulumi/command": "1.0.1",
+    "@pulumi/docker-build": "0.0.8",
+    "@pulumi/pulumi": "v3.146.0",
+    "@pulumi/random": "4.16.6",
+    "@pulumi/tls": "5.0.1",
+    "@pulumiverse/vercel": "1.11.0",
+    "@smithy/smithy-client": "2.1.18",
+    "@tsconfig/node18": "18.2.2",
+    "@types/node": "^22.10.0",
+    "acorn": "8.11.3",
+    "acorn-walk": "8.3.2",
+    "archiver": "6.0.1",
+    "aws4fetch": "1.0.18",
+    "esbuild": "0.20.2",
+    "glob": "10.3.10",
+    "prettier": "3.1.1",
+    "typescript": "5.7.2",
+    "undici": "^6.19.5",
+    "unenv-sst": "npm:unenv-nightly@2.0.0-20241024-111401-d4156ac"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-iot": "3.501.0",
+    "@types/archiver": "6.0.2",
+    "@types/aws-lambda": "8.10.133",
+    "@types/bun": "1.2.1",
+    "vitest": "^1.2.2"
+  },
+  "name": "@sst/platform",
+  "overrides": {
+    "string-width": "4.2.3"
+  },
+  "prettier": {},
+  "scripts": {
+    "build": "bash ./scripts/build",
+    "dev": "tsc --watch --noEmit",
+    "test": "vitest run"
+  },
+  "sideEffects": false,
+  "trustedDependencies": [
+    "esbuild",
+    "protobufjs"
+  ],
+  "type": "module"
+}
