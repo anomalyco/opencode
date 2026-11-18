@@ -58,9 +58,6 @@ fn started(h: &Harness, session: &str) {
     h.tui.data.apply(&[event]);
 }
 
-// Expected: a status claim nested in the home footer renders a store batch the footer itself keeps, so only the
-// status claim's text changes, written in place with no widget built, and it stays after a resize rebuilds the footer
-// around it.
 #[test]
 fn a_status_claim_updates_while_the_footer_keeps_its_node() {
     let h = mount(100, &[], vec![abi::Plugin { id: "test.status", setup: status }.into()]);
@@ -162,8 +159,6 @@ fn footer_frames(run: Run) -> Vec<Vec<opentui::testing::Cell>> {
     frames
 }
 
-// Expected: the home footer draws the same cells through the C ABI's byte shims as in process, its nested slot
-// included, and so does its own source built as a library file and opened by the loader.
 #[test]
 fn the_home_footer_draws_the_same_through_the_c_abi_loopback() {
     let linked = footer_frames(Run::Linked);
@@ -171,10 +166,6 @@ fn the_home_footer_draws_the_same_through_the_c_abi_loopback() {
     assert_eq!(footer_frames(Run::Library), linked);
 }
 
-// Expected: a 1.x status claim nested in the home footer stays across the footer's size thresholds: below 16 rows the
-// footer's row loses its padding, which builds its box again, below 14 the footer hides and the claim goes to
-// `home.footer` itself (TS `survivingAncestor`), and back at 30 the footer shows again with the claim in its row (P6a
-// review, big-boi medium 4: a box built again left the claim in the widget that went).
 #[test]
 fn a_nested_status_claim_stays_across_the_footer_thresholds() {
     let h = mount(100, &[], vec![abi::Plugin { id: "test.status", setup: status }.into()]);
@@ -214,8 +205,6 @@ fn toggle(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected: a 2.0 box that holds a nested slot, hidden and shown again, shows the slot's 1.x claim again with its own
-// label: whether a box shows changes its widget in place.
 #[test]
 fn a_hidden_and_shown_box_keeps_its_nested_claim() {
     SHOWN.set(true);
@@ -246,8 +235,6 @@ fn growing(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected: a status claim is a flex item of the footer's row, as in TS's `<Slot>` fragment, so a growing root takes
-// its share of the room between the MCP servers and the version with the footer's spacer (carbon's probe 2).
 #[test]
 fn a_growing_status_claim_fills_the_footer_row() {
     let h = mount(100, &[], vec![abi::Plugin { id: "test.grow", setup: growing }.into()]);
@@ -258,8 +245,6 @@ fn a_growing_status_claim_fills_the_footer_row() {
     assert!(right - left > 30 && line.trim_end().ends_with("local"), "{screen}");
 }
 
-// Expected: with the footer plugin off, `home.footer.status` is not mounted, so a status claim is appended to
-// `home.footer` instead (TS `survivingAncestor`).
 #[test]
 fn a_status_claim_shows_in_the_home_footer_without_the_footer_plugin() {
     let h = mount(100, &["-opencode.home.footer"], vec![abi::Plugin { id: "test.status", setup: status }.into()]);
@@ -293,9 +278,6 @@ fn mount_failing(width: u16, failed: &'static [&'static str]) -> Harness {
     support::mount(width, 30, deps)
 }
 
-// Expected: the footer counts the failed server plugins once their list arrives, which tells the claims `local`, with
-// `/plugins` from 80 columns; a click on the count opens the plugin manager, and the new failure shows TS's error
-// toast that offers to open it (carbon-5).
 #[test]
 fn the_footer_counts_failed_plugins_and_a_toast_tells_of_them() {
     let h = mount_failing(100, &["team-audit"]);
@@ -319,8 +301,6 @@ fn the_footer_counts_failed_plugins_and_a_toast_tells_of_them() {
     assert!(screen.contains("2 plugins failed") && screen.contains("Open plugins"), "{screen}");
 }
 
-// Expected: a toast about a session without a title takes the session's title, as TS `toast.title ??
-// session.title` (carbon-6).
 #[test]
 fn a_session_toast_without_a_title_takes_the_sessions() {
     let h = mount(100, &[], Vec::new());

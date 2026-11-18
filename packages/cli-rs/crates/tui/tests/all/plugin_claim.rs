@@ -962,8 +962,6 @@ fn whole_stream(faults: &[Command]) -> Vec<Command> {
     commands
 }
 
-// Expected (`stream-whole`): every call and the fence, streamed revision by revision, show what the claim draws for
-// their content mounted fresh, also across a theme switch, and the `read` call shows the host's own row.
 #[test]
 fn each_revision_of_a_claimed_part_equals_a_fresh_mount() {
     for carrier in CARRIERS {
@@ -986,9 +984,6 @@ fn each_revision_of_a_claimed_part_equals_a_fresh_mount() {
     }
 }
 
-// Expected (`isolation`): a panic in one claim's view fails its plugin, and its parts show the host's rows as when the
-// user disabled it; an overrun, and a tree refused twice, show the host's row for that part alone. The other plugin's
-// parts and every other cell stay as in the twin, and each fault fired.
 #[test]
 fn a_fault_in_a_claim_falls_back_for_what_it_claims_alone() {
     for carrier in CARRIERS {
@@ -1006,8 +1001,6 @@ fn a_fault_in_a_claim_falls_back_for_what_it_claims_alone() {
     }
 }
 
-// Expected (final re-review big-boi 12): a part streaming several revisions before a paint gets one view, as that
-// paint starts, with the newest content; the paint after views nothing. A phase change is viewed at once.
 #[test]
 fn a_streaming_part_gets_one_view_a_frame() {
     for carrier in CARRIERS {
@@ -1037,7 +1030,6 @@ fn a_streaming_part_gets_one_view_a_frame() {
     }
 }
 
-// Expected: a part the claim declines shows the host's own row, and a later revision the claim takes shows its tree.
 #[test]
 fn a_declined_part_shows_the_host_row() {
     for carrier in CARRIERS {
@@ -1066,8 +1058,6 @@ fn a_declined_part_shows_the_host_row() {
     }
 }
 
-// Expected: a fence keeps its mount while it streams: Markdown hands its widget back, and the claim finds its mount
-// through it.
 #[test]
 fn a_streaming_fence_keeps_its_mount() {
     for carrier in CARRIERS {
@@ -1084,8 +1074,6 @@ fn a_streaming_fence_keeps_its_mount() {
     }
 }
 
-// Expected (`ledger`): a part that leaves the transcript forgets its tree: leaving the session frees every claimed
-// part, with its content and memo values.
 #[test]
 fn leaving_the_session_frees_every_claimed_part() {
     for carrier in CARRIERS {
@@ -1154,9 +1142,6 @@ fn shell_last(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected: a claim of a tool takes its calls by the name the host gives the tool too (`bash` is the shell), the plugin
-// last in activation order wins, the content a view gives shows through its handle and goes with the part, and a part
-// laid out at another width is viewed again with it.
 #[test]
 fn the_last_claim_of_a_tool_draws_it_with_its_content_at_its_width() {
     for carrier in CARRIERS {
@@ -1213,8 +1198,6 @@ fn two_claims(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected: each claim of a plugin draws with its own view, on both carriers, and a view that releases what it gave
-// before leaves the part holding one handle.
 #[test]
 fn each_claim_draws_with_its_own_view_and_releases_hold() {
     for carrier in CARRIERS {
@@ -1345,11 +1328,6 @@ fn grouped() -> Session {
     Session { verbosity: Some(Verbosity::Low), ..Session::default() }
 }
 
-// Expected (E.8 with 4.11): with grouping on, a claimed call in a folded group is not mounted and its view is not
-// called; unfolded, the claim draws it as it draws a call outside a group. The fallback rules hold inside the group:
-// a declined revision shows the host's row; a tree refused twice leaves the call to the host for the rest of its
-// mount, which folding the group ends, so unfolded again the claim draws it afresh; a panic fails the plugin and every
-// call in the group shows the host's row.
 #[test]
 fn a_claimed_call_in_a_group_draws_while_the_group_is_open() {
     for carrier in CARRIERS {
@@ -1499,10 +1477,6 @@ impl World {
     }
 }
 
-// Expected (4.11: "waiting for permission"): the claim is told when the session's first permission request waits on its
-// call, at once and with one view, also in a frame that viewed the call already (it is a phase), and told again when
-// the request is answered. With grouping on, a call that waits
-// shows below its folded group, as the host's row does (`PendingEntries`), drawn by the claim; answered, it folds back.
 #[test]
 fn a_claimed_call_waiting_on_a_permission_is_viewed_with_it() {
     for carrier in CARRIERS {
@@ -1537,8 +1511,6 @@ fn a_claimed_call_waiting_on_a_permission_is_viewed_with_it() {
     }
 }
 
-// Expected (E.6b with 4.11): the images a call returned are the host's, below the row that draws the call: the claim's
-// tree while it shows, the host's row when the claim declines, and once either way. Previews off, none show.
 #[test]
 fn a_claimed_call_keeps_its_images_below_the_claim() {
     // A 1x1 PNG.
@@ -1590,9 +1562,6 @@ fn plugin_nest(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (4.2, P4's memo check): a view that keeps a memoized subtree holding another memo is valid on both
-// carriers: the library's table holds both values, and the tree the host resolves holds both keys. The plugin stays
-// active, and the ledger books both values.
 #[test]
 fn a_kept_memo_that_holds_a_memo_is_valid_on_every_carrier() {
     for carrier in CARRIERS {
@@ -1612,9 +1581,6 @@ fn a_kept_memo_that_holds_a_memo_is_valid_on_every_carrier() {
     }
 }
 
-// Expected (4.11, review finding H2): a view held back for the paint that declines, or whose tree is refused twice, or
-// that overruns, hands the part to the host's row at that paint, with no event after it: the claim's tree does not
-// stay up. On the C ABI an overrun fails the plugin, so every part shows the host's row.
 #[test]
 fn a_view_at_the_paint_that_does_not_draw_hands_the_row_back() {
     for carrier in CARRIERS {
@@ -1643,8 +1609,6 @@ fn a_view_at_the_paint_that_does_not_draw_hands_the_row_back() {
     }
 }
 
-// Expected (4.11, review finding H2 for fences): a fence whose view at the paint declines shows the host's code view
-// of its newest code at that paint, in the block the claim had.
 #[test]
 fn a_fence_view_at_the_paint_that_declines_shows_the_host_code() {
     for carrier in CARRIERS {
@@ -1666,9 +1630,6 @@ fn a_fence_view_at_the_paint_that_declines_shows_the_host_code() {
     }
 }
 
-// Expected (4.11, review finding M7, final re-review big-boi 12): a part gets at most one view a frame while it streams,
-// also while its claim declines it and the host's row shows it; the view at the paint that accepts takes the row back
-// in that paint.
 #[test]
 fn a_declined_part_gets_one_view_a_frame_and_the_paint_takes_it_back() {
     for carrier in CARRIERS {
@@ -1708,8 +1669,6 @@ fn plugin_twice(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (4.11, review finding H3): a fence that falls back leaves another fence of the same text claimed: the
-// fallback is the block's, not the text's.
 #[test]
 fn a_fence_that_falls_back_leaves_one_of_the_same_text_claimed() {
     for carrier in CARRIERS {
@@ -1743,9 +1702,6 @@ fn plugin_memo(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (`ledger`, review finding M9): a declined part keeps its memo values, in the host's table and in a
-// library's alike, and the ledger counts them until the mount ends; the registry of live parts holds none that went,
-// without a reader pruning it.
 #[test]
 fn the_ledger_counts_what_a_declined_part_keeps_and_what_went() {
     for carrier in CARRIERS {
@@ -1791,9 +1747,6 @@ fn plugin_label(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (synthesis 4.2: output by reference; review finding H4): what a call returned stays with the host. A
-// claim's view of a call that returned 100 KB and an image gets the call without them, and through the C ABI its
-// request stays under 4 KB, also when a resize views it again; metadata over 4 KB is left out, and less is sent.
 #[test]
 fn a_claimed_call_sends_its_view_no_result() {
     let png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
@@ -1855,9 +1808,6 @@ fn plugin_narrow(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (4.2 with 4.11, review finding M8): a claim's view sees the inputs it can read as they are now. A part the
-// claim declined at one width is asked again at another, for a call and a fence alike, and the claim draws it when it
-// accepts; a part has no height of its own, so a resize of the terminal's height leaves nothing stale.
 #[test]
 fn a_part_is_viewed_again_at_a_new_width_and_gets_no_height() {
     for carrier in CARRIERS {
@@ -1909,8 +1859,6 @@ fn plugin_tall(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (review finding H5): a claimed call above the reader that falls back to the host's shorter row, away from
-// the tail, leaves the reader's rows where they were on screen; at the tail the transcript stays at the tail.
 #[test]
 fn a_part_that_falls_back_above_the_reader_leaves_the_reader_in_place() {
     for carrier in CARRIERS {
@@ -1963,10 +1911,6 @@ fn a_part_that_falls_back_above_the_reader_leaves_the_reader_in_place() {
     }
 }
 
-// Expected (synthesis 4.4 and P4c, review policy on decisions 4 and 14): the one rule that differs by carrier. An
-// overrun of a claim's view in process is a counted host bug: that part falls back, the plugin stays active and its
-// other part keeps its tree, with no toast. As a library the plugin fails, as an external plugin does: every part it
-// claimed shows the host's row, with the `Plugin failed` toast. The other plugin's claim draws on, on both.
 #[test]
 fn an_overrun_falls_back_in_process_and_fails_a_library() {
     for carrier in CARRIERS {
@@ -2050,8 +1994,6 @@ fn plugin_nested(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (review finding carbon-2): a fence in the Markdown of a claimed part is not claimed again: Markdown draws it
-// as code, so a claim whose tree holds its own fence draws once and the TUI lives.
 #[test]
 fn a_fence_in_a_claimed_part_is_not_claimed_again() {
     for carrier in CARRIERS {
@@ -2086,9 +2028,6 @@ fn plugin_cache(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (4.2: a handle lives until the mount ends or the plugin releases it; review finding carbon-6): a part the
-// claim declined keeps the content its views gave, so a later view may name it again; the ledger counts it until the
-// mount ends. A tree refused for anything but a keep the host does not hold falls back with no second view.
 #[test]
 fn a_declined_part_keeps_its_content_and_a_bad_tree_gets_one_view() {
     for carrier in CARRIERS {
@@ -2144,8 +2083,6 @@ fn plugin_bump(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (synthesis 4.4: a handler of the plugin ran, so what it changed shows; review finding carbon-4): a claimed
-// part is drawn again after its plugin's command runs, from a click on the part or from the keymap, on both carriers.
 #[test]
 fn a_claimed_part_draws_again_after_its_plugin_runs_a_command() {
     for carrier in CARRIERS {
@@ -2172,8 +2109,6 @@ fn bash_claim(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (`abi::claim::Target`: `bash` and `shell` are one tool; review finding carbon-8): a claim of a tool by the
-// name a provider gives it takes the calls the transcript names as the host does, and the other way round.
 #[test]
 fn a_claim_of_a_tool_takes_its_calls_by_either_name() {
     for carrier in CARRIERS {
@@ -2186,8 +2121,6 @@ fn a_claim_of_a_tool_takes_its_calls_by_either_name() {
     }
 }
 
-// Expected (review finding carbon-7): a fence's first view gets the width the fence is laid out at, so a fence that
-// streams in whole is viewed once, and draws its first frame at its own width.
 #[test]
 fn a_fence_is_viewed_first_at_its_own_width() {
     for carrier in CARRIERS {
@@ -2214,9 +2147,6 @@ fn plugin_given(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (4.2; review finding carbon-9: CM7, CM10): content a view gives and releases in the same view is not the
-// part's, and the ledger books none of it; a call in a state this client does not know is the host's to show, and the
-// claim is not asked.
 #[test]
 fn a_claim_keeps_no_content_it_released_and_is_not_asked_of_an_unknown_state() {
     for carrier in CARRIERS {
@@ -2255,9 +2185,6 @@ fn plugin_keeper(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (4.2 and P4's checks; review finding carbon-6, mutants C6 and C8): a whole view that keeps what the host does
-// not hold falls back with no second view, and the ledger books what a library holds after it. A library that
-// declines the whole view asked for after a refused keep stays within bounds, and the plugin stays active.
 #[test]
 fn a_refused_keep_is_asked_once_whole_and_a_decline_after_it_stays_within_bounds() {
     for carrier in CARRIERS {
@@ -2287,8 +2214,6 @@ fn a_refused_keep_is_asked_once_whole_and_a_decline_after_it_stays_within_bounds
     }
 }
 
-// Expected (4.11, deep run seed 386): a resize views each claimed part it reaches once, at its new width: the paint's
-// view and the transcript's render at the new width are one.
 #[test]
 fn a_resize_views_a_claimed_part_once() {
     for carrier in CARRIERS {
@@ -2310,9 +2235,6 @@ fn a_resize_views_a_claimed_part_once() {
     }
 }
 
-// Expected (`work`; deep run seed 511): a theme change views each claimed fence once and a call whose claim does not
-// read the palette not at all, and mounts the fence once: Markdown's restyle builds its blocks again for each style it
-// sets, and a claimed fence waits for the last.
 #[test]
 fn a_theme_change_views_a_claimed_fence_once() {
     for carrier in CARRIERS {
@@ -2332,8 +2254,6 @@ fn a_theme_change_views_a_claimed_fence_once() {
     }
 }
 
-// Expected (deep run seed 511): an overrun armed on the fence fires at the one view a theme change makes, and the
-// fence that view falls back is the one that shows.
 #[test]
 fn an_overrun_at_a_theme_change_falls_the_fence_back() {
     let commands =
@@ -2358,9 +2278,6 @@ fn plugin_code(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (P3 with Pr): P3's node kinds serve claims as they serve surfaces, with no change to the claims: a fence
-// claim draws its code in P3's `Code` view, with its gutter, while the fence streams and once it closed, on both
-// carriers.
 #[test]
 fn a_fence_claim_draws_its_code_in_p3s_code_view() {
     for carrier in CARRIERS {
@@ -2431,8 +2348,6 @@ fn fenced(carrier: Carrier, how: Fenced, text: &str) -> (World, Capture) {
     (world, frame)
 }
 
-// Expected (contract 2.x additions, `fence-node`): a fence claim's tree that is the fence node alone draws as the host's
-// own code view of the fence, cell for cell, on both carriers.
 #[test]
 fn a_fence_node_alone_draws_as_the_host_code_view() {
     let text = "```probe\nlet a = 1;\nlet b = 2;\n```\n\nAfter.\n";
@@ -2445,9 +2360,6 @@ fn a_fence_node_alone_draws_as_the_host_code_view() {
     }
 }
 
-// Expected (carbon c2a-2): the host's code view of a claimed fence keeps the code whole, also a line of three backticks
-// in a fence opened with four, or with tildes: the fence node, and the host's row of a declined fence, draw what the
-// transcript draws with no plugin.
 #[test]
 fn a_fence_node_keeps_a_fence_in_its_code() {
     for text in [
@@ -2469,8 +2381,6 @@ fn a_fence_node_keeps_a_fence_in_its_code() {
     }
 }
 
-// Expected (contract 2.x additions, `fence-node`): the fence node follows the fence as it streams, while the claim's
-// card stays the tree it kept; the host's row never shows.
 #[test]
 fn a_fence_node_follows_the_stream() {
     for carrier in CARRIERS {
@@ -2492,8 +2402,6 @@ fn a_fence_node_follows_the_stream() {
     }
 }
 
-// Expected (contract 2.x, step D, as TS's `defaultRender().bg`): a fence node's background is its code's too, so a card
-// that sets it reads as one block (good-fences); the host's own row of a declined fence keeps the transcript's.
 #[test]
 fn a_fence_nodes_code_is_on_its_background() {
     let text = "```probe\nlet a = 1;\n```\n\nAfter.\n";
@@ -2515,8 +2423,6 @@ fn a_fence_nodes_code_is_on_its_background() {
     }
 }
 
-// Expected (contract 2.x additions, `fence-node`): a fence node costs one node and one row, whatever its code: a fence of
-// 2,000 lines in a card draws whole, where P3's `Code` of the same lines is past the tree's rows and a placeholder.
 #[test]
 fn a_long_fence_in_a_card_draws_whole() {
     let code: String = (0..2_000).map(|line| format!("line {line}\n")).collect();
@@ -2532,8 +2438,6 @@ fn a_long_fence_in_a_card_draws_whole() {
     }
 }
 
-// Expected (contract 2.x additions, `fence-node`): a tree with two fence nodes, and a tool call's tree with one, are
-// refused, and the part shows the host's row; the plugin stays active.
 #[test]
 fn a_fence_node_where_it_may_not_be_shows_the_host_row() {
     for carrier in CARRIERS {
@@ -2599,11 +2503,6 @@ fn plugin_rival(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (4.2 `limits` with 4.11; review bigboi 1, carbon-3): a claimed part's nodes and content are its plugin's and
-// the total's, beside its plugin's surface: a part whose content its plugin's share cannot hold, or the total, shows
-// the placeholder in its tree and the rest of the tree as it is, while the claim keeps drawing it; what is held never
-// passes either share; and leaving the session gives back what the parts held, the surface's staying. On both
-// carriers.
 #[test]
 fn a_claimed_part_holds_its_plugins_share_beside_its_surface_and_the_total() {
     for carrier in CARRIERS {
@@ -2681,10 +2580,6 @@ fn plugin_pics(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (4.2 `limits`, 4.4 host time; review bigboi 1, carbon-3): a claimed part's picture decodes on a worker
-// within its plugin's reservation; a part that replaces and releases its picture on each revision, still mounted,
-// holds one decoded picture and its bytes, not one a revision; the host's work for the part is its plugin's host
-// time; and the part's mount ending gives every picture back. On both carriers.
 #[test]
 fn a_claimed_part_that_replaces_its_picture_holds_only_the_one_it_shows() {
     for carrier in CARRIERS {
@@ -2742,11 +2637,6 @@ fn plugin_coalesce(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (4.11, 4.14 `work`; review bigboi 12, final re-review big-boi 12 and its final pass): a part's revision and a
-// handler of its plugin before a paint give the part one view, at that first paint, with the newest of both: the
-// command's effect and the newest content, which that paint shows; the paint after views nothing. So in either order,
-// also when the handler's redraw is drained before the revision comes. A view at that paint that declines hands the row
-// back at that paint. On both carriers.
 #[test]
 fn a_revision_and_a_handler_in_one_frame_give_a_part_one_view() {
     for carrier in CARRIERS {
@@ -2822,8 +2712,6 @@ fn mount_reader(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (bigboi's re-review): `Read::mount` names the part's mount in a claim's view on both carriers, as
-// `View::mount` does, so a helper that only takes the reads sees the same mount linked and over the C ABI.
 #[test]
 fn a_claim_view_reads_its_part_s_mount_on_both_carriers() {
     for carrier in CARRIERS {
@@ -2858,8 +2746,6 @@ fn plugin_wake(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (re-review final pass, big-boi 12): a wake of the plugin is drained as a paint starts, so the part is viewed
-// then, in that paint: the first paint after the wake shows the plugin's new state, with one view. On both carriers.
 #[test]
 fn a_wake_drained_at_the_paint_shows_in_that_paint() {
     for carrier in CARRIERS {

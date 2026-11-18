@@ -89,9 +89,6 @@ fn line(pipe: &Pipe, prefix: &str) -> Option<String> {
     pipe.harness.app.text().lines().map(str::trim).find(|line| line.starts_with(prefix)).map(str::to_owned)
 }
 
-// Expected (`docs/plugins.md`, "Writing a plugin"): the guide's TypeScript example, `examples/pipe/hello`, runs on the
-// JS host as its Rust and Luau twins run on their carriers: its line closes the home footer, its command toasts, and a
-// click on the line runs the command.
 #[test]
 fn the_guides_typescript_hello_runs_on_the_js_host() {
     let Some(config) = config() else { return };
@@ -111,9 +108,6 @@ fn the_guides_typescript_hello_runs_on_the_js_host() {
     toasted("a click on the line runs the command");
 }
 
-// Expected (`delivery` for the V2 layer): commands a V2 plugin registers with `keymap.layer` reach its handlers once each
-// and in order, through the pipe's fault operators too (a drop or a swap ends the JS host, which a restart follows),
-// and its JSX shows what they did once the JS host settled.
 #[test]
 fn a_v2_plugins_commands_arrive_once_each_in_order() {
     let Some(config) = config() else { return };
@@ -142,8 +136,6 @@ fn a_v2_plugins_commands_arrive_once_each_in_order() {
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
 }
 
-// Expected (containment, as TS's plugin boundary): a render that throws shows nothing from then on and says so once, in
-// the words TS uses; the plugin stays active and its commands run.
 #[test]
 fn a_v2_render_that_throws_is_reported_as_ts_reports_it() {
     let Some(config) = config() else { return };
@@ -160,8 +152,6 @@ fn a_v2_render_that_throws_is_reported_as_ts_reports_it() {
     assert!(toasts(&pipe).is_empty(), "the crash was reported again");
 }
 
-// Expected: an intrinsic the contract has no node for (`<tab_select>`) throws as it is created, which the boundary reports
-// as any crash in a render: the plugin learns it as an exception, the user as TS's crash toast.
 #[test]
 fn an_intrinsic_without_a_node_is_reported_as_a_crash() {
     let Some(config) = config() else { return };
@@ -178,10 +168,6 @@ fn an_intrinsic_without_a_node_is_reported_as_a_crash() {
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
 }
 
-// Expected: what the layer does not map warns once a plugin and feature in the client's log, shows no toast over the
-// plugin's surface, and does nothing; an API that answers whether it did answers false, as TS's `ui.panel.open` does
-// outside a session. A warning toast covered `P.8/file-browser`'s route until it timed out, so whether the checkpoint
-// saw it depended on the machine's speed.
 #[test]
 fn what_does_not_map_warns_once_and_answers_false() {
     let Some(config) = config() else { return };
@@ -199,8 +185,6 @@ fn what_does_not_map_warns_once_and_answers_false() {
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
 }
 
-// Expected: `ui.dialog.select` shows the host's select, and its promise answers the value of the row picked, whatever
-// value it was.
 #[test]
 fn a_select_answers_the_value_picked() {
     let Some(config) = config() else { return };
@@ -215,8 +199,6 @@ fn a_select_answers_the_value_picked() {
     assert_eq!(logged(&pipe, &log, 1), [json!({ "picked": { "n": 2 } })]);
 }
 
-// Expected (the audit's most used dialogs): `confirm`, `prompt` and `alert` show the host's dialogs, and each promise
-// answers what the user did there.
 #[test]
 fn confirm_prompt_and_alert_answer_their_promises() {
     let Some(config) = config() else { return };
@@ -237,9 +219,6 @@ fn confirm_prompt_and_alert_answer_their_promises() {
     assert_eq!(logged(&pipe, &log, expected.len()), expected);
 }
 
-// Expected (contract 2.x, step B, `focus-input` on the pipe): a field a handler shows with `focused` takes the focus
-// once the revision that shows it is adopted, though the focus came first, with the handler's effects: what the user
-// types then is the field's. The revision is held until the focus has come (`Tamper::Hold`), as a slow frame holds it.
 #[test]
 fn a_field_shown_and_focused_in_one_handler_takes_the_focus_once_shown() {
     let Some(config) = config() else { return };
@@ -268,10 +247,6 @@ fn a_field_shown_and_focused_in_one_handler_takes_the_focus_once_shown() {
     assert_eq!(logged(&pipe, &log, 2), [json!({ "found": "a" }), json!({ "found": "ab" })]);
 }
 
-// Expected (contract 2.x, step B, the ownership rule of 2.8; big-boi's G2 contrast): a batch the JS host sends as a
-// mount's applies to that mount or nowhere. The route opens, closes and opens again, a new mount with the same fields
-// `guard` and `same`; with `guard` focused, a focus of `same` that names the closed mount moves nothing, where the same
-// focus naming no mount (the activation's) or the new mount focuses `same`.
 #[test]
 fn a_batch_of_a_closed_mount_moves_nothing_where_the_activations_would() {
     let Some(config) = config() else { return };
@@ -315,9 +290,6 @@ fn raw(config: Config, name: &str, source: &str) -> Pipe {
     pipe
 }
 
-// Expected (carbon c2b-1): a call's effects apply in its order, a field's focus that names a mount among them. A
-// command that closes the plugin's alert and then focuses a field of its route focuses the field, where the focus came
-// first, sent on its own, and the open alert refused it.
 #[test]
 fn a_calls_effects_keep_their_order() {
     let Some(config) = config() else { return };
@@ -360,10 +332,6 @@ fn a_thrown_calls_mount_effects_go_with_it() {
     assert!(!tui.dialogs.is_open(), "the thrown call's dispatch ran:\n{}", app.text());
 }
 
-// Expected (carbon c2b-2): a field's focus that waits for the view showing it is dropped once the user takes the focus
-// back meanwhile: the reserved chord, though the composer had the focus already, or a click into another field. The
-// home footer's slot shows its field `sp` and focuses it in one call, and the revision that shows it is held until
-// then; the composer, or the field clicked, keeps the focus once it comes.
 #[test]
 fn a_pending_focus_goes_when_the_user_takes_the_focus_back() {
     let Some(config) = config() else { return };
@@ -400,9 +368,6 @@ fn a_pending_focus_goes_when_the_user_takes_the_focus_back() {
     }
 }
 
-// Expected (cf-3): a reload of the registrations that ends the home footer slot's mount and begins it again gives the
-// focus back to the field the plugin focused only if the field still held it as the mount ended, as TS's renderable
-// keeps or lost it. With the composer focused by the user meanwhile, the composer keeps it.
 #[test]
 fn a_reload_gives_the_focus_back_only_to_a_field_that_held_it() {
     let Some(config) = config() else { return };
@@ -535,9 +500,6 @@ const CLOSED: &str = r#"export default { id: "example.closed", setup(api) {
 } }
 "#;
 
-// Expected (contract 2.x, step B, the ownership rule of 2.8): a field's focus is its mount's, and applies to it or
-// nowhere: one the JS host sent while the mount was open, which the host takes only after the mount closed, moves
-// nothing; the composer the user went back to keeps the focus and what they type.
 #[test]
 fn a_fields_focus_after_its_mount_closed_moves_nothing() {
     let Some(config) = config() else { return };
@@ -568,8 +530,6 @@ fn a_fields_focus_after_its_mount_closed_moves_nothing() {
     assert_eq!(calls(&log), Vec::<Value>::new());
 }
 
-// Expected (contract 2.x, addition 4, on the pipe): a select and then an alert, each sized and centered by `dialog.set`
-// right after, as opencode-session-time's `/time`, show extra large and centered.
 #[test]
 fn a_dialog_set_right_after_sizes_and_centers_the_dialog() {
     let Some(config) = config() else { return };
@@ -586,8 +546,6 @@ fn a_dialog_set_right_after_sizes_and_centers_the_dialog() {
     assert_eq!(logged(&pipe, &log, 1), [json!({ "turn": 1 })]);
 }
 
-// Expected (the audit's most used layout): a plugin's route draws its bordered, titled box with its padding, the data
-// its navigation gave, and a scroll the wheel moves.
 #[test]
 fn a_route_draws_a_bordered_box_and_a_scroll_with_its_data() {
     let Some(config) = config() else { return };
@@ -609,10 +567,6 @@ fn a_route_draws_a_bordered_box_and_a_scroll_with_its_data() {
     assert!(screen.contains("line 9") && !screen.contains("line 0"), "{screen}");
 }
 
-// Expected (OpenTUI's reconciler as TS runs it): a node with `visible={false}` draws nothing; a span takes its `style`
-// and `href` alone, so its `fg` prop leaves it in the text's color; a `replace` of a path the host does not publish shows
-// nowhere, as TS's never degrades; a read an installed package's JSX makes once, as it mounts, shows the host's value,
-// which came after that render; and text outside a `<text>` crashes the render as OpenTUI's does.
 #[test]
 fn a_render_draws_by_the_reconcilers_rules() {
     let Some(config) = config() else { return };
@@ -636,8 +590,6 @@ fn a_render_draws_by_the_reconcilers_rules() {
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
 }
 
-// Expected: a theme change restyles a node colored from the context's theme without the plugin's render running again
-// (its colors carry their token), and the theme the plugin reads after it is the new one.
 #[test]
 fn a_theme_change_restyles_the_render_and_reaches_the_theme() {
     let Some(config) = config() else { return };
@@ -661,7 +613,6 @@ fn a_theme_change_restyles_the_render_and_reaches_the_theme() {
     assert_eq!(toasts(&pipe), [format!("#{:02x}{:02x}{:02x}", muted.r, muted.g, muted.b)]);
 }
 
-// Expected: a dialog another one replaces answers nothing (`undefined`), as TS's does; the second answers its pick.
 #[test]
 fn a_replaced_dialog_answers_nothing() {
     let Some(config) = config() else { return };
@@ -675,9 +626,6 @@ fn a_replaced_dialog_answers_nothing() {
     assert_eq!(logged(&pipe, &log, 2), [json!({ "picked": null }), json!({ "picked": { "n": 1 } })]);
 }
 
-// Expected (`ui.dialog.show`, the audit's most common gap): the plugin's own JSX shows in the host's panel dialog and
-// follows its signals, a click in it runs its handler, and escape closes it and calls `onClose`, as `dialog.clear()`
-// does.
 #[test]
 fn a_dialog_of_its_own_shows_its_jsx_and_closes() {
     let Some(config) = config() else { return };
@@ -708,9 +656,6 @@ fn a_dialog_of_its_own_shows_its_jsx_and_closes() {
     assert_eq!(logged(&pipe, &log, 3), [json!({ "closed": true }), json!({ "base": true }), json!({ "closed": true })]);
 }
 
-// Expected: a command a component registers (the page's, after setup) runs while the component is mounted, and goes
-// once the component left; the change settles (nothing more crosses while the page stays), and the reads the plugin
-// watched before it follow navigation after it.
 #[test]
 fn a_components_command_lives_with_its_mount_across_a_reload() {
     let Some(config) = config() else { return };
@@ -747,8 +692,6 @@ fn a_components_command_lives_with_its_mount_across_a_reload() {
     assert!(!matches!(tui.keymap.dispatch("v2probe.onpage", None), opentui::keymap::RunResult::Ok), "it stayed");
 }
 
-// Expected (CT-1): a page whose layer's commands have no `id`, as tokscope's, draws and settles: its commands change in
-// place, once. They named them anew each mount, and each reload mounted the page again, about 1,000 times a second.
 #[test]
 fn a_page_whose_commands_have_no_id_draws_and_settles() {
     let Some(config) = config() else { return };
@@ -769,9 +712,6 @@ fn a_page_whose_commands_have_no_id_draws_and_settles() {
     assert_eq!(logged(&pipe, &log, 1), [json!({ "inline": "j" })]);
 }
 
-// Expected (CT-21): a page that names its layer's command anew each time it mounts, as opencode-navigator does, draws
-// and settles: its command changes in place, which mounts nothing again. Each reload mounted it again, and it failed at
-// the 64-changes bound.
 #[test]
 fn a_page_that_names_its_commands_anew_each_mount_settles() {
     let Some(config) = config() else { return };
@@ -830,8 +770,6 @@ fn a_change_of_commands_alone_keeps_the_route_and_its_field() {
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
 }
 
-// Expected (CT-29): a session panel whose render registers a key layer, as opencode-self-improvement's /memory panel
-// does, stays open: the command it registers changes in place. A reload closed it, so `/memory` showed nothing.
 #[test]
 fn a_session_panel_stays_open_across_a_reload() {
     let Some(config) = config() else { return };
@@ -852,9 +790,6 @@ fn a_session_panel_stays_open_across_a_reload() {
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
 }
 
-// Expected (CT-38): a session panel's input puts it full screen and back, gives the focus to its field, and closes it, as
-// TS's `PanelInput` does (oc-models-pro's ctrl+y and escape, btw-sidechat's focus as its panel mounts). They were
-// missing: the plugin's handler threw.
 #[test]
 fn a_session_panel_toggles_focuses_and_closes_itself() {
     let Some(config) = config() else { return };
@@ -892,9 +827,6 @@ fn a_session_panel_toggles_focuses_and_closes_itself() {
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
 }
 
-// Expected (O-170): a plugin that imports the `effect` package fails to load alone, naming the package, and the client
-// goes on: the JS host serves what the TUI plugin API defines, not libraries a plugin expects the host to happen to
-// have. The row held the opposite when the host served effect (CT-13).
 #[test]
 fn a_plugin_that_imports_effect_fails_to_load_naming_it() {
     let Some(config) = config() else { return };
@@ -914,9 +846,6 @@ fn a_plugin_that_imports_effect_fails_to_load_naming_it() {
     assert!(!pipe.harness.app.text().is_empty(), "the client stopped drawing");
 }
 
-// Expected (contract 2.x, addition 1, R3): a page that sizes its box from its own width, a cell wider each time, is
-// held after 8 frames in a row of rect pushes with no other cause: its `onSizeChange` runs a bounded number of times,
-// and the plugin stays active. A page that settles after one change ends at that width and hears no more.
 #[test]
 fn a_layout_that_follows_its_own_size_is_held() {
     let Some(config) = config() else { return };
@@ -1040,9 +969,6 @@ fn reloaded(pipe: &Pipe, before: Option<u64>) {
     pipe.settle();
 }
 
-// Expected (carbon ce-5): a command enabled after a reload of the plugin's registrations was sent, but before the host
-// took it, is enabled on the guest that takes the plugin over. Everything the JS host sends is handed over at once, so
-// the `set-enabled` comes to the guest that handed over, and `^` is taken.
 #[test]
 fn a_state_set_as_the_registrations_reload_goes_to_the_new_guest() {
     let Some(config) = config() else { return };
@@ -1066,8 +992,6 @@ fn a_state_set_as_the_registrations_reload_goes_to_the_new_guest() {
     assert_eq!((harness.text(), calls(&log)), (String::new(), vec![json!({ "caret": true })]));
 }
 
-// Expected (contract gaps 2): a JS plugin's key listener takes its key with `preventDefault`. Not taken, `ctrl+p` goes
-// on to the host's palette once the JS host answered; taken, no palette opens. The listener hears it once each time.
 #[test]
 fn a_js_listener_takes_its_key_with_prevent_default() {
     let Some(config) = config() else { return };
@@ -1115,8 +1039,6 @@ fn hearing(setup: &mut opencode_plugin::abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (cg2-5): a key a JS listener takes and lets go is heard once by every native listener, above it and below
-// it: the key it puts back resumes below the listeners that heard it.
 #[test]
 fn a_key_a_js_listener_lets_go_is_heard_once_by_each_native_listener() {
     let Some(config) = config() else { return };
@@ -1137,8 +1059,6 @@ fn a_key_a_js_listener_lets_go_is_heard_once_by_each_native_listener() {
     assert_eq!(heard, ["above:ctrl+o", "below:ctrl+o"]);
 }
 
-// Expected (cg2-1): what the user types into the composer never waits for a JS listener of every key, even one that
-// can take keys: with every answer of the JS host held back, the letters show at once; a key it may take still waits.
 #[test]
 fn composer_typing_never_waits_for_a_js_key_listener() {
     let Some(config) = config() else { return };
@@ -1160,7 +1080,6 @@ fn composer_typing_never_waits_for_a_js_key_listener() {
     assert!(!tui.dialogs.is_open(), "the listener did not take its key");
 }
 
-// Expected (ce-4): a JS palette command whose key declines is still listed as the palette that key opens shows.
 #[test]
 fn a_declining_palette_command_stays_in_the_palette_its_key_opens() {
     let Some(config) = config() else { return };
@@ -1174,8 +1093,6 @@ fn a_declining_palette_command_stays_in_the_palette_its_key_opens() {
     assert!(harness.app.text().contains("Probe hotkey"), "{}", harness.app.text());
 }
 
-// Expected (the key hold's bound): a JS host that ends while it holds keys releases them at once, the bound key first
-// as declined, even under a hold limit far longer than the test; its command is not sent again.
 #[test]
 fn a_js_host_that_ends_while_keys_are_held_releases_them() {
     let Some(mut config) = config() else { return };
@@ -1197,9 +1114,6 @@ fn a_js_host_that_ends_while_keys_are_held_releases_them() {
     assert!(!calls(&log).iter().any(|call| call.get("percent").is_some()), "{:?}", calls(&log));
 }
 
-// Expected (big-boi's catalog recheck): an activation a reload handed the JS host's activation to owns the dialogs of the
-// one before it (FT-4); a plugin disabled and enabled again runs a fresh setup, whose activation owns its own dialogs
-// alone, not those of the activations before it. It took on the reload's chain, and claimed them.
 #[test]
 fn a_fresh_activation_owns_only_its_own_dialogs() {
     let Some(config) = config() else { return };
@@ -1227,8 +1141,6 @@ fn a_fresh_activation_owns_only_its_own_dialogs() {
     assert!(now.iter().all(|generation| !chain.contains(generation)), "the fresh activation owns {now:?} of {chain:?}");
 }
 
-// Expected (carbon-5): a handler of an activation a reload ended that rejects late fails nothing: the reloaded plugin
-// stays active.
 #[test]
 fn a_late_rejection_of_a_reloaded_plugin_fails_nothing() {
     let Some(config) = config() else { return };
@@ -1259,8 +1171,6 @@ fn a_store_made_after_setup_takes_its_first_write() {
     assert_eq!(stored.and_then(|text| serde_json::from_str::<Value>(&text).ok()), Some(json!({ "count": 42 })));
 }
 
-// Expected (carbon-2): two reloads of a plugin's registrations that both come before the host took the first leave the
-// plugin working: the commands of both run.
 #[test]
 fn two_quick_reloads_leave_the_plugin_working() {
     let Some(config) = config() else { return };
@@ -1278,8 +1188,6 @@ fn two_quick_reloads_leave_the_plugin_working() {
     assert_eq!(logged(&pipe, &log, 2), [json!({ "ran": "v2probe.first" }), json!({ "ran": "v2probe.second" })]);
 }
 
-// Expected (containment): a render that spins ends the JS host by the progress rule; the plugin fails, named, and the
-// JS host starts again for the others.
 #[test]
 fn a_v2_render_that_spins_fails_its_plugin_alone() {
     let Some(mut config) = config() else { return };
@@ -1293,8 +1201,6 @@ fn a_v2_render_that_spins_fails_its_plugin_alone() {
     assert_ne!(pipe.scripts().pid(), Some(pid));
 }
 
-// Expected (containment): a plugin that floods the host with toasts from a timer fails, though no call of it ran, and
-// alone.
 #[test]
 fn a_v2_plugin_that_floods_fails_alone() {
     let Some(config) = config() else { return };
@@ -1314,8 +1220,6 @@ fn a_v2_plugin_that_floods_fails_alone() {
     assert_eq!(pipe.status("example.twin"), Some(Status::Active));
 }
 
-// Expected (O-146): a project's V2 plugin waits for approval: none of its module runs before (its import writes a
-// line), and once approved it loads, sets up and draws.
 #[test]
 fn a_project_v2_plugin_waits_for_approval() {
     let Some(config) = config() else { return };
@@ -1499,8 +1403,6 @@ fn a_project_plugins_package_name_cannot_lead_out_of_its_approved_files() {
     assert!(!marker.exists(), "a module outside the approved files ran");
 }
 
-// Expected (carbon jsnpm-3): a global plugin, which is not confined, also loads only a TUI module among its own files: a
-// `package.json` `name` that leads elsewhere fails the plugin, and the module it names runs nowhere.
 #[cfg(unix)]
 #[test]
 fn a_global_plugins_package_name_cannot_lead_out_of_its_directory() {
@@ -1533,8 +1435,6 @@ fn a_global_plugins_package_name_cannot_lead_out_of_its_directory() {
     assert!(!marker.exists(), "a module outside the plugin's directory ran");
 }
 
-// Expected (FT-3): a project plugin's approved files import one another by relative paths, from its root and from a
-// directory below it, as TS loads them.
 #[test]
 fn a_project_plugin_imports_its_own_files_by_relative_paths() {
     let Some(config) = config() else { return };
@@ -1566,9 +1466,6 @@ fn a_project_plugin_imports_its_own_files_by_relative_paths() {
     assert_eq!(std::fs::read_to_string(&marker).ok().as_deref(), Some("near"));
 }
 
-// Expected (bigboi P8-1, FT-2): what runs is what was approved, also when a dependency's file changes after the
-// approval without changing what the walk off the UI thread stamps (its size and time kept): a new JS host sets the
-// plugin up again from the approved copy, and the changed file runs nowhere.
 #[test]
 fn a_dependency_changed_after_approval_runs_nothing_unapproved() {
     let Some(config) = config() else { return };
@@ -1606,8 +1503,6 @@ fn a_dependency_changed_after_approval_runs_nothing_unapproved() {
     assert_eq!(std::fs::read_to_string(&marker).unwrap(), "approved\napproved\n");
 }
 
-// Expected (FT-5): a plugin that imports OpenTUI's renderable classes and enums by name links and sets up, as in TS,
-// where Bun failed its module for a name the layer did not export; a class it extends constructs.
 #[test]
 fn a_plugin_importing_opentuis_classes_links_and_sets_up() {
     let Some(config) = config() else { return };
@@ -1635,10 +1530,6 @@ fn a_plugin_importing_opentuis_classes_links_and_sets_up() {
     assert_eq!(std::fs::read_to_string(&marker).ok().as_deref(), Some("resize"));
 }
 
-// Expected (CT-3, CT-4): a server plugin's TUI part as delayed-message's is written loads and calls its server's RPC,
-// as in TS: it imports Solid and OpenTUI's JSX runtime by OpenTUI's runtime registry names, the encoded and the plain
-// spelling, defines its RPC with `@opencode/plugin/rpc`, and `client.rpc` calls `/api/rpc/<id>/<method>`. It failed
-// with "Cannot find package 'opentui:runtime-module:solid-js'", and `client.rpc` was not a function.
 #[test]
 fn a_plugin_imports_runtime_modules_and_calls_its_own_rpc() {
     let Some(config) = config() else { return };
@@ -1684,8 +1575,6 @@ fn a_plugin_imports_runtime_modules_and_calls_its_own_rpc() {
     pipe.harness.wait_for("rpc hi");
 }
 
-// Expected (CT-6): a local TypeScript plugin that fails to load is listed by its package's name, as a skipped one is
-// (FT-15), not by its directory's path.
 #[test]
 fn a_local_plugin_that_fails_is_listed_by_its_package() {
     let Some(config) = config() else { return };
@@ -1707,9 +1596,6 @@ fn a_local_plugin_that_fails_is_listed_by_its_package() {
     assert_eq!(entry.id, "opencode-broken-thing", "{entry:?}");
 }
 
-// Expected (FT-9): a plugin that makes a store for each of 80 keys in its setup, as opencode-tokscope does for its
-// history shards, loads and stays active, and each store holds and follows what the host stored for it, as in TS: no
-// key or read bound is hit, and with the UI thread busy as the setup runs, its messages stay under the pipe's 256.
 #[test]
 fn a_plugin_with_eighty_stores_reads_each() {
     let Some(config) = config() else { return };
@@ -1761,11 +1647,6 @@ fn a_plugin_with_eighty_stores_reads_each() {
     assert_eq!(std::fs::read_to_string(&marker).ok().as_deref(), Some("160"));
 }
 
-// Expected (CT-36): a V2 plugin that stores a value of about 1 MB, as opencodebar keeps its price list and prompt-search
-// its index of every prompt, has its write refused past the stored value's bound of 256 KiB (big-boi's `cg4-3`,
-// `cg4-4`): its update rejects, what it stored before stays, and the plugin goes on. It follows a value of that size
-// another client stores. The write goes to the host in pieces and the read comes back in parts: before, the write's frame
-// over the cap ended the JS host, and a read over 256 KiB read as nothing.
 #[test]
 fn a_plugin_past_the_stored_values_bound_goes_on_and_follows_a_large_value() {
     let Some(config) = config() else { return };
@@ -1826,9 +1707,6 @@ fn a_plugin_past_the_stored_values_bound_goes_on_and_follows_a_large_value() {
     assert_eq!(pipe.status("example.big"), Some(Status::Active));
 }
 
-// Expected (big-boi's `cg4-1`): a store's update appends to a stored list whose text, quoted in its answer, is past a
-// frame (a value of 220 KB, within the stored bound): the answer comes in parts and both items are kept. Its answer
-// was reduced to null, read as an empty key, and the update stored the new item alone.
 #[test]
 fn a_store_update_of_a_value_answered_past_a_frame_keeps_it() {
     let Some(config) = config() else { return };
@@ -1976,19 +1854,12 @@ fn assert_installs_nothing((status, toast, asked): (Option<Status>, Option<Strin
     assert_eq!(asked, 0, "Bun asked a registry for the missing package");
 }
 
-// Expected (js-no-install, Simon's rule: npm plugins load, nothing is installed): a plugin whose directory has no
-// `node_modules` and that imports a package nobody installed fails to load, saying which package and that
-// opencode-native installs nothing; the startup's failure toast and `/plugins` show it, and Bun asks no registry for
-// it, which it did with its auto-install on.
 #[test]
 fn a_plugin_importing_a_package_nobody_installed_fails_and_nothing_is_fetched() {
     let Some(config) = config() else { return };
     assert_installs_nothing(missing_package(config));
 }
 
-// Expected (js-no-install): the same on the JS host the bundled opencode binary gives, run as the Bun it embeds
-// (`BUN_BE_BUN=1`), which parses Bun's flags and bunfig itself: `Config::find`'s bundled path, with no `bun` on the
-// path.
 #[test]
 fn the_bundled_opencode_as_bun_installs_nothing_either() {
     if config().is_none() {

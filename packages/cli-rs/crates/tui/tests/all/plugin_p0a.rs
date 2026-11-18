@@ -75,9 +75,6 @@ fn toasts(h: &Harness, text: &str) -> usize {
     h.app.text().lines().filter(|line| line.contains(text)).count()
 }
 
-// Expected: a confirm opens with `Confirm` active and its labels in title case; enter runs its action with `true`, a
-// move to `Cancel` and enter with `false`, escape with `false` (TS `dialog.confirm` resolves `true`, `false`), and a
-// dialog that replaces it runs nothing (TS resolves `undefined`). The cells are the same on both carriers.
 #[test]
 fn a_confirm_answers_true_false_or_nothing_on_both_carriers() {
     let rows: [(&[&str], Option<&str>); 4] = [
@@ -118,8 +115,6 @@ fn a_confirm_answers_true_false_or_nothing_on_both_carriers() {
     assert!(drawn[0] == drawn[1], "the loopback draws the confirm otherwise");
 }
 
-// Expected: an alert's action runs once after it closes, by enter, by escape, or when another dialog replaces it, as
-// TS resolves the alert's promise in each case. The cells are the same on both carriers.
 #[test]
 fn an_alert_runs_its_action_once_however_it_closes() {
     let mut drawn = Vec::new();
@@ -168,9 +163,6 @@ fn read(setup: &Setup) -> String {
     text[start..end.unwrap_or_else(|| panic!("no focus in the read:\n{screen}"))].to_owned()
 }
 
-// Expected: a plugin reads the composer's text, its cursor as a byte offset and its focus; an insert goes in at the
-// cursor as typing does, a set replaces the text and puts the cursor at the end, and a submit sends what the composer
-// shows and clears it, as enter does. Both carriers read and edit the same.
 #[test]
 fn the_composer_reads_and_edits_the_same_on_both_carriers() {
     for carrier in CARRIERS {
@@ -209,8 +201,6 @@ fn the_composer_reads_and_edits_the_same_on_both_carriers() {
     }
 }
 
-// Expected (bigboi 6, carbon-p0a-5): the cursor a plugin reads is the byte where its insert goes: after a tab, which
-// takes two columns in the buffer, across a line break, after a combining mark, a ZWJ emoji and wide characters.
 #[test]
 fn the_cursor_read_is_where_an_insert_goes() {
     let setup = session(Carrier::Linked);
@@ -228,9 +218,6 @@ fn the_cursor_read_is_where_an_insert_goes() {
     }
 }
 
-// Expected (bigboi 5, carbon-p0a-4): a set closes the completion popup of the text it replaces, as TS's `setText`
-// tells it, so a set and a submit in one call send exactly the new text from a `/` or an `@` popup. A set whose text
-// starts a completion opens its popup, and the submit then sends nothing, as enter does with a popup open.
 #[test]
 fn a_set_tells_the_completion_of_the_new_text() {
     for (typed, popup) in [("/", "Switch agent"), ("@", "@general")] {
@@ -283,8 +270,6 @@ fn unread(setup: &Setup) {
     setup.wait_for("no composer");
 }
 
-// Expected (bigboi 1, carbon-p0a-6): a composer that a session hides, where TS unmounts it, is no composer to a plugin:
-// for a form, a permission and the drawer it reads `None`, and a set and a submit change and send nothing.
 #[test]
 fn a_hidden_composer_is_not_read_or_edited() {
     let field = serde_json::json!([{ "key": "ok", "type": "boolean", "title": "Continue?" }]);
@@ -310,9 +295,6 @@ fn a_hidden_composer_is_not_read_or_edited() {
     refused(&setup, "unsent");
 }
 
-// Expected (bigboi 1, carbon-p0a-6): a composer that shows but may not submit, under a home form or while another
-// pane owns the input, takes a set but no submit from a plugin, as TS's `ref.set` sets and its `submit` refuses a
-// disabled prompt.
 #[test]
 fn a_disabled_composer_takes_no_submit() {
     let field = serde_json::json!([{ "key": "token", "type": "string", "title": "Token" }]);
@@ -345,8 +327,6 @@ fn a_disabled_composer_takes_no_submit() {
     assert!(setup.requests("POST", "/prompt").is_empty());
 }
 
-// Expected (bigboi 1): behind an ordinary dialog the composer still shows, and a plugin's submit sends it; the dialog
-// stays open and nothing answers it.
 #[test]
 fn a_submit_behind_a_dialog_sends_and_leaves_the_dialog() {
     let setup = session(Carrier::Linked);
@@ -373,9 +353,6 @@ fn changed(file: &str) -> opencode_api::generated::V2Event {
     event("filesystem.changed", serde_json::json!({ "file": file, "event": "change" }))
 }
 
-// Expected (bigboi 4): of two store signals the UI routes in one batch, the second sees the composer edit a plugin
-// asked for while the first was handled, and a route switch that the second makes does not carry the edit to the
-// next session's composer; on both carriers.
 #[test]
 fn a_composer_edit_is_not_overtaken_by_the_next_signal() {
     for carrier in CARRIERS {
@@ -409,7 +386,6 @@ fn a_composer_edit_is_not_overtaken_by_the_next_signal() {
     }
 }
 
-// Expected: a set starts the history over, as TS's `ref.set` does, so up then recalls the newest entry.
 #[test]
 fn a_set_starts_the_history_over() {
     let setup = session(Carrier::Linked);
@@ -430,9 +406,6 @@ fn a_set_starts_the_history_over() {
     assert_eq!(setup.textarea().text(), "two");
 }
 
-// Expected (`no-effects`): a call that sets, inserts and submits the composer and opens a confirm and an alert, then
-// panics, leaves the composer's text, sends no prompt and opens no dialog, on both carriers. Guard: the same call
-// without the panic does all of it.
 #[test]
 fn a_call_that_panics_leaves_no_composer_edit_and_no_dialog() {
     for carrier in CARRIERS {
@@ -461,8 +434,6 @@ fn a_call_that_panics_leaves_no_composer_edit_and_no_dialog() {
     }
 }
 
-// Expected (`no-effects`; bigboi 3): of three dispose callbacks, the one that queues a set, a submit and an alert and
-// then panics leaves none of it, and the two around it run and keep what they wrote; on both carriers.
 #[test]
 fn a_dispose_callback_that_panics_leaves_no_effects() {
     for carrier in CARRIERS {
@@ -512,11 +483,6 @@ fn witnessed(h: &Harness) -> u64 {
     json.and_then(|json| serde_json::from_str::<serde_json::Value>(&json).ok()?["count"].as_u64()).unwrap_or(0)
 }
 
-// Expected (`ledger`; bigboi 2, carbon-p0a-7): a plugin's alert closes when the plugin is disabled, and the composer
-// has the focus again; nothing it answers reaches the old activation, the new one after the plugin is enabled again,
-// or another plugin's command it names. The answer to a dialog that closes in the same turn as a disable and an enable
-// reaches nobody either. The plugin model (`plugin_model.rs`) runs the rest of the confirm's and alert's life against
-// its own commands; these rows add another plugin's command, a turn the model does not split, and both carriers.
 #[test]
 fn a_dialog_of_a_disabled_plugin_goes_and_answers_nobody() {
     for carrier in CARRIERS {
@@ -549,8 +515,6 @@ fn a_dialog_of_a_disabled_plugin_goes_and_answers_nobody() {
     }
 }
 
-// Expected (bigboi 2): a dialog that a plugin asked for and that arrives after the plugin was disabled does not show,
-// so it does not replace the dialog the user has open.
 #[test]
 fn a_dialog_of_a_plugin_that_is_not_live_does_not_show() {
     for carrier in CARRIERS {
@@ -566,8 +530,6 @@ fn a_dialog_of_a_plugin_that_is_not_live_does_not_show() {
     }
 }
 
-// Expected (`ledger`): a plugin's alert goes when a later call of the plugin panics, and the composer has the focus
-// again; its action, another plugin's command, does not run as it closes: a failed plugin's dialog answers nobody.
 #[test]
 fn a_dialog_of_a_failed_plugin_goes_and_answers_nobody() {
     for carrier in CARRIERS {
@@ -603,7 +565,6 @@ fn a_closed_dialog_leaves_the_next_one_to_the_host() {
     }
 }
 
-// Expected (bigboi 2): a dialog of a live plugin that names another plugin's command runs it, once.
 #[test]
 fn a_live_dialog_runs_a_foreign_command_once() {
     let h = home(Carrier::Linked);
@@ -616,9 +577,6 @@ fn a_live_dialog_runs_a_foreign_command_once() {
     assert_eq!(witnessed(&h), 1);
 }
 
-// Expected: a styled box draws its rounded border with the centered title, the heavy left rule and its padding inside
-// the box's padding, the chips wrapped to the box's width and cut at its height, at its margin and its width (the
-// slot's root takes the margin, once); the same cells on both carriers.
 #[test]
 fn a_styled_box_draws_the_same_on_both_carriers() {
     let drawn: Vec<_> = CARRIERS
@@ -646,7 +604,6 @@ fn a_styled_box_draws_the_same_on_both_carriers() {
     assert!(drawn[0].0 == drawn[1].0, "the loopback draws the box otherwise");
 }
 
-// Expected: the sample library built with the probe shows the same confirm, answers it, and edits the composer.
 #[test]
 fn the_sample_library_confirms_and_edits_the_composer() {
     let h = crate::plugins::open(Route::Home, "", &crate::plugins::build("p0a"));

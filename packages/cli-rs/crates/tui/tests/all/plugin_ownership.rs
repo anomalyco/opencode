@@ -214,35 +214,27 @@ fn rows(carrier: Carrier) -> Vec<Row> {
     all.filter(|row| reachable(carrier, *row)).collect()
 }
 
-// Expected (bigboi's freeze and ownership passes): every row of the table holds in process.
 #[test]
 fn request_ownership_in_process() {
     table(Carrier::InProcess);
 }
 
-// Expected (bigboi's freeze and ownership passes): every row of the table holds through the C ABI.
 #[test]
 fn request_ownership_through_the_c_abi() {
     table(Carrier::CAbi);
 }
 
-// Expected (bigboi's freeze and ownership passes): every row of the table holds over the pipe, where a cancelled fetch
-// rejects.
 #[test]
 fn request_ownership_over_the_pipe() {
     table(Carrier::Pipe);
 }
 
-// Expected (luau-spike 1.2): a Luau plugin is on the linked path, so every row holds for it as in process.
 #[cfg(luau)]
 #[test]
 fn request_ownership_in_luau() {
     table(Carrier::Luau);
 }
 
-// Expected (await-cancel, contract-ergonomics 2.1): a task a mount's key started, parked on that mount's fetch, goes
-// on once with `cancelled` as the mount closes, while the server still holds the fetch; nothing follows, also not once
-// the route opens again and the server answers. In process, through the C ABI and in Luau.
 #[test]
 fn a_task_parked_on_its_mounts_fetch_goes_on_once_cancelled() {
     #[cfg_attr(not(luau), allow(unused_mut))]
@@ -361,9 +353,6 @@ end)
     )
 }
 
-// Expected (carbon tm2-1): a task of the activation's that a mount's task wakes goes on in the mount's call (here the
-// reply of the mount's sleep) under the activation, not the mount: the fetch it sends then is the activation's, and its
-// reply comes after the mount closed. In process and through the C ABI (a Luau task wakes only on its own answer).
 #[test]
 fn a_task_a_mount_wakes_keeps_the_activations_owner() {
     for loopback in [false, true] {

@@ -90,8 +90,6 @@ fn notified(loopback: bool) -> String {
     harness.app.text()
 }
 
-// Expected: the notifications plugin plays the same sound and shows the same session toast through the C ABI's byte
-// shims as in process.
 #[test]
 fn notifications_act_the_same_through_the_c_abi_loopback() {
     let screen = notified(true);

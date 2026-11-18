@@ -291,10 +291,6 @@ fn probe(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected: focus moving between the session pane and the right pane, back and forth, dims the footer's hints and
-// brightens them again (TS `useInteractivity`, which claims read as `Read::interactive`), and mounts no
-// `prompt.footer` claim again: a probe claim's `on_mount` runs neither way and its widget stays the same, and the
-// goal is not read again.
 #[test]
 fn a_pane_focus_switch_dims_the_footer_hints_without_remounting_the_footer() {
     let h = mount();

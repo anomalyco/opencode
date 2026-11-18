@@ -417,8 +417,6 @@ fn mini(h: &View, command: &str) -> String {
     h.app.render().text()
 }
 
-// Expected (review big-boi 7): a plugin's move takes the wheel's whole path: away from the bottom, "Jump to latest"
-// shows, as after a wheel step.
 #[test]
 fn a_plugins_move_shows_the_way_back_to_the_latest() {
     let h = mapped(false);
@@ -426,8 +424,6 @@ fn a_plugins_move_shows_the_way_back_to_the_latest() {
     assert!(screen.contains("Jump to latest"), "{screen}");
 }
 
-// Expected (review big-boi 7, carbon-7): a jump to the top asked for again at the top goes on up, as the wheel does: it
-// reveals older rows or asks for an older page each time.
 #[test]
 fn a_plugins_jump_to_the_top_backfills_each_time() {
     let h = mapped(false);
@@ -449,7 +445,6 @@ fn a_plugins_jump_to_the_top_backfills_each_time() {
     );
 }
 
-// Expected (review carbon-7): a pointer that moves over the transcript, without the wheel, runs no behaviors.
 #[test]
 fn a_pointer_over_the_transcript_runs_no_behaviors() {
     let h = mapped(true);
@@ -461,7 +456,6 @@ fn a_pointer_over_the_transcript_runs_no_behaviors() {
     assert_eq!(opencode_plugin::behave::counts().since(before).arms, 0);
 }
 
-// Expected (review big-boi 7, carbon-7): a surface told about the transcript hears a plugin's move in its frame.
 #[test]
 fn a_subscriber_hears_a_plugins_move_in_its_frame() {
     let h = mapped(true);
@@ -473,9 +467,6 @@ fn a_subscriber_hears_a_plugins_move_in_its_frame() {
     assert_eq!(told, offset);
 }
 
-// Expected (rich plugins P3, decision 8): the transcript publishes its offset and mounted rows, and a plugin's verb on
-// it takes the wheel's own path: a jump to the top reveals older rows, or asks for an older page, as the wheel near
-// the top does.
 #[test]
 fn a_plugin_moves_the_transcript_through_its_own_scroll_path() {
     PLUGGED.with(|plugged| plugged.set(true));

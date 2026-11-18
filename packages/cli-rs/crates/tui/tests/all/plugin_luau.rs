@@ -43,8 +43,6 @@ fn hello(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (`carrier-equal`): the quick start in Luau draws the frame the Rust source draws, and its command shows the
-// same toast.
 #[test]
 fn the_luau_quick_start_draws_and_sends_what_its_rust_source_does() {
     let rust = home(abi::Plugin { id: "example.hello", setup: hello }.into());
@@ -64,8 +62,6 @@ fn the_luau_quick_start_draws_and_sends_what_its_rust_source_does() {
     assert_eq!(shown(&luau), shown(&rust));
 }
 
-// Expected (luau-spike): the counter's confirm is a host dialog; its answer reaches the plugin as the command's input,
-// and what the answer stores shows in the claim.
 #[test]
 fn the_counter_asks_before_it_resets_and_its_answer_comes_back() {
     let h = support::mount(
@@ -104,8 +100,6 @@ fn page(view: &str) -> Harness {
     h
 }
 
-// Expected (P1's memo, `View::memo`): a Luau view's memo builds its subtree once while its value stays, and the host
-// keeps what it built; a value that changes builds it again.
 #[test]
 fn a_luau_memo_keeps_its_subtree_while_its_value_stays() {
     let h = page(
@@ -129,7 +123,6 @@ fn a_luau_memo_keeps_its_subtree_while_its_value_stays() {
     assert!(text.contains("cards built") && text.contains("builds 1 views") && views > 1, "{text}");
 }
 
-// Expected (P1): a tree with an id twice is refused whole, and a second refusal in a row fails the plugin.
 #[test]
 fn a_refused_luau_tree_fails_the_plugin_the_second_time() {
     let h = page(
@@ -146,8 +139,6 @@ fn a_refused_luau_tree_fails_the_plugin_the_second_time() {
     assert!(!h.app.text().contains("twice"));
 }
 
-// Expected (luau-spike 1.3, O-159): a plugin whose command spins is stopped once it used the overrun limit of CPU
-// time, well before the watchdog's 0.5 s notice; it is failed, its claim goes, and the TUI keeps drawing.
 #[test]
 fn a_spinning_luau_plugin_is_failed_and_the_tui_keeps_drawing() {
     let init = r#"
@@ -174,8 +165,6 @@ fn a_spinning_luau_plugin_is_failed_and_the_tui_keeps_drawing() {
     h.wait_for("still here");
 }
 
-// Expected (await-luau, carbon `al-2`): a Luau task's dialog that the host keeps out, while its own approval dialog is
-// open, still closes: the task goes on with `nil` instead of waiting for the rest of the activation.
 #[test]
 fn a_dialog_the_host_keeps_out_answers_its_task_nil() {
     let init = r#"

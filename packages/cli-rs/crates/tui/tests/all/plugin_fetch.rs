@@ -162,8 +162,6 @@ fn stats_frames(loopback: bool) -> Vec<Vec<opentui::testing::Cell>> {
     frames
 }
 
-// Expected: `/stats` from a session fetches the stats and shows the poster; escape, a command of the route's scope,
-// goes back to the session, and opening it again fetches again; the same cells through the C ABI's byte shims.
 #[test]
 fn stats_goes_back_with_escape_and_fetches_afresh_the_same_through_the_c_abi_loopback() {
     let direct = stats_frames(false);
@@ -171,8 +169,6 @@ fn stats_goes_back_with_escape_and_fetches_afresh_the_same_through_the_c_abi_loo
     assert!(stats_frames(true) == direct, "the loopback draws other cells");
 }
 
-// Expected: a fetch goes through the TUI's client as it is now, so after the managed service moved, the stats go to
-// the new port with the new password.
 #[test]
 fn a_moved_service_gets_the_fetch() {
     let server = Server::new(true);
@@ -186,8 +182,6 @@ fn a_moved_service_gets_the_fetch() {
     assert_eq!(seen.header("authorization"), Some(format!("Basic {}", Auth::password("new").token())));
 }
 
-// Expected: a bare `/btw` opens the prompt, whose answer asks the session's question; `c` copies the answer and shows
-// `✓ copied` in place, where the answer stays scrolled.
 #[test]
 fn a_bare_btw_prompts_and_copying_keeps_the_answer_scrolled() {
     let capture = opencode_tui::features::links::testing::capture();
@@ -212,7 +206,6 @@ fn a_bare_btw_prompts_and_copying_keeps_the_answer_scrolled() {
     assert_eq!(*capture.0.copied.borrow(), [answer("long").trim().to_owned()]);
 }
 
-// Expected: two questions are pending at once, with the `/btw` spinner until both are answered; each answer opens.
 #[test]
 fn two_btw_questions_can_be_pending_at_once() {
     let server = Server::new(false);
@@ -235,7 +228,6 @@ fn two_btw_questions_can_be_pending_at_once() {
     h.wait_gone("/btw");
 }
 
-// Expected: a reply that arrives after its plugin was disabled reaches nothing: no answer opens.
 #[test]
 fn a_slow_btw_reply_across_a_disable_delivers_nothing() {
     let server = Server::new(false);
@@ -252,7 +244,6 @@ fn a_slow_btw_reply_across_a_disable_delivers_nothing() {
     h.wait_gone("/btw");
 }
 
-// Expected: closing an answer frees its body and handlers; four answers opened and closed leave none behind.
 #[test]
 fn a_closed_btw_answer_is_freed() {
     let server = Server::new(true);
@@ -269,8 +260,6 @@ fn a_closed_btw_answer_is_freed() {
     assert_eq!(std::rc::Rc::strong_count(&marker), 1, "a closed answer's body is still held");
 }
 
-// Expected: the answer's box follows the screen as TS's `maxHeight` does, so after the terminal gets shorter the
-// header and the footer stay on screen.
 #[test]
 fn a_btw_answer_fits_a_shorter_terminal() {
     let server = Server::new(true);
@@ -284,7 +273,6 @@ fn a_btw_answer_fits_a_shorter_terminal() {
     assert!(screen.contains("/btw") && screen.contains("copy response"), "{screen}");
 }
 
-// Expected: a copy that completes after its answer closed does not open the answer again.
 #[test]
 fn a_late_btw_copy_does_not_reopen_a_closed_answer() {
     let server = Server::new(true);
@@ -298,9 +286,6 @@ fn a_late_btw_copy_does_not_reopen_a_closed_answer() {
     assert!(!h.app.text().contains("answer to one"), "{}", h.app.text());
 }
 
-// Expected (carbon-4, bigboi-7): the stats route asks for the stats as it mounts, however it opens, as TS's
-// `StatsPage` does: as the first route (`OPENCODE_ROUTE`), through another plugin's navigation, and afresh on each
-// visit; `/stats` while the route shows asks nothing more.
 #[test]
 fn the_stats_route_fetches_as_it_mounts_however_it_opens() {
     let server = Server::new(true);
@@ -341,9 +326,6 @@ fn probe_setup(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (plugin-live R2-2): a fetch that gets 404 or 500 replies with the status and the body's text, or a
-// declared error's message as TS's `errorMessage` shows it, never `UnsupportedContentType`; the same in process and
-// through the C ABI's byte shims.
 #[test]
 fn an_error_status_reaches_the_plugin_with_its_status_and_body() {
     let want: Vec<Result<Value, String>> = [
@@ -383,7 +365,6 @@ fn an_error_status_reaches_the_plugin_with_its_status_and_body() {
     }
 }
 
-// Expected: `/btw` toasts a declared error's message alone, as TS's `toast.error` shows it.
 #[test]
 fn a_failed_btw_toasts_the_declared_message() {
     let server = Server::new(true);

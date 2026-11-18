@@ -690,9 +690,6 @@ fn composer(harness: &Harness) -> String {
     text
 }
 
-// Expected (P2, the docked panel): a command opens the panel surface beside the session, its view gets the panel's
-// input (split, with the input), keys of its surface layer reach its handler while it has the focus, and closing it
-// revokes every layer it registered.
 #[test]
 fn a_panel_surface_docks_takes_keys_and_revokes_them() {
     let harness = open();
@@ -727,8 +724,6 @@ fn a_panel_surface_docks_takes_keys_and_revokes_them() {
     assert_eq!(interact::ledger(&*harness.tui), before);
 }
 
-// Expected (`Pass`): a bind whose handler passes lets the key go on down the host's order, as if the plugin were not
-// there; a consumed one goes no further.
 #[test]
 fn a_passed_key_goes_on_and_a_consumed_one_does_not() {
     let harness = open();
@@ -746,8 +741,6 @@ fn a_passed_key_goes_on_and_a_consumed_one_does_not() {
     assert_eq!(taken(), ["global: any x [-]", "setup: key cx [-]"]);
 }
 
-// Expected (FT-14): a plugin's printable bind in global scope does not take a key while the composer has the focus, so
-// the user's `h` types; its bind with a modifier does. Once no text input has the focus, its `h` reaches it.
 #[test]
 fn a_printable_global_bind_leaves_the_composer_its_typing() {
     let harness = open_with(|probe| probe.global_h = true);
@@ -765,8 +758,6 @@ fn a_printable_global_bind_leaves_the_composer_its_typing() {
     assert_eq!(taken(), ["other: key gh [-]"]);
 }
 
-// Expected (3.8, `delivery`): a modal composer's mode switch applies before the next key of the same batch: `esc`,
-// `d`, `w` in one read inserts nothing, and `i` then text loses no character.
 #[test]
 fn a_mode_switch_applies_before_the_next_key_of_the_batch() {
     let harness = open_with(|probe| probe.listen = true);
@@ -809,8 +800,6 @@ fn a_mode_switch_applies_before_the_next_key_of_the_batch() {
     assert!(taken().contains(&"setup: paste pasted [normal]".to_owned()));
 }
 
-// Expected (3.8): a mode ends when the focus leaves its scope, and does not come back with the focus; the reserved
-// chord ends every plugin mode and reaches the app; no layer may bind it.
 #[test]
 fn a_mode_ends_with_its_scope_and_on_the_reserved_chord() {
     let harness = open();
@@ -848,8 +837,6 @@ fn a_mode_ends_with_its_scope_and_on_the_reserved_chord() {
     assert_eq!(interact::ledger(&*harness.tui).modes, base.modes, "a mode stayed past its scope's blur");
 }
 
-// Expected (the `Any` listener): a global listener sees every key in the base mode before the host's layers, and one
-// that consumes takes the key from them.
 #[test]
 fn a_global_listener_sees_every_key_and_may_take_it() {
     let harness = open_with(|probe| probe.listen = true);
@@ -864,8 +851,6 @@ fn a_global_listener_sees_every_key_and_may_take_it() {
     assert_eq!(taken(), ["global: any j [-]"]);
 }
 
-// Expected (pointer and hover): a press, a drag after a consumed press, a release and the wheel reach a pointer node
-// with the cell in the node; the hover color is the host's with no call; the drag ends with the release.
 #[test]
 fn pointer_events_carry_the_cell_and_a_consumed_press_captures_the_drag() {
     let harness = open();
@@ -894,8 +879,6 @@ fn pointer_events_carry_the_cell_and_a_consumed_press_captures_the_drag() {
     assert_eq!(cell.bg, opentui::style::Color::rgb(255, 0, 0));
 }
 
-// Expected (the overlay): it opens at its anchor over the session, takes the focus and its own keys, and escape closes
-// it, which its opener hears; a press outside it closes it too; it ends with its opener.
 #[test]
 fn an_overlay_takes_the_focus_and_closes_on_escape_or_outside() {
     let harness = open();
@@ -927,8 +910,6 @@ fn an_overlay_takes_the_focus_and_closes_on_escape_or_outside() {
     assert_eq!(taken(), ["side: key overlay [-]"]);
 }
 
-// Expected (the hold): after a consumed hold key the host holds the keys that follow until the plugin releases them
-// or the hold's time passes, then routes them in their order.
 #[test]
 fn a_hold_key_holds_the_keys_after_it_until_the_time_passes() {
     let harness = open_with(|probe| probe.hold = true);
@@ -957,8 +938,6 @@ fn active(harness: &Harness, id: &str) -> bool {
     harness.tui.plugins.entries().iter().any(|entry| entry.id == id && entry.active)
 }
 
-// Expected (the rich select, 4.10): a select shown again under its key while it is open changes in place, keeping the
-// filter and the selected row; footers and colors are the plugin's, live; a plugin that finds it closed shows nothing.
 #[test]
 fn a_rich_select_changes_in_place_and_keeps_its_filter() {
     let harness = open();
@@ -983,8 +962,6 @@ fn a_rich_select_changes_in_place_and_keeps_its_filter() {
     assert!(!harness.app.text().contains("Pick"), "a closed select opened again");
 }
 
-// Expected (4.10): a row's own action runs instead of the select's; a footer action runs with the selected row's
-// value and is hidden on the rows it names; an extra key runs with the selected row.
 #[test]
 fn a_rich_select_runs_row_actions_footer_actions_and_keys() {
     let harness = open();
@@ -1004,8 +981,6 @@ fn a_rich_select_runs_row_actions_footer_actions_and_keys() {
     assert_eq!(taken(), ["update alpha", "picked alpha", "row beta"]);
 }
 
-// Expected (3.6): a row may toggle another plugin, which the host does after the key and labels from the plugin's
-// real state; a row that names its own plugin is refused.
 #[test]
 fn a_select_row_toggles_another_plugin_but_never_its_own() {
     let harness = open();
@@ -1026,7 +1001,6 @@ fn a_select_row_toggles_another_plugin_but_never_its_own() {
     assert!(active(&harness, ID), "a row toggled its own plugin");
 }
 
-// Expected (the error view): the host's own error details show the plugin's error, and escape runs its back action.
 #[test]
 fn error_details_show_and_go_back() {
     let harness = open();
@@ -1039,7 +1013,6 @@ fn error_details_show_and_go_back() {
     assert_eq!(taken(), ["picked back"]);
 }
 
-// Expected: no layer may bind the reserved chord; a pointer drag without a consumed press reaches nobody.
 #[test]
 fn the_reserved_chord_and_an_uncaptured_drag_reach_no_plugin() {
     let harness = open();
@@ -1057,7 +1030,6 @@ fn the_reserved_chord_and_an_uncaptured_drag_reach_no_plugin() {
     assert!(!taken().iter().any(|line| line.contains("Drag")));
 }
 
-// Expected (the listeners' order): listeners run by priority, the newest first among equals, before any layer.
 #[test]
 fn listeners_run_by_priority_then_newest_first() {
     let harness = open_with(|probe| {
@@ -1069,7 +1041,6 @@ fn listeners_run_by_priority_then_newest_first() {
     assert_eq!(taken(), ["above: any q [-]", "newer: any q [-]", "global: any q [-]"]);
 }
 
-// Expected (capture): a press the plugin passes captures nothing, so the drag after it reaches no plugin.
 #[test]
 fn a_passed_press_captures_nothing() {
     let harness = open_with(|probe| probe.pass_press = true);
@@ -1084,8 +1055,6 @@ fn a_passed_press_captures_nothing() {
     assert_eq!(log, ["side: Down a 1,0 [-]"]);
 }
 
-// Expected (`reconcile-fresh` for input): a box whose pointer flag changes is wired again, so its events follow the
-// tree the host accepted last.
 #[test]
 fn a_box_that_gains_pointer_events_gets_them() {
     let harness = open();
@@ -1103,8 +1072,6 @@ fn a_box_that_gains_pointer_events_gets_them() {
     assert_eq!(log, ["side: Down b 1,0 [-]", "side: Up b 1,0 [-]"]);
 }
 
-// Expected (synchronous geometry reads): a call reads where a node of the plugin's mount is, as the last settled frame
-// laid it out, and which of its nodes has the focus.
 #[test]
 fn a_call_reads_the_geometry_and_the_focus_of_its_mount() {
     let harness = open();
@@ -1121,7 +1088,6 @@ fn a_call_reads_the_geometry_and_the_focus_of_its_mount() {
     assert!(line.ends_with("height: 1 }) Focused { node: Some(\"a\"), surface: true }"), "{line}");
 }
 
-// Expected (paste): a paste in a panel goes to its surface's layer that declares pastes.
 #[test]
 fn a_paste_in_a_panel_goes_to_its_paste_layer() {
     let harness = open();
@@ -1132,8 +1098,6 @@ fn a_paste_in_a_panel_goes_to_its_paste_layer() {
     assert_eq!(taken(), ["side: paste zz [-]"]);
 }
 
-// Expected (TS `dialog.select`'s `search`): a select that names the plugin's search lists the rows it returns, in its
-// order and flat, for the query as it is typed and for the empty one as it opens; the search gets the enabled rows.
 #[test]
 fn a_rich_select_lists_the_rows_of_the_plugins_search() {
     let harness = open_with(|probe| probe.search = true);
@@ -1154,8 +1118,6 @@ fn a_rich_select_lists_the_rows_of_the_plugins_search() {
     assert_eq!(log.last().map(String::as_str), Some("row beta"), "{log:?}");
 }
 
-// Expected (capture, synthesis 4.4): a resize ends the capture, here one that squeezes the captured node off the
-// screen: the drags after it reach no plugin, also once the node shows again.
 #[test]
 fn a_resize_that_removes_the_captured_node_ends_the_capture() {
     let harness = open();
@@ -1179,8 +1141,6 @@ fn a_resize_that_removes_the_captured_node_ends_the_capture() {
     assert_eq!(log, ["side: Down a 1,0 [-]"]);
 }
 
-// Expected (hover on text, TS `onMouseOver` and `onMouseOut` on a `text`): a text with an id and hover events tells
-// its mount when the pointer enters and leaves it, also one that gains them in place.
 #[test]
 fn a_text_with_hover_events_tells_the_pointer_entering_and_leaving() {
     let harness = open();
@@ -1200,8 +1160,6 @@ fn a_text_with_hover_events_tells_the_pointer_entering_and_leaving() {
     assert_eq!(pass(), ["side: hover t true [-]", "side: hover t false [-]"]);
 }
 
-// Expected (an overlay anchored to another surface, synthesis 4.2): it shows inside that surface of the plugin,
-// against the edge it names; anchored to one that does not show, it does not open.
 #[test]
 fn an_overlay_anchored_to_a_surface_shows_against_its_edge() {
     let harness = open_with(|probe| probe.strip = true);
@@ -1216,9 +1174,6 @@ fn an_overlay_anchored_to_a_surface_shows_against_its_edge() {
     assert!(y > top, "{screen}");
 }
 
-// Expected (a global layer's paste): it hears a paste in the composer before the composer does, and one that lands
-// where no widget takes it; a host widget that takes a paste keeps it (TS offers every paste to a global listener
-// first).
 #[test]
 fn a_global_paste_layer_hears_a_paste_no_host_widget_takes() {
     let harness = open_with(|probe| probe.paste_global = true);
@@ -1251,8 +1206,6 @@ fn a_global_paste_layer_hears_a_paste_no_host_widget_takes() {
     assert!(harness.app.text().contains("d1"), "{}", harness.app.text());
 }
 
-// Expected (drag and drop between mounts): a drag from a node of one mount of the plugin dropped on a node of another
-// reaches the second with where it started; a drag from a host widget or another plugin's node drops nothing.
 #[test]
 fn a_drop_from_another_mount_of_the_plugin_says_where_it_started() {
     let harness = open_with(|probe| probe.strip = true);
@@ -1285,9 +1238,6 @@ fn composer_at(harness: &Harness) -> (u16, u16) {
     (rect.screen_x as u16 + 1, rect.screen_y as u16)
 }
 
-// Expected (review 1, synthesis 3.6): a row that toggles a plugin does so only on a key or a click: a run of the
-// select's submit by name changes nothing, and neither does an Enter whose select is closed or replaced by what runs
-// before its toggle (a task queued before the key).
 #[test]
 fn a_toggle_row_moves_the_registry_only_on_a_key_or_a_click() {
     let harness = open();
@@ -1323,8 +1273,6 @@ fn a_toggle_row_moves_the_registry_only_on_a_key_or_a_click() {
     assert!(!active(&harness, "test.other"), "a click did not toggle the plugin");
 }
 
-// Expected (review 7): a select shown again under its key with other footer actions or keys has those, and keeps its
-// filter and selection; after a toggle the row says what the registry holds at once, and the hint names the plugin.
 #[test]
 fn a_keyed_select_takes_new_actions_and_its_rows_follow_a_toggle() {
     let harness = open();
@@ -1364,8 +1312,6 @@ fn a_keyed_select_takes_new_actions_and_its_rows_follow_a_toggle() {
     assert!(screen.contains("disabled") && screen.contains("enable test.other"), "{screen}");
 }
 
-// Expected (review 2): what follows a hold key waits behind it in order, a paste included; input meant for a focus that
-// a press or a command moved reaches nothing; a hold key routed again holds what follows it.
 #[test]
 fn a_hold_keeps_the_input_after_it_in_order_and_for_its_focus() {
     let harness = open_with(|probe| probe.hold = true);
@@ -1415,8 +1361,6 @@ fn a_hold_keeps_the_input_after_it_in_order_and_for_its_focus() {
     assert!(ledger.holding && ledger.held == 1, "{ledger:?}");
 }
 
-// Expected (review 3): a hold ends only by its own owner, its own timer or its limit: an earlier hold's timer and
-// another plugin's release leave it, and a large read is routed in order with no more than the limit kept.
 #[test]
 fn a_hold_ends_by_its_own_owner_timer_or_limit() {
     let harness = open_with(|probe| {
@@ -1457,9 +1401,6 @@ fn a_hold_ends_by_its_own_owner_timer_or_limit() {
     assert!(!interact::ledger(&*harness.tui).holding);
 }
 
-// Expected (review 4, synthesis 3.8): the reserved chord is never held, however it is spelled no plugin key takes it,
-// it resets the plugins' input before the host's selection may stop it, and the next key reaches the host past a
-// listener that takes every key.
 #[test]
 fn the_reserved_chord_escapes_every_plugin_hold_spelling_and_listener() {
     let harness = open_with(|probe| {
@@ -1513,9 +1454,6 @@ fn the_reserved_chord_escapes_every_plugin_hold_spelling_and_listener() {
     assert!(!taken().iter().any(|line| line.starts_with("picked")));
 }
 
-// Expected (review 5): a host dialog keeps its input over a plugin's mode, focus and overlay; a route's layer does not
-// take keys from an overlay; an overlay in a mode with no escape of its own still closes on escape; closing the upper
-// of two plugins' overlays gives the focus to the other.
 #[test]
 fn a_host_dialog_and_the_top_overlay_keep_their_input() {
     let harness = open();
@@ -1563,8 +1501,6 @@ fn a_host_dialog_and_the_top_overlay_keep_their_input() {
     assert_eq!(taken(), ["menu: key k [-]"]);
 }
 
-// Expected (review 8): a capture ends with a move of the focus even when the focus comes back before the drag, and a
-// mode ends with a move out of its scope even when one call moves the focus out and back.
 #[test]
 fn a_capture_and_a_mode_end_with_a_move_out_and_back() {
     let harness = open();
@@ -1600,8 +1536,6 @@ fn a_capture_and_a_mode_end_with_a_move_out_and_back() {
     assert!(!taken().iter().any(|line| line.contains("down")), "a mode came back with the focus");
 }
 
-// Expected (review 9): a paste goes to the listeners by priority, as a key does, and a paste in a route or a slot
-// claim goes to its paste layer.
 #[test]
 fn a_paste_goes_by_priority_and_to_a_route_or_slot() {
     let harness = open_with(|probe| {
@@ -1628,8 +1562,6 @@ fn a_paste_goes_by_priority_and_to_a_route_or_slot() {
     assert_eq!(taken(), ["route: paste pass3 [-]", "pasted: paste pass3 [-]"]);
 }
 
-// Expected (review 8): the composer's mode ends as the composer goes with its route; back on the session, the
-// composer types again.
 #[test]
 fn a_composer_mode_ends_with_its_route() {
     let harness = open();
@@ -1646,8 +1578,6 @@ fn a_composer_mode_ends_with_its_route() {
     assert_eq!(composer(&harness), "d");
 }
 
-// Expected (review 10): on a box with a click of its own and pointer events, a press the plugin consumes runs no
-// click, and one it passes does.
 #[test]
 fn a_consumed_press_runs_no_click_of_the_same_box() {
     let harness = open_with(|probe| probe.click_a = true);
@@ -1663,7 +1593,6 @@ fn a_consumed_press_runs_no_click_of_the_same_box() {
     assert!(taken().contains(&"row a".to_owned()), "a passed press ran no click");
 }
 
-// Expected (review 11): in a route, a handler's and a command's reads of the focus agree with the focused node.
 #[test]
 fn a_route_reads_its_focused_node() {
     let harness = open();
@@ -1678,8 +1607,6 @@ fn a_route_reads_its_focused_node() {
     assert!(line.ends_with("Focused { node: Some(\"r\"), surface: true }"), "{line}");
 }
 
-// Expected (review 8 and 12): a capture of a node that takes no focus ends as the node leaves the tree the host
-// accepts, with no pointer event and no read to end it; reading the ledger changes nothing.
 #[test]
 fn a_capture_ends_as_its_node_leaves_the_tree() {
     let harness = open_with(|probe| probe.pointer_b = true);
@@ -1695,7 +1622,6 @@ fn a_capture_ends_as_its_node_leaves_the_tree() {
     assert_eq!(interact::ledger(&*harness.tui), interact::ledger(&*harness.tui));
 }
 
-// Expected (review 6): a panel that closes with the focus gives it to the composer, which types what comes next.
 #[test]
 fn a_closed_panel_gives_its_focus_to_the_composer() {
     let harness = open();
@@ -1723,10 +1649,6 @@ fn failure(harness: &Harness) -> Option<String> {
     })
 }
 
-// Expected (P4c's containment of a handler): a handler is a plugin call, timed and contained; one that panics fails
-// its plugin, and what the plugin held of the input goes by the owners' end: its layers, listeners and modes, a
-// capture, a hold with a key behind it and its timer, an overlay. The focus goes to the composer, the held key reaches
-// nothing, and the host goes on.
 #[test]
 fn a_panicking_handler_fails_its_plugin_and_leaves_no_input() {
     let twin = without();
@@ -1769,8 +1691,6 @@ fn a_panicking_handler_fails_its_plugin_and_leaves_no_input() {
     assert!(opencode_plugin::Host::composer_focused(&*harness.tui));
 }
 
-// Expected (carbon-1): binds that hold the reserved chord in a list (`a,ctrl+c`), a sequence (`ctrl+c x`) or another
-// spelling (`Control + C`) never take it, and no key after it is swallowed as the rest of a sequence.
 #[test]
 fn no_spelling_list_or_sequence_takes_the_reserved_chord() {
     let harness = open();
@@ -1788,8 +1708,6 @@ fn no_spelling_list_or_sequence_takes_the_reserved_chord() {
     assert_eq!(taken(), ["side: key x [-]"]);
 }
 
-// Expected (carbon-2): a mode the panel sets holds in the panel although the panel also has a layer of the composer;
-// another plugin's global layer takes no escape or key from an overlay with the focus.
 #[test]
 fn a_mode_holds_where_it_was_set_and_an_overlay_keeps_its_keys() {
     let harness = open();
@@ -1809,8 +1727,6 @@ fn a_mode_holds_where_it_was_set_and_an_overlay_keeps_its_keys() {
     assert!(!harness.app.text().contains("MENU"), "{}", harness.app.text());
 }
 
-// Expected (carbon-3): a focused node that the new tree builds again keeps the focus; one the tree leaves out gives it
-// to the panel, whose layers hold.
 #[test]
 fn a_focus_the_new_tree_takes_away_comes_back() {
     let harness = open();
@@ -1830,9 +1746,6 @@ fn a_focus_the_new_tree_takes_away_comes_back() {
     assert_eq!(taken(), ["side: key x [-]"], "the panel lost the focus with its node");
 }
 
-// Expected (contract 2.x additions, `focus-input`): a plugin gives its field the focus as a click does, and what the user
-// types is the field's; a tree that builds the field again keeps the focus; one that leaves it out gives it to the
-// panel, whose layers hold; a field in a hidden box takes no focus; nor does any field while a host dialog is open.
 #[test]
 fn a_plugin_focuses_its_field() {
     let harness = open_with(|probe| probe.field = true);
@@ -1870,9 +1783,6 @@ fn a_plugin_focuses_its_field() {
     assert!(changes().is_empty(), "the field took the focus from a host dialog");
 }
 
-// Expected (carbon c2a-1): the reserved chord gives the composer back the focus a slot surface's field took, one level,
-// as it closes a focused panel: the app does not end over the composer's draft, the draft stays, and what the user types
-// next is the composer's.
 #[test]
 fn the_reserved_chord_takes_the_focus_back_from_a_slot_field() {
     let harness = open_with(|probe| (probe.strip, probe.strip_field) = (true, true));
@@ -1891,8 +1801,6 @@ fn the_reserved_chord_takes_the_focus_back_from_a_slot_field() {
     assert_eq!(text, "drafty");
 }
 
-// Expected (review carbon-5): a focused node that the new tree puts in a hidden box can take no focus, so the focus
-// goes to the panel, as for a node left out.
 #[test]
 fn a_focus_the_new_tree_hides_goes_to_the_panel() {
     let harness = open();
@@ -1907,9 +1815,6 @@ fn a_focus_the_new_tree_hides_goes_to_the_panel() {
     assert!(!harness.app.text().contains("AAAA"), "{}", harness.app.text());
 }
 
-// Expected (carbon-5): a press a node takes starts no selection of selectable text under it, so its drag goes on
-// outside it and its drop lands; a release under a host dialog is not the plugin's; a handler that gives the focus
-// away on the press keeps its capture; a press on a node that takes no focus focuses the panel.
 #[test]
 fn a_taken_press_owns_its_gesture() {
     let harness = open_with(|probe| {
@@ -1983,9 +1888,6 @@ fn a_taken_press_owns_its_gesture() {
     assert_eq!(taken(), ["side: key x [-]"], "the press left the focus at the composer");
 }
 
-// Expected (carbon-6): a panel's first view sees how it shows and is the only view as it opens; a splitter drag gives
-// it every width; a theme switch keeps its mount and restyles an overlay; a handler that fails as it hears its
-// overlay replaced leaves no overlay; a panel the plugin does not have opens nothing.
 #[test]
 fn a_panel_shows_with_one_view_follows_its_room_and_its_theme() {
     let harness = open();
@@ -2033,8 +1935,6 @@ fn a_panel_shows_with_one_view_follows_its_room_and_its_theme() {
     assert!(harness.tui.panels.current().is_none());
 }
 
-// Expected (carbon-7): a toggle row of a select with no key toggles; a hidden disabled row of the same value toggles
-// nothing; rows naming the caller or the plugin manager show no toggle; a rowless action runs with no row.
 #[test]
 fn a_select_toggles_only_what_it_shows() {
     let harness = open_with(|probe| probe.keyless = true);
@@ -2081,8 +1981,6 @@ fn a_select_toggles_only_what_it_shows() {
     assert_eq!(taken(), ["picked new"]);
 }
 
-// Expected (carbon-8): a chord types nothing, so a modal composer's `i` is not `alt+i`; a bind of several keys tells
-// which one ran it; an overlay stays on the screen as it shrinks, and a wheel outside closes it.
 #[test]
 fn keys_say_what_was_pressed_and_overlays_stay_on_screen() {
     let harness = open();
@@ -2116,7 +2014,6 @@ fn keys_say_what_was_pressed_and_overlays_stay_on_screen() {
     assert!(!harness.app.text().contains("MENU"), "{}", harness.app.text());
 }
 
-// Expected (carbon-9): an overlay the plugin closes goes with no close event; one against the bottom edge shows there.
 #[test]
 fn an_overlay_closes_on_the_plugins_word_and_shows_against_an_edge() {
     let harness = open();
@@ -2133,8 +2030,6 @@ fn an_overlay_closes_on_the_plugins_word_and_shows_against_an_edge() {
     assert_eq!(y, 28, "{}", harness.app.text());
 }
 
-// Expected (carbon-9): a box's background token, changed in place and switched with the theme, draws as a box mounted
-// in that state does.
 #[test]
 fn a_pointer_box_restyles_in_place() {
     let open = || {
@@ -2147,8 +2042,6 @@ fn a_pointer_box_restyles_in_place() {
     support::assert_restyles_in_place(open, |_| {}, |screen| screen.contains("AAAA"));
 }
 
-// Expected (carbon-7): an action on the row is primary unless it says, and a rowless one secondary, as TS's `group`
-// defaults: listed first, the row action still shows after the rowless one, with the primary actions.
 #[test]
 fn a_row_action_is_primary_unless_it_says() {
     let harness = open_with(|probe| probe.launch = true);
@@ -2159,8 +2052,6 @@ fn a_row_action_is_primary_unless_it_says() {
     assert!(at("launch") > at("new") && at("new").is_some(), "{screen}");
 }
 
-// Expected (carbon-9): a hold whose owner ends goes with it, so a key typed at once after reaches the composer then,
-// not at the hold's deadline.
 #[test]
 fn a_hold_goes_with_its_owner() {
     let harness = open_with(|probe| probe.hold = true);
@@ -2174,8 +2065,6 @@ fn a_hold_goes_with_its_owner() {
     assert_eq!(composer(&harness), "q");
 }
 
-// Expected (carbon's review of P6c, 3): a node in a list's item is the plugin's as any other: it takes the focus, the
-// focus names it, its rect reads, and a drag from it is captured and dropped as itself.
 #[test]
 fn a_node_in_a_list_item_is_found() {
     let harness = open_with(|probe| {

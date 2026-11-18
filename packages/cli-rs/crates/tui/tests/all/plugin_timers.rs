@@ -54,9 +54,6 @@ enum Carrier {
     Luau,
 }
 
-// Expected (timers, contract-ergonomics 2.3; big-boi tm-2): a one-second `every` whose route's view does not change
-// ticks once a second and makes no frame, also over 400 s: the app wakes for each tick and paints nothing. Disabled, the plugin's timer wakes the app
-// no more. In process, through the C ABI and in Luau.
 #[test]
 fn a_ticking_plugin_that_changes_nothing_makes_no_frame() {
     #[cfg_attr(not(luau), allow(unused_mut))]
@@ -113,8 +110,6 @@ fn ticks_without_frames(carrier: Carrier) {
     );
 }
 
-// Expected (big-boi tm-3): a JS plugin keeps time with `setTimeout`, so the pipe refuses the raw timer request before
-// it gives an ID: the effect's result is `null`, and no reply is left to wait for.
 #[cfg(feature = "ts")]
 #[test]
 fn the_pipe_refuses_a_timer_without_giving_it_an_id() {
@@ -207,9 +202,6 @@ return plugin.define(function(setup)
 end)
 "#;
 
-// Expected (timers, big-boi's note on `every`; carbon tm2-1): an `every` a mount's handler started is that mount's task:
-// each next sleep is the mount's, also after a tick that awaited a fetch, whose reply comes in a call of the
-// activation; so the loop ends when the mount closes. In process, through the C ABI and in Luau.
 #[test]
 fn an_every_a_mount_started_ends_with_that_mount() {
     #[cfg_attr(not(luau), allow(unused_mut))]
@@ -289,8 +281,6 @@ fn budgeted() -> support::Harness {
     h
 }
 
-// Expected (carbon tm2-2): each tick of the fastest timer is a frame of its own, judged alone against the frame
-// budget: a 20 ms timer whose ticks cost half of it is never slow, as it was once two or three ticks were summed.
 #[test]
 fn a_fast_timer_with_cheap_ticks_is_not_slow() {
     let h = budgeted();
@@ -318,9 +308,6 @@ fn two_timers(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (carbon tm2-2): a paint between a tick and its idle close, and another tick after the paint, leave no frame
-// open for good: the idle close that finds the later tick's frame open closes it too, so later ticks with no paint
-// are not summed into it without end.
 #[test]
 fn a_tick_after_a_paint_leaves_no_frame_open_for_good() {
     let h = budgeted();
@@ -356,9 +343,6 @@ fn dropped_sleeps(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (carbon tm2-3): a sleep dropped before its time lets its timer go: 40 dropped sleeps hold no place among the
-// plugin's 32 timers, so the next sleep sleeps, and none of them wakes the app at its minute. In process and through
-// the C ABI.
 #[test]
 fn dropped_sleeps_hold_no_timer() {
     for carrier in [Carrier::InProcess, Carrier::CAbi] {

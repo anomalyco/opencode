@@ -110,7 +110,6 @@ fn mount(server: &Gated, width: u16, loopback: bool, events: bool) -> Harness {
     h
 }
 
-// Expected: a `changed` event that arrives while the mount's goal read is in flight wins over the read's older reply.
 #[test]
 fn a_change_event_before_the_first_read_returns_wins() {
     let server = Gated::new(false);
@@ -127,8 +126,6 @@ fn a_change_event_before_the_first_read_returns_wins() {
     assert!(h.app.text().contains("◎ goal paused"), "the stale reply showed the active goal:\n{}", h.app.text());
 }
 
-// Expected: shell mode mounts the footer again, and back; the read the first mount started is not sent again, and its
-// reply reaches the footer that shows now.
 #[test]
 fn a_remount_while_the_read_is_pending_keeps_the_read() {
     let server = Gated::new(false);
@@ -145,8 +142,6 @@ fn a_remount_while_the_read_is_pending_keeps_the_read() {
     assert_eq!(server.reads(), reads);
 }
 
-// Expected: on a narrow terminal, the busy footer (a claim root that may shrink to zero, as TS `footer.tsx:72`) fits
-// beside the location on its row.
 #[test]
 fn the_busy_footer_shrinks_on_a_narrow_terminal() {
     let server = Gated::new(true);
@@ -179,9 +174,6 @@ fn goal_frames(loopback: bool) -> (Vec<Vec<opentui::testing::Cell>>, Vec<Option<
     (frames, commands)
 }
 
-// Expected: a click on the goal opens its panel, `p` pauses it and keeps the panel open, the `changed` event shows the
-// paused goal in place with `resume r`, and `x` closes it and clears the goal; the same cells and commands through the
-// C ABI's byte shims.
 #[test]
 fn the_goal_panel_acts_the_same_through_the_c_abi_loopback() {
     let direct = goal_frames(false);

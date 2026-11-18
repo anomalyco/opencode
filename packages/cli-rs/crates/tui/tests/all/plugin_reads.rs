@@ -244,9 +244,6 @@ fn home_on(
     (h, memory, root)
 }
 
-// Expected: a sized claim reads its laid-out width and renders again when a resize changes it; it reads the theme,
-// the palette's key, that its own hidden command can be reached, and no variants without a model; a variant, also the
-// default, is refused without a model, as TS refuses it. Its span is an OSC 8 link. On both paths.
 #[test]
 fn a_claim_reads_its_width_the_theme_and_the_keymap() {
     for loopback in [false, true] {
@@ -289,8 +286,6 @@ fn a_link_with_a_control_character_is_dropped() {
     }
 }
 
-// Expected: the pending keys read as the TUI shows them, the active keys include one that continues a sequence (the
-// leader) and one with a description, and the claim renders again as the sequence starts and ends.
 #[test]
 fn a_claim_follows_the_pending_keys() {
     for loopback in [false, true] {
@@ -304,10 +299,6 @@ fn a_claim_follows_the_pending_keys() {
     }
 }
 
-// Expected (TS `ui.tabs`): with tabs on, `close` with no tab on screen is refused, `open` adds a tab without showing
-// it, `move` reorders an open tab and refuses one that is not open, `focus` shows a tab, which reads as active, and
-// `close` closes a named tab; the claim reads the tabs in order after each change, also one the TUI itself makes. With
-// tabs off every verb is refused. On both paths.
 #[test]
 fn tabs_open_move_and_close_as_ts_does() {
     for loopback in [false, true] {
@@ -340,9 +331,6 @@ fn tabs_open_move_and_close_as_ts_does() {
     }
 }
 
-// Expected (reviews bigboi-8, carbon-7): a verb answers for the state the same call's earlier verbs left, as TS's act
-// in order: a variant is checked against the model the call selected, and a tab against the tabs it opened and closed.
-// On both paths.
 #[test]
 fn verbs_in_one_call_see_the_earlier_ones() {
     let catalog = || {
@@ -383,8 +371,6 @@ fn verbs_in_one_call_see_the_earlier_ones() {
     }
 }
 
-// Expected (review bigboi-10, TS `ui.tabs`): `move` takes any session of an open tab's family, `close` only the tab's
-// own ID, so a child's ID closes nothing. On both paths.
 #[test]
 fn close_takes_the_tab_id_and_move_a_child() {
     for loopback in [false, true] {
@@ -398,8 +384,6 @@ fn close_takes_the_tab_id_and_move_a_child() {
     }
 }
 
-// Expected (TS 1.x `api.theme.set`): a known theme is selected, saved, and read back; an unknown one is refused and
-// changes nothing. On both paths.
 #[test]
 fn a_plugin_selects_a_theme_it_knows() {
     for loopback in [false, true] {
@@ -414,8 +398,6 @@ fn a_plugin_selects_a_theme_it_knows() {
     }
 }
 
-// Expected (TS 1.x `api.theme.install`): an installed theme is written to the config's themes directory and then
-// listed, without being selected; a name that is not a plain file name installs nothing. On both paths.
 #[test]
 fn a_plugin_installs_a_theme() {
     for loopback in [false, true] {
@@ -436,9 +418,6 @@ fn a_plugin_installs_a_theme() {
     }
 }
 
-// Expected (reviews bigboi-11, carbon-4): a theme installed in a call can be selected in the same call, from both
-// paths; writes land in the order asked, two names both stay listed, and a value that is not a theme leaves the file
-// and the listed theme as they were.
 #[test]
 fn installs_land_in_order_and_select_at_once() {
     for loopback in [false, true] {
@@ -479,9 +458,6 @@ fn installs_land_in_order_and_select_at_once() {
     assert!(h.tui.theme.borrow_mut().take_error().is_none(), "the theme does not load");
 }
 
-// Expected (reviews bigboi-9, carbon-8): a claim reads a change of the tabs, the keymap and the selected theme in the
-// first frame after it, also when another client reordered the tabs on disk, when a dialog changed what the keys
-// reach while no key is pending, and when a preview selected a theme of the same palette. On both paths.
 #[test]
 fn a_claim_hears_of_tabs_keymap_and_theme_changes() {
     for loopback in [false, true] {
@@ -521,9 +497,6 @@ fn a_claim_hears_of_tabs_keymap_and_theme_changes() {
     }
 }
 
-// Expected (review bigboi-14): every read of one plugin call sees one store snapshot. A batch that changes two
-// sessions, applied on another thread between the call's reads of them, shows in neither, and in both after. On
-// both paths.
 #[test]
 fn a_call_reads_one_snapshot() {
     for loopback in [false, true] {
@@ -564,8 +537,6 @@ fn a_call_reads_one_snapshot() {
     }
 }
 
-// Expected (review carbon-9): a tab reads its session's title, also one opened without being shown, which the TUI
-// reads for it (carbon-8), whether the session runs, a permission waits, and what is unread. On both paths.
 #[test]
 fn tabs_read_their_metadata() {
     let routes = || {
@@ -618,9 +589,6 @@ fn tabs_read_their_metadata() {
     }
 }
 
-// Expected (review carbon-9): the keymap reads have every field: a pending key's token, an active key's key, title,
-// description and group, and a command's title, description, group, and whether it is enabled, in the palette, a
-// slash command or suggested. On both paths.
 #[test]
 fn keymap_reads_have_every_field() {
     for loopback in [false, true] {
@@ -693,8 +661,6 @@ fn walk(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
     entries.flat_map(|entry| if entry.path().is_dir() { walk(&entry.path()) } else { vec![entry.path()] }).collect()
 }
 
-// Expected: the streaming deltas the store applies reach the plugin once a change batch, in order, which `on_event`
-// never gets; a sync with no delta calls nothing. On both paths.
 #[test]
 fn deltas_reach_the_plugin() {
     for loopback in [false, true] {
@@ -714,8 +680,6 @@ fn deltas_reach_the_plugin() {
     }
 }
 
-// Expected (review bigboi-7): the deltas of two store batches synced before one frame reach the plugin in one call,
-// before that frame, in order. On both paths.
 #[test]
 fn deltas_reach_the_plugin_once_a_frame() {
     for loopback in [false, true] {
@@ -738,7 +702,6 @@ fn deltas_reach_the_plugin_once_a_frame() {
     }
 }
 
-// Expected: a plugin reads the text the mouse selected and clears it; then nothing is selected. On both paths.
 #[test]
 fn a_plugin_reads_and_clears_the_selection() {
     for loopback in [false, true] {
@@ -754,7 +717,6 @@ fn a_plugin_reads_and_clears_the_selection() {
     }
 }
 
-// Expected: an xlarge panel opens at the TUI's xlarge dialog size (TS `xlarge`). On both paths.
 #[test]
 fn an_xlarge_panel_opens_xlarge() {
     for loopback in [false, true] {
@@ -766,8 +728,6 @@ fn an_xlarge_panel_opens_xlarge() {
     }
 }
 
-// Expected: a program in the foreground runs with the terminal released, and its exit code comes back as a reply.
-// On both paths.
 #[cfg(unix)]
 #[test]
 fn a_program_runs_in_the_foreground_and_its_exit_code_comes_back() {
@@ -782,9 +742,6 @@ fn a_program_runs_in_the_foreground_and_its_exit_code_comes_back() {
     }
 }
 
-// Expected (reviews bigboi-4, carbon-1): the terminal goes to one program at a time. A second one asked for before the
-// first ran is refused with its own reply (as is the external editor, which takes the same slot); once the first ran,
-// the next one runs.
 #[cfg(unix)]
 #[test]
 fn a_second_program_is_refused_until_the_first_ran() {

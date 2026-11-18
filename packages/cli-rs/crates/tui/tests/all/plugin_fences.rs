@@ -167,9 +167,6 @@ fn hold_came(fences: &Fences) {
     });
 }
 
-// Expected: a fence a JS renderer claims shows the host's own code view in the frame it first shows, and the plugin's
-// box (a label and that code view) once the JS host answered; as it streams, the code follows in the frame and the box
-// stays; the host's row never comes back.
 #[test]
 fn a_js_fence_claim_draws_its_box_after_the_frame() {
     let Some(config) = config() else { return };
@@ -200,8 +197,6 @@ fn a_js_fence_claim_draws_its_box_after_the_frame() {
     assert_eq!(fences.status(), Some(opencode_plugin::Status::Active));
 }
 
-// Expected (Simon's call 6): a renderer that throws falls back its part alone, for the part's mount, with one toast;
-// the plugin stays active, and its other fences draw. A declined fence shows the host's code view.
 #[test]
 fn a_renderer_that_throws_falls_back_its_part_alone() {
     let Some(config) = config() else { return };
@@ -223,8 +218,6 @@ fn a_renderer_that_throws_falls_back_its_part_alone() {
     assert_eq!(drawn(), 2, "{:?}", mounted());
 }
 
-// Expected: a claim's view reads only, on every carrier: the toast a renderer asks for as it draws is dropped (the
-// log says so once), and its fence draws.
 #[test]
 fn what_a_renderer_asks_for_as_it_draws_is_dropped() {
     let Some(config) = config() else { return };
@@ -236,8 +229,6 @@ fn what_a_renderer_asks_for_as_it_draws_is_dropped() {
     assert_eq!(drawn(), 1, "{:?}", mounted());
 }
 
-// Expected (the pipe's bounds): a part waits while the JS host's queue is backed up, and is offered as it drains, so 300
-// fences that mount at once all draw the plugin's box, oldest first, none is lost, and nothing is refused.
 #[test]
 fn three_hundred_fences_mounted_at_once_all_fill_in() {
     let Some(mut config) = config() else { return };
@@ -255,8 +246,6 @@ fn three_hundred_fences_mounted_at_once_all_fill_in() {
     assert_eq!(after.refused_sends, before.refused_sends, "the queue refused a part");
 }
 
-// Expected (the pipe's bounds): a part that waited while another plugin's parts backed the queue up is offered once it
-// drained, though nothing of its own plugin wakes it.
 #[test]
 fn a_part_another_plugin_held_back_is_offered_once_the_queue_drained() {
     let Some(mut config) = config() else { return };
@@ -271,7 +260,6 @@ fn a_part_another_plugin_held_back_is_offered_once_the_queue_drained() {
     assert!(opencode_plugin::pipe::crossed().deferred_parts > before.deferred_parts, "no part waited");
 }
 
-// Expected (the pipe's bounds): a fence over 256 KiB keeps the host's code view, and the plugin stays active.
 #[test]
 fn a_fence_past_the_frame_cap_keeps_the_host_view() {
     let Some(config) = config() else { return };
@@ -287,7 +275,6 @@ fn a_fence_past_the_frame_cap_keeps_the_host_view() {
     assert_eq!(fences.status(), Some(opencode_plugin::Status::Active));
 }
 
-// Expected (the pipe's bounds): a plugin holds 256 claims: a fence of a language past them is not claimed.
 #[test]
 fn a_plugin_holds_256_claims() {
     let Some(config) = config() else { return };
@@ -298,8 +285,6 @@ fn a_plugin_holds_256_claims() {
     assert_eq!(claimed, ["x200"]);
 }
 
-// Expected: a tree the JS host sends for a part whose mount ended is dropped: the session left before the answer came,
-// and nothing of the part stays; the plugin stays active.
 #[test]
 fn a_tree_for_a_gone_part_is_dropped() {
     let Some(config) = config() else { return };
@@ -325,9 +310,6 @@ fn a_tree_for_a_gone_part_is_dropped() {
     assert_eq!(fences.status(), Some(opencode_plugin::Status::Active));
 }
 
-// Expected (carbon c2d-1): a part's mount ends on the JS host also after a reload of the plugin's registrations handed
-// its activation on. The part's tree is held while the plugin registers a renderer late, which reloads it; the session
-// is then left. The JS host holds no part in flight, so it settles: a ping says nothing waits.
 #[test]
 fn a_parts_mount_ends_on_the_js_host_after_a_reload() {
     let Some(config) = config() else { return };
@@ -357,9 +339,6 @@ fn a_parts_mount_ends_on_the_js_host_after_a_reload() {
     assert_eq!(fences.status(), Some(opencode_plugin::Status::Active));
 }
 
-// Expected (carbon c2d-2): a part falls back and settles on the JS host however its tree in flight ends, while a newer
-// part streams in: the renderer threw (one toast, and the renderer runs no more), the fence grew past 256 KiB, or the
-// host refused the tree (two fence nodes). The JS host then holds nothing in flight, and the plugin stays active.
 #[test]
 fn a_part_whose_tree_fails_in_flight_falls_back_and_settles() {
     let Some(config) = config() else { return };
@@ -394,8 +373,6 @@ fn a_part_whose_tree_fails_in_flight_falls_back_and_settles() {
     }
 }
 
-// Expected (the existing rule, P.4): a renderer that never returns leaves its fence as the host's code view; the JS host,
-// which then answers nothing, is ended, and the plugin whose view ran fails, so all its fences show the host's row.
 #[test]
 fn a_js_host_that_never_answers_leaves_every_fence_as_code() {
     let Some(mut config) = config() else { return };
@@ -417,9 +394,6 @@ fn a_js_host_that_never_answers_leaves_every_fence_as_code() {
     assert_eq!(drawn(), 0, "{:?}", mounted());
 }
 
-// Expected (ownership, 2.8): a claimed part is a mount with a generation. A tree that comes after Markdown built the
-// same fence again in a new theme, a new mount, is dropped; the new mount draws its own. One that comes after the
-// plugin was disabled is dropped too, and the fence shows the host's code view.
 #[test]
 fn a_tree_of_an_ended_mount_is_dropped_after_a_rebuild_or_a_disable() {
     let Some(config) = config() else { return };

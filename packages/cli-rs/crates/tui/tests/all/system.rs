@@ -359,8 +359,6 @@ fn plugin_manager_matches_typescript_on(abi: bool) {
     assert_dialog(&app, "E.18b/plugins-internal", "Plugins");
 }
 
-// Expected (carbon-dialogs-7): the manager reads the server plugins again on `plugin.updated` while it shows an error,
-// as TS's subscription lives as long as the dialog.
 #[test]
 fn plugin_manager_follows_plugin_updated_under_its_error_view() {
     for abi in [false, true] {
@@ -429,8 +427,6 @@ fn plugin_manager_reads_the_active_location_on(app: &TestApp, mounted: &Mounted)
     assert_eq!(mounted.requests("/api/plugin")[1], "GET /api/plugin?location%5Bdirectory%5D=%2Ftmp%2Fother");
 }
 
-// Expected: the plugin manager and the diff viewer are host entries among the built-ins in TS order. Disabling the
-// viewer takes `diff.open` away; enabling it brings it back, and its route shows the viewer, not the missing route.
 #[test]
 fn the_host_entries_list_and_toggle_like_plugins() {
     let app = TestApp::new(100, 30);
@@ -574,7 +570,6 @@ fn pair_matches_typescript() {
     assert_dialog(&app, "E.18b/pair-error", "Pair");
 }
 
-// Expected (carbon-dialogs-6): a click on a link inside the dialog opens it, as TS `Link` does.
 #[test]
 fn a_pair_link_opens_on_click() {
     let app = TestApp::new(100, 40);
@@ -616,7 +611,6 @@ fn pair_links_skip_server_urls_with_non_ascii_hosts() {
     assert_eq!(value.localhost, None);
 }
 
-// Expected (bigboi-dialogs-7): closing the export options frees them with what their confirm holds.
 #[test]
 fn closing_export_frees_its_select_and_callbacks() {
     let app = TestApp::new(80, 24);
@@ -923,7 +917,6 @@ fn the_home_notice_opens_the_dialog_and_skip_hides_it_for_good() {
     wait_for(&app, "/exit restart to use v2.0.29");
 }
 
-// Expected (R2-1): the home notice draws its row again on each change, and frees the row it replaced.
 #[test]
 fn the_home_notice_frees_the_row_it_replaces() {
     let app = TestApp::new(80, 30);
@@ -949,8 +942,6 @@ fn without_an_updater_there_is_no_update_command_or_notice() {
     assert!(!app.text().contains("2.0.28"), "{}", app.text());
 }
 
-// Expected (D2): toggling a built-in in `/plugins` mounts the route again under the dialog, yet once the dialog closes
-// the prompt takes typing, as in TS.
 #[test]
 fn the_prompt_takes_typing_after_a_plugin_manager_toggle() {
     for abi in [false, true] {
@@ -981,7 +972,6 @@ pub(crate) fn toggle_a_plugin(h: &support::Harness) {
     h.wait_for("enable enter");
 }
 
-// Expected (D4): with the internal plugins shown, the search finds a built-in by its ID, as TS does.
 #[test]
 fn the_plugin_manager_search_finds_built_ins_once_they_show() {
     for abi in [false, true] {
@@ -997,10 +987,6 @@ fn the_plugin_manager_search_finds_built_ins_once_they_show() {
     }
 }
 
-// Expected (review bigboi-4): the manager's actions take the user's keybinds as TS's commands do: `none` turns update
-// off, another key moves it, and the literal default does nothing then; the requests say so. As in TS, enter on a
-// toggle row still toggles when `plugins.toggle` is `none` or moved (the select's own submit; provisional decision),
-// and the moved key toggles too; the registry says so.
 #[test]
 fn the_manager_actions_take_the_users_keybinds() {
     let updates = |mounted: &Mounted| mounted.requests("/api/plugin/update").len();

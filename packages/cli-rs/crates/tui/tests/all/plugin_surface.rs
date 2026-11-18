@@ -310,9 +310,6 @@ fn fail_at(step: usize, property: &'static str, detail: String) -> Option<Failur
     Some(Failure { property, site: property, step, detail })
 }
 
-// Expected: a surface's mounts get views only while they show, each with a generation of its own whose first view
-// builds whole; a refused tree is asked again whole at once and leaves the plugin active; a theme change calls no
-// view and rebuilds nothing; and what a mount held goes with it.
 #[test]
 fn surface_mounts_hold_their_properties() {
     for carrier in CARRIERS {
@@ -391,9 +388,6 @@ fn frame_after(carrier: Carrier, commands: &[Command]) -> String {
     harness.app.render().text()
 }
 
-// Expected (`no-effects`, a refused tree): a view whose tree is refused leaves nothing: the route draws as in a run
-// where that view never returned it, and the content it gave the host is gone. The guard: the same run with a value
-// changed differs.
 #[test]
 fn a_refused_tree_leaves_no_trace() {
     use Command::*;
@@ -407,8 +401,6 @@ fn a_refused_tree_leaves_no_trace() {
     }
 }
 
-// Expected (`keep-full`): a second refused tree in a row fails the plugin: one report, no view after, and its mount
-// holds no content.
 #[test]
 fn a_second_refusal_in_a_row_fails_the_plugin() {
     for carrier in CARRIERS {
@@ -430,9 +422,6 @@ fn a_second_refusal_in_a_row_fails_the_plugin() {
     }
 }
 
-// Expected (`work`, a theme change): a surface that names its colors by token gets no call on a theme switch and its
-// widgets take the theme in place, kept cards included; one that reads the palette gets one view, with the new
-// palette. Either way the route draws as one opened in the new theme.
 #[test]
 fn a_theme_change_calls_only_a_surface_that_reads_the_palette() {
     for (carrier, palette) in CARRIERS.into_iter().flat_map(|carrier| [(carrier, false), (carrier, true)]) {
@@ -524,12 +513,6 @@ fn tool_event(kind: &str, seq: u64, data: serde_json::Value) -> V2Event {
     serde_json::from_value(event).unwrap()
 }
 
-// Expected: a tool call's output named by reference shows the transcript's own text, which never crosses to the
-// plugin. A call the transcript does not have yet, or that streams its input or runs, shows nothing; once it completes
-// its output shows, also under a kept ancestor, in code, and in a list's kept item, with no view of the plugin's
-// (review big-boi 11, carbon-4). A newer tool whose input holds the
-// call's id and a text, and a message whose id is named, show nothing of theirs. The same when the view keeps its whole
-// page, on both carriers: a keep of the root still shows the output that arrives (P6a review, big-boi high 1).
 #[test]
 fn a_part_output_shows_the_transcripts_own_text() {
     for (root, carrier) in [(false, Carrier::Linked), (true, Carrier::Linked), (true, Carrier::Abi)] {
@@ -630,9 +613,6 @@ fn parts_harness(carrier: Carrier) -> Harness {
     harness
 }
 
-// Expected (fixed row; review bigboi 4): a box and a list's item the plugin keeps show the tool call output under them
-// as one it writes out does, through an output within the text limit, one past it, and one within it again: the
-// screen equals a twin run's whose view writes them out every time. On both carriers, and with the whole page kept.
 #[test]
 fn a_kept_output_is_admitted_as_one_written_out() {
     let _limits = opencode_plugin::limits::set(opencode_plugin::limits::Limits {
@@ -683,8 +663,6 @@ fn plain(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected: a theme switch on a plugin's route of ABI 1.x paints the route in the new theme in place: its text in the
-// new muted color and its page in the new background, with the same widgets.
 #[test]
 fn a_route_of_abi_1_takes_a_new_theme_in_place() {
     let deps = Deps {
@@ -831,9 +809,6 @@ pub(crate) fn held() -> (support::Fake, Gate, Count, Count) {
     (fake, gate, served, asked)
 }
 
-// Expected (`lifecycle`, mounts; bigboi's last pass): what a mount's own command asked for ends with that mount: a
-// reply that arrives after the route closed and opened again under the same key reaches the plugin no more. What the
-// plugin's global command asked for is the activation's, and arrives. The same on both carriers.
 #[test]
 fn a_late_reply_does_not_reach_a_mount_opened_again() {
     for loopback in [false, true] {
@@ -909,8 +884,6 @@ fn room(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected: a 2.0 route has the whole page: its growing scroll shows rows and the wheel moves them, and after a resize
-// its view gets the new size. A slot surface's view gets the room its slot gives it, not the terminal's.
 #[test]
 fn a_surface_gets_the_room_it_is_given() {
     ROOM.with(|room| room.borrow_mut().clear());
@@ -976,9 +949,6 @@ fn retry(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (`keep-full`, `no-effects`): the whole tree asked for after a refusal can neither show content the refused
-// view gave nor keep a subtree of the last accepted tree: either is a second refusal, which fails the plugin, and the
-// refused content is never shown. A view that panics fails the plugin, and of what it memoized and gave nothing stays.
 #[test]
 fn a_whole_tree_after_a_refusal_takes_nothing_from_before() {
     for mode in [1, 2, 3] {
@@ -1057,11 +1027,6 @@ fn cell_of(harness: &Harness, text: &str) -> opentui::testing::Cell {
     capture.cells[usize::from(y) * capture.width as usize + usize::from(x)].clone()
 }
 
-// Expected (`work`, a theme change; bigboi's 7): a switch to a light theme keeps every surface's mount in the home
-// footer, the `app` slot, the sidebar and the prompt's footer: no view of one that names its colors by token, one
-// view of the one that reads the palette, in its own mount, and no widget built or dropped. Each paints in the new
-// theme, also the palette's view that changed its click with the palette, and a claim of ABI 1.x that keeps what it
-// showed.
 #[test]
 fn a_theme_change_keeps_every_surface_mounted() {
     let session = support::merge(support::session("ses_t", "Restyle"), serde_json::json!({ "agent": "build" }));
@@ -1144,8 +1109,6 @@ fn replacing(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (`ledger`, carbon's 4): a plugin whose surface replaces a slot and then fails gives the slot back: the host's
-// own content shows again, and the failed plugin holds no mount.
 #[test]
 fn a_failed_surface_gives_its_slot_back() {
     REPLACING.set(usize::MAX);
@@ -1166,9 +1129,6 @@ fn a_failed_surface_gives_its_slot_back() {
     assert_eq!(surface::ledger_of("test.replacing"), Ledger::default());
 }
 
-// Expected (`work`, a theme change): a switch to a theme of another name changes what a plugin reads (its name, ABI
-// 1.6), so a surface that does not read the palette gets one view, in its mount; the view keeps every card, and
-// nothing is built.
 #[test]
 fn a_theme_of_another_name_calls_the_view_once_and_builds_nothing() {
     for carrier in CARRIERS {
@@ -1188,9 +1148,6 @@ fn a_theme_of_another_name_calls_the_view_once_and_builds_nothing() {
     }
 }
 
-// Expected (`lifecycle`, a reload; bigboi's 9): a plugin disabled and enabled again while its route's command and its
-// global command each wait on a reply hears neither: both belong to the activation that ended. A request of the new
-// activation gets its reply. The oracle is the plugin's own log of replies.
 #[test]
 fn a_reload_drops_the_replies_of_the_activation_before() {
     REPLIES.with(|replies| replies.borrow_mut().clear());
@@ -1227,9 +1184,6 @@ fn a_reload_drops_the_replies_of_the_activation_before() {
     assert_eq!(REPLIES.with(|replies| replies.borrow().len()), 1, "the new activation's reply did not arrive");
 }
 
-// Expected (`ledger`, a census by weak handles; bigboi's 9): every widget a mount showed is freed when the route opens
-// again under a new generation, when it closes, and when its plugin fails; a refused tree and its retry free none of
-// the shown ones. The oracle is a marker each widget's handler holds, apart from the host's own counts.
 #[test]
 fn a_mounts_widgets_are_freed_with_it() {
     for carrier in CARRIERS {
@@ -1303,9 +1257,6 @@ fn crossed_by(count: usize, step: impl FnOnce(&Harness)) -> opencode_plugin::loa
     opencode_plugin::loader::native::crossed().since(before)
 }
 
-// Expected (`work` in bytes, 4.14): through the C ABI, a revision that changes one card crosses the same bytes at 40
-// and at 410 cards, beyond what a revision that changes nothing crosses, and its request is the same size; a theme of
-// another name, which a plugin reads (ABI 1.6), crosses one view on a surface that names its colors by token.
 #[test]
 fn a_revision_crosses_bytes_that_follow_the_change() {
     let run = |count, command: &'static str| {
@@ -1357,8 +1308,6 @@ fn hiding(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (`keep-full`, on both carriers): a card a view left out is not kept for the next view, which builds it
-// when it comes back, so the host refuses nothing and asks for no whole tree after the first.
 #[test]
 fn a_card_left_out_is_built_again_when_it_comes_back() {
     for carrier in CARRIERS {
@@ -1405,8 +1354,6 @@ fn duplicating(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (review carbon-4, 3.4): only a keep the host lost track of is mended by asking for a whole tree; a tree with
-// an id twice breaks the contract, fails the plugin at once, and no view runs after it. On both carriers.
 #[test]
 fn a_duplicate_id_fails_the_plugin_without_a_retry() {
     for carrier in CARRIERS {
@@ -1440,10 +1387,6 @@ fn page(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (`work`, review bigboi-7): a route opens with one view call, on both carriers, from Home, from a page with
-// no keymap layer of its own, and from another plugin's route with commands. The TUI's sync of the route it has just
-// mounted calls none; the route's first view runs after the keymap layers of the page it replaces are gone, so their
-// going calls none either; and the route's own layer is there before it.
 #[test]
 fn a_route_opens_with_one_view() {
     let from = [
@@ -1494,8 +1437,6 @@ fn tally(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (PL-3): a route's palette commands show in the palette while the route shows, as TS lists them, and run
-// from it on the route; their keys run them on the route, and not under a dialog. Elsewhere the palette has none.
 #[test]
 fn a_routes_commands_are_in_the_palette() {
     for carrier in CARRIERS {
@@ -1547,8 +1488,6 @@ fn doomed(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (PL-8, deviation F16-plugin-failed-route): the route of a plugin that failed while it showed says that the
-// plugin failed and points to `/plugins`; a route no plugin has is still unknown.
 #[test]
 fn a_failed_plugins_route_says_it_failed() {
     for carrier in CARRIERS {
@@ -1568,8 +1507,6 @@ fn a_failed_plugins_route_says_it_failed() {
     }
 }
 
-// Expected (4.3): leaving a 2.0 route over the C ABI tells the library, which drops the mount's memo table: one call
-// crosses, and nothing more.
 #[test]
 fn leaving_a_surface_unmounts_it_in_the_library() {
     let harness = open_tui(Carrier::Abi);
@@ -1581,9 +1518,6 @@ fn leaving_a_surface_unmounts_it_in_the_library() {
     assert_eq!(opencode_plugin::loader::native::crossed().since(before).calls, 1);
 }
 
-// Expected (`work`, review bigboi-7): a view that ran after the last change of the host's own state calls no view for
-// the notice of it, but every change after it calls one: a settings write and a local change (the catalog followed)
-// each run the route's view once, on both carriers.
 #[test]
 fn each_change_of_the_hosts_state_after_a_view_calls_one() {
     for carrier in CARRIERS {
@@ -1622,8 +1556,6 @@ fn nesting(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (4.2): a view that keeps a memoized subtree holding another memo is valid on both carriers; the library's
-// table holds both values and the tree the host resolves holds both keys, so the plugin stays active.
 #[test]
 fn a_kept_memo_that_holds_a_memo_keeps_a_library_active() {
     for carrier in CARRIERS {

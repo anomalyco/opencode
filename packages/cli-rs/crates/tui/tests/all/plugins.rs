@@ -152,8 +152,6 @@ fn the_sample_claims_the_home_footer_and_runs_its_command() {
     print_excerpt("plugin manager with the sample active", &screen);
 }
 
-// Expected: an external slot claim asks for its rows again with each change batch, so it shows state the plugin
-// changed since it was mounted. The `still` build starts no ticker, so only the change batch draws it again.
 #[test]
 fn an_external_claim_draws_again_on_a_change_batch() {
     let h = open(Route::Home, "", &build("still"));
@@ -234,8 +232,6 @@ fn a_major_abi_mismatch_is_refused_with_its_reason() {
     print_excerpt("error details of a major mismatch", &screen);
 }
 
-// Expected: a plugin, whose storage takes objects or arrays, stores an array in real TUI storage, reads it back at once,
-// and finds it on disk (bigboi-3).
 #[test]
 fn a_plugin_stores_an_array() {
     let h =
@@ -252,9 +248,6 @@ fn a_plugin_stores_an_array() {
     assert!(written, "{:?}", storage.load("plugin.sample.list", &Value::Null));
 }
 
-// Expected (rich-plugins 3.9): through `external`, the sample in a project's `.opencode/plugins` waits for approval;
-// approving it in the plugin manager loads it at once, the decision is kept in the state directory, and a client
-// started again on that state loads it without asking.
 #[test]
 fn a_project_plugin_runs_once_approved_and_the_approval_is_kept() {
     let root = opencode_util::temp::tempdir().unwrap();
@@ -287,8 +280,6 @@ fn a_project_plugin_runs_once_approved_and_the_approval_is_kept() {
     assert!(!h.app.text().contains("needs approval"), "{}", h.app.text());
 }
 
-// Expected (bigboi-2): a state directory inside the project keeps no decision: the question says the answer lasts until
-// opencode exits, nothing is written there, and a client started again asks again.
 #[test]
 fn a_state_directory_inside_the_project_keeps_no_decision() {
     let root = opencode_util::temp::tempdir().unwrap();
@@ -351,9 +342,6 @@ fn project_plugin(root: &Path, name: &str, library: &[u8]) {
     std::fs::write(dir.join(entry_file()), library).unwrap();
 }
 
-// Expected (bigboi-9): nothing of a project's plugin is mapped before it is approved. Its library's static constructor,
-// which runs as the platform loader maps it and before any of its code is called, does not run while it is pending,
-// after a decline, or in a client started again; it runs once the plugin is approved, the positive control.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn nothing_of_a_project_plugin_is_mapped_before_it_is_approved() {
@@ -387,8 +375,6 @@ fn nothing_of_a_project_plugin_is_mapped_before_it_is_approved() {
     let _ = std::fs::remove_file(&witness);
 }
 
-// Expected (carbon-6): however the question closes, the list comes back on the row it was asked from, also when
-// another plugin's row comes first.
 #[test]
 fn the_list_comes_back_on_the_row_that_was_asked_about() {
     let root = opencode_util::temp::tempdir().unwrap();
@@ -420,9 +406,6 @@ fn boom() -> abi::Plugin {
     abi::Plugin { id: "test.boom", setup }
 }
 
-// Expected (review bigboi-5, carbon-2): once the question about a project's plugin closes, by escape or by an answer
-// that cannot be saved, the list comes back as the plugins are then, with its filter: a plugin that failed while the
-// question was open shows failed, with no later change to tell the manager.
 #[cfg(unix)]
 #[test]
 fn the_list_comes_back_as_the_plugins_are_after_the_question() {
@@ -471,8 +454,6 @@ fn the_list_comes_back_as_the_plugins_are_after_the_question() {
     }
 }
 
-// Expected: a plugin that fails to load shows TS's error toast, which offers to open the plugin manager, and the home
-// footer counts it (carbon-5).
 #[test]
 fn a_plugin_that_fails_to_load_shows_a_toast_and_the_footer_counts_it() {
     let h = open(Route::Home, "", &build("major-3"));
@@ -534,8 +515,6 @@ fn home_with(
     h
 }
 
-// Expected: a dispatch and a storage write run in the order the command asked for them, on both paths: the claims
-// hear of the storage once, after the dispatched command stored its own key, and render once, seeing it.
 #[test]
 fn a_dispatch_and_a_storage_write_reach_the_claims_in_call_order() {
     for loopback in [false, true] {
@@ -578,8 +557,6 @@ pub(crate) fn chain(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (review carbon-2): a command that dispatches itself runs a bounded chain and stops, and one that fans out
-// runs a bounded number of effects before each paint, so the UI still paints and reads input, on both paths.
 #[test]
 fn a_chain_of_dispatches_never_holds_the_ui_thread() {
     for loopback in [false, true] {
@@ -639,9 +616,6 @@ fn fetcher(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (bigboi's final pass): a fetch is given an ID only when its reply can come. While another plugin's fan-out
-// fills the queue of effects, an unrelated plugin's fetch is an error that says so, and every ID given gets its reply,
-// also once the fan-out ends; a fetch with room gets an ID and its reply, on both carriers.
 #[test]
 fn a_fetch_given_an_id_gets_its_reply_under_queue_pressure() {
     for loopback in [false, true] {
@@ -735,9 +709,6 @@ fn burst(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (review carbon new-1): every effect is an entry of its own on every carrier: a call that dispatches 3,000
-// commands runs at most a frame's bound of them before a paint, as on the linked carrier; and an overlay opened again
-// each time the one it replaced tells it closed is a chain that ends, though no dispatch is in it.
 #[test]
 fn one_call_of_many_effects_and_a_chain_of_closes_are_bounded() {
     for loopback in [false, true] {
@@ -785,8 +756,6 @@ fn updates(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected: an event that changes only plugin state, with no store batch and no storage write, renders the plugin's
-// claims again, on both paths.
 #[test]
 fn an_event_handler_renders_its_plugins_claims_again() {
     for loopback in [false, true] {
@@ -807,9 +776,6 @@ fn an_event_handler_renders_its_plugins_claims_again() {
     }
 }
 
-// Expected (carbon-2): an external plugin whose setup fails shows the "Plugin failed" toast with "Open plugins", and
-// the plugin manager lists it failed and offers to enable it; a fixed build loaded by hot reload refreshes the open
-// manager, which then lists it active and offers to disable it.
 #[test]
 fn a_failed_setup_is_offered_to_enable_and_the_open_manager_follows_a_reload() {
     let h = open(Route::Home, "", &build("setup-fails"));
@@ -835,8 +801,6 @@ fn exiting(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (carbon-1): as the TUI exits, every active plugin is disposed while the TUI is still alive, as TS's plugin
-// context does on exit.
 #[test]
 fn the_tui_disposes_its_plugins_as_it_exits() {
     let options = opentui::AppOptions { exit_on_ctrl_c: false, ..opentui::AppOptions::default() };
@@ -870,8 +834,6 @@ fn running(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (review carbon-1): a headless TUI (drive mode) has no terminal to give a plugin's program, so the program
-// does not run and the plugin gets an error.
 #[test]
 fn a_headless_tui_refuses_a_program_in_the_foreground() {
     let options = opentui::AppOptions { exit_on_ctrl_c: false, ..opentui::AppOptions::default() };
@@ -930,8 +892,6 @@ fn exit_with_a_saving_plugin() {
     .unwrap();
 }
 
-// Expected (bigboi-2): a storage write a plugin makes as it is disposed on exit is on disk once the process ended,
-// even when the write waited for the storage lock another client held.
 #[test]
 fn a_storage_write_made_on_exit_reaches_the_disk() {
     let root = opencode_util::temp::tempdir().unwrap();
@@ -968,8 +928,6 @@ fn a_storage_write_made_on_exit_reaches_the_disk() {
     assert_eq!(storage.load("plugin.saving.state", &Value::Null).unwrap(), json!({ "saved": true }));
 }
 
-// Expected (R2-1): a plugin toggled in the plugin manager mounts the route again, and the route view it replaced and
-// the closed manager are freed with every widget they showed.
 #[test]
 fn toggling_a_plugin_frees_the_view_and_the_manager() {
     let h = open(session_route(), "Here:\n\n```sample\nhello plugin\n```", &build("still"));
@@ -1019,8 +977,6 @@ fn trap(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (review carbon-5): a panel's binds go through the keys a plugin may bind: escape and `ctrl+c` still close
-// the dialog however a bind spells them, and a key that cannot be bound is left out alone, so the others still run.
 #[test]
 fn a_panel_cannot_take_the_keys_that_close_it() {
     let h = support::mount(100, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
@@ -1058,9 +1014,6 @@ fn asks(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (cf-3): a plugin prompt's one-row field starts with its value on one line, where a line break scrolled the
-// text out of the row and showed nothing, and submits that line; its description shows at most eight rows, so the
-// field stays on screen.
 #[test]
 fn a_plugin_prompt_shows_its_value_on_one_line_under_a_bounded_description() {
     let h = support::mount(100, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
@@ -1097,8 +1050,6 @@ fn second(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (review carbon new-2, big-boi's toast medium): a second failure behind several plugin toasts shows at once,
-// ahead of them; the plugins' toasts that wait are bounded, the oldest going, and they show after the host's, in order.
 #[test]
 fn a_second_failure_goes_ahead_of_the_plugin_toasts_that_wait() {
     let h = support::mount(100, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
@@ -1132,8 +1083,6 @@ fn a_second_failure_goes_ahead_of_the_plugin_toasts_that_wait() {
     assert_eq!(title(&h).as_deref(), Some("chat 2"));
 }
 
-// Expected (PL-2): a plugin that toasts as the plugin list changes does not hide the host's report of another plugin
-// that failed: the report stays for its time, and the plugin's toast waits behind it.
 #[test]
 fn a_plugin_toast_never_hides_the_report_of_a_failure() {
     let h = support::mount(100, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
@@ -1172,9 +1121,6 @@ fn paneled<const SUB: bool>(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (review bigboi-7): a plugin's dialog is its own, also from a plugin whose ID starts with its ID and a `/`:
-// the other one's close and the end of its activation leave it open. A revoke ends a dialog only once the activation
-// that asked for it ended, so one that comes while it runs leaves it.
 #[test]
 fn a_plugin_ends_only_its_own_dialog() {
     let h = support::mount(100, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
@@ -1226,9 +1172,6 @@ fn shifting(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (review carbon-12): a panel updated under its key shows what it now is, also where its widgets cannot take
-// it in place: a panel of a set height that gains its first action shows its footer, and one that turns bare drops
-// its header, as a panel opened so does.
 #[test]
 fn a_panel_shown_again_under_its_key_takes_its_footer_and_bareness() {
     let h = support::mount(100, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
@@ -1248,8 +1191,6 @@ fn a_panel_shown_again_under_its_key_takes_its_footer_and_bareness() {
     assert!(!screen.contains("Apply"), "{screen}");
 }
 
-// Expected: an external plugin's `app` claim shows on the last row, under the route, on home and in a session, as
-// TS's `<Slot path="app" />` under the routes (`app.tsx:1466`); disabling the plugin takes it away.
 #[test]
 fn an_app_claim_shows_under_every_route() {
     let h = open(Route::Home, "Done here.", &build("app"));
@@ -1269,7 +1210,6 @@ fn an_app_claim_shows_under_every_route() {
     h.wait_gone("sample app: under the route");
 }
 
-// Expected: once a plugin panics, the fences it drew before fall back to the code view too, as `docs/P.4.md` says.
 #[test]
 fn a_panic_turns_the_fences_already_drawn_back_into_code() {
     let h = open(session_route(), "Here:\n\n```sample\nhello plugin\n```", &build("still"));
@@ -1279,8 +1219,6 @@ fn a_panic_turns_the_fences_already_drawn_back_into_code() {
     h.wait_gone("SAMPLE v1 HELLO PLUGIN");
 }
 
-// Expected (r2 review, bigboi-ui-5): a `plugins` change in `cli.json` reconciles the plugins while the TUI runs, as
-// TS does on `config.data.plugins`: a directive disables a running native plugin and a later change enables it again.
 #[test]
 fn a_plugins_change_in_cli_json_reconciles_while_running() {
     let h = open(Route::Home, "", &build(""));
@@ -1298,8 +1236,6 @@ fn a_plugins_change_in_cli_json_reconciles_while_running() {
     h.wait_for("sample plugin v1: home.footer");
 }
 
-// Expected (review bigboi-9): `plugin dev`'s library is a target of its own, beside the configured ones: a settings
-// edit that rewrites `plugins` keeps it loaded and out of the config, and a new build after the edit reloads.
 #[test]
 fn a_dev_library_survives_a_settings_edit() {
     let root = opencode_util::temp::tempdir().unwrap();
@@ -1357,9 +1293,6 @@ fn cloud(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (review carbon-6): two plugins whose keys TS stores under one name keep apart: what the old name held stays
-// readable by both, the dotted key's first write moves it to a name of its own, keeping its fields, and neither reads
-// what the other writes after; a dot-free key keeps TS's name. On both carriers.
 #[test]
 fn storage_keys_of_dotted_ids_and_keys_keep_apart() {
     for carrier in crate::plugin_surface::CARRIERS {
@@ -1410,8 +1343,6 @@ fn storage_keys_of_dotted_ids_and_keys_keep_apart() {
     }
 }
 
-// Expected (PL-7): a `plugin dev` build that fails says so in the TUI and names its log, and the next build that passes
-// says that too; a log there before the TUI started tells nothing.
 #[test]
 fn a_failed_dev_build_says_so() {
     let root = opencode_util::temp::tempdir().unwrap();
@@ -1564,11 +1495,6 @@ fn two_clients_merging_a_key_stay_within_its_bound_together() {
     }
 }
 
-// Expected (re-review last pass, the storage cache): a write refused under the lock leaves no value in this client's
-// cache that no file holds, also when the correction cannot reach the UI thread and another write is queued behind
-// it: the UI queue is full as the refusal is posted, and a second write of the plugin waits behind the refused merge.
-// A read of the plugin after both, before any watcher event, gives what the file holds, and the cache equals the files
-// for both keys. On both carriers.
 #[test]
 fn a_refused_write_leaves_the_cache_equal_to_the_file_when_its_notice_is_lost() {
     for carrier in crate::plugin_surface::CARRIERS {

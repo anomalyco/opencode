@@ -100,9 +100,6 @@ fn toggle(harness: &Harness, id: &str, active: bool) {
     settle(harness);
 }
 
-// Expected (`ledger`): the manager disabled while its list shows closes it and holds nothing: no command of it is
-// reachable, the list is not read again, and the screen and the commands equal a TUI started with `-opencode.plugins`
-// (the twin). Enabled again, `/plugins` opens it.
 #[test]
 fn a_disabled_manager_holds_nothing_and_matches_one_never_enabled() {
     carriers(a_disabled_manager_holds_nothing_and_matches_one_never_enabled_on);
@@ -129,9 +126,6 @@ fn a_disabled_manager_holds_nothing_and_matches_one_never_enabled_on() {
     harness.wait_for("show internal");
 }
 
-// Expected (`lifecycle`, 4.10): only `/plugins` opens the list. While it shows, a change of the plugins shows in its
-// rows at once, with no read of the server list; under its error view a change shows nothing until Back, which brings
-// the list back on the row with the change in it; once the list is closed, a change opens nothing.
 #[test]
 fn the_manager_shows_the_plugins_only_while_its_list_shows() {
     carriers(the_manager_shows_the_plugins_only_while_its_list_shows_on);
@@ -221,10 +215,6 @@ fn registry(harness: &Harness) -> Vec<String> {
         .collect()
 }
 
-// Expected (`delivery`): a plugin that reads the plugin list hears every change of it once, in order, after the event
-// that made it, and nothing when nothing changed: a toggle in the manager, a toggle of the host, a plugin added, one
-// that fails, and steps that change nothing (the manager opened and closed, a change told twice). What it reads is the
-// registry. Seeded walks of the steps.
 #[test]
 fn a_plugin_hears_each_change_of_the_plugin_list_once() {
     carriers(a_plugin_hears_each_change_of_the_plugin_list_once_on);
@@ -343,10 +333,6 @@ fn manager_status(harness: &Harness) -> opencode_plugin::Status {
     harness.tui.plugins.entries().into_iter().find(|entry| entry.key == key).unwrap().status
 }
 
-// Expected (synthesis 3.6, 4.10; deviation F16-plugin-manager-fallback; review bigboi-1, bigboi-3): while the manager
-// has failed, `/plugins` is the host's read-only list. Its row for the manager starts it again on the user's key or
-// click, never on a run of the submit by name (as a plugin's `dispatch` runs it); then the host's list goes and the
-// manager that runs serves `/plugins` again. A row's error shows, with Back to the list.
 #[test]
 fn the_host_lists_the_plugins_while_the_manager_has_failed() {
     carriers(the_host_lists_the_plugins_while_the_manager_has_failed_on);
@@ -483,9 +469,6 @@ impl Backend for Ext {
     }
 }
 
-// Expected (TS `plugins.tsx`): a failed built-in shows while the built-ins are hidden, failed, with `view error` on its
-// own key beside its toggle, which disables it as it is still active, and not on enter; and the filter finds a plugin
-// by its target, not only by its title.
 #[test]
 fn a_failed_built_in_shows_and_a_plugin_is_found_by_its_target() {
     carriers(a_failed_built_in_shows_and_a_plugin_is_found_by_its_target_on);
@@ -580,10 +563,6 @@ fn status_of(harness: &Harness, key: &str) -> Option<(opencode_plugin::Status, b
     entries.into_iter().find(|entry| entry.key == key).map(|entry| (entry.status, entry.active))
 }
 
-// Expected (review bigboi-3): a build held back after a crash that shares its ID with a running built-in is a row of
-// its own: enter on it releases that build and leaves the built-in running, and the build loads next. A held build of
-// the manager's ID does not put up the host's list, is a row of the manager that serves `/plugins`, and is released
-// the same way (review carbon-3).
 #[test]
 fn a_held_build_that_shares_an_id_is_a_row_of_its_own() {
     carriers(a_held_build_that_shares_an_id_is_a_row_of_its_own_on);
@@ -667,9 +646,6 @@ impl Backend for Unloadable {
     }
 }
 
-// Expected (review bigboi-2, synthesis 3.6): the plugin list a plugin reads, linked or over the C ABI, holds no error
-// text of another plugin: not a setup's, a panic's or a load's. The user still sees each in the manager's error view,
-// which the host fills.
 #[test]
 fn the_plugin_list_holds_no_error_text() {
     for abi in [false, true] {
@@ -760,8 +736,6 @@ impl Gated {
     }
 }
 
-// Expected (review bigboi-6, TS `createResource`): the manager shows the newest read of the server plugins, also when
-// an older one, of the same open or an earlier one, answers after it.
 #[test]
 fn the_newest_server_list_shows_whatever_order_the_replies_come_in() {
     carriers(the_newest_server_list_shows_whatever_order_the_replies_come_in_on);
@@ -810,9 +784,6 @@ fn quiet(id: &'static str) -> abi::Plugin {
     abi::Plugin { id, setup }
 }
 
-// Expected (review bigboi-7): in one filtered open, on both carriers, each enter toggles the selected plugin alone and
-// the selection stays on its row; a plugin that fails while the list shows shows failed on its row, the selection
-// stays, and the others' registrations are unchanged; enter on it then disables it.
 #[test]
 fn toggles_in_one_filtered_open_reach_the_selected_plugin_alone() {
     for abi in [false, true] {
@@ -911,10 +882,6 @@ fn picker() -> abi::Plugin {
     abi::Plugin { id: "test.picker", setup }
 }
 
-// Expected (review carbon-1, carbon-2): a select's action with an empty keybind name or key, or a key the host cannot
-// bind, is left out and the TUI runs on; one that names the host's `plugins.toggle` or a select command of the host is
-// left out too, so the user's remapped toggle is the host's, with its real key. A keyless select's row names a plugin
-// by its target, and the toggle reaches it.
 #[test]
 fn a_select_cannot_break_or_take_the_hosts_keys() {
     carriers(a_select_cannot_break_or_take_the_hosts_keys_on);
@@ -946,8 +913,6 @@ fn a_select_cannot_break_or_take_the_hosts_keys_on() {
     assert!(!harness.tui.dialogs.is_open() && PICKED.get() == 0, "{}", harness.app.text());
 }
 
-// Expected (review carbon-5): the manager's own commands act only while its list shows: run by name with no list
-// they open nothing and read nothing.
 #[test]
 fn the_managers_own_commands_open_nothing() {
     carriers(the_managers_own_commands_open_nothing_on);
@@ -983,8 +948,6 @@ fn the_slow_manager_cannot_be_disabled_from_its_toast_on() {
     assert!(harness.tui.toasts.current().is_some_and(|toast| toast.action.is_some()));
 }
 
-// Expected (review carbon-4): a `plugins` entry added to the config while the TUI runs, which loads nothing and is
-// listed skipped, reaches a plugin that reads the plugin list.
 #[test]
 fn a_skipped_entry_added_to_the_config_is_heard() {
     carriers(a_skipped_entry_added_to_the_config_is_heard_on);
@@ -1117,9 +1080,6 @@ fn open_on(fake: Fake) -> (Harness, Log) {
     (harness, log)
 }
 
-// Expected (TS `plugins.tsx`; review carbon-5, carbon-6): a failed outdated package lists update before view error, as
-// TS's footer does; a package the server updates shows `updating` with the spinner; a check or an update that fails
-// toasts the server's message, and the check says `checking for updates` while it runs, once however often it is asked.
 #[test]
 fn the_server_rows_follow_typescript() {
     carriers(the_server_rows_follow_typescript_on);
@@ -1176,8 +1136,6 @@ fn panicky() -> abi::Plugin {
     abi::Plugin { id: "test.panicky", setup }
 }
 
-// Expected (review carbon-6): a handler of the plugin list is a contained call named `on-plugins`: one that panics fails
-// its plugin with that name, linked and across the C ABI.
 #[test]
 fn a_panicking_plugin_list_handler_fails_its_plugin() {
     for abi in [false, true] {
@@ -1213,8 +1171,6 @@ fn slowly() -> abi::Plugin {
     abi::Plugin { id: "test.slowly", setup }
 }
 
-// Expected (review carbon-4): a plugin that reads the plugin list hears each time a plugin becomes slow and stops, the
-// second time too, which no toast tells; and nothing when only what a slow frame costs changed.
 #[test]
 fn a_plugin_hears_when_a_plugin_becomes_slow_and_stops() {
     carriers(a_plugin_hears_when_a_plugin_becomes_slow_and_stops_on);
@@ -1277,7 +1233,6 @@ fn titled() -> abi::Plugin {
     abi::Plugin { id: "test.titled", setup }
 }
 
-// Expected (review carbon-5): a keyed select shown again with another title shows it.
 #[test]
 fn a_keyed_select_shown_again_takes_its_new_title() {
     let (harness, _) = open(&[]);
@@ -1313,10 +1268,6 @@ fn presented() -> abi::Plugin {
     abi::Plugin { id: "test.presented", setup }
 }
 
-// Expected (contract 2.x additions, TS `dialog.set({ size, centered })`): a select with `centered` shows in the middle
-// of the screen, lower than one without; a keyed select shown again with `centered` changed moves and keeps its filter
-// and its selected row; an alert and a confirm take their size and their centering, and a dialog without them is
-// medium and a quarter of the way down.
 #[test]
 fn a_dialog_takes_its_size_and_centering() {
     let (harness, _) = open(&[]);
