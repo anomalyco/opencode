@@ -492,6 +492,39 @@ it.effect("auto compaction estimates current content against the buffered prompt
     // Another provider's usage is not trusted either.
     const foreign = { ...assistant, model: { ...assistant.model, providerID: Provider.ID.make("other") } }
     expect(SessionCompaction.estimateContext({ ...grown, messages: [foreign] })).toBe(21)
+    const swapped = {
+      ...assistant,
+      id: SessionMessage.ID.create(),
+      model: { ...assistant.model, id: Model.ID.make("other-model") },
+    }
+    expect(SessionCompaction.estimateContext({ ...grown, messages: [swapped] })).toBe(21)
+    expect(yield* due({ ...grown, messages: [swapped] })).toBe(false)
+    const otherVariant = { ...assistant, model: { ...assistant.model, variant: Model.VariantID.make("fast") } }
+    expect(SessionCompaction.estimateContext({ ...grown, messages: [otherVariant] })).toBe(21)
+    expect(yield* due({ ...grown, messages: [otherVariant] })).toBe(false)
+    const otherAgent = { ...assistant, agent: Agent.ID.make("other") }
+    expect(SessionCompaction.estimateContext({ ...grown, messages: [otherAgent] })).toBe(21)
+    expect(yield* due({ ...grown, messages: [otherAgent] })).toBe(false)
+    const nativeWindow = Schema.decodeUnknownSync(SessionMessage.CompactionCompleted)({
+      id: SessionMessage.ID.create(),
+      type: "compaction",
+      status: "completed",
+      reason: "auto",
+      model: assistant.model,
+      native: { messages: [] },
+      summary: "",
+      time: { created: 0, completed: 0 },
+    })
+    // Usage from another agent cannot measure the encrypted native window for this request.
+    expect(yield* due({ ...grown, messages: [nativeWindow, otherAgent] }, { measured: 90_000, estimated: 0 })).toBe(
+      false,
+    )
+    expect(
+      SessionCompaction.estimateContext({
+        ...grown,
+        messages: [input(1_000, contextLimited).messages[0], swapped],
+      }),
+    ).toBe(1_001)
     expect(
       SessionCompaction.estimateContext({
         ...grown,
@@ -1307,18 +1340,43 @@ it.effect("a model switch waits for the new model's first response before summar
     const compaction = yield* SessionCompaction.Service
     const session = yield* insertSession(Session.ID.make("ses_precompute_switch"))
     const history = precomputeHistory()
-    const switched = (messages: readonly SessionMessage.Info[]) => ({
-      ...loaded(session, messages),
-      model: { ...resolved, ref: { ...resolved.ref, id: Model.ID.make("other") } },
-    })
+    const model = { ...resolved, ref: { ...resolved.ref, id: Model.ID.make("other") } }
 
     // The latest response came from the previous model, so the new one has no cached prefix to summarize from.
-    yield* compaction.precompute(Effect.succeed(switched(history.near)))
-    expect(yield* compaction.compact({ reason: "auto", context: switched(history.due) })).toEqual({
+    yield* compaction.precompute(Effect.succeed({ ...loaded(session, history.near), model }))
+    const next = [
+      ...history.due,
+      textUser("Fourth question"),
+      { ...measured("Fourth answer", 182_000), model: model.ref },
+    ]
+    expect(yield* compaction.compact({ reason: "auto", context: { ...loaded(session, next), model } })).toEqual({
       status: "completed",
     })
     expect(requests).toHaveLength(1)
     expect(JSON.stringify(requests[0].messages)).toContain("Third answer")
+  }),
+)
+
+it.effect("switching back waits for a fresh measurement before starting a background summary", () =>
+  Effect.gen(function* () {
+    requests = []
+    const compaction = yield* SessionCompaction.Service
+    const session = yield* insertSession(Session.ID.make("ses_precompute_switch_back"))
+    const history = precomputeHistory()
+    const other = measured("Third answer from another model", 168_000)
+    const switched = [
+      ...history.near,
+      textUser("Third question"),
+      { ...other, model: { ...other.model, id: Model.ID.make("other") } },
+    ]
+
+    yield* compaction.precompute(Effect.succeed(loaded(session, switched)))
+    const next = [...switched, textUser("Fourth question"), measured("Fourth answer", 182_000)]
+    expect(yield* compaction.compact({ reason: "auto", context: loaded(session, next) })).toEqual({
+      status: "completed",
+    })
+    expect(requests).toHaveLength(1)
+    expect(JSON.stringify(requests[0].messages)).toContain("Third answer from another model")
   }),
 )
 
@@ -1407,10 +1465,13 @@ it.effect("a background summary is swapped in for a different model", () =>
     const history = precomputeHistory()
 
     yield* compaction.precompute(Effect.succeed(loaded(session, history.near)))
-    const switched = {
-      ...loaded(session, history.due),
-      model: { ...resolved, ref: { ...resolved.ref, id: Model.ID.make("other") } },
-    }
+    const model = { ...resolved, ref: { ...resolved.ref, id: Model.ID.make("other") } }
+    const next = [
+      ...history.near,
+      textUser("Third question"),
+      { ...measured("Third answer", 182_000), model: model.ref },
+    ]
+    const switched = { ...loaded(session, next), model }
     expect(yield* compaction.compact({ reason: "auto", context: switched })).toEqual({ status: "completed" })
 
     // The one request ended before the response the summary started from.
@@ -1509,7 +1570,7 @@ it.effect("a background summary starts a fixed lead before the threshold, not at
   }),
 )
 
-it.effect("a background summary starts on a window whose threshold is under 64k", () =>
+it.effect("a background summary uses current-request measurements on a window whose threshold is under 64k", () =>
   Effect.gen(function* () {
     requests = []
     const compaction = yield* SessionCompaction.Service
@@ -1519,7 +1580,14 @@ it.effect("a background summary starts on a window whose threshold is under 64k"
       ...loaded(session, messages),
       model: { ...resolved, limit: { context: 64_000, output: 16_000 } },
     })
-    const early = [textUser("First question"), measured("First answer", 20_000), textUser("Second question")]
+    const previous = measured("Previous model answer", 46_000)
+    const early = [
+      textUser("Previous model question"),
+      { ...previous, model: { ...previous.model, id: Model.ID.make("previous-model") } },
+      textUser("First question"),
+      measured("First answer", 20_000),
+      textUser("Second question"),
+    ]
     const before = [...early, measured("Second answer", 30_000)]
     const within = [...before, textUser("Third question"), measured("Third answer", 40_000)]
     const due = [...within, textUser("Fourth question"), measured("Fourth answer", 50_000)]
