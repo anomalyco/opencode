@@ -1654,7 +1654,8 @@ fn module(vm: &mut Vm, specifier: &str) -> Res {
     let Some(found) = found else {
         let message = cannot_import(specifier);
         let proto = vm.realm.error_proto;
-        return Err(vm.make_error(proto, &message));
+        // A failure, as the reference throws it at the import: the diagnostic says where.
+        return Err(vm.failure(proto, &message, DiagnosticKind::ExecutionFailure));
     };
     vm.host.modules.insert(name, found);
     Ok(found)
