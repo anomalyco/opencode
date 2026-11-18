@@ -1,1 +1,8 @@
-const r=[]; try { Math.hypot(Infinity, { valueOf() { throw new Error("x") } }) } catch (e) { r.push(e.message) }; r.push(Math.hypot(), Math.hypot(-0), Math.hypot(3, 4), Math.hypot(NaN, Infinity), Math.hypot(1e200, 1e200), Math.hypot(1, 2, 3), Math.hypot(0.1, 0.2), Math.hypot(-3)); return [r, (() => { let seed = 5; const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648 }; const out = []; for (let i = 0; i < 200; i++) { const n = 1 + Math.floor(rnd() * 5); const xs = []; for (let j = 0; j < n; j++) xs.push((rnd() - 0.5) * 10 ** Math.floor(rnd() * 20 - 10)); out.push(String(Math.hypot(...xs))) } return out })()]
+// Results that are exact, so every libm and compiler agrees; std-math-hypot-inexact covers rounded ones.
+const r = []
+try { Math.hypot(Infinity, { valueOf() { throw new Error("x") } }) } catch (e) { r.push(e.message) }
+const ones = (n) => Array.from({ length: n }, () => 1)
+r.push(Math.hypot(), Math.hypot(-0), Math.hypot(3, 4), Math.hypot(NaN, Infinity), Math.hypot(3 * 2 ** 1021, 4 * 2 ** 1021), Math.hypot(0.75, -1), Math.hypot(-3))
+r.push(Math.hypot(1, 2, 2), Math.hypot(1, 4, 8), Math.hypot(-2, 4, -4), Math.hypot(2 ** -1000, 2 ** -999, 2 ** -999), Math.hypot(0, 0, 0), Math.hypot(NaN, 1, Infinity))
+r.push(Math.hypot(1, 1, 1, 1), Math.hypot(2, ...ones(12)), Math.hypot(1, 2, ...ones(11)), Math.hypot(-0.5, 0.5, 0.5, 0.5), Math.hypot(2 ** 1000, 2 ** 1000, 2 ** 1000, 2 ** 1000), Math.hypot(0, 0, 0, 0), Math.hypot(NaN, 1, 2, Infinity))
+return r.map(String)

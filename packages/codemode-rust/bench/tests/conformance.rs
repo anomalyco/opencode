@@ -1,5 +1,6 @@
 //! Runs every `conformance/cases/<name>.js` through `psychoscript::Runtime` and compares it with the reference outcome
-//! in `<name>.json`. Reports every failing case at once. `CONFORMANCE_FILTER=<substring>` narrows the run.
+//! in `<name>.json`. Reports every failing case at once. `CONFORMANCE_FILTER=<substring>` narrows the run. A case
+//! with a `// @platform "<os>"` header is checked only on that OS, where `conformance/generate.ts` records it.
 
 use std::panic::{self, AssertUnwindSafe};
 use std::path::Path;
@@ -154,6 +155,13 @@ fn conformance() {
         .iter()
         .filter_map(|name| {
             let code = std::fs::read_to_string(dir.join(format!("{name}.js"))).unwrap();
+            let platform = code
+                .lines()
+                .find_map(|l| l.strip_prefix("// @platform "))
+                .map(|p| serde_json::from_str::<String>(p).unwrap());
+            if platform.is_some_and(|p| p != std::env::consts::OS) {
+                return None;
+            }
             let expected: Json = serde_json::from_str(
                 &std::fs::read_to_string(dir.join(format!("{name}.json"))).unwrap(),
             )

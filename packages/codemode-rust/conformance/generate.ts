@@ -7,6 +7,9 @@
 // A case may start with header comments that set its inputs:
 //   // @bindings {"event": {"type": "init"}}
 //   // @limits {"max_tool_calls": 2}
+//   // @platform "linux"
+// A case with @platform depends on the system libm or compiler, so it is recorded and checked only on that platform
+// (`process.platform`); elsewhere this leaves its expectation as it is.
 
 import { readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { join, resolve } from "node:path"
@@ -52,6 +55,11 @@ const names = readdirSync(dir)
 
 for (const name of names) {
   const code = readFileSync(join(dir, `${name}.js`), "utf8")
+  const platform = header(code, "platform")
+  if (platform !== undefined && platform !== process.platform) {
+    console.log(`${name.padEnd(36)} skipped (${platform} only)`)
+    continue
+  }
   const bindings = header(code, "bindings") ?? {}
   const limits = header(code, "limits")
   const runtime = CodeMode.make({
