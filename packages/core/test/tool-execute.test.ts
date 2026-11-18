@@ -414,6 +414,9 @@ describe("Bun", () => {
               await failure(() => Bun.write("object.txt", { text: "x" })),
               await failure(() => Bun.write({ name: "object.txt" }, "x")),
               await failure(() => Bun.write("deep", "x")),
+              await Bun.write("flat.txt", "flat", { createPath: false }),
+              await failure(() => Bun.write("missing/flat.txt", "x", { createPath: false })),
+              await failure(() => Bun.write("mode.txt", "x", { mode: 0o755 })),
               await Bun.file("own.txt").delete() ?? null,
               await Bun.file("own.txt").exists(),
             ]`,
@@ -434,6 +437,9 @@ describe("Bun", () => {
       ["TypeError", "Bun.write expects a string, a Uint8Array, a BunFile, or a Response as the data to write."],
       ["TypeError", "Bun.write expects a path or a BunFile to write to."],
       ["Error", "EISDIR"],
+      4,
+      ["Error", "ENOENT"],
+      ["TypeError", 'Bun.write does not support the "mode" option in Code Mode. Supported options: createPath.'],
       null,
       false,
     ])
@@ -446,7 +452,7 @@ describe("Bun", () => {
     expect((await written("page.txt")).toString()).toBe("downloaded")
     expect((await written("number.txt")).toString()).toBe("5")
     expect((await fs.readdir(tmp.path)).toSorted()).toEqual(
-      ["bom.txt", "bytes.bin", "deep", "into.txt", "notes.txt", "number.txt", "page.txt"].toSorted(),
+      ["bom.txt", "bytes.bin", "deep", "flat.txt", "into.txt", "notes.txt", "number.txt", "page.txt"].toSorted(),
     )
     expect(result.output.toolCalls.slice(0, 5)).toEqual([
       { tool: "Bun", status: "completed", input: { method: "file", path: "notes.txt" } },

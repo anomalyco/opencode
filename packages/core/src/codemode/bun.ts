@@ -186,18 +186,19 @@ const remove = (handle: Handle) =>
   )
 
 // `Bun.write`: the bytes written. The destination is a path or a BunFile; the data is text, bytes, a BunFile to copy,
-// or a response, whose body is read here. Like Bun, it creates missing parent directories.
-const writeTo = (destination: unknown, data: unknown) => {
+// or a response, whose body is read here. Like Bun, it creates missing parent directories unless `createPath` is false.
+const writeTo = (destination: unknown, data: unknown, options?: { readonly createPath?: boolean }) => {
+  supports("Bun.write", options, ["createPath"])
   const to = typeof destination === "string" || destination instanceof URL ? toPath(destination) : handleOf(destination)
   if (to === undefined) throw new TypeError("Bun.write expects a path or a BunFile to write to.")
-  return write(to, data)
+  return write(to, data, options?.createPath !== false)
 }
 
-const write = (to: string | Handle, data: unknown) => {
+const write = (to: string | Handle, data: unknown, parents = true) => {
   const from = handleOf(data)
   // A copy asks edit without a diff of the file.
   return (from ? read(from) : contents(data)).pipe(
-    Effect.flatMap((bytes) => put(to, bytes, { parents: true, diff: from === undefined })),
+    Effect.flatMap((bytes) => put(to, bytes, { parents, diff: from === undefined })),
   )
 }
 
