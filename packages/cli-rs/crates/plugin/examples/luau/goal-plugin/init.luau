@@ -4,7 +4,8 @@
 -- whose select shows the goal's summary and sends the prompt that refreshes, lists the history of, pauses, resumes or
 -- clears it. The options' `locale` picks English or Chinese, as TS's.
 --
--- An active goal's time counts on each second, on the host's clock (`plugin.every`), from when its result was sampled.
+-- An active goal's time counts on each second while the sidebar shows, on the host's clock (`plugin.every`), from when
+-- its result was sampled.
 --
 -- Where it differs from TS: a Luau plugin reads no files, so it never reads the goal server's state file, and an
 -- active goal's time counts on only when its tool result says when it was sampled; `locale: "auto"` is English, as the
@@ -231,10 +232,8 @@ return plugin.define(function(setup)
         host:toast({ variant = variant, title = t.title, message = message })
     end
 
-    -- TS counts an active goal's time each second; the tick draws the sidebar again (`changed.woken`).
-    plugin.every(1000, function()
-        return true
-    end)
+    -- The sidebar blocks mounted, and whether the tick runs.
+    local mounts, ticking = 0, false
 
     setup:slot({ path = "sidebar.content" }, function(read, input, changed)
         local id = input.session_id
@@ -284,6 +283,23 @@ return plugin.define(function(setup)
         end
         table.insert(rows, muted(goal.objective))
         return plugin.show(plugin.column({ plugin.column(rows) }))
+    end)
+
+    -- TS counts an active goal's time each second; the tick draws the sidebar again (`changed.woken`). It runs only
+    -- while a block shows: the first mount starts it, and the first tick after the last mount went ends it.
+    setup:onMount({ path = "sidebar.content" }, function(_, _, mounted)
+        mounts = math.max(0, mounts + if mounted then 1 else -1)
+        if not mounted or ticking then
+            return
+        end
+        ticking = true
+        plugin.every(1000, function()
+            if mounts == 0 then
+                ticking = false
+                return false
+            end
+            return true
+        end)
     end)
 
     setup:command({

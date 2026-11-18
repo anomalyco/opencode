@@ -891,7 +891,9 @@ fn session_usage_ends_a_run_its_sidebar_closed_during() {
 
 // Expected (timers, contract-ergonomics 2.3): goal-plugin's sidebar counts an active goal's time on each second, on
 // the host's clock and with no thread, from when its result was sampled: after the clock passed a second, and a second
-// passed on the wall too, the time shown is later. On the Rust port over the C ABI and on the Luau port.
+// passed on the wall too, the time shown is later. It ticks only while the sidebar shows (carbon tm2-3): on the home
+// screen it wakes the app no more, and the session again starts it again. On the Rust port over the C ABI and on the
+// Luau port.
 #[test]
 fn goal_plugin_counts_an_active_goals_time_each_second() {
     #[cfg_attr(not(feature = "luau"), allow(unused_mut))]
@@ -935,6 +937,19 @@ fn goal_plugin_counts_an_active_goals_time_each_second() {
         std::thread::sleep(Duration::from_millis(1100));
         h.app.advance(Duration::from_millis(1000));
         h.wait(&format!("{carrier:?}: the time moves on from {before}"), || shown(&h).is_some_and(|now| now != before));
+        // Home shows no sidebar: the tick ends at its next second, and wakes the app no more (carbon tm2-3). The app's
+        // own timers wake it less than once a second.
+        h.tui.navigate(Route::Home);
+        h.app.idle(Duration::from_secs(2));
+        let home = h.app.idle(Duration::from_secs(10));
+        assert!(home.wakeups < 10, "{carrier:?}: the tick ran on with no sidebar: {home:?}");
+        // The session again: the tick starts again.
+        h.tui.navigate(support::session_route("ses_p"));
+        let before = h.wait_for("Ship the parser rewrite");
+        let before = before.lines().find_map(|line| line.split("Time: ").nth(1).map(|time| time.trim().to_owned()));
+        std::thread::sleep(Duration::from_millis(1100));
+        h.app.advance(Duration::from_millis(1000));
+        h.wait(&format!("{carrier:?}: the time moves on again"), || shown(&h) != before);
     }
 }
 
