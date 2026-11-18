@@ -267,12 +267,10 @@ export const Plugin = {
         editor.add({
           name,
           options: { codemode: false, pinned: true, permission: "edit" },
-          codemode: {
-            description:
-              "Edit a file by replacing `oldString` with `newString` (must differ). Preserve exact indentation without line-number prefixes. Use `\\n` for line breaks; existing LF/CRLF endings are preserved unless `oldString` and `newString` differ only in `\\r`. `oldString` must match once unless `replaceAll` is true; add context to disambiguate.",
-          },
-          description:
-            "Edit the contents of a file by finding and replacing exact text. When editing text from Read output, preserve the exact indentation (tabs or spaces) and omit the line-number prefix, such as `1: `. Never include the prefix in oldString or newString. Write line breaks as \\n; the file's existing CRLF or LF line endings are matched and preserved. To change line endings themselves, make oldString and newString differ only in \\r; that edit applies to the exact bytes. If there is no exact match, the edit retries while ignoring typographic quote, dash, and space variants, then trailing whitespace on each line. The edit fails if oldString is not found. By default, oldString must identify a UNIQUE location. Multiple matches FAIL unless replaceAll is true. Add more surrounding context to disambiguate, or set replaceAll to true to replace every occurrence. Use replaceAll when the change should apply to every occurrence, such as renaming a variable.",
+          description: (codeMode) =>
+            codeMode
+              ? "Edit a file by replacing `oldString` with `newString` (must differ). Preserve exact indentation without line-number prefixes. Use `\\n` for line breaks; existing LF/CRLF endings are preserved unless `oldString` and `newString` differ only in `\\r`. `oldString` must match once unless `replaceAll` is true; add context to disambiguate."
+              : "Edit the contents of a file by finding and replacing exact text. When editing text from Read output, preserve the exact indentation (tabs or spaces) and omit the line-number prefix, such as `1: `. Never include the prefix in oldString or newString. Write line breaks as \\n; the file's existing CRLF or LF line endings are matched and preserved. To change line endings themselves, make oldString and newString differ only in \\r; that edit applies to the exact bytes. If there is no exact match, the edit retries while ignoring typographic quote, dash, and space variants, then trailing whitespace on each line. The edit fails if oldString is not found. By default, oldString must identify a UNIQUE location. Multiple matches FAIL unless replaceAll is true. Add more surrounding context to disambiguate, or set replaceAll to true to replace every occurrence. Use replaceAll when the change should apply to every occurrence, such as renaming a variable.",
           input: Input,
           output: Output,
           execute: (input, context) => {

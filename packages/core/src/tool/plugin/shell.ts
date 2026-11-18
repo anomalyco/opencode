@@ -7,7 +7,6 @@ import type { ShellCreateBefore } from "@opencode/plugin/effect/shell"
 import type { Shell as ShellSchema } from "@opencode/schema/shell"
 import type { Tool } from "@opencode/schema/tool"
 import { Clock, Deferred, Effect, Fiber, Option, Schema, Struct } from "effect"
-import { CodeModeExecution } from "../../codemode/execution.js"
 import { Environment } from "../../environment/index.js"
 import { Job } from "../../job.js"
 import { FileAccess } from "../../file-access.js"
@@ -372,25 +371,19 @@ export const Plugin = {
           name,
           // When placed in Code Mode, shell is pinned so the catalog always lists it, however many other tools there are.
           options: { codemode: false, pinned: true },
-          description: description(undefined, false),
-          input: Input,
-          codemode: {
-            description: description(undefined, true),
-            input: CodeModeInput,
-          },
+          description: (codeMode) => description(undefined, codeMode),
+          input: (codeMode) => (codeMode ? CodeModeInput : Input),
           output: StructuredOutput,
           execute: (input, context) => {
             // Code Mode input has no background parameter.
             const background = "background" in input && input.background === true
-            let finalTimeout = 0
+            // A foreground timeout of 0 falls back to the default, so a call can't block until the command exits.
+            const foreground = input.timeout || (context.codeMode ? CODE_MODE_TIMEOUT_MS : DEFAULT_TIMEOUT_MS)
+            const timeout = background ? (input.timeout ?? 0) : foreground
+            let finalTimeout = timeout
             // Uninterruptible from spawning to blocking, so an interrupt cannot orphan a started command.
             return Effect.uninterruptibleMask((restore) =>
               Effect.gen(function* () {
-                const codeMode = Option.isSome(yield* Effect.serviceOption(CodeModeExecution.Service))
-                // A foreground timeout of 0 falls back to the default, so a call can't block until the command exits.
-                const foreground = input.timeout || (codeMode ? CODE_MODE_TIMEOUT_MS : DEFAULT_TIMEOUT_MS)
-                const timeout = background ? (input.timeout ?? 0) : foreground
-                finalTimeout = timeout
                 // Listens for the user's stop for the whole call, starting before the command does, so a stop always
                 // reaches this tool through `cancel` instead of interrupting it, even while the command starts.
                 const stopped = yield* Deferred.make<void>()

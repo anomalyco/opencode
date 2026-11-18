@@ -19,18 +19,28 @@ export const codecFor = (schema: JsonSchema.JsonSchema) => {
   return codec
 }
 
-export const definition = (tool: Tool.Info<any, any>): ToolDefinition => ({
-  type: "tool",
-  name: effectiveName(tool),
-  description: tool.description,
-  inputSchema: inputJsonSchema(tool.input),
-  ...(tool.freeform && { freeform: tool.freeform }),
-  ...(tool.output === undefined ? {} : { outputSchema: outputJsonSchema(tool.output) }),
-})
+export const isDynamicField = (value: unknown): value is (codeMode: boolean) => unknown =>
+  typeof value === "function" && !("~standard" in value) && !Schema.isSchema(value)
+
+export const resolveField = <T>(value: Tool.Dynamic<T>, codeMode: boolean): T =>
+  isDynamicField(value) ? (value(codeMode) as T) : value
+
+export const definition = (tool: Tool.Info<any, any>, codeMode = false): ToolDefinition => {
+  const output = resolveField(tool.output, codeMode)
+  return {
+    type: "tool",
+    name: effectiveName(tool),
+    description: resolveField(tool.description, codeMode),
+    inputSchema: inputJsonSchema(resolveField(tool.input, codeMode)),
+    ...(tool.freeform && { freeform: tool.freeform }),
+    ...(output === undefined ? {} : { outputSchema: outputJsonSchema(output) }),
+  }
+}
 
 export const execute = (tool: Tool.Info<any, any>, input: unknown, context: Tool.Context) =>
   Effect.gen(function* () {
-    const decoded = yield* decodeInput(tool, input)
+    const codeMode = context.codeMode === true
+    const decoded = yield* decodeInput(tool, resolveField(tool.input, codeMode), input)
     // Tool implementations declare `Tool.Error` but plugins can fail with anything at
     // runtime. A foreign typed failure would slip past every `catchTag("Tool.Error")`
     // downstream and leave its call permanently unsettled, so the declared contract is
@@ -45,7 +55,8 @@ export const execute = (tool: Tool.Info<any, any>, input: unknown, context: Tool
             }),
       ),
     )
-    if (tool.output === undefined) {
+    const outputSchema = resolveField(tool.output, codeMode)
+    if (outputSchema === undefined) {
       if ("output" in result) return yield* Effect.die("Tool result declared output without an output schema")
       return {
         output: undefined,
@@ -54,7 +65,7 @@ export const execute = (tool: Tool.Info<any, any>, input: unknown, context: Tool
       }
     }
     if (!("output" in result)) return yield* new Tool.Error({ message: "Tool did not return its declared output" })
-    const output = yield* encodeOutput(tool.output, result.output)
+    const output = yield* encodeOutput(outputSchema, result.output)
     return {
       output,
       content: normalizeContent(result.content, output),
@@ -62,9 +73,9 @@ export const execute = (tool: Tool.Info<any, any>, input: unknown, context: Tool
     }
   })
 
-const decodeInput = (tool: Tool.Info<any, any>, value: unknown) =>
+const decodeInput = (tool: Pick<Tool.Info, "name" | "options">, schema: Tool.ValueSchema<any>, value: unknown) =>
   Effect.gen(function* () {
-    const result = yield* validateInput(tool.input, value)
+    const result = yield* validateInput(schema, value)
     if (result.issues)
       return yield* new Tool.Error({ message: formatInputIssues(effectiveName(tool), result.issues, value) })
     return result.value
@@ -135,7 +146,7 @@ const encodeOutput = (schema: Tool.ValueSchema<any>, value: unknown) => {
 }
 
 const isStandardSchema = (schema: Tool.ValueSchema<any>): schema is StandardSchemaV1<any, any> =>
-  typeof schema === "object" && schema !== null && "~standard" in schema
+  (typeof schema === "object" || typeof schema === "function") && schema !== null && "~standard" in schema
 
 const isStandardJSONSchema = (
   schema: StandardSchemaV1<any, any>,

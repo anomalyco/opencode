@@ -1,6 +1,6 @@
 export * as Tool from "./tool.js"
 export { CallID, Content, Error, FileContent, TextContent } from "@opencode/schema/tool"
-export type { CodeMode, Context, Metadata, Namespace, Options, Result } from "@opencode/schema/tool"
+export type { Context, Dynamic, Metadata, Namespace, Options, Resolved, Result } from "@opencode/schema/tool"
 
 import { ToolDefinition, type ToolCall } from "@opencode/ai/effect"
 import type { CodeMode } from "@opencode/codemode"
@@ -18,7 +18,15 @@ import { PluginHooks } from "./plugin/hooks.js"
 import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
 import { State } from "./state.js"
-import { definition, effectiveName, execute, normalizedName, normalizeContent } from "./tool/runtime.js"
+import {
+  definition,
+  effectiveName,
+  execute,
+  isDynamicField,
+  normalizedName,
+  normalizeContent,
+  resolveField,
+} from "./tool/runtime.js"
 import { Wildcard } from "./util/wildcard.js"
 
 export class RegistrationError extends Schema.TaggedError<RegistrationError>()("Tool.RegistrationError", {
@@ -26,19 +34,36 @@ export class RegistrationError extends Schema.TaggedError<RegistrationError>()("
   message: Schema.String,
 }) {}
 
+type ResolvedTool = Tool.Resolved & { readonly id: string }
+
 export interface Editor {
-  readonly list: () => readonly (Tool.Info & { readonly id: string })[]
-  readonly get: (id: string) => (Tool.Info & { readonly id: string }) | undefined
+  readonly list: () => readonly ResolvedTool[]
+  readonly get: (id: string) => ResolvedTool | undefined
   readonly namespace: (namespace: Tool.Namespace) => void
-  readonly add: (tool: Tool.Info) => void
-  readonly update: (id: string, update: (tool: Types.Mutable<Tool.Info>) => void) => void
+  readonly add: <
+    Input extends Tool.ValueSchema<any> = Tool.ValueSchema<any>,
+    Output extends Tool.ValueSchema<any> | undefined = Tool.ValueSchema<any> | undefined,
+  >(
+    tool: Tool.Info<Input, Output>,
+  ) => void
+  readonly update: (id: string, update: (tool: Types.Mutable<Tool.Resolved>) => void) => void
   readonly remove: (id: string) => void
 }
 
+type Entry = {
+  readonly source: Tool.Info & { readonly id: string }
+  // Resolved and converted once per registration; schemas cannot change without re-registering the tool.
+  readonly direct: {
+    readonly info: ResolvedTool
+    readonly definition: ToolDefinition
+  }
+  readonly codeMode?: {
+    readonly info: ResolvedTool
+  }
+}
+
 type Data = {
-  tools: Map<string, Tool.Info & { readonly id: string }>
-  // Converted once at registration; schemas cannot change without re-registering the tool.
-  definitions: Map<string, ToolDefinition>
+  tools: Map<string, Entry>
   namespaces: Map<string, Tool.Namespace>
   errors: { kind: "tool" | "namespace"; name: string; namespace?: string; error: RegistrationError }[]
 }
@@ -58,7 +83,7 @@ export interface SnapshotOptions {
 }
 
 export interface Interface extends State.Transformable<Editor> {
-  readonly list: () => Effect.Effect<ReadonlyArray<Tool.Info & { readonly id: string }>>
+  readonly list: () => Effect.Effect<ReadonlyArray<ResolvedTool>>
   readonly snapshot: (permissions?: Permission.Ruleset, options?: SnapshotOptions) => Effect.Effect<Snapshot>
   /**
    * Runs a Code Mode program with no model step over only the Code Mode tools named in `tools` (still subject to
@@ -223,13 +248,12 @@ const layer = Layer.effect(
       name: "tool",
       initial: () => ({
         tools: new Map(),
-        definitions: new Map(),
         namespaces: new Map(),
         errors: [],
       }),
       editor: (editor) => ({
-        list: () => Array.from(editor.tools.values()),
-        get: (id) => editor.tools.get(id),
+        list: () => Array.from(editor.tools.values(), (entry) => entry.direct.info),
+        get: (id) => editor.tools.get(id)?.direct.info,
         namespace: (namespace) => {
           const error = namespaceError(namespace.name)
           if (error) {
@@ -240,22 +264,30 @@ const layer = Layer.effect(
         },
         add: (tool) => {
           const id = effectiveName(tool)
-          commit(editor, id, { ...tool, id })
+          commit(editor, id, { ...(tool as Tool.Info), id })
         },
         update: (id, update) => {
           const current = editor.tools.get(id)
           if (!current) return
-          const tool = cloneTool(current)
-          update(tool)
-          tool.name = current.name
-          tool.id = id
-          if (tool.options?.namespace !== current.options?.namespace)
-            tool.options = { ...tool.options, namespace: current.options?.namespace }
-          commit(editor, id, tool)
+          const draft: Types.Mutable<ResolvedTool> = {
+            ...current.direct.info,
+            options: current.direct.info.options && { ...current.direct.info.options },
+          }
+          update(draft)
+          draft.name = current.source.name
+          draft.id = id
+          if (draft.options?.namespace !== current.source.options?.namespace)
+            draft.options = { ...draft.options, namespace: current.source.options?.namespace }
+          commit(editor, id, {
+            ...draft,
+            description:
+              draft.description !== current.direct.info.description ? draft.description : current.source.description,
+            input: draft.input !== current.direct.info.input ? draft.input : current.source.input,
+            output: draft.output !== current.direct.info.output ? draft.output : current.source.output,
+          })
         },
         remove: (id) => {
           editor.tools.delete(id)
-          editor.definitions.delete(id)
         },
       }),
       notify: (value) => {
@@ -277,7 +309,7 @@ const layer = Layer.effect(
     return Service.of({
       transform: state.transform,
       reload: state.reload,
-      list: () => Effect.sync(() => Array.from(state.get().tools.values())),
+      list: () => Effect.sync(() => Array.from(state.get().tools.values(), (entry) => entry.direct.info)),
       snapshot: Effect.fn("Tool.snapshot")((permissions, options) =>
         Effect.gen(function* () {
           const rules = permissions ?? []
@@ -291,16 +323,17 @@ const layer = Layer.effect(
           }
           const hidden = options?.tools?.hidden
           const promoted = options?.tools?.codemode
-          const direct = new Map<string, Tool.Info>()
-          const codeModeEntries: Array<[string, Tool.Info]> = []
-          for (const [name, tool] of data.tools) {
+          const direct = new Map<string, Entry["direct"]>()
+          const codeModeEntries: Array<[string, ResolvedTool]> = []
+          for (const [name, entry] of data.tools) {
+            const tool = entry.source
             if (hidden?.has(name)) continue
             if (whollyDisabled(tool.options?.permission ?? name, rules)) continue
             if (codeModeEnabled && (tool.options?.codemode !== false || promoted?.has(name))) {
-              codeModeEntries.push([name, tool])
+              codeModeEntries.push([name, entry.codeMode?.info ?? entry.direct.info])
               continue
             }
-            direct.set(name, tool)
+            direct.set(name, entry.direct)
           }
           const codeMode = !codeModeEnabled
             ? undefined
@@ -315,7 +348,7 @@ const layer = Layer.effect(
                   catalogs.set(key, cached)
                 }
                 const inventory = cached?.inventory ?? {
-                  tools: new Map(codeModeEntries.map(([name, tool]) => [name, toCodeModeTool(tool)])),
+                  tools: new Map(codeModeEntries),
                   namespaces: data.namespaces,
                 }
                 const tool = CodeModeTool.create(
@@ -343,7 +376,7 @@ const layer = Layer.effect(
             definitions: [
               ...Array.from(direct)
                 .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-                .map(([name]) => data.definitions.get(name)!),
+                .map(([, entry]) => entry.definition),
               ...(codeMode ? [codeMode.definition] : []),
             ],
             execute: Effect.fnUntraced(function* (input: Parameters<Snapshot["execute"]>[0]) {
@@ -366,8 +399,8 @@ const layer = Layer.effect(
                 const background = yield* CodeModeJob.Current
                 return yield* background ? background(context, run) : run(context)
               }
-              const tool = direct.get(name)
-              if (tool) return yield* executeTool(tool, name, event.input, context)
+              const entry = direct.get(name)
+              if (entry) return yield* executeTool(entry.info, name, event.input, context)
               return yield* new Tool.Error({
                 message: `No tool named "${name}" is currently available. Please use a tool from the available tool list.`,
               })
@@ -388,12 +421,12 @@ const layer = Layer.effect(
         const tools = new Map(
           Array.from(data.tools)
             .filter(
-              ([name, tool]) =>
-                tool.options?.codemode !== false &&
-                allowed.has(CodeModeTool.qualifiedName(tool)) &&
-                !whollyDisabled(tool.options?.permission ?? name, input.permissions),
+              ([name, entry]) =>
+                entry.source.options?.codemode !== false &&
+                allowed.has(CodeModeTool.qualifiedName(entry.source)) &&
+                !whollyDisabled(entry.source.options?.permission ?? name, input.permissions),
             )
-            .map(([name, tool]) => [name, toCodeModeTool(tool)]),
+            .map(([name, entry]) => [name, entry.codeMode?.info ?? entry.direct.info]),
         )
         const callSeq = yield* Ref.make(0)
         return yield* CodeModeTool.check(
@@ -407,6 +440,7 @@ const layer = Layer.effect(
               const context: Tool.Context = {
                 ...input.context,
                 id: Tool.CallID.make(`call_${input.context.messageID}_${index}`),
+                codeMode: true,
               }
               return yield* run(tools, tool, name, toolInput, context)
             }),
@@ -416,29 +450,20 @@ const layer = Layer.effect(
   }),
 )
 
-const cloneTool = <T extends Tool.Info>(tool: T): Types.Mutable<T> => ({
-  ...tool,
-  options: tool.options && { ...tool.options },
-  codemode: tool.codemode && { ...tool.codemode },
-})
-
 /** Store a valid tool under its effective name, or record why it was skipped. */
 function commit(editor: Data, id: string, input: Tool.Info & { readonly id: string }) {
-  // JavaScript plugins may leave out `input` for a tool that takes none.
-  const cloned = cloneTool(input)
-  const tool = cloned.input === undefined || cloned.input === null ? { ...cloned, input: {} } : cloned
-  const registered = register(tool)
+  const source = { ...input, options: input.options && { ...input.options } }
+  const registered = register(id, source)
   if (Result.isFailure(registered)) {
     editor.errors.push({
       kind: "tool",
-      name: tool.name,
-      namespace: tool.options?.namespace,
+      name: source.name,
+      namespace: source.options?.namespace,
       error: registered.failure,
     })
     return
   }
-  editor.tools.set(id, tool)
-  editor.definitions.set(id, registered.success)
+  editor.tools.set(id, registered.success)
 }
 
 const whollyDisabled = (action: string, rules: Permission.Ruleset) => {
@@ -448,15 +473,6 @@ const whollyDisabled = (action: string, rules: Permission.Ruleset) => {
 
 const CATALOG_CACHE_LIMIT = 5
 
-function toCodeModeTool(tool: Tool.Info): Tool.Info {
-  if (!tool.codemode) return tool
-  return {
-    ...tool,
-    ...(tool.codemode.description === undefined ? {} : { description: tool.codemode.description }),
-    ...(tool.codemode.input === undefined ? {} : { input: tool.codemode.input }),
-  }
-}
-
 const formatSchemaIssue = SchemaIssue.makeFormatterDefault()
 
 function schemaMakeError(error: unknown) {
@@ -464,39 +480,91 @@ function schemaMakeError(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
 
-function register(tool: Tool.Info): Result.Result<ToolDefinition, RegistrationError> {
-  const namespace = tool.options?.namespace
+const emptyInput = {}
+
+function resolveForm(source: Tool.Info & { readonly id: string }, codeMode: boolean): ResolvedTool {
+  const rawInput = resolveField(source.input, codeMode)
+  // JavaScript plugins may leave out `input` for a tool that takes none.
+  const input = rawInput === undefined || rawInput === null ? emptyInput : rawInput
+  const output = resolveField(source.output, codeMode)
+  return {
+    ...source,
+    description: resolveField(source.description, codeMode),
+    input,
+    ...(output === undefined ? { output: undefined } : { output }),
+  }
+}
+
+const hasDynamicFields = (tool: Tool.Info) =>
+  isDynamicField(tool.description) || isDynamicField(tool.input) || isDynamicField(tool.output)
+
+function register(id: string, source: Tool.Info & { readonly id: string }): Result.Result<Entry, RegistrationError> {
+  const namespace = source.options?.namespace
   if (namespace !== undefined) {
     const error = namespaceError(namespace)
     if (error) return Result.fail(error)
   }
-  const name = normalizedName(tool)
+  const name = normalizedName(source)
   if (!/^[A-Za-z0-9_-]+$/.test(name))
     return Result.fail(new RegistrationError({ name, message: `Invalid tool name: ${name}` }))
-  const id = effectiveName(tool)
-  if (tool.options?.codemode === false && id === "execute")
+  if (source.options?.codemode === false && id === "execute")
     return Result.fail(new RegistrationError({ name: id, message: 'Tool name "execute" is reserved for CodeMode' }))
+
+  const directForm = Result.try({
+    try: () => resolveForm(source, false),
+    catch: (error) =>
+      new RegistrationError({ name: id, message: `Invalid tool definition ${id}: ${schemaMakeError(error)}` }),
+  })
+  if (Result.isFailure(directForm)) return Result.fail(directForm.failure)
   // Standard Schema libraries such as ArkType make schemas that are functions.
-  if (typeof tool.input !== "object" && typeof tool.input !== "function")
+  if (typeof directForm.success.input !== "object" && typeof directForm.success.input !== "function")
     return Result.fail(
       new RegistrationError({ name: id, message: `Invalid tool definition ${id}: input must be a schema` }),
     )
-  if (tool.codemode?.input !== undefined) {
-    if (typeof tool.codemode.input !== "object" && typeof tool.codemode.input !== "function")
-      return Result.fail(
-        new RegistrationError({ name: id, message: `Invalid tool definition ${id}: input must be a schema` }),
-      )
-    const variant = Result.try({
-      try: () => ToolDefinition.make(definition(toCodeModeTool(tool))),
+  const directDef = Result.try({
+    try: () => ToolDefinition.make(definition(directForm.success)),
+    catch: (error) =>
+      new RegistrationError({ name: id, message: `Invalid tool definition ${id}: ${schemaMakeError(error)}` }),
+  })
+  if (Result.isFailure(directDef)) return Result.fail(directDef.failure)
+
+  if (!hasDynamicFields(source)) {
+    return Result.succeed({
+      source,
+      direct: { info: directForm.success, definition: directDef.success },
+      ...(source.options?.codemode === false ? {} : { codeMode: { info: directForm.success } }),
+    })
+  }
+
+  const codeModeForm = Result.try({
+    try: () => resolveForm(source, true),
+    catch: (error) =>
+      new RegistrationError({ name: id, message: `Invalid tool definition ${id}: ${schemaMakeError(error)}` }),
+  })
+  if (Result.isFailure(codeModeForm)) return Result.fail(codeModeForm.failure)
+  if (typeof codeModeForm.success.input !== "object" && typeof codeModeForm.success.input !== "function")
+    return Result.fail(
+      new RegistrationError({ name: id, message: `Invalid tool definition ${id}: input must be a schema` }),
+    )
+  if (typeof codeModeForm.success.description !== "string")
+    return Result.fail(
+      new RegistrationError({ name: id, message: `Invalid tool definition ${id}: expected string description` }),
+    )
+  if (
+    codeModeForm.success.input !== directForm.success.input ||
+    codeModeForm.success.output !== directForm.success.output
+  ) {
+    const codeModeDef = Result.try({
+      try: () => ToolDefinition.make(definition(codeModeForm.success)),
       catch: (error) =>
         new RegistrationError({ name: id, message: `Invalid tool definition ${id}: ${schemaMakeError(error)}` }),
     })
-    if (Result.isFailure(variant)) return variant
+    if (Result.isFailure(codeModeDef)) return Result.fail(codeModeDef.failure)
   }
-  return Result.try({
-    try: () => ToolDefinition.make(definition(tool)),
-    catch: (error) =>
-      new RegistrationError({ name: id, message: `Invalid tool definition ${id}: ${schemaMakeError(error)}` }),
+  return Result.succeed({
+    source,
+    direct: { info: directForm.success, definition: directDef.success },
+    codeMode: { info: codeModeForm.success },
   })
 }
 

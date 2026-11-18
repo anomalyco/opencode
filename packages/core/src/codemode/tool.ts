@@ -163,6 +163,7 @@ export const create = (
                   const executed = yield* executeTool(name, tool, input, {
                     ...context,
                     id,
+                    codeMode: true,
                     // Progress replaces the execute call's own, so an inner tool's updates would hide the call rows.
                     progress: () => Effect.void,
                     // A stop is the execute call's to handle: a nested call never fails it with its own error.
@@ -353,7 +354,7 @@ function inventoryTools(inventory: Inventory) {
   const root: ToolNode = { children: new Map() }
   for (const namespace of inventory.namespaces?.values() ?? []) getNode(root, namespace.name).namespace = namespace
   for (const [name, registration] of inventory.tools) {
-    const child = definition(registration)
+    const child = definition(registration, true)
     getNode(root, qualifiedName(registration)).tool = Tool.make({
       description: child.description,
       input: child.inputSchema,

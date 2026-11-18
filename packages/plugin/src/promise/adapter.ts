@@ -9,7 +9,7 @@ import { define } from "../effect/plugin.js"
 import type { ToolFailures, ToolHooks } from "../effect/tool.js"
 import { AssertInput } from "../permission.js"
 import type { Plugin } from "./plugin.js"
-import type { Info } from "./tool.js"
+import type { Info, ResolvedInfo } from "./tool.js"
 import type { RpcDomain, RpcHandlers } from "./rpc.js"
 
 type HostRegistration = { readonly dispose: Effect.Effect<void> }
@@ -534,7 +534,7 @@ export function fromPromise(plugin: Plugin) {
                       }),
                     update: (id, update) =>
                       editor.update(id, (tool) => {
-                        const value: Info = {
+                        const value: ResolvedInfo = {
                           ...tool,
                           execute: promiseExecutor(tool.execute),
                         }
@@ -543,7 +543,6 @@ export function fromPromise(plugin: Plugin) {
                           output: value.output,
                           freeform: value.freeform,
                           options: value.options,
-                          codemode: value.codemode,
                           execute: (input: Parameters<Info["execute"]>[0], context: Tool.Context) =>
                             executePromiseTool(value, input, context),
                         })

@@ -62,11 +62,10 @@ export const Plugin = {
         editor.add({
           name,
           options: { codemode: false, pinned: true, permission: "edit" },
-          codemode: {
-            description:
-              "Apply multi-file edits inside `*** Begin Patch` ... `*** End Patch`. Start each operation with `*** Add File: <path>` (every content line prefixed with `+`), `*** Delete File: <path>`, or `*** Update File: <path>` (optional `*** Move to: <path>`, then `@@ [context]` hunks with space/`-`/`+` line prefixes).",
-          },
-          description: DESCRIPTION,
+          description: (codeMode) =>
+            codeMode
+              ? "Apply multi-file edits inside `*** Begin Patch` ... `*** End Patch`. Start each operation with `*** Add File: <path>` (every content line prefixed with `+`), `*** Delete File: <path>`, or `*** Update File: <path>` (optional `*** Move to: <path>`, then `@@ [context]` hunks with space/`-`/`+` line prefixes)."
+              : DESCRIPTION,
           input: Input,
           freeform: { type: "lark", grammar: GRAMMAR },
           output: Output,

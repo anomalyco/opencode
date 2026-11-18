@@ -754,29 +754,34 @@ describe("Tool", () => {
   )
 
   it.effect(
-    "applies model tool policy and Code Mode variants, falling back to direct variants when execute is denied",
+    "resolves function-form fields once per registration and picks direct or Code Mode forms per placement",
     () =>
       Effect.gen(function* () {
         const service = yield* Tool.Service
+        const resolutions: boolean[] = []
+        const directInput = Schema.Struct({ command: Schema.String, background: Schema.optionalKey(Schema.Boolean) })
+        const codeModeInput = Schema.Struct({ command: Schema.String })
         yield* service.transform((editor) => {
           editor.add({
             name: "shell",
-            description: "Direct shell",
-            input: Schema.Struct({ command: Schema.String, background: Schema.optionalKey(Schema.Boolean) }),
-            codemode: {
-              description: "Code Mode shell",
-              input: Schema.Struct({ command: Schema.String }),
+            description: (codeMode) => {
+              resolutions.push(codeMode)
+              return codeMode ? "Code Mode shell" : "Direct shell"
             },
-            output: Schema.String,
+            input: (codeMode) => (codeMode ? codeModeInput : directInput),
+            output: (codeMode) => (codeMode ? Schema.Struct({ summary: Schema.String }) : Schema.String),
             options: { codemode: false, pinned: true },
-            execute: (input) =>
-              Effect.succeed({
-                output: `${input.command}:${"background" in input ? String(input.background) : "omitted"}`,
-              }),
+            execute: (input, context) => {
+              const summary = `${input.command}:${"background" in input ? String(input.background) : "omitted"}:${String(Boolean(context.codeMode))}`
+              return Effect.succeed({ output: context.codeMode ? { summary } : summary })
+            },
           })
           editor.add({ ...make(), name: "glob", options: { codemode: false } })
           editor.add({ ...make(), name: "mcp_search" })
         })
+
+        expect(resolutions).toEqual([false, true])
+        expect((yield* service.list()).find((tool) => tool.id === "shell")?.description).toBe("Direct shell")
 
         const direct = yield* service.snapshot()
         expect(direct.definitions.map((tool) => tool.name)).toEqual(["glob", "shell", "execute"])
@@ -784,7 +789,17 @@ describe("Tool", () => {
         expect(direct.definitions.find((tool) => tool.name === "shell")?.inputSchema.properties).toHaveProperty(
           "background",
         )
-        expect(codeModeListings(direct.codeModeCatalog!).map((tool) => tool.path)).toEqual(["mcp_search"])
+        expect(
+          (yield* direct.execute({
+            ...call("shell"),
+            call: {
+              type: "tool-call",
+              id: "call-direct-shell",
+              name: "shell",
+              input: { command: "ls", background: true },
+            },
+          })).output,
+        ).toBe("ls:true:false")
 
         const policy = { hidden: new Set(["glob"]), codemode: new Set(["shell"]) }
         const promoted = yield* service.snapshot(undefined, { tools: policy })
@@ -796,7 +811,7 @@ describe("Tool", () => {
         expect(shellListing.line).not.toContain("background")
         expect(promoted.codeModeCatalog?.tools.find((tool) => tool.name === "shell")).toMatchObject({ pinned: true })
 
-        // Decodes Code Mode calls with the Code Mode input schema, stripping direct-only fields.
+        // Decodes and encodes Code Mode calls with the Code Mode schemas and passes context.codeMode = true.
         const executed = yield* promoted.execute({
           ...call("execute"),
           call: {
@@ -806,7 +821,7 @@ describe("Tool", () => {
             input: { code: 'return await tools.shell({ command: "ls", background: true })' },
           },
         })
-        expect(executed.output).toMatchObject({ output: "ls:omitted" })
+        expect(executed.output).toMatchObject({ output: JSON.stringify({ summary: "ls:omitted:true" }) })
 
         // When execute is denied, promoted tools fall back to their direct form while hidden tools stay hidden.
         const denied = yield* service.snapshot([{ action: "execute", resource: "*", effect: "deny" }], {
@@ -818,31 +833,25 @@ describe("Tool", () => {
         expect(denied.definitions.find((tool) => tool.name === "shell")?.inputSchema.properties).toHaveProperty(
           "background",
         )
+        // Neither snapshots nor executions re-ran the field functions.
+        expect(resolutions).toEqual([false, true])
 
-        // Headless Tool.check also decodes Code Mode tools with their Code Mode input schema.
+        // Updating options preserves untouched function-form fields, and Tool.check uses the Code Mode form.
         yield* service.transform((editor) =>
-          editor.add({
-            name: "task",
-            description: "Task",
-            input: Schema.Struct({ command: Schema.String, background: Schema.optionalKey(Schema.Boolean) }),
-            codemode: { input: Schema.Struct({ command: Schema.String }) },
-            output: Schema.String,
-            execute: (input) =>
-              Effect.succeed({
-                output: `${input.command}:${"background" in input ? String(input.background) : "omitted"}`,
-              }),
+          editor.update("shell", (tool) => {
+            tool.options = { ...tool.options, codemode: true }
           }),
         )
         expect(
           yield* service.check({
-            code: 'return await tools.task({ command: "build", background: true })',
-            tools: ["task"],
+            code: 'return await tools.shell({ command: "build", background: true })',
+            tools: ["shell"],
             bindings: {},
             permissions: [],
             limits: {},
             context: { sessionID, ...identity, progress: () => Effect.void },
           }),
-        ).toMatchObject({ ok: true, value: "build:omitted" })
+        ).toMatchObject({ ok: true, value: { summary: "build:omitted:true" } })
       }),
   )
 

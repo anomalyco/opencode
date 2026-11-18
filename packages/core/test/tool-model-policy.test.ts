@@ -170,8 +170,7 @@ const setupContext = Effect.gen(function* () {
       const variant = name === "read" || name === "shell"
       editor.add({
         name,
-        description: `Direct ${name}`,
-        ...(variant ? { codemode: { description: `Code Mode ${name}` } } : {}),
+        description: variant ? (codeMode) => (codeMode ? `Code Mode ${name}` : `Direct ${name}`) : `Direct ${name}`,
         input: Schema.Struct({}),
         output: Schema.String,
         options: { codemode: false, ...(variant ? { pinned: true } : {}) },
@@ -210,13 +209,15 @@ describe("SessionContext.select model tool policy", () => {
   defaultIt.effect("keeps strong-model tools direct when full_codemode is off", () =>
     Effect.gen(function* () {
       const { registry, select } = yield* setupContext
-      const tools = yield* registry.list()
+      const catalog = (yield* registry.snapshot(undefined, {
+        tools: { codemode: new Set(["edit", "write", "patch"]) },
+      })).codeModeCatalog!
       for (const name of ["edit", "write", "patch"]) {
-        const tool = tools.find((item) => item.name === name)
-        expect(tool?.options?.pinned).toBe(true)
-        expect(tool?.codemode?.description).toBeDefined()
-        expect(tool?.codemode?.description).not.toContain("\n")
-        expect(tool!.codemode!.description!.length).toBeLessThan(500)
+        const entry = catalog.tools.find((item) => item.type === "tool" && item.name === name)
+        expect(entry).toMatchObject({ type: "tool", pinned: true })
+        if (entry?.type !== "tool") continue
+        expect(entry.description).not.toContain("\n")
+        expect(entry.description.length).toBeLessThan(500)
       }
       expect(names(yield* select("openai", "gpt-5")).join(",")).toBe(
         "glob,grep,patch,read,shell,webfetch,websearch,execute",

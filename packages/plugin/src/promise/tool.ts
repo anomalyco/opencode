@@ -1,5 +1,5 @@
 export { CallID, Error } from "@opencode/schema/tool"
-export type { CodeMode, Metadata, Options, Result } from "@opencode/schema/tool"
+export type { Metadata, Options, Result } from "@opencode/schema/tool"
 
 import { Tool } from "@opencode/schema/tool"
 import type { Agent } from "@opencode/schema/agent"
@@ -29,15 +29,25 @@ export type Info<
   ) => Promise<Tool.Result<Output>>
 }
 
+export type ResolvedInfo<
+  Input extends Tool.ValueSchema<any> = Tool.ValueSchema<any>,
+  Output extends Tool.ValueSchema<any> | undefined = Tool.ValueSchema<any> | undefined,
+> = Omit<Tool.Resolved<Input, Output>, "execute"> & {
+  readonly execute: (
+    input: Parameters<Tool.Resolved<Input, Output>["execute"]>[0],
+    context: ToolContext,
+  ) => Promise<Tool.Result<Output>>
+}
+
 export interface ToolEditor {
-  list(): readonly (Info & { readonly id: string })[]
-  get(id: string): (Info & { readonly id: string }) | undefined
+  list(): readonly (ResolvedInfo & { readonly id: string })[]
+  get(id: string): (ResolvedInfo & { readonly id: string }) | undefined
   namespace(namespace: Tool.Namespace): void
   add<Input extends Tool.ValueSchema<any>, Output extends Tool.ValueSchema<any> | undefined>(
     tool: Info<Input, Output>,
   ): void
   /** Updates an existing tool; missing IDs are ignored. */
-  update(id: string, update: (tool: Types.Mutable<Info>) => void): void
+  update(id: string, update: (tool: Types.Mutable<ResolvedInfo>) => void): void
   remove(id: string): void
 }
 
@@ -73,6 +83,6 @@ export interface ToolDomain {
   readonly transform: Transform<ToolEditor>
   readonly reload: () => Promise<void>
   /** Currently registered tools, after every transform, keyed by effective name. */
-  readonly list: () => Promise<readonly (Info & { readonly id: string })[]>
+  readonly list: () => Promise<readonly (ResolvedInfo & { readonly id: string })[]>
   readonly hook: Hooks<ToolHooks>
 }

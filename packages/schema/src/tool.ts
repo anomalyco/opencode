@@ -34,6 +34,8 @@ export interface Context {
    * has; a tool that does not is interrupted.
    */
   readonly cancel?: Effect.Effect<void>
+  /** True when the tool is invoked from inside Code Mode (`execute`). */
+  readonly codeMode?: boolean
 }
 
 export interface Namespace {
@@ -50,20 +52,21 @@ export interface Options {
 
 export type ValueSchema<A = unknown> = Schema.Codec<A, any> | StandardSchemaV1<any, A> | JsonSchema.JsonSchema
 
-type InputValue<S> = 0 extends 1 & S
-  ? any
-  : S extends Schema.Codec<infer A, any>
-    ? A
-    : S extends StandardSchemaV1<any, infer A>
-      ? A
-      : unknown
-type OutputValue<S> = S extends undefined
+/** A tool field that may depend on whether the tool is shown or run inside Code Mode. */
+export type Dynamic<T> = T | ((codeMode: boolean) => T)
+
+type SchemaInput<S> = S extends Schema.Codec<infer A, any> ? A : S extends StandardSchemaV1<any, infer A> ? A : unknown
+
+type SchemaOutput<S> = S extends undefined
   ? never
   : S extends Schema.Codec<infer A, any>
     ? A
     : S extends StandardSchemaV1<infer A, any>
       ? A
       : any
+
+type InputValue<S> = 0 extends 1 & S ? any : SchemaInput<S>
+type OutputValue<S> = 0 extends 1 & S ? any : SchemaOutput<S>
 
 export class Error extends Schema.TaggedError<Error>()("Tool.Error", {
   message: Schema.String,
@@ -96,22 +99,24 @@ export interface Result<Output extends ValueSchema<any> | undefined = ValueSchem
   readonly metadata?: Metadata
 }
 
-export interface CodeMode {
-  readonly description?: string
-  readonly input?: ValueSchema<any>
-}
-
 export type Info<
   Input extends ValueSchema<any> = ValueSchema<any>,
   Output extends ValueSchema<any> | undefined = ValueSchema<any> | undefined,
 > = {
   readonly name: string
-  readonly input: Input
+  readonly input: Dynamic<Input>
   readonly freeform?: Freeform
-  readonly description: string
+  readonly description: Dynamic<string>
   readonly execute: (input: InputValue<Input>, context: Context) => Effect.Effect<Result<Output>, Error>
-  readonly output?: Output
+  readonly output?: Dynamic<Output>
   readonly options?: Options
-  /** Overrides applied when the tool is exposed through Code Mode instead of directly. */
-  readonly codemode?: CodeMode
+}
+
+export type Resolved<
+  Input extends ValueSchema<any> = ValueSchema<any>,
+  Output extends ValueSchema<any> | undefined = ValueSchema<any> | undefined,
+> = Omit<Info<Input, Output>, "description" | "input" | "output"> & {
+  readonly description: string
+  readonly input: Input
+  readonly output?: Output
 }

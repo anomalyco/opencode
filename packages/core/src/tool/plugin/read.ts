@@ -56,8 +56,7 @@ export const Plugin = {
         editor.add({
           name,
           options: { codemode: false, pinned: true },
-          description: description(false),
-          codemode: { description: description(true) },
+          description,
           input: Input,
           output: ReadToolFileSystem.Output,
           execute: (input, context) => {
