@@ -131,9 +131,15 @@ function session(input: {
   // The requests made so far, settled or not: the next one starts once they all have.
   const chain: Promise<unknown>[] = []
 
-  const sequence = <Value,>(_sessionID: string, send: () => Promise<Value>) => {
-    if (!input.chained) return send()
-    const next = Promise.all(chain.splice(0)).then(send)
+  const sequence = <Value,>(_sessionID: string, send: () => Promise<Value>, prepare?: () => Promise<unknown>) => {
+    const run = async () => {
+      await prepare?.()
+
+      return send()
+    }
+
+    if (!input.chained) return run()
+    const next = Promise.all(chain.splice(0)).then(run)
 
     chain.push(next.catch(() => undefined))
 

@@ -822,29 +822,26 @@ function sendCommand(
 
     if (turn.before) await turn.before
 
-    const sending = session.data.session.sequence(session.id, async () => {
-      // Like queued prompts, queued commands must not apply the composer's selection to active work. What the plugins
-      // prepare runs beside it, and a send cancelled meanwhile stops here.
-      await Promise.all([
-        gate?.open,
-        value.delivery === "steer" ? applySelection(session, value.selection, track) : undefined,
-      ])
-
-      return session.api.command({
-        sessionID: session.id,
-        name: command.command,
-        text: command.arguments,
-        files: request.files.map((file) => ({
-          uri: file.uri,
-          name: file.name,
-          description: file.description,
-          mention: file.mention,
-        })),
-        agents: request.agents,
-        skills: request.skills,
-        delivery: value.delivery,
-      })
-    })
+    const sending = session.data.session.sequence(
+      session.id,
+      () =>
+        session.api.command({
+          sessionID: session.id,
+          name: command.command,
+          text: command.arguments,
+          files: request.files.map((file) => ({
+            uri: file.uri,
+            name: file.name,
+            description: file.description,
+            mention: file.mention,
+          })),
+          agents: request.agents,
+          skills: request.skills,
+          delivery: value.delivery,
+        }),
+      // What the request waits for is not part of its place in the chain's order.
+      () => Promise.all([gate?.open, value.delivery === "steer" ? applySelection(session, value.selection, track) : undefined]),
+    )
 
     turn.joined()
     await sending

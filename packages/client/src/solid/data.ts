@@ -275,6 +275,9 @@ function createSync() {
 }
 
 const CHILD_PAGE = 200
+// How long a sequenced request that stays open holds its session's send chain
+// once it has left: time to reach the server before the next send does.
+const SEQUENCE_HANDOFF_MS = 250
 const DELETED_SESSION_LIMIT = 512
 
 export function createData(config: CreateDataInput) {
@@ -460,8 +463,14 @@ export function createData(config: CreateDataInput) {
     void promise.then(settle, settle)
   }
 
-  // Capture creation before settlement clears its entry, so dependent RPCs still see a failed create.
-  function sendAdmission<Value>(sessionID: string, send: () => Promise<Value>, gate?: Promise<unknown>) {
+  // Capture creation before settlement clears its entry, so dependent RPCs still see a failed create. The chain's
+  // link is the request itself, or `link` of it for a request that stays open after the server has it.
+  function sendAdmission<Value>(
+    sessionID: string,
+    send: () => Promise<Value>,
+    gate?: Promise<unknown>,
+    link?: (request: Promise<Value>) => Promise<unknown>,
+  ) {
     const created = creating.get(sessionID)
     const previous = sending.get(sessionID)
     const request = Promise.resolve()
@@ -470,7 +479,7 @@ export function createData(config: CreateDataInput) {
     track(
       sending,
       sessionID,
-      request.catch(() => undefined),
+      (link?.(request) ?? request).catch(() => undefined),
     )
     return request
   }
@@ -1776,11 +1785,31 @@ export function createData(config: CreateDataInput) {
         return request
       },
       // Runs a session request this layer does not model, such as a shell or a
-      // server command, in the session's send chain: `send` starts once the
-      // prompts, compactions and sequenced requests made before it have
-      // settled, so the server receives them in the order they were made.
-      sequence<Value>(sessionID: string, send: () => Promise<Value>) {
-        return sendAdmission(sessionID, send)
+      // server command, in the session's send chain: `prepare` and then `send`
+      // start once the prompts, compactions and sequenced requests made before
+      // it have left, so the server receives them in the order they were made.
+      // The chain keeps the order in which requests leave, not the work they
+      // start: such a request can stay open for as long as that work runs, as a
+      // shell command's does until its process exits. Its link therefore ends
+      // when the request settles or has had `SEQUENCE_HANDOFF_MS` to reach the
+      // server, whichever is first.
+      sequence<Value>(sessionID: string, send: () => Promise<Value>, prepare?: () => Promise<unknown>) {
+        const left = Promise.withResolvers<void>()
+        return sendAdmission(
+          sessionID,
+          async () => {
+            await prepare?.()
+            const request = send()
+            left.resolve()
+            return request
+          },
+          undefined,
+          (request) =>
+            Promise.race([
+              request,
+              left.promise.then(() => new Promise((resolve) => setTimeout(resolve, SEQUENCE_HANDOFF_MS))),
+            ]),
+        )
       },
       // Optimistic prompt admission: render the prompt immediately under a
       // client-minted ID, send it, and let the durable inbox.enqueued echo
