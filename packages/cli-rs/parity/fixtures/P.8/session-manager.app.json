@@ -41,7 +41,7 @@
   {"checkpoint":"cleared","until":"Draft the notes","fixture":"P.8/session-manager/cleared"},
   {"keys":["k"]},
   {"keys":["r"]},
-  {"checkpoint":"rename","until":"Rename session","fixture":"P.8/session-manager/rename"},
+  {"checkpoint":"rename","until":"Rename session","deviation":[{"file":"CF3-plugin-prompt","cells":26,"styleOnly":true}],"fixture":"P.8/session-manager/rename"},
   {"keys":["escape"]},
   {"checkpoint":"renamed","until":"Esc back","fixture":"P.8/session-manager/renamed"},
   {"keys":["d"]},
