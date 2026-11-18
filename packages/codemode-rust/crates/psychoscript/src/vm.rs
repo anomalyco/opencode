@@ -1912,8 +1912,9 @@ impl<'rt> Vm<'rt> {
         }
     }
 
-    /// Resumes a generator for the native frame on top, as `resume_generator` does: `Some` with its value and whether
-    /// it is done when it does not run, `None` once its frame is pushed, which hands the frame below its next yield as
+    /// Resumes a generator for the native frame on top, as `resume_generator` does (`mode` 0 for `next`, 1 for
+    /// `return`, 2 for `throw`): `Some` with its value and whether it is done when it does not run, `None` once its frame
+    /// is pushed, which hands the frame below its next yield as
     /// a call's result or its completion as `Input::Finished`.
     pub(crate) fn native_resume(
         &mut self,
@@ -1931,13 +1932,18 @@ impl<'rt> Vm<'rt> {
             _ => {
                 return match mode {
                     0 => Ok(Some((Value::Undef, true))),
-                    _ => Ok(Some((v, true))),
+                    1 => Ok(Some((v, true))),
+                    _ => Err(v),
                 };
             }
         };
         if !started && mode != 0 {
             self.heap[g as usize].kind = Kind::Generator(GenState::Done);
-            return Ok(Some((v, true)));
+            return if mode == 1 {
+                Ok(Some((v, true)))
+            } else {
+                Err(v)
+            };
         }
         let wants = self.enter_generator(g, Resume::Native, false);
         if mode == 0 {
@@ -1946,7 +1952,9 @@ impl<'rt> Vm<'rt> {
             }
             return Ok(None);
         }
-        match self.deliver_abrupt(REQ_RETURN, v) {
+        // A throw the generator does not catch unwinds from its frame into the frames below, as a throw there does.
+        let kind = if mode == 1 { REQ_RETURN } else { REQ_THROW };
+        match self.deliver_abrupt(kind, v) {
             Ok(()) => Ok(None),
             Err(Err(e)) => Err(e),
             Err(Ok(_)) => Ok(None),
