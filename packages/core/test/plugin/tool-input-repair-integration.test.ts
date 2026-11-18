@@ -153,3 +153,46 @@ it.effect("repairs namespaced inner tool input called from Code Mode", () =>
     expect(executed).toEqual([{ count: 3 }])
   }),
 )
+
+it.effect("repairs nested Code Mode calls against the Code Mode input schema", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const registry = yield* Tool.Service
+    const executed: unknown[] = []
+    yield* plugins.activate([{ ...ToolInputRepairPlugin.Plugin, revision: "1" }])
+    yield* registry.transform((draft) =>
+      draft.add({
+        name: "inspect",
+        options: { codemode: false },
+        description: "Inspect",
+        input: (codeMode) =>
+          codeMode
+            ? Schema.Struct({ count: Schema.Int, detail: Schema.optionalKey(Schema.Boolean) })
+            : Schema.Struct({ count: Schema.Int }),
+        execute: (input) => Effect.sync(() => executed.push(input)).pipe(Effect.as({ content: "ok" })),
+      }),
+    )
+
+    const promoted = yield* registry.snapshot(undefined, { tools: { codemode: new Set(["inspect"]) } })
+    yield* promoted.execute({
+      ...identity,
+      call: {
+        type: "tool-call",
+        id: "call-codemode-dynamic",
+        name: "execute",
+        input: { code: 'return await tools.inspect({ count: "3", detail: "true", extra: true })' },
+      },
+    })
+    const direct = yield* registry.snapshot()
+    yield* direct.execute({
+      ...identity,
+      call: {
+        type: "tool-call",
+        id: "call-direct-dynamic",
+        name: "inspect",
+        input: { count: "4", detail: true },
+      },
+    })
+    expect(executed).toEqual([{ count: 3, detail: true }, { count: 4 }])
+  }),
+)

@@ -112,11 +112,13 @@ export type Info<
   readonly options?: Options
 }
 
-export type Resolved<
-  Input extends ValueSchema<any> = ValueSchema<any>,
-  Output extends ValueSchema<any> | undefined = ValueSchema<any> | undefined,
-> = Omit<Info<Input, Output>, "description" | "input" | "output"> & {
-  readonly description: string
-  readonly input: Input
-  readonly output?: Output
+export declare namespace Info {
+  export type Form<
+    Input extends ValueSchema<any> = ValueSchema<any>,
+    Output extends ValueSchema<any> | undefined = ValueSchema<any> | undefined,
+  > = Omit<Info<Input, Output>, "description" | "input" | "output"> & {
+    readonly description: string
+    readonly input: Input
+    readonly output?: Output
+  }
 }

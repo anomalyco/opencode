@@ -6,20 +6,22 @@ import type { Effect, Types } from "effect"
 import type { Hooks, Transform } from "./registration.js"
 
 export interface ToolEditor {
-  list(): readonly (Tool.Resolved & { readonly id: string })[]
-  get(id: string): (Tool.Resolved & { readonly id: string }) | undefined
+  list(): readonly (Tool.Info & { readonly id: string })[]
+  get(id: string): (Tool.Info & { readonly id: string }) | undefined
   namespace(namespace: Tool.Namespace): void
   add<Input extends Tool.ValueSchema<any>, Output extends Tool.ValueSchema<any> | undefined>(
     tool: Tool.Info<Input, Output>,
   ): void
   /** Updates an existing tool; missing IDs are ignored. */
-  update(id: string, update: (tool: Types.Mutable<Tool.Resolved>) => void): void
+  update(id: string, update: (tool: Types.Mutable<Tool.Info>) => void): void
   remove(id: string): void
 }
 
 export interface ToolHooks {
   readonly "execute.before": {
     tool: string
+    readonly info?: Tool.Info
+    readonly codeMode: boolean
     readonly sessionID: Session.ID
     readonly agent: Agent.ID
     readonly messageID: SessionMessage.ID
@@ -28,6 +30,8 @@ export interface ToolHooks {
   }
   readonly "execute.after": {
     readonly tool: string
+    readonly info?: Tool.Info
+    readonly codeMode: boolean
     readonly sessionID: Session.ID
     readonly agent: Agent.ID
     readonly messageID: SessionMessage.ID
@@ -55,6 +59,6 @@ export interface ToolDomain {
   readonly transform: Transform<ToolEditor>
   readonly reload: () => Effect.Effect<void>
   /** Currently registered tools, after every transform, keyed by effective name. */
-  readonly list: () => Effect.Effect<readonly (Tool.Resolved & { readonly id: string })[]>
+  readonly list: () => Effect.Effect<readonly (Tool.Info & { readonly id: string })[]>
   readonly hook: Hooks<ToolHooks, ToolFailures>
 }

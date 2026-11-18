@@ -758,6 +758,28 @@ describe("Tool", () => {
     () =>
       Effect.gen(function* () {
         const service = yield* Tool.Service
+        const hooks = yield* PluginHooks.Service
+        const hooked: Array<{ phase: string; tool: string; codeMode: boolean; dynamic: boolean }> = []
+        yield* hooks.register("tool", "execute.before", (event) =>
+          Effect.sync(() => {
+            hooked.push({
+              phase: "before",
+              tool: event.tool,
+              codeMode: event.codeMode,
+              dynamic: typeof event.info?.description === "function",
+            })
+          }),
+        )
+        yield* hooks.register("tool", "execute.after", (event) =>
+          Effect.sync(() => {
+            hooked.push({
+              phase: "after",
+              tool: event.tool,
+              codeMode: event.codeMode,
+              dynamic: typeof event.info?.description === "function",
+            })
+          }),
+        )
         const resolutions: boolean[] = []
         const directInput = Schema.Struct({ command: Schema.String, background: Schema.optionalKey(Schema.Boolean) })
         const codeModeInput = Schema.Struct({ command: Schema.String })
@@ -781,7 +803,7 @@ describe("Tool", () => {
         })
 
         expect(resolutions).toEqual([false, true])
-        expect((yield* service.list()).find((tool) => tool.id === "shell")?.description).toBe("Direct shell")
+        expect(typeof (yield* service.list()).find((tool) => tool.id === "shell")?.description).toBe("function")
 
         const direct = yield* service.snapshot()
         expect(direct.definitions.map((tool) => tool.name)).toEqual(["glob", "shell", "execute"])
@@ -836,12 +858,14 @@ describe("Tool", () => {
         // Neither snapshots nor executions re-ran the field functions.
         expect(resolutions).toEqual([false, true])
 
-        // Updating options preserves untouched function-form fields, and Tool.check uses the Code Mode form.
-        yield* service.transform((editor) =>
+        // Updating options edits the function-form source directly, and Tool.check uses the Code Mode form.
+        yield* service.transform((editor) => {
+          expect(typeof editor.get("shell")?.description).toBe("function")
           editor.update("shell", (tool) => {
+            expect(typeof tool.description).toBe("function")
             tool.options = { ...tool.options, codemode: true }
-          }),
-        )
+          })
+        })
         expect(
           yield* service.check({
             code: 'return await tools.shell({ command: "build", background: true })',
@@ -852,6 +876,16 @@ describe("Tool", () => {
             context: { sessionID, ...identity, progress: () => Effect.void },
           }),
         ).toMatchObject({ ok: true, value: { summary: "build:omitted:true" } })
+        expect(hooked).toEqual([
+          { phase: "before", tool: "shell", codeMode: false, dynamic: true },
+          { phase: "after", tool: "shell", codeMode: false, dynamic: true },
+          { phase: "before", tool: "execute", codeMode: false, dynamic: false },
+          { phase: "before", tool: "shell", codeMode: true, dynamic: true },
+          { phase: "after", tool: "shell", codeMode: true, dynamic: true },
+          { phase: "after", tool: "execute", codeMode: false, dynamic: false },
+          { phase: "before", tool: "shell", codeMode: true, dynamic: true },
+          { phase: "after", tool: "shell", codeMode: true, dynamic: true },
+        ])
       }),
   )
 
