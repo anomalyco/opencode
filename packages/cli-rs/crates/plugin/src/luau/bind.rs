@@ -552,6 +552,24 @@ fn objects(lua: &Lua, current: &Rc<Slot>) -> mlua::Result<(Table, Table, Functio
         })?;
         host.raw_set(name, f)?;
     }
+    // `plugin.client`'s request: operation `name` with `input`, built from the operations table and sent as a fetch. It
+    // answers `id, nil, reply` (how the reply reads: `data` is unwrapped by the prelude), or `nil, why`.
+    {
+        let current = current.clone();
+        let f = lua.create_function(move |lua, (_this, name, request): (Value, String, Value)| {
+            let built = super::client::request(&name, &json(lua, &request)?);
+            let asked = built.and_then(|(fetch, reply)| {
+                let now = current.get();
+                let host = now.host().map_err(|error| error.to_string())?;
+                host.try_fetch(fetch).map(|id| (id, reply))
+            });
+            Ok(match asked {
+                Ok((id, reply)) => (Some(id.0), None, Some(reply.name())),
+                Err(error) => (None, Some(error), None),
+            })
+        })?;
+        host.raw_set("call", f)?;
+    }
     let memo = {
         let current = current.clone();
         lua.create_function(move |lua, (this, key, value, build): (Value, String, Value, Function)| {

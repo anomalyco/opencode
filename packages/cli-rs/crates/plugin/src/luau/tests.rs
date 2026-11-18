@@ -2093,6 +2093,95 @@ fn plugin_all_waits_for_each_of_its_tasks() {
     assert_eq!(failure(&registry, "test.luau"), None);
 }
 
+// Expected (typed-client): `plugin.client`'s operation sends the request the Rust builder sends for the same input, and
+// returns its `data`; an object body with no field set is `{}`, not an empty array; a misspelled field and an operation
+// the client does not have are refused before anything is sent.
+#[test]
+fn a_typed_call_sends_the_rust_builders_request_and_returns_its_data() {
+    let host = host();
+    let registry = tasking(
+        &host,
+        r#"
+        setup:command({ name = "call" }, function(host)
+            local items, err = plugin.client.session.inbox.list({ sessionID = "ses 1" })
+            local _, misspelled = plugin.client.session.inbox.list({ sesionID = "ses_1" })
+            local _, unknown = plugin.client.session.nothing({ sessionID = "ses_1" })
+            local created = plugin.client.session.create({})
+            host:toast({ variant = "info", message = `{if items then #items else err} | {misspelled} | {unknown} | {created.id}` })
+        end)
+        "#,
+    );
+    run(&host, "call", None);
+    let input = abi::types::SessionInboxListInput { session_id: abi::types::SessionID("ses 1".into()) };
+    let rust = abi::call::fetch_of(&abi::client::session_inbox_list(&input)).unwrap();
+    assert_eq!(host.fetches.borrow()[0].0, rust);
+    answer(&host, Ok(serde_json::json!({ "data": [{ "id": "a" }, { "id": "b" }] })));
+    let (method, path, body) = {
+        let fetches = host.fetches.borrow();
+        let fetch = &fetches[0].0;
+        (fetch.method.clone(), fetch.path.clone(), fetch.body.clone())
+    };
+    assert_eq!((method.as_str(), path.as_str(), body), ("POST", "/api/session", Some(serde_json::json!({}))));
+    answer(&host, Ok(serde_json::json!({ "data": { "id": "ses_new" } })));
+    assert_eq!(
+        said(&host),
+        ["2 | session.inbox.list: no field sesionID | plugin.client has no operation session.nothing | ses_new"]
+    );
+    assert_eq!(failure(&registry, "test.luau"), None);
+}
+
+// Expected (typed-client): for every operation of the generated client, Luau's request (the carrier's, from the
+// operations table), Rust's (the typed builder's, as the SDK's `cx.call` sends it) and the generated client's (its
+// `*_call`, which is that builder) are one request: method, path, query and body, from one sample input of every field.
+// An operation a plugin's fetch cannot carry (a header, a byte body, a stream of events) is refused by both plugin
+// paths, and only the generated client sends it.
+#[test]
+fn every_operation_is_one_request_in_luau_rust_and_the_generated_client() {
+    let samples: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_str(include_str!("client-samples.json")).unwrap();
+    let names: std::collections::BTreeSet<&str> = client::names().collect();
+    assert_eq!(names, samples.keys().map(String::as_str).collect(), "the table and the samples name other operations");
+    // Query pairs by key, each key's values in their order: an object's keys come in another order from a Luau table.
+    let sorted = |mut pairs: Vec<(String, String)>| {
+        pairs.sort_by(|a, b| a.0.cmp(&b.0));
+        pairs
+    };
+    let (mut equal, mut refused) = (Vec::new(), Vec::new());
+    for (name, input) in &samples {
+        let rust = opencode_api_types::client::probe(name, input).unwrap_or_else(|| panic!("the client has no {name}"));
+        let luau = client::request(name, input).map(|(fetch, _)| fetch);
+        let Ok(rust) = rust else {
+            assert!(luau.is_err(), "{name}: Rust has no request for it, Luau sends {luau:?}");
+            refused.push(name.as_str());
+            continue;
+        };
+        assert!(rust.error.is_none(), "{name}: {:?}", rust.error);
+        let sdk = abi::call::fetch_of(&rust);
+        match (sdk, luau) {
+            (Ok(sdk), Ok(luau)) => {
+                let generated = (rust.method.to_owned(), rust.path.clone(), sorted(rust.query.clone()));
+                let generated_body = match &rust.body {
+                    Some(opencode_api_types::call::Body::Json(value)) => Some(value.clone()),
+                    _ => None,
+                };
+                for (column, fetch) in [("Rust", &sdk), ("Luau", &luau)] {
+                    let request = (fetch.method.clone(), fetch.path.clone(), sorted(fetch.query.clone()));
+                    assert_eq!(request, generated, "{name}: {column}'s request is not the generated client's");
+                    assert_eq!(fetch.body, generated_body, "{name}: {column}'s body is not the generated client's");
+                }
+                assert_eq!(sdk.bytes, luau.bytes, "{name}");
+                equal.push(name.as_str());
+            }
+            (Err(_), Err(_)) => refused.push(name.as_str()),
+            (sdk, luau) => panic!("{name}: Rust {sdk:?}, Luau {luau:?}"),
+        }
+    }
+    assert_eq!(equal.len() + refused.len(), samples.len());
+    // 169 operations; the plugin paths refuse the two streams of events, the byte upload and the three that take a
+    // ticket header.
+    assert_eq!((samples.len(), refused.len()), (169, 6), "refused: {refused:?}");
+}
+
 // Expected (await-luau): a waiting call outside a task (a render, setup) fails the call, and says where tasks are.
 #[test]
 fn a_wait_outside_a_task_is_refused() {

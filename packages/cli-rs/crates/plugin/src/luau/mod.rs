@@ -6,6 +6,7 @@
 //! cap. Behind the cargo feature `luau`, and at run time `OPENCODE_PLUGIN_LUAU=1`.
 
 mod bind;
+pub mod client;
 mod current;
 mod decode;
 mod inputs;
