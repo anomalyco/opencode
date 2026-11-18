@@ -45,7 +45,7 @@ export const Output = Schema.Array(FileSystem.Match)
 type EncodedOutput = typeof Output.Encoded
 
 /** Format raw search matches into concise model content. */
-export const toModelContent = (matches: EncodedOutput, truncated = false) => {
+export const toModelContent = (matches: EncodedOutput, truncated = false, omitted = 0) => {
   const lines = matches.length === 0 ? ["No matches found"] : [`Found ${matches.length} matches`]
   let current = ""
   for (const match of matches) {
@@ -60,6 +60,11 @@ export const toModelContent = (matches: EncodedOutput, truncated = false) => {
     lines.push(
       "",
       `(Results are truncated: showing first ${matches.length} results. Consider using a more specific path or pattern.)`,
+    )
+  if (omitted > 0)
+    lines.push(
+      "",
+      `(Matches in ${omitted} ${omitted === 1 ? "file" : "files"} omitted: reading them is denied or needs approval.)`,
     )
   return lines.join("\n")
 }
@@ -120,17 +125,35 @@ export const Plugin = {
                   limit,
                 }),
               )
-              return {
-                matches: result.items.map((match) =>
-                  FileSystem.Match.make({
-                    ...match,
-                    entry: FileSystem.Entry.make({
-                      ...match.entry,
-                      path: RelativePath.make(path.relative(location.directory, path.resolve(cwd, match.entry.path))),
-                    }),
-                  }),
+              // Matches quote file contents, so only files the read rules already allow are returned.
+              const files = [...new Set(result.items.map((match) => path.resolve(cwd, match.entry.path)))]
+              const readable = new Set(
+                yield* Effect.filter(files, (file) =>
+                  access.resolve({ path: file, kind: "file" }).pipe(
+                    Effect.flatMap((target) =>
+                      permission.allows({
+                        action: "read",
+                        resources: [target.resource],
+                        ...Permission.invocation(context),
+                      }),
+                    ),
+                  ),
                 ),
+              )
+              return {
+                matches: result.items
+                  .filter((match) => readable.has(path.resolve(cwd, match.entry.path)))
+                  .map((match) =>
+                    FileSystem.Match.make({
+                      ...match,
+                      entry: FileSystem.Entry.make({
+                        ...match.entry,
+                        path: RelativePath.make(path.relative(location.directory, path.resolve(cwd, match.entry.path))),
+                      }),
+                    }),
+                  ),
                 truncated: result.truncated,
+                omitted: files.length - readable.size,
               }
             }).pipe(
               Effect.map((result) => ({
@@ -141,6 +164,7 @@ export const Plugin = {
                     entry: { ...match.entry, path: path.resolve(location.directory, match.entry.path) },
                   })),
                   result.truncated,
+                  result.omitted,
                 ),
                 metadata: { matches: result.matches.length, truncated: result.truncated },
               })),
