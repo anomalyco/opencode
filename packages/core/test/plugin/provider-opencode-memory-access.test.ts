@@ -98,6 +98,20 @@ describe("OpencodeMemoryAccess.share, internal hosts", () => {
   })
 })
 
+describe("OpencodeMemoryAccess.share, scratch paths", () => {
+  test("refuses a path into this machine's scratch space, unless it's inside the checkout", () => {
+    expect(OpencodeMemoryAccess.share({ body: "Built a shim in /tmp/opencode/cat-wrapper" }, {})).toMatchObject({
+      field: "body",
+      kind: "a scratch path (/tmp/…)",
+    })
+    expect(OpencodeMemoryAccess.share({ body: "See /tmp/work/repo/src/a.ts" }, { checkout: "/tmp/work/repo" })).toEqual(
+      {
+        fields: { body: "See src/a.ts" },
+      },
+    )
+  })
+})
+
 describe("OpencodeMemoryAccess.localize", () => {
   test("makes the checkout's paths relative and other home paths start at ~/", () => {
     const roots = { checkout: "/home/ada/src/api", home: "/home/ada" }

@@ -121,6 +121,13 @@ export function share(
           kind: "an internal host name or address",
           repair: "Replace it with a descriptive placeholder such as <internal database host>",
         })
+      // A scratch file exists only on this machine.
+      if (kind === undefined && TEMP.test(localized))
+        found.push({
+          field,
+          kind: "a scratch path (/tmp/…)",
+          repair: "Leave it out, or say what the file holds instead: no other machine has this one's scratch files",
+        })
       // What's left in a home directory after this machine's own paths were made relative is someone else's.
       if (kind === undefined && HOME.test(localized))
         found.push({
@@ -147,6 +154,9 @@ export function share(
 /** A private-network address (RFC 1918), or a host under a name only an internal network resolves. */
 const INTERNAL =
   /(?<![\d.])(?:10\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])|192\.168)\.\d{1,3}\.\d{1,3}(?![\d.]*\d)|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:internal|corp|lan|intranet)\b/i
+
+/** A path into this machine's scratch space, as Console's scan finds one. */
+const TEMP = /(?:^|[\s"'`(=:[,])(?:(?:\/private)?\/tmp\/|\/var\/folders\/)/
 
 /** A path into someone's home directory, as Console's scan finds one. */
 const HOME =

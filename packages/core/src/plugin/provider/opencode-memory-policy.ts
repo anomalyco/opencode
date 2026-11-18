@@ -14,6 +14,8 @@ export interface Hit {
   readonly snippet: string
   readonly revision: number
   readonly score: number
+  /** `provisional`: published but not yet backed by a teammate, so searched and never injected. */
+  readonly status?: "live" | "provisional"
 }
 
 /** One entry Console injected, with its whole body, which the session reads in place of a `read`. */
@@ -218,10 +220,11 @@ export const initial: Policy = {
 export const current = initial
 
 /** One line per listed entry: id, revision, kind, title and preview, without control characters. */
-export function summary(hit: Pick<Hit, "id" | "kind" | "title" | "snippet" | "revision">) {
+export function summary(hit: Pick<Hit, "id" | "kind" | "title" | "snippet" | "revision" | "status">) {
   const snippet = line(hit.snippet)
   const preview = snippet.length > MAX_SNIPPET ? `${snippet.slice(0, MAX_SNIPPET - 1)}…` : snippet
-  return `- ${line(hit.id)} r${hit.revision} ${hit.kind}: ${line(hit.title)}${preview ? ` — ${preview}` : ""}`
+  const status = hit.status === "provisional" ? " (provisional: no teammate has backed it yet)" : ""
+  return `- ${line(hit.id)} r${hit.revision} ${hit.kind}${status}: ${line(hit.title)}${preview ? ` — ${preview}` : ""}`
 }
 
 /**

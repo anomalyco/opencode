@@ -1,5 +1,6 @@
 export * as OpencodeMemory from "./opencode-memory.js"
 
+import fs from "fs/promises"
 import os from "os"
 import path from "path"
 import { fileURLToPath } from "url"
@@ -11,6 +12,7 @@ import { Hash } from "@opencode/util/hash"
 import { AppProcess } from "@opencode/util/process"
 import { Clock, Effect, Exit, Fiber, Option, Schema, Scope, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
+import { ChildProcess } from "effect/process"
 import { Git } from "../../git.js"
 import { AbsolutePath } from "../../schema.js"
 import { normalizeContent } from "../../tool/runtime.js"
@@ -43,6 +45,7 @@ const Hit = Schema.Struct({
   snippet: Schema.String,
   revision: Schema.Number,
   score: Schema.Number,
+  status: Schema.optional(Schema.Literals(["live", "provisional"])),
 })
 const Injected = Schema.Struct({
   id: Schema.String,
@@ -130,6 +133,16 @@ const Paths = Schema.Array(Schema.String).annotate({
 const Errors = Schema.Array(Schema.String).annotate({
   description: "Error messages or signatures it answers, as they appear",
 })
+const Evidence = Schema.Array(
+  Schema.Struct({ kind: Schema.Literals(["commit", "pr", "test", "command", "ci"]), ref: Schema.String }),
+)
+  .check(Schema.isMaxLength(10))
+  .annotate({
+    description:
+      "What shows it holds: a test or command you ran and saw pass, a commit, PR or CI run. A teammate's evidence makes a provisional entry live",
+  })
+/** A session that read this has taken in outside input: the web, issue text or other repositories. */
+const OUTSIDE = /\b(?:curl|wget|gh (?:issue|pr|api|repo clone)|git clone)\b/
 const KindInput = Kind.annotate({
   description:
     "bug: symptom, cause, fix. convention: how this code does it. procedure: build, test, CI, release. gotcha: an API or tool pitfall. decision: what and why, with commits. failed-approach: what didn't work and why",
@@ -156,6 +169,8 @@ type Tracked = {
   readonly work: { step: number; lastEdit: number; readonly tests: Array<{ step: number; failed: boolean }> }
   /** The session had its publish reminder. */
   reminded?: boolean
+  /** The session took in outside input, so what it publishes is marked tainted and never promoted. */
+  tainted?: boolean
   task?: string
   /** A given entry the user's latest message may correct, for the next request to point out. */
   nudge?: { readonly entry: OpencodeMemoryPolicy.Given; readonly messageID: string }
@@ -179,7 +194,8 @@ export const make = Effect.fnUntraced(function* (
 ) {
   const scope = yield* Scope.Scope
   const git = yield* Git.Service
-  const github = OpencodeMemoryAccess.make(http, yield* AppProcess.Service, yield* OpencodeMemoryAccess.GitHub)
+  const processes = yield* AppProcess.Service
+  const github = OpencodeMemoryAccess.make(http, processes, yield* OpencodeMemoryAccess.GitHub)
   let current: { console: OpencodeWatches.Console; readonly lease: Scope.Closeable } | undefined
   const sessions = new Map<string, Tracked>()
   const tracked = (sessionID: string): Tracked => {
@@ -279,6 +295,43 @@ export const make = Effect.fnUntraced(function* (
       })
     })
 
+  /**
+   * Refuses a write whose `paths` name a repository path that isn't there. Only clear paths (with a `/`) are checked:
+   * globs, dotted module names and root files are taken as given, and git-ignored or generated files pass, as the
+   * publish audit's anchor gate refused all of those wrongly.
+   */
+  const resolved = (tool: string, paths: ReadonlyArray<string> | undefined) =>
+    Effect.gen(function* () {
+      const checkout = (yield* roots).checkout
+      const missing = yield* Effect.filter(
+        (paths ?? []).filter((item) => item.includes("/") && !/[*?[\]{}]/.test(item)),
+        (item) =>
+          Effect.gen(function* () {
+            const file = path.join(checkout, item)
+            if (
+              yield* Effect.promise(() =>
+                fs.stat(file).then(
+                  () => true,
+                  () => false,
+                ),
+              )
+            )
+              return false
+            const ignored = yield* processes
+              .run(ChildProcess.make("git", ["check-ignore", "-q", item], { cwd: checkout, stdin: "ignore" }))
+              .pipe(
+                Effect.map((result) => result.exitCode === 0),
+                Effect.orElseSucceed(() => false),
+              )
+            return !ignored
+          }),
+      )
+      if (missing.length === 0) return
+      return yield* new ToolFailure({
+        message: `Nothing was sent: paths name ${missing.map((item) => `"${item}"`).join(", ")}, which ${missing.length === 1 ? "isn't" : "aren't"} in the repository. Fix ${missing.length === 1 ? "it" : "them"} to a file or directory that exists, or leave ${missing.length === 1 ? "it" : "them"} out, then call ${namespace}.${tool} again.`,
+      })
+    })
+
   const call = <S extends Schema.Top>(
     schema: S,
     method: "GET" | "POST" | "PATCH",
@@ -310,6 +363,7 @@ export const make = Effect.fnUntraced(function* (
           message: `Nothing was sent: ${tool} acts on the whole of ${id}, so it starts from text you were shown, and this session hasn't been shown r${revision} whole${state.compactions > 0 ? " since the conversation was compacted" : ""}. Call ${namespace}.read with id "${id}", then call ${namespace}.${tool} again with the revision it shows.`,
         })
       const fields = yield* shared(tool, change)
+      yield* resolved(tool, Schema.decodeUnknownOption(Paths)(fields.paths).pipe(Option.getOrUndefined))
       const expectedRevision = based(sessionID, id, revision)
       const written = yield* call(
         Written,
@@ -451,6 +505,12 @@ export const make = Effect.fnUntraced(function* (
       const files = touched(event.tool, event.input).map((file) => relative(ctx.location.directory, file))
       const work = tracked(event.sessionID).work
       work.step++
+      if (
+        event.tool === "webfetch" ||
+        event.tool === "websearch" ||
+        (event.tool === "read" && files.some((file) => path.isAbsolute(file)))
+      )
+        tracked(event.sessionID).tainted = true
       if (event.tool !== "read" && files.length > 0) work.lastEdit = work.step
       if (files.length > 0) {
         const state = tracked(event.sessionID)
@@ -467,6 +527,7 @@ export const make = Effect.fnUntraced(function* (
       })
       // A command still running in the background, or one a signal ended, has no exit code yet.
       if (Option.isNone(shell) || shell.value.output.exitCode === null) return Effect.void
+      if (OUTSIDE.test(shell.value.input.command)) tracked(event.sessionID).tainted = true
       const failed = policy.failed(shell.value.input.command, shell.value.output.output, shell.value.output.exitCode)
       if (policy.test(shell.value.input.command)) work.tests.push({ step: work.step, failed })
       if (work.tests.length > MAX_TESTS) work.tests.splice(0, work.tests.length - MAX_TESTS)
@@ -611,28 +672,39 @@ export const make = Effect.fnUntraced(function* (
             Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 50 })).annotate({ description: "Default 10" }),
           ),
         }),
-        output: Schema.Struct({ results: Schema.Array(Hit) }),
+        output: Schema.Struct({
+          status: Schema.optional(Schema.Literals(["ok", "no_reliable_entry"])),
+          results: Schema.Array(Hit),
+        }),
         options: { namespace, codemode: true, pinned: true },
         execute: (input, context) =>
           Effect.gen(function* () {
             const checkout = yield* repository
             const files = sessions.get(context.sessionID)?.files ?? []
-            const answer = yield* call(Schema.Struct({ results: Schema.Array(Hit) }), "POST", "/api/memory/search", {
-              query: input.query,
-              context: {
-                ...("repo" in checkout && checkout.repo !== undefined ? { repo: checkout.repo } : {}),
-                ...(files.length === 0 ? {} : { files }),
+            const answer = yield* call(
+              Schema.Struct({
+                status: Schema.optional(Schema.Literals(["ok", "no_reliable_entry"])),
+                results: Schema.Array(Hit),
+              }),
+              "POST",
+              "/api/memory/search",
+              {
+                query: input.query,
+                context: {
+                  ...("repo" in checkout && checkout.repo !== undefined ? { repo: checkout.repo } : {}),
+                  ...(files.length === 0 ? {} : { files }),
+                },
+                ...(input.kinds === undefined ? {} : { kinds: input.kinds }),
+                ...(input.tags === undefined ? {} : { tags: input.tags }),
+                ...(input.limit === undefined ? {} : { limit: input.limit }),
+                sessionID: context.sessionID,
+                ...(yield* reader),
               },
-              ...(input.kinds === undefined ? {} : { kinds: input.kinds }),
-              ...(input.tags === undefined ? {} : { tags: input.tags }),
-              ...(input.limit === undefined ? {} : { limit: input.limit }),
-              sessionID: context.sessionID,
-              ...(yield* reader),
-            })
+            )
             return {
               output: answer,
               content:
-                answer.results.length === 0
+                answer.status === "no_reliable_entry" || answer.results.length === 0
                   ? "No reliable memory entry found."
                   : answer.results.map(OpencodeMemoryPolicy.summary).join("\n"),
             }
@@ -691,6 +763,7 @@ export const make = Effect.fnUntraced(function* (
           paths: Schema.optional(Paths),
           errors: Schema.optional(Errors),
           tags: Schema.optional(Tags),
+          evidence: Schema.optional(Evidence),
           distinctFrom: Schema.optional(
             Schema.Array(Schema.String).annotate({
               description: "Ids of existing entries you checked that don't cover this; publishes beside them",
@@ -703,7 +776,12 @@ export const make = Effect.fnUntraced(function* (
           Effect.gen(function* () {
             // The key is the tool call's own: Console answers a retry of this call with what it saved, while an
             // agent's re-issue is a new call that Console's duplicate check catches as this session's own entry.
-            const fields = yield* shared("publish", { ...metadata(input), body: input.body })
+            const fields = yield* shared("publish", {
+              ...metadata(input),
+              body: input.body,
+              ...(input.evidence === undefined ? {} : { evidence: input.evidence }),
+            })
+            yield* resolved("publish", Schema.decodeUnknownOption(Paths)(fields.paths).pipe(Option.getOrUndefined))
             const source = yield* checkout
             // The checkout's repository by GitHub's id and visibility, so Console gives the entry only to its readers.
             const anchor =
@@ -713,19 +791,21 @@ export const make = Effect.fnUntraced(function* (
               ...(input.distinctFrom === undefined ? {} : { distinctFrom: input.distinctFrom }),
               source: { ...source, sessionID: context.sessionID },
               ...(anchor === undefined ? {} : { anchor }),
+              // Its session read the web, issue text or another repository: Console never promotes it.
+              ...(tracked(context.sessionID).tainted ? { tainted: true } : {}),
               ...(yield* reader),
               idempotencyKey: `${context.sessionID}:${context.id}`.slice(0, 128),
             })
             return {
               output: published,
-              content: `Published ${published.id} r${published.revision}${published.replayed ? " (this publish was already saved)" : ""}.`,
+              content: `Published ${published.id} r${published.revision}${published.replayed ? " (this publish was already saved)" : ""}. It's provisional until a teammate backs it: found by search, not handed to sessions.`,
             }
           }).pipe(Effect.mapError(failure)),
       })
       editor.add({
         name: "edit",
         description:
-          'Change part of an entry: a fix, a correction, an outdated detail. Copy oldText exactly from the entry\'s current body (no line numbers), unique in it; newText "" deletes it. For several changes pass edits: each oldText is matched against the revision you read, not after the others, and all apply or none. Also changes kind, title, tags, paths or errors. Pass the revision you read. Fix an entry right away when the user corrects what it says; record what holds for the repository as committed, not your uncommitted changes. Example: {"id":"mem_01","revision":3,"oldText":"npm test","newText":"bun test"}',
+          'Change part of an entry: a fix, a correction, an outdated detail. Copy oldText exactly from the entry\'s current body (no line numbers), unique in it; newText "" deletes it. For several changes pass edits: each oldText is matched against the revision you read, not after the others, and all apply or none. Also changes kind, title, tags, paths or errors, and adds evidence: when you checked that an entry holds, add what you ran and saw pass, which makes a teammate\'s provisional entry live. Pass the revision you read. Fix an entry right away when the user corrects what it says; record what holds for the repository as committed, not your uncommitted changes. Example: {"id":"mem_01","revision":3,"oldText":"npm test","newText":"bun test"}',
         input: Schema.Struct({
           id: Schema.String,
           revision: Schema.Int,
@@ -741,17 +821,18 @@ export const make = Effect.fnUntraced(function* (
           tags: Schema.optional(Tags),
           paths: Schema.optional(Paths),
           errors: Schema.optional(Errors),
+          evidence: Schema.optional(Evidence),
         }),
         output: Written,
         options: { namespace, codemode: true, pinned: true },
         execute: (input, context) => {
           const pair = input.oldText === undefined ? [] : [{ oldText: input.oldText, newText: input.newText ?? "" }]
           const edits = [...pair, ...(input.edits ?? [])]
-          const fields = metadata(input)
+          const fields = { ...metadata(input), ...(input.evidence === undefined ? {} : { evidence: input.evidence }) }
           if (edits.length === 0 && Object.keys(fields).length === 0)
             return Effect.fail(
               new ToolFailure({
-                message: "edit takes oldText and newText, edits, or a new kind, title, tags, paths or errors",
+                message: "edit takes oldText and newText, edits, a new kind, title, tags, paths or errors, or evidence",
               }),
             )
           return write("edit", context.sessionID, input.id, input.revision, {

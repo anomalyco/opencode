@@ -130,7 +130,8 @@ function fakeConsole() {
         body,
         authorization: request.headers.get("authorization"),
       })
-      if (url.pathname === "/api/memory/search") return Response.json({ results: state.hits })
+      if (url.pathname === "/api/memory/search")
+        return Response.json({ status: state.hits.length === 0 ? "no_reliable_entry" : "ok", results: state.hits })
       if (url.pathname === "/api/memory/inject") return Response.json({ entries: state.injected })
       if (url.pathname === "/api/memory/entries" && request.method === "POST") {
         const key = String(body?.idempotencyKey)
@@ -389,7 +390,7 @@ describe("OpencodePlugin memory", () => {
           { query: "deploy fails", kinds: ["bug"] },
           context(session.id),
         )
-        expect(found.output).toEqual({ results: console.state.hits })
+        expect(found.output).toEqual({ status: "ok", results: console.state.hits })
         expect(found.content).toBe("- mem_1 r1 bug: Entry mem_1 — Connect first")
         // The session's directory isn't a Git checkout, so there's no repository to send.
         expect(console.state.requests.at(-1)).toEqual({
@@ -427,6 +428,8 @@ describe("OpencodePlugin memory", () => {
         const { host } = yield* start(console)
         const session = yield* host.session.create({})
         const publish = yield* memoryTool("publish")
+        const directory = (yield* Location.Service).directory
+        yield* Effect.promise(() => fs.mkdir(path.join(directory, "apps/worker"), { recursive: true }))
 
         const input = {
           kind: "gotcha",
@@ -437,7 +440,9 @@ describe("OpencodePlugin memory", () => {
           tags: ["deploy"],
         }
         const published = yield* publish.execute(input, context(session.id, "call_publish"))
-        expect(published.content).toBe("Published mem_new0 r1.")
+        expect(published.content).toBe(
+          "Published mem_new0 r1. It's provisional until a teammate backs it: found by search, not handed to sessions.",
+        )
         // The session's directory isn't a Git checkout, so the session is all the source there is.
         const sent = console.state.requests.at(-1)?.body as Record<string, unknown>
         expect(sent).toEqual({
@@ -448,7 +453,9 @@ describe("OpencodePlugin memory", () => {
 
         // The same call again, as after a lost answer, sends the same key and gets the entry the first one saved.
         const retried = yield* publish.execute(input, context(session.id, "call_publish"))
-        expect(retried.content).toBe("Published mem_new0 r1 (this publish was already saved).")
+        expect(retried.content).toBe(
+          "Published mem_new0 r1 (this publish was already saved). It's provisional until a teammate backs it: found by search, not handed to sessions.",
+        )
         expect(console.state.published.size).toBe(1)
 
         // The agent re-issuing it is another call with its own key: Console's duplicate check answers that.
@@ -470,7 +477,9 @@ describe("OpencodePlugin memory", () => {
           { kind: "gotcha", title: "VPN for deploys", body: "Connect it", distinctFrom: ["mem_close"] },
           context(session.id, "call_distinct"),
         )
-        expect(distinct.content).toBe("Published mem_new1 r1.")
+        expect(distinct.content).toBe(
+          "Published mem_new1 r1. It's provisional until a teammate backs it: found by search, not handed to sessions.",
+        )
       }),
     ),
   )
@@ -507,6 +516,7 @@ describe("OpencodePlugin memory", () => {
         const { host } = yield* start(console)
         const session = yield* host.session.create({})
         const directory = (yield* Location.Service).directory
+        yield* Effect.promise(() => fs.mkdir(path.join(directory, "db"), { recursive: true }))
         const publish = yield* memoryTool("publish")
 
         const asked = console.state.requests.length
@@ -646,7 +656,9 @@ describe("OpencodePlugin memory", () => {
           source: { sessionID: session.id },
         })
         const empty = yield* edit.execute({ id: "mem_1", revision: 1 }, context(session.id)).pipe(Effect.flip)
-        expect(empty.message).toBe("edit takes oldText and newText, edits, or a new kind, title, tags, paths or errors")
+        expect(empty.message).toBe(
+          "edit takes oldText and newText, edits, a new kind, title, tags, paths or errors, or evidence",
+        )
       }),
     ),
   )
@@ -903,6 +915,76 @@ describe("OpencodePlugin memory", () => {
         expect(publish.description.split("\n")[0]).toStartWith("Most sessions should publish nothing.")
         expect(publish.description).toContain("\nClaim: ")
         expect(publish.description).toContain("\nVerify: the command to run and the result to expect. / Avoid: ")
+      }),
+    ),
+  )
+
+  it.effect("checks paths exist, marks a session that took in outside input as tainted, and passes on evidence", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        const { host } = yield* start(console)
+        const directory = (yield* Location.Service).directory
+        yield* Effect.promise(() => fs.mkdir(path.join(directory, "src"), { recursive: true }))
+        const publish = yield* memoryTool("publish")
+        const session = yield* host.session.create({})
+        const entry = { kind: "gotcha", title: "Dates are UTC", body: "Use toISOString" }
+
+        const asked = console.state.requests.length
+        const missing = yield* publish
+          .execute({ ...entry, paths: ["src/", "src/missing.ts", "lib/gone/"] }, context(session.id))
+          .pipe(Effect.flip)
+        expect(missing.message).toBe(
+          'Nothing was sent: paths name "src/missing.ts", "lib/gone/", which aren\'t in the repository. Fix them to a file or directory that exists, or leave them out, then call memory.publish again.',
+        )
+        expect(console.state.requests.length).toBe(asked)
+
+        // Globs, dotted module names and root files are taken as given.
+        const evidence = [{ kind: "test", ref: "bun test test/dates.test.ts" }]
+        const published = yield* publish.execute(
+          { ...entry, paths: ["src/**/*.ts", "sqlparse.format", "setup.py"], evidence },
+          context(session.id, "call_ok"),
+        )
+        expect(published.content).toBe(
+          "Published mem_new0 r1. It's provisional until a teammate backs it: found by search, not handed to sessions.",
+        )
+        expect(console.state.requests.at(-1)?.body).toMatchObject({ evidence })
+        expect(console.state.requests.at(-1)?.body).not.toHaveProperty("tainted")
+
+        // A session that fetched from the web publishes tainted.
+        const browsing = yield* host.session.create({})
+        yield* ran(browsing.id, "webfetch", { url: "https://example.com" }, { output: "page" })
+        yield* publish.execute(entry, context(browsing.id, "call_web"))
+        expect(console.state.requests.at(-1)?.body).toMatchObject({ tainted: true })
+        const cloned = yield* host.session.create({})
+        yield* ran(
+          cloned.id,
+          "shell",
+          { command: "git clone https://github.com/x/y /tmp/y" },
+          { exitCode: 0, output: "ok" },
+        )
+        yield* publish.execute(entry, context(cloned.id, "call_clone"))
+        expect(console.state.requests.at(-1)?.body).toMatchObject({ tainted: true })
+
+        // A teammate who checked an entry backs it with evidence through edit.
+        yield* (yield* memoryTool("edit")).execute({ id: "mem_1", revision: 1, evidence }, context(session.id))
+        expect(console.state.requests.at(-1)?.body).toMatchObject({ expectedRevision: 1, evidence })
+      }),
+    ),
+  )
+
+  it.effect("marks provisional hits and says when search found no reliable entry", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        const { host } = yield* start(console)
+        const session = yield* host.session.create({})
+        const search = yield* memoryTool("search")
+        const none = yield* search.execute({ query: "deploy" }, context(session.id))
+        expect(none.content).toBe("No reliable memory entry found.")
+        console.state.hits = [{ ...hit("mem_new", 0.8), status: "provisional" } as ReturnType<typeof hit>]
+        const found = yield* search.execute({ query: "deploy" }, context(session.id))
+        expect(resultText(found)).toBe(
+          "- mem_new r1 bug (provisional: no teammate has backed it yet): Entry mem_new — About mem_new",
+        )
       }),
     ),
   )
