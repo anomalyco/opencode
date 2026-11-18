@@ -19,6 +19,7 @@ use windows_sys::Wdk::System::SystemServices::RtlGetVersion;
 use windows_sys::Win32::Foundation::{
     ERROR_ACCESS_DENIED, FILETIME, FreeLibrary, STILL_ACTIVE, WAIT_FAILED, WAIT_OBJECT_0,
 };
+use windows_sys::Win32::Globalization::GetUserDefaultLocaleName;
 use windows_sys::Win32::Storage::FileSystem::{
     BY_HANDLE_FILE_INFORMATION, FILE_FLAG_BACKUP_SEMANTICS, FILE_READ_ATTRIBUTES, FILE_WRITE_ATTRIBUTES,
     GetFileInformationByHandle,
@@ -158,6 +159,19 @@ pub fn os_release() -> Option<String> {
     // SAFETY: `info` is as large as its size field says and outlives the call.
     let status = unsafe { RtlGetVersion(&mut info) };
     (status >= 0).then(|| format!("{}.{}.{}", info.dwMajorVersion, info.dwMinorVersion, info.dwBuildNumber))
+}
+
+/// The user's default locale as a BCP 47 tag (`GetUserDefaultLocaleName`, the regional format the user set): `de-DE`,
+/// `sr-Latn-RS`. An alternate sort (`de-DE_phoneb`) is left out; `None` when Windows names none.
+pub fn user_locale() -> Option<String> {
+    // `LOCALE_NAME_MAX_LENGTH`, which windows-sys keeps under `Win32_System_SystemServices`.
+    const MAX: usize = 85;
+    let mut name = [0u16; MAX];
+    // SAFETY: `name` holds the `MAX` characters the call is told it may write.
+    let written = unsafe { GetUserDefaultLocaleName(name.as_mut_ptr(), MAX as i32) };
+    let name = String::from_utf16(name.get(..(written as usize).checked_sub(1)?)?).ok()?;
+    let tag = name.split('_').next().unwrap_or_default();
+    (!tag.is_empty()).then(|| tag.to_owned())
 }
 
 /// Loads the library at `path`, or by name when it is not absolute (`LoadLibraryExW`). Each `/` becomes `\`, as the
@@ -805,6 +819,19 @@ mod tests {
         let release = os_release().unwrap();
         let parts: Vec<u32> = release.split('.').map(|part| part.parse().unwrap()).collect();
         assert!(parts.len() == 3 && parts[0] >= 10, "{release}");
+    }
+
+    // Expected (win-locale): the user's default locale is a BCP 47 tag, a language and its subtags, without a sort.
+    #[test]
+    fn the_user_locale_is_a_bcp_47_tag() {
+        let locale = user_locale().unwrap();
+        let mut subtags = locale.split('-');
+        let language = subtags.next().unwrap();
+        assert!((2..=3).contains(&language.len()) && language.chars().all(|c| c.is_ascii_lowercase()), "{locale}");
+        assert!(
+            subtags.all(|subtag| !subtag.is_empty() && subtag.chars().all(|c| c.is_ascii_alphanumeric())),
+            "{locale}"
+        );
     }
 
     #[test]

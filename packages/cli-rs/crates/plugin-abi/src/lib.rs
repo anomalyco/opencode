@@ -1503,8 +1503,9 @@ pub struct Info {
     /// The TUI plugins and the server plugins that failed. Claims render again with [`Changed::local`] when it changes.
     #[serde(default, skip_serializing_if = "is_zero_usize")]
     pub failed_plugins: usize,
-    /// The user's locale as a BCP 47 tag, such as `en-US`, from `LC_ALL`, `LC_MESSAGES` or `LANG`; `None` when none
-    /// names one (unset, `C` or `POSIX`). The host formats nothing by it: a plugin picks its own strings.
+    /// The user's locale as a BCP 47 tag, such as `en-US`, from `LC_ALL`, `LC_MESSAGES` or `LANG`; when none names one
+    /// (unset, `C` or `POSIX`), Windows' user default locale, and elsewhere `None`. The host formats nothing by it: a
+    /// plugin picks its own strings.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub locale: Option<String>,
 }
