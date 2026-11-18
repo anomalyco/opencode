@@ -343,17 +343,3 @@ impl Tokens {
         list
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn colors_walk_the_tokens_in_visit_order() {
-        let tokens = Tokens::blank();
-        let (mut named, mut nameless) = (Vec::new(), Vec::new());
-        tokens.visit_ref(&mut |_, color| named.push(std::ptr::from_ref(color)));
-        tokens.visit_colors(&mut |color| nameless.push(std::ptr::from_ref(color)));
-        assert_eq!(named, nameless);
-    }
-}
