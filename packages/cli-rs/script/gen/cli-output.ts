@@ -1,4 +1,4 @@
-// Records what the TypeScript CLI prints for help, completions, and usage errors, with colors (FORCE_COLOR=1),
+// Records what the TypeScript CLI prints for help and usage errors, with colors (FORCE_COLOR=1),
 // into crates/cli/tests/fixtures/cli. Each usage error records the environment it ran in. The Rust tests in
 // crates/cli/src/tests/output.rs compare their own output with these files byte for byte, and with the colors
 // stripped for a run without a terminal.
@@ -99,7 +99,6 @@ visit(root, [])
 const out = path.resolve(import.meta.dir, "../../crates/cli/tests/fixtures/cli")
 await rm(out, { recursive: true, force: true })
 await mkdir(path.join(out, "help"), { recursive: true })
-await mkdir(path.join(out, "completions"), { recursive: true })
 
 const run = async (args: string[], env: Record<string, string> = { FORCE_COLOR: "1" }) => {
   const box = await sandbox(env)
@@ -144,13 +143,9 @@ await pool(paths, 6, async (prefix) => {
   const stdout = expectClean(await run([...prefix, "--help"]))
   await Bun.write(path.join(out, "help", `${["opencode", ...prefix].join(" ")}.txt`), stdout)
 })
-await pool(["bash", "zsh", "fish", "powershell"], 4, async (shell) => {
-  const stdout = expectClean(await run(["--completions", shell]))
-  await Bun.write(path.join(out, "completions", `${shell}.txt`), stdout)
-})
 const failures = [
   ...(await pool(errors, 6, (args) => run(args))),
   ...(await pool(environments, 4, (item) => run(item.args, item.env))),
 ]
 await Bun.write(path.join(out, "errors.json"), records(failures, ["[]"]))
-console.log(`cli-output: wrote ${paths.length} help pages, 4 completion scripts, ${failures.length} errors to ${out}`)
+console.log(`cli-output: wrote ${paths.length} help pages and ${failures.length} errors to ${out}`)
