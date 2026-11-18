@@ -7,12 +7,12 @@ use super::*;
 use crate::claim::{self, FencePart, ToolPart};
 use crate::interact::{self, Bind, Button, Dragged, Focused, Handled, Key, Layer, LayerScope, Pointer, PointerKind};
 use crate::{
-    Alert, Attention, Blob, Command, Composer, ComposerEdit, Confirm, ConfirmLabel, Dialog, ErrorDetails, Family,
-    Fence, Fenced, Fetch, Foreground, Gutter, HostRequest, Image, ImageBounds, Images, Info, InputTo, KeymapActive,
-    KeymapCommand, KeymapPending, KeymapSlash, Level, Manifest, Measure, Member, Metadata, Panel, PanelAction,
-    PanelBind, PanelSize, PluginEntry, PluginOrigin, PluginStatus, Prompt, Render, RenderFence, Request, RequestId,
-    Route, Scope, Select, SelectAction, SelectOption, Session, SessionStatus, SlotClaim, SlotKind, Sound, SoundName,
-    SurfaceClaim, SurfacePlace, Tab, TabEdit, Toast, Unread, Variant, ViewReply, When,
+    Alert, Attention, Blob, Command, Composer, ComposerEdit, Confirm, ConfirmLabel, Dialog, DialogSurface,
+    ErrorDetails, Family, Fence, Fenced, Fetch, Foreground, Gutter, HostRequest, Image, ImageBounds, Images, Info,
+    InputTo, KeymapActive, KeymapCommand, KeymapPending, KeymapSlash, Level, Manifest, Measure, Member, Metadata,
+    Panel, PanelAction, PanelBind, PanelSize, PluginEntry, PluginOrigin, PluginStatus, Prompt, Render, RenderFence,
+    Request, RequestId, Route, Scope, Select, SelectAction, SelectOption, Session, SessionStatus, SlotClaim, SlotKind,
+    Sound, SoundName, SurfaceClaim, SurfacePlace, Tab, TabEdit, Toast, Unread, Variant, ViewReply, When,
 };
 
 /// The node tree of a render (`render`, `render-fence`, `render-route`) and of a dialog body, beside a surface's keyed
@@ -98,6 +98,7 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
                 Slot { kind: reference("SlotKind"), path: string() } { },
                 Panel { name: string() } { },
                 Overlay { name: string() } { },
+                Dialog { name: string() } { },
             }),
         ),
         (
@@ -402,6 +403,16 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
                 Alert: reference("Alert"),
                 ErrorDetails: reference("ErrorDetails"),
                 Images: reference("Images"),
+                Surface: reference("DialogSurface"),
+            }),
+        ),
+        (
+            "DialogSurface",
+            object!(DialogSurface, "A dialog whose body is a new mount of the plugin's dialog surface.", {
+                surface: string(),
+            } {
+                key: nullable(string()), size: nullable(reference("PanelSize")), centered: boolean(),
+                title: nullable(string()),
             }),
         ),
         (

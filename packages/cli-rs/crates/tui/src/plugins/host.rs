@@ -503,6 +503,13 @@ impl Host for Tui {
         self.dialogs.is_open()
     }
 
+    fn modal_holds(&self, view: &View) -> bool {
+        // The dialogs replace each other, so one under the dialogs' host is in the dialog on top.
+        let host = self.dialogs.host().id();
+        self.dialogs.is_open()
+            && std::iter::successors(Some(view.as_any()), |widget| widget.parent()).any(|w| w.id() == host)
+    }
+
     fn overlay_layer(&self) -> Option<View> {
         Some(self.plugin_overlays.clone())
     }
@@ -742,6 +749,8 @@ pub struct Reads {
     /// What the last change batch changed, for the plugins.
     batch: RefCell<abi::Changed>,
     pub(super) panel: RefCell<Option<super::panel::Live>>,
+    /// The plugin dialog surface on screen, which one of the same key changes in place.
+    pub(super) surface: RefCell<Option<Rc<super::panel::Body>>>,
     /// The plugin and activation whose dialog is on screen, until it closes.
     pub(super) owner: RefCell<Option<(String, u64)>>,
     /// The action the next plugin dialog runs as it closes (`abi::Dialog::Dismissable`), until that dialog takes it.

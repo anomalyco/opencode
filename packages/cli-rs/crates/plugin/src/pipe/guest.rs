@@ -1111,7 +1111,9 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>) {
                     routed.iter().map(|command| js_command(&guest, command, Some(alive.clone()))).collect()
                 })
             }
-            v2::Place::Slot(_) | v2::Place::Panel(_) | v2::Place::Overlay(_) => Rc::new(|_| Vec::new()),
+            v2::Place::Slot(_) | v2::Place::Panel(_) | v2::Place::Overlay(_) | v2::Place::Dialog(_) => {
+                Rc::new(|_| Vec::new())
+            }
         };
         let failing = Rc::downgrade(guest);
         let fail: surface::Fail = Rc::new(move |error| {

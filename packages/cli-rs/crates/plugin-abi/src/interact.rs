@@ -51,7 +51,9 @@ pub enum Event {
     /// The pointer entered (`inside`) or left a node with [`Interact::hover_events`].
     #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Hover { node: String, inside: bool },
-    /// The host closed the plugin's overlay `surface`: escape, a click outside it, or another overlay of the plugin.
+    /// The host closed the plugin's overlay `surface`: escape, a click outside it, or another overlay of the plugin. Or
+    /// the dialog of its dialog surface `surface` closed, however it closed: the plugin hears it, not the mount, which
+    /// has ended ([`crate::Dialog::Surface`]).
     #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Closed { surface: String },
     /// P3: a scroll of the mount: the user moved one that asks with `user_scroll`, or a step of the plugin's own

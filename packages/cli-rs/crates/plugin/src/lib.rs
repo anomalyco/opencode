@@ -270,6 +270,11 @@ pub trait Host: 'static {
     fn modal_open(&self) -> bool {
         false
     }
+    /// Whether `view` is in the dialog on top: a plugin's dialog surface mounted there holds the input while it is
+    /// ([`abi::v2::Place::Dialog`]).
+    fn modal_holds(&self, _view: &View) -> bool {
+        false
+    }
     /// The layer the plugins' overlays show in: over the routes, under the host's dialogs.
     fn overlay_layer(&self) -> Option<View> {
         None
@@ -298,6 +303,14 @@ pub(crate) trait Claimed {
     fn restyle(&self, _host: &dyn Host) -> bool {
         false
     }
+    /// What tells a dialog surface's handler that its dialog closed, as the plugin's call: it outlives the mount.
+    fn closing(&self) -> Option<Effect> {
+        None
+    }
+    /// Empties the field of the mount that has the focus, if it has text; whether it did.
+    fn clear_field(&self, _host: &dyn Host) -> bool {
+        false
+    }
 }
 
 impl Claimed for View {
@@ -310,6 +323,8 @@ type ClaimRender = Rc<dyn Fn(&dyn Host, &SlotInput) -> Box<dyn Claimed>>;
 type Claim = Box<dyn Claimed>;
 type RouteRender = Rc<dyn Fn(&dyn Host) -> Box<dyn Claimed>>;
 type PanelRender = Rc<dyn Fn(&dyn Host, &View) -> Box<dyn Claimed>>;
+/// Mounts a dialog surface into the dialog's body under a key.
+type DialogRender = Rc<dyn Fn(&dyn Host, &View, &str) -> Box<dyn Claimed>>;
 pub(crate) type SearchCall = Rc<dyn Fn(&dyn Host, &str, &[abi::SelectOption]) -> Option<Vec<String>>>;
 type SetupFn = Rc<dyn Fn(&mut Setup<'_>) -> Result<(), String>>;
 /// The current failure of an external plugin, if any.
@@ -643,7 +658,10 @@ pub(crate) fn linked(id: impl Into<String>, run: LinkedSetup, external: bool) ->
                     .filter(|(command, _)| matches!(&command.scope, abi::Scope::Route(route) if route == name))
                     .map(|(command, run)| (command.clone(), run.clone()))
                     .collect(),
-                abi::v2::Place::Slot(_) | abi::v2::Place::Panel(_) | abi::v2::Place::Overlay(_) => Vec::new(),
+                abi::v2::Place::Slot(_)
+                | abi::v2::Place::Panel(_)
+                | abi::v2::Place::Overlay(_)
+                | abi::v2::Place::Dialog(_) => Vec::new(),
             };
             // P3: `layout` and the scroll handler run as calls of the plugin, as its view does.
             let laying = scope.clone();
@@ -1058,6 +1076,16 @@ impl Owners {
     pub(crate) fn focus(&self, node: &str) -> Effect {
         let Ok(owner) = self.owner_of(node) else { return Box::new(|_| {}) };
         let node = node.to_owned();
+        // A call of the plugin's own whose node no mount holds yet: a mount an earlier effect of the call opens (a dialog
+        // surface it shows) may hold it once the effects before this one applied.
+        if Rc::ptr_eq(&owner, &self.input) {
+            let (activation, input) = (self.activation.clone(), self.input.clone());
+            return Box::new(move |host| {
+                let mounts = activation.owners().into_iter().rev();
+                let owner = mounts.into_iter().find(|owner| owner.has(&node)).unwrap_or(input);
+                owner.focus(host, &node)
+            });
+        }
         Box::new(move |host| owner.focus(host, &node))
     }
 
@@ -2261,6 +2289,33 @@ impl Setup<'_> {
                 });
                 self.registration.panels.push((name, panel));
             }
+            // A dialog surface mounts when the plugin shows it ([`abi::Dialog::Surface`]); its scope is the dialog on top.
+            abi::v2::Place::Dialog(name) => {
+                let dialog: DialogRender = Rc::new(move |host: &dyn Host, body: &View, key: &str| {
+                    let mounted = surface::Surface::new(
+                        host,
+                        owner.clone(),
+                        plugin.clone(),
+                        &surface,
+                        (key, ""),
+                        &SlotInput::default(),
+                        Rc::new(()),
+                        viewer.clone(),
+                        fail.clone(),
+                        calls.clone(),
+                        input.clone(),
+                        host_time.clone(),
+                    );
+                    activation.track(Rc::downgrade(&mounted) as Weak<dyn Drawn>);
+                    if let Some(holder) = mounted.holder() {
+                        holder.hold_dialog(body.clone());
+                        activation.own(&holder);
+                    }
+                    body.add(&mounted.root());
+                    Box::new(mounted) as Box<dyn Claimed>
+                });
+                self.registration.dialogs.push((name, dialog));
+            }
             // An overlay mounts when the plugin opens it ([`abi::Host::overlay`]).
             abi::v2::Place::Overlay(name) => {
                 let open: OverlayFn = Rc::new(move |host: &dyn Host, frame: &View| {
@@ -2359,6 +2414,8 @@ struct Registration {
     routes: Vec<(String, RouteRender)>,
     /// The panel surfaces (P2), each mounting into the panel the host shows.
     panels: Vec<(String, PanelRender)>,
+    /// The dialog surfaces, each mounting into the body of the dialog the host shows.
+    dialogs: Vec<(String, DialogRender)>,
     /// The searches a select names (P2).
     searches: Vec<(String, SearchCall)>,
     code_blocks: Vec<(String, CodeBlockRender)>,
@@ -3238,6 +3295,27 @@ impl Registry {
         Some(PanelMount(render(host, parent)))
     }
 
+    /// Whether active plugin `id` registered the dialog surface `name`.
+    pub fn has_dialog(&self, id: &str, name: &str) -> bool {
+        self.with_plugin(id, |plugin| {
+            plugin
+                .active
+                .as_ref()
+                .is_some_and(|(_, registration)| registration.dialogs.iter().any(|(dialog, _)| dialog == name))
+        })
+        .unwrap_or(false)
+    }
+
+    /// Mounts the dialog surface plugin `id` registers as `name` under `key` into `body`, the body of the dialog the
+    /// host shows: what it returns is the mount, which ends when it drops.
+    pub fn dialog(&self, host: &dyn Host, id: &str, name: &str, key: &str, body: &View) -> Option<PanelMount> {
+        let render = self.with_plugin(id, |plugin| {
+            let (_, registration) = plugin.active.as_ref().filter(|_| plugin.running())?;
+            registration.dialogs.iter().find(|(dialog, _)| dialog == name).map(|(_, render)| render.clone())
+        })??;
+        Some(PanelMount(render(host, body, key)))
+    }
+
     /// The values of `options` that plugin `id`'s search `name` lists for `query`, in its order; `None` when it has no
     /// such search, or the search failed. A select that names it closes with the activation that showed it.
     pub fn search(
@@ -3365,6 +3443,18 @@ impl PanelMount {
     /// Takes the host's theme in place, keeping its widgets and their state; false when it must mount again.
     pub fn restyle(&self, host: &dyn Host) -> bool {
         self.0.restyle(host)
+    }
+
+    /// Ends the mount of a dialog surface whose dialog closed: what it returns tells its handler
+    /// ([`abi::interact::Event::Closed`]), as the plugin's call, once the host calls it.
+    pub fn close(self) -> Option<Box<dyn FnOnce(&dyn Host)>> {
+        self.0.closing()
+    }
+
+    /// Empties the field of the mount that has the focus, if it has text, as `ctrl+c` does in the host's dialogs;
+    /// whether it did.
+    pub fn clear_field(&self, host: &dyn Host) -> bool {
+        self.0.clear_field(host)
     }
 }
 

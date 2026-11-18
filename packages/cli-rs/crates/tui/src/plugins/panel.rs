@@ -5,7 +5,7 @@ use opencode_plugin::abi;
 use opencode_plugin::node::{self, Act};
 use opencode_ui::alert::AlertProps;
 use opencode_ui::confirm::ConfirmProps;
-use opencode_ui::dialog::{self, DIALOG_INSET, DialogCx, FooterAction, FooterProps, MODAL_MODE};
+use opencode_ui::dialog::{self, DIALOG_INSET, DialogCx, FooterAction, FooterProps, HeaderProps, MODAL_MODE};
 use opencode_ui::prompt::{PromptProps, prompt};
 
 use crate::features::session_links::{self, Links};
@@ -69,6 +69,7 @@ pub fn show(tui: &Tui, id: &str, generation: u64, dialog: abi::Dialog) {
             tui.reads.dismissed.borrow_mut().take();
         }
         abi::Dialog::Select(select) => pick(tui, owner, select),
+        abi::Dialog::Surface(shown) => surface(tui, owner, shown),
         abi::Dialog::Confirm(confirm) => ask_yes(tui, owner, confirm),
         abi::Dialog::Alert(alert) => tell(tui, owner, alert),
         abi::Dialog::ErrorDetails(details) => detail(tui, owner, details),
@@ -806,6 +807,129 @@ fn tell(tui: &Tui, owner: Owner, alert: abi::Alert) {
         )
     });
     tui.dialogs.set_centered(centered);
+}
+
+/// A plugin's dialog surface on screen (TS `ui.dialog.show`): the frame, with a header when it has a title, and in its
+/// body the mount of the plugin's surface, which ends as the dialog closes. Built again in a new theme, it keeps its
+/// widgets and the mount.
+pub struct Body {
+    key: String,
+    /// The key the plugin named, which the mount's ID has.
+    named: String,
+    surface: String,
+    owner: RefCell<Owner>,
+    title: RefCell<Option<String>>,
+    frame: View,
+    header: View,
+    body: View,
+    /// The build of the moment, which the header is drawn in.
+    cx: RefCell<Option<Rc<DialogCx>>>,
+    mount: RefCell<Option<opencode_plugin::PanelMount>>,
+}
+
+/// Shows `shown`: a new mount of the plugin's dialog surface, or, under the key that is open, the same mount in a frame
+/// changed in place.
+fn surface(tui: &Tui, owner: Owner, shown: abi::DialogSurface) {
+    let key = format!("{}/{}", owner.0, shown.shown_key());
+    let (size, centered) = (shown.size.map(dialog_size).unwrap_or_default(), shown.centered);
+    let open = open(tui, &owner.0, shown.shown_key()).then(|| tui.reads.surface.borrow().clone()).flatten();
+    if let Some(body) = open.filter(|body| body.key == key && body.surface == shown.surface) {
+        *body.owner.borrow_mut() = owner.clone();
+        *body.title.borrow_mut() = shown.title;
+        body.draw_header();
+        tui.dialogs.set_size(size);
+        tui.dialogs.set_centered(centered);
+        *tui.reads.owner.borrow_mut() = Some(owner);
+        tui.app.request_redraw();
+        return;
+    }
+    if !tui.plugins.has_dialog(&owner.0, &shown.surface) {
+        log::warn!("plugin {}: it has no dialog surface {:?}", owner.0, shown.surface);
+        // A plugin that waits for its answer hears it closed.
+        if let Some((owner, action)) = tui.reads.dismissed.borrow_mut().take() {
+            run(tui, &owner, &action, None);
+        }
+        return;
+    }
+    let app = &tui.app;
+    let (header, body) = (View::new(app), View::new(app).column().focusable(true));
+    let frame = View::new(app).column().child(&header).child(&body);
+    let shown = Rc::new(Body {
+        key: key.clone(),
+        named: shown.shown_key().to_owned(),
+        surface: shown.surface,
+        owner: RefCell::new(owner.clone()),
+        title: RefCell::new(shown.title),
+        frame,
+        header,
+        body,
+        cx: RefCell::default(),
+        mount: RefCell::default(),
+    });
+    *tui.reads.surface.borrow_mut() = Some(shown.clone());
+    let closed = Rc::downgrade(&shown);
+    own(tui, owner, |on_close| {
+        let on_close: Box<dyn FnOnce()> = Box::new(bind!(tui, |tui| {
+            on_close();
+            let mine =
+                tui.reads.surface.borrow().as_ref().is_some_and(|body| Weak::ptr_eq(&Rc::downgrade(body), &closed));
+            if mine {
+                tui.reads.surface.borrow_mut().take();
+            }
+            // The mount ends now, so nothing it asked for after the close goes out; its handler hears it closed, as
+            // the plugin's call, after the event that closed it.
+            let mount = closed.upgrade().and_then(|body| body.mount.borrow_mut().take());
+            if let Some(tell) = mount.and_then(opencode_plugin::PanelMount::close) {
+                tui.app.defer(bind!(tui, |tui, _| tell(&*super::host::host(&tui))));
+            }
+        }));
+        tui.dialogs.replace(
+            bind!(tui, |tui, cx| shown.build(&tui, cx), else View::new(&cx.app)),
+            Some(on_close),
+            DialogOptions::new(size).key(key),
+        )
+    });
+    tui.dialogs.set_centered(centered);
+}
+
+impl Body {
+    /// The frame in the build `cx`: the mount the first time, the same mount in the new theme after.
+    fn build(self: &Rc<Self>, tui: &Rc<Tui>, cx: &Rc<DialogCx>) -> View {
+        *self.cx.borrow_mut() = Some(cx.clone());
+        self.draw_header();
+        let host = super::host::host(tui);
+        // `ctrl+c` empties the field of the mount that has the focus before it closes the dialog.
+        let cleared = Rc::downgrade(self);
+        cx.editor(bind!(tui.weak(), |tui| {
+            let Some(body) = cleared.upgrade() else { return false };
+            let mount = body.mount.borrow();
+            mount.as_ref().is_some_and(|mount| mount.clear_field(&*super::host::host(&tui)))
+        }, else false));
+        let mounted = self.mount.borrow().as_ref().map(|mount| mount.restyle(&*host));
+        if mounted.is_none() {
+            let owner = self.owner.borrow().clone();
+            let mount = tui.plugins.dialog(&*host, &owner.0, &self.surface, &self.named, &self.body);
+            if mount.is_none() {
+                log::warn!("plugin {}: its dialog surface {:?} did not mount", owner.0, self.surface);
+            }
+            *self.mount.borrow_mut() = mount;
+        }
+        self.frame.clone()
+    }
+
+    /// The header, with the title and the close label, and the dialog's inset around the body; neither without a
+    /// title, where the view draws the whole dialog.
+    fn draw_header(&self) {
+        let Some(cx) = self.cx.borrow().clone() else { return };
+        self.header.clear();
+        let title = self.title.borrow().clone();
+        let inset = if title.is_some() { DIALOG_INSET } else { 0 };
+        self.frame.padding_x(inset).padding_edge(Edge::Bottom, inset.min(1)).gap(inset.min(1));
+        self.header.visible(title.is_some());
+        if let Some(title) = title {
+            self.header.add(&dialog::header(&cx, HeaderProps::new(title)));
+        }
+    }
 }
 
 fn dialog_size(size: abi::PanelSize) -> DialogSize {

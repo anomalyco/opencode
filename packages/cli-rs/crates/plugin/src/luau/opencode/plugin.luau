@@ -248,7 +248,18 @@ export type Dialog = ({
     type: "error-details",
 }) | (Images & {
     type: "images",
+}) | (DialogSurface & {
+    type: "surface",
 }))
+
+--- A dialog whose body is a new mount of the plugin's dialog surface.
+export type DialogSurface = {
+    surface: string,
+    key: string?,
+    size: PanelSize?,
+    centered: boolean?,
+    title: string?,
+}
 
 export type DiffView = ("unified" | "split")
 
@@ -1484,6 +1495,9 @@ export type SurfacePlace = ({
 } | {
     name: string,
     type: "overlay",
+} | {
+    name: string,
+    type: "dialog",
 })
 
 --- A session tab.

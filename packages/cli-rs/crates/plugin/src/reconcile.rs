@@ -652,6 +652,28 @@ impl Tree {
         });
     }
 
+    /// Empties the tree's input that has the focus, if it shows text, as an edit of the user's would: the id of the
+    /// input, whose handler is to hear the change.
+    pub(crate) fn clear_focused_field(&self, app: &App) -> Option<String> {
+        let focused = app.focused()?.id();
+        let mut cleared = None;
+        each(&self.nodes, &mut |node| {
+            if let (None, Some(id), Extra::Input(field, _, reported)) = (&cleared, node.node.id(), &node.extra)
+                && field.widget().id() == focused
+                && !field.draft().0.is_empty()
+            {
+                field.set("");
+                let mut reported = reported.borrow_mut();
+                if reported.len() == ECHOES {
+                    reported.remove(0);
+                }
+                reported.push(String::new());
+                cleared = Some(id.to_owned());
+            }
+        });
+        cleared
+    }
+
     /// Where the scroll with id `id` is scrolled, as of the last frame.
     pub fn scroll_position(&self, id: &str) -> Option<(f64, f64)> {
         fn find<'a>(nodes: &'a [Mounted], id: &str) -> Option<&'a Mounted> {
