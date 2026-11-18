@@ -24,7 +24,8 @@ export default definePty({
     { keys: "/settings", settle: 300 },
     { keys: "\r", until: { screen: "Settings" }, settle: 500, checkpoint: "settings" },
     { keys: "\x1b[C", settle: 800, checkpoint: "everything" },
-    { keys: "\x1b", settle: 400 },
+    // Escape waits for the settings to close: a lone ESC not yet read would join the next key.
+    { keys: "\x1b", until: { gone: "left/right change" }, settle: 400 },
     ...leave,
   ],
   exits: true,

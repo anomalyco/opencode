@@ -14,10 +14,11 @@ export default definePty({
     { ...opened, until: { screen: "Permission required" }, checkpoint: "asked" },
     { keys: "\x1b[C", settle: 300, checkpoint: "moved" },
     { keys: "\r", settle: 300, checkpoint: "always" },
-    { keys: "\x1b", settle: 300 },
+    // Each Escape waits for the stage it opens: a lone ESC not yet read would join the next key as Alt+key.
+    { keys: "\x1b", until: { gone: "This will always allow" }, settle: 300 },
     { keys: "\x1b[D", settle: 300 },
     { keys: "\r", until: { screen: "WebFetch" }, settle: 400, checkpoint: "next" },
-    { keys: "\x1b", settle: 300, checkpoint: "reject" },
+    { keys: "\x1b", until: { screen: "Reject permission" }, settle: 300, checkpoint: "reject" },
     { keys: "use the cache", settle: 300 },
     { keys: "\r", until: { screen: "ctrl+p menu" }, settle: 600, checkpoint: "replied" },
     ...leave,

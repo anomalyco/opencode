@@ -23,11 +23,13 @@ export default definePty({
     { keys: "\x1b[<32;21;17M\x1b[<32;25;17M", settle: 50 },
     { keys: "\x1b[<0;25;17m" },
     { until: { osc: "52;" }, settle: 300, timeout: 10_000, checkpoint: "copied" },
-    // Escape clears the selection; Ctrl+U empties the prompt so Ctrl+C exits.
-    { keys: "\x1b", settle: 300 },
-    { keys: "\x15", settle: 300 },
+    // Escape, then Ctrl+U empties the prompt. Escape shows no text to wait for, so it goes as the Kitty keyboard sends
+    // it (the TUI turned it on): a lone ESC the program had not yet timed out would join Ctrl+U. The mouse selection
+    // stays on both sides, so the first Ctrl+C ends it (copy on select) and the second exits.
+    { keys: "\x1b[27u", settle: 300 },
+    { keys: "\x15", until: { gone: "copy this text" }, settle: 300 },
     { keys: "\x03", settle: 300 },
-    { keys: "\x03" },
+    { keys: "\x03", until: { exit: true } },
   ],
   osc: ["clipboard"],
   masks: [

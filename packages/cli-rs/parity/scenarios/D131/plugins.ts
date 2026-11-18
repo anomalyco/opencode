@@ -33,9 +33,9 @@ export function plugins(config: object): PtyCase {
       { keys: "\r", until: { screen: "alpha" }, settle: 500, checkpoint: "plugins" },
       // Up from the top shows the end of the list.
       { keys: "\x1b[A", settle: 300, checkpoint: "end" },
-      { keys: "\x1b", settle: 300 },
-      { keys: "\x03", settle: 300 },
-      { keys: "\x03" },
+      // Escape waits for the list to close, and the one Ctrl+C on the empty prompt for the exit.
+      { keys: "\x1b", until: { gone: "check for updates" }, settle: 300 },
+      { keys: "\x03", until: { exit: true } },
     ],
     exits: true,
   }

@@ -38,8 +38,17 @@ export type PtyStep = {
   // Pushed to the `fallback: "tui"` event stream after the keys.
   emit?: Parameters<FakeServer["emit"]>[0][]
   // Waits until an OSC sequence or the screen matches (a string matches as a substring).
-  // `oscCount` waits until that many OSC sequences contain the string.
-  until?: { osc?: string | RegExp; screen?: string | RegExp; oscCount?: [string, number] }
+  // `oscCount` waits until that many OSC sequences contain the string. `gone` waits until the screen no longer
+  // contains the string, and `exit` until the program exited: a key whose effect is a closed view or an exit, such
+  // as Escape or Ctrl+C, waits for it before the next keys go out, since a still screen cannot tell a slow program
+  // from one that is done (a lone ESC the program has not yet timed out joins the next key as Alt+key).
+  until?: {
+    osc?: string | RegExp
+    screen?: string | RegExp
+    oscCount?: [string, number]
+    gone?: string
+    exit?: boolean
+  }
   // Once `until` holds and the screen settled: the screen must not contain this.
   absent?: string
   // Waits until the screen has not changed for this long.
@@ -445,7 +454,10 @@ async function waitFor(step: PtyStep, probe: Probe) {
     const countOk =
       counted === undefined || probe.osc().filter((entry) => entry.data.includes(counted[0])).length >= counted[1]
     const screenOk =
-      countOk && (want === undefined || (typeof want === "string" ? text.includes(want) : want.test(text)))
+      countOk &&
+      (want === undefined || (typeof want === "string" ? text.includes(want) : want.test(text))) &&
+      (step.until?.gone === undefined || !text.includes(step.until.gone)) &&
+      (!step.until?.exit || exited)
     const settled = step.settle === undefined || Date.now() - state.since >= step.settle
     if (oscOk && screenOk && settled) {
       if (step.absent !== undefined && text.includes(step.absent))

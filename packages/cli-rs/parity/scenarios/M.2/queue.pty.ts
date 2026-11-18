@@ -35,7 +35,9 @@ export default definePty({
     { keys: "!", settle: 100 },
     { keys: "ls", settle: 100 },
     { keys: "\x18\r", settle: 400, checkpoint: "refused" },
-    { keys: "\x1b", settle: 100 },
+    // Escape shows no text to wait for, so it goes as the Kitty keyboard sends it (Mini turned it on): a lone ESC the
+    // program had not yet timed out would join Ctrl+L.
+    { keys: "\x1b[27u", settle: 100 },
     { keys: "\x0c", settle: 600, checkpoint: "cleared" },
     // The first Ctrl+C clears the draft.
     { keys: "\x03", settle: 200 },

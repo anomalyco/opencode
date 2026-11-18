@@ -41,8 +41,8 @@ export async function install(root: string, config?: object) {
 export const home: PtyStep[] = [
   { until: { screen: "█▀▀█" }, settle: 500, timeout: 30_000 },
   { keys: "/p0brun", until: { screen: "Run a program" }, settle: 200, timeout: 30_000 },
-  { keys: "\x1b", settle: 200 },
-  { keys: "\x15", settle: 200 },
+  { keys: "\x1b", until: { gone: "Run a program" }, settle: 200 },
+  { keys: "\x15", until: { gone: "/p0brun" }, settle: 200 },
 ]
 
 // Runs `command` through `/p0brun`, which first prints `ready-<n + 1>`, and waits for that: text the command itself
@@ -54,15 +54,14 @@ export function run(command: string, n: number): PtyStep[] {
   ]
 }
 
-// Two Ctrl+C: the TUI exits.
-export const leave: PtyStep[] = [{ keys: "\x03", settle: 300 }, { keys: "\x03" }]
+// Ctrl+C on the empty prompt: the TUI exits. A second press could land once the terminal is restored, as a SIGINT.
+export const leave: PtyStep[] = [{ keys: "\x03", until: { exit: true } }]
 
-// Home, then `/p0btitle` once both clients list it, then two Ctrl+C to exit.
+// Home, then `/p0btitle` once both clients list it, then Ctrl+C to exit.
 export const steps: PtyStep[] = [
   // The title can come before the first paint, so wait for the logo as well.
   { until: { screen: "█▀▀█" }, settle: 500, timeout: 30_000 },
   { keys: "/p0btitle", until: { screen: "Set the title" }, settle: 300, timeout: 30_000 },
   { keys: "\r", until: { osc: "p0b title" }, settle: 300 },
-  { keys: "\x03", settle: 300 },
-  { keys: "\x03" },
+  ...leave,
 ]

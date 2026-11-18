@@ -80,8 +80,8 @@ export default definePty({
       until: { screen: "Session failed" },
       settle: 300,
     },
-    { keys: "\x03", settle: 300 },
-    { keys: "\x03" },
+    // Ctrl+C on the empty prompt exits; a second press could land once the terminal is restored, as a SIGINT.
+    { keys: "\x03", until: { exit: true } },
   ],
   osc: ["status", "notify"],
   // Deviation N03-status-order: the order between a notification and a status record is not fixed in Rust.

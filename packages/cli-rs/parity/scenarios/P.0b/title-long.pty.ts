@@ -14,7 +14,7 @@ export default definePty({
     { keys: "/p0blong", until: { screen: "Set a long title" }, settle: 300 },
     { keys: "\r", until: { osc: "p0b long éé" }, settle: 300 },
     { keys: "still here", until: { screen: "still here" }, settle: 300 },
-    { keys: "\x15", settle: 200 },
+    { keys: "\x15", until: { gone: "still here" }, settle: 200 },
     ...leave,
   ],
   osc: ["title"],

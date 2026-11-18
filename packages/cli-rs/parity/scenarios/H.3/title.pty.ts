@@ -12,8 +12,8 @@ export default definePty({
   steps: [
     // The title can come before the first paint, so wait for the logo as well.
     { until: { osc: "OpenCode", screen: "█▀▀█" }, settle: 500, timeout: 30_000 },
-    { keys: "\x03", settle: 300 },
-    { keys: "\x03" },
+    // Ctrl+C on the empty prompt exits; a second press could land once the terminal is restored, as a SIGINT.
+    { keys: "\x03", until: { exit: true } },
   ],
   exits: true,
 })

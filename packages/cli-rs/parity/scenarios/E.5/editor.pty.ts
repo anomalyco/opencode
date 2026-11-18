@@ -21,8 +21,8 @@ export default definePty({
     { keys: "hello", until: { screen: "hello" }, settle: 200 },
     { keys: "\x18e", until: { screen: "second line" }, settle: 300, timeout: 10_000, checkpoint: "edited" },
     // Ctrl+C clears the prompt, then exits.
-    { keys: "\x03", settle: 300 },
-    { keys: "\x03" },
+    { keys: "\x03", until: { gone: "second line" }, settle: 300 },
+    { keys: "\x03", until: { exit: true } },
   ],
   osc: [],
   masks: [

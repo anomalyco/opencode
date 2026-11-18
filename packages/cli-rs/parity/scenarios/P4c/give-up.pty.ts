@@ -17,7 +17,8 @@ export default definePty({
     { until: { screen: "fault plugin c" }, settle: 500, timeout: 30_000 },
     ...palette("Fault in render: segv"),
     { until: { screen: /crashed the client in `render-slot`[\s\S]*fault plugin c/ }, settle: 500, timeout: 20_000 },
-    { keys: "\x1b", settle: 300 },
+    // Each Escape waits for its toast to close: a lone ESC not yet read would join the palette's Ctrl+P.
+    { keys: "\x1b", until: { gone: "crashed the client" }, settle: 300 },
     ...palette("Fault B in render: segv"),
     // The third client holds both: `example.fault` by the crash list, `example.fault.b` by the handoff.
     {
@@ -25,7 +26,7 @@ export default definePty({
       settle: 500,
       timeout: 20_000,
     },
-    { keys: "\x1b", settle: 300 },
+    { keys: "\x1b", until: { gone: "example.fault.b" }, settle: 300 },
     ...palette("Fault C in render: segv"),
     {
       until: { screen: /\$ opencode-native -s ses_b[\s\S]*crashed 3 times in 60 s \(last in plugin example\.fault\.c\)/ },

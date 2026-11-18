@@ -14,7 +14,8 @@ export default definePty({
   steps: [
     { ...opened, checkpoint: "hints" },
     { keys: "\x10", until: { screen: "View subagents" }, settle: 400, checkpoint: "menu" },
-    { keys: "\x1b", settle: 300 },
+    // Escape waits for the menu to close: a lone ESC not yet read would join the arrow as Alt+Down.
+    { keys: "\x1b", until: { gone: "View subagents" }, settle: 300 },
     { keys: "\x1b[B", until: { screen: "Select subagent" }, settle: 400, checkpoint: "panel" },
     { keys: "\t", settle: 300, checkpoint: "inactive" },
     { keys: "\r", until: { screen: "The docs cover" }, settle: 500, checkpoint: "inspector" },

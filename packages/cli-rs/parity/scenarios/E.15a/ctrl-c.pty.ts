@@ -44,7 +44,7 @@ export default definePty({
     { keys: "/diff", until: { screen: "/diff" }, settle: 300 },
     { keys: "\r", until: { screen: "≡ lexer.ts" }, settle: 500, checkpoint: "open" },
     { keys: "\x03", until: { screen: "█▀▀█" }, settle: 1000, checkpoint: "home" },
-    { keys: "\x03" },
+    { keys: "\x03", until: { exit: true } },
   ],
   masks: homeMasks,
   exits: true,

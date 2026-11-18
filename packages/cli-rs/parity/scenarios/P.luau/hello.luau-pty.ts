@@ -29,8 +29,8 @@ export default definePty({
     { until: { screen: /hello\s*$/m }, settle: 300, timeout: 30_000, checkpoint: "home" },
     { keys: "/hello", until: { screen: "Say hello" }, settle: 300 },
     { keys: "\r", until: { screen: "Hello from a plugin" }, settle: 300, checkpoint: "toast" },
-    { keys: "\x03", settle: 300 },
-    { keys: "\x03" },
+    // Ctrl+C on the empty prompt exits; a second press could land once the terminal is restored, as a SIGINT.
+    { keys: "\x03", until: { exit: true } },
   ],
   masks: [{ pattern: /Ask anything… .*$/, reason: "the placeholder is picked at random" }],
   exits: true,

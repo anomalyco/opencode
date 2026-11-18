@@ -12,7 +12,8 @@ export default definePty({
   steps: [
     opened,
     { keys: "!", settle: 300, checkpoint: "shell" },
-    { keys: "\x1b", settle: 300, checkpoint: "normal" },
+    // Escape waits for shell mode to end: a lone ESC not yet read would join the next key.
+    { keys: "\x1b", until: { gone: "Shell ·" }, settle: 300, checkpoint: "normal" },
     { keys: "!", settle: 200 },
     { keys: "\x7f", settle: 300, checkpoint: "backspace" },
     { keys: "!ls -la", settle: 300, checkpoint: "typed" },
