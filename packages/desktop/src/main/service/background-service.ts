@@ -9,7 +9,7 @@ import { BackgroundServiceMachine } from "./background-service-machine"
 import { cleanStages } from "./cli-stages"
 import { keptStages, serviceVersion, shouldRetryEnsure } from "./cli-version"
 import { DesktopCli } from "./desktop-cli"
-import { localRegistrationFile } from "./registration"
+import { localRegistrationFile, servicePort } from "./registration"
 import { SidecarCredentials } from "./sidecar-credentials"
 import { takeSidecarProbe } from "./sidecar-probe"
 
@@ -64,12 +64,12 @@ const ensure = Effect.fn("BackgroundService.ensure")(function* (mode: Background
       file: setup.file,
       version,
       // A fixed port makes a second contender fail to bind and back off; port 0 never collides, so two
-      // services could boot against the same database.
+      // services could boot against the same database. The port is fixed per registration, not per machine.
       command: [
         ...setup.cli.command,
         "serve",
         "--service",
-        ...(setup.isolated ? ["--hostname", "0.0.0.0", "--port", String(0x0c0c)] : []),
+        ...(setup.isolated ? ["--hostname", "0.0.0.0", "--port", String(setup.port)] : []),
       ],
       onStart: (reason, previousVersion) =>
         runFork(Effect.logInfo("v2 CLI background service starting", { reason, previousVersion })),
@@ -111,7 +111,9 @@ const prepare = Effect.fn("BackgroundService.prepare")(function* (mode: Backgrou
       ? localRegistrationFile({ stateHome: process.env.XDG_STATE_HOME, home: app.getPath("home") })
       : undefined
 
-  return { cli, client, file, isolated: ISOLATED_SERVER, version }
+  const port = servicePort(file ?? client.fallback(), process.env.OPENCODE_DESKTOP_SERVER_PORT)
+
+  return { cli, client, file, isolated: ISOLATED_SERVER, port, version }
 })
 
 const adopt = Effect.fn("BackgroundService.adopt")(function* (
