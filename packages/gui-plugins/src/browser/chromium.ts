@@ -381,6 +381,7 @@ export function createBrowserPage(
     options.userInput()
     void choosers.update().catch(() => undefined)
   })
+
   // A cropped page can own focus in its child window. Only that child may raise the host.
   function focusHost() {
     if (win.isDestroyed()) return
