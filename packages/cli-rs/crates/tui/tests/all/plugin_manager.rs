@@ -102,8 +102,12 @@ fn a_disabled_manager_holds_nothing_and_matches_one_never_enabled() {
 
 fn a_disabled_manager_holds_nothing_and_matches_one_never_enabled_on() {
     let (harness, log) = open(&[]);
+    let before = reads(&log);
     harness.dispatch("plugins.list");
     harness.wait_for("show internal");
+    // The list's read goes out as it opens, and a loaded machine logs it late: the count after the toggle is taken
+    // from once it is in (preview 44324450162, Windows).
+    harness.wait("the list's read", || reads(&log) > before);
     let (with, read) = (commands(&harness), reads(&log));
     assert!(with.contains("plugins.list") && with.contains("opencode.plugins.check"), "{with:?}");
     toggle(&harness, ID, false);
