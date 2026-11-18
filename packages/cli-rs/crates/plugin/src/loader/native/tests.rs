@@ -597,7 +597,8 @@ fn the_sample_slot_draws_the_same_in_process_and_through_the_library() {
 }
 
 // Expected: the LaTeX built-in, wired through the byte shims of the C ABI (`Loopback`), keeps its formula across
-// a chunk that does not parse, as it does in process, with the host's fence keys crossing the wire.
+// a chunk that does not parse and draws an incomplete one, as it does in process, with the host's fence keys crossing
+// the wire.
 #[test]
 fn latex_streams_the_same_through_the_c_abi_loopback() {
     let host = host();
@@ -606,12 +607,14 @@ fn latex_streams_the_same_through_the_c_abi_loopback() {
     let loopback =
         loopback(&host, abi::export_plugin!(@loopback opencode_latex::plugin().id, opencode_latex::plugin().setup));
 
-    let chunks = ["```latex\n\\frac{a_1+b_1}{c_1+d_1}", "+\\frac{a_", "2+b_2}{c_2+d_2}"];
+    // A half-typed command keeps the last formula; an incomplete one draws with `□`; then the whole one.
+    let chunks = ["```latex\n\\frac{a_1+b_1}{c_1+d_1}", "+\\fr", "ac{a_", "2}{c_2}"];
     let direct = stream(&host, &in_process, &chunks);
     let text: Vec<String> = direct.iter().map(Capture::text).collect();
     assert_eq!(direct[1], direct[0]);
     assert!(text[0].contains("───") && !text[0].contains("\\frac"), "{}", text[0]);
-    assert!(direct[2] != direct[0] && !text[2].contains("\\frac"), "{}", text[2]);
+    assert!(text[2].contains('□') && !text[2].contains("\\fr"), "{}", text[2]);
+    assert!(!text[3].contains('□') && !text[3].contains("\\frac"), "{}", text[3]);
     assert_eq!(stream(&host, &loopback, &chunks), direct);
 }
 
