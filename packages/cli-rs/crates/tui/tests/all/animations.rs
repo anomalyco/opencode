@@ -65,7 +65,6 @@ fn mount(layout: &str, animations: bool) -> (support::Harness, Memory) {
 }
 
 fn mount_with(tabs: Value, animations: bool, active: &Value) -> (support::Harness, Memory) {
-    // Medium verbosity draws the tool rows; low, the default, folds them into one summary.
     let config = json!({
         "animations": animations,
         "tabs": tabs,
@@ -169,7 +168,6 @@ fn turning_animations_off_and_on_takes_effect_at_once() {
 
         settings::update(&h.tui, |draft| settings::set_path(draft, &["animations"], json!(true)));
         assert!(frames(&h, Duration::from_millis(200)) > 0, "{layout}: no frames after turning animations on");
-        // The braille dots again, one step every 80 ms (`spinner.tsx`).
         let first = SPINNER_FRAMES.iter().position(|frame| frame.starts_with(shell_glyph(&h))).unwrap();
         for step in 1..=10 {
             h.app.advance(SPINNER_INTERVAL);
@@ -192,7 +190,6 @@ fn a_spinner_out_of_sight_costs_no_frames_and_no_wakeups() {
         // The startup polls, as `settle` waits for them; the spinners keep asking for frames meanwhile.
         frames(&h, Duration::from_secs(2));
         h.wait("the startup reads to end", || memory.in_flight() == 0);
-        // The tool rows' spinners at 12.5 a second share the frames of the prompt's at 25 (`spinner.tsx`).
         let shown = h.app.idle(Duration::from_secs(1));
         assert!((25..=26).contains(&shown.frames) && shown.wakeups <= shown.frames + 1, "{case}: shown {shown:?}");
         match case {

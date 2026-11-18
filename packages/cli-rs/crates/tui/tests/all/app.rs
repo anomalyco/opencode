@@ -112,14 +112,12 @@ fn run(recording: &Recording, abi: bool) -> (bool, String) {
             continue_: args.continue_,
             events: true,
             abi_builtins: abi,
-            // The TS fixture's roots are a temporary directory's; its cache is the scenario's npm cache.
             roots: cache.as_ref().and_then(|cache| {
                 support::roots(Paths { cache: cache.path().to_owned(), ..support::paths(cache.path()) }, "test")
             }),
             ..support::deps(Arc::new(memory.clone()))
         },
         Args {
-            // The TS fixture's `app.version`.
             version: "test".to_owned(),
             prompt: args.prompt.clone(),
             new_session_id: args.new_session_id.clone().map(SessionID),
@@ -131,11 +129,8 @@ fn run(recording: &Recording, abi: bool) -> (bool, String) {
             ..Args::default()
         },
     );
-    // The replay compares cells, not speed, and TS has no slow-plugin report: on the wall clock a run under load could
-    // charge a built-in a slow frame and toast "Plugin is slow" over a checkpoint (file-browser-flake).
     let still = std::time::Instant::now();
     tui.plugins.monitor().set_clock(move || still);
-    // The Rust twins of the TS test plugins under parity/plugins, which the Rust TUI lists as skipped (P.1).
     match recording.env.get("OPENCODE_PARITY_PLUGIN").map(String::as_str) {
         Some("slot") => opencode_tui::plugins::host::add(&tui, slot_plugin().into()),
         Some("app") => opencode_tui::plugins::host::add(&tui, app_plugin().into()),
@@ -145,7 +140,6 @@ fn run(recording: &Recording, abi: bool) -> (bool, String) {
         Some("fence") => opencode_tui::plugins::host::add(&tui, fence_plugin().into()),
         _ => {}
     }
-    // P8: the published packages the scenario names, unmodified, on the JS host.
     #[cfg(feature = "ts")]
     let _plugins = npm.then(|| {
         let bun = crate::plugin_pipe::bun().expect("an npm scenario needs bun (OPENCODE_BUN or bun on the path)");
@@ -172,7 +166,6 @@ fn run(recording: &Recording, abi: bool) -> (bool, String) {
         opencode_tui::plugins::host::external_with(&tui, external, Some(config));
         root
     });
-    // The editor context's sources (E.5): the fake IDE server and the Zed database the TS side had.
     let ide = recording.ide.as_ref().map(|_| ide::Ide::start());
     let zed = recording.zed.as_ref().map(|zed| {
         let directory = opencode_util::temp::tempdir().expect("zed directory");
@@ -231,7 +224,6 @@ fn run(recording: &Recording, abi: bool) -> (bool, String) {
             Step::Event { event } => memory.emit(event),
             Step::Release { release } => memory.release(release),
             Step::Wait { wait } => {
-                // As long on the app's clock as in real time, as the TS recorder's `Bun.sleep` lets its timers run.
                 app.wait_until(Duration::from_millis(*wait), || false);
                 app.advance(Duration::from_millis(*wait));
             }
@@ -241,7 +233,6 @@ fn run(recording: &Recording, abi: bool) -> (bool, String) {
                 app.wait_until(UNTIL, || ide.initialized());
                 ide.send(message);
             }
-            // The recorded socket sends what the step made the TS fake send.
             Step::Pty { .. } => {}
             Step::Checkpoint(checkpoint) => {
                 let capture = settle(&app, &|| memory.in_flight(), checkpoint.until.as_deref(), |capture| {
@@ -429,7 +420,6 @@ impl pty::Connector for Sockets {
     }
 }
 
-/// `parity/plugins/slot/tui.tsx`: one line appended to `home.footer`, and one to `session.composer.top`.
 fn slot_plugin() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         for path in [slot::HOME_FOOTER, slot::SESSION_COMPOSER_TOP] {
@@ -442,7 +432,6 @@ fn slot_plugin() -> abi::Plugin {
     abi::Plugin { id: "parity.slot", setup }
 }
 
-/// `parity/plugins/app/tui.tsx`: one line appended to `app`.
 fn app_plugin() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         let node = Node::column(vec![Node::text([Span::new("app plugin: app")]).fg("text.muted")]);
@@ -465,8 +454,6 @@ fn fence_plugin() -> abi::Plugin {
     abi::Plugin { id: "parity.fence", setup }
 }
 
-/// `parity/plugins/p0a/tui.tsx`: F6 asks a confirm, F7 shows an alert, F8 inserts into the composer, F9 sets it, and
-/// the probe's styled box is appended to `home.footer`.
 fn p0a_plugin() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         let command = |name: &str, key: Option<&str>| abi::Command::new(name).maybe(key, abi::Command::keybind);
@@ -529,7 +516,6 @@ fn p0b_plugin() -> abi::Plugin {
     abi::Plugin { id: "parity.p0b", setup }
 }
 
-/// `parity/plugins/fence-margin/tui.tsx`: `parity` fences drawn as `fence: <code>` in TS `TextRenderable`'s white.
 fn fence_margin_plugin() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         setup.code_block("parity", |_, fence| abi::Fenced::Lines {
@@ -542,10 +528,6 @@ fn fence_margin_plugin() -> abi::Plugin {
     abi::Plugin { id: "parity.fence-margin", setup }
 }
 
-/// P8: the recording's config with each `plugins` entry `./out/npm/node_modules/<name>` unpacked there from the
-/// published tarball `parity/plugins/npm/<name>.tgz` (a scope's `/` as `__`), as the TS recorder does, and named by its
-/// absolute path: the TS side resolved it against the parity directory, its working directory. An entry
-/// `./plugins/<name>` is that directory of the parity tree, by its absolute path.
 #[cfg(feature = "ts")]
 fn npm_config(config: &serde_json::Value) -> String {
     const PREFIX: &str = "./out/npm/node_modules/";
@@ -561,7 +543,6 @@ fn npm_config(config: &serde_json::Value) -> String {
             },
             _ => continue,
         };
-        // A local V2 plugin under parity/plugins runs on the JS host too, as TS loads it from there (FT-12).
         if target.starts_with("./plugins/") {
             let local = target.split('/').skip(1).fold(parity.clone(), |path, part| path.join(part));
             *target = local.to_string_lossy().into_owned();
@@ -682,7 +663,6 @@ pub(crate) fn settle(
     }
 }
 
-/// Whether a comparison passes, and the line that says why. `allowed`: the deviations allow the difference.
 fn verdict(equal: bool, allowed: bool, deviation: &[String]) -> (bool, String) {
     let missing: Vec<&String> = deviation.iter().filter(|name| !app::deviation_exists(name)).collect();
     if !missing.is_empty() {

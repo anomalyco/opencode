@@ -19,12 +19,10 @@ struct Keys {
 
 deref_harness!(Keys);
 
-/// The user's `cli.json`, with `tabs.mode` set to `mode`, at 100 columns.
 fn mount(mode: &str) -> Keys {
     mount_at(mode, 100)
 }
 
-/// [`mount`] at `width` columns. The vertical rail needs 130 (`sessionTabsFitVertically`).
 fn mount_at(mode: &str, width: u16) -> Keys {
     let home = opencode_util::temp::tempdir().unwrap();
     let paths = support::home_paths(home.path());
@@ -116,7 +114,6 @@ fn tab_and_shift_tab_cycle_tabs_only_while_tabs_are_on() {
         let moved = h.app.wait_until(WAIT, || h.tui.route() == support::session_route(target));
         assert!(moved, "{key:?}: {:?}", h.tui.route());
     }
-    // `ctrl+w` closed ses_b.
     let ids: Vec<String> = h.tui.tabs.tabs(&h.tui).into_iter().map(|tab| tab.session_id).collect();
     assert_eq!(ids, ["ses_a"]);
 }
@@ -140,7 +137,6 @@ fn turning_tabs_on_in_settings_shows_a_rail_that_keys_and_clicks_drive() {
     h.app.feed(b"\t");
     assert!(h.app.wait_until(WAIT, || h.tui.route() == support::session_route("ses_b")));
 
-    // A click on the other tab's title in the vertical rail selects it.
     let text = h.app.text();
     assert!(text.contains("+ New session"), "no vertical rail:\n{text}");
     let (row, line) = text.lines().enumerate().find(|(_, line)| line.contains("Fix the parser")).unwrap();

@@ -5,8 +5,6 @@ use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use tokio_tungstenite::tungstenite::Message;
 
-/// A WebSocket server on a loopback port: it answers `initialize`, records what the client sends and the
-/// handshake's authorization header, and pushes notifications to every client.
 pub struct Ide {
     pub port: u16,
     pub received: Arc<Mutex<Vec<Value>>>,
@@ -27,7 +25,6 @@ impl Ide {
         runtime.spawn(async move {
             while let Ok((stream, _)) = listener.accept().await {
                 let auth = auth.clone();
-                // tungstenite's handshake callback returns its error response by value.
                 #[allow(clippy::result_large_err)]
                 let header = move |request: &tokio_tungstenite::tungstenite::handshake::server::Request,
                                    response| {
@@ -85,12 +82,10 @@ impl Ide {
             .collect()
     }
 
-    /// Whether a client finished the MCP handshake.
     pub fn initialized(&self) -> bool {
         self.methods().iter().any(|method| method == "notifications/initialized")
     }
 
-    /// Sends `{"jsonrpc": "2.0", ...message}` to every client.
     pub fn send(&self, message: &Value) {
         let mut message = message.clone();
         if let Some(object) = message.as_object_mut() {

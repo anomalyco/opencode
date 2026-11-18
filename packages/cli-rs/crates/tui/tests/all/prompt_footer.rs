@@ -41,7 +41,6 @@ impl Gated {
         self.memory.requests().into_iter().filter(|logged| logged.path == path).collect()
     }
 
-    /// `rpc.opencode.goal.changed` of `ses_a` with a paused goal.
     fn paused(&self) {
         self.memory.emit(&json!({
             "id": "evt_goal", "created": 3, "type": "rpc.opencode.goal.changed",

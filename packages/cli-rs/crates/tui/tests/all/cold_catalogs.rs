@@ -11,7 +11,6 @@ use opencode_api::transport::{BoxFuture, Request, Response, Transport};
 use opencode_tui::{Deps, Route};
 use serde_json::{Value, json};
 
-/// The catalogs a cold Location answers with an empty list.
 const CATALOGS: [&str; 4] = ["/api/agent", "/api/model", "/api/provider", "/api/command"];
 
 /// The in-memory server, whose catalogs stay empty until [`Cold::warm`].
@@ -26,7 +25,6 @@ impl Cold {
         Self { memory: Memory::new(routes()), warm: Arc::default() }
     }
 
-    /// The plugins have loaded: the catalogs are full, and each sends its `*.updated` event.
     fn warm(&self) {
         self.warm.store(true, Ordering::SeqCst);
         for kind in ["provider", "model", "agent", "command"] {
@@ -95,7 +93,6 @@ fn the_prompt_line_and_agents_fill_in_from_updated_events() {
     h.app.render();
     assert!(!h.app.text().contains("Model M"), "{}", h.app.text());
     server.warm();
-    // The model and agent lists reload on separate events.
     h.wait_for_all(&["Model M", "Build"]);
     h.dispatch("agent.cycle");
     h.wait_for("Plan");

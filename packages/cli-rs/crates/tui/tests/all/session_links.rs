@@ -1,6 +1,4 @@
-//! Session IDs as links (#63224, #63247; `packages/tui/test/ui/session-link.test.tsx`): titles of loaded sessions,
-//! plain IDs for the current, archived and missing ones, one lookup per ID, code spans, renames, and clicks that open
-//! the session from the transcript and from the `/btw` answer.
+//! TypeScript: `packages/tui/test/ui/session-link.test.tsx`.
 
 use crate::support::{self, DIRECTORY, Harness, Seen};
 
@@ -16,8 +14,6 @@ fn id(name: &str) -> String {
     format!("ses_{name:0<26}")
 }
 
-/// Serves the current session with one reply of `text`, the `known` and `archived` sessions, and a 404 for any other
-/// session.
 fn open(width: u16, height: u16, text: &str, info: Info) -> (Harness, support::Log) {
     let (current, known, archived) = (id("current"), id("known"), id("archived"));
     let reply = json!({
@@ -58,7 +54,6 @@ fn open(width: u16, height: u16, text: &str, info: Info) -> (Harness, support::L
     (support::mount(width, height, deps), log)
 }
 
-/// The underlined runs on screen, the links.
 fn linked(h: &Harness) -> Vec<String> {
     let capture = h.app.render();
     let mut runs = Vec::new();

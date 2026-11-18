@@ -26,14 +26,12 @@ use opencode_plugin::loader::entry_file;
 use opencode_tui::Route;
 use opentui::keymap::RunResult;
 
-/// The build whose `setup` returns a failure.
 const BAD: u8 = 9;
 const ID: &str = "model.probe";
 const CHANGED: &str = "The plugin changed while you were asked, so nothing was saved. Review the new build.";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Answer {
-    /// The Approve button.
     Approve,
     /// The Decline button, which is active at first.
     Decline,
@@ -43,19 +41,15 @@ pub enum Answer {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Command {
-    /// Enter on the probe's row in the plugin manager, which asks about the build held back.
     Open,
-    /// Answers the open question, then closes the list it comes back to.
     Answer(Answer),
     /// A new build in the probe's directory, then a reconcile, as the watcher runs it also while the question is open.
     Reload(u8),
-    /// The plugin manager's action on the probe's row, as the plugin model runs it.
     Toggle,
     Run,
     Frame,
     Home,
     Route,
-    /// The client exits and starts again, on the same approvals.
     Restart,
 }
 
@@ -63,15 +57,11 @@ pub enum Command {
 /// back, and the question on screen.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Gate {
-    /// The build in the probe's directory.
     file: u8,
     /// The last decision for the place, with the build it named.
     decision: Option<(u8, Decision)>,
-    /// The build held back and asked about, if any.
     held: Option<u8>,
-    /// A toggle in the manager; a plugin loaded again starts enabled.
     enabled: bool,
-    /// The build the open question asks about.
     question: Option<u8>,
 }
 
@@ -98,17 +88,14 @@ impl Gate {
         }
     }
 
-    /// A reconcile; returns the reports it makes.
     fn reconcile(&mut self, loaded: bool) -> Vec<String> {
         if self.approved() {
             self.held = None;
-            // A failing build that loads now is told.
             return match loaded && self.file == BAD {
                 true => vec![format!("Plugin failed: {ID}")],
                 false => Vec::new(),
             };
         }
-        // What ran from the target was unloaded; a plugin loaded again starts enabled.
         if self.held.is_none() {
             self.enabled = true;
         }
@@ -120,7 +107,6 @@ impl Gate {
         }
     }
 
-    /// Moves the machine; returns the reports it expects, `<target>` standing for the probe's directory.
     fn step(&mut self, command: Command) -> Vec<String> {
         let closes = !matches!(command, Command::Reload(_) | Command::Frame | Command::Answer(_));
         if closes {
@@ -153,7 +139,6 @@ impl Gate {
                 // plugin's dialog replaces the host's (review carbon-9).
                 self.reconcile(changed)
             }
-            // The manager's error, then the toast the failing setup showed.
             Command::Toggle if self.approved() && self.file == BAD => {
                 vec![format!("probe build {BAD} fails its setup"), BAD_TOAST.to_owned()]
             }
@@ -277,7 +262,6 @@ fn apply(world: &mut World, command: Command, gate: &Gate) -> (bool, Vec<String>
                 Answer::Decline => press(world, "enter", &mut reports),
                 Answer::Dismiss => press(world, "escape", &mut reports),
             }
-            // The list it comes back to.
             press(world, "escape", &mut reports);
         }
         Command::Answer(_) => {}
@@ -300,7 +284,6 @@ fn apply(world: &mut World, command: Command, gate: &Gate) -> (bool, Vec<String>
     (false, reports)
 }
 
-/// What the plugin manager's action does (`Manager::toggle`), as the plugin model runs it; its error is the report.
 fn toggle(world: &World) -> Vec<String> {
     let tui = &world.harness.tui;
     let active = tui.plugins.entries().iter().any(|entry| entry.id == ID && entry.active);
@@ -379,7 +362,6 @@ fn run(commands: &[Command]) -> Option<Failure> {
         if failure.is_some() {
             return failure;
         }
-        // An approved build may load from here on.
         if gate.approved() {
             loads = LOADS.get();
         }
@@ -405,7 +387,6 @@ fn lifecycle(before: &Gate, after: &Gate, command: Option<Command>, reached: boo
     (!matches).then(|| format!("expected {expected:?} from {before:?} to {after:?}, got {others:?}"))
 }
 
-/// `asked`: the manager lists the probe as the gate does.
 fn listed(world: &World, gate: &Gate) -> Option<String> {
     let target = target(world);
     let listed = world.harness.tui.plugins.entries().into_iter().find(|entry| entry.target.as_deref() == Some(&target));
@@ -414,7 +395,6 @@ fn listed(world: &World, gate: &Gate) -> Option<String> {
         .then(|| format!("listed {status:?}, expected {:?} ({gate:?})", gate.listed()))
 }
 
-/// `asked`: the step reported exactly what the gate expects.
 fn reported(world: &World, expected: &[String], reports: &[String]) -> Option<String> {
     let target = target(world);
     let expected: Vec<String> = expected.iter().map(|report| report.replace("<target>", &target)).collect();
@@ -474,7 +454,6 @@ const FIXED: &[(&str, &[Command])] = &[
         "an-approval-of-a-build-that-came-back-holds",
         &[Command::Open, Command::Reload(2), Command::Reload(1), Command::Answer(Answer::Approve)],
     ),
-    // carbon-6: closing the question decides nothing.
     (
         "a-closed-question-leaves-the-plugin-pending",
         &[Command::Open, Command::Answer(Answer::Dismiss), Command::Restart],
@@ -536,7 +515,6 @@ fn the_approval_oracles_can_fail() {
     assert!(reported(&world, &[], &["unexpected".to_owned()]).is_some());
 }
 
-/// Opens the manager on the probe's row.
 fn manager(world: &World) {
     world.harness.tui.keymap.dispatch("plugins.list", None);
     world.settle();
@@ -636,7 +614,6 @@ fn closing_the_question_decides_nothing() {
         assert!(app.text().contains("Run project plugin?"), "{how}");
         match how {
             "header" => {
-                // The question's own `esc`, at the end of its title's row.
                 let (_, y) = world.harness.find("Run project plugin?");
                 let row = app.text().lines().nth(usize::from(y)).unwrap().to_owned();
                 let x = row.rfind("esc").unwrap();

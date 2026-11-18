@@ -69,7 +69,6 @@ fn a_field_shown_and_focused_in_one_call_takes_the_focus() {
     assert_eq!(failed, [], "the field shown by the call took no focus");
 }
 
-/// The TUI at 80 columns on the probe's route, on `carrier`.
 fn open(carrier: Carrier) -> Harness {
     SHOW.set(false);
     let h = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
@@ -96,7 +95,6 @@ fn open(carrier: Carrier) -> Harness {
     h
 }
 
-/// The node of the route's mount that has the focus.
 fn focused(h: &Harness) -> Option<String> {
     opencode_plugin::behave::mounts(h.app.app(), ID, "pf").pop().and_then(|mount| mount.focused)
 }
@@ -140,7 +138,6 @@ fn page(wide: bool, show: bool) -> v2::Node {
     v2::Node::column(nodes)
 }
 
-/// The probe in Luau.
 #[cfg(luau)]
 const LUAU: &str = r#"local plugin = require("@opencode/plugin")
 local show = false

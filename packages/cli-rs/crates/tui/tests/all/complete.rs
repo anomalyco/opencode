@@ -137,7 +137,6 @@ fn slash_lists_commands_and_enter_runs_one_without_arguments() {
     for row in ["/btw", "/cd", "/compact", "Change working directory"] {
         assert!(screen.contains(row), "{row:?} missing:\n{screen}");
     }
-    // The server's command, with its description.
     setup.app.type_text("re");
     setup.wait_for("Review changes");
     for _ in 0..2 {
@@ -146,7 +145,6 @@ fn slash_lists_commands_and_enter_runs_one_without_arguments() {
     setup.app.type_text("sessions");
     setup.wait_gone("/agents");
     setup.app.press("return");
-    // `/sessions` ran: the slash text is gone and the session list is open.
     setup.wait_for("Fix the parser");
     assert_eq!(setup.text(), "");
     assert!(setup.requests("POST", "/prompt").is_empty());
@@ -265,7 +263,6 @@ fn agent_mentions_are_one_unit_and_are_sent_as_parts() {
     let setup = Setup::new();
     setup.app.type_text("ask @");
     let screen = setup.wait_for("@general");
-    // Subagents and `all` agents; not primary or hidden ones.
     assert!(screen.contains("@explore"), "{screen}");
     assert!(!screen.contains("@build") && !screen.contains("@secret"), "{screen}");
     setup.app.type_text("gen");
@@ -276,7 +273,6 @@ fn agent_mentions_are_one_unit_and_are_sent_as_parts() {
     assert_eq!(marks.len(), 1);
     assert_eq!((marks[0].start, marks[0].end), (4, 12));
     assert!(marks[0].options.atomic && marks[0].options.style.is_some());
-    // Backspace takes the space, then the whole mention.
     setup.app.press("backspace");
     setup.app.press("backspace");
     assert_eq!(setup.text(), "ask ");
@@ -299,7 +295,6 @@ fn agent_mentions_are_one_unit_and_are_sent_as_parts() {
     );
     assert_eq!(sent[0].1["files"], json!([]));
 
-    // History brings the mention back as a part.
     setup.app.press("up");
     assert_eq!(setup.text(), "please ask @general now");
     let marks = setup.textarea().extmarks();
@@ -307,8 +302,6 @@ fn agent_mentions_are_one_unit_and_are_sent_as_parts() {
     assert_eq!((marks[0].start, marks[0].end), (11, 19));
 }
 
-/// A theme switch restyles the prompt's mentions and the open popup in place: each cell equals the prompt mounted in
-/// the new theme and typed the same way.
 #[test]
 fn a_theme_switch_restyles_mentions_and_the_popup_in_place() {
     support::assert_restyles_in_place(
@@ -323,7 +316,6 @@ fn a_theme_switch_restyles_mentions_and_the_popup_in_place() {
     );
 }
 
-/// A mention keeps its part through a theme switch, which adds its mark again in the new style.
 #[test]
 fn a_mention_keeps_its_part_through_a_theme_switch() {
     let setup = Setup::new();
@@ -397,7 +389,6 @@ fn file_mentions_search_record_frecency_and_carry_line_ranges() {
     assert_eq!(line["path"], main);
     assert_eq!(line["frequency"], 1);
 
-    // A line range goes into the name and the URI.
     setup.app.type_text("@src/main.rs#3-5");
     // The list's row, not the typed text: until the search for it lands, Enter picks `#3`.
     setup.wait_for("┃ src/main.rs#3-5 ");
@@ -421,7 +412,6 @@ fn file_mentions_search_record_frecency_and_carry_line_ranges() {
 fn skills_and_references_are_listed_and_sent() {
     let setup = Setup::new();
     setup.app.type_text("@");
-    // Skills, references and agents load separately.
     let rows = ["@release-notes", "Write release notes.", "@docs", "/refs/docs", "skill", "reference", "agent"];
     let listed = setup.app.wait_until(WAIT, || {
         let screen = setup.app.text();
@@ -430,7 +420,6 @@ fn skills_and_references_are_listed_and_sent() {
     let screen = setup.app.text();
     assert!(listed, "{rows:?} missing:\n{screen}");
     assert!(!screen.contains("@hidden"), "{screen}");
-    // A reference name narrows the list to it, and no file search runs for it.
     let finds = setup.requests("GET", "/api/fs/find").len();
     setup.app.type_text("docs");
     setup.wait_gone("@release-notes");
@@ -524,7 +513,6 @@ fn escape_hides_and_ctrl_c_dismisses_the_command() {
     setup.app.press("escape");
     setup.wait_gone("No matching commands");
     assert_eq!(setup.text(), "/xyz");
-    // Typing reopens it; Ctrl+C removes the typed command.
     setup.app.press("backspace");
     setup.wait_for("No matching commands");
     setup.app.press("ctrl+c");
@@ -572,7 +560,6 @@ fn a_list_typed_before_a_remounted_composer_lays_out_shows_every_row() {
         }
         setup.app.type_text("/se");
         setup.wait_for("Open settings");
-        // The frame lays the prompt out; the popup follows its place within 50 ms, as TS polls it.
         setup.app.render();
         setup.app.advance(Duration::from_millis(50));
         setup.app.render().text()
@@ -669,7 +656,6 @@ fn a_file_list_keeps_its_results_and_selection_across_a_remount() {
     assert_eq!(picked(true), twin);
 }
 
-/// Picks `@src/main.rs` from the file search.
 fn mention_main(setup: &Setup) {
     setup.app.type_text("@ma");
     setup.wait_for("src/main.rs");
@@ -677,8 +663,6 @@ fn mention_main(setup: &Setup) {
     setup.app.press("ctrl+c");
 }
 
-/// P-FILE: the TypeScript `FrecencyProvider` reads the `frecency.jsonl` the Rust prompt writes, and the Rust
-/// prompt reads what TypeScript writes.
 #[test]
 fn frecency_file_is_shared_with_typescript() {
     let Some(root) = support::ts_root() else { return };
@@ -693,11 +677,9 @@ fn frecency_file_is_shared_with_typescript() {
     let frequencies = typescript_frecency(&root, &state, json!(["src/main.rs", "README.md"]));
     assert_eq!(frequencies, json!({ "/project/src/main.rs": 3, "/project/README.md": 1 }));
     let typescript = std::fs::read_to_string(state.join("frecency.jsonl")).unwrap();
-    // Its load rewrote the Rust lines to one per path, the Rust line kept as written.
     assert_eq!(typescript.lines().next(), rust.lines().nth(1));
     assert_eq!(typescript.lines().count(), 3, "{typescript}");
 
-    // A new Rust prompt reads the TypeScript file: its load rewrites it the same way, and it counts on.
     let home = opencode_util::temp::TempDir::new().unwrap();
     std::fs::create_dir_all(home.path().join("state")).unwrap();
     std::fs::copy(state.join("frecency.jsonl"), home.path().join("state/frecency.jsonl")).unwrap();
@@ -706,11 +688,9 @@ fn frecency_file_is_shared_with_typescript() {
     let written = again.wait_file("frecency.jsonl", "\"frequency\":4");
     let last: Value = serde_json::from_str(written.lines().last().unwrap()).unwrap();
     assert_eq!((last["path"].clone(), last["frequency"].clone()), (json!("/project/src/main.rs"), json!(4)));
-    // The load kept one line per path, then the pick appended one.
     assert_eq!(written.lines().count(), 3, "{written}");
 }
 
-/// Runs `parity/oracle/E.3-frecency.ts`: the real `FrecencyProvider` on `state`, with the cwd `/project`.
 fn typescript_frecency(root: &Path, state: &Path, paths: Value) -> Value {
     use std::io::Write;
     let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../parity/oracle/E.3-frecency.ts");

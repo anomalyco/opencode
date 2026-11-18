@@ -21,81 +21,55 @@ use opentui::input::{Event as Input, KeyCode, KeyEvent, Modifiers, MouseButton, 
 
 pub const ID: &str = "test.input";
 
-/// What the test plugin does and saw.
 #[derive(Default)]
 pub struct Probe {
-    /// The plugin's own log of its calls.
     pub log: Vec<String>,
     /// The keys of the `x` bind pass instead of being consumed.
     pub pass_x: bool,
-    /// The global listener logs the keys it sees.
     pub listen: bool,
-    /// The global listener consumes every key.
     pub swallow: bool,
-    /// The two later global listeners log the keys they see.
     pub listen_more: bool,
-    /// The panel passes a press, which captures nothing.
     pub pass_press: bool,
-    /// Node `b` takes pointer events.
     pub pointer_b: bool,
-    /// Text `t` tells the pointer entering and leaving.
     pub hover_t: bool,
     /// The `x` bind holds the keys after it.
     pub hold: bool,
-    /// The panel's view.
     pub panel: Option<input::PanelInput>,
     pub views: usize,
-    /// The rows of the rich select, and the word of their footers.
     pub rows: Vec<String>,
     pub footer: String,
-    /// The rich select lists its rows by the plugin's search.
     pub search: bool,
     /// A strip of the plugin in the session's composer top, with a node that takes drops; with a field `sf` too.
     pub strip: bool,
     pub strip_field: bool,
-    /// A global layer that takes pastes.
     pub paste_global: bool,
-    /// The panel leaves node `b` out.
     pub hide_b: bool,
-    /// The selection copies on the reserved chord, and keeps it from the keymap (`terminal.copy` `manual`).
     pub manual_copy: bool,
-    /// The rich select has no key.
     pub keyless: bool,
-    /// The other plugin binds escape everywhere, above an overlay's own.
     pub other_escape: bool,
     /// The panel's handler panics as it hears an overlay of it closed.
     pub panic_closed: bool,
-    /// A press on `a` gives the focus to `b`.
     pub down_focus_b: bool,
-    /// Node `a` has padding, which builds it again; node `a` is left out; node `a` is on a background token.
     pub a_pad: bool,
     pub hide_a: bool,
     pub a_bg: Option<&'static str>,
-    /// Node `a` is in a hidden box.
     pub a_in_hidden: bool,
     /// The panel holds a field `f` under `b`; in a hidden box; or left out (contract 2.x additions, `focus-input`).
     pub field: bool,
     pub field_hidden: bool,
     pub field_gone: bool,
-    /// Node `a` is the item of a list.
     pub a_in_list: bool,
     /// Each view of the panel: how it showed, and its mount's generation.
     pub panels: Vec<(Option<input::PanelInput>, u64)>,
     /// The panel's handler panics, which fails the plugin.
     pub panic: bool,
-    /// The rich select has no footer action.
     pub no_update: bool,
-    /// The select's `update` action is disabled (P6b).
     pub update_disabled: bool,
     /// The rich select's first footer action, `launch`, runs on the row and does not say its group.
     pub launch: bool,
-    /// Node `a` has a click of its own, on the press, which runs `input.row a`.
     pub click_a: bool,
-    /// Two composer paste layers: an older one above, a newer one below.
     pub paste_rank: bool,
-    /// The panel's texts may be selected.
     pub selectable: bool,
-    /// The other plugin binds the printable `h` and `f6` everywhere (FT-14).
     pub global_h: bool,
 }
 
@@ -111,7 +85,6 @@ fn log(owner: &str, host: &dyn abi::Host, event: &Event) {
     let mode = host.mode().unwrap_or_else(|| "-".to_owned());
     let event = match event {
         Event::Key(key) => match key.bind.as_deref() {
-            // The bind of several keys says which one it was.
             Some("v") => format!("key v as {}", key.key),
             Some(bind) => format!("key {bind}"),
             None => format!("any {}", key.key),
@@ -143,7 +116,6 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     setup.command(command("input.overlay"), |host, _| {
         host.overlay(Overlay { surface: "menu".into(), anchor: Anchor::Point { x: 4, y: 3 }, width: 24, height: 4 });
     });
-    // The overlay against an edge of the panel, inside it.
     setup.command(command("input.beside"), |host, _| {
         let anchor = Anchor::Surface { surface: "side".into(), edge: input::Edge::Left };
         host.overlay(Overlay { surface: "menu".into(), anchor, width: 12, height: 3 });
@@ -152,7 +124,6 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     // Picks the select's row as Enter would, but by the command's name.
     setup.command(command("input.submit"), |host, _| host.dispatch("dialog.select.submit", None));
     setup.command(command("input.release"), |host, _| host.release_keys());
-    // Two moves of the focus in one call: out of the panel, and back.
     setup.command(command("input.bounce"), |host, _| {
         host.blur();
         host.focus("a");
@@ -174,14 +145,12 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         let focused = host.focused();
         probe(|probe| probe.log.push(format!("where {rect:?} {focused:?}")));
     });
-    // The rich select: its rows follow the probe's `rows`, and it is shown again under its key as they change.
     setup.command(command("input.select"), |host, _| host.dialog(abi::Dialog::Select(select(host))));
     setup.command(command("input.reselect"), |host, _| {
         if host.dialog_open("pick") {
             host.dialog(abi::Dialog::Select(select(host)));
         }
     });
-    // The toggle row's footer follows the plugins the host lists (P6b).
     setup.on_plugins(|host| {
         if host.dialog_open("pick") {
             host.dialog(abi::Dialog::Select(select(host)));
@@ -231,7 +200,6 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         }));
     }
     if probe(|probe| probe.paste_global) {
-        // Passes a paste that starts with `pass`.
         setup.layer(Layer::default().scope(LayerScope::Global).paste(), |host, event| {
             log("pasted", host, event);
             match event {
@@ -249,7 +217,6 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
             });
         }
     }
-    // A route of the plugin: its layer takes `k`, `w` (where its focus is) and pastes.
     let route = v2::Surface::new("probe", v2::Place::Route("probe".into()), |_| {
         let interact = Interact { focusable: true, ..Interact::default() };
         v2::Node::column(vec![
@@ -361,7 +328,6 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         .on(|host, event| {
             assert!(!probe(|probe| probe.panic), "the probe asked for a panic");
             log("menu", host, event);
-            // `n`: a mode of the overlay, which binds no escape.
             if let Event::Key(key) = event
                 && key.bind.as_deref() == Some("nav")
             {
@@ -370,7 +336,6 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
             Handled::Consume
         }),
     );
-    // A modal composer: `escape` enters normal mode, where every key is taken, and `i` leaves it.
     setup.layer(
         Layer::default().scope(LayerScope::Composer).priority(10).keys(vec![Bind::new("escape", "normal")]),
         |host, event| {
@@ -396,7 +361,6 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         }
         if probe(|probe| probe.swallow) { Handled::Consume } else { Handled::Pass }
     });
-    // Two more global listeners: one newer at the same priority, one above it.
     for (name, priority) in [("newer", 0), ("above", 1)] {
         setup.layer(Layer::default().scope(LayerScope::Global).priority(priority).any(), move |host, event| {
             if probe(|probe| probe.listen_more) {
@@ -405,7 +369,6 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
             Handled::Pass
         });
     }
-    // `x` in the composer: taken, or passed on to the composer, which types it.
     setup.layer(Layer::default().scope(LayerScope::Composer).keys(vec![Bind::new("x", "cx")]), |host, event| {
         log("setup", host, event);
         if probe(|probe| probe.pass_x) { Handled::Pass } else { Handled::Consume }
@@ -413,9 +376,6 @@ pub fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-/// The probe's rich select: a row of each of its `rows`, one with its own action, one that toggles `test.other`, one
-/// that toggles the probe itself (which the host refuses), with a footer action, a key, and live footers; the row that
-/// toggles `test.other` says whether it is enabled, as the host lists it.
 fn select(read: &dyn abi::Read) -> abi::Select {
     let other = read.plugins().into_iter().find(|entry| entry.id == "test.other").is_some_and(|entry| entry.active);
     let (rows, footer) = probe(|probe| (probe.rows.clone(), probe.footer.clone()));
@@ -423,7 +383,6 @@ fn select(read: &dyn abi::Read) -> abi::Select {
     let options = rows
         .iter()
         .flat_map(|row| {
-            // `dup`: a hidden disabled row of the same value toggles the other plugin; the shown one does not.
             let hidden =
                 (row == "dup").then(|| abi::SelectOption::new("row hidden", "dup").disabled().toggle("test.other"));
             let mut option = abi::SelectOption::new(format!("row {row}"), row.clone());
@@ -596,7 +555,6 @@ fn side(cx: &mut v2::View<'_>) -> v2::Node {
         true => a.on_click(abi::Click::command("input.row").input("a").on_down()),
         false => a,
     };
-    // With pointer events, `b` takes no focus: a capture of it begins and ends with the focus elsewhere.
     let pointer_b = probe(|probe| probe.pointer_b);
     let b = v2::Node::row(vec![text("BBBB")]).with_id("b").interact(interact(!pointer_b, pointer_b, None));
     let b = match probe(|probe| probe.hide_b) {
@@ -674,7 +632,6 @@ fn key(code: KeyCode) -> Input {
     Input::Key(KeyEvent::new(code, Modifiers::NONE))
 }
 
-/// Dispatches `keys` as one polled batch: nothing deferred runs between them.
 pub fn batch(harness: &Harness, keys: &[Input]) {
     for event in keys {
         harness.app.app().dispatch(event.clone());
@@ -694,7 +651,6 @@ fn composer(harness: &Harness) -> String {
 fn a_panel_surface_docks_takes_keys_and_revokes_them() {
     let harness = open();
     let before = interact::ledger(&*harness.tui);
-    // A panel beside a session that does not show opens nowhere.
     run(&harness, "input.elsewhere", None);
     assert!(!harness.app.text().contains("PANEL"), "{}", harness.app.text());
     run(&harness, "input.panel", None);
@@ -713,7 +669,6 @@ fn a_panel_surface_docks_takes_keys_and_revokes_them() {
     harness.app.press("y");
     settle(&harness);
     assert_eq!(taken(), ["side: key y [-]"]);
-    // `y` gave the focus to `b`: `y` no longer reaches the node layer of `a`.
     harness.app.press("y");
     settle(&harness);
     assert_eq!(taken(), Vec::<String>::new());
@@ -792,7 +747,6 @@ fn a_mode_switch_applies_before_the_next_key_of_the_batch() {
     // An edit asked for in normal mode goes through the composer's own edit path before the next key.
     batch(&harness, &[key(KeyCode::Escape), key(KeyCode::Char('p')), key(KeyCode::Char('i')), key(KeyCode::Char('z'))]);
     assert_eq!(composer(&harness), "abcPz");
-    // A paste in normal mode is the layer's, which takes it.
     batch(&harness, &[key(KeyCode::Escape)]);
     harness.app.paste("pasted");
     settle(&harness);
@@ -806,7 +760,6 @@ fn a_mode_ends_with_its_scope_and_on_the_reserved_chord() {
     let base = interact::ledger(&*harness.tui);
     batch(&harness, &[key(KeyCode::Escape)]);
     assert_eq!(interact::ledger(&*harness.tui).modes, base.modes + 1);
-    // The panel takes the focus; the composer's mode ends.
     run(&harness, "input.panel", None);
     run(&harness, "input.close", None);
     opencode_plugin::Host::focus_composer(&*harness.tui);
@@ -815,7 +768,6 @@ fn a_mode_ends_with_its_scope_and_on_the_reserved_chord() {
     settle(&harness);
     assert_eq!(composer(&harness), "d", "a mode came back with the focus");
     assert_eq!(interact::ledger(&*harness.tui).modes, base.modes, "an ended mode stayed on the keymap's stack");
-    // The reserved chord.
     batch(&harness, &[key(KeyCode::Escape)]);
     probe(|probe| probe.listen = true);
     taken();
@@ -823,7 +775,6 @@ fn a_mode_ends_with_its_scope_and_on_the_reserved_chord() {
     settle(&harness);
     harness.app.type_text("e");
     settle(&harness);
-    // The chord reached the composer's own handler of it, in the base mode, which cleared it (carbon-1).
     assert_eq!(composer(&harness), "e");
     assert!(!taken().iter().any(|line| line.contains("ctrl+c")), "a listener saw the reserved chord");
     assert_eq!(interact::ledger(&*harness.tui).modes, base.modes, "an ended mode stayed past the next key");
@@ -873,7 +824,6 @@ fn pointer_events_carry_the_cell_and_a_consumed_press_captures_the_drag() {
         ["side: Down a 1,0 [-]", "side: Drag a 2,0 [-]", "side: Up a 2,0 [-]", "side: WheelDown a 1,0 [-]"]
     );
     assert!(log.contains(&"side: hover a true [-]".to_owned()), "{log:?}");
-    // The hover color, under the pointer.
     let capture = harness.app.render();
     let cell = capture.cell(u32::from(x), u32::from(y)).unwrap();
     assert_eq!(cell.bg, opentui::style::Color::rgb(255, 0, 0));
@@ -901,7 +851,6 @@ fn an_overlay_takes_the_focus_and_closes_on_escape_or_outside() {
     settle(&harness);
     assert!(!harness.app.text().contains("MENU one"));
     assert_eq!(taken(), ["side: key overlay [-]", "side: closed menu [-]"]);
-    // The opener goes: its overlay goes with it, and nothing tells it.
     harness.app.press("o");
     settle(&harness);
     run(&harness, "input.close", None);
@@ -933,7 +882,6 @@ fn rows(rows: &[&str], footer: &str) {
     });
 }
 
-/// Whether plugin `id` is active.
 fn active(harness: &Harness, id: &str) -> bool {
     harness.tui.plugins.entries().iter().any(|entry| entry.id == id && entry.active)
 }
@@ -951,7 +899,6 @@ fn a_rich_select_changes_in_place_and_keeps_its_filter() {
     assert!(screen.contains("row gamma") && screen.contains("new gamma"), "{screen}");
     assert!(!screen.contains("row alpha"), "the filter went: {screen}");
     assert!(screen.contains("gam"), "{screen}");
-    // Picking the row runs the select's action and leaves it open: it has a key.
     harness.app.press("enter");
     settle(&harness);
     assert_eq!(taken(), ["picked gamma"]);
@@ -975,7 +922,6 @@ fn a_rich_select_runs_row_actions_footer_actions_and_keys() {
     settle(&harness);
     harness.app.press("enter");
     settle(&harness);
-    // `update` is hidden on `beta`: its key goes on to the list.
     harness.app.press("ctrl+u");
     settle(&harness);
     assert_eq!(taken(), ["update alpha", "picked alpha", "row beta"]);
@@ -1021,7 +967,6 @@ fn the_reserved_chord_and_an_uncaptured_drag_reach_no_plugin() {
     harness.app.press("ctrl+c");
     settle(&harness);
     assert!(!taken().iter().any(|line| line.contains("key c")));
-    // The host closes the plugin's panel that had the input (review carbon-2 of P6c); it opens again.
     assert!(harness.tui.panels.current().is_none(), "the chord left the focused panel open");
     run(&harness, "input.panel", None);
     let (x, y) = support::at(&harness.app.text(), "AAAA").unwrap();
@@ -1186,7 +1131,6 @@ fn a_global_paste_layer_hears_a_paste_no_host_widget_takes() {
     harness.app.paste("e1");
     settle(&harness);
     assert_eq!(taken(), ["pasted: paste e1 [-]"]);
-    // Passed in a surface whose layers take no paste, it is not offered again where it lands.
     opencode_plugin::Host::focus_composer(&*harness.tui);
     run(&harness, "input.panel", None);
     harness.app.press("o");
@@ -1232,7 +1176,6 @@ fn a_drop_from_another_mount_of_the_plugin_says_where_it_started() {
     assert_eq!(log, ["strip: Drop s 1,0 from side/a [-]"]);
 }
 
-/// Where the composer is on the screen.
 fn composer_at(harness: &Harness) -> (u16, u16) {
     let rect = harness.tui.textarea.borrow().as_ref().map(opentui::prelude::Widget::rect).unwrap();
     (rect.screen_x as u16 + 1, rect.screen_y as u16)
@@ -1245,7 +1188,6 @@ fn a_toggle_row_moves_the_registry_only_on_a_key_or_a_click() {
     run(&harness, "input.select", None);
     run(&harness, "input.submit", None);
     assert!(active(&harness, "test.other"), "a submit by name toggled the plugin");
-    // P6b: the host's toggle action, run by name as a plugin's `dispatch` runs it.
     harness.tui.keymap.dispatch("plugins.toggle", None);
     settle(&harness);
     assert!(active(&harness, "test.other"), "the toggle action by name toggled the plugin");
@@ -1288,7 +1230,6 @@ fn a_keyed_select_takes_new_actions_and_its_rows_follow_a_toggle() {
     harness.app.press("ctrl+u");
     settle(&harness);
     assert_eq!(taken(), Vec::<String>::new());
-    // P6b: shown again with the action disabled, its key runs nothing; enabled again, in place, it runs.
     probe(|probe| (probe.no_update, probe.update_disabled) = (false, true));
     run(&harness, "input.reselect", None);
     harness.app.press("ctrl+u");
@@ -1323,7 +1264,6 @@ fn a_hold_keeps_the_input_after_it_in_order_and_for_its_focus() {
     harness.app.advance(input::HOLD + Duration::from_millis(1));
     settle(&harness);
     assert_eq!(taken(), ["side: key x [-]", "side: key mode [-]"], "a paste overtook a held key");
-    // A panel mounted again, in no mode: a press on the composer moves the focus, and the held `m` was the panel's.
     run(&harness, "input.close", None);
     run(&harness, "input.panel", None);
     let (cx, cy) = composer_at(&harness);
@@ -1336,7 +1276,6 @@ fn a_hold_keeps_the_input_after_it_in_order_and_for_its_focus() {
     assert_eq!(taken(), ["side: key x [-]"]);
     assert_eq!(composer(&harness), "");
     assert!(opencode_plugin::Host::composer_focused(&*harness.tui));
-    // A command moves the focus away: the held `m` was the panel's, and reaches nothing.
     run(&harness, "input.close", None);
     run(&harness, "input.panel", None);
     taken();
@@ -1382,7 +1321,6 @@ fn a_hold_ends_by_its_own_owner_timer_or_limit() {
     harness.app.advance(Duration::from_millis(20));
     settle(&harness);
     assert!(taken().contains(&"side: key mode [-]".to_owned()));
-    // Mounted again, in no mode.
     run(&harness, "input.close", None);
     run(&harness, "input.panel", None);
     taken();
@@ -1415,7 +1353,6 @@ fn the_reserved_chord_escapes_every_plugin_hold_spelling_and_listener() {
     let ledger = interact::ledger(&*harness.tui);
     assert!(!ledger.holding && ledger.held == 0 && ledger.timers == 0, "{ledger:?}");
     assert_eq!(taken(), ["side: key x [-]"], "a plugin key took the reserved chord");
-    // The host closes the plugin's panel that had the input (review carbon-2 of P6c); it opens again.
     assert!(harness.tui.panels.current().is_none(), "the chord left the focused panel open");
     run(&harness, "input.panel", None);
     // The plugin's layers hold again once the focus moves. A mode, then a selection that copies on the chord: the mode
@@ -1445,7 +1382,6 @@ fn the_reserved_chord_escapes_every_plugin_hold_spelling_and_listener() {
     harness.app.type_text("b");
     settle(&harness);
     assert_eq!(composer(&harness), "b");
-    // The select's key and footer action spelled `Ctrl+C` and `Ctrl + C` are none of it.
     rows(&["alpha"], "f");
     run(&harness, "input.select", None);
     taken();
@@ -1473,7 +1409,6 @@ fn a_host_dialog_and_the_top_overlay_keep_their_input() {
     harness.app.press("escape");
     settle(&harness);
     run(&harness, "other.gmode", None);
-    // Under the route's overlay, `k` is the overlay's.
     let harness = open();
     run(&harness, "input.route", None);
     assert!(harness.app.text().contains("ROUTE"), "{}", harness.app.text());
@@ -1482,13 +1417,11 @@ fn a_host_dialog_and_the_top_overlay_keep_their_input() {
     harness.app.press("k");
     settle(&harness);
     assert_eq!(taken(), ["menu: key k [-]"]);
-    // In the overlay's mode, escape still closes it.
     harness.app.press("n");
     settle(&harness);
     harness.app.press("escape");
     settle(&harness);
     assert!(!harness.app.text().contains("MENU"), "{}", harness.app.text());
-    // Two plugins' overlays: closing the upper focuses the other.
     let harness = open();
     run(&harness, "input.overlay", None);
     run(&harness, "other.pop", None);
@@ -1516,7 +1449,6 @@ fn a_capture_and_a_mode_end_with_a_move_out_and_back() {
     settle(&harness);
     assert!(!taken().iter().any(|line| line.contains("Drag")), "a capture came back with the focus");
     harness.app.mouse(MouseEventKind::Up(MouseButton::Left), x + 2, y);
-    // Moved by the host's own focus keys, out and back.
     harness.app.mouse(MouseEventKind::Down(MouseButton::Left), x + 1, y);
     settle(&harness);
     harness.app.app().focus_next();
@@ -1556,7 +1488,6 @@ fn a_paste_goes_by_priority_and_to_a_route_or_slot() {
     harness.app.paste("p3");
     settle(&harness);
     assert_eq!(taken(), ["route: paste p3 [-]"]);
-    // Passed by the route and the global layer, it is not offered again where it lands.
     harness.app.paste("pass3");
     settle(&harness);
     assert_eq!(taken(), ["route: paste pass3 [-]", "pasted: paste pass3 [-]"]);
@@ -1641,7 +1572,6 @@ fn without() -> interact::Ledger {
     interact::ledger(&*support::mount(120, 30, deps).tui)
 }
 
-/// The test plugin's failure, if it failed.
 fn failure(harness: &Harness) -> Option<String> {
     harness.tui.plugins.entries().into_iter().find(|entry| entry.id == ID).and_then(|entry| match entry.status {
         opencode_plugin::Status::Failed(error) => Some(error),
@@ -1674,7 +1604,6 @@ fn a_panicking_handler_fails_its_plugin_and_leaves_no_input() {
     harness.app.type_text("z");
     settle(&harness);
     assert_eq!(composer(&harness), "z", "the held key reached the composer, or the host stopped");
-    // An overlay's handler, in the overlay's mode.
     let harness = open();
     run(&harness, "input.overlay", None);
     harness.app.press("n");
@@ -1699,7 +1628,6 @@ fn no_spelling_list_or_sequence_takes_the_reserved_chord() {
     taken();
     harness.app.press("ctrl+c");
     settle(&harness);
-    // The host closes the plugin's panel that had the input (review carbon-2 of P6c); it opens again.
     assert!(harness.tui.panels.current().is_none(), "the chord left the focused panel open");
     run(&harness, "input.panel", None);
     run(&harness, "input.focus", Some("side"));
@@ -1835,7 +1763,6 @@ fn a_taken_press_owns_its_gesture() {
     assert!(log.iter().any(|line| line.starts_with("side: Drag a")), "{log:?}");
     assert!(log.contains(&"strip: Drop s 1,0 from side/a [-]".to_owned()), "{log:?}");
     assert!(harness.app.app().selected_text().is_none());
-    // A host dialog over the capture.
     harness.app.mouse(MouseEventKind::Down(MouseButton::Left), x + 1, y);
     settle(&harness);
     rows(&["alpha"], "f");
@@ -1864,7 +1791,6 @@ fn a_taken_press_owns_its_gesture() {
     assert!(!taken().iter().any(|line| line.contains("Drag a")), "a dialog left the capture");
     harness.app.mouse(MouseEventKind::Up(MouseButton::Left), x + 2, y);
     settle(&harness);
-    // The focus given away on the press.
     let harness = open_with(|probe| probe.down_focus_b = true);
     run(&harness, "input.panel", None);
     let (x, y) = support::at(&harness.app.text(), "AAAA").unwrap();
@@ -1874,7 +1800,6 @@ fn a_taken_press_owns_its_gesture() {
     harness.app.mouse(MouseEventKind::Drag(MouseButton::Left), x + 2, y);
     settle(&harness);
     assert!(taken().iter().any(|line| line.starts_with("side: Drag a")), "the capture ended with its own focus move");
-    // A node that takes no focus.
     let harness = open_with(|probe| probe.pointer_b = true);
     run(&harness, "input.panel", None);
     opencode_plugin::Host::focus_composer(&*harness.tui);
@@ -1897,7 +1822,6 @@ fn a_panel_shows_with_one_view_follows_its_room_and_its_theme() {
     let (panels, heard) = probe(|probe| (probe.panels.clone(), probe.log.clone()));
     assert!(panels[0].0.is_some_and(|panel| panel.focused && panel.width > 0), "{panels:?}");
     assert!(panels.iter().all(|view| *view == panels[0]), "{panels:?}\nthe panel heard: {heard:?}");
-    // The splitter, dragged left in steps.
     let (left, top) = support::at(&harness.app.text(), "PANEL").unwrap();
     harness.app.mouse(MouseEventKind::Down(MouseButton::Left), left - 1, top + 5);
     for step in 1..=4 {
@@ -1910,7 +1834,6 @@ fn a_panel_shows_with_one_view_follows_its_room_and_its_theme() {
     let widths: Vec<u16> =
         probe(|probe| probe.panels.iter().filter_map(|(panel, _)| panel.map(|panel| panel.width)).collect());
     assert_eq!(widths.last(), Some(&(widths[0] + 12)), "the view did not follow the drag: {widths:?}");
-    // A theme switch.
     let generation = probe(|probe| probe.panels.last().unwrap().1);
     harness.app.press("o");
     settle(&harness);
@@ -1923,7 +1846,6 @@ fn a_panel_shows_with_one_view_follows_its_room_and_its_theme() {
     assert_eq!(probe(|probe| probe.panels.last().unwrap().1), generation, "the panel mounted again");
     let after = harness.app.render().cell(u32::from(mx), u32::from(my)).unwrap().fg;
     assert_ne!(before, after, "the overlay kept the old theme");
-    // A failure on hearing the overlay replaced.
     let twin = without();
     probe(|probe| probe.panic_closed = true);
     run(&harness, "input.overlay", None);
@@ -1931,7 +1853,6 @@ fn a_panel_shows_with_one_view_follows_its_room_and_its_theme() {
     settle(&harness);
     assert!(failure(&harness).is_some());
     assert_eq!(interact::ledger(&*harness.tui), twin);
-    // A panel the plugin does not have.
     let harness = open();
     run(&harness, "input.nopanel", None);
     assert!(harness.tui.panels.current().is_none());

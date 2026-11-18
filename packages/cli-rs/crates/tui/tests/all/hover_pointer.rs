@@ -56,12 +56,10 @@ fn transcript() -> Vec<Value> {
     ]
 }
 
-/// Mounts the TUI on `ses_a` with `ses_b` open as a second tab, and runs `check` with the app.
 fn with_tabs(width: u16, config: Value, check: impl FnOnce(&TestApp, &opencode_tui::Tui)) {
     let home = opencode_util::temp::tempdir().unwrap();
     let paths = support::home_paths(home.path());
     std::fs::create_dir_all(&paths.state).unwrap();
-    // Medium verbosity draws the subagent row; low, the default, folds it into one summary.
     let config = support::merge(config, json!({ "session": { "verbosity": "medium" } }));
     let deps = Deps {
         config: support::config(support::decode(&config.to_string())),
@@ -80,7 +78,6 @@ fn wait_for(app: &TestApp, texts: &[&str]) {
     assert!(found, "{texts:?} never showed:\n{}", app.text());
 }
 
-/// The column and row where `text` starts.
 fn find(app: &TestApp, text: &str) -> (u16, u16) {
     let screen = app.text();
     support::at(&screen, text).unwrap_or_else(|| panic!("{text:?} is not on screen:\n{screen}"))
@@ -126,7 +123,6 @@ fn clickable_elements_show_the_hand_and_everything_else_the_default() {
         assert_eq!(pointer_over(app, "Pointer toast"), MousePointer::POINTER, "toast:\n{}", app.text());
         tui.toasts.dismiss();
 
-        // A select dialog: its rows and close button take the hand, its filter input keeps the default.
         tui.keymap.dispatch("command.palette.show", None);
         wait_for(app, &["Search commands"]);
         let hands = [("select row", pointer_over(app, "Switch session")), ("dialog close", pointer_over(app, "esc"))];
@@ -134,7 +130,6 @@ fn clickable_elements_show_the_hand_and_everything_else_the_default() {
         assert_eq!(pointer_over(app, "Search commands"), MousePointer::DEFAULT, "filter:\n{}", app.text());
     });
 
-    // Wide enough for the rail.
     with_tabs(140, json!({ "animations": false, "tabs": { "layout": "vertical" } }), |app, _| {
         let (rail, _) = find(app, "Fix the parser");
         let hands = [
@@ -144,7 +139,6 @@ fn clickable_elements_show_the_hand_and_everything_else_the_default() {
         ];
         assert_shapes(app, &hands, MousePointer::POINTER);
         assert_eq!(pointer_at(app, rail, HEIGHT - 2), MousePointer::DEFAULT, "rail below the tabs:\n{}", app.text());
-        // The handle is two columns wide, on the rail's right edge.
         let resize: Vec<u16> =
             (0..140).filter(|&x| pointer_at(app, x, HEIGHT / 2) == MousePointer::EW_RESIZE).collect();
         let (prompt, _) = find(app, "╹");
@@ -154,7 +148,6 @@ fn clickable_elements_show_the_hand_and_everything_else_the_default() {
 
 #[test]
 fn the_sidebar_working_directory_shows_the_hand() {
-    // Wide enough for the sidebar, whose footer repeats the prompt footer's directory on the right.
     with_tabs(180, json!({ "animations": false, "tabs": { "layout": "horizontal" } }), |app, _| {
         let screen = app.text();
         let (row, line) = screen.lines().enumerate().filter(|(_, line)| line.contains("/project")).last().unwrap();

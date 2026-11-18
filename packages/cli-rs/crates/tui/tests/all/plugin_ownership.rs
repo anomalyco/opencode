@@ -41,13 +41,11 @@ enum Kind {
 }
 
 impl Kind {
-    /// A request, which gets a reply; else an effect, which applies.
     fn request(self) -> bool {
         matches!(self, Kind::Fetch | Kind::Foreground | Kind::Timer)
     }
 }
 
-/// The call that asks.
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Origin {
     Setup,
@@ -71,7 +69,6 @@ enum Close {
     /// Over the pipe, the host navigates away as soon as the call is delivered, and only then handles the JS host's
     /// answer ([`opencode_plugin::pipe::Scripts::hold_answers`]).
     Racing,
-    /// The call asks, then closes the plugin's overlay, another mount: a control, which ends nothing of the route's.
     Other,
     /// The program ran, and the route's mount closes before its reply goes (`foreground::on_exit`).
     Launched,
@@ -92,14 +89,12 @@ enum Carrier {
     InProcess,
     CAbi,
     Pipe,
-    /// A Luau plugin (spike `luau-spike`), in process on the linked path.
     #[cfg(luau)]
     Luau,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Outcome {
-    /// The fetch is answered, the program runs, and its one reply comes, with the ID the call got.
     Delivered,
     /// No reply comes; a fetch the mount closed before is not sent, a program does not start, and a TypeScript fetch
     /// rejects with an `AbortError` and is freed, while the server still holds it. A Rust or C plugin hears the cancel
@@ -107,9 +102,7 @@ enum Outcome {
     Cancelled,
     /// The program ran once, and no reply comes: the cancel comes in its place, as for [`Outcome::Cancelled`].
     Unanswered,
-    /// The effect applies: to the mount that asked, or to the activation.
     Applied,
-    /// The effect applies nowhere: neither to the activation nor to a mount opened since.
     Dropped,
 }
 
@@ -302,7 +295,6 @@ fn parked(carrier: Carrier) {
 }
 
 thread_local! {
-    /// What the Rust task of [`parked_plugin`] got: its fetch's error, or `ok`.
     static PARKED: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
 }
 
@@ -326,7 +318,6 @@ fn parked_plugin(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-/// [`parked_plugin`] in Luau: the surface's handler is the task; it records in its storage what its fetch gave.
 #[cfg(luau)]
 fn parked_script() -> String {
     let page = luau_literal(&serde_json::to_value(page()).unwrap());
@@ -434,13 +425,10 @@ fn woken_plugin(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-/// The program that witnesses its launch in `mark`, and its arguments: a tiny program of this crate's, on every
-/// platform, with no shell.
 fn witness(mark: &Path) -> (String, Vec<String>) {
     (env!("CARGO_BIN_EXE_plugin-launch-witness").to_owned(), vec![mark.display().to_string()])
 }
 
-/// Runs every row on `carrier`, then fails with each row whose outcome is not the rule's.
 fn table(carrier: Carrier) {
     if carrier == Carrier::Pipe && config().is_none() {
         return;
@@ -449,16 +437,12 @@ fn table(carrier: Carrier) {
     assert!(failed.is_empty(), "{carrier:?}: {} rows broke the rule:\n{}", failed.len(), failed.join("\n"));
 }
 
-/// What one row did.
 struct Seen {
-    /// The IDs the call's `try_` gave, or one `None` a TypeScript ask.
     asked: Vec<Option<u64>>,
     /// The replies the plugin got, each with its ID, or how the TypeScript fetch settled with what stayed pending.
     replies: Vec<(Option<u64>, String)>,
-    /// The fetches the server was asked for, and the programs that started.
     sent: usize,
     launched: usize,
-    /// The begins (`true`) and ends of the second mount, the overlay.
     other: Vec<bool>,
 }
 
@@ -501,7 +485,6 @@ fn run(carrier: Carrier, row: Row) -> Result<(), String> {
     }
     turns(h, 3);
     if row.kind == Kind::Fetch && row.close == Close::InFlight {
-        // Sent and held; a TypeScript fetch of a mount it closed has settled by now.
         let sent = h.app.wait_until(support::WAIT, || asked.load(Ordering::SeqCst) >= 1);
         if !sent {
             return Err(format!("{carrier:?} {row:?}: the fetch was never sent"));
@@ -532,7 +515,6 @@ fn run(carrier: Carrier, row: Row) -> Result<(), String> {
         close();
         turns(h, 3);
     }
-    // The route opens again, which mounts it anew, and what is still held answers.
     if !matches!(row.close, Close::Never | Close::Other) {
         open();
         turns(h, 3);
@@ -571,13 +553,11 @@ fn run(carrier: Carrier, row: Row) -> Result<(), String> {
     check(carrier, row, &seen)
 }
 
-/// Compares what a row did with the rule's outcome.
 fn check(carrier: Carrier, row: Row, seen: &Seen) -> Result<(), String> {
     let outcome = expected(row);
     let pipe = carrier == Carrier::Pipe;
     let id = seen.asked.first().copied().flatten();
     let accepted = seen.asked.len() == 1 && (pipe || id.is_some_and(|id| id != 0));
-    // Each reply names the ID its call got.
     let named = seen.replies.iter().all(|(reply, _)| *reply == id);
     let replied = |text: &str| seen.replies.len() == 1 && seen.replies[0].1.contains(text);
     let delivered = match (row.kind, pipe) {
@@ -585,7 +565,6 @@ fn check(carrier: Carrier, row: Row, seen: &Seen) -> Result<(), String> {
         (Kind::Fetch, false) => replied("held") && seen.sent == 1,
         (Kind::Fetch, true) => replied("Ok 0") && seen.sent == 1,
         (Kind::Foreground, false) => replied("code") && seen.launched == 1,
-        // The pipe's carrier has no promise of a program: its reply goes nowhere.
         (Kind::Foreground, true) => seen.launched == 1,
         _ => unreachable!("an effect's row runs in run_effect"),
     };
@@ -772,21 +751,16 @@ fn turns(h: &Harness, count: usize) {
 thread_local! {
     /// The row the in-process and C ABI probe runs.
     static ROW: Cell<Option<Row>> = const { Cell::new(None) };
-    /// Where its program writes.
     static MARK: RefCell<PathBuf> = RefCell::default();
-    /// What its `try_` call returned, and the replies it got.
     static SEEN: RefCell<Probed> = const { RefCell::new((Vec::new(), Vec::new())) };
-    /// The overlay's begins and ends.
     static OTHER: RefCell<Vec<bool>> = const { RefCell::new(Vec::new()) };
 }
 
 type Probed = (Vec<Result<abi::RequestId, String>>, Vec<(abi::RequestId, String)>);
 
-/// The plugin of a row, on its carrier, in its own harness.
 enum Probe {
     Native(Harness),
     Pipe(Pipe, PathBuf),
-    /// The Luau probe, which records what it saw in its storage.
     #[cfg(luau)]
     Luau(Harness),
 }
@@ -859,7 +833,6 @@ impl Probe {
         }
     }
 
-    /// The overlay's begins (`true`) and ends.
     fn other(&self) -> Vec<bool> {
         match self {
             Probe::Native(_) => OTHER.with_borrow(Vec::clone),
@@ -881,7 +854,6 @@ impl Probe {
             Probe::Pipe(_, log) => {
                 lines(log).into_iter().filter(|line| line.starts_with("asked")).map(|_| None).collect()
             }
-            // 0 names no request: an effect, or a request the host did not take.
             #[cfg(luau)]
             Probe::Luau(harness) => {
                 luau_seen(harness, "asked").iter().map(|id| id.as_u64().filter(|id| *id != 0)).collect()
@@ -949,7 +921,6 @@ fn ask(host: &dyn abi::Host, origin: Origin) {
             host.try_foreground(abi::Foreground::new(command).args(args))
         }
         Kind::Timer => host.try_timer(Duration::from_millis(20)),
-        // An effect gets no ID: the call asked.
         Kind::Overlay => {
             let anchor = Anchor::Point { x: 0, y: 0 };
             host.overlay(Overlay { surface: "other".into(), anchor, width: 20, height: 1 });
@@ -999,8 +970,6 @@ fn leave(host: &dyn abi::Host, place: Place) {
     }
 }
 
-/// The probe: a route with its own command, a global command, a key of the mount, and the mount's begin and end, each
-/// of which may ask, as the row says; and an overlay, another mount, which a global command opens.
 fn probe(setup: &mut abi::Setup) -> Result<(), String> {
     ask(setup.host(), Origin::Setup);
     let command = |name: &str, scope| abi::Command::new(name).scope(scope);
@@ -1047,7 +1016,6 @@ fn probe(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-/// The route's page: its text, a focusable node `n`, and a scroll `s` taller than its five rows.
 fn page() -> v2::Node {
     let rows = (0..40).map(|row| v2::Node::text(vec![abi::Span::new(format!("row {row}"))])).collect();
     v2::Node::column(vec![
@@ -1132,7 +1100,6 @@ export default {{ id: "example.probe", setup(api) {{
     )
 }
 
-/// What the Luau probe recorded under `field` of its storage.
 #[cfg(luau)]
 fn luau_seen(harness: &Harness, field: &str) -> Vec<serde_json::Value> {
     let stored = opencode_plugin::Host::storage_read(&*harness.tui, "plugin.test.probe.seen");
@@ -1140,7 +1107,6 @@ fn luau_seen(harness: &Harness, field: &str) -> Vec<serde_json::Value> {
     seen[field].as_array().cloned().unwrap_or_default()
 }
 
-/// A JSON value as a Luau literal.
 #[cfg(luau)]
 fn luau_literal(value: &serde_json::Value) -> String {
     match value {
@@ -1162,8 +1128,6 @@ fn luau_literal(value: &serde_json::Value) -> String {
     }
 }
 
-/// The probe in Luau: the same calls as the Rust one, which record in its storage what the calls got and what the
-/// replies said; its program is the Rust one's.
 #[cfg(luau)]
 fn luau_script(row: Row, mark: &Path) -> String {
     let (command, args) = witness(mark);

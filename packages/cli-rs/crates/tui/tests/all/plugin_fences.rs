@@ -21,7 +21,6 @@ use crate::support;
 const SESSION: &str = "ses_f";
 const ID: &str = "example.fences";
 
-/// The TUI on a session, with `example.fences` (its `options`) on the JS host `config`.
 struct Fences {
     pipe: Pipe,
     seq: Cell<u64>,
@@ -32,8 +31,6 @@ impl Fences {
         Self::open_with(config, options, false)
     }
 
-    /// [`Fences::open`], with a second copy of the plugin when `other`: `example.other`, which draws `other` fences as
-    /// `example.fences` draws `probe` ones.
     fn open_with(config: Config, options: Option<Value>, other: bool) -> Self {
         let root = opencode_util::temp::tempdir().unwrap();
         let config_dir = root.path().join("config");
@@ -101,18 +98,15 @@ impl Fences {
         assert!(self.pipe.harness.app.wait_until(support::WAIT, || tui.synced()), "the views never took the event");
     }
 
-    /// The answer begins with `text`.
     fn answer(&self, text: &str) {
         self.emit("session.text.started", json!({ "ordinal": 0 }));
         self.more(text);
     }
 
-    /// The answer goes on with `text`.
     fn more(&self, text: &str) {
         self.emit("session.text.delta", json!({ "ordinal": 0, "delta": text }));
     }
 
-    /// The screen as it is drawn now, the JS host left as it is.
     fn now(&self) -> String {
         let app = &self.pipe.harness.app;
         app.advance(Duration::from_millis(1));
@@ -153,7 +147,6 @@ impl Fences {
     }
 }
 
-/// The claimed parts that show the plugin's tree.
 fn drawn() -> usize {
     mounted().iter().filter(|shown| shown.shows).count()
 }
@@ -208,13 +201,11 @@ fn a_renderer_that_throws_falls_back_its_part_alone() {
         assert!(screen.contains(code), "{code:?} does not show:\n{screen}");
     }
     assert_eq!(fences.toasts(), ["example.fences crashed in code block boom: boom"]);
-    // The part that threw is not viewed again as it streams: no second toast.
     fences.more("more thrown\n```\n\nAfter.\n");
     let screen = fences.settled();
     assert!(screen.contains("more thrown") && screen.contains("After."), "{screen}");
     assert_eq!(fences.toasts(), Vec::<String>::new());
     assert_eq!(fences.status(), Some(opencode_plugin::Status::Active));
-    // `probe`'s box and `asks`' code view are the plugin's; the thrown and the declined fences show the host's row.
     assert_eq!(drawn(), 2, "{:?}", mounted());
 }
 

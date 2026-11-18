@@ -39,13 +39,11 @@ fn a_settings_write_reaches_the_tabs_and_the_leader_timeout_at_once() {
     settings::update(&tui, set(&["tabs", "mode"], json!("off")));
     assert!(!Tabs::enabled(&tui), "tabs.mode stayed at its startup value");
 
-    // `leader.timeout` shortens the next leader.
     settings::update(&tui, set(&["leader", "timeout"], json!(250)));
     app.press("ctrl+x");
     assert!(tui.keymap.leader_active());
     app.advance(Duration::from_millis(250));
     assert!(!tui.keymap.leader_active(), "the leader waited for the startup timeout");
-    // And lengthens it.
     settings::update(&tui, set(&["leader", "timeout"], json!(5000)));
     app.press("ctrl+x");
     assert!(tui.keymap.leader_active());
@@ -72,7 +70,6 @@ fn the_leader_sequence_expires_on_the_app_clock() {
         assert!(tui.keymap.leader_active());
         app.advance(Duration::from_millis(wait));
         assert_eq!(tui.keymap.leader_active(), completes, "{config} after {wait} ms");
-        // `session.list` is `<leader>l`.
         app.press("l");
         let typed = tui.textarea.borrow().as_ref().map(|textarea| textarea.text()).unwrap_or_default();
         assert_eq!((tui.dialogs.is_open(), typed.as_str()), (completes, if completes { "" } else { "l" }), "{config}");

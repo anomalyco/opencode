@@ -27,18 +27,15 @@ use serde_json::{Value, json};
 const MACHINES: &str = include_str!("../../../../parity/machines/plugins.json");
 
 thread_local! {
-    /// Life arm: the next setup fails. It outlives an activation, as the TS plugin's module state does.
     static ARMED: Cell<bool> = const { Cell::new(false) };
     /// The built-ins run across the C ABI's byte shims (review bigboi-7: the manager on both carriers).
     static ABI: Cell<bool> = const { Cell::new(false) };
 }
 
-/// The Rust twin of `parity/plugins/other/tui.tsx`, the views machine's distractor, whose setup fails with its cause.
 fn other(_: &mut abi::Setup) -> Result<(), String> {
     Err("other setup fails as it loads".to_owned())
 }
 
-/// The Rust twin of `parity/plugins/life/tui.tsx`.
 fn life(setup: &mut abi::Setup) -> Result<(), String> {
     if ARMED.replace(false) {
         return Err("life setup armed to throw".to_owned());
@@ -49,7 +46,6 @@ fn life(setup: &mut abi::Setup) -> Result<(), String> {
     let flipped = side.clone();
     setup.command(command("life.flip", "Life flip"), move |_, _| flip(&flipped));
     setup.command(command("life.throw", "Life throw"), |_, _| -> () { panic!("life command throws") });
-    // Over the budget of one call (rich plugins 4.4), which TS does not have.
     setup.command(command("life.stall", "Life stall"), |_, _| {
         let end = std::time::Instant::now() + std::time::Duration::from_millis(150);
         while std::time::Instant::now() < end {
@@ -58,7 +54,6 @@ fn life(setup: &mut abi::Setup) -> Result<(), String> {
     });
     setup.command(command("life.arm", "Life arm"), |_, _| ARMED.set(true));
     setup.command(command("life.dialog", "Life dialog"), |host, _| {
-        // TS's prompt has no action; this one names a command nobody registers.
         let action = abi::Action::command("life.prompted");
         host.dialog(abi::Dialog::Prompt(abi::Prompt::new("Life prompt", action)));
     });
@@ -121,7 +116,6 @@ impl Backend for Builds {
     }
 }
 
-/// The TUI on home with the life plugin in its plugins directory, as the user drives it.
 struct Life {
     harness: Harness,
     loader: Rc<Loader>,
@@ -154,7 +148,6 @@ impl Life {
             std::fs::write(other.join(entry_file()), [1]).unwrap();
         }
         let loader = Rc::new(Loader::new(Rc::new(Builds), config, root.path().to_path_buf(), Vec::new()));
-        // The plugin manager's question reaches this loader.
         harness.tui.plugins.set_loader(loader.clone());
         loader.reconcile(&host(&harness.tui), &harness.tui.plugins);
         let life = Self { harness, loader, build, builds: Cell::new(1), _root: root };
@@ -209,7 +202,6 @@ impl Life {
         self.settle();
     }
 
-    /// Searches the palette for `title`, runs it if `run` asks and it is listed, and returns whether it is.
     fn palette(&self, title: &str, run: bool) -> bool {
         let app = &self.harness.app;
         app.press("ctrl+p");
@@ -223,7 +215,6 @@ impl Life {
         listed
     }
 
-    /// Opens the plugin manager filtered to the life plugin.
     fn manager(&self) {
         self.harness.tui.keymap.dispatch("plugins.list", None);
         self.settle();
@@ -268,7 +259,6 @@ impl Life {
 }
 
 impl Life {
-    /// Runs an action of the manager machine as the user types it: `/plugins` and enter, escape, ctrl+a, or enter.
     fn act_manager(&self, action: &str) {
         match action {
             "open" => {
@@ -284,8 +274,6 @@ impl Life {
         self.settle();
     }
 
-    /// Runs an action of the views machine: `/plugins` and enter, `parity.other` typed into the filter, down, the key the
-    /// footer offers for `view error`, or escape.
     fn act_views(&self, action: &str) {
         match action {
             "open" => {
@@ -305,13 +293,10 @@ impl Life {
         self.settle();
     }
 
-    /// `dialog/a/b`, as `parity/machines/plugins.json` writes them for the views machine: the query and the rows of
-    /// the list, or the plugin whose source and the plugin whose cause the details show.
     fn observe_views(&self) -> String {
         let screen = self.harness.app.text();
         let lines: Vec<&str> = screen.lines().collect();
         if screen.contains("TUI plugin error") {
-            // The source, on the row under the title: the plugin's directory. A toast may name other plugins.
             let title = lines.iter().position(|line| line.contains("TUI plugin error"));
             let source = title.and_then(|row| lines.get(row + 1)).copied().unwrap_or_default();
             let plugin = source.split("parity.").nth(1);
@@ -326,7 +311,6 @@ impl Life {
         if !screen.contains("show internal") && !screen.contains("hide internal") {
             return "-/?/?".to_owned();
         }
-        // The filter's field is two rows under the title's.
         let title = lines.iter().position(|line| line.contains("Plugins") && line.contains("esc"));
         let query = title.and_then(|row| lines.get(row + 2)).map_or("?", |line| line.trim());
         let query = if query == "Search" { "-" } else { query };
@@ -348,7 +332,6 @@ impl Life {
         format!("list/{query}/{}", rows.join("+"))
     }
 
-    /// `dialog/internal/life`, as `parity/machines/plugins.json` writes them for the manager machine.
     fn observe_manager(&self) -> String {
         let screen = self.harness.app.text();
         let internal = ["show", "hide"].into_iter().find(|word| screen.contains(&format!("{word} internal")));
@@ -356,7 +339,6 @@ impl Life {
             let life = if screen.contains("life plugin:") { "on" } else { "off" };
             return format!("-/?/{life}");
         };
-        // The built-in rows may push the life row below the screen.
         if internal == "hide" {
             return "list/hide/?".to_owned();
         }
@@ -370,7 +352,6 @@ impl Life {
     }
 }
 
-/// The TUI on home over two files, a.ts and b.ts, whose diff `/diff` shows in the viewer's route (P6c).
 struct Viewer {
     harness: Harness,
 }
@@ -401,7 +382,6 @@ impl Viewer {
         viewer
     }
 
-    /// Lets every reply, view and frame land.
     fn settle(&self) {
         let app = &self.harness.app;
         app.advance(Duration::from_millis(1));
@@ -413,7 +393,6 @@ impl Viewer {
         }
     }
 
-    /// Runs an action of the viewer machine as the user types it.
     fn act(&self, action: &str) {
         let app = &self.harness.app;
         match action {
@@ -456,7 +435,6 @@ impl Viewer {
     }
 }
 
-/// [`replay`] of the viewer machine, whose reader sends every action but those a state leaves unspecified.
 fn replay_viewer(machine: &Value, path: &[&str], known: &mut ExpectedFailures) -> Option<String> {
     let viewer = Viewer::open();
     let mut state = machine["initial"].as_str().unwrap();
@@ -483,21 +461,18 @@ fn replay_viewer(machine: &Value, path: &[&str], known: &mut ExpectedFailures) -
     None
 }
 
-/// The known differences of this client: `state action observation`.
 struct ExpectedFailures {
     known: BTreeSet<String>,
     seen: BTreeSet<String>,
 }
 
 impl ExpectedFailures {
-    /// This client's rows of each of `rows`.
     fn new(rows: &[&Value]) -> Self {
         let known = rows
             .iter()
             .flat_map(|rows| rows.as_array().unwrap())
             .filter(|row| row[0] == "rust")
             .map(|row| {
-                // A deviation file, or an open finding of `steps/plugins-pt.md`.
                 let file = row[1].as_str().unwrap();
                 let deviation =
                     std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../../parity/deviations/{file}.md"));
@@ -525,7 +500,6 @@ impl ExpectedFailures {
     }
 }
 
-/// Every path from the initial state to `depth` (`walks` false), or the seeded walks, as OpenTUI's reader makes them.
 fn traces<'a>(corpus: &Value, machine: &'a Value, walks: bool) -> Vec<Vec<&'a str>> {
     fn visit<'a>(machine: &'a Value, state: &str, path: &mut Vec<&'a str>, depth: usize, out: &mut Vec<Vec<&'a str>>) {
         let edges = machine["states"][state][1].as_object().unwrap();
@@ -694,7 +668,6 @@ fn the_plugin_life_recovers_from_a_dropped_repeated_or_swapped_action() {
     );
 }
 
-/// The fault trials' normal cycles of machine `name`.
 fn cycles(name: &str) -> Vec<Vec<&'static str>> {
     CORPUS["faults"][name]["cycles"]
         .as_array()

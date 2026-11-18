@@ -17,7 +17,6 @@ use opencode_plugin::{reconcile, slot, surface};
 use opencode_tui::Deps;
 use serde_json::{Value, json};
 
-/// `ses_a` with the sidebar docked, the prompt footer and the getting started card; `plugins` is the config's list.
 fn session(plugins: &[&str], extra: Vec<opencode_plugin::Builtin>) -> Harness {
     let config = json!({ "animations": false, "plugins": plugins });
     let mut builtins = support::deps(Arc::new(support::empty())).builtins;
@@ -177,7 +176,6 @@ fn a_theme_switch_builds_nothing_in_the_built_ins() {
     }
 }
 
-/// This year's stats, as E.14/stats serves them.
 fn stats() -> Value {
     let day = 86_400_000_i64;
     let from = 1_767_268_800_000_i64;
@@ -193,7 +191,6 @@ fn stats() -> Value {
     } })
 }
 
-/// The `/stats` route at `height` rows, its stats served.
 fn stats_route(height: u16) -> Harness {
     let fake = Fake::new(|seen| match seen.path.as_str() {
         "/api/experimental/session/stats" => (200, stats()),
@@ -326,7 +323,6 @@ fn a_todo_list_written_in_a_streaming_reply_shows_in_the_sidebar() {
     harness.wait("the list in the sidebar", sidebar);
 }
 
-/// The built-ins with a 2.0 surface on the session route.
 const SESSION: [&str; 7] = [
     "opencode.prompt.footer",
     "opencode.btw",
@@ -355,7 +351,6 @@ fn a_disabled_built_in_holds_nothing_and_draws_as_one_never_enabled() {
         let harness = open(&[]);
         let held = surface::ledger_of(id);
         assert!(held.mounts > 0, "{id} holds no mount: {held:?}");
-        // As the plugin manager toggles: the route mounts again with the plugins' claims.
         let toggle = |active| {
             let host = opencode_tui::plugins::host::host(&harness.tui);
             assert_eq!(harness.tui.plugins.toggle(&host, id, active), Some(Ok(())), "{id}");
@@ -363,7 +358,6 @@ fn a_disabled_built_in_holds_nothing_and_draws_as_one_never_enabled() {
             settle(&harness);
         };
         toggle(false);
-        // Home's placeholder example is random (P-APP masks it).
         let screen = |harness: &Harness| {
             let text = harness.app.render().text();
             text.lines().filter(|line| !line.contains("Ask anything")).collect::<Vec<_>>().join("\n")
@@ -405,7 +399,6 @@ fn heard() -> Vec<String> {
     HEARD.with(|heard| heard.take())
 }
 
-/// A slot surface in the prompt's status row that hears its mounts and logs them and each view: the plugin's own log.
 fn probe(setup: &mut abi::Setup) -> Result<(), String> {
     setup.storage_key("state");
     setup.command(Command::new("probe.write"), |host, _| {
@@ -444,7 +437,6 @@ fn probe(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-/// What a view heard changed, in short.
 fn said(changed: &Changed) -> String {
     let mut said = Vec::new();
     for (on, name) in [(changed.all, "all"), (changed.local, "local"), (changed.size, "size"), (changed.woken, "woken")]
@@ -606,16 +598,11 @@ fn a_change_of_the_hosts_state_is_local_once() {
 }
 
 thread_local! {
-    /// The keeper's cards, each the value of its memo.
     static CARDS: RefCell<Vec<u32>> = RefCell::new(vec![1, 2, 3]);
-    /// The cards its views built.
     static BUILT: Cell<usize> = const { Cell::new(0) };
-    /// Its root is a hidden box.
     static HIDE: Cell<bool> = const { Cell::new(false) };
-    /// Its next view gives content and keeps its root; later views show that content.
     static GIVE: Cell<bool> = const { Cell::new(false) };
     static GIVEN: Cell<Option<abi::v2::ContentRef>> = const { Cell::new(None) };
-    /// The slot's width and height and the surface's, as each view was told them.
     static SIZES: RefCell<Vec<[u16; 4]>> = const { RefCell::new(Vec::new()) };
 }
 
@@ -710,11 +697,9 @@ fn a_kept_root_takes_a_new_theme() {
 }
 
 thread_local! {
-    /// The views of the mounter's route.
     static VIEWS: Cell<usize> = const { Cell::new(0) };
 }
 
-/// A route that hears its mounts begin, and opens an overlay of the plugin as one does.
 fn mounter(setup: &mut abi::Setup) -> Result<(), String> {
     let page = Surface::new("mounter", Place::Route("mounter".into()), |_| {
         VIEWS.set(VIEWS.get() + 1);

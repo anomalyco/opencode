@@ -16,11 +16,8 @@ use opencode_tui::{Deps, Route};
 use serde_json::{Value, json};
 
 thread_local! {
-    /// What `p0b.pair` runs between its reads of `ses_a` and `ses_b`.
     static BETWEEN: RefCell<Option<Box<dyn Fn()>>> = const { RefCell::new(None) };
-    /// The costs of `ses_a` and `ses_b` that `p0b.pair` read.
     static PAIR: Cell<Option<(f64, f64)>> = const { Cell::new(None) };
-    /// The tabs `p0b.tabs` read.
     static TABS: RefCell<Vec<abi::Tab>> = const { RefCell::new(Vec::new()) };
     /// The pending keys, active keys and commands `p0b.keys` read.
     static KEYS: RefCell<Keys> = RefCell::default();
@@ -28,14 +25,12 @@ thread_local! {
 
 type Keys = (Vec<abi::KeymapPending>, Vec<abi::KeymapActive>, Vec<abi::KeymapCommand>);
 
-/// The built-in theme `aura`'s document, which loads as a custom theme.
 fn aura() -> Value {
     let themes: Value = serde_json::from_str(include_str!("../../../ui/src/theme/generated/themes.json")).unwrap();
     let themes = themes["themes"].as_array().unwrap();
     themes.iter().find(|theme| theme["name"] == "aura").unwrap()["document"].clone()
 }
 
-/// Commands of one verb each, which toast what the verb answered, and a sized `app` claim that shows what it reads.
 fn reader(setup: &mut abi::Setup) -> Result<(), String> {
     let command = |name: &str| abi::Command::new(name);
     let toast = |host: &dyn abi::Host, text: String| host.toast(abi::Toast::new(abi::Variant::Info, text));
@@ -128,7 +123,6 @@ fn reader(setup: &mut abi::Setup) -> Result<(), String> {
     let asked = program.clone();
     setup.command(command("p0b.run"), move |host, input| {
         let args = vec!["-c".to_owned(), input.unwrap_or_default().to_owned()];
-        // The test's working directory: the TUI's is a fake one.
         let cwd = Some(".".to_owned());
         asked.set(host.try_foreground(abi::Foreground { command: "sh".to_owned(), args, cwd }).ok());
     });
@@ -144,7 +138,6 @@ fn reader(setup: &mut abi::Setup) -> Result<(), String> {
             *told.borrow_mut() = result.map_or_else(|error| error, |value| value["code"].to_string());
         }
     });
-    // The claim's link; `p0b.link` sets another.
     let link = Rc::new(RefCell::new("https://opencode.ai/p0b".to_owned()));
     let linked = link.clone();
     setup.command(command("p0b.link"), move |_, input| *linked.borrow_mut() = input.unwrap_or_default().to_owned());
@@ -203,7 +196,6 @@ fn home(loopback: bool, width: u16, config: Value) -> (Harness, Memory, opencode
     home_on(loopback, width, config, Vec::new())
 }
 
-/// [`home`] on a server that also answers `routes`.
 fn home_on(
     loopback: bool,
     width: u16,
@@ -351,7 +343,6 @@ fn verbs_in_one_call_see_the_earlier_ones() {
         h.tui.keymap.dispatch("p0b.script", Some("model p/a"));
         h.wait_for("p0b script1 -");
         assert_eq!(selected(), Some(("a".to_owned(), None)), "loopback {loopback}");
-        // As the model dialog picks it: a recent model, and the claim reads its variants (review carbon-9).
         assert_eq!(h.tui.local.recent().first().map(|model| model.model_id.as_str()), Some("a"));
         h.wait_for(" true  1 d:");
         h.tui.keymap.dispatch("p0b.script", Some("model p/b;variant high"));
@@ -638,12 +629,10 @@ fn keymap_reads_have_every_field() {
 
 const WAIT: std::time::Duration = std::time::Duration::from_secs(10);
 
-/// The JSON in `path`.
 fn read(path: &std::path::Path) -> Value {
     serde_json::from_slice(&std::fs::read(path).unwrap_or_default()).unwrap_or_default()
 }
 
-/// Reverses every `tabs` list in a tabs file.
 fn reverse_tabs(value: &mut Value) {
     match value {
         Value::Object(object) => object.iter_mut().for_each(|(key, value)| match value {
@@ -655,7 +644,6 @@ fn reverse_tabs(value: &mut Value) {
     }
 }
 
-/// Every file under `dir`.
 fn walk(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
     let entries = std::fs::read_dir(dir).into_iter().flatten().flatten();
     entries.flat_map(|entry| if entry.path().is_dir() { walk(&entry.path()) } else { vec![entry.path()] }).collect()
@@ -736,7 +724,6 @@ fn a_program_runs_in_the_foreground_and_its_exit_code_comes_back() {
         h.wait_for("p0b w120 ");
         h.tui.keymap.dispatch("p0b.run", Some("exit 3"));
         h.wait_for(" x:3");
-        // One that does not start answers why (review carbon-9).
         h.tui.keymap.dispatch("p0b.missing", None);
         h.wait_for(" x:p0b-no-such-program: ");
     }

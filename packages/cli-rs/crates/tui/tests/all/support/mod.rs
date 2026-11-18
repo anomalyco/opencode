@@ -35,25 +35,21 @@ pub const DIRECTORY: &str = "/project";
 /// A status and a JSON body. A 204 is sent without a body.
 pub type Reply = (u16, Value);
 
-/// One request the fake server saw.
 #[derive(Clone, Debug)]
 pub struct Seen {
     pub method: String,
     pub path: String,
     /// The raw query, without `?`.
     pub query: String,
-    /// The JSON body, or `null`.
     pub body: Value,
     pub headers: Vec<(String, String)>,
 }
 
 impl Seen {
-    /// The path with its query.
     pub fn url(&self) -> String {
         if self.query.is_empty() { self.path.clone() } else { format!("{}?{}", self.path, self.query) }
     }
 
-    /// The value of one query parameter, or an empty string.
     pub fn param(&self, name: &str) -> String {
         url::form_urlencoded::parse(self.query.as_bytes())
             .find(|(key, _)| key == name)
@@ -69,14 +65,12 @@ impl Seen {
 /// Every request a [`Fake`] saw, in order.
 pub type Log = Arc<Mutex<Vec<Seen>>>;
 
-/// The requests in `log` as `METHOD path` lines.
 pub fn lines(log: &Log) -> Vec<String> {
     log.lock().unwrap().iter().map(|seen| format!("{} {}", seen.method, seen.path)).collect()
 }
 
 type Handler = Box<dyn Fn(&Seen) -> Reply + Send + Sync>;
 
-/// A fake server: logs each request, then answers it with the handler's reply.
 pub struct Fake {
     log: Log,
     handler: Handler,
@@ -107,7 +101,6 @@ impl Transport for Fake {
     }
 }
 
-/// A JSON response; a 204 has no body.
 pub fn respond(status: u16, body: &Value) -> Response {
     let bytes = if status == 204 { Vec::new() } else { serde_json::to_vec(body).unwrap() };
     Response {
@@ -121,7 +114,6 @@ pub fn not_found() -> Reply {
     (404, json!({}))
 }
 
-/// An empty session list; anything else is a 404.
 pub fn empty() -> Fake {
     Fake::new(|seen| match seen.path.as_str() {
         "/api/session" => (200, json!({ "data": [], "cursor": {} })),
@@ -129,9 +121,6 @@ pub fn empty() -> Fake {
     })
 }
 
-/// The routes most fixtures serve, for a location at `directory`: session `ses_a` with no messages, the `build`
-/// agent and "Model M", empty catalogs and request lists, an echo of each prompt, 204 for model and agent writes, and
-/// a data migration that has completed. Anything else is a 404.
 pub fn base(seen: &Seen, directory: &str) -> Reply {
     let path = seen.path.as_str();
     match (seen.method.as_str(), path) {
@@ -163,7 +152,6 @@ pub fn base(seen: &Seen, directory: &str) -> Reply {
     }
 }
 
-/// The server's answer to a prompt: the user message of the session the path names, in `delivery`.
 pub fn prompted(seen: &Seen, delivery: &str) -> Value {
     json!({ "data": {
         "id": seen.body["id"], "sessionID": seen.path.split('/').nth(3), "time": { "created": 1 }, "type": "user",
@@ -171,17 +159,14 @@ pub fn prompted(seen: &Seen, delivery: &str) -> Value {
     } })
 }
 
-/// A location-scoped list response.
 pub fn list(directory: &str, data: Value) -> Value {
     json!({ "location": { "directory": directory }, "data": data })
 }
 
-/// `/api/location` for a project rooted at `directory`.
 pub fn location(directory: &str) -> Value {
     json!({ "directory": directory, "project": { "id": "project", "directory": directory, "canonical": directory } })
 }
 
-/// A session at [`DIRECTORY`] with no agent or model.
 pub fn session(id: &str, title: &str) -> Value {
     json!({
         "id": id, "title": title, "projectID": "project", "cost": 0,
@@ -191,12 +176,10 @@ pub fn session(id: &str, title: &str) -> Value {
     })
 }
 
-/// A session at [`DIRECTORY`] in project `proj_test`, as the in-memory route tables serve it.
 pub fn test_session(id: &str, title: &str) -> Value {
     merge(session(id, title), json!({ "projectID": "proj_test" }))
 }
 
-/// In-memory routes for `session`: itself, no messages, and empty inbox, permission and form lists.
 pub fn session_routes(session: &Value) -> Vec<memory::Route> {
     let path = format!("/api/session/{}", session["id"].as_str().unwrap());
     let mut routes = vec![
@@ -209,12 +192,10 @@ pub fn session_routes(session: &Value) -> Vec<memory::Route> {
     routes
 }
 
-/// `ses_a` "Fix the parser" on the `build` agent and Model M, as [`base`] serves it.
 pub fn catalog_session() -> Value {
     merge(session("ses_a", "Fix the parser"), json!({ "agent": "build", "model": { "providerID": "p", "id": "m" } }))
 }
 
-/// `value` with each field of `extra` set.
 pub fn merge(mut value: Value, extra: Value) -> Value {
     for (key, field) in extra.as_object().unwrap() {
         value[key] = field.clone();
@@ -238,8 +219,6 @@ pub fn model(provider: &str, id: &str, name: &str) -> Value {
     })
 }
 
-/// The TUI's inputs over `transport`: [`DIRECTORY`], the default config, no roots, session `ses_a`, no
-/// event stream, and the Mermaid and LaTeX built-ins.
 pub fn deps(transport: Arc<dyn Transport>) -> Deps {
     Deps {
         client: Client::with_transport("http://opencode.local", transport).unwrap(),
@@ -258,12 +237,10 @@ pub fn config(info: Info) -> Resolved {
     Resolved::new(info, |_| None)
 }
 
-/// A config from `cli.json` text.
 pub fn decode(text: &str) -> Info {
     cli_config::decode_text(text).unwrap()
 }
 
-/// [`Info`] with animations off.
 pub fn still() -> Info {
     Info { animations: Some(false), ..Info::default() }
 }
@@ -309,7 +286,6 @@ pub fn paths(home: &Path) -> Paths {
     }
 }
 
-/// The roots a real run with `HOME=home` uses.
 pub fn home_paths(home: &Path) -> Paths {
     let home = home.to_owned();
     Paths::from_vars(|name| (name == "HOME").then(|| home.clone().into_os_string())).unwrap()
@@ -335,7 +311,6 @@ pub fn dark_app(width: u16, height: u16) -> TestApp {
     )
 }
 
-/// The TypeScript checkout the P-FILE tests run: `OPENCODE_TS_ROOT`, else this one.
 pub fn ts_root() -> Option<PathBuf> {
     let root = std::env::var_os("OPENCODE_TS_ROOT")
         .map(PathBuf::from)
@@ -353,7 +328,6 @@ pub fn ts_root() -> Option<PathBuf> {
     present.then_some(root)
 }
 
-/// The harness config of `parity/lib/component.tsx` (the dark `opencode` theme, no animations) plus `extra`.
 pub fn component_info(extra: Value) -> Info {
     cli_config::merge(&[
         Some(json!({ "theme": { "name": "opencode", "mode": "dark" }, "animations": false })),
@@ -361,7 +335,6 @@ pub fn component_info(extra: Value) -> Info {
     ])
 }
 
-/// The variables that put every root of a run under `home`.
 fn xdg_env(home: &Path) -> Vec<(&'static str, PathBuf)> {
     vec![
         ("HOME", home.to_path_buf()),
@@ -372,7 +345,6 @@ fn xdg_env(home: &Path) -> Vec<(&'static str, PathBuf)> {
     ]
 }
 
-/// The roots a run with [`xdg_env`] uses, as the TS `Config` service in [`ts_config`] sees them.
 pub fn xdg_paths(home: &Path) -> Paths {
     let vars = xdg_env(home);
     Paths::from_vars(|name| vars.iter().find(|(key, _)| *key == name).map(|(_, value)| value.clone().into_os_string()))
@@ -418,7 +390,6 @@ pub fn ts_config(home: &Path, op: Value) -> Option<Value> {
     Some(results.remove(0))
 }
 
-/// A mounted TUI and its app.
 pub struct Harness {
     pub app: TestApp,
     pub tui: Rc<Tui>,
@@ -439,7 +410,6 @@ pub fn mount_still(width: u16, height: u16, deps: Deps) -> Harness {
     harness
 }
 
-/// Home over [`empty`], with `info` and `roots`.
 pub fn mount_empty(app: &TestApp, info: Info, roots: Option<Roots>) -> Rc<Tui> {
     opencode_tui::mount(app, Deps { config: config(info), roots, route: Route::Home, ..deps(Arc::new(empty())) })
 }
@@ -492,7 +462,6 @@ impl Harness {
         self.tui.textarea.borrow().clone().unwrap()
     }
 
-    /// The prompt's text.
     pub fn text(&self) -> String {
         self.textarea().text()
     }
@@ -504,7 +473,6 @@ impl Harness {
         at(&screen, needle).unwrap_or_else(|| panic!("{needle:?} is not on screen:\n{screen}"))
     }
 
-    /// Runs a keymap command and lets it draw.
     pub fn dispatch(&self, command: &str) {
         self.tui.keymap.dispatch(command, None);
         self.app.advance(Duration::from_millis(1));
@@ -515,7 +483,6 @@ impl Harness {
         self.app.press(key);
     }
 
-    /// Hides everything but the dialog host, as the TS scripts render a dialog alone.
     pub fn only_dialog(&self) {
         let host = self.tui.dialogs.host().id();
         for child in self.app.root().children() {
@@ -549,7 +516,6 @@ pub fn mark(app: &TestApp, root: &impl Widget, keep: usize, marker: &Rc<()>) -> 
     marked.len()
 }
 
-/// [`mark`] for the widget at the cell where `needle` starts and its parents, `levels` widgets in all.
 #[track_caller]
 pub fn mark_at(app: &TestApp, needle: &str, levels: usize, marker: &Rc<()>) {
     let (x, y) = at(&app.text(), needle).unwrap_or_else(|| panic!("{needle:?} is not on screen:\n{}", app.text()));
@@ -595,7 +561,6 @@ pub fn wait_fixture(app: &TestApp, name: &str) {
     opencode_parity::assert_fixture(&app.render(), name);
 }
 
-/// The theme [`assert_restyles_in_place`] switches to from the default `opencode`.
 const SWITCHED: &str = "tokyonight";
 
 /// A mounted TUI and its app, as a test's own harness holds them.
@@ -614,8 +579,6 @@ impl<H: std::ops::Deref<Target = Harness>> Mounted for H {
     }
 }
 
-/// Switches `harness` to [`SWITCHED`]; with `remount`, mounts the route again afterwards, which draws every widget of
-/// it from scratch in the new theme.
 fn switch_theme(harness: &impl Mounted, remount: bool) {
     let tui = harness.tui();
     assert!(tui.theme.borrow_mut().set(SWITCHED));
@@ -626,9 +589,6 @@ fn switch_theme(harness: &impl Mounted, remount: bool) {
     harness.app().advance(Duration::from_millis(1));
 }
 
-/// A theme switch restyles the view in place, as TS's views follow their theme: the view `open` mounts, brought to
-/// a state by `prepare` and switched, draws every cell as the view mounted again in the new theme and brought to the
-/// same state. `ready` tells when a screen shows that state.
 #[track_caller]
 pub fn assert_restyles_in_place<H: Mounted>(open: impl Fn() -> H, prepare: impl Fn(&H), ready: impl Fn(&str) -> bool) {
     let in_place = open();

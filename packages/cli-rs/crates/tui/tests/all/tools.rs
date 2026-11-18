@@ -13,7 +13,6 @@ use opencode_tui::Deps;
 use opentui::prelude::Color;
 use serde_json::{Value, json};
 
-/// Serves one session, its messages, its permission requests, and shell output; logs every request.
 fn fake(messages: Vec<Value>, permissions: Vec<Value>) -> Fake {
     Fake::new(move |seen| match (seen.method.as_str(), seen.path.as_str()) {
         ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
@@ -37,7 +36,6 @@ fn session() -> Value {
     support::merge(support::session("ses_t", "Tools"), json!({ "agent": "build" }))
 }
 
-/// A user prompt, then one assistant step that calls `tools`.
 fn turn(tools: Vec<Value>) -> Vec<Value> {
     vec![
         json!({ "id": "msg_1", "type": "user", "text": "Run the tools", "time": { "created": 1000 } }),
@@ -83,7 +81,6 @@ deref_harness!(Tools);
 fn open(width: u16, height: u16, messages: Vec<Value>, permissions: Vec<Value>) -> Tools {
     let fake = fake(messages, permissions);
     let seen = fake.log();
-    // Each call in its own row: grouping and verbosity are E.8's.
     let info = Info {
         animations: Some(false),
         session: Some(Session {
@@ -99,7 +96,6 @@ fn open(width: u16, height: u16, messages: Vec<Value>, permissions: Vec<Value>) 
 }
 
 impl Tools {
-    /// Every request, as `METHOD path?query`.
     fn log(&self) -> Vec<String> {
         let seen = self.seen.lock().unwrap();
         seen.iter().map(|seen| format!("{} {}?{}", seen.method, seen.path, seen.query)).collect()
@@ -162,7 +158,6 @@ fn inline_tools_show_pending_running_and_finished_lines() {
     ]);
     assert_eq!(h.fg("Read src/b.rs"), theme.text.muted);
 
-    // A denied call is struck through in the muted color, not shown as an error.
     let (x, y) = h.find("Grep \"secret\"");
     let capture = h.app.render();
     let cell = capture.cell(u32::from(x), u32::from(y)).unwrap();
@@ -183,7 +178,6 @@ fn a_failed_call_shows_its_error_on_click() {
     assert_eq!(h.fg("Glob \"*.md\""), theme.text.feedback.error.base);
     assert!(!h.app.text().contains("No such directory"));
     h.click("Glob \"*.md\"");
-    // The ANSI codes are stripped; the error sits under the text, past the icon.
     let screen = h.wait_for("No such directory");
     assert!(screen.contains("     No such directory\n"), "{screen}");
     // Apart from the first click, so the two are not a double click that selects a word.
@@ -214,23 +208,18 @@ fn shell_blocks_collapse_their_output_and_read_a_named_shell_on_click() {
         h.wait_for_all(&["$ false", "⋯ cd web && npm test", "$ seq 20", "(13 earlier lines)", "line 20", "$ echo hi"]);
     let theme = h.tui.page();
     assert!(!screen.contains("line 13\n"), "{screen}");
-    // A named shell's output is read from the server, not taken from the tool's content.
     assert!(!screen.contains("<shell status>"), "{screen}");
-    // The error under the command, in the error color.
     assert_eq!(h.fg("Command failed"), theme.text.feedback.error.base);
-    // Blocks sit on the raised background behind a rule in the page color.
     assert_eq!(h.bg("$ seq 20"), theme.background.raised.base);
     let (x, y) = h.find("$ seq 20");
     let capture = h.app.render();
     let rule = capture.cell(u32::from(x) - 3, u32::from(y)).unwrap();
     assert_eq!(rule.symbol, "┃");
 
-    // A click expands the output.
     h.click("$ seq 20");
     let screen = h.wait_for("line 1\n");
     assert!(!screen.contains("earlier lines"), "{screen}");
 
-    // A click on the named shell reads its output from the start.
     h.click("$ echo hi");
     h.wait_for("hi from the shell");
     let log = h.log();
@@ -286,7 +275,6 @@ fn write_and_edit_blocks_show_the_file_and_the_diff() {
         "2 -     old();",
         "2 +     new();",
     ]);
-    // The removed line above the added one.
     let (_, removed) = h.find("old();");
     let (_, added) = h.find("new();");
     assert_eq!(added, removed + 1, "{screen}");
@@ -373,7 +361,6 @@ fn the_edit_diff_splits_in_a_session_pane_above_120_columns() {
     let (_, removed) = h.find("old();");
     let (_, added) = h.find("new();");
     assert_ne!(added, removed, "{screen}");
-    // Hiding it widens the pane past 120 columns, and the rows render again split.
     opencode_tui::dialogs::settings::update(&h.tui, |draft| {
         opencode_tui::dialogs::settings::set_path(draft, &["session", "sidebar"], json!("hide"))
     });
@@ -411,9 +398,6 @@ fn write_and_edit_blocks_keep_no_second_copy_of_the_text() {
         h.wait_for("end\n");
         measure.kept()
     };
-    // Measured: write 1.06 and edit 9.55 copies. Write's is OpenTUI's `Code`'s source; a view that is not finished
-    // keeps a second copy for its highlighter to diff the next edit against (2.13), and a copy in the block adds one
-    // more (3.19). Edit's are OpenTUI's `Diff`: the patch, the text of each side, and per-line gutter maps.
     for (name, bound) in [("write", 1.6), ("edit", 10.1)] {
         // The first mount on a thread also fills caches that live for the process.
         kept(name, 4096);
@@ -439,7 +423,6 @@ fn the_generic_tool_lists_its_inputs_and_output_on_click() {
     assert!(screen.contains("   ✗ mcp_drop\n"), "{screen}");
     assert_eq!(h.fg("mcp_drop"), theme.text.feedback.error.base);
 
-    // Hovering a clickable line brightens it.
     let (x, y) = h.find("mcp_fetch");
     h.app.hover(x, y);
     h.app.advance(Duration::from_millis(1));
@@ -474,8 +457,6 @@ fn a_call_waiting_on_permission_takes_the_warning_color() {
     assert_eq!(h.fg("Grep \"TODO\""), theme.text.muted);
 }
 
-/// The permission prompt over a call restyles in place: the chosen option stays chosen, and each cell equals the
-/// prompt mounted in the new theme, its diff included.
 #[test]
 fn a_theme_switch_restyles_the_permission_prompt_in_place() {
     let patch = "--- src/a.rs\n+++ src/a.rs\n@@ -1,3 +1,3 @@\n fn main() {\n-    old();\n+    new();\n }\n";
@@ -500,7 +481,6 @@ fn a_theme_switch_restyles_the_permission_prompt_in_place() {
 
 #[test]
 fn a_shell_moved_to_the_background_draws_only_its_command() {
-    // The result a timed-out command gets (#63024; the default since #63699).
     let output = "Command moved to the background (shell ID: sh_1).\nPID: 4321\nOutput is streaming to: /shell-output\n\nThe command did not finish within its timeout of 120 seconds and was moved to the background. Do not start another copy while it is running.";
     let messages = turn(vec![tool(
         "call_1",
@@ -524,7 +504,6 @@ fn a_running_shell_the_store_lists_reads_its_output_every_second() {
     let h = open(100, 30, messages, Vec::new());
     h.wait_for("npm run dev");
     let reads = || h.log().iter().filter(|line| line.contains("/api/shell/sh_1/output")).count();
-    // Not listed yet: nothing to read.
     h.app.advance(Duration::from_secs(2));
     assert_eq!(reads(), 0);
 

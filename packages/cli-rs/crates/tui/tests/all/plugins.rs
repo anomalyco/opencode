@@ -42,7 +42,6 @@ pub(crate) fn build(features: &str) -> Vec<u8> {
     library
 }
 
-/// Serves one session whose assistant reply is `text`.
 fn fake(text: String) -> Fake {
     Fake::new(move |seen| match seen.path.as_str() {
         "/api/session" => (200, json!({ "data": [], "cursor": {} })),
@@ -80,12 +79,10 @@ pub(crate) struct Plugins {
 
 deref_harness!(Plugins);
 
-/// The TUI on `route` with the sample's `build` in `<config>/plugins/sample`.
 pub(crate) fn open(route: Route, text: &str, build: &[u8]) -> Plugins {
     open_with(route, text, build, |_| None)
 }
 
-/// [`open`], with the roots `roots` gives for the temp directory.
 fn open_with(
     route: Route,
     text: &str,
@@ -126,7 +123,6 @@ fn the_sample_renders_in_the_transcript_and_reloads_on_change() {
     assert!(!screen.contains("hello plugin"), "{screen}");
     assert_eq!(h.status(), opencode_plugin::Status::Active);
 
-    // A new build in place: the watcher reconciles, the route remounts, and the transcript draws v2.
     write_atomic(&h.plugin.join(entry_file()), &build("v2"));
     h.wait_for("SAMPLE v2 HELLO PLUGIN");
 }
@@ -195,7 +191,6 @@ fn a_panicking_command_is_caught_and_enabling_restarts_the_plugin() {
     h.wait_for("sample plugin v1: home.footer");
     h.tui.keymap.dispatch("sample.panic", None);
     assert_eq!(h.status(), opencode_plugin::Status::Failed("run-command panicked: sample command panicked".to_owned()));
-    // Its claims draw empty, and the toast offers the plugin manager, as in TS.
     let screen = h.wait_for("Plugin failed: sample");
     assert!(screen.contains("Open plugins") && !screen.contains("sample plugin v1: home.footer"), "{screen}");
     h.tui.keymap.dispatch("plugins.list", None);
@@ -251,7 +246,6 @@ fn a_plugin_stores_an_array() {
 #[test]
 fn a_project_plugin_runs_once_approved_and_the_approval_is_kept() {
     let root = opencode_util::temp::tempdir().unwrap();
-    // The project is `work`; the state directory is outside it.
     project_plugin(root.path(), "sample", &build(""));
     let open = || project_tui(root.path());
     let h = open();
@@ -265,7 +259,6 @@ fn a_project_plugin_runs_once_approved_and_the_approval_is_kept() {
     // Decline is active at first.
     h.app.press("right");
     h.app.press("enter");
-    // The manager comes back on the plugin's row, now under its ID.
     let back = h.app.wait_until(support::WAIT, || {
         let text = h.app.text();
         !text.contains("Run project plugin?") && text.contains("Plugins") && !text.contains("pending")
@@ -310,7 +303,6 @@ fn a_state_directory_inside_the_project_keeps_no_decision() {
     open().wait_for("Plugin needs approval");
 }
 
-/// A TUI with real roots under `root`, whose project is `root/work`, with the external plugins loaded.
 fn project_tui(root: &Path) -> Harness {
     project_tui_at(root, &root.join("home"))
 }
@@ -324,7 +316,6 @@ fn project_tui_at(root: &Path, home: &Path) -> Harness {
     harness
 }
 
-/// [`project_tui`], and the log of its requests.
 #[cfg(unix)]
 fn project_tui_logged(root: &Path) -> (Harness, support::Log) {
     let fake = fake(String::new());
@@ -335,7 +326,6 @@ fn project_tui_logged(root: &Path) -> (Harness, support::Log) {
     (harness, log)
 }
 
-/// Writes `library` as the project plugin `name` under `root/work`.
 fn project_plugin(root: &Path, name: &str, library: &[u8]) {
     let dir = root.join("work/.opencode/plugins").join(name);
     std::fs::create_dir_all(&dir).unwrap();
@@ -443,7 +433,6 @@ fn the_list_comes_back_as_the_plugins_are_after_the_question() {
         std::fs::set_permissions(&state, std::fs::Permissions::from_mode(0o700)).ok();
         if answer != "filtered" {
             h.wait_for("x test.boom");
-            // The server list is read again, as `plugin.updated` went unheard under the question.
             h.wait("the server list read again", || reads() == before + 1);
             continue;
         }
@@ -462,7 +451,6 @@ fn a_plugin_that_fails_to_load_shows_a_toast_and_the_footer_counts_it() {
     h.wait_for("⊙ 1 plugin failed");
 }
 
-/// Replaces `path` as editors and build tools do: a new file renamed over the old one.
 pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) {
     let next = path.with_extension("next");
     std::fs::write(&next, bytes).unwrap();
@@ -534,11 +522,9 @@ fn a_dispatch_and_a_storage_write_reach_the_claims_in_call_order() {
 }
 
 thread_local! {
-    /// How often `chain.self` and `chain.fan` ran.
     static CHAINED: Cell<(usize, usize)> = const { Cell::new((0, 0)) };
 }
 
-/// `chain.self` dispatches itself; `chain.fan` dispatches itself twice, and copies with itself as the `then`.
 pub(crate) fn chain(setup: &mut abi::Setup) -> Result<(), String> {
     let command = |name: &str| abi::Command::new(name);
     setup.command(command("chain.self"), |host, _| {
@@ -590,7 +576,6 @@ fn a_chain_of_dispatches_never_holds_the_ui_thread() {
         }
         let waiting = opencode_plugin::effects_waiting();
         assert!((60_000..=1 << 16).contains(&waiting), "loopback {loopback}: {waiting} effects wait");
-        // The UI still takes input: the composer shows what was typed.
         h.app.type_text("still here");
         h.wait_for("still here");
         h.tui.plugins.deactivate_all();
@@ -599,13 +584,11 @@ fn a_chain_of_dispatches_never_holds_the_ui_thread() {
 }
 
 thread_local! {
-    /// What `fetcher`'s fetches returned, and the IDs its replies came back with.
     static FETCHES: RefCell<Fetches> = const { RefCell::new((Vec::new(), Vec::new())) };
 }
 
 type Fetches = (Vec<Result<abi::RequestId, String>>, Vec<abi::RequestId>);
 
-/// `fetcher.go` fetches the session list; each reply is kept by its ID.
 fn fetcher(setup: &mut abi::Setup) -> Result<(), String> {
     setup.command(abi::Command::new("fetcher.go"), |host, _| {
         let fetch = abi::Fetch::new("GET", "/api/session");
@@ -668,7 +651,6 @@ fn a_fetch_given_an_id_gets_its_reply_under_queue_pressure() {
 }
 
 thread_local! {
-    /// How often `burst.hit` ran, and how often the `ring` overlay heard it closed.
     static BURST: Cell<(usize, usize)> = const { Cell::new((0, 0)) };
 }
 
@@ -745,7 +727,6 @@ fn one_call_of_many_effects_and_a_chain_of_closes_are_bounded() {
     }
 }
 
-/// A handler of `rpc.example.updated`, which counts it in plugin state, and a home claim that shows the count.
 fn updates(setup: &mut abi::Setup) -> Result<(), String> {
     let seen = Rc::new(Cell::new(0));
     let counted = seen.clone();
@@ -821,11 +802,9 @@ fn the_tui_disposes_its_plugins_as_it_exits() {
 }
 
 thread_local! {
-    /// The reply the `running` plugin got for its program.
     static RAN: RefCell<Option<Result<Value, String>>> = const { RefCell::new(None) };
 }
 
-/// `x.run` asks for `true` in the foreground; the reply goes to [`RAN`].
 fn running(setup: &mut abi::Setup) -> Result<(), String> {
     setup.command(abi::Command::new("x.run"), |host, _| {
         let _ = host.try_foreground(abi::Foreground { command: "true".into(), ..abi::Foreground::default() });
@@ -937,9 +916,7 @@ fn toggling_a_plugin_frees_the_view_and_the_manager() {
         assert!(support::mark(&h.app, &h.tui.frame.main(), 0, &marker) > 0);
         h.tui.keymap.dispatch("plugins.list", None);
         h.wait_for("able enter");
-        // The host, its backdrop and its panel stay for the next dialog.
         assert!(support::mark(&h.app, h.tui.dialogs.host(), 2, &marker) > 0);
-        // The footer action toggles it.
         let (x, y) = h.find("able enter");
         h.app.hover(x, y);
         h.app.click(x, y);
@@ -952,11 +929,9 @@ fn toggling_a_plugin_frees_the_view_and_the_manager() {
 }
 
 thread_local! {
-    /// How often a bind of the `trap` panel ran.
     static TRAPPED: Cell<usize> = const { Cell::new(0) };
 }
 
-/// `trap.panel` opens a panel that binds the dialog's close keys, an empty key, and `ctrl+e`, each to `trap.hit`.
 fn trap(setup: &mut abi::Setup) -> Result<(), String> {
     let command = |name: &str| abi::Command::new(name);
     setup.command(command("trap.hit"), |_, _| TRAPPED.set(TRAPPED.get() + 1));
@@ -996,12 +971,9 @@ fn a_panel_cannot_take_the_keys_that_close_it() {
 }
 
 thread_local! {
-    /// What the `asks` prompt submitted.
     static ASKED: RefCell<Option<String>> = const { RefCell::new(None) };
 }
 
-/// `asks.prompt` asks in a prompt whose value has line breaks, under a description of 20 lines; `asks.named` keeps
-/// what it submits.
 fn asks(setup: &mut abi::Setup) -> Result<(), String> {
     setup.command(abi::Command::new("asks.named"), |_, input| ASKED.set(input.map(str::to_owned)));
     setup.command(abi::Command::new("asks.prompt"), |host, _| {
@@ -1028,10 +1000,8 @@ fn a_plugin_prompt_shows_its_value_on_one_line_under_a_bounded_description() {
     assert_eq!(ASKED.take().as_deref(), Some("Old title more"));
 }
 
-/// Toasts on every change of the plugin list, as the C conformance plugin does.
 fn chatty(setup: &mut abi::Setup) -> Result<(), String> {
     setup.on_plugins(|host| host.toast(abi::Toast::new(abi::Variant::Info, "plugins changed")));
-    // Six toasts in one call: `chat 0` to `chat 5`.
     setup.command(abi::Command::new("chatty.burst"), |host, _| {
         (0..6).for_each(|index| host.toast(abi::Toast::new(abi::Variant::Info, format!("chat {index}"))));
     });
@@ -1102,7 +1072,6 @@ fn a_plugin_toast_never_hides_the_report_of_a_failure() {
     h.wait_for("plugins changed");
 }
 
-/// A command `{id}.panel` that opens a panel with key `panel`, and one `{id}.close` that closes it.
 fn paneled<const SUB: bool>(setup: &mut abi::Setup) -> Result<(), String> {
     let id = if SUB { "owner/sub" } else { "owner" };
     let command = |name: String| abi::Command::new(name);
@@ -1143,11 +1112,9 @@ fn a_plugin_ends_only_its_own_dialog() {
 }
 
 thread_local! {
-    /// What `shifting`'s next panel is: 0 a fixed height and no action, 1 an action too, 2 bare.
     static SHIFT: Cell<u8> = const { Cell::new(0) };
 }
 
-/// A command that shows the panel `panel`, of a set height, as [`SHIFT`] says.
 fn shifting(setup: &mut abi::Setup) -> Result<(), String> {
     setup.command(abi::Command::new("shifting.panel"), |host, _| {
         let stage = SHIFT.get();
@@ -1271,7 +1238,6 @@ fn named(name: &str) -> abi::Command {
     abi::Command::new(name)
 }
 
-/// The plugin `acme`, with the dotted key `cloud.token`.
 fn acme(setup: &mut abi::Setup) -> Result<(), String> {
     setup.storage_key("cloud.token");
     setup.command(named("acme.read"), |host, _| {
@@ -1283,7 +1249,6 @@ fn acme(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-/// The plugin `acme.cloud`, with the key `token`: TS names both keys `plugin.acme.cloud.token`.
 fn cloud(setup: &mut abi::Setup) -> Result<(), String> {
     setup.storage_key("token");
     setup.command(named("cloud.read"), |host, _| {
@@ -1369,7 +1334,6 @@ fn a_failed_dev_build_says_so() {
     harness.wait_for("plugin dev: the build passes again");
 }
 
-/// A field just over half a stored value's bound: one fits, two do not.
 const FIELD: usize = opencode_plugin::storage::VALUE_BYTES / 64 * 35;
 
 thread_local! {
@@ -1427,7 +1391,6 @@ fn a_merge_is_bounded_by_the_value_it_makes() {
 }
 
 thread_local! {
-    /// The field names `two`'s key `state` held at each of its reads.
     static TWO: RefCell<Vec<Vec<String>>> = const { RefCell::new(Vec::new()) };
 }
 

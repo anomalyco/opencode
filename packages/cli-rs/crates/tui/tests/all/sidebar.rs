@@ -26,7 +26,6 @@ struct Sidebar {
 
 deref_harness!(Sidebar);
 
-/// `ses_a` with the sidebar docked and `plugins` in the config, with TUI storage when `stored`.
 fn mount(plugins: &[&str], stored: bool) -> Sidebar {
     let fake = Fake::new(|seen| match (seen.method.as_str(), seen.path.as_str()) {
         ("GET", "/api/mcp") => (200, list(DIRECTORY, servers())),
@@ -54,7 +53,6 @@ impl Sidebar {
         self.wait_gone("MCP server needs authentication");
     }
 
-    /// Clicks `text` in the sidebar, on the right.
     fn click(&self, text: &str) {
         let screen = self.app.text();
         let (x, y) = screen
@@ -120,7 +118,6 @@ const VIEW: &str = "plugin.opencode.sidebar.mcp.view";
 const CARD: &str = "plugin.opencode.sidebar.footer.getting-started";
 
 impl Sidebar {
-    /// Writes `value` under `key` as another client does.
     fn write(&self, key: &str, value: Value) {
         let file = self.tui.storage().unwrap().file(key).unwrap();
         opencode_local::storage::write_json_atomic(&file, &value).unwrap();

@@ -11,9 +11,7 @@ use std::sync::{Mutex, MutexGuard};
 
 pub struct Counting;
 
-/// The thread whose allocations count, 0 for none.
 static MEASURED: AtomicUsize = AtomicUsize::new(0);
-/// The running measure's number, 0 for none.
 static MEASURE: AtomicUsize = AtomicUsize::new(0);
 static NEXT_MEASURE: AtomicUsize = AtomicUsize::new(1);
 static LIVE: AtomicIsize = AtomicIsize::new(0);
@@ -69,7 +67,6 @@ fn header(layout: Layout) -> usize {
     layout.align().max(size_of::<usize>())
 }
 
-/// The measure an allocation this thread makes now counts in, 0 for none.
 fn counted_in() -> usize {
     let measured = MEASURED.load(Ordering::Relaxed);
     if measured == 0 || measured != thread() {

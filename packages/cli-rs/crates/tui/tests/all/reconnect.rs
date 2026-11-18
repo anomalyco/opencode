@@ -45,7 +45,6 @@ fn a_reconnect_the_status_did_not_show_reads_the_config_again() {
     let h = support::mount(100, 30, Deps { route: Route::Home, events: true, ..support::deps(server.clone()) });
     h.wait_for("Model One");
     *server.model.lock().unwrap() = "p/m2";
-    // A second `server.connected` on the same stream: the status stays connected throughout.
     server.memory.emit(&json!({ "id": "evt_again", "type": "server.connected", "data": {} }));
     let found = h.app.wait_until(WAIT, || h.app.text().contains("Model Two"));
     assert!(found, "the config was not read again:\n{}", h.app.text());

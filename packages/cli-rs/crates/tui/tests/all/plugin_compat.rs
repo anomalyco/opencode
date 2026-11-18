@@ -21,7 +21,6 @@ use crate::support;
 const EXAMPLES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../plugin/examples/pipe");
 const PROBE: &str = "example.v2probe";
 
-/// The probe, with its call log, on Home and settled.
 fn probe(config: Config) -> (Pipe, PathBuf) {
     let log = log_file();
     let options = json!({ "log": log.to_string_lossy() });
@@ -42,7 +41,6 @@ fn drawn(pipe: &Pipe) {
     pipe.settle();
 }
 
-/// A call log of this test's own, empty.
 fn log_file() -> PathBuf {
     let log =
         std::env::temp_dir().join(format!("v2probe-{}-{:?}.log", std::process::id(), std::thread::current().id()));
@@ -76,7 +74,6 @@ fn toasts(pipe: &Pipe) -> Vec<String> {
     shown
 }
 
-/// The probe's list in its home footer claim: `v2probe <count>: <items>|`.
 fn footer(pipe: &Pipe) -> String {
     let text = pipe.harness.app.text();
     let listed =
@@ -324,7 +321,6 @@ const KEYS: &str = r#"export default { id: "example.keys", setup(api) {
 } }
 "#;
 
-/// The TUI with the raw carrier plugin `example.<name>` of `source`, active.
 fn raw(config: Config, name: &str, source: &str) -> Pipe {
     let root = opencode_util::temp::tempdir().unwrap();
     let plugin = root.path().join("config").join("plugins").join(name);
@@ -447,8 +443,6 @@ fn a_reload_gives_the_focus_back_only_to_a_field_that_held_it() {
     assert_eq!(focused(), None, "the reload took the focus back from the composer");
 }
 
-/// The probe of the refocus row, on the TS API: a slot of the home footer with the field `search`; `rf.focus` focuses
-/// it, and `rf.reload` registers another layer, which reloads the plugin's registrations.
 const REFOCUS: &str = r#"import { createElement, insert, insertNode, setProp } from "@opentui/solid"
 let field
 let layers = 0
@@ -862,8 +856,6 @@ fn a_session_panel_toggles_focuses_and_closes_itself() {
     assert_eq!(presentation(), opencode_tui::panel::Presentation::Fullscreen);
     run("v2probe.panel-full");
     assert_eq!(presentation(), opencode_tui::panel::Presentation::Panel);
-    // The panel took the focus as it mounted: the session pane takes it back, then the panel's input gives it to its
-    // field, where the keys typed next go, in the right half.
     run("pane.focus.left");
     run("v2probe.panel-focus");
     pipe.harness.app.type_text("zq");
@@ -995,7 +987,6 @@ fn a_restarted_js_hosts_commands_take_its_setups_states() {
     pipe.settle();
     assert!(reachable(), "the enabled command is not reachable");
     let pid = pipe.scripts().pid();
-    // The swapped call ends the JS host as the next one comes.
     pipe.scripts().fault(Fault::Swap);
     tui.keymap.dispatch("v2probe.add", Some("x"));
     tui.keymap.dispatch("v2probe.add", Some("y"));
@@ -1067,12 +1058,9 @@ fn a_js_listener_takes_its_key_with_prevent_default() {
 }
 
 thread_local! {
-    /// What the native listeners of [`hearing`] heard, `above:<key>` and `below:<key>`.
     static HEARD: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
-/// A linked plugin with two global listeners of every key, one above the JS host's listeners and one below, which
-/// hear and pass each key.
 fn hearing(setup: &mut opencode_plugin::abi::Setup) -> Result<(), String> {
     use opencode_plugin::abi::interact::{Event, Handled, Layer, LayerScope};
     for (priority, name) in [(10, "above"), (-10, "below")] {
@@ -1153,7 +1141,6 @@ fn a_js_host_that_ends_while_keys_are_held_releases_them() {
     harness.app.type_text("%ab");
     assert_eq!(harness.text(), "", "the keys after the bound key wait for its command");
     pipe.until("the ended JS host released the keys", || harness.text() == "%ab");
-    // The plugin whose command ended it fails, blamed, as any such does.
     pipe.until("the end was noticed", || {
         pipe.scripts().pid() != pid && matches!(pipe.status(PROBE), Some(Status::Failed(_)))
     });
@@ -1369,7 +1356,6 @@ fn a_project_plugin_imports_nothing_outside_its_approved_files() {
     let shared = format!("require(\"node:fs\").writeFileSync({:?}, \"ran\")\nexport const note = 1\n", marker);
     let outside = work.join(".opencode/shared.ts");
     std::fs::write(&outside, shared).unwrap();
-    // By its absolute path, which resolves wherever the importing file is.
     let module = format!(
         "import {{ note }} from {outside:?}\nexport default {{ id: \"example.reach\", setup() {{ void note }} }}\n"
     );
@@ -1407,7 +1393,6 @@ fn a_project_plugins_package_name_cannot_lead_out_of_its_approved_files() {
     );
     std::fs::write(unapproved.join("tui.ts"), &module).unwrap();
     std::fs::write(unapproved.join("helper.ts"), "export const helper = 1\n").unwrap();
-    // Up to `/` from wherever the copy is staged, then down to the unapproved directory.
     let climb = format!("{}{}", "../".repeat(40), unapproved.to_string_lossy().trim_start_matches('/'));
     let plugins = work.join(".opencode").join("plugins");
     let named = |name: &str, folder: &str| {
@@ -1676,14 +1661,12 @@ fn a_plugin_with_eighty_stores_reads_each() {
     std::thread::sleep(Duration::from_millis(1500));
     pipe.active("example.shards");
     pipe.settle();
-    // A store's read let go and watched again at each snapshot sent 13,000 messages; each store's are a few.
     let sent = opencode_plugin::pipe::crossed().received - received;
     assert!(sent < 1000, "the setup sent {sent} messages");
     pipe.harness.tui.keymap.dispatch("shards.sum", None);
     pipe.settle();
     assert_eq!(pipe.status("example.shards"), Some(Status::Active));
     assert_eq!(std::fs::read_to_string(&marker).ok().as_deref(), Some("80"));
-    // The host's values change, as another client's writes change them: every store follows, as none was let go.
     for index in 0..80 {
         opencode_plugin::Host::storage_write(&*host, &format!("plugin.example.shards.shard{index}"), r#"{"n":2}"#)
             .unwrap();
@@ -1742,7 +1725,6 @@ fn a_plugin_past_the_stored_values_bound_goes_on_and_follows_a_large_value() {
     pipe.harness.tui.keymap.dispatch("big.count", None);
     marked("the store shows what is stored", &|text| text == "5");
     assert_eq!(pipe.status("example.big"), Some(Status::Active));
-    // Another client stores a list of 1.1 MB: the plugin's store follows it.
     let others: serde_json::Map<String, Value> = (0..12_000)
         .map(|index| (format!("other/model-{index}"), serde_json::json!({ "input": index, "note": "y".repeat(80) })))
         .collect();
@@ -1817,7 +1799,6 @@ fn project(globals: &[&str], config: Config) -> (Pipe, PathBuf, PathBuf) {
     (pipe, dir, marker)
 }
 
-/// Approves the project plugin `dir` as it is held.
 fn approve(pipe: &Pipe, dir: &Path) {
     let tui = &pipe.harness.tui;
     let target = dir.to_string_lossy().into_owned();
@@ -1826,8 +1807,6 @@ fn approve(pipe: &Pipe, dir: &Path) {
     assert_eq!(crate::plugin_pipe::decide(&pipe.harness, &target, &artifact, Decision::Approved), Ok(true));
 }
 
-/// A registry that answers nothing and counts the connections made to it: Bun pointed at it shows whether it asked
-/// npm for anything (js-no-install).
 struct Registry {
     url: String,
     asked: Arc<std::sync::atomic::AtomicUsize>,
@@ -1852,7 +1831,6 @@ impl Registry {
         self.asked.load(std::sync::atomic::Ordering::SeqCst)
     }
 
-    /// `config` with Bun pointed at this registry.
     fn point(&self, config: Config) -> Config {
         let env = ["BUN_CONFIG_REGISTRY", "NPM_CONFIG_REGISTRY", "npm_config_registry"]
             .map(|name| (name.to_owned(), self.url.clone()))
@@ -1861,9 +1839,6 @@ impl Registry {
     }
 }
 
-/// A global plugin with no `node_modules` whose module imports a package nobody installed, loaded on a JS host that
-/// runs as `config` says, with Bun pointed at a registry that counts what it is asked; its status, the toast told, and
-/// how often the registry was asked.
 fn missing_package(config: Config) -> (Option<Status>, Option<String>, usize) {
     let registry = Registry::start();
     let root = opencode_util::temp::tempdir().unwrap();

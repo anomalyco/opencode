@@ -50,7 +50,6 @@ fn id(plugin: u8) -> &'static str {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Fault {
     Panic,
-    /// One call of 101 ms on the injected clock.
     Overrun,
 }
 
@@ -63,7 +62,6 @@ pub enum Kind {
 }
 
 impl Kind {
-    /// The call kind the host names in the record.
     fn name(self) -> &'static str {
         match self {
             Kind::Setup => "setup",
@@ -76,33 +74,23 @@ impl Kind {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Command {
-    /// The plugin's command, which counts.
     Run(u8),
     Frame,
-    /// A key in the composer.
     Type(char),
-    /// The plugin manager's action on `model.b`.
     ToggleB,
-    /// Makes `model.a`'s next call of that kind fail so.
     Arm(Fault, Kind),
-    /// `model.a` takes 2 ms a call from now on, or no longer.
     Lag,
-    /// A composer command: clear, history back, stash, stash pop.
     Prompt(&'static str),
-    /// The route mounts again, as a manager action does.
     Remount,
 }
 
-/// One call a plugin got, as it logs it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Call {
-    /// The world it ran in: 0 the host, 1 the twin.
     world: usize,
     plugin: u8,
     kind: Kind,
     /// What the record named while the call ran.
     seen: Option<(String, String)>,
-    /// The frame the call ran in, and what it cost on the injected clock.
     frame: u64,
     took: Duration,
 }
@@ -130,7 +118,6 @@ thread_local! {
     static OUTCOME: Cell<(bool, bool)> = const { Cell::new((false, false)) };
 }
 
-/// A plugin with a command that counts and a line in `home.footer`; each call logs itself.
 fn probe<const P: u8>(setup: &mut abi::Setup) -> Result<(), String> {
     called(P, Kind::Setup);
     let count = Rc::new(Cell::new(0));
@@ -150,7 +137,6 @@ fn probe<const P: u8>(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-/// Logs a call with what the record says inside it, then fails as armed.
 fn called(plugin: u8, kind: Kind) {
     let current = CURRENT.with_borrow(|current| current.clone()).expect("a world is current");
     let seen = current.record.running().and_then(|running| {
@@ -204,7 +190,6 @@ impl Backend for Builds {
     }
 }
 
-/// A directory with both plugins' builds.
 fn builds() -> opencode_util::temp::TempDir {
     let root = opencode_util::temp::tempdir().unwrap();
     for (name, build) in [("a", A), ("b", B)] {
@@ -215,13 +200,10 @@ fn builds() -> opencode_util::temp::TempDir {
     root
 }
 
-/// A TUI on home with both plugins, a run record and an injected clock.
 struct World {
     harness: Harness,
     current: Current,
-    /// The toasts shown as it started.
     opened: Vec<ToastOptions>,
-    /// Stands in for the TUI's own loader, which `PluginsChanged` reconciles.
     loader: Loader,
     _root: opencode_util::temp::TempDir,
 }
@@ -233,8 +215,6 @@ impl World {
         Self::mount(world, root, record, None)
     }
 
-    /// A TUI on home with the plugins of `root` and `record`, which a parent made for it; with `home`, it keeps its
-    /// state there, as a real run does.
     fn mount(world: usize, root: opencode_util::temp::TempDir, record: Arc<Record>, home: Option<&Path>) -> Self {
         let config = root.path().join("config");
         let roots = home.and_then(|home| support::roots(support::home_paths(home), "test"));
@@ -272,7 +252,6 @@ impl World {
                 let ran = tui.keymap.dispatch(&format!("{}.run", id(plugin)), None);
                 let _ = matches!(ran, RunResult::Ok);
             }
-            // `advance` paints nothing; the budget counts painted frames.
             Command::Frame => {
                 app.advance(Duration::from_millis(16));
                 app.render();
@@ -296,7 +275,6 @@ impl World {
         }
     }
 
-    /// What the plugin manager's action does.
     fn toggle(&self, plugin: u8) {
         self.enter();
         let tui = &self.harness.tui;
@@ -351,14 +329,12 @@ impl World {
     }
 }
 
-/// The rows of a frame as text.
 fn rows(frame: &Capture) -> Vec<String> {
     (0..frame.height)
         .map(|y| (0..frame.width).filter_map(|x| frame.cell(x, y)).map(|cell| cell.symbol.as_str()).collect())
         .collect()
 }
 
-/// The failure count the home footer shows in `a` and not in the twin, which moves what follows it.
 const COUNT: &str = "⊙ 1 plugin failed /plugins";
 
 /// The first row where `a` and `b` differ outside `mask`. In the row of `a` that holds the failure count, the count
@@ -459,7 +435,6 @@ fn take_calls() -> Vec<Call> {
     LOG.with_borrow_mut(std::mem::take)
 }
 
-/// The calls of world `world`.
 fn only(calls: &[Call], world: usize) -> Vec<Call> {
     calls.iter().filter(|call| call.world == world).cloned().collect()
 }
@@ -559,7 +534,6 @@ fn run(commands: &[Command]) -> Option<Failure> {
     None
 }
 
-/// `record-balanced`: each call found its own plugin and call in the record, and now the record names nobody.
 fn balanced(world: &World, calls: &[Call]) -> Option<String> {
     for call in calls.iter().filter(|call| call.world == 0) {
         let expected = Some((id(call.plugin).to_owned(), call.kind.name().to_owned()));
@@ -602,7 +576,6 @@ fn reported(world: &World, reports: &[String], failing: bool, due: bool) -> Opti
     }
 }
 
-/// Shrunk traces of defects the model found and that are not fixed, each with the property it fails.
 const OPEN: &[(&str, &str, &[Command])] = &[];
 
 /// Fixed rows: each fault and report through the whole host, with whether `model.a` must fail and be told slow, so a
@@ -699,7 +672,6 @@ fn the_oracles_can_fail() {
     let titles: Vec<_> = toasts.iter().filter_map(|toast| toast.title.clone()).collect();
     assert_eq!(titles, ["Plugin is slow: model.a"]);
     assert!(slow.harness.tui.plugins.entries().iter().any(|entry| entry.id == "model.a" && entry.slow.is_some()));
-    // The manager says which of its calls cost (PL-5); the toast's Disable turns it off.
     let _ = slow.harness.tui.keymap.dispatch("plugins.list", None);
     slow.settle();
     let screen = rows(&slow.frame()).join("\n");
@@ -734,7 +706,6 @@ fn after_in(root: opencode_util::temp::TempDir, crash: Crash, home: &Path) -> Wo
     World::mount(0, root, record, Some(home))
 }
 
-/// The crash of `id`'s build in `root`, in a render: its target there, and the digest the loader gives it.
 fn crash_of(root: &opencode_util::temp::TempDir, id: &str) -> Crash {
     let name = if id == "model.a" { "a" } else { "b" };
     let target = root.path().join("config").join("plugins").join(name).to_string_lossy().into_owned();
@@ -752,7 +723,6 @@ fn crash_of(root: &opencode_util::temp::TempDir, id: &str) -> Crash {
     }
 }
 
-/// The crash list in the state directory of `world`.
 fn crash_list(world: &World) -> serde_json::Value {
     let file = world.harness.tui.state_dir().expect("a state directory").join("plugin-crashes.json");
     serde_json::from_slice(&std::fs::read(file).unwrap_or_else(|_| b"[]".to_vec())).unwrap()
@@ -865,7 +835,6 @@ fn a_test_client_starts_no_watchdog() {
     take_calls();
 }
 
-/// Where the 2.0 plugin of [`a_2_0_surface_is_contained`] fails next, and how.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum At {
     SlotView,
@@ -883,7 +852,6 @@ thread_local! {
     static SURFACE_RECORD: RefCell<Option<Arc<Record>>> = const { RefCell::new(None) };
 }
 
-/// Notes the call at `at`, then fails as armed: a panic, or 150 ms on the monitor's clock.
 fn surface_call(at: At) {
     let named = SURFACE_RECORD.with_borrow(|record| {
         let running = record.as_ref()?.running()?;
@@ -903,7 +871,6 @@ fn surface_call(at: At) {
     }
 }
 
-/// A built-in of contract 2.0: a surface in the home footer, a surface on route `page` and a command of that route.
 fn surfaces(setup: &mut abi::Setup) -> Result<(), String> {
     use abi::v2;
     let command = abi::Command::new("s2.go").title("go").scope(abi::Scope::Route("page".into()));
@@ -943,7 +910,6 @@ fn a_2_0_surface_is_contained() {
     let (app, tui) = (&harness.app, &harness.tui);
     let base = Instant::now();
     tui.plugins.monitor().set_clock(move || base + SURFACE_CLOCK.get());
-    // The mount's calls ran on the wall clock, which a loaded machine stretches past 100 ms: counted from here on.
     let overruns = tui.plugins.monitor().host_overruns();
     let settle = || {
         app.advance(Duration::from_millis(1));
@@ -956,7 +922,6 @@ fn a_2_0_surface_is_contained() {
     settle();
     assert!(screen().contains("slot body"), "{}", screen());
 
-    // Overruns of a built-in: counted, nothing fails, everything still shows.
     tui.navigate(page());
     settle();
     SURFACE_FAULT.set(Some((At::Command, Fault::Overrun)));
@@ -973,7 +938,6 @@ fn a_2_0_surface_is_contained() {
     }
     assert!(seen.iter().all(|(_, named, caught)| named.is_some() && *caught), "{seen:?}");
 
-    // A panic in a route command fails the plugin; its route shows nothing more.
     let before = SURFACE_MOUNT.get();
     SURFACE_FAULT.set(Some((At::Command, Fault::Panic)));
     let _ = tui.keymap.dispatch("s2.go", None);

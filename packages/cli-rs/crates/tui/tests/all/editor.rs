@@ -1,7 +1,3 @@
-//! Editor integration (E.5): the IDE's selection and mentions from a fake IDE MCP server, Zed's selection
-//! from a database in a temporary directory, and the prompt's use of them. No real editor, IDE, or Zed
-//! database is touched: every source is built here.
-
 use crate::support::{self, DIRECTORY, Fake, Harness, Log, deref_harness, list};
 
 use std::path::Path;
@@ -16,7 +12,6 @@ use crate::support::ide;
 
 use ide::Ide;
 
-/// The baseline routes; any other read is an empty list and any other write a 204.
 fn fake() -> Fake {
     Fake::new(|seen| match (seen.method.as_str(), seen.path.as_str()) {
         ("GET", "/api/vcs") => (200, list(DIRECTORY, json!({}))),
@@ -57,7 +52,6 @@ impl Setup {
             .lock()
             .unwrap()
             .iter()
-            // The goal footer's RPC `get` is a read (E.14).
             .filter(|seen| seen.method == "POST" && !seen.path.starts_with("/api/rpc/"))
             .map(|seen| (seen.path.clone(), seen.body.clone()))
             .collect()
@@ -125,7 +119,6 @@ fn ide_selection_shows_and_goes_once_before_the_prompt() {
     assert_eq!(synthetics, 1);
     setup.wait_for("main.rs#3-5");
 
-    // `prompt.editor_context.clear` removes it.
     setup.tui.keymap.dispatch("prompt.editor_context.clear", None);
     setup.wait("the label to go", || !setup.app.text().contains("main.rs#"));
 }
@@ -193,7 +186,6 @@ fn zed_selection_is_read_from_its_database() {
     });
     // `index.*` names its directory too; bytes 6..17 run from line 1 into line 2.
     setup.wait_for("src/index.ts#1-2");
-    // The next poll sees a new selection.
     zed::exec(&db, "update editor_selections set start = 12, end = 17").unwrap();
     setup.wait_for("src/index.ts#2");
     let selection = setup.tui.prompt.editor.selection().unwrap();

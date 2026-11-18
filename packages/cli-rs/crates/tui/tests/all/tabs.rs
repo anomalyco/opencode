@@ -107,7 +107,6 @@ fn tabs_open_close_and_persist_in_the_cwd_scope() {
     let file = h.wait_file("tabs", |file| file["cwd"][cwd()]["tabs"] == both_tabs());
     assert_eq!(file["cwd"][cwd()]["unread"], json!({}));
 
-    // `<leader>w` closes the open tab and goes back to the previous one; `ctrl+shift+t` reopens it.
     h.app.press("ctrl+x");
     h.app.press("w");
     h.wait_tabs(&["ses_a"], Some("ses_a"));
@@ -139,7 +138,6 @@ fn clear_closes_the_tab_and_goes_home() {
     h.wait_for("Write the docs");
     h.tui.keymap.dispatch("session.clear", None);
     h.wait_tabs(&["ses_a"], None);
-    // Home shows the strip with the new-session tab.
     let screen = h.wait_for("New session");
     assert!(screen.lines().next().unwrap().contains("Fix the parser"), "{screen}");
 }
@@ -214,9 +212,6 @@ fn a_background_tab_reads_its_pending_permission() {
     assert!(waiting, "{}", h.app.text());
 }
 
-// #64261: another TUI closes the viewed session's tab. This one keeps showing the session; closing it then selects
-// the neighbour that took its place, not home (TS `session-tabs.test.tsx`, "closing a session whose tab another TUI
-// closed selects its former neighbour").
 #[test]
 fn closing_a_session_whose_tab_another_tui_closed_selects_its_former_neighbour() {
     let home = opencode_util::temp::tempdir().unwrap();
@@ -248,7 +243,6 @@ fn closing_a_session_whose_tab_another_tui_closed_selects_its_former_neighbour()
         .update("tabs", &json!({}), |value| *value = serde_json::from_str(&file(&["ses_a", "ses_c"])).unwrap())
         .unwrap();
     assert!(h.app.wait_until(WAIT, || ids() == ["ses_a", "ses_c"]), "{:?}", ids());
-    // The other client's close leaves this view in place rather than switching sessions under the user.
     assert_eq!(h.tui.route(), support::session_route("ses_b"));
 
     opencode_tui::tabs::close(&h.tui, None);
@@ -346,7 +340,6 @@ fn a_deletion_lost_in_a_signal_overflow_still_closes_its_tab() {
     h.wait_tabs(&["ses_a"], Some("ses_a"));
 }
 
-// `TabPulse` unmounts with its tab: closing a busy tab leaves no pulse that keeps the frame ticking.
 #[test]
 fn a_closed_busy_tab_stops_the_pulse_ticks() {
     let h = mount(100, json!({}));
@@ -366,7 +359,6 @@ fn a_closed_busy_tab_stops_the_pulse_ticks() {
     assert!(h.app.needs_frame(), "a busy tab pulses");
     opencode_tui::tabs::close(&h.tui, Some("ses_a"));
     h.wait_tabs(&["ses_b"], Some("ses_b"));
-    // Late responses may still draw; a pulse left behind draws every tick, forever.
     let still = h.app.wait_until(WAIT, || {
         h.app.render();
         h.app.advance(std::time::Duration::from_millis(200));
@@ -399,7 +391,6 @@ fn a_busy_tab_paints_on_its_own_and_stops_when_idle() {
         ("strip", json!({ "tabs": { "layout": "horizontal" } }), false, 160usize),
         ("rail", vertical.clone(), false, 160),
         ("compact rail", vertical, true, 100),
-        // A still glyph or a number needs no frames.
         ("compact rail, no animations", json!({ "animations": false, "tabs": { "layout": "vertical" } }), true, 0),
         ("compact rail, numbers", json!({ "tabs": { "layout": "vertical", "indicators": "numbers" } }), true, 0),
     ] {
@@ -416,7 +407,6 @@ fn a_busy_tab_paints_on_its_own_and_stops_when_idle() {
         assert!(frames(&h).len() <= 1, "{name}: idle");
         // The app's other timers, which wake `App::run`'s loop without a frame.
         let rest = h.app.idle(std::time::Duration::from_secs(8));
-        // Off the spinner's steps, which count from the app clock's start.
         h.app.advance(std::time::Duration::from_millis(30));
         h.tui.data.apply(&[execution("started", 1)]);
         if compact && busy > 0 {
@@ -443,7 +433,6 @@ fn a_busy_tab_paints_on_its_own_and_stops_when_idle() {
         assert!((busy.saturating_sub(1)..=busy + 2).contains(&idle.frames), "{name}: idle loop, {idle:?}");
         assert!(idle.wakeups <= idle.frames + rest.wakeups, "{name}: idle loop, {idle:?}, at rest {rest:?}");
         if busy > 0 {
-            // The running tab's glyph is its spinner's summed ticks: a frame late by five steps moves it five.
             let frames = opencode_ui::motion::SPINNER_FRAMES;
             let glyph = || {
                 let text = h.app.text();
@@ -453,8 +442,6 @@ fn a_busy_tab_paints_on_its_own_and_stops_when_idle() {
             let first = glyph().unwrap_or_else(|| panic!("{name}: no spinner"));
             h.app.advance(opencode_ui::motion::SPINNER_INTERVAL * 5);
             assert_eq!(glyph(), Some((first + 5) % frames.len()), "{name}: a late frame");
-            // A strip or rail that hides unmounts its tabs: shown again, a running tab's spinner starts over, as TS
-            // mounts it.
             if name.contains("rail") {
                 h.app.resize(60, 30);
                 h.app.render();
@@ -471,7 +458,6 @@ fn a_busy_tab_paints_on_its_own_and_stops_when_idle() {
         h.tui.data.apply(&[execution("succeeded", 2)]);
         frames(&h);
         assert!(frames(&h).len() <= 1, "{name}: idle again");
-        // An idle tab costs what the app costs at rest (the devtools sampler, every 2 s), or a fixture retry.
         let again = h.app.idle(std::time::Duration::from_secs(8));
         assert!(again.frames <= 1 && again.wakeups <= rest.wakeups + again.frames, "{name}: {again:?}, {rest:?}");
     }
@@ -499,7 +485,6 @@ fn frames(h: &Tabs) -> Vec<u128> {
 #[test]
 fn a_split_panel_shows_beside_the_session_and_resizes() {
     let h = mount(140, json!({ "animations": false, "session": { "sidebar": "hide" } }));
-    // A plugin's panel surface that names the session it shows beside.
     let setup = |setup: &mut abi::Setup| {
         setup.surface(v2::Surface::new("diff", v2::Place::Panel("diff".into()), |cx| {
             let abi::Route::Session { id } = cx.read.route() else { return v2::Node::column(Vec::new()) };
@@ -515,7 +500,6 @@ fn a_split_panel_shows_beside_the_session_and_resizes() {
     let row = screen.lines().find(|line| line.contains("panel for")).unwrap();
     assert_eq!(row.chars().position(|c| c == 'p'), Some(70), "{screen}");
 
-    // Drag the handle (on the boundary's right cell, column 69) to column 89: the panel is 50 wide.
     h.app.hover(69, 10);
     h.app.drag((69, 10), (89, 10));
     let column = || {
@@ -524,7 +508,6 @@ fn a_split_panel_shows_beside_the_session_and_resizes() {
     assert!(h.app.wait_until(WAIT, || column() == Some(90)), "{}", h.app.text());
     h.wait_file("layout", |layout| layout["paneWidth"] == 50);
 
-    // Leaving the panel's session closes it.
     h.open("ses_b");
     assert!(h.app.wait_until(WAIT, || h.tui.panels.current().is_none()));
 }
@@ -536,9 +519,7 @@ fn tabs_and_layout_are_shared_with_the_typescript_client() {
     let Some(script) = oracle() else { return };
     let h = mount(120, json!({ "animations": false, "tabs": { "layout": "vertical" } }));
     h.open("ses_b");
-    // The second tab's title lands with its session read.
     h.wait_file("tabs", |file| file["cwd"][cwd()]["tabs"] == both_tabs());
-    // The rail's handle sits on column 41; a drag to 30 stores 31.
     h.app.drag((41, 10), (30, 10));
     h.wait_file("layout", |layout| layout["verticalTabsWidth"] == 31);
 
@@ -547,14 +528,12 @@ fn tabs_and_layout_are_shared_with_the_typescript_client() {
     assert_eq!(read["tabs"]["cwd"][cwd()]["tabs"], both_tabs());
     assert_eq!(read["layout"]["verticalTabsWidth"], 31);
 
-    // TS moves a tab and widens the rail; the running Rust TUI's storage watch picks both up.
     run(&script, &["move", &state, CHANNEL, &cwd(), "ses_b", "0"]);
     run(&script, &["width", &state, CHANNEL, "50"]);
     let reloaded = h.app.wait_until(WAIT, || h.ids() == ["ses_b", "ses_a"] && h.tui.frame.rail_width(&h.tui) == 50);
     assert!(reloaded, "tabs {:?}, rail {}", h.ids(), h.tui.frame.rail_width(&h.tui));
 }
 
-// The TypeScript side of P-FILE, when bun and the workspace's node_modules are there.
 fn oracle() -> Option<PathBuf> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let script = root.join("parity/oracle/E.12-tabs.ts");
@@ -571,7 +550,6 @@ fn oracle() -> Option<PathBuf> {
 }
 
 fn run(script: &Path, args: &[&str]) -> Value {
-    // `parity/bunfig.toml` preloads Solid's JSX, which the TS storage module needs.
     let output = Command::new("bun")
         .current_dir(script.parent().unwrap().parent().unwrap())
         .arg(script)

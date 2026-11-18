@@ -27,7 +27,6 @@ enum Carrier {
 
 const CARRIERS: [Carrier; 2] = [Carrier::Linked, Carrier::Loopback];
 
-/// Adds the probe to `h` on `carrier`.
 fn add(h: &Harness, carrier: Carrier) {
     let definition = match carrier {
         Carrier::Linked => abi::Plugin { id: "p0a", setup: probe::setup }.into(),
@@ -59,18 +58,15 @@ fn cells(h: &Harness) -> Vec<opentui::testing::Cell> {
     capture.cells.into_iter().enumerate().filter(|(index, _)| !example(*index)).map(|(_, cell)| cell).collect()
 }
 
-/// The probe's log, from its storage.
 fn log(h: &Harness) -> Vec<String> {
     let json = opencode_plugin::Host::storage_read(&*opencode_tui::plugins::host::host(&h.tui), "plugin.p0a.log");
     json.and_then(|json| serde_json::from_str(&json).ok()).unwrap_or_default()
 }
 
-/// The entries of the probe's log that start with `prefix`.
 fn logged(h: &Harness, prefix: &str) -> Vec<String> {
     log(h).into_iter().filter(|entry| entry.starts_with(prefix)).collect()
 }
 
-/// The lines on screen that contain `text`.
 fn toasts(h: &Harness, text: &str) -> usize {
     h.app.text().lines().filter(|line| line.contains(text)).count()
 }
@@ -101,7 +97,6 @@ fn a_confirm_answers_true_false_or_nothing_on_both_carriers() {
                     h.wait_gone("Delete the draft?");
                     assert_eq!(toasts(&h, "answered"), 1, "{carrier:?} {keys:?}: {}", h.app.text());
                 }
-                // Replaced by the alert: the confirm's action does not run.
                 None => {
                     h.tui.keymap.dispatch("p0a.alert", None);
                     h.wait_for("Heads up");
@@ -183,7 +178,6 @@ fn the_composer_reads_and_edits_the_same_on_both_carriers() {
         let prompts = setup.wait_request("POST", "/api/session/ses_a/prompt", 1);
         assert_eq!(prompts[0]["text"], "héllo wörld", "{carrier:?}");
         setup.wait("the clear", || setup.textarea().text().is_empty());
-        // A set keeps the mode, as TS's `ref.set` does.
         setup.app.type_text("!");
         setup.wait_for("Shell");
         setup.tui.keymap.dispatch("p0a.set", Some("ls"));
@@ -193,7 +187,6 @@ fn the_composer_reads_and_edits_the_same_on_both_carriers() {
         setup.app.press("escape");
         setup.wait_for("Build");
         setup.app.press("ctrl+c");
-        // With a dialog open the composer keeps its text and loses the focus.
         setup.app.type_text("later");
         setup.tui.keymap.dispatch("p0a.alert", None);
         setup.wait_for("Heads up");
@@ -244,7 +237,6 @@ fn serving(route: Route, reads: Vec<(&str, serde_json::Value)>) -> Setup {
     serving_at(route, reads, 90)
 }
 
-/// [`serving`] on a terminal `width` columns wide.
 fn serving_at(route: Route, reads: Vec<(&str, serde_json::Value)>, width: u16) -> Setup {
     let setup = Setup::serving(route, reads, width);
     add(&setup, Carrier::Linked);
@@ -253,7 +245,6 @@ fn serving_at(route: Route, reads: Vec<(&str, serde_json::Value)>, width: u16) -
     setup
 }
 
-/// Asserts that a set and a submit from the plugin leave the composer's text `draft` and send nothing.
 #[track_caller]
 fn refused(setup: &Setup, draft: &str) {
     setup.tui.keymap.dispatch("p0a.send", Some("from the plugin"));
@@ -263,7 +254,6 @@ fn refused(setup: &Setup, draft: &str) {
     assert!(setup.requests("POST", "/api/session").is_empty());
 }
 
-/// Asserts that the plugin reads no composer.
 #[track_caller]
 fn unread(setup: &Setup) {
     setup.tui.keymap.dispatch("p0a.read", None);
@@ -286,7 +276,6 @@ fn a_hidden_composer_is_not_read_or_edited() {
         unread(&setup);
         refused(&setup, "");
     }
-    // The drawer hides the composer over a draft.
     let setup = serving(session_route(), Vec::new());
     setup.app.type_text("unsent");
     setup.tui.keymap.dispatch("session.child.first", None);
@@ -301,12 +290,10 @@ fn a_disabled_composer_takes_no_submit() {
     let form = serde_json::json!({ "id": "frm_g", "sessionID": "global", "title": "MCP server needs a token", "fields": field });
     let setup = serving(Route::Home, vec![("/api/form", support::list("/project", serde_json::json!([form])))]);
     setup.wait_for("MCP server needs a token");
-    // The set edits the composer, which shows; the submit in the same call sends nothing.
     setup.tui.keymap.dispatch("p0a.send", Some("from the plugin"));
     setup.wait("the set", || setup.textarea().text() == "from the plugin");
     setup.app.advance(std::time::Duration::from_millis(100));
     assert!(setup.requests("POST", "/api/session").is_empty() && setup.requests("POST", "/prompt").is_empty());
-    // The diff viewer, docked beside the session at this width, takes the input; the composer still shows.
     let diff = serde_json::json!({
         "file": "src/main.rs", "patch": "@@ -1 +1 @@\n-old\n+new\n", "additions": 1, "deletions": 1, "status": "modified",
     });
@@ -340,7 +327,6 @@ fn a_submit_behind_a_dialog_sends_and_leaves_the_dialog() {
     assert!(!setup.app.text().contains("alert closed"), "{}", setup.app.text());
 }
 
-/// A store signal of event `kind` in the fixture's directory, with `data`.
 fn event(kind: &str, data: serde_json::Value) -> opencode_api::generated::V2Event {
     let id = format!("evt_{}", data.to_string().len());
     let json = serde_json::json!({
@@ -361,12 +347,10 @@ fn a_composer_edit_is_not_overtaken_by_the_next_signal() {
         opencode_tui::features::events::testing::signal(&setup.tui, changed("src/read.rs"));
         setup.wait("the read", || !logged(&setup, "read").is_empty());
         assert_eq!(logged(&setup, "read"), ["read from an event"], "{carrier:?}");
-        // A wake in the same batch as the signal that set the composer: the wake handler reads the new text.
         setup.tui.keymap.dispatch("p0a.set", Some(""));
         setup.wait("the clear", || setup.textarea().text().is_empty());
         opencode_tui::features::events::testing::signal(&setup.tui, changed("src/set.rs"));
         setup.tui.keymap.dispatch("p0a.wake", None);
-        // The wake handlers run as a paint starts (Pl).
         setup.wait("the wake", || {
             setup.app.render();
             !logged(&setup, "woke").is_empty()
@@ -414,7 +398,6 @@ fn a_call_that_panics_leaves_no_composer_edit_and_no_dialog() {
             setup.app.type_text("draft");
             setup.tui.keymap.dispatch("p0a.all", panics.then_some("panic"));
             match panics {
-                // Each effect shows: the prompt sent, the alert closed by the confirm that replaced it, the confirm.
                 false => {
                     let prompts = setup.wait_request("POST", "/api/session/ses_a/prompt", 1);
                     assert_eq!(prompts[0]["text"], "all of it", "{carrier:?}");
@@ -452,7 +435,6 @@ fn a_dispose_callback_that_panics_leaves_no_effects() {
     }
 }
 
-/// A plugin that logs each run of its command `witness.ran` in its storage.
 fn witness() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         setup.storage_key("ran");
@@ -477,7 +459,6 @@ fn witness() -> abi::Plugin {
     abi::Plugin { id: "witness", setup }
 }
 
-/// How often `witness.ran` ran.
 fn witnessed(h: &Harness) -> u64 {
     let json = opencode_plugin::Host::storage_read(&*opencode_tui::plugins::host::host(&h.tui), "plugin.witness.ran");
     json.and_then(|json| serde_json::from_str::<serde_json::Value>(&json).ok()?["count"].as_u64()).unwrap_or(0)
@@ -591,7 +572,6 @@ fn a_styled_box_draws_the_same_on_both_carriers() {
     let rows: Vec<&str> = screen.lines().skip_while(|line| !line.contains("p0a")).take(5).collect();
     assert_eq!(
         rows.iter().map(|row| row.trim_end()).collect::<Vec<_>>(),
-        // As TS draws it (parity/scenarios/P.1/p0a-dialogs.app.ts): the wrapped chips' second row is past the height.
         [
             "  ╭─────────p0a──────────╮",
             "  │  ┃ ruled             │",

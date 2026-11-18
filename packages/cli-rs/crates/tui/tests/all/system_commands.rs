@@ -21,7 +21,6 @@ use opentui::prelude::*;
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
 
-/// The F keys the scenarios bind the toggles to, as `parity/scenarios/E.20/toggles.app.ts` does.
 fn keybinds() -> Value {
     json!({
         "app.toggle.animations": "f5",
@@ -33,7 +32,6 @@ fn keybinds() -> Value {
 }
 
 fn mount(app: &TestApp, info: Info, roots: Option<Roots>) -> Rc<Tui> {
-    // An empty session list and a working reload; anything else is a 404.
     let fake = Fake::new(|seen| match seen.path.as_str() {
         "/api/session" => (200, json!({ "data": [], "cursor": {} })),
         "/api/location/reload" => (204, Value::Null),
@@ -74,14 +72,12 @@ fn copy_on_select_copies_the_drag_and_ctrl_c_clears_it_then_exits() {
     assert_eq!(*capture.0.copied.borrow(), ["/project"]);
     assert_eq!(app.app().selected_text().as_deref(), Some("/project"));
 
-    // Under copy-on-select, Ctrl+C clears the selection and still reaches `app.exit`, as in TS.
     app.press("ctrl+c");
     assert_eq!(app.app().selected_text(), None);
     assert!(app.app().is_quitting());
     assert_eq!(capture.0.copied.borrow().len(), 1);
 }
 
-/// The backdrop asks whether a selection exists when the press lands, as TS does (`ui/dialog.tsx:51-53`).
 #[test]
 fn a_drag_inside_a_dialog_copies_and_keeps_it_open() {
     let capture = testing::capture();
@@ -111,7 +107,6 @@ fn manual_copy_waits_for_ctrl_c_or_a_right_click_and_escape_clears() {
 
     app.press("escape");
     assert_eq!(app.app().selected_text(), None);
-    // With nothing selected, Ctrl+C is `app.exit` again.
     app.press("ctrl+c");
     assert!(app.app().is_quitting());
 }
@@ -175,7 +170,6 @@ fn a_plain_click_opens_a_link_and_modified_clicks_and_drags_do_not() {
     app.drag((0, y), (3, y));
     assert!(capture.0.opened.borrow().is_empty());
     assert_eq!(opencode_tui::features::links::link_at(app.app(), 1, y).as_deref(), Some("https://opencode.ai/docs"));
-    // A plain click opens it.
     app.advance(Duration::from_millis(600));
     app.click(1, y);
     assert_eq!(*capture.0.opened.borrow(), ["https://opencode.ai/docs"]);
@@ -239,8 +233,6 @@ fn ctrl_y_in_the_console_copies_its_selection() {
     wait_for(&app, "Copied to clipboard");
 }
 
-// P-FILE ------------------------------------------------------------------------------------------------------
-
 #[test]
 fn toggles_write_cli_json_as_typescript_does_and_typescript_reads_them() {
     let original = format!(
@@ -296,7 +288,6 @@ fn toggles_write_cli_json_as_typescript_does_and_typescript_reads_them() {
     assert_eq!(ok["prompt"]["image_preview"], json!(true), "{read}");
     assert_eq!(ok["terminal"]["title"], json!(false), "{read}");
 
-    // A second press turns each back.
     app.press("f6");
     assert!(app.wait_until(WAIT, || { tui.settings.info().to_value()["diffs"]["wrap"] == json!("word") }));
 }
