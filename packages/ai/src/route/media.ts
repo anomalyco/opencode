@@ -205,7 +205,16 @@ export const queued = <Request extends MediaRequest, Response, Token>(
     }) =>
       get(operation.path(token)).pipe(
         Effect.flatMap((response) =>
-          operation.decode(response, { token, get, headers: (url) => transport.headers(url, exchange) }),
+          operation.decode(response, {
+            token,
+            get,
+            credentials: (url) =>
+              Effect.gen(function* () {
+                const headers = yield* transport.headers(url, exchange)
+                if (headers === undefined) return {}
+                return { headers, middleware: yield* RequestExecutor.CurrentMiddleware }
+              }),
+          }),
         ),
       )
     const status = poll(protocol.status)
@@ -399,7 +408,7 @@ const makeTransport = <Request extends MediaRequest>(
     }),
     /**
      * The headers a follow-up GET of `url` sends, for result URLs that only download with the same credentials. A URL
-     * on another origin than the route's base URL gets none, so credentials never leave the provider's host.
+     * on another origin than the route's base URL gets undefined, so credentials never leave the provider's host.
      */
     headers: (url: string, exchange: Exchange) =>
       URL.canParse(url) && new URL(url).origin === baseURL("").origin
@@ -409,8 +418,8 @@ const makeTransport = <Request extends MediaRequest>(
             url,
             body: "",
             headers: Headers.fromInput(exchange.headers),
-          }).pipe(Effect.map((headers): Record<string, string> => ({ ...headers })))
-        : Effect.succeed({}),
+          }).pipe(Effect.map((headers): Record<string, string> | undefined => ({ ...headers })))
+        : Effect.succeed(undefined),
     /** Bodiless follow-up call (status, result, cancel) with the same auth and headers as `submit`. */
     call: (method: AuthInput["method"], path: string, exchange: Exchange, execute: Execute) => {
       // Provider-issued absolute URLs are used as-is; everything else resolves against the base.

@@ -21,16 +21,19 @@ const ERROR_BYTES = 8 * 1024
 const MAX_SUBMATCHES = 100
 const MAX_LINE_CHARS = 2_000
 
+// rg reports data that is not valid UTF-8 as base64 `bytes` instead of `text`.
+const RawData = Schema.Union([Schema.Struct({ text: Schema.String }), Schema.Struct({ bytes: Schema.String })])
+
 const RawMatch = Schema.Struct({
   type: Schema.Literal("match"),
   data: Schema.Struct({
-    path: Schema.Struct({ text: Schema.String }),
-    lines: Schema.Struct({ text: Schema.String }),
+    path: RawData,
+    lines: RawData,
     line_number: PositiveInt,
     absolute_offset: NonNegativeInt,
     submatches: Schema.Array(
       Schema.Struct({
-        match: Schema.Struct({ text: Schema.String }),
+        match: RawData,
         start: NonNegativeInt,
         end: NonNegativeInt,
       }),
@@ -39,7 +42,8 @@ const RawMatch = Schema.Struct({
 })
 const decodeJsonRecord = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))
 
-type RawMatchData = (typeof RawMatch.Type)["data"]
+const rawText = (data: typeof RawData.Type) =>
+  "text" in data ? data.text : Buffer.from(data.bytes, "base64").toString("utf8")
 
 export class Error extends Schema.TaggedError<Error>()("Ripgrep.Error", {
   message: Schema.String,
@@ -226,7 +230,7 @@ const layer = Layer.effect(
           onItem: input.onEntry,
         }).pipe(Effect.catchTag("Ripgrep.InvalidPatternError", (cause) => Effect.fail(failure(cause.message, cause)))),
       grep: (input) =>
-        run<RawMatchData>({
+        run({
           ...input,
           args: [
             "--no-config",
@@ -248,17 +252,23 @@ const layer = Layer.effect(
                 if (!json || typeof json !== "object" || !("type" in json) || json.type !== "match")
                   return Effect.undefined
                 return Schema.decodeUnknownEffect(RawMatch)(json).pipe(
-                  Effect.map((match) => ({
-                    ...match.data,
-                    lines: {
-                      text:
-                        match.data.lines.text.length > MAX_LINE_CHARS
-                          ? TextBoundary.head(match.data.lines.text, MAX_LINE_CHARS) + "..."
-                          : match.data.lines.text,
-                    },
-                    path: { text: normalizePath(match.data.path.text) },
-                    submatches: match.data.submatches.slice(0, MAX_SUBMATCHES),
-                  })),
+                  Effect.map((match) => {
+                    const lines = rawText(match.data.lines)
+                    return {
+                      ...match.data,
+                      lines: {
+                        text:
+                          lines.length > MAX_LINE_CHARS
+                            ? TextBoundary.head(lines, MAX_LINE_CHARS) + "..."
+                            : lines,
+                      },
+                      path: { text: normalizePath(rawText(match.data.path)) },
+                      submatches: match.data.submatches.slice(0, MAX_SUBMATCHES).map((submatch) => ({
+                        ...submatch,
+                        match: { text: rawText(submatch.match) },
+                      })),
+                    }
+                  }),
                   Effect.mapError((cause) => failure("Invalid ripgrep match output", cause)),
                 )
               }),

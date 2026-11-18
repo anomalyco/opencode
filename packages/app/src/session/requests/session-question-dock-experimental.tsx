@@ -1098,7 +1098,7 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
                 </Show>
                 <IconButton
                   ref={(el: HTMLButtonElement) => (chevron = el)}
-                  icon={<Icon name="outline-chevron-down" size="normal" />}
+                  icon={<Icon name="chevron-down" size="normal" />}
                   variant="ghost"
                   size="large"
                   disabled={sending()}

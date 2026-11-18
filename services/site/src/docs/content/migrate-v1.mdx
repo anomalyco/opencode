@@ -1,5 +1,6 @@
 ---
 title: "Migrate from V1"
+description: "Upgrade from OpenCode 1 to OpenCode 2, which has breaking changes to plugins, the server API, and terminal client configuration."
 ---
 
 OpenCode 1 and OpenCode 2 both use the `opencode` command and are no longer installed side by side by default. Remove a
@@ -552,9 +553,11 @@ require a V2 rewrite. See [Skills](/skills).
 Existing `AGENTS.md` files stay in place. V2 discovers the global `~/.config/opencode/AGENTS.md` and ambient `AGENTS.md`
 files from the current directory up to home. For projects outside home, discovery stops at the project root.
 
-If a V1 setup relied on a `CLAUDE.md` fallback, move that guidance into the applicable `AGENTS.md`. V2 currently only
-discovers `AGENTS.md`; because non-API V1 behavior is intended to remain compatible, also file a compatibility issue with
-the affected project details. See [Instructions](/instructions).
+V2 keeps the V1 `CLAUDE.md` fallback: a directory without `AGENTS.md` uses its `CLAUDE.md`, and `~/.claude/CLAUDE.md`
+stands in for a missing global `AGENTS.md`. `OPENCODE_DISABLE_CLAUDE_CODE` skips every `CLAUDE.md`, and so does
+`OPENCODE_DISABLE_CLAUDE_CODE_PROMPT`, which in V1 skipped only `~/.claude/CLAUDE.md`. Unlike V1, which stopped at the
+first file name found anywhere up the tree, V2 picks per directory, so an `AGENTS.md` at the root no longer hides a
+nested `CLAUDE.md`. See [Instructions](/instructions).
 
 ## Terminal client configuration
 

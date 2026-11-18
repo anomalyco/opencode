@@ -53,4 +53,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} {{timeout}}ms dan keyin vaqt tugadi",
   "error.failedPort": "Port olinmadi",
   "menu.remove": "O'chirish",
+  "error.busy": "{{distro}} boshqa vazifa bilan band. U tugagach qayta urinib ko‘ring.",
 }

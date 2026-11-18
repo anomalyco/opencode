@@ -161,6 +161,7 @@ export interface SessionRetry {
  * the Session that owns the job: the idle Session itself, or a descendant such as a subagent child.
  */
 export type SessionIdleBackground =
+  | { readonly kind: "codemode"; readonly sessionID: Session.ID; readonly jobID: string }
   | {
       readonly kind: "shell"
       readonly sessionID: Session.ID

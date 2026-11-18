@@ -29,4 +29,13 @@ export default {
   "releaseNotes.action.next": "Volgende",
   "releaseNotes.action.hideFuture": "Laat deze in de toekomst niet zien",
   "releaseNotes.media.alt": "Releasevoorbeeld",
+  "action.reload": "Opnieuw laden om bij te werken",
+  "action.reloading": "Opnieuw laden…",
+  "web.ready.title": "Update klaar",
+  "web.ready.message":
+    "Er is een nieuwe versie van OpenCode klaar. Laad opnieuw om die in elk open venster te gebruiken.",
+  "web.reload": "Opnieuw laden",
+  "web.reset.title": "Opnieuw laden vanaf server",
+  "web.reset.description": "Wis de opgeslagen kopie van de app en laad de huidige versie van de server",
+  "web.reset.action": "Opnieuw laden vanaf server",
 }

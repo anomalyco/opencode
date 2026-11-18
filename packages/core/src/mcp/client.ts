@@ -76,7 +76,7 @@ const EVENT_STREAM_IDLE = Duration.seconds(60)
 const EVENT_LIST_PAGES = 100
 
 /** Experimental: MCP Events is a draft extension; may change without compatibility guarantees. */
-const EventType = Schema.Struct({
+export const EventType = Schema.Struct({
   name: Schema.String,
   description: Schema.optional(Schema.String),
   /** Any of "poll", "push" and "webhook". */

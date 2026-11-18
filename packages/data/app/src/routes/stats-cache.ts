@@ -8,7 +8,7 @@ export function setStatsPageCacheHeaders(headers: Headers | undefined) {
 
   headers.set("Cache-Control", statsPageCacheControl)
   // The same URL serves Markdown to clients that ask for it.
-  appendVary(headers, "Accept", "Accept-Language", "Cookie", LOCALE_HEADER)
+  appendVary(headers, "Accept", LOCALE_HEADER)
 }
 
 function appendVary(headers: Headers, ...values: string[]) {

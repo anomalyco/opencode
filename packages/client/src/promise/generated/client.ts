@@ -113,6 +113,10 @@ import type {
   ExperimentalGenerateTextOutput,
   ExperimentalGenerateImageInput,
   ExperimentalGenerateImageOutput,
+  ExperimentalGenerateVideoCreateInput,
+  ExperimentalGenerateVideoCreateOutput,
+  ExperimentalGenerateVideoGetInput,
+  ExperimentalGenerateVideoGetOutput,
   ExperimentalGenerateDecisionsInput,
   ExperimentalGenerateDecisionsOutput,
   ExperimentalVoiceModelsOutput,
@@ -243,18 +247,20 @@ import type {
   ExperimentalPersistentPtyConnectTokenOutput,
   ExperimentalMediaGetInput,
   ExperimentalMediaGetOutput,
-  ExperimentalScheduleCreateInput,
-  ExperimentalScheduleCreateOutput,
-  ExperimentalScheduleListInput,
-  ExperimentalScheduleListOutput,
-  ExperimentalScheduleGetInput,
-  ExperimentalScheduleGetOutput,
-  ExperimentalSchedulePauseInput,
-  ExperimentalSchedulePauseOutput,
-  ExperimentalScheduleResumeInput,
-  ExperimentalScheduleResumeOutput,
-  ExperimentalScheduleDeleteInput,
-  ExperimentalScheduleDeleteOutput,
+  ExperimentalBlobGetInput,
+  ExperimentalBlobGetOutput,
+  ExperimentalAutomationCreateInput,
+  ExperimentalAutomationCreateOutput,
+  ExperimentalAutomationListInput,
+  ExperimentalAutomationListOutput,
+  ExperimentalAutomationGetInput,
+  ExperimentalAutomationGetOutput,
+  ExperimentalAutomationPauseInput,
+  ExperimentalAutomationPauseOutput,
+  ExperimentalAutomationResumeInput,
+  ExperimentalAutomationResumeOutput,
+  ExperimentalAutomationDeleteInput,
+  ExperimentalAutomationDeleteOutput,
   ExperimentalArtifactsProvidersInput,
   ExperimentalArtifactsProvidersOutput,
   ExperimentalArtifactsListInput,
@@ -1205,6 +1211,41 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ).then((value) => value.data),
+        video: {
+          create: (input: ExperimentalGenerateVideoCreateInput, requestOptions?: RequestOptions) =>
+            request<{ readonly data: ExperimentalGenerateVideoCreateOutput }>(
+              {
+                method: "POST",
+                path: `/api/experimental/generate/video`,
+                body: {
+                  model: input["model"],
+                  prompt: input["prompt"],
+                  start: input["start"],
+                  end: input["end"],
+                  references: input["references"],
+                  duration: input["duration"],
+                  aspect: input["aspect"],
+                  resolution: input["resolution"],
+                  sound: input["sound"],
+                },
+                successStatus: 200,
+                declaredStatuses: [400, 401, 403, 404, 422, 502, 503],
+                empty: false,
+              },
+              requestOptions,
+            ).then((value) => value.data),
+          get: (input: ExperimentalGenerateVideoGetInput, requestOptions?: RequestOptions) =>
+            request<{ readonly data: ExperimentalGenerateVideoGetOutput }>(
+              {
+                method: "GET",
+                path: `/api/experimental/generate/video/${encodeURIComponent(input.id)}`,
+                successStatus: 200,
+                declaredStatuses: [400, 401, 403, 404],
+                empty: false,
+              },
+              requestOptions,
+            ).then((value) => value.data),
+        },
         decisions: (input: ExperimentalGenerateDecisionsInput, requestOptions?: RequestOptions) =>
           request<{ readonly data: ExperimentalGenerateDecisionsOutput }>(
             {
@@ -1505,20 +1546,33 @@ export function make(options: ClientOptions) {
             requestOptions,
           ),
       },
-      schedule: {
-        create: (input: ExperimentalScheduleCreateInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalScheduleCreateOutput }>(
+      blob: {
+        get: (input: ExperimentalBlobGetInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalBlobGetOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/blob/${encodeURIComponent(input.id)}`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+              binary: true,
+            },
+            requestOptions,
+          ),
+      },
+      automation: {
+        create: (input: ExperimentalAutomationCreateInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalAutomationCreateOutput }>(
             {
               method: "POST",
-              path: `/api/experimental/schedule`,
+              path: `/api/experimental/automation`,
               body: {
                 sessionID: input["sessionID"],
+                directory: input["directory"],
                 name: input["name"],
-                when: input["when"],
-                if: input["if"],
-                until: input["until"],
-                ends: input["ends"],
-                prompt: input["prompt"],
+                trigger: input["trigger"],
+                action: input["action"],
+                expires: input["expires"],
               },
               successStatus: 200,
               declaredStatuses: [400, 401, 403, 404],
@@ -1526,56 +1580,56 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ).then((value) => value.data),
-        list: (input: ExperimentalScheduleListInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalScheduleListOutput }>(
+        list: (input?: ExperimentalAutomationListInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalAutomationListOutput }>(
             {
               method: "GET",
-              path: `/api/experimental/schedule`,
-              query: { sessionID: input["sessionID"] },
+              path: `/api/experimental/automation`,
+              query: { sessionID: input?.["sessionID"], directory: input?.["directory"] },
               successStatus: 200,
               declaredStatuses: [400, 401, 403, 404],
               empty: false,
             },
             requestOptions,
           ).then((value) => value.data),
-        get: (input: ExperimentalScheduleGetInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalScheduleGetOutput }>(
+        get: (input: ExperimentalAutomationGetInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalAutomationGetOutput }>(
             {
               method: "GET",
-              path: `/api/experimental/schedule/${encodeURIComponent(input.scheduleID)}`,
+              path: `/api/experimental/automation/${encodeURIComponent(input.automationID)}`,
               successStatus: 200,
               declaredStatuses: [400, 401, 403, 404],
               empty: false,
             },
             requestOptions,
           ).then((value) => value.data),
-        pause: (input: ExperimentalSchedulePauseInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalSchedulePauseOutput }>(
+        pause: (input: ExperimentalAutomationPauseInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalAutomationPauseOutput }>(
             {
               method: "POST",
-              path: `/api/experimental/schedule/${encodeURIComponent(input.scheduleID)}/pause`,
+              path: `/api/experimental/automation/${encodeURIComponent(input.automationID)}/pause`,
               successStatus: 200,
               declaredStatuses: [400, 401, 403, 404],
               empty: false,
             },
             requestOptions,
           ).then((value) => value.data),
-        resume: (input: ExperimentalScheduleResumeInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalScheduleResumeOutput }>(
+        resume: (input: ExperimentalAutomationResumeInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalAutomationResumeOutput }>(
             {
               method: "POST",
-              path: `/api/experimental/schedule/${encodeURIComponent(input.scheduleID)}/resume`,
+              path: `/api/experimental/automation/${encodeURIComponent(input.automationID)}/resume`,
               successStatus: 200,
               declaredStatuses: [400, 401, 403, 404],
               empty: false,
             },
             requestOptions,
           ).then((value) => value.data),
-        delete: (input: ExperimentalScheduleDeleteInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalScheduleDeleteOutput>(
+        delete: (input: ExperimentalAutomationDeleteInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalAutomationDeleteOutput>(
             {
               method: "DELETE",
-              path: `/api/experimental/schedule/${encodeURIComponent(input.scheduleID)}`,
+              path: `/api/experimental/automation/${encodeURIComponent(input.automationID)}`,
               successStatus: 204,
               declaredStatuses: [400, 401, 403, 404],
               empty: true,
