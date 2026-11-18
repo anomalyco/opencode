@@ -51,7 +51,7 @@ describe("modelTools", () => {
       makeModel("azure", "deployment", { modelID: Model.ID.make("gpt-6") }),
     ]) {
       const result = modelTools({ model, websearch: true, fullCodeMode: true })
-      expect([...result.codemode].sort()).toEqual(["patch", "read", "shell"])
+      expect([...result.codemode].sort()).toEqual(["patch", "read", "shell", "websearch"])
       expect([...result.hidden].sort()).toEqual(["edit", "glob", "grep", "webfetch", "write"])
     }
   })
@@ -64,7 +64,7 @@ describe("modelTools", () => {
       makeModel("azure", "gpt-deployment", { modelID: Model.ID.make("gpt-4o") }),
     ]) {
       const result = modelTools({ model, websearch: true, fullCodeMode: true })
-      expect([...result.codemode].sort()).toEqual(["edit", "read", "shell", "write"])
+      expect([...result.codemode].sort()).toEqual(["edit", "read", "shell", "websearch", "write"])
       expect([...result.hidden].sort()).toEqual(["glob", "grep", "patch", "webfetch"])
     }
   })
@@ -83,12 +83,12 @@ describe("modelTools", () => {
       makeModel("gateway", "sonnet", { canonical: Provider.ID.make("anthropic") }),
     ]) {
       const result = modelTools({ model, websearch: true, fullCodeMode: true })
-      expect([...result.codemode].sort()).toEqual(["edit", "read", "shell", "write"])
+      expect([...result.codemode].sort()).toEqual(["edit", "read", "shell", "websearch", "write"])
       expect([...result.hidden].sort()).toEqual(["glob", "grep", "patch", "webfetch"])
     }
   })
 
-  test("with fullCodeMode off, keeps file tools, shell, glob, grep, and webfetch direct for every model while still applying patch/edit+write and websearch rules", () => {
+  test("with fullCodeMode off, keeps file tools, shell, glob, grep, webfetch, and websearch direct for every model while still applying patch/edit+write and websearch rules", () => {
     expect(modelTools({ model: makeModel("openai", "gpt-5"), websearch: true, fullCodeMode: false })).toEqual({
       hidden: new Set(["edit", "write"]),
       codemode: new Set(),
@@ -105,16 +105,20 @@ describe("modelTools", () => {
     })
   })
 
-  test("keeps file tools, shell, glob, grep, and webfetch direct for non-strong models even with fullCodeMode on", () => {
+  test("keeps file tools, shell, glob, grep, and webfetch direct for non-strong models with fullCodeMode on, while moving websearch into Code Mode", () => {
     for (const model of [makeModel("deepseek", "deepseek-reasoner"), makeModel("opencode", "gemini-4-carbon")]) {
       const result = modelTools({ model, websearch: true, fullCodeMode: true })
-      expect([...result.codemode]).toEqual([])
+      expect([...result.codemode]).toEqual(["websearch"])
       expect([...result.hidden]).toEqual(["patch"])
     }
   })
 
-  test("hides websearch when unavailable and applies no model rules when model is absent", () => {
+  test("places websearch in Code Mode when available with fullCodeMode on, hides it when unavailable, and applies no model rules when model is absent", () => {
     expect(modelTools({ model: undefined, websearch: true, fullCodeMode: true })).toEqual({
+      hidden: new Set(),
+      codemode: new Set(["websearch"]),
+    })
+    expect(modelTools({ model: undefined, websearch: true, fullCodeMode: false })).toEqual({
       hidden: new Set(),
       codemode: new Set(),
     })
@@ -308,7 +312,7 @@ describe("SessionContext.select model tool policy", () => {
           })
 
         const gpt = yield* selectFor("openai", "gpt-5")
-        expect(gpt.tools.definitions.map((tool) => tool.name)).toEqual(["websearch", "execute"])
+        expect(gpt.tools.definitions.map((tool) => tool.name)).toEqual(["execute"])
         const gptListings = codeModeListings(gpt.tools.codeModeCatalog!)
         expect(gptListings.map((entry) => entry.path)).toEqual([
           "alpha.search",
@@ -316,6 +320,7 @@ describe("SessionContext.select model tool policy", () => {
           "patch",
           "read",
           "shell",
+          "websearch",
         ])
         expect(gptListings.find((entry) => entry.path === "patch")?.line).toContain("*** Begin Patch")
         expect(gptListings.find((entry) => entry.path === "patch")?.line).toContain("*** End Patch")
@@ -331,13 +336,14 @@ describe("SessionContext.select model tool policy", () => {
         expect(directInstructions).not.toContain("through `execute`")
 
         const claude = yield* selectFor("anthropic", "claude-sonnet-4-5")
-        expect(claude.tools.definitions.map((tool) => tool.name)).toEqual(["websearch", "execute"])
+        expect(claude.tools.definitions.map((tool) => tool.name)).toEqual(["execute"])
         expect(codeModeListings(claude.tools.codeModeCatalog!).map((entry) => entry.path)).toEqual([
           "alpha.search",
           "edit",
           "opencode.session_move",
           "read",
           "shell",
+          "websearch",
           "write",
         ])
 
@@ -349,7 +355,6 @@ describe("SessionContext.select model tool policy", () => {
           "read",
           "shell",
           "webfetch",
-          "websearch",
           "write",
           "execute",
         ])
@@ -357,11 +362,14 @@ describe("SessionContext.select model tool policy", () => {
         expect(codeModeListings(deepseek.tools.codeModeCatalog!).map((entry) => entry.path)).toEqual([
           "alpha.search",
           "opencode.session_move",
+          "websearch",
         ])
 
-        // Removing all providers or turning off websearch hides the websearch tool.
+        // Removing all providers or turning off websearch hides the websearch tool from Code Mode too.
         yield* websearch.transform((editor) => editor.remove(WebSearch.ID.make("exa")))
-        expect((yield* selectFor("openai", "gpt-5")).tools.definitions.map((tool) => tool.name)).toEqual(["execute"])
+        expect(
+          codeModeListings((yield* selectFor("openai", "gpt-5")).tools.codeModeCatalog!).map((entry) => entry.path),
+        ).not.toContain("websearch")
         yield* websearch.transform((editor) =>
           editor.add({
             id: WebSearch.ID.make("exa"),
@@ -370,7 +378,9 @@ describe("SessionContext.select model tool policy", () => {
           }),
         )
         yield* websearch.select(false)
-        expect((yield* selectFor("openai", "gpt-5")).tools.definitions.map((tool) => tool.name)).toEqual(["execute"])
+        expect(
+          codeModeListings((yield* selectFor("openai", "gpt-5")).tools.codeModeCatalog!).map((entry) => entry.path),
+        ).not.toContain("websearch")
 
         // An unavailable model falls back to the configured ref in select, and surfaces ModelUnavailableError in load.
         const unavailable = yield* selectFor("openai", "gpt-5-missing")

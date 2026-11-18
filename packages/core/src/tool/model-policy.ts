@@ -13,6 +13,7 @@ export function modelTools(input: {
   const hidden = new Set<string>()
   const codemode = new Set<string>()
   if (!input.websearch) hidden.add("websearch")
+  else if (input.fullCodeMode) codemode.add("websearch")
   if (!input.model) return { hidden, codemode }
 
   const id = input.model.id.toLowerCase()
