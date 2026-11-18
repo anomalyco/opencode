@@ -5,6 +5,7 @@ import { createEffect, createMemo, createSignal, type Accessor } from "solid-js"
 import { transparent, type RunFooterTheme } from "./theme"
 import { Locale } from "../util/locale"
 import { stringWidth } from "../util/string-width"
+import { I18n } from "../i18n"
 import { moveSelection, moveSelectionOffset, reconcileSelection, revealSelectionOffset } from "../ui/select-controller"
 
 export const FOOTER_MENU_ROWS = 8
@@ -193,7 +194,7 @@ export function RunFooterMenu(props: {
             backgroundColor={props.background ? props.theme().shade : transparent}
           >
             <text fg={props.theme().muted} wrapMode="none" truncate>
-              {props.empty ?? "No matching items"}
+              {props.empty ?? I18n.t("menu.empty")}
             </text>
           </box>
         </box>
