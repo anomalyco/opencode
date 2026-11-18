@@ -1,14 +1,8 @@
-import type { SessionMessageInfo, SessionStatus } from "@opencode/client/promise"
-import { CurrentSessionProviders } from "@opencode/session-ui/storybook"
-import { createNextTimelineProjection, createNextTimelineRowRenderer } from "@opencode/session-ui/timeline-next"
-import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { TimelineRow } from "@opencode/session-ui/timeline/projection"
-import { DialogProvider } from "@opencode/ui/context/dialog"
-import { Predicate } from "effect"
-import { batch, createMemo, onCleanup, Show } from "solid-js"
-import { createStore, produce, reconcile } from "solid-js/store"
+import { createComputed, createMemo, createSignal, onCleanup } from "solid-js"
+import { createStore } from "solid-js/store"
 import { render } from "solid-js/web"
-import { LanguageProvider, UiI18nBridge } from "../src/runtime/i18n/language"
+import { LanguageProvider } from "../src/runtime/i18n/language"
 import { createTimelineFollow } from "../src/session/timeline/follow"
 import { createTimelineVirtualizer } from "../src/session/timeline/virtualizer"
 
@@ -174,69 +168,38 @@ export function mountTimelineVirtualizer(input: {
   )
 }
 
-const assistant = (
-  id: string,
-  time: { created: number; completed?: number },
-  content: Extract<SessionMessageInfo, { type: "assistant" }>["content"],
-) => ({ id, type: "assistant", agent: "build", model: { id: "model", providerID: "provider" }, time, content }) as const
-
-const history: SessionMessageInfo[] = [
-  { id: "msg_user_1", type: "user", text: "Plan it first", time: { created: 1 } },
-  assistant("msg_assistant_1", { created: 2, completed: 2 }, [{ type: "text", text: "Here is the plan." }]),
-  { id: "msg_idle_1", type: "idle", outcome: "succeeded", time: { created: 3 } },
-  { id: "msg_user_2", type: "user", text: "Now build it", time: { created: 4 } },
-  assistant("msg_assistant_2", { created: 5, completed: 5 }, [{ type: "text", text: "Built it." }]),
-  { id: "msg_idle_2", type: "idle", outcome: "succeeded", time: { created: 6 } },
-]
-
 /**
- * The New timeline under the real virtualizer, drawn by its real row renderer the way message-timeline.tsx draws it.
- * Each event edits the transcript the way the client applies it, and keeps any error the renderer threw.
+ * Rows the test replaces. `replace(next, settled)` publishes `next` and then, in the same flush and after TanStack has
+ * read `next`, `settled`: what a projection does when its inputs settle in two steps. Each mounted row records any
+ * other key's row it is handed.
  */
-export function mountNextTimelineVirtualizer(preset: (typeof timelinePresets)[number]["id"]) {
-  const detail = timelinePresets.find((item) => item.id === preset)!.value
+export function mountTimelineRowChanges(ids: string[]) {
   const host = document.createElement("main")
-  host.dataset.testid = "next-timeline-virtualizer-fixture"
-  host.style.cssText = "position:fixed;top:24px;right:24px;width:640px;z-index:1000"
+  host.dataset.testid = "timeline-row-changes-fixture"
+  host.style.cssText = "position:fixed;top:24px;right:24px;width:400px;z-index:1000"
   document.body.appendChild(host)
+  const list = (ids: string[]) => ids.map((id) => new TimelineRow.UserMessage({ userMessageID: id }))
+  const [rows, setRows] = createSignal(list(ids))
   const errors: string[] = []
-
-  const [state, setState] = createStore<{ messages: SessionMessageInfo[]; status: SessionStatus; pending: string[] }>({
-    messages: [],
-    status: { type: "idle" },
-    pending: [],
-  })
-
-  let container!: HTMLDivElement
-
-  const session = {
-    sessionID: "ses_fixture",
-    get messages() {
-      return state.messages
-    },
-    get status() {
-      return state.status
-    },
-    diffs: [],
-  }
+  const foreign: string[] = []
+  let settled: string[] | undefined
 
   function Fixture() {
-    const follow = createTimelineFollow(() => "next-timeline-virtualizer-fixture")
-
-    const pendingInputIDs = createMemo(() => new Set(state.pending))
-
-    const projection = createNextTimelineProjection({
-      sessionMessages: () => state.messages,
-      status: () => state.status,
-      timelineDetail: () => detail,
-      pendingInputIDs,
-    })
+    const rowByKey = createMemo(() => new Map(rows().map((row) => [TimelineRow.key(row), row])))
+    const indexes = createMemo(() => new Map(rows().map((row, index) => [row.userMessageID, index])))
 
     const timeline = createTimelineVirtualizer({
-      sessionKey: () => "next-timeline-virtualizer-fixture",
-      projection,
+      sessionKey: () => "row-changes-fixture",
+      projection: {
+        rows,
+        rowByKey,
+        activeMessageID: () => undefined,
+        messageByID: () => new Map(),
+        messageRowIndex: indexes,
+        messageLastRowIndex: indexes,
+      },
       showHeader: () => false,
-      follow,
+      follow: createTimelineFollow(() => "row-changes-fixture"),
       scroll: () => ({ overflow: false, jump: false }),
       setScrollRef: () => {},
       onContentResize: () => {},
@@ -244,30 +207,39 @@ export function mountNextTimelineVirtualizer(preset: (typeof timelinePresets)[nu
       onResumeScroll: () => {},
       onUserScroll: () => {},
       onHistoryScroll: () => {},
+      canRenderImmediately: () => true,
     })
 
-    const rowRenderer = createNextTimelineRowRenderer({
-      sessionID: () => session.sessionID,
-      status: () => state.status,
-      projection,
-      presentation: () => undefined,
-      timelineDetail: () => detail,
-      disclosure: timeline.disclosure,
+    // Created after the virtualizer, so it runs once TanStack has read the rows it follows.
+    createComputed(() => {
+      rows()
+      const next = settled
+
+      settled = undefined
+
+      if (next) setRows(list(next))
     })
 
     return (
-      <div ref={container} style={{ height: "320px", width: "640px" }}>
+      <div style={{ height: "400px", width: "400px" }}>
         <timeline.View
           header={null}
           deferred={() => false}
-          renderRow={(row, onSizeChange) => (
-            <Show
-              when={Predicate.isTagged(row(), "Activity")}
-              fallback={<rowRenderer.Row row={row} onSizeChange={onSizeChange} />}
-            >
-              <div style={{ height: "36px" }} />
-            </Show>
-          )}
+          renderRow={(row) => {
+            const key = TimelineRow.key(row())
+
+            const read = () => {
+              const other = TimelineRow.key(row())
+
+              if (other !== key) foreign.push(`${key} read ${other}`)
+            }
+
+            // Renderers read their row while mounted and again as they unmount, as a row that stops growing in does.
+            createComputed(read)
+            onCleanup(read)
+
+            return <div style={{ height: "40px" }}>{key}</div>
+          }}
         />
       </div>
     )
@@ -276,64 +248,25 @@ export function mountNextTimelineVirtualizer(preset: (typeof timelinePresets)[nu
   render(
     () => (
       <LanguageProvider locale="en">
-        <UiI18nBridge>
-          <DialogProvider>
-            <CurrentSessionProviders document={session}>
-              <Fixture />
-            </CurrentSessionProviders>
-          </DialogProvider>
-        </UiI18nBridge>
+        <Fixture />
       </LanguageProvider>
     ),
     host,
   )
 
-  const apply = (change: () => void) => {
-    try {
-      change()
-    } catch (error) {
-      errors.push(String(error))
-    }
-  }
-
-  const edit = (change: (messages: SessionMessageInfo[]) => void) => apply(() => setState("messages", produce(change)))
-
   return {
     errors,
-    // The transcript arrives as a message sync, which reconciles it with what the server has.
-    "history.loaded": () => apply(() => setState("messages", reconcile(structuredClone(history)))),
-    prompt: () =>
-      apply(() =>
-        setState({
-          messages: [...state.messages, { id: "msg_user_3", type: "user", text: "Now test it", time: { created: 7 } }],
-          status: { type: "busy" },
-        }),
-      ),
-    "step.started": () => edit((messages) => messages.push(assistant("msg_assistant_3", { created: 8 }, []))),
-    "reasoning.started": () =>
-      edit((messages) => {
-        const message = messages.at(-1)
+    foreign,
+    mounted: () =>
+      [...host.querySelectorAll<HTMLElement>("[data-timeline-key]")].map((element) => element.dataset.timelineKey),
+    replace: (next: string[], then?: string[]) => {
+      settled = then
 
-        if (message?.type === "assistant") message.content.push({ type: "reasoning", text: "", time: { created: 8 } })
-      }),
-    // Some providers stream thinking with no readable text, so the thought ends as empty as it started.
-    "reasoning.ended": () =>
-      edit((messages) => {
-        const message = messages.at(-1)
-        const content = message?.type === "assistant" ? message.content.at(-1) : undefined
-
-        if (content?.type === "reasoning") content.time = { created: 8, completed: 9 }
-      }),
-    // A whole transcript at once, as a message sync or a history page reconciles it.
-    sync: (next: { messages: SessionMessageInfo[]; status: SessionStatus; pending: string[] }) =>
-      apply(() =>
-        batch(() => {
-          setState("messages", reconcile(structuredClone(next.messages)))
-          setState("status", reconcile(next.status))
-          setState("pending", reconcile(next.pending))
-        }),
-      ),
-    viewport: () => host.querySelector<HTMLElement>("[data-scrollable]")!,
-    resize: (height: number) => (container.style.height = `${height}px`),
+      try {
+        setRows(list(next))
+      } catch (error) {
+        errors.push(String(error))
+      }
+    },
   }
 }

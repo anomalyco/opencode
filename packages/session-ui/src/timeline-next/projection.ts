@@ -8,7 +8,7 @@ import type {
   SessionStatus,
 } from "@opencode/client/promise"
 import { Effect, Option, Predicate, Schema } from "effect"
-import { createComputed, createMemo, createSignal, mapArray, type Accessor } from "solid-js"
+import { createComputed, createMemo, createSignal, mapArray, untrack, type Accessor } from "solid-js"
 import { timelineNoticeRequired, type TimelineDetail } from "../timeline/detail"
 import { TimelineRow, type PartGroup, type PartRef } from "../timeline/timeline-row"
 import {
@@ -128,7 +128,9 @@ export function createNextTimelineProjection(input: {
       const [visible, setVisible] = createSignal(false)
       createComputed(() => setVisible(textShows(content)))
 
-      return [content, visible] as const
+      // The signal only says when visibility flips, one computation after the write that flipped it. Rows built from
+      // its value in between list a part that no longer shows, so the value comes from the part itself.
+      return [content, () => (visible(), untrack(() => textShows(content)))] as const
     },
   )
 
