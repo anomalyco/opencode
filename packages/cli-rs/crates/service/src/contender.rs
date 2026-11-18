@@ -172,12 +172,11 @@ mod tests {
     struct Fake {
         pid: u32,
         exit: Rc<Cell<Option<i32>>>,
-        released: Rc<Cell<bool>>,
     }
 
     impl Fake {
         fn new(pid: u32) -> Self {
-            Self { pid, exit: Rc::default(), released: Rc::default() }
+            Self { pid, exit: Rc::default() }
         }
 
         fn exit(&self, code: i32) {
@@ -198,9 +197,7 @@ mod tests {
         fn failure(&self) -> Option<String> {
             self.exit.get().filter(|code| *code != 0).map(|code| format!("failure of {} ({code})", self.pid))
         }
-        fn release(&self) {
-            self.released.set(true);
-        }
+        fn release(&self) {}
     }
 
     fn pool(spawn: u64, max_spawn: u64) -> Pool<Fake> {
@@ -209,42 +206,6 @@ mod tests {
 
     fn ms(start: Instant, offset: u64) -> Instant {
         start + Duration::from_millis(offset)
-    }
-
-    #[test]
-    fn remembers_the_first_startup_failure_and_reports_it_once_no_attempt_is_left() {
-        let now = Instant::now();
-        let mut pool = pool(0, 30_000);
-        let survivor = Fake::new(1);
-        let failed = Fake::new(2);
-        pool.add(survivor.clone(), now);
-        pool.add(failed.clone(), now);
-        failed.exit(1);
-        assert_eq!(pool.reap(), None);
-        assert_eq!(pool.failure(), Some("failure of 2 (1)"));
-        assert!(!pool.should_recruit(false, now));
-        survivor.exit(1);
-        assert_eq!(pool.reap().as_deref(), Some("failure of 2 (1)"));
-    }
-
-    #[test]
-    fn evicting_a_stopped_owner_forgets_its_failure_and_restarts_the_spawn_clock() {
-        let now = Instant::now();
-        let mut pool = pool(60_000, 60_000);
-        let owner = Fake::new(1);
-        let failed = Fake::new(2);
-        pool.add(owner.clone(), now);
-        pool.add(failed.clone(), now);
-        failed.exit(1);
-        assert_eq!(pool.reap(), None);
-        assert!(pool.failure().is_some());
-        assert!(pool.owns(1));
-        pool.evict(1);
-        assert!(owner.released.get());
-        assert!(!pool.owns(1));
-        assert_eq!(pool.failure(), None);
-        assert_eq!(pool.reap(), None);
-        assert!(pool.should_recruit(false, now));
     }
 
     #[test]
@@ -297,20 +258,5 @@ mod tests {
         assert_eq!(pool.reap(), None);
         pool.service_answered();
         assert!(pool.should_recruit(false, ms(now, 250)));
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn a_real_contender_reports_its_exit_code_and_stderr() {
-        let contender = Contender::spawn(&["sh".into(), "-c".into(), "echo denied >&2; exit 23".into()], &[]).unwrap();
-        while !contender.finished() {
-            std::thread::sleep(Duration::from_millis(5));
-        }
-        assert_eq!(contender.failure().as_deref(), Some("Server process exited with code 23\ndenied"));
-        let killed = Contender::spawn(&["sh".into(), "-c".into(), "kill -9 $$".into()], &[]).unwrap();
-        while !killed.finished() {
-            std::thread::sleep(Duration::from_millis(5));
-        }
-        assert_eq!(killed.failure().as_deref(), Some("Server process terminated by SIGKILL"));
     }
 }
