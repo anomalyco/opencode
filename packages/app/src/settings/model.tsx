@@ -130,6 +130,7 @@ const generalSchema = Persistence.struct({
   backgroundActivity: Schema.Literals(["off", "left", "center", "right"]),
   timelineWidth: Schema.Literals(["focused", "comfortable", "wide"]),
   foldUserMessages: Schema.Boolean,
+  wrapCodeBlocks: Schema.Boolean,
   // The redesigned keyboard-first question dock, off until it ships.
   newQuestionUI: Schema.Boolean,
   // The redesigned session timeline, off until it ships.
@@ -306,6 +307,7 @@ export const defaultSettings: Settings = {
     backgroundActivity: "left",
     timelineWidth: "comfortable",
     foldUserMessages: false,
+    wrapCodeBlocks: false,
     newQuestionUI: false,
     sidebarOrganize: "list",
     mobileTitlebarPosition: "top",
@@ -426,6 +428,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         foldUserMessages: withFallback(() => store.general?.foldUserMessages, defaultSettings.general.foldUserMessages),
         setFoldUserMessages(value: boolean) {
           setStore("general", "foldUserMessages", value)
+        },
+        wrapCodeBlocks: withFallback(() => store.general?.wrapCodeBlocks, defaultSettings.general.wrapCodeBlocks),
+        setWrapCodeBlocks(value: boolean) {
+          setStore("general", "wrapCodeBlocks", value)
         },
         newTimeline: withFallback(() => store.general?.newTimeline, false),
         setNewTimeline(value: boolean) {

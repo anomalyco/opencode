@@ -385,7 +385,25 @@
     }
   }
 
-  /* Plugin actions sit before the 24px Copy button, revealed with it. */
+  /* Wrap sits before the 24px Copy button and shows only while a line is wider than the block. */
+  [data-slot="markdown-wrap-button"] {
+    display: none;
+    position: absolute;
+    top: 4px;
+    inset-inline-end: 30px;
+    transition: opacity 0.15s ease;
+    z-index: 1;
+
+    @media (hover: hover) {
+      opacity: 0;
+    }
+  }
+
+  [data-component="markdown-code"][data-code-overflow] > [data-slot="markdown-wrap-button"] {
+    display: block;
+  }
+
+  /* Plugin actions sit before the 24px Copy button, and before Wrap when it shows, revealed with them. */
   [data-slot="markdown-code-actions"] {
     position: absolute;
     top: 4px;
@@ -400,9 +418,31 @@
     }
   }
 
-  [data-component="markdown-code"]:hover :is([data-slot="markdown-copy-button"], [data-slot="markdown-code-actions"]),
-  :is([data-slot="markdown-copy-button"], [data-slot="markdown-code-actions"]):focus-within {
+  [data-component="markdown-code"][data-code-overflow] > [data-slot="markdown-code-actions"] {
+    inset-inline-end: 56px;
+  }
+
+  [data-component="markdown-code"]:hover
+    :is([data-slot="markdown-copy-button"], [data-slot="markdown-wrap-button"], [data-slot="markdown-code-actions"]),
+  :is(
+    [data-slot="markdown-copy-button"],
+    [data-slot="markdown-wrap-button"],
+    [data-slot="markdown-code-actions"]
+  ):focus-within {
     opacity: 1;
+  }
+
+  /* The setting wraps every block on the root; a block's own choice overrides it either way. */
+  &[data-code-wrap] [data-component="markdown-code"]:not([data-wrap="false"]) > pre,
+  [data-component="markdown-code"][data-wrap="true"] > pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  /* Set only for one synchronous measurement of the unwrapped width. */
+  [data-component="markdown-code"][data-code-measure] > pre {
+    white-space: pre !important;
+    overflow-wrap: normal !important;
   }
 
   [data-slot="markdown-copy-button"] [data-check-icon] {

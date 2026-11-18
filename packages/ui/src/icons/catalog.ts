@@ -258,6 +258,10 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<path d="M9.5 3.5V1.5H1.5V10.5H4.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><path d="M6.5 14.5V5.5H14.5V14.5H6.5Z" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/>`,
   },
+  "text-wrap": {
+    viewBox: "0 0 16 16",
+    body: `<path d="M1.5 3.5H14.5M1.5 8H11.5C12.8807 8 14 9.11929 14 10.5C14 11.8807 12.8807 13 11.5 13H8.5M10 11.5L8.5 13L10 14.5M1.5 12.5H5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/>`,
+  },
   check: {
     viewBox: "0 0 16 16",
     body: `<path d="M4.5 7.5L7 11.5L11.5 4.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/>`,
