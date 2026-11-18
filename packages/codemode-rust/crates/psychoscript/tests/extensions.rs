@@ -308,6 +308,133 @@ fn host_errors_become_program_errors() {
 }
 
 #[test]
+fn a_host_function_passed_back_arrives_as_itself_wherever_it_sits() {
+    // Each file's `text` is named after the file, so the host can tell which function it got back.
+    let rt = Runtime::new().extension(
+        Extension::new("files")
+            .function(
+                "file",
+                HostFunction::new("file", 1, |args| {
+                    let name = args[0].as_str().unwrap_or_default().to_owned();
+                    let text = HostFunction::new(format!("text:{name}"), 0, |_| Ok("text".into()));
+                    Ok(HostValue::object([
+                        ("name", HostValue::String(name)),
+                        ("text", text.into()),
+                    ]))
+                }),
+            )
+            .function(
+                "copy",
+                HostFunction::new_async("copy", 2, |args| async move {
+                    let text = match &args[1] {
+                        HostValue::Object(fields) => fields.iter().find(|(k, _)| k == "text"),
+                        _ => None,
+                    };
+                    let name = match text {
+                        Some((_, HostValue::Function(f))) => f.name().to_owned(),
+                        _ => "no function".to_owned(),
+                    };
+                    Ok(HostValue::array([args[0].clone(), HostValue::String(name)]))
+                }),
+            ),
+    );
+    assert_eq!(
+        value(&rt, r#"return await copy("b", file("a"))"#),
+        json!(["b", "text:a"])
+    );
+    assert_eq!(
+        value(
+            &rt,
+            r#"const f = file("a"); return await copy("b", { text: f.text })"#
+        ),
+        json!(["b", "text:a"])
+    );
+}
+
+#[test]
+fn a_program_function_or_a_global_passed_to_the_host_is_left_out() {
+    let taken = Held::default();
+    let into = taken.clone();
+    let rt = Runtime::new().extension(
+        Extension::new("gated")
+            .object(
+                "fs",
+                HostValue::object([(
+                    "rm",
+                    HostFunction::new("rm", 0, |_| Ok(HostValue::Undefined)).into(),
+                )]),
+            )
+            .function(
+                "take",
+                HostFunction::new("take", 1, move |args| {
+                    into.lock()
+                        .unwrap()
+                        .push(args.into_iter().next().unwrap_or_default());
+                    Ok(HostValue::Undefined)
+                }),
+            ),
+    );
+    value(
+        &rt,
+        r#"take({ text: async () => "x" }); take({ text: take }); take(fs.rm); take({ a: fs.rm }); take(fs)"#,
+    );
+    let taken: Vec<Option<Json>> = taken
+        .lock()
+        .unwrap()
+        .iter()
+        .map(HostValue::to_json)
+        .collect();
+    assert_eq!(
+        taken,
+        [
+            Some(json!({})),
+            Some(json!({})),
+            None,
+            Some(json!({})),
+            Some(json!({}))
+        ]
+    );
+}
+
+#[test]
+fn a_promise_in_the_arguments_that_never_settles_waits_until_the_timeout() {
+    let held = Held::default();
+    let rt = Runtime::new()
+        .extension(web(&held).function(
+            "never",
+            HostFunction::new_async("never", 0, |_| std::future::pending()),
+        ))
+        .limits(Limits {
+            timeout_ms: Some(50),
+            ..Limits::default()
+        });
+    let d = rt
+        .execute("keep({ n: never() })", &serde_json::Map::new())
+        .result
+        .unwrap_err();
+    assert_eq!(d.kind.name(), "TimeoutExceeded");
+    assert!(held.lock().unwrap().is_empty());
+}
+
+#[test]
+fn a_result_with_functions_is_handed_to_a_tool_as_its_data() {
+    let held = Held::default();
+    let rt = Runtime::new().extension(web(&held)).with_tool(
+        "echo",
+        psychoscript::Tool::new("Echo", |input, _| Ok(input["v"].clone()))
+            .input(psychoscript::Schema::validated(json!({ "type": "object" })))
+            .output(psychoscript::Schema::validated(json!({}))),
+    );
+    assert_eq!(
+        value(
+            &rt,
+            r#"return await tools.echo({ v: await fetch("https://a.test/") })"#
+        ),
+        json!({ "status": 200, "ok": true, "headers": {}, "handlers": [null] })
+    );
+}
+
+#[test]
 fn extension_calls_are_not_tool_calls() {
     let held = Held::default();
     let rt = Runtime::new().extension(web(&held)).limits(Limits {

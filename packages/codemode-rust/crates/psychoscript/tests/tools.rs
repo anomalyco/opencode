@@ -143,6 +143,44 @@ fn arguments_follow_json_serialization_and_drop_undefined() {
 }
 
 #[test]
+fn tool_arguments_leave_functions_out_and_await_promises_as_json_did() {
+    let observed = Arc::new(Mutex::new(Vec::new()));
+    let seen = observed.clone();
+    let rt = Runtime::new().with_tool(
+        "shop.show",
+        Tool::new("Show raw input", move |input, _| {
+            seen.lock().unwrap().push(input);
+            Ok(json!("ok"))
+        })
+        .input(Schema::validated(json!({ "type": "object" }))),
+    );
+    for code in [
+        r#"await tools.shop.show({ q: "x", format(v) { return v } })"#,
+        "await tools.shop.show({ n: Promise.resolve(5) })",
+        // A toJSON method is a function too: left out, not run.
+        r#"await tools.shop.show({ item: "book", price: { cents: 1999, toJSON() { return "$19.99" } } })"#,
+        "await tools.shop.show({ later: (async () => { await null; return [1, () => 2] })() })",
+    ] {
+        assert!(run(&rt, code).result.is_ok(), "{code}");
+    }
+    assert_eq!(
+        *observed.lock().unwrap(),
+        vec![
+            json!({ "q": "x" }),
+            json!({ "n": 5 }),
+            json!({ "item": "book", "price": { "cents": 1999 } }),
+            json!({ "later": [1, null] }),
+        ]
+    );
+    let d = failure(
+        &rt,
+        r#"await tools.shop.show({ n: Promise.reject(new Error("no price")) })"#,
+    );
+    assert!(d.message.contains("no price"), "{}", d.message);
+    assert_eq!(observed.lock().unwrap().len(), 4);
+}
+
+#[test]
 fn validated_input_drops_excess_properties_before_the_tool_sees_it() {
     let observed = Arc::new(Mutex::new(Vec::new()));
     let seen = observed.clone();

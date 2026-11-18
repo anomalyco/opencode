@@ -1,0 +1,12 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    1,
+    2,
+    "main",
+    "boom",
+    "Unknown tool 'git.stat'. Did you mean tools.git.status?"
+  ],
+  "logs": []
+}
