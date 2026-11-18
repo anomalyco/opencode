@@ -267,6 +267,7 @@ export type CloudCodeError = {
   message?: string
   reason?: string
   resetTime?: string
+  retryDelay?: string
 }
 
 type QuotaWindow = {
@@ -324,18 +325,21 @@ export function explainCloudCodeError(input: {
     (input.error.status === "RESOURCE_EXHAUSTED" && messageIsLongQuota(input.error.message))
   // Cloud Code answers some request content with an instant bare RESOURCE_EXHAUSTED while quota is untouched.
   // Retrying sends the same content again, so fail once instead of treating it as a throttle.
+  const group = fiveHour ? `${fiveHour.id.split(":")[0]}:` : undefined
   const rejected =
     !quota &&
     !input.error.reason &&
+    !input.error.retryDelay &&
     input.error.status === "RESOURCE_EXHAUSTED" &&
     fiveHour !== undefined &&
-    fiveHour.remainingFraction >= 0.95
+    fiveHour.remainingFraction >= 0.95 &&
+    windows.every((window) => !window.id.startsWith(group ?? "") || window.remainingFraction > 0)
   const status =
     input.error.status && input.error.message
       ? `${input.error.status}: ${input.error.message}`
       : (input.error.status ?? input.error.message ?? "")
   const headline = rejected
-    ? `${status} Quota is nearly full, so this is likely Google rejecting the request content, not quota; not retrying.`
+    ? `${status} This is likely not quota: at least 95% of this model's quota is unused, so Google probably rejected this request's content. Not retrying; changing the prompt or switching models may help.`
     : status
   const readout = windows.map(
     (window) =>
@@ -382,6 +386,7 @@ function cloudCodeError(text: string): CloudCodeError | undefined {
     ...(message ? { message } : {}),
     ...(details.reason ? { reason: details.reason } : {}),
     ...(details.resetTime ? { resetTime: details.resetTime } : {}),
+    ...(details.retryDelay ? { retryDelay: details.retryDelay } : {}),
   }
 }
 
@@ -397,7 +402,7 @@ function nestedGoogleError(message: string) {
 
 function errorDetails(error: Record<string, unknown> | undefined) {
   const details = error && Array.isArray(error.details) ? error.details : []
-  return details.reduce<{ reason?: string; resetTime?: string }>((acc, detail) => {
+  return details.reduce<{ reason?: string; resetTime?: string; retryDelay?: string }>((acc, detail) => {
     if (!isRecord(detail)) return acc
     const metadata = isRecord(detail.metadata) ? detail.metadata : undefined
     return {
@@ -407,6 +412,7 @@ function errorDetails(error: Record<string, unknown> | undefined) {
         textField(metadata?.quotaResetTimeStamp) ??
         textField(metadata?.quotaResetTimestamp) ??
         textField(metadata?.resetTime),
+      retryDelay: acc.retryDelay ?? textField(detail.retryDelay),
     }
   }, {})
 }

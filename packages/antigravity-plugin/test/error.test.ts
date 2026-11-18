@@ -201,7 +201,7 @@ describe("Cloud Code 429 bodies", () => {
     })
     expect(explained?.quota).toBe(false)
     expect(explained?.rejected).toBe(true)
-    expect(explained?.message).toContain("likely Google rejecting the request content, not quota")
+    expect(explained?.message).toContain("likely not quota: at least 95% of this model's quota is unused")
     expect(explained?.message).toContain("gemini:5h remainingFraction=0.9998")
     expect(JSON.parse(explained?.body ?? "{}").error.details).toEqual([
       { "@type": "type.googleapis.com/google.rpc.ErrorInfo", reason: "CONTENT_BLOCKED" },
@@ -209,9 +209,41 @@ describe("Cloud Code 429 bodies", () => {
   })
 
   test.each([
+    { modelID: "gemini-3.8-flash-low", group: "Gemini models", fraction: 0.95, rejected: true },
+    { modelID: "claude-sonnet-4-6", group: "Claude + GPT", fraction: 1, rejected: true },
+    { modelID: "claude-sonnet-4-6", group: "Gemini models", fraction: 1, rejected: false },
+  ])("reads the failed model's own group for $modelID", ({ modelID, group, fraction, rejected }) => {
+    expect(
+      GoogleAntigravityWire.explainCloudCodeError({
+        error: { status: "RESOURCE_EXHAUSTED", message: "Resource has been exhausted (e.g. check quota)." },
+        summary: { groups: [{ displayName: group, buckets: [{ window: "5h", remainingFraction: fraction }] }] },
+        httpStatus: 429,
+        modelID,
+      })?.rejected,
+    ).toBe(rejected)
+  })
+
+  test.each([
     { name: "an explicit reason", error: { reason: "RATE_LIMIT_EXCEEDED" }, summary: fullQuota(1) },
     { name: "partly used quota", error: {}, summary: fullQuota(0.5) },
     { name: "no quota summary", error: {}, summary: undefined },
+    { name: "a retry delay", error: { retryDelay: "30s" }, summary: fullQuota(1) },
+    { name: "5h just under the threshold", error: {}, summary: fullQuota(0.9499) },
+    {
+      name: "an exhausted weekly window",
+      error: {},
+      summary: {
+        groups: [
+          {
+            displayName: "Gemini models",
+            buckets: [
+              { window: "5h", remainingFraction: 1 },
+              { window: "weekly", remainingFraction: 0 },
+            ],
+          },
+        ],
+      },
+    },
   ])("keeps a bare throttle retryable with $name", ({ error, summary }) => {
     expect(
       GoogleAntigravityWire.explainCloudCodeError({

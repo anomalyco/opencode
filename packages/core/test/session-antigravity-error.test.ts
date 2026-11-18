@@ -145,6 +145,6 @@ it.effect("a bare RESOURCE_EXHAUSTED with nearly full quota classifies as a non-
     })
     expect(error.reason._tag).toBe("ContentPolicy")
     expect(isRetryable(error)).toBe(false)
-    expect(error.message).toContain("not quota")
+    expect(error.message).toContain("likely not quota")
   }),
 )
