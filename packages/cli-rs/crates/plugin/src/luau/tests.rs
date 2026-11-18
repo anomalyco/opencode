@@ -705,6 +705,71 @@ fn a_long_pattern_match_is_stopped_at_the_budget() {
     assert_ne!(toast.as_deref(), Some("matched"));
 }
 
+// Expected (luau-safety-2 3, carbon ls-3): one thread compiles a target at a time. Saves while it runs are compiled
+// after it, the newest only, and the build is the newest save's.
+#[test]
+fn one_thread_compiles_a_plugin_and_the_newest_save_wins() {
+    let temp = opencode_util::temp::tempdir().unwrap();
+    let dir = temp.path().join("big");
+    big_plugin(&dir, 300_000);
+    let builds = Builds::new(std::sync::Arc::new(|| {}));
+    let mut most = 0;
+    for key in 1..=8 {
+        assert!(builds.built("big", &dir, key, false).is_none());
+        most = most.max(builds.threads());
+    }
+    while builds.running() {
+        most = most.max(builds.threads());
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    assert_eq!(most, 1, "threads compiled at once");
+    assert!(builds.built("big", &dir, 8, false).is_some_and(|built| built.is_ok()));
+}
+
+// Expected (luau-safety-2 3, carbon ls-3): a global plugin's build holds the files its key names. A save that breaks
+// it while the thread reads, then one that restores it, used to leave the restored files listed failed with the
+// broken save's error, as the key said they were built.
+#[test]
+fn a_build_holds_the_files_its_key_names() {
+    let temp = opencode_util::temp::tempdir().unwrap();
+    let dir = temp.path().join("plugin");
+    install("hello", &dir);
+    let good = fs::read(dir.join("init.luau")).unwrap();
+    let key = crate::pipe::tree::light(&dir).unwrap();
+    fs::write(dir.join("init.luau"), "return plugin.define(function(setup) end end").unwrap();
+    let builds = Builds::new(std::sync::Arc::new(|| {}));
+    assert!(builds.built("hello", &dir, key, true).is_none());
+    std::thread::sleep(Duration::from_millis(100));
+    fs::write(dir.join("init.luau"), &good).unwrap();
+    while builds.running() {
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    let built = builds.built("hello", &dir, key, true).expect("built");
+    assert!(built.is_ok(), "{:?}", built.err());
+}
+
+// Expected (luau-safety-2 3, carbon ls-3): a build made for a plugin that went while it compiled is dropped; it used to
+// stay, and the loader never settled.
+#[test]
+fn a_build_for_a_plugin_that_went_is_dropped() {
+    let temp = opencode_util::temp::tempdir().unwrap();
+    let config = temp.path().join("config");
+    let dir = config.join("plugins").join("big");
+    big_plugin(&dir, (SOURCES as usize - 200) / 2);
+    let (host, registry) = (host(), Registry::define(Vec::new(), []));
+    let loader = loader(&config, temp.path());
+    loader.reconcile(&dynamic(&host), &registry);
+    while loader.luau_walking() {
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    loader.reconcile(&dynamic(&host), &registry);
+    assert!(loader.luau_walking(), "the compilation runs");
+    fs::remove_dir_all(&dir).unwrap();
+    settle(&loader, &host, &registry);
+    assert!(!loader.luau_ready());
+    assert!(registry.entries().iter().all(|entry| entry.target.as_deref() != Some(&*dir.to_string_lossy())));
+}
+
 // Expected (luau-safety 1, safety-audit #5): `print` writes to the client's log, never to the terminal under the TUI:
 // one line naming the plugin, with escape sequences escaped and at most 4 KiB of what it printed.
 #[test]
