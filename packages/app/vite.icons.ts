@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 import type { Plugin } from "vite"
 import manifest from "./manifest.json" with { type: "json" }
 
-export function icons(channel: string): Plugin {
+export function icons(channel: string, base = "/"): Plugin {
   const selected = channel === "beta" || channel === "prod" ? channel : "dev"
   const prefix = `icons/${selected}`
 
@@ -21,7 +21,10 @@ export function icons(channel: string): Plugin {
       fileName: "site.webmanifest",
       source: JSON.stringify({
         ...manifest,
-        icons: manifest.icons.map((icon) => ({ ...icon, src: `/${prefix}${icon.src}` })),
+        id: base,
+        start_url: base,
+        scope: base,
+        icons: manifest.icons.map((icon) => ({ ...icon, src: `${base}${prefix}${icon.src}` })),
       }),
       type: "application/manifest+json",
     },
@@ -34,7 +37,7 @@ export function icons(channel: string): Plugin {
     },
     configureServer(server) {
       server.middlewares.use((request, response, next) => {
-        const file = files.find((file) => `/${file.fileName}` === request.url?.split("?")[0])
+        const file = files.find((file) => `${base}${file.fileName}` === request.url?.split("?")[0])
 
         if (!file) return next()
         response.setHeader("Content-Type", file.type)
@@ -45,8 +48,8 @@ export function icons(channel: string): Plugin {
       order: "pre",
       handler(html) {
         return html
-          .replace("%OPENCODE_FAVICON%", `/${prefix}/favicon.ico`)
-          .replace("%OPENCODE_APPLE_TOUCH_ICON%", `/${prefix}/apple-touch-icon.png`)
+          .replace("%OPENCODE_FAVICON%", `${base}${prefix}/favicon.ico`)
+          .replace("%OPENCODE_APPLE_TOUCH_ICON%", `${base}${prefix}/apple-touch-icon.png`)
       },
     },
   }

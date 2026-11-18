@@ -53,7 +53,9 @@ const clearAuthToken = () => {
 const web = createWebPlatform(import.meta.env.VITE_OPENCODE_VERSION ?? pkg.version)
 
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
-  window.addEventListener("load", () => void navigator.serviceWorker.register("/sw.js"), { once: true })
+  window.addEventListener("load", () => void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`), {
+    once: true,
+  })
 }
 
 if (import.meta.env.VITE_SENTRY_DSN) {
