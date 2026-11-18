@@ -810,6 +810,22 @@ describe("OpenAI Responses tool updates", () => {
     }),
   )
 
+  it.effect("folds tool changes alongside automatic context_management compaction", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: astra,
+          tools: [read, edit],
+          messages: conversation,
+          providerOptions: { contextManagement: [{ type: "compaction", compactThreshold: 9000 }] },
+        }),
+      )
+
+      expect(additional(prepared.body)).toEqual([])
+      expect(topLevel(prepared.body)).toEqual(["read", "write"])
+    }),
+  )
+
   it.effect("keeps earlier declarations and calls of a freeform tool unchanged when it is redefined later", () =>
     Effect.gen(function* () {
       const schema = { type: "object", properties: { code: { type: "string" } }, required: ["code"] }
