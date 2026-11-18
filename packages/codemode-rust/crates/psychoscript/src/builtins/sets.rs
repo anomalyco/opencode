@@ -2,7 +2,10 @@
 //! WeakSet.
 
 use super::{arg, describe_value, fuel, incompatible, require_callback};
-use crate::native::{FOR_OF_SLOTS, Flow, ForOf, Frame, enter_for_of};
+use crate::native::{
+    FOR_OF_SLOTS, Flow, ForOf, Frame, Input, NativeOp, Step, enter_for_of, enter_for_of_sub,
+    for_of_step,
+};
 use crate::object::*;
 use crate::value::{Id, Slot, Value};
 use crate::vm::{Res, Vm};
@@ -95,7 +98,7 @@ fn map_get_or_insert(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     Ok(arg(args, 1))
 }
 
-fn get_or_insert_computed(vm: &mut Vm, id: Id, args: &[Value], name: &str) -> Res {
+fn get_or_insert_computed(vm: &mut Vm, id: Id, args: &[Value], name: &str, callee: Id) -> Res {
     let f = require_callback(vm, &arg(args, 1), name)?;
     let k = normalize(arg(args, 0));
     let key = vm.map_key(&k);
@@ -104,18 +107,42 @@ fn get_or_insert_computed(vm: &mut Vm, id: Id, args: &[Value], name: &str) -> Re
     }
     // A missing key is the reference's `insertComputed`: the callback, then `$Table("add")`.
     fuel::handoff(vm);
-    let v = vm.call_counted(&f, Value::Undef, &[k])?;
-    table(vm, id).set(key, k, v);
-    fuel::native(vm);
-    vm.bytecode_builtin();
-    Ok(v)
+    vm.enter_native_sub(
+        NativeOp::Collections,
+        GET_OR_INSERT,
+        callee,
+        Value::Undef,
+        &[Value::Obj(id), k, f],
+    )
 }
 
-fn map_get_or_insert_computed(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+/// The step of `getOrInsertComputed` once the key was missing: calls the callback, then stores what it returned.
+fn get_or_insert_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
+    match input {
+        Input::Start => {
+            let (f, k) = (fr.slot(vm, 2), fr.slot(vm, 1));
+            fr.call_slots(vm, f, Slot::UNDEF, [k])
+        }
+        Input::Returned(r) => {
+            let id = fr.slot(vm, 0).obj().unwrap_or(0);
+            let k = fr.get(vm, 1);
+            let key = vm.map_key(&k);
+            let v = r.get();
+            table(vm, id).set(key, k, v);
+            fuel::native(vm);
+            vm.bytecode_builtin();
+            Ok(Step::Done(v))
+        }
+        Input::Threw(e) => Err(e),
+        Input::Finished(_) => Ok(Step::Done(Value::Undef)),
+    }
+}
+
+fn map_get_or_insert_computed(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     let id = receiver(vm, &this, "Map.prototype.getOrInsertComputed", |k| {
         matches!(k, Kind::Map(_))
     })?;
-    get_or_insert_computed(vm, id, args, "Map.getOrInsertComputed")
+    get_or_insert_computed(vm, id, args, "Map.getOrInsertComputed", callee)
 }
 
 // The slots of a `groupBy` frame, after the loop's: the callback, the next index, the item being grouped, the
@@ -297,14 +324,6 @@ fn set_method(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     let Value::Obj(oid) = other else {
         return Err(vm.type_error(&format!("Set.{name} expects a Set-like object.")));
     };
-    let r = set_method_in(vm, target, other, oid, name);
-    if r.is_ok() {
-        vm.bytecode_builtin();
-    }
-    r
-}
-
-fn set_method_in(vm: &mut Vm, target: Id, other: Value, oid: Id, name: &str) -> Res {
     let sk = vm.names.size;
     let raw = vm.get(&other, sk)?;
     let size = vm.number_of(&raw)?;
@@ -335,31 +354,146 @@ fn set_method_in(vm: &mut Vm, target: Id, other: Value, oid: Id, name: &str) -> 
     }
     let own = table(vm, target).live as f64;
     fuel::native(vm);
-    if name == "isSubsetOf" && own > size {
-        return Ok(Value::Bool(false));
-    }
-    if name == "isSupersetOf" && own < size {
+    if (name == "isSubsetOf" && own > size) || (name == "isSupersetOf" && own < size) {
+        vm.bytecode_builtin();
         return Ok(Value::Bool(false));
     }
     let result = match name {
-        "intersection" => Some(new_set(vm, Vec::new())),
+        "intersection" => Value::Obj(new_set(vm, Vec::new())),
         "union" | "difference" | "symmetricDifference" => {
             fuel::native(vm);
             let vals = live_values(vm, target);
-            Some(new_set(vm, vals))
+            Value::Obj(new_set(vm, vals))
         }
-        _ => None,
+        _ => Value::Undef,
     };
+    // With a Set-like object at least as large, the methods that may drop items ask its `has` for each own item;
+    // otherwise they walk its `keys()`.
     let asks = name == "isSubsetOf"
         || (matches!(name, "intersection" | "difference" | "isDisjointFrom") && own <= size);
     if asks {
+        fuel::native(vm);
+    }
+    let phase = if asks { ASKING } else { KEYS };
+    let slots = [
+        Value::Obj(target),
+        other,
+        has,
+        keys,
+        result,
+        Value::Num(which as f64),
+        Value::Num(phase as f64),
+        Value::Num(0.0),
+        Value::Undef,
+        Value::Undef,
+        Value::Undef,
+        Value::Bool(false),
+    ];
+    vm.enter_native_sub(
+        NativeOp::Collections,
+        SET_METHOD,
+        callee,
+        Value::Undef,
+        &slots,
+    )
+}
+
+// The slots of a Set method's frame: the receiver, the Set-like object, its `has` and `keys`, the Set it builds (or
+// undefined), which method, the phase, the next entry of the walk, the item asked about, the iterator `keys()`
+// returned and its `next`, and whether that iterator is an array's.
+const SM_TARGET: usize = 0;
+const SM_OTHER: usize = 1;
+const SM_HAS: usize = 2;
+const SM_KEYS: usize = 3;
+const SM_RESULT: usize = 4;
+const SM_WHICH: usize = 5;
+const SM_PHASE: usize = 6;
+const SM_AT: usize = 7;
+const SM_ITEM: usize = 8;
+const SM_ITER: usize = 9;
+const SM_NEXT: usize = 10;
+const SM_ARRAY: usize = 11;
+
+/// What a Set method's frame waits on: `has(item)`, `keys()`, the iterator's `next()`, its `return()`, or a
+/// generator closing.
+const ASKING: usize = 0;
+const KEYS: usize = 1;
+const STEPPING: usize = 2;
+const CLOSING: usize = 3;
+const CLOSING_GEN: usize = 4;
+
+fn set_method_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
+    let name = SET_METHODS[fr.index(vm, SM_WHICH)].0;
+    let target = fr.slot(vm, SM_TARGET).obj().unwrap_or(0);
+    let result = fr.slot(vm, SM_RESULT).obj();
+    let phase = fr.index(vm, SM_PHASE);
+    match input {
+        Input::Start if phase == KEYS => {
+            let (keys, other) = (fr.slot(vm, SM_KEYS), fr.slot(vm, SM_OTHER));
+            return fr.call_slots(vm, keys, other, []);
+        }
+        Input::Start => {}
+        Input::Returned(r) => match phase {
+            ASKING => {
+                let found = vm.truthy(&r.get());
+                let item = fr.get(vm, SM_ITEM);
+                match (name, result) {
+                    ("intersection", Some(res)) => {
+                        if found {
+                            let key = vm.map_key(&item);
+                            table(vm, res).set(key, item, Value::Undef);
+                            fuel::native(vm);
+                        }
+                    }
+                    ("difference", Some(res)) => {
+                        if found {
+                            let key = vm.map_key(&item);
+                            table(vm, res).delete(key);
+                            fuel::native(vm);
+                        }
+                    }
+                    _ => {
+                        if found == (name == "isDisjointFrom") {
+                            return set_done(vm, Value::Bool(false));
+                        }
+                    }
+                }
+                fuel::step(vm);
+            }
+            KEYS => opened(vm, fr, r.get(), name)?,
+            STEPPING => {
+                let Some(rid) = r.obj() else {
+                    return Err(vm.type_error("Iterator next() result must be an object."));
+                };
+                let (dk, vk) = (vm.names.done, vm.names.value);
+                let done = vm.get_obj(rid, dk);
+                if vm.truthy(&done) {
+                    return set_done(vm, set_result(result));
+                }
+                let item = vm.get_obj(rid, vk);
+                if let Some(step) = take_key(vm, fr, item, name, target, result)? {
+                    return Ok(step);
+                }
+            }
+            CLOSING => {
+                if r.obj().is_none() {
+                    return Err(vm.type_error("Iterator return() result must be an object."));
+                }
+                return set_done(vm, Value::Bool(false));
+            }
+            // A generator closing yielded from a `finally`.
+            _ => return set_done(vm, Value::Bool(false)),
+        },
+        Input::Finished(_) => return set_done(vm, Value::Bool(false)),
+        Input::Threw(e) => return Err(e),
+    }
+    if phase == ASKING {
         let walk = if name == "difference" {
             result.unwrap_or(target)
         } else {
             target
         };
-        fuel::native(vm);
-        let mut i = 0;
+        let mut i = fr.index(vm, SM_AT);
         loop {
             let entry = {
                 let m = table(vm, walk);
@@ -370,37 +504,33 @@ fn set_method_in(vm: &mut Vm, target: Id, other: Value, oid: Id, name: &str) -> 
             };
             i += 1;
             let Some((item, _)) = entry else { continue };
-            let r = vm.call_counted(&has, other, &[item])?;
-            let found = vm.truthy(&r);
-            match (name, result) {
-                ("intersection", Some(res)) => {
-                    if found {
-                        let key = vm.map_key(&item);
-                        table(vm, res).set(key, item, Value::Undef);
-                        fuel::native(vm);
-                    }
-                }
-                ("difference", Some(res)) => {
-                    if found {
-                        let key = vm.map_key(&item);
-                        table(vm, res).delete(key);
-                        fuel::native(vm);
-                    }
-                }
-                _ => {
-                    if found == (name == "isDisjointFrom") {
-                        return Ok(Value::Bool(false));
-                    }
-                }
-            }
-            fuel::step(vm);
+            fr.set_index(vm, SM_AT, i);
+            fr.set(vm, SM_ITEM, item);
+            let (has, other) = (fr.slot(vm, SM_HAS), fr.slot(vm, SM_OTHER));
+            return fr.call_slots(vm, has, other, [Slot::pack(item)]);
         }
-        return Ok(match result {
-            Some(r) => Value::Obj(r),
-            None => Value::Bool(true),
-        });
+        return set_done(vm, set_result(result));
     }
-    let iterator = vm.call_counted(&keys, other, &[])?;
+    // The keys of the Set-like object, one at a time.
+    let iterator = fr.get(vm, SM_ITER);
+    loop {
+        if !vm.truthy(&fr.get(vm, SM_ARRAY)) {
+            fr.set_index(vm, SM_PHASE, STEPPING);
+            let next = fr.slot(vm, SM_NEXT);
+            return fr.call_slots_as(vm, next, Slot::pack(iterator), [], Step::CallUncounted);
+        }
+        // An array's iterator, which the reference steps itself.
+        let Some(item) = vm.iter_step(&iterator)? else {
+            return set_done(vm, set_result(result));
+        };
+        if let Some(step) = take_key(vm, fr, item, name, target, result)? {
+            return Ok(step);
+        }
+    }
+}
+
+/// What `keys()` returned: keeps the iterator to step.
+fn opened(vm: &mut Vm, fr: Frame, iterator: Value, name: &str) -> Result<(), Value> {
     fuel::native(vm);
     let Value::Obj(iid) = iterator else {
         return Err(vm.type_error(&format!(
@@ -410,71 +540,112 @@ fn set_method_in(vm: &mut Vm, target: Id, other: Value, oid: Id, name: &str) -> 
     fuel::native(vm);
     // An array from `keys()` is read like its values iterator.
     let array = matches!(vm.heap[iid as usize].kind, Kind::Array(_));
-    let iterator = if array {
+    let it = if array {
         vm.get_iterator(&iterator)?
     } else {
         iterator
     };
     let nk = vm.names.next;
     let next = vm.get_obj(iid, nk);
-    loop {
-        let item = if array {
-            match vm.iter_step(&iterator)? {
-                Some(v) => v,
-                None => break,
-            }
-        } else {
-            let r = vm.call(&next, iterator, &[])?;
-            let Value::Obj(rid) = r else {
-                return Err(vm.type_error("Iterator next() result must be an object."));
-            };
-            let (dk, vk) = (vm.names.done, vm.names.value);
-            let done = vm.get_obj(rid, dk);
-            if vm.truthy(&done) {
-                break;
-            }
-            vm.get_obj(rid, vk)
-        };
-        let item = normalize(item);
-        let key = vm.map_key(&item);
-        let found = table(vm, target).has(key);
-        fuel::native(vm);
-        match (name, result) {
-            ("union", Some(res)) => {
+    if !array && !vm.is_callable(&next) {
+        return Err(vm.type_error("The called value is not a function."));
+    }
+    fr.set(vm, SM_ITER, it);
+    fr.set(vm, SM_NEXT, next);
+    fr.set(vm, SM_ARRAY, Value::Bool(array));
+    Ok(())
+}
+
+/// One key of the Set-like object: `Some` with the frame's next step when it decides the result early.
+fn take_key(
+    vm: &mut Vm,
+    fr: Frame,
+    item: Value,
+    name: &str,
+    target: Id,
+    result: Option<Id>,
+) -> Result<Option<Step>, Value> {
+    let item = normalize(item);
+    let key = vm.map_key(&item);
+    let found = table(vm, target).has(key);
+    fuel::native(vm);
+    match (name, result) {
+        ("union", Some(res)) => {
+            table(vm, res).set(key, item, Value::Undef);
+            fuel::native(vm);
+        }
+        ("intersection", Some(res)) => {
+            if found {
                 table(vm, res).set(key, item, Value::Undef);
                 fuel::native(vm);
             }
-            ("intersection", Some(res)) => {
-                if found {
-                    table(vm, res).set(key, item, Value::Undef);
-                    fuel::native(vm);
-                }
-            }
-            ("difference", Some(res)) => {
+        }
+        ("difference", Some(res)) => {
+            table(vm, res).delete(key);
+            fuel::native(vm);
+        }
+        ("symmetricDifference", Some(res)) => {
+            if found {
                 table(vm, res).delete(key);
-                fuel::native(vm);
+            } else {
+                table(vm, res).set(key, item, Value::Undef);
             }
-            ("symmetricDifference", Some(res)) => {
-                if found {
-                    table(vm, res).delete(key);
-                } else {
-                    table(vm, res).set(key, item, Value::Undef);
-                }
-                fuel::native(vm);
-            }
-            _ => {
-                if found == (name == "isDisjointFrom") {
-                    vm.iter_close(&iterator)?;
-                    return Ok(Value::Bool(false));
-                }
+            fuel::native(vm);
+        }
+        _ => {
+            if found == (name == "isDisjointFrom") {
+                return close_keys(vm, fr).map(Some);
             }
         }
-        fuel::step(vm);
     }
-    Ok(match result {
+    fuel::step(vm);
+    Ok(None)
+}
+
+/// Closes the keys iterator after the result was decided early, then finishes with `false`.
+fn close_keys(vm: &mut Vm, fr: Frame) -> Result<Step, Value> {
+    let Value::Obj(id) = fr.get(vm, SM_ITER) else {
+        return set_done(vm, Value::Bool(false));
+    };
+    match &vm.heap[id as usize].kind {
+        Kind::Generator(GenState::Suspended(_)) => {
+            fr.set_index(vm, SM_PHASE, CLOSING_GEN);
+            match super::collections::resume_catching(vm, fr, id, 1, Value::Undef)? {
+                None => Ok(Step::Pushed),
+                Some(_) => set_done(vm, Value::Bool(false)),
+            }
+        }
+        Kind::Generator(_)
+        | Kind::ArrayIter { .. }
+        | Kind::MapIter { .. }
+        | Kind::StrIter { .. }
+        | Kind::ListIter { .. } => set_done(vm, Value::Bool(false)),
+        _ => {
+            let rk = vm.names.return_;
+            let f = vm.get_obj(id, rk);
+            if f.is_nullish() {
+                return set_done(vm, Value::Bool(false));
+            }
+            if !vm.is_callable(&f) {
+                return Err(vm.type_error("Iterator return must be a function."));
+            }
+            fr.set_index(vm, SM_PHASE, CLOSING);
+            let it = Slot::pack(Value::Obj(id));
+            fr.call_slots_as(vm, Slot::pack(f), it, [], Step::CallUncounted)
+        }
+    }
+}
+
+fn set_result(result: Option<Id>) -> Value {
+    match result {
         Some(r) => Value::Obj(r),
         None => Value::Bool(true),
-    })
+    }
+}
+
+fn set_done(vm: &mut Vm, v: Value) -> Result<Step, Value> {
+    vm.bytecode_builtin();
+    Ok(Step::Done(v))
 }
 
 // ---------- WeakMap and WeakSet ----------
@@ -495,7 +666,41 @@ fn holdable(vm: &Vm, v: &Value) -> bool {
     matches!(v, Value::Obj(id) if !matches!(vm.heap[*id as usize].kind, Kind::ToolRef(_)))
 }
 
-fn weak_ctor(vm: &mut Vm, this: Value, args: &[Value], name: &str, pairs: bool) -> Res {
+/// The reference's `fillCollection` into the WeakMap or WeakSet in the frame's first own slot: for a WeakMap,
+/// `$IsObject`, then `$Table("add")`, for each entry; for a WeakSet, `$Table("add")` for each value.
+struct WeakFill;
+
+impl ForOf for WeakFill {
+    fn item(vm: &mut Vm, fr: Frame, item: Value) -> Result<Flow, Value> {
+        let id = fr.slot(vm, FOR_OF_SLOTS).obj().unwrap_or(0);
+        if matches!(vm.heap[id as usize].kind, Kind::WeakMap(_)) {
+            fuel::native(vm);
+            if !matches!(item, Value::Obj(_)) {
+                return Err(
+                    vm.type_error("new WeakMap(...) expects [key, value] pairs as entry objects.")
+                );
+            }
+            let k = vm.get_elem(&item, &Value::Num(0.0))?;
+            let v = vm.get_elem(&item, &Value::Num(1.0))?;
+            weak_key(vm, &k, "as weak map key")?;
+            let key = vm.map_key(&k);
+            table(vm, id).set(key, k, v);
+        } else {
+            weak_key(vm, &item, "in weak set")?;
+            let key = vm.map_key(&item);
+            table(vm, id).set(key, item, Value::Undef);
+        }
+        fuel::native(vm);
+        Ok(Flow::Next)
+    }
+
+    fn finish(vm: &mut Vm, fr: Frame) -> Res {
+        Ok(fr.get(vm, FOR_OF_SLOTS))
+    }
+}
+
+fn weak_ctor(vm: &mut Vm, this: Value, args: &[Value], pairs: bool, callee: Id) -> Res {
+    let name = if pairs { "WeakMap" } else { "WeakSet" };
     if !matches!(this, Value::Uninit) {
         return Err(vm.type_error(&format!("Constructor {name} requires 'new'.")));
     }
@@ -514,51 +719,25 @@ fn weak_ctor(vm: &mut Vm, this: Value, args: &[Value], name: &str, pairs: bool) 
     if src.is_nullish() {
         return Ok(Value::Obj(id));
     }
-    // The reference's `fillCollection`: `$IsObject` for a pair, then `$Table("add")`, for each item.
     fuel::method(vm);
-    let open = vm.open_fuel(&src, crate::bytecode::ITER_FOR_OF);
-    let it = vm.get_iterator(&src)?;
-    vm.fuel(open);
-    let next = vm.record_next_of(&src, &it)?;
-    while let Some(item) = vm.iter_step_with(&it, next)? {
-        let r = (|| -> Result<(), Value> {
-            if pairs {
-                fuel::native(vm);
-                if !matches!(item, Value::Obj(_)) {
-                    return Err(vm.type_error(&format!(
-                        "new {name}(...) expects [key, value] pairs as entry objects."
-                    )));
-                }
-                let k = vm.get_elem(&item, &Value::Num(0.0))?;
-                let v = vm.get_elem(&item, &Value::Num(1.0))?;
-                weak_key(vm, &k, "as weak map key")?;
-                let key = vm.map_key(&k);
-                table(vm, id).set(key, k, v);
-            } else {
-                weak_key(vm, &item, "in weak set")?;
-                let key = vm.map_key(&item);
-                table(vm, id).set(key, item, Value::Undef);
-            }
-            fuel::native(vm);
-            Ok(())
-        })();
-        if let Err(e) = r {
-            let close = vm.close_fuel(&it);
-            let _ = vm.iter_close(&it);
-            vm.fuel(close);
-            return Err(e);
-        }
-        fuel::step(vm);
-    }
-    Ok(Value::Obj(id))
+    let own = [Value::Obj(id)];
+    enter_for_of_sub(
+        vm,
+        NativeOp::Collections,
+        WEAK_FILL,
+        callee,
+        Value::Undef,
+        src,
+        &own,
+    )
 }
 
-fn weak_map_ctor(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    weak_ctor(vm, this, args, "WeakMap", true)
+fn weak_map_ctor(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    weak_ctor(vm, this, args, true, callee)
 }
 
-fn weak_set_ctor(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    weak_ctor(vm, this, args, "WeakSet", false)
+fn weak_set_ctor(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    weak_ctor(vm, this, args, false, callee)
 }
 
 fn weak_map_of(vm: &mut Vm, this: &Value, name: &str) -> Result<Id, Value> {
@@ -638,18 +817,36 @@ fn weak_get_or_insert(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     Ok(arg(args, 1))
 }
 
-fn weak_get_or_insert_computed(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+fn weak_get_or_insert_computed(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     let id = weak_map_of(vm, &this, "getOrInsertComputed")?;
     weak_key(vm, &arg(args, 0), "as weak map key")?;
-    get_or_insert_computed(vm, id, args, "WeakMap.getOrInsertComputed")
+    get_or_insert_computed(vm, id, args, "WeakMap.getOrInsertComputed", callee)
 }
 
+// The sub-ops of this family's frames. A number keeps its meaning once a snapshot may hold it.
+/// `getOrInsertComputed` of a Map or WeakMap.
+const GET_OR_INSERT: u16 = 0;
+/// A Set composition method given a Set-like object.
+const SET_METHOD: u16 = 1;
+/// `new WeakMap(iterable)` and `new WeakSet(iterable)`.
+const WEAK_FILL: u16 = 2;
+/// A generator's `next`, `return` or `throw` called as a native.
+pub(crate) const GEN_RESUME: u16 = 3;
+/// `Promise.all`, `allSettled`, `any` and `race` over an input they iterate in a frame.
+pub(crate) const COMBINE: u16 = 4;
+/// The loop that collects a combinator's input.
+pub(crate) const COLLECT: u16 = 5;
+
 /// The steps of this family's native frames (`native::NativeOp::Collections`), by sub-op; see `native.rs`.
-pub(crate) fn family_step(
-    _vm: &mut Vm,
-    _sub: u16,
-    _fr: crate::native::Frame,
-    _input: crate::native::Input,
-) -> Result<crate::native::Step, Value> {
-    Ok(crate::native::Step::Done(Value::Undef))
+pub(crate) fn family_step(vm: &mut Vm, sub: u16, fr: Frame, input: Input) -> Result<Step, Value> {
+    use super::collections;
+    match sub {
+        GET_OR_INSERT => get_or_insert_step(vm, fr, input),
+        SET_METHOD => set_method_step(vm, fr, input),
+        WEAK_FILL => for_of_step::<WeakFill>(vm, fr, input),
+        GEN_RESUME => collections::gen_resume_step(vm, fr, input),
+        COMBINE => collections::combine_step(vm, fr, input),
+        COLLECT => for_of_step::<collections::Collect>(vm, fr, input),
+        _ => Ok(Step::Done(Value::Undef)),
+    }
 }

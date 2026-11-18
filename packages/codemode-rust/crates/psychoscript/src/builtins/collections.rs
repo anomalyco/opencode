@@ -1,7 +1,9 @@
 //! Map, Set, Promise, generators and built-in iterators.
 
 use super::{arg, fuel};
-use crate::native::{FOR_OF_SLOTS, Flow, ForOf, Frame, enter_for_of};
+use crate::native::{
+    FOR_OF_SLOTS, Flow, ForOf, Frame, Input, Step, enter_for_of, enter_for_of_sub,
+};
 use crate::object::*;
 use crate::value::{Id, Slot, Value};
 use crate::vm::{Reaction, Res, Vm};
@@ -52,10 +54,24 @@ pub fn setup(vm: &mut Vm) {
         &[
             ("resolve", 1, promise_resolve),
             ("reject", 1, promise_reject),
-            ("all", 1, promise_all),
-            ("allSettled", 1, promise_all_settled),
-            ("any", 1, promise_any),
-            ("race", 1, promise_race),
+        ],
+    );
+    // Each combinator keeps, as its data, the internal function that collects an input it iterates in a frame.
+    let collect = vm.native_fn("", 1, collect_items, Value::Undef);
+    let combinators: [(&'static str, crate::vm::NativeFn); 4] = [
+        ("all", promise_combinator::<ALL>),
+        ("allSettled", promise_combinator::<ALL_SETTLED>),
+        ("any", promise_combinator::<ANY>),
+        ("race", promise_combinator::<RACE>),
+    ];
+    for (name, f) in combinators {
+        let v = vm.native_fn(name, 1, f, collect);
+        let key = vm.atoms.intern(name);
+        vm.define_hidden(promise, key, v);
+    }
+    vm.methods(
+        promise,
+        &[
             ("withResolvers", 0, promise_with_resolvers),
             ("try", 1, promise_try),
         ],
@@ -67,8 +83,8 @@ pub fn setup(vm: &mut Vm) {
         &[("catch", 1, promise_catch), ("finally", 1, promise_finally)],
     );
 
+    // `Iterator.prototype.next` is `builtins::iterator`'s.
     let ip = vm.realm.iter_proto;
-    vm.method(ip, "next", 0, iter_next);
     let self_iter = vm.native_fn("[Symbol.iterator]", 0, iter_self, Value::Undef);
     vm.define_hidden(ip, SYM_ITERATOR, self_iter);
 
@@ -288,39 +304,80 @@ fn map_entries<const SET: bool>(vm: &mut Vm, this: Value, _args: &[Value], _: Id
 
 // ---------- iterators and generators ----------
 
-fn iter_next(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
-    let r = vm.iter_step(&this)?;
-    Ok(match r {
-        Some(v) => vm.iter_result(v, false),
-        None => vm.iter_result(Value::Undef, true),
-    })
-}
-
 fn iter_self(_vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
     Ok(this)
 }
 
-fn gen_resume(vm: &mut Vm, this: &Value, mode: u8, v: Value) -> Res {
-    let Value::Obj(id) = this else {
+/// A generator method called as a native (`mode` 0 for `next`, 1 for `return`, 2 for `throw`): a generator that
+/// runs does so in a frame, which answers with the iterator result.
+fn gen_resume(vm: &mut Vm, this: &Value, mode: u8, v: Value, callee: Id) -> Res {
+    let Value::Obj(id) = *this else {
         return Err(vm.type_error("Generator method called on incompatible receiver"));
     };
-    if !matches!(vm.heap[*id as usize].kind, Kind::Generator(_)) {
-        return Err(vm.type_error("Generator method called on incompatible receiver"));
+    match vm.heap[id as usize].kind {
+        Kind::Generator(GenState::Suspended(_)) => {}
+        Kind::Generator(_) => {
+            // A generator that is done or running does not run: the answer is at hand.
+            if let Some((value, done)) = vm.native_resume(id, mode, v)? {
+                return Ok(vm.iter_result(value, done));
+            }
+        }
+        _ => return Err(vm.type_error("Generator method called on incompatible receiver")),
     }
-    let (value, done) = vm.resume_generator(*id, mode, v)?;
-    Ok(vm.iter_result(value, done))
+    let op = crate::native::NativeOp::Collections;
+    let slots = [Value::Obj(id), Value::Num(mode as f64), v];
+    vm.enter_native_sub(op, super::sets::GEN_RESUME, callee, Value::Undef, &slots)
 }
 
-fn gen_next(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    gen_resume(vm, &this, 0, arg(args, 0))
+/// `Vm::native_resume` for the frame `fr` on top, with what the generator throws and does not catch coming back to
+/// the frame as `Input::Threw`. A `return` or `throw` request unwinds while the frame's step runs, which must not
+/// carry the throw past the frame: when the frame is the base of a run, that would unwind the frames below it twice.
+pub(crate) fn resume_catching(
+    vm: &mut Vm,
+    fr: Frame,
+    g: Id,
+    mode: u8,
+    v: Value,
+) -> Result<Option<(Value, bool)>, Value> {
+    let sp = (vm.stack.len() - fr.base()) as u32;
+    vm.handlers_mut().push(crate::vm::Handler {
+        pc: crate::native::THREW as u32,
+        sp,
+    });
+    let r = vm.native_resume(g, mode, v);
+    if !matches!(r, Ok(None)) {
+        vm.handlers_mut().pop();
+    }
+    r
 }
 
-fn gen_return(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    gen_resume(vm, &this, 1, arg(args, 0))
+/// The step of a generator method's frame: resumes the generator, then answers with what it yielded or returned.
+pub(crate) fn gen_resume_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
+    match input {
+        Input::Start => {
+            let g = fr.slot(vm, 0).obj().unwrap_or(0);
+            let (mode, v) = (fr.index(vm, 1) as u8, fr.get(vm, 2));
+            match resume_catching(vm, fr, g, mode, v)? {
+                None => Ok(Step::Pushed),
+                Some((value, done)) => Ok(Step::Done(vm.iter_result(value, done))),
+            }
+        }
+        Input::Returned(r) => Ok(Step::Done(vm.iter_result(r.get(), false))),
+        Input::Finished(r) => Ok(Step::Done(vm.iter_result(r.get(), true))),
+        Input::Threw(e) => Err(e),
+    }
 }
 
-fn gen_throw(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    gen_resume(vm, &this, 2, arg(args, 0))
+fn gen_next(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    gen_resume(vm, &this, 0, arg(args, 0), callee)
+}
+
+fn gen_return(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    gen_resume(vm, &this, 1, arg(args, 0), callee)
+}
+
+fn gen_throw(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    gen_resume(vm, &this, 2, arg(args, 0), callee)
 }
 
 // ---------- Promise ----------
@@ -361,53 +418,123 @@ fn promise_reject(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     Ok(Value::Obj(p))
 }
 
-/// The members of a combinator's input, or the promise it returns already rejected when iterating it fails.
-fn combinator_items(
-    vm: &mut Vm,
-    args: &[Value],
-    name: &str,
-) -> Result<Result<Vec<Value>, Id>, Value> {
+// Which combinator a frame runs, as its slot holds it.
+const ALL: u8 = 0;
+const ALL_SETTLED: u8 = 1;
+const ANY: u8 = 2;
+const RACE: u8 = 3;
+const COMBINATOR_NAMES: [&str; 4] = ["all", "allSettled", "any", "race"];
+
+/// `Promise.all`, `allSettled`, `any` and `race`: an input that fails to iterate gives a rejected promise, not a
+/// throw. An array is walked here; any other input is iterated in a frame (`combine_step`).
+fn promise_combinator<const K: u8>(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Res {
     let items = arg(args, 0);
-    let listed = if vm.is_iterable(&items) {
-        // The reference adds the items in its internal `$vmCombine`, a back-edge each, after its own call.
-        fuel::native(vm);
+    if !vm.is_iterable(&items) {
+        let d = vm.describe_data(&items);
+        let name = COMBINATOR_NAMES[K as usize];
+        let e = vm.type_error(&format!(
+            "Promise.{name} expects a synchronous iterable, received {d}."
+        ));
+        return Ok(rejected(vm, e));
+    }
+    // The reference adds the items in its internal `$vmCombine`, a back-edge each, after its own call.
+    fuel::native(vm);
+    if matches!(items, Value::Obj(id) if matches!(vm.heap[id as usize].kind, Kind::Array(_))) {
         let mut list = Vec::new();
-        fuel::for_of(vm, &items, |_, v| {
+        return match fuel::for_of(vm, &items, |_, v| {
             list.push(v);
             Ok(true)
-        })
-        .map(|_| {
-            vm.bytecode_builtin();
-            list
-        })
-    } else {
-        let d = vm.describe_data(&items);
-        Err(vm.type_error(&format!(
-            "Promise.{name} expects a synchronous iterable, received {d}."
-        )))
-    };
-    match listed {
-        Ok(items) => Ok(Ok(items)),
-        Err(e) if vm.fatal.is_some() => Err(e),
-        Err(e) => {
-            let p = vm.new_promise();
-            vm.reject(p, e);
-            Ok(Err(p))
+        }) {
+            Ok(_) => {
+                vm.bytecode_builtin();
+                Ok(combine(vm, K, list))
+            }
+            Err(e) if vm.fatal.is_some() => Err(e),
+            Err(e) => Ok(rejected(vm, e)),
+        };
+    }
+    let collect = vm.native_data(callee);
+    let op = crate::native::NativeOp::Collections;
+    let slots = [collect, items, Value::Num(K as f64)];
+    vm.enter_native_sub(op, super::sets::COMBINE, callee, Value::Undef, &slots)
+}
+
+/// The step of a combinator's frame: collects its input with the internal `collect_items`, catching what that throws,
+/// then combines the items, or answers with a rejected promise.
+pub(crate) fn combine_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
+    match input {
+        Input::Start => {
+            let (collect, items) = (fr.slot(vm, 0), fr.slot(vm, 1));
+            Ok(fr.catching_list(vm, collect, Slot::UNDEF, &[items], Step::CallUncounted))
         }
+        Input::Returned(r) => {
+            let list = match r.obj().map(|id| &mut vm.heap[id as usize].kind) {
+                Some(Kind::Array(items)) => std::mem::take(items),
+                _ => Vec::new(),
+            };
+            vm.bytecode_builtin();
+            let kind = fr.index(vm, 2) as u8;
+            Ok(Step::Done(combine(vm, kind, list)))
+        }
+        Input::Threw(e) if vm.fatal.is_some() => Err(e),
+        Input::Threw(e) => Ok(Step::Done(rejected(vm, e))),
+        Input::Finished(_) => Ok(Step::Done(Value::Undef)),
     }
 }
 
-fn combinator(vm: &mut Vm, args: &[Value], kind: CombKind) -> Res {
-    let name = match kind {
-        CombKind::All => "all",
-        CombKind::AllSettled => "allSettled",
-        CombKind::Any => "any",
-    };
-    let items = match combinator_items(vm, args, name)? {
-        Ok(items) => items,
-        Err(rejected) => return Ok(Value::Obj(rejected)),
-    };
+/// The internal function a combinator's frame calls to collect its input into an array, in a frame of its own.
+fn collect_items(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Res {
+    let list = vm.new_array(Vec::new());
+    let op = crate::native::NativeOp::Collections;
+    let sub = super::sets::COLLECT;
+    enter_for_of_sub(vm, op, sub, callee, Value::Undef, arg(args, 0), &[list])
+}
+
+/// Collects each value into the array in the frame's first own slot.
+pub(crate) struct Collect;
+
+impl ForOf for Collect {
+    fn item(vm: &mut Vm, fr: Frame, x: Value) -> Result<Flow, Value> {
+        if let Some(list) = fr.slot(vm, FOR_OF_SLOTS).obj()
+            && let Kind::Array(items) = &mut vm.heap[list as usize].kind
+        {
+            items.push(x);
+        }
+        Ok(Flow::Next)
+    }
+
+    fn finish(vm: &mut Vm, fr: Frame) -> Res {
+        Ok(fr.get(vm, FOR_OF_SLOTS))
+    }
+}
+
+fn rejected(vm: &mut Vm, e: Value) -> Value {
+    let p = vm.new_promise();
+    vm.reject(p, e);
+    Value::Obj(p)
+}
+
+/// The promise a combinator returns for its input's items.
+fn combine(vm: &mut Vm, which: u8, items: Vec<Value>) -> Value {
     let result = vm.new_promise();
+    let kind = match which {
+        ALL => CombKind::All,
+        ALL_SETTLED => CombKind::AllSettled,
+        ANY => CombKind::Any,
+        _ => {
+            if items.is_empty() {
+                let e = vm.type_error(
+                    "Promise.race([]) would never settle; provide at least one promise or value.",
+                );
+                vm.reject(result, e);
+            }
+            for item in items {
+                let p = vm.promise_resolve(item);
+                vm.perform_then(p, Reaction::Resolve(result));
+            }
+            return Value::Obj(result);
+        }
+    };
     let n = items.len();
     if n == 0 {
         if kind == CombKind::Any {
@@ -423,7 +550,7 @@ fn combinator(vm: &mut Vm, args: &[Value], kind: CombKind) -> Res {
             let empty = vm.new_array(Vec::new());
             vm.resolve_promise(result, empty);
         }
-        return Ok(Value::Obj(result));
+        return Value::Obj(result);
     }
     let proto = vm.realm.object_proto;
     let comb = vm.alloc(Obj::new(
@@ -445,38 +572,7 @@ fn combinator(vm: &mut Vm, args: &[Value], kind: CombKind) -> Res {
             },
         );
     }
-    Ok(Value::Obj(result))
-}
-
-fn promise_all(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
-    combinator(vm, args, CombKind::All)
-}
-
-fn promise_all_settled(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
-    combinator(vm, args, CombKind::AllSettled)
-}
-
-fn promise_any(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
-    combinator(vm, args, CombKind::Any)
-}
-
-fn promise_race(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
-    let items = match combinator_items(vm, args, "race")? {
-        Ok(items) => items,
-        Err(rejected) => return Ok(Value::Obj(rejected)),
-    };
-    let result = vm.new_promise();
-    if items.is_empty() {
-        let e = vm.type_error(
-            "Promise.race([]) would never settle; provide at least one promise or value.",
-        );
-        vm.reject(result, e);
-    }
-    for item in items {
-        let p = vm.promise_resolve(item);
-        vm.perform_then(p, Reaction::Resolve(result));
-    }
-    Ok(Value::Obj(result))
+    Value::Obj(result)
 }
 
 fn promise_with_resolvers(vm: &mut Vm, _this: Value, _args: &[Value], _: Id) -> Res {

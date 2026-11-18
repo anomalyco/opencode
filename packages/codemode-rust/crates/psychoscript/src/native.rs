@@ -116,7 +116,7 @@ pub enum Input {
     /// The call it asked for threw this, which a handler it pushed (`catching`) caught.
     Threw(Value),
     /// The generator it resumed finished with this.
-    Finished(#[expect(dead_code, reason = "read by the generator methods' frames")] Slot),
+    Finished(Slot),
 }
 
 /// What a step asks of the loop.
