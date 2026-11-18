@@ -935,7 +935,7 @@ export const dict = {
   "sidebar.view.markAllRead": "Mark all as read",
   "sidebar.view.noMatch": "No other sessions match",
   "tabs.groups.menu": "Group tabs",
-  "tabs.groups.groupBy": "Group by",
+  "tabs.groups.groupBy": "Automatic grouping",
   "tabs.groups.mode.none": "None",
   "tabs.groups.mode.server": "Server",
   "tabs.groups.mode.project": "Project",
