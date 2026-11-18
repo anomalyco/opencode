@@ -159,6 +159,7 @@ test("a surface that owns the keyboard keeps command keys from running inside it
 
   expect(ran).toEqual(["palette"])
 })
+
 test.each([
   { keybind: "mod+alt+.", init: { key: "≥", code: "Period", ctrlKey: true, altKey: true } },
   { keybind: "mod+shift+[", init: { key: "{", code: "BracketLeft", ctrlKey: true, shiftKey: true } },
