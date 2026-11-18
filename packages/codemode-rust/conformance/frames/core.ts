@@ -37,6 +37,11 @@ export default ({ after, text }: Helpers) => ({
     "await (async () => { async function* ag() { yield* { [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n > 1, value: S(++n) }) } } } } const r = []; for await (const x of ag()) r.push(x); return r })()",
     "await (async () => { async function* ag() { yield S(1); const x = S(2); yield x } const r = []; for await (const x of ag()) r.push(x); return r })()",
     "await (async () => { async function* ag() { yield S(1) } const it = ag(); return [await it.next(), await it.next()] })()",
+    // A sync generator's finally, catch and body run under for await and an async generator's yield*.
+    "await (async () => { function* g() { try { yield 1; yield 2 } finally { S(9) } } const r = []; for await (const x of g()) { r.push(x); break } return r })()",
+    "await (async () => { function* g() { try { yield 1 } catch (e) { yield S(e) } } async function* ag() { yield* g() } const it = ag(); await it.next(); return it.throw(3) })()",
+    "await (async () => { function* g() { try { yield 1 } finally { S(4) } } async function* ag() { yield* g() } const it = ag(); await it.next(); return it.return(7) })()",
+    "await (async () => { async function* ag() { function* g() { yield S(1); yield S(2) } yield* g() } const r = []; for await (const x of ag()) r.push(x); return r })()",
     // `for await` and an async generator's `yield*` over iterators whose methods are the program's.
     "await (async () => { const r = []; for await (const x of { [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n > 1, value: S(++n) + n }) } } }) r.push(x); return r })()",
     "await (async () => { const r = []; const it = { n: 0, [Symbol.asyncIterator]() { S(0); return this }, next() { return Promise.resolve({ done: this.n > 1, value: S(++this.n) }) } }; for await (const x of it) r.push(x); return r })()",

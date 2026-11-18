@@ -211167,6 +211167,79 @@
       "log": []
     },
     {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = await (async () => { function* g() { try { yield 1; yield 2 } finally { S(9) } } const r = []; for await (const x of g()) { r.push(x); break } return r })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            1
+          ],
+          [
+            "job",
+            "call 9",
+            "answer 9"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = await (async () => { function* g() { try { yield 1 } catch (e) { yield S(e) } } async function* ag() { yield* g() } const it = ag(); await it.next(); return it.throw(3) })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          {
+            "value": 1,
+            "done": false
+          },
+          [
+            "job",
+            "call 3",
+            "answer 3"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = await (async () => { function* g() { try { yield 1 } finally { S(4) } } async function* ag() { yield* g() } const it = ag(); await it.next(); return it.return(7) })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          {
+            "value": 7,
+            "done": true
+          },
+          [
+            "job",
+            "call 4",
+            "answer 4"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = await (async () => { async function* ag() { function* g() { yield S(1); yield S(2) } yield* g() } const r = []; for await (const x of ag()) r.push(x); return r })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            1,
+            1
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
       "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = await (async () => { const r = []; for await (const x of { [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n > 1, value: S(++n) + n }) } } }) r.push(x); return r })(); return [r, log]",
       "outcome": {
         "ok": true,

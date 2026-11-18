@@ -1654,7 +1654,13 @@ impl<'rt> Vm<'rt> {
                         return Ok(Value::Obj(made));
                     }
                     let rk = self.names.return_;
+                    let generator = matches!(
+                        self.heap[sync as usize].kind,
+                        Kind::Generator(GenState::Suspended(_))
+                    );
                     let ret = match self.heap[sync as usize].kind {
+                        // A suspended generator closes through its own `return`, from a frame, for nothing.
+                        Kind::Generator(GenState::Suspended(_)) => self.get_obj(sync, rk),
                         Kind::Generator(_)
                         | Kind::ArrayIter { .. }
                         | Kind::MapIter { .. }
@@ -1662,7 +1668,7 @@ impl<'rt> Vm<'rt> {
                         | Kind::ListIter { .. } => Value::Undef,
                         _ => self.get_obj(sync, rk),
                     };
-                    let closed = if self.calls_program(&ret) {
+                    let closed = if generator || self.calls_program(&ret) {
                         match self.adapt_by_frame(BY_CLOSE, made, sync, kind, None, ret) {
                             Ok(_) => return Ok(Value::Undef),
                             Err(e) => Err(e),
@@ -1681,6 +1687,13 @@ impl<'rt> Vm<'rt> {
                 }
                 if self.calls_program(&m) {
                     self.adapt_by_frame(BY_UNCOUNTED, made, sync, kind, arg, m)
+                        .map(|_| None)
+                } else if matches!(
+                    self.heap[sync as usize].kind,
+                    Kind::Generator(GenState::Suspended(_))
+                ) {
+                    // A generator's own method runs its body: from a frame, as bytecode calls it.
+                    self.adapt_by_frame(BY_COUNTED, made, sync, kind, arg, m)
                         .map(|_| None)
                 } else {
                     let args: &[Value] = match &arg {
