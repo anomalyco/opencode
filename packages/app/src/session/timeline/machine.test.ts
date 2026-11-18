@@ -18,6 +18,12 @@ import {
 
 const replay = (events: FollowEvent[], from = createFollowState()) => events.reduce(transitionFollow, from)
 
+test("starts detached when timeline following is disabled", () => {
+  expect(createFollowState()).toEqual({ type: "following" })
+  expect(createFollowState(false)).toEqual({ type: "detached", endPending: false })
+  expect(isFollowing(createFollowState(false))).toBe(false)
+})
+
 const scroll = (scrollTop: number, previousTop: number, maxScroll = 1000, previousMaxScroll = maxScroll) =>
   ({ type: "scroll", scrollTop, previousTop, maxScroll, previousMaxScroll }) as const
 
