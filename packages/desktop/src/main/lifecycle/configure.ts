@@ -7,6 +7,7 @@ import { app } from "electron"
 import { debugBuild, memoryLogInterval } from "@opencode/gui-plugins/debug/options"
 import { APP_ID, APP_NAME, CHANNEL } from "../constants"
 import { remoteDebuggingPort } from "../diagnostics/options"
+import { lockHeld } from "./instance-lock"
 
 const testOnboarding = process.env.OPENCODE_TEST_ONBOARDING === "1"
 
@@ -58,7 +59,16 @@ export function configureApplication() {
 
 export function acquireApplicationLock() {
   if (app.requestSingleInstanceLock()) return true
-  app.quit()
+  const held = lockHeld({ packaged: app.isPackaged }, app.getPath("userData"))
+
+  if (held.type === "handover") {
+    app.quit()
+
+    return false
+  }
+
+  // A terminal's stderr is written asynchronously on Windows, so the exit waits for the sentence to be out.
+  process.stderr.write(`${held.message}\n`, () => app.exit(1))
 
   return false
 }
