@@ -123,6 +123,7 @@ translates. See [Base URLs](/console/harnesses#base-urls) for the full set.
 | Nano Banana 2.1             | gemini-nano-banana-2.1      | `https://opencode.ai/inference/google/v1beta/models/gemini-nano-banana-2.1:generateContent` | `@ai-sdk/google`            |
 | Grok Imagine Image 2.0      | grok-imagine-image-2.0      | `https://opencode.ai/inference/xai/v1/images/generations`                                   | `@ai-sdk/xai`               |
 | Big Pickle                  | big-pickle                  | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
+| Tidepool Alpha Free         | tidepool-alpha-free         | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | Iceman Free                 | iceman-free                 | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | Inkling 2 Small Free        | inkling-2-small-free        | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | DeepSeek V4.1 Flash Free    | deepseek-v4.1-flash-free    | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
@@ -260,6 +261,7 @@ noted.
 | Model                               | Input           | Output            | Cached Read      | Cached Write |
 | ----------------------------------- | --------------- | ----------------- | ---------------- | ------------ |
 | Big Pickle                          | Free            | Free              | Free             | -            |
+| Tidepool Alpha Free                 | Free            | Free              | Free             | -            |
 | Iceman Free                         | Free            | Free              | Free             | -            |
 | Inkling 2 Small Free                | Free            | Free              | Free             | -            |
 | DeepSeek V4.1 Flash Free            | Free            | Free              | Free             | -            |
@@ -398,6 +400,7 @@ models to generate session titles.
 - Nemotron 3.5 Lightning Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Nemotron 3.5 Super VL Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Big Pickle is a stealth model that's free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
+- Tidepool Alpha Free is a stealth model that's free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Iceman Free is a stealth model that's free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Inkling 2 Small Free is free on OpenCode for a limited time. Its provider retains your data and may use it for model training; see [Privacy](#privacy). It's not available in the European Union, Iceland, Liechtenstein, Norway, Cuba, Iran, North Korea, Russia, Ukraine, or Venezuela.
 - Beam Free is free on OpenCode for a limited time. Its provider does not use your data for model training and retains it for 30 days for safety reasons. It's not available in Angola, Belarus, Cambodia, China (including Hong Kong and Macau), Cuba, the Democratic Republic of the Congo, Equatorial Guinea, Iran, Iraq, Laos, Libya, Nigeria, North Korea, Russia, Syria, Turkmenistan, Uzbekistan, Venezuela, or the Crimea, Donetsk, and Luhansk regions of Ukraine.
@@ -450,6 +453,7 @@ To hide free models in OpenCode, set `OPENCODE_DISABLE_FREE_MODELS=1`. See [free
 All our models are hosted in the US and EU. Our providers follow a zero-retention policy and do not use your data for model training, with the following exceptions:
 
 - Big Pickle: During its free period, collected data may be used to improve the model.
+- Tidepool Alpha Free: During its free period, collected data is retained and used to improve the model.
 - Iceman Free: During its free period, collected data is retained and used to improve the model.
 - Inkling 2 Small Free: During its free period, collected data is retained and may be used to monitor the model's real-world performance and for model training. See Thinking Machines' [Terms of Service](https://thinkingmachines.ai/legal/tml-free-research-api-tier-terms-of-service.pdf) and [Privacy Notice](https://thinkingmachines.ai/legal/tml-free-research-api-tier-privacy-notice.pdf).
 - Flint 40B Free: During its free period, collected data may be used to improve the model. Data is retained for 30 days.
