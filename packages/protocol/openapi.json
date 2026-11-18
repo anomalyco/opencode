@@ -19913,7 +19913,7 @@
       "Generate.VideoErrorReason": {
         "type": "string",
         "enum": ["failed", "cancelled", "expired", "unknown"],
-        "description": "failed: the provider failed the job. cancelled: the provider cancelled it. expired: the provider expired it. unknown: the provider gave no result in time, or the server stopped while submitting the job"
+        "description": "failed: the provider failed the job. cancelled: the provider cancelled it. expired: the provider expired it. unknown: the provider gave no result in time"
       },
       "Generate.VideoID": {
         "type": "string",

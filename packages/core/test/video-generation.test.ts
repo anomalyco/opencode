@@ -30,7 +30,6 @@ const mp4 = Uint8Array.from([0, 0, 0, 0x14, ...new TextEncoder().encode("ftypmp4
 /** A provider the test drives: each submission gets the next remote ID, whose status the test sets. */
 const provider = () => ({
   submitted: 0,
-  hang: false,
   status: new Map<string, VideoStatus>(),
   cancelled: [] as string[],
 })
@@ -54,7 +53,7 @@ const app = (dir: string, state: State) =>
               image: () => Effect.die("unused"),
               decisions: () => Effect.die("unused"),
               video: {
-                start: () => (state.hang ? Effect.never : Effect.sync(() => ({ id: `remote_${++state.submitted}` }))),
+                start: () => Effect.sync(() => ({ id: `remote_${++state.submitted}` })),
                 status: (_, remote) => Effect.sync(() => state.status.get(remote) ?? { status: "running" }),
                 result: () =>
                   Effect.succeed([
@@ -99,26 +98,12 @@ it.effect("keeps video jobs across restarts and forgets them a day after they fi
       ])
       expect(job.blobs.every((blob) => blob.id.startsWith("blob_"))).toBe(true)
       expect(yield* generations.get(slow.id)).toEqual({ id: slow.id, status: "running" })
-      // A submission the process stops in the middle of.
-      state.hang = true
-      yield* generations.start({ model, prompt: "a crab" }).pipe(Effect.forkChild({ startImmediately: true }))
-      yield* eventually(records, (page) => page.entries.length === 3)
       return { job, slow: slow.id }
     }).pipe(Effect.provide(app(dir, state)))
 
     yield* Effect.gen(function* () {
       const generations = yield* VideoGeneration.Service
       expect(yield* generations.get(first.job.id)).toEqual(first.job)
-      const crab = (yield* records).entries
-        .map((entry) => entry.key.slice("video:".length) as VideoID)
-        .find((id) => id !== first.job.id && id !== first.slow)!
-      // Failed once it has gone unanswered for 30 minutes.
-      yield* TestClock.adjust("30 minutes")
-      expect(yield* eventually(generations.get(crab), (job) => job.status !== "running")).toMatchObject({
-        status: "error",
-        reason: "unknown",
-      })
-
       state.status.set("remote_2", { status: "completed" })
       expect(yield* settled(first.slow)).toMatchObject({ status: "completed" })
 

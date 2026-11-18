@@ -14,20 +14,7 @@ import { Model } from "@opencode/schema/model"
 import { makeGlobalNode, Node } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
-import {
-  Clock,
-  Context,
-  Deferred,
-  Duration,
-  Effect,
-  Exit,
-  Fiber,
-  FiberMap,
-  Layer,
-  Option,
-  Schedule,
-  Schema,
-} from "effect"
+import { Clock, Context, Duration, Effect, Fiber, FiberMap, Layer, Option, Schedule, Schema } from "effect"
 import { BlobStore } from "./blob-store.js"
 import { Database } from "./database/database.js"
 import { Generate } from "./generate.js"
@@ -44,7 +31,7 @@ export class NotFoundError extends Schema.TaggedError<NotFoundError>()("VideoGen
 
 const INTERVAL = Duration.seconds(5)
 const DEADLINE = Duration.hours(2)
-/** How long a finished job's record is kept. Its blobs keep their own retention. */
+/** How long a finished job's record is kept. Its blobs are kept for good. */
 const RETENTION = Duration.hours(24)
 const PREFIX = "video:"
 /**
@@ -53,8 +40,6 @@ const PREFIX = "video:"
  */
 const LEADER = "video-leader"
 const TTL = Duration.minutes(1)
-/** A submission still unanswered after this long belongs to a server that stopped; real ones take seconds to minutes. */
-const SUBMIT = Duration.minutes(30)
 
 export interface StartOptions {
   /** Where the model and its credentials are resolved; defaults to the server's base configuration. */
@@ -76,7 +61,6 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Vi
 // `remote` is the provider's ID for the job; it never leaves this service.
 const fields = { model: Model.Ref, location: Location.Ref, created: Schema.Finite }
 const Job = Schema.Union([
-  Schema.Struct({ status: Schema.Literal("submitting"), ...fields }),
   Schema.Struct({ status: Schema.Literal("running"), remote: Schema.String, ...fields }),
   Schema.Struct({
     status: Schema.Literal("completed"),
@@ -103,9 +87,9 @@ const encode = Schema.encodeSync(Job)
 const decodeID = Schema.decodeUnknownOption(VideoID)
 
 /**
- * Each job is a record in kv under `video:<id>`, written before the provider is called, so a restart resumes polling
- * running jobs and fails the ones whose submission it interrupted. Records are deleted 24 hours after the job finished.
- * Only the elected server polls providers and downloads videos.
+ * Each job is a record in kv under `video:<id>`, written once the provider accepted it, so a restart resumes polling.
+ * Every 5 seconds each server drops records 24 hours after their job finished, and while jobs are running, tries for
+ * the lease. The one holding it checks each running job once.
  */
 const layer = Layer.effect(
   Service,
@@ -115,14 +99,11 @@ const layer = Layer.effect(
     const blobs = yield* BlobStore.Service
     const kv = yield* KV.Service
     const db = (yield* Database.Service).db
+    const scope = yield* Effect.scope
     const owner = randomUUID()
     // The same base-config Location the generate routes use.
     const base = Location.Ref.make({ directory: AbsolutePath.make(global.config) })
-    // Submissions run wherever they were received; polls run only on the elected server.
-    const submits = yield* FiberMap.make<VideoID>()
-    const polls = yield* FiberMap.make<VideoID>()
-
-    const save = (id: VideoID, job: Job) => kv.set(PREFIX + id, encode(job))
+    const checks = yield* FiberMap.make<VideoID>()
 
     const load = (id: VideoID) =>
       kv
@@ -147,22 +128,34 @@ const layer = Layer.effect(
       return claimed !== undefined
     })
 
-    const release = db
-      .delete(KVTable)
-      .where(and(eq(KVTable.key, LEADER), sql`json_extract(${KVTable.value}, '$.owner') = ${owner}`))
-      .run()
-      .pipe(Effect.ignore)
+    yield* Effect.addFinalizer(() =>
+      db
+        .delete(KVTable)
+        .where(and(eq(KVTable.key, LEADER), sql`json_extract(${KVTable.value}, '$.owner') = ${owner}`))
+        .run()
+        .pipe(Effect.ignore),
+    )
 
-    let leading = false
-
-    // A job cancelled meanwhile, possibly by another server, keeps its record and drops what this one downloaded.
-    const finish = Effect.fnUntraced(function* (id: VideoID, job: Job, outcome: Outcome) {
-      if ((yield* load(id))?.status !== job.status)
-        return yield* Effect.forEach(outcome.status === "completed" ? outcome.blobs : [], blobs.remove, {
-          discard: true,
-        })
-      const finished = yield* Clock.currentTimeMillis
-      yield* save(id, { model: job.model, location: job.location, created: job.created, ...outcome, finished })
+    // Writes the outcome only if the job is still running; one cancelled meanwhile, possibly by another server, keeps
+    // its record and drops what this one downloaded.
+    const finish = Effect.fnUntraced(function* (id: VideoID, job: Running, outcome: Outcome) {
+      const now = yield* Clock.currentTimeMillis
+      const value = encode({
+        model: job.model,
+        location: job.location,
+        created: job.created,
+        ...outcome,
+        finished: now,
+      })
+      const updated = yield* db
+        .update(KVTable)
+        .set({ value, time_updated: now })
+        .where(and(eq(KVTable.key, PREFIX + id), sql`json_extract(${KVTable.value}, '$.status') = 'running'`))
+        .returning({ key: KVTable.key })
+        .get()
+        .pipe(Effect.orDie)
+      if (updated === undefined && outcome.status === "completed")
+        yield* Effect.forEach(outcome.blobs, blobs.remove, { discard: true })
     })
 
     const generate = <A>(
@@ -200,30 +193,24 @@ const layer = Layer.effect(
       return written
     })
 
-    // A status read that fails is retried at the next interval: the provider may be briefly unavailable.
-    const poll = (id: VideoID, job: Running, left: Duration.Duration) =>
-      generate(job.location, (service) => service.video.status(job.model, job.remote)).pipe(
-        Effect.map((status) => (status.status === "running" ? undefined : status)),
-        Effect.catch((error) =>
-          Effect.logWarning("video status read failed", { id, error: error.message }).pipe(Effect.as(undefined)),
-        ),
-        Effect.repeat({ schedule: Schedule.spaced(INTERVAL), until: (status) => status !== undefined }),
-        Effect.timeoutOption(left),
-        Effect.map((status) => Option.getOrUndefined(status)),
-      )
-
-    const settle = Effect.fnUntraced(function* (id: VideoID, job: Running) {
-      const left = job.created + Duration.toMillis(DEADLINE) - (yield* Clock.currentTimeMillis)
-      const settled = left > 0 ? yield* poll(id, job, Duration.millis(left)) : undefined
-      if (settled === undefined)
+    // A status read that fails is tried again at the next check: the provider may be briefly unavailable.
+    const check = Effect.fnUntraced(function* (id: VideoID, job: Running, now: number) {
+      if (now >= job.created + Duration.toMillis(DEADLINE))
         return yield* finish(id, job, {
           status: "error",
           reason: "unknown",
           error: `The provider had no result ${Duration.format(DEADLINE)} after submission`,
         })
-      if ((yield* load(id))?.status !== "running") return
-      if (settled.status === "error") {
-        const reason = settled.reason ?? "failed"
+      const status = yield* generate(job.location, (service) => service.video.status(job.model, job.remote)).pipe(
+        Effect.catch((error) =>
+          Effect.logWarning("video status read failed", { id, error: error.message }).pipe(
+            Effect.as({ status: "running" } as const),
+          ),
+        ),
+      )
+      if (status.status === "running") return
+      if (status.status === "error") {
+        const reason = status.reason ?? "failed"
         return yield* finish(id, job, { status: "error", reason, error: `The provider reported the job as ${reason}` })
       }
       const outcome = yield* download(job).pipe(
@@ -234,51 +221,30 @@ const layer = Layer.effect(
       yield* finish(id, job, outcome)
     })
 
-    const track = (id: VideoID, job: Running) =>
-      FiberMap.run(polls, id, settle(id, job).pipe(Effect.ignore), { onlyIfMissing: true }).pipe(Effect.asVoid)
-
     const start = Effect.fn("VideoGeneration.start")(function* (input: Generate.VideoInput, options?: StartOptions) {
-      const id = VideoID.create()
-      const submitted = yield* Deferred.make<VideoRunning, Generate.Error>()
-      const job = {
-        status: "submitting",
-        model: input.model,
-        location: options?.location ?? base,
-        created: yield* Clock.currentTimeMillis,
-      } satisfies Job
-      // Runs in the server's fibers, so a client that disconnects can't interrupt a paid submission midway.
-      yield* FiberMap.run(
-        submits,
-        id,
-        Effect.gen(function* () {
-          yield* save(id, job)
-          // A rejected submission's ID is never returned, so its record is dropped.
-          const started = yield* generate(job.location, (service) => service.video.start(input)).pipe(
-            Effect.tapError(() => kv.remove(PREFIX + id)),
-          )
-          const running = { ...job, status: "running", remote: started.id } satisfies Running
-          yield* save(id, running)
-          // The leader polls it from here: at once when that's this server, otherwise at its next scan. Started before
-          // the reply, so a `wait` right after sees the poll.
-          if (leading) yield* track(id, running)
-          yield* Deferred.succeed(submitted, { id, status: "running" } as const)
-        }).pipe(
-          // Once the submission succeeded, this does nothing.
-          Effect.onExit((exit) => (Exit.isFailure(exit) ? Deferred.failCause(submitted, exit.cause) : Effect.void)),
-          Effect.ignore,
-        ),
-      )
-      return yield* Deferred.await(submitted)
+      const location = options?.location ?? base
+      const submit = Effect.gen(function* () {
+        const started = yield* generate(location, (service) => service.video.start(input))
+        const id = VideoID.create()
+        const created = yield* Clock.currentTimeMillis
+        yield* kv.set(
+          PREFIX + id,
+          encode({ status: "running", remote: started.id, model: input.model, location, created }),
+        )
+        return { id, status: "running" } as const
+      })
+      // Runs in the server's scope, so a client that disconnects can't interrupt a paid submission midway.
+      return yield* Fiber.join(yield* submit.pipe(Effect.forkIn(scope, { startImmediately: true })))
     })
 
     const get = Effect.fn("VideoGeneration.get")(function* (id: VideoID) {
       const missing = new NotFoundError({ id, message: `Video not found: ${id}` })
       const job = yield* load(id)
       if (!job || expired(job, yield* Clock.currentTimeMillis)) return yield* missing
-      if (job.status === "submitting" || job.status === "running") return { id, status: "running" } satisfies VideoJob
+      if (job.status === "running") return { id, status: "running" } satisfies VideoJob
       if (job.status === "error")
         return { id, status: "error", reason: job.reason, error: job.error } satisfies VideoJob
-      // A blob that expired or was deleted is dropped.
+      // A deleted blob is dropped.
       const found = yield* Effect.forEach(job.blobs, (blob) => blobs.read(blob).pipe(Effect.option))
       const infos = found.flatMap((blob) =>
         Option.isSome(blob) ? [{ id: blob.value.id, mime: blob.value.mime, bytes: blob.value.bytes }] : [],
@@ -287,13 +253,12 @@ const layer = Layer.effect(
       return { id, status: "completed", blobs: infos } satisfies VideoJob
     })
 
-    // Reads the record, so it works whichever server polls the job; when this one does, it waits for its poller.
+    // Reads the record, so it works whichever server polls the job.
     const wait = (id: VideoID): Effect.Effect<VideoCompleted | VideoError, NotFoundError> =>
       Effect.gen(function* () {
         const job = yield* get(id)
         if (job.status !== "running") return job
-        const fiber = yield* FiberMap.get(polls, id)
-        yield* Option.isSome(fiber) ? Fiber.await(fiber.value) : Effect.sleep(INTERVAL)
+        yield* Effect.sleep(INTERVAL)
         return yield* wait(id)
       })
 
@@ -301,7 +266,7 @@ const layer = Layer.effect(
       const job = yield* load(id)
       if (!job) return yield* new NotFoundError({ id, message: `Video not found: ${id}` })
       if (job.status !== "running") return
-      yield* FiberMap.remove(polls, id)
+      yield* FiberMap.remove(checks, id)
       yield* finish(id, job, { status: "error", reason: "cancelled", error: "The video generation was cancelled" })
       // Best effort: some providers can't cancel, and the paid job then runs to completion on their side.
       yield* generate(job.location, (service) => service.video.cancel(job.model, job.remote)).pipe(Effect.ignore)
@@ -318,62 +283,34 @@ const layer = Layer.effect(
       }
     })
 
-    // The leader polls every running job, until its deadline. A submission left unanswered by a server that stopped is
-    // never resent: it's paid and not idempotent, so whether the provider got it is unknown.
-    const scan = Effect.gen(function* () {
+    // Records that can't be read are removed with the expired ones. A claim that fails, such as on a busy database,
+    // counts as not leading, so two servers never poll at once; losing the lease stops this server's checks.
+    const tick = Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis
+      const running = (yield* Effect.forEach(yield* rows, (row) => {
+        const id = Option.getOrUndefined(decodeID(row.key.slice(PREFIX.length)))
+        const job = Option.getOrUndefined(decode(row.value))
+        if (!job || expired(job, now)) return kv.remove(row.key).pipe(Effect.as([]))
+        return Effect.succeed(id && job.status === "running" ? [{ id, job }] : [])
+      })).flat()
+      const leading =
+        running.length > 0 &&
+        (yield* claim().pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("video leader claim failed", { cause }).pipe(Effect.as(false)),
+          ),
+        ))
+      if (!leading) return yield* FiberMap.clear(checks)
       yield* Effect.forEach(
-        yield* rows,
-        (row) => {
-          const id = Option.getOrUndefined(decodeID(row.key.slice(PREFIX.length)))
-          const job = Option.getOrUndefined(decode(row.value))
-          if (!id || !job) return Effect.void
-          if (job.status === "running") return track(id, job)
-          if (job.status === "submitting" && job.created + Duration.toMillis(SUBMIT) <= now)
-            return finish(id, job, {
-              status: "error",
-              reason: "unknown",
-              error: "The server stopped while submitting the job; its outcome is unknown",
-            })
-          return Effect.void
-        },
+        running,
+        (entry) =>
+          FiberMap.run(checks, entry.id, check(entry.id, entry.job, now).pipe(Effect.ignore), { onlyIfMissing: true }),
         { discard: true },
       )
     })
-
-    // Every server tries for the lease every 20 s; the one holding it scans every 5 s. A lost lease stops its polls.
-    // A claim that fails, such as on a busy database, counts as not leading, so two servers never poll at once.
-    const elect = claim().pipe(
-      Effect.catchCause((cause) => Effect.logWarning("video leader claim failed", { cause }).pipe(Effect.as(false))),
-      Effect.flatMap((held) =>
-        Effect.gen(function* () {
-          if (!held && leading) yield* FiberMap.clear(polls)
-          leading = held
-        }),
-      ),
-    )
-    yield* elect
-    yield* elect.pipe(Effect.delay(Duration.seconds(20)), Effect.forever, Effect.ensuring(release), Effect.forkScoped)
-    yield* Effect.suspend(() => (leading ? scan : Effect.void)).pipe(
-      Effect.ignoreCause({ log: "Error", message: "Video job scan failed" }),
+    yield* tick.pipe(
+      Effect.ignoreCause({ log: "Error", message: "Video job check failed" }),
       Effect.repeat(Schedule.spaced(INTERVAL)),
-      Effect.forkScoped,
-    )
-
-    // Records that can't be read are removed with the expired ones.
-    yield* Effect.gen(function* () {
-      const now = yield* Clock.currentTimeMillis
-      yield* Effect.forEach(
-        yield* rows,
-        (row) => {
-          const job = Option.getOrUndefined(decode(row.value))
-          return !job || expired(job, now) ? kv.remove(row.key) : Effect.void
-        },
-        { discard: true },
-      )
-    }).pipe(
-      Effect.ignoreCause({ log: "Error", message: "Video record cleanup failed" }),
-      Effect.repeat(Schedule.spaced(Duration.hours(1))),
       Effect.forkScoped,
     )
 
@@ -383,8 +320,7 @@ const layer = Layer.effect(
 
 // A job that never recorded finishing is treated as finished at its deadline.
 function expired(job: Job, now: number) {
-  const finished =
-    job.status === "completed" || job.status === "error" ? job.finished : job.created + Duration.toMillis(DEADLINE)
+  const finished = job.status === "running" ? job.created + Duration.toMillis(DEADLINE) : job.finished
   return finished + Duration.toMillis(RETENTION) <= now
 }
 
