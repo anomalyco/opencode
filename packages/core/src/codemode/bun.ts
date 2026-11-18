@@ -111,8 +111,8 @@ const file = (handle: Handle, type: string, size: number, lastModified: number) 
       ),
     ),
     bytes,
-    // The runtime has no ArrayBuffer: one crosses to a program as a Uint8Array.
-    arrayBuffer: later(() => read(handle)),
+    // A copy, so the buffer holds exactly the file's bytes.
+    arrayBuffer: later(() => read(handle).pipe(Effect.map((bytes) => bytes.slice().buffer))),
     exists: later(() => exists(handle)),
     stat: later(() => stat(handle)),
     slice: (...args: ReadonlyArray<number | string | undefined>): unknown => {
@@ -277,7 +277,9 @@ const contents = (data: unknown) => {
 }
 
 const unwritable = () =>
-  new TypeError("Bun.write expects a string, a Uint8Array, a BunFile, or a Response as the data to write.")
+  new TypeError(
+    "Bun.write expects a string, an ArrayBuffer, a typed array, a BunFile, or a Response as the data to write.",
+  )
 
 // A value from a program is a plain copy, so its functions are among its own entries.
 const method = (value: unknown, key: string) => {
@@ -291,6 +293,7 @@ const toBytes = (value: unknown) => {
   if (typeof value === "string") return Buffer.from(value)
   if (typeof value === "number" || typeof value === "boolean") return Buffer.from(String(value))
   if (value instanceof Uint8Array) return value
+  if (ArrayBuffer.isView(value)) return new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
   if (value instanceof ArrayBuffer) return new Uint8Array(value)
 }
 

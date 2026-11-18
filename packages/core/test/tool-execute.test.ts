@@ -235,8 +235,10 @@ describe("Bun", () => {
         const missing = Bun.file("missing.txt")
         let error
         try { await missing.text() } catch (e) { error = [e.code, e.syscall, e.path] }
+        const buffer = await notes.slice(6).arrayBuffer()
         return [await notes.text(), await Bun.file("data.json").json(), [...await notes.slice(0, 5).bytes()],
-          await notes.slice(-5).text(), [notes.size, notes.type], await missing.exists(), error]`,
+          await notes.slice(-5).text(), [notes.size, notes.type], await missing.exists(), error,
+          [buffer instanceof ArrayBuffer, buffer.byteLength, new TextDecoder().decode(buffer)]]`,
       ),
     ).toEqual([
       "hello world",
@@ -246,6 +248,7 @@ describe("Bun", () => {
       [11, "text/plain;charset=utf-8"],
       false,
       ["ENOENT", "open", "missing.txt"],
+      [true, 5, "world"],
     ])
   })
 
@@ -264,6 +267,8 @@ describe("Bun", () => {
         return [
           await Bun.write("deep/text.txt", "text"),
           await Bun.write("bytes.bin", new Uint8Array([0xff, 0x00])),
+          await Bun.write("words.bin", new Uint16Array([0x6968]).buffer),
+          await Bun.file("words.bin").text(),
           await Bun.write("copy.txt", Bun.file("notes.txt")),
           await failure(() => Bun.write("missing/x.txt", "x", { createPath: false })),
           await failure(() => Bun.write("mode.txt", "x", { mode: 0o755 })),
@@ -273,13 +278,15 @@ describe("Bun", () => {
     ).toEqual([
       4,
       2,
+      2,
+      "hi",
       5,
       "ENOENT",
       'Bun.write does not support the "mode" option in Code Mode. Supported options: createPath.',
       "one\ntwo\n",
     ])
     expect((await fs.readdir(tmp.path)).toSorted()).toEqual(
-      ["bytes.bin", "copy.txt", "deep", "log.txt", "notes.txt"].toSorted(),
+      ["bytes.bin", "copy.txt", "deep", "log.txt", "notes.txt", "words.bin"].toSorted(),
     )
   })
 
@@ -454,7 +461,8 @@ describe("streaming fetch", () => {
       const bytes = await (await fetch(res.url)).bytes()
       const buffer = await (await fetch(res.url)).arrayBuffer()
       const empty = await fetch(res.url, { method: "HEAD" })
-      return [res.headers.get("Content-Type"), before, number, res.bodyUsed, second, [...bytes], [...buffer], empty.body === null]
+      return [res.headers.get("Content-Type"), before, number, res.bodyUsed, second, [...bytes], buffer instanceof ArrayBuffer,
+        [...new Uint8Array(buffer)], empty.body === null]
     `,
       ),
     )
@@ -465,6 +473,7 @@ describe("streaming fetch", () => {
       true,
       "TypeError",
       [52, 50],
+      true,
       [52, 50],
       true,
     ])
