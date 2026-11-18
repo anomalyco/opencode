@@ -996,6 +996,16 @@ export type JobImage = {
   model: string
 }
 
+export type JobVideo = {
+  kind: "video"
+  id: string
+  sessionID: SessionID
+  status: JobStatus
+  title?: string
+  time: JobTime
+  path: string
+}
+
 export type JobCodeMode = {
   kind: "codemode"
   id: string
@@ -2303,7 +2313,7 @@ export type AutomationTrigger =
 
 export type ArtifactContent = { info: ArtifactInfo; files: { [x: string]: string } }
 
-export type JobInfo = JobShell | JobSubagent | JobImage | JobCodeMode
+export type JobInfo = JobShell | JobSubagent | JobImage | JobVideo | JobCodeMode
 
 export type SessionInboxMove = {
   id: SessionMessageID
@@ -4787,7 +4797,7 @@ export type ExperimentalArtifactsViewOutput = globalThis.Uint8Array
 
 export type ExperimentalJobListInput = {
   readonly sessionID?: string | undefined
-  readonly kind?: ("shell" | "subagent" | "image" | "codemode") | undefined
+  readonly kind?: ("shell" | "subagent" | "image" | "video" | "codemode") | undefined
   readonly status?: ("running" | "completed" | "error" | "cancelled") | undefined
   readonly descendants?: boolean | undefined
 }

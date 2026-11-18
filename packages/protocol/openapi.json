@@ -20879,13 +20879,16 @@
             "$ref": "#/components/schemas/Job.Image"
           },
           {
+            "$ref": "#/components/schemas/Job.Video"
+          },
+          {
             "$ref": "#/components/schemas/Job.CodeMode"
           }
         ]
       },
       "Job.Kind": {
         "type": "string",
-        "enum": ["shell", "subagent", "image", "codemode"]
+        "enum": ["shell", "subagent", "image", "video", "codemode"]
       },
       "Job.Shell": {
         "type": "object",
@@ -20970,6 +20973,35 @@
           }
         },
         "required": ["started"],
+        "additionalProperties": false
+      },
+      "Job.Video": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["video"]
+          },
+          "id": {
+            "type": "string"
+          },
+          "sessionID": {
+            "$ref": "#/components/schemas/Session.ID"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Job.Status"
+          },
+          "title": {
+            "type": "string"
+          },
+          "time": {
+            "$ref": "#/components/schemas/Job.Time"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": ["kind", "id", "sessionID", "status", "time", "path"],
         "additionalProperties": false
       },
       "Location.PublicInfo": {

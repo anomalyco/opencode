@@ -11,6 +11,7 @@ import { FetchHttpClient, HttpClient } from "effect/http"
 import { Agent } from "../agent.js"
 import { App } from "../app.js"
 import { Artifact } from "../artifact.js"
+import { BlobStore } from "../blob-store.js"
 import { Model } from "../model.js"
 import { Provider } from "../provider.js"
 import { Command } from "../command.js"
@@ -35,6 +36,7 @@ import { ConfigCompatibilityPlugin } from "../config/plugin/compatibility.js"
 import { ConfigToolOutputPlugin } from "../config/plugin/tool-output.js"
 import { ConfigWebSearchPlugin } from "../config/plugin/websearch.js"
 import { ConfigWorktreePlugin } from "../config/plugin/worktree.js"
+import { VideoGeneration } from "../video-generation.js"
 import { Worktree } from "../worktree.js"
 import { WorktreeStrategies } from "../worktree/strategies.js"
 import { Bus } from "../bus.js"
@@ -80,6 +82,7 @@ import { EditTool } from "../tool/plugin/edit.js"
 import { GlobTool } from "../tool/plugin/glob.js"
 import { GrepTool } from "../tool/plugin/grep.js"
 import { ImageGenerateTool } from "../tool/plugin/image-generate.js"
+import { VideoGenerateTool } from "../tool/plugin/video-generate.js"
 import { McpEventTools } from "../tool/plugin/mcp-events.js"
 import { McpResourceTools } from "../tool/plugin/mcp-resource.js"
 import { OpenCodeTools } from "../tool/plugin/opencode.js"
@@ -127,6 +130,7 @@ const services = [
   FetchHttpClient.Fetch,
   Artifact.Service,
   AppProcess.Service,
+  BlobStore.Service,
   Provider.Service,
   Model.Service,
   Command.Service,
@@ -176,6 +180,7 @@ const services = [
   ToolOutput.Service,
   Watcher.Service,
   WellKnown.Service,
+  VideoGeneration.Service,
   Worktree.Service,
   WorktreeStrategies.Service,
 ] as const
@@ -187,6 +192,7 @@ export const requirements = LayerNode.group([
   App.node,
   Artifact.node,
   AppProcess.node,
+  BlobStore.node,
   Provider.node,
   Model.node,
   Command.node,
@@ -238,6 +244,7 @@ export const requirements = LayerNode.group([
   ToolOutput.node,
   Watcher.node,
   WellKnown.node,
+  VideoGeneration.node,
   Worktree.node,
   WorktreeStrategies.node,
 ])
@@ -269,6 +276,7 @@ const pre = [
   GlobTool.Plugin,
   GrepTool.Plugin,
   ImageGenerateTool.Plugin,
+  VideoGenerateTool.Plugin,
   OpenCodeTools.Plugin,
   McpEventTools.Plugin,
   McpResourceTools.Plugin,
