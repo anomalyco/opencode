@@ -355,7 +355,8 @@ export const Plugin = {
               return {
                 output: { id, path: file, model: ref },
                 content: [
-                  `Video job ${id} started in the background with ${ref}. It will be saved to ${file}; if the model returns more than one video, the others are saved next to it with -1, -2, … added to the name.`,
+                  // The model is named only when the tool picked it.
+                  `Video job ${id} started in the background${input.model ? "" : ` with ${ref}`}. It will be saved to ${file}; if the model returns more than one video, the others are saved next to it with -1, -2, … added to the name.`,
                   "You will be notified automatically when it finishes or fails. Videos usually take a few minutes.",
                   "DO NOT sleep, poll, check whether the file exists, or request the same video again while it runs.",
                   "Work on other tasks, or briefly tell the user what you started and end your response.",
