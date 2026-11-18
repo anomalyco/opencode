@@ -3,11 +3,12 @@ import { createFollowState, followAnchor, isFollowing, transitionFollow, type Fo
 
 // Each session gets a fresh machine. Reading the state recomputes it for a changed key, so a view that mounts for the
 // new session starts out following, whatever order the flush runs its computations in.
-export function createTimelineFollow(sessionKey: Accessor<string>) {
+export function createTimelineFollow(sessionKey: Accessor<string>, followStreaming: Accessor<boolean>) {
   const machine = createMemo(() => {
     sessionKey()
 
-    return createSignal(createFollowState())
+    // Read the preference only when a session changes; toggling it must not reset the active timeline.
+    return createSignal(createFollowState(untrack(followStreaming)))
   })
 
   const state = () => machine()[0]()
