@@ -1195,7 +1195,7 @@ fn oauth_view(
 }
 
 /// `OAUTH_CODE`, `/[A-Z0-9]{4}-[A-Z0-9]{4,5}/`: a device-flow code such as `R283-GOUEO`, copied instead of the URL.
-fn oauth_code(text: &str) -> Option<String> {
+pub(super) fn oauth_code(text: &str) -> Option<String> {
     let chars: Vec<char> = text.chars().collect();
     let code = |c: &char| c.is_ascii_uppercase() || c.is_ascii_digit();
     (0..chars.len()).find_map(|start| {
@@ -1489,5 +1489,6 @@ mod tests {
         assert_eq!(oauth_code("Enter code ABCD-1234 at the page").as_deref(), Some("ABCD-1234"));
         assert_eq!(oauth_code("code WXYZ-12345!").as_deref(), Some("WXYZ-12345"));
         assert_eq!(oauth_code("abcd-1234"), None);
+        assert_eq!(oauth_code("ABCD-123"), None);
     }
 }
