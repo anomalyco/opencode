@@ -9,10 +9,11 @@ import type { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Hash } from "@opencode/util/hash"
 import { AppProcess } from "@opencode/util/process"
-import { Clock, Effect, Exit, Fiber, Option, Schema, Scope } from "effect"
+import { Clock, Effect, Exit, Fiber, Option, Schema, Scope, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Git } from "../../git.js"
 import { AbsolutePath } from "../../schema.js"
+import { normalizeContent } from "../../tool/runtime.js"
 import { OpencodeMemoryAccess } from "./opencode-memory-access.js"
 import { OpencodeMemoryPolicy } from "./opencode-memory-policy.js"
 import { OpencodeWatches } from "./opencode-watches.js"
@@ -83,6 +84,7 @@ const Written = Schema.Struct({
   changesSince: Schema.optional(Schema.String),
   warnings: Schema.optional(Schema.Array(Schema.String)),
   replayed: Schema.optional(Schema.Boolean),
+  merged: Schema.optional(Schema.Boolean),
 })
 type Written = typeof Written.Type
 /** A refused write: nothing was written; Console says why, what the entry holds now, and the one call to make next. */
@@ -138,6 +140,16 @@ type Tracked = {
   readonly given: Map<string, OpencodeMemoryPolicy.Given>
   /** Per entry, each revision this session wrote over the one before it, by that one: its own edits aren't news to it. */
   readonly revisions: Map<string, Map<number, number>>
+  /**
+   * Per entry, the revisions this session was shown whole since its last compaction: read, injected or written by it.
+   * A rewrite or retire replaces what the entry says, so it starts from one of these.
+   */
+  readonly shown: Map<string, Set<number>>
+  /** Entries injected into the session, whole, to deliver once more after a compaction drops them. */
+  readonly delivered: Map<string, OpencodeMemoryPolicy.Injected>
+  compactions: number
+  /** A compaction ended since the delivered entries were last given. */
+  redeliver?: boolean
   task?: string
   /** A given entry the user's latest message may correct, for the next request to point out. */
   nudge?: { readonly entry: OpencodeMemoryPolicy.Given; readonly messageID: string }
@@ -170,6 +182,9 @@ export const make = Effect.fnUntraced(function* (
       injected: { prompt: 0, failure: 0 },
       given: new Map(),
       revisions: new Map(),
+      shown: new Map(),
+      delivered: new Map(),
+      compactions: 0,
     }
     sessions.delete(sessionID)
     sessions.set(sessionID, found)
@@ -180,7 +195,19 @@ export const make = Effect.fnUntraced(function* (
     state.given.delete(entry.id)
     state.given.set(entry.id, { ...entry, text: entry.text.slice(0, MAX_GIVEN_TEXT) })
     if (state.given.size > MAX_GIVEN) state.given.delete(state.given.keys().next().value ?? entry.id)
+    see(state, entry.id, entry.revision)
   }
+  const see = (state: Tracked, id: string, revision: number) => {
+    state.shown.set(id, (state.shown.get(id) ?? new Set<number>()).add(revision))
+  }
+  // Whole entries the session was injected, for delivering again after a compaction.
+  const deliver = (state: Tracked, entries: ReadonlyArray<OpencodeMemoryPolicy.Injected>) =>
+    entries.forEach((entry) => {
+      give(state, { id: entry.id, revision: entry.revision, title: entry.title, text: entry.body })
+      state.delivered.delete(entry.id)
+      state.delivered.set(entry.id, entry)
+      if (state.delivered.size > MAX_GIVEN) state.delivered.delete(state.delivered.keys().next().value ?? entry.id)
+    })
   // After this session writes an entry, a nudge names the revision it now has, and a later write from the revision it
   // wrote over goes on from this one. A write applied over someone else's change isn't chained: that change is news.
   const wrote = (sessionID: string, id: string, expected: number, written: Written) => {
@@ -188,6 +215,9 @@ export const make = Effect.fnUntraced(function* (
     const given = state.given.get(id)
     if (written.revision === undefined) return
     if (given) give(state, { ...given, revision: written.revision })
+    see(state, id, written.revision)
+    // What was injected no longer says what the entry does; it isn't delivered again.
+    state.delivered.delete(id)
     if (written.rebasedFrom !== undefined) return
     const chain = state.revisions.get(id) ?? new Map<number, number>()
     chain.set(expected, written.revision)
@@ -267,6 +297,11 @@ export const make = Effect.fnUntraced(function* (
     change: Record<string, unknown>,
   ) =>
     Effect.gen(function* () {
+      const state = tracked(sessionID)
+      if ((tool === "rewrite" || tool === "retire") && !state.shown.get(id)?.has(revision))
+        return yield* new ToolFailure({
+          message: `Nothing was sent: ${tool} acts on the whole of ${id}, so it starts from text you were shown, and this session hasn't been shown r${revision} whole${state.compactions > 0 ? " since the conversation was compacted" : ""}. Call ${namespace}.read with id "${id}", then call ${namespace}.${tool} again with the revision it shows.`,
+        })
       const fields = yield* shared(tool, change)
       const expectedRevision = based(sessionID, id, revision)
       const written = yield* call(
@@ -340,11 +375,10 @@ export const make = Effect.fnUntraced(function* (
     // Read now, so the first moment doesn't wait on Git or GitHub.
     yield* repository.pipe(Effect.forkIn(lease, { startImmediately: true }))
     yield* reachable.pipe(Effect.forkIn(lease, { startImmediately: true }))
-    // Only Console is asked in the background, so neither a prompt nor a tool waits on it; one at a time per session.
-    const begin = (sessionID: Session.ID, moment: OpencodeMemoryPolicy.Moment) =>
+    // The entries Console gives for a moment the policy picks, within its timeout; none when it picks none or fails.
+    const ask = (sessionID: Session.ID, moment: OpencodeMemoryPolicy.Moment) =>
       Effect.gen(function* () {
         const state = tracked(sessionID)
-        if (state.pending) return
         const session = yield* ctx.session.get({ sessionID })
         const inject = policy.inject(
           moment,
@@ -356,9 +390,9 @@ export const make = Effect.fnUntraced(function* (
           },
           session,
         )
-        if (!inject) return
+        if (!inject) return undefined
         state.injected[moment.type]++
-        state.pending = yield* reader.pipe(
+        const answer = yield* reader.pipe(
           Effect.flatMap((set) =>
             call(Schema.Struct({ entries: Schema.Array(Injected) }), "POST", "/api/memory/inject", {
               sessionID,
@@ -368,11 +402,20 @@ export const make = Effect.fnUntraced(function* (
             }),
           ),
           Effect.timeout(policy.timeout),
-          Effect.map((answer) => ({ entries: answer.entries, moment })),
-          Effect.catch((cause) => Effect.logDebug("memory injection failed", { cause }).pipe(Effect.as(undefined))),
+        )
+        // Console injects a revision once per session; a revision the agent already has isn't injected either.
+        return answer.entries.filter((entry) => (state.given.get(entry.id)?.revision ?? 0) < entry.revision)
+      }).pipe(Effect.catch((cause) => Effect.logDebug("memory injection failed", { cause }).pipe(Effect.as(undefined))))
+    // Task start is asked in the background, so the prompt doesn't wait on Console; one at a time per session.
+    const begin = (sessionID: Session.ID, moment: OpencodeMemoryPolicy.Moment) =>
+      Effect.gen(function* () {
+        const state = tracked(sessionID)
+        if (state.pending) return
+        state.pending = yield* ask(sessionID, moment).pipe(
+          Effect.map((entries) => (entries === undefined ? undefined : { entries, moment })),
           Effect.forkIn(lease, { startImmediately: true }),
         )
-      }).pipe(Effect.catch((cause) => Effect.logWarning("failed to start a memory injection", { cause })))
+      })
 
     yield* ctx.session.hook("prompt", (event) =>
       Effect.gen(function* () {
@@ -416,26 +459,72 @@ export const make = Effect.fnUntraced(function* (
       if (Option.isNone(shell) || shell.value.output.exitCode === null) return Effect.void
       if (!policy.failed(shell.value.input.command, shell.value.output.output, shell.value.output.exitCode))
         return Effect.void
-      return begin(event.sessionID, {
-        type: "failure",
+      const moment = {
+        type: "failure" as const,
         command: shell.value.input.command,
         output: shell.value.output.output,
         exitCode: shell.value.output.exitCode,
+      }
+      // Appended to the failing command's own result, where the agent reads the failure, so it's in the next request
+      // without a message of its own. The command's result waits for Console at most the policy's timeout.
+      return Effect.gen(function* () {
+        const entries = yield* ask(event.sessionID, moment)
+        if (entries === undefined || entries.length === 0) return
+        const ids = entries.map((entry) => `${entry.id}@${entry.revision}`)
+        event.result = {
+          ...event.result,
+          content: [
+            ...normalizeContent(event.result.content, event.result.output),
+            { type: "text", text: `\n${policy.render(entries, moment)}` },
+          ],
+          metadata: { ...event.result.metadata, memory: { source: "console.memory", moment: "failure", entries: ids } },
+        }
+        deliver(tracked(event.sessionID), entries)
       })
     })
-    // The request after a moment waits for its injection, at most the policy's timeout, and the request after a
-    // correcting message points out the entry it may correct. Other requests find neither. Both are persisted so later
-    // requests keep them, and land after this step, so this request gets them at the end, which keeps the cached prefix.
+    // A compaction drops what was injected from the conversation, and the agent's view of entries with it.
+    yield* ctx.event.subscribe({ types: ["session.compaction.ended"] }).pipe(
+      Stream.runForEach((event) =>
+        Effect.sync(() => {
+          const state = sessions.get(event.data.sessionID)
+          if (!state) return
+          state.compactions++
+          state.shown.clear()
+          if (state.delivered.size > 0) state.redeliver = true
+        }),
+      ),
+      Effect.forkIn(lease, { startImmediately: true }),
+    )
+    // The request after a task's first prompt waits for its injection, at most the policy's timeout; the request after a
+    // correcting message points out the entry it may correct; the request after a compaction gets the injected entries
+    // once more. Other requests find none. They're persisted so later requests keep them, and land after this step, so
+    // this request gets them at the end, which keeps the cached prefix.
     yield* ctx.session.hook("context", (event) =>
       Effect.gen(function* () {
         const state = sessions.get(event.sessionID)
-        if (!state || (!state.pending && !state.nudge)) return
+        if (!state || (!state.pending && !state.nudge && !state.redeliver)) return
         const pending = state.pending
         const nudge = state.nudge
         state.pending = undefined
         state.nudge = undefined
+        if (state.redeliver) {
+          state.redeliver = false
+          const again = [...state.delivered.values()]
+          const text = policy.render(again, { type: "prompt", text: state.task ?? "", files: [] })
+          const ids = again.map((entry) => `${entry.id}@${entry.revision}`)
+          yield* ctx.session.synthetic({
+            sessionID: event.sessionID,
+            id: messageID(event.sessionID, `compaction:${state.compactions}`),
+            text,
+            description: `${ids.length === 1 ? "1 memory entry" : `${ids.length} memory entries`} again after compaction`,
+            metadata: { source: "console.memory", moment: "compaction", entries: ids },
+            resume: false,
+          })
+          event.messages.push(Message.user(text))
+          again.forEach((entry) => see(state, entry.id, entry.revision))
+        }
         const delivery = pending ? yield* Fiber.join(pending) : undefined
-        // Console injects a revision once per session; a revision the agent already read isn't injected either.
+        // A failure's delivery may have given an entry since Console answered.
         const entries =
           delivery?.entries.filter((entry) => (state.given.get(entry.id)?.revision ?? 0) < entry.revision) ?? []
         if (delivery && entries.length > 0) {
@@ -450,9 +539,7 @@ export const make = Effect.fnUntraced(function* (
             resume: false,
           })
           event.messages.push(Message.user(text))
-          entries.forEach((entry) =>
-            give(state, { id: entry.id, revision: entry.revision, title: entry.title, text: entry.body }),
-          )
+          deliver(state, entries)
         }
         if (!nudge) return
         const entry = state.given.get(nudge.entry.id) ?? nudge.entry
@@ -477,7 +564,7 @@ export const make = Effect.fnUntraced(function* (
       editor.namespace({
         name: namespace,
         description:
-          "Your OpenCode Console workspace's shared memory: what coding agents across the workspace learned about its repositories. Entries are editable: fix one that's wrong, especially when the user corrects it.",
+          "Your OpenCode Console workspace's shared memory: what coding agents across the workspace learned about its repositories. Entries are editable: fix one that's wrong, especially when the user corrects it. When search finds no reliable entry, go on without one.",
       })
       editor.add({
         name: "search",
@@ -513,7 +600,7 @@ export const make = Effect.fnUntraced(function* (
               output: answer,
               content:
                 answer.results.length === 0
-                  ? "No matches."
+                  ? "No reliable memory entry found."
                   : answer.results.map(OpencodeMemoryPolicy.summary).join("\n"),
             }
           }).pipe(Effect.mapError(failure)),
@@ -554,7 +641,7 @@ export const make = Effect.fnUntraced(function* (
       editor.add({
         name: "publish",
         description:
-          "Publish what a teammate's coding agent would want to know before similar work, once verified, as it holds for the repository as committed: not your uncommitted changes, progress notes, what README or AGENTS.md says, or secrets. Specific title; a self-contained body with exact errors, commands, paths and symbols; paths and errors make it reach sessions on those files and failures. Repo, branch and commit are recorded. If an entry on this subject exists, nothing is published and the answer says which to edit instead.",
+          "Most sessions should publish nothing. Publish only what a teammate's coding agent would want to know before similar work and couldn't work out from the repository, once verified, as it holds for the repository as committed. Never: overviews, task status or progress notes, your uncommitted changes, what README or AGENTS.md says, logs or dumps, secrets, or always/never rules wider than what you verified. Specific title; a self-contained body with exact errors, commands, paths and symbols; paths and errors make it reach sessions on those files and failures. Repo, branch and commit are recorded. If an entry on this subject exists, nothing is published and the answer says which to edit instead.",
         input: Schema.Struct({
           kind: KindInput,
           title: Schema.String,
@@ -787,7 +874,7 @@ function expectOk(response: HttpClientResponse.HttpClientResponse) {
       const said =
         body?.message ??
         (response.status === 404
-          ? "No such memory entry, or memory is off for this OpenCode Console workspace"
+          ? "Not found, or not readable with your repository access (or memory is off for this OpenCode Console workspace); retrying won't change that"
           : `OpenCode Console answered ${response.status}`)
       // Console's message ends with its next call; it goes last, once, as Console wrote it.
       const next = body?.next
@@ -827,7 +914,7 @@ function expectOk(response: HttpClientResponse.HttpClientResponse) {
 /** A write's answer: the new revision, how it applied, what Console warns about, then the diff of what changed. */
 function receipt(id: string, written: Written) {
   return [
-    `${written.id ?? id} is now r${written.revision}${written.rebasedFrom === undefined ? "" : ` (applied over changes since r${written.rebasedFrom})`}.`,
+    `${written.id ?? id} is now r${written.revision}${written.rebasedFrom === undefined ? "" : written.merged ? ` (merged word by word with the changes since r${written.rebasedFrom}: check the diff)` : ` (applied over changes since r${written.rebasedFrom})`}.`,
     ...(written.changesSince === undefined ? [] : [`Changes since r${written.rebasedFrom}:`, written.changesSince]),
     ...(written.matched?.includes("fuzzy") ? ["An oldText matched only approximately: check the diff."] : []),
     ...(written.warnings ?? []).map((warning) => `Warning: ${warning}`),

@@ -6,7 +6,7 @@ import { Message, SystemPart } from "@opencode/ai/effect"
 import type { Plugin as PluginContext } from "@opencode/plugin/effect"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Model } from "@opencode/schema/model"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Queue, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Agent } from "@opencode/core/agent"
 import { Credential } from "@opencode/core/credential"
@@ -170,6 +170,7 @@ function fakeConsole() {
             id,
             revision: 3,
             nearest: [],
+            ...(body?.body === undefined ? {} : { merged: true }),
             rebasedFrom: 1,
             changesSince: "@@ -2 +2 @@\n-More\n+Less",
             diff: "--- body\n-Body of\n+Use bun for",
@@ -230,8 +231,20 @@ const start = Effect.fnUntraced(function* (console: ReturnType<typeof fakeConsol
   })
   const real = yield* PluginHost.make(yield* Plugin.Service, "test")
   const synthetic = new Array<Synthetic>()
+  // Compactions the test ends, heard alongside the host's own events.
+  const compactions = yield* Queue.unbounded<Session.ID>()
+  const subscribe = ((input) =>
+    input?.types?.some((type) => type === "session.compaction.ended")
+      ? Stream.merge(
+          real.event.subscribe(input),
+          Stream.fromQueue(compactions).pipe(
+            Stream.map((sessionID) => ({ type: "session.compaction.ended", data: { sessionID } }) as never),
+          ),
+        )
+      : real.event.subscribe(input)) as PluginContext.Context["event"]["subscribe"]
   const host: PluginContext.Context = {
     ...real,
+    event: { ...real.event, subscribe },
     session: {
       ...real.session,
       synthetic: (input) => {
@@ -247,7 +260,10 @@ const start = Effect.fnUntraced(function* (console: ReturnType<typeof fakeConsol
       env: { GH_TOKEN: "reader-token" },
     }),
   )
-  return { host, synthetic }
+  // Lets the plugin's subscriber take the compaction before the test goes on.
+  const compacted = (sessionID: Session.ID) =>
+    Queue.offer(compactions, sessionID).pipe(Effect.andThen(Effect.yieldNow), Effect.andThen(Effect.yieldNow))
+  return { host, synthetic, compacted }
 })
 
 const memoryTools = Effect.gen(function* () {
@@ -297,17 +313,25 @@ const prompt = (sessionID: Session.ID, text: string) =>
 const ran = (sessionID: Session.ID, tool: string, input: unknown, output?: unknown) =>
   Effect.gen(function* () {
     const hooks = yield* PluginHooks.Service
-    yield* hooks.trigger("tool", "execute.after", {
+    const event = {
       tool,
       sessionID,
       agent: Agent.ID.make("build"),
       messageID: SessionMessage.ID.create(),
       id: Tool.CallID.make("call_1"),
       input,
-      status: "completed",
-      result: { output },
-    })
+      status: "completed" as const,
+      result: { output } as Tool.Result,
+    }
+    yield* hooks.trigger("tool", "execute.after", event)
+    return event.result
   })
+
+/** A tool result's text as the model gets it. */
+const resultText = (result: Tool.Result) =>
+  typeof result.content === "string"
+    ? result.content
+    : (result.content ?? []).map((part) => (part.type === "text" ? part.text : "")).join("")
 
 const texts = (event: SessionHooks["context"]) =>
   event.messages.map((message) => message.content.map((part) => (part.type === "text" ? part.text : "")).join(""))
@@ -390,7 +414,9 @@ describe("OpencodePlugin memory", () => {
         const missing = yield* (yield* memoryTool("read"))
           .execute({ id: "mem_missing" }, context(session.id))
           .pipe(Effect.flip)
-        expect(missing.message).toBe("No such memory entry, or memory is off for this OpenCode Console workspace")
+        expect(missing.message).toBe(
+          "Not found, or not readable with your repository access (or memory is off for this OpenCode Console workspace); retrying won't change that",
+        )
       }),
     ),
   )
@@ -690,6 +716,17 @@ describe("OpencodePlugin memory", () => {
           source: { sessionID: session.id },
         })
 
+        // A rewrite replaces what the entry says: it starts from a revision the session was shown whole.
+        const asked = console.state.requests.length
+        const unread = yield* (yield* memoryTool("rewrite"))
+          .execute({ id: "mem_1", revision: 1, body: "Short" }, context(session.id))
+          .pipe(Effect.flip)
+        expect(unread.message).toBe(
+          'Nothing was sent: rewrite acts on the whole of mem_1, so it starts from text you were shown, and this session hasn\'t been shown r1 whole. Call memory.read with id "mem_1", then call memory.rewrite again with the revision it shows.',
+        )
+        expect(console.state.requests.length).toBe(asked)
+        yield* (yield* memoryTool("read")).execute({ id: "mem_1" }, context(session.id))
+
         // The rewrite cites r1, which the session read; its own append since doesn't make it stale.
         const rewritten = yield* (yield* memoryTool("rewrite")).execute(
           { id: "mem_1", revision: 1, body: "Short" },
@@ -768,6 +805,69 @@ describe("OpencodePlugin memory", () => {
     ),
   )
 
+  it.effect("delivers injected entries once more after a compaction, and rewrites start from what's shown since", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        const { host, synthetic, compacted } = yield* start(console)
+        const hooks = yield* PluginHooks.Service
+        const session = yield* host.session.create({})
+        console.state.injected = [injected("mem_a", 0.95)]
+        yield* prompt(session.id, "Fix the deploy")
+        yield* hooks.trigger("session", "context", request(session.id, "Fix the deploy"))
+        console.state.injected = [injected("mem_fix", 0.9)]
+        yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 1, output: "TypeError: boom" })
+        expect(synthetic).toHaveLength(1)
+
+        yield* compacted(session.id)
+        // The summary dropped what the agent was shown: a rewrite from it waits for the entry to be shown again.
+        const rewrite = yield* memoryTool("rewrite")
+        const stale = yield* rewrite
+          .execute({ id: "mem_a", revision: 1, body: "Short" }, context(session.id))
+          .pipe(Effect.flip)
+        expect(stale.message).toContain("hasn't been shown r1 whole since the conversation was compacted.")
+
+        const next = request(session.id, "Go on")
+        yield* hooks.trigger("session", "context", next)
+        const again = OpencodeMemoryPolicy.initial.render([injected("mem_a", 0.95), injected("mem_fix", 0.9)], {
+          type: "prompt",
+          text: "Fix the deploy",
+          files: [],
+        })
+        expect(texts(next)).toEqual(["Go on", again])
+        expect(synthetic.at(-1)).toMatchObject({
+          text: again,
+          description: "2 memory entries again after compaction",
+          metadata: { source: "console.memory", moment: "compaction", entries: ["mem_a@1", "mem_fix@1"] },
+          resume: false,
+        })
+        // Once: the request after it gets nothing more.
+        const later = request(session.id, "Go on")
+        yield* hooks.trigger("session", "context", later)
+        expect(texts(later)).toEqual(["Go on"])
+        yield* rewrite.execute({ id: "mem_a", revision: 1, body: "Short" }, context(session.id))
+        expect(console.state.requests.at(-1)?.body).toMatchObject({ expectedRevision: 1, body: "Short" })
+      }),
+    ),
+  )
+
+  it.effect("says a rewrite Console merged with the changes since it was read", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        const { host } = yield* start(console)
+        const session = yield* host.session.create({})
+        yield* (yield* memoryTool("read")).execute({ id: "mem_1" }, context(session.id))
+        console.state.rebase = true
+        const merged = yield* (yield* memoryTool("rewrite")).execute(
+          { id: "mem_1", revision: 1, body: "Use bun for tests\nLess" },
+          context(session.id),
+        )
+        expect(resultText(merged).split("\n")[0]).toBe(
+          "mem_1 is now r3 (merged word by word with the changes since r1: check the diff).",
+        )
+      }),
+    ),
+  )
+
   it.effect("injects nothing when Console returns nothing or fails", () =>
     withConsole((console) =>
       Effect.gen(function* () {
@@ -811,7 +911,7 @@ describe("OpencodePlugin memory", () => {
         yield* ran(session.id, "shell", { command: "test -f x" }, { exitCode: 1, output: "" })
         const output = `${"x".repeat(3000)}\nTypeError: boom`
         // Piped through tail, the failing test run exits 0; its output still says it failed.
-        yield* ran(session.id, "shell", { command: "bun test 2>&1 | tail -40" }, { exitCode: 0, output })
+        const failed = yield* ran(session.id, "shell", { command: "bun test 2>&1 | tail -40" }, { exitCode: 0, output })
         const after = request(session.id, "Fix the deploy")
         yield* hooks.trigger("session", "context", after)
         expect(console.state.requests.at(-1)?.body).toEqual({
@@ -824,8 +924,15 @@ describe("OpencodePlugin memory", () => {
             commands: ["bun test 2>&1 | tail -40"],
           },
         })
-        expect(texts(after).at(-1)).toContain('<workspace-memory for="failure">')
-        expect(synthetic.map((item) => item.description)).toEqual(["1 memory entry for this failure"])
+        // Delivered in the command's own result, after what it printed; no message of its own.
+        expect(resultText(failed)).toStartWith(JSON.stringify({ exitCode: 0, output }))
+        expect(resultText(failed)).toContain('<workspace-memory for="failure">\n')
+        expect(resultText(failed)).toContain("## mem_fix r1 bug: Entry mem_fix")
+        expect(failed.metadata).toEqual({
+          memory: { source: "console.memory", moment: "failure", entries: ["mem_fix@1"] },
+        })
+        expect(texts(after)).toEqual(["Fix the deploy"])
+        expect(synthetic).toEqual([])
 
         yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 1, output: "TypeError: again" })
         yield* hooks.trigger("session", "context", request(session.id, "Fix the deploy"))
@@ -898,7 +1005,13 @@ describe("OpencodePlugin memory", () => {
         const session = yield* host.session.create({})
         yield* (yield* memoryTool("read")).execute({ id: "mem_seen" }, context(session.id))
         console.state.injected = [injected("mem_seen", 0.9)]
-        yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 1, output: "TypeError: boom" })
+        const seen = yield* ran(
+          session.id,
+          "shell",
+          { command: "bun test" },
+          { exitCode: 1, output: "TypeError: boom" },
+        )
+        expect(seen).toEqual({ output: { exitCode: 1, output: "TypeError: boom" } })
         const event = request(session.id, "Fix it")
         yield* hooks.trigger("session", "context", event)
         expect(texts(event)).toEqual(["Fix it"])
@@ -906,10 +1019,13 @@ describe("OpencodePlugin memory", () => {
 
         // Someone corrected it since: Console injects the new revision once, and so does the plugin.
         console.state.injected = [injected("mem_seen", 0.9, 2)]
-        yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 1, output: "TypeError: again" })
-        const corrected = request(session.id, "Fix it")
-        yield* hooks.trigger("session", "context", corrected)
-        expect(texts(corrected).at(-1)).toContain("## mem_seen r2 bug: Entry mem_seen")
+        const corrected = yield* ran(
+          session.id,
+          "shell",
+          { command: "bun test" },
+          { exitCode: 1, output: "TypeError: again" },
+        )
+        expect(resultText(corrected)).toContain("## mem_seen r2 bug: Entry mem_seen")
       }),
     ),
   )
