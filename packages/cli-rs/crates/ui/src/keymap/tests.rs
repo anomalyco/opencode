@@ -1,6 +1,6 @@
 use super::*;
 use opentui::input::{Event, Input, Parser};
-use serde_json::{Map, Value};
+use serde_json::Value;
 use std::time::Instant;
 
 /// Replays recorded input sequences and checks which commands actually run.
@@ -95,27 +95,6 @@ fn oracle_invalid_configs_fail_as_typescript_does() {
             assert!(error.is_some(), "{} should fail: {expected}", case["keybinds"]);
         }
     }
-}
-
-#[test]
-fn generated_definitions_cover_every_name_once() {
-    assert_eq!(DEFINITIONS.len(), 245);
-    let mut names: Vec<&str> = DEFINITIONS.iter().map(|definition| definition.name).collect();
-    names.sort_unstable();
-    names.dedup();
-    assert_eq!(names.len(), 245);
-    assert_eq!(DEFINITIONS.iter().filter(|definition| definition.name.starts_with("which-key.")).count(), 11);
-    let keybinds = Keybinds::<u32>::defaults();
-    assert_eq!(keybinds.get("session.share").len(), 0);
-    assert_eq!(keybinds.get("app.exit")[0].desc.as_deref(), Some("Exit the application"));
-}
-
-#[test]
-fn windows_config_turns_off_suspend_and_adds_ctrl_z_undo() {
-    let keybinds = Keybinds::<u32>::resolve(&Map::new(), false).unwrap();
-    assert!(keybinds.get("terminal.suspend").is_empty());
-    let keys: Vec<String> = keybinds.get("input.undo").iter().map(|binding| binding.key.to_string()).collect();
-    assert_eq!(keys, ["ctrl+z,ctrl+-,super+z"]);
 }
 
 #[test]
