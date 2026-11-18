@@ -1229,7 +1229,7 @@ fn to_host(
             }
             for (k, val) in vm.own_entries(id) {
                 let key = crate::strings::host_text(vm.atoms.text(k)).into_owned();
-                if crate::cross::uncrossed(&key) || k == cause_key || key == "name" {
+                if crate::cross::uncrossed(&key) || k == cause_key {
                     continue;
                 }
                 if let Some(item) = left_behind(vm, &val, seen)? {
