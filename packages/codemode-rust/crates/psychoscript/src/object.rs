@@ -129,7 +129,7 @@ pub struct PromiseData {
 }
 
 /// Key for Map and Set under SameValueZero; strings compare by their interned atom.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum MapKey {
     Undef,
     Null,
@@ -138,6 +138,24 @@ pub enum MapKey {
     Str(Atom),
     Obj(Id),
     Sym(u32),
+}
+
+/// One word per key. A number's bits fold their high half into the low half: an integer's double has its low
+/// mantissa bits all zero, and those are the bits the Fx hash puts in the table's tag, which then matches in every
+/// slot of a probed group.
+impl std::hash::Hash for MapKey {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let (tag, x) = match *self {
+            MapKey::Undef => (0u64, 0),
+            MapKey::Null => (1, 0),
+            MapKey::Bool(b) => (2, b as u64),
+            MapKey::Num(n) => (3, n ^ (n >> 32)),
+            MapKey::Str(a) => (4, a as u64),
+            MapKey::Obj(id) => (5, id as u64),
+            MapKey::Sym(s) => (6, s as u64),
+        };
+        state.write_u64(x ^ (tag << 61));
+    }
 }
 
 /// Insertion-ordered hash map with tombstones, so iterators stay valid across deletes.
@@ -176,20 +194,24 @@ impl OrderedMap {
     }
 
     pub fn set(&mut self, key: MapKey, k: Value, v: Value) {
-        if let Some(i) = self.index.get(&key) {
-            if let Some(e) = &mut self.entries[*i as usize] {
-                e.1 = v;
+        let next = self.entries.len() as u32;
+        match self.index.entry(key) {
+            std::collections::hash_map::Entry::Occupied(i) => {
+                if let Some(e) = &mut self.entries[*i.get() as usize] {
+                    e.1 = v;
+                }
             }
-            return;
+            std::collections::hash_map::Entry::Vacant(slot) => {
+                slot.insert(next);
+                let k = if let Value::Num(n) = k {
+                    Value::Num(if n == 0.0 { 0.0 } else { n })
+                } else {
+                    k
+                };
+                self.entries.push(Some((k, v)));
+                self.live += 1;
+            }
         }
-        let k = if let Value::Num(n) = k {
-            Value::Num(if n == 0.0 { 0.0 } else { n })
-        } else {
-            k
-        };
-        self.index.insert(key, self.entries.len() as u32);
-        self.entries.push(Some((k, v)));
-        self.live += 1;
     }
 
     pub fn delete(&mut self, key: MapKey) -> bool {
