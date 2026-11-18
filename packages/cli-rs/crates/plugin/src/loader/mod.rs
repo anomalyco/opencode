@@ -1025,11 +1025,8 @@ impl Loader {
         Some(Found::Build(identified))
     }
 
-    /// The one place that decides whether the library of `target`, at `file`, may be opened, before anything of it
-    /// runs: a project's build waits for the user's approval (3.9), and the registry holds a build that crashed the
-    /// client, every external one in safe mode, and every one in a client no parent guards (4.5). Returns the build's
-    /// digest, bytes and raw quarantine to open, all read through one descriptor, or, when it is held or unchanged,
-    /// whether the manager's list changed.
+    /// Checks approval and crash policy before loading a native build. Returns the digest, bytes and quarantine from
+    /// one descriptor; a held or unchanged build is not opened.
     fn admit(
         &self,
         host: &Rc<dyn Host>,
@@ -1048,7 +1045,7 @@ impl Loader {
         };
         let unchanged = |digest: u64| self.seen.borrow().get(name).is_some_and(|seen| seen.digest == digest);
         let (digest, bytes, quarantine) = match target.project {
-            // A project's build runs only once the user approved this artifact (3.9). Until then nothing of it is read
+            // A project's build runs only once the user approved this artifact. Until then nothing of it is read
             // but its hash, nothing is opened, and it claims nothing. What is loaded is what was hashed. When it
             // cannot be identified, what ran from it stops and nothing is reported.
             true => {

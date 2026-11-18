@@ -625,7 +625,6 @@ impl Core {
         };
         let plugin = &self.claim.plugin;
         let mut state = self.state.borrow_mut();
-        // Content past what the plugin may hold is not kept: a node that shows it is a placeholder (4.2).
         let (admitted, over) = surface::admit_content(plugin, given);
         let Held { tree, content, last, measures, dropped, .. } = &mut *state;
         let unheld: HashSet<ContentRef> = dropped.union(&over).copied().collect();
@@ -722,9 +721,7 @@ impl Core {
         self.state.borrow().tree.holds_fence()
     }
 
-    /// Drops the tree, so a later view builds whole, and the pictures of inline images, which only the tree named.
-    /// The content handles and memo values its views gave stay with the mount until it ends or the plugin releases
-    /// them (4.2), as a library keeps its table: a later view may name them again.
+    /// Keep the mount’s content and memo handles: a later view can reuse them.
     fn wipe(&self) {
         let mut state = self.state.borrow_mut();
         state.tree.clear(&self.root);

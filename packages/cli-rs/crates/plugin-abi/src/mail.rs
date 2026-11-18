@@ -13,7 +13,7 @@ use std::sync::{Arc, PoisonError, RwLock};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
-/// The entries of one plugin's mailbox. 256 is the pipe's number of pending ordered events (4.3), a starting value.
+/// Maximum pending messages per plugin.
 pub const BOUND: usize = 256;
 
 /// Why a send was refused; the message comes back.

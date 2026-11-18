@@ -392,7 +392,7 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-/// The heap an idle VM of `sources` holds once its setup ran: what a plugin costs at rest (the spike's measure).
+/// The heap an idle VM of `sources` holds once its setup ran: what a plugin costs at rest.
 pub fn idle_memory(sources: &Sources) -> Result<usize, String> {
     let manifest = Manifest::parse(sources.text(MANIFEST)?)?;
     let compiled = Rc::new(vm::Compiled::new(sources, &manifest.id, &manifest.entry)?);

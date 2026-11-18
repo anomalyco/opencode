@@ -1103,7 +1103,7 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>) {
         });
         let place =
             surface::Place { name: claim.name.clone(), at, palette: claim.palette, notify: claim.notify.clone() };
-        // No `layout` crosses the pipe: no frame waits for the JS host (3.7). A scroll event reaches the handler as the
+        // No `layout` crosses the pipe: no frame waits for the JS host. A scroll event reaches the handler as the
         // others do.
         let calls = behave::Calls {
             plugin: setup.id().to_owned(),

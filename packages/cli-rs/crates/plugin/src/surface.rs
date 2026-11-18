@@ -868,7 +868,7 @@ impl Surface {
                         return;
                     }
                     // Only a keep the host does not hold is mended by a whole tree; any other refusal is the plugin's
-                    // error, and fails it at once (3.4).
+                    // error, and fails it at once.
                     if !matches!(refused, Refused::Unknown(_) | Refused::Kept(_)) {
                         drop(state);
                         self.wipe();
@@ -1092,7 +1092,6 @@ impl Surface {
         let focused =
             self.holder().map(|owner| owner.focused()).filter(|focused| focused.surface || focused.node.is_some());
         let mut state = self.state.borrow_mut();
-        // Content past what the plugin may hold is not kept: a node that shows it is a placeholder (4.2).
         let (admitted, over) = admit_content(&self.plugin, &staged.given);
         let State { tree, content, last, dropped, .. } = &mut *state;
         let restyled = !tree.styled_in(theme);
@@ -1490,8 +1489,7 @@ pub(crate) fn part_output(host: &dyn Host, part: &v2::PartRef) -> Option<String>
     found
 }
 
-/// Whether `bytes` have the header of a PNG, GIF, JPEG or WebP image within one image's limits (4.2): what the host
-/// decodes at all.
+/// Checks the image header and per-image limits before decoding.
 pub fn within_bounds(bytes: &[u8]) -> bool {
     let limits = limits::get();
     crate::image::size(bytes).is_some_and(|(width, height)| {
@@ -1499,8 +1497,7 @@ pub fn within_bounds(bytes: &[u8]) -> bool {
     })
 }
 
-/// The size of the image `bytes` decode to, or `None` where an image node of them shows nothing ([`abi::Read::image_size`]):
-/// it decodes them, within one image's limits (4.2).
+/// Decodes within the image budget. Invalid or oversized input has no size.
 pub fn decoded_size(app: &App, bytes: &[u8]) -> Option<(u32, u32)> {
     match decode(app, bytes) {
         Picture::Ready(image) => image.info().ok().map(|info| (info.width, info.height)),
@@ -1508,8 +1505,7 @@ pub fn decoded_size(app: &App, bytes: &[u8]) -> Option<(u32, u32)> {
     }
 }
 
-/// The image `bytes` decode to in the frame, for [`decoded_size`]: within one image's limits (4.2), else the
-/// placeholder; bytes that are no image, or do not decode, show nothing.
+/// Oversized images get a placeholder; undecodable images show nothing.
 fn decode(app: &App, bytes: &[u8]) -> Picture {
     let Some((width, height)) = crate::image::size(bytes) else {
         log::warn!("an image node's bytes are not a PNG, GIF, JPEG or WebP image");
@@ -1535,7 +1531,7 @@ fn decode(app: &App, bytes: &[u8]) -> Picture {
 }
 
 /// Which content of `staged` plugin `plugin` may hold beside what it holds, in the order the view gave it: the bytes
-/// admitted, and the handles past its share or the total (4.2), which the host does not keep.
+/// admitted, and the handles past its share or the total, which the host does not keep.
 pub(crate) fn admit_content(plugin: &str, given: &HashMap<ContentRef, Arc<[u8]>>) -> (u64, HashSet<ContentRef>) {
     let mut room = limits::room(plugin, limits::Kind::Content, 0);
     let mut given: Vec<(&ContentRef, &Arc<[u8]>)> = given.iter().collect();

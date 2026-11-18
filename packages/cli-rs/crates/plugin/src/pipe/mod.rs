@@ -354,7 +354,7 @@ fn inherited(name: &std::ffi::OsStr) -> bool {
         || name.starts_with("OPENCODE_")
 }
 
-/// What crossed the pipe, counted outside any plugin and any mount (4.14, `work`).
+/// What crossed the pipe, counted outside any plugin and any mount.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Crossed {
     /// Messages and bytes the host sent.
@@ -659,7 +659,7 @@ enum Blame {
     Plugin(String),
 }
 
-/// A fault the next handler's message suffers on its way to the JS host (4.14's pipe operators), for the tests.
+/// Fault injected into the next handler message in transport tests.
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Fault {
@@ -2021,7 +2021,7 @@ impl Scripts {
     /// The JS host ended, hung, broke the protocol, was flooded, or went over its budget: it is ended with its process
     /// group. `blame` names whom: the work it said it started and did not finish (its plugin fails), a plugin that
     /// flooded it, or nobody (memory). Every other plugin is set up again on a new JS host, and its surfaces keep their
-    /// last trees until new ones come; a restart resets every plugin's JS state, as the process is one (3.7). The calls
+    /// last trees until new ones come; a restart resets every plugin's JS state, as the process is one. The calls
     /// the JS host received and did not start are sent again, in order, after the setups: they never ran. One it started
     /// and did not finish is not: it may have done what it does, so it is never run twice (at most once). Past the limit
     /// of ends, every plugin on it fails.

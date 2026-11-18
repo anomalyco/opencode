@@ -123,7 +123,7 @@ pub trait Host: 'static {
     fn slow_changed(&self) {}
     /// Ends what the host shows for an activation of plugin `id` that ended (it was disabled, replaced, unloaded, or
     /// failed): the dialog it opened, if that activation is no longer [`Registry::live`], so nothing of an old build can
-    /// run (4.14). Called outside every plugin callback.
+    /// run. Called outside every plugin callback.
     fn revoked(&self, _id: &str) {}
     /// Notifies the user once per project build that needs approval, outside plugin callbacks.
     fn pending(&self, target: &str) {
@@ -1301,7 +1301,7 @@ impl Scope {
 
     /// Ends the activation, so no call, reply or wake reaches the plugin after, then disposes its registrations `api`
     /// with the host, or without it once it is gone. A plugin that failed is called no more, so its dispose callbacks
-    /// do not run (4.14; TS runs no plugin code after a failed setup either).
+    /// do not run.
     fn dispose(self: &Rc<Self>, api: &mut abi::Registered) {
         self.revoked.take().into_iter().for_each(Disposer::dispose);
         // First, so nothing the dispose callbacks set off calls the plugin back.
@@ -1835,7 +1835,7 @@ pub(crate) fn fail(
     activation: &Rc<Activation>,
     error: String,
 ) {
-    // A failure is final, and the first cause is the one reported (4.14): a plugin that failed cannot fail again.
+    // The first failure is the one shown to the user.
     if failure.borrow().is_some() {
         return;
     }
@@ -1849,8 +1849,7 @@ pub(crate) fn fail(
         // The fences it drew fall back to the code view, as the ones it draws from now on do.
         behave::remount(host);
     });
-    // The queued redraw still runs on a disposed activation, so the claims draw empty once. Disposing tells its threads
-    // to end and drops what they sent (4.14: a wake for a plugin that is not active).
+    // Invalidate before disposal so mounted claims clear their last render.
     activation.invalidate();
     activation.dispose();
 }
@@ -2205,7 +2204,6 @@ impl Setup<'_> {
     ) {
         let (owner, activation) = (Rc::downgrade(self.host), owners.activation.clone());
         let plugin: Rc<str> = Rc::from(self.id);
-        // The host's work for the plugin's nodes is timed apart from its calls, as its host time (4.4).
         let (monitor, slot) = (self.monitor.clone(), self.monitor.slot(&self.artifact()));
         let host_time: surface::HostTime = Rc::new(move |work| monitor.host(slot, work));
         match surface.at.clone() {
@@ -2430,7 +2428,7 @@ struct Registration {
 }
 
 impl Registration {
-    /// Whether a call of this activation panicked: it contributes nothing, and is called no more (4.14).
+    /// Whether a call of this activation panicked: it contributes nothing, and is called no more.
     fn panicked(&self) -> bool {
         self.failure.as_ref().is_some_and(|failure| failure().is_some())
     }
@@ -3132,7 +3130,6 @@ impl Registry {
                 id: plugin.definition.id.clone(),
                 target: plugin.definition.target().map(str::to_owned),
                 source: plugin.source,
-                // `slow` is a flag on `active` (4.14).
                 slow: (status == Status::Active).then(|| self.monitor.report(&plugin.definition.id)).flatten(),
                 status,
                 active: plugin.active.is_some(),
@@ -3424,7 +3421,6 @@ impl Registry {
     /// The `part` of every active registration in activation order, cloned so no borrow outlives the call.
     fn by_activation<T: Clone>(&self, part: impl Fn(&Registration) -> &Vec<T>) -> Vec<T> {
         let plugins = self.plugins.borrow();
-        // A plugin that panicked contributes nothing (4.14): its claims give their slots back.
         let mut active: Vec<_> =
             plugins.iter().filter(|plugin| plugin.running()).filter_map(|plugin| plugin.active.as_ref()).collect();
         active.sort_by_key(|(order, _)| *order);
