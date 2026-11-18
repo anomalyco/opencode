@@ -94,6 +94,34 @@ fn line(pipe: &Pipe, prefix: &str) -> Option<String> {
     pipe.harness.app.text().lines().map(str::trim).find(|line| line.starts_with(prefix)).map(str::to_owned)
 }
 
+// Expected (`docs/plugins.md`, "Writing a plugin"): the guide's TypeScript example, `examples/pipe/hello`, runs on the
+// JS host as its Rust and Luau twins run on their carriers: its line closes the home footer, its command toasts, and a
+// click on the line runs the command.
+#[test]
+fn the_guides_typescript_hello_runs_on_the_js_host() {
+    let Some(config) = config() else { return };
+    let pipe = open(&[("hello", None)], config, (80, 30));
+    pipe.active("example.ts-hello");
+    let (app, tui) = (&pipe.harness.app, &pipe.harness.tui);
+    pipe.harness.wait("its line closes the home footer", || {
+        app.advance(Duration::from_millis(1));
+        app.text().lines().any(|line| line.trim_end().ends_with("hello"))
+    });
+    pipe.settle();
+    let toasted = |what: &str| {
+        pipe.harness.wait(what, || {
+            app.advance(Duration::from_millis(1));
+            tui.toasts.current().is_some()
+        });
+        assert_eq!(toasts(&pipe), ["Hello from a plugin"]);
+    };
+    tui.keymap.dispatch("hello.greet", None);
+    toasted("the command toasts");
+    let (x, y) = pipe.harness.find("hello");
+    app.click(x, y);
+    toasted("a click on the line runs the command");
+}
+
 // Expected (`delivery` for the V2 layer): commands a V2 plugin registers with `keymap.layer` reach its handlers once each
 // and in order, through the pipe's fault operators too (a drop or a swap ends the JS host, which a restart follows),
 // and its JSX shows what they did once the JS host settled.
