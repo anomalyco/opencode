@@ -653,6 +653,29 @@ fn a_plugin_past_the_source_limit_is_refused() {
     assert!(error.contains("sources larger than 1 MiB"), "{error}");
 }
 
+// Expected (luau-safety-2 1, carbon ls-1): a `.luaurc` that is not a JSON object is refused when the plugin builds, with
+// why. Luau would run a Luau-syntax config on the UI thread, in a state with no memory cap and the process's `print`:
+// one that prints wrote escape sequences to the terminal, and one that returns a cyclic table crashed the client.
+#[test]
+fn a_luaurc_that_is_not_json_is_refused() {
+    let configs = [
+        "print('\\27]0;title\\7'); return { aliases = { util = './util' } }",
+        "local t = {}; t.a = t; return t",
+        r#"{ "aliases": { "util": "./util" }, }"#,
+        r#"[ "aliases" ]"#,
+    ];
+    for config in configs {
+        let sources = Sources::from_files([
+            ("plugin.toml", "id = \"test.luau\"\nentry = \"main.luau\""),
+            ("main.luau", "return require('@util/x')"),
+            ("util/x.luau", "return 1"),
+            (".luaurc", config),
+        ]);
+        let Err(error) = define(&sources, None) else { panic!("{config} was taken") };
+        assert!(error.contains("test.luau: .luaurc: a .luaurc is a JSON object"), "{config}: {error}");
+    }
+}
+
 // Expected (luau-safety 1, safety-audit #5): `print` writes to the client's log, never to the terminal under the TUI:
 // one line naming the plugin, with escape sequences escaped and at most 4 KiB of what it printed.
 #[test]
