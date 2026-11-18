@@ -54,9 +54,11 @@ pub enum NativeOp {
     GroupBy,
     /// `replace` and `replaceAll` with a callback.
     ReplaceWith,
+    /// `forEach`, `some`, `every`, `find`, `toArray` and `reduce` of `Iterator.prototype`.
+    IterConsume,
 }
 
-const OPS: [NativeOp; 13] = [
+const OPS: [NativeOp; 14] = [
     NativeOp::ArrayEach,
     NativeOp::ArrayReduce,
     NativeOp::SortWith,
@@ -70,6 +72,7 @@ const OPS: [NativeOp; 13] = [
     NativeOp::ToLocaleString,
     NativeOp::GroupBy,
     NativeOp::ReplaceWith,
+    NativeOp::IterConsume,
 ];
 
 impl NativeOp {
@@ -148,6 +151,9 @@ pub fn step(vm: &mut Vm, op: NativeOp, base: usize, input: Input) -> Result<Step
         NativeOp::ToLocaleString => crate::builtins::array::to_locale_string_step(vm, frame, input),
         NativeOp::GroupBy => for_of_step::<crate::builtins::sets::GroupBy>(vm, frame, input),
         NativeOp::ReplaceWith => crate::builtins::string::replace_with_step(vm, frame, input),
+        NativeOp::IterConsume => {
+            for_of_step::<crate::builtins::iterator::Consume>(vm, frame, input)
+        }
     }
 }
 
@@ -275,12 +281,16 @@ pub trait ForOf {
     }
     /// The built-in's result once the iterator is done.
     fn finish(vm: &mut Vm, fr: Frame) -> Res;
+    /// The body stopped the loop (`Flow::Stop`) and the iterator closed.
+    fn stopped(_vm: &mut Vm) {}
 }
 
 /// What a `ForOf` body does next.
 pub enum Flow {
     /// Go on to the next value (after a back-edge).
     Next,
+    /// Close the iterator, then finish with this.
+    Stop(Value),
     /// The body called `Frame::catching` and waits for its result (`ForOf::returned`); a throw closes the iterator.
     Call(Step),
 }
@@ -316,6 +326,29 @@ pub fn enter_for_of(
         Value::Undef,
         Value::Undef,
         Value::Num(START_LOOP as f64),
+        Value::Undef,
+    ];
+    slots.extend_from_slice(own);
+    vm.enter_native(op, callee, this, &slots)
+}
+
+/// Pushes a `ForOf` frame over an iterator record already open: `next` is the method to call, or undefined to step
+/// the iterator as the reference steps its own.
+#[allow(clippy::too_many_arguments)]
+pub fn enter_for_of_record(
+    vm: &mut Vm,
+    op: NativeOp,
+    callee: crate::value::Id,
+    this: Value,
+    it: Value,
+    next: Value,
+    own: &[Value],
+) -> Res {
+    let mut slots = vec![
+        Value::Undef,
+        it,
+        next,
+        Value::Num(STEP as f64),
         Value::Undef,
     ];
     slots.extend_from_slice(own);
@@ -362,18 +395,17 @@ pub fn for_of_step<C: ForOf>(vm: &mut Vm, fr: Frame, input: Input) -> Result<Ste
             // A generator yielded.
             STEP => flow = Some(body::<C>(vm, fr, |vm, fr| C::item(vm, fr, r.get()))),
             BODY => flow = Some(body::<C>(vm, fr, |vm, fr| C::returned(vm, fr, r))),
-            CLOSING => return close_done(vm, fr, Some(r)),
-            _ => return close_done(vm, fr, None),
+            CLOSING => return close_done::<C>(vm, fr, Some(r)),
+            _ => return close_done::<C>(vm, fr, None),
         },
         Input::Finished => match phase {
             STEP => return Ok(Step::Done(C::finish(vm, fr)?)),
-            CLOSING => return close_done(vm, fr, None),
-            _ => return close_done(vm, fr, None),
+            _ => return close_done::<C>(vm, fr, None),
         },
         Input::Threw(e) => match phase {
-            BODY => return close(vm, fr, Err(e)),
+            BODY => return close::<C>(vm, fr, Err(e)),
             // A failing close of a loop that threw keeps the loop's error.
-            _ => return close_done(vm, fr, None),
+            _ => return close_done::<C>(vm, fr, None),
         },
     }
     if phase == START_LOOP {
@@ -409,8 +441,9 @@ pub fn for_of_step<C: ForOf>(vm: &mut Vm, fr: Frame, input: Input) -> Result<Ste
     loop {
         match flow.take() {
             None => {}
-            Some(Err(e)) => return close(vm, fr, Err(e)),
+            Some(Err(e)) => return close::<C>(vm, fr, Err(e)),
             Some(Ok(Flow::Next)) => crate::builtins::fuel::step(vm),
+            Some(Ok(Flow::Stop(v))) => return close::<C>(vm, fr, Ok(v)),
             Some(Ok(Flow::Call(step))) => {
                 fr.set_index(vm, LOOP_PHASE, BODY);
                 return Ok(step);
@@ -497,7 +530,7 @@ fn is_builtin_iterator(vm: &Vm, id: crate::value::Id) -> bool {
 }
 
 /// Closes the loop's iterator: after the loop stopped with `Ok(result)`, or threw `Err(error)` (unless fatal).
-fn close(vm: &mut Vm, fr: Frame, outcome: Result<Value, Value>) -> Result<Step, Value> {
+fn close<C: ForOf>(vm: &mut Vm, fr: Frame, outcome: Result<Value, Value>) -> Result<Step, Value> {
     if let Err(e) = &outcome
         && vm.fatal.is_some()
     {
@@ -515,16 +548,16 @@ fn close(vm: &mut Vm, fr: Frame, outcome: Result<Value, Value>) -> Result<Step, 
     );
     let it = fr.get(vm, LOOP_IT);
     let Value::Obj(id) = it else {
-        return close_done(vm, fr, None);
+        return close_done::<C>(vm, fr, None);
     };
     use crate::object::{GenState, Kind};
     match &vm.heap[id as usize].kind {
         Kind::Generator(GenState::Suspended(_)) => match vm.native_resume(id, 1, Value::Undef) {
             Ok(None) => Ok(Step::Pushed),
-            Ok(Some(_)) => close_done(vm, fr, None),
+            Ok(Some(_)) => close_done::<C>(vm, fr, None),
             Err(e) if throwing => {
                 let _ = e;
-                close_done(vm, fr, None)
+                close_done::<C>(vm, fr, None)
             }
             Err(e) => Err(e),
         },
@@ -532,16 +565,16 @@ fn close(vm: &mut Vm, fr: Frame, outcome: Result<Value, Value>) -> Result<Step, 
         | Kind::ArrayIter { .. }
         | Kind::MapIter { .. }
         | Kind::StrIter { .. }
-        | Kind::ListIter { .. } => close_done(vm, fr, None),
+        | Kind::ListIter { .. } => close_done::<C>(vm, fr, None),
         _ => {
             let rk = vm.names.return_;
             let f = vm.get_obj(id, rk);
             if f.is_nullish() {
-                return close_done(vm, fr, None);
+                return close_done::<C>(vm, fr, None);
             }
             if !vm.is_callable(&f) {
                 if throwing {
-                    return close_done(vm, fr, None);
+                    return close_done::<C>(vm, fr, None);
                 }
                 return Err(vm.type_error("Iterator return must be a function."));
             }
@@ -559,7 +592,7 @@ fn close(vm: &mut Vm, fr: Frame, outcome: Result<Value, Value>) -> Result<Step, 
 
 /// The iterator closed (`result` is what its `return()` returned, when it was called): spends the close's fuel, then
 /// throws the loop's error or finishes with its result.
-fn close_done(vm: &mut Vm, fr: Frame, result: Option<Slot>) -> Result<Step, Value> {
+fn close_done<C: ForOf>(vm: &mut Vm, fr: Frame, result: Option<Slot>) -> Result<Step, Value> {
     let throwing = fr.index(vm, LOOP_PHASE) == CLOSING_THROW;
     if !throwing
         && let Some(r) = result
@@ -574,6 +607,7 @@ fn close_done(vm: &mut Vm, fr: Frame, result: Option<Slot>) -> Result<Step, Valu
     if throwing {
         return Err(stash);
     }
+    C::stopped(vm);
     Ok(Step::Done(stash))
 }
 

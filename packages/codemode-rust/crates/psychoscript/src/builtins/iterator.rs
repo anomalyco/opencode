@@ -1,8 +1,9 @@
 //! Live iterators over standard-library collections, and the shared iterator prototype's `next`.
 
 use super::{arg, fuel};
+use crate::native::{FOR_OF_SLOTS, Flow, ForOf, Frame, enter_for_of_record};
 use crate::object::*;
-use crate::value::{Id, Value};
+use crate::value::{Id, Slot, Value};
 use crate::vm::{Res, Vm};
 
 pub fn setup(vm: &mut Vm) {
@@ -193,7 +194,6 @@ fn close_source(vm: &mut Vm, iter: &Value) -> Result<(), Value> {
 #[derive(Clone, Copy)]
 enum Site {
     Kept(Value),
-    Running,
 }
 
 fn step(vm: &mut Vm, iter: &Value, next: &Value, site: Site) -> Result<Option<Value>, Value> {
@@ -201,7 +201,6 @@ fn step(vm: &mut Vm, iter: &Value, next: &Value, site: Site) -> Result<Option<Va
         let name = match site {
             Site::Kept(Value::Str(s)) => Some(vm.text(s).to_owned()),
             Site::Kept(_) => None,
-            Site::Running => vm.call_site().map(str::to_owned),
         };
         let name = name.as_deref().unwrap_or("The called value");
         return Err(vm.type_error(&format!("{name} is not a function.")));
@@ -547,114 +546,208 @@ fn helper_return(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
     Ok(vm.iter_result(Value::Undef, true))
 }
 
-/// Runs `f(item, index)` over the iterator until it decides, closing the iterator when it stops early or throws.
-fn consume(
-    vm: &mut Vm,
-    this: &Value,
-    args: &[Value],
-    name: &str,
-    decide: fn(&mut Vm, Value, Value) -> Option<Value>,
-) -> Result<Option<Value>, Value> {
-    // The prelude's `Iterator$prototype$...` and its `iteratorTest`.
-    fuel::method(vm);
-    fuel::method(vm);
-    let (iter, next) = direct(vm, this)?;
-    let f = super::require_callback(vm, &arg(args, 0), &format!("Iterator.prototype.{name}"))?;
-    fuel::native(vm);
-    let mut index = 0.0;
-    while let Some(item) = step(vm, &iter, &next, Site::Running)? {
-        let r = match vm.call_counted(&f, Value::Undef, &[item, Value::Num(index)]) {
-            Ok(r) => r,
-            Err(e) => {
-                let close = vm.close_fuel(&iter);
-                let _ = vm.iter_close(&iter);
-                vm.fuel(close);
-                return Err(e);
+// The consumers of an iterator run on the for-of driver (see `native::ForOf`), from its record: the slots after the
+// loop's are what they do, the callback, the next index, the accumulator (or `toArray`'s result) and whether it is
+// set, and the item being decided on.
+const USE_MODE: usize = FOR_OF_SLOTS;
+const USE_F: usize = FOR_OF_SLOTS + 1;
+const USE_INDEX: usize = FOR_OF_SLOTS + 2;
+const USE_ACC: usize = FOR_OF_SLOTS + 3;
+const USE_HAS_ACC: usize = FOR_OF_SLOTS + 4;
+const USE_ITEM: usize = FOR_OF_SLOTS + 5;
+
+const FOR_EACH: usize = 0;
+const SOME: usize = 1;
+const EVERY: usize = 2;
+const FIND: usize = 3;
+const TO_ARRAY: usize = 4;
+const REDUCE: usize = 5;
+
+/// `forEach`, `some`, `every`, `find`, `toArray` and `reduce` of `Iterator.prototype`, as the prelude's
+/// `Iterator$prototype$...` and its `iteratorTest` run them: a callback that throws closes the iterator, and one
+/// that decides closes it too.
+pub(crate) struct Consume;
+
+impl ForOf for Consume {
+    fn item(vm: &mut Vm, fr: Frame, x: Value) -> Result<Flow, Value> {
+        match fr.index(vm, USE_MODE) {
+            TO_ARRAY => {
+                let out = fr.slot(vm, USE_ACC).obj().unwrap_or(0);
+                if let Kind::Array(items) = &mut vm.heap[out as usize].kind {
+                    if items.len() >= crate::ops::MAX_ARRAY_LEN {
+                        return Err(vm.range_error("Invalid array length"));
+                    }
+                    items.push(x);
+                }
+                Ok(Flow::Next)
             }
-        };
-        index += 1.0;
-        if let Some(v) = decide(vm, item, r) {
-            close_record(vm, &iter)?;
-            vm.bytecode_builtin();
-            return Ok(Some(v));
+            REDUCE if fr.index(vm, USE_HAS_ACC) == 0 => {
+                fr.set(vm, USE_ACC, x);
+                fr.set_index(vm, USE_HAS_ACC, 1);
+                let index = fr.index(vm, USE_INDEX);
+                fr.set_index(vm, USE_INDEX, index + 1);
+                Ok(Flow::Next)
+            }
+            REDUCE => {
+                let (f, acc, index) = (
+                    fr.slot(vm, USE_F),
+                    fr.slot(vm, USE_ACC),
+                    fr.slot(vm, USE_INDEX),
+                );
+                Ok(Flow::Call(fr.catching(
+                    vm,
+                    f,
+                    Slot::UNDEF,
+                    [acc, Slot::pack(x), index],
+                )?))
+            }
+            _ => {
+                fr.set(vm, USE_ITEM, x);
+                let (f, index) = (fr.slot(vm, USE_F), fr.slot(vm, USE_INDEX));
+                Ok(Flow::Call(fr.catching(
+                    vm,
+                    f,
+                    Slot::UNDEF,
+                    [Slot::pack(x), index],
+                )?))
+            }
         }
-        fuel::step(vm);
     }
-    vm.bytecode_builtin();
-    Ok(None)
+
+    fn returned(vm: &mut Vm, fr: Frame, r: Slot) -> Result<Flow, Value> {
+        let index = fr.index(vm, USE_INDEX);
+        fr.set_index(vm, USE_INDEX, index + 1);
+        let r = r.get();
+        Ok(match fr.index(vm, USE_MODE) {
+            REDUCE => {
+                fr.set(vm, USE_ACC, r);
+                Flow::Next
+            }
+            SOME if vm.truthy(&r) => Flow::Stop(Value::Bool(true)),
+            EVERY if !vm.truthy(&r) => Flow::Stop(Value::Bool(false)),
+            FIND if vm.truthy(&r) => Flow::Stop(fr.get(vm, USE_ITEM)),
+            _ => Flow::Next,
+        })
+    }
+
+    fn finish(vm: &mut Vm, fr: Frame) -> Res {
+        let r = match fr.index(vm, USE_MODE) {
+            SOME => Value::Bool(false),
+            EVERY => Value::Bool(true),
+            TO_ARRAY => fr.get(vm, USE_ACC),
+            REDUCE if fr.index(vm, USE_HAS_ACC) != 0 => fr.get(vm, USE_ACC),
+            REDUCE => {
+                return Err(vm.type_error(
+                    "Iterator.prototype.reduce of an empty iterator with no initial value.",
+                ));
+            }
+            _ => Value::Undef,
+        };
+        vm.bytecode_builtin();
+        Ok(r)
+    }
+
+    fn stopped(vm: &mut Vm) {
+        vm.bytecode_builtin();
+    }
 }
 
-fn it_for_each(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    consume(vm, &this, args, "forEach", |_, _, _| None)?;
-    Ok(Value::Undef)
+/// Starts a consumer on the iterator `this` once its prologue's fuel is spent: a `next` that is not a function fails
+/// as the first step would.
+fn consume(vm: &mut Vm, this: Value, callee: Id, iter: Value, next: Value, own: [Value; 4]) -> Res {
+    let direct = stepped_directly(vm, &iter);
+    if !direct && !vm.is_callable(&next) {
+        let name = vm.call_site().unwrap_or("The called value").to_owned();
+        return Err(vm.type_error(&format!("{name} is not a function.")));
+    }
+    let next = if direct { Value::Undef } else { next };
+    let own = [
+        own[0],
+        own[1],
+        Value::Num(0.0),
+        own[2],
+        own[3],
+        Value::Undef,
+    ];
+    enter_for_of_record(
+        vm,
+        crate::native::NativeOp::IterConsume,
+        callee,
+        this,
+        iter,
+        next,
+        &own,
+    )
 }
 
-fn it_some(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let r = consume(vm, &this, args, "some", |vm, _, r| {
-        vm.truthy(&r).then_some(Value::Bool(true))
-    })?;
-    Ok(r.unwrap_or(Value::Bool(false)))
-}
-
-fn it_every(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let r = consume(vm, &this, args, "every", |vm, _, r| {
-        (!vm.truthy(&r)).then_some(Value::Bool(false))
-    })?;
-    Ok(r.unwrap_or(Value::Bool(true)))
-}
-
-fn it_find(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let r = consume(vm, &this, args, "find", |vm, item, r| {
-        vm.truthy(&r).then_some(item)
-    })?;
-    Ok(r.unwrap_or(Value::Undef))
-}
-
-fn it_to_array(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
+/// The prologue of `forEach`, `some`, `every` and `find`: the prelude's `Iterator$prototype$...` and its
+/// `iteratorTest`.
+fn test(vm: &mut Vm, this: Value, args: &[Value], callee: Id, mode: usize, name: &str) -> Res {
+    fuel::method(vm);
     fuel::method(vm);
     let (iter, next) = direct(vm, &this)?;
-    let mut out = Vec::new();
-    while let Some(item) = step(vm, &iter, &next, Site::Running)? {
-        if out.len() >= crate::ops::MAX_ARRAY_LEN {
-            return Err(vm.range_error("Invalid array length"));
-        }
-        out.push(item);
-        fuel::step(vm);
-    }
-    vm.bytecode_builtin();
-    Ok(vm.new_array(out))
+    let f = super::require_callback(vm, &arg(args, 0), &format!("Iterator.prototype.{name}"))?;
+    fuel::native(vm);
+    consume(
+        vm,
+        this,
+        callee,
+        iter,
+        next,
+        [Value::Num(mode as f64), f, Value::Undef, Value::Num(0.0)],
+    )
 }
 
-fn it_reduce(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+fn it_for_each(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    test(vm, this, args, callee, FOR_EACH, "forEach")
+}
+
+fn it_some(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    test(vm, this, args, callee, SOME, "some")
+}
+
+fn it_every(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    test(vm, this, args, callee, EVERY, "every")
+}
+
+fn it_find(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
+    test(vm, this, args, callee, FIND, "find")
+}
+
+fn it_to_array(vm: &mut Vm, this: Value, _args: &[Value], callee: Id) -> Res {
+    fuel::method(vm);
+    let (iter, next) = direct(vm, &this)?;
+    let out = vm.new_array(Vec::new());
+    consume(
+        vm,
+        this,
+        callee,
+        iter,
+        next,
+        [
+            Value::Num(TO_ARRAY as f64),
+            Value::Undef,
+            out,
+            Value::Num(0.0),
+        ],
+    )
+}
+
+fn it_reduce(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     fuel::method(vm);
     let (iter, next) = direct(vm, &this)?;
     let f = super::require_callback(vm, &arg(args, 0), "Iterator.prototype.reduce")?;
     fuel::native(vm);
-    let mut acc = args.get(1).copied();
-    let mut index = 0.0;
-    while let Some(item) = step(vm, &iter, &next, Site::Running)? {
-        acc = Some(match acc {
-            None => item,
-            Some(a) => match vm.call_counted(&f, Value::Undef, &[a, item, Value::Num(index)]) {
-                Ok(r) => r,
-                Err(e) => {
-                    let close = vm.close_fuel(&iter);
-                    let _ = vm.iter_close(&iter);
-                    vm.fuel(close);
-                    return Err(e);
-                }
-            },
-        });
-        index += 1.0;
-        fuel::step(vm);
-    }
-    match acc {
-        Some(a) => {
-            vm.bytecode_builtin();
-            Ok(a)
-        }
-        None => Err(
-            vm.type_error("Iterator.prototype.reduce of an empty iterator with no initial value.")
-        ),
-    }
+    let (acc, has) = match args.get(1) {
+        Some(a) => (*a, 1.0),
+        None => (Value::Undef, 0.0),
+    };
+    consume(
+        vm,
+        this,
+        callee,
+        iter,
+        next,
+        [Value::Num(REDUCE as f64), f, acc, Value::Num(has)],
+    )
 }

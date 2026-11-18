@@ -589,6 +589,10 @@ programs.push(
     "'abcab'.replace('b', (m) => S(1) + m)",
     "'abcab'.replaceAll('b', (m, i) => S(i) + i)",
     "'a1b2'.replace(/(\\d)/g, (m, d) => S(d) + d)",
+    "(() => { const r = []; [1, 2].values().forEach((x) => r.push(S(x) + x)); return r })()",
+    "[1, 2].values().some((x) => S(x) + x > 2)",
+    "Iterator.from({ next() { return { done: false, value: 3 } } }).find((x) => S(x) > 0)",
+    "[1, 2, 3].values().reduce((a, x) => a + S(x) + x)",
   ].map(
     (expr) => `const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }
      Promise.resolve().then(() => log.push('job')); const r = ${expr}; return [r, log]`,

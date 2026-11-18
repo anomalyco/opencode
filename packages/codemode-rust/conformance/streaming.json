@@ -16544,6 +16544,75 @@
       "log": []
     },
     {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = (() => { const r = []; [1, 2].values().forEach((x) => r.push(S(x) + x)); return r })(); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          [
+            2,
+            3
+          ],
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = [1, 2].values().some((x) => S(x) + x > 2); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          true,
+          [
+            "call 1",
+            "job",
+            "answer 1",
+            "call 2",
+            "answer 2"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = Iterator.from({ next() { return { done: false, value: 3 } } }).find((x) => S(x) > 0); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          3,
+          [
+            "call 3",
+            "job",
+            "answer 3"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
+      "code": "const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }\n     Promise.resolve().then(() => log.push('job')); const r = [1, 2, 3].values().reduce((a, x) => a + S(x) + x); return [r, log]",
+      "outcome": {
+        "ok": true,
+        "value": [
+          8,
+          [
+            "call 2",
+            "job",
+            "answer 2",
+            "call 3",
+            "answer 3"
+          ]
+        ]
+      },
+      "log": []
+    },
+    {
       "code": "const r = await fetch({\"chunks\":[\"hel\",\"lo\"],\"status\":201,\"statusText\":\"Created\",\"headers\":{\"Content-Type\":\"text/plain\",\"X-A\":\"1\"}}); let flip = -1; let k = 0\n   const see = (x) => { k++; if (flip < 0 && r.body.locked) flip = k; return x }\n   const a = []; for (let i = 0; i < 30000; i++) if (i % 3) a[i] = i; a.length = 30000; const d = a.filter(() => true); \n   for (let j = 0; j < 37; j++) await tools.t.echo({ p: Promise.resolve(j), a: [1, { b: 2 }, [3]], s: 'x' }); const p = r.text(); for (let i = 0; i < 30000; i++) see(i)\n   await p.catch(() => 0); return flip",
       "outcome": {
         "ok": true,
@@ -19536,151 +19605,151 @@
           }
         ],
         [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
-        ],
-        [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
-        ],
-        [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
-        ],
-        [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
-        ],
-        [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
-        ],
-        [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
-        ],
-        [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
-        ],
-        [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
-        ],
-        [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
-        ],
-        [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
-        ],
-        [
-          "echo",
-          {
-            "t": 1,
-            "a": [
-              1,
-              2,
-              {
-                "c": 3
-              }
-            ]
-          }
-        ],
-        [
           "pull",
           2
+        ],
+        [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
+        ],
+        [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
+        ],
+        [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
+        ],
+        [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
+        ],
+        [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
+        ],
+        [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
+        ],
+        [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
+        ],
+        [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
+        ],
+        [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
+        ],
+        [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
+        ],
+        [
+          "echo",
+          {
+            "t": 1,
+            "a": [
+              1,
+              2,
+              {
+                "c": 3
+              }
+            ]
+          }
         ],
         [
           "echo",
