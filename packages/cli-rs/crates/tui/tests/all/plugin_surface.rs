@@ -1643,3 +1643,184 @@ fn a_kept_memo_that_holds_a_memo_keeps_a_library_active() {
         assert_eq!(opencode_plugin::surface::ledger_of("test.nest").memo_entries, 2, "{carrier:?}");
     }
 }
+
+// A dialog whose body is a surface (contract ergonomics 2.7): the plugin `test.dlg` has a route `pg` with a field
+// `outside`, and a dialog surface `ask` with a field `name`, which its command `dlg.open` shows and focuses in one
+// call. The surface's handler records each edit of its field and the dialog's close.
+
+thread_local! {
+    static DIALOG_SEEN: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+}
+
+/// The dialog probe's carriers: linked, the C ABI, and Luau.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum DialogCarrier {
+    Native(Carrier),
+    #[cfg(feature = "luau")]
+    Luau,
+}
+
+fn dialog_carriers() -> Vec<DialogCarrier> {
+    vec![
+        DialogCarrier::Native(Carrier::Linked),
+        DialogCarrier::Native(Carrier::Abi),
+        #[cfg(feature = "luau")]
+        DialogCarrier::Luau,
+    ]
+}
+
+fn dialog_probe(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.command(abi::Command::new("dlg.open"), |host, _| {
+        host.dialog(abi::Dialog::Surface(abi::DialogSurface::new("ask").title("Ask")));
+        host.focus("name");
+    });
+    setup.command(abi::Command::new("dlg.outside").scope(abi::Scope::Route("pg".into())), |host, _| {
+        host.focus("outside");
+    });
+    let text = |text: &str| v2::Node::text(vec![abi::Span::new(text)]);
+    setup.surface(v2::Surface::new("pg", v2::Place::Route("pg".into()), move |_| {
+        v2::Node::column(vec![text("dialog page"), v2::Node::input("").with_id("outside")])
+    }));
+    let surface = v2::Surface::new("ask", v2::Place::Dialog("ask".into()), move |_| {
+        v2::Node::column(vec![text("dialog body"), v2::Node::input("").with_id("name")])
+    })
+    .on(|_, event| {
+        let line = match event {
+            abi::interact::Event::Change { text, .. } => format!("change {text}"),
+            abi::interact::Event::Closed { surface } => format!("closed {surface}"),
+            _ => return abi::interact::Handled::Pass,
+        };
+        DIALOG_SEEN.with_borrow_mut(|seen| seen.push(line));
+        abi::interact::Handled::Pass
+    });
+    setup.surface(surface);
+    Ok(())
+}
+
+/// [`dialog_probe`] in Luau, which records in its storage.
+#[cfg(feature = "luau")]
+const DIALOG_LUAU: &str = r#"local plugin = require("@opencode/plugin")
+local function text(text) return { type = "text", spans = { { text = text } } } end
+local function record(host, line)
+    local seen = host:storageGet("seen") or {}
+    table.insert(seen, line)
+    host:storageSet("seen", seen)
+end
+return plugin.define(function(setup)
+    setup:storageKey("seen")
+    setup:command({ name = "dlg.open" }, function(host)
+        host:dialog({ type = "surface", surface = "ask", title = "Ask" })
+        host:focus("name")
+    end)
+    setup:command({ name = "dlg.outside", scope = { route = "pg" } }, function(host) host:focus("outside") end)
+    setup:surface({ name = "pg", place = { type = "route", name = "pg" } }, function()
+        return { type = "box", children = { text("dialog page"), { type = "input", id = "outside" } } }
+    end)
+    setup:surface({ name = "ask", place = { type = "dialog", name = "ask" } }, function()
+        return { type = "box", children = { text("dialog body"), { type = "input", id = "name" } } }
+    end, function(host, event)
+        if event.type == "change" then record(host, "change " .. event.text) end
+        if event.type == "closed" then record(host, "closed " .. event.surface) end
+        return "pass"
+    end)
+end)
+"#;
+
+/// The TUI on the probe's route, on `carrier`.
+fn dialog_open(carrier: DialogCarrier) -> Harness {
+    DIALOG_SEEN.with_borrow_mut(Vec::clear);
+    let harness = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    let definition = match carrier {
+        DialogCarrier::Native(Carrier::Linked) => abi::Plugin { id: "test.dlg", setup: dialog_probe }.into(),
+        DialogCarrier::Native(Carrier::Abi) => {
+            let entries = abi::export_plugin!(@loopback "test.dlg", dialog_probe);
+            let host = opencode_tui::plugins::host::host(&harness.tui);
+            opencode_plugin::loader::native::loopback(&host, entries).unwrap().0
+        }
+        #[cfg(feature = "luau")]
+        DialogCarrier::Luau => {
+            let sources = opencode_plugin::luau::Sources::from_files([
+                ("plugin.toml", "id = \"test.dlg\""),
+                ("init.luau", DIALOG_LUAU),
+            ]);
+            opencode_plugin::luau::define(&sources, None).unwrap().0
+        }
+    };
+    opencode_tui::plugins::host::add(&harness.tui, definition);
+    harness.tui.navigate(Route::Plugin { id: "test.dlg".into(), name: "pg".into() });
+    harness.wait_for("dialog page");
+    dialog_turns(&harness);
+    harness
+}
+
+fn dialog_turns(harness: &Harness) {
+    for _ in 0..5 {
+        harness.app.advance(Duration::from_millis(1));
+        harness.app.render();
+    }
+}
+
+/// What the probe's handler recorded.
+#[cfg_attr(not(feature = "luau"), allow(unused_variables))]
+fn dialog_seen(harness: &Harness, carrier: DialogCarrier) -> Vec<String> {
+    match carrier {
+        DialogCarrier::Native(_) => DIALOG_SEEN.with_borrow(Vec::clone),
+        #[cfg(feature = "luau")]
+        DialogCarrier::Luau => {
+            let stored = opencode_plugin::Host::storage_read(&*harness.tui, "plugin.test.dlg.seen");
+            stored.and_then(|json| serde_json::from_str(&json).ok()).unwrap_or_default()
+        }
+    }
+}
+
+/// The node of `surface`'s newest mount that has the focus, and how many mounts it has.
+fn dialog_focus(harness: &Harness, surface: &str) -> (Option<String>, usize) {
+    let mut mounts = opencode_plugin::behave::mounts(harness.app.app(), "test.dlg", surface);
+    let count = mounts.len();
+    (mounts.pop().and_then(|mount| mount.focused), count)
+}
+
+// Expected (contract ergonomics 2.7, CT-37): the command that shows the dialog focuses its field, which takes what the
+// user types and tells the handler; the route's own command cannot move the focus out of the dialog to its field under
+// it. Ctrl+C empties the focused field first, as in the host's own dialogs, then closes the dialog, whose handler hears
+// it closed and whose mount ends. Opened again, the dialog is a new mount whose field the command focuses again, and
+// escape closes it as one level, leaving the route.
+#[test]
+fn a_dialog_surface_takes_the_focus_inside_it_only_and_closes_on_ctrl_c() {
+    for carrier in dialog_carriers() {
+        let h = dialog_open(carrier);
+        _ = h.tui.keymap.dispatch("dlg.open", None);
+        h.wait_for("dialog body");
+        dialog_turns(&h);
+        assert_eq!(dialog_focus(&h, "ask"), (Some("name".to_owned()), 1), "{carrier:?}: the field took no focus");
+        h.app.type_text("abc");
+        dialog_turns(&h);
+        assert_eq!(dialog_seen(&h, carrier).last().map(String::as_str), Some("change abc"), "{carrier:?}");
+
+        _ = h.tui.keymap.dispatch("dlg.outside", None);
+        dialog_turns(&h);
+        assert_eq!(dialog_focus(&h, "pg").0, None, "{carrier:?}: a field under the dialog took the focus");
+        assert_eq!(dialog_focus(&h, "ask").0.as_deref(), Some("name"), "{carrier:?}: the dialog lost its focus");
+
+        h.app.press("ctrl+c");
+        dialog_turns(&h);
+        assert!(h.app.text().contains("dialog body"), "{carrier:?}: ctrl+c closed a dialog whose field had text");
+        assert_eq!(dialog_seen(&h, carrier).last().map(String::as_str), Some("change "), "{carrier:?}");
+        h.app.press("ctrl+c");
+        dialog_turns(&h);
+        assert!(!h.app.text().contains("dialog body"), "{carrier:?}: ctrl+c left the dialog open");
+        assert!(h.app.text().contains("dialog page"), "{carrier:?}: ctrl+c closed more than the dialog");
+        assert_eq!(dialog_focus(&h, "ask").1, 0, "{carrier:?}: the dialog's mount outlived it");
+        assert_eq!(dialog_seen(&h, carrier).last().map(String::as_str), Some("closed ask"), "{carrier:?}");
+
+        _ = h.tui.keymap.dispatch("dlg.open", None);
+        h.wait_for("dialog body");
+        dialog_turns(&h);
+        assert_eq!(dialog_focus(&h, "ask"), (Some("name".to_owned()), 1), "{carrier:?}: reopened, no focus");
+        h.app.press("escape");
+        dialog_turns(&h);
+        assert!(!h.app.text().contains("dialog body") && h.app.text().contains("dialog page"), "{carrier:?}");
+        let closes = dialog_seen(&h, carrier).iter().filter(|line| *line == "closed ask").count();
+        assert_eq!(closes, 2, "{carrier:?}: {:?}", dialog_seen(&h, carrier));
+    }
+}

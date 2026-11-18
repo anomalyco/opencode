@@ -21,10 +21,10 @@
 use crate::interact::{self, Anchor, Bind, LayerScope, OpenPanel, Overlay};
 use crate::v2::{self, DiffView, Fit, MountId, Node, Paint, Source, Split};
 use crate::{
-    Absolute, Action, Alert, Attention, Border, BorderStyle, Click, Color, Command, Confirm, ConfirmLabel, Edges,
-    ErrorDetails, Fetch, Foreground, Gutter, Image, Images, Layout, Panel, PanelAction, PanelBind, PanelSize, Press,
-    Prompt, Scope, Select, SelectAction, SelectOption, Sides, Sound, SoundName, Span, TitleAlign, Toast, Variant, When,
-    Width,
+    Absolute, Action, Alert, Attention, Border, BorderStyle, Click, Color, Command, Confirm, ConfirmLabel,
+    DialogSurface, Edges, ErrorDetails, Fetch, Foreground, Gutter, Image, Images, Layout, Panel, PanelAction,
+    PanelBind, PanelSize, Press, Prompt, Scope, Select, SelectAction, SelectOption, Sides, Sound, SoundName, Span,
+    TitleAlign, Toast, Variant, When, Width,
 };
 
 /// A setter of each field of `$ty` but those in `[…]`, which its constructor or a setter of its own sets. `field: T`
@@ -341,6 +341,15 @@ impl Alert {
 }
 
 builder!(Alert [title, message] { action?: Action, size?: PanelSize, centered! });
+
+impl DialogSurface {
+    /// A new mount of dialog surface `surface`, medium, under the surface's name.
+    pub fn new(surface: impl Into<String>) -> Self {
+        Self { surface: surface.into(), key: None, size: None, centered: false, title: None }
+    }
+}
+
+builder!(DialogSurface [surface] { key?: impl String, size?: PanelSize, centered!, title?: impl String });
 
 builder!(Select [title, options, action] {
     placeholder?: impl String,

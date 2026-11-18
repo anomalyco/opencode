@@ -2753,6 +2753,18 @@
             }
           },
           "required": ["type", "name"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "const": "dialog"
+            }
+          },
+          "required": ["type", "name"]
         }
       ],
       "description": "Where a surface shows."
@@ -5304,9 +5316,68 @@
               "required": ["type"]
             }
           ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/DialogSurface"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "surface"
+                }
+              },
+              "required": ["type"]
+            }
+          ]
         }
       ],
       "description": "A dialog the host shows."
+    },
+    "DialogSurface": {
+      "type": "object",
+      "properties": {
+        "surface": {
+          "type": "string"
+        },
+        "key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "size": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PanelSize"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "centered": {
+          "type": "boolean"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["surface"],
+      "description": "A dialog whose body is a new mount of the plugin's dialog surface."
     },
     "Select": {
       "type": "object",

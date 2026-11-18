@@ -458,6 +458,11 @@ pub enum Place {
     Panel(String),
     /// Over everything but the host's dialogs, anchored: the name the plugin opens it by.
     Overlay(String),
+    /// The body of a dialog, which the plugin opens with [`crate::Dialog::Surface`] by this name: the host draws the
+    /// dialog's frame, and the view the rest, with scrolls and fields. Each opening is a new mount, which ends as the
+    /// dialog closes. While that dialog is on top, [`crate::Host::focus`] gives the focus to the mount's nodes, its
+    /// layers of no mode hold, and its handler hears the user's input; no other surface's do.
+    Dialog(String),
 }
 
 /// A surface as [`crate::Setup::surface`] registers it.

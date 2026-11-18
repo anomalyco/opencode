@@ -232,9 +232,17 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *   the palette, the user's scroll): the host answers OPENCODE_ERROR to any other. None of the input requests ("focus",
  *   "set-mode", "overlay", ...) is taken during `create`, which has no input yet. A "focus" names a box that is
  *   focusable, or, on a host with the feature "focus-input", an "input" with an id, which then takes what the user
- *   types; a node in a hidden box, and any focus while a host dialog is open, is not taken. A node the mount's tree
- *   does not hold yet takes the focus if the mount's next view (the one after the call) shows it, and is dropped if
- *   it does not: a later view, after a resize or a theme, does not apply it.
+ *   types; a node in a hidden box, and any focus while a host dialog is open, is not taken, but for a node of the
+ *   plugin's own dialog surface while its dialog is on top. A node the mount's tree does not hold yet takes the focus
+ *   if the mount's next view (the one after the call) shows it, and is dropped if it does not: a later view, after a
+ *   resize or a theme, does not apply it. A global command's focus of a node no mount holds yet names the mount that
+ *   holds it once the effects before it applied, such as the dialog surface it showed.
+ * - A "surface" dialog ({"type": "surface", "surface", "key", "size", "centered", "title"}) shows a new mount of the
+ *   plugin's surface placed {"type": "dialog", "name"} as the dialog's body, under "key" (the surface's name when
+ *   none), which a "close" and "dialog-open" name and the mount's ID has; shown again under that key while it is
+ *   open, the frame changes in place and the mount stays. The mount ends as the dialog closes, however it closes, and
+ *   the surface's handler then hears {"type": "closed", "surface"} as the plugin's input, which names no mount. While
+ *   the dialog is on top, its layers of no mode hold, it sets no mode, and "ctrl+c" first empties its focused input.
  * - "fetch", "foreground" and "timer" answer the ID their one reply comes back with ("reply"), never 0, which names no
  *   request: an SDK refuses an answer of 0 as malformed. A "timer"'s reply is {"Ok": null} once "ms" milliseconds
  *   passed on the host's clock, at least 20; with 32 timers of the plugin waiting already, it is {"Err": why} at once.

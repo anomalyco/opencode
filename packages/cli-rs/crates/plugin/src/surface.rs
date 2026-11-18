@@ -615,7 +615,8 @@ impl Surface {
         host_time: HostTime,
     ) -> Rc<Self> {
         let id = v2::MountId { surface: surface.name.clone(), key: key.to_owned(), generation: generation() };
-        let fills = path.is_empty();
+        // A dialog's body is as high as its view lays it out, as a slot's root, in the room the dialog frame gives.
+        let fills = path.is_empty() && !matches!(surface.at, v2::Place::Dialog(_));
         let root = match fills {
             true => View::new(host.app()).column().width(Length::percent(100.0)).height(Length::percent(100.0)),
             false => View::new(host.app()).column().shrink(0.0).visible(false),
@@ -687,6 +688,9 @@ impl Surface {
         );
         let deliver: interact::Deliver =
             input.deliver.clone().unwrap_or_else(|| Rc::new(|_, _, _| abi::interact::Handled::Pass));
+        if matches!(surface.at, v2::Place::Dialog(_)) {
+            owned.mark_dialog();
+        }
         owned.register(host, &input.layers, &deliver);
         // A surface that asks hears its mount begin before its first view, as a render claim's `on_mount` (P6a).
         mounted.tell_mount(host, true);
@@ -1382,6 +1386,23 @@ impl Claimed for Rc<Surface> {
         let mut done = true;
         self.state.borrow().tree.each_slot(&mut |slots| done &= slots.restyle(host));
         done
+    }
+
+    fn closing(&self) -> Option<crate::Effect> {
+        // The plugin hears it, not the mount, which ends with the dialog: what it asks for is the activation's.
+        let (deliver, activation) = (self.input.deliver.clone()?, self.input.activation.clone());
+        let event = abi::interact::Event::Closed { surface: self.id.surface.clone() };
+        Some(Box::new(move |host| {
+            deliver(host, &activation, &event);
+        }))
+    }
+
+    fn clear_field(&self, host: &dyn Host) -> bool {
+        let Some(node) = self.state.borrow().tree.clear_focused_field(host.app()) else { return false };
+        if let Some(owner) = self.holder() {
+            owner.hear(&abi::interact::Event::Change { node, text: String::new() });
+        }
+        true
     }
 }
 

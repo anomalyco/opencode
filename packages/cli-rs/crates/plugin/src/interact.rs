@@ -30,6 +30,7 @@ use std::rc::{Rc, Weak};
 use opencode_plugin_abi::interact::{
     self as input, Anchor, Bind, Button, Event, Handled, Interact, Layer, LayerScope, Pointer, PointerKind,
 };
+use opencode_ui::dialog::MODAL_MODE;
 use opencode_ui::keymap::{BASE_MODE, KeymapLayer, TuiCommand};
 use opentui::input::{Event as Input, KeyCode, KeyEvent, Modifiers, MouseButton, MouseEvent, MouseEventKind};
 use opentui::keymap::{Condition, Disposer, Stroke};
@@ -67,6 +68,8 @@ pub struct Owner {
     ended: Cell<bool>,
     /// It has a layer of the composer, so its mode holds while the composer has the focus.
     composer: Cell<bool>,
+    /// A dialog surface's mount: its layers of no mode are the host dialogs' mode's, and it sets no mode of its own.
+    dialog: Cell<bool>,
     layers: RefCell<Vec<Disposer>>,
     mode: RefCell<Option<Mode>>,
     /// The ids of its tree's nodes, and of its focusable ones.
@@ -91,10 +94,12 @@ struct Mode {
 }
 
 /// Where a surface's own scope holds: while the focus is in a view (a panel, an overlay's frame, a slot's root), or,
-/// for a route, while it shows and no dialog of the host is over it (the route of synthesis 4.2's `Scope::Route`).
+/// for a route, while it shows and no dialog of the host is over it (the route of synthesis 4.2's `Scope::Route`), or,
+/// for a dialog surface, while the dialog whose body is the view is on top, wherever the focus is in it.
 enum Held {
     Within(View),
     Route,
+    Dialog(View),
 }
 
 /// A listener of every key or of pastes, with its handler.
@@ -272,6 +277,7 @@ impl Owner {
             alive: Cell::new(true),
             ended: Cell::new(false),
             composer: Cell::new(false),
+            dialog: Cell::new(false),
             layers: RefCell::default(),
             mode: RefCell::default(),
             ids: RefCell::default(),
@@ -291,6 +297,28 @@ impl Owner {
         blurs(&view, &self.host);
         self.pastes_in(&view);
         *self.held.borrow_mut() = Held::Within(view);
+    }
+
+    /// A dialog surface's mount, before its layers register: they hold in the host dialogs' mode.
+    pub(crate) fn mark_dialog(&self) {
+        self.dialog.set(true);
+    }
+
+    /// The scope of the surface is the dialog whose body is `view`, while it is on top.
+    pub(crate) fn hold_dialog(&self, view: View) {
+        blurs(&view, &self.host);
+        self.pastes_in(&view);
+        *self.held.borrow_mut() = Held::Dialog(view);
+    }
+
+    /// Whether its dialog is the one on top: a dialog surface's mount holds the input then, as no other does.
+    fn on_top(&self, host: &dyn Host) -> bool {
+        matches!(&*self.held.borrow(), Held::Dialog(view) if host.modal_holds(view))
+    }
+
+    /// Whether a dialog of the host other than its own is over it, which takes its focus and its pointer.
+    fn modal_over(&self, host: &dyn Host) -> bool {
+        host.modal_open() && !self.on_top(host)
     }
 
     /// The scope of the surface is the focus in its root: a slot claim.
@@ -325,17 +353,19 @@ impl Owner {
     /// The view whose focus is the surface's, if its scope is one.
     fn within(&self) -> Option<View> {
         match &*self.held.borrow() {
-            Held::Within(view) if self.root.is_some() => Some(view.clone()),
+            Held::Within(view) | Held::Dialog(view) if self.root.is_some() => Some(view.clone()),
             _ => None,
         }
     }
 
-    /// Whether the focus is in the surface's scope, or its route shows with no dialog or overlay over it.
+    /// Whether the focus is in the surface's scope, or its route shows with no dialog or overlay over it, or its
+    /// dialog is on top.
     fn in_surface(&self, host: &dyn Host) -> bool {
         match (&*self.held.borrow(), &self.root) {
             (_, None) => false,
             (Held::Within(view), Some(_)) => focus_within(host.app(), view.id()),
             (Held::Route, Some(_)) => !host.modal_open() && !host.router().is_some_and(|router| router.overlaid(host)),
+            (Held::Dialog(view), Some(_)) => host.modal_holds(view),
         }
     }
 
@@ -458,6 +488,8 @@ impl Owner {
     fn mode_key(&self, mode: Option<&str>) -> String {
         match mode {
             Some(mode) => format!("{}:{mode}", self.plugin),
+            // A dialog's own keys hold in the mode its dialog pushed, beside its escape and `ctrl+c`.
+            None if self.dialog.get() => MODAL_MODE.to_owned(),
             None => BASE_MODE.to_owned(),
         }
     }
@@ -509,6 +541,11 @@ impl Owner {
     pub(crate) fn set_mode(self: &Rc<Self>, host: &dyn Host, mode: Option<&str>) {
         if let Some(old) = self.mode.borrow_mut().take() {
             old.disposer.dispose();
+        }
+        // A mode over the host dialogs' would take their escape and `ctrl+c`.
+        if mode.is_some() && self.dialog.get() {
+            log::warn!("plugin {}: a dialog surface sets no mode", self.plugin);
+            return;
         }
         let Some((name, scope)) = mode.filter(|_| self.alive()).zip(self.mode_scope()) else { return };
         let ended = Rc::new(Cell::new(false));
@@ -602,11 +639,11 @@ impl Owner {
         *self.focusable.borrow_mut() = focusable;
     }
 
-    /// Gives the focus to the owner's node `id`, if it is focusable and no host dialog is open.
+    /// Gives the focus to the owner's node `id`, if it is focusable and no host dialog is open but its own, on top.
     pub(crate) fn focus(&self, host: &dyn Host, id: &str) {
         // A focus asked for replaces one that waits.
         self.pending.borrow_mut().take();
-        if host.modal_open() {
+        if self.modal_over(host) {
             log::warn!("plugin {}: a dialog of the host has the focus", self.plugin);
             return;
         }
@@ -1110,9 +1147,9 @@ impl Router {
     /// Ends a capture whose owner, node or focus went, or that a host dialog took.
     fn prune_capture(&self, host: &dyn Host) {
         let stale = self.capture.borrow().as_ref().is_some_and(|capture| {
-            let owner = capture.owner.upgrade().filter(|owner| owner.alive());
-            let node = owner.and_then(|owner| owner.lookup.as_ref().and_then(|lookup| lookup(&capture.node)));
-            node.is_none() || host.modal_open() || host.app().focused().map(|widget| widget.id()) != capture.focus
+            let Some(owner) = capture.owner.upgrade().filter(|owner| owner.alive()) else { return true };
+            let node = owner.lookup.as_ref().and_then(|lookup| lookup(&capture.node));
+            node.is_none() || owner.modal_over(host) || host.app().focused().map(|widget| widget.id()) != capture.focus
         });
         if stale {
             self.capture.borrow_mut().take();
@@ -1528,7 +1565,7 @@ fn pointed(host: &dyn Host, owner: &Rc<Owner>, node: &str, view: &impl Widget, e
     let Some(router) = host.router() else { return Handled::Pass };
     router.prune_capture(host);
     // A dialog of the host over it: a release or a drag that OpenTUI still sends to the pressed node is not the plugin's.
-    if host.modal_open() {
+    if owner.modal_over(host) {
         return Handled::Pass;
     }
     let me = Rc::downgrade(owner);

@@ -537,6 +537,10 @@ pub enum SurfacePlace {
     Overlay {
         name: String,
     },
+    /// The body of a dialog, which [`Dialog::Surface`] opens.
+    Dialog {
+        name: String,
+    },
 }
 
 impl From<&v2::Place> for SurfacePlace {
@@ -546,6 +550,7 @@ impl From<&v2::Place> for SurfacePlace {
             v2::Place::Slot(at) => SurfacePlace::Slot { kind: at.kind, path: at.path.clone() },
             v2::Place::Panel(name) => SurfacePlace::Panel { name: name.clone() },
             v2::Place::Overlay(name) => SurfacePlace::Overlay { name: name.clone() },
+            v2::Place::Dialog(name) => SurfacePlace::Dialog { name: name.clone() },
         }
     }
 }
@@ -557,6 +562,7 @@ impl From<&SurfacePlace> for v2::Place {
             SurfacePlace::Slot { kind, path } => v2::Place::Slot(Placement::new(*kind, path.clone())),
             SurfacePlace::Panel { name } => v2::Place::Panel(name.clone()),
             SurfacePlace::Overlay { name } => v2::Place::Overlay(name.clone()),
+            SurfacePlace::Dialog { name } => v2::Place::Dialog(name.clone()),
         }
     }
 }
@@ -2479,6 +2485,40 @@ pub enum Dialog {
     },
     /// 2.0 (P6c): images in the host's image preview (TS `DialogImagePreview`), starting at `index`.
     Images(Images),
+    /// The plugin's dialog surface ([`v2::Place::Dialog`]) as the dialog's body (TS `ui.dialog.show`).
+    Surface(DialogSurface),
+}
+
+/// A [`Dialog::Surface`]: a new mount of the plugin's dialog surface `surface` in the host's dialog frame, under `key`
+/// (the surface's name when unset), which [`Dialog::Close`] and [`Read::dialog_open`] name and the mount's
+/// [`v2::MountId::key`] is. Shown again while that key is open, it changes the frame in place (its size, centering
+/// and title) and keeps the mount; any other dialog replaces it. However it closes (escape, `ctrl+c`, the backdrop,
+/// another dialog, the plugin's close, its unload) its mount ends, and the surface's handler hears
+/// [`interact::Event::Closed`] as the plugin's call, not the mount's, unless the plugin is unloaded. `ctrl+c` first
+/// empties a field of the mount that has the focus and text, as in the host's own dialogs.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(feature = "host"), non_exhaustive)]
+pub struct DialogSurface {
+    pub surface: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    /// The dialog's width; [`PanelSize::Medium`] when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<PanelSize>,
+    /// In the middle of the screen, not a quarter of the way down.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub centered: bool,
+    /// The header's title, with the host's close label: without it the view draws the whole dialog, as TS draws a
+    /// plugin's own view.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+}
+
+impl DialogSurface {
+    /// The key the dialog shows under: [`DialogSurface::key`], else the surface's name.
+    pub fn shown_key(&self) -> &str {
+        self.key.as_deref().unwrap_or(&self.surface)
+    }
 }
 
 /// A [`Dialog::Prompt`]: a one-line text field. Enter closes it and runs `action` with the text as its input; escape
@@ -3233,17 +3273,21 @@ pub trait Host: Read {
     /// 2.0: gives the focus to the node with id `id` of the running call's mount: a box with
     /// [`interact::Interact::focusable`], or, on a host with [`FOCUS_INPUT`], a [`v2::Node::Input`], as a click does, so
     /// what the user types goes into the field. Any other node, one in a hidden box, another plugin's node and a host
-    /// widget are refused, as is any focus while a host dialog is open; a host without [`FOCUS_INPUT`] refuses a field.
+    /// widget are refused, as is any focus while a host dialog is open, but for a node of the plugin's own dialog
+    /// surface ([`v2::Place::Dialog`]) while its dialog is on top; a host without [`FOCUS_INPUT`] refuses a field.
     /// A call the user did not cause may ask for it too, as a click can: the host does not refuse it. A node the
     /// mount's tree does not hold yet takes the focus if the mount's next view shows it (the view after the call, or
     /// the JS host's next revision), so a call can show a field and focus it; if that view does not, the focus is
-    /// dropped, and no later view (a resize, a theme) applies it.
+    /// dropped, and no later view (a resize, a theme) applies it. A call of the plugin's own (a command) that names a
+    /// node no mount holds yet names the mount that holds it once the effects before it applied: a command can show
+    /// its dialog surface ([`Dialog::Surface`]) and focus a field in it.
     fn focus(&self, _id: &str) {}
     /// 2.0: takes the focus from the running call's mount, if it has it, and gives it to the composer.
     fn blur(&self) {}
     /// 2.0: sets the mode of the running call's owner, its mount or else the plugin: its layers of that mode hold,
     /// and the host's base layers do not. `None` ends it. It ends too when the focus leaves the owner's scope, when
-    /// the owner ends, and on [`interact::RESERVED`].
+    /// the owner ends, and on [`interact::RESERVED`]. A dialog surface's mount sets none: it would take the dialog's
+    /// escape and `ctrl+c`.
     fn set_mode(&self, _mode: Option<&str>) {}
     /// 2.0: routes the keys a [`interact::Bind::hold`] key held, in order.
     fn release_keys(&self) {}
