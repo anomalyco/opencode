@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { type Extension, isAsync } from "./extension.js"
+import { type Extension, isAsync, isConstructible } from "./extension.js"
 import { scanTools } from "./scan.js"
 import { hooked, type Services, type ToolDescription, ToolRuntime } from "./tool-runtime.js"
 import type { Tools } from "./tools.js"
@@ -265,7 +265,11 @@ export function make<
           ),
         ),
       }),
+      // A later extension's module name wins over an earlier one's.
+      modules: Object.assign({}, ...picked.map((extension) => extension.modules ?? {})),
       limits: { timeoutMs: limits.timeoutMs, maxOutputBytes: limits.maxOutputBytes },
+      // Arguments cross as JSON would carry them: functions are left out and promises are awaited.
+      translate: { functions: "drop", promises: "await" },
     }) as unknown as Language.Runtime.Runtime<R>
     runtimes.set(key, made)
     return made
@@ -330,7 +334,7 @@ const extensionFunction = <R>(
     // The program sees the extension function's own name and length.
     Object.defineProperty(run, "name", { value: value.name })
     Object.defineProperty(run, "length", { value: value.length })
-    return Host.fn(run, { type, snapshot })
+    return Host.fn(run, { type, snapshot, constructible: isConstructible(value), takesFunctions: true })
   }
   if (before === undefined && after === undefined) return named((args) => value(...args))
   return named((args) =>

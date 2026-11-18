@@ -5,8 +5,10 @@ import type { Effect } from "effect"
 /**
  * Host values a program reaches directly as globals: functions, or objects of functions such as `fs`. Values crossing
  * in either direction are converted, never shared: arguments come in as copies, results go out as copies, and a
- * function inside a result is callable the same way. Extension calls are not tool calls. A global may return a value,
- * a Promise, or an Effect, and an Effect's requirements join the runtime's environment.
+ * function inside a result is callable the same way. When the program passes such a function back, it arrives as
+ * itself, so `Bun.write(dest, Bun.file(src))` can tell what it was given; a global never crosses back, and is left out
+ * like the program's own functions. Extension calls are not tool calls. A global may return a value, a Promise, or an
+ * Effect, and an Effect's requirements join the runtime's environment.
  *
  * A global is synchronous unless it is an `async` function or is marked with `async`. A synchronous global that
  * returns an Effect blocks the program until the Effect completes and returns its value, as `fs.readFileSync` does;
@@ -20,6 +22,8 @@ import type { Effect } from "effect"
 export type Extension<Globals extends Readonly<Record<string, unknown>> = Readonly<Record<string, unknown>>> = {
   readonly name: string
   readonly globals: Globals
+  /** Module names that load one of these globals, as `{ bun: "Bun" }` makes `import { file } from "bun"` work. */
+  readonly modules?: Readonly<Record<string, keyof Globals & string>> | undefined
   /** How a suspended run saves the values this extension's functions returned; see `Snapshot`. */
   readonly snapshot?: Snapshot | undefined
 }
@@ -58,6 +62,7 @@ export const make = <const Globals extends Readonly<Record<string, unknown>>>(
   return {
     name: options.name,
     globals: { ...options.globals },
+    ...(options.modules === undefined ? {} : { modules: { ...options.modules } }),
     ...(options.snapshot === undefined ? {} : { snapshot: options.snapshot }),
   }
 }
@@ -74,3 +79,16 @@ export const async = <F extends Function>(global: F): F => {
 }
 
 export const isAsync = (global: Function) => global instanceof AsyncFunction || asyncGlobals.has(global)
+
+const constructibleGlobals = new WeakSet<Function>()
+
+/**
+ * Lets a program call a function with `new`, as it would a class such as `Bun.Glob`. `new` calls it the same way a
+ * plain call does, and the program gets what it returns.
+ */
+export const constructible = <F extends Function>(global: F): F => {
+  constructibleGlobals.add(global)
+  return global
+}
+
+export const isConstructible = (global: Function) => constructibleGlobals.has(global)

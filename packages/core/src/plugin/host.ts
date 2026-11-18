@@ -50,7 +50,7 @@ const isRpcType = (type: string): type is RpcEvent["type"] => type.startsWith("r
 const isRpcEvent = (event: Event.Payload): event is RpcEvent => isRpcType(event.type)
 const isPublicEvent = (event: Event.Payload): event is EventManifest.ServerEvent | RpcEvent =>
   EventManifest.isServer(event) || isRpcEvent(event)
-export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interface, "list" | "ready">, pluginID: string) {
+export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interface, "list">, pluginID: string) {
   const app = yield* App.Service
   const agents = yield* Agent.Service
   const artifacts = yield* Artifact.Service
@@ -466,11 +466,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
         ),
     },
     plugin: {
-      list: () =>
-        // Readiness first, so a list read after it is never older than a `true`.
-        Effect.all([plugin.ready, response(plugin.list())]).pipe(
-          Effect.map(([ready, listed]) => ({ ...listed, ready })),
-        ),
+      list: () => response(plugin.list()),
     },
     reference: {
       list: () => response(reference.list()),

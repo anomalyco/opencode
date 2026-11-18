@@ -1249,16 +1249,24 @@ export class Vm {
             if (this.fuel <= 0) return 1
             continue
           }
-          case 72: // Op.NEW
-            if (this.execNew(frame, (w >>> 8) & 0xff, pc, sp)) continue outer
+          case 72: {
+            // Op.NEW
+            const made = this.execNew(frame, (w >>> 8) & 0xff, pc, sp)
+            if (made === 1) continue outer
+            if (made === 2) return 2
             sp = frame.sp
             pc++
             continue
-          case 73: // Op.NEW_SPREAD
-            if (this.execNewSpread(frame, pc, sp)) continue outer
+          }
+          case 73: {
+            // Op.NEW_SPREAD
+            const made = this.execNewSpread(frame, pc, sp)
+            if (made === 1) continue outer
+            if (made === 2) return 2
             sp = frame.sp
             pc++
             continue
+          }
           case 74: // Op.ITER_OPEN
             frame.pc = pc
             frame.sp = sp
@@ -1702,7 +1710,7 @@ export class Vm {
     return this.invokeCallable(frame, callee, thisVal, [...argsArr.items], callSiteOf(frame, pc), pc)
   }
 
-  private execNew(frame: Frame, n: number, pc: number, sp: number): boolean {
+  private execNew(frame: Frame, n: number, pc: number, sp: number): number {
     const fcode = frame.code
     const regs = frame.regs
     if (n === 255) {
@@ -1713,7 +1721,7 @@ export class Vm {
         throw notConstructible(callee, fcode.siteAt(pc) as NewExpression)
       }
       frame.sp = sp
-      return false
+      return 0
     }
     frame.pc = pc
     const base = sp - n
@@ -1723,7 +1731,7 @@ export class Vm {
     return this.execConstruct(frame, callee, args, callSiteOf(frame, pc))
   }
 
-  private execNewSpread(frame: Frame, pc: number, sp: number): boolean {
+  private execNewSpread(frame: Frame, pc: number, sp: number): number {
     const regs = frame.regs
     const argsArr = regs[--sp] as Arr
     const callee = regs[--sp] as Builtin
@@ -2177,7 +2185,7 @@ export class Vm {
       const site = callee.callback && callee.call.length < 3 ? undefined : callSiteOf(frame, pc)
       const res = callee.call(thisVal, args, site)
       if (this.tripEvery === 0) this.fuel -= NATIVE_FUEL
-      if ((res as unknown) !== BLOCK && (res === null || typeof res !== "object" || res instanceof Obj)) {
+      if ((res as unknown) !== BLOCK && (res as unknown) !== ENTERED && (res === null || typeof res !== "object" || res instanceof Obj)) {
         normalizeItems(res)
         regs[base - 2] = res
         frame.sp = base - 1
@@ -2272,7 +2280,7 @@ export class Vm {
     throw notAFunction(callNode?.callee, site ?? this.currentSite())
   }
 
-  private execConstruct(callerFrame: Frame, ctor: Builtin, args: Array<Value>, site: AstNode | undefined): boolean {
+  private execConstruct(callerFrame: Frame, ctor: Builtin, args: Array<Value>, site: AstNode | undefined): number {
     conversions.count = 0
     let res: NativeResult
     try {
@@ -2280,7 +2288,7 @@ export class Vm {
     } catch (err) {
       throw locate(err, site ?? this.currentSite())
     }
-    return this.settleNativeResult(callerFrame, res, ctor, ctor, args, true, site, callerFrame.pc) === 1
+    return this.settleNativeResult(callerFrame, res, ctor, ctor, args, true, site, callerFrame.pc)
   }
 
   private settleNativeResult(
@@ -2303,6 +2311,7 @@ export class Vm {
       return 1
     }
     if ((res as unknown) === BLOCK) return 2
+    if ((res as unknown) === ENTERED) return 1
     if (res instanceof Convert) {
       const builtins = this.ctx.builtins
       this.pushInternalCall(
@@ -2904,12 +2913,18 @@ export class Vm {
         frame.pc = pc + 1
         return this.fuel <= 0 ? -3 : pc + 1
       }
-      case Op.NEW:
-        if (this.execNew(frame, a, pc, sp)) return -1
+      case Op.NEW: {
+        const made = this.execNew(frame, a, pc, sp)
+        if (made === 1) return -1
+        if (made === 2) return -4
         return pc + 1
-      case Op.NEW_SPREAD:
-        if (this.execNewSpread(frame, pc, sp)) return -1
+      }
+      case Op.NEW_SPREAD: {
+        const made = this.execNewSpread(frame, pc, sp)
+        if (made === 1) return -1
+        if (made === 2) return -4
         return pc + 1
+      }
       case Op.ITER_OPEN:
         return this.execIterOpen(frame, a, pc, sp)
       case Op.ITER_INIT:

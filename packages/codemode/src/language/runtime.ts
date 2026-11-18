@@ -31,6 +31,23 @@ export type Limits = {
   readonly maxOutputBytes?: number
 }
 
+/**
+ * How a host call's arguments carry program values the host can't hold. Every host function in the runtime gets its
+ * arguments this way; results are not affected.
+ */
+export type Translate = {
+  /**
+   * A program function inside an argument: `"error"` (the default) fails the call; `"drop"` leaves it out, as
+   * `JSON.stringify` does: an object's key is left out, an array's item is `null`, and an argument is `undefined`.
+   */
+  readonly functions?: "error" | "drop" | undefined
+  /**
+   * A program promise inside an argument: `"error"` (the default) fails the call; `"await"` makes the call wait for it
+   * to settle and use its value. A rejection fails the call with its reason.
+   */
+  readonly promises?: "error" | "await" | undefined
+}
+
 /** A runtime's host globals for one run: `Host.fn`, `Host.durableFn`, `Host.namespace`, and plain values of them. */
 export type Globals = Readonly<Record<string, unknown>>
 
@@ -40,7 +57,10 @@ export type Options<G extends Globals = Globals> = {
    * run's own state in `run.metadata`.
    */
   readonly globals?: ((run: Run) => G) | undefined
+  /** Module names that load a global, beyond its own name: `{ bun: "Bun" }` makes `import "bun"` load `Bun`. */
+  readonly modules?: Readonly<Record<string, string>> | undefined
   readonly limits?: Limits | undefined
+  readonly translate?: Translate | undefined
 }
 
 /** Options for `Runtime.program`. */
@@ -106,6 +126,11 @@ export const make = <const G extends Globals = {}>(options: Options<G> = {}): Ru
       maxOutputBytes: validateLimit("maxOutputBytes", options.limits?.maxOutputBytes, 0),
     },
     globals: options.globals,
+    modules: options.modules,
+    translate: {
+      functions: options.translate?.functions ?? "error",
+      promises: options.translate?.promises ?? "error",
+    },
   }
   const program = (code: string, programOptions?: ProgramOptions) =>
     makeProgram(() => Effect.succeed(startProgram(setup, code, programOptions?.bindings, programOptions?.runId)))

@@ -653,7 +653,7 @@ const lowerToolResultOutput = Effect.fnUntraced(function* (
 
 const DEFAULT_EFFORT = "medium"
 
-const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter: ProviderAdapter) {
+export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter: ProviderAdapter) {
   const input: OpenResponsesInputItem[] = []
   const providerMetadataKey = metadataKey(request.model)
   const custom = OpenAIFreeform.tools(request)
@@ -824,12 +824,15 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter:
   return input
 })
 
+// The system prompt leads `input` as a developer message: GPT-6.2 models never cache top-level `instructions`.
 export const lowerConversation = Effect.fnUntraced(function* (request: LLMRequest, adapter: ProviderAdapter) {
-  const instructions = ProviderShared.joinText(request.system)
+  const system = ProviderShared.joinText(request.system)
   return {
     model: request.model.id,
-    input: yield* lowerMessages(request, adapter),
-    ...(instructions ? { instructions } : {}),
+    input: [
+      ...(system ? [{ type: "message" as const, role: "developer" as const, content: system }] : []),
+      ...(yield* lowerMessages(request, adapter)),
+    ],
   }
 })
 

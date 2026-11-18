@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test"
+import { expect, test, type Locator, type Page } from "@playwright/test"
 import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
 import {
   NO_PROVIDER,
@@ -504,12 +504,37 @@ test("option arrows move to the previous or next tab, and with shift to the next
   await expectPath(page, sessionHref(c.id))
 })
 
-for (const navigation of ["horizontal", "vertical", "keyboard", "numbered"] as const) {
-  test(`switching session tabs restores the caret and pastes into the destination draft (${navigation})`, async ({
+const clickTab = (_: Page, tab: Locator) => tab.click()
+
+const press = (key: string) => (page: Page) => page.keyboard.press(key)
+
+for (const row of [
+  { navigation: "horizontal", toB: clickTab, toA: press("Control+Alt+ArrowLeft"), backToB: clickTab },
+  { navigation: "vertical", toB: clickTab, toA: press("Control+Alt+ArrowLeft"), backToB: clickTab },
+  {
+    navigation: "keyboard",
+    toB: press("Control+Alt+ArrowRight"),
+    toA: press("Control+Alt+ArrowLeft"),
+    backToB: clickTab,
+  },
+  {
+    navigation: "numbered",
+    // Pressed in a titlebar control, which stays mounted and keeps focus while the destination composer mounts.
+    toB: async (page: Page) => {
+      const home = page.locator('[data-slot="titlebar-v2"]').getByRole("button", { name: "Home", exact: true })
+      await home.focus()
+      await expect(home).toBeFocused()
+      await page.keyboard.press("ControlOrMeta+2")
+    },
+    toA: press("ControlOrMeta+1"),
+    backToB: press("ControlOrMeta+2"),
+  },
+]) {
+  test(`switching session tabs restores the caret and pastes into the destination draft (${row.navigation})`, async ({
     page,
     context,
   }) => {
-    const tabLayout = navigation === "vertical" ? "vertical" : "horizontal"
+    const tabLayout = row.navigation === "vertical" ? "vertical" : "horizontal"
 
     const strip = page.locator(
       tabLayout === "vertical" ? '[data-slot="vertical-tabs-sidebar"]' : '[data-slot="titlebar-tabs"]',
@@ -525,24 +550,14 @@ for (const navigation of ["horizontal", "vertical", "keyboard", "numbered"] as c
     const tabB = strip.locator(`[data-titlebar-tab-link][href="${sessionHref(b.id)}"]`)
     await editor.fill("Draft A")
 
-    if (navigation === "keyboard") await page.keyboard.press("Control+Alt+ArrowRight")
-
-    if (navigation === "numbered") {
-      // A titlebar control stays mounted across sessions, so it still holds focus when the destination composer mounts.
-      const home = page.locator('[data-slot="titlebar-v2"]').getByRole("button", { name: "Home", exact: true })
-      await home.focus()
-      await expect(home).toBeFocused()
-      await page.keyboard.press("ControlOrMeta+2")
-    }
-
-    if (navigation === "horizontal" || navigation === "vertical") await tabB.click()
+    await row.toB(page, tabB)
     await expectPath(page, sessionHref(b.id))
     await expect(editor).toBeFocused()
     await page.evaluate(() => navigator.clipboard.writeText("Draft B"))
     await page.keyboard.press("ControlOrMeta+V")
     await expect(editor).toHaveText("Draft B")
 
-    await page.keyboard.press(navigation === "numbered" ? "ControlOrMeta+1" : "Control+Alt+ArrowLeft")
+    await row.toA(page)
     await expectPath(page, sessionHref(a.id))
     await expect(editor).toBeFocused()
     await expect(editor).toHaveText("Draft A")
@@ -550,7 +565,7 @@ for (const navigation of ["horizontal", "vertical", "keyboard", "numbered"] as c
     await page.keyboard.press("ControlOrMeta+V")
     await expect(editor).toHaveText("Draft A appended")
 
-    await (navigation === "numbered" ? page.keyboard.press("ControlOrMeta+2") : tabB.click())
+    await row.backToB(page, tabB)
     await expectPath(page, sessionHref(b.id))
     await expect(editor).toBeFocused()
     await expect(editor).toHaveText("Draft B")

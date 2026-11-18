@@ -475,12 +475,10 @@ describe("first-class promise values", () => {
 })
 
 describe("promises at data boundaries", () => {
-  test("an un-awaited promise inside a result is awaited; inside a tool argument it fails the call", async () => {
+  test("an un-awaited promise inside a result or a tool argument is awaited", async () => {
     expect(await value(`return { result: tools.host.echo({ id: 1 }) }`)).toEqual({ result: 1 })
     expect(await value(`return Array.from([Promise.resolve(1)])`)).toEqual([1])
-    expect((await error(`return await tools.host.echo({ id: tools.host.echo({ id: 1 }) })`)).message).toContain(
-      "un-awaited Promise",
-    )
+    expect(await value(`return await tools.host.echo({ id: tools.host.echo({ id: 1 }) })`)).toBe(1)
   })
 
   test("a rejected promise inside a result fails the program with its reason", async () => {

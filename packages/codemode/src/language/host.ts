@@ -2,11 +2,12 @@ import type { Code } from "./code.js"
 import { DurableFn, Fn } from "./host-function.js"
 import type { Interpreter } from "./runtime/interpreter.js"
 import type { AstNode, Diagnostic } from "./runtime/model.js"
-import type { PromiseObj, Value } from "./runtime/objects.js"
+import { internalCode } from "./internal-prelude.js"
+import { Arr, type PromiseObj, type Value } from "./runtime/objects.js"
 import { promiseLike } from "./runtime/promises.js"
 import type { Completion } from "./runtime/signals.js"
 import { HostCall, type HostPolicy, Resolving } from "./scheduler.js"
-import type { FrameMode } from "./vm.js"
+import { type FrameMode, Mode } from "./vm.js"
 
 // The VM's side of host work (plan §4.10): calls to host functions, the host calls they queue, and the blocking call
 // a job may wait on.
@@ -81,31 +82,41 @@ export class HostCalls {
   ) {}
 
   /**
-   * Calls a host function from the program. Its arguments cross to the host now. An `async` or durable function's
-   * call is queued and the program gets its promise; a failure crossing rejects it. Any other is called now: its value
-   * crosses back at once, a Promise it returned is a promise, and an Effect blocks the job until it completes.
+   * Calls a host function from the program, which reached it as `callee`. Its arguments cross to the host now. An
+   * `async` or durable function's call is queued and the program gets its promise; a failure crossing rejects it. Any
+   * other is called now: its value crosses back at once, a Promise it returned is a promise, and an Effect blocks the
+   * job until it completes. When the runtime awaits promises in arguments and one hasn't fulfilled, the call waits for
+   * them (see `wait`) first.
    */
   call(
     fn: Fn<unknown> | DurableFn<unknown>,
     values: Array<Value>,
     site: AstNode | undefined,
     target: HostTarget,
+    callee: Value,
   ): HostResult {
     const hosts = this.ctx.hosts!
+    const waiting: Array<PromiseObj> = []
+    // The host functions that cross back among the arguments, when the function takes them.
+    const back: Array<Function> | undefined = fn instanceof Fn && fn.takesFunctions ? [] : undefined
     if (fn instanceof DurableFn || fn.type === "async") {
       const resolving = this.promises.resolving(this.promises.newPromise(), site)
       let args: ReadonlyArray<unknown>
       try {
-        args = hosts.toHost(values, target.label)
+        args = hosts.toHost(values, target.label, waiting, back)
       } catch (error) {
         resolving.reject(error)
         return resolving.promise
       }
+      if (waiting.length > 0) return this.wait(waiting, callee, values, site, resolving)
       const policy = fn instanceof DurableFn ? "durable" : fn.idempotent ? "idempotent" : "async"
-      this.queue(target, policy, args, false, resolving, site).fn = fn
+      const call = this.queue(target, policy, args, false, resolving, site)
+      call.fn = fn
+      call.holdsFunctions = back !== undefined && back.length > 0
       return resolving.promise
     }
-    const args = hosts.toHost(values, target.label)
+    const args = hosts.toHost(values, target.label, waiting, back)
+    if (waiting.length > 0) return this.wait(waiting, callee, values, site)
     const id = this.nextID++
     const result = hosts.invoke(fn, args, `${this.runId}:${id}`, target.label)
     if (result.kind === "value") {
@@ -118,6 +129,27 @@ export class HostCalls {
     this.queued.push(call)
     this.blocked = call
     return BLOCK
+  }
+
+  // Waits in the program for the promises, then calls `callee` again with the same arguments, which cross with their
+  // values now. A sync function's call waits where it is, as an `await` would; an async one's settles `resolving`.
+  private wait(
+    promises: Array<PromiseObj>,
+    callee: Value,
+    values: Array<Value>,
+    site: AstNode | undefined,
+    resolving?: Resolving,
+  ): HostResult {
+    const builtins = this.ctx.builtins
+    this.ctx.vm.pushInternal(
+      internalCode("$vmHostWait"),
+      [new Arr(builtins.Array, promises), callee, new Arr(builtins.Array, values)],
+      site,
+      resolving === undefined ? Mode.CALLER : Mode.ASYNC,
+      resolving,
+      resolving?.promise,
+    )
+    return ENTERED
   }
 
   // What a host function left pending (a Promise, or an Effect): the program holds a promise for it.
