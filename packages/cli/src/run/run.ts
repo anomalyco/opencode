@@ -2,6 +2,7 @@ import { Service, type Endpoint } from "@opencode/client/effect/service"
 import { OpenCode, type SessionMessageAssistantTool } from "@opencode/client/promise"
 import { FSUtil } from "@opencode/util/fs-util"
 import { noTimeoutFetch } from "@opencode/util/no-timeout-fetch"
+import { constants } from "node:fs"
 import { open } from "node:fs/promises"
 import path from "node:path"
 import { readStdin, readStdinIfReady } from "../util/io"
@@ -169,7 +170,10 @@ export function parseRunModel(value?: string) {
 
 async function prepareFile(input: string, directory: string): Promise<FilePart> {
   const file = path.resolve(directory, input)
-  const handle = await open(file, "r").catch(() => fail(`File not found: ${input}`))
+  // A blocking open waits for a FIFO's writer, so open non-blocking and let the isFile() check reject it.
+  const handle = await open(file, constants.O_RDONLY | constants.O_NONBLOCK).catch(() =>
+    fail(`File not found: ${input}`),
+  )
   try {
     const stat = await handle.stat()
     if (!stat.isFile() || stat.size > ATTACH_FILE_MAX_BYTES)

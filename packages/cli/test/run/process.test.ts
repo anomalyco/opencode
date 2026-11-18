@@ -139,3 +139,31 @@ posix(
   },
   30_000,
 )
+
+// Windows has no FIFOs.
+posix(
+  "run rejects a FIFO attachment without waiting for a writer",
+  async () => {
+    await using directory = await tmpdir()
+    const fake = await serve(directory.path)
+    expect(Bun.spawnSync(["mkfifo", path.join(directory.path, "fifo.txt")]).exitCode).toBe(0)
+    const child = spawnRun(
+      fake.server.url.toString(),
+      directory.path,
+      ["--file", "fifo.txt", "inspect this file"],
+      "ignore",
+    )
+    try {
+      expect(await new Response(child.stderr).text()).toContain(
+        "Cannot attach a directory, special file, or file larger than 10 MiB: fifo.txt",
+      )
+      expect(await child.exited).toBe(1)
+      expect(fake.requests.some((item) => item.path.endsWith("/prompt"))).toBe(false)
+    } finally {
+      child.kill("SIGKILL")
+      await child.exited
+      await fake.server.stop(true)
+    }
+  },
+  30_000,
+)
