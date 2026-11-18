@@ -11,9 +11,11 @@
 
 aho-corasick
 atomic-waker
+autocfg
 base64
 bitflags
 block-buffer
+bstr
 bytes
 cc
 cfg-if
@@ -23,6 +25,7 @@ cpufeatures
 crypto-common
 data-encoding
 digest
+either
 equivalent
 errno
 find-msvc-tools
@@ -48,15 +51,25 @@ idna_adapter
 indexmap
 ipnet
 itoa
+jobserver
 libc build
 linux-raw-sys
+lock_api
 log
+luau0-src git
+maybe-dangling
 memchr
 mio
+mlua git
+mlua-sys build cc git
+num-traits build
 once_cell
 openssl-probe
+parking_lot
+parking_lot_core build
 percent-encoding
 pin-project-lite
+pkg-config
 proc-macro2 build
 quote build
 rand
@@ -66,12 +79,14 @@ regex-automata
 regex-syntax
 reqwest
 ring build cc
+rustc-hash
 rustix build
 rustls build
 rustls-native-certs
 rustls-pki-types
 rustls-platform-verifier
 rustls-webpki
+scopeguard
 serde build
 serde_core build
 serde_derive proc-macro
@@ -156,22 +171,8 @@ zmij build
 
 [optional]
 # Third-party crates only non-default features bring in, over normal, build and dev edges of the whole workspace
-# with --all-features. The same rules apply. opencode-plugin's `luau` feature (Luau plugins, off by default) brings all
-# of these in, accepted by O-168 (the O-58 decision for `luau-spike`); mlua and mlua-sys from mlua's git at Luau 747,
-# and maybe-dangling, which that mlua adds, by O-172; luau0-src from simonklee/luau-src-rs's git, by O-176.
+# with --all-features. The same rules apply. Empty: the `luau` feature is on by default (O-178), so the crates it brings
+# in are in the shipped graph above, accepted by O-168 (the O-58 decision for `luau-spike`); mlua and mlua-sys from
+# mlua's git at Luau 747, and maybe-dangling, which that mlua adds, by O-172; luau0-src from simonklee/luau-src-rs's
+# git, by O-176.
 
-autocfg
-bstr
-either
-jobserver
-lock_api
-luau0-src git
-maybe-dangling
-mlua git
-mlua-sys build cc git
-num-traits build
-parking_lot
-parking_lot_core build
-pkg-config
-rustc-hash
-scopeguard

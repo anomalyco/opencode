@@ -211,6 +211,8 @@ impl Vm {
     /// A new VM for `compiled`, CPU time limited to `limit` a call and the heap to `memory`. The globals are frozen
     /// once it starts; nothing of the plugin has run yet.
     pub(crate) fn new(compiled: &Rc<Compiled>, limit: Duration, memory: usize) -> mlua::Result<Self> {
+        #[cfg(test)]
+        MADE.with(|made| made.set(made.get() + 1));
         let lua = Lua::new();
         lua.set_memory_limit(memory)?;
         pace(&lua)?;
@@ -303,6 +305,18 @@ impl Vm {
     pub(crate) fn interrupts(&self) -> u32 {
         self.budget.fired.get()
     }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// How many VMs this thread made: a plugin's VM is made on the UI thread, a test's own.
+    static MADE: Cell<usize> = const { Cell::new(0) };
+}
+
+/// How many VMs this thread made.
+#[cfg(test)]
+pub(crate) fn made() -> usize {
+    MADE.with(Cell::get)
 }
 
 /// The outermost call of a VM, from its start until it drops, also by unwinding: the budget armed, the call watched by

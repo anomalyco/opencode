@@ -56,7 +56,7 @@ indexmap = { version = "2", features = ["serde"] }
 libc = "0.2"
 log = { version = "0.4", features = ["std"] }
 memchr = "2"
-# Luau plugins, behind opencode-plugin's `luau` feature (spike `luau-spike`): Luau's VM and compiler. Values cross as
+# Luau plugins, behind opencode-plugin's default feature `luau` (O-178): Luau's VM and compiler. Values cross as
 # JSON (`crates/plugin/src/luau/json.rs`), so mlua's own serde is off.
 mlua = { version = "0.12", features = ["luau"] }
 notify = "8"

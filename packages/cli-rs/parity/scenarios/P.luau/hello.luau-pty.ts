@@ -1,9 +1,9 @@
 // A Luau plugin under a real terminal (spike `luau-spike`): the quick start in Luau on the Rust side
-// (`crates/plugin/examples/luau/hello`, in a build with the `luau` feature and `OPENCODE_PLUGIN_LUAU=1`) against its
-// TypeScript twin (`parity/plugins/luau-hello/tui.tsx`), in one `plugins` directory: its line closes the home footer,
-// and `/hello` shows its toast. A default build has no Luau, so the suite's `*.pty.ts` glob leaves this file out; run
-// it by path with OPENCODE_RS_BIN naming a build with the feature:
-//   OPENCODE_RS_BIN=<opencode-native built with --features luau> bun run parity:pty parity/scenarios/P.luau/hello.luau-pty.ts
+// (`crates/plugin/examples/luau/hello`; Luau plugins are on by default, O-178) against its TypeScript twin
+// (`parity/plugins/luau-hello/tui.tsx`), in one `plugins` directory: its line closes the home footer, and `/hello` shows
+// its toast. The suite's `*.pty.ts` glob still leaves this file out, from when a default build had no Luau; run it by
+// path:
+//   bun run parity:pty parity/scenarios/P.luau/hello.luau-pty.ts
 import { copyFile, mkdir, readdir } from "node:fs/promises"
 import path from "node:path"
 import { parityRoot } from "../../cli/client"
@@ -17,7 +17,7 @@ export default definePty({
   rows: 30,
   server: { fallback: "tui" },
   // The TS client run from source is on the `local` channel, which shows its devtools bar: off, as Rust has none.
-  env: { OPENCODE_PLUGIN_LUAU: "1", OPENCODE_CLI_CONFIG_CONTENT: JSON.stringify({ debug: { devtools: false } }) },
+  env: { OPENCODE_CLI_CONFIG_CONTENT: JSON.stringify({ debug: { devtools: false } }) },
   setup: async (root) => {
     const directory = path.join(root, "home/.config/opencode/plugins/hello")
     await mkdir(directory, { recursive: true })

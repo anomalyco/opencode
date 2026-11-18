@@ -105,14 +105,8 @@ impl std::fmt::Debug for Find {
     }
 }
 
-/// Whether `OPENCODE_PLUGIN_JS`, as `value`, turns the JS host off: `0`, `false` or `off` (in any case, O-166). Unset,
-/// empty or anything else leaves it on.
-pub fn turned_off(value: Option<&std::ffi::OsStr>) -> bool {
-    value.and_then(|value| value.to_str()).is_some_and(|value| {
-        let value = value.trim();
-        value == "0" || value.eq_ignore_ascii_case("false") || value.eq_ignore_ascii_case("off")
-    })
-}
+/// Whether `OPENCODE_PLUGIN_JS`, as `value`, turns the JS host off ([`crate::turned_off`], O-166).
+pub use crate::turned_off;
 
 impl Config {
     pub fn new(bun: PathBuf) -> Self {
