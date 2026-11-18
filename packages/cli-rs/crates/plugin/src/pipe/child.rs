@@ -1140,6 +1140,23 @@ mod tests {
         (Child::spawn(command, limits, || {}).unwrap(), dir)
     }
 
+    /// Waits, taking nothing, until the `count` messages a [`fake`] child sends have all reached the inbox, or the
+    /// stream ended; then takes what came. A take starts the inbox's bounds again, so a row about a flood waits so, not
+    /// for a time (pipe-flakes: 300 ms was shorter than the child's start under load).
+    fn flooded(child: &Child, count: usize) -> Vec<Event> {
+        let begun = Instant::now();
+        loop {
+            let inbox = lock(&child.shared.inbox);
+            if inbox.events.len() >= count || inbox.events.iter().any(|event| matches!(event, Event::Gone(..))) {
+                break;
+            }
+            drop(inbox);
+            assert!(begun.elapsed() < Duration::from_secs(20), "the child's {count} messages never came");
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        child.take()
+    }
+
     fn control(up: &Up) -> Vec<u8> {
         wire::encode(wire::CONTROL, &serde_json::to_vec(up).unwrap())
     }
@@ -1235,8 +1252,7 @@ mod tests {
             frames.extend(effects("quiet"));
             (0..count).for_each(|_| frames.extend(effects("loud")));
             let (child, _dir) = fake(&frames, limits);
-            std::thread::sleep(Duration::from_millis(300));
-            let events = child.take();
+            let events = flooded(&child, count + 2);
             let why = events.iter().find_map(|event| match event {
                 Event::Gone(why, plugin) => Some((why.clone(), plugin.clone())),
                 _ => None,
@@ -1257,8 +1273,7 @@ mod tests {
             frames.extend(entered(None));
         }
         let (child, _dir) = fake(&frames, Limits { ordered: 16, ..Limits::default() });
-        std::thread::sleep(Duration::from_millis(300));
-        let blamed = child.take().into_iter().find_map(|event| match event {
+        let blamed = flooded(&child, 17).into_iter().find_map(|event| match event {
             Event::Gone(_, plugin) => Some(plugin),
             _ => None,
         });
@@ -1271,8 +1286,7 @@ mod tests {
         let mut frames = hello();
         (0..9).for_each(|index| frames.extend(watch("watcher", &format!("k{index}"))));
         let (child, _dir) = fake(&frames, limits);
-        std::thread::sleep(Duration::from_millis(300));
-        let blamed = child.take().into_iter().find_map(|event| match event {
+        let blamed = flooded(&child, 10).into_iter().find_map(|event| match event {
             Event::Gone(_, plugin) => Some(plugin),
             _ => None,
         });
@@ -1284,8 +1298,7 @@ mod tests {
         (0..6).for_each(|_| frames.extend(log("chatty", 10)));
         frames.extend(log("heavy", 2000));
         let (child, _dir) = fake(&frames, Limits { inbox: 2048, ..limits });
-        std::thread::sleep(Duration::from_millis(300));
-        let blamed = child.take().into_iter().find_map(|event| match event {
+        let blamed = flooded(&child, 8).into_iter().find_map(|event| match event {
             Event::Gone(_, plugin) => Some(plugin),
             _ => None,
         });
@@ -1300,11 +1313,22 @@ mod tests {
         let mut frames = hello();
         (1..=20).for_each(|rev| frames.extend(tree(rev)));
         let (child, _dir) = fake(&frames, limits);
-        std::thread::sleep(Duration::from_millis(300));
+        // The reader holds back once the bound's worth wait, before it delivers the next (pipe-flakes: a sleep of 300 ms
+        // was shorter than the child's start under load, and nothing had come).
+        let begun = Instant::now();
+        while !child.shared.held.load(Ordering::Acquire) {
+            assert!(begun.elapsed() < Duration::from_secs(20), "the reader was never held back");
+            std::thread::sleep(Duration::from_millis(1));
+        }
         let first = child.take();
         let trees = |events: &[Event]| events.iter().filter(|event| matches!(event, Event::Tree(_))).count();
         assert_eq!(trees(&first), 4, "{first:?}");
-        let rest = take_until(&child, |events| trees(events) >= 16);
+        let mut rest = Vec::new();
+        while trees(&rest) < 16 {
+            assert!(begun.elapsed() < Duration::from_secs(20), "{} of the rest came", trees(&rest));
+            rest.extend(child.take());
+            std::thread::sleep(Duration::from_millis(2));
+        }
         assert_eq!(trees(&rest), 16);
     }
 
@@ -1499,8 +1523,7 @@ mod tests {
             let mut frames = hello();
             (0..count).for_each(|_| frames.extend(&effects));
             let (child, _dir) = fake(&frames, limits);
-            std::thread::sleep(Duration::from_millis(300));
-            let why = child.take().into_iter().find_map(|event| match event {
+            let why = flooded(&child, count + 1).into_iter().find_map(|event| match event {
                 Event::Gone(_, plugin) => Some(plugin),
                 _ => None,
             });
