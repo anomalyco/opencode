@@ -31,6 +31,14 @@ export default ({ after, during, text }: Helpers) => ({
     "(() => { try { search({ query: { toJSON: () => 'echo' }, p: Promise.reject(new Error('no')) }) } catch (e) { return [e.name, e.message] } })()",
     "(() => { try { search({ p: Promise.resolve(1), query: { toJSON() { throw new Error('tj') } } }) } catch (e) { return [e.name, e.message] } })()",
     "await Promise.resolve(1).then((x) => search({ query: { toJSON: () => 'echo' }, p: Promise.resolve(x) }).items.length + x)",
+    // A key or part converted by the program's toString or valueOf inside the loop over the entries or pairs.
+    // An entry holding a function is rejected, so a key's methods are inherited.
+    "Object.fromEntries([[Object.create({ toString: () => 'k' + S(1) }), 1], ['b', 2]])",
+    "Object.fromEntries([[Object.create({ toString: () => ({}), valueOf: () => S(3) }), 'v']])",
+    `Object.fromEntries(${iterable("[Object.create({ toString: () => 'k' + S(++n) }), n]")})`,
+    "[...new URLSearchParams([[{ toString: () => 'a' + S(1) }, 'b'], ['c', { toString: () => 'd' + S(2) }]])]",
+    "[...new Headers([[{ toString: () => 'x-' + S(1) }, { toString: () => 'v' + S(2) }]])]",
+    `[...new URLSearchParams(${iterable("[{ toString: () => 'k' + S(++n) }, n]")})]`,
   ] as Array<string>,
   programs: [
     // A search inside a toJSON of the program's result.
@@ -106,6 +114,13 @@ export default ({ after, during, text }: Helpers) => ({
     `const t = { toJSON(k) { return { k, n: { toJSON: (k2) => k2 + '!' } } } }; return [await tools.t.echo({ t, u: [t] }), await tools.t.echo({ t, p: Promise.resolve(1) }), search({ query: 'echo', t }).items.length]`,
     `return [{ t: { toJSON() { return Promise.resolve(5) } } }, await tools.t.echo({ t: { toJSON() { return Promise.resolve(5) } } })]`,
     `try { return [{ toJSON: () => 'echo' }].map((q) => search.call(null, { query: q, p: Promise.resolve(1) }).items.length) } catch (e) { return [e.name, e.message] }`,
+    // A key or part whose conversion throws closes the iterator; the order of the conversions against the reads.
+    `const log = []; const it = { [Symbol.iterator]() { return { next: () => ({ done: false, value: [Object.create({ toString() { throw new Error('ts') } }), 1] }), return: () => (log.push('closed'), {}) } } }
+     try { Object.fromEntries(it) } catch (e) { log.push(e.message) } return log`,
+    `const log = []; const it = { [Symbol.iterator]() { return { next: () => ({ done: false, value: [{ toString() { throw new Error('ts') } }, 'v'] }), return: () => (log.push('closed'), {}) } } }
+     try { new URLSearchParams(it) } catch (e) { log.push(e.message) } try { new Headers(it) } catch (e) { log.push(e.message) } return log`,
+    `const log = []; const key = (k) => Object.create({ toString() { log.push('ts ' + k); return k } }); const it = { [Symbol.iterator]() { let n = 0; return { next() { log.push('next ' + n); return n < 2 ? { done: false, value: [key('k' + n), n++] } : { done: true } } } } }
+     return [Object.fromEntries(it), String(new URLSearchParams(it)), log]`,
   ] as Array<string>,
   suspensions: [
     `const p = fetch(${JSON.stringify(text)}); const s = JSON.stringify({ a: [1, { toJSON() { ${busy} return 2 } }], b: 'x' }, null, 1); const r = await p; return [r.status, s]`,
@@ -121,5 +136,9 @@ export default ({ after, during, text }: Helpers) => ({
     `return await tools.t.echo({ w: tools.wait({}), a: { toJSON() { for (let i = 0; i < 2000000; i++) {} return 2 } } })`,
     `function f() { return search({ query: { toJSON: () => 'echo' }, w: tools.wait({}) }).items.length } return [f(), 1]`,
     `function f() { return search({ w: tools.wait({}), query: { toJSON: () => 'echo' } }).items.length } return [f(), 1]`,
+    // Suspended inside the toString of an entry's key or a pair's part.
+    `return Object.fromEntries([[Object.create({ toString: () => 'k' + search({ query: tools.wait({}).then(() => 'echo') }).items.length }), 1]])`,
+    `return String(new URLSearchParams([['a', { toString: () => 'b' + search({ query: tools.wait({}).then(() => 'echo') }).items.length }]]))`,
+    `return [...new Headers([[Object.create({ toString: () => 'x-' + search({ query: tools.wait({}).then(() => 'echo') }).items.length }), 'v']])]`,
   ] as Array<string>,
 })

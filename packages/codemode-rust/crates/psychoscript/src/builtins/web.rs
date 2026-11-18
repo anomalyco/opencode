@@ -587,21 +587,43 @@ impl crate::native::ForOf for Pair {
         fr: crate::native::Frame,
         part: Value,
     ) -> Result<crate::native::Flow, Value> {
-        let s = vm.string_of(&part)?;
-        super::fuel::native(vm);
-        let parts = fr
-            .get(vm, crate::native::FOR_OF_SLOTS)
-            .as_obj()
-            .unwrap_or(0);
-        if let Kind::Array(items) = &mut vm.heap[parts as usize].kind {
-            items.push(Value::Str(s));
+        if vm.converts_by_call(&part, crate::ops::Hint::String) {
+            let step = super::convert_catching(vm, fr, part, crate::ops::Hint::String)?;
+            return Ok(crate::native::Flow::Call(step));
         }
-        Ok(crate::native::Flow::Next)
+        push_part(vm, fr, part)
+    }
+
+    /// A part converted by a call.
+    fn returned(
+        vm: &mut Vm,
+        fr: crate::native::Frame,
+        r: crate::value::Slot,
+    ) -> Result<crate::native::Flow, Value> {
+        push_part(vm, fr, r.get())
     }
 
     fn finish(vm: &mut Vm, fr: crate::native::Frame) -> Res {
         Ok(fr.get(vm, crate::native::FOR_OF_SLOTS))
     }
+}
+
+/// A part of a pair made a string and kept.
+fn push_part(
+    vm: &mut Vm,
+    fr: crate::native::Frame,
+    part: Value,
+) -> Result<crate::native::Flow, Value> {
+    let s = vm.string_of(&part)?;
+    super::fuel::native(vm);
+    let parts = fr
+        .get(vm, crate::native::FOR_OF_SLOTS)
+        .as_obj()
+        .unwrap_or(0);
+    if let Kind::Array(items) = &mut vm.heap[parts as usize].kind {
+        items.push(Value::Str(s));
+    }
+    Ok(crate::native::Flow::Next)
 }
 
 fn params_ctor(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {

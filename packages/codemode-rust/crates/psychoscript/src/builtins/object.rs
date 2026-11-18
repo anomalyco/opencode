@@ -250,20 +250,39 @@ fn object_from_entries(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) ->
         callee,
         Value::Undef,
         source,
-        &[Value::Obj(id)],
+        &[Value::Obj(id), Value::Undef],
     )
 }
 
-/// `Object.fromEntries` over its entries: its own slot is the object it fills.
+/// `Object.fromEntries` over its entries: its own slots are the object it fills and the value of an entry whose key
+/// is converted by a call.
 struct FromEntries;
 
 impl crate::native::ForOf for FromEntries {
     fn item(vm: &mut Vm, fr: crate::native::Frame, x: Value) -> Result<crate::native::Flow, Value> {
-        let id = fr
-            .get(vm, crate::native::FOR_OF_SLOTS)
-            .as_obj()
-            .unwrap_or(0);
-        from_entry(vm, id, &x)?;
+        // One entry: `$IsObject`, `String` of its key, `$Define`.
+        fuel::native(vm);
+        if !matches!(x, Value::Obj(_)) || contains_opaque(vm, &x, &mut Vec::new()) {
+            return Err(vm.type_error("Object.fromEntries expects [key, value] entry objects."));
+        }
+        let k = vm.get_elem(&x, &Value::Num(0.0))?;
+        let v = vm.get_elem(&x, &Value::Num(1.0))?;
+        if vm.converts_by_call(&k, Hint::String) {
+            fr.set(vm, crate::native::FOR_OF_SLOTS + 1, v);
+            let step = super::convert_catching(vm, fr, k, Hint::String)?;
+            return Ok(crate::native::Flow::Call(step));
+        }
+        define_entry(vm, fr, &k, v)?;
+        Ok(crate::native::Flow::Next)
+    }
+
+    fn returned(
+        vm: &mut Vm,
+        fr: crate::native::Frame,
+        r: crate::value::Slot,
+    ) -> Result<crate::native::Flow, Value> {
+        let v = fr.get(vm, crate::native::FOR_OF_SLOTS + 1);
+        define_entry(vm, fr, &r.get(), v)?;
         Ok(crate::native::Flow::Next)
     }
 
@@ -273,15 +292,13 @@ impl crate::native::ForOf for FromEntries {
     }
 }
 
-/// One entry: `$IsObject`, `String` of its key, `$Define`.
-fn from_entry(vm: &mut Vm, id: Id, item: &Value) -> Result<(), Value> {
-    fuel::native(vm);
-    if !matches!(item, Value::Obj(_)) || contains_opaque(vm, item, &mut Vec::new()) {
-        return Err(vm.type_error("Object.fromEntries expects [key, value] entry objects."));
-    }
-    let k = vm.get_elem(item, &Value::Num(0.0))?;
-    let v = vm.get_elem(item, &Value::Num(1.0))?;
-    let a = vm.key_of(&k)?;
+/// An entry's key made a property key, then its value defined.
+fn define_entry(vm: &mut Vm, fr: crate::native::Frame, k: &Value, v: Value) -> Result<(), Value> {
+    let id = fr
+        .get(vm, crate::native::FOR_OF_SLOTS)
+        .as_obj()
+        .unwrap_or(0);
+    let a = vm.key_of(k)?;
     fuel::native(vm);
     vm.define(id, a, v);
     fuel::native(vm);
