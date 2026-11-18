@@ -1,0 +1,8 @@
+{
+  "bindings": {},
+  "ok": false,
+  "kind": "UnsupportedSyntax",
+  "logs": [
+    "before"
+  ]
+}

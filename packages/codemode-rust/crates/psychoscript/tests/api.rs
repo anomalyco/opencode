@@ -78,6 +78,26 @@ fn unsupported_syntax_has_a_location() {
         .unwrap_err();
     assert_eq!(d.kind, DiagnosticKind::UnsupportedSyntax);
     assert_eq!(d.location, Some((2, 11)));
+    // As the reference reports it: the node type, then the orientation it also suggests (the streaming recording
+    // checks the message, not the suggestions).
+    assert_eq!(d.suggestions.len(), 1);
+    assert_eq!(
+        d.message,
+        format!(
+            "SyntaxError: Syntax 'ClassExpression' is not supported. {} (line 2, col 11)",
+            d.suggestions[0]
+        )
+    );
+    // Rethrown, it keeps them.
+    let again = run(
+        &Runtime::new(),
+        "let e; try { class A {} } catch (x) { e = x }\nthrow e",
+    )
+    .result
+    .unwrap_err();
+    assert_eq!(again.kind, DiagnosticKind::UnsupportedSyntax);
+    assert_eq!(again.location, Some((1, 14)));
+    assert_eq!(again.suggestions, d.suggestions);
 }
 
 #[test]
