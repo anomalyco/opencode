@@ -1,15 +1,15 @@
 //! TypeScript: `component/dialog-go-upsell.tsx`, `routes/session/index.tsx:633-758`.
 
 use opencode_api::generated::{
-    ConnectionInfo, IntegrationAttempt, IntegrationAttemptID, IntegrationAttemptStatus, IntegrationID,
-    IntegrationMethod, IntegrationMethodID, IntegrationOauthCancelInput, IntegrationOauthConnectInput,
-    IntegrationOauthStatusInput, LocationQueryInput, ModelInfoStatus,
+    ConnectionInfo, IntegrationAttempt, IntegrationAttemptID, IntegrationID, IntegrationMethod, IntegrationMethodID,
+    IntegrationOauthCancelInput, IntegrationOauthConnectInput, IntegrationOauthStatusInput, LocationQueryInput,
+    ModelInfoStatus,
 };
 use opencode_local::model_pref::Model;
 use opencode_store::Catalog;
 use opencode_ui::dialog::{DIALOG_INSET, DialogCx, FooterAction, FooterProps, footer, layout_view};
 
-use super::go_upsell_art;
+use super::{go_upsell_art, integration};
 use crate::local::Local;
 use crate::prelude::*;
 
@@ -436,11 +436,7 @@ impl Connect {
         let primary = match &attempt {
             Some(attempt) => vec![
                 action(
-                    if super::integration::oauth_code(&attempt.instructions).is_some() {
-                        "copy code"
-                    } else {
-                        "copy link"
-                    },
+                    if integration::oauth_code(&attempt.instructions).is_some() { "copy code" } else { "copy link" },
                     "c",
                     Connect::copy,
                 ),
@@ -553,42 +549,26 @@ impl Connect {
         };
         let client = self.local.client.clone();
         self.local.app.spawn(
-            async move { client.integration_oauth_status(&input).await },
+            integration::oauth_complete(client, input),
             bind!(self, |state, cx, result| {
                 if state.closed.get() {
                     return;
                 }
-                let status = match result {
-                    Ok(output) => output.data,
-                    Err(error) => {
-                        state.settled.set(true);
-                        state.fail(error.to_string());
-                        return;
-                    }
-                };
-                match status {
-                    IntegrationAttemptStatus::Pending(_) => {
-                        state.timer.set(Some(
-                            cx.set_timeout(Duration::from_millis(500), bind!(state, |state, _| state.poll(attempt))),
-                        ));
-                    }
-                    IntegrationAttemptStatus::Complete(_) => {
-                        state.settled.set(true);
-                        state.sync(
-                            true,
-                            bind!(state, |state, outcome| if outcome.is_none() && !state.closed.get() {
-                                state.local.dialogs.clear();
-                            }),
-                        );
-                    }
-                    IntegrationAttemptStatus::Failed(failed) => {
-                        state.settled.set(true);
-                        state.fail(failed.message);
-                    }
-                    _ => {
-                        state.settled.set(true);
-                        state.fail("Authorization expired".into());
-                    }
+                if matches!(result, Ok(false)) {
+                    state.timer.set(Some(
+                        cx.set_timeout(Duration::from_millis(500), bind!(state, |state, _| state.poll(attempt))),
+                    ));
+                    return;
+                }
+                state.settled.set(true);
+                match result {
+                    Ok(_) => state.sync(
+                        true,
+                        bind!(state, |state, outcome| if outcome.is_none() && !state.closed.get() {
+                            state.local.dialogs.clear();
+                        }),
+                    ),
+                    Err(error) => state.fail(error),
                 }
             }),
         );
@@ -690,12 +670,7 @@ impl Connect {
 
     fn copy(&self) {
         let Some(attempt) = self.attempt.borrow().clone() else { return };
-        let value = super::integration::oauth_code(&attempt.instructions).unwrap_or(attempt.url);
-        if crate::features::selection::put(&self.local.app, &value) {
-            self.local.toasts.show(ToastOptions::new(Variant::Info, "Copied to clipboard"));
-            return;
-        }
-        self.local.toasts.error("Could not copy to the clipboard");
+        integration::copy_oauth(&self.local, &attempt, "Could not copy to the clipboard");
     }
 }
 
