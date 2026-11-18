@@ -46,6 +46,25 @@ const LEAST_SLOTS: u64 = 1 << 20;
 /// these, where its slots alone would let it run a few hundred milliseconds.
 const SLOTS_A_WALK: u64 = 32;
 
+/// The theme tokens a color names most, kept as these `'static` names rather than a `String` each: a render of many
+/// spans names a few tokens again and again. Any other token is its own `String`.
+pub(super) const TOKENS: &[&str] = &[
+    "text.base",
+    "text.muted",
+    "text.faint",
+    "text.feedback.error.base",
+    "text.feedback.warning.base",
+    "text.feedback.success.base",
+    "text.feedback.info.base",
+    "text.action.primary.base",
+    "background.base",
+    "background.raised.base",
+    "border.base",
+];
+
+/// The items an array's `Vec` holds before it grows: its length, up to this, as a length is not yet charged.
+const ITEMS_AHEAD: usize = 1024;
+
 /// How deep a value's tables may nest: past the layout depth ([`crate::reconcile::MAX_DEPTH`]) twice over, as a node's
 /// children are a table in a table.
 const DEPTH: usize = 2 * crate::reconcile::MAX_DEPTH as usize;
@@ -180,13 +199,13 @@ impl Decode {
     /// A string value: charged, and UTF-8.
     fn text<'s>(&mut self, bytes: &'s [u8]) -> Result<&'s str, Refused> {
         self.charge_bytes(bytes.len())?;
-        std::str::from_utf8(bytes).map_err(|_| Refused::Value("a string that is not UTF-8".to_owned()))
+        utf8(bytes).ok_or_else(|| Refused::Value("a string that is not UTF-8".to_owned()))
     }
 
     /// A key: charged, and UTF-8.
     fn key<'s>(&mut self, bytes: &'s [u8]) -> Result<&'s str, Refused> {
         self.charge_bytes(bytes.len())?;
-        std::str::from_utf8(bytes).map_err(|_| Refused::Value("a key that is not UTF-8".to_owned()))
+        utf8(bytes).ok_or_else(|| Refused::Value("a key that is not UTF-8".to_owned()))
     }
 
     /// Enters the table at `index`, `depth` deep: a part, within the depth, with room on the VM's stack for a pair and
@@ -463,12 +482,21 @@ impl Decode {
     /// As for [`Decode::top`].
     unsafe fn string(&mut self, state: *mut ffi::lua_State, index: c_int) -> Result<String, Slow> {
         // SAFETY: as the caller's.
+        unsafe { self.str(state, index).map(str::to_owned) }
+    }
+
+    /// A string field, borrowed from the VM.
+    ///
+    /// # Safety
+    /// As for [`Decode::top`].
+    unsafe fn str<'s>(&mut self, state: *mut ffi::lua_State, index: c_int) -> Result<&'s str, Slow> {
+        // SAFETY: as the caller's; the string lives while its table does.
         unsafe {
             if ffi::lua_type(state, index) != ffi::LUA_TSTRING {
                 return Err(Slow::Serde);
             }
             self.charge(1)?;
-            self.text(raw_bytes(state, index)).map(str::to_owned).map_err(Slow::from_field)
+            self.text(raw_bytes(state, index)).map_err(Slow::from_field)
         }
     }
 
@@ -570,10 +598,13 @@ impl Decode {
     /// As for [`Decode::top`].
     unsafe fn color(&mut self, state: *mut ffi::lua_State, index: c_int) -> Result<Option<abi::Color>, Slow> {
         // SAFETY: as the caller's.
-        let text = unsafe { self.string(state, index)? };
-        Ok(Some(match abi::Rgba::parse(&text).filter(|_| text.len() == 9) {
+        let text = unsafe { self.str(state, index)? };
+        Ok(Some(match abi::Rgba::parse(text).filter(|_| text.len() == 9) {
             Some(rgba) => abi::Color::Rgba(rgba),
-            None => abi::Color::Token(Cow::Owned(text)),
+            None => abi::Color::Token(match TOKENS.iter().find(|token| **token == text) {
+                Some(token) => Cow::Borrowed(token),
+                None => Cow::Owned(text.to_owned()),
+            }),
         }))
     }
 
@@ -595,7 +626,8 @@ impl Decode {
     /// # Safety
     /// As for [`Decode::top`].
     unsafe fn spans(&mut self, state: *mut ffi::lua_State, index: c_int, depth: usize) -> Result<Vec<abi::Span>, Slow> {
-        let mut spans = Vec::new();
+        // SAFETY: as the caller's.
+        let mut spans = Vec::with_capacity(unsafe { length(state, index) });
         // SAFETY: as the caller's.
         unsafe {
             self.items(state, index, depth, |decode, at| {
@@ -645,7 +677,8 @@ impl Decode {
         depth: usize,
         node: NodeFn<N>,
     ) -> Result<Vec<N>, Slow> {
-        let mut children = Vec::new();
+        // SAFETY: as the caller's.
+        let mut children = Vec::with_capacity(unsafe { length(state, index) });
         // SAFETY: as the caller's.
         unsafe {
             self.items(state, index, depth + 1, |decode, at| {
@@ -1323,6 +1356,29 @@ unsafe fn raw_bytes<'a>(state: *mut ffi::lua_State, index: c_int) -> &'a [u8] {
         }
         std::slice::from_raw_parts(text.cast::<u8>(), length)
     }
+}
+
+/// The capacity of a `Vec` for the array at `index`: its length, up to [`ITEMS_AHEAD`].
+///
+/// # Safety
+/// `index` is a valid slot of `state`.
+unsafe fn length(state: *mut ffi::lua_State, index: c_int) -> usize {
+    // SAFETY: as documented. Only a table's: `lua_objlen` makes a number on the stack a string.
+    unsafe {
+        if ffi::lua_type(state, index) != ffi::LUA_TTABLE {
+            return 0;
+        }
+        usize::try_from(ffi::lua_objlen_(state, index)).unwrap_or(0).min(ITEMS_AHEAD)
+    }
+}
+
+/// `bytes` as UTF-8: most text a plugin returns is ASCII, which `is_ascii` reads a word at a time.
+fn utf8(bytes: &[u8]) -> Option<&str> {
+    if bytes.is_ascii() {
+        // SAFETY: ASCII is UTF-8.
+        return Some(unsafe { std::str::from_utf8_unchecked(bytes) });
+    }
+    std::str::from_utf8(bytes).ok()
 }
 
 fn type_name(kind: c_int) -> &'static str {

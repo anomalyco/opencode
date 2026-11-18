@@ -1904,6 +1904,15 @@ fn a_tables_slots_are_read_from_its_header() {
     assert_eq!(slots, [1001, 4, 1, 4, 8]);
 }
 
+// Expected (decode-budget): each color token the decoder keeps as a `'static` name is one the theme has.
+#[test]
+fn each_kept_color_token_is_a_theme_token() {
+    let theme =
+        opencode_ui::theme::Catalog::default().load("opencode", opencode_ui::theme::ThemeMode::Dark).unwrap().theme;
+    let unknown: Vec<_> = decode::TOKENS.iter().filter(|token| theme.get(token).is_none()).collect();
+    assert!(unknown.is_empty(), "{unknown:?}");
+}
+
 // Expected (luau-calls): a reused list, set in place only where a call's list differs from the last one's, holds the
 // running call's items and no others: also as a table the plugin kept from an earlier call, after the list grew,
 // shrank, was reordered or emptied, or stayed as it was while a flag changed.
