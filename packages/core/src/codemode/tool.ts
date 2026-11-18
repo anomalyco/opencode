@@ -361,7 +361,6 @@ export const check = (
 function inventoryTools(inventory: Inventory) {
   // A path may carry namespace metadata, a callable tool, child tools, or all three.
   const root: ToolNode = { children: new Map() }
-  for (const namespace of inventory.namespaces?.values() ?? []) getNode(root, namespace.name).namespace = namespace
   for (const [name, registration] of inventory.tools) {
     const child = definition(registration)
     getNode(root, qualifiedName(registration)).tool = Tool.make({
@@ -373,6 +372,14 @@ function inventoryTools(inventory: Inventory) {
       output: child.outputSchema ?? { type: ["string", "null"] },
       execute: (input) => Run.use((run) => run.executeTool(name, registration, input)),
     })
+  }
+  // A namespace is there for the tools under it. With none this caller may use, it is absent as they are: its name,
+  // and what it says of a tool it once had, would tell a caller denied the namespace that it exists and what it holds.
+  for (const namespace of inventory.namespaces?.values() ?? []) {
+    const node = namespace.name
+      .split(".")
+      .reduce<ToolNode | undefined>((parent, name) => parent?.children.get(name), root)
+    if (node) node.namespace = namespace
   }
   return renderTools(root)
 }

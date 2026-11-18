@@ -773,8 +773,59 @@ it.live("an agent denied the browser finds no browser tools through Code Mode's 
         denied.selection,
         'try { await tools.browser.tabs.list({}); return "called" } catch (error) { return String(error?.message ?? error) }',
       ),
-    ).toMatchObject({ output: "Unknown tool 'browser.tabs.list'.", toolCalls: [] })
+    ).toMatchObject({ output: expect.stringMatching(/^Unknown tool 'browser\.tabs\.list'\./), toolCalls: [] })
     expect(browser.commands.count).toBe(1)
+  }),
+)
+
+// A removed name is answered with what to call instead only where the namespace is listed. Anywhere else it must read
+// exactly as any other name does, or the sentence tells a caller denied the browser that it exists and what it has.
+it.live("a removed browser tool is one more unknown tool to a caller that cannot see the browser", () =>
+  Effect.gen(function* () {
+    const attempt = (name: string) =>
+      `try { await tools.browser.${name}({}); return "called" } catch (error) { return String(error?.message ?? error) }`
+
+    // What a name gets in a namespace that never existed: "Unknown tool", and at most a tool the caller can see.
+    const absent = (selection: SessionContext.Selection) =>
+      Effect.gen(function* () {
+        for (const name of ["preview", "click"]) {
+          const answer = yield* codeMode(selection, attempt(name))
+          expect(answer).toMatchObject({ toolCalls: [] })
+          expect(answer.output).toStartWith(`Unknown tool 'browser.${name}'.`)
+          expect(answer.output).not.toMatch(/removed|browser\.(tabs|navigate)/)
+        }
+
+        expect(yield* codeMode(selection, 'return Object.keys(tools).includes("browser")')).toMatchObject({ output: "false" })
+      })
+
+    const browser = yield* setup({ agents: { reviewer: { mode: "primary", permissions: [rule("*", "deny")] } } })
+    const allowed = yield* browser.listing()
+    expect(yield* codeMode(allowed.selection, attempt("preview"))).toMatchObject({
+      output: expect.stringMatching(/^browser\.preview was removed: call browser\.tabs\.open/),
+      toolCalls: [],
+    })
+    expect(yield* codeMode(allowed.selection, 'return Object.keys(tools).includes("browser")')).toMatchObject({ output: "true" })
+
+    // Denied by the agent's rules.
+    const sessions = yield* Session.Service
+    yield* sessions.switchAgent({ sessionID: browser.session.id, agent: Agent.ID.make("reviewer") })
+    yield* absent((yield* browser.listing()).selection)
+
+    // Denied by a rule another plugin's hook adds.
+    const hooked = yield* setup({})
+    yield* Context.get(hooked.context, PluginHooks.Service).register("permission", "experimental.rules", (event) =>
+      Effect.sync(() => event.deny({ action: "browser", resource: "*" })),
+    )
+    const denied = yield* hooked.listing()
+    expect(denied.catalog).toEqual([])
+    yield* absent(denied.selection)
+
+    // A session no desktop is attached to.
+    const unattached = yield* setup({})
+    const lone = yield* sessions.create({ location: unattached.ref })
+    const none = yield* unattached.listing(lone.id)
+    expect(none.catalog).toEqual([])
+    yield* absent(none.selection)
   }),
 )
 
