@@ -411,6 +411,7 @@ function renderEntry(
   if (node.namespace !== undefined)
     return Namespace.make({
       description: node.namespace.description,
+      ...(node.namespace.removed === undefined ? {} : { removed: node.namespace.removed }),
       tools,
     })
   if (node.tool === undefined) return tools

@@ -39,6 +39,11 @@ export interface Context {
 export interface Namespace {
   readonly name: string
   readonly description: string
+  /**
+   * Tools this namespace no longer has, by the name they had under it, each with the one sentence that says what to
+   * call instead. A Code Mode call to one fails with that sentence instead of a guessed suggestion.
+   */
+  readonly removed?: Readonly<Record<string, string>>
 }
 
 interface BaseOptions {

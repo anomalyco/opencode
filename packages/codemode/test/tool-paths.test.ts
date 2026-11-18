@@ -114,6 +114,30 @@ describe("callable namespaces", () => {
     expect(diagnostic.message).toBe("Unknown tool 'issues.get-list'. Did you mean tools.issues.list?")
   })
 
+  test("a tool its namespace says was removed fails with that namespace's sentence, not a guessed tool", async () => {
+    const shown = "pages.show was removed: call pages.open({ path }) to show a file."
+    const focused = "pages.tabs.focus was removed: pages.tabs.list returns the focused tab."
+    const pages = CodeMode.make({
+      tools: {
+        pages: Namespace.make({
+          removed: { show: shown, "tabs.focus": focused },
+          tools: { open: echo("Open a page", "opened"), "tabs.list": echo("List tabs", "listed") },
+        }),
+      },
+    })
+    const diagnostic = await failure(pages, `return await tools.pages.show({ path: "a.html" })`)
+    expect(diagnostic.kind).toBe("UnknownTool")
+    expect(diagnostic.message).toBe(shown)
+    expect(diagnostic.suggestions).toBeUndefined()
+    expect((await failure(pages, `return await tools.pages.tabs.focus({})`)).message).toBe(focused)
+    // Only the names it lists: any other unknown tool still gets the closest match.
+    expect((await failure(pages, `return await tools.pages.opens({})`)).message).toBe(
+      "Unknown tool 'pages.opens'. Did you mean tools.pages.open?",
+    )
+    expect(await value(pages, `return await tools.pages.open({})`)).toBe("opened")
+    expect(pages.catalog.map((tool) => tool.path)).toEqual(["pages.open", "pages.tabs.list"])
+  })
+
   test("a namespace without its own tool stays non-callable", async () => {
     const nested = CodeMode.make({ tools: { "issues.list": echo("List issues", "list") } })
     const diagnostic = await failure(nested, `return await tools.issues({})`)

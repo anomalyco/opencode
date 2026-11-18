@@ -525,10 +525,22 @@ const namespaceKeys = <R>(root: ToolNode<R>, path: ReadonlyArray<string>): Reado
   return Array.from(node.children.keys())
 }
 
+// What the deepest namespace on the way to a missing tool says about it, when that namespace once had the tool.
+const removedTool = <R>(root: ToolNode<R>, segments: ReadonlyArray<string>): string | undefined =>
+  segments
+    .map((_, depth) => {
+      const removed = lookup(root, segments.slice(0, depth))?.namespace?.removed
+      const name = segments.slice(depth).join(".")
+      return removed !== undefined && Object.hasOwn(removed, name) ? removed[name] : undefined
+    })
+    .findLast((sentence) => sentence !== undefined)
+
 const resolve = <R>(root: ToolNode<R>, path: ReadonlyArray<string>, index: ReadonlyArray<SearchEntry>): Tool<R> => {
   const segments = canonicalSegments(path)
   const node = lookup(root, segments)
   if (node === undefined) {
+    const removed = removedTool(root, segments)
+    if (removed !== undefined) throw new ToolRuntimeError("UnknownTool", removed)
     const name = segments.join(".")
     const ns = segments.length > 1 && root.children.has(segments[0]) ? segments[0] : undefined
     const closest = rank(
