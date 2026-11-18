@@ -4461,6 +4461,18 @@
         {
           "type": "object",
           "properties": {
+            "id": {
+              "$ref": "#/$defs/RequestId"
+            },
+            "type": {
+              "const": "cancel-timer"
+            }
+          },
+          "required": ["type", "id"]
+        },
+        {
+          "type": "object",
+          "properties": {
             "type": {
               "const": "owner"
             }

@@ -542,6 +542,8 @@ pub(crate) enum Effect {
     Foreground(abi::RequestId, abi::Foreground, Option<Weak<()>>),
     /// A timer, with the mount that owns it.
     Timer(abi::RequestId, std::time::Duration, Option<Weak<()>>),
+    /// A timer let go of ([`abi::Host::cancel_timer`]).
+    CancelTimer(abi::RequestId),
     Title(String),
     Theme(String),
     InstallTheme(String, serde_json::Value),
@@ -1142,6 +1144,7 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
             ctx.effects.push(Effect::Timer(id, std::time::Duration::from_millis(ms), owning(ctx)));
             return Ok(serde_json::to_value(id).unwrap_or_default());
         }
+        HostRequest::CancelTimer { id } => ctx.effects.push(Effect::CancelTimer(id)),
         HostRequest::Owner => return Ok(crate::owner_id(owning(ctx).as_ref()).into()),
         HostRequest::SetOwner { owner } => {
             if let Some(owners) = &ctx.owners {
@@ -1268,6 +1271,7 @@ fn effect(request: &HostRequest) -> bool {
         | HostRequest::ClearSelection
         | HostRequest::Foreground(_)
         | HostRequest::Timer { .. }
+        | HostRequest::CancelTimer { .. }
         | HostRequest::Title { .. }
         | HostRequest::SetTheme { .. }
         | HostRequest::InstallTheme { .. }
@@ -1713,6 +1717,11 @@ impl Inflight {
     }
 }
 
+/// Forgets `request` of a mount: a timer let go of, whose reply never comes.
+pub(crate) fn forget(request: abi::RequestId) {
+    take_inflight(request);
+}
+
 /// Whether `request` waited for its reply, which it does no more.
 fn take_inflight(request: abi::RequestId) -> bool {
     INFLIGHT.with_borrow_mut(|inflight| {
@@ -1833,6 +1842,13 @@ fn run(host: &dyn Host, effect: Effect, id: &str, guest: &Weak<dyn Answers>, gen
             reply_to(guest, host, request, mount, move |host, reply| {
                 activation.start_timer(host.app(), request, delay, reply);
             });
+        }
+        // After the timer's own effect, which a call asks for before it lets the timer go.
+        Effect::CancelTimer(request) => {
+            if let Some(activation) = guest.upgrade().and_then(|guest| guest.activation()) {
+                activation.cancel_timer(request);
+            }
+            take_inflight(request);
         }
         Effect::Title(title) => host.set_title(&title),
         Effect::Theme(name) => host.set_theme(&name),

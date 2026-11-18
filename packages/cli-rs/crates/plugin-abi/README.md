@@ -149,7 +149,8 @@ A plugin keeps time on the host's clock, with no thread of its own: `cx.sleep(du
 `tasks.every(host, period, |cx| …)` ticks until its future gives `ControlFlow::Break`. A timer waits at least
 `MIN_TIMER` (20 ms; a shorter one is lengthened to it), at most `MAX_TIMERS` (32) of a plugin wait at once (one more is
 refused through its reply), and it is owned and cancelled as a fetch is: an `every` a mount started is that mount's
-task, and ends with it. A tick whose plugin changes nothing on screen costs a wake and no frame, however long it runs.
+task, and ends with it. A sleep dropped before its time (a race's loser) lets its timer go (`Host::cancel_timer`). A
+tick whose plugin changes nothing on screen costs a wake and no frame, however long it runs.
 
 ### The source promise of 2.x
 

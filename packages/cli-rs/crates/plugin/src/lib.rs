@@ -1525,6 +1525,17 @@ impl abi::Host for Scoped<'_> {
         })
     }
 
+    fn cancel_timer(&self, id: abi::RequestId) {
+        // After the timer's own effect, which the call may have asked for before it.
+        let activation = Rc::downgrade(&self.scope.activation);
+        self.defer_reserved(move |_| {
+            if let Some(activation) = activation.upgrade() {
+                activation.cancel_timer(id);
+            }
+            loader::native::forget(id);
+        });
+    }
+
     fn owner(&self) -> u64 {
         owner_id(self.scope.owners.owning().as_ref())
     }

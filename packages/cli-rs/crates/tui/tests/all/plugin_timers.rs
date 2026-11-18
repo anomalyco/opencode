@@ -337,3 +337,47 @@ fn a_tick_after_a_paint_leaves_no_frame_open_for_good() {
     let (own, _) = h.tui.plugins.monitor().spent(slot);
     assert_eq!(own, Duration::ZERO, "a frame stayed open and summed {own:?} of ticks");
 }
+
+thread_local! {
+    /// What [`dropped_sleeps`]' last sleep gave.
+    static SLEPT: std::cell::RefCell<Vec<Result<(), String>>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// A task that, after a first sleep, drops 40 sleeps of a minute before their time (as a race's loser is), then sleeps.
+fn dropped_sleeps(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.tasks().spawn(setup.host(), |cx| async move {
+        let _ = cx.sleep(Duration::from_millis(20)).await;
+        for _ in 0..40 {
+            drop(cx.sleep(Duration::from_secs(60)));
+        }
+        let slept = cx.sleep(Duration::from_millis(20)).await;
+        SLEPT.with_borrow_mut(|seen| seen.push(slept));
+    });
+    Ok(())
+}
+
+// Expected (carbon tm2-3): a sleep dropped before its time lets its timer go: 40 dropped sleeps hold no place among the
+// plugin's 32 timers, so the next sleep sleeps, and none of them wakes the app at its minute. In process and through
+// the C ABI.
+#[test]
+fn dropped_sleeps_hold_no_timer() {
+    for carrier in [Carrier::InProcess, Carrier::CAbi] {
+        SLEPT.with_borrow_mut(Vec::clear);
+        let h = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+        h.app.idle(Duration::from_secs(3));
+        let quiet = h.app.idle(Duration::from_secs(61));
+        let host = opencode_tui::plugins::host::host(&h.tui);
+        let definition = match carrier {
+            Carrier::CAbi => {
+                let entries = abi::export_plugin!(@loopback "test.dropped", dropped_sleeps);
+                opencode_plugin::loader::native::loopback(&host, entries).unwrap().0
+            }
+            _ => abi::Plugin { id: "test.dropped", setup: dropped_sleeps }.into(),
+        };
+        opencode_tui::plugins::host::add(&h.tui, definition);
+        h.app.idle(Duration::from_millis(100));
+        assert_eq!(SLEPT.with_borrow(Vec::clone), [Ok(())], "{carrier:?}: the dropped sleeps kept their timers");
+        let after = h.app.idle(Duration::from_secs(61));
+        assert!(after.wakeups <= quiet.wakeups, "{carrier:?}: the dropped sleeps woke the app: {after:?}, {quiet:?}");
+    }
+}

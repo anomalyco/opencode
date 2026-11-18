@@ -238,12 +238,14 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  * - "fetch", "foreground" and "timer" answer the ID their one reply comes back with ("reply"), never 0, which names no
  *   request: an SDK refuses an answer of 0 as malformed. A "timer"'s reply is {"Ok": null} once "ms" milliseconds
  *   passed on the host's clock, at least 20; with 32 timers of the plugin waiting already, it is {"Err": why} at once.
- *   A mount's timer is owned as a mount's fetch is. One the host does not take, as while the effects that wait fill its
- *   queue, answers OPENCODE_ERROR with why, and no reply comes for it: the Rust SDK's `Host::try_fetch` returns that as
- *   an `Err`. A request a mount's call asks for (a "command" of the route it shows, an "input" to that mount) is the
- *   mount's: once it closes, the request is not sent, a program does not start, and its "reply" is dropped, also for
- *   the surface opened again under the same key. Any other is the activation's, whose reply comes until `destroy`: so
- *   is one of the "input" of a "mount" event, at its begin as at its end, whose "to" names no mount.
+ *   A mount's timer is owned as a mount's fetch is. "cancel-timer" {"id"} lets a timer go once the call's earlier
+ *   effects apply: it fires no more and frees its place; another ID, or a timer that fired, is ignored. One the host
+ *   does not take, as while the effects that wait fill its queue, answers OPENCODE_ERROR with why, and no reply comes
+ *   for it: the Rust SDK's `Host::try_fetch` returns that as an `Err`. A request a mount's call asks for (a "command"
+ *   of the route it shows, an "input" to that mount) is the mount's: once it closes, the request is not sent, a program
+ *   does not start, and its "reply" is dropped, also for the surface opened again under the same key. Any other is the
+ *   activation's, whose reply comes until `destroy`: so is one of the "input" of a "mount" event, at its begin as at
+ *   its end, whose "to" names no mount.
  * - "owner" answers the owner of what the running call asks for now, a number: 0 for the activation, another for a
  *   mount. "set-owner" {"owner": n} makes owner n's what the call asks for from now on, until it returns, also when
  *   that mount has closed (its requests are then cancelled); null, or no "owner", gives the call its own back. A
