@@ -580,7 +580,7 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
               detached: command.options.detached ?? process.platform !== "win32",
               shell: command.options.shell,
               windowsHide: process.platform === "win32",
-              windowsVerbatimArguments: rewritesCmdArgs(command.command, command.args),
+              windowsVerbatimArguments: rewritesCmdArgs(command.command, command.args.map(unwrap)),
             }),
             Effect.fnUntraced(
               function* ([proc, closed, exited, stopOutput]) {
