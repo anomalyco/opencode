@@ -54,8 +54,8 @@ enum Carrier {
     Luau,
 }
 
-// Expected (timers, contract-ergonomics 2.3): a one-second `every` whose route's view does not change ticks once a
-// second and makes no frame: the app wakes for each tick and paints nothing. Disabled, the plugin's timer wakes the app
+// Expected (timers, contract-ergonomics 2.3; big-boi tm-2): a one-second `every` whose route's view does not change
+// ticks once a second and makes no frame, also over 400 s: the app wakes for each tick and paints nothing. Disabled, the plugin's timer wakes the app
 // no more. In process, through the C ABI and in Luau.
 #[test]
 fn a_ticking_plugin_that_changes_nothing_makes_no_frame() {
@@ -99,6 +99,9 @@ fn ticks_without_frames(carrier: Carrier) {
     if matches!(carrier, Carrier::InProcess | Carrier::CAbi) {
         assert_eq!(TICKS.get() - ticks, 5, "{carrier:?}: it did not tick once a second");
     }
+    // Nor ever: ticks with no paint between them do not add up to the frame's bound of effects (big-boi tm-2).
+    let long = h.app.idle(Duration::from_secs(400));
+    assert_eq!(long.frames, 0, "{carrier:?}: 400 s of ticks painted frames: {long:?}");
     assert!(h.tui.plugins.set_active(&host, "test.tick", false));
     h.app.idle(Duration::from_millis(100));
     let before = TICKS.get();
@@ -108,4 +111,46 @@ fn ticks_without_frames(carrier: Carrier) {
         ticking.wakeups >= disabled.wakeups + 4,
         "{carrier:?}: the ticks did not wake the app, or the disabled plugin's still do: {ticking:?}, {disabled:?}"
     );
+}
+
+// Expected (big-boi tm-3): a JS plugin keeps time with `setTimeout`, so the pipe refuses the raw timer request before
+// it gives an ID: the effect's result is `null`, and no reply is left to wait for.
+#[cfg(feature = "ts")]
+#[test]
+fn the_pipe_refuses_a_timer_without_giving_it_an_id() {
+    let Some(config) = crate::plugin_pipe::config() else { return };
+    let root = opencode_util::temp::tempdir().unwrap();
+    let log = root.path().join("log");
+    let plugin = root.path().join("config").join("plugins").join("timer");
+    std::fs::create_dir_all(&plugin).unwrap();
+    let script = format!(
+        r#"import {{ appendFileSync }} from "node:fs"
+export default {{ id: "example.timer", setup(api) {{
+  const carrier = api[Symbol.for("opencode.carrier")]
+  carrier.command({{ name: "timer.go", title: "timer.go" }}, () => {{
+    carrier.effect({{ type: "timer", ms: 20 }}).then(
+      (result) => appendFileSync({log:?}, "result " + JSON.stringify(result) + "\n"),
+      (error) => appendFileSync({log:?}, "error " + error + "\n"),
+    )
+  }})
+}} }}
+"#
+    );
+    std::fs::write(plugin.join("tui.ts"), script).unwrap();
+    let harness = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    let external = opencode_tui::plugins::host::External {
+        config_dir: root.path().join("config"),
+        cwd: root.path().to_path_buf(),
+        dev: Vec::new(),
+    };
+    opencode_tui::plugins::host::external_with(&harness.tui, external, Some(config));
+    let pipe = crate::plugin_pipe::Pipe { harness, root: opencode_util::temp::tempdir().unwrap() };
+    pipe.active("example.timer");
+    pipe.harness.tui.keymap.dispatch("timer.go", None);
+    let read = || std::fs::read_to_string(&log).unwrap_or_default();
+    pipe.harness.app.wait_until(support::WAIT, || {
+        pipe.harness.app.advance(Duration::from_millis(1));
+        !read().is_empty()
+    });
+    assert_eq!(read(), "result null\n", "the pipe gave a timer an ID");
 }

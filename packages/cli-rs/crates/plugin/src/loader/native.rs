@@ -1611,18 +1611,14 @@ pub(crate) fn reply_to(
     send(
         host,
         Box::new(move |result| {
-            // A timer's reply carries that to the call it makes, which then asks for no paint.
-            let ticking = crate::is_ticking();
             defer(&owner, move |_| {
-                crate::ticking(ticking, || {
-                    // A mount's request its mount's close cancelled already ([`cancel_closed`]) waits no more.
-                    let waiting = mount.is_none() || take_inflight(request);
-                    let Some(guest) = guest.upgrade().filter(|_| waiting) else { return };
-                    match mount.as_ref().is_none_or(|mount| mount.upgrade().is_some()) {
-                        true => guest.answer(Request::Reply { id: request, result }),
-                        false => guest.cancel(request),
-                    }
-                });
+                // A mount's request its mount's close cancelled already ([`cancel_closed`]) waits no more.
+                let waiting = mount.is_none() || take_inflight(request);
+                let Some(guest) = guest.upgrade().filter(|_| waiting) else { return };
+                match mount.as_ref().is_none_or(|mount| mount.upgrade().is_some()) {
+                    true => guest.answer(Request::Reply { id: request, result }),
+                    false => guest.cancel(request),
+                }
             });
         }),
     );

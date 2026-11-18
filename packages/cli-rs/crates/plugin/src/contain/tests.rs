@@ -673,3 +673,24 @@ fn a_build_the_record_cannot_name_is_not_attributed() {
     // Nothing was written past the names: the snapshot after them reads back.
     assert_eq!(record.snapshot(), Some(snapshot));
 }
+
+// Expected (big-boi tm-1): a timer's idle close ends a frame of timer calls alone, as a frame of its own with no
+// paint. A frame where another call ran too is left for a paint to end, so that call's time stays the scheduler's.
+#[test]
+fn an_idle_close_leaves_a_frame_with_other_work_for_its_paint() {
+    let bench = Bench::new();
+    let slot = bench.monitor.slot(&Artifact::builtin("p"));
+    let painted = bench.monitor.painted();
+    crate::ticking(true, || bench.call(slot, "on-reply", Duration::from_micros(50)));
+    bench.call(slot, "run-command", Duration::from_millis(2));
+    assert!(bench.monitor.close_idle(painted).is_none(), "the idle close ended a frame with a command in it");
+    assert_eq!(bench.monitor.spent(slot), (Duration::from_micros(2050), Duration::from_micros(2050)));
+    // A paint ends it; a later tick alone ends as a frame of its own, with no paint.
+    bench.frame.set(bench.frame.get() + 1);
+    bench.monitor.close();
+    let painted = bench.monitor.painted();
+    crate::ticking(true, || bench.call(slot, "on-reply", Duration::from_micros(50)));
+    assert_eq!(bench.monitor.spent(slot).0, Duration::from_micros(50));
+    assert!(bench.monitor.close_idle(painted).is_some());
+    assert_eq!(bench.monitor.spent(slot), (Duration::ZERO, Duration::ZERO), "the tick's frame did not end");
+}

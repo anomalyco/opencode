@@ -215,6 +215,8 @@ pub struct Monitor {
     closing: Cell<bool>,
     /// The frames that ended with no paint ([`Monitor::close_idle`]), which count on after the host's.
     idle: Cell<u64>,
+    /// The frame of the latest call that was no timer's reply ([`crate::ticking`]).
+    plain: Cell<Option<u64>>,
     record: OnceCell<(Arc<Record>, Instant)>,
     /// Told when a call returns whose hang notice the watchdog painted: the plugin and how long the call took.
     on_notice: RefCell<Option<Rc<OnNotice>>>,
@@ -354,6 +356,7 @@ impl Monitor {
             counted: Cell::new(None),
             closing: Cell::new(false),
             idle: Cell::new(0),
+            plain: Cell::new(None),
             record: OnceCell::new(),
             on_notice: RefCell::default(),
             told: RefCell::default(),
@@ -402,12 +405,17 @@ impl Monitor {
 
     /// Ends the frame open now as a frame of its own when no paint came since `painted` ([`Monitor::painted`]), then
     /// closes as [`Monitor::close`] does: the calls of a timer's tick with nothing to paint count as one frame, not
-    /// summed with every later tick until a paint comes.
-    pub fn close_idle(&self, painted: u64) -> Vec<(String, String)> {
+    /// summed with every later tick until a paint comes. `None`, and nothing ends, when a call that is no timer's runs
+    /// in the frame open now: its time stays the scheduler's ([`Monitor::spent`]) until a paint ends the frame, as for
+    /// any call (big-boi tm-1).
+    pub fn close_idle(&self, painted: u64) -> Option<Vec<(String, String)>> {
+        if self.plain.get() == Some(self.frame()) {
+            return None;
+        }
         if self.painted() == painted {
             self.idle.set(self.idle.get() + 1);
         }
-        self.close()
+        Some(self.close())
     }
 
     /// Whether a frame open now is over a budget: a close must end it at a later paint, for the slow rule to see
@@ -615,6 +623,9 @@ impl Monitor {
             }
         };
         samples.add(took);
+        if !crate::is_ticking() {
+            self.plain.set(Some(frame));
+        }
         stats.calls_total += took;
         stats.counted = Some(add(stats.counted, frame, took));
         self.counted.set(Some(add(self.counted.get(), frame, took)));
