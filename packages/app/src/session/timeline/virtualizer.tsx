@@ -139,6 +139,7 @@ export type TimelineRouteReveal = {
 
 type ViewProps = {
   header: JSX.Element
+  headerInset?: JSX.Element
   bottomSpacer?: JSX.Element
   deferred: (row: TimelineRow.TimelineRow) => boolean
   renderRow: (row: Accessor<TimelineRow.TimelineRow>, onSizeChange?: () => void) => JSX.Element
@@ -1094,7 +1095,8 @@ export function createTimelineVirtualizer(input: Input) {
             width: "100%",
             height: `${item().size}px`,
             overflow: "clip",
-            "overflow-clip-margin": Predicate.isTagged(row(), "TurnGap") ? undefined : "0.5px",
+            // Room for paint rounding, card shadows and a focus ring (2px at a 2px offset) on a control at the row edge.
+            "overflow-clip-margin": Predicate.isTagged(row(), "TurnGap") ? undefined : "5px",
           }}
         >
           <div
@@ -1151,10 +1153,13 @@ export function createTimelineVirtualizer(input: Input) {
           style={{ bottom: `${bottomInset() + 32}px` }}
           inert={!input.scroll().overflow || !input.scroll().jump}
         >
+          {/* Out of the tab order: tabbing through the timeline already scrolls each row into view, so a focus stop here
+              would only be an invisible one. Screen readers can still reach it. */}
           <button
             type="button"
+            tabindex="-1"
             aria-label={language.t("session.messages.jumpToLatest")}
-            class="pointer-events-auto flex items-center justify-center w-8 h-7 px-2 py-1.5 rounded-lg border-none cursor-pointer text-v2-text-text-base backdrop-blur-[2px] outline-none hover:bg-[linear-gradient(var(--v2-overlay-simple-overlay-hover),var(--v2-overlay-simple-overlay-hover))] active:bg-[linear-gradient(var(--v2-overlay-simple-overlay-pressed),var(--v2-overlay-simple-overlay-pressed))] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-border-border-focus"
+            class="pointer-events-auto flex items-center justify-center w-8 h-7 px-2 py-1.5 rounded-lg border-none cursor-pointer text-v2-text-text-base backdrop-blur-[2px] outline-none hover:bg-[linear-gradient(var(--v2-overlay-simple-overlay-hover),var(--v2-overlay-simple-overlay-hover))] active:bg-[linear-gradient(var(--v2-overlay-simple-overlay-pressed),var(--v2-overlay-simple-overlay-pressed))]"
             style={{
               "background-color": "color-mix(in srgb, var(--v2-background-bg-base) 92%, transparent)",
               "box-shadow": "var(--v2-elevation-raised), 0px 2px 8px var(--v2-background-bg-base)",
@@ -1170,6 +1175,10 @@ export function createTimelineVirtualizer(input: Input) {
             </svg>
           </button>
         </div>
+        <Show when={input.showHeader()}>
+          {/* The scroll viewport's fade masks anything outside the chat, including the review toggle when open. */}
+          <div class="pointer-events-none absolute inset-x-0 top-0 z-30">{props.header}</div>
+        </Show>
         <ScrollView
           data-slot="session-timeline-scroll"
           viewportRef={bindListRoot}
@@ -1189,7 +1198,7 @@ export function createTimelineVirtualizer(input: Input) {
           style={{ "--sticky-accordion-top": input.showHeader() ? "var(--session-header-height, 48px)" : "0px" }}
         >
           <Show when={input.showHeader()} fallback={<div aria-hidden="true" class="h-4 md:hidden" />}>
-            {props.header}
+            {props.headerInset}
           </Show>
           <div
             data-timeline-virtual-content

@@ -190,7 +190,7 @@ export const DialogConnectProvider: Component<{
                                 {(value) => (
                                   <button
                                     type="button"
-                                    class="flex min-w-0 items-center gap-1.5 rounded-sm font-[530] text-v2-text-text-base hover:text-v2-text-text-muted focus-visible:text-v2-text-text-muted focus-visible:outline-none"
+                                    class="flex min-w-0 items-center gap-1.5 rounded-[4px] font-[530] text-v2-text-text-base hover:text-v2-text-text-muted"
                                     onClick={() => controller.navigate(value())}
                                   >
                                     {content()}
@@ -202,7 +202,7 @@ export const DialogConnectProvider: Component<{
                               {(value) => (
                                 <button
                                   type="button"
-                                  class="flex min-w-0 shrink items-center gap-1.5 rounded-sm font-[440] text-v2-text-text-faint hover:text-v2-text-text-base focus-visible:text-v2-text-text-base focus-visible:outline-none"
+                                  class="flex min-w-0 shrink items-center gap-1.5 rounded-[4px] font-[440] text-v2-text-text-faint hover:text-v2-text-text-base"
                                   onClick={() => controller.navigate(value())}
                                 >
                                   {content()}

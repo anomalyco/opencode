@@ -55,8 +55,10 @@
             background-color: var(--v2-overlay-simple-overlay-hover);
           }
         }
+        /* Inset, because the trigger is a full-width row that its container clips. */
         &:focus-visible {
-          outline: none;
+          outline: 2px solid var(--v2-border-border-focus);
+          outline-offset: -2px;
         }
         &[data-disabled] {
           cursor: not-allowed;

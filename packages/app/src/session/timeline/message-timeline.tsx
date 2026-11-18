@@ -35,6 +35,7 @@ import {
   SessionAncestorTrail,
   SessionHeaderLayout,
   SessionLocation,
+  SessionHeaderFade,
   SessionTitleHeader,
 } from "../session-identity-header"
 import { SessionHeaderSpacer } from "@/session/header/session-header"
@@ -90,6 +91,7 @@ type MessageTimelineProps = {
   onHistoryScroll: () => void
   centered: boolean
   reserveReviewToggle: boolean
+  reviewToggle?: JSX.Element
   onContentResize: () => void
   bottomInset?: number
   setVisibleRef?: (el: HTMLDivElement | undefined) => void
@@ -156,6 +158,8 @@ function MessageTimelineView(
   const sessionID = props.data.sessionID
   const sessionStatus = props.data.status
   const parentID = props.data.parentID
+
+  let titleButton: HTMLButtonElement | undefined
   const parentTitle = props.data.parentTitle
   const childTitle = props.data.childTitle
   const projection = props.data.projection
@@ -572,9 +576,15 @@ function MessageTimelineView(
           }}
         </Show>
       )}
+      headerInset={
+        <Show when={!props.hideHeader}>
+          <div aria-hidden="true" class="h-16" />
+          <SessionHeaderFade />
+        </Show>
+      }
       header={
         <Show when={!props.hideHeader}>
-          <SessionTitleHeader>
+          <SessionTitleHeader separateFade>
             <SessionHeaderLayout
               title={title().editing ? title().draft : childTitle()}
               location={
@@ -628,6 +638,7 @@ function MessageTimelineView(
                         }}
                       />
                       <SessionHeaderSpacer visible={props.reserveReviewToggle} />
+                      {props.reviewToggle}
                     </>
                   )}
                 </Show>
@@ -651,13 +662,17 @@ function MessageTimelineView(
                 <Show
                   when={title().editing}
                   fallback={
-                    <h1
-                      data-slot="session-title-child"
-                      class="truncate text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base w-fit rounded-[6px] px-1 py-1.5 hover:bg-v2-overlay-simple-overlay-hover"
-                      classList={{ "max-w-[45%] shrink-0": !!parentID() }}
-                      onClick={props.title.edit}
-                    >
-                      {childTitle()}
+                    <h1 class="session-title-rename w-fit text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base">
+                      <button
+                        ref={titleButton}
+                        type="button"
+                        dir="auto"
+                        data-slot="session-title-child"
+                        class="truncate hover:bg-v2-overlay-simple-overlay-hover"
+                        onClick={props.title.edit}
+                      >
+                        {childTitle()}
+                      </button>
                     </h1>
                   }
                 >
@@ -688,6 +703,7 @@ function MessageTimelineView(
                       if (event.key === "Escape") {
                         event.preventDefault()
                         props.title.cancel()
+                        titleButton?.focus({ preventScroll: true })
                       }
                     }}
                     onBlur={props.title.submit}

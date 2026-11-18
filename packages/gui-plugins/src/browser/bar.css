@@ -217,7 +217,10 @@
     color: var(--v2-icon-icon-base);
   }
   &:focus-visible {
-    outline: 1px solid var(--v2-border-border-focus);
+    /* The translated hit area sits flush with the preview's clipping edge. */
+    border-radius: 4px;
+    outline: 2px solid var(--v2-border-border-focus);
+    outline-offset: -2px;
   }
 
   &::after {

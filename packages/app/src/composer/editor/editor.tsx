@@ -50,6 +50,7 @@ import type {
 import type { ComposerEditorModel, ComposerSelectControl } from "./interaction"
 import { isAttachment, promptLength } from "../prompt-parts"
 import { editorMatchesPrompt, getCursorPosition, isEditorDomBlank, isPromptInlineBlank } from "./dom"
+import { createTabFocus } from "@/runtime/tab-focus"
 import {
   INITIAL_EDITOR_SYNC_STATE,
   INPUT_PARSED,
@@ -102,6 +103,8 @@ export type ComposerEditorProps = {
 }
 
 export function ComposerEditor(props: ComposerEditorProps) {
+  const keyboardFocus = createTabFocus()
+
   const i18n = useI18n()
   const markdown = useMarkdown()
   const state = props.controller.state
@@ -425,7 +428,11 @@ export function ComposerEditor(props: ComposerEditorProps) {
                   if (caret.top < bounds.top + 16) viewport.scrollTop += caret.top - bounds.top - 16
                 })
               }}
-              onFocus={() => props.controller.dispatch({ type: "focus.editor" })}
+              data-keyboard-focus={keyboardFocus.visible() || undefined}
+              onFocus={() => {
+                keyboardFocus.enter()
+                props.controller.dispatch({ type: "focus.editor" })
+              }}
             />
             <Show when={!props.controller.value()}>
               <div

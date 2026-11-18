@@ -569,3 +569,7 @@
     transition: none;
   }
 }
+[data-slot="sidebar-project-row"]:has(> button:first-child:focus-visible) {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: -2px;
+}

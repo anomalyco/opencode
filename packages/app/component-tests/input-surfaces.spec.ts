@@ -1,5 +1,53 @@
 import { expect, story } from "../../stories/playwright/story"
 
+story("focus-only outlines stay off at rest in forced colours", async ({ mount, page }) => {
+  await page.emulateMedia({ forcedColors: "active" })
+
+  const root = await mount("review-focus-visibility--all-surfaces", { args: { forced: false, locator: false } })
+
+  const controls = [
+    {
+      card: "Switch: a black ring flashes",
+      target: '[data-slot="switch-input"]',
+      ring: '[data-slot="switch-control"]',
+      hasBorder: true,
+    },
+    {
+      card: "Radio: forced colours show a ring",
+      target: '[data-slot="radio-v2-item-input"][value="text"]',
+      ring: '[data-slot="radio-v2-item"][data-checked] [data-slot="radio-v2-item-control"]',
+      hasBorder: true,
+    },
+    {
+      card: "Language: inline select",
+      target: '[data-component="select-v2"]',
+      ring: '[data-component="select-v2"]',
+      hasBorder: false,
+    },
+  ]
+
+  for (const control of controls) {
+    const card = root.locator("figure").filter({ hasText: control.card })
+
+    const target = card.locator(control.target)
+
+    const ring = card.locator(control.ring)
+
+    await expect(ring).toHaveCSS("outline-style", "none")
+
+    if (control.hasBorder) await expect(ring).toHaveCSS("border-top-width", "1px")
+
+    await target.press("Shift+Tab")
+    await page.keyboard.press("Tab")
+    await expect(target).toBeFocused()
+    await expect(ring).toHaveCSS("outline-style", "solid")
+    await expect(ring).toHaveCSS("outline-width", "2px")
+    await expect(ring).not.toHaveCSS("transition-property", /outline|all/)
+    await page.keyboard.press("Shift+Tab")
+    await expect(ring).toHaveCSS("outline-style", "none")
+  }
+})
+
 for (const control of ["text-input", "textarea"]) {
   story(`${control} supports its surfaces with inset feedback and stable geometry`, async ({ mount, page }) => {
     const root = await mount(`ui-${control}--surfaces`)

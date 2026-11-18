@@ -1,25 +1,47 @@
+import "@/composer/editor/editor.css"
+import "@/home/projects/view.css"
+import "@/home/sessions/view.css"
+import "@/shell/titlebar/tab-nav.css"
+import "@/shell/titlebar/titlebar.css"
+import "@/session/session-identity-header.css"
 import "@/settings/settings.css"
 import "@/settings/workspaces/project.css"
+import "@opencode/session-ui/sources/panel"
+import "../../../gui-plugins/src/browser/bar.css"
 
+import { File } from "@opencode/session-ui/file"
+import { SessionFilePanelV2 } from "@opencode/session-ui/v2/session-file-panel-v2"
+import { SessionReviewV2Sidebar, SessionReviewV2SidebarToggle } from "@opencode/session-ui/v2/session-review-v2"
 import { Accordion } from "@opencode/ui/accordion"
+import { Button } from "@opencode/ui/button"
+import { Checkbox } from "@opencode/ui/checkbox"
+import { Collapsible } from "@opencode/ui/collapsible"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { ProjectAvatar } from "@opencode/ui/project-avatar"
+import { RadioGroup, RadioItem } from "@opencode/ui/radio"
+import { ScrollView } from "@opencode/ui/scroll-view"
+import { SegmentedControl, SegmentedControlItem } from "@opencode/ui/segmented-control"
 import { Select } from "@opencode/ui/select"
 import { Switch } from "@opencode/ui/switch"
 import { Tabs } from "@opencode/ui/tabs"
+import { TextInput } from "@opencode/ui/text-input"
 import { createEffect, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { createTabStripScroll } from "@/runtime/plugin/tab-strip-scroll"
+import { createTabFocus } from "@/runtime/tab-focus"
+import { SessionHeaderActions } from "@/session/header/session-header-actions"
 import { SettingsList } from "@/settings/list"
 import { SettingsRow } from "@/settings/row"
 import { SettingsSearchField } from "@/settings/search-field"
+import { trackTabHeader } from "@/settings/tab-header"
 import { forceFocusStyles } from "./force-focus"
 
 // Each case renders production components, markup and CSS inside the ancestor that hides its focus, at the size the
 // audit found it. On open the target is marked focused with the lab copy of the production focus rules, and any scroller
 // is left where the browser's own scroll-into-view puts it, as the keys do. Real keyboard focus takes over from there.
 
-type Failure = "Occluded" | "Clipped" | "Invisible"
+// Inconsistent: focus showed, but not as the shared ring (another colour, width, offset or shape, or a background).
+type Failure = "Occluded" | "Clipped" | "Invisible" | "Inconsistent"
 
 type Case = {
   name: string
@@ -28,9 +50,11 @@ type Case = {
   keys: string
   sizing: string
   source: string
+  // How it was fixed, so each case stays here as a check that it holds.
+  fix: string
   // The scroller the keys start in and the edge it starts at, such as the end of a list Shift+Tab walks back up.
   from?: { scroller: string; edge: "start" | "end" }
-  render: () => JSX.Element
+  render: (forced: () => boolean) => JSX.Element
 }
 
 type Surface = { name: string; cases: Case[]; also: string[] }
@@ -60,6 +84,225 @@ const panelTabs = [
 
 const surfaces: Surface[] = [
   {
+    name: "Titlebar",
+    cases: [
+      {
+        name: "Search and New tab: ring cut at the top and bottom by the titlebar row",
+        failure: "Clipped",
+        target: '[aria-label="Search sessions"]',
+        keys: "Click the titlebar's empty space, press Tab.",
+        sizing: "Any width. The buttons are as tall as the 36px row, which clips for the tab strip.",
+        source: "app/src/shell/titlebar (row overflow: hidden), titlebar.css",
+        fix: "Titlebar IconButtons draw the 2px ring inset (offset -2px, titlebar.css), inside the row that clips them. Found once they got a ring at all.",
+        render: () => (
+          <div
+            data-slot="titlebar-v2"
+            class="shrink-0 relative flex flex-row h-9 bg-v2-background-bg-deep overflow-visible"
+            style={{ width: "360px" }}
+          >
+            <div class="h-full flex-1 overflow-hidden flex flex-row items-center gap-1.5 px-2">
+              <div class="-me-0.5 flex shrink-0 items-center gap-0.5">
+                <IconButton variant="ghost-muted" icon={<Icon name="grid-plus" />} aria-label="Home" class="!w-9" />
+                <IconButton
+                  variant="ghost-muted"
+                  icon={<Icon name="magnifying-glass" />}
+                  aria-label="Search sessions"
+                  class="!w-9"
+                />
+                <IconButton variant="ghost-muted" icon={<Icon name="plus" />} aria-label="New tab" class="!w-9" />
+              </div>
+            </div>
+          </div>
+        ),
+      },
+      {
+        name: "Session tab: selected and keyboard focused look the same",
+        failure: "Invisible",
+        target: "[data-titlebar-tab-link]",
+        keys: "Focus Search in the top tab bar, then press Tab to reach the session tab.",
+        sizing: "The tab and the strip both clip overflow.",
+        source: "app/src/shell/titlebar/tab-nav.tsx, titlebar.css",
+        fix: "The link suppresses its outline. Its rounded tab wrapper now draws the inset ring when the link has keyboard focus. The close button keeps its own ring.",
+        render: () => (
+          <div class="flex items-center gap-2 overflow-hidden" style={{ width: "280px" }}>
+            <IconButton variant="ghost-muted" icon={<Icon name="magnifying-glass" />} aria-label="Search sessions" />
+            <div
+              data-slot="titlebar-tab-item"
+              class="flex h-7 min-w-0 items-center gap-1.5 overflow-hidden rounded-[6px] bg-v2-background-bg-layer-02 px-1.5"
+            >
+              <a data-titlebar-tab-link href="#review-focus-visibility" class="flex h-full items-center gap-1.5">
+                <ProjectAvatar fallback="O" variant="blue" class="!size-4" />
+                <span class="text-13-medium">Test message</span>
+              </a>
+              <IconButton variant="ghost-muted" size="small" icon={<Icon name="close" />} aria-label="Close tab" />
+            </div>
+          </div>
+        ),
+      },
+    ],
+    also: [],
+  },
+  {
+    name: "Session header and composer",
+    cases: [
+      {
+        name: "Project button: keyboard focus only changes the background",
+        failure: "Inconsistent",
+        target: '[data-slot="session-location-trigger"]',
+        keys: "Tab to the project name at the start of the session header.",
+        sizing: "Any header width, including when the label collapses to an icon.",
+        source: "app/src/session/session-identity-header.tsx",
+        fix: "Keep hover and menu-open backgrounds, and let the project button draw the shared outset keyboard ring.",
+        render: () => (
+          <button
+            type="button"
+            data-slot="session-location-trigger"
+            class="flex h-7 items-center gap-2 rounded-[6px] px-1.5 text-13-regular text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover"
+          >
+            <ProjectAvatar fallback="O" variant="blue" class="!size-4" />
+            opencode
+          </button>
+        ),
+      },
+      {
+        name: "Editable session title: skipped by Tab",
+        failure: "Invisible",
+        target: "h1 > button",
+        keys: "From the project button, press Tab. In a session, Enter or Space opens rename and Escape returns focus.",
+        sizing: "An editable session title. Read-only titles remain plain headings.",
+        source: "app/src/session/timeline/message-timeline.tsx, session/session-identity-header.css",
+        fix: "A native button inside the heading makes rename reachable with Tab and gives it the shared outset ring.",
+        render: () => (
+          <div class="flex items-center gap-2">
+            <button type="button" class="h-7 rounded-[6px] px-1.5 text-13-regular">
+              opencode
+            </button>
+            <Icon name="chevron-right" />
+            <h1 class="session-title-rename w-fit text-13-medium">
+              <button type="button" class="truncate hover:bg-v2-overlay-simple-overlay-hover">
+                Test message
+              </button>
+            </h1>
+          </div>
+        ),
+      },
+      {
+        name: "Right panel toggle: focus arrives before the header",
+        failure: "Inconsistent",
+        target: '[aria-controls="review-panel"]',
+        keys: "Focus the preceding header action and press Tab. Shift+Tab goes back to that action.",
+        sizing: "Desktop width, with the review panel open or closed.",
+        source:
+          "app/src/session/screen.tsx, session/timeline/message-timeline.tsx, session/session-identity-header.css",
+        fix: "The toggle follows the other header actions in DOM order. It stays at the pane row's end visually when the panel opens.",
+        render: () => (
+          <div class="flex items-center gap-2">
+            <IconButton variant="ghost-muted" icon={<Icon name="layout-left" />} aria-label="Session details" />
+            <SessionHeaderActions
+              state={{
+                reviewLabel: "Toggle review",
+                reviewKeybind: [],
+                reviewVisible: true,
+                reviewOpened: false,
+                onReviewToggle: () => undefined,
+              }}
+            />
+          </div>
+        ),
+      },
+      {
+        name: "Composer editor: caret is the only Tab focus cue",
+        failure: "Invisible",
+        target: '[data-component="composer-editor"]',
+        keys: "Focus the preceding button, then press Tab into the prompt. Click inside the prompt to see the ring go away.",
+        sizing: "The editor sits inside a masked scroll viewport.",
+        source: "app/src/composer/editor/editor.css, runtime/tab-focus.ts",
+        fix: "Tab focus on the editor draws a 2px inset ring on the composer frame. Click-to-type and automatic focus leave it quiet.",
+        render: (forced) => <ComposerFocusExample forced={forced()} />,
+      },
+    ],
+    also: [],
+  },
+  {
+    name: "New session",
+    cases: [
+      ...(["tip", "dismiss"] as const).map(
+        (part): Case => ({
+          name: `Provider tip ${part === "dismiss" ? "dismiss button" : "link"}: focus only changes the background`,
+          failure: "Inconsistent",
+          target: part === "dismiss" ? '[aria-label="Dismiss"]' : "button:first-child",
+          keys: `On New session, Tab to the provider tip${part === "dismiss" ? ", then Tab to Dismiss" : ""}.`,
+          sizing: "The tip appears when no provider is connected. Both controls have room for an outset ring.",
+          source: "app/src/new-session/view.tsx",
+          fix: "Keep the hover treatment and use the shared rounded keyboard ring. Dismiss still reveals when it takes focus.",
+          render: () => (
+            <div data-component="new-session-tip" class="flex max-w-full items-center gap-1">
+              <button
+                type="button"
+                class="flex h-6 min-w-0 items-center rounded-[4px] ps-1.5 text-13-regular text-v2-text-text-faint hover:bg-v2-overlay-simple-overlay-hover"
+              >
+                <span class="truncate">Connect to 75+ providers to use other models</span>
+                <Icon name="chevron-right" class="shrink-0" />
+              </button>
+              <button
+                type="button"
+                aria-label="Dismiss"
+                class="grid size-6 shrink-0 place-items-center rounded-[4px] text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover"
+              >
+                <Icon name="close" />
+              </button>
+            </div>
+          ),
+        }),
+      ),
+      {
+        name: "Project picker: keyboard focus looks like hover",
+        failure: "Inconsistent",
+        target: '[data-action="prompt-project"]',
+        keys: "On New session, Tab to the project picker below the composer.",
+        sizing: "The project picker and worktree picker sit below the composer, outside its clipping frame.",
+        source: "app/src/new-session/view.tsx, project/selector.tsx",
+        fix: "Use the shared rounded outset ring on the project and worktree pickers, including the add-project fallback.",
+        render: () => (
+          <button
+            type="button"
+            data-action="prompt-project"
+            class="flex h-7 items-center gap-1.5 rounded-[4px] ps-1.5 pe-2 text-13-regular text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover"
+          >
+            <ProjectAvatar fallback="D" class="!size-4" />
+            Default Project
+            <Icon name="chevron-down" class="text-v2-icon-icon-muted" />
+          </button>
+        ),
+      },
+      {
+        name: "Composer Send: ring touches the button fill",
+        failure: "Inconsistent",
+        target: '[data-action="composer-submit"]',
+        keys: "Type a draft, then Tab to Send.",
+        sizing: "Send sits outside the scrolling toolbar controls, with 8px of space to the composer frame.",
+        source: "app/src/composer/editor/editor.css",
+        fix: "Keep the toolbar rings inset but let the fixed Send button use the default 2px outset ring.",
+        render: () => (
+          <div data-component="composer" class="w-[240px] overflow-clip rounded-xl bg-v2-background-bg-layer-01">
+            <div class="px-4 pt-4 pb-2 text-13-regular">Review the recent changes.</div>
+            <div data-slot="composer-actions" class="flex h-11 items-center justify-end px-2">
+              <IconButton
+                type="button"
+                data-action="composer-submit"
+                variant="submit"
+                class="size-7 rounded-md p-[6px]"
+                aria-label="Send"
+                icon={<Icon name="arrow-up" />}
+              />
+            </div>
+          </div>
+        ),
+      },
+    ],
+    also: [],
+  },
+  {
     name: "Timeline",
     cases: [
       {
@@ -70,15 +313,16 @@ const surfaces: Surface[] = [
         sizing: "Any width (audited at 1100×800 and 390×680). The row clips at its measured height.",
         source:
           "app/src/session/timeline/virtualizer.tsx:1077–86 (overflow: clip, clip margin 0.5px), session-ui message-part.css:577–83",
+        fix: "The virtual row's overflow-clip-margin went from 0.5px to 5px (virtualizer.tsx), room for the 2px ring at its 2px offset. The same margin keeps card shadows at a row edge.",
         render: () => (
-          <div style={{ width: "420px", position: "relative", overflow: "clip", "overflow-clip-margin": "0.5px" }}>
+          <div style={{ width: "420px", position: "relative", overflow: "clip", "overflow-clip-margin": "5px" }}>
             <div data-component="text-part">
               <div data-slot="text-part-body">
                 <div data-component="markdown">
                   <p>Historical response 8. Existing session content keeps the virtual timeline realistic.</p>
                 </div>
               </div>
-              <div data-slot="text-part-copy-wrapper">
+              <div data-slot="text-part-copy-wrapper" data-keep-copy-visible>
                 <IconButton
                   icon={<Icon name="copy" size="small" />}
                   size="small"
@@ -99,6 +343,7 @@ const surfaces: Surface[] = [
         sizing:
           "Prompts over 12 lines fold to 8. The link has no authored focus rule, so its browser default ring shows only with real focus.",
         source: "session-ui message-part.css:221–230 (fold overflow: hidden, 40px mask), message-content.tsx:786",
+        fix: "The fold pads its sides by 5px and takes it back with a negative margin, so a ring at either end of a line is inside the clip. Links keep a 40px bottom scroll-margin, clear of the fade, and draw the default ring.",
         render: () => (
           <div data-component="user-message" style={{ width: "380px" }}>
             <div data-slot="user-message-text" dir="auto">
@@ -130,6 +375,7 @@ const surfaces: Surface[] = [
         keys: "Click above the list, press Tab.",
         sizing: "Any width. The trigger sets outline: none and nothing replaces it.",
         source: "ui/src/data-display/accordion/accordion.css:58",
+        fix: "The trigger draws the 2px ring inset (offset -2px), since the list clips a full-width row.",
         render: () => (
           <div style={{ width: "380px" }}>
             <Accordion collapsible>
@@ -143,16 +389,338 @@ const surfaces: Surface[] = [
           </div>
         ),
       },
+      {
+        name: "New timeline tool row: background only",
+        failure: "Inconsistent",
+        target: '[data-slot="collapsible-trigger"]',
+        keys: "Turn on the new timeline, click the response above a tool row, press Tab.",
+        sizing: "Any width. The trigger also holds the gap below an open row.",
+        source: "session-ui/src/timeline-next/timeline-next.css",
+        fix: "Keyboard focus rings the row's line of text (tool-trigger) at the default 2px offset with a 4px radius, instead of filling it with the hover background. A ring on the trigger itself would take in the gap below an open row.",
+        render: () => (
+          <div data-timeline="next" style={{ width: "380px" }}>
+            <Collapsible variant="ghost">
+              <Collapsible.Trigger>
+                <div data-component="tool-trigger" class="text-13-regular" style={{ gap: "6px" }}>
+                  Read <span class="text-v2-text-text-muted">src/session/timeline.tsx</span>
+                </div>
+              </Collapsible.Trigger>
+              <Collapsible.Content>Content</Collapsible.Content>
+            </Collapsible>
+          </div>
+        ),
+      },
+      {
+        name: "Compaction divider: thin accent ring",
+        failure: "Inconsistent",
+        target: '[data-slot="session-compaction-divider"]',
+        keys: "Click the message above a compaction, press Tab.",
+        sizing: "Any width.",
+        source: "session-ui/src/components/session-compaction.css",
+        fix: "Was 1px in --v2-text-text-accent. Now the shared 2px ring in the focus colour at a 2px offset.",
+        render: () => (
+          <div data-component="session-compaction-message" data-quiet style={{ width: "380px" }}>
+            <button type="button" data-slot="session-compaction-divider">
+              Compacted
+            </button>
+          </div>
+        ),
+      },
+      {
+        name: "Session link in a response: ring in the text colour",
+        failure: "Inconsistent",
+        target: ".markdown-session-link",
+        keys: "Click the response text, press Tab.",
+        sizing: "Any width.",
+        source: "session-ui/src/components/markdown.css",
+        fix: "Was 2px in currentColor, so it took the link's colour. Now the shared focus colour at a 2px offset.",
+        render: () => (
+          <div data-component="markdown" style={{ width: "380px" }}>
+            <p>
+              Continued from{" "}
+              <a href="#review-focus-visibility" class="markdown-session-link">
+                Fix the review panel
+              </a>
+              .
+            </p>
+          </div>
+        ),
+      },
+      {
+        name: "Sources chip: 1px ring",
+        failure: "Inconsistent",
+        target: '[data-component="sources-chip"]',
+        keys: "Turn on the Sources experiment, click a response that searched the web, press Tab.",
+        sizing: "Any width.",
+        source: "session-ui/src/sources/sources.css",
+        fix: "The chip was 1px at a 1px offset, and the panel's rows 1px inset. Now the shared 2px ring: outset on the chip, inset (-2px) on the rows, which fill the panel's scrolling list.",
+        render: () => (
+          <button type="button" data-component="sources-chip">
+            3 sources
+          </button>
+        ),
+      },
+      {
+        name: "Question progress: ring runs into the next segment",
+        failure: "Clipped",
+        target: '[data-slot="question-progress-segment"]',
+        keys: "Open a multi-question prompt, Tab to the progress segments.",
+        sizing: "Any width. Segments sit 2px apart.",
+        source: "session-ui/src/components/question-prompt.css, question-prompt-experimental.css",
+        fix: "Was 2px at a 1px offset, which overlapped the neighbouring segment. Now inset (-2px), inside the segment.",
+        render: () => (
+          <div data-component="dock-prompt" data-kind="question" style={{ width: "240px" }}>
+            <div data-slot="question-progress">
+              <button type="button" data-slot="question-progress-segment" aria-label="Question 1">
+                <span data-slot="question-progress-bar" />
+              </button>
+              <button type="button" data-slot="question-progress-segment" aria-label="Question 2">
+                <span data-slot="question-progress-bar" />
+              </button>
+              <button type="button" data-slot="question-progress-segment" aria-label="Question 3">
+                <span data-slot="question-progress-bar" />
+              </button>
+            </div>
+          </div>
+        ),
+      },
     ],
     also: [
       "Shift+Tab from the session header's More actions to Copy response leaves it under the sticky header.",
-      "The new timeline's command group loses the bottom of its shadow.",
-      "The timeline ScrollView viewport and the diff viewer take focus with nothing visible.",
+      "Fixed: the new timeline's command group lost the bottom of its shadow. The 5px row clip margin above covers it.",
     ],
+  },
+  {
+    name: "Home",
+    cases: [
+      {
+        name: "Home viewport: invisible Tab stop",
+        failure: "Invisible",
+        target: '.scroll-view__viewport[tabindex="0"]',
+        keys: "Tab to the scrollable viewport, then use ArrowDown or PageDown. With no overflow, Tab skips the viewport.",
+        sizing: "The viewport only needs a keyboard stop when it can scroll.",
+        source: "ui/src/components/scroll-view.tsx, scroll-view.css",
+        fix: "Only include the viewport in the Tab order when it overflows, and draw the ring inside its edge.",
+        render: () => (
+          <ScrollView class="h-[90px] w-[300px] rounded-[6px] bg-v2-background-bg-layer-01">
+            <div class="grid gap-3 p-3 text-13-regular">
+              <span>Recent sessions</span>
+              <span>Review focus states</span>
+              <span>Check mobile layout</span>
+              <span>Update the component lab</span>
+            </div>
+          </ScrollView>
+        ),
+      },
+      ...(["Projects", "opencode"] as const).map(
+        (label): Case => ({
+          name: `Side tabs: ${label === "Projects" ? "Projects heading" : "project row"} has only a background change`,
+          failure: "Inconsistent",
+          target: '[data-slot="sidebar-project-row"] > button',
+          keys: `Open Side tabs and Tab to ${label}. Tab again to focus the adjacent icon button independently.`,
+          sizing: "The row spans the sidebar, including the trailing action.",
+          source: "app/src/shell/titlebar/sidebar-organized.tsx, sidebar-customized.tsx, tab-nav.css",
+          fix: "Draw the inset ring around the whole row when its main button has keyboard focus. The trailing button keeps its own ring.",
+          render: () => (
+            <div data-slot="sidebar-project-row" class="flex h-7 w-[250px] items-center rounded-[6px] pe-1">
+              <button
+                type="button"
+                class="flex h-full flex-1 items-center gap-2 px-2 text-13-regular focus-visible:outline-none"
+              >
+                {label === "Projects" ? null : <ProjectAvatar fallback="O" class="!size-4" />}
+                {label}
+              </button>
+              <IconButton
+                size="small"
+                variant="ghost-muted"
+                icon={<Icon name={label === "Projects" ? "folder-add-left" : "outline-dots"} />}
+                aria-label={label === "Projects" ? "Add project" : "More options"}
+              />
+            </div>
+          ),
+        }),
+      ),
+      {
+        name: "Recent sessions: keyboard focus looks like hover",
+        failure: "Inconsistent",
+        target: '[data-component="home-session-row"]',
+        keys: "In Home, Tab from New session into Recent sessions. Click the example or move the pointer over it to compare.",
+        sizing: "Each session is its own full-width Tab stop.",
+        source: "app/src/home/sessions/view.tsx, view.css",
+        fix: "Use a rounded 2px inset ring for the session button. Hover keeps its background; search results, row actions and inline rename keep their existing focus styles.",
+        render: () => (
+          <div class="w-[360px] max-w-full overflow-hidden">
+            <button
+              type="button"
+              data-component="home-session-row"
+              class="flex h-10 w-full items-center gap-1.5 rounded-[6px] px-3 text-start text-13-medium hover:bg-v2-overlay-simple-overlay-hover"
+            >
+              <ProjectAvatar fallback="O" variant="blue" class="!size-4" />
+              <span>Test message</span>
+              <span class="text-13-regular text-v2-text-text-muted">opencode</span>
+            </button>
+          </div>
+        ),
+      },
+      {
+        name: "Search sessions: Tab shows only a caret",
+        failure: "Invisible",
+        target: "input",
+        keys: "Focus the preceding button and Tab into Search sessions. Click the field to clear the ring.",
+        sizing: "The field spans the Home results column. The ring belongs on the field, not just its editable text.",
+        source: "app/src/home/sessions/view.tsx, view.css, runtime/tab-focus.ts",
+        fix: "Tab entry draws the shared 2px outset ring around the search field. Clicking still shows only the normal field background and caret.",
+        render: (forced) => <HomeSearchFocusExample forced={forced()} />,
+      },
+      {
+        name: "Project row: focus looks like selection",
+        failure: "Inconsistent",
+        target: '[data-component="home-project-row"]',
+        keys: "In Home › Projects, Tab from Add project to a project row.",
+        sizing: "The row fills the scrolling list, and its hover actions sit over its trailing edge.",
+        source: "app/src/home/projects/view.tsx, view.css",
+        fix: "Replace the faint shadow with a 2px inset ring around the selected or unselected row. Paint it above the hover actions without blocking clicks.",
+        render: () => (
+          <div class="w-[260px] overflow-hidden">
+            <div data-home-row data-selected class="relative flex h-7 items-center rounded-[6px]">
+              <button
+                type="button"
+                data-component="home-project-row"
+                data-slot="home-project-nav-button"
+                class="flex h-7 w-full items-center gap-2 rounded-[6px] px-1.5 text-13-regular"
+              >
+                <ProjectAvatar fallback="O" variant="blue" class="!size-4" />
+                opencode
+              </button>
+              <div data-slot="home-row-actions" class="absolute end-1 inset-y-0 flex items-center ps-2">
+                <IconButton
+                  size="small"
+                  variant="ghost-muted"
+                  icon={<Icon name="outline-dots" />}
+                  aria-label="More options"
+                />
+              </div>
+            </div>
+          </div>
+        ),
+      },
+      ...(["Settings", "Help"] as const).map(
+        (action): Case => ({
+          name: `${action}: barely visible keyboard focus`,
+          failure: "Inconsistent",
+          target: "button",
+          keys: `Tab to ${action} below the Projects list or in the Home footer.`,
+          sizing: "The same control is used in the sidebar and the narrower footer.",
+          source: "app/src/home/projects/view.tsx, view.css",
+          fix: "Replace the faint shadow with the shared 2px keyboard ring, inset so the edges stay visible.",
+          render: () => (
+            <button
+              type="button"
+              data-slot="home-project-nav-button"
+              class="flex h-7 w-[260px] items-center gap-2 rounded-[6px] px-1.5 text-13-regular text-v2-text-text-faint"
+            >
+              <Icon name={action === "Settings" ? "settings-gear" : "help"} />
+              {action}
+            </button>
+          ),
+        }),
+      ),
+    ],
+    also: [],
+  },
+  {
+    name: "Browser device toolbar",
+    cases: (["width", "height"] as const).map((axis) => ({
+      name: `${axis === "width" ? "Side" : "Bottom"} resize grip: the preview clips the keyboard ring`,
+      failure: "Clipped",
+      target: `[data-axis="${axis}"]`,
+      keys: "Enable the browser device toolbar, choose a device size, and Tab to the resize grip.",
+      sizing: "The preview clips at its outer edge. Each grip has a 14px hit area.",
+      source: "gui-plugins/src/browser/bar.css",
+      fix: "Draw the shared 2px ring inset around the rounded hit area so the preview cannot clip it. The grip still resizes the same way.",
+      render: () => (
+        <div
+          data-component="browser-preview"
+          data-fixed
+          data-resizable
+          style={{ "grid-template": "100px / 220px", width: "234px", height: "118px", "box-sizing": "border-box" }}
+        >
+          <div class="rounded-[6px] bg-v2-background-bg-base" aria-hidden="true" />
+          <div
+            data-slot="browser-viewport-grip"
+            data-axis="width"
+            role="separator"
+            tabIndex={0}
+            aria-label="Resize viewport width"
+            aria-orientation="vertical"
+          />
+          <div
+            data-slot="browser-viewport-grip"
+            data-axis="height"
+            role="separator"
+            tabIndex={0}
+            aria-label="Resize viewport height"
+          />
+          <div data-slot="browser-viewport-grip" data-axis="corner" aria-hidden="true" />
+        </div>
+      ),
+    })),
+    also: [],
   },
   {
     name: "Right panel",
     cases: [
+      {
+        name: "Review diff viewer: no visible keyboard focus",
+        failure: "Invisible",
+        target: '[data-component="file"]',
+        keys: "Open a changed file in Review and Tab from the diff toolbar to the code.",
+        sizing: "The file viewer sits inside a scrolling preview.",
+        source: "session-ui/src/components/file.tsx, file.css",
+        fix: "Keep keyboard access to the diff and paint the shared inset ring above the code, clear of the scrollport edge.",
+        render: () => (
+          <div class="w-[360px] max-w-full overflow-auto">
+            <File
+              mode="diff"
+              class="min-h-12"
+              before={{ name: "example.ts", contents: 'export const status = "draft"\n' }}
+              after={{ name: "example.ts", contents: 'export const status = "ready"\n' }}
+            />
+          </div>
+        ),
+      },
+      {
+        name: "Git changes: file-tree toggle covers the start of the ring",
+        failure: "Occluded",
+        target: '[data-component="select-v2"]',
+        keys: "In Review, focus the file-tree toggle and press Tab.",
+        sizing: "The toggle ends 2px before the selector, in both the sidebar and the collapsed toolbar.",
+        source: "session-ui/src/v2/components/session-review-v2.css",
+        fix: "Draw the mode selector's ring inset so the floating toggle cannot cover it.",
+        render: () => (
+          <div class="h-[100px] w-[340px]">
+            <SessionFilePanelV2
+              toolbar={false}
+              sidebarToggle={<SessionReviewV2SidebarToggle opened onToggle={() => undefined} />}
+              sidebar={
+                <SessionReviewV2Sidebar
+                  open
+                  transition={false}
+                  filter=""
+                  onFilterChange={() => undefined}
+                  title={
+                    <Select
+                      options={["Git changes", "Branch changes"]}
+                      current="Git changes"
+                      onSelect={() => undefined}
+                    />
+                  }
+                />
+              }
+            />
+          </div>
+        ),
+      },
       {
         name: "Tab strip: End puts the last tab under the sticky Add tab",
         failure: "Occluded",
@@ -161,6 +729,7 @@ const surfaces: Surface[] = [
         sizing: "Side panel 360px wide with 13 tabs open.",
         source:
           "app/src/runtime/plugin/side-region.tsx:333 (sticky +), ui tabs.css:605–621 (strip mask), tabs.css:100 (no ring)",
+        fix: 'Kobalte moved focus without scrolling, so End left the tab where it was. The strip now scrolls a keyboard-focused tab into view (tab-strip-scroll.ts), and its scroll-padding-inline, --tab-strip-add plus the 24px fade (tabs.css), keeps it clear of the "+". The ring covers the whole tab, close button included.',
         from: { scroller: '[data-slot="tabs-list"]', edge: "start" },
         render: () => <TabStrip />,
       },
@@ -171,6 +740,7 @@ const surfaces: Surface[] = [
         keys: "From any tab, press Home.",
         sizing: "Any panel width.",
         source: "ui/src/navigation/tabs/tabs.css:100–103 (outline: none, box-shadow: none)",
+        fix: "The tab draws the 2px ring inset (offset -2px) around its label and close button, since the strip scrolls and would clip a ring outside.",
         from: { scroller: '[data-slot="tabs-list"]', edge: "end" },
         render: () => <TabStrip />,
       },
@@ -180,12 +750,79 @@ const surfaces: Surface[] = [
       "CSV preview at 80px: Copy content overflows the header.",
       "Line comment More options runs past the panel edge at 360px.",
       "Files and Review trees: ArrowDown from the selected file moves focus with no visible change (pierre-tree.tsx:41–42, 84–92).",
-      "Git changes inline select, and the source and diff viewers: no visible focus (same pattern as the Language select below).",
     ],
   },
   {
     name: "Settings",
     cases: [
+      {
+        name: "Extensions tab panel: the ring loses both sides",
+        failure: "Clipped",
+        target: '[role="tabpanel"]',
+        keys: "Open Settings › Extensions › MCPs and Tab from the selected tab onto its panel.",
+        sizing: "The panel stretches edge to edge inside a clipping tabs root.",
+        source: "app/src/settings/settings.css (.settings-subtabs)",
+        fix: "Keep the tab panel reachable, including when it has no interactive content. Draw its ring inset, independently of the rings on its children.",
+        render: () => (
+          <div class="w-[400px] max-w-full">
+            <Tabs variant="pill" defaultValue="mcps" class="settings-subtabs">
+              <Tabs.List>
+                <Tabs.Trigger value="mcps">MCPs</Tabs.Trigger>
+                <Tabs.Trigger value="plugins">Plugins</Tabs.Trigger>
+              </Tabs.List>
+              <Tabs.Content value="mcps">
+                <div class="settings-extension-row">
+                  <span>Available to all projects</span>
+                  <span class="text-v2-text-text-muted">Manage in opencode.json</span>
+                </div>
+              </Tabs.Content>
+              <Tabs.Content value="plugins">Manage plugins</Tabs.Content>
+            </Tabs>
+          </div>
+        ),
+      },
+      {
+        name: "Connect provider dialog: breadcrumb focus only changes text colour",
+        failure: "Inconsistent",
+        target: "nav button",
+        keys: "Open Connect, choose a provider, then Tab or Shift+Tab to the Connect breadcrumb.",
+        sizing: "The breadcrumb is a compact text button, not a full-width row.",
+        source: "app/src/providers/connect/dialog.tsx",
+        fix: "Both interactive breadcrumbs use the shared outset keyboard ring with a 4px radius. Non-interactive breadcrumb labels remain plain text.",
+        render: () => (
+          <div data-slot="dialog-header" class="w-[320px] rounded-xl border border-v2-border-border-base p-4">
+            <nav aria-label="Provider connection" class="flex items-center gap-1 text-13-regular">
+              <button type="button" class="rounded-[4px] text-v2-text-text-faint hover:text-v2-text-text-base">
+                Connect
+              </button>
+              <Icon name="chevron-right" class="text-v2-icon-icon-muted" />
+              <span class="text-13-medium">OpenCode Go</span>
+            </nav>
+          </div>
+        ),
+      },
+      {
+        name: "Providers: Show more providers draws a full-width square ring",
+        failure: "Inconsistent",
+        target: ".settings-providers-view-all",
+        keys: "In Settings › Providers, Tab from the last Connect button to Show more providers.",
+        sizing: "The section is a column; by default its children stretch across the panel.",
+        source: "app/src/settings/settings.css (.settings-providers-view-all)",
+        fix: "Size the text action to its label, give it a 4px corner radius, and use the shared 2px outset ring.",
+        render: () => (
+          <div class="settings-section" style={{ width: "min(100%, 560px)" }}>
+            <h3 class="settings-section-title">Popular providers</h3>
+            <SettingsList>
+              <SettingsRow title="OpenAI" description="Connect an account to use OpenAI models">
+                <Button size="small">Connect</Button>
+              </SettingsRow>
+            </SettingsList>
+            <button type="button" class="settings-providers-view-all">
+              Show more providers
+            </button>
+          </div>
+        ),
+      },
       {
         name: "Models: Shift+Tab hides the focused switch under the sticky header",
         failure: "Occluded",
@@ -193,35 +830,34 @@ const surfaces: Surface[] = [
         keys: "Click the last row's name, then press Shift+Tab until a row scrolls up.",
         sizing: "Audited at 1280×800 and 390×680. The panel has no scroll padding for its sticky header.",
         source: "app/src/settings/settings.css:587–611 (.settings-panel, sticky .settings-tab-header)",
+        fix: "tab-header.ts writes the header's height to --settings-tab-header-height; focusable controls in .settings-tab-body take it, plus the 24px fade, as their top scroll-margin.",
         from: { scroller: ".settings-panel", edge: "end" },
+        render: () => <ModelsPanel />,
+      },
+      {
+        name: "Extensions: Check for updates and How to add skills cut at the right",
+        failure: "Clipped",
+        target: ".settings-extension-link",
+        keys: "Open Extensions › Skills (or Plugins), press Tab until the link (or Check for updates) is focused.",
+        sizing: "Any width. Both sit flush with the sub-tab panel's end edge.",
+        source:
+          "ui tabs-current.css (tabs-v2 root overflow: clip), settings.css (.settings-subtabs panel overflow: auto), extensions.tsx",
+        fix: "The tabs root clips with a 5px overflow-clip-margin, and the scrolling sub-tab panel pads its sides by 5px and takes it back with a negative margin, so a ring at either edge shows.",
         render: () => (
-          <div class="settings-panel" style={{ width: "560px", height: "340px" }}>
-            <div class="settings-tab-header settings-tab-header--stacked">
-              <div class="settings-tab-header-row">
-                <div class="flex min-w-0 flex-col gap-1">
-                  <h2 class="settings-tab-title">Models</h2>
-                  <span class="text-11-regular text-v2-text-text-muted">
-                    Choose which models appear in the model picker.
-                  </span>
+          <div style={{ width: "560px" }}>
+            <Tabs variant="pill" defaultValue="skills" class="settings-subtabs">
+              <Tabs.List>
+                <Tabs.Trigger value="skills">Skills</Tabs.Trigger>
+              </Tabs.List>
+              <Tabs.Content value="skills">
+                <div class="flex items-center justify-between">
+                  <span class="text-13-medium">Available to all projects</span>
+                  <a class="settings-extension-link text-13-regular underline" href="#review-focus-visibility">
+                    How to add skills
+                  </a>
                 </div>
-              </div>
-              <SettingsSearchField value="" active={false} placeholder="Search models" onInput={() => undefined} />
-            </div>
-            <div class="settings-tab-body settings-models">
-              <SettingsList variant="catalog">
-                <For each={models}>
-                  {(name) => (
-                    <SettingsRow title={name} description="">
-                      <div>
-                        <Switch defaultChecked hideLabel>
-                          {name}
-                        </Switch>
-                      </div>
-                    </SettingsRow>
-                  )}
-                </For>
-              </SettingsList>
-            </div>
+              </Tabs.Content>
+            </Tabs>
           </div>
         ),
       },
@@ -232,6 +868,7 @@ const surfaces: Surface[] = [
         keys: "Click the path, press Tab.",
         sizing: "Audited at 1280×800. Delete is the row's top-right control.",
         source: "app/src/settings/settings.css:1919–27 (row overflow: hidden), workspaces.tsx:543–553",
+        fix: "The row clips with overflow: clip and a 5px overflow-clip-margin instead of overflow: hidden, so the removal animation still clips and the ring shows.",
         render: () => (
           <div class="settings-tab-body settings-workspaces" style={{ width: "560px", padding: "0" }}>
             <div class="settings-workspaces-inventory">
@@ -267,6 +904,7 @@ const surfaces: Surface[] = [
         keys: "Click the row title, press Tab.",
         sizing: "Any width. Inline appearance sets outline: none, and focus only recolours that outline.",
         source: "ui/src/forms/select/select.css:100–103, 193–204",
+        fix: "Inline Select draws the default ring immediately on keyboard focus, with no outline at rest. A transparent rest outline would show in forced colours. Bordered selects keep their normal field border.",
         render: () => (
           <div style={{ width: "560px" }}>
             <SettingsList>
@@ -290,6 +928,7 @@ const surfaces: Surface[] = [
         keys: "Click the row title, press Tab three times.",
         sizing: "Any width. Focus and selection share one ring.",
         source: "app/src/settings/workspaces/project.css:328–332",
+        fix: "Focus is the default outline and selection a neutral ring in --v2-border-border-inverse, so the two read apart.",
         render: () => (
           <div style={{ width: "560px" }}>
             <SettingsList>
@@ -321,11 +960,190 @@ const surfaces: Surface[] = [
           </div>
         ),
       },
+      {
+        name: "Navigation and sub-tabs: square ring on a rounded tab",
+        failure: "Inconsistent",
+        target: '[data-slot="tabs-v2-trigger"]',
+        keys: "Click the page title, press Shift+Tab to the navigation (or Tab to a sub-tab), then the arrow keys.",
+        sizing: "Any width.",
+        source: "ui/src/navigation/tabs/tabs-current.css",
+        fix: "The trigger inside the tab has no radius, so its ring was square. The ring now goes on the tab's wrapper (:has(trigger:focus-visible)), inset 2px, and follows the tab's radius. It also shows only for the keyboard (:focus-visible), not after a click.",
+        render: () => (
+          <div style={{ width: "360px" }}>
+            <Tabs variant="pill" defaultValue="mcps" class="settings-subtabs">
+              <Tabs.List>
+                <Tabs.Trigger value="mcps">MCPs</Tabs.Trigger>
+                <Tabs.Trigger value="plugins">Plugins</Tabs.Trigger>
+                <Tabs.Trigger value="skills">Skills</Tabs.Trigger>
+              </Tabs.List>
+            </Tabs>
+          </div>
+        ),
+      },
+      {
+        name: "Timeline › Advanced: background only",
+        failure: "Inconsistent",
+        target: '[data-slot="collapsible-trigger"]',
+        keys: "Open Settings › Timeline, Tab to Advanced.",
+        sizing: "Any width.",
+        source: "ui/src/components/collapsible.css",
+        fix: "A standalone disclosure, not a list row, so it takes the default ring (2px offset) with a 4px radius instead of the hover background.",
+        render: () => (
+          <div style={{ width: "360px" }}>
+            <Collapsible variant="ghost">
+              <Collapsible.Trigger>
+                <span>Advanced</span>
+                <Collapsible.Arrow />
+              </Collapsible.Trigger>
+              <Collapsible.Content>Content</Collapsible.Content>
+            </Collapsible>
+          </div>
+        ),
+      },
+      {
+        name: "Projects: thin square ring inside the row's highlight",
+        failure: "Inconsistent",
+        target: ".settings-project-card > button",
+        keys: "Open Settings › Projects, press Tab to a project row.",
+        sizing: "Any width.",
+        source: "app/src/settings/settings.css, settings/workspaces/project-row.tsx",
+        fix: "The row's inner button drew a 1px inset box-shadow with square corners inside the row's highlight. The ring is now on the whole row (.settings-project-card:has(> button:first-child:focus-visible)), 2px, inset 2px, with its radius. The options button keeps its own ring.",
+        render: () => (
+          <div style={{ width: "360px" }}>
+            <div role="listitem" data-component="settings-project-card" class="settings-project-card">
+              <button
+                type="button"
+                class="flex h-full min-w-0 flex-1 items-center gap-2 rounded-[4px] bg-transparent text-start focus-visible:outline-none"
+              >
+                <ProjectAvatar fallback="O" variant="blue" class="!size-5" />
+                <span class="text-[13px] font-[530]">opencode</span>
+              </button>
+            </div>
+          </div>
+        ),
+      },
     ],
     also: [
+      "Fixed: the sticky header's scroll margin (Models, above) now applies on every Settings page, not just Models (navigation.tsx).",
       "Section headings and Timeline detail controls lose their bottom stroke at the scrollport edge.",
-      "The selected Settings navigation tab looks the same focused and blurred.",
+      "Fixed: the selected Settings navigation tab looked the same focused and blurred. The tab ring above covers it.",
     ],
+  },
+  {
+    name: "Shared controls",
+    cases: [
+      {
+        name: "Focus ring colour: the default did not adapt to the scheme",
+        failure: "Inconsistent",
+        target: "button",
+        keys: "Switch Scheme between Light and Dark. With forced focus off, Tab to the button in each scheme.",
+        sizing: "The ring keeps the same width and offset in both schemes.",
+        source: "ui/src/styles/tokens/theme.css, ui/src/theme/v2/mapping.ts",
+        fix: "Use Blue 500 in light mode and Blue 400 in dark mode. The Settings colour experiment is no longer needed.",
+        render: () => <Button variant="neutral">Focus ring</Button>,
+      },
+      {
+        name: "Links: the browser's orange, square ring",
+        failure: "Inconsistent",
+        target: "a",
+        keys: "Tab to any link without its own focus rule, such as Help & feedback.",
+        sizing: "Any width. The colour is the system accent, orange with an orange macOS accent.",
+        source: "ui/src/styles/base.css",
+        fix: "base.css makes the shared ring the default for every :focus-visible element, so nothing falls back to the browser's, and gives links a 4px radius like the other rings.",
+        render: () => (
+          <a
+            href="#review-focus-visibility"
+            class="inline-flex items-center gap-1.5 text-13-regular text-v2-text-text-muted underline"
+          >
+            Help &amp; feedback
+            <Icon name="arrow-up-right" size="small" />
+          </a>
+        ),
+      },
+      {
+        name: "Switch: a black ring flashes as focus arrives",
+        failure: "Inconsistent",
+        target: '[data-slot="switch-input"]',
+        keys: "Tab onto a switch and watch the ring appear.",
+        sizing: "Any width. Tab with forced colours enabled to check that the unfocused switch has no ring.",
+        source: "ui/src/forms/switch/switch.css",
+        fix: "Draw the full ring immediately on keyboard focus, with no outline at rest. In forced colours, a system-colour border keeps the track and thumb visible.",
+        render: () => <Switch defaultChecked>Compact switch</Switch>,
+      },
+      {
+        name: "Radio: forced colours show a ring before focus",
+        failure: "Inconsistent",
+        target: '[data-slot="radio-v2-item-input"]',
+        keys: "Tab to the selected radio, then use an arrow key to move to the next radio.",
+        sizing:
+          "Reproduces in Chromium with forced colours enabled. The regular radio border is separate from its ring.",
+        source: "ui/src/forms/radio/radio.css",
+        fix: "Remove the transparent rest outline and show the focus ring immediately. A system-colour border and selected dot keep the radio visible in forced colours.",
+        render: () => (
+          <RadioGroup label="Output format" name="focus-visibility-radio" defaultValue="text">
+            <RadioItem value="text" label="Text" />
+            <RadioItem value="markdown" label="Markdown" />
+          </RadioGroup>
+        ),
+      },
+      {
+        name: "Standard checkbox and switch: blue border and soft shadow",
+        failure: "Inconsistent",
+        target: '[data-slot="checkbox-checkbox-input"]',
+        keys: "Tab onto a standard (legacy) checkbox or switch.",
+        sizing: "Any width.",
+        source: "ui/src/forms/checkbox/checkbox.css, switch/switch.css",
+        fix: "Was a blue border with the --shadow-xs-border-focus box-shadow. Now the shared 2px outline at a 2px offset.",
+        render: () => <Checkbox defaultChecked>Standard checkbox</Checkbox>,
+      },
+      {
+        name: "Segmented control: ring runs into the next item",
+        failure: "Clipped",
+        target: '[data-slot="segmented-control-v2-item"]',
+        keys: "Tab onto a segmented control.",
+        sizing: "Any width. Items sit edge to edge in a 28px track.",
+        source: "ui/src/navigation/segmented-control/segmented-control.css",
+        fix: "Was 2px at a 1px offset, over the neighbouring item and the track. Now inset (-2px), inside the item.",
+        render: () => (
+          <SegmentedControl defaultValue="one" aria-label="Segmented">
+            <SegmentedControlItem value="one">One</SegmentedControlItem>
+            <SegmentedControlItem value="two">Two</SegmentedControlItem>
+          </SegmentedControl>
+        ),
+      },
+      {
+        name: "Text field clear button: ring runs past the field's edge",
+        failure: "Clipped",
+        target: '[data-slot="text-input-v2-icon-button"]',
+        keys: "Type in a clearable field, press Tab to the clear button.",
+        sizing: "Any width. The button sits at the field's end.",
+        source: "ui/src/forms/text-input/text-input.css",
+        fix: "Was 2px at a 1px offset, over the field's border. Now inset (-2px), inside the button.",
+        render: () => (
+          <div style={{ width: "240px" }}>
+            <TextInput value="Clearable" showClearButton clearLabel="Clear" />
+          </div>
+        ),
+      },
+      {
+        name: "Small controls: 2.5px and 1px offsets",
+        failure: "Inconsistent",
+        target: '[data-component="button-v2"]',
+        keys: "Tab through any form.",
+        sizing: "At 1x, a 2.5px offset lands on a half pixel and the ring's edges blur.",
+        source: "ui button.css, icon-button.css, checkbox, switch, radio, select, field, and every app rule at 2.5px",
+        fix: "One rule: 2px outset by default, -2px inset for rows and controls flush with a clipping or scrolling edge. 2.5px became 2px; compact switch, radio and the field info icon went from 1px to 2px.",
+        render: () => (
+          <div class="flex items-center gap-4">
+            <Button variant="neutral">Button</Button>
+            <Switch defaultChecked hideLabel>
+              Compact switch
+            </Switch>
+          </div>
+        ),
+      },
+    ],
+    also: [],
   },
 ]
 
@@ -352,12 +1170,13 @@ function FocusVisibility(props: VisibilityArgs) {
       <header style={{ display: "grid", gap: "4px" }}>
         <h1 style={{ ...heading, "font-size": "18px" }}>Focus visibility</h1>
         <p style={{ ...label, margin: "0" }}>
-          Where focus is clipped, covered or invisible. Each case opens with its target focused; the dashed box marks
-          where that target is. Follow the keys to reproduce it with real focus.
+          Where focus was clipped, covered, invisible or inconsistent with the shared ring, and how each was fixed. The
+          cases stay here as checks that the fixes hold: each opens with its target focused and the dashed box marks
+          where it is. Follow the keys to check it with real focus.
         </p>
       </header>
       <For each={surfaces}>
-        {(surface) => (
+        {(surface, sectionIndex) => (
           <section style={{ display: "grid", gap: "12px" }}>
             <h2 style={heading}>{surface.name}</h2>
             <div
@@ -368,15 +1187,27 @@ function FocusVisibility(props: VisibilityArgs) {
               }}
             >
               <For each={surface.cases}>
-                {(item) => <CaseCard case={item} forced={props.forced} locator={props.locator} />}
+                {(item, caseIndex) => (
+                  <CaseCard
+                    case={item}
+                    number={
+                      surfaces.slice(0, sectionIndex()).reduce((count, section) => count + section.cases.length, 1) +
+                      caseIndex()
+                    }
+                    forced={props.forced}
+                    locator={props.locator}
+                  />
+                )}
               </For>
             </div>
-            <div style={{ display: "grid", gap: "4px" }}>
-              <span style={{ ...label, color: "var(--v2-text-text-base)" }}>Same audit, not rendered here</span>
-              <ul style={{ ...label, margin: "0", "padding-inline-start": "18px" }}>
-                <For each={surface.also}>{(line) => <li>{line}</li>}</For>
-              </ul>
-            </div>
+            <Show when={surface.also.length}>
+              <div style={{ display: "grid", gap: "4px" }}>
+                <span style={{ ...label, color: "var(--v2-text-text-base)" }}>Same audit, not rendered here</span>
+                <ul style={{ ...label, margin: "0", "padding-inline-start": "18px" }}>
+                  <For each={surface.also}>{(line) => <li>{line}</li>}</For>
+                </ul>
+              </div>
+            </Show>
           </section>
         )}
       </For>
@@ -384,7 +1215,7 @@ function FocusVisibility(props: VisibilityArgs) {
   )
 }
 
-function CaseCard(props: { case: Case; forced: boolean; locator: boolean }) {
+function CaseCard(props: { case: Case; number: number; forced: boolean; locator: boolean }) {
   let stage: HTMLDivElement | undefined
 
   const [box, setBox] = createSignal<{ left: number; top: number; width: number; height: number }>()
@@ -468,8 +1299,12 @@ function CaseCard(props: { case: Case; forced: boolean; locator: boolean }) {
       }}
     >
       <div style={{ display: "flex", gap: "8px", "align-items": "baseline", "justify-content": "space-between" }}>
-        <span style={{ ...label, color: "var(--v2-text-text-base)", "font-weight": 530 }}>{props.case.name}</span>
-        <span style={{ ...label, color: "var(--v2-state-fg-danger)", "flex-shrink": 0 }}>{props.case.failure}</span>
+        <span style={{ ...label, color: "var(--v2-text-text-base)", "font-weight": 530 }}>
+          {props.number}. {props.case.name}
+        </span>
+        <span style={{ ...label, color: "var(--v2-state-fg-success)", "flex-shrink": 0 }}>
+          Fixed · {props.case.failure}
+        </span>
       </div>
       <div
         ref={stage}
@@ -480,7 +1315,7 @@ function CaseCard(props: { case: Case; forced: boolean; locator: boolean }) {
         }}
         style={{ position: "relative", padding: "12px", overflow: "auto", "max-width": "100%" }}
       >
-        {props.case.render()}
+        {props.case.render(() => props.forced)}
         <Show when={props.locator && box()}>
           {(rect) => (
             <div
@@ -509,8 +1344,114 @@ function CaseCard(props: { case: Case; forced: boolean; locator: boolean }) {
         <dd style={{ margin: "0", "font-family": "var(--font-family-mono)", "font-size": "11px" }}>
           {props.case.source}
         </dd>
+        <dt>Fix</dt>
+        <dd style={{ margin: "0", color: "var(--v2-text-text-base)" }}>{props.case.fix}</dd>
       </dl>
     </figure>
+  )
+}
+
+function createPreviewTabFocus(forced: () => boolean) {
+  const focus = createTabFocus()
+  const [entered, setEntered] = createSignal(false)
+
+  return {
+    visible: () => focus.visible() || (forced() && !entered()) || undefined,
+    enter: () => {
+      setEntered(true)
+      focus.enter()
+    },
+  }
+}
+
+function HomeSearchFocusExample(props: { forced: boolean }) {
+  const focus = createPreviewTabFocus(() => props.forced)
+
+  return (
+    <div class="grid w-[360px] gap-2">
+      <Button class="justify-self-start">Previous control</Button>
+      <label
+        data-slot="home-session-search-field"
+        class="flex h-9 items-center gap-2 rounded-[6px] bg-v2-background-bg-layer-02/60 ps-3 pe-2 text-v2-icon-icon-muted focus-within:bg-v2-background-bg-layer-02"
+      >
+        <Icon name="magnifying-glass" />
+        <input
+          data-keyboard-focus={focus.visible()}
+          aria-label="Search sessions"
+          placeholder="Search sessions"
+          class="min-w-0 flex-1 border-0 bg-transparent text-v2-text-text-base outline-0"
+          onFocus={focus.enter}
+        />
+      </label>
+    </div>
+  )
+}
+
+function ComposerFocusExample(props: { forced: boolean }) {
+  const focus = createPreviewTabFocus(() => props.forced)
+
+  return (
+    <div class="grid w-[360px] gap-2">
+      <Button class="justify-self-start">Previous control</Button>
+      <form data-component="composer" class="overflow-clip rounded-xl shadow-[var(--v2-elevation-raised)]">
+        <div data-component="composer-scroll">
+          <div
+            data-component="composer-editor"
+            data-keyboard-focus={focus.visible()}
+            role="textbox"
+            aria-label="Prompt"
+            contenteditable
+            class="px-4 pt-4 pb-2 text-13-regular focus:outline-none"
+            onFocus={focus.enter}
+          >
+            Ask anything
+          </div>
+        </div>
+        <div class="p-2">
+          <IconButton type="button" variant="ghost-muted" icon={<Icon name="plus" />} aria-label="Attach" />
+        </div>
+      </form>
+    </div>
+  )
+}
+
+// The Models page, with its header measured the way Settings measures it.
+function ModelsPanel() {
+  let panel: HTMLDivElement | undefined
+
+  onMount(() => {
+    const header = panel?.querySelector<HTMLElement>(".settings-tab-header")
+
+    if (panel && header) onCleanup(trackTabHeader(panel, header))
+  })
+
+  return (
+    <div ref={panel} class="settings-panel" style={{ width: "560px", height: "340px" }}>
+      <div class="settings-tab-header settings-tab-header--stacked">
+        <div class="settings-tab-header-row">
+          <div class="flex min-w-0 flex-col gap-1">
+            <h2 class="settings-tab-title">Models</h2>
+            <span class="text-11-regular text-v2-text-text-muted">Choose which models appear in the model picker.</span>
+          </div>
+        </div>
+        <SettingsSearchField value="" active={false} placeholder="Search models" onInput={() => undefined} />
+      </div>
+      <div class="settings-tab-body settings-models">
+        <SettingsList variant="catalog">
+          <For each={models}>
+            {(name) => (
+              <SettingsRow title={name} description="">
+                <div>
+                  <Switch defaultChecked hideLabel>
+                    {name}
+                  </Switch>
+                </div>
+              </SettingsRow>
+            )}
+          </For>
+        </SettingsList>
+      </div>
+    </div>
   )
 }
 
@@ -535,6 +1476,13 @@ function TabStrip() {
               <IconButton variant="ghost" icon={<Icon name="plus" />} aria-label="Add tab" />
             </div>
           </Tabs.List>
+          {/* The panel actions slot, here only the space side-region.tsx keeps for the panel toggle. */}
+          <div
+            data-slot="session-side-panel-actions"
+            class="session-review-v2-open-in-app-slot h-[var(--tabs-bar-height)] shrink-0 flex items-center gap-2 pe-[var(--session-header-inset-end,12px)]"
+          >
+            <div class="size-7 shrink-0" aria-hidden />
+          </div>
         </div>
       </Tabs>
     </aside>

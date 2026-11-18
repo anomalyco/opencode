@@ -1168,6 +1168,22 @@ test.describe("pages open before slow data", () => {
     refresh.release()
   })
 
+  test("extensions keeps the empty MCP panel's keyboard ring inside the tabs", async ({ page }) => {
+    const { settings } = await open(page)
+
+    await settings.getByRole("tab", { name: "Extensions", exact: true }).click()
+
+    const tab = settings.getByRole("tab", { name: "MCPs", exact: true })
+
+    const panel = settings.getByRole("tabpanel", { name: "Extensions", exact: true }).getByRole("tabpanel")
+
+    await expect(panel.getByText("Available to all projects")).toBeVisible()
+    await tab.press("Tab")
+    await expect(panel).toBeFocused()
+    await expect(panel).toHaveCSS("outline-style", "solid")
+    await expect(panel).toHaveCSS("outline-offset", "-2px")
+  })
+
   test("extensions", async ({ page }) => {
     const { settings } = await open(page, {
       mcp: [{ name: "demo-mcp", status: { status: "connected" } }],
@@ -1853,6 +1869,12 @@ test("providers: OpenCode Go connects with its own methods, not the Console sign
     .click()
   const dialog = page.getByRole("dialog", { name: "Connect OpenCode Go", exact: true })
   await expect(dialog.getByPlaceholder("API key")).toBeVisible()
+
+  const connect = dialog.getByRole("navigation").getByRole("button", { name: "Connect", exact: true })
+
+  await dialog.getByRole("button", { name: "Close", exact: true }).press("Shift+Tab")
+  await expect(connect).toBeFocused()
+  await expect(connect).toHaveCSS("outline-style", "solid")
   expect(attempts).toEqual([])
 })
 

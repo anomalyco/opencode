@@ -25,6 +25,7 @@ import { Menu } from "@opencode/ui/menu"
 import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { useLanguage } from "@/runtime/i18n/language"
+import { createTabFocus } from "@/runtime/tab-focus"
 import { ServerConnection } from "@/runtime/server/registry"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import { showToast } from "@/shell/notifications/toast"
@@ -434,6 +435,8 @@ function HomeSessionSearch(
 ) {
   const scope = children(() => props.searchScope)
 
+  const keyboardFocus = createTabFocus()
+
   return (
     <div class="w-full">
       <div
@@ -510,6 +513,7 @@ function HomeSessionSearch(
           </div>
         </Show>
         <label
+          data-slot="home-session-search-field"
           class={`
             relative z-20 flex h-9 w-full items-center gap-2 rounded-[6px] py-1 ps-3 pe-2
             bg-v2-background-bg-layer-02/60 text-v2-icon-icon-muted transition-[background-color,box-shadow]
@@ -532,7 +536,11 @@ function HomeSessionSearch(
             aria-activedescendant={
               props.searchActive && props.searchOpen ? `home-session-search-option-${props.searchActive}` : undefined
             }
-            onFocus={props.onSearchFocus}
+            data-keyboard-focus={keyboardFocus.visible() || undefined}
+            onFocus={() => {
+              keyboardFocus.enter()
+              props.onSearchFocus()
+            }}
             onInput={(event) => props.onSearchInput(event.currentTarget.value)}
             onKeyDown={(event) => {
               if (event.key === "Escape") {
@@ -804,7 +812,7 @@ function HomeSessionRow(
             flex h-10 min-w-0 w-full flex-1 shrink-0 cursor-default items-center rounded-[6px] border-0
             bg-transparent py-3 ps-1.5 pe-3 md:ps-3 text-start text-v2-text-text-muted [font-weight:530]
             transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out
-            hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none
+            hover:bg-v2-overlay-simple-overlay-hover
           `}
           classList={{ "gap-1.5": props.desktop, "gap-2": !props.desktop, "md:pe-10": SHOW_HOME_SESSION_ARCHIVE }}
           onMouseDown={(event) => {

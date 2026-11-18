@@ -5,6 +5,26 @@ import { mockPluginsActivating, type MockServerConfig } from "../utils/mock-serv
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] })
 
+test("the composer frame rings on Tab entry but not on click", async ({ page }) => {
+  const view = await openSession(page, { name: "ComposerKeyboardFocus" })
+
+  const frame = page.locator('[data-component="composer"]').filter({ has: view.editor })
+
+  await view.editor.click()
+  await expect(view.editor).toBeFocused()
+  await expect(frame).toHaveCSS("outline-style", "none")
+
+  await page.keyboard.press("Shift+Tab")
+  await expect(view.editor).not.toBeFocused()
+  await page.keyboard.press("Tab")
+  await expect(view.editor).toBeFocused()
+  await expect(frame).toHaveCSS("outline-style", "solid")
+
+  await view.editor.click()
+  await expect(view.editor).toBeFocused()
+  await expect(frame).toHaveCSS("outline-style", "none")
+})
+
 test("mention a session by title, send its stable token, and open its own tab", async ({ page }) => {
   const target = "ses_0123456789abcdefghijklmnop"
   const prompts: Parameters<NonNullable<MockServerConfig["onPrompt"]>>[0]["body"][] = []
