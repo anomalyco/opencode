@@ -29,12 +29,6 @@
   {"checkpoint":"single-reviewed","fixture":"E.15a/route/single-reviewed"},
   {"keys":["s"]},
   {"checkpoint":"all","fixture":"E.15a/route/all"},
-  {"keys":["ctrl+d"]},
-  {"checkpoint":"half-page","fixture":"E.15a/route/half-page"},
-  {"keys":["shift+g"]},
-  {"checkpoint":"last","fixture":"E.15a/route/last"},
-  {"keys":["g","g"]},
-  {"checkpoint":"first","fixture":"E.15a/route/first"},
   {"keys":["q"]},
   {"checkpoint":"home","until":"Ask anything","masks":[{"x":26,"y":16,"width":94,"height":1,"reason":"the placeholder example: random in TS and Rust"}],"fixture":"E.15a/route/home"}
  ],

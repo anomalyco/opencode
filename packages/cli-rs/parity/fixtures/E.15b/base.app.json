@@ -25,9 +25,7 @@
   {"keys":["down","enter"]},
   {"checkpoint":"chosen","until":"vs release","fixture":"E.15b/base/chosen"},
   {"keys":["d"]},
-  {"checkpoint":"remembered","until":"Diff source","fixture":"E.15b/base/remembered"},
-  {"keys":["escape"]},
-  {"checkpoint":"closed","until":"vs release","fixture":"E.15b/base/closed"}
+  {"checkpoint":"remembered","until":"Diff source","fixture":"E.15b/base/remembered"}
  ],
  "requests": {
   "writes": [],

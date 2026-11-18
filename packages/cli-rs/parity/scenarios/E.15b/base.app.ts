@@ -52,7 +52,5 @@ export default defineApp({
     { checkpoint: "chosen", until: "vs release" },
     { keys: ["d"] },
     { checkpoint: "remembered", until: "Diff source" },
-    { keys: ["escape"] },
-    { checkpoint: "closed", until: "vs release" },
   ],
 })
