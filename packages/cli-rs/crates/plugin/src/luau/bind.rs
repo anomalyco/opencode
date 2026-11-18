@@ -67,7 +67,8 @@ pub(crate) fn setup(
             Err(mlua::Error::runtime(message))
         })
         .map_err(error)?;
-    let module: Table = prelude.call(fail).map_err(error)?;
+    let native = natives(&vm.lua).map_err(error)?;
+    let module: Table = prelude.call((fail, native)).map_err(error)?;
     vm.lua.register_module("@opencode/plugin", &module).map_err(error)?;
     let lua = vm.lua.clone();
     let inputs = Inputs::new(&lua).map_err(error)?;
@@ -123,6 +124,43 @@ pub(crate) fn out<T: Serialize + Any>(lua: &Lua, value: &T) -> mlua::Result<Valu
     }
     let value = serde_json::to_value(value).map_err(|error| mlua::Error::runtime(error.to_string()))?;
     json::luau(lua, &value)
+}
+
+/// What the prelude's `plugin.json` is built on: `decode(text, nulls)`, `encode(value)`, `null`, and the array and object
+/// markers ([`json::markers`]).
+fn natives(lua: &Lua) -> mlua::Result<Table> {
+    let (array, object) = json::markers(lua)?;
+    let native = lua.create_table()?;
+    native.raw_set("array", array)?;
+    native.raw_set("object", object)?;
+    native.raw_set("null", Value::LightUserData(mlua::LightUserData(std::ptr::null_mut())))?;
+    // `value, nil`, or `nil, why` for a text that is not JSON or is past the bounds a value from a plugin is held to:
+    // its bytes, its depth (serde_json's 128) and its parts, checked before a table is built.
+    let decode = lua.create_function(|lua, (text, nulls): (mlua::LuaString, bool)| {
+        let limits = crate::limits::get();
+        let text = text.as_bytes();
+        if text.len() as u64 > limits.plugin_content {
+            return Ok((Value::Nil, Some(format!("its text is more than {} bytes", limits.plugin_content))));
+        }
+        let value = match serde_json::from_slice::<serde_json::Value>(&text) {
+            Ok(value) => value,
+            Err(error) => return Ok((Value::Nil, Some(error.to_string()))),
+        };
+        let most = decode::VALUES_A_NODE * limits.nodes;
+        if json::parts(&value) > most {
+            return Ok((Value::Nil, Some(format!("it holds more than {most} parts"))));
+        }
+        let nulls = if nulls { json::Nulls::Sentinel } else { json::Nulls::Carrier };
+        Ok((json::luau_with(lua, &value, nulls)?, None))
+    })?;
+    native.raw_set("decode", decode)?;
+    // The text of `value`, read as any value a plugin hands the host is ([`read`]): a bound it passes fails the call.
+    let encode = lua.create_function(|lua, value: Value| {
+        let value: serde_json::Value = read(lua, &value)?;
+        serde_json::to_string(&value).map_err(|error| mlua::Error::runtime(error.to_string()))
+    })?;
+    native.raw_set("encode", encode)?;
+    Ok(native)
 }
 
 /// A Luau value as JSON ([`read`]).

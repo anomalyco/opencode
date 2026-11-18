@@ -8,8 +8,8 @@
 -- it. A helper given no `props` builds the smallest table and runs no loop.
 
 -- What the host hands this chunk: `fail(message)` fails the running call with `message` though nothing more can be
--- allocated to raise it.
-local fail: (string) -> never = ...
+-- allocated to raise it; `native`, what `plugin.json` is built on (its `decode`, `encode`, `null` and markers).
+local fail: (string) -> never, native: any = ...
 
 local plugin = {}
 
@@ -404,6 +404,101 @@ function plugin.define(setup)
             setup(tasked(raw))
         end,
     })
+end
+
+-- JSON --------------------------------------------------------------------------------------------------------------
+--
+-- `plugin.json` reads and writes JSON with the host's `serde_json`, under the bounds any value a plugin hands the host
+-- is held to: its text, its depth and its parts. Luau has one table for JSON's arrays and objects: a table is an array
+-- when its keys are `1..n` (an empty table is one), an object otherwise, and a table with the object marker is an
+-- object whatever its keys. A table the host builds from JSON (`decode`, a reply, `setup.options`, `storageGet`)
+-- carries the marker of what it was, so an empty object goes back as `{}`.
+
+local json = {}
+
+-- JSON's `null` where a table must hold it: what `decode` gives with `{ null = true }`, and what the host reads as
+-- `null` in anything a plugin hands it (`encode`, a request's body, storage).
+json.null = native.null
+
+local ARRAY, OBJECT = native.array, native.object
+
+-- `text` as a value and `nil`, or `nil` and why: text that is not JSON, or past the bounds. A `null` field is left out
+-- and a `null` item is `plugin.json.null`, as the host hands values over; with `{ null = true }` every `null` is
+-- `plugin.json.null`, so a field that is `null` is told from one that is missing.
+function json.decode(text: string, options: { null: boolean? }?): (any, string?)
+    if type(text) ~= "string" then
+        error("plugin.json.decode needs a string", 2)
+    end
+    return native.decode(text, options ~= nil and options.null == true)
+end
+
+-- The JSON text of `value`. A function, a thread, userdata or a number that is not finite cannot be written.
+function json.encode(value: any): string
+    return native.encode(value)
+end
+
+-- Whether table `t` goes to JSON as an array: not when it has the object marker, else when its keys are `1..n`.
+function json.isArray(t: { [any]: any }): boolean
+    if getmetatable(t) == OBJECT then
+        return false
+    end
+    local count = 0
+    for _ in t do
+        count += 1
+    end
+    return count == #t
+end
+
+-- Marks table `t` an array, and returns it: an empty one goes to JSON as `[]`.
+function json.array<T>(t: T): T
+    return setmetatable(t :: any, ARRAY)
+end
+
+-- Marks table `t` an object, and returns it: an empty one goes to JSON as `{}`, and keys `1..n` as `"1"` to `"n"`.
+function json.object<T>(t: T): T
+    return setmetatable(t :: any, OBJECT)
+end
+
+plugin.json = table.freeze(json)
+
+-- Sorts `list` in place by `less` (`a < b` when left out) and returns it. Equal items keep their order, as in
+-- JavaScript's `Array.prototype.sort`; `table.sort`'s do not.
+function plugin.sort<T>(list: { T }, less: ((T, T) -> boolean)?): { T }
+    local n = #list
+    if n < 2 then
+        return list
+    end
+    local before: (T, T) -> boolean = less or function(a: any, b: any)
+        return a < b
+    end
+    -- Runs of `width` merged in pairs, from one buffer into the other, an item of the right run first only when it is
+    -- strictly less.
+    local from, to = list, table.create(n)
+    local width = 1
+    while width < n do
+        local low = 1
+        while low <= n do
+            local middle, high = math.min(low + width, n + 1), math.min(low + 2 * width, n + 1)
+            local left, right, at = low, middle, low
+            while left < middle and right < high do
+                if before(from[right], from[left]) then
+                    to[at], right = from[right], right + 1
+                else
+                    to[at], left = from[left], left + 1
+                end
+                at += 1
+            end
+            table.move(from, left, middle - 1, at, to)
+            table.move(from, right, high - 1, at + middle - left, to)
+            low = high
+        end
+        from, to = to, from
+        width *= 2
+    end
+    if from ~= list then
+        table.move(from, 1, n, 1, list)
+    end
+    return list
 end
 
 -- A span: `plugin.span("text", { fg = "text.muted", bold = true })`.

@@ -371,6 +371,28 @@ export type Plugin = {
     --- Runs each function as a task and waits until all ended: their values in order, or \`nil\` and the error of the
     --- first that returned one. Only a task waits.
     all: (fns: { () -> (any, any) }) -> ({ any }?, any),
+    --- JSON with the host's reader and writer, under the bounds of any value a plugin hands the host.
+    json: Json,
+    --- Sorts \`list\` in place by \`less\` (\`a < b\` when left out) and returns it; equal items keep their order.
+    sort: <T>(list: { T }, less: ((T, T) -> boolean)?) -> { T },
+}
+
+--- \`plugin.json\`. A table is a JSON array when its keys are \`1..n\` (an empty table is one), an object otherwise, and a
+--- table with the object marker is an object whatever its keys; a table the host builds from JSON carries its marker.
+export type Json = {
+    --- JSON's \`null\` where a table must hold it: what \`decode\` gives with \`{ null = true }\`.
+    null: any,
+    --- \`text\` as a value and \`nil\`, or \`nil\` and why. A \`null\` field is left out and a \`null\` item is \`null\`; with
+    --- \`{ null = true }\` every \`null\` is \`null\`.
+    decode: (text: string, options: { null: boolean? }?) -> (any, string?),
+    --- The JSON text of \`value\`.
+    encode: (value: any) -> string,
+    --- Whether table \`t\` goes to JSON as an array.
+    isArray: (t: { [any]: any }) -> boolean,
+    --- Marks \`t\` an array, and returns it: an empty one goes as \`[]\`.
+    array: <T>(t: T) -> T,
+    --- Marks \`t\` an object, and returns it: an empty one goes as \`{}\`.
+    object: <T>(t: T) -> T,
 }
 `
 

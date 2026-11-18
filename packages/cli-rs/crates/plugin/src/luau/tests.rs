@@ -930,9 +930,10 @@ fn a_value_past_the_conversion_bounds_is_refused_at_once() {
         end)
     "#;
     let registry = running(&host, define(&sources(dag), None).unwrap().0);
-    let start = Instant::now();
-    let text = footer(&host, &registry);
-    assert!(start.elapsed() < Duration::from_millis(500), "{:?}", start.elapsed());
+    // CPU time, which the machine's load does not stretch: a debug build reads the parts the bound allows in a tenth
+    // of it, where the DAG's 2^30 leaves would never end.
+    let (used, text) = cpu(|| footer(&host, &registry));
+    assert!(used < Duration::from_millis(500), "{used:?}");
     let error = failure(&registry, "test.luau").expect("refused");
     assert!(error.contains("the plugin's value is refused: it holds more than 320000 parts"), "{error}");
     assert!(!text.contains("leaf"));
@@ -1369,6 +1370,157 @@ fn each_refusal_of_the_decoder_names_its_cause() {
         "{ type = 'box' }, ".repeat(20)
     );
     assert_eq!(refused(&parts), ["bound: it holds more than 16 parts"; 2]);
+}
+
+/// The plugin of `body`, a command `check` that toasts what it finds, run once on a fresh host: its toasts, and why it
+/// failed if it did.
+fn checked(body: &str) -> (Vec<String>, Option<String>) {
+    let host = host();
+    let init = format!(
+        r#"
+        local plugin = require("@opencode/plugin")
+        local json = plugin.json
+        return plugin.define(function(setup)
+            setup:command({{ name = "check" }}, function(host)
+                local function say(message: string) host:toast({{ variant = "info", message = message }}) end
+                {body}
+            end)
+        end)
+    "#
+    );
+    let registry = running(&host, define(&sources(&init), None).unwrap().0);
+    keymap(&host).dispatch("check", None);
+    host.app.advance(Duration::from_millis(1));
+    let toasts = host.toasts.borrow().iter().map(|toast| toast.message.clone()).collect();
+    (toasts, failure(&registry, "test.luau"))
+}
+
+// Expected (luau-json): `plugin.json` reads and writes JSON as the host does: escapes and surrogate pairs, `null` both
+// ways (a field left out and an item `plugin.json.null`, or `plugin.json.null` everywhere), the array and object
+// markers on what it builds and what it is given, and the refusals; `plugin.sort` keeps equal items in their order.
+#[test]
+fn plugin_json_reads_and_writes_json_as_the_host_does() {
+    let (toasts, failed) = checked(
+        r#"
+        local value, err = json.decode('{"a":"\\u00e9\\n\\"q\\" \\ud83d\\ude00","b":[1,null,{}],"c":null,"d":[],"e":1.5}')
+        assert(err == nil, err)
+        assert(value.a == "é\n\"q\" 😀", value.a)
+        assert(value.b[1] == 1 and value.b[2] == json.null and #value.b == 3 and value.c == nil and value.e == 1.5)
+        assert(json.isArray(value.b) and json.isArray(value.d) and not json.isArray(value.b[3]) and not json.isArray(value))
+        local nulls = json.decode('{"c":null,"l":[null]}', { null = true })
+        assert(nulls.c == json.null and nulls.l[1] == json.null)
+        assert(json.decode("null", { null = true }) == json.null and json.decode("null") == nil)
+        local bad, why = json.decode("{")
+        assert(bad == nil and why:find("EOF"), why)
+        say(json.encode(value))
+        say(json.encode({ empty = {}, object = json.object({}), array = json.array({}), keys = json.object({ "x" }),
+            list = { 1, json.null, "\u{1}" }, mixed = { 1, k = 2 } }))
+        local ok, failure = pcall(json.encode, { f = print })
+        assert(not ok and tostring(failure):find("a function cannot cross"), tostring(failure))
+        local rows = { { k = 2, n = "a" }, { k = 1, n = "b" }, { k = 2, n = "c" }, { k = 1, n = "d" }, { k = 0, n = "e" } }
+        assert(plugin.sort(rows, function(x, y) return x.k < y.k end) == rows)
+        local names = {}
+        for index, row in rows do names[index] = row.n end
+        assert(table.concat(names) == "ebdac", table.concat(names))
+        local many = {}
+        for index = 1, 100 do many[index] = { k = index % 3, n = index } end
+        plugin.sort(many, function(x, y) return x.k < y.k end)
+        for index = 2, 100 do
+            local a, b = many[index - 1], many[index]
+            assert(a.k < b.k or (a.k == b.k and a.n < b.n), `{index}`)
+        end
+        assert(table.concat(plugin.sort({ 3, 1, 2 })) == "123" and #plugin.sort({}) == 0)
+        say("ok")
+    "#,
+    );
+    assert_eq!(failed, None);
+    let json = |text: &str| serde_json::from_str::<serde_json::Value>(text).unwrap();
+    assert_eq!(json(&toasts[0]), serde_json::json!({ "a": "é\n\"q\" 😀", "b": [1, null, {}], "d": [], "e": 1.5 }));
+    let written = serde_json::json!({
+        "empty": [], "object": {}, "array": [], "keys": { "1": "x" }, "list": [1, null, "\u{1}"], "mixed": { "1": 1, "k": 2 },
+    });
+    assert_eq!(json(&toasts[1]), written);
+    assert_eq!(toasts[2], "ok");
+}
+
+// Expected (luau-json): `plugin.json` holds to the bounds of any value a plugin hands the host. A text past them, or
+// nested or holding past them, decodes to `nil` and why; a value past them is refused when written, and the refusal
+// fails the call though the plugin caught it.
+#[test]
+fn plugin_json_holds_to_the_bounds() {
+    let text = crate::limits::Limits { plugin_content: 64, ..crate::limits::Limits::default() };
+    let restore = crate::limits::set(text);
+    let (toasts, failed) = checked(
+        r#"
+        local _, text = json.decode('"' .. string.rep("x", 70) .. '"')
+        assert(text == "its text is more than 64 bytes", text)
+        say("text")
+    "#,
+    );
+    assert_eq!(toasts.first().map(String::as_str), Some("text"), "{failed:?}");
+    drop(restore);
+    let parts = crate::limits::Limits { nodes: 1, ..crate::limits::Limits::default() };
+    let restore = crate::limits::set(parts);
+    let (toasts, failed) = checked(
+        r#"
+        local _, deep = json.decode(string.rep("[", 200) .. string.rep("]", 200))
+        assert(deep == "recursion limit exceeded at line 1 column 128", deep)
+        local _, parts = json.decode("[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17]")
+        assert(parts == "it holds more than 16 parts", parts)
+        say("bounds")
+    "#,
+    );
+    assert_eq!(toasts.first().map(String::as_str), Some("bounds"), "{failed:?}");
+    drop(restore);
+    // A failed call's effects do not apply: neither toast shows.
+    let (toasts, failed) = checked(
+        r#"
+        local nested = {}
+        for _ = 1, 200 do nested = { nested } end
+        say("before the refusal")
+        pcall(json.encode, nested)
+        say("after the refusal")
+    "#,
+    );
+    assert!(
+        failed.is_some_and(|error| error.contains("the plugin's value is refused: its tables nest more than 128 deep"))
+    );
+    assert!(toasts.iter().all(|toast| !toast.ends_with("the refusal")), "{toasts:?}");
+}
+
+// Expected (luau-json, command-hotkeys' option check): an empty table marked an object crosses to the server as `{}`
+// and an unmarked one as `[]`, and what comes back keeps the difference.
+#[test]
+fn an_empty_object_and_an_empty_array_cross_as_themselves() {
+    let host = host();
+    let init = r#"
+        local plugin = require("@opencode/plugin")
+        local json = plugin.json
+        return plugin.define(function(setup)
+            setup:command({ name = "send" }, function(host)
+                local body = { tags = json.object({}), list = {}, nested = { json.object({}), json.array({}) } }
+                local reply = host:fetch({ method = "POST", path = "/x", body = body })
+                local kinds = `{json.isArray(reply.tags)} {json.isArray(reply.list)} {json.isArray(reply)}`
+                host:toast({ variant = "info", message = `{kinds} {json.encode(reply)}` })
+            end)
+        end)
+    "#;
+    let registry = running(&host, define(&sources(init), None).unwrap().0);
+    keymap(&host).dispatch("send", None);
+    host.app.advance(Duration::from_millis(1));
+    let fetches = std::mem::take(&mut *host.fetches.borrow_mut());
+    let [(fetch, reply)] = <[_; 1]>::try_from(fetches).unwrap_or_else(|_| panic!("one fetch"));
+    assert_eq!(fetch.body, Some(serde_json::json!({ "tags": {}, "list": [], "nested": [{}, []] })));
+    reply(Ok(serde_json::json!({ "tags": {}, "list": [] })));
+    host.app.advance(Duration::from_millis(1));
+    assert_eq!(failure(&registry, "test.luau"), None);
+    let toast = host.toasts.borrow().last().map(|toast| toast.message.clone()).unwrap_or_default();
+    let (kinds, written) = toast.split_at(toast.find('{').unwrap_or(0));
+    assert_eq!(kinds, "false true false ");
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(written).unwrap(),
+        serde_json::json!({ "tags": {}, "list": [] })
+    );
 }
 
 // Expected (luau-calls): a reused list, set in place only where a call's list differs from the last one's, holds the
