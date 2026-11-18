@@ -550,11 +550,17 @@ test("an element's focus is the host's and it emits as OpenTUI's renderables", a
   refs.list.scrollBy(2)
   // `scrollChildIntoView` is the least scroll that shows the row (opencode-session-manager's selection).
   refs.list.scrollChildIntoView("row-3")
+  // A move past the content is the edge, as OpenTUI clamps it, within the host's i32 (CT-42: opencode-omeglecode's
+  // `scrollTo(Number.MAX_SAFE_INTEGER)` ended the JS host).
+  refs.list.scrollTo(Number.MAX_SAFE_INTEGER)
+  refs.list.scrollTo(-Infinity)
   await turn()
   const target = { type: "node", surface, id: "list" }
   expect(fake.effects.filter((effect: Json) => effect.type === "scroll")).toEqual([
     { type: "scroll", target, verb: { type: "offset", offset: 6 } },
     { type: "scroll", target, verb: { type: "to", node: "row-3", align: { type: "nearest" } } },
+    { type: "scroll", target, verb: { type: "offset", offset: 2 ** 31 - 1 } },
+    { type: "scroll", target, verb: { type: "offset", offset: -(2 ** 31) } },
   ])
   expect(fake.watches.has(`scroll:${surface}:list`)).toBe(true)
 })
