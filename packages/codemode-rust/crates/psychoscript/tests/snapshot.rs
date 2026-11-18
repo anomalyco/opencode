@@ -9,8 +9,8 @@ use std::thread;
 use std::time::Duration;
 
 use psychoscript::{
-    Extension, Hooks, HostFunction, HostValue, Json, Limits, Program, RunOutcome, Runtime, Schema,
-    Snapshot, Suspended, Suspender, Tool, ToolError,
+    Extension, Hooks, HostFunction, HostValue, Json, Limits, Program, RunOptions, RunOutcome,
+    Runtime, Schema, Snapshot, Suspended, Suspender, Tool, ToolError,
 };
 use serde_json::json;
 
@@ -492,6 +492,69 @@ fn a_state_is_refused_by_another_build_other_extensions_or_a_changed_source() {
         bytes.0["state"]["buffers"] = json!([bad]);
         assert!(rt.resume(&bytes).is_err(), "{bad}");
     }
+}
+
+#[test]
+fn a_run_started_with_some_extensions_resumes_with_the_same_ones_in_any_order() {
+    let global = |name: &'static str, n: f64| {
+        Extension::new(name).function(
+            name,
+            HostFunction::new(name, 0, move |_| Ok(HostValue::Number(n))),
+        )
+    };
+    let gate = Gate::default();
+    let rt = Runtime::new()
+        .with_tool("step", marked(&gate))
+        .extension(global("now", 7.0))
+        .extension(global("later", 8.0))
+        .extension(global("unused", 1.0));
+    let code =
+        format!("await tools.step({{ value: 1 }}); {BUSY} return [now(), later(), typeof unused]");
+    let picked = RunOptions::new().extensions(["later", "now"]);
+    let (outcome, _) = background(
+        rt.program_with(&code, &Default::default(), None, &picked),
+        |s| {
+            gate.entered(1);
+            suspend_soon(&s, None)
+        },
+    );
+    let state = suspended(outcome).state;
+    for refused in [
+        rt.resume(&state).err(),
+        rt.resume_with(&state, &RunOptions::new().extensions(["now"]))
+            .err(),
+    ] {
+        assert!(
+            refused
+                .expect("refused")
+                .message
+                .contains("saved by a runtime with other host globals")
+        );
+    }
+    let again = RunOptions::new().extensions(["now", "later", "now"]);
+    let o = done(
+        rt.resume_with(&state, &again)
+            .unwrap()
+            .run_resumable()
+            .unwrap(),
+    );
+    assert_eq!(o.result.unwrap(), json!([7, 8, "undefined"]));
+}
+
+#[test]
+fn picking_an_extension_the_runtime_was_not_made_with_panics() {
+    let rt = Runtime::new().extension(
+        Extension::new("now").function("now", HostFunction::new("now", 0, |_| Ok(1.0.into()))),
+    );
+    let other = RunOptions::new().extensions(["other"]);
+    let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        rt.program_with("1", &Default::default(), None, &other);
+    }))
+    .unwrap_err();
+    assert_eq!(
+        panicked.downcast_ref::<String>().map(String::as_str),
+        Some("Extension \"other\" isn't one this runtime was made with.")
+    );
 }
 
 #[test]
