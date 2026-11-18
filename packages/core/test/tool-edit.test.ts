@@ -126,7 +126,7 @@ const call = (input: typeof EditTool.Input.Type, id = "call-edit") => ({
   call: { type: "tool-call" as const, id, name: "edit", input },
 })
 
-const it = testEffect(Layer.empty)
+const it = testEffect(Layer.succeed(Flag.Overrides, undefined))
 
 describe("EditTool", () => {
   it.live("registers and replaces relative exact text through FileMutation once", () =>
