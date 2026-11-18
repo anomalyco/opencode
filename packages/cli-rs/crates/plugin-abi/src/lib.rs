@@ -3948,6 +3948,8 @@ impl Ctx {
 
 /// A registered fence render.
 pub type FenceFn = Rc<dyn Fn(&dyn Read, &Fence) -> Fenced>;
+/// A registered inline math render of [`Setup::inline_math`].
+pub type InlineMathFn = Rc<dyn Fn(&dyn Read, &str) -> Option<Line>>;
 /// A registered slot render.
 pub type RenderFn = Rc<dyn Fn(&dyn Read, &SlotInput, &Changed) -> Render>;
 /// A registered route render of [`Setup::route`].
@@ -4108,6 +4110,14 @@ impl Setup<'_> {
     pub fn code_block(&mut self, language: &str, render: impl Fn(&dyn Read, &Fence) -> Fenced + 'static) {
         self.registered.manifest.fences.push(language.to_owned());
         self.registered.fences.push((language.to_owned(), Rc::new(render)));
+    }
+
+    /// Renders inline Markdown math, `$…$` and `\(…\)`: `render` gets the TeX without its delimiters and returns
+    /// one row, or `None` to show the TeX as typed. Markdown parses math only where a plugin renders it, and display
+    /// math (`$$…$$`, `\[…\]`) reaches the [`Setup::code_block`] renderer of `math`. In-process plugins only: the
+    /// other loaders do not carry it.
+    pub fn inline_math(&mut self, render: impl Fn(&dyn Read, &str) -> Option<Line> + 'static) {
+        self.registered.inline_math.push(Rc::new(render));
     }
 
     /// Claims a place in the slot tree. `render` reads what it shows and returns it; it gets the slot's input and
@@ -4319,6 +4329,7 @@ pub struct Registered {
     host: HostHandle,
     waker: Option<Waker>,
     fences: Vec<(String, FenceFn)>,
+    inline_math: Vec<InlineMathFn>,
     slots: Vec<RenderFn>,
     views: Vec<(String, RouteFn)>,
     commands: Vec<CommandFn>,
@@ -4432,6 +4443,11 @@ impl Registered {
 
     pub fn fences(&self) -> &[(String, FenceFn)] {
         &self.fences
+    }
+
+    /// The renders of [`Setup::inline_math`].
+    pub fn inline_math(&self) -> &[InlineMathFn] {
+        &self.inline_math
     }
 
     /// The slot claims of [`Setup::slot`], with their index in [`Manifest::slots`] and their renders.

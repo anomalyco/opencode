@@ -43,7 +43,7 @@ impl Compaction {
     pub fn new(cx: &Context<'_>) -> Self {
         let (left, label, right) = rule(cx);
         let markdown = opencode_ui::markdown::view(cx.app, cx.theme, cx.syntax, cx.renderers, cx.conceal, true);
-        let links = session_links::attach(cx.tui, &markdown);
+        let links = session_links::attach(cx.tui, &markdown, cx.renderers);
         let body =
             View::new(cx.app).padding_edge(Edge::Top, 1).padding_edge(Edge::Left, 3).visible(false).child(&markdown);
         let line = View::new(cx.app).row().align_items(Align::Center).child(&left).child(&label).child(&right);

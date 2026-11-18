@@ -1,5 +1,10 @@
 //! The LaTeX math parser, a port of `packages/latex/src/parser.ts` and `limits.ts` in strict mode, the mode the
-//! TypeScript plugin uses. User macros are not ported: the plugin never passes any.
+//! TypeScript plugin uses, with the fixes of opentui-tex's `math-parser.ts`: literals are whole graphemes, combining
+//! marks after a command or delimiter stay on it, style directives and `\limits` make no atom, `\limits` reaches an
+//! operator through styles, `\color` stops at a cell, and comments end at any line break. User macros are not
+//! ported: the plugin never passes any.
+
+use unicode_segmentation::UnicodeSegmentation;
 
 use crate::symbols;
 
@@ -114,13 +119,26 @@ pub fn parse(source: &str) -> Result<Node> {
         });
     }
     check_nesting(&source)?;
-    let mut parser = Parser { source, position: 0, depth: 0 };
+    let mut parser = Parser { boundaries: boundaries(&source), source, position: 0, depth: 0 };
     let body = parser.row(&|_| false)?;
     parser.skip_whitespace();
     if !parser.done() {
         return parser.fail(format!("Unexpected \"{}\"", parser.peek_str()));
     }
     Ok(row(body))
+}
+
+/// Whether each character starts a grapheme, and the end: a literal is the rest of its grapheme.
+fn boundaries(source: &[char]) -> Vec<bool> {
+    let text: String = source.iter().collect();
+    let mut starts = vec![false; source.len() + 1];
+    let mut index = 0;
+    for grapheme in text.graphemes(true) {
+        starts[index] = true;
+        index += grapheme.chars().count();
+    }
+    starts[source.len()] = true;
+    starts
 }
 
 /// Rejects brace nesting deeper than [`MAX_DEPTH`] before parsing (`assertNestingDepth`).
@@ -151,6 +169,7 @@ fn check_nesting(source: &[char]) -> Result<()> {
 
 struct Parser {
     source: Vec<char>,
+    boundaries: Vec<bool>,
     position: usize,
     depth: usize,
 }
@@ -189,46 +208,63 @@ impl Parser {
             if current == Some('\\') && self.limits_modifier(&mut body) {
                 continue;
             }
-            body.push(self.atom()?);
+            if let Some(atom) = self.atom(stop)? {
+                body.push(atom);
+            }
         }
         Ok(body)
     }
 
-    fn atom(&mut self) -> Result<Node> {
+    /// The next atom, or `None` for a directive that makes none, such as `\displaystyle`.
+    fn atom(&mut self, stop: Stop<'_>) -> Result<Option<Node>> {
         self.depth += 1;
         let result = if self.depth > MAX_DEPTH {
             self.fail(format!("LaTeX nesting exceeds the {MAX_DEPTH}-level limit"))
         } else {
-            self.atom_inner()
+            self.atom_inner(stop)
         };
         self.depth -= 1;
         result
     }
 
-    fn atom_inner(&mut self) -> Result<Node> {
+    fn atom_inner(&mut self, stop: Stop<'_>) -> Result<Option<Node>> {
         match self.peek() {
-            Some('{') => self.group(),
-            Some('\\') => self.command(),
+            Some('{') => self.group().map(Some),
+            Some('\\') => {
+                let mut atom = self.command(stop)?;
+                if let Some(value) = atom.as_mut().and_then(unwrap_value) {
+                    value.push_str(&self.read_marks());
+                }
+                Ok(atom)
+            }
             Some('~') => {
                 self.position += 1;
-                Ok(Node::Space(1))
+                Ok(Some(Node::Space(1)))
             }
-            current => {
-                // At the end TS reads an empty symbol; keep that so `\not` at the end behaves the same.
-                self.position += 1;
-                let value = current.map(String::from).unwrap_or_default();
-                let role = infer_role(&value);
-                Ok(Node::Symbol { value, role: Some(role) })
+            _ => {
+                let value = self.read_literal();
+                let role = infer_role(value.get(..value.chars().next().map_or(0, char::len_utf8)).unwrap_or(""));
+                Ok(Some(Node::Symbol { value, role: Some(role) }))
             }
         }
     }
 
-    fn command(&mut self) -> Result<Node> {
+    fn command(&mut self, stop: Stop<'_>) -> Result<Option<Node>> {
         let start = self.position;
         let command = self.read_command()?;
         let command = command.as_str();
+        Ok(Some(match command {
+            "\\" => Node::Row(Vec::new()),
+            " " => Node::Space(1),
+            "limits" | "nolimits" | "displaystyle" | "textstyle" | "scriptstyle" | "scriptscriptstyle" => {
+                return Ok(None);
+            }
+            _ => self.command_node(command, start, stop)?,
+        }))
+    }
+
+    fn command_node(&mut self, command: &str, start: usize, stop: Stop<'_>) -> Result<Node> {
         match command {
-            "\\" => return Ok(Node::Row(Vec::new())),
             "begin" => return self.environment(),
             "frac" | "dfrac" | "tfrac" | "cfrac" => {
                 self.skip_whitespace();
@@ -313,13 +349,20 @@ impl Parser {
             }
             "color" => {
                 let color = self.read_raw_group()?;
-                return Ok(Node::Color { color, body: Box::new(row(self.row(&|_| false)?)) });
+                return Ok(Node::Color { color, body: Box::new(row(self.row(stop)?)) });
             }
             "not" => {
-                return Ok(match self.atom()? {
-                    Node::Symbol { value, role } => Node::Symbol { value: negate(&value), role },
-                    target => Node::Row(vec![Node::Symbol { value: "¬".into(), role: None }, target]),
-                });
+                self.skip_whitespace();
+                // At the end TS negates an empty symbol.
+                if self.done() {
+                    return Ok(Node::Symbol { value: negate(""), role: Some(infer_role("")) });
+                }
+                let mut target = self.argument()?;
+                if let Node::Symbol { value, .. } = unwrap_style(&mut target) {
+                    *value = negate(value);
+                    return Ok(target);
+                }
+                return Ok(Node::Row(vec![Node::Symbol { value: "¬".into(), role: None }, target]));
             }
             "pmod" => {
                 return Ok(Node::Row(vec![
@@ -336,9 +379,6 @@ impl Parser {
                 self.skip_whitespace();
                 self.expect("{")?;
                 return self.matrix(Environment::Gathered, "}", None);
-            }
-            "limits" | "nolimits" | "displaystyle" | "textstyle" | "scriptstyle" | "scriptscriptstyle" => {
-                return Ok(Node::Row(Vec::new()));
             }
             _ => {}
         }
@@ -448,14 +488,21 @@ impl Parser {
     }
 
     fn argument(&mut self) -> Result<Node> {
-        self.skip_whitespace();
-        if self.peek() == Some('{') {
-            return self.group();
+        loop {
+            self.skip_whitespace();
+            if self.peek() == Some('{') {
+                return self.group();
+            }
+            if self.done() {
+                return self.fail("Expected an argument".into());
+            }
+            if self.peek() == Some('}') {
+                return self.fail("Unexpected closing group".into());
+            }
+            if let Some(atom) = self.atom(&|_| false)? {
+                return Ok(atom);
+            }
         }
-        if self.done() {
-            return self.fail("Expected an argument".into());
-        }
-        self.atom()
     }
 
     fn group(&mut self) -> Result<Node> {
@@ -500,16 +547,49 @@ impl Parser {
         if self.done() {
             return self.fail("Expected a delimiter".into());
         }
+        if self.peek() == Some('}') {
+            return self.fail("Unexpected closing group".into());
+        }
         let start = self.position;
         if self.peek() == Some('\\') {
             let command = self.read_command()?;
             return match symbols::delimiter(&format!("\\{command}")).or_else(|| symbols::delimiter(&command)) {
-                Some(delimiter) => Ok(delimiter.into()),
+                Some(delimiter) => Ok(self.with_marks(delimiter.to_owned())),
                 None => self.fail_at(format!("Unsupported delimiter \\{command}"), start),
             };
         }
         let token = self.next().map(String::from).unwrap_or_default();
-        Ok(symbols::delimiter(&token).map_or(token, str::to_owned))
+        let delimiter = symbols::delimiter(&token).map_or(token, str::to_owned);
+        Ok(self.with_marks(delimiter))
+    }
+
+    /// `delimiter` with the marks after it; an invisible one (`.`) takes them away too.
+    fn with_marks(&mut self, delimiter: String) -> String {
+        let marks = self.read_marks();
+        if delimiter.is_empty() {
+            return delimiter;
+        }
+        delimiter + &marks
+    }
+
+    /// The rest of the grapheme at the position, cut before TeX syntax so a prepended character does not take it.
+    fn read_literal(&mut self) -> String {
+        let start = self.position;
+        let mut end = start + 1;
+        while !self.boundaries[end] && !is_syntax(self.source[end]) {
+            end += 1;
+        }
+        self.position = end;
+        self.source[start..end].iter().collect()
+    }
+
+    /// The combining marks that continue the grapheme at the position, which stay on the atom before them.
+    fn read_marks(&mut self) -> String {
+        let start = self.position;
+        while self.position < self.source.len() && !self.boundaries[self.position] {
+            self.position += 1;
+        }
+        self.source[start..self.position].iter().collect()
     }
 
     fn read_command(&mut self) -> Result<String> {
@@ -530,22 +610,41 @@ impl Parser {
         Ok(command)
     }
 
+    /// The source of a `{…}` group, without its comments unless `comments`.
     fn read_raw_group(&mut self) -> Result<String> {
+        self.read_raw(false)
+    }
+
+    fn read_raw(&mut self, comments: bool) -> Result<String> {
         self.skip_whitespace();
         self.expect("{")?;
         let start = self.position;
+        let mut value = String::new();
         let mut depth = 1usize;
         while let Some(char) = self.next() {
-            let escaped = (char == '{' || char == '}') && self.is_escaped(self.position - 1);
+            let escaped = matches!(char, '{' | '}' | '%') && self.is_escaped(self.position - 1);
+            if char == '%' && !escaped && !comments {
+                while self.peek().is_some_and(|c| c != '\n' && c != '\r') {
+                    self.position += 1;
+                }
+                if self.peek() == Some('\r') {
+                    self.position += 1;
+                }
+                if self.peek() == Some('\n') {
+                    self.position += 1;
+                }
+                continue;
+            }
             if char == '{' && !escaped {
                 depth += 1;
             }
             if char == '}' && !escaped {
                 depth -= 1;
                 if depth == 0 {
-                    return Ok(self.source[start..self.position - 1].iter().collect());
+                    return Ok(value);
                 }
             }
+            value.push(char);
         }
         self.fail_at("Unterminated group".into(), start)
     }
@@ -558,15 +657,7 @@ impl Parser {
             return false;
         };
         self.position += 1 + name.len();
-        let operator = match body.last_mut() {
-            Some(Node::Operator { limits, .. }) => Some(limits),
-            Some(Node::Scripts { base, .. }) => match base.as_mut() {
-                Node::Operator { limits, .. } => Some(limits),
-                _ => None,
-            },
-            _ => None,
-        };
-        if let Some(limits) = operator {
+        if let Some(Node::Operator { limits, .. }) = body.last_mut().map(limits_target) {
             *limits = name == "limits";
         }
         true
@@ -578,7 +669,7 @@ impl Parser {
 
     /// A raw group with TeX's text escapes resolved (`readTextGroup`).
     fn read_text_group(&mut self) -> Result<String> {
-        let raw: Vec<char> = self.read_raw_group()?.chars().collect();
+        let raw: Vec<char> = self.read_raw(true)?.chars().collect();
         let mut text = String::new();
         let mut index = 0;
         while index < raw.len() {
@@ -617,7 +708,7 @@ impl Parser {
             if char.is_whitespace() {
                 self.position += 1;
             } else if char == '%' {
-                while self.peek().is_some_and(|c| c != '\n') {
+                while self.peek().is_some_and(|c| c != '\n' && c != '\r') {
                     self.position += 1;
                 }
             } else {
@@ -677,6 +768,35 @@ fn row(mut body: Vec<Node>) -> Node {
         return body.remove(0);
     }
     Node::Row(body)
+}
+
+/// The characters a literal stops at.
+fn is_syntax(char: char) -> bool {
+    "\\{}[]^_~&%".contains(char) || char.is_whitespace()
+}
+
+/// The value of an atom under its styles, to which marks after it belong.
+fn unwrap_value(node: &mut Node) -> Option<&mut String> {
+    match unwrap_style(node) {
+        Node::Symbol { value, .. } | Node::Text(value) | Node::Operator { value, .. } => Some(value),
+        _ => None,
+    }
+}
+
+/// `node` under its variants and colors.
+fn unwrap_style(node: &mut Node) -> &mut Node {
+    match node {
+        Node::Variant { body, .. } | Node::Color { body, .. } => unwrap_style(body),
+        node => node,
+    }
+}
+
+/// What `\limits` after `node` changes: the operator under its styles and scripts.
+fn limits_target(node: &mut Node) -> &mut Node {
+    match node {
+        Node::Variant { body, .. } | Node::Color { body, .. } | Node::Scripts { base: body, .. } => limits_target(body),
+        node => node,
+    }
 }
 
 fn is_command_letter(char: char) -> bool {

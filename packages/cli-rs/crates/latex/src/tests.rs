@@ -11,18 +11,19 @@ use crate::layout::Options;
 
 /// P-ORACLE: every case of `parity/fixtures/P.2/layouts.json` (`parity/oracle/P.2-latex.ts`, the TypeScript
 /// `renderLatex` over the sources of `packages/latex/src/*.test.ts` and more) lays out to the same text, geometry,
-/// and cell styles, or fails to parse in both.
+/// and cell styles, or fails to parse in both, except the [`DEVIATES`] sources.
 #[test]
 fn layouts_match_typescript() {
     let cases: Vec<Value> = serde_json::from_str(include_str!("../../../parity/fixtures/P.2/layouts.json")).unwrap();
     let failures: Vec<String> = cases
         .iter()
+        .filter(|case| !DEVIATES.contains(&case["source"].as_str().unwrap()))
         .filter_map(|case| {
             let source = case["source"].as_str().unwrap();
             let options = Options {
                 display: case["options"]["displayMode"].as_bool().unwrap_or(true),
                 compact_scripts: case["options"]["compactScripts"].as_bool().unwrap_or(true),
-                color: None,
+                ..Options::default()
             };
             let actual = match crate::render_with(source, &options) {
                 Err(_) => serde_json::json!({ "error": true }),
@@ -43,6 +44,10 @@ fn layouts_match_typescript() {
         .collect();
     assert!(failures.is_empty(), "{} of {} differ:\n{}", failures.len(), cases.len(), failures.join("\n"));
 }
+
+/// The oracle sources that draw as opentui-tex does (`parity/deviations/P2-latex-inline.md`); `tex_rows` has their
+/// rows. A style directive is no atom, so it adds no space before the fraction.
+const DEVIATES: &[&str] = &["\\displaystyle \\frac{a}{b} \\textstyle c \\scriptstyle d"];
 
 fn styled(layout: &crate::Layout) -> Vec<String> {
     layout
@@ -94,8 +99,8 @@ impl opencode_plugin_abi::Read for Dark {
     }
 }
 
-/// `TextPart`'s Markdown with the plugin's renderers for `latex` and `math`, through the host's fence adapter, as
-/// the plugin host registers them.
+/// `TextPart`'s Markdown with the plugin's renderers for `latex` and `math` fences, through the host's fence adapter,
+/// and for inline math, as the plugin host registers them.
 fn markdown(app: &TestApp, theme: &Theme, streaming: bool) -> Markdown {
     let mut setup = opencode_plugin_abi::Registered::new("opencode.latex", None);
     (crate::plugin().setup)(&mut setup.setup()).unwrap();
@@ -106,6 +111,12 @@ fn markdown(app: &TestApp, theme: &Theme, streaming: bool) -> Markdown {
             language.clone(),
             Rc::new(move |block| fences.render(block, &theme, |fence| render(&Dark, &fence))),
         );
+    }
+    for render in setup.inline_math() {
+        let (render, theme) = (render.clone(), theme.clone());
+        renderers.register_math(Rc::new(move |tex| {
+            Some(render(&Dark, tex)?.iter().map(|span| opencode_plugin::node::styled(&theme, span, None)).collect())
+        }));
     }
     let syntax = opencode_ui::code::syntax_theme(theme);
     opencode_ui::markdown::view(app, theme, &syntax, &renderers, true, streaming)
@@ -123,16 +134,77 @@ fn transcript_fences_match_typescript() {
     }
 }
 
-/// TS draws only fenced `latex` and `math` blocks: `$$…$$` and `$…$` stay text, so the client leaves the
-/// Markdown math extension (OpenTUI #2072) off even though this plugin renders `math`.
-#[test]
-fn dollar_math_stays_text() {
-    let (app, theme) = app(60, 8);
-    let text = markdown(&app, &theme, false).set_markdown("$$\\frac{1}{2}$$\n\nInline $\\frac{a}{b}$ too.");
+/// The frame of `source` in the transcript's Markdown, `width` columns wide.
+fn frame(source: &str, width: u16) -> String {
+    let (app, theme) = app(width, 16);
+    let text = markdown(&app, &theme, false).set_markdown(source);
     app.root().add(&text);
-    let frame = app.render().text();
-    assert!(frame.contains("$$\\frac{1}{2}$$") && frame.contains("$\\frac{a}{b}$"), "{frame}");
-    assert!(!frame.contains("───"), "{frame}");
+    app.render().text()
+}
+
+/// Beyond TS (`parity/deviations/P2-latex-inline.md`): with the plugin, Markdown parses math (OpenTUI #2072).
+/// `$…$` and `\(…\)` draw on one row in the text; `$$…$$` and `\[…\]` reach the `math` fence renderer.
+#[test]
+fn markdown_math_renders() {
+    for (source, shown) in [
+        ("Energy is $E=mc^2$ here.", "Energy is E = mc² here."),
+        ("Then \\(\\alpha \\le \\frac{1}{2}\\) holds.", "Then α ≤ 1/2 holds."),
+        ("A root $\\sqrt{x+1}$, a sum $\\sum_{i=1}^n i$.", "A root √(x + 1), a sum ∑ⁿᵢ₌₁ i."),
+        // TeX that does not parse shows as typed, without its delimiters.
+        ("Broken $\\frac{1}{x$ here.", "Broken \\frac{1}{x here."),
+    ] {
+        let frame = frame(source, 60);
+        assert!(frame.contains(shown), "{source:?}\n{frame}");
+    }
+    for source in ["$$\n\\frac{1}{2}\n$$", "\\[\n\\frac{1}{2}\n\\]", "Before\n\n$$\\frac{1}{2}$$\n\nafter"] {
+        let frame = frame(source, 60);
+        assert!(frame.contains("───") && frame.contains(" 1") && !frame.contains("frac"), "{source:?}\n{frame}");
+    }
+}
+
+/// Dollars that are not math stay text, as OpenTUI decides: currency, shell variables, a lone `$`.
+#[test]
+fn dollars_that_are_not_math_stay_text() {
+    for (source, shown) in [
+        ("It costs $5 and $10 today.", "It costs $5 and $10 today."),
+        ("Run `echo $HOME` or echo $PATH now.", "Run echo $HOME or echo $PATH now."),
+        ("Set $HOME and $PATH first.", "Set $HOME and $PATH first."),
+        ("A lone $ sign.", "A lone $ sign."),
+        ("Escaped \\$x\\$ stays.", "Escaped $x$ stays."),
+        ("Spaced $ x $ stays.", "Spaced $ x $ stays."),
+    ] {
+        let frame = frame(source, 60);
+        assert!(frame.contains(shown), "{source:?}\n{frame}");
+    }
+}
+
+/// Streaming: a `$` shows as text until OpenTUI decides it is math, then the math shows and stays (its property:
+/// shown math never reverts), so a half-typed `$x^` never draws as broken math.
+#[test]
+fn streaming_inline_math_shows_once_closed() {
+    let frames = stream_text(&["Energy $E=mc", "^", "2", "$ now", " and $x^", "$ too"]);
+    assert!(frames[0].contains("Energy $E=mc"), "{}", frames[0]);
+    assert!(frames[1].contains("$E=mc^") && frames[2].contains("$E=mc^2"), "{frames:?}");
+    for frame in &frames[3..] {
+        assert!(frame.contains("Energy E = mc² now"), "{frame}");
+    }
+    assert!(frames[4].contains("and $x^"), "{}", frames[4]);
+    // `x^` closed does not parse: its TeX shows as typed.
+    assert!(frames[5].contains("and x^ too"), "{}", frames[5]);
+}
+
+/// Streams `chunks` of prose into one document, returning the frame text after each.
+fn stream_text(chunks: &[&str]) -> Vec<String> {
+    let (app, theme) = app(60, 6);
+    let view = markdown(&app, &theme, true);
+    app.root().add(&view);
+    chunks
+        .iter()
+        .map(|chunk| {
+            view.append(chunk);
+            app.render().text()
+        })
+        .collect()
 }
 
 /// Streams `chunks` into one document, returning the frame text after each.

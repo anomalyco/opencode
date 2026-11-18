@@ -2,7 +2,8 @@
 
 `opencode.latex` draws `latex` and `math` Markdown fences (and `tex`, which resolves to `latex`) as Unicode math in
 terminal cells, as `packages/latex/src/plugin.ts` does. It registers one renderer for both languages through the
-P.1 code-block API.
+P.1 code-block API. Beyond TS, it also draws Markdown math: `$…$` and `\(…\)` on one row in the text, and `$$…$$`
+and `\[…\]` as display math (deviation `P2-latex-inline`).
 
 ## Library choice
 
@@ -39,13 +40,48 @@ and uses `unicode-segmentation` for graphemes (TS `Intl.Segmenter`). The P-ORACL
 - `layout.rs`: `layout.ts`. `Layout` holds cells, width, height, and baseline, and `Display` gives TS
   `toString`. `Options` keeps `displayMode` and `compactScripts` for the oracle. The plugin uses the defaults
   (display math, compact scripts).
-- `symbols.rs`: `symbols.ts`.
+- `symbols.rs`: `symbols.ts`, with `\degree`.
+- `inline.rs`: inline math on one row. `linear` rewrites what display math stacks: `\frac{a}{b}` is `a/b`
+  (parentheses around several atoms), `\sqrt[3]{x}` is `∛x`, a script Unicode has no characters for is `^(…)` or
+  `_(…)`, limits and `\overset` are scripts, accents are combining marks, a matrix is `(a, b; c, d)`. The layout then
+  runs with `Options::inline`, whose compact scripts take every Latin and Greek super- and subscript letter Unicode
+  has. A source that does not parse, or that lays out to nothing, is an error.
 - `lib.rs`: `plugin()`, `render()`, and `renderer()`, the Markdown adapter (`markdown.ts`). The formula is a
   `Text` with no wrapping, as wide as the formula, inside a `ScrollBox` that scrolls only sideways, with hidden
   scrollbars. TS adds one row of top margin. The Rust Markdown already puts a blank row between blocks, so the
   widget adds none (deviation `F13-latex-leading-row`). Structural glyphs (brackets, the radical, box drawing) use
   `theme.text.muted`. Everything else uses `theme.text.base`. Relations are bold. A source that does not parse
   returns `None`, so Markdown shows the source in its code view.
+
+## opentui-tex
+
+Simon's opentui-tex (`math-parser.ts`, `math-layout.ts`) grew from the same parser and is ahead of TS. The crate
+takes its fixes where they apply to cells: literals are whole graphemes, so a prepended or combining character does
+not split from its base or take TeX syntax; combining marks after a command or delimiter stay on it, and on a
+stretched delimiter's middle row; style directives and `\limits` make no atom, so `x^\displaystyle 2` is `x²` and a
+leading `\displaystyle` adds no space; `\limits` reaches an operator through `\mathbf` and colors, and so does the
+scripts' placement and the operator's spacing; `\color` ends at a matrix cell; `\not` takes an argument and negates
+through styles; comments end at `\r` too and leave raw groups (`\textcolor`, array columns), not text; `\ ` is a
+space; an empty script, such as an empty `\textcolor`, adds no rows. `tex_rows.rs` has its parser and layout rows.
+
+Not taken: its radical (`√` with a corner) and its matrices without a blank row between rows, which the P-ORACLE
+holds to TS; its `\epsilon`/`\varepsilon` swap, for the same reason; its permissive mode and incomplete-input
+recovery, since the plugin is strict and shows the source, and streaming keeps the last formula that parsed; its
+three-state limits, which only differ in inline layout, where `inline.rs` writes limits as scripts anyway; and its
+renderable and native renderer.
+
+## Markdown math
+
+`CodeBlockRenderers` carries the inline math renderer of `Setup::inline_math` (in-process plugins only; the other
+loaders do not carry it). A `markdown::view` with one turns on `MarkdownExtension::Math` and an inline hook that
+replaces each math span with the renderer's row, in the span's style with the row's attributes: relations bold,
+`\mathbf` and `\mathit` as in display math, no colors of its own. With markers shown it keeps the source. Session
+links compose after it (`markdown::inline_hook`). So math is on wherever the plugin fences are: assistant text, the
+compaction summary, reasoning, and plugin Markdown. The `mini` client and Markdown without plugin renderers keep `$`
+as text.
+
+OpenTUI decides what is math: a `$` that may still be currency or a shell variable shows as text until it is
+decided, and math never reverts while a message streams. The renderer is pure, so it keeps that property.
 
 ## Streaming
 
@@ -67,10 +103,13 @@ over broken math shows the source while the message still streams, as in TS.
 - P-ORACLE: `parity/oracle/P.2-latex.ts` writes `parity/fixtures/P.2/layouts.json`: the text, geometry, styled
   cells, or parse failure of 207 sources. These are every source in `packages/latex/src/*.test.ts`, about 60
   textbook formulas, malformed input, and the option variants. `tests::layouts_match_typescript` requires all of
-  them to be equal.
+  them but one to be equal: `\displaystyle \frac{a}{b} …` draws without TS's space (`DEVIATES`).
 - P-COMP: `parity/component/P.2-latex.tsx` renders `TextPart`'s `<markdown>` with the TS plugin's renderer over
   four documents: structures, the adapter cases of `markdown.test.ts`, a wide formula at 30 columns, and invalid
   math next to an ordinary fence. `tests::transcript_fences_match_typescript` renders the same documents with
   `opencode_ui::markdown::view` and this renderer. Every cell is equal, colors and attributes included.
 - Behavior tests port `markdown.test.ts`: fallback to source, streaming retention, discard on stop, and no
   reuse across fences.
+- `tex_rows.rs`: opentui-tex's parser and layout rows, and the inline rows. `tests.rs`: inline `$…$` and `\(…\)`,
+  display `$$…$$` and `\[…\]`, dollars that are not math, and streamed inline math.
+- P-APP `P.2/inline-math`: a message that mixes them, against TS (deviation `P2-latex-inline`, 191 cells).

@@ -657,7 +657,7 @@ pub(crate) fn bordered(view: &View, theme: &Theme, border: &abi::Border) {
 }
 
 /// `span` styled in `theme`, in `fg` without a color of its own.
-pub(crate) fn styled(theme: &Theme, span: &abi::Span, fg: Option<Color>) -> Span<'static> {
+pub fn styled(theme: &Theme, span: &abi::Span, fg: Option<Color>) -> Span<'static> {
     let mut attributes = Attributes::NONE;
     for (set, attribute) in [
         (span.bold, Attributes::BOLD),

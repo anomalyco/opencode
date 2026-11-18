@@ -8,7 +8,10 @@ use std::rc::Rc;
 
 use opentui::prelude::*;
 use opentui::syntax::SyntaxTheme;
-use opentui::widget::{CodeBlock, Markdown, MarkdownColors, MarkdownTableOptions, MarkdownTableStyle};
+use opentui::widget::{
+    CodeBlock, InlineContext, InlineSpan, Markdown, MarkdownColors, MarkdownExtension, MarkdownTableOptions,
+    MarkdownTableStyle,
+};
 
 use crate::theme::Theme;
 
@@ -16,18 +19,74 @@ use crate::theme::Theme;
 /// [`Markdown::code_block_renderer`].
 pub type CodeBlockRenderer = Rc<dyn Fn(&CodeBlock<'_>) -> Option<AnyWidget>>;
 
+/// Renders inline math's TeX as one row of spans, or returns `None` to show the TeX as typed.
+pub type InlineMathRenderer = Rc<dyn Fn(&str) -> Option<Vec<Span<'static>>>>;
+
 /// The code-block renderers plugins register, such as LaTeX and Mermaid: the Rust form of the TUI plugins'
-/// `renderNode` (`plugins.markdown()`). Empty until a plugin registers one.
+/// `renderNode` (`plugins.markdown()`), and the inline math renderer. Empty until a plugin registers one.
 #[derive(Clone, Default)]
-pub struct CodeBlockRenderers(Vec<(String, CodeBlockRenderer)>);
+pub struct CodeBlockRenderers {
+    blocks: Vec<(String, CodeBlockRenderer)>,
+    math: Option<InlineMathRenderer>,
+}
 
 impl CodeBlockRenderers {
     /// Renders fences of `language` with `render`. A later registration for the same language replaces it.
     pub fn register(&mut self, language: impl Into<String>, render: CodeBlockRenderer) {
         let language = language.into();
-        self.0.retain(|(key, _)| *key != language);
-        self.0.push((language, render));
+        self.blocks.retain(|(key, _)| *key != language);
+        self.blocks.push((language, render));
     }
+
+    /// Renders inline math with `render`, replacing an earlier one. A [`view`] with an inline math renderer parses
+    /// Markdown math: `$…$` and `\(…\)` reach `render`, and `$$…$$` and `\[…\]` the code-block renderer of `math`.
+    pub fn register_math(&mut self, render: InlineMathRenderer) {
+        self.math = Some(render);
+    }
+}
+
+/// Makes `hook` the inline hook of a [`view`] made with `renderers`, after the inline math renderer's own.
+pub fn inline_hook(
+    markdown: &Markdown,
+    renderers: &CodeBlockRenderers,
+    hook: impl Fn(Vec<InlineSpan>, &InlineContext<'_>) -> Vec<InlineSpan> + 'static,
+) {
+    let math = renderers.math.clone();
+    markdown.inline_hook(move |spans, cx| {
+        let spans = match &math {
+            Some(math) => math_spans(math, spans, cx),
+            None => spans,
+        };
+        hook(spans, cx)
+    });
+}
+
+/// Each inline math span as `math` renders it, in the span's style under the renderer's own. With markers shown
+/// (no conceal), math keeps its source, as other markup does.
+fn math_spans(math: &InlineMathRenderer, spans: Vec<InlineSpan>, cx: &InlineContext<'_>) -> Vec<InlineSpan> {
+    if !cx.conceal {
+        return spans;
+    }
+    spans
+        .into_iter()
+        .flat_map(|span| {
+            let Some(rendered) = span.math.as_deref().and_then(|tex| math(tex)) else { return vec![span] };
+            let base = span.span.style;
+            rendered
+                .into_iter()
+                .map(|piece| {
+                    let style = Style {
+                        fg: piece.style.fg.or(base.fg),
+                        bg: piece.style.bg.or(base.bg),
+                        attributes: base.attributes.union(piece.style.attributes),
+                    };
+                    let mut inline = span.clone();
+                    inline.span = Span::styled(piece.content, style);
+                    inline
+                })
+                .collect()
+        })
+        .collect()
 }
 
 /// The widget's colors from the TUI theme's `markdown` tokens, for the parts the syntax theme leaves unstyled. The
@@ -49,7 +108,8 @@ pub fn colors(theme: &Theme) -> MarkdownColors {
 }
 
 /// Markdown in the theme's colors with `TextPart`'s options: text styled and code fences highlighted by `syntax`
-/// (see [`crate::code::syntax_theme`]), fences drawn by `renderers` where one is registered, grid tables with one column of cell padding, markers
+/// (see [`crate::code::syntax_theme`]), fences drawn by `renderers` where one is registered, and math parsed and
+/// drawn when `renderers` has an inline math renderer, grid tables with one column of cell padding, markers
 /// hidden when `conceal` (`session.markdown` is `rendered`), and incremental parsing while `streaming` (the message
 /// has not completed). Stream text into it with [`Markdown::append`] or [`Markdown::set_markdown`], and call
 /// [`Markdown::streaming`] with `false` once the message completes.
@@ -69,9 +129,13 @@ pub fn view(
         .table_options(table(syntax))
         .conceal(conceal)
         .streaming(streaming);
-    for (language, render) in &renderers.0 {
+    for (language, render) in &renderers.blocks {
         let render = render.clone();
         markdown.code_block_renderer(language, move |block| render(block));
+    }
+    if renderers.math.is_some() {
+        markdown.extensions(&[MarkdownExtension::Math]);
+        inline_hook(&markdown, renderers, |spans, _| spans);
     }
     markdown
 }
