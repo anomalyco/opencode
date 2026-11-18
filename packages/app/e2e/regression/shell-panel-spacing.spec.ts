@@ -1,7 +1,19 @@
 import { expect, test, type Page } from "@playwright/test"
 import { fixture, installStressSessionTabs, mockStressTimeline } from "../utils/session-fixture"
-import { sessionHref, draftHref } from "../utils/app"
+import { seed, sessionHref, draftHref } from "../utils/app"
 import { openWithDirection } from "../utils/direction"
+
+test("the sidebar panel keeps only style containment so Firefox paints portaled dialogs above it", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await mockStressTimeline(page)
+  await installStressSessionTabs(page)
+  await seed(page, { settings: { appearance: { tabLayout: "vertical", sidebarOpen: true } } })
+  await page.goto(sessionHref(fixture.targetID))
+  await expect(page.getByRole("heading", { name: fixture.expected.targetTitle })).toBeVisible()
+
+  // Layout or paint containment here makes Firefox composite the panel over dialogs after a pointer move.
+  await expect(page.locator('[data-slot="vertical-tabs-panel"]')).toHaveCSS("contain", "style")
+})
 
 for (const direction of ["ltr", "rtl"] as const) {
   test(`bottom mobile navigation adds no extra top panel gutter in ${direction}`, async ({ page }) => {
