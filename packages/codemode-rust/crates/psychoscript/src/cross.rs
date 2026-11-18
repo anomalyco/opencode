@@ -1287,7 +1287,8 @@ fn resume_wait(vm: &mut Vm, state: Id, outcome: Result<Value, Value>) -> Result<
         Value::Num(n) => n as usize + 1,
         _ => 0,
     };
-    vm.fuel(1);
+    // The wait loop's back-edge.
+    vm.fuel_step();
     let promises = list(vm, item(vm, 0));
     if let Some(&awaited) = promises.get(next) {
         if let Kind::Array(items) = &mut vm.heap[state as usize].kind {
@@ -1400,7 +1401,8 @@ pub(crate) fn wait_step(
         (Input::Threw(e), PARKED) => Err(e),
         (Input::Returned(_) | Input::Finished(_), PARKED) => {
             let next = fr.index(vm, W_INDEX) + 1;
-            vm.fuel(1);
+            // The wait loop's back-edge.
+            vm.fuel_step();
             if next < list(vm, fr.get(vm, W_PROMISES)).len() {
                 return park_for(vm, fr, next);
             }
