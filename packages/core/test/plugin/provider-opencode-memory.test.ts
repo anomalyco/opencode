@@ -575,7 +575,7 @@ describe("OpencodePlugin memory", () => {
           { id: "mem_1", revision: 1, reason: "Deploys moved to the pipeline", supersededBy: "mem_2" },
           context(session.id),
         )
-        expect(retired.content).toBe("mem_1 is now r2.")
+        expect(retired.content).toBe("mem_1 is retired (r2); it's no longer searched or injected.")
         expect(console.state.requests.at(-1)).toEqual({
           method: "POST",
           path: "/api/memory/entries/mem_1/retire",

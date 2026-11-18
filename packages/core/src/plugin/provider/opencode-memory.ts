@@ -447,7 +447,7 @@ export const make = Effect.fnUntraced(function* (
       editor.add({
         name: "publish",
         description:
-          "Publish what a teammate's coding agent would want to know before similar work, once verified. Not progress notes, what README or AGENTS.md says, or secrets. Specific title; a self-contained body with exact errors, commands, paths and symbols; paths and errors make it reach sessions on those files and failures. Repo, branch and commit are recorded. If an entry on this subject exists, nothing is published and the answer says which to edit instead.",
+          "Publish what a teammate's coding agent would want to know before similar work, once verified, as it holds for the repository as committed: not your uncommitted changes, progress notes, what README or AGENTS.md says, or secrets. Specific title; a self-contained body with exact errors, commands, paths and symbols; paths and errors make it reach sessions on those files and failures. Repo, branch and commit are recorded. If an entry on this subject exists, nothing is published and the answer says which to edit instead.",
         input: Schema.Struct({
           kind: KindInput,
           title: Schema.String,
@@ -499,7 +499,7 @@ export const make = Effect.fnUntraced(function* (
       editor.add({
         name: "edit",
         description:
-          'Change part of an entry: a fix, a correction, an outdated detail. Copy oldText exactly from the entry\'s current body (no line numbers), unique in it; newText "" deletes it. For several changes pass edits: each oldText is matched against the revision you read, not after the others, and all apply or none. Also changes kind, title, tags, paths or errors. Pass the revision you read. Fix an entry right away when the user corrects what it says. Example: {"id":"mem_01","revision":3,"oldText":"npm test","newText":"bun test"}',
+          'Change part of an entry: a fix, a correction, an outdated detail. Copy oldText exactly from the entry\'s current body (no line numbers), unique in it; newText "" deletes it. For several changes pass edits: each oldText is matched against the revision you read, not after the others, and all apply or none. Also changes kind, title, tags, paths or errors. Pass the revision you read. Fix an entry right away when the user corrects what it says; record what holds for the repository as committed, not your uncommitted changes. Example: {"id":"mem_01","revision":3,"oldText":"npm test","newText":"bun test"}',
         input: Schema.Struct({
           id: Schema.String,
           revision: Schema.Int,
@@ -588,7 +588,10 @@ export const make = Effect.fnUntraced(function* (
             reason: input.reason,
             ...(input.supersededBy === undefined ? {} : { supersededBy: input.supersededBy }),
           }).pipe(
-            Effect.map((written) => ({ output: written, content: receipt(input.id, written) })),
+            Effect.map((written) => ({
+              output: written,
+              content: `${written.id ?? input.id} is retired (r${written.revision}); it's no longer searched or injected.`,
+            })),
             Effect.mapError(failure),
           ),
       })
