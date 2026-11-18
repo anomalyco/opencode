@@ -78,13 +78,15 @@ pub(crate) fn setup(
     let current = Rc::new(Slot::default());
     let (read, host, memo) = objects(&vm.lua, &current).map_err(error)?;
     let prelude = load_prelude(&vm.lua)?;
-    // What fails a call whose task ran out of memory: the latch the call ends with ([`vm::refuse`]), as raising an error
-    // in Luau would need memory the heap no longer has.
+    // What fails a call whose task ran out of memory, or whose error is huge: the latch the call ends with
+    // ([`vm::refuse`]), as raising an error in Luau would need memory the heap no longer has. `frames` is the task's
+    // traceback (`"\nstack traceback:\n..."`), which the host joins to the message on its own heap.
     let fail = vm
         .lua
-        .create_function(|lua, message: mlua::LuaString| -> mlua::Result<()> {
+        .create_function(|lua, (message, frames): (mlua::LuaString, Option<mlua::LuaString>)| -> mlua::Result<()> {
             let message = message.to_string_lossy();
-            vm::refuse(lua, &message);
+            let frames = frames.map(|frames| frames.to_string_lossy()).unwrap_or_default();
+            vm::refuse(lua, &format!("{message}{frames}"));
             Err(mlua::Error::runtime(message))
         })
         .map_err(error)?;
