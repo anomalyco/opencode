@@ -1,5 +1,5 @@
 // Generates crates/api/src/generated and crates/api-types/src/types.rs from ClientApi, with the options of the Promise client
-// (packages/client/script/generate.ts). The type mapping is in docs/F.2.md.
+// (packages/client/script/generate.ts). docs/architecture.md describes what it generates.
 import { compile, type Endpoint } from "@opencode/httpapi-codegen"
 import { ClientApi, clientNamespace, groupNames, promiseOmitEndpoints } from "@opencode/protocol/client"
 import { Schema, SchemaAST, SchemaRepresentation } from "effect"

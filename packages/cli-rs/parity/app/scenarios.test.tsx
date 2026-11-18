@@ -1,4 +1,4 @@
-// P-APP, TypeScript side (docs/H.2.md): records every parity/scenarios/*/*.app.ts through the whole TS TUI in
+// P-APP, TypeScript side (docs/testing.md): records every parity/scenarios/*/*.app.ts through the whole TS TUI in
 // createAppFixture. Writes parity/fixtures/<step>/<name>.app.json and one cell file per checkpoint.
 // `PARITY_SCENARIO=<step>/<name>` selects one scenario.
 import { test } from "bun:test"

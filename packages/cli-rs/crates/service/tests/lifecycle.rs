@@ -1,6 +1,6 @@
 //! The cases of `packages/client/test/service.test.ts`, run against the same fake service
 //! (`packages/client/test/fixture/service.ts` under `bun`) with the same accelerated timing. Cases
-//! where TS replaces a service assert the Rust policy instead (docs/F.9.md): the service is used,
+//! where TS replaces a service assert the Rust policy instead (docs/architecture.md): the service is used,
 //! or left running. Every file lives in a temporary directory, and every process a test starts is
 //! killed when its fixture drops. Without `bun` the tests pass with a note.
 #![cfg(unix)]

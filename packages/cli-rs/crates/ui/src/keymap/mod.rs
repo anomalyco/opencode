@@ -2,7 +2,7 @@
 //!
 //! [`TuiKeymap`] installs what the TypeScript `Keymap.Provider` installs, takes layers of [`TuiCommand`]s as
 //! `Keymap.createLayer` does, keeps the input mode stack, and formats shortcuts. [`Keybinds`] resolves the
-//! `keybinds` config. Design: `docs/U.2.md`.
+//! `keybinds` config.
 
 mod config;
 #[rustfmt::skip]

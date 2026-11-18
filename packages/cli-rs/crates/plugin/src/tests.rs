@@ -279,7 +279,7 @@ fn an_external_plugin_replaces_a_built_in_of_its_id_in_place() {
 }
 
 // Expected (D3): an external plugin keeps its place among the claims when it is rebuilt and when it is disabled and
-// enabled again, as `docs/P.4.md` and TS have it; so does a built-in that is enabled again.
+// enabled again, as `docs/plugin-abi.md` and TS have it; so does a built-in that is enabled again.
 #[test]
 fn a_plugin_keeps_its_place_across_a_reload_and_a_toggle() {
     let host = host();

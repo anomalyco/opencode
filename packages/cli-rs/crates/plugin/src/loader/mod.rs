@@ -1,4 +1,4 @@
-//! External plugins (P.4, `docs/P.4.md`, row F16): discovery in `plugins` directories, the `plugins` entries of
+//! External plugins (`docs/plugins.md`, "Running plugins"): discovery in `plugins` directories, the `plugins` entries of
 //! `cli.json`, and loading of native builds (shared libraries on the C ABI of `opencode-plugin-abi`, decision
 //! O-42) through a [`Backend`], which is [`native::Native`] in the TUI. Targets without a native build
 //! (TypeScript plugins) run on the JS host ([`crate::pipe`]) when the loader has one, and are listed as skipped

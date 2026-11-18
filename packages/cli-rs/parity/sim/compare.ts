@@ -1,4 +1,4 @@
-// P-TUI comparison (docs/H.5.md): captures become H.1 cell fixtures, masked with H.2's `applyMasks`, and compared
+// P-TUI comparison (docs/testing.md): captures become H.1 cell fixtures, masked with H.2's `applyMasks`, and compared
 // cell by cell as `opencode_parity::compare` does. Requests follow H.2's P-REQ rule.
 import type { Frontend } from "@opencode/protocol/simulation"
 import type { Deviation } from "../lib/app"
