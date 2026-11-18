@@ -1,12 +1,4 @@
-//! Inline math (`$…$`, `\(…\)`) on one row: [`linear`] rewrites what display math stacks into a one-line form, as
-//! text would write it, and the layout draws the rest with every Unicode super- and subscript it has.
-//!
-//! - `\frac{a}{b}` is `a/b`, with parentheses around a numerator or denominator of several atoms: `(x + 1)/2`.
-//! - `\sqrt{x}` is `√x`, `\sqrt[3]{x}` is `∛x`, and another index is a superscript before the radical.
-//! - A script Unicode has no characters for is `^` or `_` and the script: `e^(iπ)`.
-//! - Operator limits, `\overset` and `\underset` are scripts; `\overbrace` and `\underbrace` drop the brace.
-//! - Accents are combining marks on each grapheme: `\hat{x}` is `x̂`.
-//! - A matrix is its rows separated by `;` and its cells by `,`, in its delimiters; aligned rows by `;` alone.
+//! Inline math lowers stacked structures to a single row before layout.
 
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -19,15 +11,11 @@ pub fn render(source: &str) -> Result<Layout, ParseError> {
     let node = linear(parse::parse(source)?);
     let options = Options { display: false, inline: true, ..Options::default() };
     let layout = layout::layout(&node, &options)
-        .ok_or_else(|| fail(format!("LaTeX layout exceeds the {}-cell limit", layout::MAX_CELLS)))?;
+        .ok_or_else(|| crate::fail(format!("LaTeX layout exceeds the {}-cell limit", layout::MAX_CELLS)))?;
     if layout.height != 1 || layout.width == 0 {
-        return Err(fail("Inline math needs one non-empty row".into()));
+        return Err(crate::fail("Inline math needs one non-empty row".into()));
     }
     Ok(layout)
-}
-
-fn fail(message: String) -> ParseError {
-    ParseError { message, position: 0 }
 }
 
 /// `node` with nothing that takes more than one row.

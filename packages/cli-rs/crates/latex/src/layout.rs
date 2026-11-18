@@ -291,13 +291,11 @@ fn script_target(node: &Node) -> &Node {
 /// `node` as compact script characters, when it is plain text that has them all: TS's characters, or with `inline`
 /// every one Unicode has.
 pub(crate) fn script_text(node: &Node, superscript: bool, inline: bool) -> Option<String> {
-    let table = match (superscript, inline) {
-        (true, false) => SUPERSCRIPTS,
-        (false, false) => SUBSCRIPTS,
-        (true, true) => INLINE_SUPERSCRIPTS,
-        (false, true) => INLINE_SUBSCRIPTS,
-    };
-    map_script(&simple_text(node)?, table)
+    let (base, extra) = if superscript { (SUPERSCRIPTS, INLINE_SUPERSCRIPTS) } else { (SUBSCRIPTS, INLINE_SUBSCRIPTS) };
+    simple_text(node)?
+        .chars()
+        .map(|c| base.iter().chain(if inline { extra } else { &[] }).find(|(from, _)| *from == c).map(|(_, to)| *to))
+        .collect()
 }
 
 fn layout_delimited(left: &str, body: &Node, right: &str, context: &Context) -> Block {
@@ -600,10 +598,6 @@ fn simple_text(node: &Node) -> Option<String> {
     }
 }
 
-fn map_script(value: &str, table: &[(char, char)]) -> Option<String> {
-    value.chars().map(|char| table.iter().find(|(from, _)| *from == char).map(|(_, to)| *to)).collect()
-}
-
 fn with_variant(context: &Context, variant: Variant) -> Context {
     let mut context = context.clone();
     context.variant = Some(variant);
@@ -704,23 +698,8 @@ const SUBSCRIPTS: &[(char, char)] = &[
     ('x', 'ₓ'),
 ];
 
-/// TS's superscripts and every other Latin and Greek superscript letter Unicode has.
+/// Additional superscripts allowed in inline math.
 const INLINE_SUPERSCRIPTS: &[(char, char)] = &[
-    ('0', '⁰'),
-    ('1', '¹'),
-    ('2', '²'),
-    ('3', '³'),
-    ('4', '⁴'),
-    ('5', '⁵'),
-    ('6', '⁶'),
-    ('7', '⁷'),
-    ('8', '⁸'),
-    ('9', '⁹'),
-    ('+', '⁺'),
-    ('-', '⁻'),
-    ('=', '⁼'),
-    ('(', '⁽'),
-    (')', '⁾'),
     ('a', 'ᵃ'),
     ('b', 'ᵇ'),
     ('c', 'ᶜ'),
@@ -729,12 +708,10 @@ const INLINE_SUPERSCRIPTS: &[(char, char)] = &[
     ('f', 'ᶠ'),
     ('g', 'ᵍ'),
     ('h', 'ʰ'),
-    ('i', 'ⁱ'),
     ('j', 'ʲ'),
     ('k', 'ᵏ'),
     ('l', 'ˡ'),
     ('m', 'ᵐ'),
-    ('n', 'ⁿ'),
     ('o', 'ᵒ'),
     ('p', 'ᵖ'),
     ('r', 'ʳ'),
@@ -778,47 +755,8 @@ const INLINE_SUPERSCRIPTS: &[(char, char)] = &[
     ('′', '′'),
 ];
 
-/// TS's subscripts and the Greek subscript letters Unicode has.
-const INLINE_SUBSCRIPTS: &[(char, char)] = &[
-    ('0', '₀'),
-    ('1', '₁'),
-    ('2', '₂'),
-    ('3', '₃'),
-    ('4', '₄'),
-    ('5', '₅'),
-    ('6', '₆'),
-    ('7', '₇'),
-    ('8', '₈'),
-    ('9', '₉'),
-    ('+', '₊'),
-    ('-', '₋'),
-    ('=', '₌'),
-    ('(', '₍'),
-    (')', '₎'),
-    ('a', 'ₐ'),
-    ('e', 'ₑ'),
-    ('h', 'ₕ'),
-    ('i', 'ᵢ'),
-    ('j', 'ⱼ'),
-    ('k', 'ₖ'),
-    ('l', 'ₗ'),
-    ('m', 'ₘ'),
-    ('n', 'ₙ'),
-    ('o', 'ₒ'),
-    ('p', 'ₚ'),
-    ('r', 'ᵣ'),
-    ('s', 'ₛ'),
-    ('t', 'ₜ'),
-    ('u', 'ᵤ'),
-    ('v', 'ᵥ'),
-    ('x', 'ₓ'),
-    ('β', 'ᵦ'),
-    ('γ', 'ᵧ'),
-    ('ρ', 'ᵨ'),
-    ('ϕ', 'ᵩ'),
-    ('φ', 'ᵩ'),
-    ('χ', 'ᵪ'),
-];
+/// Additional subscripts allowed in inline math.
+const INLINE_SUBSCRIPTS: &[(char, char)] = &[('β', 'ᵦ'), ('γ', 'ᵧ'), ('ρ', 'ᵨ'), ('ϕ', 'ᵩ'), ('φ', 'ᵩ'), ('χ', 'ᵪ')];
 
 const DOUBLE_STRUCK: &[(char, char)] =
     &[('C', 'ℂ'), ('H', 'ℍ'), ('N', 'ℕ'), ('P', 'ℙ'), ('Q', 'ℚ'), ('R', 'ℝ'), ('Z', 'ℤ')];
