@@ -15,6 +15,7 @@ import { EmbeddingRoute } from "../route/embedding.js"
 import { Endpoint } from "../route/endpoint.js"
 import { MediaRoute } from "../route/media.js"
 import {
+  mergeTransport,
   ProviderConfigurationError,
   ProviderID,
   type LLMRequest,
@@ -183,7 +184,11 @@ export const configure = (input: Config = {}) => {
           message: "Google Vertex embedContent does not support Express Mode API keys; use project credentials",
         })
       return selected.route
-        .with({ endpoint: target.endpoint, auth: target.auth, headers: input.headers, http: input.http })
+        .with({
+          endpoint: target.endpoint,
+          auth: target.auth,
+          ...mergeTransport(input),
+        })
         .model<VertexOptionsInput & PredictOptionsInput>({ id: modelID, providerOptions })
     },
     configure,

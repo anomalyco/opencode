@@ -99,14 +99,13 @@ export const model = (input: MediaRoute.ModelInput) =>
   new ExtractionModel({
     id: input.id,
     provider: route.provider,
-    http: input.http,
+    transport: input.transport,
     route: MediaRoute.inline({
       protocol,
       endpoint: Endpoint.path<MediaProtocol.Body, ExtractionRequest>(({ request }) => `/${request.model.id}`, {
         baseURL: input.baseURL,
       }),
       auth: input.auth,
-      headers: input.headers,
     }),
   })
 

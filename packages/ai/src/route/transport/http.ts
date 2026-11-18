@@ -1,21 +1,11 @@
-import { Clock, Duration, Effect, Stream } from "effect"
+import { Effect } from "effect"
 import { Headers, HttpClientRequest } from "effect/http"
 import { Auth } from "../auth.js"
 import { render as renderEndpoint } from "../endpoint.js"
 import { Framing } from "../framing.js"
 import type { HttpMiddleware, Transport, TransportPrepareInput } from "./index.js"
 import * as ProviderShared from "../../protocols/shared.js"
-import {
-  AIError,
-  DEFAULT_CHUNK_TIMEOUT_MS,
-  DEFAULT_HTTP_TIMEOUT_MS,
-  mergeJsonRecords,
-  timeoutConfig,
-  TransportError,
-  type HttpContext,
-  type HttpTimeout,
-  type LLMRequest,
-} from "../../schema/index.js"
+import { mergeJsonRecords, type LLMRequest } from "../../schema/index.js"
 import { RequestExecutor } from "../executor.js"
 
 export type JsonRequestInput<Body> = TransportPrepareInput<Body>
@@ -94,55 +84,18 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
     }),
   execute: (prepared, request, runtime) =>
     Effect.gen(function* () {
-      const timeout = (operation: "request" | "read", message: string, http?: HttpContext) =>
-        new AIError({
-          reason: new TransportError({
-            message,
-            transport: "http",
-            operation,
-            code: "Timeout",
-            url: prepared.request.url,
-            http,
-          }),
-        })
-      const started = yield* Clock.currentTimeMillis
-      const limits = timeoutConfig(request.timeout)
-      // Unlike the header and chunk limits, the whole-request budget has no default.
-      const total = limits.total ? Duration.millis(limits.total) : Duration.infinity
-      const response = yield* RequestExecutor.withTls(runtime.http.execute, request.http?.tls)(
-        prepared.request,
-        prepared.middleware,
-      ).pipe(
-        Effect.timeoutOrElse({
-          duration: Duration.min(timeoutDuration(limits.headers), total),
-          orElse: () => timeout("request", "Timed out waiting for response headers"),
-        }),
-      )
-      const http = RequestExecutor.responseHttp(response)
-      const remaining = Duration.subtract(total, Duration.millis((yield* Clock.currentTimeMillis) - started))
+      const response = yield* RequestExecutor.withTimeout(
+        RequestExecutor.withTls(runtime.http.execute, request.http?.tls),
+        request.timeout,
+      )(prepared.request, prepared.middleware)
       return {
-        frames: prepared.framing.frame(
-          RequestExecutor.responseStream(response).pipe(
-            Stream.timeoutOrElse({
-              duration: timeoutDuration(limits.chunk, DEFAULT_CHUNK_TIMEOUT_MS),
-              orElse: () => Stream.fail(timeout("read", "Timed out waiting for response data", http)),
-            }),
-            Stream.interruptWhen(
-              Effect.sleep(remaining).pipe(
-                Effect.andThen(Effect.fail(timeout("read", "Timed out waiting for the response to complete", http))),
-              ),
-            ),
-          ),
-        ),
-        http,
+        frames: prepared.framing.frame(RequestExecutor.responseStream(response)),
+        http: RequestExecutor.responseHttp(response),
         body: prepared.framing.body,
         raw: prepared.framing.raw,
       }
     }),
 })
-
-const timeoutDuration = (value: HttpTimeout | undefined, fallback = DEFAULT_HTTP_TIMEOUT_MS) =>
-  value === false ? Duration.infinity : Duration.millis(value ?? fallback)
 
 export const sseJson = {
   id: "http-json/sse",

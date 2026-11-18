@@ -386,7 +386,9 @@ describe("ai.video / transient read failures", () => {
             ),
           ),
         ),
+        { startImmediately: true },
       )
+      yield* TestClock.withLive(Effect.sleep("1 millis"))
       yield* TestClock.adjust("9 seconds")
       expect(calls).toHaveLength(1)
       yield* TestClock.adjust("1 second")

@@ -5,6 +5,7 @@ import { Endpoint } from "../route/endpoint.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { MediaRoute } from "../route/media.js"
 import {
+  mergeTransport,
   ProviderConfigurationError,
   ProviderID,
   type ModelID,
@@ -158,14 +159,9 @@ export const configure = (input: Config) => {
 
   const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) => {
     const target = endpoint(input, modelID)
-    const media = MediaRoute.deployment({ ...input, baseURL: target.baseURL }, auth(input))
-    return OpenAIImages.model({
-      ...media,
-      id: modelID,
-      provider: id,
-      providerOptions,
-      http: { ...media.http, query: { ...media.http?.query, ...target.query } },
-    })
+    const transport = mergeTransport(input, { http: { query: target.query } })
+    const media = MediaRoute.deployment({ ...transport, baseURL: target.baseURL }, auth(input))
+    return OpenAIImages.model({ ...media, id: modelID, provider: id, providerOptions })
   }
 
   const embedding = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
@@ -174,8 +170,7 @@ export const configure = (input: Config) => {
         provider: id,
         endpoint: endpoint(input, modelID),
         auth: auth(input),
-        headers: input.headers,
-        http: input.http,
+        ...mergeTransport(input),
       })
       .model({ id: modelID, providerOptions })
 

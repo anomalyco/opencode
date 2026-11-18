@@ -1,17 +1,16 @@
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { MediaRoute } from "../route/media.js"
-import { type HttpOptions, ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderID, type ModelID, type TransportOptions } from "../schema/index.js"
 import { CartesiaSpeech } from "../protocols/cartesia-speech.js"
 
 export type { CartesiaEncoding, CartesiaSpeechOptions } from "../protocols/cartesia-speech.js"
 
 export const id = ProviderID.make("cartesia")
 
-export type Config = ProviderAuthOption<"optional"> & {
-  readonly baseURL?: string
-  readonly headers?: Record<string, string>
-  readonly http?: HttpOptions
-}
+export type Config = TransportOptions &
+  ProviderAuthOption<"optional"> & {
+    readonly baseURL?: string
+  }
 
 const auth = (options: ProviderAuthOption<"optional">) => AuthOptions.bearer(options, "CARTESIA_API_KEY")
 

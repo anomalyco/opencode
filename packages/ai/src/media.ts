@@ -4,9 +4,15 @@ import { Effect, FileSystem, Result, Schema, SchemaGetter, Stream } from "effect
 import { Base64 } from "effect/encoding"
 import { HttpClientRequest } from "effect/http"
 import { ProviderID } from "./schema/ids.js"
-import { AIError, InvalidProviderOutputError, InvalidRequestError } from "./schema/errors.js"
+import { AIError, InvalidRequestError } from "./schema/errors.js"
 import { ProviderMetadata } from "./schema/options.js"
-import { CurrentMiddleware, type HttpMiddleware, responseHttp, Service } from "./route/executor-service.js"
+import {
+  CurrentMiddleware,
+  type HttpMiddleware,
+  responseBytes,
+  responseStream,
+  Service,
+} from "./route/executor-service.js"
 import { detectMediaType, fileMediaType } from "./utils/media-type.js"
 
 export { detectMediaType } from "./utils/media-type.js"
@@ -271,19 +277,7 @@ const download = Effect.fn("Media.download")(function* (
   const response = yield* executor
     .execute(HttpClientRequest.get(source.url).pipe(HttpClientRequest.setHeaders(headers ?? {})))
     .pipe(Effect.provideService(CurrentMiddleware, middleware))
-  const buffer = yield* response.arrayBuffer.pipe(
-    Effect.mapError(
-      (cause) =>
-        new AIError({
-          reason: new InvalidProviderOutputError({
-            message: `Failed to read media from ${source.url}`,
-            http: responseHttp(response),
-            cause,
-          }),
-        }),
-    ),
-  )
-  return new Uint8Array(buffer)
+  return yield* responseBytes(response)
 })
 
 const downloadStream = Effect.fn("Media.downloadStream")(function* (
@@ -295,18 +289,7 @@ const downloadStream = Effect.fn("Media.downloadStream")(function* (
   const response = yield* executor
     .execute(HttpClientRequest.get(source.url).pipe(HttpClientRequest.setHeaders(headers ?? {})))
     .pipe(Effect.provideService(CurrentMiddleware, middleware))
-  return response.stream.pipe(
-    Stream.mapError(
-      (cause) =>
-        new AIError({
-          reason: new InvalidProviderOutputError({
-            message: `Failed to read media from ${source.url}`,
-            http: responseHttp(response),
-            cause,
-          }),
-        }),
-    ),
-  )
+  return responseStream(response)
 })
 
 // ---------------------------------------------------------------------------
