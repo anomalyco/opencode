@@ -537,6 +537,7 @@ fn settles(message: &Down) -> bool {
         Down::Call { call: Request::Reply { .. }, .. }
             | Down::Part { .. }
             | Down::Answered { .. }
+            | Down::AnsweredPart { .. }
             | Down::Cancelled { .. }
             | Down::Skipped { .. }
             | Down::Deactivate { .. }
@@ -545,11 +546,12 @@ fn settles(message: &Down) -> bool {
     )
 }
 
-/// What of a message too large for one frame goes in parts ([`Scripts::split`]): a reply's result (CT-5) and a read's
-/// value (CT-36).
+/// What of a message too large for one frame goes in parts ([`Scripts::split`]): a reply's result (CT-5), a read's
+/// value (CT-36) and what effects answered (a stored value's text, big-boi's `cg4-1`).
 enum Parted<'a> {
     Reply { activation: u64, request: opencode_plugin_abi::RequestId, result: &'a Result<serde_json::Value, String> },
     Snapshot { id: &'a str, activation: u64, key: &'a str, value: &'a serde_json::Value },
+    Answered { id: &'a str, activation: u64, key: &'a str, results: &'a [serde_json::Value] },
 }
 
 impl<'a> Parted<'a> {
@@ -561,6 +563,9 @@ impl<'a> Parted<'a> {
             Down::Snapshot { id, activation, key, value, error: None, parted: false } => {
                 Some(Self::Snapshot { id, activation: *activation, key, value })
             }
+            Down::Answered { id, activation, key, results, parted: false, dropped } if dropped.is_empty() => {
+                Some(Self::Answered { id, activation: *activation, key, results })
+            }
             _ => None,
         }
     }
@@ -570,6 +575,7 @@ impl<'a> Parted<'a> {
         match self {
             Self::Reply { result, .. } => json_len(result),
             Self::Snapshot { value, .. } => json_len(value),
+            Self::Answered { results, .. } => json_len(results),
         }
     }
 
@@ -577,6 +583,7 @@ impl<'a> Parted<'a> {
         match self {
             Self::Reply { result, .. } => serde_json::to_vec(result).ok(),
             Self::Snapshot { value, .. } => serde_json::to_vec(value).ok(),
+            Self::Answered { results, .. } => serde_json::to_vec(results).ok(),
         }
     }
 
@@ -586,6 +593,9 @@ impl<'a> Parted<'a> {
             Self::Reply { activation, request, .. } => Down::Part { activation: *activation, request: *request, data },
             Self::Snapshot { id, activation, key, .. } => {
                 Down::SnapshotPart { id: (*id).to_owned(), activation: *activation, key: (*key).to_owned(), data }
+            }
+            Self::Answered { id, activation, key, .. } => {
+                Down::AnsweredPart { id: (*id).to_owned(), activation: *activation, key: (*key).to_owned(), data }
             }
         }
     }
@@ -611,6 +621,14 @@ impl<'a> Parted<'a> {
                 value: serde_json::Value::Null,
                 error: None,
                 parted: true,
+            },
+            (Self::Answered { id, activation, key, .. }, _) => Down::Answered {
+                id: (*id).to_owned(),
+                activation: *activation,
+                key: (*key).to_owned(),
+                results: Vec::new(),
+                parted: true,
+                dropped: Vec::new(),
             },
             _ => unreachable!("a reply's parts close with its call"),
         }
@@ -717,8 +735,9 @@ pub struct Scripts {
     loads: RefCell<HashMap<String, Load>>,
     /// Each plugin's running activation, by ID.
     guests: RefCell<HashMap<String, Weak<Guest>>>,
-    /// What a plugin sent after its setup was answered and before the loader registered it: its watches, its effects.
-    early: RefCell<HashMap<String, Vec<Up>>>,
+    /// What a plugin sent after its setup was answered and before the loader registered it, its watches and its effects,
+    /// and their bytes.
+    early: RefCell<HashMap<String, (Vec<Up>, usize)>>,
     /// The plugins whose activation sent more than [`EARLY`] messages before it was registered, by that activation:
     /// it fails once it is ([`Scripts::keep`]).
     spilled: RefCell<HashMap<String, u64>>,
@@ -1414,8 +1433,10 @@ impl Scripts {
                 Down::Call { seq: *seq, id: id.clone(), activation: *activation, call, route, parted: false }
             }
             // A request's ID, a number, is kept: without it the JS host reads an accepted request as refused, which
-            // then runs while its caller retries (bigboi's verification). A read's value goes, as a failed read.
-            Down::Answered { id, activation, key, results } if !self.sendable(message) => Down::Answered {
+            // then runs while its caller retries (bigboi's verification). A read's value goes, named as dropped: a
+            // stored value's text read as null was an empty key, which a store's update then overwrote (big-boi's
+            // `cg4-1`).
+            Down::Answered { id, activation, key, results, .. } if !self.sendable(message) => Down::Answered {
                 id: id.clone(),
                 activation: *activation,
                 key: key.clone(),
@@ -1423,6 +1444,8 @@ impl Scripts {
                     .iter()
                     .map(|result| if scalar(result) { result.clone() } else { serde_json::Value::Null })
                     .collect(),
+                parted: false,
+                dropped: results.iter().enumerate().filter(|(_, result)| !scalar(result)).map(|(at, _)| at).collect(),
             },
             other => other.clone(),
         };
@@ -1897,7 +1920,9 @@ impl Scripts {
     }
 
     /// Keeps `up` of a plugin the loader has not registered yet, for its activation.
-    /// Keeps a message of an activation not registered yet, up to [`EARLY`]. The activation that sends more spilled,
+    /// Keeps a message of an activation not registered yet, up to [`EARLY`] of them and as many bytes as the JS host may
+    /// leave unread ([`child::Limits::inbox`]): the reader's bound let them go as they came here (big-boi's `cg4-5`). The
+    /// activation that sends more spilled,
     /// and fails as a whole, before anything it sent is applied (big-boi's catalog review): from then on nothing of it
     /// is kept or applied, a batch of effects of it is answered at once as refused ([`Scripts::refuse_spilled`]), and
     /// its setup fails instead of registering it, with nothing it sent applied ([`Scripts::spill_load`]). Replaying
@@ -1908,13 +1933,16 @@ impl Scripts {
         if self.spilled_by(&id, activation) {
             return self.refuse_spilled(up);
         }
+        let bytes = json_len(&up);
         let mut early = self.early.borrow_mut();
         let kept = early.entry(id.clone()).or_default();
-        if kept.len() < EARLY {
-            return kept.push(up);
+        if kept.0.len() < EARLY && kept.1 + bytes <= self.config.limits.inbox {
+            kept.1 += bytes;
+            return kept.0.push(up);
         }
         drop(early);
-        log::warn!("plugin {id}: over {EARLY} messages before it was registered; it fails once it is");
+        let bound = self.config.limits.inbox;
+        log::warn!("plugin {id}: over {EARLY} messages or {bound} bytes before it was registered; it fails once it is");
         self.spilled.borrow_mut().insert(id, activation);
         self.refuse_spilled(up);
     }
@@ -1930,7 +1958,8 @@ impl Scripts {
     fn refuse_spilled(&self, up: Up) {
         if let Up::Effects { id, activation, seq, effects, .. } = up {
             let results = vec![serde_json::Value::Null; effects.len()];
-            self.settle(&Down::Answered { id, activation, key: format!("b{seq}"), results }, 0);
+            let (key, dropped) = (format!("b{seq}"), (0..effects.len()).collect());
+            self.settle(&Down::Answered { id, activation, key, results, parted: false, dropped }, 0);
         }
     }
 
@@ -1938,7 +1967,7 @@ impl Scripts {
     /// registered ([`Scripts::spill_load`]).
     fn registered(self: &Rc<Self>, id: &str) {
         let early = self.early.borrow_mut().remove(id).unwrap_or_default();
-        early.into_iter().for_each(|up| self.up(up));
+        early.0.into_iter().for_each(|up| self.up(up));
     }
 
     /// Ends `loaded`, an activation that spilled, as its setup fails: nothing it sent is applied. What it sent before is
@@ -2551,6 +2580,12 @@ pub(crate) fn evaluate(
     let mut ctx = crate::loader::native::Ctx::new(host.clone(), id, keys);
     (ctx.read_only, ctx.owners) = (true, owners);
     match crate::loader::native::handle(&mut ctx, request.clone()) {
+        // A stored value is JSON text: its snapshot carries the JSON itself, not the text quoted again, which escaped
+        // each quote and backslash once more and could double its size past what the JS host takes (big-boi's
+        // `cg4-2`). The layer reads either.
+        Ok(serde_json::Value::String(text)) if matches!(request, HostRequest::StorageGet { .. }) => {
+            serde_json::from_str(&text).unwrap_or(serde_json::Value::String(text))
+        }
         Ok(value) => value,
         Err(error) => {
             log::warn!("plugin {id}: a watched read failed: {error}");
@@ -2562,6 +2597,26 @@ pub(crate) fn evaluate(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Expected (big-boi's `cg4-5`): what an activation sends before it is registered is kept within as many bytes as the
+    // JS host may leave unread, not only 256 messages: two of 40 KiB under a bound of 64 KiB spill it.
+    #[test]
+    fn what_comes_before_registration_is_bounded_by_its_bytes() {
+        let mut config = Config::new("bun".into());
+        config.limits.inbox = 64 << 10;
+        let host: Rc<dyn Host> = crate::tests::host();
+        let scripts = Scripts::new(config, &host);
+        let watch = |index: usize| Up::Watch {
+            id: "p".into(),
+            activation: 1,
+            key: format!("{index}{}", "k".repeat(40 << 10)),
+            request: HostRequest::Route,
+        };
+        scripts.keep(watch(0));
+        assert!(!scripts.spilled_by("p", 1));
+        scripts.keep(watch(1));
+        assert!(scripts.spilled_by("p", 1), "kept past its bytes");
+    }
 
     // Expected (CT-5): a reply too large for a frame goes in parts, each a frame, its call last, while the overflow has
     // room for all of them within its bound; past that room it does not, and is refused as before. Only a reply does.
@@ -2744,10 +2799,23 @@ mod tests {
         let held = Down::Ping { seq: 1 };
         scripts.overflowed(held.clone(), 512);
         let cancelled = Down::Cancelled { activation: 1, request: opencode_plugin_abi::RequestId(5) };
-        let answered =
-            Down::Answered { id: "p".into(), activation: 1, key: "c1".into(), results: vec![serde_json::json!(7)] };
+        let answered = Down::Answered {
+            id: "p".into(),
+            activation: 1,
+            key: "c1".into(),
+            results: vec![serde_json::json!(7)],
+            parted: false,
+            dropped: Vec::new(),
+        };
         let big = serde_json::json!("x".repeat(wire::CONTROL_CAP));
-        let huge = Down::Answered { id: "p".into(), activation: 1, key: "c2".into(), results: vec![big.clone(), big] };
+        let huge = Down::Answered {
+            id: "p".into(),
+            activation: 1,
+            key: "c2".into(),
+            results: vec![big.clone(), big],
+            parted: false,
+            dropped: Vec::new(),
+        };
         let call = Down::Call {
             seq: 2,
             id: "p".into(),
@@ -2772,6 +2840,8 @@ mod tests {
             activation: 1,
             key: "c2".into(),
             results: vec![serde_json::Value::Null; 2],
+            parted: false,
+            dropped: vec![0, 1],
         };
         let skipped = Down::Skipped { seq: 2 };
         let kept: Vec<Down> = scripts.overflow.borrow().0.iter().map(|(message, _)| message.clone()).collect();
@@ -2817,14 +2887,23 @@ mod tests {
     #[test]
     fn an_answer_too_large_for_a_frame_keeps_its_request_ids() {
         let mut config = Config::new("sh".into());
-        config.limits.queued = 4 << 10;
+        // An overflow too small for its parts, which go when there is room (big-boi's `cg4-1`).
+        (config.limits.queued, config.limits.inbox) = (4 << 10, 6 << 10);
         let host = crate::tests::host();
         let dynamic: Rc<dyn Host> = host.clone();
         let scripts = Scripts::new(config, &dynamic);
         let _dir = quiet(&scripts, &host);
         let read = serde_json::json!("x".repeat(8 << 10));
         let results = vec![serde_json::json!(7), read, serde_json::json!(true), serde_json::Value::Null];
-        let answered = Down::Answered { id: "p".into(), activation: 1, key: "c1".into(), results };
+        let answered = Down::Answered {
+            id: "p".into(),
+            activation: 1,
+            key: "c1".into(),
+            results,
+            parted: false,
+            dropped: Vec::new(),
+        };
+        // The read's value goes, named as dropped, so it is not read as null.
         let reduced = Down::Answered {
             id: "p".into(),
             activation: 1,
@@ -2835,6 +2914,8 @@ mod tests {
                 serde_json::json!(true),
                 serde_json::Value::Null,
             ],
+            parted: false,
+            dropped: vec![1],
         };
         // Refused behind what waits, it is kept reduced: the fetch's ID 7 and the verb's answer stay.
         scripts.overflowed(Down::Ping { seq: 1 }, 16);
@@ -2853,6 +2934,8 @@ mod tests {
             activation: 1,
             key: "c2".into(),
             results: vec![serde_json::json!(1); 4 << 10],
+            parted: false,
+            dropped: Vec::new(),
         };
         let ends = scripts.ends.borrow().len();
         scripts.send(ids.clone(), None);
@@ -2926,6 +3009,8 @@ mod tests {
             activation: 1,
             key: key.into(),
             results: vec![serde_json::json!(id), read(bytes), serde_json::json!(true)],
+            parted: false,
+            dropped: Vec::new(),
         };
         let reply = |seq: u64, id: u64, bytes: usize| Down::Call {
             seq,
@@ -3001,18 +3086,9 @@ mod tests {
                 .iter()
                 .flat_map(|message| match message {
                     _ if fits(message) => vec![message.clone()],
-                    Down::Answered { id, activation, key, results } => vec![Down::Answered {
-                        id: id.clone(),
-                        activation: *activation,
-                        key: key.clone(),
-                        results: results
-                            .iter()
-                            .map(|result| if scalar(result) { result.clone() } else { serde_json::Value::Null })
-                            .collect(),
-                    }],
-                    // A reply or a read within the overflow's room goes in parts (CT-5, CT-36), which join to its
-                    // result or value below.
-                    Down::Call { call: Request::Reply { .. }, .. } | Down::Snapshot { .. } => {
+                    // A reply, a read or an answer within the overflow's room goes in parts (CT-5, CT-36, big-boi's
+                    // `cg4-1`); the reply's and the read's join to their result and value below.
+                    Down::Call { call: Request::Reply { .. }, .. } | Down::Snapshot { .. } | Down::Answered { .. } => {
                         scripts.split(message).unwrap()
                     }
                     other => vec![Down::Skipped { seq: other.seq().unwrap() }],

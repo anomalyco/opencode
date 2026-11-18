@@ -23,10 +23,11 @@ use crate::Host;
 /// The storage keys one plugin may declare (FT-9: opencode-tokscope declares about 80, its 64 history shards and a
 /// dozen others).
 pub const KEYS: usize = 128;
-/// The JSON bytes one stored value may have (CT-36: opencodebar keeps a price list of 1 MB, prompt-search an index of
-/// every prompt, 330 KB at 900 sessions). A value is a file of its own, read when it is asked for; what goes to and
-/// from the JS host goes in parts.
-pub const VALUE_BYTES: usize = 4 << 20;
+/// The JSON bytes one stored value may have. The host keeps what a plugin read or wrote of each key, and a merge reads,
+/// merges and writes the whole value on the UI thread, so the bound holds those too: 128 keys of it is 32 MiB a plugin
+/// (big-boi's `cg4-3`, `cg4-4`). opencodebar's price list of 1 MB and prompt-search's index of every prompt are refused
+/// (CT-36), and the plugin goes on.
+pub const VALUE_BYTES: usize = 256 << 10;
 
 /// The host's names of a plugin's key: where it is kept, and where TS kept it, when that is another name.
 #[derive(Clone, Debug, PartialEq, Eq)]

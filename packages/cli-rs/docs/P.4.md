@@ -711,10 +711,13 @@ It is the second timing tier. No frame waits for the JS host:
   whole one. Until a mount's first tree it shows a placeholder that keeps the rows its key had (or one); while a new
   one is on its way, the last.
 - **Reads** are snapshots the host pushes for what the plugin watches, before each event, after each call's effects
-  and at each change. A read too large for one frame goes in parts, as a large reply does (CT-36: the `sessions` read
-  of 900 sessions); one past the plugin's content room, or past what the overflow has room for now (just under 6 MiB
-  of JSON while it is empty), is not pushed: the plugin reads nothing (`carrier.readError(key)` says why), and goes
-  on. The host still builds the read whole on its thread before it measures it. There is no canvas draw.
+  and at each change. A read too large for one frame goes in parts, as a large reply and a call's answers do (CT-36:
+  the `sessions` read of 900 sessions); one past the plugin's content room, or past what the overflow has room for now
+  (just under 6 MiB of JSON while it is empty), is not pushed: the plugin reads nothing (`carrier.readError(key)` says
+  why), and goes on, and the read is pushed again at the next refresh, though it did not change. A stored value's read
+  carries its JSON, not its text quoted again. An answer the host still cannot send names the results it dropped,
+  which the JS host answers as nothing, not null: a store's update then fails rather than read an empty key. The host
+  still builds the read whole on its thread before it measures it. There is no canvas draw.
 - **Hold**: a command that declares `hold`, and a key a JS command or listener may decline, holds the input typed
   after it (keys and pastes, in order) until its handler's effects applied, or 50 ms. Each call that holds owns its
   entry until the first of its answer, its deadline, its refusal, the JS host's end and the reserved chord, which
@@ -725,7 +728,9 @@ It is the second timing tier. No frame waits for the JS host:
 - **Supervision**: the queues are bounded. To the JS host, 1 MiB is queued and what does not fit waits in an overflow
   of 8 MiB that drains as it reads, past which a message is refused (a handler's call answered with nothing); nothing
   ends for it. From it, 512 unread messages and 8 MiB, and 8 unread trees, after which it blocks in its write; a
-  message too large for one frame (a stored value of 1 MB) comes in pieces, joined within those 8 MiB (CT-36). A JS host
+  message too large for one frame (a stored value of 1 MB) comes in pieces of a whole frame each, joined within those
+  8 MiB together with what waits unread, each piece progress for the watchdog (CT-36). What a plugin sends before it
+  is registered is held within 256 messages and those 8 MiB. A JS host
   that owes an answer and sends nothing for 1 s (a started load or setup: 10 s) is hung, so a queue that moves is not,
 and the time the host's reader waits for the UI thread to take its trees, while what the JS host sent after them waits
 unread, is not the JS host's silence;

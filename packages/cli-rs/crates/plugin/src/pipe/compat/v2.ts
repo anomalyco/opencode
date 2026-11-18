@@ -272,11 +272,18 @@ export function context(base: Base, carrier: Carrier) {
   // session's own read from the same store and loads nothing for it (`Read::session`), so a read a session would only
   // churn the bounded watches, a watch and a release for each ID past them. opencode-sesh asks the status of each of
   // 900 listed sessions in one pass: 1,800 messages, which flooded the host (CT-36). Indexed once a snapshot.
+  // A session missing from it is read from its own read where there is one: the route's session seeded at setup, and
+  // one `sync(id)` watches, so what `sync` loaded `get` answers (big-boi's `cg4-9`); one with neither starts none.
   let indexed: { list: Json[]; byID: Map<string, Json> } | undefined
   const session = (sessionID: string): Json => {
     const list = sessions()
     if (indexed?.list !== list) indexed = { list, byID: new Map(list.map((item) => [item.info.id, item])) }
-    return indexed.byID.get(sessionID)
+    const own = `session:${sessionID}`
+    return (
+      indexed.byID.get(sessionID) ??
+      (watched.has(own) ? read(own, { type: "session", id: sessionID }) : carrier.read(own)) ??
+      undefined
+    )
   }
   const info = (): Json => read("info", { type: "info" })
   const locationOf = (location: Json) =>
@@ -310,26 +317,15 @@ export function context(base: Base, carrier: Carrier) {
   // A collection the contract has no read of, loaded through the plugin's `client` over the host's fetch: as the plugin
   // first lists or syncs it, again on `invalidate`, and again on each event `events` names, which it subscribes to with
   // its first load. A list answers `undefined` until its load came, and its reader follows it.
-  // At most 4 of the plugin's loads of what the host does not push run at once; the others wait their turn. A plugin
-  // that lists the permissions or forms of each of 900 sessions asked 1,800 fetches in one pass, each an effect, past
-  // the host's bound on what it has not taken (CT-36: agents-view, op1/threads).
+  // At most 4 loads of a collection run at once, and the others wait their turn, each key once: a load asked for while
+  // its key waits is that wait, and one asked for while it loads runs once more after it, so two of a key never overlap
+  // and an older answer never comes after a newer one (big-boi's `cg4-11`: a form cancelled came back). A load whose key
+  // is asked for again meanwhile publishes nothing, the next does. At most 256 keys wait: past them the oldest waiting
+  // gives up its turn, and loads again when it is next listed (`cg4-10`). A plugin that lists the permissions or forms
+  // of each of 900 sessions asked 1,800 fetches in one pass, each an effect, past the host's bound on what it has not
+  // taken (CT-36: agents-view, op1/threads). Each collection has its own turns: one whose loads hang holds no other.
   const LOADS = 4
-  let loads = 0
-  const turns: Array<() => void> = []
-  const inTurn = <T,>(run: () => Promise<T>): Promise<T> =>
-    new Promise<T>((resolve, reject) => {
-      const start = () => {
-        loads++
-        run()
-          .then(resolve, reject)
-          .finally(() => {
-            loads--
-            turns.shift()?.()
-          })
-      }
-      if (loads < LOADS) start()
-      else turns.push(start)
-    })
+  const WAITING = 256
   // `concerns`: whether an event of `events` changes what the entry of `args` holds; an event reloads only those.
   const fetched = (
     events: string[],
@@ -337,17 +333,61 @@ export function context(base: Base, carrier: Carrier) {
     key = (...args: Json[]) => JSON.stringify(args),
     concerns = (_event: Json, _args: Json[]) => true,
   ) => {
-    const entries = new Map<string, { args: Json[]; value?: Json; version: ReturnType<typeof createSignal<number>>; loading?: Promise<void> }>()
+    type Entry = {
+      args: Json[]
+      value?: Json
+      version: ReturnType<typeof createSignal<number>>
+      state: "idle" | "waiting" | "loading"
+      again: boolean
+      settled: Array<() => void>
+    }
+    const entries = new Map<string, Entry>()
+    const waiting: Entry[] = []
+    let loading = 0
     let heard = false
     const entry = (args: Json[]) => {
       const at = key(...args)
       const known = entries.get(at)
       if (known) return known
-      const made = { args, version: createRoot(() => createSignal(0)) }
+      const made: Entry = { args, version: createRoot(() => createSignal(0)), state: "idle", again: false, settled: [] }
       entries.set(at, made)
       return made
     }
-    const reload = (at: ReturnType<typeof entry>): Promise<void> => {
+    const settle = (at: Entry) => {
+      at.state = "idle"
+      for (const done of at.settled.splice(0)) done()
+    }
+    const next = () => {
+      while (loading < LOADS && waiting.length) start(waiting.shift()!)
+    }
+    const start = (at: Entry) => {
+      at.state = "loading"
+      at.again = false
+      loading++
+      load(...at.args)
+        .then(
+          (value) => {
+            if (at.again) return
+            at.value = value
+            at.version[1]((count) => count + 1)
+            invalidate()
+          },
+          (error) => console.warn(`plugin ${id}: a load of data failed: ${error instanceof Error ? error.message : error}`),
+        )
+        .finally(() => {
+          loading--
+          if (at.again) queue(at)
+          else settle(at)
+          next()
+        })
+    }
+    const queue = (at: Entry) => {
+      at.state = "waiting"
+      waiting.push(at)
+      if (waiting.length > WAITING) settle(waiting.shift()!)
+      next()
+    }
+    const reload = (at: Entry): Promise<void> => {
       if (!heard) {
         heard = true
         for (const type of events)
@@ -357,21 +397,16 @@ export function context(base: Base, carrier: Carrier) {
             }),
           )
       }
-      at.loading = inTurn(() => load(...at.args)).then(
-        (value) => {
-          at.value = value
-          at.version[1]((count) => count + 1)
-          invalidate()
-        },
-        (error) => console.warn(`plugin ${id}: a load of data failed: ${error instanceof Error ? error.message : error}`),
-      )
-      return at.loading
+      const done = new Promise<void>((resolve) => at.settled.push(resolve))
+      if (at.state === "loading") at.again = true
+      else if (at.state === "idle") queue(at)
+      return done
     }
     return {
       list(...args: Json[]) {
         const at = entry(args)
         at.version[0]()
-        if (at.value === undefined && !at.loading) void reload(at)
+        if (at.value === undefined && at.state === "idle") void reload(at)
         return at.value
       },
       sync: (...args: Json[]) => reload(entry(args)),
@@ -390,17 +425,22 @@ export function context(base: Base, carrier: Carrier) {
     (location?: Json) => raw.form.list({ location: directoryOf(location) }).then((out: Json) => out.data),
     (location?: Json) => locationKey(location),
   )
-  const sessionForms = new Map<string, { of: Json; forms: Json }>()
+  // Each location's forms by session, of its list as it is now: one kept for each session pinned a list the location
+  // had refreshed (big-boi's `cg4-12`).
+  const formIndex = new Map<string, { of: Json[]; bySession: Map<string, Json[]>; none: Json[] }>()
   const forms = {
     list(sessionID: string, location?: Json) {
       const of = locationForms.list(location)
       if (of === undefined) return undefined
-      const at = `${sessionID} ${locationKey(location)}`
-      const known = sessionForms.get(at)
-      if (known?.of === of) return known.forms
-      const made = of.filter((form: Json) => form.sessionID === sessionID)
-      sessionForms.set(at, { of, forms: made })
-      return made
+      const at = locationKey(location)
+      let index = formIndex.get(at)
+      if (index?.of !== of) {
+        const bySession = new Map<string, Json[]>()
+        for (const form of of) bySession.set(form.sessionID, [...(bySession.get(form.sessionID) ?? []), form])
+        index = { of, bySession, none: [] }
+        formIndex.set(at, index)
+      }
+      return index.bySession.get(sessionID) ?? index.none
     },
     sync: (_sessionID: string, location?: Json) => locationForms.sync(location),
     invalidate: (_sessionID: string, location?: Json) => locationForms.invalidate(location),
@@ -1107,8 +1147,9 @@ export function context(base: Base, carrier: Carrier) {
         rendered.delete(at)
         presses.delete(at)
         taking()
-        if (!entry || entry.crashed !== undefined || !handover) return entry?.dispose()
         const slot = `${mount.surface}\u0000${mount.key}`
+        if (!handover && panelHandles.get(slot)?.mount.generation === mount.generation) panelHandles.delete(slot)
+        if (!entry || entry.crashed !== undefined || !handover) return entry?.dispose()
         const before = parked.get(slot)
         if (before) {
           clearTimeout(before.timer)
@@ -1168,19 +1209,7 @@ export function context(base: Base, carrier: Carrier) {
         width: panel.width ?? cx.input.width,
         presentation: panel.fullscreen ? "fullscreen" : "panel",
         focused: !!panel.focused,
-        // CT-38: as TS's `PanelInput`. The contract has no focus of a pane: the panel's first field or scroll takes the
-        // focus, which moves the input to the panel as a click in it does (btw-sidechat focuses its field after).
-        focus() {
-          const root = rendered.get(`${cx.mount.surface}\u0000${cx.mount.key}\u0000${cx.mount.generation}`)?.root
-          const first = (node: VNode): VNode | undefined =>
-            FOCUSABLE.has(node.tag) ? node : node.children.reduce<VNode | undefined>((found, child) => found ?? first(child), undefined)
-          const node = root && first(root)
-          if (node) focus.focus(node)
-          else unsupported("panel.focus() of a panel with no field or scroll")
-        },
-        close: () => void carrier.effect({ type: "close-panel", surface }),
-        toggleFullscreen: () =>
-          void carrier.effect({ type: "open-panel", surface, ...(panel.fullscreen ? {} : { fullscreen: true }) }),
+        ...panelHandle(surface, cx.mount, !!panel.fullscreen).methods,
       }
     }
     if (path.startsWith("sidebar.") || path === "session.composer.top") return { sessionID: slot.session_id ?? "" }
@@ -1190,6 +1219,60 @@ export function context(base: Base, carrier: Carrier) {
   // `enabled`, @cleocode/goal's) follows it (carbon ce-2).
   const [panelName, setPanelName] = createRoot(() => createSignal(""))
   const panels: string[] = []
+  // CT-38: a session panel's `focus`, `close` and `toggleFullscreen`, as TS's `PanelInput` has them. One handle a panel
+  // mount, which each draw tells its mount as it is now and whether it shows full screen: its methods stay the same
+  // functions, so a mount adopted after a reload keeps them with its new generation (big-boi's `cg4-14`), and they act
+  // only while that mount lives, as its requests, so a handle kept past its panel moves no other (`cg4-13`).
+  const panelHandles = new Map<string, { mount: Json; fullscreen: boolean; methods: Json }>()
+  const panelHandle = (surface: string, mount: Json, fullscreen: boolean) => {
+    const at = `${mount.surface}\u0000${mount.key}`
+    let handle = panelHandles.get(at)
+    if (!handle) {
+      const live = () => {
+        const now = panelHandles.get(at)
+        const key = now && `${now.mount.surface}\u0000${now.mount.key}\u0000${now.mount.generation}`
+        return key && rendered.has(key) ? now : undefined
+      }
+      handle = {
+        mount,
+        fullscreen,
+        methods: {
+          // The contract has no focus of a pane: the panel's first field or scroll that shows takes the focus
+          // (`cg4-15`: a hidden one did), which moves the input to the panel as a click in it does.
+          focus() {
+            const now = live()
+            const root = now && rendered.get(`${now.mount.surface}\u0000${now.mount.key}\u0000${now.mount.generation}`)?.root
+            if (!root) return
+            const first = (node: VNode): VNode | undefined =>
+              node.props.visible === false
+                ? undefined
+                : FOCUSABLE.has(node.tag)
+                  ? node
+                  : node.children.reduce<VNode | undefined>((found, child) => found ?? first(child), undefined)
+            const node = first(root)
+            if (node) focus.focus(node)
+            else unsupported("panel.focus() of a panel with no field or scroll")
+          },
+          close() {
+            const now = live()
+            if (now) void carrier.effect({ type: "close-panel", surface }, now.mount)
+          },
+          // A toggle of what it asked for last, which the next draw corrects to what shows: two at once go full
+          // screen and back, where each asked for full screen (`cg4-16`).
+          toggleFullscreen() {
+            const now = live()
+            if (!now) return
+            now.fullscreen = !now.fullscreen
+            void carrier.effect({ type: "open-panel", surface, ...(now.fullscreen ? { fullscreen: true } : {}) }, now.mount)
+          },
+        },
+      }
+      panelHandles.set(at, handle)
+    }
+    handle.mount = mount
+    handle.fullscreen = fullscreen
+    return handle
+  }
   // An input as the plugin's props hold it: a copy, but for its functions (a panel's `focus`, CT-38), which are kept.
   const copied = (value: Json): Json =>
     typeof value === "function" || value === null || typeof value !== "object"
@@ -1627,10 +1710,12 @@ export function context(base: Base, carrier: Carrier) {
         void carrier.effect({ type: "storage-key", key })
         carrier.storage([key])
         carrier.changed()
+        // The stored value: its JSON, as a watched read carries it (big-boi's `cg4-2`), or its text.
         const persisted = () => {
-          const text = read(`storage:${key}`, { type: "storage-get", key })
+          const stored = read(`storage:${key}`, { type: "storage-get", key })
+          if (stored !== null && typeof stored === "object") return stored
           try {
-            return typeof text === "string" ? JSON.parse(text) : undefined
+            return typeof stored === "string" ? JSON.parse(stored) : undefined
           } catch {
             return undefined
           }
@@ -1638,6 +1723,9 @@ export function context(base: Base, carrier: Carrier) {
         const [store, setStore] = createRoot(() => createStore(structuredClone(persisted() ?? options.initial)))
         carrier.listen((pushedKey) => {
           if (pushedKey !== `storage:${key}`) return
+          // A refresh that failed leaves the store as it was, and says so in the log by the store's key.
+          const error = failed(pushedKey)
+          if (error) return unsupported(`store ${key}`, `${id}: the store ${key} keeps its last value: ${error}`)
           const value = untrack(persisted)
           if (value !== undefined) setStore(reconcile(value))
         })
@@ -1645,13 +1733,20 @@ export function context(base: Base, carrier: Carrier) {
         // then, which the last update wrote; what it changed is merged into what is stored as it is written, so a field
         // another client wrote meanwhile stays. One that removes a field writes the whole value.
         let queue: Promise<unknown> = Promise.resolve()
+        // A stored value that did not come (too large for the JS host, or the plugin failed) fails the update: read as
+        // an empty key, the update overwrote what was stored with the initial value (big-boi's `cg4-1`). A write the
+        // host refused fails it too, and the store keeps what is stored.
         const once = async (mutation: (draft: Json) => void) => {
           const stored = await carrier.effect({ type: "storage-get", key })
+          if (stored === undefined) throw new Error(`the stored value of ${key} did not come`)
           let base: Json
           try {
             base = typeof stored === "string" ? JSON.parse(stored) : structuredClone(options.initial)
           } catch {
             base = structuredClone(options.initial)
+          }
+          const written = (answer: Json) => {
+            if (answer !== true) throw new Error(`${key} was not stored: ${answer?.error ?? "no answer"}`)
           }
           const draft = structuredClone(base)
           mutation(draft)
@@ -1660,8 +1755,8 @@ export function context(base: Base, carrier: Carrier) {
             const fields = Object.fromEntries(
               Object.entries(draft).filter(([field, value]) => JSON.stringify(value) !== JSON.stringify(base[field])),
             )
-            if (Object.keys(fields).length) await carrier.effect({ type: "storage-merge", key, fields })
-          } else await carrier.effect({ type: "storage-set", key, value: JSON.stringify(draft) })
+            if (Object.keys(fields).length) written(await carrier.effect({ type: "storage-merge", key, fields }))
+          } else written(await carrier.effect({ type: "storage-set", key, value: JSON.stringify(draft) }))
           batch(() => setStore(reconcile(draft)))
         }
         const update = (mutation: (draft: Json) => void) => {

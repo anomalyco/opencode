@@ -349,6 +349,11 @@ interface Plugin {
   parts: Map<number, Buffer[]>
   // CT-36: the parts of each read's value too large for one frame, until its snapshot joins them.
   snapshotParts: Map<string, Buffer[]>
+  // The parts of each answer of effects too large for one frame, until it joins them (big-boi's `cg4-1`).
+  answerParts: Map<string, Buffer[]>
+  // The reads the plugin let go and has not watched again: a snapshot of one still on its way sets nothing (big-boi's
+  // `cg4-7`: a late read of 300 KB came back after its unwatch, uncharged).
+  retired: Set<string>
   batch: number
   // P8: who hears each snapshot, and the manifest the host was last told.
   listeners: Array<(key: string) => void>
@@ -737,12 +742,15 @@ function context(plugin: Plugin) {
     },
     effect: (request: Request, mount?: Json) => effect(plugin, request, mount),
     watch(key: string, request: Request) {
+      plugin.retired.delete(key)
       const watch = { type: "watch", id: plugin.id, activation: plugin.activation, key, request }
       if (plugin.setting) plugin.setupWatches.push(watch)
       else send(watch)
     },
     unwatch(key: string) {
       plugin.snapshots.delete(key)
+      plugin.snapshotParts.delete(key)
+      plugin.retired.add(key)
       send({ type: "unwatch", id: plugin.id, activation: plugin.activation, key })
     },
     read: (key: string) => plugin.snapshots.get(key),
@@ -993,6 +1001,8 @@ function candidate(definition: Plugin["definition"], target: string, dir: string
     replies: new Map(),
     parts: new Map(),
     snapshotParts: new Map(),
+    answerParts: new Map(),
+    retired: new Set(),
     batch: 0,
     listening: {},
     listeners: [],
@@ -1073,6 +1083,7 @@ function deactivate(plugin: Plugin) {
   plugin.replies.clear()
   plugin.parts.clear()
   plugin.snapshotParts.clear()
+  plugin.answerParts.clear()
   for (const mount of plugin.mounts.values()) {
     try {
       plugin.surfaces[mount.surface]?.unmount?.(mount.id)
@@ -1304,14 +1315,14 @@ async function handle(message: Json) {
       return within(plugin, () => view(plugin, mount))
     }
     case "snapshot-part": {
-      if (!plugin) return
+      if (!plugin || plugin.retired.has(message.key)) return
       const parts = plugin.snapshotParts.get(message.key) ?? []
       parts.push(Buffer.from(message.data, "base64"))
       plugin.snapshotParts.set(message.key, parts)
       return
     }
     case "snapshot":
-      if (!plugin) return
+      if (!plugin || plugin.retired.has(message.key)) return
       // A read too large for one frame: its value is the JSON of the parts that came before it (CT-36). Parts the
       // host refused on the way make no value, which reads as a failed read.
       if (message.parted) {
@@ -1344,10 +1355,34 @@ async function handle(message: Json) {
       if (reply) within(plugin, () => reply.reject(cancelled()))
       return
     }
+    case "answered-part": {
+      if (!plugin || !plugin.answers.has(message.key)) return
+      const parts = plugin.answerParts.get(message.key) ?? []
+      parts.push(Buffer.from(message.data, "base64"))
+      plugin.answerParts.set(message.key, parts)
+      return
+    }
     case "answered": {
       const waiting = plugin?.answers.get(message.key)
       plugin?.answers.delete(message.key)
-      if (plugin && waiting) within(plugin, () => waiting.forEach((resolve, index) => resolve(message.results[index])))
+      const parts = plugin?.answerParts.get(message.key)
+      plugin?.answerParts.delete(message.key)
+      // Answers too large for one frame are the JSON of the parts before it. One the host could not send (`dropped`),
+      // or parts that are not whole, answer nothing, which is not null, a key that holds nothing (big-boi's `cg4-1`).
+      let results: Json[] = message.results
+      let dropped = new Set<number>(message.dropped ?? [])
+      if (message.parted) {
+        try {
+          results = JSON.parse(Buffer.concat(parts ?? []).toString())
+        } catch {
+          results = []
+          dropped = new Set((waiting ?? []).map((_, index) => index))
+        }
+      }
+      if (plugin && waiting)
+        within(plugin, () =>
+          waiting.forEach((resolve, index) => resolve(dropped.has(index) ? undefined : results[index])),
+        )
       return
     }
     case "ping": {

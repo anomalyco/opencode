@@ -164,7 +164,18 @@ pub enum Down {
         activation: u64,
         key: String,
         results: Vec<serde_json::Value>,
+        /// Its results are the [`Down::AnsweredPart`]s of its key before it, joined, and not the ones it carries
+        /// (big-boi's `cg4-1`: a stored value's text answered past a frame).
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        parted: bool,
+        /// The results the host could not send, by index, each null here: they did not come, which the JS host tells
+        /// apart from a null answer (a key that holds nothing).
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        dropped: Vec<usize>,
     },
+    /// A piece of the JSON of the results of an [`Down::Answered`] of `key`, in base64, too large for one frame: its
+    /// answer follows the pieces, in order, and says it is [`Down::Answered::parted`].
+    AnsweredPart { id: String, activation: u64, key: String, data: String },
     /// The host cancelled `request` of activation `activation`, as the mount that owns it closed: no reply comes, and
     /// the fetch that waits for it rejects with an `AbortError`.
     Cancelled { activation: u64, request: opencode_plugin_abi::RequestId },
@@ -196,6 +207,7 @@ impl Down {
             | Down::Snapshot { .. }
             | Down::SnapshotPart { .. }
             | Down::Answered { .. }
+            | Down::AnsweredPart { .. }
             | Down::Part { .. }
             | Down::Cancelled { .. } => None,
         }

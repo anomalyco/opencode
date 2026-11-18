@@ -25,6 +25,7 @@ export default {
     })
     command("lab.unwatch", () => carrier.unwatch("note"))
     command("lab.readerror", () => toast(`read error ${carrier.readError("note") ?? "none"}`))
+    command("lab.notelength", () => toast(`note length ${JSON.stringify(carrier.read("note") ?? null).length}`))
     command("lab.watches", () => {
       let answered = 0
       for (let index = 0; index < 140; index++) if (carrier.read(`w${index}`) !== undefined) answered++

@@ -578,13 +578,26 @@ fn read(shared: &Shared, reader: channel::Reader) {
             shared.read_trees.fetch_add(payload.len() as u64 + 5, Ordering::Relaxed);
         }
         if kind == wire::PIECE || (kind == wire::CONTROL && !pieces.is_empty()) {
-            if pieces.len() + payload.len() > shared.limits.inbox {
-                let why = format!("the JS host sent a message of over {} bytes", shared.limits.inbox);
+            // Each piece is a whole frame, the control frame the rest: a message in pieces is at most its bound in
+            // frames, so each piece may count as progress (big-boi's `cg4-6`: pieces 60 ms apart were a hang).
+            if kind == wire::PIECE && payload.len() != wire::CONTROL_CAP {
+                let why = format!("the JS host broke the protocol: a piece of {} bytes", payload.len());
+                deliver(shared, gone(ended(shared, &why)), 0);
+                return;
+            }
+            // What it joins counts with what the UI thread has not taken, within one bound (big-boi's `cg4-5`).
+            let held = lock(&shared.inbox).bytes;
+            if held + pieces.len() + payload.len() > shared.limits.inbox {
+                let why = format!(
+                    "the JS host sent over {} bytes the host had not taken, a message in pieces among them",
+                    shared.limits.inbox
+                );
                 deliver(shared, gone(ended(shared, &why)), 0);
                 return;
             }
             pieces.append(&mut payload);
             if kind == wire::PIECE {
+                lock(&shared.sent).progress = Instant::now();
                 continue;
             }
             payload = std::mem::take(&mut pieces);
@@ -1278,6 +1291,66 @@ mod tests {
             let gone = events.iter().any(|event| matches!(event, Event::Gone(..)));
             assert_eq!((read, gone), (whole, !whole), "inbox {inbox}: {} events", events.len());
         }
+    }
+
+    // Expected (big-boi's `cg4-5`): a message in pieces counts with what the host has not taken: with 300 KiB of messages
+    // unread under a bound of 512 KiB, its first piece of 256 KiB ends the stream, where the pieces had a bound of their
+    // own and only the last frame met the other's.
+    #[test]
+    fn a_message_in_pieces_counts_with_what_waits_unread() {
+        let log = |bytes: usize| Up::Log { id: Some("p".into()), level: Level::Info, message: "m".repeat(bytes) };
+        let mut frames = hello();
+        (0..3).for_each(|_| frames.extend(control(&log(100 << 10))));
+        frames.extend(wire::encode(wire::PIECE, &vec![b' '; wire::CONTROL_CAP]));
+        let (child, _dir) = fake(&frames, Limits { inbox: 512 << 10, ..Limits::default() });
+        // Nothing is taken while the reader reads: the messages wait unread.
+        std::thread::sleep(Duration::from_millis(300));
+        let events = child.take();
+        let gone = events.iter().find_map(|event| match event {
+            Event::Gone(why, _) => Some(why.clone()),
+            _ => None,
+        });
+        assert!(gone.as_deref().is_some_and(|why| why.contains("a message in pieces")), "{gone:?}");
+    }
+
+    // Expected (big-boi's `cg4-6`): a message whose pieces come 60 ms apart, longer in all than the limit, is progress,
+    // not a hang: the answer after it comes and nothing was named hung. A piece smaller than a frame breaks the protocol,
+    // so a message is a bounded number of pieces.
+    #[cfg(unix)]
+    #[test]
+    fn pieces_that_trickle_in_are_progress() {
+        let dir = opencode_util::temp::tempdir().unwrap();
+        let file = |name: &str, bytes: Vec<u8>| {
+            let path = dir.path().join(name);
+            std::fs::write(&path, bytes).unwrap();
+            format!("cat '{}' >&0", path.display())
+        };
+        let log = Up::Log { id: Some("p".into()), level: Level::Info, message: "m".repeat(5 * wire::CONTROL_CAP) };
+        let json = serde_json::to_vec(&log).unwrap();
+        let pieces: Vec<&[u8]> = json.chunks(wire::CONTROL_CAP).collect();
+        let mut script = vec![file("hello", hello())];
+        for (index, piece) in pieces.iter().enumerate() {
+            let kind = if index + 1 == pieces.len() { wire::CONTROL } else { wire::PIECE };
+            script.push("sleep 0.06".to_owned());
+            script.push(file(&format!("piece{index}"), wire::encode(kind, piece)));
+        }
+        script.push(file("done", wire::encode(wire::CONTROL, br#"{"type":"done","seq":1}"#)));
+        script.push("cat > /dev/null".to_owned());
+        let mut command = Command::new("sh");
+        command.arg("-c").arg(script.join("; "));
+        let limits = Limits { ack: Duration::from_millis(165), ..Limits::default() };
+        let child = Child::spawn(command, limits, || {}).unwrap();
+        child.send(wire::CONTROL, b"{}", Some(1), Wait::Answer).unwrap();
+        let events = take_until(&child, |events| {
+            events.iter().any(|event| matches!(event, Event::Up(up) if matches!(**up, Up::Done { .. })))
+        });
+        assert!(events.iter().any(|event| matches!(event, Event::Up(up) if **up == log)), "the message did not come");
+        assert!(!events.iter().any(|event| matches!(event, Event::Hung { .. })), "named hung");
+        let mut short = hello();
+        short.extend(wire::encode(wire::PIECE, b"short"));
+        let (child, _dir) = fake(&short, Limits::default());
+        let events = take_until(&child, |events| events.iter().any(|event| matches!(event, Event::Gone(..))));
+        assert!(events.iter().any(|event| matches!(event, Event::Gone(why, _) if why.contains("a piece of 5 bytes"))));
     }
 
     // Expected (the bound on ordered messages): the bound's worth of messages the host has not taken is held; one more

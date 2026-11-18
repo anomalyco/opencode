@@ -87,10 +87,12 @@ function host(answer: (key: string) => Json = () => [], limit = 128) {
       fake.effects.push(mount ? { ...request, mount } : request)
       await turn()
       if (request.type === "storage-get") return fake.stored.get(request.key) ?? null
+      // As the host's: a write answers whether it was kept.
       if (request.type === "storage-set") fake.stored.set(request.key, request.value)
-      // As the host's: merged into what is stored as it is written.
+      // Merged into what is stored as it is written.
       if (request.type === "storage-merge")
         fake.stored.set(request.key, JSON.stringify({ ...JSON.parse(fake.stored.get(request.key) ?? "{}"), ...request.fields }))
+      if (request.type === "storage-set" || request.type === "storage-merge") return true
       return null
     },
     watch(key: string) {
@@ -1222,6 +1224,26 @@ test("data collections load through the client", async () => {
   expect(fake.toasts()).toEqual([])
 })
 
+// big-boi's `cg4-1`: a store's update whose stored value did not come (an answer too large for the JS host) rejects
+// and writes nothing, where it read as an empty key and overwrote what was stored; and one whose write the host refused
+// rejects, the store showing what is stored.
+test("a store's update writes nothing it did not read, and shows nothing the host refused", async () => {
+  const fake = host()
+  fake.stored.set("notes", JSON.stringify({ items: ["kept"] }))
+  const ctx = plugin("t.store", fake)
+  const [store, update] = ctx.storage.store("notes", { initial: { items: [] } })
+  await turn()
+  expect(store.items).toEqual(["kept"])
+  const answer = fake.effect
+  fake.effect = async (request: Json, mount?: Json) => (request.type === "storage-get" ? undefined : answer(request, mount))
+  await expect(update((draft: Json) => draft.items.push("tail"))).rejects.toThrow("did not come")
+  expect(JSON.parse(fake.stored.get("notes")!)).toEqual({ items: ["kept"] })
+  fake.effect = async (request: Json, mount?: Json) =>
+    request.type === "storage-merge" ? { error: "a stored value of 300000 bytes, past 262144" } : answer(request, mount)
+  await expect(update((draft: Json) => draft.items.push("big"))).rejects.toThrow("past 262144")
+  expect([store.items, JSON.parse(fake.stored.get("notes")!)]).toEqual([["kept"], { items: ["kept"] }])
+})
+
 // CT-38: a session panel's input has TS's `close`, `toggleFullscreen` and `focus` (oc-models-pro, btw-sidechat), which
 // were missing, so the plugin threw: close closes the panel's surface, toggleFullscreen opens it full screen and back,
 // and focus gives the focus to the panel's first field, as the request of its mount.
@@ -1249,11 +1271,183 @@ test("a session panel closes, toggles and focuses itself", async () => {
   input.focus()
   await turn()
   expect(fake.effects.map(({ type, surface, fullscreen, mount }: Json) => ({ type, surface, fullscreen, mount }))).toEqual([
-    { type: "close-panel", surface: name, fullscreen: undefined, mount: undefined },
-    { type: "open-panel", surface: name, fullscreen: true, mount: undefined },
-    { type: "open-panel", surface: name, fullscreen: undefined, mount: undefined },
+    { type: "close-panel", surface: name, fullscreen: undefined, mount },
+    { type: "open-panel", surface: name, fullscreen: true, mount },
+    { type: "open-panel", surface: name, fullscreen: undefined, mount },
     { type: "focus", surface: undefined, fullscreen: undefined, mount },
   ])
+})
+
+// A context whose `data.on` keeps each event's handler, for the rows that send events.
+function evented(id: string, fake: Json) {
+  const handlers = new Map<string, (event: Json) => unknown>()
+  const base = {
+    id,
+    options: {},
+    app: { version: "", channel: "" },
+    themeMode: "dark",
+    data: { on: (type: string, handler: (event: Json) => unknown) => (handlers.set(type, handler), () => {}) },
+  }
+  return { ctx: context(base, fake) as Json, handlers }
+}
+
+// big-boi's `cg4-9`: what `session.sync(id)` loaded is what `get(id)` and `status(id)` answer, and a session the host
+// seeded (the route's, at setup) answers before the sessions read came; both read only the list of every session.
+test("a session synced or seeded is what get answers", async () => {
+  const nine = { info: { id: "ses_9", title: "Nine" }, status: "running" }
+  const fake = host((key) => (key === "session:ses_9" ? nine : key === "sessions" ? undefined : []))
+  const ctx = plugin("t.sync", fake)
+  fake.push("session:ses_r", { info: { id: "ses_r", title: "Route" }, status: "idle" })
+  expect(ctx.data.session.get("ses_r")).toEqual({ id: "ses_r", title: "Route" })
+  await ctx.data.session.sync("ses_9")
+  expect([ctx.data.session.get("ses_9"), ctx.data.session.status("ses_9")]).toEqual([{ id: "ses_9", title: "Nine" }, "running"])
+})
+
+// big-boi's `cg4-10`: a key waits for its load once, however often it is asked for meanwhile, and loads that hang in
+// one collection hold no other's: four held permission loads and four events for a waiting session made five fetches
+// of it, and held the agents' list behind them.
+test("a key waits once, and one collection's loads hold no other's", async () => {
+  const fake = host()
+  const fetched: string[] = []
+  const held: Array<() => void> = []
+  fake.fetch = async (request: Json) => {
+    fetched.push(`${request.method} ${request.path}`)
+    if (request.path.endsWith("/permission")) await new Promise<void>((resolve) => held.push(resolve))
+    return { Ok: { location: { directory: "/w" }, data: [] } }
+  }
+  const { ctx, handlers } = evented("t.turns", fake)
+  for (const session of ["a", "b", "c", "d", "e"]) ctx.data.session.permission.list(session)
+  await turn()
+  for (let event = 0; event < 4; event++) handlers.get("permission.asked")!({ type: "permission.asked", data: { sessionID: "e" } })
+  ctx.data.location.agent.list({ directory: "/w" })
+  await turn()
+  expect(fetched).toContain("GET /api/agent")
+  while (held.length) {
+    held.splice(0).forEach((resolve) => resolve())
+    await turn()
+    await turn()
+  }
+  expect(fetched.filter((line) => line === "GET /api/session/e/permission")).toEqual(["GET /api/session/e/permission"])
+})
+
+// big-boi's `cg4-11`: an answer older than one asked for after an event never shows: the forms loaded before a
+// `form.cancelled` came after the load the event asked for, and the cancelled form showed again.
+test("an older load never undoes a newer one", async () => {
+  const fake = host()
+  let server: Json[] = [{ id: "frm_1", sessionID: "s" }]
+  const pending: Array<() => void> = []
+  fake.fetch = (request: Json) => {
+    const answer = { Ok: { data: request.path === "/api/form" ? server : [] } }
+    return new Promise((resolve) => pending.push(() => resolve(answer)))
+  }
+  const { ctx, handlers } = evented("t.forms", fake)
+  ctx.data.session.form.list("s")
+  await turn()
+  server = []
+  handlers.get("form.cancelled")!({ type: "form.cancelled", data: { sessionID: "s", id: "frm_1" } })
+  await turn()
+  // The latest load answers first.
+  while (pending.length) {
+    pending.pop()!()
+    for (let round = 0; round < 3; round++) await turn()
+  }
+  expect(ctx.data.session.form.list("s")).toEqual([])
+})
+
+// big-boi's `cg4-12`: a location's forms are indexed as its list is now: a session that read an older list pinned it,
+// so another session's form it held stayed reachable after that session refreshed to none.
+test("a refreshed form list leaves no older list reachable", async () => {
+  const fake = host()
+  let server: Json[] = [
+    { id: "frm_a", sessionID: "A" },
+    { id: "frm_b", sessionID: "B", body: "x".repeat(1000) },
+  ]
+  fake.fetch = async () => ({ Ok: { data: server } })
+  const { ctx, handlers } = evented("t.pinned", fake)
+  ctx.data.session.form.list("A")
+  for (let round = 0; round < 3; round++) await turn()
+  ctx.data.session.form.list("A")
+  const weak = new WeakRef(ctx.data.session.form.list("B")[0])
+  server = [{ id: "frm_a", sessionID: "A" }]
+  handlers.get("form.replied")!({ type: "form.replied", data: { sessionID: "B", id: "frm_b" } })
+  for (let round = 0; round < 3; round++) await turn()
+  expect(ctx.data.session.form.list("B")).toEqual([])
+  for (let round = 0; round < 3; round++) {
+    Bun.gc(true)
+    await turn()
+  }
+  expect(weak.deref()).toBeUndefined()
+})
+
+// A session panel of the plugin `fake`'s context `ctx`, drawn as mount `generation`, and the input its render last got.
+function panelOf(ctx: Json, fake: Json, children: () => Json) {
+  let input: Json
+  ctx.ui.slot({
+    append: "session.panel",
+    render: (props: Json) => {
+      input = props
+      return h("box", { children: children() })
+    },
+  })
+  const index = fake.surfaces.findIndex((surface: Json) => surface.place.type === "panel")
+  const name = fake.surfaces[index].name
+  const mount = (generation: number) => ({ surface: name, key: "k", generation })
+  const draw = (generation: number, fullscreen = false) =>
+    fake.surfaces[index].view({ mount: mount(generation), input: { width: 40, height: 10, slot: { session_id: "s" }, panel: { fullscreen } } })
+  const unmount = (generation: number, handover?: boolean) => fake.surfaces[index].options.unmount(mount(generation), handover)
+  return { input: () => input, name, mount, draw, unmount }
+}
+
+// big-boi's `cg4-13`: a panel's input kept past its mount moves nothing: its `close` closed the panel that replaced it,
+// and its `toggleFullscreen` opened it again.
+test("a panel's input past its mount moves nothing", async () => {
+  const fake = host()
+  const panel = panelOf(plugin("t.stale", fake), fake, () => [h("text", { children: "Notes" })])
+  panel.draw(1)
+  const kept = panel.input()
+  panel.unmount(1)
+  kept.close()
+  kept.toggleFullscreen()
+  await turn()
+  expect(fake.effects.filter((effect: Json) => effect.type.endsWith("-panel"))).toEqual([])
+})
+
+// big-boi's `cg4-14`: a panel adopted after a reload of the plugin's registrations, its input unchanged, focuses its
+// field as the new mount: its `focus` looked for the mount that ended, and found no field.
+test("a panel adopted after a reload focuses its field", async () => {
+  const fake = host()
+  const panel = panelOf(plugin("t.adopted", fake), fake, () => [h("input", { id: "field" })])
+  panel.draw(1)
+  panel.unmount(1, true)
+  panel.draw(2)
+  panel.input().focus()
+  await turn()
+  expect(fake.effects.filter((effect: Json) => effect.type === "focus")).toEqual([{ type: "focus", node: "field", mount: panel.mount(2) }])
+})
+
+// big-boi's `cg4-15`: `focus` gives the focus to the first field that shows, not one in a hidden box before it.
+test("a panel focuses the field that shows", async () => {
+  const fake = host()
+  const panel = panelOf(plugin("t.hidden", fake), fake, () => [
+    h("box", { visible: false, children: [h("input", { id: "hidden" })] }),
+    h("input", { id: "shown" }),
+  ])
+  panel.draw(1)
+  panel.input().focus()
+  await turn()
+  expect(fake.effects.filter((effect: Json) => effect.type === "focus").map((effect: Json) => effect.node)).toEqual(["shown"])
+})
+
+// big-boi's `cg4-16`: `toggleFullscreen` toggles: twice before the next draw goes full screen and back, where each
+// asked for full screen.
+test("a panel's toggleFullscreen toggles", async () => {
+  const fake = host()
+  const panel = panelOf(plugin("t.toggle", fake), fake, () => [h("text", { children: "Notes" })])
+  panel.draw(1)
+  panel.input().toggleFullscreen()
+  panel.input().toggleFullscreen()
+  await turn()
+  expect(fake.effects.filter((effect: Json) => effect.type === "open-panel").map((effect: Json) => !!effect.fullscreen)).toEqual([true, false])
 })
 
 // CT-36: a plugin that lists the status, permissions and forms of each of 900 sessions (sesh, agents-view,
@@ -1287,9 +1481,12 @@ test("listing hundreds of sessions stays within the host's bounds", async () => 
   await turn()
   expect(ids.filter((id) => ctx.data.session.status(id) === "running")).toEqual(["ses_1"])
   expect([...fake.watches]).toEqual(["sessions"])
-  ids.forEach((id) => ctx.data.session.permission.list(id))
-  for (let rounds = 0; rounds < 1000 && (fetched.length < ids.length || flying > 0); rounds++) await turn()
-  expect([fetched.length, most]).toEqual([ids.length, 4])
+  // Listed again as a plugin's render lists them: past the 256 that may wait, a list loads when it is next listed.
+  for (let rounds = 0; rounds < 2000 && (fetched.length < ids.length || flying > 0); rounds++) {
+    ids.forEach((id) => ctx.data.session.permission.list(id))
+    await turn()
+  }
+  expect([fetched.length, new Set(fetched).size, most]).toEqual([ids.length, ids.length, 4])
   fetched.length = 0
   handlers.get("permission.asked")!({ type: "permission.asked", data: { sessionID: "ses_7", id: "per_1" } })
   for (let rounds = 0; rounds < 4; rounds++) await turn()
