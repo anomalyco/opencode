@@ -129,10 +129,10 @@ mlua-sys = { git = "https://github.com/mlua-rs/mlua", rev = "01b48a402fffa83c142
 # Luau 747 with simonklee/luau's fixes (O-176), their flags on by default: linear-time plain `string.find`,
 # `string.split` and literal `gsub`; table built-ins and pattern matching bounded between interrupts; a collector goal
 # by heap size, for the carrier to set; small allocator pages while a heap is small; single-class patterns matched
-# against a byte table; `string.format` and `bit32` edge cases defined; and a build without the codegen-only libraries, in one parallel pass. Each fix
-# moves back to stock once upstream takes it; the patch goes when the fork's diff is empty. mlua-sys 0.14 takes 0.24.1
-# unchanged.
-luau0-src = { git = "https://github.com/simonklee/luau-src-rs", rev = "1da05009f5dbbb627c915237ad2d5d7ea4fec2ed" }
+# against a byte table; `string.format` and `bit32` edge cases defined; and a build without the codegen-only libraries,
+# in one parallel pass, whose release builds define `NDEBUG` (no `LUAU_ASSERT`). Each fix moves back to stock once
+# upstream takes it; the patch goes when the fork's diff is empty. mlua-sys 0.14 takes 0.24.1 unchanged.
+luau0-src = { git = "https://github.com/simonklee/luau-src-rs", rev = "96e8286806489c4f8d002697fbb9bc079e5eb607" }
 
 # Debug info stays in the object files instead of passing through the linker, and dependencies keep only file and line
 # tables. Backtraces still show file and line, and a test binary links in about half the time and memory. `test`
