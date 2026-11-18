@@ -17,6 +17,7 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { OpencodePlugin } from "@opencode/core/plugin/provider/opencode"
+import { OpencodeMemoryAccess } from "@opencode/core/plugin/provider/opencode-memory-access"
 import { OpencodeMemory } from "@opencode/core/plugin/provider/opencode-memory"
 import { OpencodeMemoryPolicy } from "@opencode/core/plugin/provider/opencode-memory-policy"
 import { Provider } from "@opencode/core/provider"
@@ -94,6 +95,12 @@ function fakeConsole() {
     /** Applies a write over changes since its revision, as Console does when they don't touch it. */
     rebase: false,
     requests: new Array<{ method: string; path: string; body?: unknown; authorization: string | null }>(),
+    /** The restricted repositories Console lists, as `host/id`. */
+    anchors: new Array<string>(),
+    /** GitHub, served here too: repositories by `owner/name`, and which ids the reader's credential can read. */
+    repositories: new Map<string, { id: number; visibility: string }>(),
+    readable: new Set<number>(),
+    github: new Array<{ path: string; authorization: string | null }>(),
   }
   const refuse = (status: number, error: Record<string, unknown> & { message: string; next: string }) =>
     Response.json({ ...error, message: `${error.message} ${error.next}` }, { status })
@@ -101,6 +108,19 @@ function fakeConsole() {
     port: 0,
     fetch: async (request) => {
       const url = new URL(request.url)
+      if (url.pathname.startsWith("/repos/") || url.pathname.startsWith("/repositories/")) {
+        const authorization = request.headers.get("authorization")
+        state.github.push({ path: url.pathname, authorization })
+        const named = state.repositories.get(url.pathname.slice("/repos/".length))
+        if (named && (named.visibility === "public" || authorization === "Bearer reader-token"))
+          return Response.json(named)
+        const id = Number(url.pathname.slice("/repositories/".length))
+        if (state.readable.has(id) && authorization === "Bearer reader-token")
+          return Response.json({ id, visibility: "private" })
+        return Response.json({ message: "Not Found" }, { status: 404 })
+      }
+      // The list the reachable set is checked against, which the plugin keeps fresh on its own: not logged.
+      if (url.pathname === "/api/memory/anchors") return Response.json({ anchors: state.anchors })
       if (url.pathname === "/api/v2/config")
         return Response.json({}, { headers: state.memory ? { [OpencodeMemory.header]: "1" } : {} })
       const body = (request.method === "GET" ? undefined : await request.json()) as Record<string, unknown> | undefined
@@ -220,7 +240,13 @@ const start = Effect.fnUntraced(function* (console: ReturnType<typeof fakeConsol
       },
     },
   }
-  yield* OpencodePlugin.effect(host)
+  // GitHub is the fake Console too, asked with the reader's token.
+  yield* OpencodePlugin.effect(host).pipe(
+    Effect.provideService(OpencodeMemoryAccess.GitHub, {
+      api: console.server.url.origin,
+      env: { GH_TOKEN: "reader-token" },
+    }),
+  )
   return { host, synthetic }
 })
 
@@ -419,6 +445,32 @@ describe("OpencodePlugin memory", () => {
           context(session.id, "call_distinct"),
         )
         expect(distinct.content).toBe("Published mem_new1 r1.")
+      }),
+    ),
+  )
+
+  it.effect("sends the restricted repositories the reader's own GitHub access reaches, by id only", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        console.state.anchors = ["github.com/7", "github.com/8", "gitlab.example.com/9"]
+        console.state.readable.add(7)
+        const { host } = yield* start(console)
+        const session = yield* host.session.create({})
+
+        yield* (yield* memoryTool("search")).execute({ query: "deploy" }, context(session.id))
+        expect(console.state.requests.at(-1)?.body).toMatchObject({ query: "deploy", reachable: ["github.com/7"] })
+        // Only GitHub's ids were checked, each with the reader's token; another host's is left out unchecked.
+        expect(new Set(console.state.github.map((request) => request.path))).toEqual(
+          new Set(["/repositories/7", "/repositories/8"]),
+        )
+        expect(console.state.github.every((request) => request.authorization === "Bearer reader-token")).toBe(true)
+
+        yield* (yield* memoryTool("read")).execute({ id: "mem_1" }, context(session.id))
+        expect(console.state.requests.at(-1)?.path).toBe(
+          `/api/memory/entries/mem_1?sessionID=${session.id}&reachable=github.com%2F7`,
+        )
+        yield* (yield* memoryTool("append")).execute({ id: "mem_1", revision: 1, text: "More" }, context(session.id))
+        expect(console.state.requests.at(-1)?.body).toMatchObject({ append: "More", reachable: ["github.com/7"] })
       }),
     ),
   )
@@ -876,18 +928,32 @@ describe("OpencodePlugin memory", () => {
           })
           const { host } = yield* start(console)
           const session = yield* host.session.create({})
-          yield* (yield* memoryTool("publish")).execute(
-            { kind: "decision", title: "Decision", body: "Why" },
-            context(session.id),
-          )
-          const source = (console.state.requests.at(-1)?.body as { source: Record<string, string> }).source
-          expect(source).toEqual({
+          const publish = yield* memoryTool("publish")
+
+          // Not found anonymously nor with the reader's token: who may read it can't be recorded.
+          const asked = console.state.requests.length
+          const unknown = yield* publish
+            .execute({ kind: "decision", title: "Decision", body: "Why" }, context(session.id))
+            .pipe(Effect.flip)
+          expect(unknown.message).toStartWith("Nothing was sent: this machine couldn't look up Acme/App on GitHub")
+          expect(console.state.requests.length).toBe(asked)
+
+          console.state.repositories.set("Acme/App", { id: 4242, visibility: "private" })
+          yield* publish.execute({ kind: "decision", title: "Decision", body: "Why" }, context(session.id))
+          const sent = console.state.requests.at(-1)?.body as { source: Record<string, string>; anchor: unknown }
+          expect(sent.source).toEqual({
             repo: "https://github.com/Acme/App",
             branch: "trunk",
             commitSha: expect.stringMatching(/^[0-9a-f]{40}$/),
             sessionID: session.id,
           })
-          expect(JSON.stringify(console.state.requests)).not.toContain("ghp_secret")
+          expect(sent.anchor).toEqual({ host: "github.com", name: "Acme/App", repoId: 4242, visibility: "private" })
+          // Asked anonymously first, then with the reader's token; the remote's own token is never sent anywhere.
+          expect(console.state.github.slice(-2)).toEqual([
+            { path: "/repos/Acme/App", authorization: null },
+            { path: "/repos/Acme/App", authorization: "Bearer reader-token" },
+          ])
+          expect(JSON.stringify([console.state.requests, console.state.github])).not.toContain("ghp_secret")
         }),
       ),
   )

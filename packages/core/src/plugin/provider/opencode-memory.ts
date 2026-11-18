@@ -8,7 +8,8 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import type { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Hash } from "@opencode/util/hash"
-import { Effect, Exit, Fiber, Option, Schema, Scope } from "effect"
+import { AppProcess } from "@opencode/util/process"
+import { Clock, Effect, Exit, Fiber, Option, Schema, Scope } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Git } from "../../git.js"
 import { AbsolutePath } from "../../schema.js"
@@ -25,6 +26,10 @@ const MAX_FILES = 20
 /** Entries a session was given that a correction may name, and how much of each is kept to match it. */
 const MAX_GIVEN = 10
 const MAX_GIVEN_TEXT = 2000
+/** How long the workspace's list of restricted repositories is reused before Console is asked again. */
+const ANCHORS_MAX_AGE = 60 * 1000
+/** The most repositories a reader's reachable set names, as Console takes it. */
+const MAX_REACHABLE = 1000
 
 // Console's answers, read leniently: only what the tools show.
 const Kind = Schema.Literals(["bug", "convention", "procedure", "gotcha", "decision", "failed-approach"])
@@ -156,6 +161,7 @@ export const make = Effect.fnUntraced(function* (
 ) {
   const scope = yield* Scope.Scope
   const git = yield* Git.Service
+  const github = OpencodeMemoryAccess.make(http, yield* AppProcess.Service, yield* OpencodeMemoryAccess.GitHub)
   let current: { console: OpencodeWatches.Console; readonly lease: Scope.Closeable } | undefined
   const sessions = new Map<string, Tracked>()
   const tracked = (sessionID: string): Tracked => {
@@ -269,12 +275,52 @@ export const make = Effect.fnUntraced(function* (
         `/api/memory/entries/${encodeURIComponent(id)}${tool === "retire" ? "/retire" : ""}`,
         // Console's retire takes no provenance.
         tool === "retire"
-          ? { expectedRevision, ...fields }
-          : { expectedRevision, ...fields, source: { ...(yield* checkout), sessionID } },
+          ? { expectedRevision, ...fields, ...(yield* reader) }
+          : { expectedRevision, ...fields, source: { ...(yield* checkout), sessionID }, ...(yield* reader) },
       )
       wrote(sessionID, id, expectedRevision, written)
       return written
     }).pipe(Effect.mapError(failure))
+  // The restricted repositories the workspace has entries for, by workspace: the same list for every member.
+  const listed = new Map<string, { readonly at: number; readonly anchors: ReadonlyArray<string> }>()
+  /**
+   * Which of those this reader can read, checked on this machine with the reader's own GitHub access, as Console names
+   * them (`github.com/<id>`): only numeric ids leave the machine. Anything unknown is left out, so Console withholds it.
+   */
+  const reachable = Effect.gen(function* () {
+    const key = current?.console.key ?? ""
+    const now = yield* Clock.currentTimeMillis
+    const known = listed.get(key)
+    const anchors =
+      known && now - known.at < ANCHORS_MAX_AGE
+        ? known.anchors
+        : yield* call(Schema.Struct({ anchors: Schema.Array(Schema.String) }), "GET", "/api/memory/anchors").pipe(
+            Effect.map((answer) => answer.anchors),
+            Effect.tap((anchors) => Effect.sync(() => listed.set(key, { at: now, anchors }))),
+          )
+    const ids = anchors.flatMap((anchor) => {
+      const match = /^github\.com\/([1-9][0-9]*)$/.exec(anchor)
+      return match?.[1] === undefined ? [] : [Number(match[1])]
+    })
+    return (yield* github.reachable(ids.slice(0, MAX_REACHABLE))).map((id) => `github.com/${id}`)
+  }).pipe(Effect.catchCause(() => Effect.succeed(new Array<string>())))
+  // The reader's set as a request field; none when it names nothing.
+  const reader = reachable.pipe(Effect.map((keys) => (keys.length === 0 ? {} : { reachable: keys })))
+  /**
+   * The anchor of the checkout's repository, `host/owner/name`, as this machine resolves it now. Without GitHub's numeric
+   * id who may read the entry can't be recorded, so nothing is published.
+   */
+  const anchored = (name: string) =>
+    Effect.gen(function* () {
+      const anchor = yield* github.anchor(name)
+      if (anchor.repoId !== undefined) return { ...anchor, repoId: anchor.repoId }
+      return yield* new ToolFailure({
+        message:
+          anchor.host === "github.com"
+            ? `Nothing was sent: this machine couldn't look up ${anchor.name} on GitHub, so who may read the entry can't be recorded. Ask the user to sign in with \`gh auth login\` (or set GH_TOKEN), then call ${namespace}.publish again.`
+            : `Nothing was sent: entries from repositories on ${anchor.host} can't be shared yet, since who may read them can't be checked. Keep this in the repository's own docs instead.`,
+      })
+    })
   const metadata = (input: {
     readonly kind?: OpencodeMemoryPolicy.Kind
     readonly title?: string
@@ -291,8 +337,9 @@ export const make = Effect.fnUntraced(function* (
 
   const start = Effect.fnUntraced(function* () {
     const lease = yield* Scope.Scope
-    // Read now, so the first moment doesn't wait on Git.
+    // Read now, so the first moment doesn't wait on Git or GitHub.
     yield* repository.pipe(Effect.forkIn(lease, { startImmediately: true }))
+    yield* reachable.pipe(Effect.forkIn(lease, { startImmediately: true }))
     // Only Console is asked in the background, so neither a prompt nor a tool waits on it; one at a time per session.
     const begin = (sessionID: Session.ID, moment: OpencodeMemoryPolicy.Moment) =>
       Effect.gen(function* () {
@@ -311,11 +358,15 @@ export const make = Effect.fnUntraced(function* (
         )
         if (!inject) return
         state.injected[moment.type]++
-        state.pending = yield* call(Schema.Struct({ entries: Schema.Array(Injected) }), "POST", "/api/memory/inject", {
-          sessionID,
-          moment: moment.type,
-          ...inject,
-        }).pipe(
+        state.pending = yield* reader.pipe(
+          Effect.flatMap((set) =>
+            call(Schema.Struct({ entries: Schema.Array(Injected) }), "POST", "/api/memory/inject", {
+              sessionID,
+              moment: moment.type,
+              ...inject,
+              ...set,
+            }),
+          ),
           Effect.timeout(policy.timeout),
           Effect.map((answer) => ({ entries: answer.entries, moment })),
           Effect.catch((cause) => Effect.logDebug("memory injection failed", { cause }).pipe(Effect.as(undefined))),
@@ -456,6 +507,7 @@ export const make = Effect.fnUntraced(function* (
               ...(input.tags === undefined ? {} : { tags: input.tags }),
               ...(input.limit === undefined ? {} : { limit: input.limit }),
               sessionID: context.sessionID,
+              ...(yield* reader),
             })
             return {
               output: answer,
@@ -474,11 +526,17 @@ export const make = Effect.fnUntraced(function* (
         output: Entry,
         options: { namespace, codemode: true, pinned: true },
         execute: (input, context) =>
-          call(
-            Entry,
-            "GET",
-            `/api/memory/entries/${encodeURIComponent(input.id)}?${new URLSearchParams({ sessionID: context.sessionID })}`,
-          ).pipe(
+          reachable.pipe(
+            Effect.flatMap((keys) =>
+              call(
+                Entry,
+                "GET",
+                `/api/memory/entries/${encodeURIComponent(input.id)}?${new URLSearchParams([
+                  ["sessionID", context.sessionID],
+                  ...keys.map((key): [string, string] => ["reachable", key]),
+                ])}`,
+              ),
+            ),
             Effect.tap((entry) =>
               Effect.sync(() =>
                 give(tracked(context.sessionID), {
@@ -516,10 +574,17 @@ export const make = Effect.fnUntraced(function* (
           Effect.gen(function* () {
             // The key is the tool call's own: Console answers a retry of this call with what it saved, while an
             // agent's re-issue is a new call that Console's duplicate check catches as this session's own entry.
+            const fields = yield* shared("publish", { ...metadata(input), body: input.body })
+            const source = yield* checkout
+            // The checkout's repository by GitHub's id and visibility, so Console gives the entry only to its readers.
+            const anchor =
+              "repo" in source && source.repo ? yield* anchored(source.repo.slice("https://".length)) : undefined
             const published = yield* call(Written, "POST", "/api/memory/entries", {
-              ...(yield* shared("publish", { ...metadata(input), body: input.body })),
+              ...fields,
               ...(input.distinctFrom === undefined ? {} : { distinctFrom: input.distinctFrom }),
-              source: { ...(yield* checkout), sessionID: context.sessionID },
+              source: { ...source, sessionID: context.sessionID },
+              ...(anchor === undefined ? {} : { anchor }),
+              ...(yield* reader),
               idempotencyKey: `${context.sessionID}:${context.id}`.slice(0, 128),
             })
             return {
@@ -638,6 +703,7 @@ export const make = Effect.fnUntraced(function* (
       yield* Scope.close(current.lease, Exit.void)
       current = undefined
       sessions.clear()
+      listed.clear()
     }
     if (next) {
       const lease = yield* Scope.fork(scope)

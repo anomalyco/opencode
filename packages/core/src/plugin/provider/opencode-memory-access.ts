@@ -2,9 +2,20 @@ export * as OpencodeMemoryAccess from "./opencode-memory-access.js"
 
 import { Hash } from "@opencode/util/hash"
 import type { AppProcess } from "@opencode/util/process"
-import { Clock, Effect, Schema } from "effect"
+import { Clock, Context, Effect, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { ChildProcess } from "effect/process"
+
+/**
+ * Where GitHub's API is (`GITHUB_API_URL` on GitHub Enterprise) and the environment the reader's credential is read
+ * from; tests point both elsewhere.
+ */
+export const GitHub = Context.Reference<{
+  readonly api: string
+  readonly env: Readonly<Record<string, string | undefined>>
+}>("@opencode/OpencodeMemoryAccess/GitHub", {
+  defaultValue: () => ({ api: process.env.GITHUB_API_URL || "https://api.github.com", env: process.env }),
+})
 
 /** How long a repository the reader could read counts as readable without asking GitHub again. Never extended by use. */
 const REACHABLE_MAX_AGE = 10 * 60 * 1000

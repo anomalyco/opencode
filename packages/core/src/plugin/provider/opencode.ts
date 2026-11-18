@@ -3,6 +3,7 @@ import { Duration, Effect, Equal, FiberHandle, Option, Schema, Scope, Semaphore,
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionHttpResponse } from "@opencode/plugin/effect/session"
+import { AppProcess } from "@opencode/util/process"
 import {
   FetchHttpClient,
   HttpBody,
@@ -183,6 +184,7 @@ function oauth(http: HttpClient.HttpClient) {
 
 export const OpencodePlugin = define<
   | HttpClient.HttpClient
+  | AppProcess.Service
   | Bus.Service
   | Config.Service
   | Flag.Service
