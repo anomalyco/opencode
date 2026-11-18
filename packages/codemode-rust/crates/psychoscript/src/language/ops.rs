@@ -1116,30 +1116,6 @@ impl<'rt> Vm<'rt> {
         }
     }
 
-    pub fn describe(&self, v: &Value) -> String {
-        match v {
-            Value::Str(s) => format!("\"{}\"", self.atoms.get(*s)),
-            Value::Num(n) => num_to_string(*n),
-            Value::Bool(b) => b.to_string(),
-            Value::Null => "null".into(),
-            Value::Undef | Value::Uninit => "undefined".into(),
-            Value::Sym(s) => self.atoms.text(*s).to_owned(),
-            Value::Obj(id) => match &self.heap[*id as usize].kind {
-                Kind::Array(_) => "array".into(),
-                Kind::Closure(c) => {
-                    let n = self.atoms.text(c.proto.name);
-                    if n.is_empty() {
-                        "function".into()
-                    } else {
-                        format!("function {n}")
-                    }
-                }
-                Kind::ToolRef(p) => format!("tools.{p}"),
-                _ => "object".into(),
-            },
-        }
-    }
-
     /// A value's string for a message, made inline with a failure ignored: never a restartable conversion, whose
     /// request an ignored failure would leave behind (see `conversion.rs`).
     pub(crate) fn quiet_string(&mut self, v: &Value) -> String {
@@ -1548,26 +1524,9 @@ impl<'rt> Vm<'rt> {
         }
     }
 
-    /// How the reference names a value in a data error: `a data object`, `a function`, `null`.
-    pub fn describe_data(&self, v: &Value) -> &'static str {
-        match v {
-            Value::Undef | Value::Uninit => "undefined",
-            Value::Null => "null",
-            Value::Bool(_) => "a boolean",
-            Value::Num(_) => "a number",
-            Value::Str(_) => "a string",
-            Value::Sym(_) => "a symbol",
-            Value::Obj(id) => match &self.heap[*id as usize].kind {
-                Kind::Ordinary | Kind::Live(_) => "a data object",
-                Kind::Array(_) => "an array",
-                Kind::Closure(_) | Kind::Native { .. } | Kind::Bound(_) => "a function",
-                Kind::Promise(_) => "an un-awaited Promise",
-                Kind::Error(_) => "an Error",
-                Kind::ToolRef(_) => "a namespace reference",
-                Kind::Generator(_) | Kind::AsyncGenerator(_) => "a generator",
-                _ => "an object",
-            },
-        }
+    /// How the reference names a value in a data error: `a data object`, `a function`, `null`, `a Date`.
+    pub fn describe_data(&self, v: &Value) -> String {
+        crate::builtins::describe_value(self, v)
     }
 
     pub fn not_iterable(&mut self, v: &Value, ctx: u8) -> Value {
@@ -1640,8 +1599,8 @@ impl<'rt> Vm<'rt> {
             }
             _ => {}
         }
-        let d = self.describe(v);
-        Err(self.type_error(&format!("{d} is not iterable")))
+        // Where the reference iterates in its prelude, a value with no iterator fails its `for...of`.
+        Err(self.not_iterable(v, crate::bytecode::ITER_FOR_OF))
     }
 
     /// A `yield*` step on an iterator the VM runs itself, as a value and a done flag: `Ok(None)` for any other

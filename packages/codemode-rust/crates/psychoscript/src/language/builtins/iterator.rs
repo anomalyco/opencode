@@ -170,7 +170,7 @@ fn flattenable(vm: &mut Vm, v: &Value, strings: bool, name: &str) -> Result<Valu
     fuel::method(vm);
     let ok = match v {
         Value::Str(_) => strings,
-        Value::Obj(_) => {
+        Value::Obj(id) if !vm.is_namespace(*id) => {
             fuel::native(vm);
             true
         }

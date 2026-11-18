@@ -407,7 +407,7 @@ fn promise_ctor(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
         return Err(vm.type_error("Promise constructor cannot be invoked without 'new'"));
     }
     let executor = arg(args, 0);
-    if !vm.is_callable(&executor) {
+    if !vm.is_callable(&executor) || matches!(executor, Value::Obj(id) if vm.is_namespace(id)) {
         return Err(vm.type_error(
             "new Promise(...) expects an executor function (e.g. new Promise((resolve, reject) => { ... })).",
         ));
@@ -525,9 +525,25 @@ impl ForOf for Collect {
 }
 
 fn rejected(vm: &mut Vm, e: Value) -> Value {
+    locate_call(vm, &e);
     let p = vm.new_promise();
     vm.reject(p, e);
     Value::Obj(p)
+}
+
+/// Points a failure a combinator rejects with at the combinator's call, as the reference's would be when thrown.
+fn locate_call(vm: &mut Vm, e: &Value) {
+    if let Value::Obj(id) = *e
+        && let Some(caller) = vm
+            .frames
+            .iter()
+            .rev()
+            .find(|f| !matches!(f.kind, crate::vm::FrameKind::Native(..)))
+        && let Kind::Error(Some(f)) = &mut vm.heap[id as usize].kind
+        && f.offset.is_none()
+    {
+        f.offset = caller.func.pos.get(caller.pc.saturating_sub(1)).copied();
+    }
 }
 
 /// The promise a combinator returns for its input's items.
@@ -542,6 +558,7 @@ fn combine(vm: &mut Vm, which: u8, items: Vec<Value>) -> Value {
                 let e = vm.type_error(
                     "Promise.race([]) would never settle; provide at least one promise or value.",
                 );
+                locate_call(vm, &e);
                 vm.reject(result, e);
             }
             for item in items {

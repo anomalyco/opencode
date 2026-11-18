@@ -313,7 +313,14 @@ fn array_from(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Res {
         );
     }
     let id = match src {
-        Value::Obj(id) if !matches!(vm.heap[id as usize].kind, Kind::Promise(_)) => id,
+        Value::Obj(id)
+            if !matches!(
+                vm.heap[id as usize].kind,
+                Kind::Promise(_) | Kind::ToolRef(_)
+            ) =>
+        {
+            id
+        }
         _ => {
             let d = vm.describe_data(&src);
             return Err(vm.invalid_data(&format!(

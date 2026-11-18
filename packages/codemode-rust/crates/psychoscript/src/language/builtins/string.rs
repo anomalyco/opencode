@@ -234,9 +234,9 @@ fn data_arg(vm: &mut Vm, name: &str, args: &[Value], i: usize) -> Res {
 
 fn string_ctor(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     if let Value::Uninit = this {
-        return Err(
-            vm.type_error("String wrapper objects are not supported; call String(value) instead")
-        );
+        return Err(vm.type_error(
+            "new String(...) is not supported; call String(...) without new instead.",
+        ));
     }
     if args.is_empty() {
         return Ok(vm.static_str(""));
@@ -265,7 +265,7 @@ fn string_from_char_code(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Re
 fn string_raw(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     let template = arg(args, 0);
     let raw = match template {
-        Value::Obj(id) => {
+        Value::Obj(id) if !vm.is_namespace(id) => {
             let k = vm.atoms.intern_static("raw");
             vm.get_obj(id, k)
         }
@@ -308,9 +308,11 @@ fn string_from_code_point(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> R
             let n = vm.number_of(a)?;
             match char::from_u32(n as u32) {
                 Some(c) if n.fract() == 0.0 && n >= 0.0 => out.push(c),
+                // The reference's host words every invalid code point alike.
                 _ => {
-                    let msg = format!("Invalid code point {}", num_to_string(n));
-                    return Err(vm.range_error(&msg));
+                    return Err(vm.range_error(
+                        "Arguments contain a value that is out of range of code points",
+                    ));
                 }
             }
         }
@@ -1293,9 +1295,9 @@ fn s_iterator(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
 
 fn number_ctor(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     if let Value::Uninit = this {
-        return Err(
-            vm.type_error("Number wrapper objects are not supported; call Number(value) instead")
-        );
+        return Err(vm.type_error(
+            "new Number(...) is not supported; call Number(...) without new instead.",
+        ));
     }
     if args.is_empty() {
         return Ok(Value::Num(0.0));

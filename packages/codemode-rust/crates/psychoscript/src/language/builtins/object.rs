@@ -153,8 +153,17 @@ pub fn setup(vm: &mut Vm) {
 fn object_ctor(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     match arg(args, 0) {
         Value::Undef | Value::Null => Ok(Value::Obj(vm.new_object())),
-        v @ Value::Obj(_) => Ok(v),
-        _ => Err(vm.type_error("Object() of a primitive value is not supported")),
+        Value::Obj(id) if !vm.is_namespace(id) => Ok(Value::Obj(id)),
+        // The reference names the host's typeof, which is "object" for a namespace.
+        v => {
+            let t = match v {
+                Value::Obj(_) => "object",
+                v => vm.type_of(&v),
+            };
+            Err(vm.type_error(&format!(
+                "Object({t}) wrapper objects are not supported; use the primitive value directly."
+            )))
+        }
     }
 }
 
@@ -353,7 +362,8 @@ fn set_flags(vm: &mut Vm, args: &[Value], flags: u8) -> Res {
 
 fn has_flags(vm: &mut Vm, args: &[Value], flags: u8, primitive: bool) -> Res {
     Ok(Value::Bool(match arg(args, 0) {
-        Value::Obj(id) => {
+        // A namespace is no object: as a primitive, it is frozen and sealed.
+        Value::Obj(id) if !vm.is_namespace(id) => {
             let o = &vm.heap[id as usize];
             // An arguments object always has its own `length`, so it is never empty.
             let empty = o.props.len() == 0
@@ -383,7 +393,7 @@ fn object_prevent_extensions(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -
 }
 fn object_is_extensible(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     Ok(Value::Bool(match arg(args, 0) {
-        Value::Obj(id) => vm.heap[id as usize].flags & NON_EXTENSIBLE == 0,
+        Value::Obj(id) if !vm.is_namespace(id) => vm.heap[id as usize].flags & NON_EXTENSIBLE == 0,
         _ => false,
     }))
 }
@@ -798,9 +808,9 @@ fn error_to_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
 
 fn boolean_ctor(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     if let Value::Uninit = this {
-        return Err(
-            vm.type_error("Boolean wrapper objects are not supported; call Boolean(value) instead")
-        );
+        return Err(vm.type_error(
+            "new Boolean(...) is not supported; call Boolean(...) without new instead.",
+        ));
     }
     Ok(Value::Bool(vm.truthy(&arg(args, 0))))
 }
