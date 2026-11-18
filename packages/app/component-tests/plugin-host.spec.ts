@@ -2180,7 +2180,7 @@ story("code block content replaces complete blocks of its languages, and actions
   const shell = blocks.nth(3)
   await expect(
     shell.locator(
-      '[data-slot="markdown-code-actions"] + [data-slot="markdown-wrap-button"] + [data-slot="markdown-copy-button"]',
+      '[data-slot="markdown-code-footer"] > [data-slot="markdown-code-actions"]:first-child + [data-slot="markdown-wrap-button"] + [data-slot="markdown-copy-button"]',
     ),
   ).toHaveCount(1)
   await shell.hover()

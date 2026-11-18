@@ -211,7 +211,7 @@ function MarkdownCopyButton(props: { labels: CodeLabels; copied: boolean }) {
     <Tooltip placement="top" value={label()} forceOpen={props.copied || undefined}>
       <IconButton
         type="button"
-        size="normal"
+        size="small"
         variant="ghost-muted"
         aria-label={label()}
         icon={
@@ -243,17 +243,22 @@ function createWrapButton(wrapper: HTMLElement, labels: CodeLabels, wrapDefault:
       const next = !wrapped()
       // Choosing the default again follows the setting from then on.
       const value = next === wrapDefault() ? undefined : next
+      const before = host.getBoundingClientRect().top
       setOverride(value)
 
-      if (value === undefined) return delete wrapper.dataset.wrap
-      wrapper.dataset.wrap = String(value)
+      if (value === undefined) delete wrapper.dataset.wrap
+      else wrapper.dataset.wrap = String(value)
+      // The block grows or shrinks above its footer, so scroll by as much to keep the button under the pointer.
+      const shift = host.getBoundingClientRect().top - before
+
+      if (shift) scrollParent(wrapper).scrollBy({ top: shift, behavior: "instant" })
     }
 
     return (
       <Tooltip placement="top" value={label()}>
         <IconButton
           type="button"
-          size="normal"
+          size="small"
           variant="ghost-muted"
           aria-label={label()}
           icon={<Icon name="text-wrap" />}
@@ -270,8 +275,21 @@ function createWrapButton(wrapper: HTMLElement, labels: CodeLabels, wrapDefault:
   return host
 }
 
+function scrollParent(element: HTMLElement): Element {
+  const parent = element.parentElement
+
+  if (!parent) return document.scrollingElement ?? document.documentElement
+
+  if (parent.scrollHeight > parent.clientHeight && /auto|scroll/.test(getComputedStyle(parent).overflowY)) return parent
+
+  return scrollParent(parent)
+}
+
 function appendCodeButtons(wrapper: HTMLElement, labels: CodeLabels, wrapDefault: () => boolean) {
-  wrapper.append(createWrapButton(wrapper, labels, wrapDefault), createCopyButton(labels))
+  const footer = document.createElement("div")
+  footer.setAttribute("data-slot", "markdown-code-footer")
+  footer.append(createWrapButton(wrapper, labels, wrapDefault), createCopyButton(labels))
+  wrapper.append(footer)
   codeOverflow()?.observe(wrapper)
 }
 
@@ -494,7 +512,7 @@ function createCodeDriver(wrapper: HTMLElement, labels: CodeLabels): CodeDriver 
     if (effect.type === "mount-actions") {
       if (!blocks) return
       actions = createCodeActions(blocks, effect.block)
-      wrapper.insertBefore(actions.host, wrapper.querySelector(':scope > [data-slot="markdown-wrap-button"]'))
+      wrapper.querySelector(':scope > [data-slot="markdown-code-footer"]')?.prepend(actions.host)
 
       return
     }
@@ -565,7 +583,7 @@ function createCodeActions(blocks: MarkdownCodeBlocks, block: MarkdownCodeBlock)
           <Tooltip placement="top" value={action.title}>
             <IconButton
               type="button"
-              size="normal"
+              size="small"
               variant="ghost-muted"
               aria-label={action.title}
               icon={<Icon name={action.icon} />}

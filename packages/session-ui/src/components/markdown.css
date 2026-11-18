@@ -344,11 +344,9 @@
   }
 
   [data-component="markdown-code"][data-mermaid-pending="true"] > pre,
-  [data-component="markdown-code"][data-mermaid-pending="true"] > [data-slot="markdown-copy-button"],
-  [data-component="markdown-code"][data-mermaid-pending="true"] > [data-slot="markdown-code-actions"],
+  [data-component="markdown-code"][data-mermaid-pending="true"] > [data-slot="markdown-code-footer"],
   [data-component="markdown-code"][data-mermaid-ready="true"] > pre,
-  [data-component="markdown-code"][data-mermaid-ready="true"] > [data-slot="markdown-copy-button"],
-  [data-component="markdown-code"][data-mermaid-ready="true"] > [data-slot="markdown-code-actions"],
+  [data-component="markdown-code"][data-mermaid-ready="true"] > [data-slot="markdown-code-footer"],
   [data-component="markdown-code"][data-code-content] > pre {
     display: none;
   }
@@ -373,63 +371,54 @@
     color: var(--markdown-shell-code-token-color) !important;
   }
 
-  [data-slot="markdown-copy-button"] {
+  /* A block's actions sit under it in its 24px bottom margin, like a message's footer, so they never cover code. The
+     footer fills that margin across the block's width and belongs to the block, so the pointer keeps the actions in
+     view while it moves down to them. Like a message's footer, it shows and hides at once. */
+  [data-slot="markdown-code-footer"] {
     position: absolute;
-    top: 4px;
-    inset-inline-end: 4px;
-    transition: opacity 0.15s ease;
+    top: 100%;
+    inset-inline: 0;
     z-index: 1;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 2px;
 
     @media (hover: hover) {
       opacity: 0;
+      pointer-events: none;
+    }
+
+    [data-component="tooltip-v2-trigger"] {
+      display: inline-flex;
+    }
+
+    [data-component="icon-button-v2"] [data-slot="icon-svg"] {
+      width: 14px;
+      height: 14px;
     }
   }
 
-  /* Wrap sits before the 24px Copy button and shows only while a line is wider than the block. */
-  [data-slot="markdown-wrap-button"] {
-    display: none;
-    position: absolute;
-    top: 4px;
-    inset-inline-end: 30px;
-    transition: opacity 0.15s ease;
-    z-index: 1;
-
-    @media (hover: hover) {
-      opacity: 0;
-    }
+  /* A clicked button keeps focus without a ring, so only keyboard focus keeps the footer shown. */
+  [data-component="markdown-code"]:hover > [data-slot="markdown-code-footer"],
+  [data-slot="markdown-code-footer"]:has(:focus-visible, [data-expanded]) {
+    opacity: 1;
+    pointer-events: auto;
   }
 
-  [data-component="markdown-code"][data-code-overflow] > [data-slot="markdown-wrap-button"] {
-    display: block;
-  }
-
-  /* Plugin actions sit before the 24px Copy button, and before Wrap when it shows, revealed with them. */
   [data-slot="markdown-code-actions"] {
-    position: absolute;
-    top: 4px;
-    inset-inline-end: 30px;
     display: flex;
     gap: 2px;
-    transition: opacity 0.15s ease;
-    z-index: 1;
-
-    @media (hover: hover) {
-      opacity: 0;
-    }
   }
 
-  [data-component="markdown-code"][data-code-overflow] > [data-slot="markdown-code-actions"] {
-    inset-inline-end: 56px;
+  /* Wrap shows only while a line is wider than the block. */
+  [data-slot="markdown-wrap-button"] {
+    display: none;
   }
 
-  [data-component="markdown-code"]:hover
-    :is([data-slot="markdown-copy-button"], [data-slot="markdown-wrap-button"], [data-slot="markdown-code-actions"]),
-  :is(
-    [data-slot="markdown-copy-button"],
-    [data-slot="markdown-wrap-button"],
-    [data-slot="markdown-code-actions"]
-  ):focus-within {
-    opacity: 1;
+  [data-component="markdown-code"][data-code-overflow] [data-slot="markdown-wrap-button"] {
+    display: flex;
   }
 
   /* The setting wraps every block on the root; a block's own choice overrides it either way. */
