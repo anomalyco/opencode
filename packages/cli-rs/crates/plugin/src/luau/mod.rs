@@ -7,6 +7,7 @@
 
 mod bind;
 mod current;
+mod decode;
 mod inputs;
 mod json;
 mod vm;

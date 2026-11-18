@@ -17,8 +17,8 @@ use serde::de::DeserializeOwned;
 
 use super::current::{Current, Enter, Slot};
 use super::inputs::Inputs;
-use super::json;
 use super::vm::{self, Compiled, Vm};
+use super::{decode, json};
 
 /// A plugin activation: its VM, what its calls reach, and the objects every call is handed.
 pub(crate) struct Plugin {
@@ -125,17 +125,22 @@ pub(crate) fn out<T: Serialize + Any>(lua: &Lua, value: &T) -> mlua::Result<Valu
     json::luau(lua, &value)
 }
 
-/// A Luau value as JSON, walked against bounds ([`json::Walk`]): a value past them is refused before anything is
-/// decoded, and the refusal fails the call ([`vm::refuse`]).
+/// A Luau value as JSON ([`read`]).
 fn json(lua: &Lua, value: &Value) -> mlua::Result<serde_json::Value> {
-    match json::Walk::new().json(lua, value) {
+    read(lua, value)
+}
+
+/// A Luau value as a value of the contract, read off the VM's stack against bounds ([`decode::Decode`]): a value past
+/// them is refused before more is made of it, and the refusal fails the call ([`vm::refuse`]).
+fn read<T: DeserializeOwned + 'static>(lua: &Lua, value: &Value) -> mlua::Result<T> {
+    match decode::Decode::new().decode(lua, value) {
         Ok(value) => Ok(value),
-        Err(json::Refused::Bound(reason)) => {
+        Err(decode::Refused::Bound(reason)) => {
             let reason = format!("the plugin's value is refused: {reason}");
             vm::refuse(lua, &reason);
             Err(mlua::Error::runtime(reason))
         }
-        Err(json::Refused::Value(reason)) => Err(mlua::Error::runtime(reason)),
+        Err(decode::Refused::Value(reason)) => Err(mlua::Error::runtime(reason)),
     }
 }
 
@@ -148,9 +153,9 @@ fn object(lua: &Lua, value: &Value) -> mlua::Result<serde_json::Map<String, serd
     }
 }
 
-/// A Luau value as a value of the contract, through one `serde_json::Value`.
-fn input<T: DeserializeOwned>(lua: &Lua, value: Value) -> mlua::Result<T> {
-    serde_json::from_value(json(lua, &value)?).map_err(|error| mlua::Error::runtime(error.to_string()))
+/// A Luau value as a value of the contract ([`read`]).
+fn input<T: DeserializeOwned + 'static>(lua: &Lua, value: Value) -> mlua::Result<T> {
+    read(lua, &value)
 }
 
 /// A Luau value as a value of the contract whose fields the table leaves out are its defaults' (a command needs only
@@ -165,7 +170,7 @@ fn defaulted<T: Default + Serialize + DeserializeOwned>(lua: &Lua, value: Value)
 }
 
 /// `nil`, or what `value` decodes to.
-fn optional<T: DeserializeOwned>(lua: &Lua, value: Value) -> mlua::Result<Option<T>> {
+fn optional<T: DeserializeOwned + 'static>(lua: &Lua, value: Value) -> mlua::Result<Option<T>> {
     match value {
         Value::Nil => Ok(None),
         value => input(lua, value).map(Some),
