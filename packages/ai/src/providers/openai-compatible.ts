@@ -1,4 +1,5 @@
 import {
+  mergeTransport,
   mergeProviderOptions,
   ProviderID,
   type ModelID,
@@ -48,17 +49,13 @@ export const configure = (input: Config) => {
     provider,
     endpoint: { baseURL },
     auth,
-    headers: input.headers,
-    timeout: input.timeout,
-    http: input.http,
+    ...mergeTransport(input),
   })
   const decisionRoute = SystemOne.route.with({
     provider,
     endpoint: { baseURL },
     auth,
-    headers: input.headers,
-    timeout: input.timeout,
-    http: input.http,
+    ...mergeTransport(input),
   })
   return {
     id: ProviderID.make(provider),

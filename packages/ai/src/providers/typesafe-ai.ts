@@ -1,4 +1,10 @@
-import { ProviderID, type ModelID, type ProviderOptions, type TransportOptions } from "../schema/index.js"
+import {
+  mergeTransport,
+  ProviderID,
+  type ModelID,
+  type ProviderOptions,
+  type TransportOptions,
+} from "../schema/index.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { SystemOne } from "../protocols/system-one.js"
@@ -21,9 +27,7 @@ export const configure = (input: Config = {}) => {
     endpoint: { baseURL: input.baseURL ?? baseURL },
     auth: AuthOptions.bearer(input, "TYPESAFE_API_KEY"),
     // Required for images; text-only requests are unchanged with it.
-    headers: { "TypeSafe-Danger-Zone-Images": "true", ...input.headers },
-    timeout: input.timeout,
-    http: input.http,
+    ...mergeTransport({ headers: { "TypeSafe-Danger-Zone-Images": "true" } }, input),
   })
   const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     route.model({ id: modelID, providerOptions })

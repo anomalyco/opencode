@@ -16,9 +16,9 @@ import {
   mergeProviderOptions,
   mergeTransport,
   type BaseRequest,
-  type HttpOptions,
   type ProviderOptions,
   type RequestTimeout,
+  type TransportOptions,
 } from "../schema/index.js"
 import { encodeJson } from "../utils/json.js"
 import { sanitizeSurrogates } from "../utils/sanitize.js"
@@ -29,8 +29,7 @@ export type Execute = Interface["execute"]
 export type MediaRequest = BaseRequest<{
   readonly id: string
   readonly provider: ProviderID
-  readonly timeout?: RequestTimeout
-  readonly http?: HttpOptions
+  readonly transport?: TransportOptions
   readonly providerOptions?: ProviderOptions
 }>
 
@@ -42,29 +41,17 @@ export interface ModelInput {
   readonly id: string
   readonly auth: Auth.Definition
   readonly baseURL?: string
-  readonly headers?: Record<string, string>
-  readonly timeout?: RequestTimeout
-  readonly http?: HttpOptions
+  /** Deployment headers, timeouts and `http` overlays every request of the model starts from. */
+  readonly transport?: TransportOptions
   /** Defaults under each request's `providerOptions`. */
   readonly providerOptions?: ProviderOptions
 }
 
 /** A provider facade's `configure(...)` input as the `ModelInput` every media selector shares, minus the model id. */
 export const deployment = (
-  input: {
-    readonly baseURL?: string
-    readonly headers?: Record<string, string>
-    readonly timeout?: RequestTimeout
-    readonly http?: HttpOptions
-  },
+  input: TransportOptions & { readonly baseURL?: string },
   auth: Auth.Definition,
-): Omit<ModelInput, "id"> => ({
-  auth,
-  baseURL: input.baseURL,
-  headers: input.headers,
-  timeout: input.timeout,
-  http: input.http,
-})
+): Omit<ModelInput, "id"> => ({ auth, baseURL: input.baseURL, transport: mergeTransport(input) })
 
 // ---------------------------------------------------------------------------
 // Routes
@@ -118,7 +105,7 @@ export type AnyRoute<Request extends MediaRequest, Event, Response> =
 export interface Composition<Request extends MediaRequest> {
   readonly endpoint: Endpoint.Definition<MediaProtocol.Body, Request>
   readonly auth: Auth.Definition
-  /** Deployment headers applied before transport authentication. */
+  /** Headers the protocol requires on every call; the model's transport headers win. */
   readonly headers?: Record<string, string>
 }
 
@@ -382,8 +369,7 @@ const makeTransport = <Request extends MediaRequest>(
   })
   return {
     /** Route and model overlays; `start` additionally merges the request's own. */
-    exchange: (model: MediaRequest["model"]): Exchange =>
-      mergeTransport({ headers: input.headers, timeout: model.timeout, http: model.http }),
+    exchange: (model: MediaRequest["model"]): Exchange => mergeTransport({ headers: input.headers }, model.transport),
     /** POST the protocol body to the route endpoint. */
     submit: Effect.fn("MediaRoute.submit")(function* (
       request: Request,
@@ -399,7 +385,7 @@ const makeTransport = <Request extends MediaRequest>(
         headers: merged,
         timeout,
         http,
-      } = mergeTransport({ headers: input.headers, timeout: request.model.timeout, http: request.model.http }, request)
+      } = mergeTransport({ headers: input.headers }, request.model.transport, request)
       const exchange = { headers: merged, timeout, http, fetch: request.fetch }
       const providerOptions = mergeProviderOptions(request.model.providerOptions, request.providerOptions)
       const headers = Headers.fromInput(merged)

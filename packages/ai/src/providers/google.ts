@@ -2,7 +2,7 @@ import { Auth } from "../route/auth.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { MediaRoute } from "../route/media.js"
 import type { ProviderPackage } from "../provider-package.js"
-import { ProviderID, type ModelID, type ProviderOptions, type RequestOptions } from "../schema/index.js"
+import { mergeTransport, ProviderID, type ModelID, type ProviderOptions, type RequestOptions } from "../schema/index.js"
 import { Gemini } from "../protocols/gemini.js"
 import {
   GoogleEmbedContent,
@@ -63,9 +63,7 @@ export const configure = (input: Config = {}) => {
     provider: id,
     endpoint: { baseURL: input.baseURL },
     auth: auth(input),
-    headers: input.headers,
-    timeout: input.timeout,
-    http: input.http,
+    ...mergeTransport(input),
   })
   return {
     id,
@@ -86,9 +84,7 @@ export const configure = (input: Config = {}) => {
         .with({
           endpoint: { baseURL: media.baseURL },
           auth: media.auth,
-          headers: media.headers,
-          timeout: media.timeout,
-          http: media.http,
+          ...media.transport,
         })
         .model<GoogleDecisions.OptionsInput>({ id: modelID, providerOptions }),
     configure,

@@ -114,7 +114,7 @@ const nativeTransportFailure = (error: unknown) => {
 
 // HTTP hooks re-wrap response bodies, so a read failure can arrive as an HttpClientError caused by
 // another HttpClientError. The innermost cause carries the native failure.
-const rootCause = (error: unknown): unknown =>
+export const rootCause = (error: unknown): unknown =>
   HttpClientError.isHttpClientError(error) && "cause" in error.reason && error.reason.cause !== undefined
     ? rootCause(error.reason.cause)
     : error

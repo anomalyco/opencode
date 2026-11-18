@@ -1,4 +1,4 @@
-import { Cause, Clock, Duration, Effect, Inspectable, Layer, Pipeable, Schema, Stream } from "effect"
+import { Cause, Clock, Duration, Effect, Layer, Stream } from "effect"
 import {
   FetchHttpClient,
   Headers,
@@ -6,8 +6,6 @@ import {
   HttpClientError,
   HttpClientRequest,
   HttpClientResponse,
-  HttpIncomingMessage,
-  UrlParams,
 } from "effect/http"
 import {
   AIError,
@@ -22,7 +20,6 @@ import {
   type RequestTimeout,
 } from "../schema/index.js"
 import { classifyProviderFailure, providerErrorMessage } from "../provider-error.js"
-import { concatBytes } from "../utils/bytes.js"
 import {
   composeMiddleware,
   CurrentMiddleware,
@@ -31,6 +28,7 @@ import {
   headerDetails,
   httpError,
   responseStream,
+  rootCause,
   Service,
   type HttpMiddleware,
   type HttpOperation,
@@ -136,7 +134,7 @@ const statusError = (response: HttpClientResponse.HttpClientResponse) =>
       status: response.status,
       responseHeaders: headerDetails(response.headers),
       responseBody: result._tag === "Success" ? result.success : undefined,
-      cause: result._tag === "Failure" ? (result.failure.cause ?? result.failure) : undefined,
+      cause: result._tag === "Failure" ? rootCause(result.failure) : undefined,
     })
   })
 
@@ -194,128 +192,49 @@ const bodyTimeoutError = (response: HttpClientResponse.HttpClientResponse, messa
     }),
   })
 
-const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer =>
-  bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength && bytes.buffer instanceof ArrayBuffer
-    ? bytes.buffer
-    : bytes.slice().buffer
+// A response with one of these statuses has no body to re-wrap.
+const NO_BODY = new Set([101, 204, 205, 304])
 
-const decodeJsonBody = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))
-
-// Bounds every body accessor on the response (`stream`, `text`, `arrayBuffer`, `json`, `urlParamsBody`, `formData`)
-// with the chunk and whole-request limits so stalled bodies fail cleanly regardless of how a caller reads them.
+/**
+ * Re-wraps the body behind the chunk and whole-request limits, so every way of reading it (`stream`, `text`, `json`,
+ * `formData`, ...) fails cleanly once it stalls.
+ */
 const withBodyTimeouts = (
   raw: HttpClientResponse.HttpClientResponse,
   limits: { readonly chunk: Duration.Duration; readonly deadline: number | undefined },
 ): Effect.Effect<HttpClientResponse.HttpClientResponse> => {
-  if (!Duration.isFinite(limits.chunk) && limits.deadline === undefined) return Effect.succeed(raw)
-  return Effect.gen(function* () {
-    const chunked = Duration.isFinite(limits.chunk)
-      ? raw.stream.pipe(
-          Stream.timeoutOrElse({
-            duration: limits.chunk,
-            orElse: () => Stream.fail(bodyTimeoutError(raw, "Timed out waiting for response data")),
-          }),
-        )
-      : raw.stream
-    const timedStream =
-      limits.deadline === undefined
-        ? chunked
-        : Stream.unwrap(
-            Effect.gen(function* () {
-              const left = limits.deadline! - (yield* Clock.currentTimeMillis)
-              if (left <= 0) return Stream.fail(bodyTimeoutError(raw, "Timed out waiting for the response to complete"))
-              return chunked.pipe(
-                Stream.interruptWhen(
-                  Effect.sleep(Duration.millis(left)).pipe(
-                    Effect.andThen(
-                      Effect.fail(bodyTimeoutError(raw, "Timed out waiting for the response to complete")),
-                    ),
-                  ),
+  if (NO_BODY.has(raw.status) || (!Duration.isFinite(limits.chunk) && limits.deadline === undefined))
+    return Effect.succeed(raw)
+  const chunked = raw.stream.pipe(
+    Stream.catchIf(
+      (error) => error.reason._tag === "EmptyBodyError",
+      () => Stream.empty,
+    ),
+    Stream.timeoutOrElse({
+      duration: limits.chunk,
+      orElse: () => Stream.fail(bodyTimeoutError(raw, "Timed out waiting for response data")),
+    }),
+  )
+  const deadline = limits.deadline
+  const body =
+    deadline === undefined
+      ? chunked
+      : Stream.unwrap(
+          Effect.map(Clock.currentTimeMillis, (now) =>
+            chunked.pipe(
+              Stream.interruptWhen(
+                Effect.sleep(Duration.millis(Math.max(0, deadline - now))).pipe(
+                  Effect.andThen(Effect.fail(bodyTimeoutError(raw, "Timed out waiting for the response to complete"))),
                 ),
-              )
-            }),
-          )
-    const bytes = yield* Effect.cached(
-      Stream.runCollect(timedStream).pipe(
-        Effect.map((chunks) => concatBytes(chunks)),
-        Effect.catchIf(
-          (error) => error.reason._tag === "EmptyBodyError",
-          () => Effect.succeed(new Uint8Array(0)),
-        ),
-      ),
-    )
-    const text = Effect.map(bytes, (data) => new TextDecoder().decode(data))
-    const arrayBuffer = Effect.map(bytes, toArrayBuffer)
-    const json = Effect.flatMap(text, (body) =>
-      body === ""
-        ? Effect.succeed<Schema.Json>(null)
-        : decodeJsonBody(body).pipe(
-            Effect.mapError(
-              (cause) =>
-                new HttpClientError.HttpClientError({
-                  reason: new HttpClientError.DecodeError({ request: raw.request, response: raw, cause }),
-                }),
+              ),
             ),
           ),
-    )
-    const urlParamsBody = Effect.flatMap(text, (body) =>
-      Effect.try({
-        try: () => UrlParams.fromInput(new URLSearchParams(body)),
-        catch: (cause) =>
-          new HttpClientError.HttpClientError({
-            reason: new HttpClientError.DecodeError({ request: raw.request, response: raw, cause }),
-          }),
-      }),
-    )
-    const formData = Effect.gen(function* () {
-      const left =
-        limits.deadline === undefined
-          ? Duration.infinity
-          : Duration.millis(Math.max(0, limits.deadline - (yield* Clock.currentTimeMillis)))
-      const limit = Duration.min(limits.chunk, left)
-      if (!Duration.isFinite(limit)) return yield* raw.formData
-      return yield* raw.formData.pipe(
-        Effect.timeoutOrElse({
-          duration: limit,
-          orElse: () => Effect.fail(bodyTimeoutError(raw, "Timed out waiting for response data")),
-        }),
-      )
-    })
-    const wrapped: HttpClientResponse.HttpClientResponse = {
-      [HttpIncomingMessage.TypeId]: HttpIncomingMessage.TypeId,
-      [HttpClientResponse.TypeId]: HttpClientResponse.TypeId,
-      request: raw.request,
-      get url() {
-        return raw.url
-      },
-      status: raw.status,
-      get headers() {
-        return raw.headers
-      },
-      get cookies() {
-        return raw.cookies
-      },
-      get remoteAddress() {
-        return raw.remoteAddress
-      },
-      get upgrade() {
-        return raw.upgrade
-      },
-      stream: timedStream,
-      text,
-      arrayBuffer,
-      json,
-      urlParamsBody,
-      formData,
-      toJSON: () => raw.toJSON(),
-      toString: () => raw.toString(),
-      [Inspectable.NodeInspectSymbol]: () => raw[Inspectable.NodeInspectSymbol](),
-      pipe() {
-        return Pipeable.pipeArguments(wrapped, arguments)
-      },
-    }
-    return wrapped
-  })
+        )
+  return Stream.toReadableStreamEffect(body).pipe(
+    Effect.map((readable) =>
+      HttpClientResponse.fromWeb(raw.request, new Response(readable, { status: raw.status, headers: raw.headers })),
+    ),
+  )
 }
 
 export const stream = (

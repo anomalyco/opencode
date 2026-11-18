@@ -52,8 +52,7 @@ export class TranscriptionModel<Options extends TranscriptionOptions = Transcrip
     return new TranscriptionModel<Options>({
       id: input.id,
       provider: route.protocol.provider,
-      timeout: input.timeout,
-      http: input.http,
+      transport: input.transport,
       providerOptions: input.providerOptions,
       route: composeRoute(route, input, collectResponse) as TranscriptionRoute,
     })

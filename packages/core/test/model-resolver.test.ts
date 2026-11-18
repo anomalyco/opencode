@@ -1690,9 +1690,9 @@ describe("ModelResolver", () => {
       ])
 
       const expected = { total: 12_000, headers: 3_000, chunk: 4_000 }
-      expect(image?.timeout).toEqual(expected)
-      expect(video?.timeout).toEqual(expected)
-      expect(decision?.timeout).toEqual(expected)
+      expect(image?.transport?.timeout).toEqual(expected)
+      expect(video?.transport?.timeout).toEqual(expected)
+      expect(decision?.transport?.timeout).toEqual(expected)
     }),
   )
 

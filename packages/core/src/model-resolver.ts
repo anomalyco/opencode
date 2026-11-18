@@ -338,17 +338,12 @@ const fromCatalogMedia = Effect.fn("ModelResolver.fromCatalogMedia")(function* <
   if (!is(adapted)) return yield* unsupported(resolved)
   if (!(adapted instanceof DecisionModel || adapted instanceof ImageModel || adapted instanceof VideoModel))
     return adapted
-  const transport = mergeTransport(
-    { timeout: adapted.timeout, http: adapted.http },
-    {
-      timeout: { total: timeouts.timeout, headers: timeouts.headerTimeout, chunk: timeouts.chunkTimeout },
-      http: { tls },
-    },
-  )
   // Media and decision models are plain classes with readonly fields, so copy onto the same prototype.
   const copy: Runtime = Object.assign(Object.create(Object.getPrototypeOf(adapted)), adapted, {
-    timeout: transport.timeout,
-    http: transport.http,
+    transport: mergeTransport(adapted.transport, {
+      timeout: { total: timeouts.timeout, headers: timeouts.headerTimeout, chunk: timeouts.chunkTimeout },
+      http: { tls },
+    }),
   })
   return copy
 })

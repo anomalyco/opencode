@@ -33,8 +33,7 @@ export class VideoModel<Options extends VideoOptions = VideoOptions> extends Med
     return new VideoModel<Options>({
       id: input.id,
       provider: route.protocol.provider,
-      timeout: input.timeout,
-      http: input.http,
+      transport: input.transport,
       providerOptions: input.providerOptions,
       route: composeQueuedRoute(route, input) as VideoRoute,
     })

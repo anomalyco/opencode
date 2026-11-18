@@ -10,10 +10,9 @@ import {
 import {
   mergeTransport,
   ProviderID,
-  type HttpOptions,
   type AIError,
   type ProviderOptions,
-  type RequestTimeout,
+  type TransportOptions,
 } from "../schema/index.js"
 import { Auth } from "./auth.js"
 import { Endpoint } from "./endpoint.js"
@@ -35,16 +34,14 @@ export interface Protocol {
 
 export const protocol = (input: Protocol) => input
 
-export interface Patch {
+/** Headers, timeouts and `http` overlays merge into the route's; every model of the route starts from them. */
+export interface Patch extends TransportOptions {
   readonly id?: string
   readonly provider?: string | ProviderID
   /** ProviderMetadata namespace for responses; defaults to the provider. */
   readonly providerMetadataKey?: string
   readonly endpoint?: Endpoint.EndpointPatch<MediaProtocol.Body, EmbeddingRequest>
   readonly auth?: Auth.Definition
-  readonly headers?: Record<string, string>
-  readonly timeout?: RequestTimeout
-  readonly http?: HttpOptions
   /**
    * Most values one HTTP request may carry. Longer requests are split into requests of this size, sent a few at a
    * time, and joined back in value order.
@@ -52,16 +49,13 @@ export interface Patch {
   readonly maxValues?: number
 }
 
-export interface Route {
+export interface Route extends TransportOptions {
   readonly id: string
   readonly provider: ProviderID
   readonly providerMetadataKey: string
   readonly protocol: Protocol
   readonly endpoint: Endpoint.Definition<MediaProtocol.Body, EmbeddingRequest>
   readonly auth: Auth.Definition
-  readonly headers?: Record<string, string>
-  readonly timeout?: RequestTimeout
-  readonly http?: HttpOptions
   readonly maxValues?: number
   readonly with: (patch: Patch) => Route
   readonly model: <Options extends EmbeddingOptions = EmbeddingOptions>(input: {
@@ -86,9 +80,7 @@ export const make = (input: MakeInput): Route => {
     protocol: input.protocol,
     endpoint: input.endpoint,
     auth: input.auth ?? Auth.none,
-    headers: input.headers,
-    timeout: input.timeout,
-    http: input.http,
+    ...mergeTransport(input),
     maxValues: input.maxValues,
   }
   return {
@@ -101,9 +93,7 @@ export const make = (input: MakeInput): Route => {
         providerMetadataKey:
           patch.providerMetadataKey ?? (patch.provider === undefined ? route.providerMetadataKey : undefined),
         endpoint: patch.endpoint === undefined ? route.endpoint : Endpoint.merge(route.endpoint, patch.endpoint),
-        headers: patch.headers === undefined ? route.headers : { ...route.headers, ...patch.headers },
-        timeout: mergeTransport({ timeout: route.timeout }, { timeout: patch.timeout }).timeout,
-        http: patch.http ?? route.http,
+        ...mergeTransport(route, patch),
         maxValues: patch.maxValues ?? route.maxValues,
       }),
     model: <Options extends EmbeddingOptions>(model: {
@@ -113,8 +103,7 @@ export const make = (input: MakeInput): Route => {
       EmbeddingModel.make<Options>({
         id: model.id,
         provider,
-        timeout: route.timeout,
-        http: route.http,
+        transport: mergeTransport(route),
         providerOptions: model.providerOptions,
         route: { id: route.id, generate: split(route.maxValues, transport(route).generate) },
       }),
@@ -181,7 +170,6 @@ const transport = (route: Omit<Route, "with" | "model">) =>
     ),
     endpoint: route.endpoint,
     auth: route.auth,
-    headers: route.headers,
   })
 
 export * as EmbeddingRoute from "./embedding.js"
