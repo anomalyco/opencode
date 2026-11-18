@@ -35,11 +35,8 @@ const URL_TYPES: Record<string, string> = {
 
 export const description = [
   "Generates a video from a prompt, optionally starting or ending on given images and guided by reference images, videos or audio.",
-  "Only call this when the user asks you to create a video. Videos are slow and expensive: if you think one would help but the user didn't ask, ask them first.",
-  "Each call starts one video job. Some models return more than one video: the first is saved to `path`, the others next to it as name-1.mp4, name-2.mp4, …",
-  "It runs in the background: the call starts a job and returns right away, and you are notified automatically when it finishes. The notice lists every saved file. Videos usually take a few minutes. Never poll, sleep, or check for the file while you wait.",
-  "Leave duration, aspect, resolution and sound unset unless the user asks for them; the model's defaults are usually right. If the provider rejects a value, the error says why.",
-  "Don't repeat a request unless the user asks.",
+  "Only call this when the user asks for a video: videos are slow and expensive.",
+  "It runs in the background, and you are notified with every saved file when it finishes. Never poll, sleep, or check for the file while you wait.",
 ].join("\n")
 
 const source = Schema.String.check(Schema.isMinLength(1))
