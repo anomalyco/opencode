@@ -604,10 +604,10 @@ describe("browser pane machine", () => {
     }
   })
 
-  test("removing a session closes its binding", () => {
+  test("removing a session closes its binding and forgets its saved tabs", () => {
     const start = ready()
     expect(transition(start, { type: "session.removed", sessionKeys: [key, other] }).effects).toEqual([
-      { type: "close-registration", sessionKey: key, attempt: attempt(start) },
+      { type: "close-registration", sessionKey: key, attempt: attempt(start), forget: true },
       { type: "detach", sessionKey: key },
     ])
     expect(transition(start, { type: "session.removed", sessionKeys: [other] }).state).toBe(start)

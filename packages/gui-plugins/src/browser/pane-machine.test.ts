@@ -180,25 +180,25 @@ describe("binding close reason", () => {
     expect(attachmentFailure(new Error("socket hang up"))).toBe("closed")
   })
 
-  test("only a missing session forgets the saved tabs; a window that detaches keeps them", () => {
+  test("only a session that is gone forgets the saved tabs; a window that detaches keeps them", () => {
     const removes = (event: BindingEvent) =>
       play(attached(), on(event)).effects.some((effect) => effect.type === "remove-restore")
 
     expect(removes({ type: "attachment.ended", outcome: "missing" })).toBe(true)
+    expect(removes({ type: "client.closed", forget: true })).toBe(true)
     expect(removes({ type: "client.closed" })).toBe(false)
     expect(removes({ type: "owner.closed" })).toBe(false)
     expect(removes({ type: "attachment.ended", outcome: "closed" })).toBe(false)
   })
 
-  test("a window that detaches suspends its binding with its tabs, so the pane keeps showing them", () => {
+  test("a window that detaches closes its binding as registration.closed and keeps its tabs saved", () => {
     const restore = { tabs: [tab(tabA, dashboard)], focusedTabID: tabA }
 
     for (const event of [{ type: "client.closed" }, { type: "owner.closed" }] as const) {
       const closed = play(attached(restore), on(event))
 
-      expect(closeEvents(closed.effects)).toEqual([
-        { state: { tabs: [tab(tabA, dashboard, "", 1)], focusedTabID: tabA }, error: "browser.pane.suspended" },
-      ])
+      expect(closeEvents(closed.effects)).toEqual([{ state: null, error: "browser.pane.registration.closed" }])
+      expect(closed.effects.some((effect) => effect.type === "remove-restore")).toBe(false)
     }
   })
 

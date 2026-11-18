@@ -164,7 +164,13 @@ export type MachineEffect =
       readonly attempt: number
       readonly restore: Browser.State | undefined
     }
-  | { readonly type: "close-registration"; readonly sessionKey: string; readonly attempt: number }
+  | {
+      readonly type: "close-registration"
+      readonly sessionKey: string
+      readonly attempt: number
+      /** The session is gone, so its saved tabs are deleted with the close. */
+      readonly forget?: boolean
+    }
   | {
       readonly type: "schedule-register-timeout"
       readonly sessionKey: string
@@ -419,7 +425,7 @@ function removed(state: Open, sessionKeys: readonly string[]): Transition {
       ...state,
       sessions: Object.fromEntries(listed(state.sessions).filter((entry) => !sessionKeys.includes(entry[0]))),
     },
-    effects: gone.flatMap(([key, attachment]) => [...stop(key, attachment.phase), detach(key)]),
+    effects: gone.flatMap(([key, attachment]) => [...stop(key, attachment.phase, true), detach(key)]),
   }
 }
 
@@ -874,14 +880,16 @@ function register(key: string, attempt: number, browser: Browser.State | null): 
   ]
 }
 
-function stop(key: string, phase: Phase): MachineEffect[] {
-  if (phase.status === "registering")
-    return [
-      { type: "cancel-register-timeout", sessionKey: key },
-      { type: "close-registration", sessionKey: key, attempt: phase.attempt },
-    ]
+function stop(key: string, phase: Phase, forget = false): MachineEffect[] {
+  const close = (attempt: number): MachineEffect =>
+    forget
+      ? { type: "close-registration", sessionKey: key, attempt, forget }
+      : { type: "close-registration", sessionKey: key, attempt }
 
-  if (phase.status === "ready") return [{ type: "close-registration", sessionKey: key, attempt: phase.attempt }]
+  if (phase.status === "registering")
+    return [{ type: "cancel-register-timeout", sessionKey: key }, close(phase.attempt)]
+
+  if (phase.status === "ready") return [close(phase.attempt)]
 
   if (phase.status === "backoff") return [{ type: "cancel-retry", sessionKey: key }]
 

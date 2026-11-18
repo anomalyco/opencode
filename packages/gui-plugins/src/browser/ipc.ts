@@ -144,7 +144,8 @@ export const BrowserPane = Ipc.define({
     },
     // Deletes the cookies the page's address can read and its origin's stored data, then reloads the page.
     clearSite: { input: Schema.Struct({ binding, tabID: Browser.TabID }) },
-    close: { input: Schema.Struct({ binding }) },
+    // The window says whether the session is gone; only then does main delete the tabs saved for it.
+    close: { input: Schema.Struct({ binding, forget: Schema.optionalKey(Schema.Boolean) }) },
   },
   events: {
     event: Schema.Struct({ binding: Schema.String, event: PaneEvent }),

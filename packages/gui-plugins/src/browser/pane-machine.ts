@@ -84,8 +84,11 @@ export type BindingEvent =
   | { readonly type: "register.timed-out" }
   /** The window navigated or was destroyed. */
   | { readonly type: "owner.closed" }
-  /** The window detached the binding, as when it leaves the session; its tabs stay for the next registration. */
-  | { readonly type: "client.closed" }
+  /**
+   * The window closed the binding, as when it leaves the session; its tabs stay for the next registration. `forget`
+   * is set only when the session is gone, and then its saved tabs are deleted.
+   */
+  | { readonly type: "client.closed"; readonly forget?: boolean }
   | { readonly type: "pane.disposed" }
   | { readonly type: "request.started"; readonly requestID: string }
   | { readonly type: "request.targeted"; readonly requestID: string; readonly tabID: Browser.TabID }
@@ -228,9 +231,9 @@ export function transitionBinding(state: BindingState, event: BindingEvent): Bin
   if (state.status === "closed") return { state, effects: [] }
   const reason = closeReason(state, event)
 
-  // Only a session that no longer exists forgets its tabs. A window that navigated or detached its registration keeps
-  // them: they are saved per server and session, and the pane restores them when it registers again.
-  if (reason) return close(state, reason, reason === "browser.pane.missing")
+  // A closed binding keeps its saved tabs: they are saved per server and session, and the pane restores them when it
+  // registers again. Only a session that no longer exists forgets them, and the window says so when it closes.
+  if (reason) return close(state, reason, (event.type === "client.closed" && event.forget) || reason === "browser.pane.missing")
 
   if (event.type === "control.unrecognized")
     return {
@@ -256,7 +259,7 @@ export function transitionBinding(state: BindingState, event: BindingEvent): Bin
 function closeReason(state: ActiveBinding, event: BindingEvent): PaneCloseReason | undefined {
   if (event.type === "handshake.unsupported") return "browser.pane.unsupported"
 
-  if (event.type === "owner.closed" || event.type === "client.closed") return "browser.pane.suspended"
+  if (event.type === "owner.closed" || event.type === "client.closed") return "browser.pane.registration.closed"
 
   if (event.type === "pane.disposed") return "browser.pane.suspended"
 

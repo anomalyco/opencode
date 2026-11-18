@@ -91,7 +91,7 @@ const setup: Plugin.MainSetup = (ctx) => {
       (await pane()).setViewport(caller.window, input.binding, input.tabID, input.viewport),
     site: async (input, caller) => (await pane()).site(caller.window, input.binding, input.tabID),
     clearSite: async (input, caller) => (await pane()).clearSite(caller.window, input.binding, input.tabID),
-    close: async (input, caller) => (await pane()).close(caller.window, input.binding),
+    close: async (input, caller) => (await pane()).close(caller.window, input.binding, input.forget),
   })
 
   // The host withdraws the Ipc before this runs, so windows hear nothing; they suspend on the Ipc going away.

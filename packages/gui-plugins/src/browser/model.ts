@@ -153,7 +153,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       if (current?.attempt !== effect.attempt) return
       registrations.delete(effect.sessionKey)
       setState("pages", effect.sessionKey, undefined)
-      current.registration.close()
+      current.registration.close(effect.forget)
 
       return
     }

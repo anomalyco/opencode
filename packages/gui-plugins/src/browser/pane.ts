@@ -353,9 +353,9 @@ export function createBrowserPane(input: {
         if (!("code" in error) || error.code !== "ERR_ABORTED") throw error
       })
     },
-    async close(window: number, binding: string) {
+    async close(window: number, binding: string, forget = false) {
       owned(window, binding)
-      dispatchBinding(binding, { type: "client.closed" })
+      dispatchBinding(binding, { type: "client.closed", forget })
     },
     /**
      * The plugin is going away (reload, disable, or quit). Windows keep each pane's tabs as a
