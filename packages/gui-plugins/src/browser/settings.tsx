@@ -2,7 +2,7 @@ import { createMemo, createSignal, For, getOwner, runWithOwner, Show, untrack, t
 import { createStore } from "solid-js/store"
 import { createLatest, usePlugin, type IconName } from "@opencode/plugin/gui"
 import { choiceLabel, choiceValue, Glyph, profileChoices, type Choice } from "./choices"
-import { accessSummary, advancedOpen, verdict } from "./settings-view"
+import { accessSummary, advancedOpen, unvettedSource, verdict } from "./settings-view"
 import { SiteChooser } from "./site-chooser"
 import type definition from "./index"
 import { createProfileJobs, type JobMessage } from "./jobs"
@@ -709,6 +709,8 @@ function InstallReview(props: {
         {ctx.t(accessSummary(props.review.access))}
         <Show when={props.review.access.length > 1}> {ctx.t("review.summary.more")}</Show>
       </p>
+      {/* In sight, not behind Details: a copy no store checked is something to know before adding it. */}
+      <Show when={unvettedSource(source())}>{(key) => <p>{ctx.t(key())}</p>}</Show>
       {/* An update that asks for more stays in sight: the person agreed to less. */}
       <Show when={props.review.added}>
         <div>
@@ -741,7 +743,7 @@ function InstallReview(props: {
               <CompatibilityDetails compatibility={props.review.compatibility} />
             </div>
           </Show>
-          <p>{ctx.t(`review.source.${source()}`)}</p>
+          <Show when={!unvettedSource(source())}><p>{ctx.t(`review.source.${source()}`)}</p></Show>
           <Show when={props.review.replaces}>{(name) => <p>{ctx.t("settings.extensions.replaces", { name: name() })}</p>}</Show>
           <Show when={props.review.access.includes("allSites")} fallback={
             <Show when={props.review.sites.length} fallback={<p>{ctx.t(props.review.hosts.length ? "review.otherSites" : "review.noSites")}</p>}>

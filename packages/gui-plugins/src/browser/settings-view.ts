@@ -19,7 +19,18 @@ export function verdict(level: ExtensionCompatibility["level"]) {
   return level === "partial" ? "review.partial" : "extensions.compat.unsupported"
 }
 
-/** One everyday sentence for the widest thing an extension can do; the whole list is behind Details. */
+/**
+ * The sentence for where an extension's package came from when no store published it. The install review shows it in
+ * sight, beside the verdict: a person must know it before adding. A store's copy says so behind Details.
+ */
+export function unvettedSource(source: "chrome" | "edge" | "browser" | "folder") {
+  return source === "browser" || source === "folder" ? (`review.source.${source}` as const) : undefined
+}
+
+/**
+ * One everyday sentence for the widest thing an extension can do, in sight beside the verdict; the whole list is behind
+ * Details. The widest of all, every website, is said in those words.
+ */
 export function accessSummary(access: Extract<InstallResult, { token: string }>["access"]) {
   if (access.includes("allSites")) return "review.summary.allSites"
 

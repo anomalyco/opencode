@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import en from "./i18n/en"
-import { accessSummary, ADVANCED_ENTRIES, advancedOpen, verdict } from "./settings-view"
+import { accessSummary, ADVANCED_ENTRIES, advancedOpen, unvettedSource, verdict } from "./settings-view"
 
 test("Advanced is closed until the person opens it, and a search hit inside it shows it open", () => {
   expect(advancedOpen(undefined, undefined)).toBe(false)
@@ -23,7 +23,7 @@ test.each([
 })
 
 test.each([
-  [["allSites", "cookies", "activity"], "Can read and change the pages you visit."],
+  [["allSites", "cookies", "activity"], "Can read and change every website you visit."],
   [["someSites", "clipboard"], "Can read and change pages on some sites."],
   [["cookies", "activity"], "Can see and change your sign-ins."],
   [["activity"], "Can see which pages you visit."],
@@ -31,4 +31,21 @@ test.each([
   [[], "Doesn't ask to read your pages."],
 ] as const)("what %j can do is said in one sentence", (access, sentence) => {
   expect(en[accessSummary(access)]).toBe(sentence)
+})
+
+// The two facts a person needs before adding an extension are in sight whatever the verdict, not behind Details.
+test.each([
+  ["chrome", undefined],
+  ["edge", undefined],
+  ["browser", "Copied from another browser. No store checked this copy."],
+  ["folder", "From a folder on this computer. No store checked this copy."],
+] as const)("an extension from %s says in sight where it came from only when no store checked it", (source, sentence) => {
+  const key = unvettedSource(source)
+
+  expect(key ? en[key] : undefined).toBe(sentence)
+})
+
+test("access to every website is said in those words", () => {
+  expect(en[accessSummary(["allSites"])]).toContain("every website")
+  expect(en[accessSummary(["someSites"])]).not.toContain("every")
 })

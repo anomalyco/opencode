@@ -442,7 +442,7 @@ export default {
   "settings.advanced": "Advanced",
   "settings.advanced.summary": "Remote servers, site permissions, sign out, cookie file",
   "review.works": "Works here",
-  "review.summary.allSites": "Can read and change the pages you visit.",
+  "review.summary.allSites": "Can read and change every website you visit.",
   "review.summary.someSites": "Can read and change pages on some sites.",
   "review.summary.cookies": "Can see and change your sign-ins.",
   "review.summary.activity": "Can see which pages you visit.",
