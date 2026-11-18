@@ -202,6 +202,30 @@ fn outcome(o: &psychoscript::Outcome) -> Json {
     }
 }
 
+/// A finished run's outcome as the reference's result object writes it.
+fn ended(o: &psychoscript::Outcome) -> Json {
+    let calls: Vec<Json> = o
+        .tool_calls
+        .iter()
+        .map(|c| json!({ "name": c.path }))
+        .collect();
+    let mut out = match &o.result {
+        Ok(value) => json!({ "ok": true, "value": value }),
+        Err(d) => {
+            let mut error = json!({ "kind": d.kind.name(), "message": d.message });
+            if !d.suggestions.is_empty() {
+                error["suggestions"] = json!(d.suggestions);
+            }
+            json!({ "ok": false, "error": error })
+        }
+    };
+    if !o.logs.is_empty() {
+        out["logs"] = json!(o.logs);
+    }
+    out["toolCalls"] = Json::Array(calls);
+    out
+}
+
 #[test]
 fn streaming_responses_match_the_reference() {
     let fixture = fixture();
@@ -313,14 +337,16 @@ fn suspending_a_run_that_holds_a_streaming_response_matches_the_reference() {
             loop {
                 match s.suspend(None) {
                     Err(e) if !e.running.is_empty() => thread::sleep(Duration::from_millis(1)),
-                    other => return other.map(|_| ()).map_err(|e| e.message),
+                    other => return other.map_err(|e| e.message),
                 }
             }
         });
-        let mut actual = json!({ "suspend": { "ok": suspend.is_ok() } });
-        if let Err(message) = suspend {
-            actual["suspend"]["message"] = json!(message);
-        }
+        let mut actual = match &suspend {
+            // The run ended before the suspend came: the suspend gives its outcome.
+            Ok(RunOutcome::Done(o)) => json!({ "suspend": { "ok": false, "outcome": ended(o) } }),
+            Ok(_) => json!({ "suspend": { "ok": true } }),
+            Err(message) => json!({ "suspend": { "ok": false, "message": message } }),
+        };
         if let RunOutcome::Suspended(s) = run {
             waiting.0.2.store(true, Ordering::SeqCst);
             actual["resume"] = match rt.resume(&s.state) {

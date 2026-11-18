@@ -138,9 +138,9 @@ fn a_function_inside_a_result_is_callable_and_crosses_the_same_way() {
     assert!(
         failure(
             &rt,
-            r#"const res = await fetch("https://a.test/"); res.handlers[0](() => 1)"#
+            r#"const res = await fetch("https://a.test/"); res.handlers[0]([1].keys())"#
         )
-        .contains("Argument 1 to fetch.handlers[0] contains a function")
+        .contains("Argument 1 to fetch.handlers[0] contains an iterator")
     );
     assert_eq!(
         value(&rt, r#"return await fetch("https://a.test/")"#),
@@ -203,12 +203,29 @@ fn a_program_error_crosses_with_its_name_message_cause_and_data() {
 }
 
 #[test]
-fn functions_promises_iterators_and_symbols_cannot_be_passed_in() {
+fn functions_are_left_out_and_promises_awaited_iterators_and_symbols_cannot_be_passed_in() {
     let held = Held::default();
     let rt = Runtime::new().extension(web(&held));
-    assert!(failure(&rt, "keep(() => 1)").contains("Argument 1 to keep contains a function"));
+    value(
+        &rt,
+        "keep({ f: () => 1, n: later(1) }); keep([() => 1, later(2)]); keep(() => 1); keep(later(3))",
+    );
+    let kept: Vec<Option<Json>> = held
+        .lock()
+        .unwrap()
+        .iter()
+        .map(HostValue::to_json)
+        .collect();
+    assert_eq!(
+        kept,
+        [
+            Some(json!({ "n": 2 })),
+            Some(json!([null, 3])),
+            None,
+            Some(json!(4))
+        ]
+    );
     assert!(failure(&rt, "keep([1].keys())").contains("Argument 1 to keep contains an iterator"));
-    assert!(failure(&rt, "keep(later(1))").contains("un-awaited Promise"));
     assert!(failure(&rt, "keep(Symbol.iterator)").contains("Argument 1 to keep contains a symbol"));
 }
 

@@ -266,7 +266,7 @@ fn opt_id(id: Option<Id>) -> J {
 
 /// A crossing to the host in progress (`cross::Cross`).
 fn cross(c: &crate::cross::Cross) -> J {
-    use crate::cross::{Step, Target, Waiting};
+    use crate::cross::{Step, Waiting};
     let stack: Vec<J> = c
         .stack
         .iter()
@@ -289,11 +289,6 @@ fn cross(c: &crate::cross::Cross) -> J {
             json!([val(&v.holder), val(&v.key), v.depth, step])
         })
         .collect();
-    let target = match &c.target {
-        Target::Tool { path, promise } => json!(["tool", path.as_ref(), promise]),
-        Target::Search { coroutine } => json!(["search", coroutine]),
-        Target::Result => json!(["result"]),
-    };
     let waiting = match c.waiting {
         Waiting::No => 0,
         Waiting::Root => 1,
@@ -305,7 +300,7 @@ fn cross(c: &crate::cross::Cross) -> J {
         vals(&c.crossed),
         stack,
         vals(&c.ancestors),
-        target,
+        json!(["result"]),
         waiting,
         c.owed
     ])
@@ -1487,7 +1482,7 @@ impl Dec<'_> {
     }
 
     fn cross<'j>(&self, f: impl Fn(usize) -> R<&'j J>) -> R<Kind> {
-        use crate::cross::{Cross, Step, Target, Visit, Waiting};
+        use crate::cross::{Cross, Step, Visit, Waiting};
         let stack = f(3)?
             .as_array()
             .ok_or_else(|| invalid("a crossing's visits are not a list."))?
@@ -1518,18 +1513,10 @@ impl Dec<'_> {
                 })
             })
             .collect::<R<Vec<_>>>()?;
-        let t = f(5)?;
-        let target = match at(t, 0)?.as_str() {
-            Some("tool") => Target::Tool {
-                path: string(at(t, 1)?)?.into(),
-                promise: self.id(at(t, 2)?)?,
-            },
-            Some("search") => Target::Search {
-                coroutine: u32_(at(t, 1)?)?,
-            },
-            Some("result") => Target::Result,
-            _ => return Err(invalid("a crossing's target is unknown.")),
-        };
+        // Only the program's result crosses this way.
+        if at(f(5)?, 0)?.as_str() != Some("result") {
+            return Err(invalid("a crossing's target is unknown."));
+        }
         let waiting = match uint(f(6)?)? {
             0 => Waiting::No,
             1 => Waiting::Root,
@@ -1540,7 +1527,6 @@ impl Dec<'_> {
             crossed: self.vals(f(2)?)?,
             stack,
             ancestors: self.vals(f(4)?)?,
-            target,
             waiting,
             owed: boolean(f(7)?)?,
         })))

@@ -395,10 +395,26 @@ fn native(vm: &mut Vm, name: &str, length: u8, f: crate::vm::NativeFn, data: Val
 
 // ---------- tool calls ----------
 
-/// `tools.<path>(...args)`: returns a promise at once; the call starts now and settles it later.
+/// `tools.<path>(...args)`: returns a promise at once. The arguments cross now (`cross::tool_args`): a failure there
+/// rejects the promise, and when they hold promises that haven't fulfilled the call waits for them first
+/// (`cross::wait_async`); otherwise the call starts, and settles the promise later.
 pub fn call_tool(vm: &mut Vm, path: &str, args: &[Value]) -> Res {
-    crate::cross::tool_call(vm, path, args)
+    use crate::cross::Args;
+    let p = vm.new_promise();
+    match crate::cross::tool_args(vm, args, crate::cross::Callee::Tool(path)) {
+        Err(e) if vm.fatal.is_some() => return Err(e),
+        Err(e) => vm.reject(p, e),
+        Ok(Args::Ready(json)) => start_tool(vm, p, path, json),
+        Ok(Args::Wait(promises)) => {
+            let callee = vm.tool_ref(path);
+            crate::cross::wait_async(vm, promises, callee, args, p);
+        }
+    }
+    Ok(Value::Obj(p))
 }
+
+/// A tool call's arguments as JSON, or the failure converting them met (`cross::tool_args`).
+pub(crate) type Crossed = Result<Vec<Option<Json>>, Box<Failed>>;
 
 /// Everything about a call that happens before its tool runs: the reference's `decode` and `admit`.
 struct Admitted<'rt> {
@@ -407,13 +423,14 @@ struct Admitted<'rt> {
     call: u64,
 }
 
-/// Starts a call whose promise is `p`, once its arguments have crossed (`args`, `None` for undefined). A call that ends
-/// at once queues its outcome; the rest become tasks.
-pub(crate) fn start_tool<'rt>(vm: &mut Vm<'rt>, p: Id, path: &str, args: Vec<Option<Json>>) {
+/// Starts a call whose promise is `p`, once its arguments have crossed (`args`, `None` for undefined, or the failure
+/// the tool runtime's `toJson` meets, which fails a call that finds its tool). A call that ends at once queues its
+/// outcome; the rest become tasks.
+pub(crate) fn start_tool<'rt>(vm: &mut Vm<'rt>, p: Id, path: &str, args: Crossed) {
     let setup = vm.host.setup;
     // Models often write `tools.search(...)` for the bare `search(...)`; honor it unless a tool owns that path.
     if path == "search" && !setup.registry.exists("search") {
-        let s = match run_search(vm, &args) {
+        let s = match args.and_then(|args| run_search(vm, &args)) {
             Ok(json) => Settlement::Json(json),
             Err(f) => Settlement::Failure(f),
         };
@@ -517,16 +534,13 @@ pub fn spawn_tool<'rt>(
 }
 
 #[inline]
-fn admit<'rt>(
-    vm: &mut Vm<'rt>,
-    path: &str,
-    args: Vec<Option<Json>>,
-) -> Result<Admitted<'rt>, Box<Failed>> {
+fn admit<'rt>(vm: &mut Vm<'rt>, path: &str, args: Crossed) -> Result<Admitted<'rt>, Box<Failed>> {
     let setup = vm.host.setup;
     let Some(tool) = setup.registry.get(path) else {
         return Err(unknown_tool(setup, path));
     };
     let tool: &'rt Tool = tool;
+    let args = args?;
     let entry_field = if tool.freeform {
         schema::string_parameter(tool.input.document()).map(|(name, _)| name)
     } else {
@@ -853,6 +867,11 @@ pub fn settle(vm: &mut Vm, p: Id, s: Settlement) {
     }
 }
 
+/// A host call's failure as the error the program sees.
+pub(crate) fn failed_value(vm: &mut Vm, f: Failed) -> Value {
+    failure_value(vm, f.kind, f.message, f.suggestions)
+}
+
 fn failure_value(
     vm: &mut Vm,
     kind: DiagnosticKind,
@@ -989,12 +1008,13 @@ fn promise_like_method(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> 
 
 // ---------- extensions ----------
 
-fn describe(vm: &Vm, v: &Value) -> &'static str {
+/// How the reference describes a value that cannot be passed to the host.
+pub(crate) fn describe(vm: &Vm, v: &Value) -> &'static str {
     match v {
         Value::Sym(_) => "a symbol",
         Value::Obj(id) => match &vm.heap[*id as usize].kind {
             Kind::Closure(_) | Kind::Native { .. } | Kind::Bound(_) => "a function",
-            Kind::ToolRef(_) => "a tool reference",
+            Kind::ToolRef(_) => "a namespace reference",
             Kind::Promise(_) => "an un-awaited Promise",
             Kind::Generator(_) | Kind::AsyncGenerator(_) => "a generator",
             Kind::ArrayIter { .. }
@@ -1010,14 +1030,69 @@ fn describe(vm: &Vm, v: &Value) -> &'static str {
     }
 }
 
-/// A program value copied out for a host function.
+/// A function's own name, as it was made.
+pub(crate) fn function_name(vm: &Vm, v: &Value) -> String {
+    match v {
+        Value::Obj(id) => match &vm.heap[*id as usize].kind {
+            Kind::Native { name, .. } => vm.atoms.text(*name).to_owned(),
+            _ => String::new(),
+        },
+        _ => String::new(),
+    }
+}
+
+/// The host function behind a function the program got inside a host result, which crosses back as itself to a host
+/// function that takes functions. The functions among the globals don't: what the host runs around their calls runs
+/// only when the program calls them.
+fn hosted(vm: &Vm, id: Id) -> Option<HostFunction> {
+    let Kind::Native {
+        f,
+        data: Value::Num(index),
+        ..
+    } = &vm.heap[id as usize].kind
+    else {
+        return None;
+    };
+    if !std::ptr::fn_addr_eq(*f, extension_native as crate::vm::NativeFn) {
+        return None;
+    }
+    let entry = vm.host.functions.get(*index as usize)?;
+    (!entry.entry).then(|| entry.f.clone())
+}
+
+/// An extension function's arguments as host values, as the reference's `toHost` copies them under Code Mode's
+/// translation (see `to_host`), or the promises among them to wait for first.
+fn host_args(
+    vm: &mut Vm,
+    args: &[Value],
+    label: &str,
+) -> Result<crate::cross::Args<Vec<HostValue>>, Value> {
+    let mut waiting = Vec::new();
+    let mut out = Vec::with_capacity(args.len());
+    for (i, a) in args.iter().enumerate() {
+        let mut seen = Vec::new();
+        let label = format!("Argument {} to {label}", i + 1);
+        let v = to_host(vm, a, &label, 0, &mut seen, &mut waiting)?;
+        out.push(v.unwrap_or(HostValue::Undefined));
+    }
+    if !waiting.is_empty() {
+        return Ok(crate::cross::Args::Wait(waiting));
+    }
+    Ok(crate::cross::Args::Ready(out))
+}
+
+/// A program value copied out for a host function, as the reference's `toHost` copies it: a function is left out
+/// (`None`: an object's key is skipped, an array's item is `null`, a Map's or Set's is undefined), unless it came from
+/// a host result, when it crosses back as the host function; a fulfilled promise is its value, and one that hasn't
+/// fulfilled goes in `waiting`, for the call to wait for.
 fn to_host(
     vm: &mut Vm,
     v: &Value,
     label: &str,
     depth: usize,
     seen: &mut Vec<Id>,
-) -> Result<HostValue, Value> {
+    waiting: &mut Vec<Value>,
+) -> Result<Option<HostValue>, Value> {
     if depth > crate::convert::MAX_VALUE_DEPTH {
         let msg = format!(
             "{label} exceeds the maximum value depth of {}.",
@@ -1026,52 +1101,52 @@ fn to_host(
         return Err(vm.type_error(&msg));
     }
     let id = match v {
-        Value::Undef | Value::Uninit => return Ok(HostValue::Undefined),
-        Value::Null => return Ok(HostValue::Null),
-        Value::Bool(b) => return Ok(HostValue::Bool(*b)),
-        Value::Num(n) => return Ok(HostValue::Number(*n)),
+        Value::Undef | Value::Uninit => return Ok(Some(HostValue::Undefined)),
+        Value::Null => return Ok(Some(HostValue::Null)),
+        Value::Bool(b) => return Ok(Some(HostValue::Bool(*b))),
+        Value::Num(n) => return Ok(Some(HostValue::Number(*n))),
         Value::Str(s) => {
-            return Ok(HostValue::String(
+            return Ok(Some(HostValue::String(
                 crate::strings::host_text(vm.text(*s)).into_owned(),
-            ));
+            )));
         }
         Value::Sym(_) => {
-            let msg = format!("{label} contains a symbol, which cannot be passed to an extension.");
+            let msg = format!("{label} contains a symbol, which cannot be passed to the host.");
             return Err(vm.type_error(&msg));
         }
         Value::Obj(id) => *id,
     };
-    // Interpreter machinery is never data; every other object crosses as a copy, as the reference's `toHost`.
-    let opaque = matches!(
-        vm.heap[id as usize].kind,
-        Kind::Closure(_)
-            | Kind::Native { .. }
-            | Kind::Bound(_)
-            | Kind::ToolRef(_)
-            | Kind::Promise(_)
-            | Kind::Generator(_)
-            | Kind::AsyncGenerator(_)
-            | Kind::ArrayIter { .. }
-            | Kind::MapIter { .. }
-            | Kind::StrIter { .. }
-            | Kind::ListIter { .. }
-            | Kind::ExoticIter { .. }
-            | Kind::IterHelper(_)
-            | Kind::AsyncFromSync { .. }
-            | Kind::Resolvers { .. }
-            | Kind::Combinator(_)
-    );
-    if opaque {
-        let msg = format!(
-            "{label} contains {}, which cannot be passed to an extension.",
-            describe(vm, v)
-        );
-        return Err(vm.type_error(&msg));
+    if let Some(f) = hosted(vm, id) {
+        return Ok(Some(HostValue::Function(f)));
+    }
+    if vm.heap[id as usize].is_callable() {
+        return Ok(None);
     }
     if seen.contains(&id) {
         return Err(vm.type_error(&format!("{label} contains a circular value.")));
     }
+    if let Kind::Promise(p) = &vm.heap[id as usize].kind {
+        let PromiseState::Fulfilled(result) = p.state else {
+            waiting.push(*v);
+            return Ok(Some(HostValue::Undefined));
+        };
+        seen.push(id);
+        let out = to_host(vm, &result, label, depth + 1, seen, waiting)?;
+        seen.pop();
+        return Ok(out);
+    }
+    if crate::cross::opaque(&vm.heap[id as usize].kind) {
+        let msg = format!(
+            "{label} contains {}, which cannot be passed to the host.",
+            describe(vm, v)
+        );
+        return Err(vm.type_error(&msg));
+    }
     seen.push(id);
+    // A child left out of a Map or a Set is undefined there.
+    let kept = |vm: &mut Vm, item: &Value, seen: &mut Vec<Id>, waiting: &mut Vec<Value>| {
+        to_host(vm, item, label, depth + 1, seen, waiting).map(Option::unwrap_or_default)
+    };
     let out = match &vm.heap[id as usize].kind {
         Kind::Date(t) => HostValue::Date(*t),
         Kind::RegExp(r) => HostValue::RegExp {
@@ -1091,7 +1166,8 @@ fn to_host(
         }
         Kind::Array(_) if vm.heap[id as usize].flags & SPARSE != 0 => {
             vm.densify(id)?;
-            return to_host(vm, v, label, depth, seen);
+            seen.pop();
+            return to_host(vm, v, label, depth, seen, waiting);
         }
         Kind::Array(items) => {
             let items = items.clone();
@@ -1099,7 +1175,10 @@ fn to_host(
             for item in &items {
                 out.push(match item {
                     Value::Uninit => None,
-                    item => Some(to_host(vm, item, label, depth + 1, seen)?),
+                    item => Some(
+                        to_host(vm, item, label, depth + 1, seen, waiting)?
+                            .unwrap_or(HostValue::Null),
+                    ),
                 });
             }
             HostValue::Array(out)
@@ -1110,49 +1189,50 @@ fn to_host(
             if is_map {
                 let mut out = Vec::with_capacity(entries.len());
                 for (k, val) in &entries {
-                    out.push((
-                        to_host(vm, k, label, depth + 1, seen)?,
-                        to_host(vm, val, label, depth + 1, seen)?,
-                    ));
+                    let k = kept(vm, k, seen, waiting)?;
+                    out.push((k, kept(vm, val, seen, waiting)?));
                 }
                 HostValue::Map(out)
             } else {
                 let mut out = Vec::with_capacity(entries.len());
                 for (k, _) in &entries {
-                    out.push(to_host(vm, k, label, depth + 1, seen)?);
+                    out.push(kept(vm, k, seen, waiting)?);
                 }
                 HostValue::Set(out)
             }
         }
         Kind::Error(_) => {
             let (name, message) = crate::convert::error_parts(vm, id);
+            let name = crate::cross::host_error_name(vm, id, name);
             let mut error = HostError::named(
                 crate::strings::host_text(&name).into_owned(),
                 crate::strings::host_text(&message).into_owned(),
             );
             let cause_key = vm.names.cause;
+            // A field that cannot cross is left behind, so the error itself always arrives.
+            let mut left_behind = |vm: &mut Vm, item: &Value, seen: &mut Vec<Id>| {
+                let at = seen.len();
+                match to_host(vm, item, label, depth + 1, seen, waiting) {
+                    Ok(item) => Ok(item),
+                    Err(e) if vm.fatal.is_some() => Err(e),
+                    Err(_) => {
+                        seen.truncate(at);
+                        Ok(None)
+                    }
+                }
+            };
             if vm.has_own(id, cause_key) {
                 let cause = vm.get_obj(id, cause_key);
-                if let Ok(c) = to_host(vm, &cause, label, depth + 1, seen) {
+                if let Some(c) = left_behind(vm, &cause, seen)? {
                     error.cause = Some(Box::new(c));
                 }
             }
             for (k, val) in vm.own_entries(id) {
                 let key = crate::strings::host_text(vm.atoms.text(k)).into_owned();
-                if matches!(
-                    key.as_str(),
-                    "stack"
-                        | "message"
-                        | "constructor"
-                        | "toString"
-                        | "__proto__"
-                        | "cause"
-                        | "name"
-                ) {
+                if crate::cross::uncrossed(&key) || k == cause_key || key == "name" {
                     continue;
                 }
-                // A field that cannot cross is left behind, so the error itself always arrives.
-                if let Ok(item) = to_host(vm, &val, label, depth + 1, seen) {
+                if let Some(item) = left_behind(vm, &val, seen)? {
                     error.fields.push((key, item));
                 }
             }
@@ -1165,13 +1245,15 @@ fn to_host(
                 if key == "__proto__" {
                     continue;
                 }
-                out.push((key, to_host(vm, &val, label, depth + 1, seen)?));
+                if let Some(item) = to_host(vm, &val, label, depth + 1, seen, waiting)? {
+                    out.push((key, item));
+                }
             }
             HostValue::Object(out)
         }
     };
     seen.pop();
-    Ok(out)
+    Ok(Some(out))
 }
 
 /// A host value copied in. `entry` is the extension of a global object whose functions are entry points.
@@ -1472,6 +1554,8 @@ fn wrap(vm: &mut Vm, f: &HostFunction, label: &str, entry: Option<(&str, bool)>)
 }
 
 fn extension_native(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Res {
+    // Whether bytecode made the call, so it can wait for a promise in its arguments where it is.
+    let direct = vm.host.meter.counted;
     let Value::Num(index) = vm.native_data(callee) else {
         return Ok(Value::Undef);
     };
@@ -1487,17 +1571,10 @@ fn extension_native(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Re
         entry.entry,
     );
     let extension_name = extension.clone();
-    let mut host_args = Vec::with_capacity(args.len());
-    for (i, a) in args.iter().enumerate() {
-        let mut seen = Vec::new();
-        host_args.push(to_host(
-            vm,
-            a,
-            &format!("Argument {} to {label}", i + 1),
-            0,
-            &mut seen,
-        )?);
-    }
+    let host_args = match extension_args(vm, &f, args, &label, callee, direct)? {
+        Ok(host_args) => host_args,
+        Err(made) => return Ok(made),
+    };
     let setup = vm.host.setup;
     let hooks = &setup.hooks;
     let invocation = hooked.then(|| ExtensionInvocation {
@@ -1568,6 +1645,37 @@ fn extension_native(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Re
             }
             Ok(Value::Obj(p))
         }
+    }
+}
+
+/// An extension function's arguments as they cross to the host (`Ok(Ok)`), or what the call gives the program instead
+/// (`Ok(Err)`): an `async` function's promise when crossing failed or the call waits for promises among them; a
+/// synchronous function's wait, or its failure, throws or enters the wait's frame.
+fn extension_args(
+    vm: &mut Vm,
+    f: &HostFunction,
+    args: &[Value],
+    label: &str,
+    callee: Id,
+    direct: bool,
+) -> Result<Result<Vec<HostValue>, Value>, Value> {
+    let is_async = matches!(f.body, Body::Async(_));
+    match host_args(vm, args, label) {
+        Ok(crate::cross::Args::Ready(host_args)) => Ok(Ok(host_args)),
+        Ok(crate::cross::Args::Wait(promises)) if is_async => {
+            let p = vm.new_promise();
+            crate::cross::wait_async(vm, promises, Value::Obj(callee), args, p);
+            Ok(Err(Value::Obj(p)))
+        }
+        Ok(crate::cross::Args::Wait(promises)) => {
+            crate::cross::wait_sync(vm, promises, Value::Obj(callee), args, direct).map(Err)
+        }
+        Err(e) if is_async && vm.fatal.is_none() => {
+            let p = vm.new_promise();
+            vm.reject(p, e);
+            Ok(Err(Value::Obj(p)))
+        }
+        Err(e) => Err(e),
     }
 }
 

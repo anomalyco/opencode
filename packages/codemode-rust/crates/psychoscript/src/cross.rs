@@ -1,12 +1,16 @@
-//! Crossing to the host as the reference's boundary crosses: a tool's or `search`'s arguments and the program's result
-//! become host JSON. Plain data crosses on a native fast path (`fast`, the reference's `tryFastBoundaryOrJson`); a value
-//! holding a promise, a `toJSON` of the program's, or shared objects revisited too often crosses through the
-//! reference's internal walk (`$vmCross` over the `visit` generators of `$vmJsonVisitor`), which awaits each promise it
-//! meets. The walk here is a heap object (`Kind::Cross`), so a run suspended while it awaits saves it, and it spends
-//! the fuel that bytecode spends, in the same order. A `toJSON` it calls runs from a native frame (`frame_step`), as
-//! the reference calls it from its bytecode, so it can park for `search(...)`, suspend and be saved in a snapshot.
-
-use std::rc::Rc;
+//! Crossing to the host. A host call's arguments cross as the reference's `toHost` copies them, under Code Mode's
+//! translation: a function is left out, a fulfilled promise is its value, and a call whose arguments hold a promise that
+//! hasn't fulfilled waits for it, then calls again (`wait_async`, `wait_sync`: the reference's `$vmHostWait`). A tool's
+//! or `search`'s arguments then become JSON as the tool runtime's `toJson` writes them (`tool_args`); no `toJSON` of the
+//! program's is called.
+//!
+//! The program's result crosses as JSON: plain data on a native fast path (`fast`, the reference's
+//! `tryFastBoundaryOrJson`); a value holding a promise, a `toJSON` of the program's, or shared objects revisited too
+//! often through the reference's internal walk (`$vmResult` over the `visit` generators of `$vmJsonVisitor`), which
+//! awaits each promise it meets. The walk here is a heap object (`Kind::Cross`), so a run suspended while it awaits
+//! saves it, and it spends the fuel that bytecode spends, in the same order. A `toJSON` it calls runs from a native
+//! frame (`frame_step`), as the reference calls it from its bytecode, so it can park for `search(...)`, suspend and be
+//! saved in a snapshot.
 
 use rustc_hash::FxHashSet;
 
@@ -30,20 +34,9 @@ pub struct Cross {
     pub stack: Vec<Visit>,
     /// The containers the walk is inside, for the circular check.
     pub ancestors: Vec<Value>,
-    pub target: Target,
     pub waiting: Waiting,
     /// A `next` that resumed the walk owes `$vmCross`'s loop its back-edge when the walk yields or ends again.
     pub owed: bool,
-}
-
-/// Where a walk's result goes.
-pub enum Target {
-    /// A tool call: started with the crossed arguments, or its promise rejected.
-    Tool { path: Rc<str>, promise: Id },
-    /// `search(...)`: run with the crossed arguments, then answered to the frames it parked with `coroutine`.
-    Search { coroutine: u32 },
-    /// The program's result.
-    Result,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -84,18 +77,6 @@ pub enum Step {
 pub enum Fast {
     Json(Option<Json>),
     Walk,
-}
-
-/// The arguments' JSON on the fast path, `None` once one needs the walk.
-pub fn fast_all(vm: &mut Vm, args: &[Value]) -> Result<Option<Vec<Option<Json>>>, Value> {
-    let mut out = Vec::with_capacity(args.len());
-    for a in args {
-        match fast(vm, a)? {
-            Fast::Json(j) => out.push(j),
-            Fast::Walk => return Ok(None),
-        }
-    }
-    Ok(Some(out))
 }
 
 /// The reference's `tryFastBoundaryOrJson` at the host boundary.
@@ -367,33 +348,7 @@ fn plain_json(vm: &Vm, v: &Value) -> Option<Json> {
     })
 }
 
-// ---------- the walk ----------
-
-/// A tool call: its promise, which the call settles once its arguments have crossed.
-pub fn tool_call(vm: &mut Vm, path: &str, args: &[Value]) -> Res {
-    let p = vm.new_promise();
-    match fast_all(vm, args) {
-        Err(e) => {
-            if vm.fatal.is_some() {
-                return Err(e);
-            }
-            vm.reject(p, e);
-        }
-        Ok(Some(json)) => crate::host::start_tool(vm, p, path, json),
-        Ok(None) => {
-            let id = start(
-                vm,
-                args.to_vec(),
-                Target::Tool {
-                    path: Rc::from(path),
-                    promise: p,
-                },
-            );
-            advance(vm, id, None)?;
-        }
-    }
-    Ok(Value::Obj(p))
-}
+// ---------- the result's walk ----------
 
 /// The program returned `v`: its result once it has crossed.
 pub fn program_result(vm: &mut Vm, v: Value) -> Result<(), Value> {
@@ -414,7 +369,7 @@ pub fn program_result(vm: &mut Vm, v: Value) -> Result<(), Value> {
             }
         }
     }
-    let id = start(vm, vec![v], Target::Result);
+    let id = start(vm, vec![v]);
     advance(vm, id, None)
 }
 
@@ -430,7 +385,7 @@ fn thenable(vm: &mut Vm, v: &Value) -> bool {
 }
 
 /// Makes a walk over `roots` as a heap object.
-pub fn start(vm: &mut Vm, roots: Vec<Value>, target: Target) -> Id {
+pub fn start(vm: &mut Vm, roots: Vec<Value>) -> Id {
     let n = roots.len();
     vm.alloc(Obj::new(
         None,
@@ -439,7 +394,6 @@ pub fn start(vm: &mut Vm, roots: Vec<Value>, target: Target) -> Id {
             crossed: Vec::with_capacity(n),
             stack: Vec::new(),
             ancestors: Vec::new(),
-            target,
             waiting: Waiting::No,
             owed: false,
         })),
@@ -447,9 +401,13 @@ pub fn start(vm: &mut Vm, roots: Vec<Value>, target: Target) -> Id {
 }
 
 /// The settled value a walk awaited (`resumed`), or the walk's start: runs it until it awaits again or ends, then
-/// hands its outcome to its target. At a `toJSON` it pushes a native frame that calls it and runs the rest of the walk
-/// (`frame_step`), whose result is then the tool call's promise.
+/// hands its outcome to the run. At a `toJSON` it pushes a native frame that calls it and runs the rest of the walk
+/// (`frame_step`). A waiting host call (`wait_async`) resumes here too, by the same reaction.
 pub fn advance(vm: &mut Vm, id: Id, resumed: Option<Result<Value, Value>>) -> Result<(), Value> {
+    if let (Kind::Array(_), Some(outcome)) = (&vm.heap[id as usize].kind, &resumed) {
+        let outcome = *outcome;
+        return resume_wait(vm, id, outcome);
+    }
     let resume = match resumed {
         None => Resume::Start,
         Some(r) => Resume::Settled(r),
@@ -460,7 +418,7 @@ pub fn advance(vm: &mut Vm, id: Id, resumed: Option<Result<Value, Value>>) -> Re
             Ok(())
         }
         Walked::Call(call) => enter_frame(vm, id, CALL, call).map(|_| ()),
-        Walked::Done(target, outcome) => finish(vm, target, outcome),
+        Walked::Done(outcome) => finish(vm, outcome),
     }
 }
 
@@ -478,8 +436,8 @@ enum Walked {
     Await(Value),
     /// It calls a `toJSON`: the function, its receiver and the key.
     Call([Value; 3]),
-    /// It ended, with every root crossed or an error.
-    Done(Target, Result<Vec<Option<Json>>, Value>),
+    /// It ended, with the result crossed or an error.
+    Done(Result<Vec<Option<Json>>, Value>),
 }
 
 /// Runs the walk until it awaits, calls a `toJSON` or ends; only a fatal error is an `Err`.
@@ -503,66 +461,33 @@ fn walk(vm: &mut Vm, id: Id, resume: Resume) -> Result<Walked, Value> {
         }
         Ok(Pause::Done) => {
             let crossed = c.crossed.iter().map(|v| plain_json(vm, v)).collect();
-            Ok(Walked::Done(c.target, Ok(crossed)))
+            Ok(Walked::Done(Ok(crossed)))
         }
         Err(e) if vm.fatal.is_some() => Err(e),
-        Err(e) => Ok(Walked::Done(c.target, Err(e))),
+        Err(e) => Ok(Walked::Done(Err(e))),
     }
 }
 
-/// `$vmCross`'s `await`: the walk resumes once `awaited` settles.
+/// `$vmResult`'s `await`: the walk resumes once `awaited` settles.
 fn wait(vm: &mut Vm, id: Id, awaited: Value) {
     let p = vm.promise_resolve(awaited);
     vm.perform_then(p, Reaction::Cross(id));
 }
 
-const SEARCH_CANT_WAIT: &str = "search(...) can't wait for a promise in its input here, in a callback or a generator; \
-                                await it first, e.g. search({ query: await query }).";
-
-/// `search(...)`: its result once its arguments have crossed. Their walk runs in a native frame (`frame_step`) whose
-/// result is the search's. When the walk awaits, a call from bytecode (`direct`) parks its frames, this one with
-/// them, up to the nearest async function as an `await` there would, and they continue once the promise settled; any
-/// other cannot wait.
-pub fn search_call(vm: &mut Vm, args: &[Value], direct: bool) -> Res {
-    if let Some(json) = fast_all(vm, args)? {
-        return crate::host::search_value(vm, &json);
-    }
-    let coroutine = if direct { vm.search_parkable() } else { None };
-    let id = start(
-        vm,
-        args.to_vec(),
-        Target::Search {
-            coroutine: coroutine.unwrap_or(u32::MAX),
-        },
-    );
-    enter_frame(vm, id, WALK, [Value::Undef; 3])
-}
-
-// The slots of a crossing's native frame: the walk, the `toJSON` call it makes (function, receiver, key), where the
-// frame is, and its result once the walk awaits or ends (a tool call's promise).
+// The slots of the walk's native frame: the walk, the `toJSON` call it makes (function, receiver, key), and where the
+// frame is.
 const F_CROSS: usize = 0;
 const F_FN: usize = 1;
 const F_THIS: usize = 2;
 const F_KEY: usize = 3;
 const F_PHASE: usize = 4;
-const F_OUT: usize = 5;
 
-/// Where a crossing's frame is: about to call the `toJSON` in its slots, about to run the walk from its start,
-/// waiting for a `toJSON` it called, or parked with its search's frames until the promise its walk awaits settles.
+/// Where the walk's frame is: about to call the `toJSON` in its slots, or waiting for a `toJSON` it called.
 const CALL: usize = 0;
-const WALK: usize = 1;
 const CALLED: usize = 2;
-const PARKED: usize = 3;
 
 /// Pushes a native frame that runs the walk `id` from `phase`.
 fn enter_frame(vm: &mut Vm, id: Id, phase: usize, call: [Value; 3]) -> Res {
-    let out = match &vm.heap[id as usize].kind {
-        Kind::Cross(c) => match c.target {
-            Target::Tool { promise, .. } => Value::Obj(promise),
-            _ => Value::Undef,
-        },
-        _ => Value::Undef,
-    };
     vm.enter_native_with(
         crate::native::NativeOp::Callbacks,
         crate::builtins::object::SUB_CROSS,
@@ -574,14 +499,13 @@ fn enter_frame(vm: &mut Vm, id: Id, phase: usize, call: [Value; 3]) -> Res {
             call[1],
             call[2],
             Value::Num(phase as f64),
-            out,
         ],
     )
 }
 
-/// The step of a crossing's native frame: calls the `toJSON`s of the program the walk meets as bytecode calls them,
-/// so they can park for `search(...)` and suspend, and hands each result back to the walk. A tool call's or the
-/// result's walk that awaits leaves the rest to a job (`Reaction::Cross`); a search's parks its frames.
+/// The step of the walk's native frame: calls the `toJSON`s of the program the walk meets as bytecode calls them, so
+/// they can park for `search(...)` and suspend, and hands each result back to the walk. A walk that awaits leaves the
+/// rest to a job (`Reaction::Cross`).
 pub(crate) fn frame_step(
     vm: &mut Vm,
     fr: crate::native::Frame,
@@ -607,36 +531,12 @@ pub(crate) fn frame_step(
             call_to_json(vm, fr)
         }
         Walked::Await(awaited) => {
-            let coroutine = match &vm.heap[id as usize].kind {
-                Kind::Cross(c) => match c.target {
-                    Target::Search { coroutine } => Some(coroutine),
-                    _ => None,
-                },
-                _ => None,
-            };
-            match coroutine {
-                None => {
-                    wait(vm, id, awaited);
-                    Ok(Step::Done(fr.get(vm, F_OUT)))
-                }
-                Some(u32::MAX) => Err(vm.invalid_data(SEARCH_CANT_WAIT)),
-                Some(c) => {
-                    vm.await_value(awaited, c);
-                    fr.set_index(vm, F_PHASE, PARKED);
-                    // The loop parks frames after a call that asks for it, as after `search(...)` itself; what the
-                    // promise settles with comes back to this frame, a rejection through the handler.
-                    let park = vm.native_fn("", 0, park, Value::Num(c as f64));
-                    fr.catching(vm, Slot::pack(park), Slot::UNDEF, [])
-                }
-            }
+            wait(vm, id, awaited);
+            Ok(Step::Done(Value::Undef))
         }
-        Walked::Done(Target::Search { .. }, Ok(json)) => {
-            Ok(Step::Done(crate::host::search_value(vm, &json)?))
-        }
-        Walked::Done(Target::Search { .. }, Err(e)) => Err(e),
-        Walked::Done(target, outcome) => {
-            finish(vm, target, outcome)?;
-            Ok(Step::Done(fr.get(vm, F_OUT)))
+        Walked::Done(outcome) => {
+            finish(vm, outcome)?;
+            Ok(Step::Done(Value::Undef))
         }
     }
 }
@@ -648,8 +548,9 @@ fn call_to_json(vm: &mut Vm, fr: crate::native::Frame) -> Result<crate::native::
     fr.catching(vm, f, this, [key])
 }
 
-/// Asks the loop to park the frames of the search with the coroutine in its data, and costs nothing. A snapshot names
-/// it with the host's natives (`host::snapshot_natives`): the heap may still hold one when the run suspends.
+/// Asks the loop to park the frames of the waiting host call with the coroutine in its data, and costs nothing. A
+/// snapshot names it with the host's natives (`host::snapshot_natives`): the heap may still hold one when the run
+/// suspends.
 pub(crate) fn park(vm: &mut Vm, _this: Value, _args: &[Value], callee: Id) -> Res {
     if let Kind::Native {
         data: Value::Num(c),
@@ -663,31 +564,15 @@ pub(crate) fn park(vm: &mut Vm, _this: Value, _args: &[Value], callee: Id) -> Re
     Ok(Value::Undef)
 }
 
-fn finish(
-    vm: &mut Vm,
-    target: Target,
-    outcome: Result<Vec<Option<Json>>, Value>,
-) -> Result<(), Value> {
-    match (target, outcome) {
-        (Target::Tool { path, promise }, Ok(json)) => {
-            crate::host::start_tool(vm, promise, &path, json);
-            Ok(())
-        }
-        (Target::Tool { promise, .. }, Err(e)) => {
-            vm.reject(promise, e);
-            Ok(())
-        }
-        (Target::Result, Ok(mut json)) => {
+fn finish(vm: &mut Vm, outcome: Result<Vec<Option<Json>>, Value>) -> Result<(), Value> {
+    match outcome {
+        Ok(mut json) => {
             vm.result_json = Some(json.pop().flatten().unwrap_or(Json::Null));
             vm.outcome = Some(Ok(Value::Undef));
-            Ok(())
         }
-        (Target::Result, Err(e)) => {
-            vm.outcome = Some(Err(e));
-            Ok(())
-        }
-        (Target::Search { coroutine }, outcome) => vm.answer_search(coroutine, outcome),
+        Err(e) => vm.outcome = Some(Err(e)),
     }
+    Ok(())
 }
 
 /// What a step of the walk does next.
@@ -752,7 +637,7 @@ fn run(vm: &mut Vm, c: &mut Cross, mut act: Act, mut root_awaited: bool) -> Resu
                     return Ok(Pause::Done);
                 }
                 let root = c.roots[at];
-                if matches!(c.target, Target::Result) && !root_awaited && thenable(vm, &root) {
+                if !root_awaited && thenable(vm, &root) {
                     c.waiting = Waiting::Root;
                     return Ok(Pause::Await(root));
                 }
@@ -1040,10 +925,6 @@ fn json_names(vm: &mut Vm, target: &Value) -> Vec<Value> {
 
 /// The values a walk holds, for the snapshot's reach.
 pub fn values(c: &Cross) -> impl Iterator<Item = Value> + '_ {
-    let target = match c.target {
-        Target::Tool { promise, .. } => Some(Value::Obj(promise)),
-        _ => None,
-    };
     c.roots
         .iter()
         .chain(c.crossed.iter())
@@ -1066,5 +947,503 @@ pub fn values(c: &Cross) -> impl Iterator<Item = Value> + '_ {
             }
             out
         }))
-        .chain(target)
+}
+
+// ---------- host-call arguments ----------
+
+/// What a host call's arguments came to: copies ready for the host, or the promises among them that haven't
+/// fulfilled, in the order they were met, which the call waits for before its arguments cross again.
+pub enum Args<T> {
+    Ready(T),
+    Wait(Vec<Value>),
+}
+
+/// A tool call's or `search`'s arguments as JSON: the reference's `toHost` under Code Mode's translation (a function is
+/// left out, a fulfilled promise is its value, one that hasn't fulfilled is waited for) and then the tool runtime's
+/// `toJson`, in one pass. An `Err` is what `toHost` throws, which fails the call at once; a `Uint8Array`, which `toJson`
+/// refuses, is the call's failure once it starts (`Ready(Err)`). `name` names the call in messages: the tool's path, or
+/// `search`.
+pub fn tool_args(
+    vm: &mut Vm,
+    args: &[Value],
+    name: Callee,
+) -> Result<Args<crate::host::Crossed>, Value> {
+    let mut x = ToJson {
+        name,
+        arg: 0,
+        seen: Vec::new(),
+        waiting: Vec::new(),
+        bytes: false,
+    };
+    let mut out = Vec::with_capacity(args.len());
+    for (i, a) in args.iter().enumerate() {
+        x.arg = i;
+        out.push(match flat(vm, a) {
+            Some(j) => Some(j),
+            None => x.visit(vm, a, 0)?,
+        });
+    }
+    if !x.waiting.is_empty() {
+        return Ok(Args::Wait(x.waiting));
+    }
+    if x.bytes {
+        return Ok(Args::Ready(Err(crate::host::Failed::from_parts(
+            crate::DiagnosticKind::InvalidDataValue,
+            "A Uint8Array cannot cross to a tool; pass text instead, e.g. `new TextDecoder().decode(bytes)` or `bytes.toBase64()`.".into(),
+            Vec::new(),
+        ))));
+    }
+    Ok(Args::Ready(Ok(out)))
+}
+
+/// What a host call is to its messages: a tool by its path, or a function by its label.
+#[derive(Clone, Copy)]
+pub enum Callee<'a> {
+    Tool(&'a str),
+    Named(&'a str),
+}
+
+impl Callee<'_> {
+    /// How the reference names an argument in a failure: `Argument 1 to tools.ns.tool`.
+    pub fn label(self, arg: usize) -> String {
+        match self {
+            Callee::Tool(path) => format!(
+                "Argument {} to {}",
+                arg + 1,
+                crate::tool::tool_expression(path)
+            ),
+            Callee::Named(name) => format!("Argument {} to {name}", arg + 1),
+        }
+    }
+}
+
+/// The error properties `toHost` leaves on a program's error.
+pub(crate) fn uncrossed(key: &str) -> bool {
+    matches!(
+        key,
+        "stack" | "message" | "constructor" | "toString" | "__proto__"
+    )
+}
+
+/// The name a program's error has as the host's copy: its own `name`, or the name of an error type the host has, or
+/// `Error`.
+pub(crate) fn host_error_name(vm: &mut Vm, id: Id, name: String) -> String {
+    let own = vm.has_own(id, vm.names.name);
+    let known = matches!(
+        name.as_str(),
+        "TypeError"
+            | "RangeError"
+            | "SyntaxError"
+            | "ReferenceError"
+            | "EvalError"
+            | "URIError"
+            | "AggregateError"
+    );
+    if own || known { name } else { "Error".into() }
+}
+
+/// The objects `toHost` refuses: the interpreter's machinery, which is not data.
+pub(crate) fn opaque(kind: &Kind) -> bool {
+    matches!(
+        kind,
+        Kind::ToolRef(_)
+            | Kind::Promise(_)
+            | Kind::Generator(_)
+            | Kind::AsyncGenerator(_)
+            | Kind::ArrayIter { .. }
+            | Kind::MapIter { .. }
+            | Kind::StrIter { .. }
+            | Kind::ListIter { .. }
+            | Kind::ExoticIter { .. }
+            | Kind::IterHelper(_)
+            | Kind::AsyncFromSync { .. }
+            | Kind::Resolvers { .. }
+            | Kind::Combinator(_)
+            | Kind::Cross(_)
+    )
+}
+
+struct ToJson<'a> {
+    name: Callee<'a>,
+    arg: usize,
+    /// The objects and promises the visit is inside, for the circular check.
+    seen: Vec<Id>,
+    waiting: Vec<Value>,
+    /// Whether a `Uint8Array` was met.
+    bytes: bool,
+}
+
+impl ToJson<'_> {
+    /// A value's JSON, `None` for one left out (undefined, a function, a promise still to wait for).
+    fn visit(&mut self, vm: &mut Vm, v: &Value, depth: usize) -> Result<Option<Json>, Value> {
+        if depth > crate::convert::MAX_VALUE_DEPTH {
+            let msg = format!(
+                "{} exceeds the maximum value depth of {}.",
+                self.name.label(self.arg),
+                crate::convert::MAX_VALUE_DEPTH
+            );
+            return Err(vm.type_error(&msg));
+        }
+        let id = match v {
+            Value::Undef | Value::Uninit => return Ok(None),
+            Value::Null => return Ok(Some(Json::Null)),
+            Value::Bool(b) => return Ok(Some(Json::Bool(*b))),
+            Value::Num(n) => return Ok(Some(number(*n))),
+            Value::Str(s) => return Ok(Some(Json::String(crate::convert::host_string(vm, *s)))),
+            Value::Sym(_) => {
+                let msg = format!(
+                    "{} contains a symbol, which cannot be passed to the host.",
+                    self.name.label(self.arg)
+                );
+                return Err(vm.type_error(&msg));
+            }
+            Value::Obj(id) => *id,
+        };
+        if vm.heap[id as usize].is_callable() {
+            return Ok(None);
+        }
+        if self.seen.contains(&id) {
+            let msg = format!("{} contains a circular value.", self.name.label(self.arg));
+            return Err(vm.type_error(&msg));
+        }
+        if let Kind::Promise(p) = &vm.heap[id as usize].kind {
+            let PromiseState::Fulfilled(result) = p.state else {
+                self.waiting.push(*v);
+                return Ok(None);
+            };
+            self.seen.push(id);
+            let out = self.visit(vm, &result, depth + 1)?;
+            self.seen.pop();
+            return Ok(out);
+        }
+        if opaque(&vm.heap[id as usize].kind) {
+            let msg = format!(
+                "{} contains {}, which cannot be passed to the host.",
+                self.name.label(self.arg),
+                crate::host::describe(vm, v)
+            );
+            return Err(vm.type_error(&msg));
+        }
+        self.seen.push(id);
+        let out = self.children(vm, id, depth)?;
+        self.seen.pop();
+        Ok(Some(out))
+    }
+
+    fn children(&mut self, vm: &mut Vm, id: Id, depth: usize) -> Result<Json, Value> {
+        Ok(match &vm.heap[id as usize].kind {
+            Kind::Date(t) if t.is_finite() => Json::String(crate::builtins::date::iso_string(*t)),
+            Kind::Date(_) => Json::Null,
+            Kind::Url(_) => Json::String(crate::builtins::web::url_href(vm, id)),
+            Kind::SearchParams(p) => Json::String(crate::builtins::web::serialize(&p.list)),
+            Kind::Headers(h) => Json::Object(
+                crate::builtins::web::header_entries(&h.list)
+                    .into_iter()
+                    .map(|(k, v)| (k, Json::String(v)))
+                    .collect(),
+            ),
+            Kind::Bytes(_) => {
+                self.bytes = true;
+                Json::Null
+            }
+            Kind::RegExp(_) => Json::Object(serde_json::Map::new()),
+            Kind::Array(_) => {
+                if vm.heap[id as usize].flags & SPARSE != 0 {
+                    vm.densify(id)?;
+                }
+                let items = match &vm.heap[id as usize].kind {
+                    Kind::Array(items) => items.clone(),
+                    _ => Vec::new(),
+                };
+                let mut out = Vec::with_capacity(items.len());
+                for item in &items {
+                    out.push(self.visit(vm, item, depth + 1)?.unwrap_or(Json::Null));
+                }
+                Json::Array(out)
+            }
+            Kind::Map(m) | Kind::Set(m) => {
+                let is_map = matches!(vm.heap[id as usize].kind, Kind::Map(_));
+                let entries: Vec<(Value, Value)> = m.entries.iter().flatten().copied().collect();
+                if is_map {
+                    // A Map's entries cross to the host, which then writes the Map as `{}`.
+                    for (k, item) in &entries {
+                        self.visit(vm, k, depth + 1)?;
+                        self.visit(vm, item, depth + 1)?;
+                    }
+                    Json::Object(serde_json::Map::new())
+                } else {
+                    let mut out = Vec::with_capacity(entries.len());
+                    for (k, _) in &entries {
+                        out.push(self.visit(vm, k, depth + 1)?.unwrap_or(Json::Null));
+                    }
+                    Json::Array(out)
+                }
+            }
+            Kind::Error(_) => self.error(vm, id, depth)?,
+            _ => {
+                let mut out = serde_json::Map::new();
+                for (k, item) in vm.own_entries(id) {
+                    let key = vm.atoms.text(k);
+                    if key == "__proto__" {
+                        continue;
+                    }
+                    let key = crate::strings::host_text(key).into_owned();
+                    if let Some(j) = self.visit(vm, &item, depth + 1)? {
+                        out.insert(key, j);
+                    }
+                }
+                Json::Object(out)
+            }
+        })
+    }
+
+    /// An error as the host copies it (its fields that cannot cross are left behind), then as the tool runtime writes
+    /// it: its name and message, then its own fields.
+    fn error(&mut self, vm: &mut Vm, id: Id, depth: usize) -> Result<Json, Value> {
+        let (name, message) = crate::convert::error_parts(vm, id);
+        let name = host_error_name(vm, id, name);
+        let mut out = serde_json::Map::new();
+        out.insert(
+            "name".into(),
+            Json::String(crate::strings::host_text(&name).into_owned()),
+        );
+        out.insert(
+            "message".into(),
+            Json::String(crate::strings::host_text(&message).into_owned()),
+        );
+        let cause = vm.names.cause;
+        if vm.has_own(id, cause) {
+            // The cause crosses, but the host's copy holds it as a property `toJson` does not list.
+            let v = vm.get_obj(id, cause);
+            self.left_behind(vm, &v, depth)?;
+        }
+        for (k, item) in vm.own_entries(id) {
+            let key = crate::strings::host_text(vm.atoms.text(k)).into_owned();
+            if uncrossed(&key) || k == cause {
+                continue;
+            }
+            if let Some(j) = self.left_behind(vm, &item, depth)? {
+                out.insert(key, j);
+            }
+        }
+        Ok(Json::Object(out))
+    }
+
+    /// An error's field: one that cannot cross is left behind, so the error itself always does.
+    fn left_behind(&mut self, vm: &mut Vm, v: &Value, depth: usize) -> Result<Option<Json>, Value> {
+        let seen = self.seen.len();
+        match self.visit(vm, v, depth + 1) {
+            Ok(j) => Ok(j),
+            Err(e) if vm.fatal.is_some() => Err(e),
+            Err(_) => {
+                self.seen.truncate(seen);
+                Ok(None)
+            }
+        }
+    }
+}
+
+// ---------- waiting host calls ----------
+
+// A host call whose arguments hold promises that haven't fulfilled waits for each in turn, then calls its function
+// again with the same arguments, which cross with their values now: the reference's `$vmHostWait`, an async function
+// in its internal bytecode (`let i = 0; while (i < promises.length) { await promises[i]; i++ } return $Apply(callee,
+// undefined, args)`). Each resumption is a job, and each turn of its loop a back-edge, as there.
+
+/// The wait of an `async` host function's call (a tool's, an `async` extension function's), whose promise `p` the
+/// caller already holds: `p` takes on what the call made again gives, or the reason a promise rejected with. The
+/// wait's state is an array no program sees, `[promises, index, callee, args, p]`, resumed by `Reaction::Cross`.
+pub fn wait_async(vm: &mut Vm, promises: Vec<Value>, callee: Value, args: &[Value], p: Id) {
+    let first = promises[0];
+    let promises = vm.new_array(promises);
+    let args = vm.new_array(args.to_vec());
+    let Value::Obj(state) =
+        vm.new_array(vec![promises, Value::Num(0.0), callee, args, Value::Obj(p)])
+    else {
+        return;
+    };
+    await_for(vm, state, first);
+}
+
+fn await_for(vm: &mut Vm, state: Id, v: Value) {
+    let q = vm.promise_resolve(v);
+    vm.perform_then(q, Reaction::Cross(state));
+}
+
+/// The awaited promise of an `async` host function's wait settled.
+fn resume_wait(vm: &mut Vm, state: Id, outcome: Result<Value, Value>) -> Result<(), Value> {
+    let item = |vm: &Vm, i: usize| match &vm.heap[state as usize].kind {
+        Kind::Array(items) => items.get(i).copied().unwrap_or(Value::Undef),
+        _ => Value::Undef,
+    };
+    let Value::Obj(p) = item(vm, 4) else {
+        return Ok(());
+    };
+    if let Err(e) = outcome {
+        vm.reject(p, e);
+        return Ok(());
+    }
+    let next = match item(vm, 1) {
+        Value::Num(n) => n as usize + 1,
+        _ => 0,
+    };
+    vm.fuel(1);
+    let promises = list(vm, item(vm, 0));
+    if let Some(&awaited) = promises.get(next) {
+        if let Kind::Array(items) = &mut vm.heap[state as usize].kind {
+            items[1] = Value::Num(next as f64);
+        }
+        await_for(vm, state, awaited);
+        return Ok(());
+    }
+    let (callee, args) = (item(vm, 2), list(vm, item(vm, 3)));
+    let r = match &vm.heap[callee.as_obj().unwrap_or(0) as usize].kind {
+        // A tool is called through its namespace, which costs the reference nothing.
+        Kind::ToolRef(path) => {
+            let path = path.clone();
+            crate::host::call_tool(vm, &path, &args)
+        }
+        _ => {
+            let r = vm.call(&callee, Value::Undef, &args);
+            vm.fuel(NATIVE_FUEL);
+            r
+        }
+    };
+    match r {
+        Ok(v) => vm.resolve_promise(p, v),
+        Err(e) if vm.fatal.is_some() => return Err(e),
+        Err(e) => vm.reject(p, e),
+    }
+    Ok(())
+}
+
+fn list(vm: &Vm, v: Value) -> Vec<Value> {
+    match v {
+        Value::Obj(id) => match &vm.heap[id as usize].kind {
+            Kind::Array(items) => items.clone(),
+            _ => Vec::new(),
+        },
+        _ => Vec::new(),
+    }
+}
+
+/// The wait of a synchronous host function's call (`search`, an extension function): its call waits where it is, as
+/// an `await` there would, parking the frames from the nearest async function up, and they go on with what the call
+/// made again returns. `direct` is whether bytecode made the call; one made from native code, or with a generator or
+/// a native call in between, cannot wait.
+pub fn wait_sync(
+    vm: &mut Vm,
+    promises: Vec<Value>,
+    callee: Value,
+    args: &[Value],
+    direct: bool,
+) -> Res {
+    let Some(c) = (if direct { vm.search_parkable() } else { None }) else {
+        let name = match callee {
+            Value::Obj(id) if id == vm.search_fn => "search".to_owned(),
+            _ => crate::host::function_name(vm, &callee),
+        };
+        let msg = format!(
+            "{name}(...) can't wait for a promise in its arguments here, in a callback or a generator; await it first."
+        );
+        return Err(vm.invalid_data(&msg));
+    };
+    let promises = vm.new_array(promises);
+    let args = vm.new_array(args.to_vec());
+    vm.enter_native_with(
+        crate::native::NativeOp::Callbacks,
+        crate::builtins::object::SUB_HOST_WAIT,
+        Value::Undef,
+        Value::Undef,
+        &[
+            promises,
+            callee,
+            args,
+            Value::Num(0.0),
+            Value::Num(c as f64),
+            Value::Num(0.0),
+        ],
+    )
+}
+
+// The slots of a synchronous call's wait: the promises, the function and its arguments, the promise it waits for now,
+// the coroutine its frames park with, and where it is.
+const W_PROMISES: usize = 0;
+const W_CALLEE: usize = 1;
+const W_ARGS: usize = 2;
+const W_INDEX: usize = 3;
+const W_COROUTINE: usize = 4;
+const W_PHASE: usize = 5;
+
+/// Where a synchronous call's wait is: parked for a promise, or calling its function again.
+const PARKED: usize = 1;
+const RECALLED: usize = 2;
+
+/// The step of a synchronous call's wait.
+pub(crate) fn wait_step(
+    vm: &mut Vm,
+    fr: crate::native::Frame,
+    input: crate::native::Input,
+) -> Result<crate::native::Step, Value> {
+    use crate::native::{Input, Step};
+    match (input, fr.index(vm, W_PHASE)) {
+        (Input::Start, _) => {
+            // The call from bytecode costs its fifty once it has entered the wait, before the wait runs.
+            if let Some(f) = vm.frames.last_mut()
+                && f.argc & 1 != 0
+            {
+                f.argc &= !1;
+                vm.fuel(NATIVE_FUEL);
+            }
+            park_for(vm, fr, 0)
+        }
+        (Input::Threw(e), PARKED) => Err(e),
+        (Input::Returned(_) | Input::Finished(_), PARKED) => {
+            let next = fr.index(vm, W_INDEX) + 1;
+            vm.fuel(1);
+            if next < list(vm, fr.get(vm, W_PROMISES)).len() {
+                return park_for(vm, fr, next);
+            }
+            fr.set_index(vm, W_PHASE, RECALLED);
+            let args = list(vm, fr.get(vm, W_ARGS));
+            vm.stack.push(fr.slot(vm, W_CALLEE));
+            vm.stack.push(Slot::UNDEF);
+            vm.stack.extend(args.iter().map(|v| Slot::pack(*v)));
+            vm.native_call(args.len())
+        }
+        (Input::Returned(r) | Input::Finished(r), _) => Ok(Step::Done(r.get())),
+        (Input::Threw(e), _) => Err(e),
+    }
+}
+
+/// Awaits the promise at `index`, parking the frames up to the nearest async function as an `await` does; what it
+/// settles with comes back to this frame, a rejection through the handler.
+fn park_for(
+    vm: &mut Vm,
+    fr: crate::native::Frame,
+    index: usize,
+) -> Result<crate::native::Step, Value> {
+    let awaited = list(vm, fr.get(vm, W_PROMISES))
+        .get(index)
+        .copied()
+        .unwrap_or(Value::Undef);
+    let c = fr.index(vm, W_COROUTINE) as u32;
+    fr.set_index(vm, W_INDEX, index);
+    fr.set_index(vm, W_PHASE, PARKED);
+    vm.await_value(awaited, c);
+    let park = vm.native_fn("", 0, park, Value::Num(c as f64));
+    fr.catching(vm, Slot::pack(park), Slot::UNDEF, [])
+}
+
+/// `search(...)`: its result once its arguments have crossed, or, when they hold promises that haven't fulfilled, its
+/// wait (`wait_sync`). A call from bytecode (`direct`) can wait.
+pub fn search_call(vm: &mut Vm, args: &[Value], direct: bool) -> Res {
+    match tool_args(vm, args, Callee::Named("search"))? {
+        Args::Ready(Ok(json)) => crate::host::search_value(vm, &json),
+        Args::Ready(Err(f)) => Err(crate::host::failed_value(vm, *f)),
+        Args::Wait(promises) => {
+            let callee = Value::Obj(vm.search_fn);
+            wait_sync(vm, promises, callee, args, direct)
+        }
+    }
 }

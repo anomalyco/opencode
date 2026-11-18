@@ -2029,41 +2029,6 @@ impl<'rt> Vm<'rt> {
         None
     }
 
-    /// A parked `search(...)`'s arguments crossed or failed: its answer, then the parked frames run on.
-    pub(crate) fn answer_search(
-        &mut self,
-        c: u32,
-        outcome: Result<Vec<Option<crate::Json>>, Value>,
-    ) -> Result<(), Value> {
-        let answer = match outcome {
-            Ok(json) => crate::host::search_value(self, &json),
-            Err(e) => Err(e),
-        };
-        if self.fatal.is_some() {
-            return answer.map(|_| ());
-        }
-        let Some(mut saved) = self.coroutines[c as usize].saved.take() else {
-            return Ok(());
-        };
-        let restored = self.restore_frame(&mut saved);
-        self.coroutines[c as usize].saved = Some(saved);
-        if !restored {
-            return Ok(());
-        }
-        match answer {
-            Ok(v) => self.push(v),
-            Err(e) => {
-                if let Err(r) = self.handle_throw(e) {
-                    return r.map(|_| ());
-                }
-            }
-        }
-        self.resumable_run = true;
-        let r = self.run();
-        self.resumable_run = false;
-        r.map(|_| ())
-    }
-
     /// Resumes a suspended async function with the settled value of what it awaited.
     pub fn resume_coroutine(&mut self, c: u32, outcome: Result<Value, Value>) -> Result<(), Value> {
         let Some(mut saved) = self.coroutines[c as usize].saved.take() else {
