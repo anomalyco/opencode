@@ -4,7 +4,7 @@ export default {
   "tab.title": "浏览器",
   "address.label": "浏览器地址",
   "action.stop": "停止",
-  unsupported: "此桌面应用程序不支持浏览器面板。",
+  unsupported: "此桌面应用不支持浏览器面板。",
   "action.reload": "重新加载",
   "model.timedOut": "浏览器加载超时",
   "command.close": "关闭浏览器标签页",

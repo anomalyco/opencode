@@ -1,6 +1,6 @@
 export default {
   "tab.title": "上下文",
-  "mobile.title": "用法",
+  "mobile.title": "用量",
   "usage.tokens": "词元数",
   "usage.usage": "使用率",
   "usage.cost": "成本",
