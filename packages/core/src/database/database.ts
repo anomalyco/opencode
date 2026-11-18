@@ -2,7 +2,7 @@ export * as Database from "./database.js"
 
 import { EffectDrizzleSqlite } from "./drizzle.js"
 import { sqliteLayer, supportsForeignKeyToggle, supportsTuningPragmas } from "#sqlite"
-import { Context, Effect, Layer, Schema, Semaphore } from "effect"
+import { Context, Effect, Layer, Option, Schema, Semaphore } from "effect"
 import type { SqlClient } from "effect/sql"
 import { Global } from "@opencode/util/global"
 import { closeSync, existsSync, openSync } from "node:fs"
@@ -10,6 +10,7 @@ import { chmod } from "node:fs/promises"
 import { isAbsolute, join } from "path"
 import { DatabaseMigration } from "./migration.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { App } from "../app.js"
 
 const makeDatabase = EffectDrizzleSqlite.makeWithDefaults()
 type DatabaseShape = Effect.Success<typeof makeDatabase>
@@ -45,6 +46,7 @@ const databaseLayer = (lock: Effect.Effect<Semaphore.Semaphore>, legacyCredentia
         yield* db.run("PRAGMA synchronous = NORMAL")
         yield* db.run("PRAGMA busy_timeout = 5000")
         yield* db.run("PRAGMA cache_size = -64000")
+        if (!(yield* skipStartupCheckpoint)) yield* db.run("PRAGMA wal_checkpoint(PASSIVE)")
       }
       // Durable Object SQLite always enforces foreign keys and rejects the pragma.
       if (supportsForeignKeyToggle && !durableObject) yield* db.run("PRAGMA foreign_keys = ON")
@@ -54,6 +56,19 @@ const databaseLayer = (lock: Effect.Effect<Semaphore.Semaphore>, legacyCredentia
       return { db }
     }).pipe(Effect.orDie),
   )
+
+// The database opens before any location loads its config, so only OPENCODE_FLAGS and the build channel decide this
+// flag; without App (embedders and tests) the channel is unknown and the checkpoint runs. Flag is imported lazily
+// because its Config dependency imports this module; the annotation keeps that cycle out of the inferred type.
+const skipStartupCheckpoint: Effect.Effect<boolean> = Effect.gen(function* () {
+  const { Flag } = yield* Effect.promise(() => import("../flag.js"))
+  const app = yield* Effect.serviceOption(App.Service)
+  return Flag.resolve({
+    entries: [],
+    channel: Option.match(app, { onNone: () => "unknown", onSome: (info) => info.channel }),
+    overrides: yield* Flag.Overrides,
+  }).skip_startup_checkpoint.enabled
+})
 
 // Two instances over one file bootstrap the same schema, so file databases
 // share a lock per path. Each in-memory database is its own connection.
@@ -111,7 +126,7 @@ export const layerFromClient: Layer.Layer<Service, never, SqlClient.SqlClient | 
 )
 
 export function configured(options?: Options) {
-  return makeGlobalNode({ service: Service, layer: layer(options), deps: [Global.node] })
+  return makeGlobalNode({ service: Service, layer: layer(options), deps: [Global.node, App.node] })
 }
 
 /** `configured`, but over an injected SqlClient layer instead of a filesystem path. */

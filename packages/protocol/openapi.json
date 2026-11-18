@@ -17346,6 +17346,9 @@
               "mcp_events": {
                 "type": "boolean"
               },
+              "skip_startup_checkpoint": {
+                "type": "boolean"
+              },
               "full_codemode": {
                 "type": "boolean"
               },

@@ -18,6 +18,8 @@ export const registry = {
     "Watch Slack threads, GitHub pull requests, issues, commits and Actions runs, and the workspace's MCP servers' events through OpenCode Console, and wake sessions when they change.",
   mcp_events:
     "Enable experimental MCP Events, a draft MCP extension: declare support to MCP servers and read the events of servers that offer them.",
+  skip_startup_checkpoint:
+    "Skip the WAL checkpoint when the database opens and leave it to SQLite's automatic checkpoint. The database opens before config loads, so only OPENCODE_FLAGS and the build channel apply; experimental.skip_startup_checkpoint is ignored.",
   full_codemode:
     "Enable the full Code Mode work in progress. Off by default in every build, including local and dev; opt in with OPENCODE_FLAGS=full_codemode or experimental.full_codemode: true.",
 } as const satisfies Record<string, string>
