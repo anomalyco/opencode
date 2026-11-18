@@ -91,11 +91,17 @@ export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Permissi
 
 export type Error = BlockedError | CorrectedError
 
+// macOS volumes ignore case by default, so `.OPENCODE/x` opens `.opencode/x`; rules for file paths must match it too.
+const fileActions = new Set(["read", "edit", "external_directory"])
+
 export function evaluate(action: string, resource: string, ...rulesets: Permission.Ruleset[]): Permission.Rule {
+  const ignoreCase = process.platform === "darwin" && fileActions.has(action)
   return (
     rulesets
       .flat()
-      .findLast((rule) => Wildcard.match(action, rule.action) && Wildcard.match(resource, rule.resource)) ?? {
+      .findLast(
+        (rule) => Wildcard.match(action, rule.action) && Wildcard.match(resource, rule.resource, ignoreCase),
+      ) ?? {
       action,
       resource: "*",
       effect: "ask",
