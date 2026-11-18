@@ -2,6 +2,22 @@
 
 Release notes for OpenCode V2, newest first.
 
+## v2.3.1-shuv.1 — 2026-11-17
+
+Sync upstream v2.3.1 (`c769de8300`), 127 commits after the #497 pin `0fad04b3d5`.
+
+### Google AI Pro / Antigravity
+
+- Adds Gemini 4 Carbon (High, Medium, Low) and Gemini 4 Hydrogen (XHigh, High, Medium, Low) to the bundled Antigravity plugin, alongside Gemini 4 Argon ([#501](https://github.com/shuv1337/shuvcode/pull/501)). Accounts whose plan does not include a model keep it hidden.
+
+### Fork notes on upstream changes
+
+- Permission prompts from subagents still collect on the root session, and a subagent session shows "Parent is waiting for you" until they are answered ([#429](https://github.com/shuv1337/shuvcode/pull/429)). Upstream's change to show them in the subagent's own session is not adopted. Rejecting a request now also rejects only the other pending requests from the same step, as upstream does.
+- Upstream's string `search("…")` shorthand in Code Mode replaces the fork's equivalent patch.
+- Upstream's new Claude Agent translations are dropped with the rest of that hidden provider's strings.
+- Retains Shuvcode identity, npm-only updates and guarded publishing, the hidden Claude Agent SDK provider, durable subagent recovery, tool-activity leases and rich failures.
+- Upstream release notes for v2.3.1 follow verbatim; earlier fork notes remain intact.
+
 ## v2.3.1 — 2026-11-17
 
 ### Highlights
