@@ -355,7 +355,8 @@ impl Guest {
             let request = Request::Input { to, event: event.clone() };
             let owning = (Some(Rc::downgrade(owner)), owner.mounted());
             if let Some((key, heard)) = listened {
-                let keyed = super::Keyed::new(key, &scripts, heard, owner.mounted());
+                let field = matches!(listener, Listener::Surface(_)).then(|| guest.id());
+                let keyed = super::Keyed::new(key, &scripts, heard, owner.mounted(), field);
                 guest.call_keyed("handle", request, true, owning, Some(keyed));
                 return Handled::Consume;
             }

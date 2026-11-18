@@ -801,10 +801,20 @@ pub(crate) struct Keyed {
 
 impl Keyed {
     /// The key a listener took, which `heard` heard, the listener last; `mount` is the listener's, if a mount's.
-    pub(crate) fn new(key: KeyEvent, scripts: &Scripts, heard: Vec<usize>, mount: Option<Weak<()>>) -> Self {
+    /// `field` is the plugin whose field's listener it is: TS's keymap saw the key before the field's `onKeyDown`, in
+    /// the state before the handler ran, so the key it declines goes past that plugin's own commands (file-browser's
+    /// `escape` blurs its field, which enables its `escape` command, and TS's browser stays open).
+    pub(crate) fn new(
+        key: KeyEvent,
+        scripts: &Scripts,
+        heard: Vec<usize>,
+        mount: Option<Weak<()>>,
+        field: Option<&str>,
+    ) -> Self {
         let mut past = scripts.past();
         past.heard = Heard::Some(heard);
         past.target = past.target.or(mount);
+        past.commands.extend(field.map(|plugin| format!("{plugin}\0")));
         Self { strokes: vec![key], past }
     }
 
@@ -2197,7 +2207,7 @@ impl Scripts {
     /// was typed.
     fn past(&self) -> Past {
         let replayed = self.replayed.borrow();
-        Past { commands: replayed.commands.clone(), heard: Heard::Nobody, target: replayed.target.clone() }
+        Past { commands: replayed.commands.clone(), target: replayed.target.clone(), ..Past::default() }
     }
 
     /// The reserved chord: every owner ends and what was held goes, so an answer after it puts nothing back (ce-3,
@@ -2211,10 +2221,15 @@ impl Scripts {
         self.cancel(timers);
     }
 
-    /// Whether the key put back now goes past command `entry` (`<plugin>\0<name>`), which declined it before: the
-    /// command passes it on as it runs, rather than leave the keymap's lists (ce-4).
+    /// Whether the key put back now goes past command `entry` (`<plugin>\0<name>`), which declined it before, or past
+    /// every command of its plugin (`<plugin>\0`, a key its field declined): the command passes it on as it runs,
+    /// rather than leave the keymap's lists (ce-4).
     pub(crate) fn stepped_aside(&self, entry: &str) -> bool {
-        self.replayed.borrow().commands.iter().any(|command| command == entry)
+        self.replayed
+            .borrow()
+            .commands
+            .iter()
+            .any(|command| command == entry || (command.ends_with('\0') && entry.starts_with(command.as_str())))
     }
 
     /// Owner `seq` was answered: a declined key comes back, and the input goes on once the call's effects applied,
@@ -3366,6 +3381,33 @@ mod tests {
         scripts.answered(1, true);
         host.app.advance(Duration::from_millis(1));
         assert!(typed(&seen).is_empty(), "{:?}", typed(&seen));
+    }
+
+    // Expected (cg2-2): a key a field's listener declined goes past its plugin's own commands, which TS's keymap ran
+    // before the field's `onKeyDown`, in the state before the handler ran: the field's handler enabling one (as
+    // file-browser's `escape` enables its `escape` command by blurring the field) does not let it take the key.
+    #[test]
+    fn a_fields_declined_key_goes_past_its_plugins_commands() {
+        let (host, scripts, seen) = holding();
+        let ran = Rc::new(Cell::new(0));
+        let (counted, weak) = (ran.clone(), Rc::downgrade(&scripts));
+        let command = opencode_ui::keymap::TuiCommand::new("p.escape", move |_, _| {
+            let Some(scripts) = weak.upgrade() else { return false };
+            if scripts.stepped_aside("p\0escape") {
+                return false;
+            }
+            counted.set(counted.get() + 1);
+            true
+        })
+        .bind(opencode_ui::keymap::Bind::Key("escape".into()));
+        let _layer = host.keymap().layer(opencode_ui::keymap::KeymapLayer::global(vec![command])).unwrap();
+        let key = Keyed::new(stroke("escape"), &scripts, Vec::new(), None, Some("p"));
+        scripts.hold_for(1, Some(key));
+        scripts.answered(1, true);
+        host.app.advance(Duration::from_millis(1));
+        assert_eq!((ran.get(), typed(&seen)), (0, vec!["escape".to_owned()]));
+        host.app.press("escape");
+        assert_eq!(ran.get(), 1, "the command takes the key typed after");
     }
 
     // Expected (cg2-6): a call that threw has no answer for its key: it goes on, with the input after it.
