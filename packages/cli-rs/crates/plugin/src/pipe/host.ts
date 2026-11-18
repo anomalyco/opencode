@@ -1,23 +1,6 @@
-// The JS host of opencode-native's pipe carrier (rich-plugins synthesis 3.7 and 4.3, phase P7). One Bun process runs
-// every TypeScript TUI plugin and speaks contract 2.0 with the client over its standard input, which carries both
-// directions (a socket pair, or a duplex named pipe on Windows; js-stdio): frames of a length (u32, little-endian), a
-// kind byte (0 control, 1 tree) and JSON. The client embeds this file and runs it; it is not a module plugins import.
-//
-// What it gives a plugin is a `{ id, setup }` module's setup context: the V2 TUI context of the compatibility layer
-// (P8, `compat/`, bundled as `compat.js`), whose slots, routes and dialogs render the plugin's JSX into contract trees,
-// and under `Symbol.for("opencode.carrier")` the carrier that layer is built on: surfaces whose views return contract
-// trees, effects, and reads the host pushes as snapshots. The modules a plugin imports from the TS client
-// (`@opencode/plugin/tui`, Solid, `@opentui/solid`, `@opentui/core`) are the layer's.
-//
-// The rules it keeps:
-// - Standard input is the protocol, both ways. Standard output and standard error are the plugins': `console` and
-//   `process.stdout` write to standard error, and what a plugin writes to the descriptor itself (`writeSync(1, …)`)
-//   the client logs, by the plugin whose code ran then, which this host marks on standard output (`own`).
-// - Every host message with a sequence is acknowledged on receipt, apart from the work it asks for. A sequence seen
-//   again is dropped; one that skips or goes back breaks the stream, and the process exits.
-// - A handler's effects are its call's: a handler that throws has none, and its plugin is called no more.
-// - A mount has at most one tree in flight: the next waits until the host adopted or refused the last.
-// - The process exits when its input ends, or when the client that started it is gone, even while a plugin spins.
+// The JS host runs all TypeScript plugins in one Bun process. Standard input is a duplex protocol channel; stdout
+// and stderr belong to plugin logs. Acknowledge sequenced calls on receipt and commit their effects on return.
+// Each mount may have only one tree awaiting adoption.
 
 import path from "node:path"
 import { Console } from "node:console"
@@ -31,29 +14,19 @@ const MAGIC = "opencode-js-host"
 const VERSION = 1
 const CONTROL = 0
 const TREE = 1
-// The first bytes of a control message too large for one frame (`wire::PIECE`).
 const PIECE = 2
-// The largest control frame the host reads (`wire::CONTROL_CAP`).
 const CONTROL_CAP = 256 << 10
 
-// Prints are logged a line at a time (review F4): every method of `console` (`dir` and `table` too, which Bun's own
-// console writes to standard output directly) and the whole `process.stdout` stream, also for a library that holds on
-// to it or waits for its callback, write to standard error.
+// Redirect console and stream writes together: some Bun console methods bypass console.log.
 const stderr = (text: string) => process.stderr.write(text.endsWith("\n") ? text : text + "\n")
 globalThis.console = new Console(process.stderr, process.stderr)
 process.stdout.write = ((chunk: unknown, encoding?: unknown, callback?: unknown) =>
   (process.stderr.write as Function)(chunk, encoding, callback)) as typeof process.stdout.write
 
-// The modules a V2 plugin imports from the TS client are the compatibility layer's, also from a package's own
-// `node_modules`, as the TS client's runtime plugin support gives its own (P8). Virtual modules, since Bun resolves the
-// JSX runtime a `@jsxImportSource` pragma names without a plugin's `onResolve`.
-// The approved copies of project plugins (P8), each a root its own files may import from alone: a module of the
-// layer and the runtime's own aside, an import that resolves outside it is refused (bigboi P8-1). Each is kept by its
-// real path, and paths are compared by `inside` (carbon recheck-3: a verbatim prefix, a drive letter's case or an 8.3
-// name on Windows).
+// Serve virtual runtime modules even from nested packages. Confined plugins may otherwise import only within
+// their approved real-path root.
 const confined = new Set<string>()
-// `Bun.resolveSync` calls this `onResolve` again, with the importer's directory and then each parent as the importer,
-// and resolving from those fails a relative import (FT-3): the call made inside answers Bun's own resolution.
+// Bun.resolveSync reenters onResolve; the nested call must use Bun's resolver.
 let resolving = false
 const OUTSIDE = "is outside the plugin's approved files"
 const RUNTIME = "opentui:runtime-module:"
@@ -61,8 +34,7 @@ const RUNTIME = "opentui:runtime-module:"
 runtime({
   name: "opencode-compat",
   setup(build) {
-    // Each also as OpenTUI's runtime registry names it, `opentui:runtime-module:<encoded specifier>`, which TS's runtime
-    // serves and a plugin may import or probe (CT-3), and with the specifier left as it is.
+    // Register the encoded and literal forms of OpenTUI runtime-module specifiers.
     for (const [name, exports] of Object.entries(modules)) {
       const ids = new Set([name, RUNTIME + encodeURIComponent(name), RUNTIME + name])
       for (const id of ids) build.module(id, () => ({ exports, loader: "object" }))
@@ -71,8 +43,7 @@ runtime({
       const importer = args.importer?.split("?")[0]
       const layer = args.path in modules || args.path.startsWith(RUNTIME)
       if (!importer || resolving || confined.size === 0 || layer || builtin(args.path)) return undefined
-      // The root itself is an importer too, as `resolveEntry` resolves from it (carbon jsnpm-3), and resolves from
-      // itself rather than from its parent.
+      // The package root itself may resolve relative imports.
       const within = (file: string) => [...confined].find((root) => inside(root, file))
       const root = within(importer) ?? within(real(importer))
       if (!root) return undefined
@@ -95,9 +66,7 @@ function builtin(specifier: string) {
   return isBuiltin(specifier) || specifier === "bun" || specifier.startsWith("bun:")
 }
 
-// Frames go out on standard input, the protocol's both ways, with blocking writes (review carbon-5): a client that
-// reads nothing stops the JS host in its write, which is the channel's back-pressure, rather than letting it buffer
-// without bound; and no frame is cut at exit.
+// Use blocking writes: a slow reader applies backpressure and exit cannot cut a queued frame in half.
 function write(bytes: Buffer, fd = 0) {
   let at = 0
   while (at < bytes.length) {
@@ -109,9 +78,8 @@ function write(bytes: Buffer, fd = 0) {
   }
 }
 
-// Whose code runs, marked on standard output as it changes: what a plugin writes there with `writeSync(1, …)` while
-// its code runs comes after its mark, so the client's log names it; bytes written outside any plugin's code (a timer, a
-// child process) come after a `null` mark and name nobody. The mark is the client's `OWNER` in `child.rs`.
+// Mark the current plugin on stdout so direct descriptor writes can be attributed. A null mark denotes unowned
+// output.
 const OWNER = "\0OPENCODE_JS_HOST_OWNER "
 let owner: string | undefined
 function own(id: string | undefined) {
@@ -131,19 +99,15 @@ async function owning<T>(id: string | undefined, run: () => T | Promise<T>): Pro
   }
 }
 
-// `OPENCODE_JS_HOST_TRACE=<file>` appends every frame the JS host reads and writes to the file, cut at 2,000
-// characters: a diagnosis of the protocol, off by default.
 const TRACE = process.env.OPENCODE_JS_HOST_TRACE
 function trace(line: string) {
   if (TRACE) require("node:fs").appendFileSync(TRACE, line.slice(0, 2000) + "\n")
 }
 
-// Throws when `message` cannot be JSON (a `BigInt`, a cycle): nothing of it is written.
 function frame(kind: number, message: unknown) {
   const body = Buffer.from(JSON.stringify(message))
   trace(`up ${body.toString()}`)
-  // A control message past a frame's cap goes in pieces, the last in a control frame, which the host joins within its
-  // bound on what it has not taken (CT-36: a plugin's stored value of 1 MB).
+  // The final control frame terminates the preceding fragments.
   const frames: Buffer[] = []
   for (let at = 0; at === 0 || at < body.length; at += CONTROL_CAP) {
     const piece = kind === CONTROL ? body.subarray(at, at + CONTROL_CAP) : body
@@ -158,12 +122,8 @@ function frame(kind: number, message: unknown) {
 }
 const send = (message: unknown) => frame(CONTROL, message)
 
-// The JS host takes everything its plugins started down with it, however the client ends (review: no orphans). The
-// client makes it a child subreaper on Linux, so a descendant whose parent exited becomes its child rather than
-// escaping; this kills every descendant it finds in `/proc` (one that left the process group too), then the group,
-// itself last. Elsewhere there is no `/proc`: the group alone. It runs when the input ends, on the parent-death signal
-// the client asks for on Linux (SIGTERM), and from a thread of its own that watches the parent, so a plugin that
-// spins on the main thread cannot hold it back.
+// A spinning plugin can block the main thread. The watchdog also checks for parent death and terminates
+// descendants; on Linux the client acts as a subreaper.
 function killAll(me: number) {
   const fs = require("node:fs")
   const descendants = () => {
@@ -225,7 +185,6 @@ type Request = { type: string; [field: string]: Json }
 
 interface Command {
   name: string
-  // How many times it is registered.
   count: number
   title: string
   run: (input?: string) => unknown
@@ -240,29 +199,23 @@ interface Surface {
   place: Json
   palette: boolean
   notify: Json[]
-  // P2: the mount's handler (its keys, pointer, scroll and input events) and the key layers each mount registers.
   on?: (event: Json) => unknown
   layers: Json[]
-  // P6a: the handler hears each mount begin and end (a "mount" event).
   mounts: boolean
-  // A view that returns `undefined` has no tree yet: it views again when a snapshot comes (P8).
+  // An undefined view waits for the next read snapshot.
   view: (cx: ViewContext) => Json
-  // P8: a mount of it ended.
   unmount?: (mount: Json, handover?: boolean, focused?: string) => void
 }
 
-// A renderer claim (contract 2.x, step D): a code block's renderer of the layer, which draws a part of the claim's
-// target, or declines (`null`), or throws.
 interface Claim {
   target: Json
   view: (part: Json) => Json
 }
 
-// A part a claim draws: its newest revision, and the revision in flight, one at a time.
 interface ClaimMount {
   id: Json
   claim: number
-  // The newest part, until the host adopted the tree drawn for it: the next one comes with its own (carbon c2d-3).
+  // Keep the current part until its tree is adopted.
   part: Json
   rev: number
   inflight: boolean
@@ -310,7 +263,7 @@ interface Plugin {
   definition: { id: string; setup: (context: Json) => unknown }
   active: boolean
   failed: boolean
-  // Its activation ended (a reload or a disable): what it still does fails no other one (carbon-5).
+  // Suppress effects from async work that outlives its activation.
   deactivated?: boolean
   setting: boolean
   activation: number
@@ -318,24 +271,21 @@ interface Plugin {
   // What setup watches, told after it was answered, as the host knows the plugin from then on.
   setupWatches: Json[]
   callEffects?: Request[]
-  // The mount each of `callEffects` is of, where it is another mount's than the call's own (carbon c2b-1).
+  // A call may enqueue an effect owned by another mount.
   callMounts?: Array<Json | null>
   // The mount the call that runs is of, when it is a surface's input: an effect of that mount is the call's.
   callMount?: Json
-  // Who waits for the answer of each effect of the call or setup that runs.
   resolvers: Array<(value: Json) => void>
   commands: Command[]
   storage: string[]
-  // P8: a subscription of `data.on` names its type, whose handlers `listening` holds.
   events: Array<{ types: string[]; handler: (event: Json) => unknown; listens?: string }>
   listening: Record<string, Array<(event: Json) => unknown>>
-  // P2: the key layers of setup, each with its handler.
   layers: Array<{ layer: Json; handler: (event: Json) => unknown }>
   surfaces: Surface[]
-  // cg2-1: its listeners of every key that can take a key now, as `{"layer": i}` or `{"surface": i}`, told the host.
+  // Listeners that can consume input, identified by layer or mount.
   taking: Set<string>
   claims: Claim[]
-  // A claim's view runs: what it asks of the host is dropped (contract 2.x, step D), which the log says once.
+  // Views of claimed parts cannot enqueue effects.
   claiming?: boolean
   claimEffects?: boolean
   cleanups: Array<() => unknown>
@@ -345,42 +295,29 @@ interface Plugin {
   readErrors: Map<string, string>
   answers: Map<string, Array<(value: Json) => void>>
   replies: Map<number, { resolve: (result: Json) => void; reject: (error: Error) => void }>
-  // CT-5: the parts of each reply too large for one frame, until its call joins them.
   parts: Map<number, Buffer[]>
-  // CT-36: the parts of each read's value too large for one frame, until its snapshot joins them.
   snapshotParts: Map<string, Buffer[]>
-  // The parts of each answer of effects too large for one frame, until it joins them (big-boi's `cg4-1`).
   answerParts: Map<string, Buffer[]>
-  // The reads the plugin let go and has not watched again: a snapshot of one still on its way sets nothing (big-boi's
-  // `cg4-7`: a late read of 300 KB came back after its unwatch, uncharged).
+  // Ignore late snapshots for retired watches.
   retired: Set<string>
   batch: number
-  // P8: who hears each snapshot, and the manifest the host was last told.
   listeners: Array<(key: string) => void>
-  // What runs at the end of each call into the plugin, inside it (the layer's ask of its commands' `enabled`).
+  // Recheck nonreactive command state before returning from a handler.
   afterCall: Array<() => void>
   told?: string
 }
 
-// Each plugin's current activation by ID, which its own messages (effects, watches) name; and every activation by the
-// load that made it, which the host's calls and views name. An activation lives until the host deactivates it: a
-// candidate set up for a reload does not end the running one, whose registrations the host still routes to.
 const plugins = new Map<string, Plugin>()
 const generations = new Map<number, Plugin>()
-// How long a component's command outlives its mount, in milliseconds (P8).
+// Allow the next mount to adopt a component's commands during registration handover.
 const UNCOMMAND = 250
-// The commands whose retirement waits for its `UNCOMMAND`, across plugins, which a ping reports (compat-harness): a
-// test waits until none does, rather than for the 250 ms on this process's clock.
 let retiring = 0
-// The failed reply of a fetch the host did not take, as `REFUSED` in `lib.rs` says it.
 const REFUSED = "the host takes no request now: the effects that wait fill its queue"
-// What a fetch rejects with when the host cancels it, as the mount that asked for it closed.
 function cancelled() {
   return Object.assign(new Error("the fetch was cancelled: the mount that asked for it closed"), { name: "AbortError" })
 }
 let last = 0
 let themeMode = "dark"
-// The page theme's colors by token, `#rrggbbaa`, which the V2 context's `theme` reads (P8).
 let palette: { mode: string; colors: Record<string, string> } = { mode: "dark", colors: {} }
 
 function mountKey(id: Json) {
@@ -394,7 +331,7 @@ function fail(plugin: Plugin, error: string) {
   send({ type: "fail", id: plugin.id, activation: plugin.activation, error })
 }
 
-// Sends what `plugin` gave, which may not be JSON: then it fails, and the call `seq`, if any, is answered with that.
+// Serialization can throw before the client receives a frame. Fail the owning plugin in that case.
 function sendFor(plugin: Plugin, out: Json, seq?: number) {
   try {
     send(out)
@@ -411,23 +348,15 @@ function message(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
 
-// The message of what a plugin threw, for its failure, which the error view shows. Its stack goes to standard error,
-// which the client logs, so the author finds the line that threw in the log.
 function thrown(error: unknown) {
   if (error instanceof Error && error.stack) stderr(error.stack)
   return message(error)
 }
 
-// Queues `request` for the call that runs, the setup that runs, or a batch of its own; resolves with its answer. A
-// call ends at its handler's first `await`: what it asks for after that is a batch's, the activation's, not the mount's.
-// A request of `mount` (the layer's focus of a field in that mount's tree, contract 2.x, step B) is that mount's: in a
-// call, one of the call's effects that names the mount unless it is the call's own, so it keeps its place among them
-// and goes with them if the call throws (carbon c2b-1); outside one, a batch that names the mount. The host applies it
-// to the mount, or nowhere once it closed.
+// Keep mount-owned requests with the running call so a throw drops all its effects.
 function effect(plugin: Plugin, request: Request, mount?: Json): Promise<Json> {
   return new Promise((resolve) => {
     if (plugin.failed) return resolve(undefined)
-    // A claim's view reads only, on every carrier (contract 2.x, step D).
     if (plugin.claiming) {
       if (!plugin.claimEffects) {
         plugin.claimEffects = true
@@ -467,7 +396,7 @@ function view(plugin: Plugin, mount: Mount) {
   const surface = plugin.surfaces[mount.surface]
   if (!surface) return
   const used = new Map<string, string>()
-  // The memos within each memo's subtree: a kept subtree keeps them too, so they stay known (review carbon-7).
+  // Keeping a subtree also keeps its nested memos.
   const nested = new Map<string, string[]>()
   const within: string[][] = []
   const kept = (key: string) => {
@@ -498,7 +427,6 @@ function view(plugin: Plugin, mount: Mount) {
       } finally {
         nested.set(key, within.pop() ?? [])
       }
-      // The subtree takes the key as its id, as the Rust SDK's memo gives it.
       return node && typeof node === "object" && node.type !== "keep" && node.type !== "slot"
         ? { ...node, id: key }
         : node
@@ -516,8 +444,7 @@ function view(plugin: Plugin, mount: Mount) {
   let text: string
   try {
     node = surface.view(cx)
-    // A view that drew nothing yet (a compat first render that waits for its reads) still owes the mount a tree, which a
-    // ping reports as waiting: a settle does not end on the mount's placeholder.
+    // An undefined view is pending, not an empty tree.
     if (node === undefined) {
       mount.dirty = true
       return
@@ -530,7 +457,7 @@ function view(plugin: Plugin, mount: Mount) {
   if (!mount.whole && text === mount.last && given.length === 0 && released.length === 0) return
   mount.rev += 1
   mount.inflight = true
-  // A keep of the whole tree (P6a) holds every value of the adopted one: the table stays as it is (review carbon-2).
+  // Keeping the root preserves the whole adopted memo table.
   const root = node?.type === "keep"
   mount.staged = root ? new Map(mount.memo) : used
   mount.stagedNested = root ? new Map(mount.nested) : nested
@@ -556,8 +483,7 @@ function viewAll(plugin: Plugin) {
   for (const mount of plugin.mounts.values()) view(plugin, mount)
 }
 
-// Draws the newest part of a claimed part's mount, a whole tree each time, unless one is in flight: then once the host
-// adopted it. A renderer that throws sends its error, and the host falls the part back; the plugin goes on.
+// Only the newest part waits behind an in-flight claim revision.
 function viewClaim(plugin: Plugin, mount: ClaimMount) {
   if (plugin.failed || !plugin.active) return
   if (mount.inflight) {
@@ -596,8 +522,6 @@ function viewClaim(plugin: Plugin, mount: ClaimMount) {
   })
 }
 
-// Runs plugin code for a message without a sequence (a view after an adoption or a snapshot, an answer's resolvers, a
-// cleanup): the host is told whose it is, so an end within it names that plugin (review carbon-3).
 function within(plugin: Plugin, run: () => void) {
   send({ type: "entered", id: plugin.id })
   const before = owner
@@ -614,8 +538,7 @@ function context(plugin: Plugin) {
   const commands = (layer: Json) => {
     for (const command of layer?.commands ?? []) {
       const name = command.id ?? `${plugin.id}.inline-${plugin.commands.length}`
-      // P8: a command registered again, as each mount of a component registers its layer, runs the latest handler;
-      // it goes once every registration of it went.
+      // Re-registering a command replaces its handler without adding a manifest entry.
       const known = plugin.commands.find((existing) => existing.name === name)
       if (known) {
         known.run = command.run
@@ -674,8 +597,6 @@ function context(plugin: Plugin) {
       changed(plugin)
       return plugin.surfaces.length - 1
     },
-    // A renderer claim (contract 2.x, step D), as contract 2.0's `Setup::claim`: `view` draws a part of `target`. It
-    // goes as the returned function runs.
     claim(target: Json, view: Claim["view"]) {
       const claim: Claim = { target, view }
       plugin.claims.push(claim)
@@ -687,14 +608,11 @@ function context(plugin: Plugin) {
         changed(plugin)
       }
     },
-    // A key layer of the activation, as contract 2.0's `Setup::layer`, by its index. A bind's key is consumed as
-    // declared; a listener of every key that can take one (`taking`) takes it with "consume", and else hears it.
     layer(layer: Json, handler: (event: Json) => unknown) {
       plugin.layers.push({ layer, handler })
       return plugin.layers.length - 1
     },
-    // cg2-1: the listener of every key `listener` (`{ layer: i }` or `{ surface: i }`) can take a key now (`on`): the
-    // host holds a key for its answer only then, and otherwise it only hears it.
+    // Tell the host when a listener can consume input; the UI cannot synchronously ask JS.
     taking(listener: Json, on: boolean) {
       const key = JSON.stringify(listener)
       if (plugin.taking.has(key) === on) return
@@ -707,10 +625,7 @@ function context(plugin: Plugin) {
       commands({ commands: [{ ...command, id: command.name, run, bind: command.keybind, slash }] })
       changed(plugin)
     },
-    // P8: a command of the plugin's goes, as a V2 keymap layer made in a component ends with it.
-    // The host remounts a component after a reload in a later message than the one that ends the last mount: a command
-    // goes only if nothing registered it again meanwhile, so a remount changes nothing.
-    // Contract ergonomics 2.5: command `name`'s state, told the host as it changes ([`enable`]).
+    // Delay retirement across a handover so the next mount can take the same command names.
     enable(name: string, enabled: boolean) {
       const command = plugin.commands.find((command) => command.name === name)
       if (command) enable(plugin, command, enabled)
@@ -730,17 +645,14 @@ function context(plugin: Plugin) {
         changed(plugin)
       }, UNCOMMAND)
     },
-    // The storage keys the plugin reads and writes, as a manifest declares them.
     storage(keys: string[]) {
       plugin.storage.push(...keys.filter((key) => !plugin.storage.includes(key)))
       changed(plugin)
     },
-    // P8: `listener` hears the key of each snapshot that comes; the page theme's colors.
     listen(listener: (key: string) => void) {
       plugin.listeners.push(listener)
     },
     palette: () => palette,
-    // P8: the registrations may have changed after setup: the host is told, once they settle.
     changed: () => changed(plugin),
     on(types: string[], handler: (event: Json) => unknown) {
       plugin.events.push({ types, handler })
@@ -759,11 +671,8 @@ function context(plugin: Plugin) {
       send({ type: "unwatch", id: plugin.id, activation: plugin.activation, key })
     },
     read: (key: string) => plugin.snapshots.get(key),
-    // Why the read `key` watches is nothing: over the host's bound.
     readError: (key: string) => plugin.readErrors.get(key),
-    // The plugin's state changed outside a call: its surfaces view again.
     invalidate: () => viewAll(plugin),
-    // P8: what runs as the activation ends, such as the layer closing a dialog of the plugin's own.
     cleanup: (cleanup: () => unknown) => cleanUp(plugin, cleanup),
     fetch(request: Json): Promise<Json> {
       // A fetch the host did not take answers no ID, and no reply comes: it ends as a failed reply does. One the host
@@ -773,15 +682,11 @@ function context(plugin: Plugin) {
         return new Promise((resolve, reject) => plugin.replies.set(id, { resolve, reject }))
       })
     },
-    // What waits on the host: the answers of calls and batches, which carry a fetch's ID, and the fetches' replies. None
-    // once each settled (bigboi's ownership pass).
-    // With the parts kept of replies too large for one frame (CT-5).
     pendingFetches: () => plugin.answers.size + plugin.replies.size + plugin.parts.size,
   }
   const base = {
     id: plugin.id,
     options: plugin.options ?? {},
-    // What the client said as it started the JS host, and the theme's mode as it changes.
     app: { version: process.env.OPENCODE_VERSION ?? "", channel: process.env.OPENCODE_CHANNEL ?? "" },
     get themeMode() {
       return themeMode
@@ -809,10 +714,7 @@ function context(plugin: Plugin) {
   return v2
 }
 
-// Tells the host plugin `plugin`'s registrations once they settle, after setup, when they changed since it was told:
-// it takes them as a reload (P8: a V2 plugin registers in an async setup, and in its components). They settle once the
-// messages that came are handled: a mount that ends and one that begins with the same layer change nothing. What a
-// view registered goes before its tree (`view`).
+// Coalesce changes during setup and render before deciding whether the manifest needs a reload.
 const unsettled = new Set<Plugin>()
 let settling = false
 function changed(plugin: Plugin) {
@@ -840,17 +742,12 @@ function tell(plugin: Plugin) {
   sendFor(plugin, { type: "manifest", id: plugin.id, activation: plugin.activation, manifest, holds })
 }
 
-// What the host is told of `plugin`'s registrations in `manifest`, to tell a change of them apart: a command's state
-// is none, whose change goes as `set-enabled` and reloads nothing. Its commands are announced from then on.
 function announce(plugin: Plugin, manifest: Json, holds: string[]) {
   for (const command of plugin.commands) command.announced = true
   const commands = manifest.commands.map(({ enabled: _, ...command }: Json) => command)
   return JSON.stringify([{ ...manifest, commands }, holds])
 }
 
-// Contract ergonomics 2.5: `command` is enabled or not, as the plugin says now. The host it was announced to is told
-// with `set-enabled`, in the call that changed it, so its key goes on to whatever else takes it from the next key on;
-// a manifest carries it to a host that reloads, or one not told of the command yet.
 function enable(plugin: Plugin, command: Command, enabled: boolean) {
   if ((command.wire.enabled !== false) === enabled) return
   if (enabled) delete command.wire.enabled
@@ -881,10 +778,6 @@ function manifestOf(plugin: Plugin) {
   }
 }
 
-// The plugin's TUI module, as TS's `Host.resolve` finds it: `<name>/tui` by its `package.json`, else `tui` at its root.
-// It must be one of the plugin's own files (carbon jsnpm-3): a `name` such as `../../x` or an absolute path resolves
-// anywhere, and the module it names would run outside what was approved. A package's `<name>/tui` resolves to the
-// package itself, by self-reference or from the `node_modules` it sits in.
 function resolveEntry(dir: string): { entry: string } | { error: string } | { missing: string } {
   let name: string | undefined
   const file = path.join(dir, "package.json")
@@ -920,14 +813,8 @@ function notInstalled(error: unknown) {
   return `it imports the package '${pkg}', which is not installed with the plugin, and opencode-native installs nothing: install the plugin's dependencies in its directory`
 }
 
-// Sets up `plugin`, a candidate activation. The running activation of its ID, if any, keeps answering what the host
-// routes to it until the host deactivates it, once it registered the candidate. A candidate whose setup throws is
-// dropped, and the running one stays (a reload that fails keeps the previous version).
-//
-// An async setup that waits on the host (a fetch, a read it syncs) cannot finish before the host has the plugin: the
-// host answers the plugin it registered. So once such a setup waits with requests outstanding, the host gets the plugin
-// as it stands, and the rest of setup goes on as the plugin's own: what it registers then the host takes as a reload,
-// and a throw then fails the plugin (P8). A setup that waits on anything else is waited for, as before.
+// An async setup may be waiting for a host effect. Flush the pending effects before waiting for setup to
+// finish.
 async function setup(seq: number, plugin: Plugin) {
   plugin.setting = true
   plugin.activation = seq
@@ -1015,11 +902,10 @@ function candidate(definition: Plugin["definition"], target: string, dir: string
   }
 }
 
-// The modules loads imported without their setup, by load: the client sets one up once it knows its plugin is enabled.
+// Describe can import a module without activating it. Reuse that import for setup.
 const described = new Map<number, Plugin>()
 
-// Loads the plugin of `target`. With `setup`, runs its setup; without, says its ID and keeps it for a `setup` message:
-// a disabled plugin's setup never runs (review carbon-8).
+// Describe imports without running setup, including for disabled plugins.
 async function load(seq: number, target: string, dir: string, options: Json, withSetup: boolean, seed?: Json) {
   const resolved = resolveEntry(dir)
   if ("missing" in resolved) return send({ type: "unsupported", seq, reason: resolved.missing })
@@ -1050,13 +936,12 @@ async function load(seq: number, target: string, dir: string, options: Json, wit
   send({ type: "described", seq, id: definition.id })
 }
 
-// The reads the client sent with a setup (P8): the route and `info` as they are now, which setup may read at once.
+// Seed reads needed during setup before watches can deliver a snapshot.
 function seeded(plugin: Plugin, seed?: Json) {
   for (const [key, value] of Object.entries(seed ?? {})) plugin.snapshots.set(key, value)
   return plugin
 }
 
-// The client forgot `target`: its plugin goes, and its ID is free for another target.
 function forget(target: string) {
   for (const [seq, plugin] of described) if (plugin.target === target) described.delete(seq)
   for (const [id, plugin] of plugins) {
@@ -1066,8 +951,7 @@ function forget(target: string) {
   }
 }
 
-// Keeps `cleanup` for the plugin's deactivation, or runs it now when its activation already ended, as an async setup
-// that settles after it does (carbon-5).
+// Run cleanup immediately if its activation already ended.
 function cleanUp(plugin: Plugin, cleanup: () => unknown) {
   if (!plugin.deactivated) return void plugin.cleanups.push(cleanup)
   try {
@@ -1080,8 +964,7 @@ function deactivate(plugin: Plugin) {
   generations.delete(plugin.activation)
   plugin.active = false
   plugin.deactivated = true
-  // What it still waits on the host for settles once, as refused: no answer or reply reaches an activation that
-  // ended, whose generation is gone (big-boi's catalog review).
+  // Reject pending work when its activation ends.
   for (const resolvers of plugin.answers.values()) for (const resolve of resolvers) resolve(undefined)
   plugin.answers.clear()
   for (const reply of plugin.replies.values()) reply.resolve({ Err: "the plugin's activation ended" })
@@ -1106,8 +989,7 @@ function deactivate(plugin: Plugin) {
 
 // Runs one handler as a call: its effects are its own, and a throw has none and fails the plugin.
 function call(seq: number, plugin: Plugin, request: Json) {
-  // A key that ran a command, or that a listener of every key was given: the host holds it until the answer, which
-  // says whether it goes on.
+  // Hand the key back when a command or listener fails.
   const keyed = request.type === "command" || (request.type === "input" && request.event?.type === "key" && !request.event.bind)
   if (!plugin.active || plugin.failed) return send({ type: "done", seq, ...(keyed ? { declined: true } : {}) })
   plugin.callEffects = []
@@ -1118,7 +1000,6 @@ function call(seq: number, plugin: Plugin, request: Json) {
   let result: unknown
   try {
     if (request.type === "command") {
-      // A command that is gone answers `false`, as one that declines: its key goes on to the host (CT-19).
       const command = plugin.commands.find((command) => command.name === request.name)
       result = command ? command.run(request.input ?? undefined) : false
     } else if (request.type === "event") {
@@ -1151,7 +1032,6 @@ function call(seq: number, plugin: Plugin, request: Json) {
   if (error) {
     plugin.failed = true
     plugin.active = false
-    // A key it was asked about goes on, as for an end of the JS host (cg2-6).
     return send({ type: "done", seq, error, ...(keyed ? { declined: true } : {}) })
   }
   if (effects.length) plugin.answers.set(`c${seq}`, resolvers)
@@ -1196,19 +1076,15 @@ async function handle(message: Json) {
     case "theme":
       themeMode = message.mode
       if (message.palette) palette = message.palette
-      // What reads the theme's mode follows it (carbon ce-2).
       for (const known of plugins.values())
         if (known.active) within(known, () => known.listeners.forEach((listener) => listener("theme")))
       return
     case "deactivate":
       if (plugin) within(plugin, () => deactivate(plugin))
       return
-    // A call for an activation that is gone answers with nothing: the host routed it before it ended.
     case "call":
       if (!plugin) return send({ type: "done", seq: message.seq })
-      // The route as the call starts, which the host sends while the plugin does not watch it (P8).
       if (message.route !== undefined) plugin.snapshots.set("route", message.route)
-      // A reply too large for one frame: its result is the JSON of the parts that came before it (CT-5).
       if (message.parted) {
         const parts = plugin.parts.get(message.call.id)
         plugin.parts.delete(message.call.id)
@@ -1257,8 +1133,7 @@ async function handle(message: Json) {
       }
       return send({ type: "done", seq: message.seq })
     }
-    // A part a claim draws: its first sight begins its mount; a newer revision is drawn now, or once the one in flight
-    // was adopted (contract 2.x, step D).
+    // Coalesce claim revisions while a tree is in flight.
     case "claim": {
       if (!plugin || !plugin.active) return send({ type: "done", seq: message.seq })
       const key = mountKey(message.mount)
@@ -1272,8 +1147,7 @@ async function handle(message: Json) {
       if (plugin?.claimMounts.delete(mountKey(message.mount))) return
       const mount = plugin?.mounts.get(mountKey(message.mount))
       plugin?.mounts.delete(mountKey(message.mount))
-      // A reload's end of a mount it begins again (`handover`), which the layer may take the state of (CT-21), and its
-      // node that had the focus then.
+      // Pass focus and mount state to the replacement during registration handover.
       if (plugin && mount)
         within(plugin, () => plugin.surfaces[mount.surface]?.unmount?.(mount.id, !!message.handover, message.focused))
       return
@@ -1328,8 +1202,7 @@ async function handle(message: Json) {
     }
     case "snapshot":
       if (!plugin || plugin.retired.has(message.key)) return
-      // A read too large for one frame: its value is the JSON of the parts that came before it (CT-36). Parts the
-      // host refused on the way make no value, which reads as a failed read.
+      // Join only snapshot fragments that belong to a live watch.
       if (message.parted) {
         const parts = plugin.snapshotParts.get(message.key)
         try {
@@ -1355,8 +1228,6 @@ async function handle(message: Json) {
       const reply = plugin.replies.get(message.request)
       plugin.replies.delete(message.request)
       plugin.parts.delete(message.request)
-      // The fetch waits for it by now: the `answered` that gave it its ID ran first, and `drain` awaits each message,
-      // so the fetch's `then` ran before this one.
       if (reply) within(plugin, () => reply.reject(cancelled()))
       return
     }
@@ -1372,8 +1243,6 @@ async function handle(message: Json) {
       plugin?.answers.delete(message.key)
       const parts = plugin?.answerParts.get(message.key)
       plugin?.answerParts.delete(message.key)
-      // Answers too large for one frame are the JSON of the parts before it. One the host could not send (`dropped`),
-      // or parts that are not whole, answer nothing, which is not null, a key that holds nothing (big-boi's `cg4-1`).
       let results: Json[] = message.results
       let dropped = new Set<number>(message.dropped ?? [])
       if (message.parted) {
@@ -1463,5 +1332,4 @@ try {
 } catch {
   // A read that fails is the end of input too: on Windows the client's end of the named pipe ends it so (EPIPE).
 }
-// The input ended: the client is done with it, or gone.
 killAll(process.pid)

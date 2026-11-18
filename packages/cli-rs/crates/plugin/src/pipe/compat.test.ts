@@ -1,5 +1,3 @@
-// The V2 compatibility layer as the JS host ships it (`compat.js`), given a carrier that answers as the host does: the
-// rows of big-boi's P8 review that a probe of the bundle showed (reads, storage, layers, dialogs, clicks).
 import { expect, test } from "bun:test"
 import { context, modules } from "./compat.js"
 
@@ -45,7 +43,7 @@ function host(answer: (key: string) => Json = () => [], limit = 128) {
       fake.layers.push({ layer, handler })
       return fake.layers.length - 1
     },
-    // cg2-1: what the listeners of every key said they can take, last first, as `host.ts` sends each change.
+    // what the listeners of every key said they can take, last first, as `host.ts` sends each change.
     taken: [] as Json[],
     takes(listener: Json) {
       return fake.taken.findLast((at: Json) => JSON.stringify(at.listener) === JSON.stringify(listener))?.on ?? false
@@ -72,7 +70,6 @@ function host(answer: (key: string) => Json = () => [], limit = 128) {
     taking(listener: Json, on: boolean) {
       fake.taken.push({ listener, on })
     },
-    // Contract 2.x, step D: the renderer claims, as `host.ts` keeps them, each ended by its disposer.
     claims: [] as Json[],
     claim(target: Json, view: (part: Json) => Json) {
       const claim = { target, view, ended: false }
@@ -163,8 +160,6 @@ const surfaceKeys = (fake: Json): string[] => surfaces(fake).map((dialog: Json) 
 const text = (tree: Json): string =>
   tree === undefined ? "<none>" : [...(tree.spans ?? []).map((span: Json) => span.text), ...(tree.children ?? []).map(text)].join("")
 
-// Bigboi P8-2: syncing 140 sessions' messages, one after another, keeps within the host's 128 reads (a read no mount
-// holds goes when it is not used), each sync answers with its session's messages, and a new view draws.
 test("reads past the host's bound are released, not lost", async () => {
   const fake = host((key) => (key.startsWith("messages:") ? [{ id: key }] : []))
   const ctx = plugin("t.reads", fake)
@@ -183,8 +178,6 @@ test("reads past the host's bound are released, not lost", async () => {
   expect(text(mount.draw())).toBe("n 1")
 })
 
-// Bigboi P8-2: a read the host cannot answer (over its bound, or too large) is an error, not empty data: its sync
-// rejects, the plugin is told once, and a healthy sibling read still answers.
 test("a read the host could not answer rejects its sync", async () => {
   const fake = host((key) => (key === "messages:big" ? "error:the read is 300000 bytes, over 262144" : []))
   const ctx = plugin("t.errors", fake)
@@ -194,8 +187,6 @@ test("a read the host could not answer rejects its sync", async () => {
   expect(fake.warnings()).toEqual(["t.errors: a read failed: the read is 300000 bytes, over 262144"])
 })
 
-// Bigboi P8-2: a first render waits for its own reads alone: a read another operation made, which never answers, does
-// not hold a view back.
 test("a view waits for its own reads only", async () => {
   const fake = host((key) => (key === "messages:never" ? undefined : [1, 2]))
   const ctx = plugin("t.deps", fake)
@@ -210,8 +201,6 @@ test("a view waits for its own reads only", async () => {
   expect(text(mount.draw())).toBe("n 2")
 })
 
-// Bigboi P8-3: two updates before the first is written each apply to what the other wrote, as TS's under its lock; a
-// field another client wrote stays.
 test("storage updates apply in turn to the latest value", async () => {
   const fake = host()
   fake.stored.set("view", JSON.stringify({ open: true }))
@@ -229,9 +218,6 @@ test("storage updates apply in turn to the latest value", async () => {
   expect(view.open).toBe(false)
 })
 
-// Bigboi P8-4, contract ergonomics 2.5: a disabled layer's commands are registered disabled, so the host binds no key
-// of theirs, and decline if run; they are enabled as the layer is. A layer is the base mode's unless it says `global`;
-// a component's layer runs nothing once the component ended.
 test("a layer keeps its conditions and ends with its component", async () => {
   const fake = host()
   const ctx = plugin("t.layer", fake)
@@ -256,9 +242,6 @@ test("a layer keeps its conditions and ends with its component", async () => {
   expect(ran).toEqual(["gated", "mounted"])
 })
 
-// Contract ergonomics 2.5 (CT-8): a command's own `enabled`, a function of what the plugin reads, is followed: the
-// host is told each change (here, the route the plugin reads), so it binds the command's key only while it holds, and
-// a run while it does not declines. The layer's reads stay watched while it lives, as a mount's do.
 test("a command's enabled is followed as what it reads changes", () => {
   const fake = host()
   const ctx = plugin("t.enabled", fake)
@@ -276,10 +259,6 @@ test("a command's enabled is followed as what it reads changes", () => {
   expect(fake.watches.has("route")).toBe(true)
 })
 
-// Carbon ce-1: two layers that hold the same command (session-manager's `pageup` while listing and while searching,
-// each layer enabled by the other's opposite): the host holds it enabled while either is, and its run is the enabled
-// layer's, whichever is newer. A layer that drops it (file-browser's `commands: []`) or ends disables it at once,
-// where it stayed enabled until `uncommand`'s 250 ms; another live layer that holds it keeps it.
 test("a command two layers hold is enabled while either is, and goes with the last", () => {
   const fake = host()
   const ctx = plugin("t.shared", fake)
@@ -312,9 +291,6 @@ test("a command two layers hold is enabled while either is, and goes with the la
   expect(fake.meta.get("t.drop").enabled).toBe(false)
 })
 
-// Carbon ce-2: a command's `enabled` that reads a field's focus (file-browser's `!inputFocused()`), the open panel
-// (@cleocode/goal) or the theme's mode follows it: each is a signal the layer follows, so a command disabled while
-// the field had the focus is enabled once it lost it, where it stayed disabled for good.
 test("a command's enabled follows a field's focus, the open panel and the theme", () => {
   const fake = host()
   const app = { version: "", channel: "" }
@@ -352,9 +328,6 @@ test("a command's enabled follows a field's focus, the open panel and the theme"
   expect(state("t.light")).toBe(true)
 })
 
-// Carbon ce-2: an `enabled` that reads only what the layer cannot follow (a plain variable) leaves its command enabled
-// on the host, which sends its key, and the run asks it, as TS asks it as the key comes: it can never latch off. One
-// that reads a signal and a plain variable is asked again as each call into the plugin ends.
 test("an enabled the layer cannot follow is asked as the key comes, and after each call", () => {
   const fake = host()
   const ctx = plugin("t.plain", fake)
@@ -378,9 +351,6 @@ test("an enabled the layer cannot follow is asked as the key comes, and after ea
   expect(ran).toEqual(["plain", "mixed"])
 })
 
-// Carbon ce-2: what a command's `enabled` or its layer reads stays watched while it reads it, and no longer: one that
-// named 140 sessions one after another leaves the host's 128 watches free for the rest, where each stayed watched for
-// good.
 test("a command's enabled holds only the reads it makes now", async () => {
   const fake = host((key) => (key.startsWith("messages:") ? [] : undefined))
   const ctx = plugin("t.many", fake)
@@ -398,9 +368,6 @@ test("a command's enabled holds only the reads it makes now", async () => {
   expect(fake.watches.size).toBeLessThanOrEqual(128)
 })
 
-// CT-1: a component that mounts again registers its layer's commands without an `id` under the names it gave them
-// before: a new name each mount was a new manifest, which reloaded tokscope and mounted its page again, without end.
-// Two of the same keys and title in one layer stay two, and the newest mount's handler runs.
 test("a layer's commands without an id keep their names when it mounts again", () => {
   const fake = host()
   const ctx = plugin("t.inline", fake)
@@ -429,9 +396,6 @@ test("a layer's commands without an id keep their names when it mounts again", (
   expect(ran).toEqual(["back 2", "j 2", "j again 2"])
 })
 
-// CT-4: a plugin's TUI part calls its own server plugin's RPC as TS's client does: `@opencode/plugin/rpc` defines it,
-// `client.rpc(definition)` calls `/api/rpc/<id>/<method>` with the input and answers the output, `client.rpc.call` is
-// the raw call, and an event of it is the host's event `rpc.<id>.<name>`, heard until it is let go.
 test("client.rpc calls a plugin's own server RPC and hears its events", async () => {
   const fake = host()
   const fetched: Json[] = []
@@ -475,8 +439,6 @@ test("client.rpc calls a plugin's own server RPC and hears its events", async ()
   expect(() => echo.events.on("unknown", () => {})).toThrow("Unknown RPC event: echo.unknown")
 })
 
-// CT-27: a text node's `content` may be OpenTUI's `StyledText`, built with `t`, `bold` and `fg`, as
-// @encoredigitalgroup/opencode's panels set it: a span of each chunk, where it drew "[object Object]".
 test("a StyledText content draws its chunks", () => {
   const fake = host()
   const ctx = plugin("t.styled", fake)
@@ -498,8 +460,6 @@ test("a StyledText content draws its chunks", () => {
   expect(core.isStyledText(core.stringToStyledText("s"))).toBe(true)
 })
 
-// CT-25: as OpenTUI's renderables, a node with a fixed width or height does not shrink unless its `flexShrink` says
-// so (@wpro-eng/opencode-config's 14-cell agent names shrank to their text).
 test("a node with a fixed size does not shrink by default", () => {
   const fake = host()
   const ctx = plugin("t.shrink", fake)
@@ -521,8 +481,6 @@ test("a node with a fixed size does not shrink by default", () => {
   expect(row.children.map((node: Json) => node.layout?.shrink)).toEqual([false, true, undefined])
 })
 
-// CT-10: `<Portal>` draws its children in a box that fills the mount's room, over the rest, which `ref` gets; it threw,
-// and opencode-landstrip's pane and opencode-sesh's menu showed nothing.
 test("a Portal draws its children over the mount's room", () => {
   const fake = host()
   const ctx = plugin("t.portal", fake)
@@ -546,18 +504,12 @@ test("a Portal draws its children over the mount's room", () => {
   expect(fake.toasts()).toEqual([])
 })
 
-// CT-23: `@opencode/plugin/effect` is served, its `Rpc` the same as `@opencode/plugin/rpc`'s (opencode-superagent's TUI
-// defines its RPC by it and failed to load); its server schemas link, undefined.
 test("@opencode/plugin/effect serves Rpc", () => {
   const effect = modules["@opencode/plugin/effect"] as Json
   expect(effect.Rpc).toBe((modules["@opencode/plugin/rpc"] as Json).Rpc)
   expect("Agent" in effect && effect.Agent === undefined).toBe(true)
 })
 
-// CT-2: an element is an event emitter, as an OpenTUI renderable is, so file-browser's `element.on("focus", …)` does
-// not crash its route; `focus()` of a field asks the host to focus it by its id and emits `focused`, another node's
-// focus blurs it (`blurred`), and `blur()` asks the host to blur. A box's focus is the layer's alone. A scroll box's
-// moves are the contract's verbs.
 test("an element's focus is the host's and it emits as OpenTUI's renderables", async () => {
   const fake = host()
   const ctx = plugin("t.focus", fake)
@@ -607,8 +559,6 @@ test("an element's focus is the host's and it emits as OpenTUI's renderables", a
   expect(fake.watches.has(`scroll:${surface}:list`)).toBe(true)
 })
 
-// Carbon c2d-3: a renderable added inside itself, or inside a node under it, throws, as a tree without end would make
-// every view of it run for good; the tree stays as it was.
 test("a renderable added inside itself throws", () => {
   const { BoxRenderable } = modules["@opentui/core"] as Json
   const outer = new BoxRenderable(undefined, {})
@@ -619,8 +569,6 @@ test("a renderable added inside itself throws", () => {
   expect([outer.parent, inner.parent === outer, outer.getChildren().length]).toEqual([undefined, true, 1])
 })
 
-// Carbon c2b-3: an alert, a confirm or a select is built a microtask after it is asked (so a `dialog.set` right after
-// sizes it); one that a `dialog.clear()` or a `dialog.show()` settled before then answers nothing and never shows.
 test("a dialog cleared or replaced before it is built never shows", async () => {
   const fake = host()
   const ctx = plugin("t.stale", fake)
@@ -638,8 +586,6 @@ test("a dialog cleared or replaced before it is built never shows", async () => 
   expect(answers).toEqual([undefined, undefined])
 })
 
-// Carbon c2b-2: a focused field the plugin removes has the focus no more: it emits `blurred`, and the layer records no
-// focus in it, so a key layer that targets it no longer holds. A field moved to another place keeps its focus.
 test("a focused field the plugin removes has the focus no more", async () => {
   const fake = host()
   const ctx = plugin("t.removed", fake)
@@ -676,9 +622,6 @@ test("a focused field the plugin removes has the focus no more", async () => {
   expect([removed.focused, ran.length, heard]).toEqual([false, 2, ["blurred"]])
 })
 
-// CT-11: the renderer's key handler hears each key through one global listener layer, registered with the first
-// `keypress` listener (opencode-navigator's `ctrl+,`), and `useKeyboard` listens on it while its component lives. A
-// route's field hears its edits, its submit and, while the plugin focused it, each key as `onKeyDown`.
 test("keys reach keyInput, useKeyboard and a focused field", () => {
   const fake = host()
   const ctx = plugin("t.keys", fake)
@@ -743,7 +686,7 @@ test("keys reach keyInput, useKeyboard and a focused field", () => {
   field.ref.blur()
   route.options.on({ type: "change", node, text: "ab", seq: 7 })
   expect([field.ref.value, field.ref.focused]).toEqual(["ab", true])
-  // The field's next tree names the edit it heard, so the host tells its echo from a value of the plugin's (cf-2).
+  // The field's next tree names the edit it heard, so the host tells its echo from a value of the plugin's.
   const viewed = route.view({ mount: { surface: "files", key: "a", generation: 1 }, input: { width: 40, height: 10 } })
   expect(JSON.stringify(viewed)).toContain('"seen":7')
   route.options.on({ type: "submit", node, text: "ab" })
@@ -755,10 +698,6 @@ test("keys reach keyInput, useKeyboard and a focused field", () => {
   expect(fake.toasts()).toEqual([])
 })
 
-// cg2-1: a listener of every key holds a key for the answer only while a handler can take it: one whose source calls
-// `preventDefault` says so up front, and one that took a key through a helper says so from then on. A handler that
-// only hears keys (most `useKeyboard`s, a field with only `onInput` or an `onKeyDown` that never takes one) costs the
-// user's typing no round trip.
 test("a listener takes keys only while a handler can take one", () => {
   const fake = host()
   const ctx = plugin("t.taking", fake)
@@ -803,8 +742,6 @@ test("a listener takes keys only while a handler can take one", () => {
   expect(fake.takes(surface)).toBe(false)
 })
 
-// Ports trio (opencode-session-manager): TS renders a route into a column that fills the page, so the root of a
-// route's tree grows, and a `flexGrow` box in it fills the page; a slot's root does not.
 test("a route's tree fills the page", () => {
   const fake = host()
   const ctx = plugin("t.fill", fake)
@@ -816,8 +753,6 @@ test("a route's tree fills the page", () => {
   expect(view(fake, fake.surfaces.indexOf(fake.surfaces.find((surface: Json) => surface.place.type !== "route")), "a").draw().layout).toBeUndefined()
 })
 
-// Contract 2.x, `focus-input`: a field's `focused` focuses it as it is created and as it turns true, and blurs it as it
-// turns false; the contract's focus and blur of its node, once each change.
 test("a field's focused prop focuses and blurs it", async () => {
   const fake = host()
   const ctx = plugin("t.focused", fake)
@@ -909,9 +844,6 @@ test("a field removed from its mount, or never added, has no focus and says so o
     })
 })
 
-// Contract 2.x, addition 4: a `dialog.set` right after a select, an alert or a confirm sizes and centers it, as TS's
-// sizes the dialog shown; a dialog without one is medium and placed as the host places it; one after the dialog showed
-// is not carried, which the client's log says once.
 test("dialog.set sizes and centers a select, an alert and a confirm", async () => {
   const fake = host()
   const ctx = plugin("t.presented", fake)
@@ -935,8 +867,6 @@ test("dialog.set sizes and centers a select, an alert and a confirm", async () =
   expect(fake.warnings()).toEqual(["t.presented: dialog.set after its dialog showed is not supported by opencode-native yet"])
 })
 
-// CT-18: a box's border as OpenTUI's: `true` or an array of sides draws, anything else (`{ type: "single" }`, the
-// OMO-Slim family's) draws none, and a border style or color set while the border is `false` makes it `true`.
 test("a border draws as OpenTUI's box draws it", () => {
   const fake = host()
   const ctx = plugin("t.border", fake)
@@ -951,7 +881,6 @@ test("a border draws as OpenTUI's box draws it", () => {
     { border: false },
     { border: false, borderColor: "#ff0000" },
     { borderColor: "#ff0000", border: false },
-    // CT-26: the bottom title beside the top one (opencode-voice's CPU and memory line).
     { border: true, title: "top", titleAlignment: "center", bottomTitle: "bottom", bottomTitleAlignment: "right" },
   ]
   const refs: Json = {}
@@ -961,7 +890,6 @@ test("a border draws as OpenTUI's box draws it", () => {
   })
   const mount = view(fake, 0, "a")
   mount.draw()
-  // Bigboi cg2-9: a ref's alignments are props as its titles are.
   Object.assign(refs.box, { title: "T", titleAlignment: "center", bottomTitle: "B", bottomTitleAlignment: "right" })
   const tree = mount.draw()
   expect(tree.children.pop().border).toEqual({ title: "T", title_align: "center", bottom_title: "B", bottom_title_align: "right" })
@@ -980,8 +908,6 @@ test("a border draws as OpenTUI's box draws it", () => {
   ])
 })
 
-// `data.listen` hears every event the client names, as `{ details }`, through one subscription made with its first
-// listener (tokscope marks a session dirty on each); it said it was not supported and heard nothing.
 test("data.listen hears every event", () => {
   const fake = host()
   const ctx = plugin("t.listen", fake)
@@ -997,9 +923,6 @@ test("data.listen hears every event", () => {
   expect(fake.toasts()).toEqual([])
 })
 
-// CT-14: the TS TUI's `<spinner>` is the contract's spinner, its own frames and color reported (opencode-auto-mode
-// crashed with "Unknown component type: spinner"). CT-16: an inert call of a method OpenTUI declares async answers a
-// resolved promise, so `getTreeSitterClient().initialize().then(…)` (shell-highlighting's setup) runs on.
 test("a spinner draws and an inert async method resolves", async () => {
   const fake = host()
   const ctx = plugin("t.spinner", fake)
@@ -1016,9 +939,6 @@ test("a spinner draws and an inert async method resolves", async () => {
   expect(added).toBe(true)
 })
 
-// CT-15: a renderable the plugin built itself, added to a node by its ref, adds nothing and says so, where the render
-// crashed on `e.children.indexOf` (opencode-quick-quote). CT-17: the renderer has a root that takes nothing and the
-// focus members a plugin probes for (opencode-dollar-skills refused to start without them), each reported as read.
 test("a built renderable added by a ref draws, and the renderer has a root", () => {
   const fake = host()
   const ctx = plugin("t.built", fake)
@@ -1027,7 +947,6 @@ test("a built renderable added by a ref draws, and the renderer has a root", () 
   ctx.ui.slot({ append: "home.footer", render: () => h("box", { ref: (el: Json) => (refs.box = el) }) })
   const mount = view(fake, 0, "a")
   mount.draw()
-  // Contract 2.x, step D: a renderable built with `new` is the node its JSX makes (CT-15 lifted).
   refs.box.add(new core.BoxRenderable({}, { backgroundColor: "#ff0000" }))
   expect(mount.draw().children[0].children).toEqual([{ type: "box", bg: "#ff0000", children: [] }])
   const renderer = ctx.renderer
@@ -1040,9 +959,6 @@ test("a built renderable added by a ref draws, and the renderer has a root", () 
   ])
 })
 
-// CT-8, CT-19: a command answers `false`, so the host routes its key on, when it declines (returns `false`), when its
-// `enabled` says no (linear binds `r` while its dialog shows), and when its layer ended; one that runs answers what
-// it returned.
 test("a disabled, declining or ended command answers false", () => {
   const fake = host()
   const ctx = plugin("t.decline", fake)
@@ -1065,8 +981,6 @@ test("a disabled, declining or ended command answers false", () => {
   expect(run("t.refresh")).toBe(false)
 })
 
-// CT-31: a layer of a mode of the plugin's own (`modal`, one it pushes) is active only while that is the input mode:
-// elsewhere its commands decline, so opencode-usage-report's `r` goes on to the composer.
 test("a layer of the plugin's own mode declines in another", () => {
   const fake = host()
   const ctx = plugin("t.mode", fake)
@@ -1077,9 +991,6 @@ test("a layer of the plugin's own mode declines in another", () => {
   expect(run()).toBe("refreshed")
 })
 
-// Ports trio (oc-context-grid): a mode a component pushes is its mount's on the host, so the plugin's own read of the
-// input mode says `base`; the layer of that mode still runs its command while the plugin's push holds, and declines
-// once it is popped.
 test("a layer of a mode the plugin pushed runs while the push holds", () => {
   const fake = host(() => "base")
   const ctx = plugin("t.pushed", fake)
@@ -1093,8 +1004,6 @@ test("a layer of a mode the plugin pushed runs while the push holds", () => {
   expect(ran).toEqual(["close"])
 })
 
-// CT-20: a layer's `target` holds its commands to the plugin's focus in that node: elsewhere they decline, so a key
-// such as @slkiser/opencode-quota's window Escape goes on to the dialog on screen (Goal's select stayed open).
 test("a layer with a target declines while its node lacks the focus", () => {
   const fake = host()
   const ctx = plugin("t.target", fake)
@@ -1120,9 +1029,6 @@ test("a layer with a target declines while its node lacks the focus", () => {
   expect(close()).toBe(false)
 })
 
-// CT-21: a reload of the registrations ends a mount (`handover`) and begins it again: the new mount of the same surface
-// and key adopts the one that ended, so its component does not run again (navigator registered new names on each run
-// and reloaded without end). One that begins after the moment renders anew, and so does one another end ended.
 test("a mount a reload begins again adopts the one it ended", async () => {
   const fake = host()
   const ctx = plugin("t.remount", fake)
@@ -1174,7 +1080,6 @@ test("a built renderable returned draws, and a node's layout is the host's", () 
   const fake = host()
   const ctx = plugin("t.layout", fake)
   const core = modules["@opentui/core"] as Json
-  // Contract 2.x, step D: what a render returns built with `new` draws as its JSX (CT-15: opencode-quick-quote).
   ctx.ui.slot({
     append: "home.footer",
     render: () => {
@@ -1216,9 +1121,6 @@ test("a built renderable returned draws, and a node's layout is the host's", () 
   expect(refs.box.height).toBe(4)
 })
 
-// The F16 data collections: the location's agents and a session's permissions, which the contract has no read of, load
-// through `client` as the plugin first lists them, answer `undefined` until then, and load again on an event that
-// changes them; they answered an empty list and a toast.
 test("data collections load through the client", async () => {
   const fake = host()
   const fetched: string[] = []
@@ -1252,9 +1154,6 @@ test("data collections load through the client", async () => {
   expect(fake.toasts()).toEqual([])
 })
 
-// big-boi's `cg4-1`: a store's update whose stored value did not come (an answer too large for the JS host) rejects
-// and writes nothing, where it read as an empty key and overwrote what was stored; and one whose write the host refused
-// rejects, the store showing what is stored.
 test("a store's update writes nothing it did not read, and shows nothing the host refused", async () => {
   const fake = host()
   fake.stored.set("notes", JSON.stringify({ items: ["kept"] }))
@@ -1319,8 +1218,6 @@ function evented(id: string, fake: Json) {
   return { ctx: context(base, fake) as Json, handlers }
 }
 
-// big-boi's `cg4-9`: what `session.sync(id)` loaded is what `get(id)` and `status(id)` answer, and a session the host
-// seeded (the route's, at setup) answers before the sessions read came; both read only the list of every session.
 test("a session synced or seeded is what get answers", async () => {
   const nine = { info: { id: "ses_9", title: "Nine" }, status: "running" }
   const fake = host((key) => (key === "session:ses_9" ? nine : key === "sessions" ? undefined : []))
@@ -1331,9 +1228,6 @@ test("a session synced or seeded is what get answers", async () => {
   expect([ctx.data.session.get("ses_9"), ctx.data.session.status("ses_9")]).toEqual([{ id: "ses_9", title: "Nine" }, "running"])
 })
 
-// big-boi's `cg4-10`: a key waits for its load once, however often it is asked for meanwhile, and loads that hang in
-// one collection hold no other's: four held permission loads and four events for a waiting session made five fetches
-// of it, and held the agents' list behind them.
 test("a key waits once, and one collection's loads hold no other's", async () => {
   const fake = host()
   const fetched: string[] = []
@@ -1358,8 +1252,6 @@ test("a key waits once, and one collection's loads hold no other's", async () =>
   expect(fetched.filter((line) => line === "GET /api/session/e/permission")).toEqual(["GET /api/session/e/permission"])
 })
 
-// big-boi's `cg4-11`: an answer older than one asked for after an event never shows: the forms loaded before a
-// `form.cancelled` came after the load the event asked for, and the cancelled form showed again.
 test("an older load never undoes a newer one", async () => {
   const fake = host()
   let server: Json[] = [{ id: "frm_1", sessionID: "s" }]
@@ -1382,8 +1274,6 @@ test("an older load never undoes a newer one", async () => {
   expect(ctx.data.session.form.list("s")).toEqual([])
 })
 
-// big-boi's `cg4-12`: a location's forms are indexed as its list is now: a session that read an older list pinned it,
-// so another session's form it held stayed reachable after that session refreshed to none.
 test("a refreshed form list leaves no older list reachable", async () => {
   const fake = host()
   let server: Json[] = [
@@ -1426,8 +1316,6 @@ function panelOf(ctx: Json, fake: Json, children: () => Json) {
   return { input: () => input, name, mount, draw, unmount }
 }
 
-// big-boi's `cg4-13`: a panel's input kept past its mount moves nothing: its `close` closed the panel that replaced it,
-// and its `toggleFullscreen` opened it again.
 test("a panel's input past its mount moves nothing", async () => {
   const fake = host()
   const panel = panelOf(plugin("t.stale", fake), fake, () => [h("text", { children: "Notes" })])
@@ -1440,8 +1328,6 @@ test("a panel's input past its mount moves nothing", async () => {
   expect(fake.effects.filter((effect: Json) => effect.type.endsWith("-panel"))).toEqual([])
 })
 
-// big-boi's `cg4-14`: a panel adopted after a reload of the plugin's registrations, its input unchanged, focuses its
-// field as the new mount: its `focus` looked for the mount that ended, and found no field.
 test("a panel adopted after a reload focuses its field", async () => {
   const fake = host()
   const panel = panelOf(plugin("t.adopted", fake), fake, () => [h("input", { id: "field" })])
@@ -1453,7 +1339,6 @@ test("a panel adopted after a reload focuses its field", async () => {
   expect(fake.effects.filter((effect: Json) => effect.type === "focus")).toEqual([{ type: "focus", node: "field", mount: panel.mount(2) }])
 })
 
-// big-boi's `cg4-15`: `focus` gives the focus to the first field that shows, not one in a hidden box before it.
 test("a panel focuses the field that shows", async () => {
   const fake = host()
   const panel = panelOf(plugin("t.hidden", fake), fake, () => [
@@ -1466,8 +1351,6 @@ test("a panel focuses the field that shows", async () => {
   expect(fake.effects.filter((effect: Json) => effect.type === "focus").map((effect: Json) => effect.node)).toEqual(["shown"])
 })
 
-// big-boi's `cg4-16`: `toggleFullscreen` toggles: twice before the next draw goes full screen and back, where each
-// asked for full screen.
 test("a panel's toggleFullscreen toggles", async () => {
   const fake = host()
   const panel = panelOf(plugin("t.toggle", fake), fake, () => [h("text", { children: "Notes" })])
@@ -1478,10 +1361,6 @@ test("a panel's toggleFullscreen toggles", async () => {
   expect(fake.effects.filter((effect: Json) => effect.type === "open-panel").map((effect: Json) => !!effect.fullscreen)).toEqual([true, false])
 })
 
-// CT-36: a plugin that lists the status, permissions and forms of each of 900 sessions (sesh, agents-view,
-// op1/threads). The statuses come from the one read of every session the host has loaded, with no read of each session,
-// which churned 1,800 watches past the host's bound; the permissions load at most 4 at once, where 900 fetches went in
-// one pass, and an event reloads only its session's; the forms load once for the location, not once a session.
 test("listing hundreds of sessions stays within the host's bounds", async () => {
   const ids = Array.from({ length: 900 }, (_, index) => `ses_${index}`)
   const fake = host((key) => (key === "sessions" ? [{ info: { id: "ses_1" }, status: "running" }] : []))
@@ -1529,9 +1408,6 @@ test("listing hundreds of sessions stays within the host's bounds", async () => 
   ])
 })
 
-// Contract 2.x, addition 1, the room rule: before the host laid a node out, a top node of the mount answers its own
-// width, `"100%"` of the room the mount's input gave or a number; a nested one answers nothing. Once laid out, a node's
-// own numeric width or height is what it answers, as the host lays it out so, where the host's rect is a frame late.
 test("a top node answers the room before the host laid it out", () => {
   const fake = host()
   const ctx = plugin("t.room", fake)
@@ -1553,9 +1429,6 @@ test("a top node answers the room before the host laid it out", () => {
   expect([refs.fixed.width, refs.fixed.height]).toEqual([13, 1])
 })
 
-// CT-8, CT-22: a raised surface's theme is the host's: a color the dialog or its footer gives differently from the page
-// is that color, without a token, and the rest keep their page token; another name is the page's. No toast says so,
-// where one covered five plugins' pages.
 test("theme.surface answers the raised surface's colors", () => {
   const fake = host()
   fake.palette = () => ({
@@ -1577,9 +1450,6 @@ test("theme.surface answers the raised surface's colors", () => {
   expect(fake.toasts()).toEqual([])
 })
 
-// CT-9: TS's raw hue scales, the categorical list, the stateful colors' `state` and the step functions, from the host's
-// palette. A step carries the contract's token (`accent.500`), so the host restyles it; opencode-sesh read
-// `theme.hue.accent` and crashed.
 test("theme carries the hue scales, categorical list and states", () => {
   const fake = host()
   const steps = (name: string, shade: (step: number) => number) =>
@@ -1617,9 +1487,6 @@ test("theme carries the hue scales, categorical list and states", () => {
   expect(fake.toasts()).toEqual([])
 })
 
-// Big-boi's catalog review (CT-1): commands without an `id` in two live layers, a global and a base one, with the same
-// keys and title but other slash names and callbacks, stay two commands, each listed with its slash name and running its
-// own callback; it was one command, the second callback's. Each keeps its name as its layer mounts again.
 test("anonymous commands of two layers stay apart and keep their names", () => {
   const fake = host()
   const ctx = plugin("t.layers", fake)
@@ -1650,8 +1517,6 @@ test("anonymous commands of two layers stay apart and keep their names", () => {
   expect(inline()).toEqual(first)
 })
 
-// Bigboi P8-7: a dialog the host closes without an answer settles at once with nothing, also with no dialog after it;
-// `clear()` closes an asked dialog on the host too; a new `show` starts from the default size and place.
 test("each dialog settles once, and clear closes it", async () => {
   const fake = host()
   const ctx = plugin("t.dialogs", fake)
@@ -1667,7 +1532,7 @@ test("each dialog settles once, and clear closes it", async () => {
   expect(await prompted).toBeUndefined()
   await turn()
   expect(fake.effects.at(-1).dialog).toEqual({ type: "close", key: "" })
-  // Contract ergonomics 2.6: a prompt's `value` is the host's field's starting text.
+  // A prompt's `value` is the host's field's starting text.
   const prompt = fake.effects.find((effect: Json) => effect.dialog?.dialog?.type === "prompt").dialog.dialog
   expect([prompt.title, prompt.value]).toEqual(["Name", "x"])
   expect(fake.warnings()).toEqual([])
@@ -1686,9 +1551,6 @@ test("each dialog settles once, and clear closes it", async () => {
   ])
 })
 
-// A select's footer actions are the contract's (session-time's "Close ctrl+a"): each with its key, side and selection,
-// a row's action told the row's value, a rowless one nothing, and the select stays open; a select past the commands it
-// maps keeps the first and says so.
 test("a select's actions are its footer's", async () => {
   const fake = host()
   const ctx = plugin("t.actions", fake)
@@ -1748,7 +1610,6 @@ function stale() {
   return { fake, heard, open, shown, action }
 }
 
-// Bigboi cg2-7: an action of a select that a newer one replaced reaches nothing, neither on a row nor rowless.
 test("a replaced select's actions reach nothing", async () => {
   const t = stale()
   const first = t.open("x")
@@ -1768,8 +1629,6 @@ test("a replaced select's actions reach nothing", async () => {
   expect(await second).toBe("yb")
 })
 
-// Bigboi cg2-8: a search lists the rows anew while the select stays open; an action and an answer still reach the row
-// they were given.
 test("a select's action reaches its row through a search", async () => {
   const t = stale()
   const picked = t.open("x")
@@ -1782,7 +1641,6 @@ test("a select's action reaches its row through a search", async () => {
   expect(await picked).toBe("xa")
 })
 
-// Bigboi P8-8: the click handlers of mounts that ended are not kept.
 test("click handlers go with their mount", async () => {
   const fake = host()
   const ctx = plugin("t.clicks", fake)
@@ -1834,8 +1692,6 @@ test("a dialog's scrollbox is a scroll its focused prop focuses", async () => {
   expect(fake.warnings()).toEqual([])
 })
 
-// Carbon-3: a dialog that replaced another is a panel of its own, so its close (escape) closes it and calls its
-// `onClose`; a render that throws in a dialog closes it, as TS's boundary clears it.
 test("a replacing dialog closes, and a crashing one closes at once", async () => {
   const fake = host()
   const ctx = plugin("t.show", fake)
@@ -1860,7 +1716,6 @@ test("a replacing dialog closes, and a crashing one closes at once", async () =>
   expect(last.dialog).toEqual({ type: "close", key: surfaceKeys(fake).at(-1) })
 })
 
-// Carbon-4: a change a view makes to another mount is drawn: only the mount being drawn takes its own changes in.
 test("a change to another mount while one is drawn is not lost", async () => {
   const fake = host()
   let invalidations = 0
@@ -1883,7 +1738,6 @@ test("a change to another mount while one is drawn is not lost", async () => {
   expect(text(a.draw())).toBe("a new")
 })
 
-// Carbon-4: a hook one plugin's render used that does not map is reported for it alone.
 test("an unmapped hook is reported for the plugin that used it", () => {
   const fake = host()
   const solidRuntime = modules["@opentui/solid"] as Json
@@ -1896,15 +1750,12 @@ test("an unmapped hook is reported for the plugin that used it", () => {
   expect(fake.warnings()).toEqual(["t.loud: usePaste is not supported by opencode-native yet"])
 })
 
-// Carbon-4: a claim goes to the host as it is: a `replace` of a path the host does not publish is the host's to
-// suppress, as TS's is, not an append to its ancestor.
 test("a claim keeps its kind and path", () => {
   const fake = host()
   plugin("t.slots", fake).ui.slot({ replace: "home.footer.custom", render: () => h("text", { children: "z" }) })
   expect(fake.surfaces[0].place).toEqual({ type: "slot", kind: "replace", path: "home.footer.custom" })
 })
 
-// Carbon-5: numbers a render computes stay in the ABI's domains, so no tree is one the host cannot read.
 test("numbers are rounded and clamped", () => {
   const fake = host()
   plugin("t.numbers", fake).ui.slot({
@@ -1928,7 +1779,6 @@ test("numbers are rounded and clamped", () => {
   expect(box.layout.absolute.z).toBe(2)
 })
 
-// Carbon-4: TS's attention defaults; the host's commands run by dispatch, and the layer's own are not listed.
 test("attention, listed commands and the mouse button", async () => {
   const fake = host((key) =>
     key === "keymap-commands" ? [{ name: "session.new" }, { name: "t.misc.compat.press" }] : [],
@@ -1947,9 +1797,6 @@ test("attention, listed commands and the mouse button", async () => {
   expect((modules["@opentui/core"] as Json).MouseButton.LEFT).toBe(0)
 })
 
-// FT-5: every name the installed `@opentui/core` and `@opentui/solid` export is one the layer exports, so a plugin's
-// named import of it links; an inert class can be extended, constructed and called through, and an enum is the
-// package's own.
 test("the layer exports every name of OpenTUI's packages", async () => {
   for (const name of ["@opentui/core", "@opentui/solid"]) {
     const real = Object.keys(await import(Bun.resolveSync(name, import.meta.dir)))
@@ -1970,16 +1817,12 @@ test("the layer exports every name of OpenTUI's packages", async () => {
   expect([fence.describe(), fence instanceof Fence, fence instanceof core.BoxRenderable]).toEqual(["fence", true, true])
   expect(`${core.SyntaxStyle.fromStyles({ keyword: {} })}`).toBe("")
   expect(core.addDefaultParsers([])).toBeDefined()
-  // opencode-good-fences spreads these Maps' values at setup, and registers the filetype each resolves to: OpenTUI's
-  // own (contract 2.x, step D).
   expect([...core.extensionToFiletype]).toEqual([...real.extensionToFiletype])
   expect([...core.basenameToFiletype]).toEqual([...real.basenameToFiletype])
   for (const info of ["ts", "TypeScript", "sh", "zsh", "Dockerfile", "makefile", "rust,no_run", "  py  extra", "x.tsx", ".md", "unknownlang", ""])
     expect(core.infoStringToFiletype(info)).toBe(real.infoStringToFiletype(info))
 })
 
-// FT-6: a method of OpenTUI's renderer that the layer lacks warns once and does nothing, rather than throw; an emitter's
-// chains, and a member that is no method stays undefined.
 test("the renderer's missing methods do nothing", async () => {
   const fake = host()
   const ctx = plugin("t.renderer", fake)
@@ -1999,10 +1842,6 @@ test("the renderer's missing methods do nothing", async () => {
   ])
 })
 
-// Expected (carbon recheck-3): the JS host's containment, as TS's `FSUtil.contains` decides it, holds on Windows paths
-// in every spelling of the same file: a drive letter or a name in another case, and a verbatim `\\?\` or `\\?\UNC\`
-// prefix on either side, are inside; a sibling with the root as a prefix, a climb out, and another drive are not. On
-// POSIX, case counts.
 test("a plugin's files are inside its directory in every spelling Windows gives them", async () => {
   const { inside, stripVerbatim } = await import("./compat/paths")
   const win = (await import("node:path")).win32
@@ -2033,7 +1872,6 @@ test("a plugin's files are inside its directory in every spelling Windows gives 
   expect(stripVerbatim("\\\\?\\C:\\a", posix)).toBe("\\\\?\\C:\\a")
 })
 
-// Expected (carbon recheck-3): `real` follows links, as the containment compares real paths.
 test("a plugin's real path follows its links", async () => {
   const { real } = await import("./compat/paths")
   const { mkdtempSync, mkdirSync, symlinkSync, realpathSync } = await import("node:fs")
@@ -2045,11 +1883,8 @@ test("a plugin's real path follows its links", async () => {
   expect(real(nodePath.join(root, "missing", ".."))).toBe(root)
 })
 
-// Contract 2.x, step D: a fence part as the host sends it to a fence claim.
 const fence = (info: string, code: string, closed = true) => ({ language: "", info, code, streaming: !closed, closed })
 
-// Contract 2.x, step D: good-fences' renderer, as `opencode-good-fences@0.1.0` writes it (`dist/tui.js`), on the layer:
-// a fence claim of the filetype, whose tree is its box of the label and the host's own code view, in the box's color.
 test("a code block's renderer draws its box around the host's code view", async () => {
   const fake = host()
   const ctx = plugin("t.fences", fake)
@@ -2082,8 +1917,6 @@ test("a code block's renderer draws its box around the host's code view", async 
   expect(fake.warnings()).toEqual([])
 })
 
-// Contract 2.x, step D: as TS's registry, a language is its filetype, which the plugin registers once (a second throws,
-// also by another name of it); one with no filetype throws; the disposer ends the claim, and the language is free.
 test("a code block's language is its filetype, registered once", () => {
   const fake = host()
   const ctx = plugin("t.once", fake)
@@ -2102,9 +1935,6 @@ test("a code block's language is its filetype, registered once", () => {
   ])
 })
 
-// Contract 2.x, step D: a renderer that returns nothing declines (the host's code view stays); one that throws throws on
-// to the JS host, which falls the part back, with one toast once it returned; what it set on the default render
-// other than `bg`, and a value that is no renderable of the layer's, are reported once it returned.
 test("a code block's renderer declines, throws, and what it cannot draw is reported", async () => {
   const fake = host()
   const ctx = plugin("t.odd", fake)
@@ -2136,9 +1966,6 @@ test("a code block's renderer declines, throws, and what it cannot draw is repor
   ])
 })
 
-// Contract ergonomics 2.6: a prompt's `value` and `description` reach the host's prompt (session-manager's rename shows
-// the directory above a field holding the old title); a value that is no string is its text, and an unset one is left
-// out.
 test("a prompt carries its value and description", async () => {
   const fake = host()
   const ctx = plugin("t.prompt", fake)
@@ -2158,16 +1985,12 @@ test("a prompt carries its value and description", async () => {
     { type: "prompt", title: "Bare" },
   ])
   expect(fake.warnings()).toEqual([])
-  // cf-3: built a microtask later, as the other dialogs: a `dialog.set` right after it is no set after it showed, and
-  // the contract's prompt has no size, which the log says.
   void ctx.ui.dialog.prompt({ title: "Sized" })
   ctx.ui.dialog.set({ size: "large" })
   await turn()
   expect(fake.warnings()).toEqual(["t.prompt: ui.dialog.set of a prompt is not supported by opencode-native yet"])
 })
 
-// Contract ergonomics 2.6: a command's slash aliases (oc-context-grid's `/ctx`, session-manager's `/sm`) go with its
-// slash name; none, or an empty list, adds nothing.
 test("a command's slash aliases go to the host", () => {
   const fake = host()
   const ctx = plugin("t.aliases", fake)
@@ -2181,8 +2004,6 @@ test("a command's slash aliases go to the host", () => {
   expect("aliases" in fake.meta.get("t.plain")).toBe(false)
 })
 
-// Contract ergonomics 2.6: `minWidth` and `maxWidth` are the layout's, in cells or percent, as OpenTUI's (session-manager's
-// directory column, `maxWidth={40}`); neither is reported any more.
 test("a node's minWidth and maxWidth are its layout's", () => {
   const fake = host()
   const ctx = plugin("t.widths", fake)
@@ -2205,8 +2026,6 @@ test("a node's minWidth and maxWidth are its layout's", () => {
   expect(fake.warnings()).toEqual([])
 })
 
-// Big-boi ds-11: a dialog of the plugin's own that the host does not open (its plugin manager shows) is closed for the
-// plugin: its `onClose` runs, and a later `dialog.set` does not open it.
 test("a dialog of the plugin's own the host refuses is closed for it", async () => {
   const fake = host()
   const ctx = plugin("t.refused", fake)

@@ -1,16 +1,4 @@
-// The V2 TUI plugin context (`@opencode/plugin/tui`'s `Context`) on the JS host (P8, O-128): what a `{ id, setup }`
-// module of today's TS client gets, built on the pipe carrier. Slots, routes and the session panel are contract 2.0
-// surfaces whose views read a Solid tree (`render.ts`); `data` and the small reads are snapshots the host pushes for
-// what the plugin watches; the verbs are the carrier's effects; `client` is the generated client over the host's fetch.
-//
-// TS reads its store synchronously. Here a read the host has not pushed yet is empty, so a mount whose first render
-// read one renders again once it came (at most a few times): a plugin installed from npm, whose JSX Bun compiles
-// without Solid's compiler, reads its data once, as it mounts.
-//
-// What does not map is reported as TS reports what is unavailable: an API that answers whether it did returns false,
-// an intrinsic or a hook the contract has no place for throws in the render and the plugin's boundary reports it, and
-// the rest warns once in the client's log, by the plugin's name, and does nothing. Each is listed by `reported`. A
-// warning is no toast: one covered the plugin's own surface for as long as it showed (`P.8/file-browser`'s field focus).
+// The V2 plugin context adapts Solid mounts, watched reads and effects to the asynchronous host pipe.
 import {
   batch,
   createComponent,
@@ -49,7 +37,6 @@ import {
 
 type Json = any
 
-// The methods of an event emitter, which return it.
 const EMITTER = new Set<string | symbol>([
   "on",
   "off",
@@ -65,48 +52,36 @@ const EMITTER = new Set<string | symbol>([
 // A hue's steps, and an action's states in the order TS's `state` asks them (`@opencode/theme`'s `HueStep`, `ActionState`).
 const STEPS = [100, 200, 300, 400, 500, 600, 700, 800, 900]
 const STATES = ["disabled", "pressed", "focused", "selected", "hovered"]
-// The fields whose events the layer maps, and the bytes OpenTUI's key event carries for a named key.
 const FIELDS = new Set(["input", "textarea"])
 const SEQUENCES: Record<string, string> = { return: "\r", escape: "\x1b", tab: "\t", backspace: "\x7f", space: " " }
 
-// How long a mount that ended waits for the mount that begins it again after a reload of the registrations, as long
-// as the JS host keeps a command a component's end retired (`host.ts` `UNCOMMAND`).
+// A registration reload may hand a mount to the next generation. Keep its Solid root briefly for adoption.
 const REMOUNT = 250
 
-// The footer actions a select maps (TS `actions`); each is a command the plugin registers once, so a select with more
-// keeps the first and the rest are reported.
 const SELECT_ACTIONS = 4
 
-// A keymap layer's commands as the layer last registered them, its `target`, and whether its component ended.
 interface Registration {
   retired: boolean
-  // The layer's own `enabled`, a value or a function: a disabled layer's commands are disabled (contract ergonomics
-  // 2.5).
+  // A disabled layer disables all its commands.
   enabled?: unknown
   commands: Map<string, Json>
-  // What the host is to hold each of its commands: its `enabled` as the layer follows it, or enabled where the layer
-  // cannot follow it, as the command's run asks it then (carbon ce-2).
+  // Recheck function-valued predicates when a handler returns; they need not read a Solid signal.
   states: Map<string, boolean>
   target?: () => unknown
   mode?: string
 }
 
-// Whether `node` is `target` or inside it.
 function within(target: unknown, node: VNode | undefined): boolean {
   for (let at = node; at; at = at.parent) if (at === target) return true
   return false
 }
 
-// The carrier the JS host gives each plugin (`host.ts`).
 export interface Carrier {
-  // Its index in the manifest.
   surface(name: string, place: Json, view: (cx: Json) => Json, options?: Json): number | void
-  // A key layer of the activation, contract 2.0's `Setup::layer`, whose handler hears its events; its index.
   layer?(layer: Json, handler: (event: Json) => unknown): number | void
-  // cg2-1: whether a listener of every key can take a key now, which the host holds for the answer only then.
+  // Notify the host before routing input; it cannot synchronously query a JS listener.
   taking?(listener: Json, on: boolean): void
   command(command: Json, run: (input?: string) => unknown): void
-  // Contract ergonomics 2.5: the host holds command `name` enabled or not (`set-enabled`).
   enable?(name: string, enabled: boolean): void
   // Runs `run` at the end of each call into the plugin, inside it: what it asks for is the call's.
   afterCall?(run: () => void): void
@@ -118,17 +93,13 @@ export interface Carrier {
   watch(key: string, request: Json): void
   unwatch(key: string): void
   read(key: string): Json
-  // Why the read `key` watches is nothing, when the host could not answer it.
   readError?(key: string): string | undefined
-  // Runs `cleanup` as the plugin's activation ends.
   cleanup?(cleanup: () => unknown): void
   listen(listener: (key: string) => void): void
   invalidate(): void
   fetch(request: Json): Promise<Json>
   palette(): { mode: string; colors: Record<string, string> }
   changed(): void
-  // A renderer claim (contract 2.x, step D): `view` draws a part of `target`, a whole tree each time, or declines
-  // (`null`); a throw falls the part back. The returned function ends the claim.
   claim?(target: Json, view: (part: Json) => Json): () => void
 }
 
@@ -140,10 +111,8 @@ export interface Base {
   data: { on(type: string, handler: (event: Json) => unknown): () => void }
 }
 
-// Every feature a plugin used that does not map, by plugin.
 export const reported = new Map<string, Set<string>>()
 
-// What `usePlugin()` reads in a plugin's components: its context, as TS provides it around each render.
 export const PluginContext = createContext<unknown>()
 
 export function context(base: Base, carrier: Carrier) {
@@ -156,10 +125,6 @@ export function context(base: Base, carrier: Carrier) {
     void carrier.effect({ type: "log", level: "warn", message })
   }
 
-  // Contract 2.x, step D: the code blocks the plugin renders, by filetype, and one part's tree. The renderer gets the
-  // fence as OpenTUI's Markdown gives it (`token`: `lang`, `text`, `raw`) and a context whose `defaultRender()` is the
-  // host's own code view of it. It returns a renderable the layer built (`renderables.ts`), or nothing to decline. What
-  // the layer reports, and a throw's toast, go once its view returned: a claim's view asks the host for nothing.
   const codeBlocks = new Set<string>()
   const codeBlock = (language: string, render: (token: Json, context: Json) => unknown, part: Json) => {
     const info = String(part.info ?? "")
@@ -193,12 +158,8 @@ export function context(base: Base, carrier: Carrier) {
     return tree
   }
 
-  // Reads: a watch per key, a signal per key that a snapshot bumps, and whether the render that runs read one the host
-  // has not pushed yet. The host watches at most 128 reads a plugin (bigboi P8-2, FT-9): a read a live mount made is
-  // held while the mount lives, and a store's while the store does; the rest are idle, and the least recently used of
-  // them goes when a new read needs its place, or when more than 16 are idle. A store's read let go came back at its
-  // next snapshot and let another go: 80 stores sent 13,000 messages (FT-9). A read the host could not answer is an
-  // error, not empty data: `sync` rejects with it, and the plugin's first such error is reported once.
+  // Share watches by key. A live mount or key layer pins its reads; evict only unpinned watches. A failed
+  // snapshot is distinct from a pending one.
   const WATCHES = 128
   const IDLE = 16
   const versions = new Map<string, ReturnType<typeof createSignal<number>>>()
@@ -267,12 +228,8 @@ export function context(base: Base, carrier: Carrier) {
     })
 
   const sessions = (): Json[] => read("sessions", { type: "sessions" }) ?? []
-  // A session and whether it runs, from the one read of every session the host has loaded: the host answers a
-  // session's own read from the same store and loads nothing for it (`Read::session`), so a read a session would only
-  // churn the bounded watches, a watch and a release for each ID past them. opencode-sesh asks the status of each of
-  // 900 listed sessions in one pass: 1,800 messages, which flooded the host (CT-36). Indexed once a snapshot.
-  // A session missing from it is read from its own read where there is one: the route's session seeded at setup, and
-  // one `sync(id)` watches, so what `sync` loaded `get` answers (big-boi's `cg4-9`); one with neither starts none.
+  // Index one session-list snapshot by ID instead of watching every session. A separately synced or seeded
+  // session takes precedence.
   let indexed: { list: Json[]; byID: Map<string, Json> } | undefined
   const session = (sessionID: string): Json => {
     const list = sessions()
@@ -297,7 +254,6 @@ export function context(base: Base, carrier: Carrier) {
     invalidate() {},
   })
   const none = (name: string) => ({
-    // Reported, and an empty list rather than none, which a plugin would not expect of a list (carbon-4).
     list: () => {
       unsupported(`data.${name}`)
       return []
@@ -313,16 +269,8 @@ export function context(base: Base, carrier: Carrier) {
   }
   const routeData = new Map<string, Json>()
 
-  // A collection the contract has no read of, loaded through the plugin's `client` over the host's fetch: as the plugin
-  // first lists or syncs it, again on `invalidate`, and again on each event `events` names, which it subscribes to with
-  // its first load. A list answers `undefined` until its load came, and its reader follows it.
-  // At most 4 loads of a collection run at once, and the others wait their turn, each key once: a load asked for while
-  // its key waits is that wait, and one asked for while it loads runs once more after it, so two of a key never overlap
-  // and an older answer never comes after a newer one (big-boi's `cg4-11`: a form cancelled came back). A load whose key
-  // is asked for again meanwhile publishes nothing, the next does. At most 256 keys wait: past them the oldest waiting
-  // gives up its turn, and loads again when it is next listed (`cg4-10`). A plugin that lists the permissions or forms
-  // of each of 900 sessions asked 1,800 fetches in one pass, each an effect, past the host's bound on what it has not
-  // taken (CT-36: agents-view, op1/threads). Each collection has its own turns: one whose loads hang holds no other.
+  // Limit loads per collection so a stalled collection cannot block the others. Accept only the newest result for
+  // a location.
   const LOADS = 4
   const WAITING = 256
   // `concerns`: whether an event of `events` changes what the entry of `args` holds; an event reloads only those.
@@ -417,15 +365,13 @@ export function context(base: Base, carrier: Carrier) {
     fetched(events, (location?: Json) => (raw as Json)[name].list({ location: directoryOf(location) }).then((out: Json) => out.data), (location?: Json) =>
       locationKey(location),
     )
-  // One list of a location's forms, which each session's are of: a list a session refetched the location's whole list
-  // for each session (CT-36).
+  // Share one form list across sessions at the same location.
   const locationForms = fetched(
     ["form.created", "form.replied", "form.cancelled"],
     (location?: Json) => raw.form.list({ location: directoryOf(location) }).then((out: Json) => out.data),
     (location?: Json) => locationKey(location),
   )
-  // Each location's forms by session, of its list as it is now: one kept for each session pinned a list the location
-  // had refreshed (big-boi's `cg4-12`).
+  // Keep the index only while its source list is current.
   const formIndex = new Map<string, { of: Json[]; bySession: Map<string, Json[]>; none: Json[] }>()
   const forms = {
     list(sessionID: string, location?: Json) {
@@ -447,8 +393,6 @@ export function context(base: Base, carrier: Carrier) {
   const shells = listed("shell", ["shell.created", "shell.exited", "shell.deleted"])
   const projects = fetched(["project.updated"], () => raw.project.list())
 
-  // `data.listen`: every event, as `{ details }`, through one subscription of the plugin to every type the client names,
-  // made with its first listener.
   const everything = new Set<(event: Json) => unknown>()
   let subscribed = false
   const data = {
@@ -480,7 +424,6 @@ export function context(base: Base, carrier: Carrier) {
         (read(`family:${sessionID}`, { type: "family", id: sessionID })?.members ?? []).map((member: Json) => member.id),
       cost: (sessionID: string): number => read(`family:${sessionID}`, { type: "family", id: sessionID })?.cost ?? 0,
       status: (sessionID: string) => (session(sessionID)?.status === "running" ? "running" : "idle"),
-      // The session's inbox items not delivered yet, as the host holds them (bigboi P8-6).
       pending: {
         list: (sessionID: string) => read(`pending:${sessionID}`, { type: "pending", id: sessionID }) ?? [],
         sync: (sessionID: string) => synced(`pending:${sessionID}`, { type: "pending", id: sessionID }),
@@ -527,7 +470,7 @@ export function context(base: Base, carrier: Carrier) {
       get: (shellID: string) => (shells.list() ?? []).find((shell: Json) => shell.id === shellID),
     },
     location: {
-      // The directory the client works in, which the JS host does not start in (carbon-1).
+      // The JS process starts outside the project; report the client's working directory.
       default: () => toRef(info()?.location) ?? { directory: process.env.OPENCODE_DIRECTORY ?? process.cwd() },
       sync: async () => {},
       invalidate() {},
@@ -552,11 +495,8 @@ export function context(base: Base, carrier: Carrier) {
     },
   }
 
-  // The theme, from the host's palette: each leaf a color that carries its token, so the host restyles it. A hue's step
-  // carries the contract's name of it (`accent.500`, `categorical.3.300`), as the palette's `hue.accent.500` is not one.
-  // A raised surface's view (`surface`, CT-22) takes the colors the palette lists for it (`@dialog.<token>`,
-  // `@dialog.footer.<token>`) where they differ from the page's: such a leaf carries its color, as the contract names
-  // no token of a raised surface, and the others their page token.
+  // Preserve theme tokens on the color values so the host can restyle a retained tree. Raised surfaces use their
+  // own palette entries.
   const theme = (surface?: string): Json => {
     const palette = carrier.palette()
     const raised: Record<string, Record<string, string>> = {}
@@ -581,8 +521,6 @@ export function context(base: Base, carrier: Carrier) {
       const rgba = new RGBA(value.r, value.g, value.b, value.a, named)
       at[last] = Object.assign(rgba, typeof at[last] === "object" ? at[last] : {})
     }
-    // CT-9: the raw scales and the state functions of TS's `ResolvedTheme`. The categorical scales are a list, and a
-    // stateful color (an action's or a field's) answers the first state set in TS's order.
     tree.hue ??= {}
     tree.categorical = Object.entries(tree.categorical ?? {})
       .sort(([a], [b]) => Number(a) - Number(b))
@@ -620,9 +558,6 @@ export function context(base: Base, carrier: Carrier) {
     tree.source = source
     tree.increase = (color: Json, amount = 1) => shift(color, amount)
     tree.decrease = (color: Json, amount = 1) => shift(color, -amount)
-    // A raised surface's theme (`ResolvedTheme.surface`, CT-8, CT-22): `dialog` and `dialog.footer` as the host
-    // resolves them; another name is the page's, which the JS host's log says once, where a toast covered the plugin's
-    // page (the joe-broadhead status dialogs).
     tree.surface = (name: string) => {
       if (name === "dialog" || name === "dialog.footer") return theme(name)
       if (!surfaces.has(name)) console.warn(`plugin ${id}: theme.surface("${name}") is the page theme`)
@@ -633,9 +568,7 @@ export function context(base: Base, carrier: Carrier) {
   }
   const surfaces = new Set<string>()
 
-  // Internal commands: a click on a node, a dialog's answer, and its close. The host runs a dialog's action with the
-  // answer as its input, and one dialog shows at a time. A click's handler is its mount's (`presses`, by the mount, then
-  // by the node): a view replaces its mount's, and an unmount or a close drops them (bigboi P8-8).
+  // Click handlers belong to a mount and are replaced with its tree.
   const presses = new Map<string, Map<string, { handler: (event: unknown) => unknown; kind: string }>>()
   let answering: ((value: string | undefined) => void) | undefined
   let asked = 0
@@ -654,8 +587,6 @@ export function context(base: Base, carrier: Carrier) {
     pressed?.handler({ ...event, stopPropagation() {}, preventDefault() {} })
   })
   carrier.command({ name: QUERY, title: QUERY }, (input) => searching?.(input ?? ""))
-  // A select's footer actions (TS `actions`): the host runs an action's command with the selected row's value, so each
-  // action of the select on screen is a command of its own. `triggers` are their handlers, by slot.
   let triggers: ((input: string | undefined) => void)[] = []
   const ACTIONS = Array.from({ length: SELECT_ACTIONS }, (_, slot) => `${id}.compat.action.${slot}`)
   ACTIONS.forEach((name, slot) => carrier.command({ name, title: name }, (input) => triggers[slot]?.(input)))
@@ -664,8 +595,7 @@ export function context(base: Base, carrier: Carrier) {
     answering = undefined
     resolve?.(input ?? "")
   })
-  // The host closed dialog `input` without its answer (escape, the backdrop, another plugin's dialog, an unload): it
-  // answers nothing, as TS resolves it with undefined (bigboi P8-7). A close after its answer finds nothing to settle.
+  // Closing after an answer must not settle the next dialog.
   carrier.command({ name: DISMISS, title: DISMISS }, (input) => {
     if (input === String(asked)) settle()
   })
@@ -677,8 +607,6 @@ export function context(base: Base, carrier: Carrier) {
     answering = undefined
     resolve?.(undefined)
   }
-  // The dialog this one replaces answers nothing, as TS resolves it with undefined. A dialog given as a function is
-  // built a microtask later, so a `dialog.set` the plugin calls right after sizes it, as TS's sizes the dialog shown.
   const ask = (dialog: Json | (() => Json)) =>
     new Promise<string | undefined>((resolve) => {
       settle()
@@ -688,8 +616,7 @@ export function context(base: Base, carrier: Carrier) {
       const dismissed = { type: "command", name: DISMISS, input: String(asked) }
       const mine = asked
       const send = () => {
-        // Another dialog came first, or a `clear()` or a `show()` settled this one before it was built: it never shows
-        // (carbon c2b-3).
+        // An intervening clear or show may have already settled this ask.
         if (asked !== mine || answering !== resolve) return
         sent = mine
         const asking = { ...(typeof dialog === "function" ? dialog() : dialog), action: { type: "command", name: ANSWER } }
@@ -699,16 +626,10 @@ export function context(base: Base, carrier: Carrier) {
       else send()
     })
 
-  // `ui.dialog.show`: the plugin's own JSX as the body of the host's dialog (contract ergonomics 2.7): a mount of the
-  // plugin's dialog surface, which renders it with the full tree, so its `<scrollbox>` scrolls and its `<input>` is a
-  // field that takes the focus. The host draws only the dialog's frame around it, as TS does; a close of it (escape,
-  // the backdrop, another dialog) calls `onClose`, as TS's `dialog.replace` does.
-  // Each `show` is a key of its own (carbon-3), which its mount's ID names, so the host tells its open and its close
-  // apart from the one it replaced, and the mount renders that show's JSX; a `dialog.set` changes its frame in place.
+  // Give each showing its own key so a late close cannot dismiss the next one.
   const DIALOG = "compat.dialog"
   let shows = 0
   let shown: { key: string; onClose?: () => void; opened: boolean } | undefined
-  // The renders of the shows, by their key, until each closes.
   const dialogs = new Map<string, () => unknown>()
   let presentation = { size: "medium", centered: false }
   // The dialog of `ask` the host shows, which a `dialog.set` after it no longer sizes.
@@ -725,15 +646,13 @@ export function context(base: Base, carrier: Carrier) {
     dialogs.delete(was.key)
     was.onClose?.()
   }
-  // Each send waits for its close: one the host did not open (as while its plugin manager shows) retires the showing at
-  // once, so a later `dialog.set` does not open it (big-boi ds-11).
+  // Only a showing acknowledged by the host can be updated in place.
   const sendShown = () => {
     if (!shown) return
     const dialog = { type: "surface", surface: DIALOG, key: shown.key, ...presented() }
     const dismissed = { type: "command", name: UNSHOWN, input: shown.key }
     void carrier.effect({ type: "dialog", dialog: { type: "dismissable", dialog, dismissed } })
   }
-  // A dialog of the plugin's own ends with its activation, and a dialog it asked answers nothing (carbon-5).
   carrier.cleanup?.(() => {
     settle()
     unshow()
@@ -745,19 +664,16 @@ export function context(base: Base, carrier: Carrier) {
     else if (shown.opened) unshow()
   })
 
-  // Surfaces: each mount renders its claim's JSX under a Solid root; its view reads that tree.
   type Rendered = Mounted & { pending: number; input: Json; setInput: (input: Json) => void }
   const rendered = new Map<string, Rendered>()
   const size = createRoot(() => createSignal({ width: 0, height: 0 }))
-  // What `useTerminalDimensions` reads: the terminal's size, as the host says it.
   const screen: Screen = {
     width: () => info()?.size?.[0] || size[0]().width,
     height: () => info()?.size?.[1] || size[0]().height,
     renderer: {},
   }
   let claims = 0
-  // A change of a tree asks for one view of the plugin's mounts once the code that changed it returned; a change of the
-  // mount whose view reads its tree is in that view already, but one of another mount is not (carbon-4).
+  // A view can invalidate another mount while it draws.
   let drawing: string | undefined
   let scheduled = false
   const invalidate = (at?: string) => {
@@ -768,13 +684,9 @@ export function context(base: Base, carrier: Carrier) {
       carrier.invalidate()
     })
   }
-  // CT-2: the plugin's node that has the focus, as it asked: a field or a scroll is the host's to focus (the contract's
-  // `focus` of the node's id); any node emits `focused` and `blurred`, as OpenTUI's renderables do.
+  // The host owns actual field and scroll focus; keep the corresponding renderable for plugin events.
   let focusedNode: VNode | undefined
   const FOCUSABLE = new Set(["input", "textarea", "scrollbox"])
-  // cg2-1: whether a key handler can take a key, which the host holds a key for the answer for: one whose source
-  // calls `preventDefault` says so up front, as TS's runs synchronously and the host cannot wait; one that took a key
-  // all the same (through a helper) says so from then on. Any other only hears keys, which go on at once.
   const takers = new WeakSet<object>()
   const mayTake = (handler: unknown) =>
     typeof handler === "function" &&
@@ -786,9 +698,8 @@ export function context(base: Base, carrier: Carrier) {
     taking()
     globalTaking?.()
   }
-  // cg2-1: a route's, a panel's or a dialog's listener of every key (by surface name, its index) takes a key only while the field the
-  // plugin focused is in its tree and has an `onKeyDown`; the host holds a key for the answer only then, and otherwise
-  // the key goes on at once.
+  // Forward unbound keys only while a listener can consume them. Printable text in the composer must not wait on
+  // JS.
   const fieldListeners = new Map<string, number>()
   const taking = () => {
     for (const [surface, index] of fieldListeners) {
@@ -797,8 +708,6 @@ export function context(base: Base, carrier: Carrier) {
       carrier.taking?.({ surface: index }, on)
     }
   }
-  // The mount whose render holds `node`, by its root, as the host names it; none for a node in no mount's tree (one not
-  // added yet, or in a dialog of the plugin's own).
   const mountOf = (node: VNode) => {
     const root = rootOf(node)
     for (const [at, entry] of rendered) {
@@ -831,8 +740,6 @@ export function context(base: Base, carrier: Carrier) {
       const mount = FOCUSABLE.has(node.tag) ? mountOf(node) : undefined
       if (mount) void carrier.effect({ type: "blur" }, mount)
     },
-    // A focused node the plugin removed has the focus no more, as OpenTUI's destroyed renderable has not: a target
-    // layer no longer holds for it, and it emits `blurred`. The host's field went with its tree.
     detached(node) {
       if (!focusedNode || !within(node, focusedNode)) return
       const was = focusedNode
@@ -841,9 +748,7 @@ export function context(base: Base, carrier: Carrier) {
       taking()
     },
   }
-  // A field's events (CT-11): its edits and its submit are the contract's `change` and `submit` of its node, which its
-  // `onInput`, `onChange` and `onSubmit` hear, and a key while the plugin's focused field is in the surface is its
-  // `onKeyDown`, which takes the key with `preventDefault` (contract gaps 2): else the host's field and keys have it.
+  // Route edits and submissions to the field in the originating mount.
   const fieldEvent = (surface: string, event: Json) => {
     const roots = [...rendered.entries()].filter(([at]) => at.startsWith(`${surface}\u0000`)).map(([, at]) => at.root)
     const find = (id: string) => {
@@ -919,8 +824,7 @@ export function context(base: Base, carrier: Carrier) {
       },
     }
   }
-  // OpenTUI's key handler (CT-11): an emitter whose `keypress` listeners hear each key, through a global listener layer
-  // the plugin registers with its first one, as most plugins never listen. A listener's `preventDefault` takes the key.
+  // Keyboard listeners receive host key events through a global listener layer.
   const keyInput = new EventEmitter()
   let listening = false
   keyInput.on("newListener", (name, first) => {
@@ -936,8 +840,6 @@ export function context(base: Base, carrier: Carrier) {
       return "consume"
     })
     carrier.changed()
-    // cg2-1: it takes a key only while a `keypress` listener can ([`mayTake`]); otherwise it only hears the key, which
-    // the host lets go on at once.
     if (typeof layer !== "number") return
     const listeners = (added?: unknown) => {
       const on = [...keyInput.listeners("keypress"), added].some(mayTake)
@@ -952,8 +854,7 @@ export function context(base: Base, carrier: Carrier) {
       if (added === "keypress") listeners(handler)
     })
   })
-  // A surface's scrolls (CT-2): a scroll box's state is the host's read of it, which follows it as it moves, and a move
-  // is the contract's verb on the scroll of the surface's live mount, by its id.
+  // Scroll offsets come from host snapshots, including user scrolling.
   const scrollsOf = (surface: string): Scrolls => {
     const target = (node: VNode) => ({ type: "node", surface, id: idOf(node) })
     return {
@@ -968,7 +869,6 @@ export function context(base: Base, carrier: Carrier) {
       },
     }
   }
-  // The nodes whose layout the plugin asked for, by their read: one with `onSizeChange` hears each new layout (CT-24).
   const measuring = new Map<string, VNode>()
   const sizes = new WeakMap<VNode, string>()
   carrier.listen((key) => {
@@ -980,7 +880,7 @@ export function context(base: Base, carrier: Carrier) {
     const size = rect && `${rect.width}x${rect.height}`
     if (!size || sizes.get(node) === size) return
     sizes.set(node, size)
-    // A plugin may set it on the renderable by its ref rather than as a prop (CT-26: opencode-voice's panel title).
+    // A plugin can install the size callback on a renderable ref instead of a prop.
     const handler = node.props.onSizeChange ?? (node as Json).onSizeChange
     if (typeof handler === "function") handler.call(node)
   })
@@ -996,9 +896,7 @@ export function context(base: Base, carrier: Carrier) {
       clearTimeout(kept.timer)
       parked.delete(slot)
       rendered.set(key(cx), kept.entry)
-      // The host's focus was the ended mount's: the field the plugin focused in the tree it adopts takes it again in the
-      // new one, as TS's renderable never lost it (`P.8/session-manager`'s search, whose keybinds reload as it shows).
-      // A focus the user moved off the field before the mount ended stays where the user put it.
+      // Restore focus on handover only if this field held it when the old mount ended.
       const field = focusedNode
       if (field && kept.focused === idOf(field) && FOCUSABLE.has(field.tag) && rootOf(field) === kept.entry.root)
         void carrier.effect({ type: "focus", node: idOf(field) }, cx.mount)
@@ -1017,7 +915,7 @@ export function context(base: Base, carrier: Carrier) {
         return draw(cx)
       } finally {
         drawing = before
-        // As TS's boundary around a dialog, which clears it: a dialog whose render threw closes (carbon-3).
+        // Close a custom dialog whose renderer failed.
         if (place.type === "dialog" && rendered.get(key(cx))?.crashed !== undefined) closeCrashed(cx.mount.key)
       }
     }
@@ -1097,10 +995,7 @@ export function context(base: Base, carrier: Carrier) {
     // context's `theme` follows `Down::Theme`. A surface that read the palette would be viewed again instead, and keep
     // its old colors, as its tree did not change.
     const index = carrier.surface(name, place, view, {
-      // A mount a reload of the registrations ends (`handover`) is kept a moment: the reload begins it again in a later
-      // message, and the new mount of the same surface and key adopts it, so its components do not run again. TS takes
-      // a registration without a remount; a component that registers anew as it mounts (opencode-navigator names each
-      // binding by a count) reloaded without end (CT-21). Any other end ends its components at once.
+      // Preserve the Solid root across registration handover; remounting would register its commands again.
       unmount(mount: Json, handover?: boolean, focused?: string) {
         // The panel closed: it is no longer the plugin's current one.
         if (place.type === "panel" && !handover) setPanelName("")
@@ -1186,14 +1081,10 @@ export function context(base: Base, carrier: Carrier) {
     if (path.startsWith("sidebar.") || path === "session.composer.top") return { sessionID: slot.session_id ?? "" }
     return {}
   }
-  // The panel the plugin opened, until its mount ends: a signal, so what reads `ui.panel.current()` (a key layer's
-  // `enabled`, @cleocode/goal's) follows it (carbon ce-2).
   const [panelName, setPanelName] = createRoot(() => createSignal(""))
   const panels: string[] = []
-  // CT-38: a session panel's `focus`, `close` and `toggleFullscreen`, as TS's `PanelInput` has them. One handle a panel
-  // mount, which each draw tells its mount as it is now and whether it shows full screen: its methods stay the same
-  // functions, so a mount adopted after a reload keeps them with its new generation (big-boi's `cg4-14`), and they act
-  // only while that mount lives, as its requests, so a handle kept past its panel moves no other (`cg4-13`).
+  // Keep each panel handle tied to the active generation so callbacks retained by an old mount cannot act on a
+  // new one.
   const panelHandles = new Map<string, { mount: Json; fullscreen: boolean; methods: Json }>()
   const panelHandle = (surface: string, mount: Json, fullscreen: boolean) => {
     const at = `${mount.surface}\u0000${mount.key}`
@@ -1208,8 +1099,7 @@ export function context(base: Base, carrier: Carrier) {
         mount,
         fullscreen,
         methods: {
-          // The contract has no focus of a pane: the panel's first field or scroll that shows takes the focus
-          // (`cg4-15`: a hidden one did), which moves the input to the panel as a click in it does.
+          // The host focuses a node, not the pane. Use its first visible field or scroll.
           focus() {
             const now = live()
             const root = now && rendered.get(`${now.mount.surface}\u0000${now.mount.key}\u0000${now.mount.generation}`)?.root
@@ -1228,8 +1118,7 @@ export function context(base: Base, carrier: Carrier) {
             const now = live()
             if (now) void carrier.effect({ type: "close-panel", surface }, now.mount)
           },
-          // A toggle of what it asked for last, which the next draw corrects to what shows: two at once go full
-          // screen and back, where each asked for full screen (`cg4-16`).
+          // Toggle from the last requested state so two calls before the next draw cancel each other.
           toggleFullscreen() {
             const now = live()
             if (!now) return
@@ -1244,7 +1133,7 @@ export function context(base: Base, carrier: Carrier) {
     handle.fullscreen = fullscreen
     return handle
   }
-  // An input as the plugin's props hold it: a copy, but for its functions (a panel's `focus`, CT-38), which are kept.
+  // Copy input data but retain its callable panel methods.
   const copied = (value: Json): Json =>
     typeof value === "function" || value === null || typeof value !== "object"
       ? value
@@ -1275,10 +1164,7 @@ export function context(base: Base, carrier: Carrier) {
       })
     }) as typeof fetch,
   })
-  // `client.rpc(definition)`, a plugin's own server RPC (CT-4), as TS's client makes it (`client/src/promise/rpc.ts`):
-  // each method calls `/api/rpc/<id>/<method>` and answers its output; an event `name` is the host's event of type
-  // `rpc.<id>.<name>`, which `data.on` hears. An error the server gives an RPC is not typed here: the host's fetch
-  // answers it as text, so the plugin gets the client's error, not `{ type, message, data }`.
+  // Plugin-defined RPCs use the same fetch channel as generated client operations.
   const rpc = Object.assign(
     (definition: Json) => {
       const on = (name: string, handler: (event: Json) => unknown, options?: { signal?: AbortSignal }) => {
@@ -1332,21 +1218,13 @@ export function context(base: Base, carrier: Carrier) {
   )
   const client = { ...raw, rpc }
 
-  // Each command name runs the newest live registration of it that is enabled. A layer of a component that ended, or a
-  // command whose `enabled` says no, runs nothing and answers `false`, as a command that declines: the key that ran it
-  // goes on to the host, as TS binds no disabled command (CT-8) and lets a declined key fall through (CT-19).
-  // A layer's `target` (CT-20): its commands run only while the plugin's focus is in that node, as TS's layer holds
-  // only while the target has the focus; elsewhere they decline. The focus is the layer's own record: what the plugin
-  // focused, or a field the user edits.
+  // The newest enabled registration wins. A disabled, out-of-scope or declining handler must pass the key on.
   const registrations = new Map<string, Registration[]>()
   // The modes the plugin pushed (`keymap.mode.push`), latest last. The host answers `input-mode` for the running call's
   // owner, and a mode a component pushes as it mounts is its mount's: a command, which runs as the plugin, reads `base`
   // there (oc-context-grid's escape never left its page). TS has one input mode.
   const modes: string[] = []
   const living = (name: string) => (registrations.get(name) ?? []).filter((at) => !at.retired && at.commands.has(name))
-  // The newest live layer that holds `name` and takes the key now runs it, as the topmost such layer does in TS; one
-  // disabled, out of its target or its mode, or whose command's `enabled` says no as the key comes, is passed over
-  // (carbon ce-1). None: the command declines.
   const dispatch = (name: string, input?: string) => {
     const live = living(name)
     for (let index = live.length - 1; index >= 0; index--) {
@@ -1362,9 +1240,7 @@ export function context(base: Base, carrier: Carrier) {
     }
     return false
   }
-  // What the host was told of each command name: enabled while any live layer that holds it holds it enabled, so a
-  // disabled layer leaves the same command of an enabled one bound, and a layer that drops it or ends disables it at
-  // once (carbon ce-1).
+  // Tell the host only when the aggregate enabled state of a command changes.
   const told = new Map<string, boolean>()
   const resync = (name: string) => {
     const on = living(name).some((at) => at.states.get(name) !== false)
@@ -1372,18 +1248,14 @@ export function context(base: Base, carrier: Carrier) {
     told.set(name, on)
     carrier.enable?.(name, on)
   }
-  // Each call into the plugin asks every command's `enabled` again as it ends: one that also reads what the layer does
-  // not follow (a variable a handler sets) is told the host then (carbon ce-2).
+  // Recheck predicates that read nonreactive plugin state after each call.
   const [rechecked, recheck] = createRoot(() => createSignal(0))
   // A microtask later too, for what a promise it resolved goes on to set.
   carrier.afterCall?.(() => {
     recheck((count) => count + 1)
     queueMicrotask(() => recheck((count) => count + 1))
   })
-  // Follows the `enabled` of `registration`'s command `name`. One that read something the layer follows is the
-  // command's state; one that read nothing followed (a plain field, a constant function) leaves it enabled on the host,
-  // which then sends the key to the command, whose run asks it, as TS asks it as the key comes: it never latches off
-  // (carbon ce-2). Its reads stay watched while it is followed, and no longer.
+  // Keep reactive reads watched only while their layer lives.
   const track = (registration: Registration, name: string, command: Json) =>
     createComputed(() => {
       rechecked()
@@ -1430,13 +1302,10 @@ export function context(base: Base, carrier: Carrier) {
       carrier.command(
         {
           name,
-          // Contract ergonomics 2.5: its state as every live layer that holds it says now, which the layer follows as
-          // it changes (`set-enabled`), so the host binds no key of a disabled command and lists it nowhere.
           enabled: told.get(name) ?? true,
           title: command.title ?? name,
           group: command.group,
           slash: command.slash?.name,
-          // Contract ergonomics 2.6: the slash name's other names (TS `slash.aliases`).
           ...(Array.isArray(command.slash?.aliases) && command.slash.aliases.length
             ? { aliases: command.slash.aliases.map(String) }
             : {}),
@@ -1452,12 +1321,8 @@ export function context(base: Base, carrier: Carrier) {
     }
     return names
   }
-  // A command without an `id` is named by what the host lists of it (its layer's mode, its keys, its title, its slash
-  // name and the rest of what goes to the host) and its place among the layer's commands of the same, so a component
-  // that mounts again names it as it did. A new name each mount is a new manifest, which reloads the plugin and mounts
-  // the component again, without end (CT-1: tokscope's page). Commands that differ in any of it stay apart, also in two
-  // layers (big-boi's catalog review: a global and a base layer with the same keys and title were one command); two
-  // the same in every listed part are one, the newest live one running, as the topmost of two such layers runs in TS.
+  // Anonymous command IDs must survive remounts and remain distinct across scopes; changing an ID can trigger
+  // another registration reload.
   const named = (list: Json[], scope: string | undefined) => {
     const seen = new Map<string, number>()
     return list.map((command: Json): [string, Json] => {
@@ -1484,9 +1349,6 @@ export function context(base: Base, carrier: Carrier) {
     {
       requestRender: () => invalidate(),
       keyInput,
-      // CT-17: OpenTUI's root renderable and focused editor, which a plugin probes for before it registers
-      // (opencode-dollar-skills): the root takes nothing, as a renderable the plugin builds draws nothing, and nothing
-      // has the focus. Each says so once.
       get root() {
         unsupported("renderer.root")
         return root
@@ -1499,7 +1361,7 @@ export function context(base: Base, carrier: Carrier) {
         unsupported("renderer.currentFocusedRenderable")
         return undefined
       },
-      // The terminal's, as `useTerminalDimensions` (carbon-4): a surface's own box is not the renderer's.
+      // Report terminal dimensions, not the dimensions of the current surface.
       get width() {
         return info()?.size?.[0] || size[0]().width || 0
       },
@@ -1508,9 +1370,7 @@ export function context(base: Base, carrier: Carrier) {
       },
     } as Json,
     {
-      // A method of OpenTUI's `CliRenderer` the layer lacks warns once and does nothing (FT-6): an emitter's returns
-      // the renderer, as Node's does, so its calls chain; one declared async a resolved promise; any other nothing.
-      // Another member is undefined.
+      // Missing renderer methods warn once. Preserve the chaining or promise return expected by callers.
       get(target, name) {
         if (name in target || typeof name === "symbol") return target[name]
         unsupported(`renderer.${String(name)}`)
@@ -1535,7 +1395,6 @@ export function context(base: Base, carrier: Carrier) {
     data,
     attention: {
       async notify(options: Json) {
-        // TS's defaults (carbon-4): a notification while the terminal is not focused, and a sound, unless `false`.
         const notification = typeof options.notification === "object" ? options.notification : {}
         const sound = typeof options.sound === "object" ? options.sound : {}
         await carrier.effect({
@@ -1559,13 +1418,10 @@ export function context(base: Base, carrier: Carrier) {
     get theme() {
       return theme()
     },
-    // A signal's read, so what reads it (a key layer's `enabled`) follows a theme change (carbon ce-2).
     get themeMode() {
       themed[0]()
       return base.themeMode
     },
-    // Contract 2.x, step D: a renderer of the fences whose info string resolves to `language`, as TS's, a fence claim
-    // of the host's. A language registered twice by the plugin throws, as in TS; across plugins the last wins.
     markdown: {
       registerCodeBlockRenderer(language: string, render: (token: Json, context: Json) => unknown) {
         const name = infoStringToFiletype(language)
@@ -1583,21 +1439,12 @@ export function context(base: Base, carrier: Carrier) {
       },
     },
     keymap: {
-      // As TS's (bigboi P8-4): the factory is followed, so its `enabled` and its commands may change. A disabled layer's
-      // commands, and a command whose `enabled` says no, stay registered and disabled: the host binds no key of theirs
-      // and lists them nowhere, as TS binds no disabled command, and a change of either goes to the host as
-      // `set-enabled`, with no reload (contract ergonomics 2.5). The factory and each command's `enabled` are followed
-      // by what they read; a command's `enabled` is asked again as it runs, for one that reads what is not followed.
-      // A layer keeps to the base mode unless its `mode` is `global`, or a mode of the plugin's own, whose commands
-      // decline unless it is the input mode. A layer a component made ends with it: from then on its commands run
-      // nothing, though the host lists them a little longer (`uncommand`). Its `target` makes its commands decline
-      // while that node lacks the plugin's focus. Its `priority` and `bindings` are not mapped.
+      // Track the layer factory so its commands and enabled state can change after registration.
       layer(factory: () => Json) {
         const registration: Registration = { retired: false, commands: new Map<string, Json>(), states: new Map() }
         let names: string[] = []
         const apply = () => {
-          // What the factory reads this run, which stays watched until it runs again (carbon ce-2: kept for good, the
-          // reads of a layer whose `enabled` named one session after another filled the host's 128).
+          // Release watches the factory no longer reads.
           const reads = { keys: new Set<string>() }
           layered.add(reads)
           onCleanup(() => layered.delete(reads))
@@ -1610,8 +1457,7 @@ export function context(base: Base, carrier: Carrier) {
             rendering = before
           }
           registration.enabled = layer?.enabled
-          // A mode of the plugin's own (`modal`, one it pushes) is active only while it is the input mode (CT-31): its
-          // commands are bound everywhere and decline elsewhere, so the key goes on.
+          // Bind a plugin mode only while it is active.
           const own = typeof layer?.mode === "string" && layer.mode !== "global" && layer.mode !== "base"
           const scope = layer?.mode === "global" || own ? undefined : "base"
           registration.mode = own ? layer.mode : undefined
@@ -1620,8 +1466,7 @@ export function context(base: Base, carrier: Carrier) {
           for (const name of [...registration.states.keys()])
             if (!registration.commands.has(name)) registration.states.delete(name)
           const next = commands(registration, scope)
-          // A command the layer no longer lists is disabled now, unless another live layer holds it, where it went
-          // only with `uncommand`'s delay (carbon ce-1: file-browser's `commands: []` held its keys 250 ms on).
+          // Disable commands removed by the factory immediately, before delayed retirement.
           for (const name of names) if (!registration.commands.has(name)) resync(name)
           names.forEach((name) => carrier.uncommand(name))
           names = next
@@ -1635,7 +1480,6 @@ export function context(base: Base, carrier: Carrier) {
               onCleanup(() => {
                 registration.retired = true
                 dispose()
-                // Its commands are disabled at once, unless another live layer holds them (carbon ce-1).
                 names.forEach(resync)
                 names.forEach((name) => carrier.uncommand(name))
                 names = []
@@ -1650,12 +1494,11 @@ export function context(base: Base, carrier: Carrier) {
       shortcuts: (name: string) => read(`shortcuts:${name}`, { type: "shortcuts", name }) ?? [],
       commands: () =>
         (read("keymap-commands", { type: "keymap-commands" }) ?? [])
-          // The layer's own commands (a click, a dialog's answer) are not the plugin's to list (carbon-5).
+          // Hide the adapter's synthetic commands from the plugin.
           .filter((command: Json) => !String(command.name ?? command.id ?? "").includes(".compat."))
           .map((command: Json) => ({
             ...command,
             slash: command.slash,
-            // As TS's: running one dispatches it (carbon-4).
             run: () => void carrier.effect({ type: "dispatch", name: command.name ?? command.id }),
           })),
       pending: () => read("keymap-pending", { type: "keymap-pending" }) ?? [],
@@ -1677,11 +1520,10 @@ export function context(base: Base, carrier: Carrier) {
       store(key: string, options: { initial: Json }) {
         const known = stores.get(key)
         if (known) return known
-        // Declared to the host at once, so its reads and writes work before the manifest that lists it (carbon-2).
+        // Declare the storage key before setup's manifest arrives.
         void carrier.effect({ type: "storage-key", key })
         carrier.storage([key])
         carrier.changed()
-        // The stored value: its JSON, as a watched read carries it (big-boi's `cg4-2`), or its text.
         const persisted = () => {
           const stored = read(`storage:${key}`, { type: "storage-get", key })
           if (stored !== null && typeof stored === "object") return stored
@@ -1700,13 +1542,10 @@ export function context(base: Base, carrier: Carrier) {
           const value = untrack(persisted)
           if (value !== undefined) setStore(reconcile(value))
         })
-        // As TS's, under its lock (bigboi P8-3): one update of the key at a time, each made from what the host holds
-        // then, which the last update wrote; what it changed is merged into what is stored as it is written, so a field
-        // another client wrote meanwhile stays. One that removes a field writes the whole value.
+        // Serialize mutations per key: each starts from the last accepted host value.
         let queue: Promise<unknown> = Promise.resolve()
-        // A stored value that did not come (too large for the JS host, or the plugin failed) fails the update: read as
-        // an empty key, the update overwrote what was stored with the initial value (big-boi's `cg4-1`). A write the
-        // host refused fails it too, and the store keeps what is stored.
+        // Never replace an unreadable stored value with the default. A refused write must not become the local
+        // snapshot.
         const once = async (mutation: (draft: Json) => void) => {
           const stored = await carrier.effect({ type: "storage-get", key })
           if (stored === undefined) throw new Error(`the stored value of ${key} did not come`)
@@ -1768,9 +1607,6 @@ export function context(base: Base, carrier: Carrier) {
           presentation = { size: options?.size ?? "medium", centered: !!options?.centered }
           // A dialog of the plugin's own changes its frame in place.
           if (shown) sendShown()
-          // A select's, an alert's and a confirm's size and centering are the contract's (contract 2.x, addition 4): a
-          // `dialog.set` right after them sizes the dialog, which is built a microtask later. One after the host showed
-          // it is not carried: the contract's dialogs are whole values, and sent again it would answer nothing.
           else if (answering && sent === asked && (presentation.size !== "medium" || presentation.centered))
             unsupported("dialog.set after its dialog showed")
         },
@@ -1783,7 +1619,6 @@ export function context(base: Base, carrier: Carrier) {
           void carrier.effect({ type: "dialog", dialog: { type: "close", key: shown.key } })
           unshow()
         },
-        // An alert and a confirm are medium until the plugin's `dialog.set` right after says otherwise, as a select.
         alert: (options: Json) => {
           presentation = { size: "medium", centered: false }
           return ask(() => ({ type: "alert", title: options.title, message: options.message, ...presented() })).then(
@@ -1800,9 +1635,6 @@ export function context(base: Base, carrier: Carrier) {
             ...presented(),
           })).then((answer) => (answer === undefined ? undefined : answer === "true"))
         },
-        // Contract ergonomics 2.6: the field's starting text and the line above it, as TS's. Built a microtask later, as
-        // the other dialogs, so a `dialog.set` right after it is not one after it showed; the contract's prompt has no
-        // size, which the log says.
         prompt: (options: Json) => {
           presentation = { size: "medium", centered: false }
           return ask(() => {
@@ -1822,11 +1654,10 @@ export function context(base: Base, carrier: Carrier) {
           if ((options.actions?.length ?? 0) > SELECT_ACTIONS) unsupported(`ui.dialog.select over ${SELECT_ACTIONS} actions`)
           const search = options.search
           const enabled = options.options.filter((option: Json) => !option.disabled)
-          // The rows listed now, which an answer's index names: a plugin's search lists its own, flat and in its order,
-          // with the category as the footer, as TS's does (FT-12).
+          // Use the plugin search result's order for the visible rows.
           let listed: Json[] = search ? (search("", enabled) ?? []).filter((option: Json) => !option.disabled) : options.options
-          // A row's value names this select and the row itself, not its place: a search lists rows anew while the
-          // select stays open, and an action of a select a newer one replaced reaches nothing (bigboi cg2-7, cg2-8).
+          // Include the select's identity in its row values: filtering changes indexes and a replacement
+          // invalidates old actions.
           const mine = asked + 1
           const tokens = new Map<Json, string>()
           const named: Json[] = []
@@ -1851,10 +1682,7 @@ export function context(base: Base, carrier: Carrier) {
             const at = listed.find((option: Json) => option.value === options.current)
             return at === undefined ? {} : { current: token(at) }
           }
-          // The host tells a plugin's search each query (P6c's `query`): it lists the rows the search returns, in place
-          // under the select's key.
           const key = `search.${asked + 1}`
-          // A new dialog is medium until the plugin's `dialog.set` says otherwise, as TS's.
           presentation = { size: "medium", centered: false }
           // Its footer actions, in the footer with their keys: one on the selected row gets its value, one of
           // `selection: "none"` none. Triggering one leaves the select open, as TS's. A rowless one's input is this
@@ -1893,7 +1721,6 @@ export function context(base: Base, carrier: Carrier) {
             : undefined
           searching = run
           const answer = await ask(dialog)
-          // A select that replaced this one searches on, and an answered or closed one keeps no actions (cg2-10).
           if (searching === run) searching = undefined
           if (triggers === triggered) triggers = []
           // A keyed select stays open as a row is picked.
@@ -1986,8 +1813,7 @@ export function context(base: Base, carrier: Carrier) {
           panels.push(name)
           return surface(name, { type: "panel", name }, slotInput(path, name), claim.render, `slot ${path}`)
         }
-        // As it is: the host degrades a path it does not publish as TS does (carbon-4): a `replace` of one never
-        // degrades, an `append` goes to the nearest published ancestor, and a plugin's own `<Slot>` is a path too.
+        // External slot names stay intact; the host decides whether to degrade or suppress the claim.
         return surface(name, { type: "slot", kind, path }, slotInput(path), claim.render, `slot ${path}`)
       },
     },

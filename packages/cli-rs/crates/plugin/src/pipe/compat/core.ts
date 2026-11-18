@@ -86,8 +86,7 @@ export function createTextAttributes(style: Record<string, boolean | undefined> 
   )
 }
 
-// OpenTUI's styled text, as `lib/styled-text.ts` builds it: chunks of text, each with its colors and attributes, which
-// a text node's `content` takes (CT-27: @encoredigitalgroup/opencode's panels drew "[object Object]").
+// Retain the styled-text brand so text nodes read the chunks rather than stringify the object.
 const BrandedStyledText = Symbol.for("@opentui/core/StyledText")
 
 export interface TextChunk {
@@ -155,8 +154,7 @@ export function t(strings: TemplateStringsArray, ...values: Stylable[]) {
   return new StyledText(chunks)
 }
 
-// OpenTUI's filetype maps and the functions that read them, as its own (contract 2.x, step D): good-fences registers a
-// renderer for each filetype they name, and the host routes a fence by the filetype its info string resolves to.
+// Use the OpenTUI filetype maps so fence registration and lookup agree.
 export const extensionToFiletype = new Map<string, string>(filetypes.extensions as Array<[string, string]>)
 export const basenameToFiletype = new Map<string, string>(filetypes.basenames as Array<[string, string]>)
 
