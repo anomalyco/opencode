@@ -902,28 +902,18 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                       <SidebarToggle handoff="out" />
                                     </div>
                                   </Show>
+                                  <div class="flex w-full shrink-0 flex-col gap-[3px]">
+                                    <Show when={!actionInSidebarHeader()}>{firstSidebarAction()}</Show>
+                                    {searchButton(true)}
+                                    <Show when={projectNavigation()} fallback={newSessionButton()}>
+                                      {settingsButton()}
+                                    </Show>
+                                  </div>
                                   <Show
                                     when={isGroupedSidebarList()}
-                                    fallback={
-                                      <>
-                                        <div class="flex w-full shrink-0 flex-col gap-[3px]">
-                                          <Show when={!actionInSidebarHeader()}>{firstSidebarAction()}</Show>
-                                          {searchButton(true)}
-                                          <Show when={projectNavigation()} fallback={newSessionButton()}>
-                                            {settingsButton()}
-                                          </Show>
-                                        </div>
-                                        <div class="h-4 w-full shrink-0" aria-hidden="true" />
-                                      </>
-                                    }
+                                    fallback={<div class="h-4 w-full shrink-0" aria-hidden="true" />}
                                   >
-                                    <VerticalTabGroupsControls
-                                      actionInHeader={actionInSidebarHeader()}
-                                      firstAction={firstSidebarAction}
-                                      newSessionButton={newSessionButton}
-                                      projectNavigation={projectNavigation()}
-                                      settingsButton={settingsButton}
-                                    />
+                                    <VerticalTabGroupsControls />
                                   </Show>
                                   <div class="flex min-h-0 flex-1 flex-col gap-1">
                                     <Switch fallback={defaultVerticalTabStrip()}>

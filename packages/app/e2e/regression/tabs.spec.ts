@@ -2799,7 +2799,9 @@ test("tab groups reorder without color drift, collapse and auto-expand on naviga
   await expect(remoteTab).toBeVisible()
 
   // Inline search filters open tabs in place without showing closed/recent results underneath.
-  const filterInput = sidebar.getByRole("textbox", { name: "Search sessions", exact: true })
+  // The global Search sessions button stays above the inline open-tab filter.
+  await expect(sidebar.getByRole("button", { name: "Search sessions", exact: true })).toBeVisible()
+  const filterInput = sidebar.getByRole("textbox", { name: "Filter tabs", exact: true })
   await filterInput.fill("Remote gamma")
   await expect(remoteTab).toBeVisible()
   await expect(sidebar.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(localOne.id)}"])`)).toHaveCount(0)

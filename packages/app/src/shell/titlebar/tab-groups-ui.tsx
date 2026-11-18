@@ -1200,24 +1200,10 @@ export function TabFilterInput(props: { trailing?: JSX.Element }) {
   )
 }
 
-export function VerticalTabGroupsControls(props: {
-  actionInHeader: boolean
-  firstAction: () => JSX.Element
-  newSessionButton: () => JSX.Element
-  projectNavigation: boolean
-  settingsButton: () => JSX.Element
-}) {
+export function VerticalTabGroupsControls() {
   return (
-    <>
-      <div class="flex w-full shrink-0 flex-col gap-[3px]">
-        <Show when={!props.actionInHeader}>{props.firstAction()}</Show>
-        <Show when={props.projectNavigation} fallback={props.newSessionButton()}>
-          {props.settingsButton()}
-        </Show>
-      </div>
-      <div class="mt-2.5 mb-2.5 flex w-full shrink-0 items-center">
-        <TabFilterInput trailing={<TabGroupingMenu />} />
-      </div>
-    </>
+    <div class="my-2.5 flex w-full shrink-0 items-center">
+      <TabFilterInput trailing={<TabGroupingMenu />} />
+    </div>
   )
 }

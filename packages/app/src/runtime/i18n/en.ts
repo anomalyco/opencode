@@ -949,7 +949,7 @@ export const dict = {
   "tabs.groups.color.pink": "Rose",
   "tabs.groups.color.cyan": "Teal",
   "tabs.groups.color.gray": "Zinc",
-  "tabs.groups.filter.placeholder": "Search sessions",
+  "tabs.groups.filter.placeholder": "Filter tabs",
   "settings.plugins.reload": "Reload",
   "settings.plugins.check": "Check for updates",
   "settings.plugins.checking": "Checking for updates",
