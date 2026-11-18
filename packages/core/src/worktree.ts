@@ -1,6 +1,6 @@
 export * as Worktree from "./worktree.js"
 
-import { Context, Effect, Layer, RcMap, Schema } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import { and, asc, desc, eq, isNull, sql } from "drizzle-orm"
 import path from "path"
 import { AbsolutePath } from "./schema.js"
@@ -285,11 +285,8 @@ const layer = Layer.effect(
         { discard: true },
       )
 
-      const refs = Array.from(yield* RcMap.keys(locations.rcMap))
-      yield* Effect.forEach(
-        refs.filter((ref) => containsDirectory(worktreeDirectory, ref.directory)),
-        (ref) => locations.invalidate(ref),
-        { discard: true },
+      yield* LocationServiceMap.invalidateUnder(worktreeDirectory).pipe(
+        Effect.provideService(LocationServiceMap.Service, locations),
       )
     })
 
@@ -300,7 +297,11 @@ const layer = Layer.effect(
       if (!stored?.strategy) return yield* new InvalidDirectoryError({ directory: worktreeDirectory })
       const settings = yield* load(row.worktree, current)
       const strategy = yield* getStrategy(stored.strategy, settings.strategies)
-      yield* release(worktreeDirectory, input.projectID)
+      const ready =
+        input.force || !strategy.canRemove
+          ? true
+          : yield* strategy.canRemove(worktreeDirectory).pipe(Effect.orElseSucceed(() => false))
+      if (ready) yield* release(worktreeDirectory, input.projectID)
       yield* strategy
         .remove({
           directory: worktreeDirectory,

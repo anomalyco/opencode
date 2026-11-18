@@ -20,6 +20,7 @@ export interface Strategy {
     branch?: string
   }) => Effect.Effect<Worktree.Info, unknown>
   readonly remove: (input: { directory: AbsolutePath; force: boolean }) => Effect.Effect<void, unknown>
+  readonly canRemove?: (directory: AbsolutePath) => Effect.Effect<boolean, unknown>
   readonly list: (directory: AbsolutePath) => Effect.Effect<readonly Worktree.ListEntry[], unknown>
 }
 

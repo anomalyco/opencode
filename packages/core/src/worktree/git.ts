@@ -24,6 +24,7 @@ export const make = Effect.gen(function* () {
       if (!repository) return yield* new DirectoryUnavailableError({ directory: input.directory })
       yield* git.worktree.remove({ repository, directory: input.directory, force: input.force })
     }),
+    canRemove: (directory) => git.worktree.isClean(directory),
     list: Effect.fn("Worktree.Git.list")(function* (directory) {
       const repository = yield* git.repo.discover(directory)
       if (!repository) return yield* new DirectoryUnavailableError({ directory })
