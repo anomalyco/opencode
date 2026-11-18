@@ -281,7 +281,7 @@ const workspaceFile = optional(
 const focus = optional(
   Schema.Boolean.annotate({
     description:
-      "For a web address. True, only when the person asked to see or be shown the page: opens the browser if it is closed and the person's settings allow it. Omit to make it active for the agent without revealing it. False keeps it in the background until the person selects it. Never switches the person's open tab. A workspace file is always shown to the person.",
+      "For a web address. True, only when the person asked to see or be shown the page: opens the browser if it is closed and the person's settings allow it. Omit to open the tab without revealing the pane. False keeps it in the background until the person selects it. Never switches the person's open tab. A workspace file is always shown to the person.",
   }),
 )
 const FileTab = Schema.Struct({
