@@ -238,7 +238,7 @@ pub(crate) fn map_for_each_step(
     match input {
         Input::Returned(_) => fuel::step(vm),
         Input::Threw(e) => return Err(e),
-        Input::Start | Input::Finished => {}
+        Input::Start | Input::Finished(_) => {}
     }
     let is_set = matches!(vm.heap[id as usize].kind, Kind::Set(_));
     loop {

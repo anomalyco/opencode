@@ -75,7 +75,7 @@ pub(crate) fn settle_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, 
         }
         Input::Returned(r) => Ok(r.get()),
         Input::Threw(e) => Err(e),
-        Input::Finished => return Ok(Step::Done(Value::Undef)),
+        Input::Finished(_) => return Ok(Step::Done(Value::Undef)),
     };
     let p = target.as_obj().unwrap_or(0);
     match (kind, outcome) {

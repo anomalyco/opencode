@@ -1349,8 +1349,7 @@ impl<'rt> Vm<'rt> {
             }
             crate::native::THREW => crate::native::Input::Threw(self.pop()),
             crate::native::FINISHED => {
-                self.stack.pop();
-                crate::native::Input::Finished
+                crate::native::Input::Finished(self.stack.pop().unwrap_or_default())
             }
             _ => crate::native::Input::Start,
         };

@@ -112,8 +112,8 @@ pub enum Input {
     Returned(Slot),
     /// The call it asked for threw this, which a handler it pushed (`catching`) caught.
     Threw(Value),
-    /// The generator it resumed finished.
-    Finished,
+    /// The generator it resumed finished with this.
+    Finished(#[expect(dead_code, reason = "read by the generator methods' frames")] Slot),
 }
 
 /// What a step asks of the loop.
@@ -308,6 +308,16 @@ pub trait ForOf {
     fn finish(vm: &mut Vm, fr: Frame) -> Res;
     /// The body stopped the loop (`Flow::Stop`) and the iterator closed.
     fn stopped(_vm: &mut Vm) {}
+    /// What the frame does once the iterator is done: by default it finishes with `finish`. A built-in with work
+    /// left that calls the program (a mapper over what it collected) may call instead: its next step then goes to
+    /// `after`.
+    fn done(vm: &mut Vm, fr: Frame) -> Result<Step, Value> {
+        Ok(Step::Done(Self::finish(vm, fr)?))
+    }
+    /// A step after `done` called.
+    fn after(_vm: &mut Vm, _fr: Frame, _input: Input) -> Result<Step, Value> {
+        Ok(Step::Done(Value::Undef))
+    }
 }
 
 /// What a `ForOf` body does next.
@@ -336,6 +346,8 @@ const CLOSING: usize = 3;
 const CLOSING_THROW: usize = 4;
 const STEP: usize = 5;
 const START_LOOP: usize = 6;
+/// The iterator is done and the built-in's own work goes on (`ForOf::after`).
+const AFTER: usize = 7;
 
 /// Pushes a `ForOf` frame over `source`, with the built-in's own slots after the loop's.
 pub fn enter_for_of(
@@ -411,6 +423,9 @@ pub fn enter_for_of_record_sub(
 /// The step of a `ForOf` frame.
 pub fn for_of_step<C: ForOf>(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
     let mut phase = fr.index(vm, LOOP_PHASE);
+    if phase == AFTER {
+        return C::after(vm, fr, input);
+    }
     let mut flow = None;
     match input {
         Input::Start => {}
@@ -440,7 +455,7 @@ pub fn for_of_step<C: ForOf>(vm: &mut Vm, fr: Frame, input: Input) -> Result<Ste
                 let (dk, vk) = (vm.names.done, vm.names.value);
                 let d = vm.get_obj(rid, dk);
                 if vm.truthy(&d) {
-                    return Ok(Step::Done(C::finish(vm, fr)?));
+                    return loop_done::<C>(vm, fr);
                 }
                 let v = vm.get_obj(rid, vk);
                 flow = Some(body::<C>(vm, fr, |vm, fr| C::item(vm, fr, v)));
@@ -451,8 +466,8 @@ pub fn for_of_step<C: ForOf>(vm: &mut Vm, fr: Frame, input: Input) -> Result<Ste
             CLOSING => return close_done::<C>(vm, fr, Some(r)),
             _ => return close_done::<C>(vm, fr, None),
         },
-        Input::Finished => match phase {
-            STEP => return Ok(Step::Done(C::finish(vm, fr)?)),
+        Input::Finished(_) => match phase {
+            STEP => return loop_done::<C>(vm, fr),
             _ => return close_done::<C>(vm, fr, None),
         },
         Input::Threw(e) => match phase {
@@ -505,7 +520,7 @@ pub fn for_of_step<C: ForOf>(vm: &mut Vm, fr: Frame, input: Input) -> Result<Ste
         // The next value.
         let (it, next) = (fr.get(vm, LOOP_IT), fr.get(vm, LOOP_NEXT));
         let Value::Obj(id) = it else {
-            return Ok(Step::Done(C::finish(vm, fr)?));
+            return loop_done::<C>(vm, fr);
         };
         let direct = next.is_nullish();
         let kind = &vm.heap[id as usize].kind;
@@ -523,7 +538,7 @@ pub fn for_of_step<C: ForOf>(vm: &mut Vm, fr: Frame, input: Input) -> Result<Ste
                 fr.set_index(vm, LOOP_PHASE, STEP);
                 match vm.native_resume(id, 0, Value::Undef)? {
                     None => return Ok(Step::Pushed),
-                    Some((_, true)) => return Ok(Step::Done(C::finish(vm, fr)?)),
+                    Some((_, true)) => return loop_done::<C>(vm, fr),
                     Some((v, false)) => Some(v),
                 }
             }
@@ -552,11 +567,17 @@ pub fn for_of_step<C: ForOf>(vm: &mut Vm, fr: Frame, input: Input) -> Result<Ste
             Some(v) => v,
             None => match vm.iter_step_with(&it, next)? {
                 Some(v) => v,
-                None => return Ok(Step::Done(C::finish(vm, fr)?)),
+                None => return loop_done::<C>(vm, fr),
             },
         };
         flow = Some(body::<C>(vm, fr, |vm, fr| C::item(vm, fr, x)));
     }
+}
+
+/// The iterator is done: the built-in finishes, or goes on to work of its own (`ForOf::done`).
+fn loop_done<C: ForOf>(vm: &mut Vm, fr: Frame) -> Result<Step, Value> {
+    fr.set_index(vm, LOOP_PHASE, AFTER);
+    C::done(vm, fr)
 }
 
 /// Runs a body hook, closing the iterator if it fails before calling anything.
@@ -707,7 +728,7 @@ fn call_list_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
             fr.set_index(vm, LIST_K, k);
         }
         Input::Threw(e) => return Err(e),
-        Input::Start | Input::Finished => {}
+        Input::Start | Input::Finished(_) => {}
     }
     if k >= fr.index(vm, LIST_N) {
         vm.bytecode_builtin();

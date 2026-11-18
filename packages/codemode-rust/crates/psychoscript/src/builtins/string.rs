@@ -918,7 +918,7 @@ pub(crate) fn replace_with_step(
             fr.set_index(vm, REP_K, k);
         }
         Input::Threw(e) => return Err(e),
-        Input::Start | Input::Finished => {}
+        Input::Start | Input::Finished(_) => {}
     }
     let n = fr.index(vm, REP_N);
     if k >= n {

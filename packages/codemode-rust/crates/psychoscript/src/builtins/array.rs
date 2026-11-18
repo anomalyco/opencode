@@ -363,7 +363,7 @@ pub(crate) fn from_like_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Ste
             fr.set_index(vm, 4, i);
         }
         Input::Threw(e) => return Err(e),
-        Input::Start | Input::Finished => {}
+        Input::Start | Input::Finished(_) => {}
     }
     if i >= fr.index(vm, 3) {
         vm.bytecode_builtin();
@@ -694,7 +694,7 @@ pub(crate) fn to_locale_string_step(vm: &mut Vm, fr: Frame, input: Input) -> Res
             fuel::step(vm);
         }
         Input::Threw(e) => return Err(e),
-        Input::Start | Input::Finished => {}
+        Input::Start | Input::Finished(_) => {}
     }
     let key = vm.atoms.intern_static("toLocaleString");
     while i < len(vm, id) {
@@ -955,7 +955,7 @@ pub(crate) fn each_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Va
             k += 1;
         }
         Input::Threw(e) => return Err(e),
-        Input::Finished => {}
+        Input::Finished(_) => {}
     }
     let this = fr.this_slot(vm);
     let Some(id) = this.obj() else {
@@ -1227,7 +1227,7 @@ pub(crate) fn reduce_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, 
             fuel::step(vm);
         }
         Input::Threw(e) => return Err(e),
-        Input::Finished => {}
+        Input::Finished(_) => {}
     }
     let this = fr.this_slot(vm);
     let Some(id) = this.obj() else {
@@ -1453,7 +1453,7 @@ pub(crate) fn sort_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Va
             fuel::step(vm);
         }
         Input::Threw(e) => return Err(e),
-        Input::Finished => {}
+        Input::Finished(_) => {}
     }
     // Fewer than two values make no merges.
     if n >= 2 {
@@ -1727,7 +1727,7 @@ pub(crate) fn flat_map_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step
             walked = fr.index(vm, 7) + 1;
         }
         Input::Threw(e) => return Err(e),
-        Input::Start | Input::Finished => {}
+        Input::Start | Input::Finished(_) => {}
     }
     loop {
         let i = match order {

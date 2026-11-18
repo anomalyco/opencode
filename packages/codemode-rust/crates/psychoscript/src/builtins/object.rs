@@ -554,7 +554,7 @@ pub(crate) fn invoke_step(
             Ok(Step::Done(r.get()))
         }
         Input::Threw(e) => Err(e),
-        Input::Finished => Ok(Step::Done(Value::Undef)),
+        Input::Finished(_) => Ok(Step::Done(Value::Undef)),
     }
 }
 
@@ -824,7 +824,7 @@ pub(crate) fn revive_step(
             visited = true;
         }
         Input::Threw(e) => return Err(e),
-        Input::Finished => {}
+        Input::Finished(_) => {}
     }
     loop {
         let (holder, key) = (
