@@ -45,6 +45,7 @@ import { FileWrite } from "../file-write.js"
 import { Flag } from "../flag.js"
 import { Formatter } from "../formatter.js"
 import { Generate } from "../generate.js"
+import { Git } from "../git.js"
 import { Form } from "../form.js"
 import { FileSystem } from "../filesystem.js"
 import { LocationWatcherPolicy } from "../filesystem/location-watcher-policy.js"
@@ -140,6 +141,7 @@ const services = [
   Flag.Service,
   Formatter.Service,
   Generate.Service,
+  Git.Service,
   LocationWatcherPolicy.Service,
   FileSystem.Service,
   FSUtil.Service,
@@ -200,6 +202,7 @@ export const requirements = LayerNode.group([
   Flag.node,
   Formatter.node,
   Generate.node,
+  Git.node,
   LocationWatcherPolicy.node,
   FileSystem.node,
   FSUtil.node,

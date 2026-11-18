@@ -21,6 +21,7 @@ import { SkillFile } from "../../config/plugin/skill-file.js"
 import { ConsoleAccess } from "../../console-access.js"
 import { Credential } from "../../credential.js"
 import { Flag } from "../../flag.js"
+import { Git } from "../../git.js"
 import { InstructionDiscovery } from "../../instruction-discovery.js"
 import { Integration } from "../../integration.js"
 import { IntegrationConnection } from "../../integration/connection.js"
@@ -185,6 +186,7 @@ export const OpencodePlugin = define<
   | Bus.Service
   | Config.Service
   | Flag.Service
+  | Git.Service
   | InstructionDiscovery.Service
   | SharedCache.Service
   | Skill.Service

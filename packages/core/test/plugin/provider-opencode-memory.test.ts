@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test"
+import fs from "fs/promises"
+import path from "path"
+import { $ } from "bun"
 import { Message, SystemPart } from "@opencode/ai/effect"
 import type { Plugin as PluginContext } from "@opencode/plugin/effect"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
@@ -9,6 +12,7 @@ import { Agent } from "@opencode/core/agent"
 import { Credential } from "@opencode/core/credential"
 import { Flag } from "@opencode/core/flag"
 import { Integration } from "@opencode/core/integration"
+import { Location } from "@opencode/core/location"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginHost } from "@opencode/core/plugin/host"
@@ -19,6 +23,7 @@ import { Provider } from "@opencode/core/provider"
 import { Session } from "@opencode/core/session"
 import { SessionMessage } from "@opencode/core/session/message"
 import { Tool } from "@opencode/core/tool"
+import { initGit } from "../fixture/git"
 import { eventually } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -35,7 +40,8 @@ const entry = (id: string, overrides: Record<string, unknown> = {}) => ({
   id,
   title: `Entry ${id}`,
   body: `Body of ${id}\nMore`,
-  tags: [],
+  tags: ["fix"],
+  source: { repo: "github.com/acme/app", branch: "main", commitSha: "abc123" },
   revision: 1,
   createdBy: author,
   updatedBy: author,
@@ -168,6 +174,22 @@ const prompt = (sessionID: Session.ID, text: string) =>
     })
   })
 
+/** A completed tool call, as the tool hooks report it. */
+const ran = (sessionID: Session.ID, tool: string, input: unknown, output?: unknown) =>
+  Effect.gen(function* () {
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.trigger("tool", "execute.after", {
+      tool,
+      sessionID,
+      agent: Agent.ID.make("build"),
+      messageID: SessionMessage.ID.create(),
+      id: Tool.CallID.make("call_1"),
+      input,
+      status: "completed",
+      result: { output },
+    })
+  })
+
 const texts = (event: SessionHooks["context"]) =>
   event.messages.map((message) => message.content.map((part) => (part.type === "text" ? part.text : "")).join(""))
 
@@ -213,9 +235,18 @@ describe("OpencodePlugin memory", () => {
 
         const found = yield* (yield* memoryTool("search")).execute({ query: "deploy fails" }, context(session.id))
         expect(found.output).toEqual({
-          results: [{ id: "mem_1", title: "Entry mem_1", snippet: "Connect\nfirst", revision: 1, score: 0.4 }],
+          results: [
+            {
+              id: "mem_1",
+              title: "Entry mem_1",
+              snippet: "Connect\nfirst",
+              revision: 1,
+              score: 0.4,
+              repo: "github.com/acme/app",
+            },
+          ],
         })
-        expect(found.content).toBe("- mem_1: Entry mem_1 — Connect first")
+        expect(found.content).toBe("- mem_1: Entry mem_1 — Connect first (github.com/acme/app)")
         expect(console.state.requests.at(-1)).toEqual({
           method: "POST",
           path: "/api/memory/search",
@@ -226,7 +257,7 @@ describe("OpencodePlugin memory", () => {
         const read = yield* (yield* memoryTool("read")).execute({ id: "mem_1" }, context(session.id))
         expect(read.output).toMatchObject({ id: "mem_1", revision: 1, body: "Body of mem_1\nMore" })
         expect(read.content).toBe(
-          `# Entry mem_1\n(mem_1, revision 1, updated by ada@example.com, at ${new Date(0).toISOString()})\n\nBody of mem_1\nMore`,
+          `# Entry mem_1\n(mem_1, revision 1, tags fix, from github.com/acme/app@main, commit abc123, updated by ada@example.com, at ${new Date(0).toISOString()})\n\nBody of mem_1\nMore`,
         )
         expect(console.state.requests.at(-1)?.path).toBe(`/api/memory/entries/mem_1?sessionID=${session.id}`)
 
@@ -248,7 +279,16 @@ describe("OpencodePlugin memory", () => {
 
         const held = yield* publish.execute({ title: "Deploy VPN", body: "Use the VPN" }, context(session.id))
         expect(held.output).toEqual({
-          nearest: [{ id: "mem_close", title: "Entry mem_close", snippet: "VPN first", revision: 1, score: 0.9 }],
+          nearest: [
+            {
+              id: "mem_close",
+              title: "Entry mem_close",
+              snippet: "VPN first",
+              revision: 1,
+              score: 0.9,
+              repo: "github.com/acme/app",
+            },
+          ],
         })
         expect(held.content).toContain("- mem_close: Entry mem_close — VPN first")
         expect(console.state.requests).toEqual([
@@ -261,14 +301,16 @@ describe("OpencodePlugin memory", () => {
         ])
 
         const published = yield* publish.execute(
-          { title: "Deploy VPN", body: "Use the VPN", distinct: true },
+          { title: "Deploy VPN", body: "Use the VPN", tags: ["gotcha"], distinct: true },
           context(session.id),
         )
         expect(published.output).toMatchObject({ entry: { id: "mem_new", title: "Deploy VPN" } })
         expect(published.content).toBe("Published mem_new: Deploy VPN")
+        // The session's directory isn't a Git checkout, so the session is all the source there is.
         expect(console.state.requests.at(-1)?.body).toEqual({
           title: "Deploy VPN",
           body: "Use the VPN",
+          tags: ["gotcha"],
           source: { sessionID: session.id },
         })
       }),
@@ -316,7 +358,7 @@ describe("OpencodePlugin memory", () => {
           "The entry changed since you read it; it is at revision 2 now. Read it again, merge your change and update with that revision.",
         )
         const empty = yield* update.execute({ id: "mem_1", revision: 1 }, context(session.id)).pipe(Effect.flip)
-        expect(empty.message).toBe("update takes a new title, body or both")
+        expect(empty.message).toBe("update takes a new title, body, tags or several")
       }),
     ),
   )
@@ -341,18 +383,38 @@ describe("OpencodePlugin memory", () => {
           },
         ])
         // Injections carry whole bodies, so the preview is the body's first line.
-        const delivered = OpencodeMemoryPolicy.initial.render([
-          { id: "mem_a", title: "Entry mem_a", snippet: "Body of mem_a", revision: 1, score: 0.95 },
-          { id: "mem_b", title: "Entry mem_b", snippet: "Body of mem_b", revision: 1, score: 0.7 },
-        ])
-        expect(delivered).toContain("- mem_a: Entry mem_a — Body of mem_a\n- mem_b: Entry mem_b — Body of mem_b")
+        const delivered = OpencodeMemoryPolicy.initial.render(
+          [
+            {
+              id: "mem_a",
+              title: "Entry mem_a",
+              snippet: "Body of mem_a",
+              revision: 1,
+              score: 0.95,
+              repo: "github.com/acme/app",
+            },
+            {
+              id: "mem_b",
+              title: "Entry mem_b",
+              snippet: "Body of mem_b",
+              revision: 1,
+              score: 0.7,
+              repo: "github.com/acme/app",
+            },
+          ],
+          { type: "prompt", text: "Fix the deploy", files: [] },
+        )
+        expect(delivered).toContain(
+          "- mem_a: Entry mem_a — Body of mem_a (github.com/acme/app)\n- mem_b: Entry mem_b — Body of mem_b (github.com/acme/app)",
+        )
+        expect(delivered).toContain("may bear on this task")
         expect(texts(first)).toEqual(["Fix the deploy", delivered])
         expect(synthetic).toMatchObject([
           {
             sessionID: session.id,
             text: delivered,
             description: "2 memory entries for this task",
-            metadata: { source: "console.memory", entries: ["mem_a", "mem_b"] },
+            metadata: { source: "console.memory", moment: "prompt", entries: ["mem_a", "mem_b"] },
             resume: false,
           },
         ])
@@ -386,25 +448,125 @@ describe("OpencodePlugin memory", () => {
       }),
     ),
   )
+
+  it.effect("injects for a failing command, with its error and the files the agent worked on, twice at most", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        const { host, synthetic } = yield* start(console)
+        const hooks = yield* PluginHooks.Service
+        const directory = (yield* Location.Service).directory
+        const session = yield* host.session.create({})
+        console.state.hits = [hit("mem_fix", 0.9)]
+        yield* ran(session.id, "read", { path: path.join(directory, "src/deploy.ts") })
+        yield* ran(session.id, "patch", {
+          patchText: "*** Begin Patch\n*** Update File: src/config.ts\n@@\n*** End Patch",
+        })
+        yield* ran(session.id, "edit", { path: "src/deploy.ts", oldString: "a", newString: "b" })
+
+        // A success, and a command that printed nothing, aren't failures worth a lookup.
+        yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 0, output: "ok" })
+        yield* ran(session.id, "shell", { command: "test -f x" }, { exitCode: 1, output: "" })
+        yield* ran(
+          session.id,
+          "shell",
+          { command: "bun test" },
+          { exitCode: 1, output: `${"x".repeat(2000)}\nTypeError: boom` },
+        )
+        const after = request(session.id, "Fix the deploy")
+        yield* hooks.trigger("session", "context", after)
+        const query = (console.state.requests[0]?.body as { query: string }).query
+        expect(query.startsWith("$ bun test\n")).toBe(true)
+        expect(query.endsWith("TypeError: boom\nFiles: src/config.ts src/deploy.ts")).toBe(true)
+        expect(query.length).toBe(1000)
+        expect(texts(after).at(-1)).toContain("may bear on this failure")
+        expect(synthetic.map((item) => item.description)).toEqual(["1 memory entry for this failure"])
+
+        yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 1, output: "TypeError: again" })
+        yield* hooks.trigger("session", "context", request(session.id, "Fix the deploy"))
+        yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 1, output: "TypeError: third" })
+        yield* hooks.trigger("session", "context", request(session.id, "Fix the deploy"))
+        expect(console.state.requests.map((item) => item.path)).toEqual(["/api/memory/inject", "/api/memory/inject"])
+      }),
+    ),
+  )
+
+  it.effect(
+    "records the checkout's repository, branch and commit with what it publishes, without the remote's token",
+    () =>
+      withConsole((console) =>
+        Effect.gen(function* () {
+          const directory = (yield* Location.Service).directory
+          yield* Effect.promise(async () => {
+            await initGit(directory, "-b", "trunk")
+            await fs.appendFile(
+              path.join(directory, ".git", "config"),
+              '[remote "origin"]\n\turl = https://bot:ghp_secret@GitHub.com/Acme/App.git\n',
+            )
+            await $`git commit --allow-empty -m root`.cwd(directory).quiet()
+          })
+          const { host } = yield* start(console)
+          const session = yield* host.session.create({})
+          yield* (yield* memoryTool("publish")).execute(
+            { title: "Decision", body: "Why", distinct: true },
+            context(session.id),
+          )
+          const source = (console.state.requests.at(-1)?.body as { source: Record<string, string> }).source
+          expect(source).toEqual({
+            repo: "github.com/Acme/App",
+            branch: "trunk",
+            commitSha: expect.stringMatching(/^[0-9a-f]{40}$/),
+            sessionID: session.id,
+          })
+          expect(JSON.stringify(console.state.requests)).not.toContain("ghp_secret")
+        }),
+      ),
+  )
 })
 
 describe("OpencodeMemoryPolicy.initial", () => {
   const session = (overrides: Record<string, unknown> = {}) =>
     ({ time: { created: 0, updated: 0 }, ...overrides }) as unknown as Session.Info
+  const signals = (overrides: Partial<OpencodeMemoryPolicy.Signals> = {}): OpencodeMemoryPolicy.Signals => ({
+    files: [],
+    injected: { prompt: 0, failure: 0 },
+    ...overrides,
+  })
+  const task = (text: string, files: string[] = []) => ({ type: "prompt" as const, text, files })
 
-  test("injects for a new session's first prompt only, at Console's own limit and bar", () => {
-    expect(OpencodeMemoryPolicy.initial.inject({ text: "  Fix the deploy  " }, session())).toEqual({
-      query: "Fix the deploy",
+  test("injects for a new session's first prompt only, with the files attached to it", () => {
+    const inject = OpencodeMemoryPolicy.initial.inject
+    expect(inject(task("  Fix the deploy  "), signals(), session())).toEqual({ query: "Fix the deploy" })
+    expect(inject(task("Fix it", ["src/a.ts"]), signals(), session())).toEqual({ query: "Fix it\nFiles: src/a.ts" })
+    expect(inject(task("   "), signals(), session())).toBeUndefined()
+    expect(
+      inject(task("Keep going"), signals(), session({ time: { created: 0, updated: 0, busy: 1 } })),
+    ).toBeUndefined()
+    expect(inject(task("Fix the deploy"), signals(), session({ fork: { sessionID: "ses_parent" } }))).toBeUndefined()
+  })
+
+  test("injects for a failing command until the session had two such injections", () => {
+    const failure = { type: "failure" as const, command: "bun test", output: "TypeError: boom", exitCode: 1 }
+    const files = Array.from({ length: 7 }, (_, index) => `f${index}.ts`)
+    expect(OpencodeMemoryPolicy.initial.inject(failure, signals({ files }), session())).toEqual({
+      query: "$ bun test\nTypeError: boom\nFiles: f2.ts f3.ts f4.ts f5.ts f6.ts",
     })
-    expect(OpencodeMemoryPolicy.initial.inject({ text: "   " }, session())).toBeUndefined()
     expect(
-      OpencodeMemoryPolicy.initial.inject(
-        { text: "Keep going" },
-        session({ time: { created: 0, updated: 0, busy: 1 } }),
-      ),
+      OpencodeMemoryPolicy.initial.inject(failure, signals({ injected: { prompt: 1, failure: 2 } }), session()),
     ).toBeUndefined()
-    expect(
-      OpencodeMemoryPolicy.initial.inject({ text: "Fix the deploy" }, session({ fork: { sessionID: "ses_parent" } })),
-    ).toBeUndefined()
+  })
+})
+
+describe("OpencodeMemory.repoName", () => {
+  test("names a remote the same way for its SSH and HTTPS forms, without credentials", () => {
+    expect(OpencodeMemory.repoName("git@github.com:anomalyco/opencode.git")).toBe("github.com/anomalyco/opencode")
+    expect(OpencodeMemory.repoName("https://github.com/anomalyco/opencode")).toBe("github.com/anomalyco/opencode")
+    expect(OpencodeMemory.repoName("https://x-access-token:tok@GitHub.com/anomalyco/opencode.git/")).toBe(
+      "github.com/anomalyco/opencode",
+    )
+    expect(OpencodeMemory.repoName("ssh://git@gitlab.example.com:2222/group/sub/app.git")).toBe(
+      "gitlab.example.com/group/sub/app",
+    )
+    expect(OpencodeMemory.repoName("/srv/git/app.git")).toBeUndefined()
+    expect(OpencodeMemory.repoName("file:///srv/git/app.git")).toBeUndefined()
   })
 })
