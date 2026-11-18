@@ -1573,7 +1573,23 @@ export type Wrap = ("word" | "char" | "none")
 
 export type AbsolutePath = string
 
+export type AgentColor = string
+
 export type AgentID = string
+
+export type AgentInfo = {
+    id: AgentID,
+    name: string,
+    model: ModelRef?,
+    request: ProviderRequest,
+    system: string?,
+    description: string?,
+    mode: ("subagent" | "primary" | "all"),
+    hidden: boolean,
+    color: AgentColor?,
+    steps: number?,
+    permissions: PermissionRuleset,
+}
 
 export type AgentUpdated = {
     id: EventID,
@@ -1608,6 +1624,39 @@ export type ApiSessionStatus = ({
     type: "busy",
 })
 
+export type ArtifactCapability = ("static" | "server-code" | "sqlite" | "durable-objects")
+
+export type ArtifactContent = {
+    info: ArtifactInfo,
+    files: { [string]: string },
+}
+
+export type ArtifactID = string
+
+export type ArtifactInfo = {
+    id: ArtifactID,
+    provider: ArtifactProviderIDEncoded,
+    sessionID: SessionID?,
+    title: string,
+    entry: string,
+    url: string,
+    time: ArtifactTime,
+}
+
+export type ArtifactProvider = {
+    id: ArtifactProviderIDEncoded,
+    name: string,
+    capabilities: { ArtifactCapability },
+    default: boolean,
+}
+
+export type ArtifactProviderIDEncoded = string
+
+export type ArtifactTime = {
+    created: number,
+    updated: number,
+}
+
 export type ArtifactUpdated = {
     id: EventID,
     created: number,
@@ -1615,6 +1664,119 @@ export type ArtifactUpdated = {
     type: "artifact.updated",
     location: ApiLocationRef?,
     data: any,
+}
+
+export type AutomationAction = (AutomationActionPrompt | AutomationActionCode)
+
+export type AutomationActionCode = {
+    type: "code",
+    code: string,
+    args: any,
+}
+
+--- What it does: { type: "prompt", prompt, to? } sends a prompt; { type: "code", code, args? } runs Code Mode with no model.
+export type AutomationActionInput = (AutomationPromptActionInput | AutomationCodeActionInput)
+
+export type AutomationActionPrompt = {
+    type: "prompt",
+    prompt: string,
+    to: AutomationTarget,
+}
+
+export type AutomationCodeActionInput = {
+    type: "code",
+    code: string,
+    args: any,
+}
+
+--- A duration such as "90 seconds", "5 minutes" or "2 hours".
+export type AutomationDuration = string
+
+export type AutomationID = string
+
+export type AutomationInfo = {
+    id: AutomationID,
+    name: string,
+    projectID: ProjectID,
+    sessionID: SessionID?,
+    directory: string,
+    trigger: AutomationTrigger1,
+    tz: string,
+    action: AutomationAction,
+    expires: number?,
+    status: AutomationStatus,
+    nextDueAt: number?,
+    runCount: number,
+    lastRunAt: number?,
+    lastOutcome: AutomationOutcome?,
+    lastOutput: string?,
+    state: any,
+    time: {
+        created: number,
+        updated: number,
+    },
+}
+
+export type AutomationOutcome = ("fired" | "late" | "skipped" | "disabled" | "failed" | "expired")
+
+export type AutomationPromptActionInput = {
+    type: "prompt",
+    prompt: string,
+    to: AutomationTarget?,
+}
+
+export type AutomationStatus = ("active" | "paused" | "done")
+
+export type AutomationTarget = ({
+    session: SessionID,
+    subagent: any,
+} | {
+    subagent: AgentID,
+    session: any,
+})
+
+--- When it runs: { type: "at", at: "in 20 minutes" | "2026-10-27T09:00" }, { type: "every", every: "1 hour" } or { type: "cron", cron: "0 9 * * 1-5" }, each with an optional tz. Or { type: "event", server, event, args? } for a connected MCP server advertising push delivery (requires mcp_events).
+export type AutomationTrigger = (AutomationTriggerAt | AutomationTriggerEvery | AutomationTriggerCron | AutomationTriggerEvent)
+
+export type AutomationTrigger1 = (AutomationTriggerAt | AutomationTriggerEvery | AutomationTriggerCron | AutomationTriggerEvent)
+
+export type AutomationTriggerAt = {
+    type: "at",
+    at: string,
+    tz: string?,
+}
+
+export type AutomationTriggerCron = {
+    type: "cron",
+    cron: string,
+    tz: string?,
+}
+
+export type AutomationTriggerEvent = {
+    type: "event",
+    server: string,
+    event: string,
+    args: { [string]: any }?,
+}
+
+export type AutomationTriggerEvery = {
+    type: "every",
+    every: AutomationDuration,
+    tz: string?,
+}
+
+export type BlobID = string
+
+export type BlobInfo = {
+    id: BlobID,
+    mime: string,
+    bytes: number,
+    expiresAt: number,
+}
+
+export type CommandInfo = {
+    name: string,
+    description: string?,
 }
 
 export type CommandUpdated = {
@@ -1626,6 +1788,271 @@ export type CommandUpdated = {
     data: any,
 }
 
+export type ConfigAgentEncoded = {
+    model: (string | {
+        providerID: string,
+        model: string,
+        variant: string?,
+    })?,
+    request: {
+        headers: { [string]: string }?,
+        body: { [string]: any }?,
+    }?,
+    system: string?,
+    description: string?,
+    mode: ("subagent" | "primary" | "all")?,
+    hidden: boolean?,
+    color: string?,
+    steps: number?,
+    disabled: boolean?,
+    permissions: PermissionRuleset?,
+}
+
+export type ConfigCommandEncoded = {
+    template: string,
+    description: string?,
+    agent: string?,
+    model: (string | {
+        providerID: string,
+        model: string,
+        variant: string?,
+    })?,
+    subagent: boolean?,
+    subtask: boolean?,
+}
+
+export type ConfigCompactionPercent = string
+
+export type ConfigDirectoryEncoded = {
+    type: "directory",
+    path: AbsolutePath,
+}
+
+export type ConfigDocumentEncoded = {
+    type: "document",
+    path: AbsolutePath?,
+    info: ConfigInfoEncoded,
+}
+
+export type ConfigEntry = (ConfigDocumentEncoded | ConfigDirectoryEncoded)
+
+export type ConfigFormatterEntryEncoded = {
+    disabled: boolean?,
+    command: { string }?,
+    environment: { [string]: string }?,
+    extensions: { string }?,
+}
+
+export type ConfigInfoEncoded = {
+    ["$schema"]: string?,
+    shell: string?,
+    model: (string | {
+        providerID: string,
+        model: string,
+        variant: string?,
+    })?,
+    default_agent: string?,
+    update: ("disable" | "notify" | "auto")?,
+    share: ("manual" | "auto" | "disabled")?,
+    enterprise: {
+        url: string?,
+    }?,
+    username: string?,
+    timezone: string?,
+    permissions: PermissionRuleset?,
+    policies: { {
+        action: ("provider.use" | "tool.use" | "integration.connect" | "integration.use" | "mcp.use" | "skill.use" | "plugin.use" | "websearch.use"),
+        resource: string,
+        effect: ("allow" | "deny"),
+    } }?,
+    agents: { [string]: ConfigAgentEncoded }?,
+    snapshots: boolean?,
+    watcher: {
+        ignore: { string }?,
+    }?,
+    formatter: (boolean | { [string]: ConfigFormatterEntryEncoded })?,
+    lsp: (boolean | { [string]: ({
+        disabled: true,
+    } | ConfigLSPServerEncoded) })?,
+    media: {
+        image: {
+            auto_resize: boolean?,
+            max_width: number?,
+            max_height: number?,
+            max_base64_bytes: number?,
+        }?,
+    }?,
+    tool_output: {
+        max_lines: number?,
+        max_bytes: number?,
+    }?,
+    mcp: {
+        timeout: {
+            startup: number?,
+            catalog: number?,
+            execution: number?,
+        }?,
+        servers: { [string]: (McpLocalConfigEncoded | McpRemoteConfigEncoded) }?,
+    }?,
+    compaction: {
+        auto: boolean?,
+        background: boolean?,
+        keep: {
+            tokens: number?,
+        }?,
+        buffer: (ConfigCompactionPercent | number)?,
+    }?,
+    skills: { string }?,
+    commands: { [string]: ConfigCommandEncoded }?,
+    instructions: { string }?,
+    references: { [string]: (string | ConfigReferenceGitEncoded | ConfigReferenceLocalEncoded) }?,
+    websearch: (false | ConfigWebSearchInfoEncoded)?,
+    plugins: { (string | ConfigPluginEntryEncoded) }?,
+    worktree: ConfigWorktree?,
+    warming: (boolean | ConfigWarmingEncoded)?,
+    providers: { [string]: ConfigProviderEncoded }?,
+    experimental: {
+        portable_shell_scanner: boolean?,
+        codemode_vm: boolean?,
+        all_flags: boolean?,
+        todo: boolean?,
+        media_blob: boolean?,
+        automations: boolean?,
+        artifacts: boolean?,
+        video_generate: boolean?,
+        console_watches: boolean?,
+        mcp_events: boolean?,
+        full_codemode: boolean?,
+        schedules: boolean?,
+        part_rows: boolean?,
+        image_generate: (boolean | {
+            model: (string | {
+                providerID: string,
+                model: string,
+                variant: string?,
+            })?,
+        })?,
+        subagent_depth: number?,
+        location_idle_timeout: (string | false)?,
+        policies: { {
+            action: ("provider.use" | "tool.use" | "integration.connect" | "integration.use" | "mcp.use" | "skill.use" | "plugin.use" | "websearch.use"),
+            resource: string,
+            effect: ("allow" | "deny"),
+        } }?,
+    }?,
+}
+
+export type ConfigLSPServerEncoded = {
+    command: { string },
+    extensions: { string }?,
+    disabled: boolean?,
+    env: { [string]: string }?,
+    initialization: { [string]: any }?,
+}
+
+export type ConfigModelCapabilities = {
+    tools: boolean?,
+    freeform: { ToolFreeformFormat }?,
+    input: { string }?,
+    output: { string }?,
+    temperature: boolean?,
+    reasoning: ConfigModelReasoning?,
+}
+
+export type ConfigModelCostEncoded = {
+    tier: {
+        type: "context",
+        size: number,
+    }?,
+    input: MoneyUSDPerMillionTokens,
+    output: MoneyUSDPerMillionTokens,
+    cache: {
+        read: MoneyUSDPerMillionTokens?,
+        write: MoneyUSDPerMillionTokens?,
+    }?,
+}
+
+export type ConfigModelEncoded = {
+    modelID: string?,
+    type: ModelType?,
+    family: string?,
+    name: string?,
+    releaseDate: string?,
+    compatibility: ModelCompatibility?,
+    package: string?,
+    settings: ConfigModelSettings?,
+    headers: { [string]: string }?,
+    body: { [string]: any }?,
+    capabilities: ConfigModelCapabilities?,
+    variants: { {
+        id: string,
+        settings: ConfigModelVariantSettings?,
+        headers: { [string]: string }?,
+        body: { [string]: any }?,
+    } }?,
+    cost: (ConfigModelCostEncoded | { ConfigModelCostEncoded })?,
+    disabled: boolean?,
+    limit: {
+        context: number?,
+        input: number?,
+        output: number?,
+    }?,
+}
+
+export type ConfigModelReasoning = ({
+    supported: false,
+} | {
+    supported: true,
+    toggle: boolean?,
+    effort: { string }?,
+    budget: {
+        min: number?,
+        max: number?,
+    }?,
+})
+
+export type ConfigModelSettings = { [string]: any }
+
+export type ConfigModelVariantSettings = { [string]: any }
+
+export type ConfigPluginEntryEncoded = {
+    package: string,
+    options: { [string]: any }?,
+}
+
+export type ConfigProviderEncoded = {
+    canonical: ProviderID?,
+    name: string?,
+    env: { string }?,
+    package: string?,
+    compatibility: ProviderCompatibility?,
+    settings: ConfigProviderSettings?,
+    headers: { [string]: string }?,
+    body: { [string]: any }?,
+    models: { [string]: ConfigModelEncoded }?,
+}
+
+export type ConfigProviderSettings = { [string]: any }
+
+export type ConfigReferenceGitEncoded = {
+    repository: string,
+    branch: string?,
+    description: string?,
+    hidden: boolean?,
+}
+
+export type ConfigReferenceLocalEncoded = {
+    path: string,
+    description: string?,
+    hidden: boolean?,
+}
+
+export type ConfigShellOption = {
+    path: string,
+    name: string,
+    acceptable: boolean,
+}
+
 export type ConfigUpdated = {
     id: EventID,
     created: number,
@@ -1635,7 +2062,72 @@ export type ConfigUpdated = {
     data: any,
 }
 
+export type ConfigWarmingEncoded = {
+    prompt: string?,
+    interval: ("auto" | string)?,
+    duration: string?,
+}
+
+export type ConfigWebSearchInfoEncoded = {
+    provider: ("random" | WebSearchID),
+}
+
+export type ConfigWorktree = {
+    directory: string,
+}
+
+export type ConnectionCredentialInfo = {
+    type: "credential",
+    id: CredentialID,
+    label: string,
+    method: ("key" | "oauth" | "external"),
+    status: ConnectionStatus?,
+}
+
+export type ConnectionEnvInfo = {
+    type: "env",
+    name: string,
+    status: ConnectionStatus?,
+}
+
+export type ConnectionInfo = (ConnectionCredentialInfo | ConnectionEnvInfo)
+
+export type ConnectionStatus = {
+    status: "needs_auth",
+    message: string,
+    url: string?,
+}
+
+export type CredentialEntry = {
+    id: CredentialID,
+    integrationID: IntegrationID,
+    label: string,
+    active: boolean,
+    value: CredentialValue,
+}
+
+export type CredentialExternal = {
+    type: "external",
+    methodID: IntegrationMethodID,
+    metadata: { [string]: any }?,
+}
+
 export type CredentialID = string
+
+export type CredentialKey = {
+    type: "key",
+    key: string,
+    metadata: { [string]: any }?,
+}
+
+export type CredentialOAuth = {
+    type: "oauth",
+    methodID: IntegrationMethodID,
+    refresh: string,
+    access: string,
+    expires: number,
+    metadata: { [string]: any }?,
+}
 
 export type CredentialSwitched = {
     id: EventID,
@@ -1660,6 +2152,8 @@ export type CredentialUpdated = {
         credentialID: CredentialID,
     },
 }
+
+export type CredentialValue = (CredentialOAuth | CredentialKey | CredentialExternal)
 
 export type EventID = string
 
@@ -1696,6 +2190,15 @@ export type FileDiffInfo = {
     more: true?,
 }
 
+export type FileSystemEntry = {
+    path: RelativePath,
+    type: ("file" | "directory"),
+}
+
+export type FileSystemWrite = {
+    path: AbsolutePath,
+}
+
 export type FilesystemChanged = {
     id: EventID,
     created: number,
@@ -1708,7 +2211,20 @@ export type FilesystemChanged = {
     },
 }
 
+export type FormAnswer = { [string]: FormValue }
+
 export type FormAnswer1 = { [string]: FormValue1 }
+
+export type FormBooleanField = {
+    key: string,
+    title: string?,
+    description: string?,
+    required: boolean?,
+    hidden: boolean?,
+    when: { FormWhen }?,
+    type: "boolean",
+    default: boolean?,
+}
 
 export type FormBooleanField1 = {
     key: string,
@@ -1744,6 +2260,15 @@ export type FormCreated = {
     },
 }
 
+export type FormDetail = {
+    id: FormID,
+    sessionID: string,
+    title: string,
+    metadata: FormMetadata?,
+    fields: FormFields,
+    state: FormState,
+}
+
 export type FormExternalField = {
     key: string,
     type: "external",
@@ -1752,11 +2277,23 @@ export type FormExternalField = {
     description: string?,
 }
 
+export type FormField = (FormStringField | FormNumberField | FormIntegerField | FormBooleanField | FormMultiselectField | FormExternalField)
+
 export type FormField1 = (FormStringField1 | FormNumberField1 | FormIntegerField1 | FormBooleanField1 | FormMultiselectField1 | FormExternalField)
+
+export type FormFields = { FormField }
 
 export type FormFields1 = { FormField1 }
 
 export type FormID = string
+
+export type FormInfo = {
+    id: FormID,
+    sessionID: string,
+    title: string,
+    metadata: FormMetadata?,
+    fields: FormFields,
+}
 
 export type FormInfo1 = {
     id: FormID,
@@ -1764,6 +2301,19 @@ export type FormInfo1 = {
     title: string,
     metadata: FormMetadata?,
     fields: FormFields1,
+}
+
+export type FormIntegerField = {
+    key: string,
+    title: string?,
+    description: string?,
+    required: boolean?,
+    hidden: boolean?,
+    when: { FormWhen }?,
+    type: "integer",
+    minimum: (number | ("Infinity" | "-Infinity" | "NaN"))?,
+    maximum: (number | ("Infinity" | "-Infinity" | "NaN"))?,
+    default: (number | ("Infinity" | "-Infinity" | "NaN"))?,
 }
 
 export type FormIntegerField1 = {
@@ -1781,6 +2331,21 @@ export type FormIntegerField1 = {
 
 export type FormMetadata = { [string]: any }
 
+export type FormMultiselectField = {
+    key: string,
+    title: string?,
+    description: string?,
+    required: boolean?,
+    hidden: boolean?,
+    when: { FormWhen }?,
+    type: "multiselect",
+    options: { FormOption },
+    minItems: number?,
+    maxItems: number?,
+    custom: boolean?,
+    default: { string }?,
+}
+
 export type FormMultiselectField1 = {
     key: string,
     title: string?,
@@ -1794,6 +2359,19 @@ export type FormMultiselectField1 = {
     maxItems: number?,
     custom: boolean?,
     default: { string }?,
+}
+
+export type FormNumberField = {
+    key: string,
+    title: string?,
+    description: string?,
+    required: boolean?,
+    hidden: boolean?,
+    when: { FormWhen }?,
+    type: "number",
+    minimum: (number | ("Infinity" | "-Infinity" | "NaN"))?,
+    maximum: (number | ("Infinity" | "-Infinity" | "NaN"))?,
+    default: (number | ("Infinity" | "-Infinity" | "NaN"))?,
 }
 
 export type FormNumberField1 = {
@@ -1828,6 +2406,34 @@ export type FormReplied = {
     },
 }
 
+export type FormState = ({
+    status: "pending",
+} | {
+    status: "answered",
+    answer: FormAnswer,
+} | {
+    status: "cancelled",
+    message: string?,
+})
+
+export type FormStringField = {
+    key: string,
+    title: string?,
+    description: string?,
+    required: boolean?,
+    hidden: boolean?,
+    when: { FormWhen }?,
+    type: "string",
+    format: ("email" | "uri" | "date" | "date-time")?,
+    minLength: number?,
+    maxLength: number?,
+    pattern: string?,
+    placeholder: string?,
+    default: string?,
+    options: { FormOption }?,
+    custom: boolean?,
+}
+
 export type FormStringField1 = {
     key: string,
     title: string?,
@@ -1846,12 +2452,194 @@ export type FormStringField1 = {
     custom: boolean?,
 }
 
+export type FormValue = (string | number | ("Infinity" | "-Infinity" | "NaN") | boolean | { string })
+
 export type FormValue1 = (string | number | ("NaN" | "Infinity" | "-Infinity") | boolean | { string })
+
+export type FormWhen = {
+    key: string,
+    op: ("eq" | "neq"),
+    value: (string | number | ("Infinity" | "-Infinity" | "NaN") | boolean),
+}
 
 export type FormWhen1 = {
     key: string,
     op: ("eq" | "neq"),
     value: (string | number | ("NaN" | "Infinity" | "-Infinity") | boolean),
+}
+
+export type GenerateChoiceAnswer = {
+    type: "choice",
+    name: string,
+    choice: GenerateChoiceValue,
+    probabilities: { {
+        value: GenerateChoiceValue,
+        probability: number,
+    } },
+    confidence: number,
+}
+
+--- Pick one value from a fixed set
+export type GenerateChoiceQuestion = {
+    type: "choice",
+    name: string,
+    instructions: string,
+    choices: { {
+        value: GenerateChoiceValue,
+        description: string?,
+    } },
+}
+
+--- Choice values are typed: true and "true" are different values
+export type GenerateChoiceValue = (string | boolean)
+
+export type GenerateDecisionAnswer = (GeneratePredicateAnswer | GenerateChoiceAnswer | GenerateScoreAnswer | GenerateErrorAnswer)
+
+export type GenerateDecisionFilePart = {
+    type: "file",
+    data: PromptBase64,
+    mime: string,
+    name: string?,
+}
+
+export type GenerateDecisionJsonPart = {
+    type: "json",
+    value: any,
+}
+
+export type GenerateDecisionPart = (GenerateDecisionTextPart | GenerateDecisionJsonPart | GenerateDecisionFilePart)
+
+export type GenerateDecisionQuestion = (GeneratePredicateQuestion | GenerateChoiceQuestion | GenerateScoreQuestion)
+
+export type GenerateDecisionResult = {
+    answers: { GenerateDecisionAnswer },
+    cost: MoneyUSD?,
+    tokens: GenerateUsage?,
+    native: GenerateNative?,
+}
+
+export type GenerateDecisionTextPart = {
+    type: "text",
+    text: string,
+}
+
+--- This one question has no answer; the other answers still came back
+export type GenerateErrorAnswer = {
+    type: "error",
+    name: string,
+    reason: string,
+    message: string?,
+}
+
+export type GenerateFile = {
+    data: PromptBase64,
+    mime: string,
+    name: string?,
+}
+
+--- Aspect ratio as width:height, for example 16:9
+export type GenerateImageAspect = string
+
+export type GenerateImageFile = {
+    data: PromptBase64,
+    mime: string,
+    name: string?,
+}
+
+export type GenerateImageOutput = {
+    type: "image",
+    data: PromptBase64,
+    mime: string,
+    name: string?,
+}
+
+--- Size tier such as 1K, 2K or 4K; 1K is about as many pixels as 1024x1024 at the requested aspect
+export type GenerateImageResolution = (("1K" | "2K" | "4K") | string)
+
+export type GenerateImageResult = {
+    images: { GenerateImageOutput },
+    cost: MoneyUSD?,
+    tokens: GenerateUsage?,
+    native: GenerateNative?,
+}
+
+--- Provider-specific data the shared fields do not cover
+export type GenerateNative = { [string]: any }
+
+export type GeneratePredicateAnswer = {
+    type: "predicate",
+    name: string,
+    probability: number,
+}
+
+--- The probability that a statement is true
+export type GeneratePredicateQuestion = {
+    type: "predicate",
+    name: string,
+    instructions: string,
+    criteria: {
+        ["true"]: string?,
+        ["false"]: string?,
+    }?,
+}
+
+export type GenerateScoreAnswer = {
+    type: "score",
+    name: string,
+    score: number,
+    probabilities: { {
+        value: number,
+        label: string,
+        probability: number,
+    } },
+    confidence: number,
+}
+
+--- Place the input on ordered levels, lowest first
+export type GenerateScoreQuestion = {
+    type: "score",
+    name: string,
+    instructions: string,
+    levels: { {
+        label: string,
+        description: string?,
+    } },
+}
+
+--- Token counts, when the provider reports them
+export type GenerateUsage = {
+    input: number?,
+    output: number?,
+}
+
+--- Aspect ratio as width:height, or auto to follow the start image
+export type GenerateVideoAspect = (GenerateImageAspect | "auto")
+
+export type GenerateVideoCompleted = {
+    id: GenerateVideoID,
+    status: "completed",
+    blobs: { BlobInfo },
+}
+
+export type GenerateVideoError = {
+    id: GenerateVideoID,
+    status: "error",
+    error: string,
+    reason: GenerateVideoErrorReason,
+}
+
+--- failed: the provider failed the job. cancelled: the provider cancelled it. expired: the provider expired it. unknown: the provider gave no result in time
+export type GenerateVideoErrorReason = ("failed" | "cancelled" | "expired" | "unknown")
+
+export type GenerateVideoID = string
+
+export type GenerateVideoJob = (GenerateVideoRunning | GenerateVideoCompleted | GenerateVideoError)
+
+export type GenerateVideoResolution = (("480p" | "720p" | "1080p" | "4k") | string)
+
+export type GenerateVideoRunning = {
+    id: GenerateVideoID,
+    status: "running",
 }
 
 export type InstallationUpdateAvailable = {
@@ -1876,6 +2664,11 @@ export type InstallationUpdated = {
     },
 }
 
+export type InstructionEntryInfo = {
+    key: InstructionEntryKey,
+    value: any,
+}
+
 --- Instruction entry key (lowercase alphanumerics plus . _ -)
 export type InstructionEntryKey = string
 
@@ -1887,7 +2680,128 @@ export type InstructionEntrySnapshot = { {
 
 export type InstructionHash = string
 
+export type IntegrationAttemptEncoded = {
+    attemptID: IntegrationAttemptID,
+    url: string,
+    instructions: string,
+    mode: ("auto" | "code"),
+    paste: true?,
+    time: {
+        created: (number | ("Infinity" | "-Infinity" | "NaN")),
+        expires: (number | ("Infinity" | "-Infinity" | "NaN")),
+    },
+}
+
+export type IntegrationAttemptID = string
+
+export type IntegrationAttemptStatus = ({
+    status: "pending",
+    time: {
+        created: (number | ("Infinity" | "-Infinity" | "NaN")),
+        expires: (number | ("Infinity" | "-Infinity" | "NaN")),
+    },
+} | {
+    status: "complete",
+    time: {
+        created: (number | ("Infinity" | "-Infinity" | "NaN")),
+        expires: (number | ("Infinity" | "-Infinity" | "NaN")),
+    },
+} | {
+    status: "failed",
+    message: string,
+    time: {
+        created: (number | ("Infinity" | "-Infinity" | "NaN")),
+        expires: (number | ("Infinity" | "-Infinity" | "NaN")),
+    },
+} | {
+    status: "expired",
+    time: {
+        created: (number | ("Infinity" | "-Infinity" | "NaN")),
+        expires: (number | ("Infinity" | "-Infinity" | "NaN")),
+    },
+})
+
+export type IntegrationCommandAttempt = {
+    attemptID: IntegrationAttemptID,
+    time: {
+        created: (number | ("Infinity" | "-Infinity" | "NaN")),
+        expires: (number | ("Infinity" | "-Infinity" | "NaN")),
+    },
+}
+
+export type IntegrationCommandAttemptStatus = ({
+    status: "pending",
+    message: string?,
+    time: {
+        created: (number | ("Infinity" | "-Infinity" | "NaN")),
+        expires: (number | ("Infinity" | "-Infinity" | "NaN")),
+    },
+} | {
+    status: "complete",
+    time: {
+        created: (number | ("Infinity" | "-Infinity" | "NaN")),
+        expires: (number | ("Infinity" | "-Infinity" | "NaN")),
+    },
+} | {
+    status: "failed",
+    message: string,
+    time: {
+        created: (number | ("Infinity" | "-Infinity" | "NaN")),
+        expires: (number | ("Infinity" | "-Infinity" | "NaN")),
+    },
+} | {
+    status: "expired",
+    time: {
+        created: (number | ("Infinity" | "-Infinity" | "NaN")),
+        expires: (number | ("Infinity" | "-Infinity" | "NaN")),
+    },
+})
+
+export type IntegrationCommandMethod = {
+    id: IntegrationMethodID,
+    type: "command",
+    label: string,
+    command: { string },
+}
+
+export type IntegrationEnvMethod = {
+    type: "env",
+    names: { string },
+}
+
+export type IntegrationExternalMethod = {
+    id: IntegrationMethodID,
+    type: "external",
+    label: string,
+    form: FormFields?,
+}
+
 export type IntegrationID = string
+
+export type IntegrationInfo = {
+    id: IntegrationID,
+    name: string,
+    metadata: { [string]: any }?,
+    methods: { IntegrationMethod },
+    connections: { ConnectionInfo },
+}
+
+export type IntegrationKeyMethod = {
+    type: "key",
+    label: string?,
+    form: FormFields?,
+}
+
+export type IntegrationMethod = (IntegrationOAuthMethod | IntegrationCommandMethod | IntegrationKeyMethod | IntegrationExternalMethod | IntegrationEnvMethod)
+
+export type IntegrationMethodID = string
+
+export type IntegrationOAuthMethod = {
+    id: IntegrationMethodID,
+    type: "oauth",
+    label: string,
+    form: FormFields?,
+}
 
 export type IntegrationUpdated = {
     id: EventID,
@@ -1896,6 +2810,67 @@ export type IntegrationUpdated = {
     type: "integration.updated",
     location: ApiLocationRef?,
     data: any,
+}
+
+export type JobCodeMode = {
+    kind: "codemode",
+    id: string,
+    sessionID: SessionID,
+    status: JobStatus,
+    title: string?,
+    time: JobTime,
+}
+
+export type JobImage = {
+    kind: "image",
+    id: string,
+    sessionID: SessionID,
+    status: JobStatus,
+    title: string?,
+    time: JobTime,
+    path: string,
+    model: string,
+}
+
+export type JobInfo = (JobShell | JobSubagent | JobImage | JobCodeMode)
+
+export type JobShell = {
+    kind: "shell",
+    id: string,
+    sessionID: SessionID,
+    status: JobStatus,
+    title: string?,
+    time: JobTime,
+    shellID: string,
+    command: string,
+}
+
+export type JobStatus = ("running" | "completed" | "error" | "cancelled")
+
+export type JobSubagent = {
+    kind: "subagent",
+    id: string,
+    sessionID: SessionID,
+    status: JobStatus,
+    title: string?,
+    time: JobTime,
+    childSessionID: SessionID,
+    agent: string,
+    description: string,
+}
+
+export type JobTime = {
+    started: number,
+    completed: number?,
+}
+
+export type LocationPublicInfo = {
+    directory: AbsolutePath,
+    project: {
+        id: ProjectID,
+        directory: AbsolutePath,
+        canonical: AbsolutePath,
+    },
 }
 
 export type LocationPublicRef = {
@@ -1911,6 +2886,71 @@ export type LocationShutdown = {
     data: any,
 }
 
+export type McpLocalConfigEncoded = {
+    type: "local",
+    command: { string },
+    cwd: string?,
+    environment: { [string]: string }?,
+    disabled: boolean?,
+    codemode: boolean?,
+    timeout: {
+        startup: number?,
+        catalog: number?,
+        execution: number?,
+    }?,
+    protocol: McpProtocol?,
+    pool: boolean?,
+}
+
+export type McpOAuthConfigEncoded = {
+    client_id: string?,
+    client_secret: string?,
+    scope: string?,
+    callback_port: number?,
+    redirect_uri: string?,
+    auth_server_metadata_url: string?,
+}
+
+--- MCP protocol negotiation. "legacy" (default) opens with the initialize handshake and speaks protocol revisions up to 2025-11-25. "auto" probes for the 2026-07-28 revision and falls back to legacy when the server does not support it. "2026-07-28" requires that revision and fails otherwise.
+export type McpProtocol = ("legacy" | "auto" | "2026-07-28")
+
+export type McpRemoteConfigEncoded = {
+    type: "remote",
+    url: string,
+    headers: { [string]: string }?,
+    oauth: (McpOAuthConfigEncoded | false)?,
+    disabled: boolean?,
+    codemode: boolean?,
+    timeout: {
+        startup: number?,
+        catalog: number?,
+        execution: number?,
+    }?,
+    protocol: McpProtocol?,
+    pool: boolean?,
+}
+
+export type McpResource = {
+    server: string,
+    name: string,
+    uri: string,
+    description: string?,
+    mimeType: string?,
+}
+
+export type McpResourceCatalog = {
+    resources: { McpResource },
+    templates: { McpResourceTemplate },
+}
+
+export type McpResourceTemplate = {
+    server: string,
+    name: string,
+    uriTemplate: string,
+    description: string?,
+    mimeType: string?,
+}
+
 export type McpResourcesChanged = {
     id: EventID,
     created: number,
@@ -1922,6 +2962,13 @@ export type McpResourcesChanged = {
     },
 }
 
+export type McpServer = {
+    name: string,
+    status: (McpStatusConnected | McpStatusPending | McpStatusDisabled | McpStatusFailed | McpStatusNeedsAuth),
+    title: string?,
+    integrationID: IntegrationID?,
+}
+
 export type McpStatusChanged = {
     id: EventID,
     created: number,
@@ -1931,6 +2978,28 @@ export type McpStatusChanged = {
     data: {
         server: string,
     },
+}
+
+export type McpStatusConnected = {
+    status: "connected",
+}
+
+export type McpStatusDisabled = {
+    status: "disabled",
+}
+
+export type McpStatusFailed = {
+    status: "failed",
+    error: string,
+}
+
+export type McpStatusNeedsAuth = {
+    status: "needs_auth",
+    error: string,
+}
+
+export type McpStatusPending = {
+    status: "pending",
 }
 
 export type ModelCacheFormat = ("anthropic" | "alibaba")
@@ -2045,6 +3114,15 @@ export type MoneyUSD = number
 
 export type MoneyUSDPerMillionTokens = number
 
+export type PairingCode = {
+    code: string,
+    expires_in: number,
+}
+
+export type PairingSession = {
+    token: string,
+}
+
 export type PermissionAsked = {
     id: EventID,
     created: number,
@@ -2082,6 +3160,17 @@ export type PermissionReplied = {
 
 export type PermissionReply = ("once" | "always" | "reject")
 
+export type PermissionRequest = {
+    id: PermissionID,
+    sessionID: SessionID,
+    action: string,
+    resources: { string },
+    save: { string }?,
+    metadata: { [string]: any }?,
+    source: PermissionSource?,
+    message: string?,
+}
+
 export type PermissionRule = {
     action: string,
     resource: string,
@@ -2089,6 +3178,19 @@ export type PermissionRule = {
 }
 
 export type PermissionRuleset = { PermissionRule }
+
+export type PermissionSavedID = string
+
+export type PermissionSavedInfo = {
+    id: PermissionSavedID,
+    projectID: ProjectID,
+    action: string,
+    resource: string,
+    time: {
+        created: number,
+        updated: number,
+    },
+}
 
 export type PermissionSource = {
     type: "tool",
@@ -2106,6 +3208,13 @@ export type PersistentPtyAdded = {
         sessionID: SessionID,
         terminal: PersistentPtyInfo,
     },
+}
+
+export type PersistentPtyHandoff = {
+    directory: string,
+    instanceID: string,
+    ticket: string,
+    expiresAt: (number | ("Infinity" | "-Infinity" | "NaN")),
 }
 
 export type PersistentPtyInfo = {
@@ -2130,6 +3239,22 @@ export type PersistentPtyInfo = {
     },
 }
 
+export type PersistentPtyReadResult = {
+    ptyID: PtyID,
+    title: string,
+    cwd: string,
+    foregroundProcess: string?,
+    screen: {
+        text: string,
+        cols: number,
+        rows: number,
+        cursor: {
+            x: number,
+            y: number,
+        },
+    },
+}
+
 export type PersistentPtyRemoved = {
     id: EventID,
     created: number,
@@ -2139,6 +3264,16 @@ export type PersistentPtyRemoved = {
     data: {
         sessionID: SessionID,
         ptyID: PtyID,
+    },
+}
+
+export type PersistentPtySnapshot = {
+    info: PersistentPtyInfo,
+    text: string,
+    checkpoint: string,
+    cursor: {
+        x: number,
+        y: number,
     },
 }
 
@@ -2154,6 +3289,51 @@ export type PersistentPtyUpdated = {
     },
 }
 
+export type PluginFeatures = {
+    server: true?,
+    tui: true?,
+    rpc: true?,
+    gui: true?,
+}
+
+export type PluginGuiBundle = {
+    code: string,
+    revision: string,
+    options: { [string]: any },
+}
+
+export type PluginID = string
+
+export type PluginInfo = {
+    id: PluginID?,
+    source: PluginSource,
+    features: PluginFeatures,
+    state: PluginState,
+}
+
+export type PluginSource = ({
+    type: "builtin",
+} | {
+    type: "package",
+    target: string,
+    version: string?,
+    outdated: true?,
+    updating: true?,
+} | {
+    type: "local",
+    path: string,
+} | {
+    type: "sdk",
+})
+
+export type PluginState = ({
+    status: "active",
+} | {
+    status: "failed",
+    error: string,
+    ref: string?,
+})
+
 export type PluginUpdated = {
     id: EventID,
     created: number,
@@ -2161,6 +3341,17 @@ export type PluginUpdated = {
     type: "plugin.updated",
     location: ApiLocationRef?,
     data: any,
+}
+
+export type Project = {
+    id: ProjectID,
+    canonical: AbsolutePath,
+    vcs: ProjectVcs?,
+    name: string?,
+    icon: ProjectIcon?,
+    commands: ProjectCommands?,
+    time: ProjectTime,
+    sandboxes: { string },
 }
 
 export type ProjectCommands = {
@@ -2225,6 +3416,19 @@ export type PromptFileSource = ({
     uri: string,
 })
 
+export type PromptInputFileAttachment = {
+    uri: string,
+    source: PromptFileSource?,
+    name: string?,
+    description: string?,
+    mention: PromptMention?,
+}
+
+export type PromptInputSkillAttachment = {
+    id: SkillID,
+    mention: PromptMention?,
+}
+
 export type PromptMention = {
     start: number,
     ["end"]: number,
@@ -2263,6 +3467,12 @@ export type ProviderInfo = {
     settings: ProviderSettings?,
     headers: { [string]: string }?,
     body: { [string]: any }?,
+}
+
+export type ProviderRequest = {
+    settings: ProviderSettings,
+    headers: { [string]: string },
+    body: { [string]: any },
 }
 
 export type ProviderSettings = { [string]: any }
@@ -2323,6 +3533,11 @@ export type PtyExited = {
 
 export type PtyID = string
 
+export type PtyTicketConnectToken = {
+    ticket: string,
+    expires_in: number,
+}
+
 export type PtyUpdated = {
     id: EventID,
     created: number,
@@ -2334,6 +3549,27 @@ export type PtyUpdated = {
     },
 }
 
+export type ReferenceGitSource = {
+    type: "git",
+    repository: string,
+    branch: string?,
+}
+
+export type ReferenceInfo = {
+    name: string,
+    path: AbsolutePath,
+    description: string?,
+    hidden: boolean?,
+    source: ReferenceSource,
+}
+
+export type ReferenceLocalSource = {
+    type: "local",
+    path: AbsolutePath,
+}
+
+export type ReferenceSource = (ReferenceLocalSource | ReferenceGitSource)
+
 export type ReferenceUpdated = {
     id: EventID,
     created: number,
@@ -2344,6 +3580,23 @@ export type ReferenceUpdated = {
 }
 
 export type RelativePath = string
+
+export type RpcOutput = {
+    output: any,
+}
+
+export type ServerInfo = {
+    version: string,
+    pid: number,
+    hostname: string?,
+    urls: { string },
+    paths: {
+        tmp: string,
+    },
+    capabilities: {
+        persistentPty: boolean?,
+    }?,
+}
 
 export type SessionAgentSelected = {
     id: EventID,
@@ -2813,6 +4066,10 @@ export type SessionInstructionsUpdated = {
     },
 }
 
+export type SessionInterruptResponse = {
+    interrupted: boolean,
+}
+
 export type SessionMessageAgentSelected = {
     id: SessionMessageID,
     metadata: { [string]: any }?,
@@ -3067,6 +4324,14 @@ export type SessionMessageUser = {
     agents: { PromptAgentAttachment }?,
     skills: { PromptSkillAttachment }?,
     type: "user",
+}
+
+export type SessionMessagesResponse = {
+    data: { SessionMessageInfo },
+    cursor: {
+        previous: string?,
+        next: string?,
+    },
 }
 
 export type SessionMetadata = { [string]: any }
@@ -3347,6 +4612,63 @@ export type SessionSkillActivated = {
         text: string,
     },
 }
+
+export type SessionStatsActivity = {
+    date: string,
+    steps: number,
+}
+
+export type SessionStatsInfo = {
+    range: {
+        from: number,
+        to: number,
+    },
+    sessions: number,
+    subagents: number,
+    prompts: number,
+    steps: number,
+    tokens: TokenUsageInfo,
+    cost: MoneyUSD,
+    tools: SessionStatsTools,
+    activeDays: number,
+    streak: number,
+    activity: { SessionStatsActivity },
+    models: { SessionStatsModelUsage },
+}
+
+export type SessionStatsModelUsage = {
+    model: ModelRef,
+    steps: number,
+    tokens: TokenUsageInfo,
+    cost: MoneyUSD,
+}
+
+export type SessionStatsToolTotals = {
+    calls: number,
+    succeeded: number,
+    failed: number,
+    unfinished: number,
+}
+
+export type SessionStatsToolUsage = {
+    name: string,
+    calls: number,
+    succeeded: number,
+    failed: number,
+    unfinished: number,
+    durationP50: number?,
+}
+
+export type SessionStatsTools = ({
+    mode: "none",
+} | {
+    mode: "summary",
+    totals: SessionStatsToolTotals,
+} | {
+    mode: "detail",
+    totals: SessionStatsToolTotals,
+    usage: { SessionStatsToolUsage },
+})
 
 export type SessionStatusUpdated = {
     id: EventID,
@@ -3677,6 +4999,11 @@ export type SessionToolSuccess = {
     },
 }
 
+export type SessionTransferData = {
+    info: SessionInfo,
+    messages: { SessionMessageInfo },
+}
+
 export type SessionUnarchived = {
     id: EventID,
     created: number,
@@ -3720,6 +5047,17 @@ export type SessionViewed = {
     data: {
         sessionID: SessionID,
         idle: number,
+    },
+}
+
+--- Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response.
+export type SessionsCursor = string
+
+export type SessionsResponse = {
+    data: { SessionInfo },
+    cursor: {
+        previous: SessionsCursor?,
+        next: SessionsCursor?,
     },
 }
 
@@ -3778,6 +5116,15 @@ export type ShellInfo = {
 }
 
 export type SkillID = string
+
+export type SkillInfo = {
+    id: SkillID,
+    name: SkillName,
+    description: string?,
+    autoinvoke: boolean?,
+    path: AbsolutePath,
+    content: string,
+}
 
 export type SkillName = string
 
@@ -3928,6 +5275,19 @@ export type V2EventServerConnected = {
     data: any,
 }
 
+export type VcsBase = {
+    name: string,
+    ref: string,
+    source: ("reflog" | "default"),
+}
+
+export type VcsBranch = {
+    current: string?,
+    default: string?,
+}
+
+export type VcsBranchList = { string }
+
 export type VcsBranchUpdated = {
     id: EventID,
     created: number,
@@ -3936,6 +5296,74 @@ export type VcsBranchUpdated = {
     location: ApiLocationRef?,
     data: {
         branch: string?,
+    },
+}
+
+export type VcsFileStatus = {
+    file: string,
+    additions: number,
+    deletions: number,
+    status: ("added" | "deleted" | "modified"),
+}
+
+export type VcsInfo = {
+    provider: string?,
+    branch: VcsBranch,
+}
+
+export type VoiceModel = {
+    model: string,
+    provider: string,
+    transports: { VoiceTransportType },
+    available: boolean,
+}
+
+export type VoiceTransport = (VoiceWebRTCTransport | VoiceWebSocketTransport)
+
+export type VoiceTransportInput = (VoiceWebRTCTransportInput | VoiceWebSocketTransportInput)
+
+export type VoiceTransportType = ("webrtc" | "websocket")
+
+export type VoiceWebRTCTransport = {
+    type: "webrtc",
+    sdp: string,
+}
+
+export type VoiceWebRTCTransportInput = {
+    type: "webrtc",
+    sdp: string,
+    dcid: (number | ("Infinity" | "-Infinity" | "NaN"))?,
+}
+
+export type VoiceWebSocketTransport = {
+    type: "websocket",
+    url: string,
+    token: string,
+    expiresAt: (number | ("Infinity" | "-Infinity" | "NaN")),
+}
+
+export type VoiceWebSocketTransportInput = {
+    type: "websocket",
+}
+
+export type WebSearchID = string
+
+export type WebSearchProvider = {
+    id: WebSearchID,
+    name: string,
+}
+
+export type WebSearchResponseEncoded = {
+    providerID: WebSearchID,
+    results: { WebSearchResult },
+}
+
+export type WebSearchResult = {
+    url: string,
+    title: string?,
+    content: string?,
+    time: {
+        published: number?,
     },
 }
 
@@ -3949,6 +5377,17 @@ export type WebsearchUpdated = {
 }
 
 export type WorkspaceID = string
+
+export type WorktreeDirectory = {
+    directory: AbsolutePath,
+    strategy: string?,
+}
+
+export type WorktreeInfo = {
+    directory: AbsolutePath,
+}
+
+export type WorktreeList = { WorktreeDirectory }
 
 export type WorktreeResolved = {
     id: EventID,
@@ -4253,9 +5692,1074 @@ export type BoxProps = {
     hover_events: boolean?,
 }
 
+--- The API's operations, by the generated client's names: `plugin.client.session.inbox.list({ sessionID = id })` waits,
+--- as `host:fetch` does, and returns the operation's output (the reply's `data` where it answers in `data`) or `nil`
+--- and the error. Only a task can call one.
+export type Client = {
+    agent: {
+        get: (input: {
+            agentID: string,
+            location: { directory: string? }?,
+        }) -> ({
+            location: LocationPublicRef,
+            data: AgentInfo,
+        }?, string?),
+        list: (input: {
+            location: { directory: string? }?,
+        }?) -> ({
+            location: LocationPublicRef,
+            data: { AgentInfo },
+        }?, string?),
+    },
+    command: {
+        list: (input: {
+            location: { directory: string? }?,
+        }?) -> ({
+            location: LocationPublicRef,
+            data: { CommandInfo },
+        }?, string?),
+    },
+    config: {
+        get: (input: {
+            location: { directory: string? }?,
+        }?) -> ({ ConfigEntry }?, string?),
+        shells: (input: {}?) -> ({ ConfigShellOption }?, string?),
+    },
+    credential: {
+        activate: (input: {
+            credentialID: string,
+        }) -> (nil, string?),
+        create: (input: {
+            id: CredentialID?,
+            integrationID: IntegrationID,
+            label: string?,
+            value: CredentialValue,
+            activate: boolean?,
+        }) -> (CredentialEntry?, string?),
+        list: (input: {}?) -> ({ CredentialEntry }?, string?),
+        remove: (input: {
+            credentialID: string,
+        }) -> (nil, string?),
+        update: (input: {
+            credentialID: string,
+            label: string,
+        }) -> (nil, string?),
+    },
+    debug: {
+        heapDump: (input: {
+            directory: string?,
+        }?) -> (({
+            path: string,
+            pid: number,
+            memory: {
+                rss: (number | ("Infinity" | "-Infinity" | "NaN")),
+                heapTotal: (number | ("Infinity" | "-Infinity" | "NaN")),
+                heapUsed: (number | ("Infinity" | "-Infinity" | "NaN")),
+                external: (number | ("Infinity" | "-Infinity" | "NaN")),
+                arrayBuffers: (number | ("Infinity" | "-Infinity" | "NaN")),
+            },
+        })?, string?),
+        location: {
+            evict: (input: {
+                location: { directory: string? }?,
+            }?) -> (nil, string?),
+            list: (input: {}?) -> ({ LocationPublicRef }?, string?),
+        },
+    },
+    event: {
+        subscribe: (input: {
+            types: { (("location.shutdown" | "models-dev.refreshed" | "credential.updated" | "credential.switched" | "integration.updated" | "provider.updated" | "model.updated" | "agent.updated" | "session.created" | "session.agent.selected" | "session.model.selected" | "session.moved" | "session.renamed" | "session.metadata.updated" | "session.permissions" | "session.viewed" | "session.archived" | "session.unarchived" | "session.usage.updated" | "session.deleted" | "session.forked" | "session.inbox.delivered" | "session.inbox.enqueued" | "session.inbox.cancelled" | "session.inbox.delivery.changed" | "session.execution.started" | "session.execution.succeeded" | "session.execution.failed" | "session.execution.interrupted" | "session.instructions.updated" | "session.synthetic" | "session.skill.activated" | "session.shell.started" | "session.shell.ended" | "session.step.started" | "session.step.first-token" | "session.step.streamed" | "session.step.ended" | "session.step.failed" | "session.text.started" | "session.text.delta" | "session.text.ended" | "session.reasoning.started" | "session.reasoning.delta" | "session.reasoning.ended" | "session.tool.input.started" | "session.tool.input.delta" | "session.tool.input.ended" | "session.tool.called" | "session.tool.progress" | "session.tool.success" | "session.tool.failed" | "session.retry.scheduled" | "session.compaction.started" | "session.compaction.delta" | "session.compaction.ended" | "session.compaction.failed" | "session.revert.staged" | "session.revert.cleared" | "session.revert.committed" | "filesystem.changed" | "reference.updated" | "permission.asked" | "permission.replied" | "plugin.updated" | "project.updated" | "worktree.updated" | "worktree.resolved" | "command.updated" | "config.updated" | "skill.updated" | "pty.created" | "pty.updated" | "pty.exited" | "pty.deleted" | "persistent-pty.added" | "persistent-pty.removed" | "persistent-pty.updated" | "shell.created" | "shell.exited" | "shell.deleted" | "form.created" | "form.replied" | "form.cancelled" | "websearch.updated" | "artifact.updated" | "session.status" | "session.idle" | "tui.prompt.append" | "tui.command.execute" | "tui.toast.show" | "tui.session.select" | "installation.updated" | "installation.update-available" | "vcs.branch.updated" | "mcp.status.changed" | "mcp.resources.changed" | "experimental.mcp.event") | string) }?,
+        }?) -> (nil, string?),
+    },
+    experimental: {
+        artifacts: {
+            create: (input: {
+                location: { directory: string? }?,
+                title: string,
+                files: { [string]: string },
+                entry: string?,
+                provider: string?,
+                sessionID: SessionID?,
+            }) -> ({
+                location: LocationPublicRef,
+                data: ArtifactInfo,
+            }?, string?),
+            delete: (input: {
+                artifactID: string,
+                location: { directory: string? }?,
+            }) -> (nil, string?),
+            get: (input: {
+                artifactID: string,
+                location: { directory: string? }?,
+            }) -> ({
+                location: LocationPublicRef,
+                data: ArtifactContent,
+            }?, string?),
+            list: (input: {
+                location: { directory: string? }?,
+                sessionID: string?,
+                provider: string?,
+            }?) -> ({
+                location: LocationPublicRef,
+                data: { ArtifactInfo },
+            }?, string?),
+            providers: (input: {
+                location: { directory: string? }?,
+            }?) -> ({
+                location: LocationPublicRef,
+                data: { ArtifactProvider },
+            }?, string?),
+            update: (input: {
+                artifactID: string,
+                location: { directory: string? }?,
+                title: string?,
+                files: { [string]: string },
+                entry: string?,
+                sessionID: SessionID?,
+            }) -> ({
+                location: LocationPublicRef,
+                data: ArtifactInfo,
+            }?, string?),
+            view: (input: {
+                artifactID: string,
+                location: { directory: string? }?,
+                path: string,
+            }) -> (string?, string?),
+        },
+        automation: {
+            create: (input: {
+                sessionID: SessionID?,
+                directory: string?,
+                name: string,
+                trigger: AutomationTrigger,
+                action: AutomationActionInput,
+                expires: string?,
+            }) -> (AutomationInfo?, string?),
+            delete: (input: {
+                automationID: string,
+            }) -> (nil, string?),
+            get: (input: {
+                automationID: string,
+            }) -> (AutomationInfo?, string?),
+            list: (input: {
+                sessionID: string?,
+                directory: string?,
+            }?) -> ({ AutomationInfo }?, string?),
+            pause: (input: {
+                automationID: string,
+            }) -> (AutomationInfo?, string?),
+            resume: (input: {
+                automationID: string,
+            }) -> (AutomationInfo?, string?),
+        },
+        blob: {
+            get: (input: {
+                id: string,
+            }) -> (string?, string?),
+        },
+        config: {
+            update: (input: {
+                shell: string?,
+            }) -> (nil, string?),
+        },
+        file: {
+            unwatch: (input: {
+                location: { directory: string? }?,
+                path: string,
+            }) -> (nil, string?),
+            watch: (input: {
+                location: { directory: string? }?,
+                path: string,
+            }) -> (nil, string?),
+            write: (input: {
+                location: { directory: string? }?,
+                path: string,
+                payload: string,
+            }) -> ({
+                location: LocationPublicRef,
+                data: FileSystemWrite,
+            }?, string?),
+        },
+        generate: {
+            decisions: (input: {
+                model: ModelRef,
+                input: { GenerateDecisionPart },
+                questions: { GenerateDecisionQuestion },
+            }) -> (GenerateDecisionResult?, string?),
+            image: (input: {
+                model: ModelRef,
+                prompt: string,
+                images: { GenerateFile }?,
+                n: number?,
+                aspect: GenerateImageAspect?,
+                resolution: GenerateImageResolution?,
+            }) -> (GenerateImageResult?, string?),
+            text: (input: {
+                prompt: string,
+                model: ModelRef?,
+            }) -> ({
+                text: string,
+            }?, string?),
+            video: {
+                create: (input: {
+                    model: ModelRef,
+                    prompt: string,
+                    start: GenerateImageFile?,
+                    ["end"]: GenerateImageFile?,
+                    references: { GenerateFile }?,
+                    duration: number?,
+                    aspect: GenerateVideoAspect?,
+                    resolution: GenerateVideoResolution?,
+                    sound: boolean?,
+                }) -> (GenerateVideoRunning?, string?),
+                get: (input: {
+                    id: string,
+                }) -> (GenerateVideoJob?, string?),
+            },
+        },
+        integration: {
+            wellknown: {
+                add: (input: {
+                    location: { directory: string? }?,
+                    url: string,
+                }) -> (nil, string?),
+            },
+        },
+        job: {
+            list: (input: {
+                sessionID: string?,
+                kind: ("shell" | "subagent" | "image" | "codemode")?,
+                status: ("running" | "completed" | "error" | "cancelled")?,
+                descendants: boolean?,
+            }?) -> ({ JobInfo }?, string?),
+        },
+        mcp: {
+            add: (input: {
+                server: string,
+                location: { directory: string? }?,
+                config: (McpLocalConfigEncoded | McpRemoteConfigEncoded),
+            }) -> (nil, string?),
+            client: {
+                token: (input: {
+                    location: { directory: string? }?,
+                    name: string,
+                    ["x-opencode-ticket"]: string?,
+                }) -> ({
+                    location: LocationPublicRef,
+                    data: PtyTicketConnectToken,
+                }?, string?),
+            },
+            connect: (input: {
+                server: string,
+                location: { directory: string? }?,
+            }) -> (nil, string?),
+            disconnect: (input: {
+                server: string,
+                location: { directory: string? }?,
+            }) -> (nil, string?),
+            remove: (input: {
+                server: string,
+                location: { directory: string? }?,
+            }) -> (nil, string?),
+        },
+        media: {
+            get: (input: {
+                hash: string,
+            }) -> (string?, string?),
+        },
+        migration: {
+            v1: {
+                status: (input: {}?) -> (({
+                    status: ("required" | "completed"),
+                } | {
+                    status: "running",
+                    progress: {
+                        label: string,
+                        numerator: number?,
+                        denominator: number?,
+                    },
+                } | {
+                    status: "error",
+                    error: string,
+                })?, string?),
+            },
+        },
+        persistentPty: {
+            connectToken: (input: {
+                ptyID: string,
+                ["x-opencode-ticket"]: string?,
+            }) -> (PtyTicketConnectToken?, string?),
+            create: (input: {
+                sessionID: string,
+                command: string?,
+                args: { string },
+                cwd: string?,
+                title: string,
+                env: { [string]: string },
+                size: {
+                    cols: number,
+                    rows: number,
+                }?,
+            }) -> (PersistentPtyInfo?, string?),
+            get: (input: {
+                ptyID: string,
+            }) -> (PersistentPtyInfo?, string?),
+            handoff: (input: {}?) -> ({
+                handoff: PersistentPtyHandoff?,
+            }?, string?),
+            list: (input: {
+                sessionID: string,
+            }) -> ({ PersistentPtyInfo }?, string?),
+            read: (input: {
+                sessionID: string,
+                lines: number?,
+            }) -> ((PersistentPtyReadResult)?, string?),
+            remove: (input: {
+                ptyID: string,
+            }) -> (nil, string?),
+            shutdown: (input: {}?) -> (nil, string?),
+            snapshot: (input: {
+                ptyID: string,
+            }) -> (PersistentPtySnapshot?, string?),
+            update: (input: {
+                ptyID: string,
+                attachmentID: string?,
+                size: {
+                    cols: number,
+                    rows: number,
+                }?,
+                title: string?,
+            }) -> (PersistentPtyInfo?, string?),
+        },
+        session: {
+            export: (input: {
+                sessionID: string,
+                sanitize: boolean?,
+            }) -> (SessionTransferData?, string?),
+            import: (input: {
+                info: SessionInfo,
+                messages: { any },
+                location: LocationPublicRef?,
+            }) -> (SessionInfo?, string?),
+            instructions: {
+                entry: {
+                    list: (input: {
+                        sessionID: string,
+                    }) -> ({ InstructionEntryInfo }?, string?),
+                    put: (input: {
+                        sessionID: string,
+                        key: string,
+                        value: any,
+                    }) -> (nil, string?),
+                    remove: (input: {
+                        sessionID: string,
+                        key: string,
+                    }) -> (nil, string?),
+                },
+            },
+            log: (input: {
+                sessionID: string,
+                after: number?,
+                follow: boolean?,
+            }) -> (nil, string?),
+            skill: (input: {
+                sessionID: string,
+                id: SkillID,
+                resume: boolean?,
+            }) -> (nil, string?),
+            stats: (input: {
+                from: number?,
+                to: number?,
+                project: string?,
+                timezone: string?,
+                tools: ("none" | "summary" | "detail")?,
+            }?) -> (SessionStatsInfo?, string?),
+            wait: (input: {
+                sessionID: string,
+            }) -> (nil, string?),
+        },
+        usage: {
+            limits: (input: {
+                location: { directory: string? }?,
+            }?) -> ({
+                location: LocationPublicRef,
+                data: UsageLimitsInfo?,
+            }?, string?),
+        },
+        voice: {
+            models: (input: {}?) -> ({
+                models: { VoiceModel },
+                default: string?,
+            }?, string?),
+            session: (input: {
+                model: string,
+                session: { [string]: any }?,
+                transport: VoiceTransportInput,
+            }) -> ({
+                transport: VoiceTransport,
+            }?, string?),
+        },
+    },
+    file: {
+        find: (input: {
+            location: { directory: string? }?,
+            query: string,
+            type: ("file" | "directory")?,
+            limit: number?,
+        }) -> ({
+            location: LocationPublicRef,
+            data: { FileSystemEntry },
+        }?, string?),
+        list: (input: {
+            location: { directory: string? }?,
+            path: string?,
+        }?) -> ({
+            location: LocationPublicRef,
+            data: { FileSystemEntry },
+        }?, string?),
+        read: (input: {
+            location: { directory: string? }?,
+            path: string,
+        }) -> (string?, string?),
+    },
+    form: {
+        list: (input: {
+            location: { directory: string? }?,
+        }?) -> ({
+            location: LocationPublicRef,
+            data: { FormInfo },
+        }?, string?),
+    },
+    integration: {
+        command: {
+            cancel: (input: {
+                integrationID: string,
+                attemptID: string,
+                location: { directory: string? }?,
+            }) -> (nil, string?),
+            connect: (input: {
+                integrationID: string,
+                location: { directory: string? }?,
+                methodID: IntegrationMethodID,
+                label: string?,
+            }) -> ({
+                location: LocationPublicRef,
+                data: IntegrationCommandAttempt,
+            }?, string?),
+            status: (input: {
+                integrationID: string,
+                attemptID: string,
+                location: { directory: string? }?,
+            }) -> ({
+                location: LocationPublicRef,
+                data: IntegrationCommandAttemptStatus,
+            }?, string?),
+        },
+        connect: {
+            external: (input: {
+                integrationID: string,
+                location: { directory: string? }?,
+                methodID: IntegrationMethodID,
+                answer: FormAnswer?,
+                label: string?,
+            }) -> (nil, string?),
+            key: (input: {
+                integrationID: string,
+                location: { directory: string? }?,
+                key: string,
+                answer: FormAnswer?,
+                label: string?,
+            }) -> (nil, string?),
+        },
+        get: (input: {
+            integrationID: string,
+            location: { directory: string? }?,
+        }) -> ({
+            location: LocationPublicRef,
+            data: IntegrationInfo,
+        }?, string?),
+        list: (input: {
+            location: { directory: string? }?,
+        }?) -> ({
+            location: LocationPublicRef,
+            data: { IntegrationInfo },
+        }?, string?),
+        oauth: {
+            cancel: (input: {
+                integrationID: string,
+                attemptID: string,
+                location: { directory: string? }?,
+            }) -> (nil, string?),
+            complete: (input: {
+                integrationID: string,
+                attemptID: string,
+                location: { directory: string? }?,
+                code: string?,
+            }) -> (nil, string?),
+            connect: (input: {
+                integrationID: string,
+                location: { directory: string? }?,
+                methodID: IntegrationMethodID,
+                answer: FormAnswer?,
+                label: string?,
+            }) -> ({
+                location: LocationPublicRef,
+                data: IntegrationAttemptEncoded,
+            }?, string?),
+            status: (input: {
+                integrationID: string,
+                attemptID: string,
+                location: { directory: string? }?,
+            }) -> ({
+                location: LocationPublicRef,
+                data: IntegrationAttemptStatus,
+            }?, string?),
+        },
+    },
+    location: {
+        get: (input: {
+            location: { directory: string? }?,
+        }?) -> (LocationPublicInfo?, string?),
+        reload: (input: {}?) -> (nil, string?),
+    },
+    mcp: {
+        list: (input: {
+            location: { directory: string? }?,
+        }?) -> ({
+            location: LocationPublicRef,
+            data: { McpServer },
+        }?, string?),
+        resource: {
+            catalog: (input: {
+                location: { directory: string? }?,
+            }?) -> ({
+                location: LocationPublicRef,
+                data: McpResourceCatalog,
+            }?, string?),
+        },
+    },
+    message: {
+        list: (input: {
+            sessionID: string,
+            limit: number?,
+            order: ("asc" | "desc")?,
+            cursor: string?,
+            type: ("agent-switched" | "model-switched" | "location-switched" | "user" | "synthetic" | "system" | "skill" | "shell" | "assistant" | "compaction" | "idle")?,
+        }) -> (SessionMessagesResponse?, string?),
+    },
+    model: {
+        default: (input: {
+            location: { directory: string? }?,
+        }?) -> ({
+            location: LocationPublicRef,
+            data: ModelInfo?,
+        }?, string?),
+        list: (input: {
+            location: { directory: string? }?,
+            types: { (("chat" | "decision" | "image" | "video") | string) }?,
+        }?) -> ({
+            location: LocationPublicRef,
+            data: { ModelInfo },
+        }?, string?),
+    },
+    permission: {
+        create: (input: {
+            sessionID: string,
+            id: PermissionID?,
+            action: string,
+            resources: { string },
+            save: { string }?,
+            metadata: { [string]: any }?,
+            source: PermissionSource?,
+            agent: AgentID?,
+        }) -> ({
+            id: PermissionID,
+            effect: PermissionEffect,
+        }?, string?),
+        get: (input: {
+            sessionID: string,
+            requestID: string,
+        }) -> (PermissionRequest?, string?),
+        list: (input: {
+            sessionID: string,
+        }) -> ({ PermissionRequest }?, string?),
+        reply: (input: {
+            sessionID: string,
+            requestID: string,
+            decision: PermissionReply,
+            message: string?,
+        }) -> (nil, string?),
+        request: {
+            list: (input: {
+                location: { directory: string? }?,
+            }?) -> ({
+                location: LocationPublicRef,
+                data: { PermissionRequest },
+            }?, string?),
+        },
+        saved: {
+            list: (input: {
+                projectID: string?,
+            }?) -> ({ PermissionSavedInfo }?, string?),
+            remove: (input: {
+                id: string,
+            }) -> (nil, string?),
+            update: (input: {
+                id: string,
+                action: string?,
+                resource: string?,
+            }) -> (PermissionSavedInfo?, string?),
+        },
+    },
+    plugin: {
+        check: (input: {
+            location: { directory: string? }?,
+            target: string?,
+        }?) -> ({
+            location: LocationPublicRef,
+            data: { PluginInfo },
+        }?, string?),
+        gui: (input: {
+            location: { directory: string? }?,
+            id: string,
+        }) -> ({
+            location: LocationPublicRef,
+            data: PluginGuiBundle,
+        }?, string?),
+        list: (input: {
+            location: { directory: string? }?,
+        }?) -> ({
+            location: LocationPublicRef,
+            data: { PluginInfo },
+        }?, string?),
+        update: (input: {
+            location: { directory: string? }?,
+            targets: { string },
+        }) -> (nil, string?),
+    },
+    project: {
+        list: (input: {
+            archived: boolean?,
+        }?) -> ({ Project }?, string?),
+        update: (input: {
+            projectID: string,
+            canonical: AbsolutePath?,
+            name: string?,
+            icon: ProjectIcon?,
+            commands: ProjectCommands?,
+        }) -> (Project?, string?),
+    },
+    provider: {
+        get: (input: {
+            providerID: string,
+            location: { directory: string? }?,
+        }) -> ({
+            location: LocationPublicRef,
+            data: ProviderInfo,
+        }?, string?),
+        list: (input: {
+            location: { directory: string? }?,
+        }?) -> ({
+            location: LocationPublicRef,
+            data: { ProviderInfo },
+        }?, string?),
+    },
+    pty: {
+        connect: {
+            token: (input: {
+                ptyID: string,
+                location: { directory: string? }?,
+                ["x-opencode-ticket"]: string?,
+            }) -> ({
+                location: LocationPublicRef,
+                data: PtyTicketConnectToken,
+            }?, string?),
+        },
+        create: (input: {
+            location: { directory: string? }?,
+            command: string?,
+            args: { string }?,
+            cwd: string?,
+            title: string?,
+            env: { [string]: string }?,
+        }?) -> ({
+            location: LocationPublicRef,
+            data: Pty,
+        }?, string?),
+        get: (input: {
+            ptyID: string,
+            location: { directory: string? }?,
+        }) -> ({
+            location: LocationPublicRef,
+            data: Pty,
+        }?, string?),
+        list: (input: {
+            location: { directory: string? }?,
+        }?) -> ({
+            location: LocationPublicRef,
+            data: { Pty },
+        }?, string?),
+        remove: (input: {
+            ptyID: string,
+            location: { directory: string? }?,
+        }) -> (nil, string?),
+        update: (input: {
+            ptyID: string,
+            location: { directory: string? }?,
+            title: string?,
+            size: {
+                rows: number,
+                cols: number,
+            }?,
+        }) -> ({
+            location: LocationPublicRef,
+            data: Pty,
+        }?, string?),
+    },
+    reference: {
+        list: (input: {
+            location: { directory: string? }?,
+        }?) -> ({
+            location: LocationPublicRef,
+            data: { ReferenceInfo },
+        }?, string?),
+    },
+    rpc: {
+        call: (input: {
+            rpcID: string,
+            method: string,
+            location: { directory: string? }?,
+            input: any?,
+        }) -> (RpcOutput?, string?),
+    },
+    server: {
+        connect: (input: {
+            code: string,
+        }) -> (PairingSession?, string?),
+        info: (input: {}?) -> (ServerInfo?, string?),
+        pair: (input: {}?) -> (PairingCode?, string?),
+    },
+    session: {
+        active: (input: {}?) -> ({ [string]: any }?, string?),
+        background: (input: {
+            sessionID: string,
+        }) -> (nil, string?),
+        command: (input: {
+            sessionID: string,
+            name: string,
+            text: string,
+            files: { PromptInputFileAttachment }?,
+            agents: { PromptAgentAttachment }?,
+            skills: { PromptInputSkillAttachment }?,
+            delivery: SessionInboxDelivery?,
+        }) -> (nil, string?),
+        compact: (input: {
+            sessionID: string,
+            id: SessionMessageID?,
+            delivery: SessionInboxDelivery?,
+        }) -> (SessionInboxCompaction?, string?),
+        context: (input: {
+            sessionID: string,
+        }) -> ({ SessionMessageInfo }?, string?),
+        create: (input: {
+            id: SessionID?,
+            parentID: SessionID?,
+            title: string?,
+            agent: AgentID?,
+            model: ModelRef?,
+            location: LocationPublicRef?,
+            metadata: SessionMetadata?,
+            permissions: PermissionRuleset?,
+        }?) -> (SessionInfo?, string?),
+        diff: (input: {
+            sessionID: string,
+            from: string?,
+            to: string?,
+            context: number?,
+        }) -> ({ FileDiffInfo }?, string?),
+        environment: (input: {
+            sessionID: string,
+            variables: { [string]: string },
+        }) -> (nil, string?),
+        fork: (input: {
+            sessionID: string,
+            before: SessionMessageID?,
+        }) -> (SessionInfo?, string?),
+        form: {
+            cancel: (input: {
+                sessionID: string,
+                formID: string,
+                message: string?,
+            }) -> (nil, string?),
+            create: (input: {
+                sessionID: string,
+                id: FormID?,
+                title: string,
+                metadata: FormMetadata?,
+                fields: FormFields,
+            }) -> (FormInfo?, string?),
+            get: (input: {
+                sessionID: string,
+                formID: string,
+            }) -> (FormDetail?, string?),
+            list: (input: {
+                sessionID: string,
+            }) -> ({ FormInfo }?, string?),
+            reply: (input: {
+                sessionID: string,
+                formID: string,
+                answer: FormAnswer,
+            }) -> (nil, string?),
+        },
+        generate: (input: {
+            sessionID: string,
+            prompt: string,
+        }) -> ({
+            text: string,
+            tokens: TokenUsageInfo,
+            cost: MoneyUSD,
+        }?, string?),
+        get: (input: {
+            sessionID: string,
+        }) -> (SessionInfo?, string?),
+        inbox: {
+            cancel: (input: {
+                sessionID: string,
+                inboxID: string,
+            }) -> (nil, string?),
+            list: (input: {
+                sessionID: string,
+            }) -> ({ SessionInboxInfo }?, string?),
+            update: (input: {
+                sessionID: string,
+                inboxID: string,
+                delivery: SessionInboxDelivery,
+            }) -> (nil, string?),
+        },
+        interrupt: (input: {
+            sessionID: string,
+            resume: boolean?,
+        }) -> (SessionInterruptResponse?, string?),
+        list: (input: {
+            limit: number?,
+            order: ("asc" | "desc")?,
+            search: string?,
+            parentID: string?,
+            archived: boolean?,
+            directory: string?,
+            project: string?,
+            subpath: string?,
+            cursor: string?,
+        }?) -> (SessionsResponse?, string?),
+        message: {
+            get: (input: {
+                sessionID: string,
+                messageID: string,
+            }) -> (SessionMessageInfo?, string?),
+        },
+        move: (input: {
+            sessionID: string,
+            directory: AbsolutePath,
+            delivery: SessionInboxDelivery?,
+        }) -> (nil, string?),
+        prompt: (input: {
+            sessionID: string,
+            id: SessionMessageID?,
+            text: string,
+            files: { PromptInputFileAttachment }?,
+            agents: { PromptAgentAttachment }?,
+            skills: { PromptInputSkillAttachment }?,
+            metadata: { [string]: any }?,
+            delivery: SessionInboxDelivery?,
+            resume: boolean?,
+        }) -> (SessionInboxUser?, string?),
+        remove: (input: {
+            sessionID: string,
+        }) -> (nil, string?),
+        revert: {
+            clear: (input: {
+                sessionID: string,
+            }) -> (nil, string?),
+            commit: (input: {
+                sessionID: string,
+            }) -> (nil, string?),
+            stage: (input: {
+                sessionID: string,
+                messageID: SessionMessageID,
+                files: boolean?,
+            }) -> (SessionRevert?, string?),
+        },
+        shell: (input: {
+            sessionID: string,
+            id: SessionMessageID?,
+            command: string,
+        }) -> (nil, string?),
+        switchAgent: (input: {
+            sessionID: string,
+            agent: AgentID,
+        }) -> (nil, string?),
+        switchModel: (input: {
+            sessionID: string,
+            model: ModelRef,
+        }) -> (nil, string?),
+        synthetic: (input: {
+            sessionID: string,
+            id: SessionMessageID?,
+            text: string,
+            description: string?,
+            metadata: { [string]: any }?,
+            delivery: SessionInboxDelivery?,
+            resume: boolean?,
+        }) -> (SessionInboxSynthetic?, string?),
+        update: (input: {
+            sessionID: string,
+            title: string?,
+            metadata: SessionMetadata?,
+            permissions: PermissionRuleset?,
+            archived: boolean?,
+        }) -> (nil, string?),
+        view: (input: {
+            sessionID: string,
+            idle: number,
+        }) -> (nil, string?),
+    },
+    shell: {
+        create: (input: {
+            location: { directory: string? }?,
+            command: string,
+            cwd: string?,
+            timeout: number?,
+            metadata: { [string]: any }?,
+        }) -> ({
+            location: LocationPublicRef,
+            data: ShellInfo,
+        }?, string?),
+        get: (input: {
+            id: string,
+            location: { directory: string? }?,
+        }) -> ({
+            location: LocationPublicRef,
+            data: ShellInfo,
+        }?, string?),
+        list: (input: {
+            location: { directory: string? }?,
+        }?) -> ({
+            location: LocationPublicRef,
+            data: { ShellInfo },
+        }?, string?),
+        output: (input: {
+            id: string,
+            location: { directory: string? }?,
+            cursor: number?,
+            limit: number?,
+        }) -> ({
+            location: LocationPublicRef,
+            data: {
+                output: string,
+                cursor: number,
+                size: number,
+                truncated: boolean,
+            },
+        }?, string?),
+        remove: (input: {
+            id: string,
+            location: { directory: string? }?,
+        }) -> (nil, string?),
+    },
+    skill: {
+        list: (input: {
+            location: { directory: string? }?,
+        }?) -> ({
+            location: LocationPublicRef,
+            data: { SkillInfo },
+        }?, string?),
+    },
+    vcs: {
+        base: (input: {
+            location: { directory: string? }?,
+        }?) -> ({
+            location: LocationPublicRef,
+            data: VcsBase?,
+        }?, string?),
+        branch: {
+            list: (input: {
+                location: { directory: string? }?,
+                search: string?,
+                limit: number?,
+            }?) -> ({
+                location: LocationPublicRef,
+                data: VcsBranchList,
+            }?, string?),
+        },
+        diff: (input: {
+            location: { directory: string? }?,
+            mode: ("working" | "branch" | "committed"),
+            base: string?,
+            context: number?,
+            untracked: ("files" | "folders")?,
+        }) -> ({
+            location: LocationPublicRef,
+            data: { FileDiffInfo },
+        }?, string?),
+        get: (input: {
+            location: { directory: string? }?,
+        }?) -> ({
+            location: LocationPublicRef,
+            data: VcsInfo,
+        }?, string?),
+        init: (input: {
+            location: { directory: string? }?,
+            provider: string?,
+        }?) -> (nil, string?),
+        status: (input: {
+            location: { directory: string? }?,
+        }?) -> ({
+            location: LocationPublicRef,
+            data: { VcsFileStatus },
+        }?, string?),
+    },
+    websearch: {
+        providers: (input: {
+            location: { directory: string? }?,
+        }?) -> ({
+            location: LocationPublicRef,
+            data: { WebSearchProvider },
+        }?, string?),
+        query: (input: {
+            location: { directory: string? }?,
+            query: string,
+            providerID: WebSearchID?,
+        }) -> ({
+            location: LocationPublicRef,
+            data: WebSearchResponseEncoded,
+        }?, string?),
+    },
+    worktree: {
+        create: (input: {
+            projectID: ProjectID,
+            from: AbsolutePath?,
+            branch: string?,
+            directory: AbsolutePath?,
+            name: string?,
+        }) -> (WorktreeInfo?, string?),
+        list: (input: {
+            projectID: string,
+        }) -> (WorktreeList?, string?),
+        refresh: (input: {
+            projectID: ProjectID,
+        }) -> (nil, string?),
+        remove: (input: {
+            projectID: ProjectID,
+            directory: AbsolutePath,
+            force: boolean,
+        }) -> (nil, string?),
+    },
+}
+
 --- `require("@opencode/plugin")`.
 export type Plugin = {
     contract: string,
+    client: Client,
     IMAGE_BOUNDS: string,
     FOCUS_INPUT: string,
     FENCE_NODE: string,

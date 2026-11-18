@@ -26,10 +26,28 @@ const schema = (await Bun.file(`${root}crates/plugin-abi/schema/v2.json`).json()
   "x-abi": { major: number; minor: number }
 }
 // The HTTP API's document, which the schema's references into `openapi.json` name (messages, sessions, models, events).
+type Route = {
+  operationId: string
+  parameters?: Array<{ name: string; in: string; schema: Schema; required?: boolean }>
+  requestBody?: { content: Record<string, { schema: Schema }> }
+  responses: Record<string, { content?: Record<string, { schema: Schema }> }>
+}
 const openapi = (await Bun.file(`${root}../protocol/openapi.json`).json()) as {
   components: { schemas: Record<string, Schema> }
+  paths: Record<string, Record<string, Route>>
 }
 const components = openapi.components.schemas
+
+// The operations `plugin.client` sends, as script/gen/api.ts writes them from the generated client: each input field's
+// name, where it goes, whether it may be left out, and the Luau type of a field that is not the body's.
+type Operation = {
+  method: string
+  path: string
+  fields: Array<[string, "params" | "query" | "headers" | "payload" | "wildcard", boolean, string | null]>
+  body: "object" | "json" | "bytes" | null
+  reply: "json" | "data" | "empty" | "binary" | "sse"
+}
+const operations = (await Bun.file(`${root}crates/plugin/src/luau/operations.json`).json()) as Record<string, Operation>
 
 // The HTTP API's schemas the stub writes, by the Luau name of each: what the contract's schema and the reads reach.
 const reached = new Map<string, string>()
@@ -64,6 +82,83 @@ function reference(fragment: string, indent: string): string {
 // `{ not: {} }` holds no value: an alternative that never matches.
 function never(schema: Schema) {
   return schema.not !== undefined && Object.keys(schema.not).length === 0
+}
+
+// A schema with its reference into the API's document followed, to read its properties.
+function resolved(schema: Schema): Schema {
+  const fragment = schema.$ref?.split("#")[1]
+  if (!fragment?.startsWith("/components/schemas/")) return schema
+  return resolved(components[fragment.slice("/components/schemas/".length)])
+}
+
+// `plugin.client`'s type: a table of namespaces by the operations' names (`session.inbox.list`), each operation a
+// function of its input that returns its output or `nil` and the error. The input's path, query and header fields have
+// the generated client's types (the OpenAPI document has their encoded forms); its body and the output have the
+// document's, which are what goes over the wire.
+function client(indent: string): string {
+  type Tree = { operation?: string; children: Map<string, Tree> }
+  const top: Tree = { children: new Map() }
+  for (const name of Object.keys(operations).toSorted()) {
+    const node = name.split(".").reduce((at, part) => {
+      if (!at.children.has(part)) at.children.set(part, { children: new Map() })
+      return at.children.get(part)!
+    }, top)
+    node.operation = name
+  }
+  const write = (tree: Tree, at: string): string => {
+    const inner = `${at}    `
+    const lines = [...tree.children].map(([name, child]) => {
+      const type = child.children.size === 0 ? callable(child.operation!, inner) : write(child, inner)
+      return `${inner}${key(name)}: ${type},`
+    })
+    const table = `{\n${lines.join("\n")}\n${at}}`
+    return tree.operation === undefined ? table : `(${callable(tree.operation, at)}) & ${table}`
+  }
+  return write(top, indent)
+}
+
+// The function type of operation `name`.
+function callable(name: string, indent: string): string {
+  const operation = operations[name]
+  const route =
+    openapi.paths[operation.path.replace(/:([A-Za-z_][A-Za-z0-9_]*)/g, "{$1}")]?.[operation.method.toLowerCase()]
+  // By method and path: a few groups are named otherwise in the document (the client's `file` is its `fs`).
+  if (!route) throw new Error(`plugin-types-luau: openapi.json has no ${operation.method} ${operation.path} (${name})`)
+  const body = route.requestBody?.content["application/json"]?.schema
+  const inner = `${indent}    `
+  const fields = operation.fields.map(([field, source, optional, type]) => {
+    const written =
+      source !== "payload"
+        ? type!
+        : operation.body === "bytes"
+          ? "string"
+          : operation.body === "json"
+            ? luau(body!, inner)
+            : luau(resolved(body!).properties![field], inner)
+    const bare = written.replace(/\?+$/, "")
+    return `${inner}${key(field)}: ${bare}${optional || bare !== written ? "?" : ""},`
+  })
+  const input = fields.length === 0 ? "{}" : `{\n${fields.join("\n")}\n${indent}}`
+  const blank = operation.fields.every(([, , optional]) => optional)
+  const out = output(operation, route, indent)
+  return `(input: ${input}${blank ? "?" : ""}) -> (${out === "nil" ? out : `${out}?`}, string?)`
+}
+
+// The output type of an operation: its reply's, or the reply's `data`.
+function output(operation: Operation, route: Route, indent: string): string {
+  if (operation.reply === "empty" || operation.reply === "sse") return "nil"
+  if (operation.reply === "binary") return "string"
+  const status = Object.keys(route.responses).find((code) => code.startsWith("2"))!
+  const reply = route.responses[status].content?.["application/json"]?.schema
+  if (!reply) return "any"
+  const data = operation.reply === "data" ? resolved(reply).properties?.data : reply
+  if (!data) throw new Error(`plugin-types-luau: ${route.operationId} answers in data, which its reply lacks`)
+  const type = luau(data, indent)
+  return type.endsWith("?")
+    ? `(${type.slice(0, -1)})`
+    : type.includes("|") && !type.startsWith("(")
+      ? `(${type})`
+      : type
 }
 
 // Luau's reserved words, which a table type names in brackets.
@@ -352,9 +447,15 @@ export type TextProps = ${props(schema.$defs.Node, ["type", "spans"], "text")}
 --- The fields \`plugin.column\` and \`plugin.row\` add to a box.
 export type BoxProps = ${props(schema.$defs.Node, ["type", "row", "children"], "box")}
 
+--- The API's operations, by the generated client's names: \`plugin.client.session.inbox.list({ sessionID = id })\` waits,
+--- as \`host:fetch\` does, and returns the operation's output (the reply's \`data\` where it answers in \`data\`) or \`nil\`
+--- and the error. Only a task can call one.
+export type Client = ${client("")}
+
 --- \`require("@opencode/plugin")\`.
 export type Plugin = {
     contract: string,
+    client: Client,
     IMAGE_BOUNDS: string,
     FOCUS_INPUT: string,
     FENCE_NODE: string,
