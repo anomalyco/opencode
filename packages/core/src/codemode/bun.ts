@@ -11,6 +11,7 @@ import { Environment } from "../environment/index.js"
 import { FileAccess } from "../file-access.js"
 import { FileMutation } from "../file-mutation.js"
 import { FileWrite } from "../file-write.js"
+import { Permission } from "../permission.js"
 import { fileDiff } from "../tool/plugin/file-diff.js"
 import { CodeModeExecution } from "./execution.js"
 
@@ -23,6 +24,7 @@ type Host = {
   readonly fileWrite: FileWrite.Interface
   readonly fileMutation: FileMutation.Interface
   readonly files: Environment.Files
+  readonly permission: Permission.Interface
 }
 type Range = { readonly offset: number; readonly length: number }
 
@@ -50,6 +52,7 @@ const call = <A, E>(syscall: string, name: string, body: (host: Host) => Effect.
       fileWrite: yield* service(FileWrite.Service),
       fileMutation: yield* service(FileMutation.Service),
       files: (yield* service(Environment.Service)).files,
+      permission: yield* Permission.Service,
     })
   }).pipe(Effect.mapError((error) => nodeError(error, syscall, name)))
 
@@ -336,8 +339,7 @@ type ScanOptions = {
   readonly onlyFiles?: boolean
 }
 
-// `scan` and `scanSync` both give an array, which `for` and `for await` both take. A scan asks read permission for
-// the directory it lists from. As in Bun without `followSymlinks`, a symlink is neither a file nor a directory to
+// `scan` and `scanSync` both give an array, which `for` and `for await` both take. As in Bun without `followSymlinks`, a symlink is neither a file nor a directory to
 // look inside: only `onlyFiles: false` lists one.
 const scan = (pattern: string, input?: string | ScanOptions) => {
   const options = typeof input === "string" ? { cwd: input } : input
@@ -361,11 +363,21 @@ const glob = (host: Host, given: string, cwd: string, dot: boolean) =>
     const pattern = given.replace(/^(\.\/)+/, "")
     const segments = pattern.split("/")
     const wild = segments.findIndex((segment) => /[*?[\]{}()!+@]/.test(segment))
-    // The fixed part of the pattern is where listing starts, and what read permission is asked for. An absolute
-    // pattern keeps its root and gives absolute paths.
+    // The fixed part of the pattern is where listing starts. An absolute pattern keeps its root and gives absolute
+    // paths. Like the glob tool, a scan asks glob permission for the pattern, and external-directory approval for
+    // where it lists outside the project.
     const fixed = (wild < 0 ? segments : segments.slice(0, wild)).join("/") || (path.isAbsolute(pattern) ? "/" : ".")
     const base = path.isAbsolute(pattern) ? fixed : path.join(cwd, fixed)
-    const root = (yield* host.access.authorizeRead(base, host.context)).absolute
+    const target = yield* host.access.resolve({ path: base, kind: "directory" })
+    yield* host.access.authorizeExternal([target], host.context)
+    yield* host.permission.assert({
+      action: "glob",
+      resources: [given],
+      save: ["*"],
+      metadata: { root: cwd },
+      ...Permission.invocation(host.context),
+    })
+    const root = target.absolute
     if (wild < 0) {
       const type = yield* typeOf(host, root)
       return type === undefined ? [] : [{ path: pattern, type }]
