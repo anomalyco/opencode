@@ -563,16 +563,20 @@ fn a_chain_of_dispatches_never_holds_the_ui_thread() {
         h.tui.keymap.dispatch("chain.fan", None);
         h.app.advance(Duration::from_millis(16));
         let first = CHAINED.get().1;
-        assert!((2..=2048).contains(&first), "loopback {loopback}: {first} ran before the first paint");
-        // The rest waits for the next paint.
+        let budget = opencode_plugin::FRAME_EFFECTS;
+        assert!((2..=budget).contains(&first), "loopback {loopback}: {first} ran before the first paint");
+        // The rest waits for the next paint, and runs just after it, one budget (frame-effects).
         h.app.advance(Duration::from_millis(16));
         assert_eq!(CHAINED.get().1, first, "loopback {loopback}: more ran with no paint");
         h.app.render();
+        assert_eq!(CHAINED.get().1, first, "loopback {loopback}: the paint ran more than its budget");
+        h.app.advance(Duration::ZERO);
         let second = CHAINED.get().1;
-        assert!(second > first && second - first <= 2048, "loopback {loopback}: {first} then {second}");
+        assert!(second > first && second - first <= budget, "loopback {loopback}: {first} then {second}");
         // Each run adds two to the queue for the one it takes, but the queue stops growing at its bound (carbon new-1).
         for _ in 0..80 {
             h.app.render();
+            h.app.advance(Duration::ZERO);
         }
         let waiting = opencode_plugin::effects_waiting();
         assert!((60_000..=1 << 16).contains(&waiting), "loopback {loopback}: {waiting} effects wait");
@@ -622,6 +626,7 @@ fn a_fetch_given_an_id_gets_its_reply_under_queue_pressure() {
         h.tui.keymap.dispatch("chain.fan", None);
         for _ in 0..80 {
             h.app.render();
+            h.app.advance(Duration::ZERO);
         }
         assert!(opencode_plugin::effects_waiting() >= 60_000, "loopback {loopback}: the queue is not under pressure");
         h.tui.keymap.dispatch("fetcher.go", None);
@@ -633,8 +638,10 @@ fn a_fetch_given_an_id_gets_its_reply_under_queue_pressure() {
         // A frame runs its budget of what waits: the drain is so many frames, however long each takes under load
         // (pipe-flakes: it outlasted the 30 s of a wait under load).
         let waiting = opencode_plugin::effects_waiting();
+        // Each paint runs nothing past its budget; the rest comes due just after it.
         for _ in 0..waiting.div_ceil(opencode_plugin::FRAME_EFFECTS) {
             h.app.render();
+            h.app.advance(Duration::ZERO);
         }
         let left = opencode_plugin::effects_waiting();
         assert_eq!(left, 0, "loopback {loopback}: the queue did not drain within a frame for each budget of {waiting}");
@@ -709,7 +716,10 @@ fn one_call_of_many_effects_and_a_chain_of_closes_are_bounded() {
         while BURST.get().0 < 3000 {
             let before = BURST.get().0;
             h.app.render();
-            assert!(BURST.get().0 > before, "loopback {loopback}: stuck at {before}");
+            h.app.advance(Duration::ZERO);
+            let ran = BURST.get().0 - before;
+            assert!(ran > 0, "loopback {loopback}: stuck at {before}");
+            assert!(ran <= opencode_plugin::FRAME_EFFECTS, "loopback {loopback}: {ran} ran in one frame");
         }
         assert_eq!(BURST.get().0, 3000, "loopback {loopback}");
         let (x, y) = h.find("PAD");
