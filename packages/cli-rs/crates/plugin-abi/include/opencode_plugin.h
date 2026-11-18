@@ -184,7 +184,10 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *   "message" and "plugins" run the plugin's handlers and answer null. "reply" carries {"Ok": json} or {"Err": text};
  *   "message" the JSON text a thread sent, as a JSON string; "plugins" goes to a plugin whose manifest has "plugins".
  *   "cancelled" goes to a plugin whose manifest has "cancelled", once for each request ("id") the host cancelled as
- *   the mount that owned it closed: no "reply" comes for it, before or after.
+ *   the mount that owned it closed: no "reply" comes for it, before or after. A "command" may answer "pass" instead,
+ *   which declines the key that ran it: the key goes on as if the command were not there. A command of the manifest
+ *   with "enabled" false binds no key and is in neither the palette nor the slash list until the host request
+ *   "set-enabled" ({"name", "enabled"}, an effect) enables it.
  * - "render-fence", "render" and "render-route" answer `Fenced` and `Render`.
  * - "view" (2.0) answers `ViewReply`. Its "content" is what the view gave the host this time, numbered "next" + 1,
  *   "next" + 2, ...; a node names it as {"content": handle}, and "released" lets the host drop handles. "memo" is how

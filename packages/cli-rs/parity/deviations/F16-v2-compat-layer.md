@@ -32,13 +32,16 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   open dialog stays and acts, as in TS (`P.8/sidebar-prompt` `kept`), and so does its session panel, which mounts again from the new registrations (CT-29: opencode-self-improvement's `/memory` panel registers keys as it renders, and the reload closed it; `plugin_compat::a_session_panel_stays_open_across_a_reload`). Each mount the
   reload ends and begins again keeps its components, which do not run again, as TS takes a registration without a
   remount (CT-21: opencode-navigator named a binding anew on each mount, `P.8/navigator`), and the field the plugin
-  focused in it takes the host's focus again (`P.8/session-manager`'s search, whose layer reloads as the field shows);
+  focused in it takes the host's focus again;
   a mount begun 250 ms after its end renders anew. A disposed `ui.slot` or `ui.router.register` draws nothing but stays registered until the
   next reload, so a disposed `replace` still holds its slot. A layer's `enabled`, its `mode` (base unless `global`; a
   mode of the plugin's own, such as `modal` or one it pushes, binds its commands everywhere, and they decline unless it
   is the input mode, CT-31: opencode-usage-report's `r`, `P.8/usage-report-keys`) and
   a command's `enabled` and slash `aliases` are kept (`P.8/file-browser` and `P.8/context-grid` `slash`); its
-  `priority` and `bindings` are not mapped. Its `target` holds
+  `priority` and `bindings` are not mapped. A layer's and a command's `enabled` are the command's state on the host
+  (contract ergonomics 2.5): a disabled command stays registered, binds no key and is in neither the palette nor the
+  slash list, as TS binds no disabled command, and the layer follows what they read, telling the host each change
+  with no reload (opencode-command-hotkeys' palette entries off a session, `ports_trio`). Its `target` holds
   its commands to the plugin's focus in that node, elsewhere they decline (CT-20: @slkiser/opencode-quota's window
   Escape kept Goal's select open), but the focus is the layer's record of what the plugin focused or the user edited:
   the host's focus by a click or Tab does not reach it, so a target the user clicks into still declines. A command
@@ -54,11 +57,11 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   that returned `false`, whose `enabled` says no, or whose layer ended declines, and its key is routed again first,
   past that command and any that declined it before, to the host's own keys and the composer (CT-8: linear's `r`,
   `P.8/linear-keys`; CT-19: rundev's space and Enter, `P.8/rundev-keys`; `P.8/host-keys` has the same keys with no
-  plugin). The key reaches the composer a round trip to the JS host later than TS's, and the host lists a disabled
-  command, where TS does not bind it: every key a JS command binds is held so, also while its `enabled` says no
-  (linear's `r` on every keystroke, quota's Enter). Not binding it would need the contract to carry a command's
-  `enabled` as state the host reads, not a manifest change, which reloads the plugin's registrations. Keys no JS
-  command binds are never held. A command the palette or a slash runs declines nothing.
+  plugin). The key reaches the composer a round trip to the JS host later than TS's. A disabled command binds no key,
+  so its key is never held (linear's `r` while its dialog is closed; `plugin_compat::a_disabled_commands_key_is_not_held`);
+  the hold stays for a command that is enabled and declines as it runs (rundev's keys, which return `false`), and for
+  an `enabled` that reads what the layer does not follow, which it asks again as the command runs. Keys no JS command
+  binds are never held. A command the palette or a slash runs declines nothing.
 - **The hold's bound**: a hold lasts at most 50 ms (`Config::hold`). If the JS host has not answered by then, the
   key that ran the command goes on as declined, first, then the keys after it, and the log says so once. A late
   answer still applies its effects but does not put the key back, so a command that would have taken the key after

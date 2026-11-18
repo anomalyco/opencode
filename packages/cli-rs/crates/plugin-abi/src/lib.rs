@@ -529,8 +529,9 @@ impl From<&SurfacePlace> for v2::Place {
     }
 }
 
-/// A command: in the palette when `palette` is set, as `/slash`, and on `keybind` (such as `ctrl+shift+h`).
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+/// A command: in the palette when `palette` is set, as `/slash`, and on `keybind` (such as `ctrl+shift+h`), while it
+/// is enabled.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct Command {
     pub name: String,
@@ -552,6 +553,28 @@ pub struct Command {
     /// `aliases`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub aliases: Vec<String>,
+    /// Contract ergonomics 2.5: while `false` the command binds no key, and is in neither the palette nor the slash
+    /// list, as TS binds no disabled command. The plugin changes it with [`Host::set_enabled`].
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub enabled: bool,
+}
+
+impl Default for Command {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            title: String::new(),
+            group: None,
+            slash: None,
+            keybind: None,
+            palette: false,
+            description: None,
+            arguments: false,
+            scope: Scope::Global,
+            aliases: Vec::new(),
+            enabled: true,
+        }
+    }
 }
 
 /// Where a [`Command`] runs: everywhere, or while the plugin's route of that name shows.
@@ -2174,6 +2197,11 @@ pub enum HostRequest {
     CloseOverlay {
         surface: String,
     },
+    /// Contract ergonomics 2.5: [`Host::set_enabled`], once the current call returns.
+    SetEnabled {
+        name: String,
+        enabled: bool,
+    },
     /// 2.0 (P2): [`Host::focus`], once the current call returns; of a field too, on a host with [`FOCUS_INPUT`].
     Focus {
         node: String,
@@ -3154,6 +3182,12 @@ pub trait Host: Read {
     }
     /// Runs the registered command `name` with `input`, the plugin's or the host's, palette or not.
     fn dispatch(&self, name: &str, input: Option<&str>);
+    /// Enables or disables the plugin's own command `name` ([`Command::enabled`]), once the current call returns: a
+    /// disabled command binds no key, so its key goes on to whatever else takes it, and is in neither the palette nor
+    /// the slash list. A name the plugin did not register changes nothing, and the log says so.
+    fn set_enabled(&self, name: &str, enabled: bool) {
+        let _ = (name, enabled);
+    }
     /// Shows `toast`.
     fn toast(&self, toast: Toast);
     /// Asks for the user's attention.
@@ -3684,6 +3718,10 @@ impl Host for HostHandle {
         let _ = self.request(&HostRequest::Dispatch { name: name.to_owned(), input: input.map(str::to_owned) });
     }
 
+    fn set_enabled(&self, name: &str, enabled: bool) {
+        let _ = self.request(&HostRequest::SetEnabled { name: name.to_owned(), enabled });
+    }
+
     fn toast(&self, toast: Toast) {
         let Toast { variant, title, message, session } = toast;
         let _ = self.request(&HostRequest::Toast { variant, message, title, session });
@@ -3874,8 +3912,31 @@ pub type RenderFn = Rc<dyn Fn(&dyn Read, &SlotInput, &Changed) -> Render>;
 pub type RouteFn = Rc<dyn Fn(&dyn Read, &Changed) -> Render>;
 /// A registered reply handler.
 pub type ReplyFn = Rc<dyn Fn(&dyn Host, RequestId, Result<serde_json::Value, String>)>;
-/// A registered command.
-pub type CommandFn = Rc<dyn Fn(&dyn Host, Option<&str>)>;
+/// A registered command: [`Handled::Pass`] declines the key that ran it, which goes on as if the command were not
+/// there.
+pub type CommandFn = Rc<dyn Fn(&dyn Host, Option<&str>) -> interact::Handled>;
+
+/// What a command's closure may return: nothing, which takes the key that ran it, or [`interact::Handled`] (contract
+/// ergonomics 2.5). A closure that only panics returns `!`, which is neither: give it `-> ()`.
+#[diagnostic::on_unimplemented(
+    message = "a command's closure returns nothing or `Handled`, not `{Self}`",
+    note = "a closure that only panics returns `!`: write `|host, input| -> () {{ panic!(...) }}`"
+)]
+pub trait CommandOutcome {
+    fn handled(self) -> interact::Handled;
+}
+
+impl CommandOutcome for () {
+    fn handled(self) -> interact::Handled {
+        interact::Handled::Consume
+    }
+}
+
+impl CommandOutcome for interact::Handled {
+    fn handled(self) -> interact::Handled {
+        self
+    }
+}
 /// A registered event handler.
 pub type EventFn = Rc<dyn Fn(&dyn Host, &V2Event)>;
 /// A registered mount handler of [`Setup::on_mount`].
@@ -3983,8 +4044,12 @@ impl Setup<'_> {
 
     /// Registers a command; `run` receives the input it was dispatched with, such as the slash command's text after
     /// its name. A command without `palette` and `slash` is hidden: a click or [`Host::dispatch`] runs it.
-    pub fn command(&mut self, command: Command, run: impl Fn(&dyn Host, Option<&str>) + 'static) {
-        self.registered.commands.push(Rc::new(run));
+    pub fn command<R: CommandOutcome>(
+        &mut self,
+        command: Command,
+        run: impl Fn(&dyn Host, Option<&str>) -> R + 'static,
+    ) {
+        self.registered.commands.push(Rc::new(move |host, input| run(host, input).handled()));
         self.registered.manifest.commands.push(command);
     }
 
@@ -4462,8 +4527,11 @@ impl Registered {
             }
             Request::Command { name, input } => {
                 let (_, run) = self.commands().find(|(command, _)| command.name == name).ok_or("no such command")?;
-                run(&self.host, input.as_deref());
-                Ok(serde_json::Value::Null)
+                // A command that declines its key answers `"pass"` (contract ergonomics 2.5).
+                match run(&self.host, input.as_deref()) {
+                    interact::Handled::Consume => Ok(serde_json::Value::Null),
+                    interact::Handled::Pass => Ok(serde_json::Value::String("pass".to_owned())),
+                }
             }
             Request::Event { handler, event } => {
                 self.events.get(handler).ok_or("no such event handler")?(&self.host, &event);
@@ -5471,6 +5539,26 @@ mod tests {
         let request = Request::Command { name: "x.hidden".into(), input: Some("b".into()) };
         assert_eq!(setup.handle(request).unwrap(), serde_json::Value::Null);
         assert_eq!(*seen.borrow(), [(Some("b".to_owned()), None)]);
+    }
+
+    // Expected (contract ergonomics 2.5): a command that answers `Handled::Pass` answers "pass" across the C ABI, one
+    // that returns nothing or `Consume` answers null; `set-enabled` crosses as written.
+    #[test]
+    fn a_command_that_declines_answers_pass() {
+        let mut registered = Registered::new("new", None);
+        let mut setup = registered.setup();
+        setup.command(Command::new("x.pass"), |_, _| interact::Handled::Pass);
+        setup.command(Command::new("x.take"), |_, _| interact::Handled::Consume);
+        setup.command(Command::new("x.unit"), |_, _| ());
+        let run = |name: &str| setup.handle(Request::Command { name: name.into(), input: None }).unwrap();
+        assert_eq!(
+            [run("x.pass"), run("x.take"), run("x.unit")],
+            [serde_json::json!("pass"), serde_json::Value::Null, serde_json::Value::Null]
+        );
+        let set = HostRequest::SetEnabled { name: "x.pass".into(), enabled: false };
+        let text = r#"{"type":"set-enabled","name":"x.pass","enabled":false}"#;
+        assert_eq!(serde_json::to_string(&set).unwrap(), text);
+        assert_eq!(serde_json::from_str::<HostRequest>(text).unwrap(), set);
     }
 
     // Expected: a 1.3 toast keeps its JSON, and a 1.4 one adds its title and session; attention, the route and a nested

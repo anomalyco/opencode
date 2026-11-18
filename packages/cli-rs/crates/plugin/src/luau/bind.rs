@@ -250,7 +250,11 @@ fn setup_object(plugin: &Rc<Plugin>, lua: &Lua, id: &str, options: Option<&str>)
         let command: abi::Command = defaulted(lua, command)?;
         let plugin = plugin.clone();
         setup.command(command, move |host, input| {
-            plugin.run(Current::acting(host), |_| run.call::<()>((plugin.host.clone(), input)));
+            plugin.run(Current::acting(host), |lua| {
+                let value = run.call::<Value>((plugin.host.clone(), input))?;
+                // `"pass"` declines the key that ran it (contract ergonomics 2.5); the prelude's task gives nothing else.
+                Ok(optional::<Handled>(lua, value)?.unwrap_or(Handled::Consume))
+            })
         });
         Ok(())
     })?;
@@ -510,6 +514,7 @@ fn objects(lua: &Lua, current: &Rc<Slot>) -> mlua::Result<(Table, Table, Functio
         "storageSet" => |h, lua, key: String, value: Value| h.storage_set(&key, input(lua, value)?);
         "storageMerge" => |h, lua, key: String, fields: Value| h.storage_merge(&key, object(lua, &fields)?);
         "dispatch" => |h, _lua, name: String, value: Option<String>| h.dispatch(&name, value.as_deref());
+        "setEnabled" => |h, _lua, name: String, enabled: bool| h.set_enabled(&name, enabled);
         "toast" => |h, lua, toast: Value| h.toast(input(lua, toast)?);
         "attention" => |h, lua, attention: Value| h.attention(input(lua, attention)?);
         "openRoute" => |h, _lua, name: String| h.open_route(&name);

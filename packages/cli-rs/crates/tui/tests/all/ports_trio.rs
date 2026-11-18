@@ -291,7 +291,8 @@ fn writes(h: &Port) -> usize {
 
 // Expected: on each column, alt+r runs `/review --all` in the session in view, the palette's "Run the review" runs it
 // again, and alt+o reads the session's goal at the session's location and pauses it; on the home screen the keys run
-// nothing. A command the server refuses toasts the plugin's failure.
+// nothing, and the palette lists no entry of the plugin's (TS's `enabled: available`, contract ergonomics 2.5). A
+// command the server refuses toasts the plugin's failure.
 #[test]
 fn command_hotkeys_send_alike_in_ts_rust_and_luau() {
     use opencode_ui::keymap::COMMAND_PALETTE_COMMAND;
@@ -326,6 +327,14 @@ fn command_hotkeys_send_alike_in_ts_rust_and_luau() {
             h.app.press("alt+r");
             h.settle();
             assert_eq!(writes(&h), 3, "{carrier:?}: a key off a session runs nothing");
+            h.tui.keymap.dispatch(COMMAND_PALETTE_COMMAND, None);
+            h.wait_for("Search commands");
+            h.app.type_text("Run the review");
+            h.settle();
+            // The query is the one line that holds the title: no entry under it. The screen is not compared: the home
+            // composer's placeholder is drawn at random.
+            let lines = h.app.text().lines().filter(|line| line.contains("Run the review")).count();
+            assert_eq!(lines, 1, "{carrier:?}: the palette lists the entry off a session:\n{}", h.app.text());
             Some(Observed { steps, requests: requests(&h, &["/api/session/ses_p"]) })
         });
     }

@@ -63,7 +63,7 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
             } {
                 group: nullable(string()), slash: nullable(string()), keybind: nullable(string()),
                 description: nullable(string()), arguments: boolean(), scope: reference("Scope"),
-                aliases: array(string()),
+                aliases: array(string()), enabled: boolean(),
             }),
         ),
         ("Scope", {
@@ -329,6 +329,7 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
                 Transcript { } { },
                 ClosePanel { surface: string() } { },
                 CloseOverlay { surface: string() } { },
+                SetEnabled { name: string(), enabled: boolean() } { },
                 Focus { node: string() } { },
                 Blur { } { },
                 SetMode { } { mode: nullable(string()) },
@@ -717,6 +718,8 @@ pub(super) fn messages() -> Value {
         ("draw", reference("DrawList")),
         ("layout", reference("LayoutReply")),
         ("input", reference("Handled")),
+        // A command that declines the key that ran it answers "pass" (contract ergonomics 2.5).
+        ("command", json!({ "enum": [null, "pass"] })),
         ("search", array(string())),
         ("*", json!({ "type": "null" })),
     ];

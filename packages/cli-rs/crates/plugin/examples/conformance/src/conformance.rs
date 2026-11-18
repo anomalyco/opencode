@@ -99,7 +99,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
             waker.wake();
         }
     });
-    setup.command(command("conf.panic"), |host, _| {
+    setup.command(command("conf.panic"), |host, _| -> () {
         host.toast(Toast::new(Variant::Info, "before panic"));
         panic!("boom");
     });

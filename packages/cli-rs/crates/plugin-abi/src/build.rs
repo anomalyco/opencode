@@ -101,7 +101,7 @@ impl Command {
     }
 }
 
-builder!(Command [name] {
+builder!(Command [name, enabled] {
     title: impl String,
     group?: impl String,
     slash?: impl String,
@@ -112,6 +112,14 @@ builder!(Command [name] {
     scope: Scope,
     aliases: [String],
 });
+
+impl Command {
+    /// The command starts disabled ([`Command::enabled`]), until [`crate::Host::set_enabled`] enables it.
+    pub fn disabled(mut self) -> Self {
+        self.enabled = false;
+        self
+    }
+}
 
 impl Span {
     pub fn new(text: impl Into<String>) -> Self {
@@ -678,6 +686,12 @@ mod tests {
         );
         assert!(command.palette && command.arguments && !command.description.is_some());
         assert_eq!(command.scope, Scope::Base);
+        // Contract ergonomics 2.5: enabled unless it says otherwise, which the JSON carries only then.
+        assert!(command.enabled && !Command::new("a.b").disabled().enabled);
+        assert_eq!(serde_json::to_value(Command::new("a.b").disabled()).unwrap()["enabled"], false);
+        assert!(serde_json::to_value(Command::new("a.b")).unwrap().get("enabled").is_none());
+        let bare = serde_json::json!({ "name": "a", "title": "a", "group": null, "slash": null, "keybind": null, "palette": false });
+        assert!(serde_json::from_value::<Command>(bare).unwrap().enabled);
         let aliased = Command::new("a.b").slash("ab").aliases(["a".to_owned(), "b".to_owned()]);
         assert_eq!(
             (aliased.slash.as_deref(), aliased.aliases.as_slice()),

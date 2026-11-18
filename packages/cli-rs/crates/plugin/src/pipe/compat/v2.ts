@@ -75,6 +75,8 @@ const REMOUNT = 250
 // A keymap layer's commands as the layer last registered them, its `target`, and whether its component ended.
 interface Registration {
   retired: boolean
+  // The layer's own `enabled`, as it last said: a disabled layer's commands are disabled (contract ergonomics 2.5).
+  on?: boolean
   commands: Map<string, Json>
   target?: () => unknown
   mode?: string
@@ -189,6 +191,8 @@ export function context(base: Base, carrier: Carrier) {
   const waiters = new Map<string, Array<{ resolve: () => void; reject: (error: Error) => void }>>()
   // The reads of the mount that renders now, or whose input changes.
   let rendering: { pending: boolean; keys: Set<string> } | undefined
+  // What each live key layer's `enabled` reads, which stays watched as a mount's reads do: the layer follows it.
+  const layered = new Set<{ keys: Set<string> }>()
   const failed = (key: string) => carrier.readError?.(key)
   carrier.listen((key) => {
     pushed.add(key)
@@ -202,7 +206,7 @@ export function context(base: Base, carrier: Carrier) {
     }
   })
   const idle = () => {
-    const live = new Set([...rendered.values(), ...(shown ? [shown.mounted] : [])].flatMap((at) => [...at.keys]))
+    const live = new Set([...rendered.values(), ...(shown ? [shown.mounted] : []), ...layered].flatMap((at) => [...at.keys]))
     return [...watched.keys()].filter(
       (key) => !live.has(key) && !key.startsWith("storage:") && !waiters.get(key)?.length,
     )
@@ -1120,7 +1124,7 @@ export function context(base: Base, carrier: Carrier) {
   const dispatch = (name: string, input?: string) => {
     const live = (registrations.get(name) ?? []).filter((at) => !at.retired && at.commands.has(name))
     const command = live.at(-1)?.commands.get(name)
-    if (!command) return false
+    if (!command || live.at(-1)?.on === false) return false
     const target = live.at(-1)?.target
     if (target && !within(target(), focusedNode)) return false
     const mode = live.at(-1)?.mode
@@ -1128,6 +1132,16 @@ export function context(base: Base, carrier: Carrier) {
       return false
     const enabled = typeof command.enabled === "function" ? command.enabled() : command.enabled !== false
     return enabled ? command.run(input) : false
+  }
+  // A command's `enabled`, a value or a function of what the plugin reads; one that throws counts as enabled, and the
+  // command's run asks it again.
+  const enabledNow = (command: Json) => {
+    if (typeof command.enabled !== "function") return command.enabled !== false
+    try {
+      return !!command.enabled()
+    } catch {
+      return true
+    }
   }
   const commands = (registration: Registration, scope?: string) => {
     const names: string[] = []
@@ -1138,6 +1152,9 @@ export function context(base: Base, carrier: Carrier) {
       carrier.command(
         {
           name,
+          // Contract ergonomics 2.5: its state as the layer and the command say now, which the layer follows as it
+          // changes (`set-enabled`), so the host binds no key of a disabled command and lists it nowhere.
+          enabled: registration.on !== false && enabledNow(command),
           title: command.title ?? name,
           group: command.group,
           slash: command.slash?.name,
@@ -1286,36 +1303,49 @@ export function context(base: Base, carrier: Carrier) {
       },
     },
     keymap: {
-      // As TS's (bigboi P8-4): the factory is followed, so its `enabled` and its commands may change; a disabled
-      // layer registers nothing; a layer keeps to the base mode unless its `mode` is `global`, or a mode of the plugin's
-      // own, whose commands decline unless it is the input mode; a command's own
-      // `enabled` is asked as it runs. A layer a component made ends with it: from then on its commands run nothing,
-      // though the host lists them a little longer (`uncommand`). Its `target` makes its commands decline while that
-      // node lacks the plugin's focus. Its `priority` and `bindings` are not mapped.
+      // As TS's (bigboi P8-4): the factory is followed, so its `enabled` and its commands may change. A disabled layer's
+      // commands, and a command whose `enabled` says no, stay registered and disabled: the host binds no key of theirs
+      // and lists them nowhere, as TS binds no disabled command, and a change of either goes to the host as
+      // `set-enabled`, with no reload (contract ergonomics 2.5). The factory and each command's `enabled` are followed
+      // by what they read; a command's `enabled` is asked again as it runs, for one that reads what is not followed.
+      // A layer keeps to the base mode unless its `mode` is `global`, or a mode of the plugin's own, whose commands
+      // decline unless it is the input mode. A layer a component made ends with it: from then on its commands run
+      // nothing, though the host lists them a little longer (`uncommand`). Its `target` makes its commands decline
+      // while that node lacks the plugin's focus. Its `priority` and `bindings` are not mapped.
       layer(factory: () => Json) {
         const registration: Registration = { retired: false, commands: new Map<string, Json>() }
+        const reads = { keys: new Set<string>() }
         let names: string[] = []
-        const apply = (layer: Json) => {
-          const enabled = typeof layer?.enabled === "function" ? layer.enabled() : layer?.enabled !== false
-          // A mode of the plugin's own (`modal`, one it pushes) is active only while it is the input mode (CT-31): its
-          // commands are bound everywhere and decline elsewhere, so the key goes on.
-          const own = typeof layer?.mode === "string" && layer.mode !== "global" && layer.mode !== "base"
-          const scope = layer?.mode === "global" || own ? undefined : "base"
-          registration.mode = own ? layer.mode : undefined
-          registration.target = typeof layer?.target === "function" ? layer.target : undefined
-          registration.commands = new Map(named(enabled ? (layer?.commands ?? []) : [], scope))
-          const next = commands(registration, scope)
-          names.forEach((name) => carrier.uncommand(name))
-          names = next
+        const apply = () => {
+          const before = rendering
+          rendering = { pending: false, keys: reads.keys }
+          try {
+            const layer = factory()
+            registration.on = typeof layer?.enabled === "function" ? !!layer.enabled() : layer?.enabled !== false
+            // A mode of the plugin's own (`modal`, one it pushes) is active only while it is the input mode (CT-31):
+            // its commands are bound everywhere and decline elsewhere, so the key goes on.
+            const own = typeof layer?.mode === "string" && layer.mode !== "global" && layer.mode !== "base"
+            const scope = layer?.mode === "global" || own ? undefined : "base"
+            registration.mode = own ? layer.mode : undefined
+            registration.target = typeof layer?.target === "function" ? layer.target : undefined
+            registration.commands = new Map(named(layer?.commands ?? [], scope))
+            const next = commands(registration, scope)
+            names.forEach((name) => carrier.uncommand(name))
+            names = next
+          } finally {
+            rendering = before
+          }
           carrier.changed()
         }
         const owner = getOwner()
+        layered.add(reads)
         createRoot((dispose) => {
-          createEffect(() => apply(factory()))
+          createEffect(apply)
           if (owner)
             runWithOwner(owner, () =>
               onCleanup(() => {
                 registration.retired = true
+                layered.delete(reads)
                 dispose()
                 names.forEach((name) => carrier.uncommand(name))
                 names = []

@@ -182,17 +182,19 @@ test("storage updates apply in turn to the latest value", async () => {
   expect(view.open).toBe(false)
 })
 
-// Bigboi P8-4: a disabled layer registers nothing, and one that becomes enabled does; a layer is the base mode's
-// unless it says `global`; a component's layer runs nothing once the component ended.
+// Bigboi P8-4, contract ergonomics 2.5: a disabled layer's commands are registered disabled, so the host binds no key
+// of theirs, and decline if run; they are enabled as the layer is. A layer is the base mode's unless it says `global`;
+// a component's layer runs nothing once the component ended.
 test("a layer keeps its conditions and ends with its component", async () => {
   const fake = host()
   const ctx = plugin("t.layer", fake)
   const [on, setOn] = solid.createSignal(false)
   const ran: string[] = []
   ctx.keymap.layer(() => ({ enabled: on(), commands: [{ id: "t.gated", run: () => ran.push("gated") }] }))
-  expect(fake.commands.has("t.gated")).toBe(false)
+  expect(fake.meta.get("t.gated").enabled).toBe(false)
+  expect(fake.commands.get("t.gated")!()).toBe(false)
   setOn(true)
-  expect(fake.commands.has("t.gated")).toBe(true)
+  expect(fake.meta.get("t.gated").enabled).toBe(true)
   fake.commands.get("t.gated")!()
   ctx.keymap.layer(() => ({ mode: "global", commands: [{ id: "t.global", run() {} }] }))
   expect([fake.meta.get("t.gated").scope, fake.meta.get("t.global").scope]).toEqual(["base", undefined])
@@ -205,6 +207,26 @@ test("a layer keeps its conditions and ends with its component", async () => {
   dispose()
   fake.commands.get("t.mounted")!()
   expect(ran).toEqual(["gated", "mounted"])
+})
+
+// Contract ergonomics 2.5 (CT-8): a command's own `enabled`, a function of what the plugin reads, is followed: the
+// host is told each change (here, the route the plugin reads), so it binds the command's key only while it holds, and
+// a run while it does not declines. The layer's reads stay watched while it lives, as a mount's do.
+test("a command's enabled is followed as what it reads changes", () => {
+  const fake = host()
+  const ctx = plugin("t.enabled", fake)
+  const ran: string[] = []
+  const session = () => ctx.ui.router.current().type === "session"
+  ctx.keymap.layer(() => ({ commands: [{ id: "t.here", bind: "r", enabled: session, run: () => ran.push("here") }] }))
+  expect(fake.meta.get("t.here").enabled).toBe(false)
+  expect(fake.commands.get("t.here")!()).toBe(false)
+  fake.push("route", { type: "session", id: "ses_1" })
+  expect(fake.meta.get("t.here").enabled).toBe(true)
+  fake.commands.get("t.here")!()
+  fake.push("route", { type: "home" })
+  expect(fake.meta.get("t.here").enabled).toBe(false)
+  expect(ran).toEqual(["here"])
+  expect(fake.watches.has("route")).toBe(true)
 })
 
 // CT-1: a component that mounts again registers its layer's commands without an `id` under the names it gave them

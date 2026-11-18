@@ -47,7 +47,7 @@ use opencode_ui::dialog::DialogKeymap;
 use opencode_ui::keymap::{Bind, Slash, TuiCommand};
 use opencode_ui::markdown::CodeBlockRenderers;
 use opencode_ui::theme::Theme;
-use opentui::keymap::Disposer;
+use opentui::keymap::{Condition, Disposer};
 use opentui::prelude::*;
 use opentui::widget::CodeBlock;
 
@@ -466,11 +466,15 @@ pub(crate) fn linked(id: impl Into<String>, run: LinkedSetup, external: bool) ->
         *scope.cancelled.borrow_mut() = api.cancelled().to_vec();
         if !api.wakes().is_empty() {
             let (wakes, scope) = (api.wakes().to_vec(), scope.clone());
-            activation.on_wake(Rc::new(move || scope.run("on-wake", |host| wakes.iter().for_each(|run| run(host)))));
+            activation.on_wake(Rc::new(move || {
+                scope.run("on-wake", |host| wakes.iter().for_each(|run| run(host)));
+            }));
         }
         if !api.plugins().is_empty() {
             let (heard, scope) = (api.plugins().to_vec(), scope.clone());
-            setup.on_plugins(Rc::new(move || scope.run("on-plugins", |host| heard.iter().for_each(|run| run(host)))));
+            setup.on_plugins(Rc::new(move || {
+                scope.run("on-plugins", |host| heard.iter().for_each(|run| run(host)));
+            }));
         }
         // A thread's message runs the message handler as `update`; a thread's panic fails the plugin, once. A plugin
         // without a handler refuses messages, also those its setup sent.
@@ -548,14 +552,16 @@ pub(crate) fn linked(id: impl Into<String>, run: LinkedSetup, external: bool) ->
             }));
             revoked.borrow_mut().extend(subscription);
         }
+        activation.commands(&api.commands().map(|(command, _)| command.clone()).collect::<Vec<_>>());
         let commands: Vec<(abi::Scope, TuiCommand)> = api
             .commands()
             .map(|(command, run)| {
                 let (run, scope) = (run.clone(), scope.clone());
-                (
-                    command.scope.clone(),
-                    tui_command(command, move |input| scope.run("run-command", |host| run(host, input))),
-                )
+                let enabled = command_enabled(&activation, &command.name);
+                let run = move |input: Option<&str>| {
+                    scope.run("run-command", |host| run(host, input)).unwrap_or(abi::interact::Handled::Consume)
+                };
+                (command.scope.clone(), tui_command(command, enabled, run))
             })
             .collect();
         let (layers, scoped) = route::split(commands);
@@ -642,8 +648,11 @@ pub(crate) fn linked(id: impl Into<String>, run: LinkedSetup, external: bool) ->
                     .iter()
                     .map(|(command, run)| {
                         let (run, scope, alive) = (run.clone(), owning.clone(), alive.clone());
-                        tui_command(command, move |input| {
-                            scope.run_owned(&alive, "run-command", |host| run(host, input));
+                        let enabled = command_enabled(&scope.activation, &command.name);
+                        tui_command(command, enabled, move |input| {
+                            scope
+                                .run_owned(&alive, "run-command", |host| run(host, input))
+                                .unwrap_or(abi::interact::Handled::Consume)
                         })
                     })
                     .collect()
@@ -680,18 +689,26 @@ pub(crate) fn linked(id: impl Into<String>, run: LinkedSetup, external: bool) ->
 
 /// The keymap command of a plugin's `command`, which calls `run` with its input. It runs for the user's input unless
 /// a plugin effect dispatched it ([`flush`]): a command the plugin runs itself, or one a reply or a result runs.
-pub(crate) fn tui_command(command: &abi::Command, run: impl Fn(Option<&str>) + 'static) -> TuiCommand {
-    keyed_command(command, move |input, _| run(input))
+pub(crate) fn tui_command(
+    command: &abi::Command,
+    enabled: Condition,
+    run: impl Fn(Option<&str>) -> abi::interact::Handled + 'static,
+) -> TuiCommand {
+    keyed_command(command, enabled, move |input, _| run(input))
 }
 
-/// [`tui_command`] whose `run` also gets the key that ran it, if a key did.
+/// [`tui_command`] whose `run` also gets the key that ran it, if a key did. It holds while `enabled` does: else it binds
+/// no key and is in neither the palette nor the slash list. A run that answers [`abi::interact::Handled::Pass`]
+/// declines its key, which goes on to the next binding as if the command were not there (contract ergonomics 2.5).
 pub(crate) fn keyed_command(
     command: &abi::Command,
-    run: impl Fn(Option<&str>, Option<&KeyEvent>) + 'static,
+    enabled: Condition,
+    run: impl Fn(Option<&str>, Option<&KeyEvent>) -> abi::interact::Handled + 'static,
 ) -> TuiCommand {
     let mut entry = TuiCommand::new(command.name.clone(), move |input, key| {
-        behave::as_user(!FLUSHING.with(Cell::get), || run(input, key));
+        behave::as_user(!FLUSHING.with(Cell::get), || run(input, key)) == abi::interact::Handled::Consume
     })
+    .enabled(enabled)
     .bind(command.keybind.clone().map_or(Bind::Default, Bind::Key));
     // The keymap refuses an empty title, which a hidden command may have.
     if !command.title.trim().is_empty() {
@@ -711,6 +728,12 @@ pub(crate) fn keyed_command(
             entry.slash(Slash { name: slash.clone(), aliases: command.aliases.clone(), arguments: command.arguments });
     }
     entry
+}
+
+/// The condition of the plugin's command `name`: while its activation holds it enabled ([`Activation::enabled`]).
+pub(crate) fn command_enabled(activation: &Rc<Activation>, name: &str) -> Condition {
+    let (activation, name) = (Rc::downgrade(activation), name.to_owned());
+    Condition::when(move || activation.upgrade().is_some_and(|activation| activation.enabled(&name)))
 }
 
 /// What an in-process plugin's reads and effects are scoped to: its host, its ID and declared storage keys, its
@@ -965,6 +988,12 @@ impl Owners {
         Box::new(move |host| owner.blur(host))
     }
 
+    /// Enables or disables the plugin's command `name` (contract ergonomics 2.5).
+    pub(crate) fn set_enabled(&self, name: &str, enabled: bool) -> Effect {
+        let (activation, plugin, name) = (self.activation.clone(), self.id.clone(), name.to_owned());
+        Box::new(move |_| activation.set_enabled(&plugin, &name, enabled))
+    }
+
     pub(crate) fn set_mode(&self, mode: Option<&str>) -> Effect {
         let Ok(owner) = self.owner() else { return Box::new(|_| {}) };
         let mode = mode.map(str::to_owned);
@@ -1090,11 +1119,13 @@ impl Scope {
     }
 
     /// Runs a handler of the plugin with the host, then invalidates its claims, whose state it may have changed.
-    fn run(self: &Rc<Self>, export: &'static str, handler: impl FnOnce(&Scoped<'_>)) {
-        let Some(host) = self.host.upgrade() else { return };
-        if self.call(export, &*host, handler).is_some() {
+    fn run<R>(self: &Rc<Self>, export: &'static str, handler: impl FnOnce(&Scoped<'_>) -> R) -> Option<R> {
+        let host = self.host.upgrade()?;
+        let answer = self.call(export, &*host, handler);
+        if answer.is_some() {
             self.activation.invalidate();
         }
+        answer
     }
 
     /// [`Scope::call`] for a call of `owner`, a mount: what it reads and asks of the input is that mount's.
@@ -1126,14 +1157,18 @@ impl Scope {
     }
 
     /// [`Scope::run`] for a command that belongs to the mount `alive` stands for.
-    fn run_owned(self: &Rc<Self>, alive: &Weak<()>, export: &'static str, handler: impl FnOnce(&Scoped<'_>)) {
-        if alive.upgrade().is_none() {
-            return;
-        }
+    fn run_owned<R>(
+        self: &Rc<Self>,
+        alive: &Weak<()>,
+        export: &'static str,
+        handler: impl FnOnce(&Scoped<'_>) -> R,
+    ) -> Option<R> {
+        alive.upgrade()?;
         let outer = self.mount.replace(Some(alive.clone()));
         // What it asks of the input is the mount's too, as on the other carriers (carbon own-1).
-        self.owners.owned_by(alive, || self.run(export, handler));
+        let answer = self.owners.owned_by(alive, || self.run(export, handler));
         *self.mount.borrow_mut() = outer;
+        answer
     }
 
     /// Runs a mount handler: a claim or route may mount and unmount after its plugin was disposed, which hears of it
@@ -1392,6 +1427,11 @@ impl abi::Host for Scoped<'_> {
     fn dispatch(&self, name: &str, input: Option<&str>) {
         let (name, input) = (name.to_owned(), input.map(str::to_owned));
         self.defer(move |host| dispatch(host, &name, input.as_deref()));
+    }
+
+    fn set_enabled(&self, name: &str, enabled: bool) {
+        let (activation, plugin, name) = (self.scope.activation.clone(), self.scope.id.clone(), name.to_owned());
+        self.defer(move |_| activation.set_enabled(&plugin, &name, enabled));
     }
 
     fn toast(&self, toast: abi::Toast) {

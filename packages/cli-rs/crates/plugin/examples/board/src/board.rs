@@ -11,7 +11,9 @@
 //! overlay under its pad, gives its field the focus (`focus-input`), and gives the focus back; a centered select lists
 //! the cards a search finds. `board.facts`, also `/inspect`, reads the host's locale, UTC offset and measure of a text, shows
 //! them in a row its layout bounds at both widths, and asks for a name in a prompt filled with a value under a
-//! description (contract ergonomics 2.6 and 2.9).
+//! description (contract ergonomics 2.6 and 2.9). `board.hotkey`, on `ctrl+p` and in the palette, starts disabled, so
+//! the host's own `ctrl+p` takes the key; `board.gate` enables or disables it, and `board.passing` makes its run decline
+//! the key, which goes on to the host as if it were not there (contract ergonomics 2.5).
 //!
 //! Its `files` route is P3's: a windowed list of files whose estimates are not their heights, each an anchor of group
 //! `file` with its hunks in group `hunk`. Commands bring a file to the top, step between hunks and show a file with
@@ -21,7 +23,7 @@
 //! of its own, and a fence's card holds the host's own code view of it (`fence-node`), which follows the fence as it
 //! streams.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use std::time::Duration;
@@ -130,10 +132,19 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
             Prompt::new("Name the board", Action::command("board.named")).value("board").description("/tmp/board");
         host.dialog(Dialog::Prompt(ask));
     });
+    let passing = Rc::new(Cell::new(false));
+    let declines = passing.clone();
+    setup.command(command("board.hotkey").keybind("ctrl+p").palette().disabled(), move |host, _| {
+        let passes = declines.get();
+        host.toast(Toast::new(Variant::Info, if passes { "hotkey passed" } else { "hotkey" }));
+        if passes { Handled::Pass } else { Handled::Consume }
+    });
+    setup.command(command("board.gate"), |host, input| host.set_enabled("board.hotkey", input != Some("off")));
+    setup.command(command("board.passing"), move |_, _| passing.set(true));
     setup.command(command("board.named"), |host, input| {
         host.toast(Toast::new(Variant::Info, format!("named {}", input.unwrap_or_default())));
     });
-    setup.command(command("board.panic"), |_, _| panic!("the board's command panicked"));
+    setup.command(command("board.panic"), |_, _| -> () { panic!("the board's command panicked") });
     let animated = board.clone();
     setup.command(command("board.animate"), move |_, _| {
         let mut board = animated.borrow_mut();

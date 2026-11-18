@@ -5,7 +5,8 @@
 -- Options are `{ bindings = { { id, key, title, command, text? }, { id, key, title, action = "goal-toggle" } } }`,
 -- checked whole before anything registers: an unknown field, a repeated `id` or key, or a bad value toasts and
 -- registers nothing, and no value is echoed. A key holds in the base mode on a session's route; off one it goes on to
--- the host, as TS's disabled command lets it. One request per session and binding runs at a time.
+-- the host, as TS's disabled command lets it. The palette entries are enabled only on a session's route, as TS's
+-- (`enabled: available`): off one they are in no list. One request per session and binding runs at a time.
 local plugin = require("@opencode/plugin")
 
 local TITLE = "Command Hotkeys"
@@ -200,14 +201,33 @@ return plugin.define(function(setup)
         end
     end
 
+    local names: { string } = {}
     for _, binding in bindings do
-        setup:command({ name = `command-hotkeys.{binding.id}`, title = binding.title, palette = true }, function(host)
+        table.insert(names, `command-hotkeys.{binding.id}`)
+        setup:command({
+            name = `command-hotkeys.{binding.id}`,
+            title = binding.title,
+            palette = true,
+            enabled = false,
+        }, function(host)
             -- The palette closed before the command runs, so the keyboard is in its base mode again.
             if host:mode() == nil then
                 execute(host, binding)
             end
         end)
     end
+    -- A session's route shows `session.composer.top`: the entries hold while it is mounted. Its mounts may overlap as
+    -- its input changes, so they are counted.
+    local mounted = 0
+    setup:onMount({ path = "session.composer.top", kind = "append" }, function(host, _, mount)
+        local before = mounted
+        mounted = if mount then mounted + 1 else math.max(mounted - 1, 0)
+        if (before > 0) ~= (mounted > 0) then
+            for _, name in names do
+                host:setEnabled(name, mounted > 0)
+            end
+        end
+    end)
     -- The keys, each alternative of `a,b` a key of its own, named by its binding's place.
     local keys = {}
     for index, binding in bindings do

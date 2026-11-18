@@ -4,17 +4,18 @@
 //! Options are `{ "bindings": [{ "id", "key", "title", "command", "text"? }, { "id", "key", "title", "action":
 //! "goal-toggle" }] }`, checked whole before anything registers: an unknown field, a repeated `id` or key, or a bad
 //! value toasts and registers nothing, and no value is echoed. A key holds in the base mode on a session's route; off
-//! one it goes on to the host, as TS's disabled command lets it. One run per session and binding goes at a time, a task
-//! that awaits each of its requests as TS does.
+//! one it goes on to the host, as TS's disabled command lets it. The palette entries are enabled only on a session's
+//! route, as TS's (`enabled: available`): off one they are in no list. One run per session and binding goes at a time,
+//! a task that awaits each of its requests as TS does.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::rc::Rc;
 
 use opencode_plugin_abi::interact::{Bind, Event, Handled, Layer, LayerScope};
 use opencode_plugin_abi::task::{Cx, Tasks};
 use opencode_plugin_abi::types::{LocationQueryInput, RpcCallInput, SessionCommandInput, SessionGetInput, SessionID};
-use opencode_plugin_abi::{Command, Host, Route, Setup, Toast, Variant, client, plugin};
+use opencode_plugin_abi::{Command, Host, Placement, Route, Setup, Toast, Variant, client, plugin};
 use serde_json::{Value, json};
 
 const TITLE: &str = "Command Hotkeys";
@@ -53,8 +54,11 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
     }
     let bindings: Rc<Vec<Rc<Binding>>> = Rc::new(bindings.into_iter().map(Rc::new).collect());
     let runs = Runs { tasks: setup.tasks(), locks: Rc::default() };
+    let names: Rc<Vec<String>> =
+        Rc::new(bindings.iter().map(|binding| format!("command-hotkeys.{}", binding.id)).collect());
     for binding in bindings.iter() {
-        let command = Command::new(format!("command-hotkeys.{}", binding.id)).title(&binding.title).palette();
+        let command =
+            Command::new(format!("command-hotkeys.{}", binding.id)).title(&binding.title).palette().disabled();
         let (binding, runs) = (binding.clone(), runs.clone());
         setup.command(command, move |host, _| {
             // The palette closed before the command runs, so the keyboard is in its base mode again.
@@ -63,6 +67,16 @@ fn setup(setup: &mut Setup) -> Result<(), String> {
             }
         });
     }
+    // A session's route shows `session.composer.top`: the entries hold while it is mounted. Its mounts may overlap as
+    // its input changes, so they are counted.
+    let mounted = Rc::new(Cell::new(0usize));
+    setup.on_mount(Placement::append("session.composer.top"), move |host, _, mount| {
+        let before = mounted.get();
+        mounted.set(if mount { before + 1 } else { before.saturating_sub(1) });
+        if (before > 0) != (mounted.get() > 0) {
+            names.iter().for_each(|name| host.set_enabled(name, mounted.get() > 0));
+        }
+    });
     // The keys, each alternative of `a,b` a key of its own, named by its binding's place.
     let keys = bindings.iter().enumerate().flat_map(|(index, binding)| {
         let title = binding.title.clone();

@@ -347,6 +347,9 @@ export type Host = {
 ${reads}    storageSet: (self: Host, key: string, value: { [any]: any }) -> (),
     storageMerge: (self: Host, key: string, fields: { [string]: any }) -> (),
     dispatch: (self: Host, name: string, input: string?) -> (),
+    --- Enables or disables the plugin's own command \`name\`, once the call returns: a disabled command binds no key and
+    --- is in neither the palette nor the slash list.
+    setEnabled: (self: Host, name: string, enabled: boolean) -> (),
     toast: (self: Host, toast: Toast) -> (),
     attention: (self: Host, attention: Attention) -> (),
     openRoute: (self: Host, name: string) -> (),
@@ -409,21 +412,22 @@ export type View = {
 export type At = { path: string, kind: SlotKind? }
 
 --- A command; only \`name\` is needed, the rest are the contract's defaults.
-export type CommandSpec = { name: string, title: string?, palette: boolean?, group: string?, slash: string?, keybind: string?, description: string?, arguments: boolean?, scope: Scope? }
+export type CommandSpec = { name: string, title: string?, palette: boolean?, group: string?, slash: string?, keybind: string?, description: string?, arguments: boolean?, scope: Scope?, enabled: boolean? }
 
 --- A surface as \`setup:surface\` takes it.
 export type SurfaceSpec = { name: string, place: SurfacePlace, layers: { Layer }?, mounts: boolean?, palette: boolean? }
 
 --- What setup registers on; each method holds only while setup runs. A handler given a \`host\` (a command's, an
 --- event's, a mount's, a layer's or a surface's) runs as a task, so it may wait; a key handler that waits has taken its
---- key. Renders, views, code blocks and \`onDispose\` read only and cannot wait.
+--- key. A command that returns \`"pass"\` declines the key that ran it, which goes on to whatever else takes it.
+--- Renders, views, code blocks and \`onDispose\` read only and cannot wait.
 export type Setup = {
     id: string,
     --- The \`options\` of the plugin's \`plugins\` entry, decoded.
     options: any,
     host: Host,
     storageKey: (self: Setup, key: string) -> (),
-    command: (self: Setup, command: CommandSpec, run: (host: Host, input: string?) -> ()) -> (),
+    command: (self: Setup, command: CommandSpec, run: (host: Host, input: string?) -> ...("pass")) -> (),
     slot: (self: Setup, at: At, render: (read: Read, input: SlotInput, changed: Changed) -> Render?) -> (),
     --- Calls \`run\` as the host mounts the claim registered last at \`at\` (\`true\`, before it first renders) and as it
     --- unmounts it (\`false\`).

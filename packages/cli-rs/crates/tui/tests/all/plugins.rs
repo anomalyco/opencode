@@ -414,7 +414,7 @@ fn the_list_comes_back_on_the_row_that_was_asked_about() {
 #[cfg(unix)]
 fn boom() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
-        setup.command(abi::Command::new("boom.boom"), |_, _| panic!("boom"));
+        setup.command(abi::Command::new("boom.boom"), |_, _| -> () { panic!("boom") });
         Ok(())
     }
     abi::Plugin { id: "test.boom", setup }
@@ -1051,13 +1051,13 @@ fn chatty(setup: &mut abi::Setup) -> Result<(), String> {
 
 /// `boomer.panic` panics.
 fn boomer(setup: &mut abi::Setup) -> Result<(), String> {
-    setup.command(abi::Command::new("boomer.panic"), |_, _| panic!("boom"));
+    setup.command(abi::Command::new("boomer.panic"), |_, _| -> () { panic!("boom") });
     Ok(())
 }
 
 /// `second.panic` panics.
 fn second(setup: &mut abi::Setup) -> Result<(), String> {
-    setup.command(abi::Command::new("second.panic"), |_, _| panic!("boom"));
+    setup.command(abi::Command::new("second.panic"), |_, _| -> () { panic!("boom") });
     Ok(())
 }
 

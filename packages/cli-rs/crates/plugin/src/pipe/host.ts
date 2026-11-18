@@ -218,6 +218,8 @@ interface Command {
   run: (input?: string) => unknown
   hold: boolean
   wire: Json
+  // The host was told of it in a manifest: a change of its state goes as `set-enabled` from then on.
+  announced?: boolean
 }
 
 interface Surface {
@@ -586,6 +588,7 @@ function context(plugin: Plugin) {
       if (known) {
         known.run = command.run
         known.count += 1
+        enable(plugin, known, command.enabled !== false)
         continue
       }
       plugin.commands.push({
@@ -605,6 +608,7 @@ function context(plugin: Plugin) {
           ...(command.slash?.arguments || command.arguments ? { arguments: true } : {}),
           ...(command.scope ? { scope: command.scope } : {}),
           ...(command.slash?.aliases?.length ? { aliases: command.slash.aliases } : {}),
+          ...(command.enabled === false ? { enabled: false } : {}),
         },
       })
     }
@@ -774,10 +778,28 @@ function tell(plugin: Plugin) {
   if (!plugin.active || plugin.failed) return
   const manifest = manifestOf(plugin)
   const holds = plugin.commands.filter((command) => command.hold).map((command) => command.name)
-  const told = JSON.stringify([manifest, holds])
+  const told = announce(plugin, manifest, holds)
   if (told === plugin.told) return
   plugin.told = told
   sendFor(plugin, { type: "manifest", id: plugin.id, activation: plugin.activation, manifest, holds })
+}
+
+// What the host is told of `plugin`'s registrations in `manifest`, to tell a change of them apart: a command's state
+// is none, whose change goes as `set-enabled` and reloads nothing. Its commands are announced from then on.
+function announce(plugin: Plugin, manifest: Json, holds: string[]) {
+  for (const command of plugin.commands) command.announced = true
+  const commands = manifest.commands.map(({ enabled: _, ...command }: Json) => command)
+  return JSON.stringify([{ ...manifest, commands }, holds])
+}
+
+// Contract ergonomics 2.5: `command` is enabled or not, as the plugin says now. The host it was announced to is told
+// with `set-enabled`, in the call that changed it, so its key goes on to whatever else takes it from the next key on;
+// a manifest carries it to a host that reloads, or one not told of the command yet.
+function enable(plugin: Plugin, command: Command, enabled: boolean) {
+  if ((command.wire.enabled !== false) === enabled) return
+  if (enabled) delete command.wire.enabled
+  else command.wire.enabled = false
+  if (command.announced && !plugin.setting) void effect(plugin, { type: "set-enabled", name: command.name, enabled })
 }
 
 function manifestOf(plugin: Plugin) {
@@ -893,7 +915,7 @@ async function setup(seq: number, plugin: Plugin) {
   plugin.resolvers = []
   const holds = plugin.commands.filter((command) => command.hold).map((command) => command.name)
   const registered = manifestOf(plugin)
-  plugin.told = JSON.stringify([registered, holds])
+  plugin.told = announce(plugin, registered, holds)
   sendFor(plugin, { type: "loaded", seq, id: plugin.id, manifest: registered, holds, effects }, seq)
   for (const watch of plugin.setupWatches.splice(0)) sendFor(plugin, watch)
 }
