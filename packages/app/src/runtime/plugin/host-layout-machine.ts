@@ -1,4 +1,23 @@
-import type { OpenOptions } from "@opencode/plugin/gui"
+import type { OpenOptions, PanelState } from "@opencode/plugin/gui"
+
+/**
+ * Where a panel key stands in a session, as `Layout.state` reports it. A New tab view shown in the key's pane covers
+ * the tab the pane selects: that tab is still in the strip, but it is not the one its pane shows.
+ */
+export function selectPanelState(input: {
+  /** The key is in the session's strip. */
+  readonly stored: boolean
+  /** The key is the tab its pane selects. */
+  readonly selected: boolean
+  /** A New tab view shows in the key's pane, over the tab the pane selects. */
+  readonly covered: boolean
+  /** The key's pane is on screen. */
+  readonly paneOpen: boolean
+}): PanelState {
+  if (!input.selected || input.covered) return input.stored ? "open" : "closed"
+
+  return input.paneOpen ? "visible" : "active"
+}
 
 /** A narrow-screen view selected for a session that is not routed waits this long for the navigation that routes it. */
 export const MOBILE_VIEW_PENDING_TTL_MS = 5_000

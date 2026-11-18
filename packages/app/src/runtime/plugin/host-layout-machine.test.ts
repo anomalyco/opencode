@@ -6,6 +6,7 @@ import {
   MOBILE_VIEW_PENDING_TTL_MS,
   PROJECT_REQUEST_TTL_MS,
   selectMobileView,
+  selectPanelState,
   selectSideRegionSession,
   transitionMobileView,
   transitionProjectRequest,
@@ -197,4 +198,17 @@ test("a request for a listed server opens the picker at once", () => {
   run.dispatch({ type: "disposed" })
   run.dispatch({ type: "request", server: "local", title: "Open", listed: true })
   expect(run.effects).toEqual([{ type: "open.picker", server: "local", title: "Open" }])
+})
+
+// `Layout.state` tells a plugin whether the person sees its tab. The browser reads it to decide whether a page the
+// agent shows must be brought to the front: a tab under the "+" New tab view reported `visible` and stayed hidden.
+test.each([
+  ["the pane's tab, on screen", { stored: true, selected: true, covered: false, paneOpen: true }, "visible"],
+  ["the pane's tab, pane hidden", { stored: true, selected: true, covered: false, paneOpen: false }, "active"],
+  ["the pane's tab under a New tab view", { stored: true, selected: true, covered: true, paneOpen: true }, "open"],
+  ["under a New tab view, pane hidden", { stored: true, selected: true, covered: true, paneOpen: false }, "open"],
+  ["another tab of the strip", { stored: true, selected: false, covered: false, paneOpen: true }, "open"],
+  ["not in the strip", { stored: false, selected: false, covered: false, paneOpen: true }, "closed"],
+] as const)("a panel key's state: %s", (_label, input, expected) => {
+  expect(selectPanelState(input)).toBe(expected)
 })

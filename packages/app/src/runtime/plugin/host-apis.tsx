@@ -74,6 +74,7 @@ import {
   createProjectRequestState,
   createSideRegionState,
   selectMobileView,
+  selectPanelState,
   selectWaitingProjectServer,
   transitionMobileView,
   transitionProjectRequest,
@@ -860,6 +861,14 @@ export function createPluginAttachment(apis: HostApis) {
     })
   }
 
+  // Selecting the tab a pane already selects changes nothing, so a New tab view over it would stay: a tab that is
+  // opened shows over that view, as one that becomes the selection does.
+  const uncover = (session: SessionRef, key: string) => {
+    const mounted = mountedSession(session) ? region() : undefined
+
+    if (mounted?.newTab(mounted.paneOf(key))) mounted.select(key)
+  }
+
   const place = (key: string, session: SessionRef, value: string, options: OpenOptions | undefined) => {
     const item = provider(key)
     const placement = options?.tab ?? "open"
@@ -872,6 +881,7 @@ export function createPluginAttachment(apis: HostApis) {
       return batch(() => {
         layout.panel.append(value, key)
         layout.panel.focus(value, key)
+        uncover(session, key)
         reveal(session, value, key)
       })
     // Lists the opened tab too, so its own fields apply before it is stored. The next preview replaces a transient tab.
@@ -890,6 +900,7 @@ export function createPluginAttachment(apis: HostApis) {
       if (known.some((entry) => entry.key === key && entry.tab.pinned)) layout.panel.focus(value, key)
       else if (placement === "preview") layout.panel.preview(value, key, transient)
       else layout.panel.open(value, key, transient, first)
+      uncover(session, key)
 
       // A background open keeps the narrow-screen view, but its tab still shows once the window is wide.
       if (!narrow() || options?.background) reveal(session, value, key)
@@ -946,9 +957,12 @@ export function createPluginAttachment(apis: HostApis) {
     const pane = mounted ? mounted.paneOf(key) : sessionTabPane(panel, key)
     const shown = mounted ? mounted.pane(pane).active() : sessionPaneTab(panel, pane)
 
-    if (shown !== key) return panel.all.includes(key) ? "open" : "closed"
-
-    return paneOpened(session, pane) ? "visible" : "active"
+    return selectPanelState({
+      stored: panel.all.includes(key),
+      selected: shown === key,
+      covered: !!mounted?.newTab(pane),
+      paneOpen: paneOpened(session, pane),
+    })
   }
 
   const hide = (key: string, session: SessionRef) =>
