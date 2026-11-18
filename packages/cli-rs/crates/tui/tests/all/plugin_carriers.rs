@@ -172,10 +172,16 @@ fn script(run: Run) -> Vec<(&'static str, Seen)> {
     tui.navigate(route.clone());
     settle(&board.harness);
     let screen = app.render().text();
-    // `max_width` wraps the row at 30 cells: `8` ends its first line (a toast may cover the rest of the row).
-    let wrapped =
-        |line: &str| line.starts_with("locale ") && line.chars().take(31).collect::<String>().ends_with(" s, 8 ");
-    assert!(screen.lines().any(wrapped) && screen.contains("cells, 5 graphemes"), "{run:?}: no facts:\n{screen}");
+    // `max_width` wraps the row at 30 cells: its first 30 and the next line make the whole text, wherever the locale's
+    // and the offset's lengths put the break (a toast may cover the rest of either row).
+    let lines: Vec<&str> = screen.lines().collect();
+    let wrapped = lines.windows(2).any(|pair| {
+        let first: String = pair[0].chars().take(30).collect();
+        let Some((rest, _)) = pair[1].split_once("graphemes") else { return false };
+        let text = format!("{} {rest}graphemes", first.trim_end());
+        text.starts_with("locale ") && text.contains(", offset ") && text.ends_with(" s, 8 cells, 5 graphemes")
+    });
+    assert!(wrapped, "{run:?}: no facts:\n{screen}");
     seen.push(("facts", observe(&board.harness)));
     // Three bursts, each all in the mailbox before the UI thread runs: one drain, one view each.
     for burst in 1..=3 {
