@@ -177,8 +177,10 @@ export default function SessionBrowserPane(props: {
     if (!visible()) return
     const current = profile()
     const rect = extensionsButton.element?.getBoundingClientRect()
-    // Where the page starts, under the toolbar and any bar below it: a popup starts there too, as in every browser.
-    const pageTop = box?.getBoundingClientRect().top
+    // Where the page area starts, under the toolbar and any bar below it: a popup starts there too, as in every
+    // browser. A device viewport sits inside that area, smaller and inset, and the popup belongs to the button in
+    // the toolbar, not to the device: it stays under the bars and may cover the device's page.
+    const pageTop = preview?.getBoundingClientRect().top
     const binding = props.model.binding(props.session)
     const tab = state()
 
@@ -249,8 +251,6 @@ export default function SessionBrowserPane(props: {
 
   let root: HTMLElement | undefined
   let toolbarToggle: HTMLButtonElement | undefined
-  // The page area under the toolbar and its bars, where an extension's popup opens.
-  let box: HTMLDivElement | undefined
   let input: HTMLInputElement | undefined
   let anchor: HTMLFormElement | undefined
   let findInput: HTMLInputElement | undefined
@@ -598,6 +598,7 @@ export default function SessionBrowserPane(props: {
     return { x: rect.x * x, y: rect.y * y, width: rect.width * x, height: rect.height * y }
   }
 
+  // The page area under the toolbar and its bars. An extension's popup opens at its top edge.
   let preview: HTMLDivElement | undefined
   let backdrop: HTMLDivElement | undefined
   const [origin, setOrigin] = createSignal({ x: 0, y: 0 })
@@ -1343,7 +1344,6 @@ export default function SessionBrowserPane(props: {
           radius={fixedViewport() ? 0 : 10}
           class="relative min-h-0 min-w-0 overflow-hidden bg-v2-background-bg-base flex items-center justify-center"
         >
-          <div ref={box} aria-hidden="true" class="pointer-events-none absolute inset-0" />
           <Show when={promptKey(true)} keyed>
             {(key) => (
               <Show when={key ? prompt() : undefined}>
