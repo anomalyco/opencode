@@ -144,7 +144,9 @@ const ExecFailure = Schema.Struct({ stdout: Schema.optional(Schema.String), stde
 const installCli = Effect.fn("DesktopCli.install")(function* (source: string, version: string) {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
-  // Same-version builds can differ by architecture and CLI channel.
+  // Same-version builds can differ by architecture and CLI channel. Reuse assumes a published version is one
+  // immutable build per pair (dev and preview versions embed their commit); a source that republishes the same
+  // version with different bytes must extend the stage key with its own build identity downstream.
   const stage = stageName(version, import.meta.env.OPENCODE_CHANNEL)
   const directory = path.join(app.getPath("userData"), "cli", stage)
   const destination = path.join(directory, executableName())
