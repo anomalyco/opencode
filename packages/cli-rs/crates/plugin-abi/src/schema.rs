@@ -852,6 +852,7 @@ mod tests {
         assert!(!agree::<crate::ViewReply>("ViewReply", json!({ "content": [] })));
         assert!(agree::<crate::Render>("Render", json!({ "type": "show", "node": { "type": "slot", "path": "p" } })));
         assert!(!agree::<crate::Render>("Render", json!({ "type": "show" })));
+        assert_eq!(serde_json::from_value::<crate::claim::Reply>(json!({})).unwrap().node, None);
         assert!(agree::<crate::claim::Part>(
             "ClaimPart",
             json!({ "type": "fence", "language": "l", "info": "", "code": "", "streaming": false, "closed": true })
@@ -985,7 +986,9 @@ mod tests {
             Node::Canvas { id: Some("v".into()), layout, version: 7, animate: true },
         ];
         for node in nodes {
-            assert!(agree::<Node>("Node", serde_json::to_value(&node).unwrap()), "{node:?}");
+            let encoded = serde_json::to_value(&node).unwrap();
+            assert!(agree::<Node>("Node", encoded.clone()), "{node:?}");
+            assert_eq!(serde_json::from_value::<Node>(encoded).unwrap(), node);
         }
         let input = SurfaceInput {
             width: 1,
