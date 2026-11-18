@@ -109,6 +109,14 @@ pub fn show(tui: &Tui, id: &str, generation: u64, dialog: abi::Dialog) {
     }
 }
 
+/// Plugin `id`'s `dialog`, which the host did not open: a [`abi::Dialog::Dismissable`] runs its `dismissed` as one that
+/// closed with no answer does, so a plugin that waits for its answer goes on.
+pub fn refused(tui: &Tui, id: &str, generation: u64, dialog: abi::Dialog) {
+    if let abi::Dialog::Dismissable { dismissed, .. } = dialog {
+        run(tui, &(id.to_owned(), generation), &dismissed, None);
+    }
+}
+
 /// Whether plugin `id`'s panel `key` is open.
 pub fn open(tui: &Tui, id: &str, key: &str) -> bool {
     let mine = tui.reads.owner.borrow().as_ref().is_some_and(|(owner, _)| owner == id);

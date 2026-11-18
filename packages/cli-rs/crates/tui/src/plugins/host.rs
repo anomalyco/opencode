@@ -328,9 +328,14 @@ impl Host for Tui {
 
     fn dialog(&self, id: &str, generation: u64, dialog: abi::Dialog) {
         // A dialog of an activation that ended, or of a setup that was not adopted, shows nowhere.
-        if self.plugins.live(id, generation) && !guarded(self, id, "dialog") {
-            super::panel::show(self, id, generation, dialog);
+        if !self.plugins.live(id, generation) {
+            return;
         }
+        // One the host's own dialog keeps out closes at once, so a plugin that waits for its answer hears that.
+        if guarded(self, id, "dialog") {
+            return super::panel::refused(self, id, generation, dialog);
+        }
+        super::panel::show(self, id, generation, dialog);
     }
 
     fn dialog_open(&self, id: &str, key: &str) -> bool {
