@@ -104,15 +104,17 @@ export const register = Effect.fn("BrowserTools.register")(function* (
   })
 
   // What an approval for showing a file names and remembers: the file that opens, under the workspace, whatever
-  // spelling asked for it (an encoded `file:` or `workspace:` address, `..` segments, a link). It never fails: an
-  // input that names no workspace file keeps its own text, and is refused after the permission check, where a caller
-  // a policy blocks hears only that. The disk is asked only which file a link is, and nothing of that is reported.
+  // spelling asked for it (an encoded `file:` or `workspace:` address, `..` segments, a link). It is remembered by
+  // its real absolute path (`file`), since the same relative path is another file in each folder and worktree of a
+  // project. It never fails: an input that names no workspace file keeps its own text, and is refused after the
+  // permission check, where a caller a policy blocks hears only that. The disk is asked only which file a link is,
+  // and nothing of that is reported.
   const named = Effect.fn("BrowserTools.named")(function* (input: string, tool: Tool.Context) {
     const path = /^workspace:/i.test(input.trim()) ? remotePath(input.trim(), workspacePrefix(tool.sessionID)) : input
     const resolved = path === undefined ? undefined : BrowserFiles.entry(path, ctx.location.directory)
     if (resolved?.entry === undefined) return { path: input.trim() }
     const file = yield* BrowserFiles.onDisk(resolved.absolute, ctx.location.directory)
-    return { path: file?.entry ?? resolved.entry, ...(file?.linked && { link: resolved.entry }) }
+    return { path: file?.entry ?? resolved.entry, ...(file && { file: file.file }), ...(file?.linked && { link: resolved.entry }) }
   })
 
   // Send the exact workspace entry we checked, not the unverified input (which might be a line link).

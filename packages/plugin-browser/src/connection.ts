@@ -435,11 +435,12 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
      * this plugin's (configured denies and asks win over the grant) and others such as `tool.use` policies.
      */
     /**
-     * `shown` is the workspace file a path form shows, as the server resolved it: the prompt names it, with the link
-     * it was reached through if any, and "always" remembers it, so no other spelling of the same file asks again and
-     * none stands for another file.
+     * `shown` is the workspace file a path form shows, as the server resolved it: the prompt names it (`path`), with
+     * the link it was reached through if any, and "always" remembers it by its real absolute path (`file`), so no
+     * other spelling of the same file asks again and none stands for another file, in this folder or in another
+     * folder or worktree of the project. A name that is no file on disk is not remembered.
      */
-    authorize: Effect.fn("BrowserConnection.authorize")(function* (tool: Tool.Context, action: Browser.Action | Extract<Browser.Input, {type: "wait"}>, paths?: readonly string[], operations?: readonly string[], shown?: { readonly path: string; readonly link?: string }) {
+    authorize: Effect.fn("BrowserConnection.authorize")(function* (tool: Tool.Context, action: Browser.Action | Extract<Browser.Input, {type: "wait"}>, paths?: readonly string[], operations?: readonly string[], shown?: { readonly path: string; readonly file?: string; readonly link?: string }) {
       const connection = BrowserMachine.selectConnection(machine.state, tool.sessionID)
       if (!connection.ok) return { connected: false as const, message: connection.error.message }
       const tab = "tabID" in action ? connection.tabs.find((tab) => tab.id === action.tabID) : undefined
@@ -448,7 +449,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
       const script = action.type === "evaluate" ? action.script : undefined
       const scope = action.type === "tabs.open" ? site(destination) : origin
       const detail = script ?? destination
-      const save = action.type === "tabs.list" ? [action.type] : shown ? (/[*?]/.test(shown.path) ? [] : [`${action.type} ${shown.path}`]) : scope && !paths && !/[*?]/.test(scope)
+      const save = action.type === "tabs.list" ? [action.type] : shown ? (!shown.file || /[*?]/.test(shown.file) ? [] : [`${action.type} ${shown.file}`]) : scope && !paths && !/[*?]/.test(scope)
         ? [`${action.type} ${scope}${detail ? ` ${createHash("sha256").update(detail).digest("hex")}` : ""}`] : []
       yield* ctx.permission.assert({
         sessionID: tool.sessionID,

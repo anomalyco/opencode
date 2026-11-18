@@ -107,9 +107,10 @@ function localPath(value: string) {
 }
 
 /**
- * The file on disk that the workspace entry `absolute` is, named under the workspace, and whether a link was followed
- * to reach it. For what an approval names and remembers, so one file has one name however it was asked for. It
- * reports nothing by failing: undefined for a missing file, and for one whose target is outside the workspace.
+ * The file on disk that the workspace entry `absolute` is, named under the workspace (`entry`) and by its real
+ * absolute path (`file`), and whether a link was followed to reach it. For what an approval names and remembers, so
+ * one file has one name however it was asked for. It reports nothing by failing: undefined for a missing file, and for
+ * one whose target is outside the workspace.
  */
 export const onDisk = (absolute: string, directory: string) =>
   Effect.tryPromise(async () => {
@@ -118,7 +119,11 @@ export const onDisk = (absolute: string, directory: string) =>
     // Each name on the way from the workspace to the entry, as asked.
     const names = relative(directory, absolute).split(/[\\/]/).filter(Boolean)
     const steps = await Promise.all(names.map((_, index) => lstat(join(directory, ...names.slice(0, index + 1)))))
-    return { entry: relative(root, target).replaceAll("\\", "/"), linked: steps.some((step) => step.isSymbolicLink()) }
+    return {
+      entry: relative(root, target).replaceAll("\\", "/"),
+      file: target.replaceAll("\\", "/"),
+      linked: steps.some((step) => step.isSymbolicLink()),
+    }
   }).pipe(Effect.orElseSucceed(() => undefined))
 
 /** Resolve and authorize the exact entry. A missing agent path must not trigger a search of unapproved directories. */

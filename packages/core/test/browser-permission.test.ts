@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import { hostname } from "os"
 import path from "path"
-import { symlink } from "node:fs/promises"
+import { realpath, symlink } from "node:fs/promises"
 import { pathToFileURL } from "node:url"
 import { Context, Deferred, Effect, Exit, Fiber, Schedule, Schema, Stream } from "effect"
 import { Browser } from "@opencode/plugin-browser/rpc"
@@ -34,6 +34,7 @@ import { Integration } from "@opencode/schema/integration"
 import { isRecord } from "@opencode/util/record"
 import { BrowserConnection } from "../../plugin-browser/src/connection"
 import { BrowserFiles } from "../../plugin-browser/src/files"
+import { initRepo } from "./fixture/git"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
 import { tmpdirScoped } from "./fixture/tmpdir"
@@ -68,9 +69,9 @@ const tab = {
 
 // A location with `config` as its opencode.json, `files` beside it and one session, plus a stand-in desktop that attaches to that
 // session and answers every browser command with an empty tab list.
-const setup = (config: object, files: Record<string, string> = {}) =>
+const setup = (config: object, files: Record<string, string> = {}, directory?: string) =>
   Effect.gen(function* () {
-    const dir = yield* tmpdirScoped()
+    const dir = directory ? { path: directory } : yield* tmpdirScoped()
     for (const [name, text] of Object.entries(files))
       yield* Effect.promise(() => Bun.write(path.join(dir.path, name), text))
     yield* Effect.promise(() => Bun.write(path.join(dir.path, "opencode.json"), JSON.stringify(config)))
@@ -588,6 +589,12 @@ const answer = Effect.fnUntraced(function* (
   return { request, exit: yield* Fiber.await(call) }
 })
 
+// What "always" remembers for the workspace file `name`: the file itself, by its real absolute path.
+const remembered = (directory: string, name: string) =>
+  Effect.promise(() => realpath(path.join(directory, name))).pipe(
+    Effect.map((file) => `preview ${file.replaceAll("\\", "/")}`),
+  )
+
 // The approval for showing a file names the file that opens, under the workspace, whatever spelling asked for it, and
 // "always" remembers that file: no other spelling of it asks again, and none stands for another file.
 it.live("a file approval names and remembers the resolved file, whatever spelling asked for it", () =>
@@ -601,6 +608,9 @@ it.live("a file approval names and remembers the resolved file, whatever spellin
     const address = pathToFileURL(directory).href
     // A folder that is a link to another folder of the workspace.
     yield* Effect.promise(() => symlink(path.join(directory, "real"), path.join(directory, "linked"), "junction"))
+
+    const secret = yield* remembered(directory, "secret.html")
+    const inner = yield* remembered(directory, "real/inner.html")
 
     const spellings: object[] = [
       { path: "secret.html" },
@@ -618,14 +628,14 @@ it.live("a file approval names and remembers the resolved file, whatever spellin
       expect([JSON.stringify(input), request.metadata?.input, request.save]).toEqual([
         JSON.stringify(input),
         { paths: ["secret.html"] },
-        ["preview secret.html"],
+        [secret],
       ])
     }
 
     // A file reached through a link is named as the file it is, and the prompt says which link led to it.
     const linked = yield* answer(browser, "tabs.open", { path: "linked/inner.html" }, "reject")
     expect(linked.request.metadata?.input).toEqual({ paths: ["real/inner.html"], link: "linked/inner.html" })
-    expect(linked.request.save).toEqual(["preview real/inner.html"])
+    expect(linked.request.save).toEqual([inner])
     expect(browser.commands.count).toBe(0)
 
     // "Always" for one spelling: every spelling of the file runs with no prompt, and one approval is kept.
@@ -637,11 +647,53 @@ it.live("a file approval names and remembers the resolved file, whatever spellin
     expect(browser.commands.count).toBe(spellings.length + 1)
     const saved = yield* PermissionSaved.Service
     const projectID = Context.get(browser.context, Location.Service).project.id
-    expect((yield* saved.list({ projectID })).map((item) => [item.action, item.resource])).toEqual([["browser", "preview secret.html"]])
+    expect((yield* saved.list({ projectID })).map((item) => [item.action, item.resource])).toEqual([["browser", secret]])
 
     // It covers that file alone: another file, and the same file moved to with navigate, still ask.
-    expect((yield* answer(browser, "tabs.open", { path: "page.html" }, "reject")).request.save).toEqual(["preview page.html"])
-    expect((yield* answer(browser, "tabs.open", { path: "linked/inner.html" }, "reject")).request.save).toEqual(["preview real/inner.html"])
+    expect((yield* answer(browser, "tabs.open", { path: "page.html" }, "reject")).request.save).toEqual([
+      yield* remembered(directory, "page.html"),
+    ])
+    expect((yield* answer(browser, "tabs.open", { path: "linked/inner.html" }, "reject")).request.save).toEqual([inner])
+    // A name that is no file on disk is not remembered: there is no file to remember.
+    expect((yield* answer(browser, "tabs.open", { path: "missing.html" }, "reject")).request.save).toEqual([])
+  }),
+)
+
+// The folders and worktrees of one repository are one project, which is what saved approvals are kept by, and each
+// has its own file at the same relative path.
+it.live("always for a file covers that file alone, not the same path in another folder of its project, and a deny still wins", () =>
+  Effect.gen(function* () {
+    const root = yield* tmpdirScoped()
+    yield* Effect.promise(() => initRepo(root.path))
+    const ask = { permissions: [rule("*", "ask")] }
+    const first = yield* setup(ask, { "page.html": "<p>first</p>" }, path.join(root.path, "first"))
+    const second = yield* setup(ask, { "page.html": "<p>second</p>" }, path.join(root.path, "second"))
+
+    const denying = yield* setup(
+      { permissions: [rule("*", "ask"), rule("preview", "deny")] },
+      { "page.html": "<p>third</p>" },
+      path.join(root.path, "third"),
+    )
+
+    const projectID = Context.get(first.context, Location.Service).project.id
+    expect(Context.get(second.context, Location.Service).project.id).toBe(projectID)
+    expect(Context.get(denying.context, Location.Service).project.id).toBe(projectID)
+
+    yield* answer(first, "tabs.open", { path: "page.html" }, "always")
+    yield* first.run("tabs.open", { path: "page.html" }).pipe(Effect.exit, Effect.timeout("5 seconds"))
+    expect(yield* Context.get(first.context, Permission.Service).list()).toEqual([])
+    expect(first.commands.count).toBe(2)
+
+    // The same relative path in the second folder is another file: it asks, and names its own.
+    const other = yield* answer(second, "tabs.open", { path: "page.html" }, "reject")
+    expect(other.request.save).toEqual([yield* remembered(second.ref.directory, "page.html")])
+    expect(second.commands.count).toBe(0)
+
+    // A remembered file in a folder whose rules deny showing files is refused all the same.
+    const saved = yield* PermissionSaved.Service
+    yield* saved.add({ projectID, action: "browser", resources: [yield* remembered(denying.ref.directory, "page.html")] })
+    expect((yield* denying.run("tabs.open", { path: "page.html" }).pipe(Effect.flip)).message).toStartWith("[browser.denied]")
+    expect(denying.commands.count).toBe(0)
   }),
 )
 
