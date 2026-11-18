@@ -1,7 +1,4 @@
-// What the layer gives for an export of `@opentui/core` or `@opentui/solid` it does not implement (FT-5): a value
-// that can be imported, called, constructed, extended and read through without throwing, and does nothing. Its first
-// use warns once in the JS host's log, by the export's name: a plugin that imports a renderable class it never uses
-// loads, where a missing ESM export would fail its whole module at link time.
+// Stand-ins let unused OpenTUI imports link. Report the first actual use of an unsupported export.
 import { core, promises, solid } from "./opentui.gen"
 
 const warned = new Set<string>()
@@ -37,8 +34,7 @@ export function inert(name: string): any {
       if (typeof key === "symbol" || key === "then") return undefined
       return inert(`${name}.${key}`)
     },
-    // A method OpenTUI declares async answers a resolved promise of an inert value (CT-16: a plugin chains
-    // `getTreeSitterClient().initialize().then(…)`); any other call an inert value.
+    // Async stand-ins must return a promise so callers can chain them.
     apply() {
       warn(name)
       const called = inert(`${name}()`)

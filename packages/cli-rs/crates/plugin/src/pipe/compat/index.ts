@@ -1,6 +1,4 @@
-// The V2 compatibility layer of the JS host (P8), bundled into `compat.js` by `script/gen/js-host.ts`: the modules a
-// V2 plugin imports, which the JS host serves in place of the TS client's (`runtime-plugin-support.bun.ts` gives
-// `@opencode/plugin/tui`, Solid and `@opentui/solid` the same way), and the context its setup gets.
+// Virtual modules and JSX entry points served to plugins by the Bun host.
 import { Rpc } from "../../../../../../schema/src/rpc"
 import * as solid from "solid-js"
 import * as store from "solid-js/store"
@@ -12,7 +10,6 @@ import * as render from "./render"
 import { BoxRenderable, CodeRenderable, InputRenderable, MarkdownRenderable, ScrollBoxRenderable, TextRenderable } from "./renderables"
 import { context, PluginContext, reported } from "./v2"
 
-// `@opentui/solid`'s `Dynamic`: a component or an intrinsic, chosen by `component`.
 function Dynamic(props: Record<string, any>) {
   const [local, rest] = splitProps(props, ["component"])
   return solid.createMemo(() => {
@@ -27,10 +24,7 @@ function Dynamic(props: Record<string, any>) {
   }) as unknown
 }
 
-// `@opentui/solid`'s `Portal` (CT-10): its children go into the renderer's root, absolute boxes over the screen. A
-// mount draws only in its own room, so they go into a box that fills the room of the mount that renders the portal,
-// over the rest of it, which `ref` gets as the container. In the `app` slot that room is the screen, as in TS
-// (opencode-landstrip's pane); elsewhere it is the slot's. Its `mount` is not followed.
+// A portal attaches its children to the active render tree.
 function Portal(props: { children?: unknown; ref?: (container: unknown) => void }) {
   const container = render.createElement("box")
   for (const [name, value] of Object.entries({ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 1 }))
@@ -40,7 +34,7 @@ function Portal(props: { children?: unknown; ref?: (container: unknown) => void 
   return container
 }
 
-// Every name the real package exports links (FT-5): those the layer lacks are inert (`inert.ts`).
+// Preserve export names even for unsupported renderables so unused imports can link.
 const opentuiSolid = exports("solid", {
   ...render,
   ...solid,
@@ -78,7 +72,6 @@ const plugin = {
   },
 }
 
-// Each specifier a plugin may import, and what the JS host gives it.
 export const modules: Record<string, Record<string, unknown>> = {
   "solid-js": solid,
   "solid-js/store": store,
@@ -88,7 +81,6 @@ export const modules: Record<string, Record<string, unknown>> = {
   // A local module without the pragma compiles for React's runtime; it gets OpenTUI's (TS compiles it with Solid's).
   "react/jsx-runtime": jsx,
   "react/jsx-dev-runtime": jsx,
-  // With the renderables a plugin builds with `new` (contract 2.x, step D).
   "@opentui/core": exports("core", {
     ...core,
     BoxRenderable,
@@ -99,10 +91,7 @@ export const modules: Record<string, Record<string, unknown>> = {
     InputRenderable,
   }),
   "@opencode/plugin/tui": plugin,
-  // The definition of a plugin's own server RPC, which its TUI part calls through `client.rpc` (CT-4).
   "@opencode/plugin/rpc": { Rpc },
-  // The Effect entry, whose `Rpc` is the same definition (CT-23: opencode-superagent's TUI defines its RPC by it). Its
-  // other names, the server's Effect schemas, link but are undefined: a TUI part has no use for them.
   "@opencode/plugin/effect": {
     Rpc,
     ...Object.fromEntries(

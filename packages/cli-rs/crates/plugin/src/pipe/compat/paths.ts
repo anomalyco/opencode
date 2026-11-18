@@ -1,7 +1,5 @@
-// What the JS host compares a plugin's files by (carbon recheck-3): a real path, and containment by `path.relative`,
-// as TS's `FSUtil.contains` decides it. On Windows `realpathSync.native` gives the long names (no 8.3 `RUNNER~1`) and
-// the volume's own case, without the `\\?\` prefix a verbatim path has, and `path.win32.relative` ignores case, so a
-// drive letter's case, a short name or a verbatim prefix on either side no longer reads as outside.
+// Compare canonical paths for containment. On Windows, account for verbatim prefixes, short names and case-
+// insensitive drive letters.
 import nodePath from "node:path"
 import { realpathSync } from "node:fs"
 

@@ -1,8 +1,4 @@
-// The OpenTUI renderables a plugin builds with `new` (contract 2.x, step D): each is the node its JSX intrinsic makes,
-// with its options as its props, `add`, `insertBefore`, `remove` and the option setters of a node (`render.ts`). A
-// code block's renderer returns one (good-fences: a box of a label and the default render), and a render may return one
-// or add one by a ref (CT-15), which draws as the JSX would. What OpenTUI does with the renderer it is given (its
-// layout, its own drawing) is the host's.
+// Renderable constructors produce the same virtual nodes as JSX. The host owns layout and painting.
 import { setProp, VNode } from "./render"
 
 type Options = Record<string, unknown> | undefined

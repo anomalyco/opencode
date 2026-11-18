@@ -1,10 +1,5 @@
-// The V2 compatibility layer's renderer (P8): what `@opentui/solid` gives a plugin, over Solid's universal renderer, on
-// a tree of plain nodes instead of OpenTUI renderables. A mount's tree is read into a contract 2.0 node
-// (`serialize`) each time the JS host views it; any change to it asks for a view.
-//
-// It keeps what OpenTUI's reconciler does with a plugin's JSX: the same intrinsics, the same props, text only inside a
-// `<text>`, and a span's `style` and `href` its only props. An intrinsic the contract has no node for throws as it is
-// created, so the plugin's boundary reports it as TS reports a crash in a render.
+// Solid's universal renderer builds a local VNode tree. Serialize the mounted root for each host view; tree
+// mutations invalidate the mount.
 import { createRenderer } from "solid-js/universal"
 import {
   catchError,
@@ -23,13 +18,10 @@ import { createTextAttributes, isStyledText, RGBA, TextAttributes } from "./core
 
 const SPANS = new Set(["span", "b", "strong", "i", "em", "u", "a", "br"])
 const ELEMENTS = new Set(["box", "text", "scrollbox", "markdown", "code", "input", "textarea", "spinner", "select", ...SPANS])
-// The intrinsics of OpenTUI's catalogue the contract has no node for.
 const UNSUPPORTED = new Set(["tab_select", "ascii_font", "diff", "line_number", "image", "video"])
 // The props whose setter turns a box's border on (OpenTUI's `initializeBorder`).
 const BORDER_ON = new Set(["borderStyle", "borderColor", "focusedBorderColor", "customBorderChars"])
-/// The tags whose `focused` prop takes the host's focus.
 const FOCUSED = new Set(["input", "textarea", "scrollbox"])
-// The events of a field the layer maps (CT-11).
 const FIELD_EVENTS = new Set(["onInput", "onChange", "onSubmit", "onKeyDown"])
 
 type Listener = (...args: any[]) => unknown
@@ -38,12 +30,9 @@ type Listener = (...args: any[]) => unknown
 export interface Focus {
   focus(node: VNode): void
   blur(node: VNode): void
-  // `node` left its tree: the focus the layer records in it goes with it (carbon c2b-2).
   detached?(node: VNode): void
 }
 
-// A mount's scrolls, as the host keeps them: where one is, once the host said, and a move of one. And where a node
-// is, as the host's last settled frame laid it out (`Read::rect`), once the host said.
 export interface Scrolls {
   state(node: VNode): { offset: number; viewport: number; extent: number } | undefined
   to(node: VNode, offset: number): void
@@ -62,15 +51,13 @@ export class VNode {
   parent?: VNode
   children: VNode[] = []
   props: Record<string, any> = {}
-  // A chunk of text, for a text node.
   text?: string
   // The mount a root node belongs to, which a change of its tree asks to view again, and which focuses its nodes.
   owner?: { invalidate(): void; focus?: Focus; scrolls?: Scrolls; report?: (feature: string) => void }
   // The Solid owner it was created under, whose mount reports what the plugin asks of it while it is in no mount's
-  // tree: a field it removed, or one it never added, has no focus on the host (contract 2.x, step B).
+  // tree: a field it removed, or one it never added, has no focus on the host.
   made?: Owner | null
-  // It has the focus, as the layer last said ([`VNode.focusChanged`]): a signal, so what reads it (a key layer's
-  // `enabled`, file-browser's `inputFocused()`) follows it (carbon ce-2).
+  // Publish focus changes to reactive command predicates.
   #focused = createSignal(false)
   get focused() {
     return this.#focused[0]()
@@ -78,19 +65,14 @@ export class VNode {
   set focused(focused: boolean) {
     this.#focused[1](focused)
   }
-  // A field's text as the host last said it changed (CT-11), which its `value` is until the plugin sets one.
   typed?: string
-  // A mount's root: the `seq` of the last change each of its fields heard, by id, which a view sends as the edit the
-  // field's `value` answers (carbon cf-2).
+  // Track the last edit sequence per field so an older render cannot overwrite newer input.
   seen?: Map<string, number>
-  // The plugin asked where it is (CT-15, CT-24): it carries an id, and the host's layout of it is watched.
+  // Measured nodes need IDs for host geometry reads.
   measured = false
-  // A mount's root: the room the host laid the mount out in, from its input (contract 2.x, addition 1, R1).
+  // A mount's root: the room the host laid the mount out in, from its input.
   room?: { width: number; height: number }
-  // CT-2: an OpenTUI renderable is an event emitter, which a plugin listens to by a ref (file-browser's search field):
-  // the layer emits `focused` and `blurred` as OpenTUI's renderables do; other names are heard and never come.
   private listeners = new Map<string, Listener[]>()
-  // A pointer handler's name in its mount, given as the tree is read.
   constructor(public tag: string) {}
 
   requestRender() {
@@ -146,8 +128,7 @@ export class VNode {
     return list.length > 0
   }
 
-  // The contract's focus of the node, through its mount: a field or a scroll the host focuses (CT-2). A field or a
-  // scroll the plugin removed from its mount has none, which the plugin's log says once; it focuses no other mount.
+  // Fields and scrollboxes delegate focus to the host.
   focus() {
     const root = rootOf(this)
     if (root.owner) return root.owner.focus?.focus(this)
@@ -159,9 +140,6 @@ export class VNode {
     rootOf(this).owner?.focus?.blur(this)
   }
 
-  // A scroll box's position, as OpenTUI's `ScrollBoxRenderable` gives it (file-browser keeps its selected row in
-  // view by it): the host's state of the scroll once it came. Before, the viewport has no height a plugin would scroll
-  // by, so it scrolls nothing.
   get scrollTop() {
     return rootOf(this).owner?.scrolls?.state(this)?.offset ?? 0
   }
@@ -184,8 +162,6 @@ export class VNode {
     this.scrollTo(this.scrollTop + (typeof by === "number" ? by : (by?.y ?? 0)))
   }
 
-  // OpenTUI's `ScrollBoxRenderable.scrollChildIntoView`: the least scroll that shows the descendant with id `id`, the
-  // contract's `to` verb with the nearest alignment (ports trio: opencode-session-manager keeps its selection in view).
   scrollChildIntoView(id: string) {
     rootOf(this).owner?.scrolls?.into?.(this, id)
   }
@@ -201,16 +177,13 @@ export class VNode {
     touch(this)
   }
 
-  // Where the host laid it out in its last settled frame, once the host said (CT-15, CT-24): OpenTUI's renderables
-  // answer their layout at once, but the host's comes after a frame, so the first read answers nothing and the node
-  // carries an id from its next view. `onSizeChange` runs as the host's layout of it changes.
+  // Geometry reads use the last settled host frame.
   measure(): Rect | undefined {
     if (!this.measured) {
       this.measured = true
       touch(this)
     }
-    // A node the host has not laid out yet reads 0×0 for a frame, which OpenTUI never reports: not yet. A plugin that
-    // sizes itself by it kept the empty size (navigator cut its section header's "Refresh" to nothing, then to ".").
+    // An unmeasured root can still use the room promised in its mount input.
     const rect = rootOf(this).owner?.scrolls?.rect?.(this)
     if (!rect || (rect.width === 0 && rect.height === 0)) return this.ahead()
     // A fixed width (or height) is what the host lays the node out at, as such a node does not shrink: it answers at
@@ -220,10 +193,7 @@ export class VNode {
     return { ...rect, width: fixed(this.props.width, rect.width), height: fixed(this.props.height, rect.height) }
   }
 
-  // The room rule (contract 2.x, addition 1): before the host laid a node out, a top node of the mount answers a width
-  // of its own, `"100%"` of the mount's room or a number, which the host lays it out at in a column; any other node
-  // answers nothing, as OpenTUI's do before their first pass. The one place the layer answers ahead of the host, so
-  // a plugin that measures itself at once (tokscope's sidebar, within ten timer ticks) sizes right.
+  // Use mount dimensions before the first layout; nested nodes still need host geometry.
   private ahead(): Rect | undefined {
     const room = this.parent?.room
     if (!room || this.parent?.parent) return undefined
@@ -232,7 +202,6 @@ export class VNode {
     return width === undefined ? undefined : { x: 0, y: 0, width, height }
   }
 
-  // Yoga's six fields, as OpenTUI's: `left` and `top` against the parent, which is measured only if they are read.
   getLayout() {
     const rect = this.measure()
     const node = this
@@ -269,9 +238,7 @@ export class VNode {
     return [...this.children]
   }
 
-  // OpenTUI's renderables take the props a plugin assigns to a ref as their own, and the children it adds. A renderable
-  // the plugin built with `new` is one of the layer's (`renderables.ts`, contract 2.x, step D) and draws; anything
-  // else is no renderable, and adding it adds nothing.
+  // Plugin-built renderables use the same virtual nodes as JSX.
   add(child: VNode, index?: number) {
     if (!(child instanceof VNode)) return rootOf(this).owner?.report?.("a renderable built with new")
     insertNode(this, child, index === undefined ? undefined : this.children[index])
@@ -282,14 +249,12 @@ export class VNode {
     insertNode(this, child, anchor instanceof VNode ? anchor : undefined)
   }
 
-  // OpenTUI's `remove(id)`: the child with that id goes.
   remove(id: string) {
     const child = this.children.find((node) => node.props.id === id)
     if (child) remove(this, child)
   }
 }
 
-// The props a plugin may assign to a ref, as on an OpenTUI renderable: each asks for a view.
 for (const name of [
   "fg",
   "bg",
@@ -306,7 +271,6 @@ for (const name of [
   "bottomTitleAlignment",
   "wrapMode",
   "truncate",
-  // A renderable built with `new` takes its layout and look the same way (contract 2.x, step D).
   "flexDirection",
   "flexGrow",
   "flexShrink",
@@ -331,9 +295,7 @@ for (const name of [
   "placeholder",
 ]) {
   Object.defineProperty(VNode.prototype, name, {
-    // A renderable's `width` and `height` are its layout, as the host laid it out, once the host said (CT-24): a
-    // number, 0 before then as OpenTUI's, never the prop it was given (opencode-novaspace built an array from
-    // `node.width` on mount, and "100%" made its length NaN).
+    // Prefer measured size over the requested layout size.
     get(this: VNode) {
       if (name !== "width" && name !== "height") return this.props[name]
       return this.measure()?.[name] ?? 0
@@ -346,7 +308,6 @@ for (const name of [
   })
 }
 
-// The nodes the contract focuses: a field and a scroll.
 const FOCUSABLE = new Set(["input", "textarea", "scrollbox"])
 
 export function rootOf(node: VNode) {
@@ -367,7 +328,7 @@ function insertNode(parent: VNode, node: VNode, anchor?: VNode) {
   // An empty text node is Solid's marker, which stands anywhere.
   if (textual(node) && !(node.tag === "#text" && node.text === "") && !(parent.tag === "text" || SPANS.has(parent.tag)))
     throw new Error(`Orphan text error: "${plain(node)}" must have a <text> as a parent`)
-  // A node under itself would be a tree without end, which no view leaves (carbon c2d-3).
+  // Reject cycles before linking a child.
   for (let at: VNode | undefined = parent; at; at = at.parent)
     if (at === node) throw new Error(`a <${node.tag}> cannot be added inside itself`)
   if (node.parent) remove(node.parent, node)
@@ -422,8 +383,6 @@ const renderer = createRenderer<VNode>({
     if (name === "focused" && FOCUSED.has(node.tag) && !!value !== !!was)
       queueMicrotask(() => (value ? node.focus() : node.blur()))
   },
-  // A renderable the plugin built itself (`new BoxRenderable(…)`), which a render returned or a ref added, is inert and
-  // draws nothing: it goes nowhere, and says so (CT-15: opencode-quick-quote returns one as its slot's element).
   insertNode(parent, node, anchor) {
     if (!(node instanceof VNode)) return rootOf(parent).owner?.report?.("a renderable built with new")
     insertNode(parent, node, anchor instanceof VNode ? anchor : undefined)
@@ -460,7 +419,6 @@ export const {
 } = renderer
 export { createComponent, insertNode }
 
-// What a component's hooks read: the plugin's renderer stand-in and the terminal's size.
 export interface Screen {
   width(): number
   height(): number
@@ -468,7 +426,6 @@ export interface Screen {
 }
 
 export const ScreenContext = createContext<Screen>()
-// What reports a feature of the mount's plugin the layer does not map, for a node of it in no mount's tree.
 const ReportContext = createContext<((feature: string) => void) | undefined>()
 
 export function useRenderer() {
@@ -493,7 +450,7 @@ function unavailable(name: string) {
     missing.add(name)
   }
 }
-// As OpenTUI's: `handler` hears the renderer's key presses while the component lives (CT-11); a release never comes.
+// Release events are unavailable on the host keyboard stream.
 export function useKeyboard(handler: Listener, options?: { release?: boolean }) {
   const keys = useContext(ScreenContext)?.renderer.keyInput as
     | { on(name: string, listener: Listener): unknown; off(name: string, listener: Listener): unknown }
@@ -520,7 +477,6 @@ export const useTimeline = () => {
   return { add() {}, play() {}, pause() {} }
 }
 
-// One showing of a JSX render: its root node, the Solid root that owns it, and whether it crashed.
 export interface Mounted {
   root: VNode
   dispose(): void
@@ -529,8 +485,6 @@ export interface Mounted {
   keys: Set<string>
 }
 
-// Renders `render` under a root node whose changes call `invalidate`; a throw, as it renders or later, ends what it
-// shows and calls `crash` once, as TS's plugin boundary does.
 export function mount(
   render: () => unknown,
   screen: Screen,
@@ -547,7 +501,7 @@ export function mount(
   const fail = (error: unknown) => {
     if (mounted.crashed !== undefined) return
     mounted.crashed = error instanceof Error ? error.message : String(error)
-    // Nothing of a render that threw is shown, also not what it drew before it threw (carbon-3).
+    // Discard partially built trees if rendering throws.
     root.children = []
     queueMicrotask(() => {
       dispose()
@@ -578,13 +532,10 @@ export function mount(
   return mounted
 }
 
-// What the tree reads into: contract 2.0 nodes, with each color as the host's token when it is the theme's.
 type Json = any
 
 export interface Reading {
-  // The action a click on `node` runs: a command of the plugin that calls `handler`.
   press(node: VNode, handler: (event: unknown) => unknown, kind: "down" | "up"): Json
-  // What the reader could not carry, by name.
   dropped: Set<string>
 }
 
@@ -601,12 +552,11 @@ export function serialize(root: VNode, reading: Reading): Json {
   })
 }
 
-// A code block's tree (contract 2.x, step D): the renderable a renderer returned, as the node it is.
+// A claim returns one complete tree or declines; unsupported content falls back to the host.
 export function claimTree(root: VNode, reading: Reading): Json {
   return root.props.visible === false ? compact({ type: "box", children: [] }) : node(root, reading)
 }
 
-// The props of a node's layout ([`layoutOf`]).
 const LAYOUT = new Set(["width", "height", "minWidth", "maxWidth", "minHeight", "maxHeight", "flexGrow", "flexShrink", "margin", "marginX", "marginY", "marginLeft", "marginRight", "marginTop", "marginBottom", "position", "top", "right", "bottom", "left", "zIndex"])
 
 function nodes(children: VNode[], reading: Reading): Json[] {
@@ -650,12 +600,10 @@ function node(at: VNode, reading: Reading): Json {
       })
     case "markdown":
       return compact({ type: "markdown", source: { text: String(props.content ?? "") } })
-    // A code block's `defaultRender()` (contract 2.x, step D): the host's own code view of the fence, in `bg`.
     case "fence":
       for (const name of Object.keys(props).filter((name) => name !== "bg" && !LAYOUT.has(name)))
         reading.dropped.add(`a code block's default render ${name}`)
       return compact({ type: "fence", bg: color(props.bg), layout })
-    // The TS TUI's `<spinner>` (CT-14) is the contract's, without a label: the host's frames, pace and color.
     case "spinner":
       for (const name of ["frames", "interval", "color", "backgroundColor", "autoplay"])
         if (props[name] !== undefined) reading.dropped.add(`<spinner> ${name}`)
@@ -671,7 +619,6 @@ function node(at: VNode, reading: Reading): Json {
       })
     case "input":
     case "textarea":
-      // Its edits, its submit and its keys reach the plugin (CT-11); its other events do not.
       for (const name of Object.keys(props).filter((name) => /^on[A-Z]/.test(name) && !FIELD_EVENTS.has(name)))
         if (typeof props[name] === "function") reading.dropped.add(`<${at.tag}> ${name}`)
       return compact({
@@ -688,10 +635,7 @@ function node(at: VNode, reading: Reading): Json {
   }
 }
 
-// OpenTUI's `<select>` (CT-14), drawn as its renderable draws it: a row of each option that fits, the selected one on
-// its background with `▶ `, and the description under the name when shown, in OpenTUI's default colors. A click is the
-// select's own handler, as a box's. Its keys (up, down, Enter while focused) and `onChange` are not mapped, as the
-// contract's focus does not reach it; it shows the selection the plugin set.
+// Render select options as rows; this intrinsic does not open a host dialog.
 const SELECT = {
   backgroundColor: "transparent",
   textColor: "#FFFFFF",
@@ -748,7 +692,6 @@ function boxOf(at: VNode, layout: Json, click: Json, reading: Reading): Json {
   const props = at.props
   const pad = edges(props, "padding")
   const symmetric = pad && pad.left === pad.right && pad.top === pad.bottom && pad.left >= 0 && pad.top >= 0
-  // A box whose size the plugin follows carries an id, by which the host answers where it is.
   if (typeof (props.onSizeChange ?? (at as unknown as Record<string, unknown>).onSizeChange) === "function") at.measure()
   return compact({
     type: "box",
@@ -786,7 +729,6 @@ function textSpans(at: VNode, reading: Reading) {
   walk(at, { attributes: base, bg: at.props.bg })
   const content = at.props.content
   if (content === undefined || at.children.length > 0) return spans
-  // A `StyledText` content (CT-27): a span of each chunk, its attributes over the node's.
   if (isStyledText(content))
     for (const chunk of content.chunks) {
       const style = { attributes: base | (chunk.attributes ?? 0), fg: chunk.fg, bg: chunk.bg ?? at.props.bg, link: chunk.link?.url }
@@ -838,9 +780,8 @@ function clickOf(at: VNode, reading: Reading) {
   const up = at.props.onMouseUp ?? at.props.onClick
   const handler = down ?? up
   if (typeof handler !== "function") return undefined
-  // The contract runs one click a node: the press, when there is one (carbon-4).
+  // A host node has one click action. Prefer the press handler when both are supplied.
   if (down && up) reading.dropped.add("onMouseUp beside onMouseDown")
-  // A tree with no handler (a code block's) has no click to run.
   const action = reading.press(at, handler, down ? "down" : "up")
   return action === undefined ? undefined : { action, on: down ? "down" : "up" }
 }
@@ -853,15 +794,13 @@ function layoutOf(props: Json, reading: Reading) {
   const layout = compact({
     width: length(props.width),
     grow: Number(props.flexGrow) > 0 ? true : undefined,
-    // As OpenTUI's renderable: one with a fixed width or height does not shrink unless it says so (CT-25:
-    // @wpro-eng/opencode-config's 14-cell agent names shrank, and their models wrapped elsewhere).
+    // Fixed sizes opt out of shrink unless the plugin overrides it.
     shrink:
       props.flexShrink !== undefined
         ? Number(props.flexShrink) > 0
         : typeof props.width === "number" || typeof props.height === "number"
           ? false
           : undefined,
-    // Contract ergonomics 2.6: as OpenTUI's, in cells or percent of the parent's.
     min_width: length(props.minWidth),
     max_width: length(props.maxWidth),
     height: length(props.height),
@@ -890,9 +829,7 @@ function edges(props: Json, name: "padding" | "margin") {
   return out.top || out.right || out.bottom || out.left ? out : undefined
 }
 
-// As OpenTUI's box (CT-18), whose props the reconciler sets in order: `border` sets it, and a border style or color set
-// while it is `false` makes it `true`. It draws all four sides for `true`, the sides an array names, and none for
-// anything else, such as `{ type: "single" }`.
+// Preserve property order: setting a border style or color can enable the border.
 function borderOf(props: Json) {
   let border: unknown = false
   for (const name of Object.keys(props)) {
@@ -929,8 +866,7 @@ function align(value: unknown) {
   return ({ "flex-start": "start", center: "center", "flex-end": "end" } as Json)[String(value)]
 }
 
-// Numbers within the ABI's domains (carbon-5): a fraction rounds, and a value past a field's range is its end, so no
-// computed size makes a tree the host cannot read.
+// Clamp numeric props to the ABI field's range before encoding.
 const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, Math.round(value)))
 
 function length(value: unknown) {
