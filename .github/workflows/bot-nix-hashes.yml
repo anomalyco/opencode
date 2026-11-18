@@ -1,4 +1,4 @@
-name: bot-nix-hashes
+name: bot-nix-hashes 
 
 # Keeps nix/hashes.json in step with the lockfile through a pull request, using only GITHUB_TOKEN.
 # - hash and compute run repository code (nix build) with a read-only token and no secrets. compute uploads only the
