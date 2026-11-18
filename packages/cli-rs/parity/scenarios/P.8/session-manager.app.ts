@@ -73,8 +73,13 @@ export default defineApp({
     { checkpoint: "cleared", until: "Draft the notes" },
     { keys: ["k"] },
     { keys: ["r"] },
-    // The prompt is filled with the title, under the session's directory (contract ergonomics 2.6).
-    { checkpoint: "rename", until: "Rename session" },
+    // The prompt is filled with the title, under the session's directory (contract ergonomics 2.6), which is in the
+    // host's description color, TS's in OpenTUI's default text color (CF3-plugin-prompt).
+    {
+      checkpoint: "rename",
+      until: "Rename session",
+      deviation: [{ file: "CF3-plugin-prompt", cells: 26, styleOnly: true }],
+    },
     { keys: ["escape"] },
     { checkpoint: "renamed", until: "Esc back" },
     { keys: ["d"] },

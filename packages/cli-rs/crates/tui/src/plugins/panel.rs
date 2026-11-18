@@ -155,6 +155,11 @@ fn own(tui: &Tui, owner: Owner, replace: impl FnOnce(Box<dyn FnOnce()>)) {
 fn ask(tui: &Tui, owner: Owner, asked: abi::Prompt) {
     let (weak, clear, confirmed) = (tui.weak(), tui.dialogs.clone(), owner.clone());
     let abi::Prompt { title, placeholder, value, description, action, .. } = asked;
+    // The field is one row: a line break would scroll the text out of it (deviation CF3-plugin-prompt).
+    let value = value
+        .as_deref()
+        .map(|value| bounded(value).split(['\r', '\n']).filter(|line| !line.is_empty()).collect::<Vec<_>>().join(" "));
+    let description: Option<Rc<str>> = description.as_deref().map(|text| bounded(text).into());
     own(tui, owner, |on_close| {
         tui.dialogs.replace(
             move |cx| {
@@ -164,10 +169,11 @@ fn ask(tui: &Tui, owner: Owner, asked: abi::Prompt) {
                     run(&tui, &owner, &action, Some(value));
                 });
                 // TS draws the description as a text of its own above the field (`<text>{description}</text>`), in
-                // OpenTUI's default text color, which no theme sets.
+                // OpenTUI's default text color; here in the color of the host's own prompt descriptions, over a few
+                // rows, so the field stays on screen.
                 let description = description.clone().map(|text| {
                     Rc::new(move |cx: &DialogCx| {
-                        Text::new(&cx.app, text.as_str()).fg(Color::rgb(255, 255, 255)).as_any()
+                        Text::new(&cx.app, &*text).fg(cx.theme.text.muted).max_height(DESCRIPTION_ROWS).as_any()
                     }) as opencode_ui::prompt::Description
                 });
                 let (view, _) = prompt(
@@ -188,6 +194,14 @@ fn ask(tui: &Tui, owner: Owner, asked: abi::Prompt) {
             DialogOptions::default(),
         )
     });
+}
+
+/// The rows a plugin prompt's description takes at most.
+const DESCRIPTION_ROWS: u32 = 8;
+
+/// `text` within one node's text ([`opencode_plugin::limits`]).
+fn bounded(text: &str) -> &str {
+    &text[..text.floor_char_boundary(opencode_plugin::limits::get().text as usize)]
 }
 
 /// The rich select on screen (synthesis 4.10): the select the plugin showed last, which a select of the same key

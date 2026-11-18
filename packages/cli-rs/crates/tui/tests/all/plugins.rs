@@ -1039,6 +1039,42 @@ fn a_panel_cannot_take_the_keys_that_close_it() {
     }
 }
 
+thread_local! {
+    /// What the `asks` prompt submitted.
+    static ASKED: RefCell<Option<String>> = const { RefCell::new(None) };
+}
+
+/// `asks.prompt` asks in a prompt whose value has line breaks, under a description of 20 lines; `asks.named` keeps
+/// what it submits.
+fn asks(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.command(abi::Command::new("asks.named"), |_, input| ASKED.set(input.map(str::to_owned)));
+    setup.command(abi::Command::new("asks.prompt"), |host, _| {
+        let lines: Vec<String> = (0..20).map(|line| format!("line {line}")).collect();
+        let prompt = abi::Prompt::new("Asks prompt", abi::Action::command("asks.named"))
+            .value("Old title\r\nmore\n")
+            .description(lines.join("\n"));
+        host.dialog(abi::Dialog::Prompt(prompt));
+    });
+    Ok(())
+}
+
+// Expected (cf-3): a plugin prompt's one-row field starts with its value on one line, where a line break scrolled the
+// text out of the row and showed nothing, and submits that line; its description shows at most eight rows, so the
+// field stays on screen.
+#[test]
+fn a_plugin_prompt_shows_its_value_on_one_line_under_a_bounded_description() {
+    let h = support::mount(100, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    opencode_tui::plugins::host::add(&h.tui, abi::Plugin { id: "asks", setup: asks }.into());
+    h.tui.keymap.dispatch("asks.prompt", None);
+    h.wait_for("Asks prompt");
+    let text = h.app.text();
+    assert!(text.contains("Old title more") && text.contains("line 7"), "{text}");
+    assert!(!text.contains("line 8"), "the description is over eight rows:\n{text}");
+    h.app.press("return");
+    h.app.render();
+    assert_eq!(ASKED.take().as_deref(), Some("Old title more"));
+}
+
 /// Toasts on every change of the plugin list, as the C conformance plugin does.
 fn chatty(setup: &mut abi::Setup) -> Result<(), String> {
     setup.on_plugins(|host| host.toast(abi::Toast::new(abi::Variant::Info, "plugins changed")));
