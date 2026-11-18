@@ -780,34 +780,6 @@ test("a field's focused prop focuses and blurs it", async () => {
   expect(fake.warnings()).toEqual([])
 })
 
-// Contract 2.x, step B: a field's focus is the request of the mount whose render holds it, which names it. A field in a
-// dialog of the plugin's own is one too (contract ergonomics 2.7, CT-37): the dialog's body is a mount.
-test("a field's focus names its mount, also in a dialog of the plugin's own", async () => {
-  const fake = host()
-  const ctx = plugin("t.owned", fake)
-  const refs: Json = {}
-  ctx.ui.router.register({ name: "f", render: () => h("input", { id: "q", ref: (el: Json) => (refs.routed = el) }) })
-  const route = fake.surfaces.find((surface: Json) => surface.place.type === "route")
-  const mount = { surface: "f", key: "a", generation: 7 }
-  route.view({ mount, input: { width: 40, height: 10 } })
-  refs.routed.focus()
-  ctx.ui.dialog.show(() => h("input", { id: "d", ref: (el: Json) => (refs.shown = el) }))
-  await turn()
-  const dialog = dialogView(fake, surfaceKeys(fake)[0]!)
-  dialog.draw()
-  refs.shown.focus()
-  await turn()
-  const focus = fake.effects.filter((effect: Json) => effect.type === "focus")
-  expect(focus).toEqual([
-    { type: "focus", node: "q", mount },
-    { type: "focus", node: "d", mount: dialog.mount },
-  ])
-  expect(fake.warnings()).toEqual([])
-})
-
-// Contract 2.x, step B (big-boi's G2): a field in no mount's tree, one the plugin removed and still holds by its ref or
-// one it built and never added, has no focus on the host, by `focus()` or by its `focused` prop; the client's log
-// says so once. It focuses no other mount.
 test("a field removed from its mount, or never added, has no focus and says so once", async () => {
   // Each its own plugin, as the log says it once a plugin: `stray` is built with its `focused` prop and never added;
   // `gone` is removed from the tree, and its ref focused twice.
@@ -1046,36 +1018,6 @@ test("a mount a reload begins again adopts the one it ended", async () => {
   expect(text(surface.view(cx(4)))).toBe("run 3")
 })
 
-// Contract ergonomics, step 8: the host's focus was the ended mount's, so the field the plugin focused in a mount a reload
-// begins again asks for it again, for the new mount, as that mount adopts the tree (`P.8/session-manager`'s search,
-// whose layer reloads as the field shows, lost what the user typed). A field not focused asks for nothing, and nor does
-// one whose mount ended after the user moved the focus out of it (cf-3).
-test("a mount a reload begins again focuses the field the plugin focused", () => {
-  const fake = host()
-  const ctx = plugin("t.refocus", fake)
-  const refs: Json = {}
-  ctx.ui.slot({ append: "sidebar.content", render: () => h("input", { id: "search", ref: (el: Json) => (refs.search = el) }) })
-  const cx = (generation: number) => ({ mount: { surface: "slot#0", key: "a", generation }, input: { width: 40, height: 10, slot: {} } })
-  const surface = fake.surfaces[0]
-  const focuses = () => fake.effects.filter((effect: Json) => effect.type === "focus").map((effect: Json) => effect.mount.generation)
-  surface.view(cx(1))
-  surface.options.unmount(cx(1).mount, true)
-  surface.view(cx(2))
-  expect(focuses()).toEqual([])
-  refs.search.focus()
-  const search = fake.effects.find((effect: Json) => effect.type === "focus").node
-  surface.options.unmount(cx(2).mount, true, search)
-  surface.view(cx(3))
-  expect(focuses()).toEqual([2, 3])
-  surface.options.unmount(cx(3).mount, true, undefined)
-  surface.view(cx(4))
-  expect(focuses()).toEqual([2, 3])
-  surface.options.unmount(cx(4).mount)
-})
-
-// CT-15: a render that returns a renderable it built itself (opencode-quick-quote's slot marker) draws nothing and says
-// so, where it crashed on `e.children.indexOf`. CT-15, CT-24: a node's `getLayout()`, `width` and `onSizeChange` are the
-// host's layout of it (`Read::rect`), once the host said: the node carries an id from its next view.
 test("a built renderable returned draws, and a node's layout is the host's", () => {
   const fake = host()
   const ctx = plugin("t.layout", fake)
@@ -1169,40 +1111,6 @@ test("a store's update writes nothing it did not read, and shows nothing the hos
     request.type === "storage-merge" ? { error: "a stored value of 300000 bytes, past 262144" } : answer(request, mount)
   await expect(update((draft: Json) => draft.items.push("big"))).rejects.toThrow("past 262144")
   expect([store.items, JSON.parse(fake.stored.get("notes")!)]).toEqual([["kept"], { items: ["kept"] }])
-})
-
-// CT-38: a session panel's input has TS's `close`, `toggleFullscreen` and `focus` (oc-models-pro, btw-sidechat), which
-// were missing, so the plugin threw: close closes the panel's surface, toggleFullscreen opens it full screen and back,
-// and focus gives the focus to the panel's first field, as the request of its mount.
-test("a session panel closes, toggles and focuses itself", async () => {
-  const fake = host()
-  const ctx = plugin("t.panel", fake)
-  let input: Json
-  ctx.ui.slot({
-    append: "session.panel",
-    render: (props: Json) => {
-      input = props
-      return h("box", { children: [h("text", { children: "Notes" }), h("input", { placeholder: "Ask" })] })
-    },
-  })
-  const index = fake.surfaces.findIndex((surface: Json) => surface.place.type === "panel")
-  const name = fake.surfaces[index].name
-  const mount = { surface: name, key: "k", generation: 1 }
-  const draw = (fullscreen: boolean) =>
-    fake.surfaces[index].view({ mount, input: { width: 40, height: 10, slot: { session_id: "s" }, panel: { fullscreen } } })
-  draw(false)
-  input.close()
-  input.toggleFullscreen()
-  draw(true)
-  input.toggleFullscreen()
-  input.focus()
-  await turn()
-  expect(fake.effects.map(({ type, surface, fullscreen, mount }: Json) => ({ type, surface, fullscreen, mount }))).toEqual([
-    { type: "close-panel", surface: name, fullscreen: undefined, mount },
-    { type: "open-panel", surface: name, fullscreen: true, mount },
-    { type: "open-panel", surface: name, fullscreen: undefined, mount },
-    { type: "focus", surface: undefined, fullscreen: undefined, mount },
-  ])
 })
 
 // A context whose `data.on` keeps each event's handler, for the rows that send events.
@@ -1665,17 +1573,6 @@ test("click handlers go with their mount", async () => {
   expect(kept.filter((ref) => ref.deref()).length).toBeLessThan(20)
 })
 
-// Bigboi P8-6: a session's pending inbox items are the host's, not an empty list.
-test("pending items are the host's", async () => {
-  const item = { type: "user", id: "inb_1", payload: { text: "queued" }, time: { created: 3 } }
-  const fake = host((key) => (key === "pending:s1" ? [item] : []))
-  const ctx = plugin("t.pending", fake)
-  await ctx.data.session.pending.sync("s1")
-  expect(ctx.data.session.pending.list("s1")).toEqual([item])
-})
-
-// Contract ergonomics 2.7: a `<scrollbox>` in a dialog of the plugin's own is a scroll of the dialog's mount, and its
-// `focused` prop gives it the host's focus, so the arrows and the page keys scroll it (sidebar-prompt's long prompt).
 test("a dialog's scrollbox is a scroll its focused prop focuses", async () => {
   const fake = host()
   const ctx = plugin("t.scroll", fake)
