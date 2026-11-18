@@ -1228,11 +1228,6 @@ export const dict = {
   "sidebar.recent.unpin": "ගළවන්න",
   "sidebar.recent.moveUp": "ඉහළට ගෙන යන්න",
   "sidebar.recent.moveDown": "පහළට ගෙන යන්න",
-  "settings.experimental.row.newIcons.title": "නව අයිකන",
-  "settings.experimental.row.newIcons.description": "යාවත්කාලීන කළ අයිකන කට්ටලය පෙරදසුන් කරන්න",
-  "settings.experimental.row.foldUserMessages.title": "දිගු පණිවිඩ නවන්න",
-  "settings.experimental.row.foldUserMessages.description":
-    'පේළි 12 ඉක්මවන ඔබගේ පණිවිඩ "තව කියවන්න" බොත්තමක් පිටුපස නවන්න',
   "settings.experimental.row.newTimeline.title": "නව කාලරේඛාව",
   "settings.experimental.row.newTimeline.description":
     "නියෝජිතයා කළ දේ සමූහගත කරන, වාරයට පහළින් එක් තත්ත්ව පේළියක් සහිත නැවත සැලසුම් කළ සැසි කාලරේඛාවක්",
@@ -1362,6 +1357,9 @@ export const dict = {
     "උප නියෝජිතයන් වෙන වෙනම පෙන්වන්න. අනෙකුත් ක්‍රියාකාරකම් විස්තර හකුළා සමූහගත කරන්න.",
   "settings.timeline.description.quiet":
     "උප නියෝජිතයන් වෙන වෙනම පෙන්වා සංස්කරණ සමූහගත කරන්න. අනෙකුත් ක්‍රියාකාරකම් සඟවන්න.",
+  "settings.timeline.row.foldUserMessages.title": "දිගු පණිවිඩ නවන්න",
+  "settings.timeline.row.foldUserMessages.description":
+    'පේළි 12 ඉක්මවන ඔබගේ පණිවිඩ "තව කියවන්න" බොත්තමක් පිටුපස නවන්න',
   "settings.timeline.row.turnDiffs.title": "වෙනස් වූ ගොනු",
   "settings.timeline.row.turnDiffs.description": "සෑම වාරයක්ම අවසන් වූ විට එය වෙනස් කළ ගොනු ලැයිස්තුගත කරන්න",
   "settings.timeline.category.commentary": "විවරණය",

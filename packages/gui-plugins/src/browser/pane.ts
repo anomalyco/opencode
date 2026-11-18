@@ -14,7 +14,7 @@ import { createBrowserNetwork, createDirectNetwork, type BrowserNetwork } from "
 import { activityOwner, agentDriven, agentRefusal, childActivity, createdActivity, destinationOrigin, normalizeURL, recordPageInput, recordTabFocus, refusal, restoreRefusal, type TabActivity } from "./policy"
 import type { Profile } from "./profile"
 import { createRefs } from "./refs"
-import type { FindAction, PaneEvent, PromptAnswer } from "./ipc"
+import type { FindAction, PaneEvent, PromptAnswer, Viewport } from "./ipc"
 import { createPageFind } from "./page-find"
 import {
   attachmentFailure,
@@ -109,6 +109,8 @@ export function createBrowserPane(input: {
   readonly sites: SitePermissions
   /** The system's camera and microphone setting, and its prompt. */
   readonly system: SystemMedia
+  /** Whether the build offers the device toolbar. */
+  readonly toolbar: boolean
   readonly emit: (window: number, value: { readonly binding: string; readonly event: PaneEvent }) => void
 }) {
   const machine: PaneMachine = { state: createPaneState() }
@@ -459,6 +461,13 @@ export function createBrowserPane(input: {
     zoom(window: number, binding: string, tabID: Browser.TabID, direction: "in" | "out" | "reset") {
       owned(window, binding)
       page(binding, tabID)?.zoom(direction)
+    },
+    async setViewport(window: number, binding: string, tabID: Browser.TabID, viewport: Viewport) {
+      owned(window, binding)
+      const target = load(binding, tabID)
+
+      if (!target) throw new Error("browser.pane.unavailable")
+      await target.setViewport(viewport)
     },
     async site(window: number, binding: string, tabID: Browser.TabID) {
       owned(window, binding)
@@ -854,17 +863,15 @@ export function createBrowserPane(input: {
       inspect: (event) => {
         if (current()) emit(binding, { type: "inspect", tabID: id, ...event })
       },
-      // Icons and zoom are local to this desktop, and follow the states reported before them, so the window files a new
-      // page's icon under that page's URL.
+      // The window files the icon under the URL from the preceding inventory update.
       detail: (value) => {
         if (current()) emit(binding, { type: "page", tabID: id, ...value })
       },
       zoomed: () => handles.get(binding)?.pages.forEach((page) => page.detail()),
+      toolbar: input.toolbar,
       shortcut: (shortcut) => {
         if (!focused() || win.isDestroyed()) return
-
-        // The page held keyboard focus; the command runs in the app, which may move focus there, as ⌘L does.
-        if (win.isFocused()) win.webContents.focus()
+        page.focusHost()
         emit(binding, { type: "shortcut", ...shortcut })
       },
       focused: () => {

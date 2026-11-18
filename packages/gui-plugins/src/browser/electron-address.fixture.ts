@@ -76,6 +76,7 @@ void electron.app.whenReady().then(async () => {
 
   const page = createBrowserPage(win, {
     id: tabID,
+    toolbar: false,
     partition,
     network: null,
     publish: () => undefined,

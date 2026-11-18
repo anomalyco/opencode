@@ -51,6 +51,7 @@ function fixture() {
     inspect: async () => undefined,
     highlight: async () => undefined,
     zoom: async () => undefined,
+    setViewport: async () => undefined,
     site: async () => ({ cookies: 0 }),
     clearSite: async () => undefined,
     reveal: async () => undefined,
@@ -98,6 +99,35 @@ function fixture() {
 
   return { ...owned, sessions, route: setCurrent, refs, emit, send, rejections }
 }
+
+test("drops page details when a tab closes or its binding is suspended", () => {
+  const app = fixture()
+
+  const session = app.sessions[0]
+
+  const closed = tab("a")
+
+  const retained = tab("b")
+
+  const viewport = { mode: "fixed", width: 390, height: 844 } as const
+
+  try {
+    app.emit(session.id, { tabs: [closed, retained], focusedTabID: closed.id })
+
+    for (const tab of [closed, retained]) app.send(session.id, { type: "page", tabID: tab.id, zoom: 1, viewport })
+    expect(app.model.page(session, closed.id)?.viewport).toEqual(viewport)
+    const remaining = { tabs: [retained], focusedTabID: retained.id }
+    app.emit(session.id, remaining)
+    expect(app.model.page(session, closed.id)).toBeUndefined()
+    expect(app.model.page(session, retained.id)?.viewport).toEqual(viewport)
+
+    app.send(session.id, { type: "state", state: remaining, error: "browser.pane.suspended" })
+    expect(app.model.tab(session, retained.id)?.url).toBe(retained.url)
+    expect(app.model.page(session, retained.id)).toBeUndefined()
+  } finally {
+    app.dispose()
+  }
+})
 
 test("one session's transitions leave another session's attachment as it was", async () => {
   const app = fixture()

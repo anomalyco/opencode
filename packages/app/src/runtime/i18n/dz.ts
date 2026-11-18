@@ -1252,11 +1252,6 @@ export const dict = {
   "sidebar.recent.unpin": "སྦྱར་བཞག་བཏོན།",
   "sidebar.recent.moveUp": "ཡར་སྤོ།",
   "sidebar.recent.moveDown": "མར་སྤོ།",
-  "settings.experimental.row.newIcons.title": "ངོས་དཔར་གསརཔ།",
-  "settings.experimental.row.newIcons.description": "དུས་མཐུན་བཟོ་ཡོད་པའི་ངོས་དཔར་ཚོ་སྡེ་ སྔོན་ལྟ་འབད།",
-  "settings.experimental.row.foldUserMessages.title": "འཕྲིན་དོན་རིངམོ་ཚུ་བསྡམ།",
-  "settings.experimental.row.foldUserMessages.description":
-    "གྲལ་ཐིག་ ༡༢ ལས་ལྷག་པའི་ ཁྱོད་ཀྱི་འཕྲིན་དོན་ཚུ་ མང་སུ་ལྷག་ ཨེབ་རྟ་གི་རྒྱབ་ལུ་བསྡམ།",
   "settings.experimental.row.newTimeline.title": "དུས་ཚོད་ཐིག་གསརཔ།",
   "settings.experimental.row.newTimeline.description":
     "ལས་ཚབ་ཀྱིས་འབད་མི་ཚུ་ སྡེ་ཚན་བཟོ་ཡོད་པའི་ ལཱ་ཡུན་དུས་ཚོད་ཐིག་ལོག་བཟོ་ཡོད་མི་ཅིག་ཨིན་ ཐེངས་ཀྱི་འོག་ལུ་ གནས་སྟངས་གྲལ་ཐིག་གཅིག་ཡོདཔ།",
@@ -1388,6 +1383,9 @@ export const dict = {
   "settings.timeline.description.compact": "ཡན་ལག་ལས་ཚབ་ཚུ་ སོ་སོ་སྦེ་སྟོན། ལས་སྣ་གཞན་ཚུ་ ཁ་གསལ་བསྡམ་སྟེ་ སྡེ་ཚན་བཟོ།",
   "settings.timeline.description.quiet":
     "ཡན་ལག་ལས་ཚབ་ཚུ་ སོ་སོ་སྦེ་སྟོན་ཞིནམ་ལས་ ཞུན་དག་ཚུ་སྡེ་ཚན་བཟོ། ལས་སྣ་གཞན་ཚུ་སྦ་བཞག",
+  "settings.timeline.row.foldUserMessages.title": "འཕྲིན་དོན་རིངམོ་ཚུ་བསྡམ།",
+  "settings.timeline.row.foldUserMessages.description":
+    "གྲལ་ཐིག་ ༡༢ ལས་ལྷག་པའི་ ཁྱོད་ཀྱི་འཕྲིན་དོན་ཚུ་ མང་སུ་ལྷག་ ཨེབ་རྟ་གི་རྒྱབ་ལུ་བསྡམ།",
   "settings.timeline.row.turnDiffs.title": "བསྒྱུར་བཅོས་འབད་ཡོད་པའི་ཡིག་སྣོད་ཚུ།",
   "settings.timeline.row.turnDiffs.description":
     "ཐེངས་རེ་རེ་མཇུག་བསྡུཝ་ད་ དེ་གིས་བསྒྱུར་བཅོས་འབད་མི་ཡིག་སྣོད་ཚུ་ ཐོ་བཀོད་འབད།",

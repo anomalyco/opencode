@@ -50,6 +50,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "Hozzászólás",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Megjegyzés hozzáadása",
+  "ui.lineComment.add": "Megjegyzés hozzáadása",
+  "ui.lineComment.actions": "Kijelölési műveletek",
   "ui.lineComment.contextPlaceholder": "Kontextus hozzáadása ehhez a módosításhoz",
   "ui.lineComment.submit": "Megjegyzés",
   "ui.lineComment.cancel": "Mégsem",

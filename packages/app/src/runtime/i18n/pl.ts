@@ -1282,11 +1282,6 @@ export const dict = {
   "sidebar.recent.unpin": "Odepnij",
   "sidebar.recent.moveUp": "Przenieś w górę",
   "sidebar.recent.moveDown": "Przenieś w dół",
-  "settings.experimental.row.newIcons.title": "Nowe ikony",
-  "settings.experimental.row.newIcons.description": "Wypróbuj zaktualizowany zestaw ikon",
-  "settings.experimental.row.foldUserMessages.title": "Zwijaj długie wiadomości",
-  "settings.experimental.row.foldUserMessages.description":
-    "Zwijaj Twoje wiadomości dłuższe niż 12 linii za przyciskiem Czytaj więcej",
   "settings.experimental.row.newTimeline.title": "Nowa oś czasu",
   "settings.experimental.row.newTimeline.description":
     "Przeprojektowana oś czasu sesji, która grupuje działania agenta, z jednym wierszem statusu pod turą",
@@ -1417,6 +1412,9 @@ export const dict = {
   "settings.timeline.row.width.wide": "Szeroka",
   "settings.timeline.description.compact": "Pokaż podagentów osobno. Grupuj inną aktywność ze zwiniętymi szczegółami.",
   "settings.timeline.description.quiet": "Pokaż podagentów osobno i grupuj edycje. Ukryj inną aktywność.",
+  "settings.timeline.row.foldUserMessages.title": "Zwijaj długie wiadomości",
+  "settings.timeline.row.foldUserMessages.description":
+    "Zwijaj Twoje wiadomości dłuższe niż 12 linii za przyciskiem Czytaj więcej",
   "settings.timeline.row.turnDiffs.title": "Zmienione pliki",
   "settings.timeline.row.turnDiffs.description": "Po zakończeniu tury wyświetl listę zmienionych w niej plików",
   "settings.timeline.category.commentary": "Komentarz",

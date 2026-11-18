@@ -99,6 +99,14 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "general",
+    label: "settings.timeline.row.foldUserMessages.title",
+    description: "settings.timeline.row.foldUserMessages.description",
+    target: "settings-fold-user-messages",
+    section: "settings.timeline.title",
+    keywords: "fold collapse long messages prompts read more",
+  },
+  {
+    tab: "general",
     label: "settings.timeline.row.turnDiffs.title",
     description: "settings.timeline.row.turnDiffs.description",
     target: "settings-show-turn-diffs",
@@ -109,20 +117,6 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     label: "settings.general.row.showCustomAgents.title",
     target: "settings-show-custom-agents",
     section: "settings.general.section.general",
-  },
-  {
-    tab: "experimental",
-    label: "settings.experimental.row.newIcons.title",
-    target: "settings-new-icons",
-    description: "settings.experimental.row.newIcons.description",
-    keywords: "icons iconography glyphs redesign",
-  },
-  {
-    tab: "experimental",
-    label: "settings.experimental.row.foldUserMessages.title",
-    target: "settings-fold-user-messages",
-    description: "settings.experimental.row.foldUserMessages.description",
-    keywords: "fold collapse long messages prompts read more",
   },
   {
     tab: "experimental",

@@ -148,7 +148,7 @@ const layer = Layer.effect(
       const permissions = yield* Permission.rules(hooks, { session, agent })
       const loaded = yield* Effect.all(
         {
-          tools: registry.snapshot(permissions),
+          tools: registry.snapshot(permissions, location),
           builtins: builtins.load(),
           discovery: discovery.load(),
           skills: skillInstructions.load(permissions),

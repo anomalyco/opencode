@@ -1239,11 +1239,6 @@ export const dict = {
   "sidebar.recent.unpin": "Yechib olish",
   "sidebar.recent.moveUp": "Yuqoriga surish",
   "sidebar.recent.moveDown": "Pastga surish",
-  "settings.experimental.row.newIcons.title": "Yangi belgilar",
-  "settings.experimental.row.newIcons.description": "Yangilangan belgilar to‘plamini sinab ko‘ring",
-  "settings.experimental.row.foldUserMessages.title": "Uzun xabarlarni yig‘ish",
-  "settings.experimental.row.foldUserMessages.description":
-    "12 qatordan uzun xabarlaringizni «Ko‘proq o‘qish» tugmasi ortiga yig‘ish",
   "settings.experimental.row.newTimeline.title": "Yangi vaqt jadvali",
   "settings.experimental.row.newTimeline.description":
     "Agent bajargan ishlarni guruhlaydigan, qadam ostida bitta holat qatori bo‘lgan qayta ishlangan sessiya vaqt jadvali",
@@ -1375,6 +1370,9 @@ export const dict = {
     "Subagentlarni alohida ko‘rsatish. Boshqa faoliyatni tafsilotlari yig‘ilgan holda guruhlash.",
   "settings.timeline.description.quiet":
     "Subagentlarni alohida ko‘rsatish va tahrirlarni guruhlash. Boshqa faoliyatni yashirish.",
+  "settings.timeline.row.foldUserMessages.title": "Uzun xabarlarni yig‘ish",
+  "settings.timeline.row.foldUserMessages.description":
+    "12 qatordan uzun xabarlaringizni «Ko‘proq o‘qish» tugmasi ortiga yig‘ish",
   "settings.timeline.row.turnDiffs.title": "O‘zgartirilgan fayllar",
   "settings.timeline.row.turnDiffs.description": "Har bir qadam tugaganda u o‘zgartirgan fayllarni ro‘yxatlash",
   "settings.timeline.category.commentary": "Izohlar",

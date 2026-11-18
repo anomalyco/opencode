@@ -2,7 +2,7 @@ import type { Browser } from "@opencode/plugin-browser/rpc"
 import type { IpcClient } from "@opencode/plugin/gui"
 import type { ExperimentalBrowserTab } from "@opencode/plugin/gui/browser"
 import { uuid } from "@opencode/util/uuid"
-import type { BrowserPane, FindAction, PaneEvent, PromptAnswer } from "./ipc"
+import type { BrowserPane, FindAction, PaneEvent, PromptAnswer, Viewport } from "./ipc"
 
 type Client = IpcClient<(typeof BrowserPane)["spec"]>
 
@@ -28,6 +28,7 @@ export type Registration = {
   notice(tabID: Browser.TabID, token: string, dismiss: boolean, copy?: boolean): Promise<void>
   reviewLink(url: string): Promise<Browser.TabID>
   answer(tabID: Browser.TabID, id: number, answer: PromptAnswer): Promise<void>
+  setViewport(tabID: Browser.TabID, viewport: Viewport): Promise<void>
   site(tabID: Browser.TabID): Promise<{ cookies: number }>
   clearSite(tabID: Browser.TabID): Promise<void>
   clearCache(tabID: Browser.TabID, address: string): Promise<void>
@@ -100,6 +101,7 @@ export function openBinding(input: {
       if (status.closed) return
       void ready.then(() => client.zoom({ binding, tabID, zoom })).catch(() => undefined)
     },
+    setViewport: (tabID, viewport) => ready.then(() => client.setViewport({ binding, tabID, viewport })),
     site: (tabID) => ready.then(() => client.site({ binding, tabID })),
     clearSite: (tabID) => ready.then(() => client.clearSite({ binding, tabID })),
     clearCache: (tabID, address) => ready.then(() => client.clearCache({ binding, tabID, address })),

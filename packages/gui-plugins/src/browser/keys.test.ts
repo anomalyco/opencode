@@ -77,6 +77,9 @@ test("forwards browser and shell shortcuts while leaving page editing, reload an
     ["mod+shift", "R", true, "r"],
     ["mod+shift", "R", false, "r"], ["mod", "F5", false, "F5"], ["mod+alt", "r", true, "r"],
     ["mod+shift", "P", true, "p"],
+    ["mod+shift", "M", true, "m"],
+    ["mod+shift", "M", false, "m"],
+    ["mod", "m", true, undefined],
     ["mod+shift", "L", true, "l"],
     ["mod+shift", "E", true, "e"],
     ["mod+shift", "{", true, "[", "BracketLeft"],
@@ -145,10 +148,16 @@ test("forwards browser and shell shortcuts while leaving page editing, reload an
     modifiers,
     key,
     mac,
-    pageShortcut(press(modifiers, key, mac, code), mac)?.key,
+    pageShortcut(press(modifiers, key, mac, code), mac, true)?.key,
   ])
 
   expect(results).toEqual(cases.map(([modifiers, key, mac, forwarded]) => [modifiers, key, mac, forwarded]))
+})
+
+test("leaves the device toolbar chord to the page in builds without the toolbar", () => {
+  expect(pageShortcut(press("mod+shift", "M", true), true, false)).toBeUndefined()
+  expect(pageShortcut(press("mod+shift", "M", false), false, false)).toBeUndefined()
+  expect(pageShortcut(press("mod+shift", "T", true), true, false)?.key).toBe("t")
 })
 
 test("reloads the focused page on F5 and the platform's reload chord, leaving other R chords to the window", () => {

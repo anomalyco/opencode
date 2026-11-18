@@ -3,6 +3,7 @@ import { MenubarItem, type Plugin } from "@opencode/plugin/gui/main"
 import type { Pane } from "./pane"
 import type { Profile } from "./profile"
 import { RefsStore } from "./refs"
+import { viewportToolbarAvailable } from "./viewport-toolbar-machine"
 import { BrowserPane } from "./ipc"
 import { BrowserProfile } from "./profile/ipc"
 import { BrowserSites, createSitePermissions } from "./site-permissions"
@@ -93,6 +94,7 @@ const setup: Plugin.MainSetup = (ctx) => {
                   // Development builds log each system call for the camera and microphone, so a tester can see that
                   // the system is asked only after a click on Allow.
                   system: createSystemMedia(ctx.app.packaged ? undefined : (line) => ctx.log.write("info", line)),
+                  toolbar: viewportToolbarAvailable(ctx.app.channel),
                   emit: (window, value) => provider.emit("event", value, window),
                 }),
               })
@@ -165,6 +167,8 @@ const setup: Plugin.MainSetup = (ctx) => {
     inspect: async (input, caller) => (await pane()).inspect(caller.window, input.binding, input.tabID, input.enabled),
     highlight: async (input, caller) => (await pane()).highlight(caller.window, input.binding, input.tabID, input.ref),
     zoom: async (input, caller) => (await pane()).zoom(caller.window, input.binding, input.tabID, input.zoom),
+    setViewport: async (input, caller) =>
+      (await pane()).setViewport(caller.window, input.binding, input.tabID, input.viewport),
     site: async (input, caller) => (await pane()).site(caller.window, input.binding, input.tabID),
     clearSite: async (input, caller) => (await pane()).clearSite(caller.window, input.binding, input.tabID),
     clearCache: async (input, caller) => (await pane()).clearCache(caller.window, input.binding, input.tabID, input.address),

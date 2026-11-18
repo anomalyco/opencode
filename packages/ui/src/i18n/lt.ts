@@ -48,6 +48,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "Komentuodamas",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Pridėti komentarą",
+  "ui.lineComment.add": "Pridėti komentarą",
+  "ui.lineComment.actions": "Pažymėto teksto veiksmai",
   "ui.lineComment.contextPlaceholder": "Pridėkite šio pakeitimo kontekstą",
   "ui.lineComment.submit": "komentuoti",
   "ui.lineComment.cancel": "Atšaukti",

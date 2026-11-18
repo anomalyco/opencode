@@ -18,11 +18,11 @@ import { projectSettingsKey, useSettings } from "@/settings/model"
 import { sessionStatus } from "@/shell/layout/project-avatar-state"
 import { ProjectIcon } from "@/shell/layout/project-icon"
 import { createProjectSessionActions } from "@/shell/tabs/project-sessions"
-import { tabKey, useTabs, type Tab } from "@/shell/tabs/tabs"
+import { tabKey, useTabs, type SessionTab, type Tab } from "@/shell/tabs/tabs"
 import { ProjectSessionRow } from "./project-session-row"
 import { createSidebarActivityListener } from "./sidebar-organized"
 import { mergeSidebarSessions } from "./sidebar-sessions"
-import type { TabStripSection } from "./tab-strip"
+import type { TabStripLeading, TabStripSection } from "./tab-strip"
 import { SidebarViewMenu } from "./sidebar-view-menu"
 import {
   SIDEBAR_GROUPINGS,
@@ -95,8 +95,11 @@ function samePlans(a: SectionPlan[], b: SectionPlan[]) {
 
 export type SidebarStripGrouping = {
   sections: TabStripSection[]
-  tabFooter: (tab: Tab) => JSX.Element | undefined
-  tabLabel: (tab: Tab) => string | undefined
+  tabFooter?: (tab: Tab) => JSX.Element | undefined
+  tabLabel?: (tab: Tab) => string | undefined
+  tabMenu?: (tab: SessionTab) => JSX.Element
+  tabMuted?: (tab: SessionTab) => boolean
+  leading?: TabStripLeading
 }
 
 /** The "Customize" vertical sidebar: open tabs and recent sessions from every server, grouped, sorted and filtered. */
@@ -611,7 +614,6 @@ export function SidebarCustomized(props: {
               fallback={
                 <Icon
                   name={group().kind === "server" ? "server" : "outline-dots"}
-                  size="small"
                   class="text-v2-icon-icon-muted"
                 />
               }

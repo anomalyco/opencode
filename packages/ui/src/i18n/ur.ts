@@ -49,6 +49,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "اس پر تبصرہ کیا جا رہا ہے: ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "تبصرہ شامل کریں۔",
+  "ui.lineComment.add": "تبصرہ شامل کریں۔",
+  "ui.lineComment.actions": "انتخاب کی کارروائیاں",
   "ui.lineComment.contextPlaceholder": "اس تبدیلی کا سیاق و سباق شامل کریں",
   "ui.lineComment.submit": "تبصرہ کریں",
   "ui.lineComment.cancel": "منسوخ کریں۔",

@@ -31,6 +31,7 @@ import {
   type PromptAnswer,
   type PromptView,
   type RefusalNotice,
+  type Viewport,
 } from "./ipc"
 import {
   addressFocusTab,
@@ -56,6 +57,8 @@ import {
 
 type Session = Pick<SessionRef, "key">
 
+type Binding = { attempt: number; registration: Registration; choices: Map<Browser.TabID, Viewport> }
+
 /** A session the machine attached: its ref, and the I/O its effects drive. */
 type Drive = {
   ref: SessionRef
@@ -65,18 +68,15 @@ type Drive = {
 
 type ModelState = {
   machine: State
-  /** Each session's page icons and zoom by tab, as this desktop reports them. */
-  pages: Record<string, Record<string, PageDetail | undefined> | undefined>
+  /** Presentation details for the tabs in each desktop binding. */
+  pages: Record<string, Record<string, PageEvent | undefined> | undefined>
   chrome: Record<
     string,
     Record<string, { find?: FindView; notice?: { notice: RefusalNotice; token: string; site?: string }; prompt?: PromptView } | undefined> | undefined
   >
 }
 
-/** A page's icon as a data URL, and its zoom factor, 1 at 100%. */
-type PageDetail = { icon?: string; zoom: number; retryOnly?: boolean }
-
-/** A mounted pane; the newest one answers the reload and inspect commands. */
+/** A mounted pane. Commands target the newest visible pane. */
 type PaneHandle = {
   visible: () => boolean
   address: () => string
@@ -86,6 +86,7 @@ type PaneHandle = {
   inspectable: () => boolean
   /** Turns the element picker on or off. */
   inspect: () => void
+  toggleToolbar: () => void
   /** Focuses the address field and selects its text. */
   focusAddress: () => void
   find: () => void
@@ -127,9 +128,10 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const [state, setState] = createStore<ModelState>({ machine: createInitialState(untrack(ipc)), pages: {}, chrome: {} })
   const machine = () => state.machine
   const [panes, setPanes] = createSignal<readonly PaneHandle[]>([])
+  const visiblePane = () => panes().find((handle) => handle.visible())
   // The I/O handles the machine's effects drive. They are never read as state.
   const drives = new Map<string, Drive>()
-  const registrations = new Map<string, { attempt: number; registration: Registration }>()
+  const registrations = new Map<string, Binding>()
   const registerTimers = new Map<string, ReturnType<typeof setTimeout>>()
   const retryTimers = new Map<string, ReturnType<typeof setTimeout>>()
   const revealTimers = new Map<string, ReturnType<typeof setTimeout>>()
@@ -181,6 +183,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       if (current?.attempt !== effect.attempt) return
       registrations.delete(effect.sessionKey)
       setState("chrome", effect.sessionKey, undefined)
+      setState("pages", effect.sessionKey, undefined)
       current.registration.close()
 
       return
@@ -272,6 +275,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
     registrations.set(sessionKey, {
       attempt,
+      choices: new Map(),
       registration: openBinding({
         client: current,
         listen(binding, listener) {
@@ -354,10 +358,10 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     // Only the pane on screen holds the page that had focus.
     if (sessions.current()?.key !== sessionKey) return
 
-    if (event.type === "shortcut") return panes()[0]?.press(event)
+    if (event.type === "shortcut") return visiblePane()?.press(event)
 
-    if (event.type === "hardReload") return panes()[0]?.visible() ? panes()[0]?.reload(true) : undefined
-    panes()[0]?.focused()
+    if (event.type === "hardReload") return visiblePane()?.reload(true)
+    visiblePane()?.focused()
   }
 
   const send = (effect: Extract<MachineEffect, { type: "send-command" }>) => {
@@ -409,11 +413,20 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     const keep = effect.keep ? new Set<string>(effect.keep) : undefined
 
     batch(() => {
-      if (keep)
+      if (keep) {
+        const choices = registrations.get(effect.sessionKey)?.choices
+        choices?.forEach((_, id) => {
+          if (!keep.has(id)) choices.delete(id)
+        })
+        Object.keys(state.pages[effect.sessionKey] ?? {}).forEach((id) => {
+          if (!keep.has(id)) setState("pages", effect.sessionKey, id, undefined)
+        })
         layout
           .stored(ref)
           .filter((tabID) => !keep.has(tabID))
           .forEach((tabID) => layout.close(key(tabID), ref))
+      }
+
       effect.open.forEach((tabID) => {
         if (layout.state(key(tabID), ref) === "closed") layout.open(key(tabID), ref, { tab: "append" })
       })
@@ -444,10 +457,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   }
 
   const page = (sessionKey: string, event: PageEvent) => {
-    setState("pages", sessionKey, (pages) => ({
-      ...pages,
-      [event.tabID]: { icon: event.icon, zoom: event.zoom, retryOnly: event.retryOnly },
-    }))
+    setState("pages", sessionKey, { [event.tabID]: event })
     const url = sessionTab(machine(), sessionKey, event.tabID)?.url
     const visits = url && event.icon ? withIcon(history.value.visits, url, event.icon) : undefined
 
@@ -607,6 +617,14 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
   const registration = (session: Session) => registrations.get(session.key)?.registration
 
+  const requireBinding = (session: Session) => {
+    const current = registrations.get(session.key)
+
+    if (!current) throw new Error("browser.pane.unavailable")
+
+    return current
+  }
+
   const command = (session: Session, action: Browser.Action) =>
     dispatch({ type: "session.command", sessionKey: session.key, action, focusAddress: false })
 
@@ -675,7 +693,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
       return true
     },
-    /** A page's icon and zoom, once this desktop reported them. */
+    /** The page's presentation details, once reported by its native tab. */
     page: (session: Session, tabID: string) => state.pages[session.key]?.[tabID],
     search: (session: Session, tabID: string) => state.chrome[session.key]?.[tabID]?.find,
     reviewLink(session: SessionRef, url: string) {
@@ -763,6 +781,33 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     },
     zoom(session: Session, tabID: Browser.TabID, zoom: Zoom) {
       registration(session)?.zoom(tabID, zoom)
+    },
+    async setViewport(session: Session, tabID: Browser.TabID, viewport: Viewport) {
+      const current = requireBinding(session)
+      current.choices.set(tabID, viewport)
+
+      return current.registration.setViewport(tabID, viewport).catch((error) => {
+        if (current.choices.get(tabID) === viewport) current.choices.delete(tabID)
+        throw error
+      })
+    },
+    async toggleViewport(session: Session, tabID: Browser.TabID, open: boolean) {
+      const current = requireBinding(session)
+
+      const page = state.pages[session.key]?.[tabID]
+
+      if (open) {
+        const choice = current.choices.get(tabID)
+
+        if (choice?.mode !== "fixed" || page?.zoom !== 1) return
+
+        return current.registration.setViewport(tabID, choice)
+      }
+
+      // A reattached page can already have a device. Keep that choice unless a newer edit is in flight.
+      if (!current.choices.has(tabID) && page?.viewport.mode === "fixed") current.choices.set(tabID, page.viewport)
+
+      return current.registration.setViewport(tabID, { mode: "auto" })
     },
     /** The page's cookie count; undefined while the pane cannot answer. */
     site: (session: Session, tabID: Browser.TabID) => registration(session)?.site(tabID),
@@ -880,7 +925,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
       if (target.ref) registration(session)?.highlight(item.id, target.ref)
     },
-    pane: () => panes()[0],
+    pane: () => visiblePane() ?? panes()[0],
     mount(handle: PaneHandle) {
       setPanes((list) => [handle, ...list])
 

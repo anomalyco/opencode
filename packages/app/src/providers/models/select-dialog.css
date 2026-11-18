@@ -78,14 +78,14 @@
     }
   }
 
-  /* Like a model row: 6px inset, a 16px icon slot and a 6px gap, so the query starts where the model names do. */
+  /* Like a model row: 8px inset, a 16px icon slot and a 6px gap, so the query starts where the model names do. */
   [data-component="search-list"] [data-slot="search-list-search"] [data-slot="text-input-v2-value"] {
     gap: 6px;
   }
 
   [data-component="search-list"] [data-slot="search-list-search"] [data-slot="text-input-v2-leading-icon"] {
-    width: 22px;
-    padding-inline-start: 6px;
+    width: 24px;
+    padding-inline-start: 8px;
   }
 
   /* The stuck header's gradient replaces it; the list measures sections for it, and here they have no box. */

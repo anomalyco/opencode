@@ -1225,10 +1225,6 @@ export const dict = {
   "sidebar.recent.unpin": "Bỏ ghim",
   "sidebar.recent.moveUp": "Di chuyển lên",
   "sidebar.recent.moveDown": "Di chuyển xuống",
-  "settings.experimental.row.newIcons.title": "Biểu tượng mới",
-  "settings.experimental.row.newIcons.description": "Xem trước bộ biểu tượng cập nhật",
-  "settings.experimental.row.foldUserMessages.title": "Thu gọn tin nhắn dài",
-  "settings.experimental.row.foldUserMessages.description": "Thu gọn tin nhắn của bạn dài quá 12 dòng sau nút Đọc thêm",
   "settings.experimental.row.newTimeline.title": "Dòng thời gian mới",
   "settings.experimental.row.newTimeline.description":
     "Dòng thời gian phiên được thiết kế lại, nhóm những gì tác nhân đã làm, với một dòng trạng thái bên dưới lượt",
@@ -1358,6 +1354,8 @@ export const dict = {
   "settings.timeline.description.compact":
     "Hiển thị tác nhân phụ riêng biệt. Nhóm hoạt động khác với chi tiết được thu gọn.",
   "settings.timeline.description.quiet": "Hiển thị tác nhân phụ riêng biệt và nhóm các chỉnh sửa. Ẩn hoạt động khác.",
+  "settings.timeline.row.foldUserMessages.title": "Thu gọn tin nhắn dài",
+  "settings.timeline.row.foldUserMessages.description": "Thu gọn tin nhắn của bạn dài quá 12 dòng sau nút Đọc thêm",
   "settings.timeline.row.turnDiffs.title": "Tệp đã thay đổi",
   "settings.timeline.row.turnDiffs.description": "Liệt kê các tệp mỗi lượt đã thay đổi khi lượt đó kết thúc",
   "settings.timeline.category.commentary": "Bình luận",

@@ -87,6 +87,7 @@ void electron.app.whenReady().then(async () => {
 
   const page = createBrowserPage(win, {
     id: tabID,
+    toolbar: false,
     partition: "page-fixture",
     network: null,
     publish: () => undefined,
@@ -204,6 +205,7 @@ void electron.app.whenReady().then(async () => {
   } as unknown as Profile
 
   const pane = createBrowserPane({
+    toolbar: false,
     windows: { get: (id) => (id === win.id ? win : undefined), list: () => [win], focused: () => win, on: () => () => undefined },
     t: (key) => key,
     serverEndpoints: {

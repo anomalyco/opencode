@@ -1230,11 +1230,6 @@ export const dict = {
   "sidebar.recent.unpin": "Shfikso",
   "sidebar.recent.moveUp": "Lëviz lart",
   "sidebar.recent.moveDown": "Lëviz poshtë",
-  "settings.experimental.row.newIcons.title": "Ikona të reja",
-  "settings.experimental.row.newIcons.description": "Shikoni paraprakisht grupin e përditësuar të ikonave",
-  "settings.experimental.row.foldUserMessages.title": "Palos mesazhet e gjata",
-  "settings.experimental.row.foldUserMessages.description":
-    "Palos mesazhet tuaja mbi 12 rreshta pas një butoni Lexo më shumë",
   "settings.experimental.row.newTimeline.title": "Rrjedhë kohore e re",
   "settings.experimental.row.newTimeline.description":
     "Një rrjedhë kohore e ridizajnuar e sesionit që grupon atë që bëri agjenti, me një rresht statusi poshtë raundit",
@@ -1366,6 +1361,9 @@ export const dict = {
   "settings.timeline.description.compact":
     "Shfaq nënagjentët veç e veç. Grupo aktivitetet e tjera me detajet të palosura.",
   "settings.timeline.description.quiet": "Shfaq nënagjentët veç e veç dhe grupo redaktimet. Fshih aktivitetet e tjera.",
+  "settings.timeline.row.foldUserMessages.title": "Palos mesazhet e gjata",
+  "settings.timeline.row.foldUserMessages.description":
+    "Palos mesazhet tuaja mbi 12 rreshta pas një butoni Lexo më shumë",
   "settings.timeline.row.turnDiffs.title": "Skedarët e ndryshuar",
   "settings.timeline.row.turnDiffs.description": "Listo skedarët që ndryshoi çdo raund kur përfundon",
   "settings.timeline.category.commentary": "Komentet",

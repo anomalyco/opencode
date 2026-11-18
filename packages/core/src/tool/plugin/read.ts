@@ -10,6 +10,7 @@ import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Flag } from "../../flag.js"
 import { Location } from "../../location.js"
 import { FileAccess } from "../../file-access.js"
+import { InstructionDiscovery } from "../../instruction-discovery.js"
 import { Permission } from "../../permission.js"
 import { SessionInstructions } from "../../session/instructions.js"
 import { AbsolutePath } from "../../schema.js"
@@ -19,7 +20,6 @@ import { ReadToolFileSystem } from "../read-filesystem.js"
 import { Environment } from "../../environment/index.js"
 
 export const name = "read"
-const FILENAME = "AGENTS.md"
 const LocationInput = Schema.Struct({
   path: Schema.String.annotate({ description: "File or directory to read" }),
   offset: ReadToolFileSystem.PageInput.fields.offset.annotate({
@@ -46,13 +46,14 @@ export const Plugin = {
     const config = yield* Config.Service
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
     const flags = yield* Flag.Service
+    const discovery = yield* InstructionDiscovery.Service
 
     yield* ctx.tool
       .transform((editor) => {
         const codeMode = flags.resolve(loaded.entries).full_codemode.enabled
         editor.add({
           name,
-          options: { codemode: codeMode },
+          options: codeMode ? { codemode: true, pinned: true } : { codemode: false },
           description: [
             "Read the contents of a file or directory. Supports text files, images, and PDFs.",
             ...(codeMode
@@ -68,8 +69,7 @@ export const Plugin = {
           output: ReadToolFileSystem.Output,
           execute: (input, context) => {
             return Effect.gen(function* () {
-              if (input.limit === 0)
-                return yield* new ToolFailure({ message: "Limit must be a positive integer" })
+              if (input.limit === 0) return yield* new ToolFailure({ message: "Limit must be a positive integer" })
               if (Skill.isUri(input.path)) {
                 const parsed = parseSkillUri(input.path)
                 if (!parsed) return yield* new ToolFailure({ message: `File not found: ${input.path}` })
@@ -143,7 +143,7 @@ export const Plugin = {
                     }),
                 ),
               )
-              // After a successful read, discover nearby AGENTS.md walking up to the Location
+              // After a successful read, discover nearby AGENTS.md (or CLAUDE.md) walking up to the Location
               // root exclusive and inject them as durable synthetic instructions. For a
               // directory listing the walk starts at the directory itself (so its own AGENTS.md
               // is discovered); for a file it starts at the file's dirname. External reads are
@@ -155,14 +155,15 @@ export const Plugin = {
                 // The Location and its ancestors are already supplied by initial instructions,
                 // even when an upward walk from elsewhere in the project cannot reach root.
                 const discovered = yield* fs.up({
-                  targets: [FILENAME],
+                  targets: InstructionDiscovery.filenames(discovery),
                   start: result.content.type === "directory" ? resolved : dirname(resolved),
                   stop: root,
                   type: "file",
                 })
-                const candidates = (yield* Effect.forEach(discovered, fs.resolve)).filter(
-                  (file) => !FSUtil.contains(dirname(file), root) && file !== resolved,
-                )
+                const candidates = (yield* Effect.forEach(
+                  InstructionDiscovery.preferAgents(discovered),
+                  fs.resolve,
+                )).filter((file) => !FSUtil.contains(dirname(file), root) && file !== resolved)
                 if (candidates.length === 0) return
                 yield* sessionInstructions.load({ sessionID: context.sessionID, paths: candidates })
               }).pipe(

@@ -1,6 +1,8 @@
 import { describe, expect } from "bun:test"
 import { Agent } from "@opencode/core/agent"
 import { Permission } from "@opencode/core/permission"
+import { Flag } from "@opencode/core/flag"
+import { AbsolutePath } from "@opencode/core/schema"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Image } from "@opencode/core/image"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
@@ -14,6 +16,7 @@ import { codeModeListings, executeTool, toolDefinitions, toolNodeReplacements } 
 import { Deferred, Effect, Exit, Fiber, Layer, Logger, Schema, SchemaGetter, SchemaIssue, Scope } from "effect"
 import { z } from "zod"
 import { testEffect } from "./lib/effect"
+import { location } from "./fixture/location"
 
 const imageStore = Layer.mock(Image.Service, {
   normalize: (resource, content) => {
@@ -42,6 +45,7 @@ const registryLayer = AppNodeBuilder.build(LayerNode.group([Tool.node, PluginHoo
   Image.node.replace(imageStore),
 ])
 const it = testEffect(registryLayer)
+const codeModeIt = testEffect(registryLayer.pipe(Layer.provide(Layer.succeed(Flag.Overrides, "full_codemode"))))
 const identity = {
   agent: Agent.ID.make("build"),
   messageID: SessionMessage.ID.make("msg_registry"),
@@ -73,6 +77,31 @@ const transform = (service: Tool.Interface, tools: Readonly<Record<string, Info>
   service.transform((editor) =>
     Object.entries(tools).forEach(([name, tool]) => editor.add({ ...tool, name, options: options ?? tool.options })),
   )
+
+describe("Code Mode path", () => {
+  const session = location({ directory: AbsolutePath.make("/session/dir") })
+  const typeOfPath = Effect.gen(function* () {
+    const tools = yield* Tool.Service
+    const snapshot = yield* tools.snapshot(undefined, session)
+    const result = yield* snapshot.execute({
+      ...call("execute"),
+      call: { type: "tool-call", id: "call-path", name: "execute", input: { code: `return [typeof path]` } },
+    })
+    return JSON.parse(result.output.output)
+  })
+
+  it.effect("is not available without full_codemode", () =>
+    Effect.gen(function* () {
+      expect(yield* typeOfPath).toEqual(["undefined"])
+    }),
+  )
+
+  codeModeIt.effect("is available with full_codemode", () =>
+    Effect.gen(function* () {
+      expect(yield* typeOfPath).toEqual(["object"])
+    }),
+  )
+})
 
 describe("Tool", () => {
   it.effect("reads the current editor tools by effective name", () =>

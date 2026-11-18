@@ -215,7 +215,7 @@ function MarkdownCopyButton(props: { labels: CodeLabels; copied: boolean }) {
         aria-label={label()}
         icon={
           <>
-            <Icon name="outline-copy" data-copy-icon />
+            <Icon name="copy" data-copy-icon />
             <Icon name="check" data-check-icon />
           </>
         }

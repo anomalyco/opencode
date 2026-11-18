@@ -3,7 +3,7 @@ import { createEventListener } from "@solid-primitives/event-listener"
 import { embedBounds, overlaps } from "./embed-geometry"
 import { frameLoop, observeReducedMotion, prefersReducedMotion } from "@opencode/ui/motion"
 import type { EmbedProps, Embeds } from "@opencode/plugin/gui"
-import type { Bridge } from "@opencode/plugin/gui/host"
+import type { Bridge, BridgeLayout } from "@opencode/plugin/gui/host"
 import {
   createEmbedStillState,
   INITIAL_FLIGHT_STATE,
@@ -305,6 +305,8 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
       dispatchSnapshot({ type: "sync", id, visible: props.visible, shown, covered: cover })
   }
 
+  const scrollport = () => element?.parentElement?.closest<HTMLElement>("[data-embed-clip]")
+
   const measure = () => {
     if (!element) return
     const id = props.id
@@ -313,18 +315,24 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
     const rect = element.getBoundingClientRect()
     const zoom = props.input.zoom()
     const bounds = embedBounds(rect, zoom)
+    // A scaled preview scrolls the box inside an ancestor; only the part inside that scrollport is shown.
+    const port = scrollport()
+    const clip = port && scrollClip(port, rect, zoom)
 
     const shown =
       props.visible &&
       current().documentVisible &&
       !props.input.moving() &&
-      bounds.width > 0 &&
-      bounds.height > 0 &&
-      overlaps(rect, { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight })
+      (clip
+        ? clip.width > 0 && clip.height > 0
+        : bounds.width > 0 && bounds.height > 0 && overlaps(rect, { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight }))
 
     // A dialog's scrim covers the box like floating content does, so it dims a still of the page
     // instead of a blank box, and the page does not blink out and back as the dialog opens and closes.
-    const cover = !!props.frozen || (props.input.dialog() && !element.closest('[role="dialog"], [role="alertdialog"], dialog[open]')) || covered(rect)
+    const cover =
+      !!props.frozen ||
+      (props.input.dialog() && !element.closest('[role="dialog"], [role="alertdialog"], dialog[open]')) ||
+      covered(clip ? new DOMRect(clip.x / zoom, clip.y / zoom, clip.width / zoom, clip.height / zoom) : rect)
 
     // The cutout exposes the app backdrop outside the rounded card, not the embed inside it.
     const color =
@@ -334,11 +342,11 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
     const ring = props.radius ? cardRing(element) : undefined
     const viewport = { width: Math.round(window.innerWidth * zoom), height: Math.round(window.innerHeight * zoom) }
 
-    return { id, shown, cover, bounds, color, ring, viewport, rect, zoom }
+    return { id, shown, cover, bounds, clip, color, ring, viewport, rect, zoom }
   }
 
   const place = (boxLayout: NonNullable<ReturnType<typeof measure>>) => {
-    const { id, shown, cover, bounds, color, ring, viewport, rect, zoom } = boxLayout
+    const { id, shown, cover, bounds, clip, color, ring, viewport, rect, zoom } = boxLayout
     syncSnapshot(id, shown, cover)
     const still = current().still
     const kept = still.status !== "disposed" && still.kept
@@ -358,7 +366,7 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
     setCoverStill(warm)
     const visible = shown && !selectSnapshotHidesNative(snapshot, id, cover, !!warm)
 
-    const next = `${id}:${visible}:${bounds.x}:${bounds.y}:${bounds.width}:${bounds.height}:${viewport.width}:${viewport.height}:${color}:${ring?.color}:${ring?.width}:${window.devicePixelRatio}`
+    const next = `${id}:${visible}:${bounds.x}:${bounds.y}:${bounds.width}:${bounds.height}:${clip?.x}:${clip?.y}:${clip?.width}:${clip?.height}:${viewport.width}:${viewport.height}:${color}:${ring?.color}:${ring?.width}:${window.devicePixelRatio}`
 
     if (next === layout) return
     layout = next
@@ -384,9 +392,10 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
 
     if (!visible && selectStillOnscreen(current().still)) dispatchStill(OFFSCREEN_STILL_EVENT)
 
-    const box = {
+    const box: BridgeLayout = {
       visible,
       bounds,
+      ...(clip && { clip }),
       viewport,
       radius: Math.round((props.radius ?? 0) * zoom),
     }
@@ -705,6 +714,24 @@ function floats(node: Element, rect: DOMRect, depth: number): boolean {
   }
 
   return depth > 0 && Array.from(node.children).some((child) => floats(child, rect, depth - 1))
+}
+
+// The client box excludes the scrollbar track, including a left-side RTL scrollbar.
+function scrollClip(port: HTMLElement, rect: DOMRect, zoom: number) {
+  const area = port.getBoundingClientRect()
+  const left = area.left + port.clientLeft
+  const top = area.top + port.clientTop
+  const x = Math.max(0, Math.round(rect.left * zoom), Math.ceil(left * zoom))
+  const y = Math.max(0, Math.round(rect.top * zoom), Math.ceil(top * zoom))
+  const right = Math.min(window.innerWidth, left + port.clientWidth)
+  const bottom = Math.min(window.innerHeight, top + port.clientHeight)
+
+  return {
+    x,
+    y,
+    width: Math.max(0, Math.min(Math.round(rect.right * zoom), Math.floor(right * zoom)) - x),
+    height: Math.max(0, Math.min(Math.round(rect.bottom * zoom), Math.floor(bottom * zoom)) - y),
+  }
 }
 
 // Decodes a JPEG still, so it paints in the frame it enters the DOM. Undefined when there is none or it cannot decode.

@@ -536,7 +536,6 @@ function SectionHeader(props: {
       <Show when={props.onToggle}>
         <Icon
           name="fill-triangle-down"
-          size="small"
           class="shrink-0 transition-transform"
           classList={{ "-rotate-90 rtl:rotate-90": !props.expanded }}
         />

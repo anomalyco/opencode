@@ -433,7 +433,7 @@ describe("WebFetchTool registration", () => {
       expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["webfetch", "execute"])
       expect(yield* executeTool(registry, call({ url, format: "text", timeout: 4 }))).toEqual({
         status: "completed",
-        output: { url, contentType: "text/plain", format: "text", output: "hello" },
+        output: { contentType: "text/plain", output: "hello" },
         content: [{ type: "text", text: "hello" }],
         metadata: { contentType: "text/plain" },
       })

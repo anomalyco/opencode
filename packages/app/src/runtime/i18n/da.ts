@@ -1280,11 +1280,6 @@ export const dict = {
   "sidebar.recent.unpin": "Frigør",
   "sidebar.recent.moveUp": "Flyt op",
   "sidebar.recent.moveDown": "Flyt ned",
-  "settings.experimental.row.newIcons.title": "Nye ikoner",
-  "settings.experimental.row.newIcons.description": "Prøv det opdaterede ikonsæt",
-  "settings.experimental.row.foldUserMessages.title": "Fold lange beskeder sammen",
-  "settings.experimental.row.foldUserMessages.description":
-    "Fold dine beskeder på over 12 linjer sammen bag en Læs mere-knap",
   "settings.experimental.row.newTimeline.title": "Ny tidslinje",
   "settings.experimental.row.newTimeline.description":
     "En nydesignet sessionstidslinje, der grupperer, hvad agenten gjorde, med én statuslinje under turen",
@@ -1413,6 +1408,9 @@ export const dict = {
   "settings.timeline.row.width.wide": "Bred",
   "settings.timeline.description.compact": "Vis underagenter separat. Gruppér anden aktivitet med detaljer skjult.",
   "settings.timeline.description.quiet": "Vis underagenter separat, og gruppér redigeringer. Skjul anden aktivitet.",
+  "settings.timeline.row.foldUserMessages.title": "Fold lange beskeder sammen",
+  "settings.timeline.row.foldUserMessages.description":
+    "Fold dine beskeder på over 12 linjer sammen bag en Læs mere-knap",
   "settings.timeline.row.turnDiffs.title": "Ændrede filer",
   "settings.timeline.row.turnDiffs.description": "Vis de filer, hver tur ændrede, når den er færdig",
   "settings.timeline.category.commentary": "Kommentarer",

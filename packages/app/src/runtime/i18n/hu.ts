@@ -1239,11 +1239,6 @@ export const dict = {
   "sidebar.recent.unpin": "Rögzítés feloldása",
   "sidebar.recent.moveUp": "Mozgatás felfelé",
   "sidebar.recent.moveDown": "Mozgatás lefelé",
-  "settings.experimental.row.newIcons.title": "Új ikonok",
-  "settings.experimental.row.newIcons.description": "A frissített ikonkészlet előnézete",
-  "settings.experimental.row.foldUserMessages.title": "Hosszú üzenetek összecsukása",
-  "settings.experimental.row.foldUserMessages.description":
-    "A 12 sornál hosszabb üzenetei egy Tovább gomb mögé kerülnek",
   "settings.experimental.row.newTimeline.title": "Új idővonal",
   "settings.experimental.row.newTimeline.description":
     "Újratervezett munkamenet-idővonal, amely csoportosítja az ügynök tevékenységét, a kör alatt egyetlen állapotsorral",
@@ -1375,6 +1370,9 @@ export const dict = {
     "Az alügynökök külön megjelenítése. Az egyéb tevékenységek csoportosítása összecsukott részletekkel.",
   "settings.timeline.description.quiet":
     "Az alügynökök külön megjelenítése és a szerkesztések csoportosítása. Az egyéb tevékenységek elrejtése.",
+  "settings.timeline.row.foldUserMessages.title": "Hosszú üzenetek összecsukása",
+  "settings.timeline.row.foldUserMessages.description":
+    "A 12 sornál hosszabb üzenetei egy Tovább gomb mögé kerülnek",
   "settings.timeline.row.turnDiffs.title": "Módosított fájlok",
   "settings.timeline.row.turnDiffs.description": "Az egyes körök által módosított fájlok listázása a kör végén",
   "settings.timeline.category.commentary": "Kommentár",

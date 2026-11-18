@@ -1336,11 +1336,6 @@ export const dict = {
   "sidebar.recent.unpin": "Открепить",
   "sidebar.recent.moveUp": "Переместить вверх",
   "sidebar.recent.moveDown": "Переместить вниз",
-  "settings.experimental.row.newIcons.title": "Новые значки",
-  "settings.experimental.row.newIcons.description": "Предпросмотр обновлённого набора значков",
-  "settings.experimental.row.foldUserMessages.title": "Сворачивать длинные сообщения",
-  "settings.experimental.row.foldUserMessages.description":
-    "Сворачивать ваши сообщения длиннее 12 строк под кнопку «Читать далее»",
   "settings.experimental.row.newTimeline.title": "Новая хронология",
   "settings.experimental.row.newTimeline.description":
     "Переработанная хронология сессии, которая группирует действия агента и показывает одну строку статуса под ходом",
@@ -1473,6 +1468,9 @@ export const dict = {
     "Показывать субагентов отдельно. Группировать остальную активность со свёрнутыми подробностями.",
   "settings.timeline.description.quiet":
     "Показывать субагентов отдельно и группировать правки. Скрывать остальную активность.",
+  "settings.timeline.row.foldUserMessages.title": "Сворачивать длинные сообщения",
+  "settings.timeline.row.foldUserMessages.description":
+    "Сворачивать ваши сообщения длиннее 12 строк под кнопку «Читать далее»",
   "settings.timeline.row.turnDiffs.title": "Изменённые файлы",
   "settings.timeline.row.turnDiffs.description": "Показывать файлы, изменённые за ход, после его завершения",
   "settings.timeline.category.commentary": "Комментарии",
