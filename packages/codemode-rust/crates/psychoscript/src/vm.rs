@@ -3938,9 +3938,17 @@ fn to_i32(x: f64) -> i32 {
 }
 
 pub fn js_rem(x: f64, y: f64) -> f64 {
-    const EXACT: f64 = 9_007_199_254_740_992.0;
-    if x.fract() == 0.0 && y.fract() == 0.0 && x.abs() < EXACT && y.abs() < EXACT && y != 0.0 {
-        let r = (x as i64 % y as i64) as f64;
+    const EXACT: u64 = 1 << 53;
+    // Integers below 2^53 convert exactly both ways (NaN converts to 0 and fails the check), and their remainder is
+    // the integer one.
+    let (a, b) = (x as i64, y as i64);
+    if a as f64 == x
+        && b as f64 == y
+        && b != 0
+        && a.unsigned_abs() < EXACT
+        && b.unsigned_abs() < EXACT
+    {
+        let r = (a % b) as f64;
         return if r == 0.0 && x.is_sign_negative() {
             -0.0
         } else {

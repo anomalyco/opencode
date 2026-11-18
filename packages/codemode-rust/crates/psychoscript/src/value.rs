@@ -114,6 +114,28 @@ fn equals_decimal(x: f64, digits: &str, q: i32) -> bool {
     r.unwrap_or(false)
 }
 
+/// An integer's decimal digits, without the formatting machinery a hot `"k" + i` would pay for.
+#[inline]
+pub fn write_int(out: &mut String, n: i64) {
+    let mut buf = [0u8; 20];
+    let mut at = buf.len();
+    let mut m = n.unsigned_abs();
+    loop {
+        at -= 1;
+        buf[at] = b'0' + (m % 10) as u8;
+        m /= 10;
+        if m == 0 {
+            break;
+        }
+    }
+    if n < 0 {
+        out.push('-');
+    }
+    for &b in &buf[at..] {
+        out.push(b as char);
+    }
+}
+
 /// `Number.prototype.toString()` with radix 10.
 pub fn num_to_string(x: f64) -> String {
     let mut out = String::new();
@@ -135,7 +157,7 @@ pub fn write_num(out: &mut String, x: f64) {
         return;
     }
     if x.fract() == 0.0 && x.abs() < 9_007_199_254_740_992.0 {
-        let _ = write!(out, "{}", x as i64);
+        write_int(out, x as i64);
         return;
     }
     if x < 0.0 {
