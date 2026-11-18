@@ -1,5 +1,4 @@
-//! Message actions dialog (E.10b, row DLG38): `routes/session/dialog-message.tsx`. A click on a user message, or
-//! Enter in the timeline (E.10a), opens it: jump to the message, revert to it, copy its text, or fork before it.
+//! Jump to, revert, copy, or fork from a user message.
 
 use opencode_api::generated::{SessionMessageAssistantContentItem, SessionMessageID, SessionRevertStageInput};
 use opencode_ui::dialog::Dialogs;

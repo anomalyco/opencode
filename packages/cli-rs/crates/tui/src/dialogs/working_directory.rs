@@ -1,4 +1,4 @@
-//! TypeScript: `ui/working-directory-actions.tsx`.
+//! Working-directory actions and clipboard export.
 
 use crate::prelude::*;
 
@@ -38,7 +38,7 @@ fn options(tui: &Rc<Tui>, directory: &str) -> Vec<SelectOption<String>> {
     vec![
         SelectOption::new("Copy path", "location.copy".to_owned()).description(directory).on_select(action(
             |tui, directory| {
-                // TS closes the dialog only once the write succeeded.
+                // Close only on a successful copy.
                 if crate::features::selection::write(tui, directory) {
                     tui.dialogs.clear();
                     tui.toasts.show(ToastOptions::new(Variant::Info, "Path copied to clipboard"));

@@ -1,14 +1,11 @@
-//! Debug dialog (E.18a): `packages/tui/src/component/dialog-debug.tsx`.
-//!
-//! The facts to paste into a bug report, one per row, and a copy action (`c`) that
-//! puts them on the clipboard. Rows are not click-to-copy, so a mouse selection still copies a single value.
+//! Debug details and clipboard export for bug reports.
 
 use opencode_ui::dialog::{DIALOG_INSET, FooterAction, FooterProps, footer, layout_view};
 use opencode_util::time;
 
 use crate::prelude::*;
 
-/// Like the TypeScript client, a build without `OPENCODE_VERSION` reports `local`.
+/// Builds without an embedded version report `local`.
 pub const VERSION: &str = match option_env!("OPENCODE_VERSION") {
     Some(version) => version,
     None => "local",
@@ -115,7 +112,7 @@ pub fn show(tui: &Tui) {
     );
 }
 
-/// Redraws the footer after the current event, since a footer action runs inside the footer it replaces.
+/// Defer redraw until the action returns; the redraw replaces its own footer.
 fn redraw(tui: &Weak<Tui>, hook: &Hook) {
     let (Some(tui), Some(draw)) = (tui.upgrade(), hook.borrow().as_ref().and_then(Weak::upgrade)) else { return };
     tui.app.defer(move |_| draw());

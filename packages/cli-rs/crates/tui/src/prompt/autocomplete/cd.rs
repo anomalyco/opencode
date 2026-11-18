@@ -1,6 +1,4 @@
-//! `/cd` (`session.cd`, row P11; `component/prompt/index.tsx:265-315`): a session moves to the
-//! directory; on home, the next session's directory changes. Either way the directory joins the
-//! project's recents, which the `/cd` argument completion lists first.
+//! `/cd` moves the current session or selects the directory of the next session on home.
 
 use opencode_api::generated::{AbsolutePath, LocationGetInput, LocationQueryInput, SessionMoveInput};
 use opencode_ui::keymap::Slash;

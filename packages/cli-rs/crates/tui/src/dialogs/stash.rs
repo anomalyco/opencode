@@ -1,8 +1,4 @@
-//! Stash dialog (E.4, row DLG20): `packages/tui/src/component/dialog-stash.tsx`.
-//!
-//! "Stash": the stashed prompts, newest first, each with its first line, when it was stashed, and
-//! `~N lines` for longer ones. Choosing one takes it out of the stash and hands it to the prompt;
-//! `stash.delete` (Ctrl+D) deletes on the second press.
+//! Restore or delete stashed prompts.
 
 use opencode_ui::select::{Select, SelectAction};
 use opencode_util::time::Zone;

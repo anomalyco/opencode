@@ -1,5 +1,4 @@
-//! Free models dialog (E.16): `component/dialog-model-free.tsx`, the model picker while no provider is
-//! connected.
+//! Model picker for users without a connected provider.
 
 use opencode_api::generated::ModelInfoStatus;
 use opencode_local::model_pref::Model;

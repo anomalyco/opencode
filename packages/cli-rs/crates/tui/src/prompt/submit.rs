@@ -1,8 +1,4 @@
-//! Submit, queue, and steer (E.2, rows P02 and P07; `component/prompt/index.tsx:1098-1405`).
-//!
-//! A submit snapshots the prompt and clears it at once; the requests then run on the runtime, and a
-//! failure puts the prompt back unless something new was typed. On home, it creates the session
-//! first (optimistically, so the session opens at once) and the prompt waits for the creation.
+//! Submit, queue, and steer prompts. Restore the snapshot on failure only if the user has not started a new draft.
 
 use indexmap::IndexMap;
 use opencode_api::client::Client;
@@ -32,7 +28,7 @@ pub fn submit(prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
 }
 
 fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
-    // A staged worktree is being created; its submit runs once it exists (E.11b).
+    // Submit after the staged worktree exists.
     if prompt.staging.creating() {
         return false;
     }
@@ -68,7 +64,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
         });
         return true;
     }
-    // The editor context goes once, before the prompt it came with (E.5).
+    // Include editor context once, before the prompt.
     let editor = prompt
         .editor_context(tui)
         .filter(|_| tui.prompt.editor.label_state() == super::editor_context::LabelState::Pending);
@@ -78,7 +74,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
     }
 
     let Some(catalog) = prompt.catalog.borrow().clone() else {
-        // Sent once the catalogs load, as `--prompt` is, unless the text changes first. TS drops it.
+        // Retry when catalogs load only if the prompt text still matches.
         *prompt.startup.borrow_mut() = Some((prompt.textarea.text(), delivery));
         return true;
     };
@@ -109,8 +105,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
     let head = slash_head(&text);
     let command = head.as_ref().filter(|(name, _)| catalog.commands.iter().any(|command| command == name)).cloned();
 
-    // Snapshot, then clear before any request: text typed meanwhile survives, and history records
-    // exactly what was sent.
+    // Snapshot before starting the request so new typing survives and history records the sent content.
     let entry = prompt.snapshot();
     let (files, agents, skills) = (
         serde_json::from_value(super::attach::files_for_server(&entry, tui.startup.args.local)).ok(),
@@ -130,7 +125,7 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
         let staged = super::r#move::create_staged(tui, prompt, move |tui, prompt, directory| {
             let typed = prompt.textarea.text();
             if !typed.is_empty() {
-                // Typed while the worktree was created: kept as home's draft.
+                // Preserve text typed during worktree creation as the home draft.
                 let mut draft = prompt.snapshot();
                 draft["text"] = Value::String(typed);
                 tui.prompt.drafts.save(None, Draft { prompt: draft, cursor: u32::MAX });
@@ -400,7 +395,7 @@ impl Failure {
     }
 }
 
-/// Shows the error, also after the composer unmounted, and restores the prompt unless something new was typed.
+/// Report submission failure even after unmount; restore the draft only if no new text replaces it.
 fn fail(tui: &std::rc::Weak<Tui>, prompt: &std::rc::Weak<Inner>, title: &str, error: &Error, entry: &Value) {
     let Some(tui) = tui.upgrade() else { return };
     tui.toasts.show(ToastOptions::new(Variant::Error, error.tui_message()).title(title));

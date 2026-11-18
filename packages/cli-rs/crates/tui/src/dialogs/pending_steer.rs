@@ -1,6 +1,4 @@
-//! Pending steer dialog (E.10b, row DLG40): a click on a user message still waiting to steer
-//! (`routes/session/index.tsx:2398-2414`). "Move to queue" queues it and "Delete" cancels it; the dialog closes once
-//! the server took the change.
+//! Move a pending steer back into the queue or delete it.
 
 use crate::prelude::*;
 use crate::routes::session::queued::{self, Action};

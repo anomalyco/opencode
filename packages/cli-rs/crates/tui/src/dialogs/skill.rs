@@ -1,8 +1,4 @@
-//! Skills dialog (E.17b, row DLG19): `packages/tui/src/component/dialog-skill.tsx`.
-//!
-//! "Skills": the location's skills, read once if the store has none, with the description after
-//! the padded name. Choosing one hands its ID to the caller and closes the dialog; the prompt
-//! inserts an `@skill` mention as a prompt part (`prompt::autocomplete::parts::insert_skill`).
+//! Select a skill to insert it into the prompt.
 
 use opencode_api::generated::{SkillID, SkillInfo};
 use opencode_store::{Catalog, Location};
@@ -102,7 +98,7 @@ fn open(tui: &Tui, load: Load, on_select: OnSelect) -> Rc<Cell<bool>> {
 }
 
 fn options(skills: &[SkillInfo]) -> Vec<SelectOption<SkillID>> {
-    // `padEnd` counts UTF-16 units; skill names are ASCII identifiers.
+    // Skill names are ASCII, so character counts match UTF-16 padding here.
     let width = skills.iter().map(|skill| skill.name.0.chars().count()).max().unwrap_or(0);
     skills
         .iter()

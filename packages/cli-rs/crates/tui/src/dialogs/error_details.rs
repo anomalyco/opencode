@@ -1,4 +1,4 @@
-//! TypeScript: `packages/tui/src/component/dialog-error-details.tsx`.
+//! Error details with copy and investigation actions.
 
 use opencode_ui::dialog::{DialogCx, FooterAction, FooterProps, footer};
 

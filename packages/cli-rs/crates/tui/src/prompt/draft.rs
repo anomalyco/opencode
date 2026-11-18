@@ -1,6 +1,4 @@
-//! Prompt drafts (E.2, row P12): one in-progress prompt per session, and one for home, kept across
-//! route changes (`component/prompt/draft-stash.ts`). Taking a draft removes it, so a stale copy
-//! never shadows newer input.
+//! Preserve the in-progress prompt for each session and for home across navigation.
 
 use crate::prelude::*;
 

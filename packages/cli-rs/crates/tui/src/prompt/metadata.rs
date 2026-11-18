@@ -1,4 +1,4 @@
-//! TypeScript: `component/prompt/metadata.tsx`, `context/local.tsx`.
+//! Agent, model, variant, and usage labels below the prompt.
 
 use opencode_api::generated::{
     AgentInfo, ConfigEntry, ConfigEntryDocumentInfoModel, ModelInfo, ModelRef, ProviderID, ProviderInfo,
@@ -131,8 +131,7 @@ pub struct Display {
     pub model: String,
     pub provider: String,
     pub variant: Option<String>,
-    /// What the workspace's limits leave for the model, once it is running low, and whether that is in the error
-    /// color (E.16, `limitLabel`).
+    /// Remaining workspace allowance and its warning severity for the selected model.
     pub limit: Option<(String, bool)>,
 }
 
@@ -160,8 +159,7 @@ impl Row {
                 if let Some(agent) = &layout.agent {
                     spans.push(agent.clone().fg(highlight));
                 }
-                // TS lays the row out as separate texts with `gap={1}`, so no text draws the gaps: a transparent
-                // foreground keeps the one beneath, as there.
+                // Leave gaps transparent so the color underneath remains visible.
                 let gap = || " ".fg(Color::TRANSPARENT);
                 if layout.auto {
                     spans.extend([gap(), "auto".fg(theme.text.muted)]);

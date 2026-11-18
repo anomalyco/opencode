@@ -1,8 +1,4 @@
-//! Session list dialog (E.11a, row DLG16): `packages/tui/src/component/dialog-session-list.tsx`.
-//!
-//! "Sessions": the root sessions of the picker's location (or of every project, `ctrl+a`), newest
-//! first under date headings, with pinned sessions on top. The list is read from the server with
-//! the typed search, debounced by 150 ms. Actions: open, pin, delete (press twice), and rename.
+//! Search and manage sessions in the current location or across projects.
 
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -648,10 +644,7 @@ fn resolve_up(flavor: Flavor, directory: &str, ups: usize) -> String {
     flavor.resolve(&paths)
 }
 
-/// Pinned sessions in `<state>/session.json` (`context/local.tsx:508-603`), shared with the TS
-/// TUI. Read once per state directory and kept in memory, as TS does. Each pin, unpin, and prune is
-/// written in order on one worker thread, under the file's lock, from what the file holds then
-/// (`opencode_local::pins`).
+/// Pinned sessions in `<state>/session.json`, shared across clients. Keep writes ordered for each state directory.
 pub mod pins {
     use std::sync::OnceLock;
 

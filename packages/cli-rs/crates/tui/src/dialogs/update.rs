@@ -1,9 +1,4 @@
-//! Update dialog (E.18b): `packages/tui/src/component/dialog-update.tsx`. `features::update_notification` opens it
-//! from `/update` and the home notice, and owns the state it shows.
-//!
-//! Opening it with `checks` runs a check of the updater. Its buttons are `Skip`, which dismisses the notice, then
-//! `Update` to install or `Restart` after an install; the last one starts active. The arrows and Tab move between
-//! them and Enter runs the active one.
+//! Update check and installation dialog.
 
 use opencode_ui::dialog::{DialogButton, DialogButtons, DialogCx};
 use opencode_ui::motion::Spinner;

@@ -1,5 +1,4 @@
-//! Release highlights dialog (E.18b): `packages/tui/src/component/dialog-highlights.tsx`, "What's new in …".
-//! `features::highlights` opens it from `/highlights` and once after an update.
+//! Release highlights dialog.
 
 use opencode_ui::dialog::{DIALOG_INSET, FooterAction, FooterProps, layout};
 use serde::Deserialize;

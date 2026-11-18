@@ -1,4 +1,4 @@
-//! TypeScript: `component/dialog-model.tsx`, `component/model-options.tsx`, `app.tsx:903-1018`.
+//! Model selection, favorites, and usage alerts.
 
 use opencode_api::generated::{ModelInfo, ModelInfoStatus, ProviderInfo};
 use opencode_api::js::locale_compare;
@@ -396,8 +396,7 @@ pub fn install(tui: &Rc<Tui>) {
     local.load();
 }
 
-/// Applies `--agent` and `--model` once the agents, the models, and `model.json` have loaded (`app.tsx:666-678`).
-/// `model` is already parsed; an invalid one only got its toast.
+/// Apply startup agent and model choices when their catalogs and saved preferences are available.
 pub fn startup(local: &Rc<Local>, agent: Option<String>, model: Option<Model>) {
     if agent.is_none() && model.is_none() {
         return;
@@ -418,8 +417,7 @@ pub fn startup(local: &Rc<Local>, agent: Option<String>, model: Option<Model>) {
             if let Some(agent) = agent {
                 local.set_agent(&agent);
             }
-            // TS sets it before it opens `-s` or `-c`'s session (`app.tsx:666-686`), so a session already open
-            // keeps its own model and `--model` only joins the recent models.
+            // A session opened at startup keeps its own model; the flag still updates recents.
             match model {
                 Some(model) if local.route().is_some() => local.add_recent_valid(&model),
                 Some(model) => local.set(&model, true),
@@ -431,8 +429,7 @@ pub fn startup(local: &Rc<Local>, agent: Option<String>, model: Option<Model>) {
     apply();
 }
 
-/// `useUsageAlerts` (`usage.tsx:224-251`): on a session, warns once per model as the selected model runs low and once
-/// as it reaches its limit.
+/// Warn once per model as it approaches and reaches a limit.
 pub fn usage_alerts(local: &Local) {
     use crate::dialogs::usage::{Level, format_dollars, format_reset, level};
     if local.route().is_none() {

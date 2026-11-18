@@ -1,4 +1,4 @@
-//! TypeScript: `component/dialog-workspace-file-changes.tsx`.
+//! Worktree changes and the actions available for them.
 
 use opencode_api::generated::{FileDiffInfoStatus, VcsFileStatus};
 use opencode_ui::dialog::{DIALOG_INSET, FooterAction, FooterProps, layout};

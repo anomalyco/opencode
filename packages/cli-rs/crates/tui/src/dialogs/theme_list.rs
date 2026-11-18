@@ -1,9 +1,4 @@
-//! Themes dialog (E.18b): `packages/tui/src/component/dialog-theme-list.tsx`, `/themes` (`theme.switch`) and
-//! Settings → Theme.
-//!
-//! Moving, or filtering to a first match, previews the theme; Enter keeps it and Escape restores the theme the
-//! dialog opened with. A preview stays in memory and only Enter writes `theme.name`; TS writes on every move and
-//! writes the old name back on cancel, which leaves the same file.
+//! Preview themes while browsing; persist the choice only on Enter.
 
 use opencode_ui::select::{Select, select};
 
@@ -125,7 +120,7 @@ impl List {
         }
     }
 
-    /// `onCleanup`: restores the opening theme unless one was picked.
+    /// Restore the opening theme on cancel.
     fn closed(&self) {
         if self.confirmed.get() {
             return;
