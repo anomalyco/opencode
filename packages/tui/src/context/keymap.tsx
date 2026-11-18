@@ -142,6 +142,10 @@ function Provider(props: ParentProps<{ config?: KeymapConfig }>) {
         name: "leader",
         timeoutMs: config.leader?.timeout ?? ("leader_timeout" in config ? config.leader_timeout : undefined) ?? 2000,
       }),
+      keymap.intercept("key:after", ({ reason, sequence, consume }) => {
+        if (reason !== "sequence-miss" || sequence[0]?.tokenName !== "leader") return
+        consume()
+      }),
     )
   }
   onCleanup(() => {
