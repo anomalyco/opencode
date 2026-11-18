@@ -114,6 +114,13 @@ export function share(
           repair: "Replace it with a variable reference such as $TOKEN or a placeholder such as <password>",
         })
       const localized = localize(value, roots)
+      // Hosts and addresses only the workspace's network reaches name nothing a reader can use, and say where it is.
+      if (kind === undefined && INTERNAL.test(localized))
+        found.push({
+          field,
+          kind: "an internal host name or address",
+          repair: "Replace it with a descriptive placeholder such as <internal database host>",
+        })
       // What's left in a home directory after this machine's own paths were made relative is someone else's.
       if (kind === undefined && HOME.test(localized))
         found.push({
@@ -136,6 +143,10 @@ export function share(
   const shared = visit(fields, "")
   return found[0] ?? { fields: shared as Record<string, unknown> }
 }
+
+/** A private-network address (RFC 1918), or a host under a name only an internal network resolves. */
+const INTERNAL =
+  /(?<![\d.])(?:10\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])|192\.168)\.\d{1,3}\.\d{1,3}(?![\d.]*\d)|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:internal|corp|lan|intranet)\b/i
 
 /** A path into someone's home directory, as Console's scan finds one. */
 const HOME =

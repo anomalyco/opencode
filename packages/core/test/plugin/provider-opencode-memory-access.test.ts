@@ -76,6 +76,28 @@ describe("OpencodeMemoryAccess.share", () => {
   })
 })
 
+describe("OpencodeMemoryAccess.share, internal hosts", () => {
+  test("refuses private addresses and internal-only host names, and keeps public ones and versions", () => {
+    const share = (body: string) => OpencodeMemoryAccess.share({ body }, {})
+    for (const body of [
+      "psql -h 10.2.0.15 app",
+      "curl http://192.168.1.20:8080",
+      "ssh deploy@172.20.4.1",
+      "vault-db.internal:5432",
+      "build.corp/api",
+    ])
+      expect(share(body)).toMatchObject({ field: "body", kind: "an internal host name or address" })
+    for (const body of [
+      "curl http://localhost:3000 and 127.0.0.1",
+      "https://api.github.com",
+      "Windows 10.0.19041.1",
+      "172.32.0.1 is public",
+      "Bump to 1.10.2.3",
+    ])
+      expect(share(body)).toEqual({ fields: { body } })
+  })
+})
+
 describe("OpencodeMemoryAccess.localize", () => {
   test("makes the checkout's paths relative and other home paths start at ~/", () => {
     const roots = { checkout: "/home/ada/src/api", home: "/home/ada" }
