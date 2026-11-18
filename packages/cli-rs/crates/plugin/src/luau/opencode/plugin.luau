@@ -1980,7 +1980,13 @@ export type ConfigInfoEncoded = {
         media_blob: boolean?,
         automations: boolean?,
         artifacts: boolean?,
-        video_generate: boolean?,
+        video_generate: (boolean | {
+            model: (string | {
+                providerID: string,
+                model: string,
+                variant: string?,
+            })?,
+        })?,
         console_watches: boolean?,
         mcp_events: boolean?,
         full_codemode: boolean?,
@@ -2633,7 +2639,7 @@ export type GenerateVideoError = {
     reason: GenerateVideoErrorReason,
 }
 
---- failed: the provider failed the job. cancelled: the provider cancelled it. expired: the provider expired it. unknown: the provider gave no result in time, or the server stopped while submitting the job
+--- failed: the provider failed the job. cancelled: the provider cancelled it. expired: the provider expired it. unknown: the provider gave no result in time
 export type GenerateVideoErrorReason = ("failed" | "cancelled" | "expired" | "unknown")
 
 export type GenerateVideoID = string
@@ -2816,7 +2822,7 @@ export type JobImage = {
     model: string,
 }
 
-export type JobInfo = (JobShell | JobSubagent | JobImage | JobCodeMode)
+export type JobInfo = (JobShell | JobSubagent | JobImage | JobVideo | JobCodeMode)
 
 export type JobShell = {
     kind: "shell",
@@ -2846,6 +2852,16 @@ export type JobSubagent = {
 export type JobTime = {
     started: number,
     completed: number?,
+}
+
+export type JobVideo = {
+    kind: "video",
+    id: string,
+    sessionID: SessionID,
+    status: JobStatus,
+    title: string?,
+    time: JobTime,
+    path: string,
 }
 
 export type LocationPublicInfo = {
@@ -5087,7 +5103,7 @@ export type Client = {
         job: {
             list: (input: {
                 sessionID: string?,
-                kind: ("shell" | "subagent" | "image" | "codemode")?,
+                kind: ("shell" | "subagent" | "image" | "video" | "codemode")?,
                 status: ("running" | "completed" | "error" | "cancelled")?,
                 descendants: boolean?,
             }?) -> ({ JobInfo }?, string?),

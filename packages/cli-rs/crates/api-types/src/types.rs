@@ -10491,6 +10491,7 @@ JobKind {
     Shell => "shell",
     Subagent => "subagent",
     Image => "image",
+    Video => "video",
     Codemode => "codemode",
 }
 }
@@ -10568,6 +10569,19 @@ pub struct JobImage {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct JobVideo {
+    pub kind: String,
+    pub id: String,
+    #[serde(rename = "sessionID")]
+    pub session_id: SessionID,
+    pub status: JobStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    pub time: JobTime,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct JobCodeMode {
     pub kind: String,
     pub id: String,
@@ -10586,6 +10600,7 @@ pub enum JobInfo {
     Shell(JobShell),
     Subagent(JobSubagent),
     Image(JobImage),
+    Video(JobVideo),
     Codemode(JobCodeMode),
     /// A member this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
@@ -10603,6 +10618,7 @@ impl JobInfo {
             Some("shell") => raw.variant().map(Self::Shell),
             Some("subagent") => raw.variant().map(Self::Subagent),
             Some("image") => raw.variant().map(Self::Image),
+            Some("video") => raw.variant().map(Self::Video),
             Some("codemode") => raw.variant().map(Self::Codemode),
             _ => raw.unknown().map(Self::Unknown),
         }
@@ -10616,6 +10632,7 @@ impl JobInfo {
             Self::Shell(value) => value.kind.as_str(),
             Self::Subagent(value) => value.kind.as_str(),
             Self::Image(value) => value.kind.as_str(),
+            Self::Video(value) => value.kind.as_str(),
             Self::Codemode(value) => value.kind.as_str(),
             Self::Unknown(value) => value.get("kind").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
@@ -10627,6 +10644,7 @@ impl JobInfo {
             Self::Shell(value) => value.id.as_str(),
             Self::Subagent(value) => value.id.as_str(),
             Self::Image(value) => value.id.as_str(),
+            Self::Video(value) => value.id.as_str(),
             Self::Codemode(value) => value.id.as_str(),
             Self::Unknown(value) => value.get("id").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
@@ -10638,6 +10656,7 @@ impl JobInfo {
             Self::Shell(value) => value.session_id.as_str(),
             Self::Subagent(value) => value.session_id.as_str(),
             Self::Image(value) => value.session_id.as_str(),
+            Self::Video(value) => value.session_id.as_str(),
             Self::Codemode(value) => value.session_id.as_str(),
             Self::Unknown(value) => value.get("sessionID").and_then(serde_json::Value::as_str).unwrap_or_default(),
         }
@@ -10649,6 +10668,7 @@ impl JobInfo {
             Self::Shell(value) => Some(&value.status),
             Self::Subagent(value) => Some(&value.status),
             Self::Image(value) => Some(&value.status),
+            Self::Video(value) => Some(&value.status),
             Self::Codemode(value) => Some(&value.status),
             Self::Unknown(_) => None,
         }
@@ -10660,6 +10680,7 @@ impl JobInfo {
             Self::Shell(value) => value.title.as_deref(),
             Self::Subagent(value) => value.title.as_deref(),
             Self::Image(value) => value.title.as_deref(),
+            Self::Video(value) => value.title.as_deref(),
             Self::Codemode(value) => value.title.as_deref(),
             Self::Unknown(_) => None,
         }
@@ -10671,6 +10692,7 @@ impl JobInfo {
             Self::Shell(value) => Some(&value.time),
             Self::Subagent(value) => Some(&value.time),
             Self::Image(value) => Some(&value.time),
+            Self::Video(value) => Some(&value.time),
             Self::Codemode(value) => Some(&value.time),
             Self::Unknown(_) => None,
         }
@@ -10682,6 +10704,7 @@ impl JobInfo {
             Self::Shell(value) => value.time.started,
             Self::Subagent(value) => value.time.started,
             Self::Image(value) => value.time.started,
+            Self::Video(value) => value.time.started,
             Self::Codemode(value) => value.time.started,
             Self::Unknown(value) => {
                 value.pointer("/time/started").and_then(serde_json::Value::as_f64).unwrap_or_default()
@@ -10695,8 +10718,18 @@ impl JobInfo {
             Self::Shell(value) => value.time.completed,
             Self::Subagent(value) => value.time.completed,
             Self::Image(value) => value.time.completed,
+            Self::Video(value) => value.time.completed,
             Self::Codemode(value) => value.time.completed,
             Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `path` field, of the members that have it.
+    pub fn path(&self) -> Option<&str> {
+        match self {
+            Self::Image(value) => Some(value.path.as_str()),
+            Self::Video(value) => Some(value.path.as_str()),
+            Self::Shell(_) | Self::Subagent(_) | Self::Codemode(_) | Self::Unknown(_) => None,
         }
     }
 }
@@ -12026,27 +12059,27 @@ pub struct ConfigEntryDocumentInfoProvidersValue {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ConfigEntryDocumentInfoExperimentalImageGenerateObject {
+pub struct ConfigEntryDocumentInfoExperimentalVideoGenerateObject {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<ConfigEntryDocumentInfoModel>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
-pub enum ConfigEntryDocumentInfoExperimentalImageGenerate {
+pub enum ConfigEntryDocumentInfoExperimentalVideoGenerate {
     Bool(bool),
-    Object(ConfigEntryDocumentInfoExperimentalImageGenerateObject),
+    Object(ConfigEntryDocumentInfoExperimentalVideoGenerateObject),
     /// A shape this client does not know, kept as it arrived.
     Unknown(serde_json::Value),
 }
 
-impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoExperimentalImageGenerate {
+impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoExperimentalVideoGenerate {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         crate::de::union(deserializer, Self::from_raw)
     }
 }
 
-impl ConfigEntryDocumentInfoExperimentalImageGenerate {
+impl ConfigEntryDocumentInfoExperimentalVideoGenerate {
     fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
         if let Ok(member) = raw.decode() {
             return Ok(Self::Bool(member));
@@ -12075,7 +12108,7 @@ pub struct ConfigEntryDocumentInfoExperimental {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub artifacts: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub video_generate: Option<bool>,
+    pub video_generate: Option<ConfigEntryDocumentInfoExperimentalVideoGenerate>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub console_watches: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -12087,7 +12120,7 @@ pub struct ConfigEntryDocumentInfoExperimental {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub part_rows: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub image_generate: Option<ConfigEntryDocumentInfoExperimentalImageGenerate>,
+    pub image_generate: Option<ConfigEntryDocumentInfoExperimentalVideoGenerate>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subagent_depth: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
