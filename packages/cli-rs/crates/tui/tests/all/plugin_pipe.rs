@@ -55,6 +55,24 @@ impl Pipe {
         self.harness.tui.plugins.entries().into_iter().find(|entry| entry.id == id).map(|entry| entry.status)
     }
 
+    /// Waits until `done` holds, turning the UI thread without moving its clock ([`still`]). The wait for anything of the
+    /// JS host's or the loader's (a reply, a reload, a drain, a load) takes real time, which no deadline of the host's
+    /// (the key hold's 50 ms, a debounce) may see: a row that advanced the clock as it polled raced those deadlines
+    /// against the machine's load (compat-harness). A row that wants a deadline to pass advances the clock itself.
+    pub fn until(&self, what: &str, done: impl Fn() -> bool) {
+        until(&self.harness, what, done);
+    }
+
+    /// Waits until the JS host retires no command a component dropped ([`Scripts::retiring`]): such a command lingers
+    /// 250 ms on the JS host's own clock (`UNCOMMAND`), then its registrations change once more. A row waited for it
+    /// with a sleep (compat-harness).
+    pub fn retired(&self) {
+        self.until("the JS host retired its dropped commands", || {
+            self.settle();
+            !self.scripts().retiring()
+        });
+    }
+
     /// Waits until plugin `id` is active.
     pub fn active(&self, id: &str) {
         let entries = || {
@@ -62,10 +80,9 @@ impl Pipe {
                 self.harness.tui.plugins.entries().into_iter().map(|entry| format!("{} {:?}", entry.id, entry.status));
             entries.collect::<Vec<_>>().join("\n")
         };
-        self.harness.wait(&format!("{id} is active"), || {
+        self.until(&format!("{id} is active"), || {
             let failed = matches!(self.status(id), Some(opencode_plugin::Status::Failed(_)));
             assert!(!failed, "{id} failed:\n{}", entries());
-            self.harness.app.advance(Duration::from_millis(1));
             self.status(id) == Some(opencode_plugin::Status::Active)
         });
     }
@@ -155,7 +172,25 @@ pub fn config() -> Option<Config> {
     Some(config)
 }
 
-/// Waits until the JS host handled everything sent before, and no tree waits for the host; then three frames.
+/// [`Pipe::until`] for a harness.
+pub fn until(harness: &Harness, what: &str, done: impl Fn() -> bool) {
+    harness.wait(what, || {
+        still(&harness.app);
+        done()
+    });
+}
+
+/// One turn of the UI thread that moves no clock: what came from the JS host, the loader's threads and the deferred
+/// work runs, and a frame paints if one is wanted, but no timer comes due that was not due already.
+pub(crate) fn still(app: &TestApp) {
+    app.advance(Duration::ZERO);
+    if app.needs_frame() {
+        app.render();
+    }
+}
+
+/// Waits until the JS host handled everything sent before, and no tree waits for the host; then three frames. However
+/// long the JS host takes, the clock moves only by the frames' turns, never as it waits ([`Pipe::until`]).
 pub fn settle(harness: &Harness, scripts: &Scripts) {
     settle_app(&harness.app, &harness.tui, scripts);
 }
@@ -191,7 +226,7 @@ pub(crate) fn settle_app(app: &TestApp, tui: &Tui, scripts: &Scripts) {
         // as the JS host began to read a full overflow waited for good).
         while pong.is_none() && scripts.pinging(seq) {
             unsettled();
-            turn_app(app);
+            still(app);
             pong = scripts.ponged(seq);
             if pong.is_none() {
                 std::thread::sleep(Duration::from_micros(200));
@@ -215,7 +250,7 @@ fn walked_app(app: &TestApp, scripts: &Scripts) {
     let begun = Instant::now();
     while scripts.walking() {
         assert!(begun.elapsed() < Duration::from_secs(20), "a walk of a plugin's tree never ended");
-        turn_app(app);
+        still(app);
         std::thread::sleep(Duration::from_micros(200));
     }
     for _ in 0..3 {

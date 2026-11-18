@@ -36,8 +36,7 @@ fn probe(config: Config) -> (Pipe, PathBuf) {
 /// waits for it without the JS host saying so to a ping (its mount is neither dirty nor in flight), so they may draw
 /// after a settle.
 fn drawn(pipe: &Pipe) {
-    pipe.harness.wait("the probe's claims drew", || {
-        pipe.harness.app.advance(Duration::from_millis(1));
+    pipe.until("the probe's claims drew", || {
         line(pipe, "v2probe commands").is_some() && line(pipe, "v2probe route").is_some()
     });
     pipe.settle();
@@ -63,10 +62,7 @@ fn calls(log: &Path) -> Vec<Value> {
 /// [`calls`] once there are `count`: a plugin's code after an answer it awaited runs some promise turns after the call
 /// that answered it, which a settle's ping may pass.
 fn logged(pipe: &Pipe, log: &Path, count: usize) -> Vec<Value> {
-    pipe.harness.wait(&format!("{count} calls logged"), || {
-        pipe.harness.app.advance(Duration::from_millis(1));
-        calls(log).len() >= count
-    });
+    pipe.until(&format!("{count} calls logged"), || calls(log).len() >= count);
     calls(log)
 }
 
@@ -102,16 +98,10 @@ fn the_guides_typescript_hello_runs_on_the_js_host() {
     let pipe = open(&[("hello", None)], config, (80, 30));
     pipe.active("example.ts-hello");
     let (app, tui) = (&pipe.harness.app, &pipe.harness.tui);
-    pipe.harness.wait("its line closes the home footer", || {
-        app.advance(Duration::from_millis(1));
-        app.text().lines().any(|line| line.trim_end().ends_with("hello"))
-    });
+    pipe.until("its line closes the home footer", || app.text().lines().any(|line| line.trim_end().ends_with("hello")));
     pipe.settle();
     let toasted = |what: &str| {
-        pipe.harness.wait(what, || {
-            app.advance(Duration::from_millis(1));
-            tui.toasts.current().is_some()
-        });
+        pipe.until(what, || tui.toasts.current().is_some());
         assert_eq!(toasts(&pipe), ["Hello from a plugin"]);
     };
     tui.keymap.dispatch("hello.greet", None);
@@ -146,10 +136,7 @@ fn a_v2_plugins_commands_arrive_once_each_in_order() {
     assert_eq!(logged(&pipe, &log, sent.len()), sent);
     // The last item shows; a restart resets the plugin's state, as it resets any plugin's on the JS host. The restarted
     // footer's first render waits for its reads, which a settle does not (`drawn`).
-    pipe.harness.wait("the restarted footer drew", || {
-        pipe.harness.app.advance(Duration::from_millis(1));
-        footer(&pipe).ends_with("33|")
-    });
+    pipe.until("the restarted footer drew", || footer(&pipe).ends_with("33|"));
     let shown = footer(&pipe);
     assert!(shown.starts_with("v2probe ") && shown.ends_with("33|"), "{shown}");
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
@@ -236,12 +223,7 @@ fn confirm_prompt_and_alert_answer_their_promises() {
     let (pipe, log) = probe(config);
     let app = &pipe.harness.app;
     // Each next dialog opens in the plugin's code after the answer it awaited, some promise turns after the answer.
-    let shows = |text: &str| {
-        pipe.harness.wait(text, || {
-            app.advance(Duration::from_millis(1));
-            app.text().contains(text)
-        })
-    };
+    let shows = |text: &str| pipe.until(text, || app.text().contains(text));
     pipe.harness.tui.keymap.dispatch("v2probe.ask", None);
     shows("Go on?");
     app.press("return");
@@ -269,16 +251,10 @@ fn a_field_shown_and_focused_in_one_handler_takes_the_focus_once_shown() {
     pipe.scripts().tamper(opencode_plugin::pipe::Tamper::Hold);
     tui.keymap.dispatch("v2probe.find", None);
     // The call answered, with its focus; a settle would wait for the held revision.
-    pipe.harness.wait("the call answered", || {
-        app.advance(Duration::from_millis(1));
-        pipe.scripts().idle()
-    });
+    pipe.until("the call answered", || pipe.scripts().idle());
     // Its revision may come after the answer: a replay before it delivers nothing, and the revision is then held for
     // good (pipe-flakes).
-    pipe.harness.wait("the revision is held", || {
-        app.advance(Duration::from_millis(1));
-        pipe.scripts().kept()
-    });
+    pipe.until("the revision is held", || pipe.scripts().kept());
     for _ in 0..20 {
         app.advance(Duration::from_millis(1));
         app.render();
@@ -305,22 +281,13 @@ fn a_batch_of_a_closed_mount_moves_nothing_where_the_activations_would() {
     let route = Route::Plugin { id: "example.closed".into(), name: "pf".into() };
     for _ in 0..2 {
         tui.navigate(route.clone());
-        pipe.harness.wait("the route shows", || {
-            app.advance(Duration::from_millis(1));
-            app.text().contains("closed page") && mounts().len() == 1
-        });
+        pipe.until("the route shows", || app.text().contains("closed page") && mounts().len() == 1);
         pipe.settle();
         tui.navigate(Route::Home);
-        pipe.harness.wait("the route closes", || {
-            app.advance(Duration::from_millis(1));
-            mounts().is_empty()
-        });
+        pipe.until("the route closes", || mounts().is_empty());
     }
     tui.navigate(route);
-    pipe.harness.wait("the route shows again", || {
-        app.advance(Duration::from_millis(1));
-        mounts().len() == 1
-    });
+    pipe.until("the route shows again", || mounts().len() == 1);
     pipe.settle();
     let focus = |command: &str| {
         tui.keymap.dispatch("pf.guard", None);
@@ -384,7 +351,7 @@ fn a_thrown_calls_mount_effects_go_with_it() {
     tui.keymap.dispatch("pf.throw", None);
     pipe.harness.wait("the throw failed the plugin", || {
         pipe.scripts().release_one();
-        app.advance(Duration::from_millis(1));
+        crate::plugin_pipe::still(app);
         app.render();
         matches!(pipe.status("example.ordered"), Some(Status::Failed(_)))
     });
@@ -412,10 +379,7 @@ fn a_pending_focus_goes_when_the_user_takes_the_focus_back() {
         pipe.settle();
         pipe.scripts().tamper(opencode_plugin::pipe::Tamper::Hold);
         tui.keymap.dispatch("sp.show", None);
-        pipe.harness.wait("the call answered", || {
-            app.advance(Duration::from_millis(1));
-            pipe.scripts().idle()
-        });
+        pipe.until("the call answered", || pipe.scripts().idle());
         assert!(!app.text().contains("sp field"), "{moved}: the revision was not held:\n{}", app.text());
         match by {
             "ctrl+c" => app.press("ctrl+c"),
@@ -453,10 +417,7 @@ fn a_reload_gives_the_focus_back_only_to_a_field_that_held_it() {
     let reload = || {
         let before = more();
         tui.keymap.dispatch("rf.reload", None);
-        pipe.harness.wait("the registrations changed", || {
-            pipe.harness.app.advance(Duration::from_millis(1));
-            more() > before
-        });
+        pipe.until("the registrations changed", || more() > before);
         pipe.settle();
     };
     pipe.harness.wait_for("refocus slot");
@@ -632,10 +593,8 @@ fn a_route_draws_a_bordered_box_and_a_scroll_with_its_data() {
     let Some(config) = config() else { return };
     let (pipe, _log) = probe(config);
     pipe.harness.tui.keymap.dispatch("v2probe.page", None);
-    pipe.settle();
-    // The page registers a command as it renders, which settles once the command's 250 ms passed.
-    std::thread::sleep(Duration::from_millis(400));
-    pipe.settle();
+    // The page registers a command as it renders, which settles once the command it replaced retired.
+    pipe.retired();
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
     let screen = pipe.harness.app.text();
     assert_eq!(pipe.harness.tui.route(), Route::Plugin { id: PROBE.to_owned(), name: "page".to_owned() });
@@ -734,10 +693,7 @@ fn a_dialog_of_its_own_shows_its_jsx_and_closes() {
     let (x, y) = pipe.harness.find("bump it");
     pipe.harness.app.click(x, y);
     // The layer sends the changed dialog in a microtask after the click's handler.
-    pipe.harness.wait("the dialog follows its signal", || {
-        pipe.harness.app.advance(Duration::from_millis(1));
-        pipe.harness.app.text().contains("shown 1")
-    });
+    pipe.until("the dialog follows its signal", || pipe.harness.app.text().contains("shown 1"));
     pipe.harness.app.press("escape");
     pipe.settle();
     assert!(!pipe.harness.app.text().contains("Own dialog"), "{}", pipe.harness.app.text());
@@ -762,10 +718,8 @@ fn a_components_command_lives_with_its_mount_across_a_reload() {
     let tui = &pipe.harness.tui;
     assert_eq!(line(&pipe, "v2probe route").as_deref(), Some("v2probe route home"));
     tui.keymap.dispatch("v2probe.page", None);
-    pipe.settle();
-    // The change the page's command made settles within the 250 ms a command lingers.
-    std::thread::sleep(Duration::from_millis(400));
-    pipe.settle();
+    // The change the page's command made settles once the command it replaced retired.
+    pipe.retired();
     let quiet = opencode_plugin::pipe::crossed();
     std::thread::sleep(Duration::from_millis(400));
     for _ in 0..5 {
@@ -789,8 +743,7 @@ fn a_components_command_lives_with_its_mount_across_a_reload() {
     tui.keymap.dispatch("v2probe.onpage", None);
     pipe.settle();
     assert_eq!(calls(&log), [json!({ "onpage": true })], "the page's command ran after the page left");
-    std::thread::sleep(Duration::from_millis(400));
-    pipe.settle();
+    pipe.retired();
     assert!(!matches!(tui.keymap.dispatch("v2probe.onpage", None), opentui::keymap::RunResult::Ok), "it stayed");
 }
 
@@ -802,9 +755,7 @@ fn a_page_whose_commands_have_no_id_draws_and_settles() {
     let (pipe, log) = probe(config);
     let tui = &pipe.harness.tui;
     tui.keymap.dispatch("v2probe.inline", None);
-    pipe.settle();
-    std::thread::sleep(Duration::from_millis(400));
-    pipe.settle();
+    pipe.retired();
     let quiet = opencode_plugin::pipe::crossed();
     std::thread::sleep(Duration::from_millis(400));
     for _ in 0..5 {
@@ -826,9 +777,7 @@ fn a_page_that_names_its_commands_anew_each_mount_settles() {
     let Some(config) = config() else { return };
     let (pipe, _log) = probe(config);
     pipe.harness.tui.keymap.dispatch("v2probe.churn", None);
-    pipe.settle();
-    std::thread::sleep(Duration::from_millis(400));
-    pipe.settle();
+    pipe.retired();
     let quiet = opencode_plugin::pipe::crossed();
     std::thread::sleep(Duration::from_millis(400));
     for _ in 0..5 {
@@ -847,10 +796,7 @@ fn a_plugin_whose_registrations_never_settle_fails() {
     let Some(config) = config() else { return };
     let (pipe, _log) = probe(config);
     pipe.harness.tui.keymap.dispatch("v2probe.restless", None);
-    pipe.harness.wait("the churn failed the plugin", || {
-        pipe.harness.app.advance(Duration::from_millis(1));
-        matches!(pipe.status(PROBE), Some(Status::Failed(_)))
-    });
+    pipe.until("the churn failed the plugin", || matches!(pipe.status(PROBE), Some(Status::Failed(_))));
     let Some(Status::Failed(error)) = pipe.status(PROBE) else { unreachable!() };
     assert!(error.contains("changed its registrations more than 64 times"), "{error}");
 }
@@ -875,10 +821,8 @@ fn a_change_of_commands_alone_keeps_the_route_and_its_field() {
     assert!(field.is_some(), "the field has no focus:\n{}", app.text());
     // The first key mounts the matches and their command: the keys after it go on while the change crosses.
     app.type_text("notes");
-    pipe.settle();
-    // Past the 250 ms a command the plugin dropped lingers.
-    std::thread::sleep(Duration::from_millis(400));
-    pipe.settle();
+    // Once the command the plugin dropped retired.
+    pipe.retired();
     assert!(app.text().contains("query notes."), "{}", app.text());
     assert_eq!(focused(), field, "the field was built again");
     assert!(matches!(tui.keymap.dispatch("v2probe.clear", None), opentui::keymap::RunResult::Ok));
@@ -897,21 +841,13 @@ fn a_session_panel_stays_open_across_a_reload() {
     let pipe = crate::plugin_pipe::open_on(&[("v2probe", Some(options))], config, (120, 30), Vec::new(), server);
     pipe.active(PROBE);
     pipe.harness.tui.navigate(Route::Session { id: opencode_api::generated::SessionID("ses_a".into()) });
-    pipe.harness.wait("the session shows", || {
-        pipe.harness.app.advance(Duration::from_millis(1));
-        matches!(pipe.harness.tui.route(), Route::Session { .. })
-    });
+    pipe.until("the session shows", || matches!(pipe.harness.tui.route(), Route::Session { .. }));
     pipe.settle();
     pipe.harness.tui.keymap.dispatch("v2probe.panel", None);
     assert_eq!(logged(&pipe, &log, 1), [json!({ "opened": true })]);
-    pipe.settle();
-    std::thread::sleep(Duration::from_millis(400));
-    pipe.settle();
+    pipe.retired();
     let shows = || pipe.harness.app.text().contains("probe panel probe.panel");
-    pipe.harness.wait("the panel shows", || {
-        pipe.harness.app.advance(Duration::from_millis(1));
-        shows()
-    });
+    pipe.until("the panel shows", shows);
     assert!(pipe.harness.tui.panels.current().is_some(), "the panel closed");
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
 }
@@ -928,17 +864,11 @@ fn a_session_panel_toggles_focuses_and_closes_itself() {
     let pipe = crate::plugin_pipe::open_on(&[("v2probe", Some(options))], config, (120, 30), Vec::new(), server);
     pipe.active(PROBE);
     pipe.harness.tui.navigate(Route::Session { id: opencode_api::generated::SessionID("ses_a".into()) });
-    pipe.harness.wait("the session shows", || {
-        pipe.harness.app.advance(Duration::from_millis(1));
-        matches!(pipe.harness.tui.route(), Route::Session { .. })
-    });
+    pipe.until("the session shows", || matches!(pipe.harness.tui.route(), Route::Session { .. }));
     pipe.settle();
     pipe.harness.tui.keymap.dispatch("v2probe.panel", None);
     assert_eq!(logged(&pipe, &log, 1), [json!({ "opened": true })]);
-    pipe.harness.wait("the panel shows", || {
-        pipe.harness.app.advance(Duration::from_millis(1));
-        pipe.harness.app.text().contains("probe panel probe.panel")
-    });
+    pipe.until("the panel shows", || pipe.harness.app.text().contains("probe panel probe.panel"));
     pipe.settle();
     let run = |command: &str| {
         pipe.harness.tui.keymap.dispatch(command, None);
@@ -1082,7 +1012,7 @@ fn a_disabled_commands_key_is_not_held() {
 fn a_restarted_js_hosts_commands_take_its_setups_states() {
     let Some(config) = config() else { return };
     let (pipe, _log) = probe(config);
-    let (harness, tui) = (&pipe.harness, &pipe.harness.tui);
+    let tui = &pipe.harness.tui;
     let reachable = || tui.keymap.commands().iter().any(|command| command.id == "v2probe.caret");
     tui.keymap.dispatch("v2probe.caretOn", Some("on"));
     pipe.settle();
@@ -1092,10 +1022,7 @@ fn a_restarted_js_hosts_commands_take_its_setups_states() {
     pipe.scripts().fault(Fault::Swap);
     tui.keymap.dispatch("v2probe.add", Some("x"));
     tui.keymap.dispatch("v2probe.add", Some("y"));
-    harness.wait("the JS host started again", || {
-        harness.app.advance(Duration::from_millis(1));
-        pipe.scripts().pid().is_some_and(|now| Some(now) != pid)
-    });
+    pipe.until("the JS host started again", || pipe.scripts().pid().is_some_and(|now| Some(now) != pid));
     pipe.settle();
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
     assert!(!reachable(), "the restarted plugin's disabled command is reachable");
@@ -1109,10 +1036,7 @@ fn generation(pipe: &Pipe) -> Option<u64> {
 /// Waits until the host took a reload of the probe's registrations past activation `before`. The reload is the host's
 /// own work after the JS host answered (the loader reconciles), so a settle that saw the JS host idle may come first.
 fn reloaded(pipe: &Pipe, before: Option<u64>) {
-    pipe.harness.wait("the probe's registrations reloaded", || {
-        pipe.harness.app.advance(Duration::from_millis(1));
-        generation(pipe).is_some_and(|now| Some(now) != before)
-    });
+    pipe.until("the probe's registrations reloaded", || generation(pipe).is_some_and(|now| Some(now) != before));
     pipe.settle();
 }
 
@@ -1127,8 +1051,7 @@ fn a_state_set_as_the_registrations_reload_goes_to_the_new_guest() {
     let before = generation(&pipe);
     pipe.scripts().hold_answers(true);
     tui.keymap.dispatch("v2probe.lateCaret", None);
-    harness.wait("the reload and the state came", || {
-        harness.app.advance(Duration::from_millis(1));
+    pipe.until("the reload and the state came", || {
         let types = pipe.scripts().held_types();
         types
             .iter()
@@ -1264,13 +1187,9 @@ fn a_js_host_that_ends_while_keys_are_held_releases_them() {
     pipe.settle();
     harness.app.type_text("%ab");
     assert_eq!(harness.text(), "", "the keys after the bound key wait for its command");
-    harness.wait("the ended JS host released the keys", || {
-        harness.app.advance(Duration::from_millis(1));
-        harness.text() == "%ab"
-    });
+    pipe.until("the ended JS host released the keys", || harness.text() == "%ab");
     // The plugin whose command ended it fails, blamed, as any such does.
-    harness.wait("the end was noticed", || {
-        harness.app.advance(Duration::from_millis(1));
+    pipe.until("the end was noticed", || {
         pipe.scripts().pid() != pid && matches!(pipe.status(PROBE), Some(Status::Failed(_)))
     });
     pipe.settle();
@@ -1350,10 +1269,7 @@ fn two_quick_reloads_leave_the_plugin_working() {
     tui.keymap.dispatch("v2probe.twice", None);
     // Both reloads wait for the UI thread, which takes them in one go; then both commands are the keymap's.
     let registered = |name: &str| tui.keymap.commands().iter().any(|command| command.id == name);
-    pipe.harness.wait("both reloads were taken", || {
-        pipe.harness.app.advance(Duration::from_millis(1));
-        registered("v2probe.first") && registered("v2probe.second")
-    });
+    pipe.until("both reloads were taken", || registered("v2probe.first") && registered("v2probe.second"));
     pipe.settle();
     for name in ["v2probe.first", "v2probe.second"] {
         tui.keymap.dispatch(name, None);
@@ -1371,10 +1287,7 @@ fn a_v2_render_that_spins_fails_its_plugin_alone() {
     let (pipe, _log) = probe(config);
     let pid = pipe.scripts().pid().unwrap();
     pipe.harness.tui.keymap.dispatch("v2probe.loop", None);
-    pipe.harness.wait("the spin ended the JS host", || {
-        pipe.harness.app.advance(Duration::from_millis(1));
-        matches!(pipe.status(PROBE), Some(Status::Failed(_)))
-    });
+    pipe.until("the spin ended the JS host", || matches!(pipe.status(PROBE), Some(Status::Failed(_))));
     let Some(Status::Failed(error)) = pipe.status(PROBE) else { unreachable!() };
     assert!(error.contains("ended the JS host"), "{error}");
     assert_ne!(pipe.scripts().pid(), Some(pid));
@@ -1394,10 +1307,7 @@ fn a_v2_plugin_that_floods_fails_alone() {
     pipe.settle();
     // The UI thread takes nothing while the flood comes.
     std::thread::sleep(Duration::from_millis(1500));
-    pipe.harness.wait("the flood ended the JS host", || {
-        pipe.harness.app.advance(Duration::from_millis(1));
-        matches!(pipe.status(PROBE), Some(Status::Failed(_)))
-    });
+    pipe.until("the flood ended the JS host", || matches!(pipe.status(PROBE), Some(Status::Failed(_))));
     pipe.settle();
     let Some(Status::Failed(error)) = pipe.status(PROBE) else { unreachable!() };
     assert!(error.contains("flooded the host with effects"), "{error}");
@@ -1690,8 +1600,7 @@ fn a_dependency_changed_after_approval_runs_nothing_unapproved() {
     opencode_tui::plugins::host::reconcile(&pipe.harness.tui);
     pipe.settle();
     pipe.scripts().kill();
-    pipe.harness.wait("the plugin was set up again", || {
-        pipe.harness.app.advance(Duration::from_millis(1));
+    pipe.until("the plugin was set up again", || {
         std::fs::read_to_string(&marker).unwrap_or_default().lines().count() == 2
     });
     assert_eq!(std::fs::read_to_string(&marker).unwrap(), "approved\napproved\n");
@@ -1768,10 +1677,7 @@ fn a_plugin_imports_runtime_modules_and_calls_its_own_rpc() {
     let pipe = Pipe { harness, root };
     pipe.active("example.rpc");
     pipe.harness.tui.keymap.dispatch("rpc.say", None);
-    pipe.harness.wait("the RPC answered", || {
-        pipe.harness.app.advance(Duration::from_millis(1));
-        std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n'))
-    });
+    pipe.until("the RPC answered", || std::fs::read_to_string(&log).is_ok_and(|text| text.ends_with('\n')));
     assert_eq!(std::fs::read_to_string(&log).unwrap(), "{\"said\":\"hi\"}\n");
     let called = requests.lock().unwrap().iter().find(|seen| seen.path == "/api/rpc/echo/say").cloned().unwrap();
     assert_eq!((called.method.as_str(), called.body), ("POST", json!({ "input": { "text": "hi" } })));
@@ -1796,10 +1702,7 @@ fn a_local_plugin_that_fails_is_listed_by_its_package() {
         let entries = pipe.harness.tui.plugins.entries();
         entries.into_iter().find(|entry| entry.target.as_deref().is_some_and(|target| target.ends_with("broken")))
     };
-    pipe.harness.wait("the load failed", || {
-        pipe.harness.app.advance(Duration::from_millis(1));
-        entry().is_some_and(|entry| matches!(entry.status, Status::Failed(_)))
-    });
+    pipe.until("the load failed", || entry().is_some_and(|entry| matches!(entry.status, Status::Failed(_))));
     let entry = entry().unwrap();
     assert_eq!(entry.id, "opencode-broken-thing", "{entry:?}");
 }
@@ -1835,10 +1738,7 @@ fn a_plugin_with_eighty_stores_reads_each() {
     let pipe = Pipe { harness, root };
     // The UI thread takes nothing while the setup runs, as when it is busy at startup: once the hello, the load and
     // the setup went, what the setup sends waits for it.
-    pipe.harness.wait("the setup went to the JS host", || {
-        pipe.harness.app.advance(Duration::from_millis(1));
-        opencode_plugin::pipe::crossed().sent - sent >= 3
-    });
+    pipe.until("the setup went to the JS host", || opencode_plugin::pipe::crossed().sent - sent >= 3);
     std::thread::sleep(Duration::from_millis(1500));
     pipe.active("example.shards");
     pipe.settle();
@@ -1897,10 +1797,7 @@ fn a_plugin_past_the_stored_values_bound_goes_on_and_follows_a_large_value() {
     pipe.active("example.big");
     pipe.settle();
     let marked = |what: &str, done: &dyn Fn(&str) -> bool| {
-        pipe.harness.wait(what, || {
-            pipe.harness.app.advance(Duration::from_millis(1));
-            std::fs::read_to_string(&marker).is_ok_and(|text| done(&text))
-        })
+        pipe.until(what, || std::fs::read_to_string(&marker).is_ok_and(|text| done(&text)))
     };
     pipe.harness.tui.keymap.dispatch("big.small", None);
     marked("the small value was stored", &|text| text == "5");
@@ -1938,11 +1835,12 @@ fn a_store_update_of_a_value_answered_past_a_frame_keeps_it() {
     let root = opencode_util::temp::tempdir().unwrap();
     let dir = root.path().join("config/plugins/notes");
     std::fs::create_dir_all(&dir).unwrap();
-    let marker = root.path().join("notes.lengths");
+    let (marker, part) = (root.path().join("notes.lengths"), root.path().join("notes.lengths.part"));
     let module = format!(
         "export default {{ id: \"example.notes\", setup(context) {{\n\
          const [store, update] = context.storage.store(\"notes\", {{ initial: {{ items: [] }} }})\n\
-         const write = (text) => require(\"node:fs\").writeFileSync({marker:?}, text)\n\
+         const fs = require(\"node:fs\")\n\
+         const write = (text) => {{ fs.writeFileSync({part:?}, text); fs.renameSync({part:?}, {marker:?}) }}\n\
          context.keymap.layer(() => ({{ mode: \"global\", commands: [{{ id: \"notes.append\", title: \"Append\", run: () =>\n\
          update((draft) => {{ draft.items.push(\"tail\") }}).then(() => write(JSON.stringify(store.items.map((item) => item.length))),\n\
          (error) => write(`refused ${{error.message}}`)) }}] }}))\n\
@@ -1961,10 +1859,8 @@ fn a_store_update_of_a_value_answered_past_a_frame_keeps_it() {
     pipe.active("example.notes");
     pipe.settle();
     pipe.harness.tui.keymap.dispatch("notes.append", None);
-    pipe.harness.wait("the update ended", || {
-        pipe.harness.app.advance(Duration::from_millis(1));
-        marker.exists()
-    });
+    // The plugin writes the marker whole, then renames it into place: it shows only with its text (compat-harness).
+    pipe.until("the update ended", || marker.exists());
     assert_eq!(std::fs::read_to_string(&marker).unwrap(), "[110000,4]");
     opencode_tui::plugins::host::flush_storage(&pipe.harness.tui);
     let stored: Value = serde_json::from_str(&opencode_plugin::Host::storage_read(&*host, key).unwrap()).unwrap();

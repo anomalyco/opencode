@@ -540,7 +540,6 @@ fn a_refilled_mailbox_holds_back_no_report_and_no_wake() {
         assert_eq!(woken.first(), Some(&1), "{carrier:?}: the wake ran after the messages {woken:?}");
         assert!(refill > 0, "{carrier:?}: the refills ended first");
         // A report: the thread's panic comes after one message, while the refills go on.
-        let before = mail(|mail| mail.arrived.len());
         let (panicked, done) = std::sync::mpsc::channel();
         mail(|mail| mail.spawner.clone())
             .unwrap()
@@ -550,6 +549,16 @@ fn a_refilled_mailbox_holds_back_no_report_and_no_wake() {
             })
             .unwrap();
         done.recv_timeout(Duration::from_secs(10)).unwrap();
+        // The report counts from when it is put in, not from when the thread began to panic: under load the refills
+        // the frames drain in between were counted as coming before it (compat-harness). Nothing drains until then.
+        let before = {
+            let begun = std::time::Instant::now();
+            while !opencode_plugin::mailbox::stats(ID).is_some_and(|stats| stats.reported) {
+                assert!(begun.elapsed() < Duration::from_secs(10), "{carrier:?}: no report was put in");
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            mail(|mail| mail.arrived.len())
+        };
         harness.wait("the panic failed the plugin", || {
             harness.app.advance(Duration::from_millis(1));
             harness.app.render();

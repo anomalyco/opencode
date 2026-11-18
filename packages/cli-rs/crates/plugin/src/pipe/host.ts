@@ -369,6 +369,9 @@ const plugins = new Map<string, Plugin>()
 const generations = new Map<number, Plugin>()
 // How long a component's command outlives its mount, in milliseconds (P8).
 const UNCOMMAND = 250
+// The commands whose retirement waits for its `UNCOMMAND`, across plugins, which a ping reports (compat-harness): a
+// test waits until none does, rather than for the 250 ms on this process's clock.
+let retiring = 0
 // The failed reply of a fetch the host did not take, as `REFUSED` in `lib.rs` says it.
 const REFUSED = "the host takes no request now: the effects that wait fill its queue"
 // What a fetch rejects with when the host cancels it, as the mount that asked for it closed.
@@ -716,7 +719,9 @@ function context(plugin: Plugin) {
       plugin.afterCall.push(run)
     },
     uncommand(name: string) {
+      retiring += 1
       setTimeout(() => {
+        retiring -= 1
         const index = plugin.commands.findIndex((command) => command.name === name)
         if (index === -1) return
         const command = plugin.commands[index]!
@@ -1391,7 +1396,7 @@ async function handle(message: Json) {
           [...plugin.mounts.values()].some((mount) => mount.inflight || mount.dirty) ||
           [...plugin.claimMounts.values()].some((mount) => mount.inflight || mount.dirty),
       )
-      return send({ type: "pong", seq: message.seq, waiting })
+      return send({ type: "pong", seq: message.seq, waiting, retiring: retiring > 0 })
     }
   }
 }

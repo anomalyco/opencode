@@ -763,6 +763,8 @@ pub struct Scripts {
     stopped: RefCell<Option<String>>,
     /// The ping last answered, and whether a tree waited then.
     pong: Cell<Option<(u64, bool)>>,
+    /// Whether the last pong said a command still lingers on the JS host, to retire ([`Scripts::retiring`]).
+    retiring: Cell<bool>,
     hold: RefCell<Hold>,
     /// What the input put back now goes past ([`Keyed`]).
     replayed: RefCell<Past>,
@@ -959,6 +961,7 @@ impl Scripts {
             ends: RefCell::default(),
             stopped: RefCell::default(),
             pong: Cell::new(None),
+            retiring: Cell::new(false),
             hold: RefCell::default(),
             replayed: RefCell::default(),
             recent: RefCell::default(),
@@ -1044,6 +1047,13 @@ impl Scripts {
     /// one (a first render that waits for its reads).
     pub fn ponged(&self, seq: u64) -> Option<bool> {
         self.pong.get().filter(|(answered, _)| *answered >= seq).map(|(_, waiting)| waiting)
+    }
+
+    /// Whether the JS host still retires a command a component dropped, by the last ping it answered: its
+    /// registrations change once more when it does.
+    #[doc(hidden)]
+    pub fn retiring(&self) -> bool {
+        self.retiring.get()
     }
 
     /// Whether ping `seq` waits for its answer: not once answered, nor when a full overflow refused it, which no answer
@@ -1867,7 +1877,8 @@ impl Scripts {
             | Up::Fail { .. }
             | Up::Taking { .. }
             | Up::Manifest { .. }) => self.from_plugin(up),
-            Up::Pong { seq, waiting } => {
+            Up::Pong { seq, waiting, retiring } => {
+                self.retiring.set(retiring);
                 self.take_waiting(seq);
                 self.pong.set(Some((seq, waiting)));
             }
@@ -2067,6 +2078,8 @@ impl Scripts {
         log::error!("{why}");
         // A ping on its way is lost with it: answered, as one a tree waits behind, so its sender asks again.
         self.pong.set(Some((self.seq.get(), true)));
+        // Its timers went with it.
+        self.retiring.set(false);
         let started = std::mem::take(&mut *self.started.borrow_mut());
         let mut waiting: Vec<(u64, Waiting)> = self.waiting.borrow_mut().drain().collect();
         waiting.sort_by_key(|(seq, _)| *seq);
