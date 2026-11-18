@@ -297,7 +297,7 @@ async function runSide(box: Sandbox, side: Side, label: string, scenario: SimSce
     debug.requests = proxy.log
     for (const step of scenario.steps) {
       console.error(`${label} ${JSON.stringify(step)}`)
-      await runStep(step, { result, until, gone, capture, captures, release: backend.release })
+      await runStep(step, { result, until, gone, capture, captures, release: backend.release, cwd: box.cwd })
     }
     if (backend.failures.length) throw new Error(`${label} backend: ${backend.failures.join("; ")}`)
     return { captures, requests: proxy.log as Logged[], model }
@@ -325,9 +325,11 @@ async function runStep(
     capture: () => Promise<Fixture>
     captures: Record<string, Fixture>
     release: (name: string) => void
+    cwd: string
   },
 ) {
   if ("release" in step) return io.release(step.release)
+  if ("touch" in step) return writeFile(path.join(io.cwd, step.touch), "")
   if ("sleep" in step) return Bun.sleep(step.sleep)
   if ("type" in step) return io.result("ui.type", { text: step.type })
   if ("press" in step)

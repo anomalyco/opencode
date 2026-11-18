@@ -21,6 +21,8 @@ export type Step =
   | { gone: string }
   // Lets the model reply waiting at `{ hold: name }` stream on (scenario.ts `Reply`).
   | { release: string }
+  // Writes an empty file under the working directory, for a shell command that waits for it to end.
+  | { touch: string }
   // Waits for a time, for state that has no text to wait for. The scenario says why.
   | { sleep: number }
   | {
