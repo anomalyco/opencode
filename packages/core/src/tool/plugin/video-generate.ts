@@ -21,7 +21,7 @@ import { SessionSchema } from "../../session/schema.js"
 import { VideoGeneration } from "../../video-generation.js"
 
 export const name = "experimental_video_generate"
-export const MAX_INPUT_BYTES = 50 * 1024 * 1024
+export const MAX_INPUT_BYTES = 100 * 1024 * 1024
 const URL_TYPES: Record<string, string> = {
   mp4: "video/mp4",
   mov: "video/quicktime",
@@ -53,7 +53,7 @@ export const Input = Schema.Struct({
   end: Schema.optionalKey(source).annotate({
     description: "Image the video ends on exactly. A local file path or an http(s) URL.",
   }),
-  references: Schema.optionalKey(Schema.Array(source).check(Schema.isMinLength(1), Schema.isMaxLength(9))).annotate({
+  references: Schema.optionalKey(Schema.Array(source).check(Schema.isMinLength(1))).annotate({
     description:
       "Images, videos or audio that guide the subject, style, motion or voice without being shown as-is. Local file paths or http(s) URLs.",
   }),
@@ -233,7 +233,7 @@ export const Plugin = {
                 Effect.catchTag("Environment.NotFound", () => new ToolFailure({ message: `File not found: ${value}` })),
               )
             if (info.size > MAX_INPUT_BYTES)
-              return yield* new ToolFailure({ message: `${value} is larger than 50 MiB.` })
+              return yield* new ToolFailure({ message: `${value} is larger than 100 MiB.` })
             const bytes = (yield* environment.files.read(target.absolute)).bytes
             const mime = Media.detectMediaType(bytes)
             if (mime === undefined)
