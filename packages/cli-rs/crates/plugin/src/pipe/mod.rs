@@ -857,6 +857,12 @@ impl Scripts {
         self.pong.get().filter(|(answered, _)| *answered >= seq).map(|(_, waiting)| waiting)
     }
 
+    /// Whether ping `seq` waits for its answer: not once answered, nor when a full overflow refused it, which no answer
+    /// follows.
+    pub fn pinging(&self, seq: u64) -> bool {
+        self.waiting.borrow().contains_key(&seq)
+    }
+
     /// Whether nothing waits for the JS host: no load, setup, handler or view is unanswered (a ping is left out).
     pub fn idle(&self) -> bool {
         self.waiting.borrow().values().all(|waiting| matches!(waiting, Waiting::Ping))

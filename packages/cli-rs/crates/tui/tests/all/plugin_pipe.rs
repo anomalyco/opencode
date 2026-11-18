@@ -158,18 +158,24 @@ pub(crate) fn settle_app(app: &TestApp, tui: &Tui, scripts: &Scripts) {
             return;
         }
     }
+    let unsettled = || {
+        if begun.elapsed() > Duration::from_secs(20) {
+            let entries = tui.plugins.entries().into_iter().map(|entry| format!("{} {:?}", entry.id, entry.status));
+            panic!("the JS host never settled:\n{}\n{}", entries.collect::<Vec<_>>().join("\n"), app.text());
+        }
+    };
     loop {
+        unsettled();
         // What the UI sends in its next frames (a route's first view is deferred) goes before the ping.
         for _ in 0..3 {
             turn_app(app);
         }
         let seq = scripts.ping();
         let mut pong = None;
-        while pong.is_none() {
-            if begun.elapsed() > Duration::from_secs(20) {
-                let entries = tui.plugins.entries().into_iter().map(|entry| format!("{} {:?}", entry.id, entry.status));
-                panic!("the JS host never settled:\n{}\n{}", entries.collect::<Vec<_>>().join("\n"), app.text());
-            }
+        // A full overflow refuses the ping, and nothing answers it: the next round pings again (pipe-flakes: a settle
+        // as the JS host began to read a full overflow waited for good).
+        while pong.is_none() && scripts.pinging(seq) {
+            unsettled();
             turn_app(app);
             pong = scripts.ponged(seq);
             if pong.is_none() {
