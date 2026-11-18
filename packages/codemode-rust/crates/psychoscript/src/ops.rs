@@ -1033,10 +1033,10 @@ impl<'rt> Vm<'rt> {
                 if *n >= 0.0 && *n < 10.0 && n.fract() == 0.0 {
                     return Ok(self.char_strs[b'0' as usize + *n as usize]);
                 }
-                match self.string_val(num_to_string(*n)) {
-                    Value::Str(id) => id,
-                    _ => 0,
+                if self.atoms.bufs.len() >= crate::vm::MAX_STRINGS {
+                    self.out_of_memory();
                 }
+                self.atoms.alloc_num(*n)
             }
             Value::Bool(b) => return Ok(self.static_id(if *b { "true" } else { "false" })),
             Value::Null => return Ok(self.static_id("null")),
@@ -1126,6 +1126,15 @@ impl<'rt> Vm<'rt> {
         self.number_of(&p)
     }
 
+    /// `Strings::concat_num`, counted against the strings a run may make.
+    #[inline]
+    fn concat_num(&mut self, s: StrId, n: f64, num_first: bool) -> Option<Value> {
+        if self.atoms.bufs.len() >= crate::vm::MAX_STRINGS {
+            return None;
+        }
+        self.atoms.concat_num(s, n, num_first).map(Value::Str)
+    }
+
     fn concat(&mut self, x: &str, y: &str) -> Res {
         if x.len() + y.len() > MAX_STRING_LEN {
             return Err(self.range_error("Invalid string length"));
@@ -1149,10 +1158,16 @@ impl<'rt> Vm<'rt> {
             (Value::Num(x), Value::Num(y)) => return Ok(Value::Num(x + y)),
             (Value::Str(x), Value::Str(y)) => return self.concat_ids(*x, *y),
             (Value::Str(x), Value::Num(y)) => {
+                if let Some(s) = self.concat_num(*x, *y, false) {
+                    return Ok(s);
+                }
                 let y = self.string_of(&Value::Num(*y))?;
                 return self.concat_ids(*x, y);
             }
             (Value::Num(x), Value::Str(y)) => {
+                if let Some(s) = self.concat_num(*y, *x, true) {
+                    return Ok(s);
+                }
                 let x = num_to_string(*x);
                 let y = self.atoms.get(*y).to_owned();
                 return self.concat(&x, &y);

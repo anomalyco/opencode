@@ -21,7 +21,7 @@ pub type NativeFn = fn(&mut Vm, Value, &[Value], Id) -> Res;
 
 pub const MAX_DEPTH: usize = 10_000;
 const MAX_OBJECTS: usize = 2_000_000;
-const MAX_STRINGS: usize = 4_000_000;
+pub(crate) const MAX_STRINGS: usize = 4_000_000;
 const MAX_NATIVE_DEPTH: usize = 400;
 pub(crate) const FUEL: i32 = 20_000;
 /// The reference's fuel: it starts the host calls a program queued whenever this runs out, so streaming responses
@@ -269,6 +269,8 @@ pub struct Vm<'rt> {
     pub stack_base: usize,
     pub stack_budget: usize,
     arg_pool: Vec<Vec<Value>>,
+    /// The parts of a `Concat` instruction, kept between them so joining allocates no list.
+    concat_parts: Vec<StrId>,
     pub char_strs: Vec<StrId>,
     pub rng: u64,
     /// A suspend (or a round trip) asks the run to stop at its next safe point.
@@ -373,6 +375,7 @@ impl<'rt> Vm<'rt> {
             stack_base: 0,
             stack_budget: usize::MAX,
             arg_pool: Vec::new(),
+            concat_parts: Vec::new(),
             char_strs,
             rng: seed | 1,
             suspend_wanted: false,
@@ -3184,17 +3187,22 @@ impl<'rt> Vm<'rt> {
                     }
                     Op::Concat(n) => {
                         let start = self.stack.len() - n as usize;
-                        let parts: Vec<StrId> = self.stack[start..]
-                            .iter()
-                            .filter(|p| p.is_str())
-                            .map(|p| p.payload())
-                            .collect();
+                        let mut parts = std::mem::take(&mut self.concat_parts);
+                        parts.extend(
+                            self.stack[start..]
+                                .iter()
+                                .filter(|p| p.is_str())
+                                .map(|p| p.payload()),
+                        );
                         self.stack.truncate(start);
                         let len: usize = parts.iter().map(|p| self.atoms.get(*p).len()).sum();
-                        if len > crate::ops::MAX_STRING_LEN {
+                        let v =
+                            (len <= crate::ops::MAX_STRING_LEN).then(|| self.concat_strs(&parts));
+                        parts.clear();
+                        self.concat_parts = parts;
+                        let Some(v) = v else {
                             throw!(self.range_error("Invalid string length"));
-                        }
-                        let v = self.concat_strs(&parts);
+                        };
                         self.push(v);
                     }
                     Op::Template(i) => {

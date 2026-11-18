@@ -3,9 +3,10 @@
 //! Strings live for the whole run, like objects, so `Value` can be `Copy`. They are immutable, except that a string
 //! built by `local += x` is held only by that local until the local is read, and grows in place meanwhile.
 //!
-//! Concatenation results of some size are prefixes of a shared growable buffer. Appending to the string that ends
-//! its buffer extends the buffer and makes a longer prefix, so `s = s + x` in a loop costs amortized linear time
-//! while every earlier `s` keeps its text.
+//! Concatenation results are ranges of shared growable buffers: a long one starts a buffer of its own, a short one
+//! goes at the end of the buffer all short results share, so making it allocates nothing. Appending to the string
+//! that ends its buffer extends the buffer and makes a longer range, so `s = s + x` in a loop costs amortized linear
+//! time while every earlier `s` keeps its text.
 //!
 //! A string that is not well-formed UTF-16 (it holds a lone surrogate) has no UTF-8 form. It keeps its code units in
 //! `Strings::wtf`, and its text is a carrier: UTF-8 in which each lone surrogate is `MARK` followed by one
@@ -35,11 +36,12 @@ pub struct StrBuf {
     pub ascii: bool,
     /// Only one local slot holds this string, so `+=` may append in place.
     pub builder: bool,
-    /// When not `NO_GROW`, the text is the first `len` bytes of `Strings::grow[grow]` rather than `s`.
+    /// When not `NO_GROW`, the text is the `len` bytes at `aux` in `Strings::grow[grow]` rather than `s`.
     grow: u32,
     len: u32,
-    /// When not `NO_WTF`, the text is a carrier and `Strings::wtf[wtf]` holds the code units.
-    wtf: u32,
+    /// For a string in a `grow` buffer, its offset there. Otherwise, when not `NO_WTF`, the text is a carrier and
+    /// `Strings::wtf[aux]` holds the code units.
+    aux: u32,
 }
 
 const NO_GROW: u32 = u32::MAX;
@@ -159,6 +161,8 @@ const GROW_MIN: usize = 64;
 pub struct Strings {
     pub bufs: Vec<StrBuf>,
     grow: Vec<String>,
+    /// The `grow` buffer short strings are appended to, so making one allocates nothing of its own.
+    arena: u32,
     wtf: Vec<Box<[u16]>>,
     map: FxHashMap<Cow<'static, str>, Atom>,
     atom_str: Vec<StrId>,
@@ -178,6 +182,7 @@ impl Strings {
         let mut s = Strings {
             bufs: Vec::new(),
             grow: Vec::new(),
+            arena: NO_GROW,
             wtf: Vec::new(),
             map: FxHashMap::default(),
             atom_str: Vec::new(),
@@ -217,7 +222,7 @@ impl Strings {
             return self.push(Cow::Owned(text), ascii);
         }
         let id = self.push(Cow::Owned(text), false);
-        self.bufs[id as usize].wtf = self.wtf.len() as u32;
+        self.bufs[id as usize].aux = self.wtf.len() as u32;
         self.wtf.push(units.into());
         id
     }
@@ -225,7 +230,8 @@ impl Strings {
     /// Whether a string's text is a carrier.
     #[inline]
     pub fn is_wtf(&self, id: StrId) -> bool {
-        self.bufs[id as usize].wtf != NO_WTF
+        let b = &self.bufs[id as usize];
+        b.grow == NO_GROW && b.aux != NO_WTF
     }
 
     pub fn alloc_static(&mut self, s: &'static str) -> StrId {
@@ -239,7 +245,7 @@ impl Strings {
             builder: false,
             grow: NO_GROW,
             len: 0,
-            wtf: NO_WTF,
+            aux: NO_WTF,
         });
         (self.bufs.len() - 1) as StrId
     }
@@ -250,12 +256,66 @@ impl Strings {
         if b.grow == NO_GROW {
             return &b.s;
         }
+        let off = b.aux as usize;
         self.grow[b.grow as usize]
-            .get(..b.len as usize)
+            .get(off..off + b.len as usize)
             .unwrap_or_default()
     }
 
     /// The concatenation of `parts`, which must not be empty. Extends the first part's buffer when it ends there.
+    /// A short ASCII string joined with a number's text (`"k" + i`, `i + "k"`): one new string, the number written
+    /// straight into it. `None` for a string this does not take, which `concat` joins instead.
+    pub fn concat_num(&mut self, s: StrId, n: f64, num_first: bool) -> Option<StrId> {
+        if self.is_wtf(s) || self.get(s).len() + 24 >= GROW_MIN {
+            return None;
+        }
+        let ascii = self.bufs[s as usize].ascii;
+        let g = self.arena();
+        let mut buf = std::mem::take(&mut self.grow[g]);
+        let start = buf.len();
+        if !num_first {
+            self.append_to(&mut buf, g, s);
+        }
+        crate::value::write_num(&mut buf, n);
+        if num_first {
+            self.append_to(&mut buf, g, s);
+        }
+        Some(self.push_grown(buf, g, start, ascii))
+    }
+
+    /// A number's text, written at the end of the short strings' buffer.
+    pub fn alloc_num(&mut self, n: f64) -> StrId {
+        let g = self.arena();
+        let mut buf = std::mem::take(&mut self.grow[g]);
+        let start = buf.len();
+        crate::value::write_num(&mut buf, n);
+        self.push_grown(buf, g, start, true)
+    }
+
+    /// The index of the short strings' buffer, made on first use.
+    fn arena(&mut self) -> usize {
+        if self.arena == NO_GROW {
+            self.arena = self.grow.len() as u32;
+            self.grow.push(String::with_capacity(1024));
+        }
+        self.arena as usize
+    }
+
+    /// A string of the text `buf` got from `start` on, `buf` going back to `grow[g]` it was taken from.
+    fn push_grown(&mut self, buf: String, g: usize, start: usize, ascii: bool) -> StrId {
+        let len = (buf.len() - start) as u32;
+        self.grow[g] = buf;
+        self.bufs.push(StrBuf {
+            s: Cow::Borrowed(""),
+            ascii,
+            builder: false,
+            grow: g as u32,
+            len,
+            aux: start as u32,
+        });
+        (self.bufs.len() - 1) as StrId
+    }
+
     pub fn concat(&mut self, parts: &[StrId]) -> StrId {
         let Some((&first, rest)) = parts.split_first() else {
             return self.alloc_static("");
@@ -267,35 +327,23 @@ impl Strings {
             return self.concat_wtf(parts, total);
         }
         let f = &self.bufs[first as usize];
-        let g = if f.grow != NO_GROW && self.grow[f.grow as usize].len() == f.len as usize {
-            f.grow as usize
-        } else if total >= GROW_MIN {
-            let mut buf = String::with_capacity(total * 2);
-            buf.push_str(self.get(first));
-            self.grow.push(buf);
-            self.grow.len() - 1
-        } else {
-            let mut out = String::with_capacity(total);
-            for p in parts {
-                out.push_str(self.get(*p));
-            }
-            return self.push(Cow::Owned(out), ascii);
-        };
+        // The first part ends its buffer: the result extends it. Otherwise a long result starts a buffer of its own,
+        // and a short one goes at the end of the short strings' buffer.
+        let (g, start, rest) =
+            if f.grow != NO_GROW && self.grow[f.grow as usize].len() == (f.aux + f.len) as usize {
+                (f.grow as usize, f.aux as usize, rest)
+            } else if total >= GROW_MIN {
+                self.grow.push(String::with_capacity(total * 2));
+                (self.grow.len() - 1, 0, parts)
+            } else {
+                let g = self.arena();
+                (g, self.grow[g].len(), parts)
+            };
         let mut buf = std::mem::take(&mut self.grow[g]);
         for p in rest {
             self.append_to(&mut buf, g, *p);
         }
-        let len = buf.len() as u32;
-        self.grow[g] = buf;
-        self.bufs.push(StrBuf {
-            s: Cow::Borrowed(""),
-            ascii,
-            builder: false,
-            grow: g as u32,
-            len,
-            wtf: NO_WTF,
-        });
-        (self.bufs.len() - 1) as StrId
+        self.push_grown(buf, g, start, ascii)
     }
 
     /// `concat` with a carrier among the parts, decoded afresh so a high and a low surrogate that meet become one
@@ -318,6 +366,16 @@ impl Strings {
             return self.push_wtf(a, b);
         }
         let ab = &self.bufs[a as usize];
+        // A builder made short leaves the short strings' buffer for text of its own, which it extends from now on.
+        if ab.grow == self.arena && ab.grow != NO_GROW {
+            let own = self.get(a).to_owned();
+            let entry = &mut self.bufs[a as usize];
+            entry.s = Cow::Owned(own);
+            entry.grow = NO_GROW;
+            entry.aux = NO_WTF;
+            entry.len = 0;
+            return self.push_in_place(a, b);
+        }
         if ab.grow == NO_GROW {
             let mut s = std::mem::take(&mut self.bufs[a as usize].s);
             s.to_mut().push_str(self.get(b));
@@ -327,17 +385,19 @@ impl Strings {
             return;
         }
         let g = ab.grow as usize;
-        if self.grow[g].len() != ab.len as usize {
+        if self.grow[g].len() != (ab.aux + ab.len) as usize {
             let mut s = String::with_capacity(ab.len as usize * 2);
             s.push_str(self.get(a));
             self.grow.push(s);
-            self.bufs[a as usize].grow = (self.grow.len() - 1) as u32;
+            let entry = &mut self.bufs[a as usize];
+            entry.grow = (self.grow.len() - 1) as u32;
+            entry.aux = 0;
             return self.push_in_place(a, b);
         }
         let mut buf = std::mem::take(&mut self.grow[g]);
         self.append_to(&mut buf, g, b);
         let entry = &mut self.bufs[a as usize];
-        entry.len = buf.len() as u32;
+        entry.len = buf.len() as u32 - entry.aux;
         entry.ascii &= ascii;
         self.grow[g] = buf;
     }
@@ -359,7 +419,8 @@ impl Strings {
     fn append_to(&self, buf: &mut String, g: usize, p: StrId) {
         let pb = &self.bufs[p as usize];
         if pb.grow as usize == g {
-            buf.extend_from_within(..pb.len as usize);
+            let off = pb.aux as usize;
+            buf.extend_from_within(off..off + pb.len as usize);
         } else {
             buf.push_str(self.get(p));
         }
@@ -371,7 +432,7 @@ impl Strings {
         StrRef {
             s: self.get(id),
             ascii: b.ascii,
-            units: (b.wtf != NO_WTF).then(|| &*self.wtf[b.wtf as usize]),
+            units: (b.grow == NO_GROW && b.aux != NO_WTF).then(|| &*self.wtf[b.aux as usize]),
         }
     }
 
@@ -597,6 +658,32 @@ mod tests {
         let back = s.concat(&[l, h]);
         assert_eq!(s.sref(back).utf16(), [0xde00, 0xd83d]);
         assert_eq!(host_text(s.get(back)), "\u{fffd}\u{fffd}");
+    }
+
+    #[test]
+    fn short_strings_share_a_buffer_and_keep_their_text() {
+        let mut s = Strings::new();
+        let k = s.alloc_static("k");
+        let a = s.concat_num(k, 12.0, false).expect("short");
+        // `a` ends the shared buffer, so this extends it; `c` no longer can.
+        let b = s.concat(&[a, k]);
+        let c = s.concat(&[a, a]);
+        let d = s.concat_num(k, -1.5, true).expect("short");
+        let n = s.alloc_num(1e21);
+        assert_eq!(
+            [a, b, c, d, n].map(|id| s.get(id)),
+            ["k12", "k12k", "k12k12", "-1.5k", "1e+21"]
+        );
+        // A builder leaves the shared buffer for text of its own, and the strings after it keep theirs.
+        s.bufs[a as usize].builder = true;
+        s.push_in_place(a, k);
+        s.push_in_place(a, n);
+        assert_eq!(
+            [a, b, c].map(|id| s.get(id)),
+            ["k12k1e+21", "k12k", "k12k12"]
+        );
+        let wide = s.alloc_units(&[0xd800]);
+        assert!(s.concat_num(wide, 1.0, false).is_none() && s.is_wtf(wide) && !s.is_wtf(b));
     }
 
     #[test]
