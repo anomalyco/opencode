@@ -355,6 +355,8 @@ export default function SessionBrowserPane(props: {
   })
 
   const size = () => fit() ?? available()
+  // One computation, as `pageVisible` is: a fixed device viewport shows its page only once it has a place.
+  const embedVisible = createMemo(() => pageVisible() && (!fixedViewport() || !!fit()))
   const tabID = createMemo(() => state()?.id)
 
   // A new visit to the same tab must not receive the old visit's failure toast.
@@ -1329,7 +1331,7 @@ export default function SessionBrowserPane(props: {
           id={embed()}
           // A page blocked in a JavaScript dialog draws no frame, so Chromium cannot capture a still of it: its dialog
           // sits over the dimmed, empty page area at once. "Leave site?" and a sign-in leave the page drawing.
-          visible={pageVisible() && (!fixedViewport() || !!fit())}
+          visible={embedVisible()}
           frozen={overlayed().frozen || !!promptKey(true)}
           // A navigation, in-page or not, a reload starting or a layout viewport change is another page.
           page={JSON.stringify([
