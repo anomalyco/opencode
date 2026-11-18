@@ -13,9 +13,7 @@ use opencode_ui::tool_info::{canonical_tool_name, tool_display_content, tool_dis
 use serde_json::Map;
 use unicode_width::UnicodeWidthStr;
 
-use super::{
-    edit, execute, generic, glob, grep, patch, question, read, shell, skill, subagent, todo, webfetch, websearch, write,
-};
+use super::{edit, execute, generic, inline, patch, question, read, shell, subagent, todo, write};
 use crate::dialogs::open::truncate_file_path;
 use crate::prelude::*;
 use crate::routes::session::messages::images::{Images, tool_images};
@@ -38,7 +36,7 @@ pub struct Tool {
 }
 
 /// A tool view: what [`Tool`] mounts and updates for the call's display name.
-trait ToolView {
+pub(super) trait ToolView {
     fn root(&self) -> &View;
     fn update(&self, cx: &Context<'_>, props: &Props<'_>);
     /// Takes the theme of `cx` in place; the update that follows paints what the view left to it.
@@ -65,19 +63,14 @@ macro_rules! tool_views {
 
 tool_views!(
     shell::Shell,
-    glob::Glob,
     read::Read,
-    grep::Grep,
     write::Write,
     edit::Edit,
-    webfetch::WebFetch,
-    websearch::WebSearch,
     subagent::Subagent,
     execute::Execute,
     patch::Patch,
     todo::Todo,
     question::Question,
-    skill::Skill,
     generic::Generic
 );
 
@@ -127,19 +120,19 @@ impl Tool {
             self.body.clear();
             let body: Box<dyn ToolView> = match display {
                 "shell" => Box::new(shell::Shell::new(cx)),
-                "glob" => Box::new(glob::Glob::new(cx)),
+                "glob" => inline::row(cx, inline::glob),
                 "read" => Box::new(read::Read::new(cx)),
-                "grep" => Box::new(grep::Grep::new(cx)),
+                "grep" => inline::row(cx, inline::grep),
                 "write" => Box::new(write::Write::new(cx)),
                 "edit" => Box::new(edit::Edit::new(cx)),
-                "webfetch" => Box::new(webfetch::WebFetch::new(cx)),
-                "websearch" => Box::new(websearch::WebSearch::new(cx)),
+                "webfetch" => inline::row(cx, inline::webfetch),
+                "websearch" => inline::row(cx, inline::websearch),
                 "subagent" => Box::new(subagent::Subagent::new(cx)),
                 "execute" => Box::new(execute::Execute::new(cx)),
                 "patch" => Box::new(patch::Patch::new(cx)),
                 "todowrite" => Box::new(todo::Todo::new(cx)),
                 "question" => Box::new(question::Question::new(cx)),
-                "skill" => Box::new(skill::Skill::new(cx)),
+                "skill" => inline::row(cx, inline::skill),
                 _ => Box::new(generic::Generic::new(cx)),
             };
             self.body.add(body.root());
