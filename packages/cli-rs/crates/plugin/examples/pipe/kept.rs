@@ -1,6 +1,5 @@
-//! The linked twin of `kept/tui.ts`, for `carrier-equal` of the built-ins' contract (P6a) on the pipe: a route that
-//! hears its mounts begin and end, keeps its root while what it shows is the same, holds a box it can hide, and shows
-//! what a read of one message gives. The two are two programs; neither shares code with the host.
+//! Linked counterpart to `kept/tui.ts`. Its route reports mount events and keeps its last tree across unrelated
+//! updates.
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;

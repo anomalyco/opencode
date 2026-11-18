@@ -1,5 +1,4 @@
-# The sample native plugin (P.4): a `cdylib` on `opencode-plugin-abi`. The loader's tests build it with `cargo build`
-# and load the library. Not a workspace member.
+# Standalone native plugin loaded by the integration tests.
 [package]
 name = "opencode-sample-plugin"
 version = "0.1.0"
@@ -19,10 +18,9 @@ setup-fails = []
 app = []
 # Starts no ticker, so the slot changes only when the host draws it again for a change batch.
 still = []
-# The probe of P0a (`src/p0a.rs`): dialogs, the composer and a styled box.
+# Dialogs, composer edits and styled boxes.
 p0a = []
-# Adds `/p0btitle`, which sets the terminal title, and `/p0brun <shell command>`, which runs it in the foreground and
-# toasts how it ended, for the P-PTY scenarios `P.0b/*`.
+# Terminal-title and foreground-process commands.
 pty = []
 # A static constructor that appends a line to `opencode-sample-witness-<pid>` in the temp directory as the library
 # loads, before any of its code is called: the TUI's approval test sees whether the library was mapped at all.

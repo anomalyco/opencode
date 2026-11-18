@@ -1,15 +1,6 @@
-//! A plugin that fails on command (synthesis 4.5, P4c). `/fault-<kind>` fails inline in the command handler
-//! (`run-command`); `/fault-render-<kind>` makes the next render of its `prompt.footer` line fail (`render-slot`);
-//! `/fault-thread-<kind>` fails on a thread of its own, 300 ms later, when no call of the plugin runs. The kinds:
-//! `panic`, `hang` (spins), `slow` (150 ms, an overrun), `segv` (`raise(SIGSEGV)` on Unix, a null write elsewhere),
-//! `abort`, `stack` (an overflow).
-//!
-//! The features `b` and `c` build the same plugin as `example.fault.b` and `example.fault.c`, with commands of their
-//! own (`Fault B in render: segv`, `/fault-b-segv`) and line `fault plugin b`, so a harness can crash the client with
-//! three different plugins.
-//!
-//! Before it fails it writes the wall clock, in ns since the epoch, to `$FAULT_STAMP`, so a harness can time the
-//! recovery from the fault itself.
+//! Exercises plugin failure in a command, in the next footer render, or on a worker thread after the call returns.
+//! `FAULT_STAMP` records nanoseconds since the epoch at the fault so the harness can measure recovery. Features `b`
+//! and `c` give the variants distinct IDs.
 
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};

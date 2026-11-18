@@ -91,9 +91,7 @@ local function traceback(co: thread, message: any): string
     return table.concat(lines, "\n")
 end
 
--- Each parked task's owner (`host:owner` of the stretch that parked): it goes on under that owner, whichever call
--- wakes it, so what it asks for is its starting mount's (carbon tm2-1). And the plugin's raw calls to read and set the
--- call's owner, once its setup started, and the owner a wake set for the call now.
+-- Resume a parked task under the mount that owned it when it yielded, regardless of which call wakes it.
 local owners: { [thread]: number } = {}
 local ownerOf: (() -> number)? = nil
 local setOwner: ((number?) -> ())? = nil
@@ -335,10 +333,8 @@ function plugin.every(ms: number, f: (any) -> boolean?)
     end)
 end
 
--- How many answer commands the dialogs take turns on. A dialog takes a command no dialog holds, and holds it until its
--- answer or its close runs; the host runs a dialog's answer before its close, so an answer that runs late, after other
--- dialogs showed, still reaches its own dialog (big-boi `acf-1`). A dialog that finds every command held answers `nil`
--- at once. The commands, the generation from 1 and the close's input are the Rust SDK's tasks' (`task::ANSWERS`).
+-- Reserve each answer command until its dialog answers or closes. If all slots are held, return nil immediately.
+-- Command names and generations must match the Rust SDK.
 local SLOTS = 64
 
 -- The setup object a plugin's setup gets: the host's, with each handler a task, the waiting calls on `host`, and the
@@ -520,8 +516,8 @@ local function tasked(raw)
             run(handler, a, b, c)
         end
     end
-    -- A command that returns "pass" declines the key that ran it, which goes on to whatever else takes it (contract
-    -- ergonomics 2.5); one that waits has taken it.
+    -- A command that returns "pass" declines the key that ran it, which goes on to whatever else takes it; one that
+    -- waits has taken it.
     local function commanded(handler)
         return function(a, b)
             local ended, result = run(handler, a, b)

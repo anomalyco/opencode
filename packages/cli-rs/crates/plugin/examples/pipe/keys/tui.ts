@@ -1,9 +1,4 @@
-// The input probe of the pipe's tests (P7 with P2): contract 2.0's input over the pipe. A modal composer: `ctrl+n`
-// sets the mode `normal`, whose layer takes `d`, `w` and `i` (back to insert); `x` sets the composer. Each of those
-// keys holds the keys after it until its answer applied and released them, as a key's answer comes a round trip late
-// (synthesis 3.7). A listener of every key hears each. A panel `side` with a focusable node and a surface layer, whose
-// view shows the reads it watches (the mode, the focus), whose node takes the pointer, and whose `o` opens an overlay
-// `menu` with a layer of its own. Every handler logs what it got to `.keys.log.jsonl` beside its directory.
+// Modal composer input probe. Its log lets the harness compare plugin and host key order.
 
 import { appendFileSync } from "node:fs"
 import path from "node:path"

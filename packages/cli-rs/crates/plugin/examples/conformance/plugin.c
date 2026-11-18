@@ -1,5 +1,5 @@
 /*
- * The conformance plugin (Pc) in C, on `crates/plugin-abi/include/opencode_plugin.h` alone: the behavior of
+ * The conformance plugin in C, on `crates/plugin-abi/include/opencode_plugin.h` alone: the behavior of
  * `src/conformance.rs`, request for request, so the golden transcripts of `crates/plugin/conformance`, recorded from the
  * Rust source, replay against it. The loader's conformance tests build it with the system's C compiler, with symbols
  * hidden and every warning an error.
@@ -275,7 +275,7 @@ static const char *const COMMANDS[] = {
     "conf.field", "conf.fence", "conf.dialogs", "conf.plugins",
 };
 
-/* The last command, `conf.facts`, has a slash name and an alias (contract ergonomics 2.6). */
+/* The last command, `conf.facts`, has a slash name and an alias. */
 #define FACTS                                                                                                          \
     "{\"name\":\"conf.facts\",\"title\":\"conf.facts\",\"group\":null,\"slash\":\"conf-facts\",\"keybind\":null,"     \
     "\"palette\":false,\"aliases\":[\"cf\"]}"
@@ -337,7 +337,7 @@ static int32_t create(const opencode_host_api *host, opencode_bytes options, voi
 
 static int string_after(opencode_bytes request, const char *needle, char *out, size_t room);
 
-/* `conf.ui`: each verb and read of P2 once, then what the reads answered. */
+/* `conf.ui`: each verb and read once, then what the reads answered. */
 static void ui(const opencode_host_api *host) {
     char answer[256];
     ask(host, "{\"type\":\"focus\",\"node\":\"i2\"}", NULL, 0);
@@ -388,7 +388,7 @@ static void dialogs(const opencode_host_api *host) {
         NULL, 0);
 }
 
-/* `conf.plugins` and a change of the plugin list (P6b): the entries the host lists and the first one's key, said as
+/* `conf.plugins` and a change of the plugin list: the entries the host lists and the first one's key, said as
  * `said N KEY`. */
 static void read_plugins(const opencode_host_api *host, const char *said) {
     char answer[2048], key[96] = "", message[192];
@@ -403,7 +403,7 @@ static void read_plugins(const opencode_host_api *host, const char *said) {
     toast(host, "info", message);
 }
 
-/* `conf.facts` (contract ergonomics 2.6, 2.9): the host's locale, its UTC offset at 0 and its measure of "ab日", then
+/* `conf.facts`: the host's locale, its UTC offset at 0 and its measure of "ab日", then
  * a prompt filled with a value under a description. */
 static void facts(const opencode_host_api *host) {
     char answer[512], locale[64] = "", offset[32] = "0", message[192];
@@ -422,7 +422,7 @@ static void facts(const opencode_host_api *host) {
         NULL, 0);
 }
 
-/* `conf.message` (P6a): a read of one message, and its ID or none. */
+/* `conf.message`: a read of one message, and its ID or none. */
 static void read_message(const opencode_host_api *host) {
     char answer[512], id[64], message[96] = "message none";
     int32_t status = ask(host, "{\"type\":\"message\",\"session\":\"ses_a\",\"message\":\"msg_1\"}", answer, sizeof answer);
@@ -579,7 +579,7 @@ static int32_t rows(opencode_owned *out) {
     return OPENCODE_OK;
 }
 
-/* The view of the route `kept` (P6a): its root kept while it would show the bumps it showed last, unless the host says
+/* The view of the route `kept`: its root kept while it would show the bumps it showed last, unless the host says
  * everything changed; a hidden box beside. */
 static int32_t kept(instance *self, opencode_bytes request, opencode_owned *out) {
     if (find(request, "\"all\":true") == NULL && self->kept == self->bumps + 1) {
@@ -626,7 +626,7 @@ static int32_t input(instance *self, opencode_bytes request, opencode_owned *out
     char said[96], text[64];
     int consume = 1;
     if (is(request, "mount")) {
-        /* A mount of `kept` begins or ends (P6a). */
+        /* A mount of `kept` begins or ends. */
         snprintf(said, sizeof said, "mount %s", find(request, "\"mounted\":true") != NULL ? "begins" : "ends");
         consume = 0;
     } else if (find(request, "\"bind\":\"conf\"") != NULL) {

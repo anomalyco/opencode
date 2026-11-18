@@ -1,7 +1,4 @@
-# The conformance plugin (Pc): the reference behavior the golden transcripts in `crates/plugin/conformance` were
-# recorded from. The loader's conformance tests link `src/conformance.rs` itself as the reference, and build this crate
-# as a `cdylib` to replay the transcripts against it; `plugin.c` beside it is the same plugin in C. Not a workspace
-# member. Its version is the one the transcripts' `describe` records.
+# Builds the transcript reference as a standalone plugin.
 [package]
 name = "opencode-conformance-plugin"
 version = "1.0.0"

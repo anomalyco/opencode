@@ -1,12 +1,9 @@
-// The probe of the pipe carrier's tests (P7): a V2 `{ id, setup }` module that writes its own call log, one JSON line a
-// call, to the file its `log` option names, so the test's oracle never reads the host's. Its commands step (and toast
-// the step, an effect), hold the keys after them, throw, hang, exit, flood the host with effects, write raw bytes to
-// standard output, print, and grow its memory. Its slot surface on the home footer shows `rows` lines.
+// Writes one JSON line per plugin call to the configured log, independent of the host's observations.
 
 import { appendFileSync, existsSync, readFileSync, writeSync } from "node:fs"
 import path from "node:path"
 
-// Beside its directory, or where `log.txt` in it says: a project's plugin runs from a copy of its files (P8).
+// Staged project plugins use the path from `log.txt` to log outside their private copy.
 const named = path.join(import.meta.dir, "log.txt")
 const beside = existsSync(named) ? readFileSync(named, "utf8").trim() : path.join(import.meta.dir, "..", ".probe.log.jsonl")
 
@@ -92,8 +89,6 @@ export default {
       children: Array.from({ length: rows }, (_, index) => ({ type: "text", spans: [{ text: `probe line ${index}` }] })),
       }
     })
-    // A route with a scroll the host moves: a verb from a command, its state as a watched read, and the user's wheel
-    // as a scroll event (contract 2.0's P3 requests, over the pipe).
     const list = { type: "node", surface: "pane", id: "list" }
     carrier.watch("list", { type: "scroll-state", target: list })
     carrier.command({ name: "probe.bottom", title: "probe.bottom" }, () => {

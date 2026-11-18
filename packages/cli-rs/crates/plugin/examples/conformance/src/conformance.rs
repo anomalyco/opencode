@@ -1,49 +1,5 @@
-//! The conformance plugin (Pc): the behavior every golden transcript of `crates/plugin/conformance` was recorded from,
-//! with this source linked into the loader's tests, and that a library must show to pass `plugin test --conformance`.
-//! `plugin.c` beside this crate is the same plugin in C, on `opencode_plugin.h` alone. A change here is a change of
-//! both, and of the transcripts, which the tests write again.
-//!
-//! - Commands: `conf.toast` toasts "hello"; `conf.store` writes 1 under its storage key `count`, reads it back and
-//!   toasts "stored 1"; `conf.send` sends "ping", then "a" and "b" under the key `k`, and toasts "sent"; `conf.wake`
-//!   wakes the host, whose wake toasts "woken"; `conf.panic` toasts "before panic" and panics with "boom"; `conf.dup`
-//!   makes the next view hold the id `count` twice; `conf.read` toasts "read", the theme mode and whether the host is
-//!   interactive; `conf.pad` moves the canvas `pad` to its next version; `conf.down` scrolls `items` by 2 rows,
-//!   `conf.step` steps it to the next anchor of `items`, and `conf.where` toasts where it is (P3); `conf.ui` makes
-//!   each verb and read of P2 once (focus, the focus read, a rect, a mode and its read, releasing held keys, a focus
-//!   of the field `field` and the focus read, a blur, a panel and an overlay opened and closed) and toasts what the
-//!   reads answered; `conf.bump` changes what `kept` shows; `conf.message` reads message `msg_1` of session `ses_a`
-//!   and toasts "message ID", or "message none" (P6a); `conf.plugins` reads the plugin list and toasts "plugins N
-//!   KEY", its length and its first entry's key (P6b); `conf.fence` makes the next view of `conf` hold a fence node,
-//!   which only a fence claim's tree may; `conf.field` gives the field `field` of `rows` the focus, or on a host
-//!   without `focus-input` toasts "field needs a click"; `conf.dialogs` shows a select, an alert and a confirm, each
-//!   centered, the select and the alert extra large (contract 2.x additions); `conf.facts`, also `/cf`, toasts "facts
-//!   LOCALE OFFSET CELLS GRAPHEMES", the host's locale, its UTC offset at 0 and its measure of "ab日", and asks in a
-//!   prompt `name` filled with "conf" under "described", whose text runs `conf.toast` (contract ergonomics 2.6, 2.9).
-//! - It hears that the plugin list changed (P6b), and toasts "plugins changed N KEY" from the list read then.
-//! - A route surface `conf`: a column `root` of a text `count`, "views N, messages M" (the views run and the messages
-//!   arrived, in this instance), and a Markdown node `fixed` of the content "# fixed", memoized: built once a mount and
-//!   kept after.
-//! - A route surface `pad` (P5): a column `pad-root` of a canvas `pad`, 20 by 1 cells, at the version `conf.pad`
-//!   counts. Its draw writes one text at its corner, "draw N CAUSE", in the terminal's colors: the draws run in this
-//!   instance, and why the host asked.
-//! - A route surface `rows` (P3): a column `rows-root` of a text `where` and a scroll `items`, 3 rows high, of six boxes
-//!   `i0` to `i5`, each an anchor of group `items` holding "item N". Its `layout` is told of `items`, and paints
-//!   `where` on `#203040` while `items` is scrolled down. Between `where` and `items`, a box `button` that takes the
-//!   pointer (P2) holds "press". Under `items`, an empty field `field`.
-//! - A route surface `kept` (P6a) that hears its mounts begin and end: a column `kept-root` of a text `kept`, "kept N"
-//!   (the bumps), and a hidden box `hidden`. A view told nothing changed (not `all`) while N is what it last showed
-//!   keeps its root.
-//! - One handler of input (P2), for `rows`, `kept` and a key layer of setup (`ctrl+g` as `conf`, `ctrl+o` as `pass`,
-//!   everywhere, with pastes): it toasts "key conf", "paste TEXT", "pressed NODE" (a press, not a release),
-//!   "landed ID" (where a step landed) and "mount begins" or "mount ends", and consumes the first three; everything
-//!   else passes on.
-//! - A renderer claim (Pr) of the calls of tool `conf-tool`: Markdown of the content "claimed N", given anew in each
-//!   view, N the views it ran; one of the fences of language `conf-fence`: a column `fence` of a text "fence LANGUAGE"
-//!   over the host's code view of the fence (a fence node), which it lowers to a text "fenced CODE" for a host without
-//!   `fence-node`; and one of the fences of language `conf-fences`, whose tree holds a text "fences" and two fence
-//!   nodes, which the host refuses.
-//! - A search `conf.find` (P2): the values of the options whose title holds the query, in their order.
-//! - Options that hold `fail-setup` make setup fail with "setup refused", before it registers anything.
+//! Reference plugin for ABI transcript recording and replay. Keep its behavior in sync with the C implementation in
+//! `plugin.c`.
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -240,7 +196,6 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
     Ok(())
 }
 
-/// The surface `kept` (P6a): it keeps its root while what it shows is the same, and hears its mounts.
 fn kept(state: Rc<State>) -> v2::Surface {
     v2::Surface::new("kept", v2::Place::Route("kept".to_owned()), move |view| {
         let bumps = state.bumps.get();
@@ -308,7 +263,6 @@ fn handle(host: &dyn Host, event: &interact::Event) -> Handled {
     handled
 }
 
-/// `conf.plugins` and a change of the plugin list (P6b): what the list holds, said as `said N KEY`.
 fn plugins(host: &dyn Host, said: &str) {
     let list = host.plugins();
     let key = list.first().map_or("", |entry| entry.key.as_str());

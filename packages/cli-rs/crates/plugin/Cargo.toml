@@ -1,6 +1,6 @@
 [package]
 name = "opencode-plugin"
-description = "The Rust plugin API (P.1)."
+description = "Plugin loaders and host runtime for the native TUI."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -13,7 +13,6 @@ workspace = true
 opentui.workspace = true
 opencode-ui.workspace = true
 log.workspace = true
-# Native plugins (P.4): the C ABI, and dlopen.
 opencode-plugin-abi.workspace = true
 opencode-util.workspace = true
 serde.workspace = true
@@ -21,22 +20,18 @@ serde_json.workspace = true
 unicode-segmentation = "1"
 unicode-width.workspace = true
 opencode-api-types.workspace = true
-# The URLs of git specs, parsed as `new URL` parses them (the npm cache's keys, js-npm).
 url.workspace = true
-# The hash an approval of a project plugin names (rich-plugins 3.9).
 ring.workspace = true
 
 
 [features]
-# TypeScript TUI plugins on the JS host: the pipe carrier, the JS host and its embedded `host.ts` and `compat.js`
-# (ts-feature). On by default; `OPENCODE_PLUGIN_JS=0` still turns the host off at run time.
+# Disable the JS host at runtime with `OPENCODE_PLUGIN_JS=0`.
 default = ["ts", "luau"]
 ts = []
-# Luau plugins, in process (O-178). On by default; `OPENCODE_PLUGIN_LUAU=0` turns them off at run time.
+# Disable Luau at runtime with `OPENCODE_PLUGIN_LUAU=0`.
 luau = ["dep:mlua"]
 
-# Luau plugins (O-178): a fourth carrier of contract 2.0, behind the default feature `luau`. Not on x86_64 Windows MSVC
-# until OpenTUI's library links beside it (build.rs).
+# The Luau and OpenTUI native libraries cannot link together on x86_64 Windows MSVC.
 [target.'cfg(not(all(target_arch = "x86_64", target_os = "windows", target_env = "msvc")))'.dependencies]
 mlua = { workspace = true, optional = true }
 

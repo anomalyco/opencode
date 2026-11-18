@@ -1,6 +1,5 @@
-// A plugin whose registrations follow a file outside it, for the pipe's tests (P7, review carbon-2): its setup reads
-// the count the file at its `file` option holds and registers that many commands, `dyn.c1` to `dyn.c<n>`, each toasting
-// its name. Set up again on a new JS host after the file changed, it registers others than the host has.
+// Registers the command count in the configured file so the harness can change registrations without editing the
+// plugin.
 
 import { readFileSync } from "node:fs"
 

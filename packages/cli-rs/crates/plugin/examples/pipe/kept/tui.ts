@@ -1,6 +1,4 @@
-// The twin of `../kept.rs` on the JS host (P6a on the pipe, `carrier-equal`): a V2 `{ id, setup }` module whose route
-// hears its mounts begin and end, keeps its root while what it shows is the same, holds a box it can hide, and shows
-// what a read of one message gives.
+// JS counterpart to `../kept.rs` for mount and subtree reuse checks.
 
 export default {
   id: "example.kept",

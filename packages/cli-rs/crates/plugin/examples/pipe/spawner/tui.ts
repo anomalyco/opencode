@@ -1,6 +1,4 @@
-// A plugin that starts processes, for the pipe's tests (review: no orphans): its setup starts `sleep` as a child, and
-// another through a shell that exits at once, in a session of its own (it leaves the JS host's process group, and its
-// parent is gone). It writes their process IDs to the file its `pids` option names. Its command spins forever.
+// Exercises descendant cleanup, including a process that leaves the host's process group.
 
 import { writeFileSync } from "node:fs"
 

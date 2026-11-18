@@ -1,10 +1,4 @@
-//! The dialogs, the composer and the box styling (P0a): a confirm and an alert whose answers come back as toasts, the composer's read and
-//! edits, and a home footer claim in a styled box. The TUI's tests run this one file linked, through the C ABI's
-//! byte shims, and in the sample library (`--features p0a`), so the three carriers run the same source. Every
-//! command is hidden: a test or a click dispatches it.
-//!
-//! The probe keeps its own log in its storage key `log`, which only grows: each activation numbers itself (`setup N`)
-//! and tags what it hears with that number, so a test tells an old activation's answer from a new one's.
+//! Dialogs, composer edits and a styled footer exercised through the linked and native carriers.
 
 use super::abi::{
     Action, Alert, Border, BorderStyle, Command, ComposerEdit, Confirm, Dialog, Edges, Host, Layout, Node, Overflow,
@@ -69,8 +63,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         host.edit_composer(ComposerEdit::Set { text: input.unwrap_or_default().to_owned() });
         host.edit_composer(ComposerEdit::Submit);
     });
-    // Every effect of P0a, in one call; with the input `panic` the call panics after them, so none may happen. The
-    // confirm replaces the alert, whose action then runs: both effects show without the panic.
+    // The panic branch must discard every requested effect.
     setup.command(hidden("p0a.all"), |host, input| {
         host.edit_composer(ComposerEdit::Set { text: "all".to_owned() });
         host.edit_composer(ComposerEdit::Insert { text: " of it".to_owned() });

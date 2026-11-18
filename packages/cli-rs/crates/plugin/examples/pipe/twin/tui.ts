@@ -1,6 +1,4 @@
-// The twin of `../twin.rs` on the JS host (P7, `carrier-equal`): a V2 `{ id, setup }` module whose route surface is a
-// board of cards, each a value and a patch by content handle, memoized on its value, below a header with their total.
-// Its commands come through `keymap.layer` as a V2 plugin's do; its surface and effects through the carrier.
+// JS counterpart to `../twin.rs` for comparing memoized card views and content handles.
 
 const CARDS = 6
 

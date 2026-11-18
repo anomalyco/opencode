@@ -1,6 +1,4 @@
-//! The small reads and verbs (P0b): a `home.footer` claim that shows its own size and what it reads, a
-//! command that asks for every verb and toasts what each answered, a handler of the streaming deltas, and the reply
-//! of a program in the foreground. The loader's tests run it in process and from the library and compare the two.
+//! Renders host reads in the footer and reports the results of host commands.
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
