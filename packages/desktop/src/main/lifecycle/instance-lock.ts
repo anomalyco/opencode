@@ -11,6 +11,6 @@ export function lockHeld(build: { readonly packaged: boolean }, userData: string
     message:
       `Another OpenCode app (the installed OpenCode Dev app, or a dev app from another checkout) is already using ` +
       `the data folder ${userData}, so this one cannot start: quit that app, or set OPENCODE_DESKTOP_TEST_ROOT to ` +
-      `an empty folder to run this one with a separate profile.`,
+      `another folder to run this one with a separate, empty profile.`,
   } as const
 }

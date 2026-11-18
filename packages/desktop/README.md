@@ -41,12 +41,12 @@ OpenCode Dev app and with source builds from other checkouts: `%APPDATA%\ai.open
 `~/Library/Application Support/ai.opencode.desktop.dev` or `~/.config/ai.opencode.desktop.dev`. When another app holds
 that lock, `bun dev` prints why it cannot start and exits with code 1. To run several at once, give each its own root:
 
-| Variable                                 | Meaning                                                                                                                                                            |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `OPENCODE_DESKTOP_TEST_ROOT`             | Folder for this run's profile, service registration, database, config and cache. It starts empty: no providers, config or sessions.                                |
-| `OPENCODE_DESKTOP_SERVER_PORT`           | Port of the app's own service. By default it is derived from the service's registration file, so each root has its own port.                                       |
-| `OPENCODE_DESKTOP_REMOTE_DEBUGGING_PORT` | Chromium debugging port. `9222` by default; `0` picks a free port.                                                                                                 |
-| `OPENCODE_DESKTOP_REGISTER_PROTOCOL`     | `1` makes this build the handler of `opencode://` links. Off by default, so links keep opening the installed app.                                                  |
+| Variable                                 | Meaning                                                                                                                             |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `OPENCODE_DESKTOP_TEST_ROOT`             | Folder for this run's profile, service registration, database, config and cache. It starts empty: no providers, config or sessions. |
+| `OPENCODE_DESKTOP_SERVER_PORT`           | Port of the app's own service. By default it is derived from the service's registration file, so each root has its own port.        |
+| `OPENCODE_DESKTOP_REMOTE_DEBUGGING_PORT` | Chromium debugging port. `9222` by default; `0` picks a free port.                                                                  |
+| `OPENCODE_DESKTOP_REGISTER_PROTOCOL`     | `1` makes this build the handler of `opencode://` links. Off by default, so links keep opening the installed app.                   |
 
 ## Beta channel
 
