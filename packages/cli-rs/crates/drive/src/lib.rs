@@ -203,7 +203,7 @@ mod tests {
 
         let requests = [
             r#"{"jsonrpc":"2.0","id":1,"method":"simulation.handshake","params":{"client":{"name":"t","version":"1"},"expectedRole":"ui","offeredVersions":[1],"requiredCapabilities":["ui.capture"],"optionalCapabilities":[]}}"#,
-            r#"{"jsonrpc":"2.0","id":2,"method":"ui.type","params":{"text":"Adx"}}"#,
+            r#"{"jsonrpc":"2.0","id":"type","method":"ui.type","params":{"text":"Adx"}}"#,
             r#"{"jsonrpc":"2.0","id":3,"method":"ui.press","params":{"key":"backspace"}}"#,
             r#"{"jsonrpc":"2.0","id":4,"method":"ui.press","params":{"key":"a"}}"#,
             r#"{"jsonrpc":"2.0","id":5,"method":"ui.press","params":{"key":"c","modifiers":{"ctrl":true}}}"#,
@@ -217,9 +217,11 @@ mod tests {
             r#"{"jsonrpc":"2.0","id":13,"method":"ui.mouse","params":{"action":"scroll","x":0,"y":0,"direction":"down"}}"#,
             r#"{"jsonrpc":"2.0","id":14,"method":"ui.mouse","params":{"action":"move","x":30,"y":0}}"#,
             r#"{"jsonrpc":"2.0","id":15,"method":"ui.resize","params":{"cols":0,"rows":3}}"#,
+            r#"{"jsonrpc":"2.0","id":20,"method":"ui.resize","params":{"cols":20.5,"rows":3}}"#,
             r#"{"jsonrpc":"2.0","id":16,"method":"ui.resize","params":{"cols":20,"rows":3}}"#,
             r#"{"jsonrpc":"2.0","id":17,"method":"ui.capture"}"#,
             r#"{"jsonrpc":"2.0","id":18,"method":"ui.state"}"#,
+            r#"{"jsonrpc":"2.0","id":21,"method":"ui.click","params":{"target":1,"x":0,"y":0}}"#,
             r#"{"jsonrpc":"2.0","method":"ui.press","params":{"key":"!"}}"#,
             r#"{"jsonrpc":"2.0","id":19,"method":"ui.nope"}"#,
         ];
@@ -246,13 +248,17 @@ mod tests {
         };
 
         assert_eq!(result(1).unwrap()["server"]["version"], "1.2.3");
-        assert_eq!(result(2).unwrap(), json!({ "focused": { "editor": true }, "elements": [] }));
+        assert_eq!(
+            responses[1],
+            json!({"jsonrpc": "2.0", "id": "type", "result": {"focused": {"editor": true}, "elements": []}})
+        );
         assert_eq!(result(7), Ok(json!(true)));
         assert_eq!(result(9), Ok(json!(true)));
         // The input under the pointer takes the wheel step, so no app mouse handler sees it.
         assert_eq!(result(13).unwrap()["elements"], json!([]));
         assert_eq!(result(14), Err("mouse position must be within the terminal viewport".into()));
         assert_eq!(result(15), Err("resize cols and rows must be positive integers".into()));
+        assert_eq!(result(20), result(15));
         let frame = result(17).unwrap();
         assert_eq!((frame["cols"].clone(), frame["rows"].clone()), (json!(20), json!(3)));
         let row = |y: usize| -> String {
@@ -261,9 +267,12 @@ mod tests {
         assert_eq!(row(0).trim_end(), "Ada");
         assert_eq!(row(1).trim_end(), "submitted Ada");
         assert!(result(18).unwrap_err().starts_with("ui.state is not supported"));
+        assert!(result(21).unwrap_err().starts_with("ui.click is not supported"));
         let invalid = responses.last().unwrap();
+        assert_eq!(invalid["jsonrpc"], "2.0");
         assert_eq!(invalid["id"], Value::Null);
-        assert_eq!(responses.len(), 19);
+        assert_eq!(invalid["error"]["code"], -32000);
+        assert_eq!(responses.len(), 21);
         assert_eq!(
             *events.borrow(),
             [
