@@ -287,11 +287,7 @@ export const layer = Layer.effect(
             })
             .pipe(Effect.orElseSucceed(() => undefined)))) ??
         context.model
-      const ceiling = calculateCeiling(model.limit, buffer)
-      // An unknown window never triggers auto compaction, but the compaction request still needs a size to aim for.
-      const cap = Number.isFinite(ceiling)
-        ? ceiling
-        : calculateCeiling({ ...model.limit, context: UNKNOWN_WINDOW }, buffer)
+      const cap = capFor(model.limit, buffer)
       return { context: model === context.model ? context : { ...context, model }, cap }
     })
 
@@ -341,7 +337,7 @@ export const layer = Layer.effect(
         model: `${selected.context.model.ref.providerID}/${selected.context.model.ref.id}`,
       })
       const retried = yield* Effect.result(
-        summarizeOn(trigger, aim(calculateCeiling(context.model.limit, settings.buffer))),
+        summarizeOn(trigger, aim(capFor(context.model.limit, settings.buffer))),
       )
       return yield* Result.isSuccess(retried)
         ? publish(trigger, retried.success)
@@ -1169,6 +1165,12 @@ const calculateCeiling = (limit: SessionContext.Loaded["model"]["limit"], buffer
   // A buffer that leaves no room, such as one set for a larger model, is ignored.
   if (tokens !== undefined && tokens < window) return window - tokens
   return window - Math.max(Math.floor(window * RESERVE_SHARE), window >= 2 * RESERVE_MIN ? RESERVE_MIN : 0)
+}
+
+/** The size a summary request aims for; an unknown window uses UNKNOWN_WINDOW so it still has one. */
+const capFor = (limit: SessionContext.Loaded["model"]["limit"], buffer: Settings["buffer"]) => {
+  const ceiling = calculateCeiling(limit, buffer)
+  return Number.isFinite(ceiling) ? ceiling : calculateCeiling({ ...limit, context: UNKNOWN_WINDOW }, buffer)
 }
 
 /**
