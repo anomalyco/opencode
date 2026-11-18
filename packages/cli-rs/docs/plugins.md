@@ -39,8 +39,8 @@ A **carrier** is a way to run a plugin against the contract. There are four:
   `parity/deviations/F16-v2-compat-layer.md`.
 - **Tests hold the carriers to the same behavior.** `crates/tui/tests/all/plugin_carriers.rs` runs one plugin source
   linked, through the C ABI's byte shims, and as a loaded library. `plugin_ownership.rs` runs one table of request
-  ownership in process, through the C ABI, over the pipe and in Luau. `ports_trio.rs` runs published TS plugins on the
-  JS host beside their Rust and Luau ports and compares cells and requests.
+  ownership in process, through the C ABI, over the pipe and in Luau. `plugin_published.rs` and the P.8 scenarios of
+  P-APP run published TS plugins on the JS host and compare their cells and requests with TS's.
 
 Which carriers a build has:
 
@@ -116,8 +116,8 @@ A render is a function the host calls. It reads, and returns data. It never draw
 
 ### Why
 
-Ten published TS plugins were ported to Rust and to Luau (`crates/plugin/examples/<name>`,
-`crates/plugin/examples/luau/<name>`; the originals are pinned in `parity/plugins/npm`). **The cost was in waiting,
+Ten published TS plugins were ported to Rust and to Luau (now in the external `plugins` repository, one directory
+per plugin with `rust` and `luau`; the originals are pinned in `parity/plugins/npm`). **The cost was in waiting,
 not in drawing.** A plugin that mostly draws came out shorter than its TS source. A plugin that waits for dialogs and
 replies came out much longer, and all of the excess was plumbing: an enum of what the open dialog asks, a map of the
 requests in flight, and a generation stamp on each dialog so that an old dialog's close is not read as the new one's.
@@ -436,14 +436,15 @@ export default Plugin.define({
 
 ### Larger examples
 
-| Example | Shows | Rust | Luau |
-| --- | --- | --- | --- |
-| queue-manager | chained dialogs and ordered writes as one task | `crates/plugin/examples/queue-manager` | `examples/luau/queue-manager` |
-| session-usage | paged typed calls in batches, work off the UI thread, a tick | `examples/session-usage` | `examples/luau/session-usage` |
-| session-manager | a route with two key layers, a search field, a debounce | `examples/session-manager` | `examples/luau/session-manager` |
-| goal-plugin | a sidebar read from tool results, a 1 s tick that runs only while the sidebar shows | `examples/goal-plugin` | `examples/luau/goal-plugin` |
-| board | surfaces: a route of memoized cards, a panel, an overlay, a thread's mailbox | `examples/board` | |
-| c | a plugin in C on the header alone | `examples/c/plugin.c` | |
+| Example | Shows | Where |
+| --- | --- | --- |
+| queue-manager | chained dialogs and ordered writes as one task | `plugins` repository, `queue-manager/{rust,luau}` |
+| session-usage | paged typed calls in batches, work off the UI thread, a tick | `plugins` repository, `session-usage/{rust,luau}` |
+| session-manager | a route with two key layers, a search field, a debounce | `plugins` repository, `session-manager/{rust,luau}` |
+| goal-plugin | a sidebar read from tool results, a 1 s tick that runs only while the sidebar shows | `plugins` repository, `goal-plugin/{rust,luau}` |
+| board | surfaces: a route of memoized cards, a panel, an overlay, a thread's mailbox | `crates/plugin/examples/board` |
+| c | a plugin in C on the header alone | `crates/plugin/examples/c/plugin.c` |
 
-`crates/tui/tests/all/ports.rs` and `ports_trio.rs` build and run the ports. `/plugins` in the TUI lists every
-plugin with its state, and shows the error of one that failed.
+The `plugins` repository holds the Rust and Luau ports of ten published TS plugins, each building on the SDK by git;
+its README says how to build and install each. `/plugins` in the TUI lists every plugin with its state, and shows the
+error of one that failed.

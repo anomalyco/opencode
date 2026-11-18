@@ -1,7 +1,0 @@
-# The port of `@bybrawe/opencode-queue-manager` (`examples/queue-manager`) in Luau.
-# Its ID is the original's, as the native port's is, so it keeps the drafts the original stored.
-id = "queue.manager.tui"
-name = "Queue Manager"
-version = "0.3.5"
-contract = "2.0"
-description = "stage, reorder and publish prompts to a session's queue, and cancel its pending items"

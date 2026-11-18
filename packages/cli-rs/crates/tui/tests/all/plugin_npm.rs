@@ -20,7 +20,7 @@ pub(crate) fn install(home: &Path, spec: &str, name: &str, generation: &str) {
         serde_json::json!({ "dependencies": { name: spec.rsplit_once('@').map_or("*", |(_, version)| version) } });
     std::fs::create_dir_all(&root).unwrap();
     std::fs::write(root.join("package.json"), manifest.to_string()).unwrap();
-    crate::ports::unpack(name, &root.join("node_modules").join(name));
+    crate::plugin_published::unpack(name, &root.join("node_modules").join(name));
 }
 
 /// The TUI on Home with `plugins` in `cli.json`, the roots of a run with `HOME=home`, and the JS host; the server
@@ -248,7 +248,7 @@ fn a_server_plugins_tui_part_loads_from_what_the_server_reports() {
     let home = opencode_util::temp::tempdir().unwrap();
     install(home.path(), "opencode-session-usage@0.1.8", "opencode-session-usage", "1794700000000");
     let local = home.path().join("local-part");
-    crate::ports::unpack("opencode-sidebar-prompt", &local);
+    crate::plugin_published::unpack("opencode-sidebar-prompt", &local);
     let part = |target: serde_json::Value, tui: bool, status: &str| {
         let state = match status {
             "failed" => serde_json::json!({ "status": "failed", "error": "boom" }),
@@ -290,7 +290,7 @@ fn a_project_local_server_part_waits_for_approval_and_a_cached_one_does_not() {
     let work = home.path().join("work");
     std::fs::create_dir_all(work.join(".git")).unwrap();
     let local = work.join("tools").join("prompt");
-    crate::ports::unpack("opencode-sidebar-prompt", &local);
+    crate::plugin_published::unpack("opencode-sidebar-prompt", &local);
     let part = |source: serde_json::Value| serde_json::json!({ "source": source, "features": { "server": true, "tui": true }, "state": { "status": "active" } });
     let target = local.to_string_lossy().into_owned();
     let server = serde_json::json!([
@@ -362,7 +362,7 @@ fn a_remote_servers_local_parts_are_left_out() {
     let home = opencode_util::temp::tempdir().unwrap();
     install(home.path(), "opencode-sidebar-tokens@0.1.3", "opencode-sidebar-tokens", "1794700000000");
     let local = home.path().join("local-part");
-    crate::ports::unpack("opencode-sidebar-prompt", &local);
+    crate::plugin_published::unpack("opencode-sidebar-prompt", &local);
     let part = |source: serde_json::Value| serde_json::json!({ "source": source, "features": { "server": true, "tui": true }, "state": { "status": "active" } });
     let target = local.to_string_lossy().into_owned();
     let server = serde_json::json!([

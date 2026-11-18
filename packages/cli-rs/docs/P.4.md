@@ -849,12 +849,11 @@ compare the title log of both clients, with titles on and off.
 shows it as it is and that it builds on the SDK alone. The loader test
 `the_quick_start_plugin_loads_from_a_plugins_directory_and_runs` installs it in a `plugins` directory, loads it, and
 runs its command and its claim. `examples/author` is a larger
-author's fixture (storage, an event, a fence), which `crates/tui/tests/all/ports.rs` loads into the TUI.
+author's fixture (storage, an event, a fence), which `crates/tui/tests/all/plugin_published.rs` loads into the TUI.
 
-Three real TS TUI plugins are ported the same way, on `opencode-plugin-abi` alone: `subagents-sidebar`
-(`opencode-subagents-sidebar`), `force-input` (`@mynameistito/opencode-force-input`) and `session-usage`
-(`opencode-session-usage`). `crates/tui/tests/all/ports.rs` builds each into `target/sample-plugin`, loads it from a
-`plugins` directory into the TUI, and checks what it draws and sends.
+Ten real TS TUI plugins are ported the same way, on `opencode-plugin-abi` alone, and to Luau. The ports live in the
+external `plugins` repository; `crates/tui/tests/all/plugin_published.rs` and the P.8 scenarios run the published
+originals.
 
 `crates/plugin/examples/board` is a plugin of contract 2.0: a route of memoized cards, and a thread that floods its
 mailbox. `crates/tui/tests/all/plugin_carriers.rs` links its `src/board.rs`, runs it through the byte shims of the

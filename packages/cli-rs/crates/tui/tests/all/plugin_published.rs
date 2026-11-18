@@ -1,7 +1,7 @@
-//! Three real TypeScript TUI plugins, ported to native plugins on the public SDK alone (`crates/plugin/examples`):
-//! each is built as a library, found in a `plugins` directory and loaded into the real TUI over a fake server. The
-//! expected rows follow the original's TS rendering logic for the same data. `Dialog::Select`, which the subagents
-//! port picks with, is proven on both paths here too, and the SDK's author fixture loads.
+//! Published TypeScript TUI plugins (P8: `parity/plugins/npm`), unmodified on the JS host, in the real TUI over a fake
+//! server. The expected rows follow each original's TS rendering logic for the same data. Their Rust and Luau ports
+//! live outside this repository (`plugins`). `Dialog::Select` is proven on both paths here too, and the SDK's author
+//! fixture loads.
 
 use crate::support::{self, DIRECTORY, Harness, Log, Reply, Seen, deref_harness};
 
@@ -100,31 +100,12 @@ pub(crate) struct Port {
 
 deref_harness!(Port);
 
-/// The TUI on session `ses_p`, `width` wide, with the port `name` in `<config>/plugins/<name>`, over `handler`.
-fn open(name: &str, width: u16, handler: impl Fn(&Seen) -> Option<Reply> + Send + Sync + 'static) -> Port {
-    open_in(name, width, handler, false)
-}
-
-/// [`open`], with real TUI storage in the temp directory when `stored`.
-fn open_in(
-    name: &str,
-    width: u16,
-    handler: impl Fn(&Seen) -> Option<Reply> + Send + Sync + 'static,
-    stored: bool,
-) -> Port {
-    open_as(&[Carrier::Port(name)], width, handler, stored, None).unwrap()
-}
-
-/// What a row loads: a port's library, or the published package of the plugin it ports, unmodified, on the JS host
-/// through the V2 compatibility layer (P8: `parity/plugins/npm/<name>.tgz`, a scope's `/` as `__`).
+/// What a row loads: an example's library (`crates/plugin/examples/<name>`), or a published package, unmodified, on
+/// the JS host through the V2 compatibility layer (P8: `parity/plugins/npm/<name>.tgz`, a scope's `/` as `__`).
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Carrier<'a> {
-    Port(&'a str),
+    Example(&'a str),
     Npm(&'a str),
-    /// The port's Luau twin (`crates/plugin/examples/luau/<name>`, spike `luau-spike`), in `<config>/plugins` as a user
-    /// installs one, which the loader loads with Luau plugins on.
-    #[cfg(luau)]
-    Luau(&'a str),
 }
 
 /// Unpacks the published package `name` from its tarball into `into`.
@@ -151,8 +132,8 @@ pub(crate) fn pinned(tarball: &Path) {
     assert_eq!(pins[name.as_ref()].as_str(), Some(actual.as_str()), "{name} is not the pinned tarball");
 }
 
-/// The TUI on `first`, or on session `ses_p`, with each of `carriers`' plugins, over `handler`; `None` without Bun for
-/// a package.
+/// The TUI on `first`, or on session `ses_p`, with each of `carriers`' plugins in `<config>/plugins`, over `handler`,
+/// with real TUI storage in the temp directory when `stored`; `None` without Bun for a package.
 pub(crate) fn open_as(
     carriers: &[Carrier<'_>],
     width: u16,
@@ -160,59 +141,22 @@ pub(crate) fn open_as(
     stored: bool,
     first: Option<Route>,
 ) -> Option<Port> {
-    open_with(carriers, width, handler, stored, first, None)
-}
-
-/// [`open_as`], with `options` as each plugin's `options` (its `plugins` entry's, or its Luau setup's).
-pub(crate) fn open_with(
-    carriers: &[Carrier<'_>],
-    width: u16,
-    handler: impl Fn(&Seen) -> Option<Reply> + Send + Sync + 'static,
-    stored: bool,
-    first: Option<Route>,
-    options: Option<&Value>,
-) -> Option<Port> {
     let scripts = match carriers.iter().any(|carrier| matches!(carrier, Carrier::Npm(_))) {
         true => Some(crate::plugin_pipe::config()?),
         false => None,
     };
     let root = opencode_util::temp::tempdir().unwrap();
     let config = root.path().join("config");
-    let mut entries = Vec::new();
     for carrier in carriers {
-        let plugin = match *carrier {
-            Carrier::Port(name) => {
+        match *carrier {
+            Carrier::Example(name) => {
                 let plugin = config.join("plugins").join(name);
                 std::fs::create_dir_all(&plugin).unwrap();
                 std::fs::write(plugin.join(entry_file()), build(name)).unwrap();
-                plugin
             }
-            Carrier::Npm(name) => {
-                let plugin = config.join("plugins").join(name.replace('/', "__"));
-                unpack(name, &plugin);
-                plugin
-            }
-            #[cfg(luau)]
-            Carrier::Luau(name) => {
-                let plugin = config.join("plugins").join(format!("{name}.luau"));
-                crate::plugin_pipe::copy(
-                    &Path::new(env!("CARGO_MANIFEST_DIR")).join("../plugin/examples/luau").join(name),
-                    &plugin,
-                );
-                plugin
-            }
-        };
-        if let Some(options) = options {
-            entries.push(json!({ "package": plugin.to_string_lossy(), "options": options }));
+            Carrier::Npm(name) => unpack(name, &config.join("plugins").join(name.replace('/', "__"))),
         }
     }
-    let info = match entries.is_empty() {
-        true => support::still(),
-        false => opencode_local::cli_config::Info {
-            animations: Some(false),
-            ..support::decode(&json!({ "plugins": entries }).to_string())
-        },
-    };
     let server = Server {
         events: Memory::new(Vec::new()),
         log: Log::default(),
@@ -220,7 +164,7 @@ pub(crate) fn open_with(
         hold: Hold::default(),
     };
     let deps = Deps {
-        config: support::config(info),
+        config: support::config(support::still()),
         route: first.unwrap_or_else(|| support::session_route("ses_p")),
         events: true,
         roots: stored.then(|| support::roots(support::home_paths(&root.path().join("home")), "test")).flatten(),
@@ -228,7 +172,7 @@ pub(crate) fn open_with(
     };
     let harness = support::mount(width, 40, deps);
     // The budget is not what these rows check. On the wall clock a loaded machine's stall in a call (memory reclaim,
-    // swap), which is no wait on a run queue, is charged: one over the overrun fails the port. A call here takes no
+    // swap), which is no wait on a run queue, is charged: one over the overrun fails the plugin. A call here takes no
     // time.
     let now = std::time::Instant::now();
     harness.tui.plugins.monitor().set_clock(move || now);
@@ -352,15 +296,14 @@ pub(crate) fn by_update() -> Vec<(String, String, &'static str)> {
     children.into_iter().map(|(_, id, title, state)| (id, title, state)).collect()
 }
 
-// Expected: as TS draws it, the sidebar lists the direct children of the session in view, newest activity first, ten
-// of them, with a dot, a title (`Subagent` without one) and running or done, then `+2 more`; a click on the header
-// folds the list to `▶ Subagents (12, 2 running)`; `/subagents` picks from all twelve, and the pick and a click on a
-// row each open their child.
+// Expected (P8): as TS draws it, the published package, unmodified on the JS host, lists the direct children of the
+// session in view, newest activity first, ten of them, with a dot, a title (`Subagent` without one) and running or
+// done, then `+2 more`, once the host has the session's family and statuses as the sidebar mounts (an installed
+// package reads them once, as it mounts, in TS too); its `/subagents` picks from all twelve and opens the pick.
 #[test]
-fn subagents_lists_ten_children_newest_first_and_opens_them() {
-    let h = open("subagents-sidebar", 170, subagents);
+fn the_published_subagents_sidebar_lists_and_picks() {
+    let Some(h) = open_as(&[Carrier::Npm("opencode-subagents-sidebar")], 170, subagents, false, None) else { return };
     h.wait_for("+2 more");
-    // The running status comes from the `session.active` read after the event stream connects.
     h.wait("Child 03 runs", || {
         h.sidebar(120).iter().any(|row| row.starts_with("• Child 03") && row.ends_with(" running"))
     });
@@ -377,62 +320,18 @@ fn subagents_lists_ten_children_newest_first_and_opens_them() {
         by_update().into_iter().take(10).map(|(_, title, state)| (format!("• {title}"), state.to_owned())).collect();
     assert_eq!(listed, expected, "{rows:#?}");
     assert_eq!(rows[start + 11], "+2 more");
-    let screen = h.app.text();
-    assert!(!screen.contains("Grandchild") && !screen.contains("Other root"), "{screen}");
     // A running dot is green, as TS's `text.feedback.success.base`; a done one muted.
     let theme = h.tui.page();
     assert_eq!(h.fg("• Child 03", 0), theme.text.feedback.success.base);
     assert_eq!(h.fg("• Child 04", 0), theme.text.muted);
-
-    // The header folds the list, and the fold is kept.
-    let (x, y) = h.find("▼ Subagents");
-    h.app.click(x, y);
-    h.wait_for("▶ Subagents (12, 2 running)");
-    h.wait_gone("+2 more");
-    let (x, y) = h.find("▶ Subagents");
-    h.app.click(x, y);
-    h.wait_for("+2 more");
-
-    // `/subagents` lists all twelve, the last too, and opens the pick.
-    let session = |id: &str| Route::Session { id: opencode_api::generated::SessionID(id.to_owned()) };
+    let (last, title, _) = by_update().pop().unwrap();
     h.tui.keymap.dispatch("subagents-sidebar.pick", None);
     h.wait_for("Child 12");
-    let (Some((y11, _)), Some((y12, _))) = (
-        h.app.text().lines().enumerate().find(|(_, line)| line.contains("Child 07 running")),
-        h.app.text().lines().enumerate().find(|(_, line)| line.contains("Child 12 done")),
-    ) else {
-        panic!("the picker does not list all twelve:\n{}", h.app.text());
-    };
-    assert!(y11 < y12, "{}", h.app.text());
-    let (last, title, _) = by_update().pop().unwrap();
     h.app.type_text(&title);
     h.wait("the filtered list", || h.app.text().lines().filter(|line| line.contains(&title)).count() >= 2);
     h.app.press("return");
-    h.wait("the pick opens its child", || h.tui.route() == session(&last));
-
-    // A click on a row opens its child too.
-    h.tui.navigate(support::session_route("ses_p"));
-    h.wait_for("+2 more");
-    let (first, title, _) = &by_update()[0];
-    let (x, y) = h.find(&format!("• {title}"));
-    h.app.click(x + 2, y);
-    h.wait("the click opens the child", || h.tui.route() == session(first));
-    h.wait_gone("▼ Subagents");
-}
-
-// Expected (carbon-3, bigboi-3): the fold, a field merge the `cdylib` asks for over the C ABI, sets only its field in
-// the latest stored object, so a field another client wrote before this TUI read it again stays.
-#[test]
-fn a_fold_over_the_c_abi_keeps_a_field_another_client_stored() {
-    let h = open_in("subagents-sidebar", 170, subagents, true);
-    h.wait_for("+2 more");
-    let storage = h.tui.storage().unwrap();
-    let file = storage.file("plugin.subagents-sidebar.view").unwrap();
-    opencode_local::storage::write_json_atomic(&file, &json!({ "open": true, "sibling": 99 })).unwrap();
-    h.tui.keymap.dispatch("subagents-sidebar.toggle", None);
-    let stored = || storage.load("plugin.subagents-sidebar.view", &Value::Null).unwrap();
-    h.wait("the fold reaches the disk", || stored()["open"] == json!(false));
-    assert_eq!(stored(), json!({ "open": false, "sibling": 99 }));
+    let session = Route::Session { id: opencode_api::generated::SessionID(last) };
+    h.wait("the pick opens its child", || h.tui.route() == session);
 }
 
 // Expected (P8): the published package's clicks run on the JS host as its port's do: a click on a row opens its child,
@@ -456,29 +355,27 @@ fn the_published_subagents_sidebar_opens_a_clicked_row_and_stores_the_fold() {
     h.wait("the fold reaches the disk", || stored() == json!({ "open": false }));
 }
 
-// Expected (bigboi P8-3, both carriers): two clicks on the header before the first fold is written store both folds,
+// Expected (bigboi P8-3): two clicks on the header before the first fold is written store both folds,
 // each made from what the other stored (TS updates under a file lock), and a field another client wrote stays.
 #[test]
 fn quick_folds_each_land_and_keep_a_field_another_client_stored() {
-    for carrier in [Carrier::Port("subagents-sidebar"), Carrier::Npm("opencode-subagents-sidebar")] {
-        let Some(h) = open_as(&[carrier], 170, subagents, true, None) else { continue };
-        h.wait_for("+2 more");
-        let storage = h.tui.storage().unwrap();
-        let file = storage.file("plugin.subagents-sidebar.view").unwrap();
-        opencode_local::storage::write_json_atomic(&file, &json!({ "open": true, "sibling": 99 })).unwrap();
-        let stored = || storage.load("plugin.subagents-sidebar.view", &Value::Null).unwrap();
-        let (x, y) = h.find("Subagents");
-        h.app.click(x, y);
-        h.app.click(x, y);
-        h.settle();
-        // Both folds reach the disk in their time; a lost one leaves `open` false, which never matches.
-        h.wait(&format!("{carrier:?}: both folds reach the disk"), || {
-            h.app.advance(std::time::Duration::from_millis(1));
-            stored() == json!({ "open": true, "sibling": 99 })
-        });
-        h.app.click(x, y);
-        h.wait("the third fold reaches the disk", || stored() == json!({ "open": false, "sibling": 99 }));
-    }
+    let Some(h) = open_as(&[Carrier::Npm("opencode-subagents-sidebar")], 170, subagents, true, None) else { return };
+    h.wait_for("+2 more");
+    let storage = h.tui.storage().unwrap();
+    let file = storage.file("plugin.subagents-sidebar.view").unwrap();
+    opencode_local::storage::write_json_atomic(&file, &json!({ "open": true, "sibling": 99 })).unwrap();
+    let stored = || storage.load("plugin.subagents-sidebar.view", &Value::Null).unwrap();
+    let (x, y) = h.find("Subagents");
+    h.app.click(x, y);
+    h.app.click(x, y);
+    h.settle();
+    // Both folds reach the disk in their time; a lost one leaves `open` false, which never matches.
+    h.wait("both folds reach the disk", || {
+        h.app.advance(std::time::Duration::from_millis(1));
+        stored() == json!({ "open": true, "sibling": 99 })
+    });
+    h.app.click(x, y);
+    h.wait("the third fold reaches the disk", || stored() == json!({ "open": false, "sibling": 99 }));
 }
 
 // --- opencode-sidebar-prompt
@@ -519,6 +416,8 @@ fn the_published_sidebar_prompt_shows_a_queued_prompt() {
 
 // --- @mynameistito/opencode-force-input
 
+const FORCE_INPUT: &str = "@mynameistito/opencode-force-input";
+
 pub(crate) fn running(seen: &Seen) -> Option<Reply> {
     match (seen.method.as_str(), seen.path.as_str()) {
         ("GET", "/api/session/active") => Some(active(&["ses_p"])),
@@ -534,12 +433,32 @@ pub(crate) fn running(seen: &Seen) -> Option<Reply> {
     }
 }
 
+// Expected (`delivery` for the V2 layer, P8): the published package, unmodified on the JS host, sends one interrupt
+// and then the prompt for ctrl+enter on a running session, in that order: its four dispatches are one call's effects, applied in
+// the order it made them. Its hint is a static render of the package's JSX, as TS draws it from `node_modules`.
+#[test]
+fn the_published_force_input_interrupts_then_sends() {
+    let Some(h) = open_as(&[Carrier::Npm(FORCE_INPUT)], 120, running, false, None) else {
+        return;
+    };
+    h.wait("the hint", || h.app.text().contains("⏎ "));
+    h.app.type_text("hello");
+    h.app.press("ctrl+return");
+    h.wait("the prompt is sent", || !h.sent("/api/session/ses_p/prompt").is_empty());
+    assert_eq!(h.wire(), ["POST /api/session/ses_p/interrupt", "POST /api/session/ses_p/prompt"]);
+    let log = h.log.lock().unwrap();
+    let prompts: Vec<&Value> =
+        log.iter().filter(|seen| seen.path.ends_with("/prompt")).map(|seen| &seen.body).collect();
+    assert_eq!(prompts.len(), 1, "{prompts:?}");
+    assert_eq!(prompts[0]["text"], "hello", "ctrl+enter added no newline");
+}
+
 // Expected (bigboi-fixes-1): a prompt reaches the server after every interrupt sent before it, so a late interrupt
 // cannot cancel its reply: ctrl+enter while armed sends two interrupts, and the prompt waits for the first too.
 #[test]
 fn a_prompt_waits_for_every_earlier_interrupt_of_its_session() {
-    let h = open("force-input", 120, running);
-    h.wait_for("⏎ steer · ctrl+⏎ interrupt & send");
+    let Some(h) = open_as(&[Carrier::Npm(FORCE_INPUT)], 120, running, false, None) else { return };
+    h.wait("the hint", || h.app.text().contains("⏎ "));
     let (release, held) = tokio::sync::oneshot::channel();
     *h.hold.lock().unwrap() = Some(held);
     h.app.press("escape");
@@ -557,8 +476,8 @@ fn a_prompt_waits_for_every_earlier_interrupt_of_its_session() {
 // the same session sends its prompt after it.
 #[test]
 fn a_prompt_waits_for_an_interrupt_sent_from_an_earlier_composer() {
-    let h = open("force-input", 120, running);
-    h.wait_for("⏎ steer · ctrl+⏎ interrupt & send");
+    let Some(h) = open_as(&[Carrier::Npm(FORCE_INPUT)], 120, running, false, None) else { return };
+    h.wait("the hint", || h.app.text().contains("⏎ "));
     let (release, held) = tokio::sync::oneshot::channel();
     *h.hold.lock().unwrap() = Some(held);
     h.app.press("escape");
@@ -580,8 +499,8 @@ fn a_prompt_waits_for_an_interrupt_sent_from_an_earlier_composer() {
 // has the interrupt, as a prompt is sent.
 #[test]
 fn a_slash_command_waits_for_a_pending_interrupt() {
-    let h = open("force-input", 120, running);
-    h.wait_for("⏎ steer · ctrl+⏎ interrupt & send");
+    let Some(h) = open_as(&[Carrier::Npm(FORCE_INPUT)], 120, running, false, None) else { return };
+    h.wait("the hint", || h.app.text().contains("⏎ "));
     let (release, held) = tokio::sync::oneshot::channel();
     *h.hold.lock().unwrap() = Some(held);
     h.app.press("escape");
@@ -613,8 +532,8 @@ fn a_slash_command_waits_for_a_pending_interrupt() {
 fn a_slash_command_picked_from_the_popup_or_the_palette_waits_for_a_pending_interrupt() {
     use opencode_ui::keymap::COMMAND_PALETTE_COMMAND;
 
-    let h = open("force-input", 120, running);
-    h.wait_for("⏎ steer · ctrl+⏎ interrupt & send");
+    let Some(h) = open_as(&[Carrier::Npm(FORCE_INPUT)], 120, running, false, None) else { return };
+    h.wait("the hint", || h.app.text().contains("⏎ "));
     let order = || -> Vec<String> {
         h.log
             .lock()
@@ -728,151 +647,17 @@ pub(crate) fn usage(grown: Arc<Mutex<bool>>, paged: bool) -> impl Fn(&Seen) -> O
     }
 }
 
-// Expected: the panel totals every message of the session and its child, over both pages of the parent's history:
-// $1.50 reported plus $1.00 at catalog prices; `session.usage.updated` of the child reads it again, and the total
-// follows. The meters draw as TS draws them: label, percentage and countdown, then a bar in the severity's color.
+// Expected (P8): the published package, unmodified on the JS host, totals every message of the session and its child,
+// over both pages of the parent's history: $1.50 reported plus $1.00 at catalog prices; `session.usage.updated` of the
+// child reads it again, and the total follows. The meters draw as TS draws them: label, percentage and countdown, then
+// a bar in the severity's color.
 #[test]
-fn session_usage_totals_the_paged_history_and_follows_usage_events() {
-    totals(Carrier::Port("session-usage"));
-}
-
-// Expected (`carrier-equal` for the V2 layer, P8): the published package, unmodified on the JS host, does all of the
-// above as its port does: the same total over the same pages, the same rows and colors, the same follow of the event.
-#[test]
-fn the_published_session_usage_totals_as_its_port_does() {
-    totals(Carrier::Npm("opencode-session-usage"));
-}
-
-// Expected (bigboi P8-5): the published package's setup reads the route and the session's location at once, as TS's
-// does: its first limits request names the session's directory, which is neither the default location nor the JS
-// host's working directory, and on a session's route it prefetches that session's cost before its panel mounts.
-#[test]
-fn the_published_session_usage_asks_for_the_sessions_location_first() {
-    let base = usage(Arc::new(Mutex::new(false)), false);
-    let elsewhere = |value: Value| support::merge(value, json!({ "location": { "directory": "/elsewhere" } }));
-    let handler = move |seen: &Seen| match (seen.method.as_str(), seen.path.as_str()) {
-        ("GET", "/api/session/ses_p") => Some((200, json!({ "data": elsewhere(session("ses_p", "Tree", None, 1)) }))),
-        ("GET", "/api/session") if seen.param("parentID").is_empty() => {
-            Some((200, json!({ "data": [elsewhere(session("ses_p", "Tree", None, 1))], "cursor": {} })))
-        }
-        _ => base(seen),
-    };
-    let Some(h) = open_as(&[Carrier::Npm("opencode-session-usage")], 170, handler, false, None) else { return };
-    h.wait_for("≈ $2.50 session total");
-    let limits = h.sent("/api/experimental/usage/limits");
-    assert!(limits.first().is_some_and(|first| first.contains("location%5Bdirectory%5D=%2Felsewhere")), "{limits:#?}");
-}
-
-// Expected (await-cancel): session-usage's sidebar closes while its run waits on a page of the session's messages. The
-// sidebar's mount handler started the run, so its requests are the activation's (`Host::try_fetch`): the run goes on
-// with the page once the server answers, the sidebar opened again shows the total, and the next
-// `session.usage.updated` starts a run, as the last one ended. On the Rust port over the C ABI and on the Luau port.
-#[test]
-fn session_usage_ends_a_run_its_sidebar_closed_during() {
-    #[cfg_attr(not(luau), allow(unused_mut))]
-    let mut carriers = vec![Carrier::Port("session-usage")];
-    #[cfg(luau)]
-    carriers.push(Carrier::Luau("session-usage"));
-    for carrier in carriers {
-        closed_mid_run(carrier);
-    }
-}
-
-// Expected (timers, contract-ergonomics 2.3): goal-plugin's sidebar counts an active goal's time on each second, on
-// the host's clock and with no thread, from when its result was sampled: after the clock passed a second, and a second
-// passed on the wall too, the time shown is later. It ticks only while the sidebar shows (carbon tm2-3): on the home
-// screen it wakes the app no more, and the session again starts it again. On the Rust port over the C ABI and on the
-// Luau port.
-#[test]
-fn goal_plugin_counts_an_active_goals_time_each_second() {
-    #[cfg_attr(not(luau), allow(unused_mut))]
-    let mut carriers = vec![Carrier::Port("goal-plugin")];
-    #[cfg(luau)]
-    carriers.push(Carrier::Luau("goal-plugin"));
-    for carrier in carriers {
-        let sampled = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() - 10;
-        let goal = json!({
-            "sessionID": "ses_p", "objective": "Ship the parser rewrite", "status": "active", "tokenBudget": null,
-            "tokensUsed": 10, "timeUsedSeconds": 3725, "createdAt": 1, "updatedAt": 2, "continuationFailures": 0,
-            "maxAutoTurns": null, "maxDurationSeconds": null, "noProgressTokenThreshold": null,
-            "maxNoProgressTurns": null, "noProgressTurns": 0, "budgetWrapupSent": false, "stopReason": null,
-            "history": [], "checkpoints": [], "lastCheckpoint": null, "lastAssistantText": "",
-            "lastAssistantMessageID": "", "autoTurns": 0, "remainingTokens": null, "sampledAt": sampled,
-        });
-        let text = json!({ "goal": goal }).to_string();
-        let handler = move |seen: &Seen| match seen.path.as_str() {
-            "/api/session/ses_p/message" => {
-                let message = json!({
-                    "id": "msg_p", "type": "assistant", "agent": "build",
-                    "model": { "providerID": "provider", "id": "model" },
-                    "content": [{
-                        "type": "tool", "id": "call_p", "name": "get_goal",
-                        "state": { "status": "completed", "input": {}, "content": [{ "type": "text", "text": text }] },
-                        "time": { "created": 20, "ran": 21, "completed": 22 },
-                    }],
-                    "finish": "stop", "time": { "created": 20, "completed": 23 },
-                });
-                Some((200, json!({ "data": [message], "cursor": {} })))
-            }
-            _ => None,
-        };
-        let h = open_as(&[carrier], 170, handler, false, None).unwrap();
-        h.wait_for("Ship the parser rewrite");
-        let shown = |h: &Port| {
-            let screen = h.app.text();
-            screen.lines().find_map(|line| line.split("Time: ").nth(1).map(|time| time.trim().to_owned()))
-        };
-        let before = shown(&h).unwrap_or_else(|| panic!("{carrier:?}: no time:\n{}", h.app.text()));
-        std::thread::sleep(Duration::from_millis(1100));
-        h.app.advance(Duration::from_millis(1000));
-        h.wait(&format!("{carrier:?}: the time moves on from {before}"), || shown(&h).is_some_and(|now| now != before));
-        // Home shows no sidebar: the tick ends at its next second, and wakes the app no more (carbon tm2-3). The app's
-        // own timers wake it less than once a second.
-        h.tui.navigate(Route::Home);
-        h.app.idle(Duration::from_secs(2));
-        let home = h.app.idle(Duration::from_secs(10));
-        assert!(home.wakeups < 10, "{carrier:?}: the tick ran on with no sidebar: {home:?}");
-        // The session again: the tick starts again.
-        h.tui.navigate(support::session_route("ses_p"));
-        let before = h.wait_for("Ship the parser rewrite");
-        let before = before.lines().find_map(|line| line.split("Time: ").nth(1).map(|time| time.trim().to_owned()));
-        std::thread::sleep(Duration::from_millis(1100));
-        h.app.advance(Duration::from_millis(1000));
-        h.wait(&format!("{carrier:?}: the time moves on again"), || shown(&h) != before);
-    }
-}
-
-fn closed_mid_run(carrier: Carrier<'_>) {
+fn the_published_session_usage_totals_the_paged_history_and_follows_usage_events() {
     let grown = Arc::new(Mutex::new(false));
-    let gate = Arc::new((Mutex::new(false), std::sync::Condvar::new()));
-    let (served, held) = (usage(grown.clone(), false), gate.clone());
-    let handler = move |seen: &Seen| {
-        if seen.path == "/api/session/ses_p/message" {
-            let (open, wake) = &*held;
-            drop(wake.wait_timeout_while(open.lock().unwrap(), Duration::from_secs(10), |open| !*open).unwrap());
-        }
-        served(seen)
+    let Some(h) = open_as(&[Carrier::Npm("opencode-session-usage")], 170, usage(grown.clone(), false), false, None)
+    else {
+        return;
     };
-    let h = open_as(&[carrier], 170, handler, false, None).unwrap();
-    h.wait(&format!("{carrier:?}: the run asks for a page"), || !h.sent("/api/session/ses_p/message").is_empty());
-    h.tui.navigate(Route::Home);
-    h.wait(&format!("{carrier:?}: the sidebar closes"), || !h.app.text().contains("Usage"));
-    *gate.0.lock().unwrap() = true;
-    gate.1.notify_all();
-    h.tui.navigate(support::session_route("ses_p"));
-    h.wait(&format!("{carrier:?}: the total"), || h.app.text().contains("≈ $2.50 session total"));
-    *grown.lock().unwrap() = true;
-    h.events.emit(&json!({
-        "id": "evt_usage", "created": 2, "type": "session.usage.updated",
-        "location": { "directory": DIRECTORY },
-        "data": { "sessionID": "ses_c", "cost": 0, "tokens": { "input": 2_000_000, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } } },
-    }));
-    h.wait(&format!("{carrier:?}: the next run"), || h.app.text().contains("≈ $3.50 session total"));
-}
-
-fn totals(carrier: Carrier<'_>) {
-    let grown = Arc::new(Mutex::new(false));
-    let Some(h) = open_as(&[carrier], 170, usage(grown.clone(), false), false, None) else { return };
     h.wait_for("≈ $2.50 session total");
     let pages = h.sent("/api/session/ses_p/message");
     assert!(pages.contains(&"GET /api/session/ses_p/message?limit=100&cursor=page100".to_owned()), "{pages:#?}");
@@ -913,6 +698,26 @@ fn totals(carrier: Carrier<'_>) {
         "data": { "sessionID": "ses_c", "cost": 0, "tokens": { "input": 2_000_000, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } } },
     }));
     h.wait_for("≈ $3.50 session total");
+}
+
+// Expected (bigboi P8-5): the published package's setup reads the route and the session's location at once, as TS's
+// does: its first limits request names the session's directory, which is neither the default location nor the JS
+// host's working directory, and on a session's route it prefetches that session's cost before its panel mounts.
+#[test]
+fn the_published_session_usage_asks_for_the_sessions_location_first() {
+    let base = usage(Arc::new(Mutex::new(false)), false);
+    let elsewhere = |value: Value| support::merge(value, json!({ "location": { "directory": "/elsewhere" } }));
+    let handler = move |seen: &Seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/session/ses_p") => Some((200, json!({ "data": elsewhere(session("ses_p", "Tree", None, 1)) }))),
+        ("GET", "/api/session") if seen.param("parentID").is_empty() => {
+            Some((200, json!({ "data": [elsewhere(session("ses_p", "Tree", None, 1))], "cursor": {} })))
+        }
+        _ => base(seen),
+    };
+    let Some(h) = open_as(&[Carrier::Npm("opencode-session-usage")], 170, handler, false, None) else { return };
+    h.wait_for("≈ $2.50 session total");
+    let limits = h.sent("/api/experimental/usage/limits");
+    assert!(limits.first().is_some_and(|first| first.contains("location%5Bdirectory%5D=%2Felsewhere")), "{limits:#?}");
 }
 
 // Expected (win11-runs D1): the published session-usage and sidebar-tokens draw their sidebar blocks again once the JS
@@ -963,12 +768,13 @@ fn the_published_sidebar_tokens_follows_the_sessions_totals() {
     );
 }
 
-// Expected: as TS `childIDs`, the panel reads a parent's next page of children only after the page before, and lists
+// Expected (P8): as TS `childIDs`, the published package's panel reads a parent's next page of children only after the page before, and lists
 // the next parent only after the last page: `ses_p`'s children are asked for once per page, and the child found on the
 // second page is in the total.
 #[test]
-fn session_usage_pages_the_children_one_parent_at_a_time() {
-    let h = open("session-usage", 170, usage(Arc::new(Mutex::new(false)), true));
+fn the_published_session_usage_pages_the_children_one_parent_at_a_time() {
+    let handler = usage(Arc::new(Mutex::new(false)), true);
+    let Some(h) = open_as(&[Carrier::Npm("opencode-session-usage")], 170, handler, false, None) else { return };
     h.wait_for("≈ $2.50 session total");
     let log = h.log.lock().unwrap();
     let cursors: Vec<String> = log
@@ -984,7 +790,7 @@ fn session_usage_pages_the_children_one_parent_at_a_time() {
 // a finished session.
 #[test]
 fn the_author_fixture_counts_and_toasts_a_finished_session() {
-    let h = open("author", 170, |_| None);
+    let h = open_as(&[Carrier::Example("author")], 170, |_| None, false, None).unwrap();
     h.wait_for("Counted 0");
     let (x, y) = h.find("Counted 0");
     h.app.click(x, y);

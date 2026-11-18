@@ -1,7 +1,0 @@
-# The port of `opencode-sidebar-tokens` (`examples/sidebar-tokens`) in Luau.
-# Its ID is the original's, as the native port's is, so it keeps what the original stored.
-id = "sidebar.tokens"
-name = "Session tokens"
-version = "0.1.3"
-contract = "2.0"
-description = "the session's input, output and cache token totals in the sidebar"

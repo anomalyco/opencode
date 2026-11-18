@@ -1,7 +1,0 @@
-# The port of `@0xuwui/opencode-session-manager` (`examples/session-manager`) in Luau.
-# Its ID is the original's, as the native port's is, so it keeps what the original stored.
-id = "session-manager"
-name = "Session Manager"
-version = "0.1.2"
-contract = "2.0"
-description = "browse, rename and delete sessions grouped by directory, project or time"

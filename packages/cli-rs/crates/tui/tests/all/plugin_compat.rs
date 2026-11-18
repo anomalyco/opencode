@@ -1,8 +1,7 @@
 //! The V2 compatibility layer (P8): today's `{ id, setup }` TUI plugins, with JSX over OpenTUI's intrinsics, on the JS
 //! host. The probe is `crates/plugin/examples/pipe/v2probe/tui.tsx`, written against `@opencode/plugin/tui` as an npm
-//! plugin is; the three published packages are compared with their native ports in `ports.rs`, and with TS cell for cell
-//! in P-APP (`parity/scenarios/P.8`); `ports::measure_the_three_npm_plugins` measures them. Every row skips without
-//! Bun, unless `OPENCODE_RS_REQUIRE_TS=1`.
+//! plugin is; the published packages run in `plugin_published.rs`, and are compared with TS cell for cell in P-APP
+//! (`parity/scenarios/P.8`). Every row skips without Bun, unless `OPENCODE_RS_REQUIRE_TS=1`.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -856,7 +855,7 @@ fn a_plugin_whose_registrations_never_settle_fails() {
     assert!(error.contains("changed its registrations more than 64 times"), "{error}");
 }
 
-// Expected (ports_trio's session-manager search lost a letter): a change of a plugin's commands alone, here the layer of
+// Expected (session-manager's port lost a letter of its search): a change of a plugin's commands alone, here the layer of
 // a component the first letter typed mounts, replaces their keys in place, as TS's keymap follows a layer: the plugin's
 // route keeps its mount, so its field keeps the focus and every key typed into it. Each change reloaded the plugin and
 // mounted the route again, whose new field took the focus a round trip later; the keys between went nowhere.

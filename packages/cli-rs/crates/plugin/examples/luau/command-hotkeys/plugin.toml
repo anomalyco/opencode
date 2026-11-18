@@ -1,7 +1,0 @@
-# The port of `opencode-command-hotkeys` (`examples/command-hotkeys`) in Luau.
-# Its ID is the original's, as the native port's is, so it keeps what the original stored.
-id = "command-hotkeys"
-name = "Command hotkeys"
-version = "0.1.1"
-contract = "2.0"
-description = "keys and palette entries that run a server command in the session in view"
