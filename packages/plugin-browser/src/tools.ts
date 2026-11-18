@@ -8,6 +8,7 @@ import { relative, sep } from "node:path"
 import { Script } from "node:vm"
 import type { BrowserConnection } from "./connection.js"
 import { BrowserFiles } from "./files.js"
+import { artifactKind } from "@opencode/util/artifact"
 import { remotePath, workspacePrefix } from "./preview-path.js"
 import { Browser } from "./rpc.js"
 import { BrowserSkill } from "./skill.js"
@@ -128,7 +129,8 @@ export const register = Effect.fn("BrowserTools.register")(function* (
     const call = `browser.${entry}`
     if (ctx.location.workspaceID) return yield* new Tool.Error({ message: `${call} shows a workspace file only when the workspace is on the server itself.` })
     const path = yield* previewable(action.path, call, tool)
-    const html = /\.html?$/i.test(path)
+    // As the desktop decides it: a file named only `.html` is not a page.
+    const html = artifactKind(path) === "html"
     if (action.type === "navigate.path" && !html)
       return yield* new Tool.Error({
         metadata: { code: "not_html" },

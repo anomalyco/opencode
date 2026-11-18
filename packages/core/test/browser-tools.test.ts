@@ -328,6 +328,13 @@ it.live("a workspace file opens through tabs.open and navigate, by path or by th
     expect(JSON.parse(yield* open({ path: "chart.svg" }))).toEqual({ path: "chart.svg", shown: "file" })
     expect(yield* move({ path: "chart.svg" })).toBe("browser.navigate moves a tab to an HTML file, and chart.svg is not one. Call browser.tabs.open({ path }) to show it in the file panel.")
     expect(browser.commands).toEqual([{ type: "preview", path: "chart.svg" }])
+    browser.commands.length = 0
+
+    // A file named only `.html` has a name and no extension: the desktop shows it in the file panel, so it has no tab.
+    yield* Effect.promise(() => Bun.write(join(browser.directory, ".html"), "plain"))
+    expect(JSON.parse(yield* open({ path: ".html" }))).toEqual({ path: ".html", shown: "file" })
+    expect(yield* move({ path: ".html" })).toBe("browser.navigate moves a tab to an HTML file, and .html is not one. Call browser.tabs.open({ path }) to show it in the file panel.")
+    expect(browser.commands).toEqual([{ type: "preview", path: ".html" }])
 
     // No tool has the old name. The call fails with what to call instead, not with a guessed tool.
     expect(yield* browser.run(`return await tools.browser.preview({ path: "page.html" }).catch(error => error.message)`)).toBe(

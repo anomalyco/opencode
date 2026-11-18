@@ -15,7 +15,8 @@ export function workspacePrefix(session: string) {
 
 /** Parse before URL normalization: reject alternate authorities, dot segments and encoded separators. */
 export function remotePath(address: string, prefix: string, windows = false) {
-  if (!address.startsWith(prefix)) return
+  // A scheme and a session ID read the same in any case, and `workspacePrefix` writes them in lower case.
+  if (address.slice(0, prefix.length).toLowerCase() !== prefix) return
   const encoded = address.slice(prefix.length).split(/[?#]/, 1)[0]
 
   if (!encoded || /%(?:2f|5c)/i.test(encoded)) return
