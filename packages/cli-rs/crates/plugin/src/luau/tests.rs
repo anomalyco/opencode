@@ -2485,6 +2485,40 @@ fn a_dialog_answers_its_task_and_an_escape_gives_nil() {
     assert_eq!(failure(&registry, "test.luau"), None);
 }
 
+// Expected (`docs/plugins.md`, "A task"): the guide's Luau wait runs as it is written there. A confirm that is not
+// confirmed sends nothing; one that is goes on to the fetch; a failed fetch returns `nil` and the error, which the alert
+// shows; and a reply toasts.
+#[test]
+fn the_guides_luau_wait_runs_as_written() {
+    let guide = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/plugins.md")).unwrap();
+    let body = guide
+        .split("```lua\n")
+        .find(|block| block.starts_with("setup:command({ name = \"x.clear\""))
+        .and_then(|block| block.split("```").next())
+        .expect("the guide's Luau wait");
+    let host = host();
+    let registry = tasking(&host, body);
+    let ask = |confirmed: &str| {
+        run(&host, "x.clear", None);
+        let (dialog, closed) = asked(&host);
+        assert!(matches!(dialog, abi::Dialog::Confirm(ref confirm) if confirm.title == "Clear?"), "{dialog:?}");
+        run(&host, &answers(&dialog), Some(confirmed));
+        run(&host, &closed.0, closed.1.as_deref());
+    };
+    ask("false");
+    assert!(host.fetches.borrow().is_empty(), "a confirm that was not confirmed sent the request");
+    ask("true");
+    answer(&host, Err("UnexpectedStatus: 404".to_owned()));
+    let (dialog, closed) = asked(&host);
+    assert!(matches!(dialog, abi::Dialog::Alert(ref alert) if alert.message == "UnexpectedStatus: 404"), "{dialog:?}");
+    run(&host, &closed.0, closed.1.as_deref());
+    assert!(said(&host).is_empty(), "{:?}", said(&host));
+    ask("true");
+    answer(&host, Ok(serde_json::Value::Null));
+    assert_eq!(said(&host), ["Cleared"]);
+    assert_eq!(failure(&registry, "test.luau"), None);
+}
+
 // Expected (await-luau): `plugin.all` runs each function as a task and returns their values in order once all ended,
 // or `nil` and the first error.
 #[test]

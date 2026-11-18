@@ -6,7 +6,8 @@ they load on Linux (`.so`), macOS (`.dylib`) and Windows (`.dll`). There is no s
 chose to run on their own machine. No cargo feature gates it.
 
 To write one, start with the quick start in [`crates/plugin-abi/README.md`](../crates/plugin-abi/README.md). It also
-lists which binaries load. This document is the reference.
+lists which binaries load. This document is the reference. [`plugins.md`](plugins.md) is the overview, and has what
+this document does not: the Luau carrier, and tasks, `await` and timers.
 
 ## The ABI
 
