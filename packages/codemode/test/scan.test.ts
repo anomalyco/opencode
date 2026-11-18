@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Result } from "effect"
-import { CodeMode } from "./lib/index.js"
+import { CodeMode } from "../src/index.js"
 
 describe("CodeMode.scanTools", () => {
   test("extracts dotted, bracketed and nested static tool calls in first-seen order", () => {
@@ -37,6 +37,21 @@ describe("CodeMode.scanTools", () => {
     expect(Result.isFailure(CodeMode.scanTools("return await tools.slack[name]({})"))).toBe(true)
     expect(Result.isFailure(CodeMode.scanTools("const s = tools.slack; return await s.read_thread({})"))).toBe(true)
     expect(Result.isFailure(CodeMode.scanTools("return Object.keys(tools)"))).toBe(true)
+  })
+
+  test("rejects loading tools as a module, which would hide the calls from the scan", () => {
+    for (const code of [
+      'import t from "tools"\nawait t.slack.post({})',
+      'const t = require("tools"); await t.slack.post({})',
+      'const t = require("node:tools"); await t.slack.post({})',
+      'const t = await import("tools"); await t.slack.post({})',
+      "const t = require(name); await t.slack.post({})",
+    ]) {
+      expect(Result.isFailure(CodeMode.scanTools(code))).toBe(true)
+    }
+    expect(CodeMode.scanTools('const fs = require("fs"); return await tools.slack.read_thread({})')).toEqual(
+      Result.succeed(["slack.read_thread"]),
+    )
   })
 
   test("binds outer globals that programs can read or shadow while keeping line numbers", async () => {

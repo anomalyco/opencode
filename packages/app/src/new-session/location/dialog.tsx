@@ -12,9 +12,10 @@ import {
   ProjectAvatar,
 } from "@opencode/ui/project-avatar"
 import { TextInput } from "@opencode/ui/text-input"
+import { Tooltip } from "@opencode/ui/tooltip"
 import { createTypeahead } from "@opencode/ui/typeahead"
 import { createEventListener } from "@solid-primitives/event-listener"
-import { getFilename } from "@opencode/util/path"
+import { getFilename, sameDirectory } from "@opencode/util/path"
 import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
 import type { PromptProject, PromptProjectController, PromptServer } from "@/new-session/project/selector"
 import type { NewSessionWorkspaceController } from "@/new-session/workspace/controller"
@@ -80,6 +81,18 @@ function NewSessionLocationDialog(props: {
   const view = createMemo(() => locationDialogView(step()))
   const drilled = createMemo(() => view().drilled)
 
+  const currentDestination = createMemo(() => {
+    const project = drilled()
+
+    if (project && props.project.isSelected(project)) return props.workspace.selection.value()
+  })
+
+  const current = (entry: LocationEntry) => {
+    const destination = currentDestination()
+
+    return entry.type === "workspace" && destination !== undefined && sameDirectory(entry.value, destination)
+  }
+
   const connection = (project: PromptProject) =>
     project.server ? servers.list.find((item) => ServerConnection.key(item) === project.server!.key) : serverSDK.server
 
@@ -119,6 +132,18 @@ function NewSessionLocationDialog(props: {
 
     return !query || values.some((value) => value?.toLowerCase().includes(query))
   }
+
+  const checkout = (project: PromptProject) =>
+    context(project)?.data.location.vcs.info({ directory: project.worktree })?.branch.current
+
+  createEffect(() => {
+    const project = drilled()
+
+    if (project?.vcs === "git")
+      void context(project)
+        ?.data.location.vcs.sync({ directory: project.worktree })
+        .catch(() => undefined)
+  })
 
   const otherCount = createMemo(() => props.project.projects().filter((project) => !project.used).length)
 
@@ -169,7 +194,13 @@ function NewSessionLocationDialog(props: {
         value: directory,
         directory,
       })),
-    ].filter((entry) => matches(workspaceTitle(project, entry.value), entry.directory))
+    ].filter((entry) =>
+      matches(
+        workspaceTitle(project, entry.value),
+        entry.directory,
+        entry.value === "main" ? checkout(project) : undefined,
+      ),
+    )
   })
 
   const entries = () => {
@@ -309,7 +340,7 @@ function NewSessionLocationDialog(props: {
   }
 
   return (
-    <Dialog class="command-palette new-session-location" size="large">
+    <Dialog class="command-palette new-session-location" size="large" fit>
       <DialogBody class="command-palette-body">
         <div class="palette-menu-search">
           <TextInput
@@ -321,7 +352,21 @@ function NewSessionLocationDialog(props: {
             appearance="large"
             aria-label={placeholder()}
             placeholder={placeholder()}
-            leadingIcon={<Icon name="magnifying-glass" />}
+            leadingIcon={
+              <Show when={view().ownsEscape && !view().titleKey} fallback={<Icon name="magnifying-glass" />}>
+                <Tooltip value={language.t("session.new.location.back")} placement="bottom-start">
+                  <button
+                    type="button"
+                    class="new-session-location-search-back"
+                    aria-label={language.t("session.new.location.back")}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={back}
+                  >
+                    <Icon name="arrow-left" />
+                  </button>
+                </Tooltip>
+              </Show>
+            }
             role="combobox"
             aria-expanded="true"
             data-owns-escape={view().ownsEscape ? "" : undefined}
@@ -390,7 +435,7 @@ function NewSessionLocationDialog(props: {
                           "new-session-location-workspace": entry.type === "workspace",
                         }}
                         role="option"
-                        aria-selected={activeEntry()?.id === entry.id}
+                        aria-selected={entry.type === "workspace" ? current(entry) : activeEntry()?.id === entry.id}
                         data-active={activeEntry()?.id === entry.id ? "" : undefined}
                         onMouseMove={(event) => {
                           // Ignore hover from a static cursor when keyboard scrolling moves rows underneath it.
@@ -475,6 +520,7 @@ function NewSessionLocationDialog(props: {
                               >
                                 <ProjectRow
                                   project={item().project}
+                                  branch={checkout(item().project)}
                                   path={item().directory}
                                   drillLabel={language.t("session.new.location.worktrees")}
                                 />
@@ -482,6 +528,9 @@ function NewSessionLocationDialog(props: {
                             )}
                           </Match>
                         </Switch>
+                        <Show when={current(entry)}>
+                          <Icon name="check" class="ms-auto shrink-0 text-v2-icon-icon-muted" />
+                        </Show>
                       </button>
                     </>
                   )}
@@ -495,7 +544,13 @@ function NewSessionLocationDialog(props: {
   )
 }
 
-function ProjectRow(props: { project: PromptProject; path: string; onDrill?: () => void; drillLabel: string }) {
+function ProjectRow(props: {
+  project: PromptProject
+  branch?: string
+  path: string
+  onDrill?: () => void
+  drillLabel: string
+}) {
   return (
     <>
       <div class="command-palette-row-main">
@@ -510,6 +565,14 @@ function ProjectRow(props: { project: PromptProject; path: string; onDrill?: () 
           <span class="new-session-location-name">
             <span class="command-palette-title palette-menu-title">{displayName(props.project)}</span>
             <ServerTag server={props.project.server} />
+            <Show when={props.branch}>
+              {(branch) => (
+                <span class="new-session-location-branch">
+                  <Icon name="branch" />
+                  <span dir="auto">{branch()}</span>
+                </span>
+              )}
+            </Show>
           </span>
           <span class="command-palette-description" dir="ltr">
             {props.path}
@@ -543,7 +606,7 @@ function ServerTag(props: { server?: PromptServer }) {
     <Show when={tagged(props.server)}>
       {(server) => (
         <Badge class="new-session-location-tag" variant="subtle" title={server().label}>
-          <Icon name={serverIcon(server())} size="small" />
+          <Icon name={serverIcon(server())} />
           <span>{server().name}</span>
         </Badge>
       )}

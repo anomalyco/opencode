@@ -6,10 +6,9 @@ import { loadSlice, translated, translator } from "~/i18n"
 import { parseLocale } from "~/lib/language"
 
 // The site's own Solid components that the static pages show only once someone asks for them (the
-// search palette, the Markdown view, the orb, the footer's wordmark, the legal cover, the products'
-// arrows) or that keep changing once shown (the logo row), rendered into the page in the browser:
-// nothing of theirs is hydrated. Loaded on intent with the component that needs it, so the page's own
-// script carries no framework.
+// search palette, the Markdown view, the orb's pop-up, the legal cover), rendered into the page in
+// the browser: nothing of theirs is hydrated. Loaded on intent with the component that needs it, so
+// the page's own script carries no framework.
 
 const locale = parseLocale(document.documentElement.dataset.locale) ?? "en"
 const i18n = { t: translator(locale), translated: (key: Parameters<typeof translated>[1]) => translated(locale, key) }

@@ -1,5 +1,6 @@
 import { Schema, type Effect } from "effect"
 import type { AIError, LanguageModelSanitizerCompatibility, LLMEvent, LLMRequest, ProtocolID } from "../schema/index.js"
+import type { ToolUpdateEncoding } from "../tool-updates.js"
 
 /**
  * The semantic API contract of one model server family.
@@ -43,6 +44,8 @@ export interface Protocol<Body, Frame, Event, State> {
   readonly stream: ProtocolStream<Frame, Event, State>
   /** Whether `body.from` lowers `Message.effort(...)` markers; wrappers around another `body.from` must forward it. */
   readonly supportsEffortUpdates?: (request: LLMRequest) => boolean
+  /** Tool changes `body.from` can send in place of `Message.tools(...)` markers; wrappers around another `body.from` must forward it. */
+  readonly toolUpdates?: ToolUpdateEncoding
   /** Tool schema sanitizer for every model on this protocol unless the model's compatibility sets one; wrappers around another `body.from` must forward it. */
   readonly sanitizer?: LanguageModelSanitizerCompatibility
 }

@@ -1,0 +1,43 @@
+/* With the host popover's 4px inset, the content sits 8px from the top and 12px from the other edges. */
+[data-component="goal-panel"] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 8px 8px;
+}
+
+:is([data-slot="goal-objective"], [data-slot="goal-reason"]) {
+  margin: 0;
+  font-size: 13px;
+  line-height: var(--line-height-base);
+  letter-spacing: -0.04px;
+  color: var(--v2-text-text-base);
+  white-space: pre-wrap;
+}
+
+[data-slot="goal-objective"] {
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+/* The hairline runs the popover's full width, through its inset and the panel's padding. */
+[data-slot="goal-divider"] {
+  flex: none;
+  margin-inline: -12px;
+  border-top: 0.5px solid var(--v2-border-border-base);
+}
+
+[data-slot="goal-status"] {
+  font-size: 12px;
+  line-height: 18px;
+  letter-spacing: 0.05px;
+  color: var(--v2-text-text-accent);
+
+  &[data-status="paused"] {
+    color: var(--v2-state-fg-warning);
+  }
+
+  &[data-status="complete"] {
+    color: var(--v2-state-fg-success);
+  }
+}

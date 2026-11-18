@@ -102,14 +102,17 @@ const ensure = Effect.fn("BackgroundService.ensure")(function* (mode: Background
 const prepare = Effect.fn("BackgroundService.prepare")(function* (mode: BackgroundServiceMachine.ConnectMode) {
   yield* Effect.logInfo("starting v2 background service")
   const desktopCli = yield* DesktopCli.Service
-  const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
+  const reuse = !app.isPackaged && process.env.OPENCODE_DESKTOP_REUSE_SERVER === "1"
+  const isolated = !app.isPackaged && !reuse && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
   const cli = yield* desktopCli.resolve
-  const version = serviceVersion({ channel: CHANNEL, isolated, mode, version: cli.version })
+  const version = reuse ? undefined : serviceVersion({ channel: CHANNEL, isolated, mode, version: cli.version })
 
   if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
   const client = yield* Effect.promise(() => import("@opencode/client/service"))
 
-  const file = client.fallback(serviceChannel())
+  const reuseFile = reuse ? process.env.OPENCODE_DESKTOP_REUSE_SERVICE_FILE || undefined : undefined
+
+  const file = reuse ? reuseFile : client.fallback(serviceChannel())
 
   return { cli, client, file, isolated, version }
 })
@@ -126,7 +129,7 @@ const adopt = Effect.fn("BackgroundService.adopt")(function* (
 
   if (url.hostname === "0.0.0.0") url.hostname = "127.0.0.1"
 
-  const runningVersion = yield* fs.readFileString(setup.file).pipe(
+  const runningVersion = yield* fs.readFileString(setup.file ?? setup.client.fallback(serviceChannel())).pipe(
     Effect.map(
       (text) =>
         Option.getOrUndefined(Schema.decodeUnknownOption(Schema.fromJsonString(RegisteredService))(text))?.version,

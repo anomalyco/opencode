@@ -1,3 +1,35 @@
+diff --git a/dist/index-BCNZS4Ap.d.mts b/dist/index-BCNZS4Ap.d.mts
+index 9dd0f80cfae3db66f0ad7762858d5e1fb217259f..3b19251c82368739993554ae37880e015b7e28a0 100644
+--- a/dist/index-BCNZS4Ap.d.mts
++++ b/dist/index-BCNZS4Ap.d.mts
+@@ -1861,6 +1861,11 @@ type RequestOptions = {
+    * Default: `false`.
+    */
+   allowInputRequired?: boolean;
++  /**
++   * Called with the request's JSON-RPC id right before it is sent.
++   * A `timeout` of `Infinity` disables the request timeout.
++   */
++  onRequestId?: (id: number) => void;
+ } & TransportSendOptions;
+ /**
+  * Flow context handed to {@linkcode Protocol._resolveNonCompleteResult}: the
+diff --git a/dist/index-eUeYt8-s.d.cts b/dist/index-eUeYt8-s.d.cts
+index 2050a30454739e753f91f627e23f52bb0dd7aaa8..ec97b3525b55e2bb6139aaf741003360a6155b2d 100644
+--- a/dist/index-eUeYt8-s.d.cts
++++ b/dist/index-eUeYt8-s.d.cts
+@@ -1864,6 +1864,11 @@ type RequestOptions = {
+    * Default: `false`.
+    */
+   allowInputRequired?: boolean;
++  /**
++   * Called with the request's JSON-RPC id right before it is sent.
++   * A `timeout` of `Infinity` disables the request timeout.
++   */
++  onRequestId?: (id: number) => void;
+ } & TransportSendOptions;
+ /**
+  * Flow context handed to {@linkcode Protocol._resolveNonCompleteResult}: the
 diff --git a/dist/public-C-9H-ftO.cjs b/dist/public-C-9H-ftO.cjs
 index 2427ea1fbf85eccf15bfb804aa80a8d7381232e7..0789ac0292e6ce5200fc73597bd5829083ab90d6 100644
 --- a/dist/public-C-9H-ftO.cjs
@@ -93,7 +125,7 @@ index fdb69ef9ee42ad4e1019cb4c9c727617286fe916..dee9ecf8c451aa2e400efd8239655652
  				console.warn(`[mcp-sdk] excluding tool '${tool.name}' from tools/list: invalid x-mcp-header declaration — ${scan.reason}`);
  				return false;
 diff --git a/dist/src-CeKsbNLO.mjs b/dist/src-CeKsbNLO.mjs
-index 4d390185ad2167d0e256fbf3aba1367a7e343bc0..4d3e1f21a69d5b426900dcb71f82a9c77eb79990 100644
+index 4d390185ad2167d0e256fbf3aba1367a7e343bc0..ffae6fcf51807e0684e442a49bb6d601bd246be2 100644
 --- a/dist/src-CeKsbNLO.mjs
 +++ b/dist/src-CeKsbNLO.mjs
 @@ -1092,11 +1092,7 @@ function build$1() {
@@ -136,8 +168,37 @@ index 4d390185ad2167d0e256fbf3aba1367a7e343bc0..4d3e1f21a69d5b426900dcb71f82a9c7
  			nextCursor: CursorSchema$1.optional()
  		}),
  		"prompts/get": liftedResult({
+@@ -4713,7 +4709,11 @@ const MCP_NAME_HEADER_SOURCE = {
+ 	"resources/read": "uri",
+ 	"tasks/get": "taskId",
+ 	"tasks/update": "taskId",
+-	"tasks/cancel": "taskId"
++	"tasks/cancel": "taskId",
++	"events/poll": "name",
++	"events/stream": "name",
++	"events/subscribe": "name",
++	"events/unsubscribe": "name"
+ };
+ /**
+ * Resolve the `Mcp-Name` source for one request against
+@@ -5802,6 +5802,7 @@ var Protocol = class {
+ 		this._requestHandlerAbortControllers.get(notification.params.requestId)?.abort(notification.params.reason);
+ 	}
+ 	_setupTimeout(messageId, timeout, maxTotalTimeout, onTimeout, resetTimeoutOnProgress = false) {
++		if (timeout === Infinity) return;
+ 		this._timeoutInfo.set(messageId, {
+ 			timeoutId: setTimeout(onTimeout, timeout),
+ 			startTime: Date.now(),
+@@ -6179,6 +6180,7 @@ var Protocol = class {
+ 			}
+ 			const requestAbort = codec.era === MODERN_WIRE_REVISION && this._transport.hasPerRequestStream === true ? new AbortController() : void 0;
+ 			const messageId = this._requestMessageId++;
++			options?.onRequestId?.(messageId);
+ 			cleanupMessageId = messageId;
+ 			const jsonrpcRequest = {
+ 				...request,
 diff --git a/dist/src-ohtppAR3.cjs b/dist/src-ohtppAR3.cjs
-index 7d9314447f98b6aea72649b4fed009fd306b8919..f8c6e461e23e23f5182d07d8f689df3916dc2a7f 100644
+index 7d9314447f98b6aea72649b4fed009fd306b8919..c7d8f6415c9279853169172e3a80983242c84ad4 100644
 --- a/dist/src-ohtppAR3.cjs
 +++ b/dist/src-ohtppAR3.cjs
 @@ -1093,11 +1093,7 @@ function build$1() {
@@ -180,3 +241,32 @@ index 7d9314447f98b6aea72649b4fed009fd306b8919..f8c6e461e23e23f5182d07d8f689df39
  			nextCursor: CursorSchema$1.optional()
  		}),
  		"prompts/get": liftedResult({
+@@ -4714,7 +4710,11 @@ const MCP_NAME_HEADER_SOURCE = {
+ 	"resources/read": "uri",
+ 	"tasks/get": "taskId",
+ 	"tasks/update": "taskId",
+-	"tasks/cancel": "taskId"
++	"tasks/cancel": "taskId",
++	"events/poll": "name",
++	"events/stream": "name",
++	"events/subscribe": "name",
++	"events/unsubscribe": "name"
+ };
+ /**
+ * Resolve the `Mcp-Name` source for one request against
+@@ -5803,6 +5803,7 @@ var Protocol = class {
+ 		this._requestHandlerAbortControllers.get(notification.params.requestId)?.abort(notification.params.reason);
+ 	}
+ 	_setupTimeout(messageId, timeout, maxTotalTimeout, onTimeout, resetTimeoutOnProgress = false) {
++		if (timeout === Infinity) return;
+ 		this._timeoutInfo.set(messageId, {
+ 			timeoutId: setTimeout(onTimeout, timeout),
+ 			startTime: Date.now(),
+@@ -6180,6 +6181,7 @@ var Protocol = class {
+ 			}
+ 			const requestAbort = codec.era === MODERN_WIRE_REVISION && this._transport.hasPerRequestStream === true ? new AbortController() : void 0;
+ 			const messageId = this._requestMessageId++;
++			options?.onRequestId?.(messageId);
+ 			cleanupMessageId = messageId;
+ 			const jsonrpcRequest = {
+ 				...request,

@@ -12,4 +12,12 @@ export default {
   noChanges: "Ingen endringer",
   "settings.wrapLines.title": "Bryt linjer",
   "settings.wrapLines.description": "Bryt lange linjer i mobile differ i stedet for å rulle vannrett",
+  "menu.count.one": "{{count}} fil endret",
+  "menu.count.other": "{{count}} filer endret",
+  "folder.more": "{{count}} · flere vises ikke",
+  "folder.failed": "Kunne ikke laste inn endringer",
+  "command.open": "Åpne gjennomgang",
+  "load.failed": "Kunne ikke laste inn endringer",
+  "load.timeout": "Serveren brukte for lang tid på å svare",
+  offline: "Kan ikke nå denne serveren",
 }

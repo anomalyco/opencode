@@ -12,4 +12,12 @@ export default {
   noChanges: "ცვლილებები არ არის",
   "settings.wrapLines.title": "სტრიქონების გადატანა",
   "settings.wrapLines.description": "მობილურ diff-ებში გრძელი სტრიქონების გადატანა ჰორიზონტალური გადახვევის ნაცვლად",
+  "menu.count.one": "შეიცვალა {{count}} ფაილი",
+  "menu.count.other": "შეიცვალა {{count}} ფაილი",
+  "folder.more": "{{count}} · დანარჩენი არ არის ნაჩვენები",
+  "folder.failed": "ცვლილებების ჩატვირთვა ვერ მოხერხდა",
+  "command.open": "მიმოხილვის გახსნა",
+  "load.failed": "ცვლილებების ჩატვირთვა ვერ მოხერხდა",
+  "load.timeout": "სერვერმა პასუხს ძალიან დიდხანს მოანდომა",
+  offline: "ამ სერვერთან დაკავშირება შეუძლებელია",
 }

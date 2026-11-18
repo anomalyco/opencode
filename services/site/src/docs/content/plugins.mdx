@@ -1,5 +1,6 @@
 ---
 title: "Plugins"
+description: "Add npm packages or local plugin directories to OpenCode in opencode.json, and enable or disable plugins by ID or wildcard."
 ---
 
 Add published packages, versioned packages, scoped packages, or local plugin directories to `opencode.json(c)`.
@@ -80,6 +81,8 @@ use `.*` to match an ID prefix. A later ID re-enables a plugin.
   "plugins": ["*", "-opencode.provider.*", "opencode.provider.openai", "-acme.reviewer"]
 }
 ```
+
+To disable the notice added to new forks, add `"-opencode.fork-notice"` to `plugins`.
 
 Two built-in plugins ignore removals so that a repository cannot switch off
 [policy](/policies) enforcement: `opencode.config.policy` and

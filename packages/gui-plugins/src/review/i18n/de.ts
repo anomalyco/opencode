@@ -12,4 +12,12 @@ export default {
   noChanges: "Keine Änderungen",
   "settings.wrapLines.title": "Zeilen umbrechen",
   "settings.wrapLines.description": "Lange Zeilen in mobilen Diffs umbrechen, statt horizontal zu scrollen",
+  "menu.count.one": "{{count}} Datei geändert",
+  "menu.count.other": "{{count}} Dateien geändert",
+  "folder.more": "{{count}} · weitere nicht angezeigt",
+  "folder.failed": "Änderungen konnten nicht geladen werden",
+  "command.open": "Überprüfung öffnen",
+  "load.failed": "Änderungen konnten nicht geladen werden",
+  "load.timeout": "Der Server hat zu lange für eine Antwort gebraucht",
+  offline: "Server nicht erreichbar",
 }

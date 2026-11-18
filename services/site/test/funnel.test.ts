@@ -33,7 +33,6 @@ const surfaces: Record<string, string | undefined> = {
   "/desktop": "www-desktop",
   "/devices": undefined,
   "/font": "www-font",
-  "/ide": "www-ide",
   "/legal": "www-legal",
   "/legal/privacy-policy": "www-legal",
   "/legal/terms-of-service": "www-legal",

@@ -28,4 +28,5 @@ export default {
   "export.success.description": "បានរក្សាទុកសម័យទៅ {{filename}}",
   "export.failed.title": "បរាជ័យក្នុងការនាំចេញសម័យ",
   "export.failed.description": "កំហុសបានកើតឡើងខណៈពេលនាំចេញសម័យ",
+  "usage.toggle": "បិទ/បើកបរិបទសម័យ",
 }

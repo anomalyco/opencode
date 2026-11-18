@@ -34,4 +34,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "إضافة خادم",
   "menu.delete": "حذف",
+  "error.unavailable": "SSH غير متاح",
 }
