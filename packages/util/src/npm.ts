@@ -60,19 +60,6 @@ export function npmOnPath() {
   return result.status === 0
 }
 
-/**
- * pacote builds a Git dependency by running `npm install` inside it and takes the binary
- * from `npmBin`. When that name ends in `.js`, it spawns `process.execPath` with the script
- * as the argument — and in every compiled distribution `process.execPath` is opencode
- * itself: the Bun binary and the Node single-executable build both run their own entry
- * point and ignore the argument. That is what made `git dep preparation failed` fire for
- * every Git plugin with a build step. Handing pacote the bare name lets the system npm do
- * the work, and `npmOnPath()` turns a missing npm into a readable error.
- */
-export function resolveNpmBin() {
-  return "npm"
-}
-
 export async function isRegistryPackage(pkg: string) {
   return (await parse(pkg))?.type === "registry"
 }
@@ -249,7 +236,13 @@ const layer = Layer.effect(
         if (git) yield* Effect.logWarning("preparing a git plugin runs its install scripts", { add })
         const options = {
           ...(yield* NpmConfig.load(input.config ?? input.dir)),
-          npmBin: resolveNpmBin(),
+          // pacote builds a Git dependency by running `npm install` inside it and takes the
+          // binary from `npmBin`. A name ending in `.js` makes it spawn `process.execPath`
+          // with that script as the argument, and in every compiled distribution that is
+          // opencode itself: it runs its own entry point and ignores the argument. The bare
+          // name hands the work to the system npm, and `npmOnPath()` turns a missing npm
+          // into a readable error.
+          npmBin: "npm",
           ...(input.update ? { preferOnline: true, noGitRevCache: true } : {}),
           // Audit reports are unused here, but Arborist waits for them before completing an install.
           audit: false,
