@@ -1,5 +1,5 @@
 use crate::layout::{self, Options};
-use crate::parse::{Accent, Environment, Limits, Mode, Node, PLACEHOLDER, Role, Variant, parse, parse_with};
+use crate::parse::{Environment, Limits, Mode, Node, PLACEHOLDER, Role, Variant, parse, parse_with};
 
 fn display(source: &str) -> String {
     crate::render(source).unwrap_or_else(|error| panic!("{source:?}: {error}")).to_string()
@@ -66,12 +66,6 @@ fn matrices_keep_empty_cells() {
 }
 
 #[test]
-fn array_columns_keep_alignment_and_rules() {
-    let node = parse("\\begin{array}{ | l || c r | }a&b&c\\end{array}").unwrap();
-    assert!(matches!(&node, Node::Matrix { columns: Some(columns), .. } if columns == "|l||cr|"), "{node:?}");
-}
-
-#[test]
 fn variants_braces_and_text() {
     for (command, variant) in [
         ("mathrm", Variant::Normal),
@@ -90,10 +84,6 @@ fn variants_braces_and_text() {
     ] {
         let body = if command == "textrm" { Node::Text("x".into()) } else { sym("x") };
         assert_eq!(parse(&format!("\\{command}{{x}}")), Ok(Node::Variant { variant, body: Box::new(body) }));
-    }
-    for (source, over) in [("\\overbrace{x}^{n}", true), ("\\underbrace{x}_{n}", false)] {
-        let Ok(Node::Scripts { base, .. }) = parse(source) else { panic!("{source}") };
-        assert_eq!(*base, Node::Brace { body: Box::new(sym("x")), over });
     }
     for (source, value) in [
         ("\\text{left \\{ right \\} \\% \\# \\$ \\& \\_ \\ }", "left { right } % # $ & _  "),
@@ -362,33 +352,24 @@ fn malformed_input_fails() {
 
 #[test]
 fn empty_scripts_add_no_geometry() {
-    let text = |value: &str| Node::Text(value.into());
-    let fraction =
-        Node::Fraction { numerator: Box::new(text("1")), denominator: Box::new(text("2")), bar: true, align: None };
-    let bases = [
-        text("x"),
-        fraction,
-        Node::Root { body: Box::new(text("x")), index: None },
-        Node::Matrix { rows: vec![vec![text("a")], vec![text("b")]], environment: Environment::Pmatrix, columns: None },
-        Node::Brace { body: Box::new(text("abcd")), over: true },
-        Node::Brace { body: Box::new(text("abcd")), over: false },
-        Node::Operator { value: "∑".into(), limits: Limits::Always },
-    ];
-    let empties = [EMPTY, text(""), Node::Color { color: "red".into(), body: Box::new(text("")) }];
-    let options = Options { display: false, ..Options::default() };
-    let draw = |node: Node| layout::layout(&node, &options).unwrap();
-    for base in &bases {
-        for empty in &empties {
-            let scripts = |superscript: Option<&Node>, subscript: Option<&Node>| Node::Scripts {
-                base: Box::new(base.clone()),
-                superscript: superscript.cloned().map(Box::new),
-                subscript: subscript.cloned().map(Box::new),
-            };
-            for (superscript, subscript) in [(Some(empty), None), (None, Some(empty)), (Some(empty), Some(empty))] {
-                assert_eq!(draw(scripts(superscript, subscript)), draw(base.clone()), "{base:?} {empty:?}");
+    for base in [
+        "x",
+        r"\frac{1}{2}",
+        r"\sqrt{x}",
+        r"\begin{pmatrix}a\\b\end{pmatrix}",
+        r"\overbrace{abcd}",
+        r"\underbrace{abcd}",
+        r"\sum\limits",
+    ] {
+        for display in [false, true] {
+            let options = Options { display, ..Options::default() };
+            let render = |tail: &str| crate::render_with(&format!("{base}{tail}"), &options).unwrap();
+            for empty in ["", r"\text{}", r"\textcolor{red}{}"] {
+                for tail in [format!("^{{{empty}}}"), format!("_{{{empty}}}"), format!("^{{{empty}}}_{{{empty}}}")] {
+                    assert_eq!(render(&tail), render(""), "{base}{tail}");
+                }
+                assert_eq!(render(&format!("^{{{empty}}}_q")), render("_q"), "{base}");
             }
-            let q = text("q");
-            assert_eq!(draw(scripts(Some(empty), Some(&q))), draw(scripts(None, Some(&q))), "{base:?} {empty:?}");
         }
     }
 }
@@ -481,10 +462,6 @@ fn fraction(denominator: &str, bar: bool, align: Option<crate::parse::Align>) ->
     Node::Fraction { numerator: Box::new(text("1")), denominator: Box::new(text(denominator)), bar, align }
 }
 
-fn draw(node: &Node) -> crate::Layout {
-    layout::layout(node, &Options { display: false, ..Options::default() }).unwrap()
-}
-
 #[test]
 fn fractions_braces_matrices_and_tall_scripts() {
     for (source, expected) in [
@@ -493,7 +470,7 @@ fn fractions_braces_matrices_and_tall_scripts() {
         ("\\overbrace{x}", "╭┴╮\n x"),
         ("\\overbrace{abcd}^{n}", " n\n╭┴─╮\nabcd"),
         (
-            "\\begin{array}{|l||r|}a&b\\\\\\frac{1}{2}&cc\\end{array}",
+            "\\begin{array}{ | l || r | }a&b\\\\\\frac{1}{2}&cc\\end{array}",
             "│ a   ││  b │\n│  1  ││    │\n│ ─── ││ cc │\n│  2  ││    │",
         ),
         ("\\begin{array}{lcr}a&b&c\\\\long&wide&last\\end{array}", "a     b      c\nlong wide last"),
@@ -699,35 +676,17 @@ fn sources_and_blocks_are_bounded() {
 #[test]
 fn alphabets_and_styles() {
     for (variant, value, expected) in [
-        (Variant::DoubleStruck, "CHNPQRZaz09", "ℂℍℕℙℚℝℤ𝕒𝕫𝟘𝟡"),
-        (Variant::Script, "BEFHILMRegoAz9", "ℬℰℱℋℐℒℳℛℯℊℴ𝒜𝓏9"),
-        (Variant::Fraktur, "CHIRZaz9", "ℭℌℑℜℨ𝔞𝔷9"),
-        (Variant::Sans, "AZaz09", "𝖠𝖹𝖺𝗓𝟢𝟫"),
-        (Variant::Monospace, "AZaz09", "𝙰𝚉𝚊𝚣𝟶𝟿"),
-        (Variant::Normal, "AZaz09", "AZaz09"),
+        ("mathbb", "CHNPQRZaz09", "ℂℍℕℙℚℝℤ𝕒𝕫𝟘𝟡"),
+        ("mathcal", "BEFHILMRegoAz9", "ℬℰℱℋℐℒℳℛℯℊℴ𝒜𝓏9"),
+        ("mathfrak", "CHIRZaz9", "ℭℌℑℜℨ𝔞𝔷9"),
+        ("mathsf", "AZaz09", "𝖠𝖹𝖺𝗓𝟢𝟫"),
+        ("mathtt", "AZaz09", "𝙰𝚉𝚊𝚣𝟶𝟿"),
+        ("mathrm", "AZaz09", "AZaz09"),
     ] {
-        let node = Node::Variant { variant, body: Box::new(text(&format!("{value}α+"))) };
-        assert_eq!(draw(&node).to_string(), format!("{expected}α+"), "{variant:?}");
+        assert_eq!(display(&format!(r"\{variant}{{\text{{{value}α+}}}}")), format!("{expected}α+"));
     }
-    let nested = Node::Variant {
-        variant: Variant::Sans,
-        body: Box::new(Node::Variant { variant: Variant::Normal, body: Box::new(text("x")) }),
-    };
-    assert_eq!(draw(&nested).to_string(), "x");
-    let color = |color: &str, body: Node| Node::Color { color: color.into(), body: Box::new(body) };
-    let variant = |variant, body: Node| Node::Variant { variant, body: Box::new(body) };
-    let node = Node::Row(vec![
-        color(
-            "red",
-            variant(
-                Variant::Bold,
-                Node::Row(vec![text("a"), variant(Variant::Italic, text("b")), color("blue", text("c"))]),
-            ),
-        ),
-        text("d"),
-        color("red", text("e")),
-    ]);
-    let layout = draw(&node);
+    assert_eq!(display(r"\mathsf{\mathrm{x}}"), "x");
+    let layout = crate::render(r"\textcolor{red}{\mathbf{a\mathit{b}\textcolor{blue}{c}}}d\textcolor{red}{e}").unwrap();
     assert_eq!(layout.to_string(), "abcde");
     let style = |x: usize| {
         let style = &layout.cells[0][x].as_ref().unwrap().style;
@@ -743,45 +702,27 @@ fn alphabets_and_styles() {
             (Some("red"), false, false)
         ]
     );
-    // Structure takes the style around it: every cell of these is red and bold.
-    let half = fraction("2", true, None);
-    for node in [
-        half.clone(),
-        Node::Root { body: Box::new(half.clone()), index: Some(Box::new(text("3"))) },
-        Node::Delimited { left: "[\u{305}".into(), body: Box::new(half.clone()), right: "]\u{305}".into() },
-        Node::Matrix {
-            rows: vec![vec![text("x"), half.clone()]],
-            environment: Environment::Array,
-            columns: Some("|l||r|".into()),
-        },
-        Node::Matrix { rows: vec![vec![text("x")], vec![text("y")]], environment: Environment::Cases, columns: None },
-        Node::Brace { body: Box::new(text("abcd")), over: true },
-        Node::Accent { accent: Accent::Hat, body: Box::new(text("x")) },
-        Node::Accent { accent: Accent::Underline, body: Box::new(text("x")) },
-        Node::Scripts {
-            base: Box::new(text("x")),
-            superscript: Some(Box::new(text("2"))),
-            subscript: Some(Box::new(text("i"))),
-        },
-        Node::Scripts { base: Box::new(half.clone()), superscript: Some(Box::new(text("q"))), subscript: None },
-        Node::OverUnder {
-            base: Box::new(text("x")),
-            over: Some(Box::new(text("n"))),
-            under: Some(Box::new(text("m"))),
-        },
+    for source in [
+        r"\frac{1}{2}",
+        r"\sqrt[3]{\frac{1}{2}}",
+        r"\left[̅\frac{1}{2}\right]̅",
+        r"\begin{array}{|l||r|}x&\frac{1}{2}\end{array}",
+        r"\begin{cases}x\\y\end{cases}",
+        r"\overbrace{abcd}",
+        r"\hat{x}",
+        r"\underline{x}",
+        r"x^2_i",
+        r"\frac{1}{2}^q",
+        r"\overset{n}{\underset{m}{x}}",
     ] {
-        let styled = draw(&color("red", variant(Variant::Bold, node.clone())));
-        for cell in styled.cells.iter().flatten().flatten() {
-            assert_eq!((cell.style.color.as_deref(), cell.style.bold), (Some("red"), true), "{node:?}");
-        }
-        assert_eq!(styled.to_string(), draw(&node).to_string());
+        let styled = crate::render(&format!(r"\textcolor{{red}}{{\mathbf{{{source}}}}}")).unwrap();
+        assert_eq!(styled.to_string(), display(source), "{source}");
+        assert!(
+            styled.cells.iter().flatten().flatten().all(|c| c.style.color.as_deref() == Some("red") && c.style.bold),
+            "{source}"
+        );
     }
-    let blue = Node::Scripts {
-        base: Box::new(text("x")),
-        superscript: Some(Box::new(color("blue", text("q")))),
-        subscript: None,
-    };
-    let layout = draw(&blue);
+    let layout = crate::render(r"x^{\textcolor{blue}{q}}").unwrap();
     assert_eq!(layout.to_string(), " q\nx");
     assert_eq!(layout.cells[0][1].as_ref().unwrap().style.color.as_deref(), Some("blue"));
     assert_eq!(display("\\left[\u{305}\\frac{1}{2}\\right]\u{305}"), "⎡ 1 ⎤\n⎢\u{305}───⎥\u{305}\n⎣ 2 ⎦");
