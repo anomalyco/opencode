@@ -7,7 +7,7 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import type { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Hash } from "@opencode/util/hash"
-import { Effect, Exit, Fiber, Option, Schema, Scope } from "effect"
+import { Effect, Exit, Fiber, Option, Schema, Scope, Struct } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Git } from "../../git.js"
 import { AbsolutePath } from "../../schema.js"
@@ -20,6 +20,9 @@ const namespace = "memory"
 /** Sessions whose files and injections are remembered; the least recently active is forgotten first. */
 const MAX_SESSIONS = 500
 const MAX_FILES = 20
+/** Entries a session was given that a correction may name, and how much of each is kept to match it. */
+const MAX_GIVEN = 10
+const MAX_GIVEN_TEXT = 2000
 
 // Console's entries and search hits, read leniently: only what the tools show.
 const Source = Schema.Struct({
@@ -57,6 +60,8 @@ const Hit = Schema.Struct({
   score: Schema.Number,
   repo: Schema.optional(Schema.String),
 })
+/** What a write returns: enough to write again. */
+const Written = Schema.Struct({ id: Schema.String, title: Schema.String, revision: Schema.Number })
 const Problem = Schema.Struct({
   _tag: Schema.optional(Schema.String),
   message: Schema.optional(Schema.String),
@@ -78,6 +83,10 @@ type Delivery = { readonly hits: ReadonlyArray<OpencodeMemoryPolicy.Hit>; readon
 type Tracked = {
   readonly files: string[]
   readonly injected: { prompt: number; failure: number }
+  /** Entries injected or read, oldest first, as this session last saw them. */
+  readonly given: Map<string, OpencodeMemoryPolicy.Given>
+  /** A given entry the user's latest message may correct, for the next request to point out. */
+  nudge?: { readonly entry: OpencodeMemoryPolicy.Given; readonly messageID: string }
   /** An injection started at a moment, waiting for the model request that follows it. */
   pending?: Fiber.Fiber<Delivery | undefined>
 }
@@ -97,12 +106,23 @@ export const make = Effect.fnUntraced(function* (
   const git = yield* Git.Service
   let current: { console: OpencodeWatches.Console; readonly lease: Scope.Closeable } | undefined
   const sessions = new Map<string, Tracked>()
-  const tracked = (sessionID: string) => {
-    const found = sessions.get(sessionID) ?? { files: [], injected: { prompt: 0, failure: 0 } }
+  const tracked = (sessionID: string): Tracked => {
+    const found = sessions.get(sessionID) ?? { files: [], injected: { prompt: 0, failure: 0 }, given: new Map() }
     sessions.delete(sessionID)
     sessions.set(sessionID, found)
     if (sessions.size > MAX_SESSIONS) sessions.delete(sessions.keys().next().value ?? sessionID)
     return found
+  }
+  const give = (state: Tracked, entry: OpencodeMemoryPolicy.Given) => {
+    state.given.delete(entry.id)
+    state.given.set(entry.id, { ...entry, text: entry.text.slice(0, MAX_GIVEN_TEXT) })
+    if (state.given.size > MAX_GIVEN) state.given.delete(state.given.keys().next().value ?? entry.id)
+  }
+  // After this session writes an entry it was given, a nudge names the revision it now has.
+  const wrote = (sessionID: string, written: typeof Written.Type) => {
+    const state = sessions.get(sessionID)
+    const given = state?.given.get(written.id)
+    if (state && given) give(state, { ...given, title: written.title, revision: written.revision })
   }
 
   // The checkout as it is now: its remote names the repository, without any credentials the URL holds.
@@ -150,7 +170,17 @@ export const make = Effect.fnUntraced(function* (
       body: input.body,
       source: { sessionID: input.sessionID },
       dryRun: true,
-    }).pipe(Effect.map((answer) => answer.nearest.map(hit)))
+    }).pipe(Effect.map((answer) => answer.nearest.map(listed)))
+  // A revision of an entry, answered in one line; the repository, branch and commit are recorded with it.
+  const write = (sessionID: string, id: string, change: Record<string, unknown>) =>
+    Effect.gen(function* () {
+      const written = yield* call(Written, "PATCH", `/api/memory/entries/${encodeURIComponent(id)}`, {
+        ...change,
+        source: { ...(yield* checkout), sessionID },
+      })
+      wrote(sessionID, written)
+      return { output: written, content: `${written.id} is now r${written.revision}.` }
+    }).pipe(Effect.mapError(failure))
 
   const start = Effect.fnUntraced(function* () {
     const lease = yield* Scope.Scope
@@ -181,12 +211,17 @@ export const make = Effect.fnUntraced(function* (
       }).pipe(Effect.catch((cause) => Effect.logWarning("failed to start a memory injection", { cause })))
 
     yield* ctx.session.hook("prompt", (event) =>
-      begin(event.sessionID, {
-        type: "prompt",
-        text: event.prompt.text,
-        files: (event.prompt.files ?? []).flatMap((file) =>
-          file.uri.startsWith("file:") ? [relative(ctx.location.directory, fileURLToPath(file.uri))] : [],
-        ),
+      Effect.gen(function* () {
+        const state = tracked(event.sessionID)
+        const corrected = policy.correction(event.prompt.text, [...state.given.values()])
+        if (corrected) state.nudge = { entry: corrected, messageID: event.messageID }
+        yield* begin(event.sessionID, {
+          type: "prompt",
+          text: event.prompt.text,
+          files: (event.prompt.files ?? []).flatMap((file) =>
+            file.uri.startsWith("file:") ? [relative(ctx.location.directory, fileURLToPath(file.uri))] : [],
+          ),
+        })
       }),
     )
     yield* ctx.tool.hook("execute.after", (event) => {
@@ -214,25 +249,46 @@ export const make = Effect.fnUntraced(function* (
         exitCode: shell.value.output.exitCode,
       })
     })
-    // The request after a moment waits for its injection, at most the policy's timeout; other requests find none.
+    // The request after a moment waits for its injection, at most the policy's timeout, and the request after a
+    // correcting message points out the entry it may correct. Other requests find neither. Both are persisted so later
+    // requests keep them, and land after this step, so this request gets them at the end, which keeps the cached prefix.
     yield* ctx.session.hook("context", (event) =>
       Effect.gen(function* () {
         const state = sessions.get(event.sessionID)
-        const pending = state?.pending
-        if (!state || !pending) return
+        if (!state || (!state.pending && !state.nudge)) return
+        const pending = state.pending
+        const nudge = state.nudge
         state.pending = undefined
-        const delivery = yield* Fiber.join(pending)
-        if (!delivery || delivery.hits.length === 0) return
-        const text = policy.render(delivery.hits, delivery.moment)
-        const ids = delivery.hits.map((hit) => hit.id)
-        // Persisted so later requests keep it. It lands after this step, so this request gets it at the end, which
-        // keeps the cached prefix. Console never injects an entry twice in a session, so its IDs name the message.
+        state.nudge = undefined
+        const delivery = pending ? yield* Fiber.join(pending) : undefined
+        // Console never injects an entry twice in a session; one the agent read already isn't injected either.
+        const hits = delivery?.hits.filter((hit) => !state.given.has(hit.id)) ?? []
+        if (delivery && hits.length > 0) {
+          const text = policy.render(hits, delivery.moment)
+          const ids = hits.map((hit) => hit.id)
+          yield* ctx.session.synthetic({
+            sessionID: event.sessionID,
+            id: messageID(event.sessionID, ids.join(",")),
+            text,
+            description: `${ids.length === 1 ? "1 memory entry" : `${ids.length} memory entries`} for this ${delivery.moment.type === "prompt" ? "task" : "failure"}`,
+            metadata: { source: "console.memory", moment: delivery.moment.type, entries: ids },
+            resume: false,
+          })
+          event.messages.push(Message.user(text))
+          hits.forEach((hit) =>
+            give(state, { id: hit.id, revision: hit.revision, title: hit.title, text: hit.body ?? hit.snippet }),
+          )
+        }
+        if (!nudge) return
+        const entry = state.given.get(nudge.entry.id) ?? nudge.entry
+        const text = policy.nudge(entry)
+        // Recorded with the entry it names, so whether an edit to it followed can be counted.
         yield* ctx.session.synthetic({
           sessionID: event.sessionID,
-          id: SessionMessage.ID.make(`msg_memory_${Hash.sha256(`${event.sessionID}\n${ids.join(",")}`).slice(0, 26)}`),
+          id: messageID(event.sessionID, `correction:${nudge.messageID}`),
           text,
-          description: `${ids.length === 1 ? "1 memory entry" : `${ids.length} memory entries`} for this ${delivery.moment.type === "prompt" ? "task" : "failure"}`,
-          metadata: { source: "console.memory", moment: delivery.moment.type, entries: ids },
+          description: `Memory entry ${entry.id} may need a correction`,
+          metadata: { source: "console.memory", kind: "correction", entry: entry.id, revision: entry.revision },
           resume: false,
         })
         event.messages.push(Message.user(text))
@@ -246,21 +302,17 @@ export const make = Effect.fnUntraced(function* (
       editor.namespace({
         name: namespace,
         description:
-          "Your OpenCode Console workspace's shared memory: what coding agents across the workspace learned about its repositories, such as root causes and fixes, conventions, build, test and CI steps, API gotchas, decisions and approaches that failed.",
+          "Your OpenCode Console workspace's shared memory: what coding agents across the workspace learned about its repositories. Entries are editable: fix one that's wrong, especially when the user corrects it.",
       })
       editor.add({
         name: "search",
         description:
-          "Search the workspace's memory before working out something other members' agents may already have: an error you don't recognize, a failing build or test, an unfamiliar service, API or convention, a deploy step. Search with what you have: the exact error message, symbol or file path, or the problem in plain words. Lists each match's id, title, preview and repository, best first; `read` one for its full text.",
+          "Search the workspace's memory before working out what teammates' agents may already know: an unfamiliar error, failing build or test, service, API, convention or deploy step. Query with the exact error, symbol or path, or plain words. Lists id, revision, title and preview, best first.",
         input: Schema.Struct({
-          query: Schema.String.annotate({
-            description: "An error message, symbol, path or command, and what you're trying to find out",
-          }),
+          query: Schema.String,
           tags: Schema.optional(Tags.annotate({ description: "Only entries with all of these tags" })),
           limit: Schema.optional(
-            Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 50 })).annotate({
-              description: "The most entries to list; 10 otherwise",
-            }),
+            Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 50 })).annotate({ description: "Default 10" }),
           ),
         }),
         output: Schema.Struct({ results: Schema.Array(Hit) }),
@@ -272,13 +324,10 @@ export const make = Effect.fnUntraced(function* (
             ...(input.limit === undefined ? {} : { limit: input.limit }),
             sessionID: context.sessionID,
           }).pipe(
-            Effect.map((answer) => answer.results.map(hit)),
+            Effect.map((answer) => answer.results.map(listed)),
             Effect.map((results) => ({
               output: { results },
-              content:
-                results.length === 0
-                  ? "Nothing in the workspace's memory matches."
-                  : results.map(OpencodeMemoryPolicy.summary).join("\n"),
+              content: results.length === 0 ? "No matches." : results.map(OpencodeMemoryPolicy.summary).join("\n"),
             })),
             Effect.mapError(failure),
           ),
@@ -286,7 +335,7 @@ export const make = Effect.fnUntraced(function* (
       editor.add({
         name: "read",
         description:
-          "Read a memory entry in full, by the id `search` or a delivered entry showed, with the repository, branch and commit it was written from. Entries are other agents' notes and may be about another repository or an older revision: check what matters against the code before relying on it, and `update` the entry when it's wrong.",
+          "Read a memory entry in full, with where it was written from. Entries may be about another repository or an older revision: verify before relying on one, and `edit` it when it's wrong.",
         input: Schema.Struct({ id: Schema.String }),
         output: Entry,
         options: { namespace, codemode: true, pinned: true },
@@ -296,33 +345,33 @@ export const make = Effect.fnUntraced(function* (
             "GET",
             `/api/memory/entries/${encodeURIComponent(input.id)}?${new URLSearchParams({ sessionID: context.sessionID })}`,
           ).pipe(
+            Effect.tap((entry) =>
+              Effect.sync(() =>
+                give(tracked(context.sessionID), {
+                  id: entry.id,
+                  revision: entry.revision,
+                  title: entry.title,
+                  text: entry.body,
+                }),
+              ),
+            ),
             Effect.map((entry) => ({ output: entry, content: show(entry) })),
             Effect.mapError(failure),
           ),
       })
       editor.add({
         name: "publish",
-        description: [
-          "Publish to the workspace's memory what another member's coding agent would want to know before similar work, once you've verified it. What's worth it:",
-          "- a bug's root cause and the fix pattern, with the error message as it appears",
-          "- a repository convention the code or its reviewers expect",
-          "- how to build, test, run or release something, and what CI needs",
-          "- an API, library or service gotcha",
-          "- a decision and its reason",
-          "- an approach that failed, and why",
-          "Not progress notes, task logs, anything a README or AGENTS.md already says, or anything secret. Use a specific title and a body that stands on its own: the exact errors, commands, file paths and symbols, so a search for them finds it. The repository, branch and commit are recorded with it. Publishing first looks for close entries: when there are some, nothing is published and they are listed, so `update` the one that covers this, or publish again with `distinct` when none does.",
-        ].join("\n"),
+        description:
+          "Publish what a teammate's coding agent would want to know before similar work, once verified: a root cause and fix (with the error as it appears), a repo convention, a build/test/CI/release step, an API gotcha, a decision and why, an approach that failed and why. Not progress notes, what README or AGENTS.md says, or secrets. Specific title; a self-contained body with exact errors, commands, paths and symbols. Repo, branch and commit are recorded. If close entries exist, nothing is published and they're listed: `edit` one, or publish again with `distinct`.",
         input: Schema.Struct({
-          title: Schema.String.annotate({ description: "What the entry is about, specific enough to find" }),
-          body: Schema.String.annotate({ description: "The entry, in Markdown, readable without this session" }),
+          title: Schema.String,
+          body: Schema.String.annotate({ description: "Markdown" }),
           tags: Schema.optional(Tags),
           distinct: Schema.optional(
-            Schema.Boolean.annotate({
-              description: "Publish even though close entries exist, after checking that none covers this",
-            }),
+            Schema.Boolean.annotate({ description: "Publish although close entries exist; none covers this" }),
           ),
         }),
-        output: Schema.Struct({ entry: Schema.optional(Entry), nearest: Schema.Array(Hit) }),
+        output: Schema.Struct({ entry: Schema.optional(Written), nearest: Schema.Array(Hit) }),
         options: { namespace, codemode: true, pinned: true },
         execute: (input, context) =>
           Effect.gen(function* () {
@@ -333,12 +382,12 @@ export const make = Effect.fnUntraced(function* (
               return {
                 output: { nearest: similar },
                 content: [
-                  "Not published: the workspace's memory has close entries. Read them, then `update` the one that covers this, or publish again with distinct: true if none does.",
+                  "Not published; close entries exist. `edit` the one that covers this, or publish with distinct: true.",
                   ...similar.map(OpencodeMemoryPolicy.summary),
                 ].join("\n"),
               }
             const published = yield* call(
-              Schema.Struct({ entry: Entry, nearest: Schema.Array(WireHit) }),
+              Schema.Struct({ entry: Written, nearest: Schema.Array(WireHit) }),
               "POST",
               "/api/memory/entries",
               {
@@ -349,37 +398,52 @@ export const make = Effect.fnUntraced(function* (
               },
             )
             return {
-              output: { entry: published.entry, nearest: published.nearest.map(hit) },
-              content: `Published ${published.entry.id}: ${published.entry.title}`,
+              output: {
+                entry: published.entry,
+                nearest: published.nearest.map(listed),
+              },
+              content: `Published ${published.entry.id} r${published.entry.revision}.`,
             }
           }).pipe(Effect.mapError(failure)),
       })
       editor.add({
-        name: "update",
+        name: "edit",
         description:
-          "Update a memory entry: correct it, add what you learned, note a newer fix or that it no longer applies. Send the revision you read; if someone changed it since, the update is refused, so read it again and merge. The title, body or tags you send replace the old ones whole; what you leave out stays. The repository, branch and commit are recorded with the change.",
+          "Fix part of an entry by exact replacement, sending only the changed text: each oldText must occur exactly once in the body (add context to make it unique). Use it whenever an entry is wrong or outdated, and right away when the user corrects something an entry you were given says. Takes the revision shown with the entry; refused if someone changed it since: read it and retry.",
         input: Schema.Struct({
           id: Schema.String,
-          revision: Schema.Int.annotate({ description: "The entry's revision when you read it" }),
-          title: Schema.optional(Schema.String),
-          body: Schema.optional(Schema.String.annotate({ description: "The whole new body, in Markdown" })),
-          tags: Schema.optional(Tags),
+          revision: Schema.Int,
+          edits: Schema.Array(
+            Schema.Struct({ oldText: Schema.String.check(Schema.isMinLength(1)), newText: Schema.String }),
+          ).check(Schema.isMinLength(1), Schema.isMaxLength(20)),
         }),
-        output: Entry,
+        output: Written,
         options: { namespace, codemode: true, pinned: true },
         execute: (input, context) =>
-          Effect.gen(function* () {
-            if (input.title === undefined && input.body === undefined && input.tags === undefined)
-              return yield* new ToolFailure({ message: "update takes a new title, body, tags or several" })
-            const entry = yield* call(Entry, "PATCH", `/api/memory/entries/${encodeURIComponent(input.id)}`, {
-              expectedRevision: input.revision,
-              ...(input.title === undefined ? {} : { title: input.title }),
-              ...(input.body === undefined ? {} : { body: input.body }),
-              ...(input.tags === undefined ? {} : { tags: input.tags }),
-              source: { ...(yield* checkout), sessionID: context.sessionID },
-            })
-            return { output: entry, content: `Updated ${entry.id} to revision ${entry.revision}: ${entry.title}` }
-          }).pipe(Effect.mapError(failure)),
+          write(context.sessionID, input.id, { expectedRevision: input.revision, edits: input.edits }),
+      })
+      editor.add({
+        name: "update",
+        description:
+          "Replace an entry's title, tags or whole body. To change part of the body, use `edit`, which sends only the changed text. Takes the revision shown with the entry.",
+        input: Schema.Struct({
+          id: Schema.String,
+          revision: Schema.Int,
+          title: Schema.optional(Schema.String),
+          body: Schema.optional(Schema.String),
+          tags: Schema.optional(Tags),
+        }),
+        output: Written,
+        options: { namespace, codemode: true, pinned: true },
+        execute: (input, context) =>
+          input.title === undefined && input.body === undefined && input.tags === undefined
+            ? Effect.fail(new ToolFailure({ message: "update takes a new title, body, tags or several" }))
+            : write(context.sessionID, input.id, {
+                expectedRevision: input.revision,
+                ...(input.title === undefined ? {} : { title: input.title }),
+                ...(input.body === undefined ? {} : { body: input.body }),
+                ...(input.tags === undefined ? {} : { tags: input.tags }),
+              }),
       })
     })
     .pipe(Effect.orDie)
@@ -453,7 +517,13 @@ function hit(wire: typeof WireHit.Type): OpencodeMemoryPolicy.Hit {
     revision: wire.entry.revision,
     score: wire.score,
     ...(wire.entry.source?.repo === undefined ? {} : { repo: wire.entry.source.repo }),
+    ...(wire.entry.body === undefined ? {} : { body: wire.entry.body }),
   }
+}
+
+/** A hit as a list shows it: without the body Console may send along. */
+function listed(wire: typeof WireHit.Type) {
+  return Struct.omit(hit(wire), ["body"])
 }
 
 function failure(cause: unknown) {
@@ -471,7 +541,7 @@ function expectOk(response: HttpClientResponse.HttpClientResponse) {
       const body = Option.getOrUndefined(problem)
       const message =
         body?._tag === "MemoryConflict"
-          ? `The entry changed since you read it${body.revision === undefined ? "" : `; it is at revision ${body.revision} now`}. Read it again, merge your change and update with that revision.`
+          ? `The entry changed since you read it${body.revision === undefined ? "" : `; it is at revision ${body.revision} now`}. Read it again and retry your change on that revision.`
           : response.status === 404
             ? "No such memory entry, or memory is off for this OpenCode Console workspace"
             : (body?.message ?? `OpenCode Console answered ${response.status}`)
@@ -480,16 +550,20 @@ function expectOk(response: HttpClientResponse.HttpClientResponse) {
   )
 }
 
+/** A message ID that the same session and `key` always give, so admitting it again changes nothing. */
+function messageID(sessionID: string, key: string) {
+  return SessionMessage.ID.make(`msg_memory_${Hash.sha256(`${sessionID}\n${key}`).slice(0, 26)}`)
+}
+
+/** The entry with one compact line of where it came from. */
 function show(entry: Entry) {
   const source = entry.source
   const about = [
-    entry.id,
-    `revision ${entry.revision}`,
-    entry.tags && entry.tags.length > 0 && `tags ${entry.tags.join(", ")}`,
-    source?.repo && `from ${source.repo}${source.branch ? `@${source.branch}` : ""}`,
-    source?.commitSha && `commit ${source.commitSha}`,
-    entry.updatedBy && `updated by ${entry.updatedBy.label}`,
-    entry.updatedAt && `at ${entry.updatedAt}`,
+    `${entry.id} r${entry.revision}`,
+    entry.tags && entry.tags.length > 0 && entry.tags.join(","),
+    source?.repo &&
+      `${source.repo}${source.branch ? `@${source.branch}` : ""}${source.commitSha ? ` ${source.commitSha.slice(0, 12)}` : ""}`,
+    entry.updatedBy && `${entry.updatedBy.label}${entry.updatedAt ? ` ${entry.updatedAt.slice(0, 10)}` : ""}`,
   ]
-  return `# ${entry.title}\n(${about.filter(Boolean).join(", ")})\n\n${entry.body}`
+  return `${about.filter(Boolean).join(" · ")}\n# ${entry.title}\n\n${entry.body}`
 }

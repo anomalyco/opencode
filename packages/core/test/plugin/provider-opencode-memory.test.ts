@@ -97,7 +97,19 @@ function fakeConsole() {
       if (id && request.method === "PATCH") {
         if (body?.expectedRevision !== 1)
           return Response.json({ _tag: "MemoryConflict", revision: 2, message: "stale" }, { status: 409 })
-        return Response.json(entry(id, { ...body, revision: 2 }))
+        const edits = body?.edits as { oldText: string; newText: string }[] | undefined
+        if (!edits) return Response.json(entry(id, { ...body, revision: 2 }))
+        // Each oldText must occur exactly once in the body, as the edit operation Console is adding requires.
+        const edited = edits.reduce<string | undefined>(
+          (text, edit) =>
+            text !== undefined && text.split(edit.oldText).length === 2
+              ? text.replace(edit.oldText, edit.newText)
+              : undefined,
+          entry(id).body,
+        )
+        if (edited === undefined)
+          return Response.json({ _tag: "MemoryInvalid", message: "oldText must occur exactly once" }, { status: 400 })
+        return Response.json(entry(id, { body: edited, revision: 2 }))
       }
       return new Response("Not found", { status: 404 })
     },
@@ -198,7 +210,7 @@ describe("OpencodePlugin memory", () => {
     withConsole((console) =>
       Effect.gen(function* () {
         yield* start(console)
-        expect((yield* memoryTools).toSorted()).toEqual(["publish", "read", "search", "update"])
+        expect((yield* memoryTools).toSorted()).toEqual(["edit", "publish", "read", "search", "update"])
 
         console.state.memory = false
         yield* TestClock.adjust("1 minute")
@@ -246,7 +258,7 @@ describe("OpencodePlugin memory", () => {
             },
           ],
         })
-        expect(found.content).toBe("- mem_1: Entry mem_1 — Connect first (github.com/acme/app)")
+        expect(found.content).toBe("- mem_1 r1: Entry mem_1 — Connect first (github.com/acme/app)")
         expect(console.state.requests.at(-1)).toEqual({
           method: "POST",
           path: "/api/memory/search",
@@ -257,7 +269,7 @@ describe("OpencodePlugin memory", () => {
         const read = yield* (yield* memoryTool("read")).execute({ id: "mem_1" }, context(session.id))
         expect(read.output).toMatchObject({ id: "mem_1", revision: 1, body: "Body of mem_1\nMore" })
         expect(read.content).toBe(
-          `# Entry mem_1\n(mem_1, revision 1, tags fix, from github.com/acme/app@main, commit abc123, updated by ada@example.com, at ${new Date(0).toISOString()})\n\nBody of mem_1\nMore`,
+          `mem_1 r1 · fix · github.com/acme/app@main abc123 · ada@example.com 1970-01-01\n# Entry mem_1\n\nBody of mem_1\nMore`,
         )
         expect(console.state.requests.at(-1)?.path).toBe(`/api/memory/entries/mem_1?sessionID=${session.id}`)
 
@@ -290,7 +302,7 @@ describe("OpencodePlugin memory", () => {
             },
           ],
         })
-        expect(held.content).toContain("- mem_close: Entry mem_close — VPN first")
+        expect(held.content).toContain("- mem_close r1: Entry mem_close — VPN first")
         expect(console.state.requests).toEqual([
           {
             method: "POST",
@@ -304,8 +316,8 @@ describe("OpencodePlugin memory", () => {
           { title: "Deploy VPN", body: "Use the VPN", tags: ["gotcha"], distinct: true },
           context(session.id),
         )
-        expect(published.output).toMatchObject({ entry: { id: "mem_new", title: "Deploy VPN" } })
-        expect(published.content).toBe("Published mem_new: Deploy VPN")
+        expect(published.output).toMatchObject({ entry: { id: "mem_new", title: "Deploy VPN", revision: 1 } })
+        expect(published.content).toBe("Published mem_new r1.")
         // The session's directory isn't a Git checkout, so the session is all the source there is.
         expect(console.state.requests.at(-1)?.body).toEqual({
           title: "Deploy VPN",
@@ -327,7 +339,7 @@ describe("OpencodePlugin memory", () => {
           { title: "New finding", body: "Details" },
           context(session.id),
         )
-        expect(published.content).toBe("Published mem_new: New finding")
+        expect(published.content).toBe("Published mem_new r1.")
         expect(console.state.requests.map((item) => (item.body as { dryRun?: boolean }).dryRun)).toEqual([
           true,
           undefined,
@@ -344,7 +356,8 @@ describe("OpencodePlugin memory", () => {
         const update = yield* memoryTool("update")
 
         const updated = yield* update.execute({ id: "mem_1", revision: 1, body: "Corrected" }, context(session.id))
-        expect(updated.content).toBe("Updated mem_1 to revision 2: Entry mem_1")
+        expect(updated.output).toEqual({ id: "mem_1", title: "Entry mem_1", revision: 2 })
+        expect(updated.content).toBe("mem_1 is now r2.")
         expect(console.state.requests.at(-1)).toMatchObject({
           method: "PATCH",
           path: "/api/memory/entries/mem_1",
@@ -355,7 +368,7 @@ describe("OpencodePlugin memory", () => {
           .execute({ id: "mem_1", revision: 0, body: "Corrected" }, context(session.id))
           .pipe(Effect.flip)
         expect(stale.message).toBe(
-          "The entry changed since you read it; it is at revision 2 now. Read it again, merge your change and update with that revision.",
+          "The entry changed since you read it; it is at revision 2 now. Read it again and retry your change on that revision.",
         )
         const empty = yield* update.execute({ id: "mem_1", revision: 1 }, context(session.id)).pipe(Effect.flip)
         expect(empty.message).toBe("update takes a new title, body, tags or several")
@@ -405,9 +418,9 @@ describe("OpencodePlugin memory", () => {
           { type: "prompt", text: "Fix the deploy", files: [] },
         )
         expect(delivered).toContain(
-          "- mem_a: Entry mem_a — Body of mem_a (github.com/acme/app)\n- mem_b: Entry mem_b — Body of mem_b (github.com/acme/app)",
+          "- mem_a r1: Entry mem_a — Body of mem_a (github.com/acme/app)\n- mem_b r1: Entry mem_b — Body of mem_b (github.com/acme/app)",
         )
-        expect(delivered).toContain("may bear on this task")
+        expect(delivered).toContain('<workspace-memory for="task">')
         expect(texts(first)).toEqual(["Fix the deploy", delivered])
         expect(synthetic).toMatchObject([
           {
@@ -478,7 +491,7 @@ describe("OpencodePlugin memory", () => {
         expect(query.startsWith("$ bun test\n")).toBe(true)
         expect(query.endsWith("TypeError: boom\nFiles: src/config.ts src/deploy.ts")).toBe(true)
         expect(query.length).toBe(1000)
-        expect(texts(after).at(-1)).toContain("may bear on this failure")
+        expect(texts(after).at(-1)).toContain('<workspace-memory for="failure">')
         expect(synthetic.map((item) => item.description)).toEqual(["1 memory entry for this failure"])
 
         yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 1, output: "TypeError: again" })
@@ -486,6 +499,105 @@ describe("OpencodePlugin memory", () => {
         yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 1, output: "TypeError: third" })
         yield* hooks.trigger("session", "context", request(session.id, "Fix the deploy"))
         expect(console.state.requests.map((item) => item.path)).toEqual(["/api/memory/inject", "/api/memory/inject"])
+      }),
+    ),
+  )
+
+  it.effect("edits by sending only the changed text against the revision read", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        const { host } = yield* start(console)
+        const session = yield* host.session.create({})
+        const edit = yield* memoryTool("edit")
+
+        const edited = yield* edit.execute(
+          { id: "mem_1", revision: 1, edits: [{ oldText: "More", newText: "Use bun, not npm" }] },
+          context(session.id),
+        )
+        expect(edited.output).toEqual({ id: "mem_1", title: "Entry mem_1", revision: 2 })
+        expect(edited.content).toBe("mem_1 is now r2.")
+        expect(console.state.requests.at(-1)).toEqual({
+          method: "PATCH",
+          path: "/api/memory/entries/mem_1",
+          body: {
+            expectedRevision: 1,
+            edits: [{ oldText: "More", newText: "Use bun, not npm" }],
+            source: { sessionID: session.id },
+          },
+          authorization: "Bearer secret",
+        })
+
+        const ambiguous = yield* edit
+          .execute({ id: "mem_1", revision: 1, edits: [{ oldText: "o", newText: "x" }] }, context(session.id))
+          .pipe(Effect.flip)
+        expect(ambiguous.message).toBe("oldText must occur exactly once")
+      }),
+    ),
+  )
+
+  it.effect("points out a given entry when the user's message corrects it, with the revision to edit", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        const { host, synthetic } = yield* start(console)
+        const hooks = yield* PluginHooks.Service
+        const session = yield* host.session.create({})
+        console.state.hits = [hit("mem_deploy", 0.9)]
+        yield* prompt(session.id, "Deploy the worker")
+        yield* hooks.trigger("session", "context", request(session.id, "Deploy the worker"))
+
+        // Not a correction: no nudge.
+        yield* prompt(session.id, "Thanks, go ahead with mem_deploy body")
+        const plain = request(session.id, "Thanks")
+        yield* hooks.trigger("session", "context", plain)
+        expect(texts(plain)).toEqual(["Thanks"])
+
+        // The injected entry's body reads "Body of mem_deploy"; the user says otherwise.
+        yield* prompt(session.id, "No, that body of mem_deploy is wrong, deploy with wrangler instead")
+        const corrected = request(session.id, "No, ...")
+        yield* hooks.trigger("session", "context", corrected)
+        const nudge = OpencodeMemoryPolicy.initial.nudge({
+          id: "mem_deploy",
+          revision: 1,
+          title: "Entry mem_deploy",
+          text: "",
+        })
+        expect(texts(corrected).at(-1)).toBe(nudge)
+        expect(nudge).toContain("mem_deploy r1")
+        expect(synthetic.at(-1)).toMatchObject({
+          text: nudge,
+          metadata: { source: "console.memory", kind: "correction", entry: "mem_deploy", revision: 1 },
+          resume: false,
+        })
+
+        // After the agent's edit, a later nudge names the new revision; the request after it gets nothing more.
+        yield* (yield* memoryTool("edit")).execute(
+          { id: "mem_deploy", revision: 1, edits: [{ oldText: "More", newText: "wrangler deploy" }] },
+          context(session.id),
+        )
+        yield* prompt(session.id, "Actually the body of mem_deploy should say wrangler, not npm")
+        const again = request(session.id, "Actually ...")
+        yield* hooks.trigger("session", "context", again)
+        expect(texts(again).at(-1)).toContain("mem_deploy r2")
+        const after = request(session.id, "Actually ...")
+        yield* hooks.trigger("session", "context", after)
+        expect(texts(after)).toEqual(["Actually ..."])
+      }),
+    ),
+  )
+
+  it.effect("doesn't inject an entry the session already read", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        const { host, synthetic } = yield* start(console)
+        const hooks = yield* PluginHooks.Service
+        const session = yield* host.session.create({})
+        yield* (yield* memoryTool("read")).execute({ id: "mem_seen" }, context(session.id))
+        console.state.hits = [hit("mem_seen", 0.9)]
+        yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 1, output: "TypeError: boom" })
+        const event = request(session.id, "Fix it")
+        yield* hooks.trigger("session", "context", event)
+        expect(texts(event)).toEqual(["Fix it"])
+        expect(synthetic).toEqual([])
       }),
     ),
   )
@@ -553,6 +665,45 @@ describe("OpencodeMemoryPolicy.initial", () => {
     expect(
       OpencodeMemoryPolicy.initial.inject(failure, signals({ injected: { prompt: 1, failure: 2 } }), session()),
     ).toBeUndefined()
+  })
+})
+
+describe("OpencodeMemoryPolicy.initial delivery", () => {
+  const entry = (id: string, length: number): OpencodeMemoryPolicy.Hit => ({
+    id,
+    title: `Title ${id}`,
+    snippet: "x".repeat(length),
+    revision: 1,
+    score: 0.9,
+  })
+  const task = { type: "prompt" as const, text: "t", files: [] }
+
+  test("keeps injected lines within the budget, the best entry always", () => {
+    const lines = (hits: OpencodeMemoryPolicy.Hit[]) =>
+      OpencodeMemoryPolicy.initial
+        .render(hits, task)
+        .split("\n")
+        .filter((line) => line.startsWith("- "))
+    expect(lines([entry("a", 500), entry("b", 500), entry("c", 500)]).map((line) => line.slice(2, 3))).toEqual([
+      "a",
+      "b",
+      "c",
+    ])
+    const kept = lines(Array.from({ length: 20 }, (_, index) => entry(`e${index}`, 120)))
+    expect(kept.length).toBeLessThan(20)
+    expect(kept.join("\n").length).toBeLessThanOrEqual(1200)
+  })
+
+  test("reads a message as a correction only with correcting words and two shared terms", () => {
+    const given = [
+      { id: "mem_a", revision: 3, title: "Deploys use wrangler", text: "Run wrangler deploy from apps/worker." },
+      { id: "mem_b", revision: 1, title: "Tests", text: "Run bun test in packages/core." },
+    ]
+    const correction = OpencodeMemoryPolicy.initial.correction
+    expect(correction("Don't use wrangler deploy, use the pipeline", given)?.id).toBe("mem_a")
+    expect(correction("Run wrangler deploy now", given)).toBeUndefined()
+    expect(correction("No, that's wrong", given)).toBeUndefined()
+    expect(correction("Actually run tests in packages/core with vitest", given)?.id).toBe("mem_b")
   })
 })
 
