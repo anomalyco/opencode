@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use opencode_plugin_abi::interact::{Event, Handled};
 use opencode_plugin_abi::v2::{self, ContentRef};
-use opencode_plugin_abi::{HostRequest, InputTo, Manifest, Request, Span};
+use opencode_plugin_abi::{HostRequest, InputTo, Manifest, Request, Scope, Span};
 use opencode_ui::keymap::TuiCommand;
 use opentui::keymap::Disposer;
 
@@ -192,6 +192,8 @@ pub(crate) fn define(scripts: &Rc<Scripts>, loaded: Rc<Loaded>) -> (Definition, 
                 generation: setup.generation(),
                 failure,
                 revoked: RefCell::default(),
+                commands: RefCell::new((loaded.manifest.commands.clone(), loaded.holds.clone())),
+                layers: RefCell::default(),
                 activation,
                 viewers: RefCell::default(),
                 claims: RefCell::default(),
@@ -239,8 +241,13 @@ pub(crate) struct Guest {
     /// The registry's activation, which owns the dialogs it asks for.
     generation: u64,
     failure: Rc<RefCell<Option<String>>>,
-    /// What a failure revokes at once: the commands' layer and the event subscriptions.
+    /// What a failure revokes at once: the event subscriptions; the commands' layers are [`Guest::layers`].
     revoked: RefCell<Vec<Disposer>>,
+    /// The commands and holds the JS host last told: its load's, or what a change of commands alone made them since
+    /// ([`Guest::activated`]).
+    commands: RefCell<(Vec<opencode_plugin_abi::Command>, Vec<String>)>,
+    /// The keymap layers of `commands` outside a route, which a change of commands alone replaces.
+    layers: RefCell<Vec<Disposer>>,
     activation: Rc<Activation>,
     /// What it holds of the input (P2): its setup's layers, and its mounts' as its surfaces show.
     owners: Rc<Owners>,
@@ -405,7 +412,11 @@ impl Guest {
         }
     }
 
-    /// The setup again returned. Registrations other than the ones this activation has take a reload.
+    /// The setup again returned, or the plugin's registrations changed. A change of its commands alone outside a route
+    /// (a component's key layer, enabled or disabled, retitled, or gone with its mount) replaces their keymap layers in
+    /// place, as TS's keymap follows a layer; any other change takes a reload, which mounts its surfaces again. A
+    /// reload for a layer remounted the plugin's route, so what the user typed in its field until the new mount's field
+    /// took the focus was lost (`ports_trio`'s session-manager search lost a letter).
     pub(crate) fn activated(self: &Rc<Self>, manifest: Manifest, holds: Vec<String>, effects: Vec<HostRequest>) {
         if self.ended() {
             return;
@@ -414,7 +425,17 @@ impl Guest {
         // The commands' states are the JS host's now, also when its manifest is the last one's: a setup run again after
         // a restart, where the last activation had set them otherwise (carbon ce-5).
         self.activation.commands(&manifest.commands);
-        if manifest == self.loaded.manifest && holds == self.loaded.holds {
+        // A guest that handed its activation to a reload not yet registered changes that reload's registrations: the
+        // replacement registers what it carries.
+        let commands_only = !self.handed_over.get() && self.commands_only(&manifest, &holds);
+        let same = |(commands, held): &(Vec<opencode_plugin_abi::Command>, Vec<String>)| {
+            stateless(commands) == stateless(&manifest.commands) && *held == holds
+        };
+        if commands_only && same(&self.commands.borrow()) {
+            *self.commands.borrow_mut() = (manifest.commands, holds);
+            return;
+        }
+        if !commands_only && manifest == self.loaded.manifest && holds == self.loaded.holds {
             return;
         }
         let Some(scripts) = self.scripts.upgrade() else { return };
@@ -431,6 +452,13 @@ impl Guest {
                 ));
                 return;
             }
+        }
+        if commands_only {
+            *self.commands.borrow_mut() = (manifest.commands, holds);
+            if let Some(host) = self.host.upgrade() {
+                self.layer_commands(&*host);
+            }
+            return;
         }
         // The replacement adopts this activation of the JS host: this guest's end must not deactivate it (review
         // carbon-2). Its mounts still end on the JS host, which keeps them for the activation (P8).
@@ -466,6 +494,40 @@ impl Guest {
         }
         drop(loads);
         scripts.reconcile();
+    }
+
+    /// Whether `manifest` and `holds` change only the commands outside a route of what this activation registered, or
+    /// a command's state: a route's commands are bound to each of its mounts as it mounts.
+    fn commands_only(&self, manifest: &Manifest, holds: &[String]) -> bool {
+        let routed = |manifest: &Manifest, holds: &[String]| -> (Vec<opencode_plugin_abi::Command>, Vec<bool>) {
+            let commands: Vec<_> =
+                manifest.commands.iter().filter(|command| matches!(command.scope, Scope::Route(_))).cloned().collect();
+            let held = commands.iter().map(|command| holds.contains(&command.name)).collect();
+            (stateless(&commands), held)
+        };
+        let loaded = &self.loaded;
+        Manifest { commands: loaded.manifest.commands.clone(), ..manifest.clone() } == loaded.manifest
+            && routed(manifest, holds) == routed(&loaded.manifest, &loaded.holds)
+    }
+
+    /// Registers the keymap layers of its commands outside a route, in place of the ones it had.
+    fn layer_commands(self: &Rc<Self>, host: &dyn Host) {
+        self.layers.take().into_iter().for_each(Disposer::dispose);
+        let commands: Vec<(Scope, TuiCommand)> = self
+            .commands
+            .borrow()
+            .0
+            .iter()
+            .map(|command| (command.scope.clone(), js_command(self, command, None)))
+            .collect();
+        // A V2 layer's commands keep to the base mode unless it opts out, as TS's (bigboi P8-4).
+        let (layers, _) = route::split(commands);
+        for layer in layers.into_iter().filter(|layer| !layer.commands.is_empty()) {
+            match host.keymap().layer(layer) {
+                Ok(disposer) => self.layers.borrow_mut().push(disposer),
+                Err(error) => log::error!("plugin {} keymap layer: {error}", self.id()),
+            }
+        }
     }
 
     /// The handler `seq` returned: its effects apply, or it threw, which fails the plugin with none.
@@ -636,7 +698,8 @@ impl Guest {
         if self.failure.borrow().is_some() {
             return;
         }
-        crate::fail(&self.host, self.id(), &self.failure, self.revoked.take(), &self.activation, error);
+        let revoked = self.layers.take().into_iter().chain(self.revoked.take()).collect();
+        crate::fail(&self.host, self.id(), &self.failure, revoked, &self.activation, error);
         self.release_reads();
         self.deactivate();
     }
@@ -885,13 +948,23 @@ impl Answers for Guest {
     }
 }
 
+/// `commands` without their states, which change by `set-enabled` and take no reload.
+fn stateless(commands: &[opencode_plugin_abi::Command]) -> Vec<opencode_plugin_abi::Command> {
+    let enable = |command: &opencode_plugin_abi::Command| {
+        let mut command = command.clone();
+        command.enabled = true;
+        command
+    };
+    commands.iter().map(enable).collect()
+}
+
 /// A command of the plugin's, which runs on the JS host; a route's runs for the mount `alive`. A key that runs it holds
 /// the keys after it until the JS host answers, as TS runs a command before the next key. If the command declines (it
 /// returned `false`, or it is disabled), the key goes on to the host with this command stepped aside, as TS binds no
 /// disabled command and lets a declined key fall through (CT-8, CT-19).
 fn js_command(guest: &Rc<Guest>, command: &opencode_plugin_abi::Command, alive: Option<Weak<()>>) -> TuiCommand {
     let (called, name) = (guest.clone(), command.name.clone());
-    let hold = guest.loaded.holds.contains(&name);
+    let hold = guest.commands.borrow().1.contains(&name);
     let entry = format!("{}\u{0}{name}", guest.id());
     let (scripts, aside) = (guest.scripts.clone(), entry.clone());
     // Disabled (contract ergonomics 2.5), or stepped aside by a key it declined.
@@ -920,20 +993,13 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>) {
     }
     let disposed = guest.clone();
     setup.on_dispose(move || disposed.dispose());
-    let commands: Vec<(opencode_plugin_abi::Scope, TuiCommand)> =
-        manifest.commands.iter().map(|command| (command.scope.clone(), js_command(guest, command, None))).collect();
-    // A V2 layer's commands keep to the base mode unless it opts out, as TS's (bigboi P8-4). A route's commands are
-    // bound to each of its mounts below.
-    let (layers, _) = route::split(commands);
-    for layer in layers.into_iter().filter(|layer| !layer.commands.is_empty()) {
-        match setup.host().keymap().layer(layer) {
-            Ok(disposer) => guest.revoked.borrow_mut().push(disposer),
-            Err(error) => log::error!("plugin {} keymap layer: {error}", setup.id()),
-        }
-    }
+    // A route's commands are bound to each of its mounts below.
+    guest.layer_commands(&**setup.host());
     {
         let guest = guest.clone();
-        setup.on_dispose(move || guest.revoked.take().into_iter().for_each(Disposer::dispose));
+        setup.on_dispose(move || {
+            guest.layers.take().into_iter().chain(guest.revoked.take()).for_each(Disposer::dispose);
+        });
     }
     for (handler, types) in manifest.events.iter().enumerate() {
         let (called, kinds) = (Rc::downgrade(guest), types.clone());

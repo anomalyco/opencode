@@ -10,7 +10,7 @@
 import { Plugin } from "@opencode/plugin/tui"
 import { RGBA } from "@opentui/core"
 import { createElement, effect, insert, insertNode, setProp } from "@opentui/solid"
-import { createSignal, onCleanup } from "solid-js"
+import { createMemo, createSignal, onCleanup } from "solid-js"
 import { appendFileSync, existsSync, readFileSync } from "node:fs"
 import path from "node:path"
 
@@ -69,12 +69,12 @@ export default Plugin.define({
         // A printable key bound globally by a command whose `enabled` follows a signal (contract ergonomics 2.5).
         { id: "v2probe.caret", bind: "^", enabled: () => caret(), run: () => log({ caret: true }) },
         { id: "v2probe.caretOn", run: (input?: string) => void setCaret(input === "on") },
-        // Registers a layer, which reloads the plugin's registrations, and enables `^` a turn later, after the manifest
-        // that reload sends.
+        // Declares a store, which reloads the plugin's registrations (a layer's commands change in place), and enables
+        // `^` a turn later, after the manifest that reload sends.
         {
           id: "v2probe.lateCaret",
           run: () => {
-            context.keymap.layer(() => ({ commands: [{ id: "v2probe.lateLayer", run() {} }] }))
+            context.storage.store("caret", { initial: {} })
             setTimeout(() => setCaret(true), 0)
           },
         },
@@ -161,6 +161,7 @@ export default Plugin.define({
         { id: "v2probe.home", run: () => context.ui.router.navigate({ type: "home" }) },
         { id: "v2probe.inline", run: () => context.ui.router.navigate({ type: "plugin", name: "inline" }) },
         { id: "v2probe.findpage", run: () => context.ui.router.navigate({ type: "plugin", name: "find" }) },
+        { id: "v2probe.searchpage", run: () => context.ui.router.navigate({ type: "plugin", name: "search" }) },
         { id: "v2probe.churn", run: () => context.ui.router.navigate({ type: "plugin", name: "churn" }) },
         { id: "v2probe.restless", run: () => context.ui.router.navigate({ type: "plugin", name: "restless" }) },
         { id: "v2probe.grow", run: () => context.ui.router.navigate({ type: "plugin", name: "grow" }) },
@@ -240,6 +241,33 @@ export default Plugin.define({
         )
       },
     })
+    // A page whose commands change as the user types in its controlled field: the matches show from the first letter, a
+    // component with keys of its own, as a list a search opens.
+    const [searching, setSearching] = createSignal(false)
+    const [query, setQuery] = createSignal("")
+    const Matches = () => {
+      context.keymap.layer(() => ({ commands: [{ id: "v2probe.clear", run: () => setSearching(false) }] }))
+      return <text>{`query ${query()}.`}</text>
+    }
+    context.ui.router.register({
+      name: "search",
+      render: () => {
+        context.keymap.layer(() => ({ commands: [{ id: "v2probe.search", run: () => setSearching(true) }] }))
+        const typed = createMemo(() => query() !== "")
+        return (
+          <box flexDirection="column">
+            {() =>
+              searching() ? (
+                <input id="search" focused value={query()} onInput={(text: string) => setQuery(text)} />
+              ) : (
+                <text>not searching</text>
+              )
+            }
+            {() => (typed() ? <Matches /> : <text>no query.</text>)}
+          </box>
+        )
+      },
+    })
     // A page whose layer's commands have no `id`, as tokscope's (CT-1), and one whose command is new each mount, which
     // never settles.
     context.ui.router.register({
@@ -263,8 +291,8 @@ export default Plugin.define({
         return <text>churn page</text>
       },
     })
-    // A session panel whose render registers a key layer, as opencode-self-improvement's /memory panel does: the
-    // registration reloads the plugin's registrations, and the panel stays open (CT-29).
+    // A session panel whose render registers a key layer, as opencode-self-improvement's /memory panel does: the panel
+    // stays open (CT-29).
     context.ui.slot({
       append: "session.panel",
       render: (panel: { name: string }) => {

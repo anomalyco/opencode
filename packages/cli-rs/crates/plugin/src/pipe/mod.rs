@@ -462,9 +462,9 @@ struct Load {
 /// The messages of a plugin's activation the host keeps before it registers it ([`Scripts::keep`]).
 const EARLY: usize = 256;
 
-/// The reloads of a plugin's registrations within [`RELOAD_WINDOW`] past which it fails. Each reload sets up its surfaces
-/// again, which mounts its components again: one whose mount changes the registrations reloads without end (CT-1:
-/// tokscope's page, about 1,000 reloads a second, until the user left it).
+/// The changes of a plugin's registrations within [`RELOAD_WINDOW`] past which it fails, a change of its commands alone
+/// in place too: registrations that never settle (CT-1: tokscope's page, about 1,000 reloads a second, until the user
+/// left it, as each reload mounted the page again).
 const RELOADS: usize = 64;
 const RELOAD_WINDOW: Duration = Duration::from_secs(5);
 

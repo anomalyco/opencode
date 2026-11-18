@@ -546,7 +546,7 @@ fn a_route_draws_a_bordered_box_and_a_scroll_with_its_data() {
     let (pipe, _log) = probe(config);
     pipe.harness.tui.keymap.dispatch("v2probe.page", None);
     pipe.settle();
-    // The page registers a command as it renders: the reload that makes remounts it once the command's 250 ms passed.
+    // The page registers a command as it renders, which settles once the command's 250 ms passed.
     std::thread::sleep(Duration::from_millis(400));
     pipe.settle();
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
@@ -665,9 +665,9 @@ fn a_dialog_of_its_own_shows_its_jsx_and_closes() {
     assert_eq!(logged(&pipe, &log, 3), [json!({ "closed": true }), json!({ "base": true }), json!({ "closed": true })]);
 }
 
-// Expected: a command a component registers (the page's, after setup) runs while the component is mounted, though
-// registering it reloaded the plugin's registrations, and goes once the component left; the reload settles (nothing
-// more crosses while the page stays), and the reads the plugin watched before it follow navigation after it.
+// Expected: a command a component registers (the page's, after setup) runs while the component is mounted, and goes
+// once the component left; the change settles (nothing more crosses while the page stays), and the reads the plugin
+// watched before it follow navigation after it.
 #[test]
 fn a_components_command_lives_with_its_mount_across_a_reload() {
     let Some(config) = config() else { return };
@@ -676,7 +676,7 @@ fn a_components_command_lives_with_its_mount_across_a_reload() {
     assert_eq!(line(&pipe, "v2probe route").as_deref(), Some("v2probe route home"));
     tui.keymap.dispatch("v2probe.page", None);
     pipe.settle();
-    // The reload the page's command made, and the remount after it, settle within the 250 ms a command lingers.
+    // The change the page's command made settles within the 250 ms a command lingers.
     std::thread::sleep(Duration::from_millis(400));
     pipe.settle();
     let quiet = opencode_plugin::pipe::crossed();
@@ -707,9 +707,8 @@ fn a_components_command_lives_with_its_mount_across_a_reload() {
     assert!(!matches!(tui.keymap.dispatch("v2probe.onpage", None), opentui::keymap::RunResult::Ok), "it stayed");
 }
 
-// Expected (CT-1): a page whose layer's commands have no `id`, as tokscope's, draws and settles: its mount after the
-// reload names them as the first did, so the registrations do not change again. They named them anew each mount, and
-// each reload mounted the page again, about 1,000 times a second.
+// Expected (CT-1): a page whose layer's commands have no `id`, as tokscope's, draws and settles: its commands change in
+// place, once. They named them anew each mount, and each reload mounted the page again, about 1,000 times a second.
 #[test]
 fn a_page_whose_commands_have_no_id_draws_and_settles() {
     let Some(config) = config() else { return };
@@ -733,8 +732,8 @@ fn a_page_whose_commands_have_no_id_draws_and_settles() {
 }
 
 // Expected (CT-21): a page that names its layer's command anew each time it mounts, as opencode-navigator does, draws
-// and settles: the reload its registration makes begins the page's mount again, which adopts the one that ended, so the
-// page does not run again and name another. Each reload mounted it again, and it failed at the 64-changes bound.
+// and settles: its command changes in place, which mounts nothing again. Each reload mounted it again, and it failed at
+// the 64-changes bound.
 #[test]
 fn a_page_that_names_its_commands_anew_each_mount_settles() {
     let Some(config) = config() else { return };
@@ -769,9 +768,39 @@ fn a_plugin_whose_registrations_never_settle_fails() {
     assert!(error.contains("changed its registrations more than 64 times"), "{error}");
 }
 
+// Expected (ports_trio's session-manager search lost a letter): a change of a plugin's commands alone, here the layer of
+// a component the first letter typed mounts, replaces their keys in place, as TS's keymap follows a layer: the plugin's
+// route keeps its mount, so its field keeps the focus and every key typed into it. Each change reloaded the plugin and
+// mounted the route again, whose new field took the focus a round trip later; the keys between went nowhere.
+#[test]
+fn a_change_of_commands_alone_keeps_the_route_and_its_field() {
+    let Some(config) = config() else { return };
+    let (pipe, _log) = probe(config);
+    let (app, tui) = (&pipe.harness.app, &pipe.harness.tui);
+    tui.keymap.dispatch("v2probe.searchpage", None);
+    pipe.harness.wait_for("not searching");
+    pipe.settle();
+    tui.keymap.dispatch("v2probe.search", None);
+    pipe.harness.wait_gone("not searching");
+    pipe.settle();
+    let focused = || app.app().focused().map(|widget| opentui::widget::Widget::id(&widget));
+    let field = focused();
+    assert!(field.is_some(), "the field has no focus:\n{}", app.text());
+    // The first key mounts the matches and their command: the keys after it go on while the change crosses.
+    app.type_text("notes");
+    pipe.settle();
+    // Past the 250 ms a command the plugin dropped lingers.
+    std::thread::sleep(Duration::from_millis(400));
+    pipe.settle();
+    assert!(app.text().contains("query notes."), "{}", app.text());
+    assert_eq!(focused(), field, "the field was built again");
+    assert!(matches!(tui.keymap.dispatch("v2probe.clear", None), opentui::keymap::RunResult::Ok));
+    pipe.harness.wait_for("not searching");
+    assert_eq!(pipe.status(PROBE), Some(Status::Active));
+}
+
 // Expected (CT-29): a session panel whose render registers a key layer, as opencode-self-improvement's /memory panel
-// does, stays open: the registration reloads the plugin's registrations, and the panel mounts again from the new ones.
-// The reload closed it, so `/memory` showed nothing.
+// does, stays open: the command it registers changes in place. A reload closed it, so `/memory` showed nothing.
 #[test]
 fn a_session_panel_stays_open_across_a_reload() {
     let Some(config) = config() else { return };
@@ -1030,8 +1059,9 @@ fn a_fresh_activation_owns_only_its_own_dialogs() {
     let tui = &pipe.harness.tui;
     let owned = || (1..512).filter(|generation| tui.plugins.owns(PROBE, *generation)).collect::<Vec<u64>>();
     let live = || (1..512).find(|generation| tui.plugins.live(PROBE, *generation));
-    // The page's layer is a registration after setup: a reload, which hands the activation on.
-    tui.keymap.dispatch("v2probe.page", None);
+    // A store made after setup declares its key, a registration: a reload, which hands the activation on. A command
+    // alone (the page's layer) changes in place.
+    tui.keymap.dispatch("v2probe.late", None);
     pipe.settle();
     std::thread::sleep(Duration::from_millis(400));
     pipe.settle();
