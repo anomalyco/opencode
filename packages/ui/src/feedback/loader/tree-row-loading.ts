@@ -25,7 +25,7 @@ ${rows} {
   opacity: 0;
   animation:
     tree-row-loading-spin 900ms linear infinite,
-    tree-row-loading-fade-in 200ms ease-out 300ms forwards;
+    tree-row-loading-fade-in 200ms ease-out 150ms forwards;
 }
 @keyframes tree-row-loading-spin {
   to { transform: rotate(360deg); }
@@ -35,7 +35,7 @@ ${rows} {
 }
 @media (prefers-reduced-motion: reduce) {
   ${rows} {
-    animation: tree-row-loading-fade-in 200ms ease-out 300ms forwards;
+    animation: tree-row-loading-fade-in 200ms ease-out 150ms forwards;
   }
 }
 `

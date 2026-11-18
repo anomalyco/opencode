@@ -24,7 +24,7 @@
   opacity: 0;
   animation:
     loader-v2-spin var(--_duration) linear infinite,
-    loader-v2-fade-in 200ms ease-out var(--loader-v2-delay, 300ms) forwards;
+    loader-v2-fade-in 200ms ease-out var(--loader-v2-delay, 150ms) forwards;
 }
 
 @keyframes loader-v2-spin {
@@ -45,6 +45,6 @@
   }
 
   [data-component="loader-v2"][data-delayed] {
-    animation: loader-v2-fade-in 200ms ease-out var(--loader-v2-delay, 300ms) forwards;
+    animation: loader-v2-fade-in 200ms ease-out var(--loader-v2-delay, 150ms) forwards;
   }
 }
