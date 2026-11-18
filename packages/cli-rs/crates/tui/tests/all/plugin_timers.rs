@@ -260,3 +260,76 @@ fn an_every_a_mount_started_ends_with_that_mount() {
         assert_eq!(ticks(), closed, "{carrier:?}: the mount's every ticked on after the mount closed");
     }
 }
+
+thread_local! {
+    /// The budget's clock of the rows below: each tick of their plugins moves it by what the tick costs.
+    static BUDGET: Cell<Duration> = const { Cell::new(Duration::ZERO) };
+}
+
+/// A 20 ms `every` whose tick costs 500 µs on the budget's clock, half the frame budget.
+fn cheap_ticks(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.tasks().every(setup.host(), Duration::from_millis(20), |_| async {
+        BUDGET.set(BUDGET.get() + Duration::from_micros(500));
+        ControlFlow::Continue(())
+    });
+    Ok(())
+}
+
+/// The TUI, settled, with the budget's clock injected.
+fn budgeted() -> support::Harness {
+    let h = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    h.app.idle(Duration::from_secs(3));
+    BUDGET.set(Duration::ZERO);
+    let base = std::time::Instant::now();
+    h.tui.plugins.monitor().set_clock(move || base + BUDGET.get());
+    h
+}
+
+// Expected (carbon tm2-2): each tick of the fastest timer is a frame of its own, judged alone against the frame
+// budget: a 20 ms timer whose ticks cost half of it is never slow, as it was once two or three ticks were summed.
+#[test]
+fn a_fast_timer_with_cheap_ticks_is_not_slow() {
+    let h = budgeted();
+    opencode_tui::plugins::host::add(&h.tui, abi::Plugin { id: "test.cheap", setup: cheap_ticks }.into());
+    h.app.idle(Duration::from_secs(3));
+    assert!(BUDGET.get() >= Duration::from_millis(60), "it did not tick: {:?}", BUDGET.get());
+    assert!(!h.tui.plugins.monitor().is_slow("test.cheap"), "500 µs ticks every 20 ms were slow");
+}
+
+/// Two 20 ms timers 10 ms apart, each tick costing 700 µs on the budget's clock: one ticks at 20 ms, the other at 30.
+fn two_timers(setup: &mut abi::Setup) -> Result<(), String> {
+    let tasks = setup.tasks();
+    let tick = || BUDGET.set(BUDGET.get() + Duration::from_micros(700));
+    tasks.every(setup.host(), Duration::from_millis(20), move |_| async move {
+        tick();
+        ControlFlow::Continue(())
+    });
+    tasks.spawn(setup.host(), move |cx| async move {
+        let mut wait = Duration::from_millis(30);
+        while cx.sleep(wait).await.is_ok() {
+            tick();
+            wait = Duration::from_millis(20);
+        }
+    });
+    Ok(())
+}
+
+// Expected (carbon tm2-2): a paint between a tick and its idle close, and another tick after the paint, leave no frame
+// open for good: the idle close that finds the later tick's frame open closes it too, so later ticks with no paint
+// are not summed into it without end.
+#[test]
+fn a_tick_after_a_paint_leaves_no_frame_open_for_good() {
+    let h = budgeted();
+    opencode_tui::plugins::host::add(&h.tui, abi::Plugin { id: "test.strand", setup: two_timers }.into());
+    let slot = h.tui.plugins.monitor().slot(&opencode_plugin::contain::Artifact::builtin("test.strand"));
+    // A paint ends what the plugin's arrival opened. Then the first timer ticks at 20 ms, which arms its idle close
+    // (37 ms); a paint at 25 ms; the second timer ticks at 30 ms in the frame after it, which arms none, as one is
+    // armed. At 37 ms the idle close finds that frame open.
+    h.app.render();
+    h.app.advance(Duration::from_millis(25));
+    h.app.render();
+    h.app.advance(Duration::from_millis(33));
+    // At 58 ms the frame of the ticks at 30, 40 and 50 ms has ended (at 54 ms), and no tick ran since.
+    let (own, _) = h.tui.plugins.monitor().spent(slot);
+    assert_eq!(own, Duration::ZERO, "a frame stayed open and summed {own:?} of ticks");
+}
