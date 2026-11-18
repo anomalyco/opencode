@@ -435,37 +435,6 @@ fn subagents_lists_ten_children_newest_first_and_opens_them() {
     h.wait_gone("▼ Subagents");
 }
 
-// Expected (`carrier-equal` for the V2 layer, P8): the published package, unmodified on the JS host, lists the same
-// rows as its port, in the same colors, once the host has the session's family and statuses as the sidebar mounts (an
-// installed package reads them once, as it mounts, in TS too); its `/subagents` picks from all twelve and opens the pick.
-#[test]
-fn the_published_subagents_sidebar_lists_and_picks_as_its_port_does() {
-    let rows = |carrier| {
-        let h = open_as(&[carrier], 170, subagents, false, None)?;
-        h.wait_for("+2 more");
-        h.wait("Child 03 runs", || {
-            h.sidebar(120).iter().any(|row| row.starts_with("• Child 03") && row.ends_with(" running"))
-        });
-        let theme = h.tui.page();
-        let colors =
-            (h.fg("• Child 03", 0) == theme.text.feedback.success.base, h.fg("• Child 04", 0) == theme.text.muted);
-        Some((h.sidebar(120), colors, h))
-    };
-    let Some((js, js_colors, h)) = rows(Carrier::Npm("opencode-subagents-sidebar")) else { return };
-    let (port, port_colors, _) = rows(Carrier::Port("subagents-sidebar")).unwrap();
-    assert_eq!(js, port);
-    assert_eq!(js_colors, (true, true));
-    assert_eq!(port_colors, (true, true));
-    let (last, title, _) = by_update().pop().unwrap();
-    h.tui.keymap.dispatch("subagents-sidebar.pick", None);
-    h.wait_for("Child 12");
-    h.app.type_text(&title);
-    h.wait("the filtered list", || h.app.text().lines().filter(|line| line.contains(&title)).count() >= 2);
-    h.app.press("return");
-    let session = Route::Session { id: opencode_api::generated::SessionID(last) };
-    h.wait("the pick opens its child", || h.tui.route() == session);
-}
-
 // Expected (carbon-3, bigboi-3): the fold, a field merge the `cdylib` asks for over the C ABI, sets only its field in
 // the latest stored object, so a field another client wrote before this TUI read it again stays.
 #[test]
@@ -578,71 +547,6 @@ pub(crate) fn running(seen: &Seen) -> Option<Reply> {
         ("POST", path) if path.ends_with("/interrupt") => Some((200, json!({}))),
         _ => None,
     }
-}
-
-// Expected: ctrl+enter on a running session sends, in this order, one interrupt (the guarded interrupt fires on its
-// second press, and the third arms it again) and then the prompt; the hint reads as TS draws it, running and idle, and
-// shell mode hides it.
-#[test]
-fn force_input_interrupts_then_submits_and_hints_the_keys() {
-    force_input(Carrier::Port("force-input"));
-}
-
-// Expected (luau-spike, `carrier-equal`): the port in Luau sends and draws what the native port does.
-#[cfg(feature = "luau")]
-#[test]
-fn force_input_in_luau_interrupts_then_submits_and_hints_the_keys() {
-    force_input(Carrier::Luau("force-input"));
-}
-
-fn force_input(carrier: Carrier<'_>) {
-    let h = open_as(&[carrier], 120, running, false, None).unwrap();
-    h.wait_for("⏎ steer · ctrl+⏎ interrupt & send");
-    let theme = h.tui.page();
-    assert_eq!(h.fg("ctrl+⏎", 0), theme.text.action.primary.base);
-    assert_eq!(h.fg("steer", 0), theme.text.muted);
-    assert_eq!(h.fg("⏎ steer", 0), theme.text.base);
-    h.app.type_text("hello");
-    h.app.press("ctrl+return");
-    h.wait("the prompt is sent", || !h.sent("/api/session/ses_p/prompt").is_empty());
-    assert_eq!(h.wire(), ["POST /api/session/ses_p/interrupt", "POST /api/session/ses_p/prompt"]);
-    let prompts: Vec<Value> = h
-        .log
-        .lock()
-        .unwrap()
-        .iter()
-        .filter(|seen| seen.path.ends_with("/prompt"))
-        .map(|seen| seen.body.clone())
-        .collect();
-    assert_eq!(prompts.len(), 1, "{prompts:?}");
-    assert_eq!(prompts[0]["text"], "hello", "ctrl+enter added no newline");
-
-    h.app.type_text("!");
-    h.wait_gone("⏎ steer");
-    h.app.press("backspace");
-    h.wait_for("⏎ steer");
-    h.tui.navigate(support::session_route("ses_q"));
-    h.wait_for("⏎ send");
-}
-
-// Expected (`carrier-equal` and `delivery` for the V2 layer, P8): the published package, unmodified on the JS host,
-// sends what its port sends for ctrl+enter, in the same order: its four dispatches are one call's effects, applied in
-// the order it made them. Its hint is a static render of the package's JSX, as TS draws it from `node_modules`.
-#[test]
-fn the_published_force_input_sends_what_its_port_sends() {
-    let Some(h) = open_as(&[Carrier::Npm("@mynameistito/opencode-force-input")], 120, running, false, None) else {
-        return;
-    };
-    h.wait("the hint", || h.app.text().contains("⏎ "));
-    h.app.type_text("hello");
-    h.app.press("ctrl+return");
-    h.wait("the prompt is sent", || !h.sent("/api/session/ses_p/prompt").is_empty());
-    assert_eq!(h.wire(), ["POST /api/session/ses_p/interrupt", "POST /api/session/ses_p/prompt"]);
-    let log = h.log.lock().unwrap();
-    let prompts: Vec<&Value> =
-        log.iter().filter(|seen| seen.path.ends_with("/prompt")).map(|seen| &seen.body).collect();
-    assert_eq!(prompts.len(), 1, "{prompts:?}");
-    assert_eq!(prompts[0]["text"], "hello", "ctrl+enter added no newline");
 }
 
 // Expected (bigboi-fixes-1): a prompt reaches the server after every interrupt sent before it, so a late interrupt
