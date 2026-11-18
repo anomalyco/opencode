@@ -122,6 +122,25 @@ pub fn first_meaningful_line(content: &str) -> Option<&str> {
     meaningful_lines(content).next().map(|line| line.text)
 }
 
+/// Accessibility directives describe the diagram but do not draw rows. A block ends on a line containing only `}`.
+#[derive(Default)]
+pub(crate) struct Accessibility {
+    in_description: bool,
+}
+
+impl Accessibility {
+    pub(crate) fn skip(&mut self, line: &str) -> bool {
+        static DIRECTIVE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)^acc(?:Title|Descr)(?::|\s|$)").unwrap());
+        static BLOCK: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)^accDescr\s*\{$").unwrap());
+        if self.in_description {
+            self.in_description = line != "}";
+            return true;
+        }
+        self.in_description = BLOCK.is_match(line);
+        self.in_description || DIRECTIVE.is_match(line)
+    }
+}
+
 pub fn strip_quotes(value: &str) -> String {
     let trimmed = js_trim(value);
     let quoted =

@@ -8,7 +8,7 @@ use regex::Regex;
 
 use crate::core::canvas::{Canvas, SizeError};
 use crate::core::geometry::js_round;
-use crate::core::text::{first_meaningful_line, js_trim, meaningful_lines, strip_quotes, width};
+use crate::core::text::{Accessibility, first_meaningful_line, js_trim, meaningful_lines, strip_quotes, width};
 use crate::{Kind, SyntaxError};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -55,8 +55,6 @@ static HEADER: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^gantt$"));
 static DIRECTIVE: LazyLock<Regex> =
     LazyLock::new(|| pattern(r"(?i)^(title|dateFormat|axisFormat|tickInterval|excludes|todayMarker)\s+(.+)$"));
 static SECTION: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^section(?:\s+(.+))?$"));
-static ACCESSIBILITY: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^acc(?:Title|Descr)(?::|\s|$)"));
-static ACC_BLOCK: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^accDescr\s*\{$"));
 static AFTER: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^after\s+"));
 static DURATION: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^(\d+(?:\.\d+)?)\s*(ms|s|m|h|d|w)$"));
 static CALENDAR: LazyLock<Regex> =
@@ -77,21 +75,11 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
     let mut date_format = "YYYY-MM-DD".to_string();
     let mut axis_format = "%Y-%m-%d".to_string();
     let mut header = false;
-    let mut in_description = false;
+    let mut accessibility = Accessibility::default();
     for source in meaningful_lines(content) {
         let line = js_trim(source.text.find("%%").map_or(source.text, |index| &source.text[..index]));
         let n = source.number;
-        if in_description {
-            if line == "}" {
-                in_description = false;
-            }
-            continue;
-        }
-        if ACC_BLOCK.is_match(line) {
-            in_description = true;
-            continue;
-        }
-        if ACCESSIBILITY.is_match(line) || line.is_empty() {
+        if accessibility.skip(line) || line.is_empty() {
             continue;
         }
         if HEADER.is_match(line) {
