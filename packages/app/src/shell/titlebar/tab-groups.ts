@@ -146,19 +146,6 @@ export function assignStableGroupColors(
   return out
 }
 
-export function matchesTabFilter(meta: ResolvedTabMeta, rawQuery: string) {
-  const query = rawQuery.trim().toLocaleLowerCase()
-
-  if (!query) return true
-
-  return (
-    meta.title.toLocaleLowerCase().includes(query) ||
-    meta.serverLabel.toLocaleLowerCase().includes(query) ||
-    (meta.projectName?.toLocaleLowerCase().includes(query) ?? false) ||
-    (meta.directory?.toLocaleLowerCase().includes(query) ?? false)
-  )
-}
-
 function applySavedGroupOrder(groups: ComputedTabGroup[], savedOrder: readonly string[] | undefined) {
   if (!savedOrder?.length) return groups
   const rank = new Map(savedOrder.map((key, index) => [key, index]))
@@ -280,36 +267,18 @@ export function buildComputedTabGroups(input: {
   mode: TabGroupMode
   serverCount: number
   knownServers?: readonly ServerConnection.Key[]
-  query: string
   labels: {
     other: string
   }
 }): ComputedTabGroup[] | undefined {
-  const searching = input.query.trim().length > 0
-  const filtered = searching ? input.items.filter((item) => matchesTabFilter(item, input.query)) : input.items
   const effectiveMode = input.mode === "server" && input.serverCount <= 1 ? "none" : input.mode
 
   if (effectiveMode === "none") {
     if (input.state.manualGroups.length > 0) {
-      return buildManualGroups(filtered, input.state, searching)
+      return buildManualGroups(input.items, input.state)
     }
 
-    if (!searching) return undefined
-
-    return [
-      {
-        key: "ungrouped:search",
-        kind: "ungrouped",
-        defaultName: "",
-        name: "",
-        hasCustomOverride: false,
-        color: "gray",
-        collapsed: false,
-        allTabs: filtered.map((item) => item.tab),
-        visibleTabs: filtered.map((item) => item.tab),
-        containsActive: filtered.some((item) => item.active),
-      },
-    ]
+    return undefined
   }
 
   if (effectiveMode === "server") {
@@ -319,14 +288,14 @@ export function buildComputedTabGroups(input: {
       input.state.overrides,
     )
 
-    const buckets = [...Map.groupBy(filtered, (item) => item.server)]
+    const buckets = [...Map.groupBy(input.items, (item) => item.server)]
 
     const groups = buckets.map(([server, rows]): ComputedTabGroup => {
       const key = `server:${server}`
       const defaultName = rows[0]?.serverLabel ?? server
       const override = input.state.overrides[key]
       const color = colorMap.get(server) ?? "blue"
-      const collapsed = searching ? false : !!input.state.collapsed[key]
+      const collapsed = !!input.state.collapsed[key]
       const allTabs = rows.map((row) => row.tab)
 
       return {
@@ -352,14 +321,14 @@ export function buildComputedTabGroups(input: {
 
   const colorMap = assignStableGroupColors(input.items.map(projectSeedOf), "project:", input.state.overrides)
 
-  const buckets = [...Map.groupBy(filtered, projectSeedOf)]
+  const buckets = [...Map.groupBy(input.items, projectSeedOf)]
 
   const groups = buckets.map(([projectKey, rows]): ComputedTabGroup => {
     const key = `project:${projectKey}`
     const defaultName = rows[0]?.projectName ?? input.labels.other
     const override = input.state.overrides[key]
     const color = colorMap.get(projectKey) ?? "gray"
-    const collapsed = searching ? false : !!input.state.collapsed[key]
+    const collapsed = !!input.state.collapsed[key]
     const allTabs = rows.map((row) => row.tab)
 
     return {
@@ -384,7 +353,6 @@ export function buildComputedTabGroups(input: {
 function buildManualGroups(
   items: readonly ResolvedTabMeta[],
   state: TabGroupsState,
-  searching: boolean,
 ): ComputedTabGroup[] {
   const groupsById = new Map(state.manualGroups.map((group) => [group.id, group]))
   const groupedItems = new Map<string, ResolvedTabMeta[]>()
@@ -442,7 +410,7 @@ function buildManualGroups(
     emittedGroups.add(manual.id)
     const rows = groupedItems.get(manual.id) ?? []
     const key = `manual:${manual.id}`
-    const collapsed = searching ? false : !!state.collapsed[key]
+    const collapsed = !!state.collapsed[key]
     const allTabs = rows.map((row) => row.tab)
     out.push({
       key,

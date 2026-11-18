@@ -50,10 +50,9 @@ import {
 import {
   createVerticalTabGroupSections,
   TabAddToGroupMenuItems,
-  TabFilterClosedMatches,
+  TabGroupsHeaderRow,
   TabGroupsProvider,
   useTabGroups,
-  VerticalTabGroupsControls,
 } from "./tab-groups-ui"
 
 export const newTabCommand = { id: "tab.new", keybind: "mod+t,mod+n" }
@@ -635,11 +634,6 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
 
             const tabGroupsEnabled = () => settings.general.tabGroups()
 
-            const isGroupedSidebarList = () =>
-              tabGroupsEnabled() &&
-              settings.appearance.tabLayout() !== "inbox" &&
-              settings.general.sidebarOrganize() === "list"
-
             return (
               <TabGroupsProvider currentTab={currentTab}>
                 {(() => {
@@ -648,30 +642,34 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
 
                   const defaultVerticalTabStrip = () => (
                     <Show when={tabGroupsEnabled()} fallback={verticalTabStrip()}>
-                      <TitlebarTabStrip
-                        orientation="vertical"
-                        sections={verticalSections()}
-                        customVerticalDrag={tabGroups.dragBinding}
-                        tabContextMenu={
-                          tabGroups.effectiveMode() === "none"
-                            ? (tab) => <TabAddToGroupMenuItems tab={tab} />
-                            : undefined
-                        }
-                        tabs={tabsStore}
-                        currentTab={currentTab()}
-                        onNavigate={(tab, el) => {
-                          tabs.select(tab)
-                          el?.scrollIntoView({ behavior: "instant", block: "nearest" })
-                        }}
-                        onClose={(tab) => {
-                          const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
+                      <div class="flex min-h-0 flex-1 flex-col [app-region:no-drag]">
+                        <TabGroupsHeaderRow />
+                        <div class="flex min-h-0 flex-1 flex-col pt-1">
+                          <TitlebarTabStrip
+                            orientation="vertical"
+                            sections={verticalSections()}
+                            customVerticalDrag={tabGroups.dragBinding}
+                            tabContextMenu={
+                              tabGroups.effectiveMode() === "none"
+                                ? (tab) => <TabAddToGroupMenuItems tab={tab} />
+                                : undefined
+                            }
+                            tabs={tabsStore}
+                            currentTab={currentTab()}
+                            onNavigate={(tab, el) => {
+                              tabs.select(tab)
+                              el?.scrollIntoView({ behavior: "instant", block: "nearest" })
+                            }}
+                            onClose={(tab) => {
+                              const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
 
-                          if (index !== -1) tabsStoreActions.closeTab(index)
-                        }}
-                        onCloseTabs={(items, keep) => tabsStoreActions.closeTabs(items.map(tabKey), keep)}
-                        onReorder={(keys) => tabsStoreActions.reorder(keys)}
-                      />
-                      <TabFilterClosedMatches />
+                              if (index !== -1) tabsStoreActions.closeTab(index)
+                            }}
+                            onCloseTabs={(items, keep) => tabsStoreActions.closeTabs(items.map(tabKey), keep)}
+                            onReorder={(keys) => tabsStoreActions.reorder(keys)}
+                          />
+                        </div>
+                      </div>
                     </Show>
                   )
 
@@ -901,29 +899,14 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                       <SidebarToggle handoff="out" />
                                     </div>
                                   </Show>
-                                  <Show
-                                    when={isGroupedSidebarList()}
-                                    fallback={
-                                      <>
-                                        <div class="flex w-full shrink-0 flex-col gap-[3px]">
-                                          <Show when={!actionInSidebarHeader()}>{firstSidebarAction()}</Show>
-                                          {searchButton(true)}
-                                          <Show when={projectNavigation()} fallback={newSessionButton()}>
-                                            {settingsButton()}
-                                          </Show>
-                                        </div>
-                                        <div class="h-4 w-full shrink-0" aria-hidden="true" />
-                                      </>
-                                    }
-                                  >
-                                    <VerticalTabGroupsControls
-                                      actionInHeader={actionInSidebarHeader()}
-                                      firstAction={firstSidebarAction}
-                                      newSessionButton={newSessionButton}
-                                      projectNavigation={projectNavigation()}
-                                      settingsButton={settingsButton}
-                                    />
-                                  </Show>
+                                  <div class="flex w-full shrink-0 flex-col gap-[3px]">
+                                    <Show when={!actionInSidebarHeader()}>{firstSidebarAction()}</Show>
+                                    {searchButton(true)}
+                                    <Show when={projectNavigation()} fallback={newSessionButton()}>
+                                      {settingsButton()}
+                                    </Show>
+                                  </div>
+                                  <div class="h-4 w-full shrink-0" aria-hidden="true" />
                                   <div class="flex min-h-0 flex-1 flex-col gap-1">
                                     <Switch fallback={defaultVerticalTabStrip()}>
                                       <Match when={settings.appearance.tabLayout() === "inbox"}>

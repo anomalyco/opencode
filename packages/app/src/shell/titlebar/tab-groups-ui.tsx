@@ -1,26 +1,18 @@
-import { createEffect, createMemo, createSignal, For, on, onCleanup, Show, untrack, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, For, on, onCleanup, Show, untrack } from "solid-js"
 import { createStore, produce } from "solid-js/store"
-import { useQueries } from "@tanstack/solid-query"
 import { createSimpleContext } from "@opencode/ui/context"
-import { useDialog } from "@opencode/ui/context/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
 import { TextInput } from "@opencode/ui/text-input"
 import { displayName } from "@opencode/ui/project-avatar"
 import { uuid } from "@opencode/util/uuid"
-import { mergeHomeSessionIndex } from "@/home/sessions/index"
-import { homeSessionsQuery } from "@/home/sessions/queries"
 import { useLanguage } from "@/runtime/i18n/language"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useGlobal } from "@/runtime/server/runtime"
 import { useSettings } from "@/settings/model"
-import { useCommand } from "@/shell/commands/command"
-import { compareSessionTime } from "@/shell/layout/helpers"
-import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
-import { listClosedTabs } from "@/shell/tabs/closed"
-import { sessionIDHasOpenTab, tabKey, useTabs, type Tab } from "@/shell/tabs/tabs"
+import { tabKey, useTabs, type Tab } from "@/shell/tabs/tabs"
 import {
   applyVerticalDragCommit,
   INITIAL_VERTICAL_DRAG_STATE,
@@ -111,7 +103,6 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
       DEFAULT_TAB_GROUPS_STATE,
     )
 
-    const [local, setLocal] = createStore({ query: "" })
     const [drag, setDrag] = createSignal(INITIAL_VERTICAL_DRAG_STATE)
 
     const mode = () => state.mode
@@ -212,7 +203,6 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
         mode: mode(),
         serverCount: serverCount(),
         knownServers: global.servers.list().map(ServerConnection.key),
-        query: local.query,
         labels: {
           other: language.t("sidebar.view.other"),
         },
@@ -361,7 +351,7 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
             if (draft.manualAssignments[key] === manualId) delete draft.manualAssignments[key]
           })
           delete draft.collapsed[`manual:${manualId}`]
-        })
+        }),
       )
     }
 
@@ -877,8 +867,6 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
       dragBinding,
       isJoinTarget: (groupKey: string) => selectJoinGroupKey(drag()) === groupKey,
       headerShiftY: (groupKey: string) => selectHeaderShiftY(drag(), groupKey),
-      query: () => local.query,
-      setQuery: (value: string) => setLocal("query", value),
       setMode: (next: TabGroupMode) => setState("mode", next),
       groups,
       groupOfKey: (key: string) => groupByKey().get(key),
@@ -1116,15 +1104,14 @@ export function TabGroupingMenu() {
   return (
     <Menu gutter={4} modal={false} placement="bottom-end">
       <Menu.Trigger
-        as="button"
-        type="button"
+        as={IconButton}
+        variant="ghost-muted"
+        size="small"
         aria-label={language.t("tabs.groups.menu")}
         title={language.t("tabs.groups.menu")}
         data-action="tab-groups-menu"
-        class="my-auto flex size-5 shrink-0 items-center justify-center rounded-[4px] text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-icon-icon-base focus-visible:outline-none [app-region:no-drag]"
-      >
-        <Icon name="outline-sliders" size="small" />
-      </Menu.Trigger>
+        icon={<Icon name="outline-sliders" size="small" />}
+      />
 
       <Menu.Portal>
         <Menu.Content class="min-w-[168px]">
@@ -1160,236 +1147,15 @@ export function TabGroupingMenu() {
   )
 }
 
-export function TabFilterInput(props: { trailing?: JSX.Element }) {
-  const tabGroups = useTabGroups()
+export function TabGroupsHeaderRow() {
   const language = useLanguage()
-  const command = useCommand()
-  const dialog = useDialog()
-  let inputRef: HTMLInputElement | undefined
-
-  const openGlobalSearch = async () => {
-    const { DialogSessionSearch } = await import("@/shell/commands/session-search")
-    void dialog.show(() => <DialogSessionSearch />)
-  }
 
   return (
-    <div data-slot="sidebar-search-input" class="min-w-0 flex-1">
-      <TextInput
-        ref={(el) => {
-          inputRef = el
-        }}
-        type="text"
-        dir="auto"
-        appearance="base"
-        surface="layer-1"
-        class="!w-full min-w-0 [app-region:no-drag]"
-        leadingIcon={<Icon name="magnifying-glass" />}
-        showClearButton={tabGroups.query().length > 0}
-        clearIcon="circle-xmark"
-        onClearClick={() => {
-          tabGroups.setQuery("")
-          inputRef?.focus()
-        }}
-        trailing={props.trailing}
-        aria-label={language.t("command.session.search")}
-        placeholder={language.t("tabs.groups.filter.placeholder")}
-        spellcheck={false}
-        autocomplete="off"
-        value={tabGroups.query()}
-        onInput={(event) => tabGroups.setQuery(event.currentTarget.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            if (tabGroups.query()) {
-              event.preventDefault()
-              tabGroups.setQuery("")
-
-              return
-            }
-
-            inputRef?.blur()
-
-            return
-          }
-
-          if (event.key === "Enter") {
-            event.preventDefault()
-            void openGlobalSearch()
-          }
-        }}
-        title={`${language.t("command.session.search")} (${command.keybindParts("sessions.search").join("+")})`}
-      />
+    <div class="flex h-7 shrink-0 items-center gap-1.5 ps-2 pe-1 [app-region:no-drag]">
+      <span class="min-w-0 flex-1 truncate text-[13px] leading-[var(--line-height-compact)] font-medium text-v2-text-text-muted">
+        {language.t("sidebar.view.sessions")}
+      </span>
+      <TabGroupingMenu />
     </div>
-  )
-}
-
-export function VerticalTabGroupsControls(props: {
-  actionInHeader: boolean
-  firstAction: () => JSX.Element
-  newSessionButton: () => JSX.Element
-  projectNavigation: boolean
-  settingsButton: () => JSX.Element
-}) {
-  return (
-    <>
-      <div class="flex w-full shrink-0 flex-col gap-[3px]">
-        <Show when={!props.actionInHeader}>{props.firstAction()}</Show>
-        <Show when={props.projectNavigation} fallback={props.newSessionButton()}>
-          {props.settingsButton()}
-        </Show>
-      </div>
-      <div class="mt-2.5 mb-2.5 flex w-full shrink-0 items-center">
-        <TabFilterInput trailing={<TabGroupingMenu />} />
-      </div>
-    </>
-  )
-}
-
-export function TabFilterClosedMatches() {
-  const tabGroups = useTabGroups()
-  const language = useLanguage()
-  const dialog = useDialog()
-  const global = useGlobal()
-  const tabs = useTabs()
-
-  const activeQuery = () => tabGroups.query().trim().toLocaleLowerCase()
-  const searching = () => activeQuery().length > 0
-  const serverList = createMemo(() => global.servers.list())
-
-  const sessionQueries = useQueries(() => ({
-    queries: serverList().map((conn) => {
-      const ctx = global.serverCtx(ServerConnection.key(conn))
-
-      return {
-        ...homeSessionsQuery(conn, ctx),
-        enabled: searching() && ctx?.sdk.connection.status() === "connected",
-      }
-    }),
-  }))
-
-  const closedMatches = createMemo(() => {
-    const query = activeQuery()
-
-    if (!query) return []
-
-    const fromClosed = listClosedTabs(tabs.closed, tabs.store)
-      .filter((entry) => entry.info?.prompted === true)
-      .flatMap((entry) => {
-        const ctx = global.serverCtx(entry.tab.server)
-        const session = ctx?.data.session.get(entry.tab.sessionId)
-        const title = sessionTabTitle(session?.title ?? entry.info?.title, language.t("session.tab.session"))
-
-        if (!title.toLocaleLowerCase().includes(query)) return []
-        const directory = session?.location.directory ?? entry.info?.directory ?? ""
-
-        const project = session
-          ? ctx?.projects.forSession(session)
-          : directory
-            ? (ctx?.projects.forDirectory(directory) ?? { worktree: directory })
-            : undefined
-
-        return [
-          {
-            key: `${entry.tab.server}\0${entry.tab.sessionId}`,
-            server: entry.tab.server,
-            sessionId: entry.tab.sessionId,
-            title,
-            directory,
-            project,
-            reopen: () => tabs.reopenClosedTab(entry.tab, { append: true }),
-          },
-        ]
-      })
-
-    const closedSet = new Set(fromClosed.map((item) => item.key))
-
-    const fromHistory = serverList()
-      .flatMap((conn, index) => {
-        const server = ServerConnection.key(conn)
-        const ctx = global.serverCtx(server)
-
-        if (!ctx) return []
-
-        return ctx.data.session
-          .apply(mergeHomeSessionIndex(sessionQueries[index]?.data?.() ?? [], ctx.data.session.known()))
-          .filter((session) => !sessionIDHasOpenTab(tabs.store, server, session.id))
-          .filter((session) => !closedSet.has(`${server}\0${session.id}`))
-          .filter((session) =>
-            sessionTabTitle(session.title, language.t("session.tab.session")).toLocaleLowerCase().includes(query),
-          )
-          .map((session) => ({ server, session }))
-      })
-      .toSorted((a, b) => compareSessionTime(a.session, b.session))
-      .slice(0, Math.max(0, 6 - fromClosed.length))
-      .map((item) => {
-        const ctx = global.serverCtx(item.server)
-        const title = sessionTabTitle(item.session.title, language.t("session.tab.session"))
-
-        return {
-          key: `${item.server}\0${item.session.id}`,
-          server: item.server,
-          sessionId: item.session.id,
-          title,
-          directory: item.session.location.directory,
-          project: ctx?.projects.forSession(item.session),
-          reopen: () => {
-            ctx?.data.session.remember(item.session)
-            tabs.select(tabs.addSessionTab({ server: item.server, sessionId: item.session.id }))
-          },
-        }
-      })
-
-    return [...fromClosed, ...fromHistory].slice(0, 6)
-  })
-
-  const openVisibleCount = () => (tabGroups.groups() ?? []).reduce((sum, group) => sum + group.visibleTabs.length, 0)
-
-  const openGlobalSearch = async () => {
-    const { DialogSessionSearch } = await import("@/shell/commands/session-search")
-    void dialog.show(() => <DialogSessionSearch />)
-  }
-
-  return (
-    <Show when={searching()}>
-      <div class="mt-2 flex shrink-0 flex-col gap-1 [app-region:no-drag]">
-        <Show when={closedMatches().length > 0}>
-          <div class="px-2 pt-1 text-[11px] leading-[var(--line-height-compact)] font-medium text-v2-text-text-faint">
-            {language.t("sidebar.project.recentSessions")}
-          </div>
-          <For each={closedMatches()}>
-            {(match) => (
-              <button
-                type="button"
-                data-slot="closed-search-match"
-                onClick={() => {
-                  match.reopen()
-                  tabGroups.setQuery("")
-                }}
-                class="flex h-7 w-full min-w-0 items-center gap-2 rounded-[6px] px-2 text-start text-[13px] leading-[var(--line-height-compact)] text-v2-text-text-faint hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:outline-none"
-              >
-                <span class="flex size-4 shrink-0 items-center justify-center">
-                  <SessionTabAvatarView project={match.project} directory={match.directory} unread={false} />
-                </span>
-                <span class="min-w-0 flex-1 truncate" dir="auto">
-                  {match.title}
-                </span>
-              </button>
-            )}
-          </For>
-        </Show>
-        <Show when={openVisibleCount() === 0 && closedMatches().length === 0}>
-          <div class="px-2 py-1 text-[12px] leading-[var(--line-height-compact)] text-v2-text-text-faint">
-            {language.t("tabs.groups.filter.empty")}
-          </div>
-        </Show>
-        <button
-          type="button"
-          class="flex h-6 items-center gap-1.5 rounded-[6px] px-2 text-start text-[12px] leading-[var(--line-height-compact)] text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base"
-          onClick={() => void openGlobalSearch()}
-        >
-          <Icon name="magnifying-glass" size="small" />
-          <span>{language.t("tabs.groups.filter.searchAll")}</span>
-        </button>
-      </div>
-    </Show>
   )
 }

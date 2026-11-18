@@ -92,11 +92,6 @@
   background: var(--tab-group-swatch);
 }
 
-/* Aligns Search leading icon (x = 8..24px) and placeholder (x = 32px) with Home & New session rows */
-[data-slot="sidebar-search-input"] [data-slot="text-input-v2-value"] {
-  gap: 8px;
-}
-
 /* ==========================================================================
    Vertical (Side) Tabs: Tonal Jewel Pill + Steady Saturated Vertical Rail
    ========================================================================== */
@@ -211,13 +206,13 @@
   z-index: 40;
 }
 
-/* Join existing group header: quiet flat pill wash, no heavy ring */
+/* Join existing group header: same neutral gray as the dragged tab fill while transient */
 [data-tab-group-header][data-drop-over="true"] {
-  background: var(--tab-group-pill-bg);
+  background: var(--v2-overlay-simple-overlay-pressed);
   border-radius: 6px;
 }
 
-/* Combine target: Metro left rail bar + indent spanning target + opened slot below (zero outlines, zero overlap) */
+/* Combine target: transient neutral gray left rail (same gray as tab fill) until committed */
 [data-titlebar-tab-slot][data-combine-target="true"] [data-titlebar-tab] {
   margin-inline-start: 16px;
   width: calc(100% - 16px);
@@ -232,9 +227,9 @@
   inset-inline-start: 8px;
   top: 3px;
   height: 54px;
-  width: 1.5px;
+  width: 2px;
   border-radius: 9999px;
-  background: var(--tab-group-rail);
+  background: var(--v2-overlay-simple-overlay-pressed);
   pointer-events: none;
 }
 

@@ -2684,14 +2684,14 @@ async function mockGaveUpPermission(page: Page, tabLayout: "horizontal" | "inbox
   }
 }
 
-test("tab groups reorder without color drift, collapse and auto-expand on navigation, reopen closed search matches, and combine by hovering into manual folders", async ({
+test("tab groups reorder without color drift, collapse and auto-expand on navigation, and combine by dwelling into manual groups", async ({
   page,
 }) => {
   const dirA = "C:/OpenCode/TabGroupsA"
   const dirB = "/srv/tab-groups-b"
   const localOne = session({ id: "ses_tg_local_1", directory: dirA, title: "Local alpha" })
   const localTwo = session({ id: "ses_tg_local_2", directory: dirA, title: "Local beta" })
-  const localClosed = session({ id: "ses_tg_closed", directory: dirA, title: "Archived lookup target" })
+  const localThree = session({ id: "ses_tg_local_3", directory: dirA, title: "Local delta" })
   const remoteOne = session({ id: "ses_tg_remote_1", directory: dirB, title: "Remote gamma" })
 
   await mockServers(page, {
@@ -2700,7 +2700,7 @@ test("tab groups reorder without color drift, collapse and auto-expand on naviga
       directory: dirA,
       project: project({ id: "proj_tg_a", directory: dirA, name: "opencode" }),
       provider: NO_PROVIDER,
-      sessions: [localOne, localTwo, localClosed],
+      sessions: [localOne, localTwo, localThree],
       pageMessages: () => ({ items: [] }),
       strictDirectory: true,
     },
@@ -2717,7 +2717,7 @@ test("tab groups reorder without color drift, collapse and auto-expand on naviga
 
   await seed(page, {
     servers: [{ url: REMOTE_SERVER, name: "blade" }],
-    tabs: [localOne.id, localTwo.id, { session: remoteOne.id, server: REMOTE_SERVER }],
+    tabs: [localOne.id, localTwo.id, localThree.id, { session: remoteOne.id, server: REMOTE_SERVER }],
     settings: {
       appearance: { tabLayout: "vertical", sidebarOpen: true },
       general: { tabGroups: true, sidebarOrganize: "list" },
@@ -2730,6 +2730,7 @@ test("tab groups reorder without color drift, collapse and auto-expand on naviga
   const remoteHeader = sidebar.locator(`[data-tab-group-header][data-group-key="server:${REMOTE_SERVER}"]`)
   const remoteTab = sidebar.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(remoteOne.id, REMOTE_SERVER)}"])`)
 
+  await expect(sidebar.locator('[data-action="vertical-tabs-search"]')).toBeVisible()
   await expect(sidebar.locator("[data-tab-group]")).toHaveCount(2)
   await expect(remoteTab).toBeVisible()
 
@@ -2765,16 +2766,7 @@ test("tab groups reorder without color drift, collapse and auto-expand on naviga
   await page.evaluate(() => window.dispatchEvent(new PopStateEvent("popstate")))
   await expect(remoteTab).toBeVisible()
 
-  // Inline sidebar search filters open tabs and surfaces closed server sessions to reopen in place.
-  const searchInput = sidebar.getByRole("textbox", { name: "Search sessions", exact: true })
-  await searchInput.fill("Archived lookup")
-  const closedMatch = sidebar.locator('[data-slot="closed-search-match"]').filter({ hasText: "Archived lookup target" })
-  await expect(closedMatch).toBeVisible()
-  await closedMatch.click()
-  await expectPath(page, sessionHref(localClosed.id))
-  await expect(searchInput).toHaveValue("")
-
-  // Turning off automatic grouping flattens the strip; hovering a tab over another combines them like an iOS folder.
+  // Turning off automatic grouping flattens the strip; dwelling a tab on another combines them into a manual group.
   await sidebar.locator('[data-action="tab-groups-menu"]').click()
   await expect(page.getByRole("menuitemradio")).toHaveText(["None", "Server", "Project"])
   await page.getByRole("menuitemradio", { name: "None", exact: true }).click()
@@ -2783,7 +2775,7 @@ test("tab groups reorder without color drift, collapse and auto-expand on naviga
 
   const slotOne = sidebar.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(localOne.id)}"])`)
   const slotTwo = sidebar.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(localTwo.id)}"])`)
-  const slotThree = sidebar.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(localClosed.id)}"])`)
+  const slotThree = sidebar.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(localThree.id)}"])`)
   const [boxOne, boxTwo] = await Promise.all([slotOne.boundingBox(), slotTwo.boundingBox()])
 
   if (!boxOne || !boxTwo) throw new Error("tab slots have no bounding box")
