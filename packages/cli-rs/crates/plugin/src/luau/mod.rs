@@ -3,7 +3,7 @@
 //! on the UI thread, in a Luau VM of its own a activation, on the built-ins' linked path ([`crate::linked`]), so its
 //! calls, reads, effects, ownership and limits are theirs. The carrier adds a sandbox (no file system, `require` held
 //! to the plugin's own files, frozen globals), a CPU-time budget it enforces itself with Luau's interrupt, and a heap
-//! cap. Behind the cargo feature `luau`, and at run time `OPENCODE_PLUGIN_LUAU=1`.
+//! cap. Behind the cargo feature `luau`, on by default (O-178); `OPENCODE_PLUGIN_LUAU=0` turns it off at run time.
 
 mod bind;
 pub mod client;
@@ -20,7 +20,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::hash::{DefaultHasher, Hasher};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 pub use vm::MEMORY;
@@ -70,18 +70,10 @@ pub fn approves(artifact: &Artifact) -> bool {
     artifact.sha256.starts_with(TAG)
 }
 
-/// Turned on by [`enable`].
-static ENABLED: AtomicBool = AtomicBool::new(false);
-
-/// Turns Luau plugins on for the rest of the process, as `OPENCODE_PLUGIN_LUAU=1` does: for a test, which cannot set
-/// the environment while other threads read it. A loader made before it keeps what it found.
-pub fn enable() {
-    ENABLED.store(true, Ordering::Relaxed);
-}
-
-/// Whether `OPENCODE_PLUGIN_LUAU=1`, or [`enable`], turns Luau plugins on.
+/// Whether Luau plugins load: on unless `OPENCODE_PLUGIN_LUAU` turns them off (`0`, `false` or `off`), as
+/// `OPENCODE_PLUGIN_JS` does the JS host ([`crate::turned_off`], O-178).
 pub fn enabled() -> bool {
-    ENABLED.load(Ordering::Relaxed) || std::env::var(FLAG).as_deref() == Ok("1")
+    !crate::turned_off(std::env::var_os(FLAG).as_deref())
 }
 
 /// Whether `dir` is a Luau plugin: it holds a `plugin.toml`.

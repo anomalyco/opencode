@@ -207,7 +207,6 @@ pub(crate) fn open_timed(
             }
             #[cfg(feature = "luau")]
             Carrier::Luau(name) => {
-                opencode_plugin::luau::enable();
                 let plugin = config.join("plugins").join(format!("{name}.luau"));
                 crate::plugin_pipe::copy(
                     &Path::new(env!("CARGO_MANIFEST_DIR")).join("../plugin/examples/luau").join(name),

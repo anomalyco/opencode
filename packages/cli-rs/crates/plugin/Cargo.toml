@@ -26,14 +26,15 @@ url.workspace = true
 # The hash an approval of a project plugin names (rich-plugins 3.9).
 ring.workspace = true
 
-# Luau plugins (spike `luau-spike`): a fourth carrier of contract 2.0, off by default.
+# Luau plugins (O-178): a fourth carrier of contract 2.0, behind the default feature `luau`.
 mlua = { workspace = true, optional = true }
 
 [features]
 # TypeScript TUI plugins on the JS host: the pipe carrier, the JS host and its embedded `host.ts` and `compat.js`
 # (ts-feature). On by default; `OPENCODE_PLUGIN_JS=0` still turns the host off at run time.
-default = ["ts"]
+default = ["ts", "luau"]
 ts = []
+# Luau plugins, in process (O-178). On by default; `OPENCODE_PLUGIN_LUAU=0` turns them off at run time.
 luau = ["dep:mlua"]
 
 [target.'cfg(unix)'.dependencies]

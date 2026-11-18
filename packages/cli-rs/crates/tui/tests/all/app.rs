@@ -676,7 +676,6 @@ fn swapped(swap: Swap) -> (opencode_util::temp::TempDir, std::path::PathBuf) {
         }
         #[cfg(feature = "luau")]
         Swap::Luau(name) => {
-            opencode_plugin::luau::enable();
             let dir = root.path().join(format!("{name}.luau"));
             let examples = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../plugin/examples/luau");
             crate::plugin_pipe::copy(&examples.join(name), &dir);

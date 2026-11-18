@@ -1572,7 +1572,7 @@ pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<JsHost>)
     let entries = configured(tui, tui.plugins.skipped());
     let project = opencode_plugin::loader::project_root(&external.cwd);
     let loader = Loader::new(Rc::new(Native), external.config_dir, external.cwd, entries);
-    // Luau plugins (spike `luau-spike`): in a build with them, `OPENCODE_PLUGIN_LUAU=1` turns them on.
+    // Luau plugins (O-178): on in a build with them, unless `OPENCODE_PLUGIN_LUAU=0` turns them off.
     #[cfg(feature = "luau")]
     let loader = match opencode_plugin::luau::enabled() {
         true => {

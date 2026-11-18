@@ -147,6 +147,11 @@ loads native plugins, shared libraries on a C ABI.
   in `--help`, which matches the TypeScript CLI's (deviation `D01-plugin-dev-test`); each takes `-h`.
 - A plugin in C uses [`crates/plugin-abi/include/opencode_plugin.h`](crates/plugin-abi/include/opencode_plugin.h);
   `crates/plugin/examples/c` is one.
+- A Luau plugin is a directory with a `plugin.toml` and an `init.luau` in the same `plugins` directories. It runs in
+  process, in a sandboxed Luau VM of its own with a CPU budget and a 32 MiB heap; a project's plugin waits for the
+  user's approval. `crates/plugin/examples/luau` holds the examples, and `crates/plugin/src/luau/opencode` the type stub
+  that `luau-analyze` and luau-lsp read (`bun run check:luau-types` checks the examples). `OPENCODE_PLUGIN_LUAU=0` turns
+  Luau plugins off.
 - [`docs/P.4.md`](docs/P.4.md) is the reference: discovery, the JS host, and how to debug a TypeScript plugin.
 
 `/plugins` shows each plugin's state, and the error of one that failed or was skipped ("view error"). The log (`opencode.log` in the `log`

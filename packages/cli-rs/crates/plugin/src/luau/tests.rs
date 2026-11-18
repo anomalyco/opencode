@@ -87,6 +87,38 @@ fn settle(loader: &Loader, host: &Rc<TestHost>, registry: &Registry) -> bool {
     panic!("the loader never settled")
 }
 
+// Expected (O-178): Luau plugins are on by default, as the JS host is (O-166): `OPENCODE_PLUGIN_LUAU` unset, empty or
+// `1` leaves them on, and `0`, `false` or `off`, in any case, turns them off.
+#[test]
+fn luau_plugins_are_on_unless_turned_off() {
+    let off = |value: Option<&str>| crate::turned_off(value.map(std::ffi::OsStr::new));
+    for on in [None, Some(""), Some("1"), Some("yes"), Some("on")] {
+        assert!(!off(on), "{on:?}");
+    }
+    for value in ["0", "false", "FALSE", "off", " Off "] {
+        assert!(off(Some(value)), "{value:?}");
+    }
+    assert_eq!(enabled(), !off(std::env::var(FLAG).ok().as_deref()));
+}
+
+// Expected (O-178): with Luau on and no Luau plugin installed, no VM is made and nothing compiles: the plugins
+// directories are walked and that is all. Installing one makes its VM.
+#[test]
+fn no_vm_is_made_without_a_luau_plugin() {
+    let temp = opencode_util::temp::tempdir().unwrap();
+    let config = temp.path().join("config");
+    fs::create_dir_all(config.join("plugins").join("not-luau")).unwrap();
+    fs::write(config.join("plugins").join("not-luau").join("package.json"), "{}").unwrap();
+    let (host, registry) = (host(), Registry::define(Vec::new(), []));
+    let loader = loader(&config, temp.path());
+    let before = vm::made();
+    settle(&loader, &host, &registry);
+    assert_eq!(vm::made(), before, "a VM without a Luau plugin");
+    install("hello", &config.join("plugins").join("hello"));
+    settle(&loader, &host, &registry);
+    assert_eq!(vm::made(), before + 1);
+}
+
 #[test]
 fn a_manifest_reads_its_flat_keys() {
     let manifest =

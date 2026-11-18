@@ -51,6 +51,15 @@ use opentui::keymap::{Condition, Disposer};
 use opentui::prelude::*;
 use opentui::widget::CodeBlock;
 
+/// Whether a switch such as `OPENCODE_PLUGIN_JS` or `OPENCODE_PLUGIN_LUAU`, as `value`, turns its plugins off: `0`,
+/// `false` or `off`, in any case (O-166, O-178). Unset, empty or anything else leaves them on.
+pub fn turned_off(value: Option<&std::ffi::OsStr>) -> bool {
+    value.and_then(|value| value.to_str()).is_some_and(|value| {
+        let value = value.trim();
+        value == "0" || value.eq_ignore_ascii_case("false") || value.eq_ignore_ascii_case("off")
+    })
+}
+
 pub use slot::{Kind, Placement, SlotInput};
 
 /// What the plugins' reads and effects reach in the host: the TUI implements it, and the adapters of both paths call
