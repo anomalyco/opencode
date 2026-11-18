@@ -332,6 +332,45 @@ export const make = Effect.fnUntraced(function* (
       })
     })
 
+  /**
+   * Refuses a write whose text names a file this checkout added and hasn't committed: no teammate has it, and agents
+   * have recorded their own uncommitted setup (a bunfig.toml) as how the repository works. `oldText` and structured
+   * evidence are left out: one must match the stored body, the other is the author's own record.
+   */
+  const committed = (tool: string, fields: Record<string, unknown>) =>
+    Effect.gen(function* () {
+      const checkout = (yield* roots).checkout
+      const status = yield* processes
+        .run(
+          ChildProcess.make("git", ["status", "--porcelain", "--untracked-files=all"], {
+            cwd: checkout,
+            stdin: "ignore",
+          }),
+        )
+        .pipe(
+          Effect.map((result) => (result.exitCode === 0 ? result.stdout.toString() : "")),
+          Effect.orElseSucceed(() => ""),
+        )
+      const added = status
+        .split("\n")
+        .filter((line) => line.startsWith("?? ") || line.startsWith("A "))
+        .map((line) => line.slice(3).trim().replace(/^"|"$/g, ""))
+      if (added.length === 0) return
+      const text = JSON.stringify(fields, (key, value) => (key === "oldText" || key === "evidence" ? undefined : value))
+      const named = added.find((file) =>
+        [
+          file,
+          ...(path.basename(file).includes(".") && path.basename(file).length >= 5 ? [path.basename(file)] : []),
+        ].some((name) =>
+          new RegExp(`(?<![\\w/.-])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w-])`).test(text),
+        ),
+      )
+      if (named === undefined) return
+      return yield* new ToolFailure({
+        message: `Nothing was sent: this names ${named}, which only your checkout has: it isn't committed, so no teammate has it. Shared memory records what holds for the repository as committed: leave it out or describe the committed state, then call ${namespace}.${tool} again.`,
+      })
+    })
+
   const call = <S extends Schema.Top>(
     schema: S,
     method: "GET" | "POST" | "PATCH",
@@ -364,6 +403,7 @@ export const make = Effect.fnUntraced(function* (
         })
       const fields = yield* shared(tool, change)
       yield* resolved(tool, Schema.decodeUnknownOption(Paths)(fields.paths).pipe(Option.getOrUndefined))
+      if (tool !== "retire") yield* committed(tool, fields)
       const expectedRevision = based(sessionID, id, revision)
       const written = yield* call(
         Written,
@@ -754,7 +794,7 @@ export const make = Effect.fnUntraced(function* (
           "Verify: the command to run and the result to expect. / Avoid: what not to do, and why.",
           "Anchors: the exact paths, symbols, commands or error text it rests on.",
           "Evidence: what you ran in this session and what it showed (failing before, passing after).",
-          'Never publish: a repo overview or directory map; task status, progress or a summary of what you changed; what README, AGENTS.md, docs or code comments already say; logs, diffs or config dumps; facts about this machine (what is installed, PATH, local directories); "always/never" rules beyond what you observed. Set paths to the files in Applies when and errors to the exact error messages. If an entry on this subject exists, nothing is published and the answer says which to edit instead.',
+          'Never publish: a repo overview or directory map; task status, progress or a summary of what you changed; what README, AGENTS.md, docs or code comments already say; logs, diffs or config dumps; facts about this machine (what is installed, PATH, local directories); files or settings you added and have not committed; "always/never" rules beyond what you observed. Set paths to the files in Applies when and errors to the exact error messages. If an entry on this subject exists, nothing is published and the answer says which to edit instead.',
         ].join("\n"),
         input: Schema.Struct({
           kind: KindInput,
@@ -782,6 +822,7 @@ export const make = Effect.fnUntraced(function* (
               ...(input.evidence === undefined ? {} : { evidence: input.evidence }),
             })
             yield* resolved("publish", Schema.decodeUnknownOption(Paths)(fields.paths).pipe(Option.getOrUndefined))
+            yield* committed("publish", fields)
             const source = yield* checkout
             // The checkout's repository by GitHub's id and visibility, so Console gives the entry only to its readers.
             const anchor =

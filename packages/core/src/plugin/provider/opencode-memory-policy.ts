@@ -212,7 +212,7 @@ export const initial: Policy = {
     return undefined
   },
   reminder: (lesson) =>
-    `This session had a ${lesson}. If it taught something an agent on a different task in this repository would need, and it isn't already in the code, docs or memory, you may publish it with memory publish, following its template. Most sessions publish nothing; then just say so. Don't change the code any more.`,
+    `This session had a ${lesson}. If it taught something an agent on a different task in this repository would need, and it isn't already in the code, docs or memory, you may publish it with memory publish, following its template, as it holds for the repository as committed (not files or settings you added). Most sessions publish nothing; then just say so. Don't change the code any more.`,
   nudge: (entry) =>
     `<memory-correction>The user's last message may correct memory entry ${entry.id} r${entry.revision} "${line(entry.title)}". If it does, fix that entry now with memory \`edit\` (only the changed text, revision ${entry.revision}); otherwise ignore this.</memory-correction>`,
 }

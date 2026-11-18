@@ -972,6 +972,59 @@ describe("OpencodePlugin memory", () => {
     ),
   )
 
+  it.effect("sends nothing that names a file only this checkout has added", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        const directory = (yield* Location.Service).directory
+        yield* Effect.promise(async () => {
+          await initGit(directory, "-b", "main")
+          await fs.mkdir(path.join(directory, "test"), { recursive: true })
+          await fs.writeFile(path.join(directory, "test/setup.ts"), "globalThis.DB = {}\n")
+          await $`git add test/setup.ts && git commit -qm setup`.cwd(directory).quiet()
+          // The agent's own, uncommitted fix for running tests.
+          await fs.writeFile(path.join(directory, "bunfig.toml"), '[test]\npreload = ["./test/setup.ts"]\n')
+        })
+        const { host } = yield* start(console)
+        const session = yield* host.session.create({})
+        const publish = yield* memoryTool("publish")
+        const asked = console.state.requests.length
+        const refused = yield* publish
+          .execute(
+            {
+              kind: "procedure",
+              title: "Plain bun test works",
+              body: "bunfig.toml preloads test/setup.ts, so run bun test.",
+            },
+            context(session.id),
+          )
+          .pipe(Effect.flip)
+        expect(refused.message).toBe(
+          "Nothing was sent: this names bunfig.toml, which only your checkout has: it isn't committed, so no teammate has it. Shared memory records what holds for the repository as committed: leave it out or describe the committed state, then call memory.publish again.",
+        )
+        const edit = yield* (yield* memoryTool("edit"))
+          .execute(
+            { id: "mem_1", revision: 1, oldText: "More", newText: "Set preload in bunfig.toml" },
+            context(session.id),
+          )
+          .pipe(Effect.flip)
+        expect(edit.message).toContain("names bunfig.toml")
+        expect(console.state.requests.length).toBe(asked)
+
+        // The committed file, and the uncommitted one as structured evidence, pass.
+        yield* publish.execute(
+          {
+            kind: "procedure",
+            title: "Tests need the DB global",
+            body: "Run bun test --preload ./test/setup.ts; test/setup.ts installs DB.",
+            evidence: [{ kind: "command", ref: "bun test with bunfig.toml preload" }],
+          },
+          context(session.id, "call_ok"),
+        )
+        expect(console.state.requests.at(-1)?.path).toBe("/api/memory/entries")
+      }),
+    ),
+  )
+
   it.effect("marks provisional hits and says when search found no reliable entry", () =>
     withConsole((console) =>
       Effect.gen(function* () {
