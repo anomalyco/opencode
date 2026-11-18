@@ -16,6 +16,7 @@ import { SessionEvent } from "../../session/event.js"
 import { SessionMessage } from "../../session/message.js"
 import { SubagentRecovery } from "../../session/subagent-recovery.js"
 import { SubagentCompletion } from "../../session/subagent-completion.js"
+import { SubagentDepth } from "../../session/subagent-depth.js"
 import { SubagentJob } from "../../session/subagent-job.js"
 
 export const name = "subagent"
@@ -144,20 +145,12 @@ export const Plugin = {
               }
               if (prior?.status !== undefined && (call?.type !== "tool" || call.state.status !== "running"))
                 return yield* new ToolFailure({ message: `Subagent operation state mismatch: ${context.id}` })
-              let current = parent
-              let depth = 0
-              while (current.parentID) {
-                depth++
-                current = yield* sessions
-                  .get(current.parentID)
-                  .pipe(
-                    Effect.mapError(
-                      (error) => new ToolFailure({ message: `Parent session not found: ${current.parentID}`, error }),
-                    ),
-                  )
-              }
-              const limit = Config.latest(yield* config.entries(), "experimental")?.subagent_depth ?? 1
-              if (depth >= limit)
+              const limit = yield* SubagentDepth.reached(parent, sessions, config).pipe(
+                Effect.mapError(
+                  (error) => new ToolFailure({ message: `Parent session not found: ${error.sessionID}`, error }),
+                ),
+              )
+              if (limit !== undefined)
                 return yield* new ToolFailure({
                   message: `Subagent depth limit reached (${limit}). Increase "experimental.subagent_depth" to allow nested subagents.`,
                 })

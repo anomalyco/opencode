@@ -1,4 +1,4 @@
-import { lazy, Show, Suspense } from "solid-js"
+import { lazy, Show, Suspense, type Component, type ComponentProps } from "solid-js"
 import { Button } from "@opencode/ui/button"
 import { TextInput } from "@opencode/ui/text-input"
 import { Wordmark } from "@opencode/ui/wordmark"
@@ -10,9 +10,20 @@ import "./screen.css"
 const PairingScanner = lazy(() => import("./scanner").then((module) => ({ default: module.PairingScanner })))
 
 export function ConnectServerScreen(props: { url?: string } = {}) {
-  const language = useLanguage()
   // Read once: the screen leaves when the server it signs in to answers, so its address does not change while it shows.
   const form = createServerConnectController({ surface: "screen", target: { kind: "connect", url: props.url } })
+
+  return <ConnectServerForm form={form} scanner={PairingScanner} />
+}
+
+export function ConnectServerForm(props: {
+  form: ReturnType<typeof createServerConnectController>
+  scanner: Component<ComponentProps<typeof PairingScanner>>
+}) {
+  const language = useLanguage()
+
+  const form = props.form
+
   const view = form.view
 
   return (
@@ -33,7 +44,7 @@ export function ConnectServerScreen(props: { url?: string } = {}) {
           when={!view().scanning}
           fallback={
             <Suspense fallback={<p role="status">{language.t("server.connect.camera.starting")}</p>}>
-              <PairingScanner
+              <props.scanner
                 redeem={form.redeem}
                 onCancel={() => form.dispatch({ type: "scan.cancelled" })}
                 onScan={(link) => form.dispatch({ type: "scan.completed", link })}

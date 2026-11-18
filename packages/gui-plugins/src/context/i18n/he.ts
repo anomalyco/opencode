@@ -28,4 +28,5 @@ export default {
   "export.success.description": "ההפעלה נשמרה בקובץ {{filename}}",
   "export.failed.title": "ייצוא ההפעלה נכשל",
   "export.failed.description": "אירעה שגיאה במהלך ייצוא ההפעלה",
+  "usage.toggle": "הצגה או הסתרה של הקשר ההפעלה",
 }

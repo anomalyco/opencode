@@ -52,4 +52,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} {{timeout}}msට පසුව කාලය අවසන් විය",
   "error.failedPort": "වරාය ලබා ගැනීමට අසමත් විය",
   "menu.remove": "ඉවත් කරන්න",
+  "error.busy": "{{distro}} වෙනත් කාර්යයක කාර්යබහුලයි. එය අවසන් වූ පසු නැවත උත්සාහ කරන්න.",
 }

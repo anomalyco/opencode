@@ -1,5 +1,5 @@
-import { setRoundTrip } from "../src/runtime/execute.js"
-import { nativeRule } from "../src/runtime/objects.js"
+import { setRoundTrip } from "../src/language/runtime/execute.js"
+import { nativeRule } from "../src/language/runtime/objects.js"
 
 // Every test run checks that natives are made only with the intrinsics.
 nativeRule.check = true

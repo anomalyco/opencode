@@ -179,5 +179,10 @@ export function createLineCommentControllerV2<T extends SavedLineComment>(props:
     }),
     onLineSelected: (range: SelectedLineRange | null) => driver.send({ type: "line.selected", range }),
     onLineSelectionEnd: (range: SelectedLineRange | null) => driver.send({ type: "line.selection-ended", range }),
+    /** Opens a draft on text selected in the code. Unset while a saved comment is edited, which keeps its range. */
+    commentSelection: () =>
+      driver.mode().status === "editing"
+        ? undefined
+        : (range: SelectedLineRange) => driver.send({ type: "draft.opened", range }),
   }
 }

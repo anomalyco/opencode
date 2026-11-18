@@ -93,10 +93,11 @@ export interface Started<Token> {
 export interface PollContext<Token> {
   readonly token: Token
   /**
-   * The headers an authenticated GET of `url` would send (deployment headers plus auth), for result URLs that need
-   * the API key to download. URLs on another origin than the route's base URL get no headers.
+   * What an authenticated download of `url` needs, for result URLs that only download with the API key: the headers a
+   * GET would send (deployment headers plus auth) and the caller's scoped middleware. Spread it into `Media.url`. URLs
+   * on another origin than the route's base URL get neither, so credentials and hooks never leave the provider's host.
    */
-  readonly headers: (url: string) => Effect.Effect<Record<string, string>, AIError>
+  readonly credentials: (url: string) => Effect.Effect<Pick<Media.AssetOptions, "headers" | "middleware">, AIError>
   /**
    * A further GET with the same auth and headers, retried like the poll itself, for providers whose result needs a
    * second lookup (MiniMax v1 answers with a file id that resolves to a download URL).

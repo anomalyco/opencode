@@ -4,7 +4,6 @@ import { useI18n } from "@opencode/ui/context/i18n"
 import { createEffect, createMemo, createSignal, onCleanup, Show, untrack } from "solid-js"
 import { BasicTool } from "../components/basic-tool"
 import { LinkedText } from "../components/linked-text"
-import { useData } from "../context"
 import {
   createCompactionEntranceState,
   DISPOSED_COMPACTION_ENTRANCE_EVENT,
@@ -30,11 +29,10 @@ export function CompactionQueued() {
 
 /**
  * A compaction, drawn with the timeline's own dividers: as tall as their text, with a plain line, spaced like the rows
- * around them. An automatic one with background compaction on is one quiet divider instead.
+ * around them. An automatic one is one quiet divider instead.
  */
 export function CompactionMessage(props: { message: SessionMessageCompaction; error: string }) {
   const i18n = useI18n()
-  const data = useData()
   const summary = () => (props.message.status === "failed" ? "" : props.message.summary)
 
   const error = () => {
@@ -81,7 +79,7 @@ export function CompactionMessage(props: { message: SessionMessageCompaction; er
 
   return (
     <Show
-      when={!data.backgroundCompaction || props.message.reason === "manual" || props.message.status === "failed"}
+      when={props.message.reason === "manual" || props.message.status === "failed"}
       fallback={
         <QuietCompaction
           id={props.message.id}

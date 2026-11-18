@@ -2,6 +2,7 @@ export * as SessionExecution from "./execution.js"
 
 import { Cause, Context, Effect, Exit, Layer } from "effect"
 import { Bus } from "../bus.js"
+import { CodeModeJob } from "../codemode/job.js"
 import { Database } from "../database/database.js"
 import { Job } from "../job.js"
 import { Instance } from "../instance/service.js"
@@ -13,6 +14,7 @@ import { SessionRunCoordinator } from "./run-coordinator.js"
 import { SessionRunner } from "./runner/index.js"
 import { SessionSchema } from "./schema.js"
 import { SessionStore } from "./store.js"
+import { SessionSynthetic } from "./synthetic.js"
 import { toSessionError } from "./to-session-error.js"
 import { ToolActivity } from "../tool-activity.js"
 
@@ -71,6 +73,7 @@ export const layer = Layer.effect(
     const jobs = yield* Job.Service
     const activity = yield* ToolActivity.Service
     const inbox = yield* SessionInbox.Service
+    const scope = yield* Effect.scope
     const db = (yield* Database.Service).db
     const reportLifecycle = <A>(sessionID: SessionSchema.ID, effect: Effect.Effect<A>) =>
       effect.pipe(
@@ -96,12 +99,14 @@ export const layer = Layer.effect(
     const holder: {
       coordinator?: SessionRunCoordinator.Coordinator<SessionSchema.ID, SessionRunner.RunError, InterruptReason>
     } = {}
+    const wake = (sessionID: SessionSchema.ID) =>
+      Effect.suspend(() => (holder.coordinator ? holder.coordinator.wake(sessionID) : Effect.void))
+    const background = CodeModeJob.make(jobs, SessionSynthetic.make(store, inbox, wake), scope)
     const subagentReport = SubagentReport.make({
       store,
       jobs,
       inbox,
-      wake: (sessionID) =>
-        Effect.suspend(() => (holder.coordinator ? holder.coordinator.wake(sessionID) : Effect.void)),
+      wake,
       draining: Effect.suspend<ReadonlySet<SessionSchema.ID>, never, never>(() =>
         holder.coordinator ? holder.coordinator.draining : Effect.succeed(new Set<SessionSchema.ID>()),
       ),
@@ -127,6 +132,7 @@ export const layer = Layer.effect(
           interruption: () => interruption(sessionID),
         }),
       ).pipe(
+        Effect.provideServiceEffect(CodeModeJob.Current, background),
         instances.provide(session),
         // The drain fiber is forked from this layer's runtime, not the caller's.
         // Tool execution only keeps its Location active when that fiber can see ToolActivity.

@@ -334,10 +334,28 @@ export class ProviderRequestError extends Schema.TaggedError<ProviderRequestErro
   { httpApiStatus: 502 },
 ) {}
 
-export class ScheduleNotFoundError extends Schema.TaggedError<ScheduleNotFoundError>()(
-  "ScheduleNotFoundError",
+export class AutomationNotFoundError extends Schema.TaggedError<AutomationNotFoundError>()(
+  "AutomationNotFoundError",
   {
-    scheduleID: Schema.String,
+    automationID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+export class VideoNotFoundError extends Schema.TaggedError<VideoNotFoundError>()(
+  "VideoNotFoundError",
+  {
+    videoID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+export class BlobNotFoundError extends Schema.TaggedError<BlobNotFoundError>()(
+  "BlobNotFoundError",
+  {
+    blobID: Schema.String,
     message: Schema.String,
   },
   { httpApiStatus: 404 },

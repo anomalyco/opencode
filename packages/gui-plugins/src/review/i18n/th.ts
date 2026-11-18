@@ -12,4 +12,12 @@ export default {
   noChanges: "ไม่มีการเปลี่ยนแปลง",
   "settings.wrapLines.title": "ตัดเส้น",
   "settings.wrapLines.description": "ตัดบรรทัดยาวๆ ในอุปกรณ์เคลื่อนที่แทนการเลื่อนในแนวนอน",
+  "menu.count.one": "มีการเปลี่ยนแปลง {{count}} ไฟล์",
+  "menu.count.other": "มีการเปลี่ยนแปลง {{count}} ไฟล์",
+  "folder.more": "{{count}} · ไม่ได้แสดงส่วนที่เหลือ",
+  "folder.failed": "โหลดการเปลี่ยนแปลงไม่ได้",
+  "command.open": "เปิดการตรวจสอบ",
+  "load.failed": "โหลดการเปลี่ยนแปลงไม่ได้",
+  "load.timeout": "เซิร์ฟเวอร์ใช้เวลาตอบนานเกินไป",
+  offline: "เข้าถึงเซิร์ฟเวอร์นี้ไม่ได้",
 }
