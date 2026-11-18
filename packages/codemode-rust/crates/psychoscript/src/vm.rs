@@ -1349,6 +1349,8 @@ impl<'rt> Vm<'rt> {
             }
             crate::native::THREW => crate::native::Input::Threw(self.pop()),
             crate::native::FINISHED => {
+                let hbase = self.frames[fi].hbase as usize;
+                self.handlers.truncate(hbase);
                 crate::native::Input::Finished(self.stack.pop().unwrap_or_default())
             }
             _ => crate::native::Input::Start,
@@ -1365,6 +1367,15 @@ impl<'rt> Vm<'rt> {
                 Ok(None)
             }
             crate::native::Step::Pushed => Ok(None),
+            crate::native::Step::DoneEmpty => {
+                let frame = self.frames.pop().expect("frame");
+                self.stack.truncate(frame.base - 2);
+                self.handlers.truncate(frame.hbase as usize);
+                self.host.meter.bytecode = false;
+                let is_base = frame.is_base;
+                self.spare_frames.push(frame);
+                Ok(is_base.then_some(Slot::UNDEF))
+            }
             crate::native::Step::CallUncounted(argc) => {
                 self.call_op_uncounted(argc)?;
                 Ok(None)
@@ -1912,7 +1923,7 @@ impl<'rt> Vm<'rt> {
     }
 
     /// Resumes a generator for the native frame on top, as `resume_generator` does (`mode` 0 for `next`, 1 for
-    /// `return`, 2 for `throw`): `Some` with its value and whether it is done when it does not run, `None` once its frame
+    /// `return`, 2 for `throw`; for these two, what the generator throws comes back to the frame as `Input::Threw`): `Some` with its value and whether it is done when it does not run, `None` once its frame
     /// is pushed, which hands the frame below its next yield as
     /// a call's result or its completion as `Input::Finished`.
     pub(crate) fn native_resume(
@@ -1943,6 +1954,17 @@ impl<'rt> Vm<'rt> {
             } else {
                 Err(v)
             };
+        }
+        // What the generator throws comes back to the frame as `Input::Threw`: a throw delivered now unwinds at once, and
+        // must not pass the frame while its step runs.
+        if mode != 0
+            && let Some(f) = self.frames.last()
+        {
+            let sp = (self.stack.len() - f.base) as u32;
+            self.handlers.push(Handler {
+                pc: crate::native::THREW as u32,
+                sp,
+            });
         }
         let wants = self.enter_generator(g, Resume::Native, false);
         if mode == 0 {
@@ -2610,6 +2632,12 @@ impl<'rt> Vm<'rt> {
                         }
                         let open = self.open_fuel(&src, crate::bytecode::ITER_SPREAD);
                         self.spend(open);
+                        if let Some(r) = self.spread_by_call(src) {
+                            self.frames[fi].pc = pc;
+                            tri!(r);
+                            self.entered = false;
+                            continue 'outer;
+                        }
                         let items = tri!(self.iterate_to_vec(&src));
                         if let Value::Obj(id) = self.top()
                             && let Kind::Array(arr) = &mut self.heap[id as usize].kind
@@ -3226,6 +3254,11 @@ impl<'rt> Vm<'rt> {
                     Op::GetIter(slot, ctx) => {
                         self.frames[fi].pc = pc;
                         let v = self.pop();
+                        if let Some(r) = self.open_by_call(&v, slot, ctx) {
+                            tri!(r);
+                            self.entered = false;
+                            continue 'outer;
+                        }
                         let (it, next) = tri!(self.open_record(&v, ctx));
                         self.stack[base + slot as usize] = Slot::pack(it);
                         self.stack[base + slot as usize + 1] = Slot::pack(next);
@@ -3237,6 +3270,12 @@ impl<'rt> Vm<'rt> {
                             if self.enter_generator(g, Resume::Iter, false) {
                                 self.stack.push(Slot::UNDEF);
                             }
+                            continue 'outer;
+                        }
+                        let next = self.stack[base + slot as usize + 1];
+                        if self.steps_by_call(it, next) {
+                            tri!(self.step_by_call(it, next, slot, Some(exit), false));
+                            self.entered = false;
                             continue 'outer;
                         }
                         let it = it.get();
@@ -3340,6 +3379,12 @@ impl<'rt> Vm<'rt> {
                             }
                             continue 'outer;
                         }
+                        let next = self.stack[base + slot as usize + 1];
+                        if self.steps_by_call(it, next) {
+                            tri!(self.step_by_call(it, next, slot, None, false));
+                            self.entered = false;
+                            continue 'outer;
+                        }
                         let it = it.get();
                         match step!(
                             slot,
@@ -3367,6 +3412,12 @@ impl<'rt> Vm<'rt> {
                             }
                             continue 'outer;
                         }
+                        let next = self.stack[base + slot as usize + 1];
+                        if self.steps_by_call(it, next) {
+                            tri!(self.step_by_call(it, next, slot, None, true));
+                            self.entered = false;
+                            continue 'outer;
+                        }
                         let it = it.get();
                         let mut items = Vec::new();
                         while let Some(v) = step!(
@@ -3382,6 +3433,13 @@ impl<'rt> Vm<'rt> {
                     Op::IterClose(slot) | Op::IterCloseQuiet(slot) => {
                         self.frames[fi].pc = pc;
                         let it = std::mem::take(&mut self.stack[base + slot as usize]).get();
+                        if let Some(r) =
+                            self.close_by_call(&it, matches!(op, Op::IterCloseQuiet(_)))
+                        {
+                            tri!(r);
+                            self.entered = false;
+                            continue 'outer;
+                        }
                         let cost = self.close_fuel(&it);
                         let r = self.iter_close(&it);
                         self.spend(cost);

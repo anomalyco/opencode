@@ -69,9 +69,11 @@ pub enum NativeOp {
     Iterators,
     Collections,
     Callbacks,
+    /// Iteration in bytecode over an iterator the VM does not step itself, by sub-op (see `iteration.rs`).
+    Iteration,
 }
 
-const OPS: [NativeOp; 20] = [
+const OPS: [NativeOp; 21] = [
     NativeOp::ArrayEach,
     NativeOp::ArrayReduce,
     NativeOp::SortWith,
@@ -92,6 +94,7 @@ const OPS: [NativeOp; 20] = [
     NativeOp::Iterators,
     NativeOp::Collections,
     NativeOp::Callbacks,
+    NativeOp::Iteration,
 ];
 
 impl NativeOp {
@@ -122,6 +125,8 @@ pub enum Step {
     Call(usize),
     /// The frame of the call was pushed already.
     Pushed,
+    /// Finished without a result for the caller, whose frame the step has updated (see `iteration.rs`).
+    DoneEmpty,
     /// `Call`, as native code calls: a native costs no fifty.
     CallUncounted(usize),
     /// `Call`, as the reference enters a promise handler (`enterSettlingCall`): a plain function's frame and a
@@ -179,6 +184,7 @@ pub fn step(vm: &mut Vm, op: NativeOp, sub: u16, base: usize, input: Input) -> R
         NativeOp::Iterators => crate::builtins::iterator::family_step(vm, sub, frame, input),
         NativeOp::Collections => crate::builtins::sets::family_step(vm, sub, frame, input),
         NativeOp::Callbacks => crate::builtins::object::family_step(vm, sub, frame, input),
+        NativeOp::Iteration => crate::iteration::step(vm, sub, frame, input),
     }
 }
 
@@ -219,6 +225,13 @@ impl Frame {
         vm.stack[self.0 + k] = Slot::index(i);
     }
 
+    /// The built-in the frame runs for (or what a frame no built-in made keeps there).
+    #[inline(always)]
+    pub fn callee(self, vm: &Vm) -> Slot {
+        vm.stack[self.0 - 2]
+    }
+
+    /// The receiver the built-in was called on.
     #[inline(always)]
     pub fn this_slot(self, vm: &Vm) -> Slot {
         vm.stack[self.0 - 1]
@@ -472,6 +485,8 @@ pub fn for_of_step<C: ForOf>(vm: &mut Vm, fr: Frame, input: Input) -> Result<Ste
         },
         Input::Threw(e) => match phase {
             BODY => return close::<C>(vm, fr, Err(e)),
+            // A close after the loop stopped throws what closing threw, before its fuel.
+            CLOSING => return Err(e),
             // A failing close of a loop that threw keeps the loop's error.
             _ => return close_done::<C>(vm, fr, None),
         },
