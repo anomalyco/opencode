@@ -32,11 +32,9 @@ use serde_json::{Value, json};
 
 use crate::support::{self, Harness, WAIT, deref_harness};
 
-/// Serves the E.16 routes and records every request (method and path with query).
 struct Server {
     routes: Value,
     seen: Mutex<Vec<(String, String)>>,
-    /// The bodies of mutating requests, by path.
     writes: Mutex<Vec<(String, Value)>>,
 }
 
@@ -65,7 +63,6 @@ impl Transport for Server {
             self.writes.lock().unwrap().push((path.clone(), sent.clone()));
         }
         let (status, body) = match (request.method, path.as_str()) {
-            // A prompt from home creates its session, then sends to it.
             ("POST", "/api/session") => (
                 200,
                 json!({ "data": {
@@ -122,7 +119,6 @@ fn state() -> opencode_util::temp::TempDir {
     dir
 }
 
-/// The dialog kit and [`Local`] on a bare app, the way the P-COMP script mounts the TS dialogs.
 struct Kit {
     app: TestApp,
     local: Rc<Local>,
@@ -175,7 +171,6 @@ impl Kit {
 
 #[test]
 fn model_dialog_matches_typescript_opened_and_filtered() {
-    // Tall enough for the whole list (parity/deviations/DLG13-model-scroll.md).
     let kit = kit(90, 60);
     model::show(&kit.local, None);
     kit.wait_for("favorite");
@@ -280,15 +275,12 @@ fn dialogs_send_reads_only() {
     ] {
         assert!(paths.contains(&read), "{read} was not read: {seen:?}");
     }
-    // Every read names the location.
     assert!(
         seen.iter().all(|(_, path)| path.contains("location%5Bdirectory%5D=%2Fproject")
             || path.contains("location[directory]=/project")),
         "{seen:?}"
     );
 }
-
-// The whole TUI, with real roots in a temp dir.
 
 struct Models {
     harness: Harness,
@@ -345,7 +337,6 @@ fn model_ref(provider: &str, model: &str) -> Value {
 fn leader_m_picks_a_model_and_saves_it_as_recent() {
     let h = mount();
     let local = h.tui.local.clone();
-    // On home the build agent's configured model and variant apply.
     assert_eq!(local.current(), Some(Model::new("anthropic", "claude-sonnet")));
     assert_eq!(local.variant().as_deref(), Some("high"));
     h.app.press("ctrl+x");
@@ -399,7 +390,6 @@ fn the_prompt_shows_and_submits_the_model_picked_in_the_dialog() {
     h.app.type_text("mini");
     h.wait_for("GPT-5 mini");
     h.app.press("return");
-    // The home prompt's metadata row follows the choice.
     h.wait_for("GPT-5 mini");
     h.app.type_text("hello");
     h.app.press("return");
@@ -434,14 +424,11 @@ fn cycle_commands_move_through_recents_favorites_agents_and_variants() {
     // F2: the first recent model, since the current one is not recent.
     h.app.press("f2");
     assert_eq!(local.current(), Some(Model::new("anthropic", "claude-haiku")));
-    // A favorite cycle moves to the favorite and records it as recent.
     h.tui.keymap.dispatch("model.cycle_favorite", None);
     assert_eq!(local.current(), Some(Model::new("openai", "gpt-5")));
     h.wait_file(|file| file["recent"][0] == model_ref("openai", "gpt-5"));
-    // GPT-5 has no variants.
     h.tui.keymap.dispatch("variant.list", None);
     h.wait_for("No variants available");
-    // The agent cycle: build, then plan, whose model is the one chosen for a new session.
     h.tui.keymap.dispatch("agent.cycle", None);
     assert_eq!(local.agent().map(|agent| agent.id.0).as_deref(), Some("plan"));
     h.tui.keymap.dispatch("agent.cycle.reverse", None);
@@ -535,7 +522,6 @@ fn model_json_is_shared_with_the_typescript_client() {
     h.app.press("escape");
     h.app.press("ctrl+t");
     h.wait_file(|file| file["variant"]["anthropic/claude-sonnet"] == "default");
-    // TS reads what Rust wrote.
     let read = run(&oracle, &["load", h.state.to_str().unwrap()]);
     assert_eq!(
         read,
@@ -564,14 +550,12 @@ fn go_upsell_is_offered_once_a_day_and_remembers_dont_show() {
     h.wait_for("Free limit reached");
     let stored = storage.load("go-upsell", &json!({})).unwrap();
     assert_eq!(stored, json!({ "lastSeenAt": now as i64 }));
-    // "dismiss" closes it; within the day it is not offered again.
     h.app.press("left");
     h.app.press("return");
     assert!(!h.tui.dialogs.is_open());
     go_upsell::offer(&local, offer(), now + 1000.0);
     h.app.wait_until(Duration::from_millis(200), || false);
     assert!(!h.tui.dialogs.is_open());
-    // A day later it is; "don't show again" is saved for every client.
     go_upsell::offer(&local, offer(), now + 86_400_000.0);
     h.wait_for("Free limit reached");
     h.app.press("left");
@@ -589,7 +573,6 @@ fn a_closed_go_upsell_is_freed() {
     go_upsell::offer(&h.tui.local, offer, 1_800_000_000_000.0);
     h.wait_for("Free limit reached");
     let marker = Rc::new(());
-    // The host, its backdrop and its panel stay for the next dialog.
     assert!(support::mark(&h.app, h.tui.dialogs.host(), 2, &marker) > 0);
     let (x, y) = h.find("dismiss");
     h.app.hover(x, y);
@@ -605,7 +588,6 @@ fn assert_no_writes(fixture: &Server) {
     assert!(seen.iter().all(|(_, path)| !path.contains("session/stats")));
 }
 
-// The TypeScript side of P-FILE, when bun and the workspace's node_modules are there.
 fn oracle() -> Option<PathBuf> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let script = root.join("parity/oracle/E.16-model-json.ts");

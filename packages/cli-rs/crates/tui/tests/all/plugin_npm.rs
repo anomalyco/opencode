@@ -1,7 +1,3 @@
-//! TUI plugins named by npm package (js-npm): with the JS host, a `cli.json` entry and a server plugin's TUI part load
-//! from the package cache TS installs into, found as TS's `Npm.resolve` finds them; nothing is installed. The
-//! packages are the pinned tarballs of `parity/plugins/npm`, laid out as an install leaves them.
-
 use std::path::Path;
 use std::sync::Arc;
 
@@ -23,14 +19,10 @@ pub(crate) fn install(home: &Path, spec: &str, name: &str, generation: &str) {
     crate::plugin_published::unpack(name, &root.join("node_modules").join(name));
 }
 
-/// The TUI on Home with `plugins` in `cli.json`, the roots of a run with `HOME=home`, and the JS host; the server
-/// lists `server` as its plugins.
 fn open(home: &opencode_util::temp::TempDir, plugins: &[&str], server: serde_json::Value) -> Option<Pipe> {
     open_in(home, plugins, server, None, &[], true)
 }
 
-/// [`open`], working in `cwd` when one is given, with `user` as the `plugins` of the global opencode config, and a
-/// server on this machine when `here` (one the client started; the fake's URL is not a loopback address).
 fn open_in(
     home: &opencode_util::temp::TempDir,
     plugins: &[&str],
@@ -59,7 +51,6 @@ fn open_in(
     let cwd = cwd.map_or_else(|| root.path().to_path_buf(), Path::to_path_buf);
     let config_dir = root.path().join("config");
     std::fs::create_dir_all(&config_dir).unwrap();
-    // JSONC, as the user may write it.
     let global = format!("// mine\n{}", serde_json::json!({ "plugins": user }));
     std::fs::write(config_dir.join("opencode.jsonc"), global).unwrap();
     let external = External { config_dir, cwd, dev: Vec::new() };
@@ -110,7 +101,6 @@ fn a_spec_is_keyed_as_ts_keys_it() {
         "_foo",
         "@s",
         "opencode-sidebar-tokens@0.1.3",
-        // carbon jsnpm-4: hosted git URLs, SSH and SCP, a name with a hosted URL, `~`, and tarballs.
         "https://github.com/u/r",
         "https://github.com/u/r.git",
         "https://gitlab.com/u/r",
@@ -122,7 +112,6 @@ fn a_spec_is_keyed_as_ts_keys_it() {
         "plugin.tgz",
         "plugin.tar.gz",
         "plugin.tar",
-        // Around them: committishes, other hosts, shortcuts, non-hosted git, paths, and refused specs.
         "u/r#semver:^1",
         "u/r#a::b",
         "u/r#semver:^1::v2",
@@ -211,7 +200,6 @@ fn a_package_named_in_cli_json_loads_from_the_cache() {
         let reason = opencode_plugin::loader::npm::missing(missing);
         assert_eq!(status(&pipe, missing), Some(Status::Skipped(reason)), "{missing}");
     }
-    // The startup notice names each, with the command that installs it.
     pipe.harness.wait("the notice", || {
         pipe.settle();
         pipe.harness.tui.toasts.current().is_some()
@@ -294,7 +282,6 @@ fn a_project_local_server_part_waits_for_approval_and_a_cached_one_does_not() {
     let Some((Ok(artifact), _)) = opencode_tui::plugins::host::held(&pipe.harness.tui, &target) else {
         panic!("no artifact held for {target}")
     };
-    // Its tree is hashed again and staged off the UI thread, as a project directory's is (js-followups).
     let before = opencode_plugin::loader::approval::hashed();
     let decision = opencode_plugin::loader::approval::Decision::Approved;
     assert_eq!(crate::plugin_pipe::decide(&pipe.harness, &target, &artifact, decision), Ok(true));
@@ -326,7 +313,6 @@ fn a_package_only_the_project_names_waits_for_approval() {
         panic!("no artifact held for {target}")
     };
     assert!(artifact.path.starts_with(lock.canonicalize().unwrap()), "{:?}", artifact.path);
-    // The install's lockfile is part of what is approved.
     let identify = || opencode_plugin::loader::approval::Artifact::tree(&artifact.path).unwrap().sha256;
     assert_eq!(identify(), artifact.sha256);
     std::fs::write(lock.join("package-lock.json"), r#"{ "lockfileVersion": 3, "packages": {} }"#).unwrap();

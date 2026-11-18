@@ -1,6 +1,3 @@
-//! Dropping the TUI frees it, its keymap and every plugin instance, whatever is open (plugins-pt R3-b): an open dialog
-//! held the dialog stack, which held the keymap, whose layers held each plugin's commands.
-
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
@@ -21,12 +18,10 @@ enum Open {
     Confirm,
     Alert,
     Panel,
-    /// The plugin asked for a prompt, and no frame ran it yet.
     Pending,
     Route,
     /// The plugin route navigated to in the same turn, before a frame.
     Navigating,
-    /// The diff viewer docked beside the session.
     SidePanel,
 }
 
@@ -35,7 +30,6 @@ thread_local! {
     static TOKEN: RefCell<Weak<()>> = const { RefCell::new(Weak::new()) };
 }
 
-/// A plugin whose commands ask for each dialog kind, with a route.
 fn probe(setup: &mut abi::Setup) -> Result<(), String> {
     let token = Rc::new(());
     TOKEN.set(Rc::downgrade(&token));

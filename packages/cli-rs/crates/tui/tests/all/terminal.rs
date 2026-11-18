@@ -57,7 +57,6 @@ struct Terminal {
     harness: Harness,
     memory: Memory,
     remotes: Arc<Mutex<Vec<Remote>>>,
-    /// The `attachment_id` each socket opened with.
     attachments: Arc<Mutex<Vec<String>>>,
     state: PathBuf,
     _home: opencode_util::temp::TempDir,
@@ -124,7 +123,6 @@ impl Terminal {
         std::fs::read_to_string(path).ok().and_then(|text| serde_json::from_str(&text).ok()).unwrap_or(Value::Null)
     }
 
-    /// Attaches the opened socket as controller and ends the replay.
     fn attach(&self) {
         assert!(self.wait(|harness| !harness.remotes.lock().unwrap().is_empty()), "no socket opened");
         // A replay that ends before the pane is laid out has no size to send pending input at (as in TS, where the
@@ -188,12 +186,9 @@ fn input_written_before_the_pane_mounts_waits_for_the_replay_and_replaces_the_cl
     assert_eq!(harness.frames(1), [[&[1, 0, 48, 0, 29][..], b"pwd\r"].concat()]);
 }
 
-// `session-frame.tsx:93-130`: one right pane. A terminal that opens closes the docked sidebar, and the sidebar
-// toggle closes the terminal.
 #[test]
 fn the_terminal_and_the_docked_sidebar_take_turns() {
     let harness = mount_at(140, true, None);
-    // The docked sidebar shows the title at its left padding, two columns into its 42.
     let docked = |harness: &Terminal| {
         harness.app.render();
         harness.app.text().lines().any(|line| line.chars().skip(100).collect::<String>().starts_with("Fix the parser"))

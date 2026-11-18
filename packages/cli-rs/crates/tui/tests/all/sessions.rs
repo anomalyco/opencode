@@ -1,10 +1,4 @@
-//! The session list and open dialogs (E.11a) over a fixture server.
-//!
-//! The `*_matches_typescript` tests are P-COMP proofs: they serve the responses of
-//! `parity/component/E.11a-sessions.tsx`, hide the screen behind the dialog (the TS script renders
-//! the dialog alone), send the same keys, and compare the cells with the fixtures it wrote. The
-//! other tests run each action and check the requests it sent (P-REQ). No test touches a real
-//! service.
+//! TypeScript: `parity/component/E.11a-sessions.tsx`.
 
 use crate::support::{self, Fake, Harness, Log, WAIT, deref_harness};
 
@@ -19,22 +13,17 @@ const DIRECTORY: &str = "/tmp/opencode/app";
 
 #[derive(Clone, Copy, PartialEq)]
 enum Mode {
-    /// The session list's sessions, at fixed dates (they show as date headings).
     List,
-    /// The open dialog's sessions, relative to now (they show as `5m`, `3h`, …).
     Open,
 }
 
-/// One request: method, path with query, and JSON body.
 type Logged = (String, String, Option<Value>);
 
-/// Serves the responses of `E.11a-sessions.tsx`; `delete_status` is the status of `DELETE /api/session/:id`.
 fn fake(mode: Mode, now: f64, delete_status: u16) -> Fake {
     Fake::new(move |seen| {
         let path = seen.path.as_str();
         let param = |name: &str| Some(seen.param(name)).filter(|value| !value.is_empty());
         match (seen.method.as_str(), path) {
-            // The store files the info under the directory the server answers for, as TS does.
             ("GET", "/api/location") => (
                 200,
                 json!({
@@ -75,7 +64,6 @@ fn fake(mode: Mode, now: f64, delete_status: u16) -> Fake {
             }
             ("GET", _) if path.starts_with("/api/session/") => {
                 let id = path.trim_start_matches("/api/session/");
-                // An opened session reads itself; one the server lacks closes again (`index.tsx:350-370`).
                 match scoped().into_iter().chain(recent(now)).find(|session| session["id"] == id) {
                     Some(session) => (200, json!({ "data": session })),
                     None => support::not_found(),
@@ -320,7 +308,6 @@ fn open_dialog_matches_typescript() {
     support::wait_fixture(&kit.app, "E.11a/open-worktrees");
 }
 
-/// Home over an in-memory server with events, the projects of [`projects`], and `ses_r1` in a background tab.
 fn evented() -> (Harness, opencode_api::memory::Memory) {
     use opencode_api::memory::{Memory, Route as MemoryRoute};
     let session = session("ses_r1", Some("Review the plan"), 1.0, json!({}));
@@ -368,7 +355,6 @@ fn open_reads_the_worktrees_again_on_worktree_updated() {
     harness.app.press("ctrl+o");
     harness.wait_for("App");
     harness.wait_gone("Refreshing");
-    // To the projects section, on App.
     harness.app.press("alt+down");
     harness.app.press("right");
     harness.wait_for("app-feature");
@@ -410,7 +396,6 @@ fn session_list_and_open_read_the_home_location_not_the_launch_directory() {
     let kit = Kit::new(Mode::List);
     opencode_tui::features::location::navigate_home(&kit.tui, Some(opencode_store::Location::new("/tmp/other")));
     kit.clear_log();
-    // The home read the location's info into the store, where both dialogs find it (`dialog-session-list.tsx:60`).
     let launch = "/api/location?location%5Bdirectory%5D=%2Ftmp%2Fopencode%2Fapp";
     kit.open_list();
     kit.wait_gone("Loading");
@@ -434,7 +419,6 @@ fn session_list_reads_the_scoped_list_then_all_projects_and_saves_the_scope() {
     kit.clear_log();
     kit.open_list();
     kit.wait_gone("Loading");
-    // The location and the projects load together into the store, then the list reads.
     let mut reads = kit.dialog_reads();
     reads[..2].sort();
     assert_eq!(
@@ -463,7 +447,6 @@ fn session_list_reads_the_scoped_list_then_all_projects_and_saves_the_scope() {
     kit.app.type_text("docs");
     assert!(kit.dialog_reads().is_empty(), "{:?}", kit.requests());
     kit.app.advance(Duration::from_millis(200));
-    // The dialog's date heading goes; the home behind keeps its own rows.
     kit.wait_gone("Tue Mar 03 2026");
     assert_eq!(kit.dialog_reads(), ["/api/session?limit=50&order=desc&search=docs&parentID=null&archived=false"]);
 }
@@ -478,7 +461,6 @@ fn delete_needs_a_second_press_and_removes_the_row() {
     kit.wait_for("Press ctrl+d again to confirm");
     assert!(kit.mutations().is_empty(), "one press only marks the row");
 
-    // Moving clears the mark.
     kit.app.press("down");
     kit.wait_gone("again to confirm");
     kit.app.press("up");
@@ -507,7 +489,6 @@ fn pin_toggles_session_json() {
     let kit = Kit::new(Mode::List);
     kit.open_list();
     kit.wait_for("Pinned");
-    // ses_b is pinned; unpin it.
     kit.app.press("ctrl+f");
     kit.wait_gone("Pinned");
     assert!(
@@ -549,7 +530,6 @@ fn open_dialog_reads_worktrees_and_creates_one() {
     kit.app.press("ctrl+o");
     kit.wait_for("Other project");
     kit.wait_gone("Refreshing");
-    // A second ctrl+o leaves the open dialog alone.
     kit.app.press("ctrl+o");
     kit.wait_for("Other project");
 
@@ -575,7 +555,6 @@ fn open_dialog_reads_worktrees_and_creates_one() {
         ]
     );
 
-    // Left returns to the projects with the project still selected.
     kit.app.press("left");
     kit.wait_for("Projects");
     kit.app.press("right");

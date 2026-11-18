@@ -12,7 +12,6 @@ use opencode_tui::{Deps, Route};
 
 use crate::support::{self, Harness};
 
-/// The TUI on home, with `definition` added.
 fn home(definition: opencode_plugin::Definition) -> Harness {
     let h = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
     opencode_tui::plugins::host::add(&h.tui, definition);
@@ -31,7 +30,6 @@ fn frames(h: &Harness) {
     }
 }
 
-/// `examples/hello`, the quick start's Rust source, linked.
 fn hello(setup: &mut abi::Setup) -> Result<(), String> {
     setup.command(Command::new("hello.greet").title("Say hello").slash("hello").palette(), |host, _input| {
         host.toast(Toast::new(Variant::Success, "Hello from a plugin"))
@@ -47,7 +45,6 @@ fn hello(setup: &mut abi::Setup) -> Result<(), String> {
 fn the_luau_quick_start_draws_and_sends_what_its_rust_source_does() {
     let rust = home(abi::Plugin { id: "example.hello", setup: hello }.into());
     let luau = home(example("hello"));
-    // The composer's placeholder is picked at random.
     let shown = |h: &Harness| {
         h.wait_for("hello");
         frames(h);
@@ -80,7 +77,6 @@ fn the_counter_asks_before_it_resets_and_its_answer_comes_back() {
     h.wait_for("The count is 0");
 }
 
-/// The TUI on the Luau plugin `test.page`'s route `page`, whose view is `view`.
 fn page(view: &str) -> Harness {
     let init = format!(
         r#"
@@ -160,7 +156,6 @@ fn a_spinning_luau_plugin_is_failed_and_the_tui_keeps_drawing() {
     let spin = entries.iter().find(|entry| entry.id == "test.spin").unwrap();
     let opencode_plugin::Status::Failed(error) = &spin.status else { panic!("{:?}", spin.status) };
     assert!(error.contains("Luau budget"), "{error}");
-    // The TUI draws on: the composer takes text.
     h.app.type_text("still here");
     h.wait_for("still here");
 }

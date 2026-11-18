@@ -60,13 +60,11 @@ fn mount(route: Route) -> Diffs {
     mount_with(route, diff, 140, 30)
 }
 
-/// Serves `diff`, one file or a list of them.
 fn mount_with(route: Route, diff: Value, width: u16, height: u16) -> Diffs {
     mount_on(route, diff, width, height, ABI.with(Cell::get))
 }
 
 thread_local! {
-    /// The carrier [`mount_with`] mounts the built-ins on, which [`on_both`] sets.
     static ABI: Cell<bool> = const { Cell::new(false) };
 }
 
@@ -80,7 +78,6 @@ fn on_both(row: impl Fn()) {
     ABI.with(|cell| cell.set(false));
 }
 
-/// [`mount_with`] over one file, with `config` merged over the rows' own.
 fn mount_config(route: Route, config: Value) -> Diffs {
     let memory = Memory::new(routes(json!([hunk_file(0, 4)])));
     let mut merged = json!({ "animations": false, "session": { "sidebar": "hide" }, "diffs": { "source": "turn" } });
@@ -136,7 +133,6 @@ impl Diffs {
         assert_ne!(opencode_plugin::interact::ledger(&*opencode_tui::plugins::host::host(&self.tui)).overlays, 0);
     }
 
-    /// The menu is gone, with what it held.
     fn assert_menu_closed(&self) {
         self.app.advance(Duration::from_millis(1));
         let screen = self.app.text();
@@ -187,7 +183,6 @@ impl Diffs {
         self.settle();
     }
 
-    /// A turn of `ses_a` starts and ends.
     fn turn(&self) {
         for (kind, status) in [
             ("session.execution.started", SessionStatus::Running),
@@ -249,7 +244,6 @@ fn the_file_tree_and_menu_are_freed_with_their_view() {
     let marker = Rc::new(());
     assert!(support::mark(&h.app, &h.tui.frame.main(), 0, &marker) > 0);
     h.open_menu();
-    // The label, its row, and the overlay.
     support::mark_at(&h.app, "Mark complete", 3, &marker);
     let (x, y) = h.find("Mark complete");
     h.app.hover(x, y);
@@ -283,7 +277,6 @@ fn the_file_tree_follows_the_selection_and_its_help_opens() {
         h.dispatch("diff.next_file");
     }
     h.wait_for("≡ file_25.rs");
-    // Each step rebuilt the tree; it kept the offset it scrolled to.
     assert!(!h.app.text().contains("≡ file_00.rs"), "{}", h.app.text());
 
     let (x, y) = h.find(" help");
@@ -325,7 +318,6 @@ fn a_large_added_file_shows_its_start_and_end() {
     }
 }
 
-/// The added JSON file of TS `diff-viewer.test.tsx`: 7,502 lines, one of them very long.
 fn large_added_patch() -> String {
     let rows = (0..7500).map(|index| {
         let repeat = if index == 777 {
@@ -369,7 +361,6 @@ fn the_viewer_runs_on_both_carriers() {
 // The scenarios of synthesis 4.9 by name, and the hunk rules the host's verbs and reads now hold (P6c). Each opens the
 // full-screen route from Home, with the file tree beside the cards, over files of one modified hunk each.
 
-/// A modified file of one hunk: `lines` lines, the third changed.
 fn hunk_file(index: usize, lines: usize) -> Value {
     let body: String = (0..lines)
         .map(|line| match line {
@@ -383,7 +374,6 @@ fn hunk_file(index: usize, lines: usize) -> Value {
     })
 }
 
-/// The route over `count` files of `lines` lines, at `width` by `height`, open and drawn.
 fn route(count: usize, lines: usize, width: u16, height: u16) -> Diffs {
     route_on(count, lines, width, height, false)
 }
@@ -411,7 +401,6 @@ impl Diffs {
         self.app.text()
     }
 
-    /// Presses each key, then lets the viewer draw.
     fn keys(&self, keys: &[&str]) -> String {
         for key in keys {
             self.app.press(key);
@@ -582,7 +571,6 @@ fn a_rebuild_at_1000_files_builds_what_it_changes() {
         let (small, large) = (rebuilds(410), rebuilds(1000));
         let touched = |steps: &[(u64, u64); 4]| steps.map(|(touched, _)| touched);
         assert_eq!(touched(&large), touched(&small), "widgets touched at 1,000 files and 410: {large:?} {small:?}");
-        // The tree's rows are the files' and the folder `src`'s.
         assert_eq!(large.map(|(_, items)| items), [2, 1000, 0, 1001], "{large:?}");
         assert_eq!(small.map(|(_, items)| items), [2, 410, 0, 411], "{small:?}");
     });
@@ -744,7 +732,6 @@ fn full_screen_is_saved_only_when_the_panel_toggles() {
     }
 }
 
-/// The route over two files with the base picker open, whose server lists `branches` for any search.
 fn base_picker(branches: Value) -> Diffs {
     let files: Vec<Value> = (0..2).map(|index| hunk_file(index, 4)).collect();
     let list = json!({ "location": { "directory": DIRECTORY }, "data": branches });
@@ -772,7 +759,6 @@ fn base_picker(branches: Value) -> Diffs {
 }
 
 impl Diffs {
-    /// Whether the base picker asked the server for the branches of `search`.
     fn searched(&self, search: &str) -> bool {
         self.memory.requests().iter().any(|logged| {
             logged.path == "/api/vcs/branch" && logged.query.get("search").is_some_and(|values| values == &[search])
@@ -929,13 +915,9 @@ fn a_mark_at_1000_files_costs_one_pass_on_both_carriers() {
         assert!(h.settle().contains("1/1000"), "{}", h.app.text());
         let (work, crossed) =
             (reconcile::work().since(work), opencode_plugin::loader::native::crossed().since(crossed));
-        // The 999 other cards and the tree's rows but the two whose marks changed.
         assert!(work.kept >= 999 + 998, "the mark kept {} subtrees (C ABI: {abi})", work.kept);
         if abi {
-            // An id's walk up is a few steps; a scan of the ids a keep was 20 million.
             assert!(work.held <= 25 * 1000, "the keeps visited {} ids", work.held);
-            // A keep a card and a keep a row cross, not the cards or the rows: 97 KB, where 766 KB crossed with the
-            // rows built each view.
             assert!(crossed.received <= 150 * 1000, "{} bytes crossed", crossed.received);
         }
     }
@@ -1193,7 +1175,6 @@ fn abi_dialog_images(images: opencode_plugin::abi::Images) -> opencode_plugin::a
 }
 
 thread_local! {
-    /// What the keymap probe's layer heard.
     static HEARD: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
@@ -1226,7 +1207,6 @@ fn a_plugins_binds_take_what_they_may() {
 }
 
 thread_local! {
-    /// Which of its two forms the dialog probe shows, and whether its select has a note.
     static SECOND: Cell<bool> = const { Cell::new(false) };
     static NOTED: Cell<bool> = const { Cell::new(false) };
 }
@@ -1264,7 +1244,6 @@ fn a_select_and_a_panel_shown_again_show_their_new_fields() {
     h.wait_for("row one");
     SECOND.with(|second| second.set(true));
     h.dispatch("probe.select");
-    // The empty text alone, then the note alone, each changed in place.
     h.wait_for("Nothing here");
     NOTED.with(|noted| noted.set(true));
     h.dispatch("probe.select");
@@ -1360,7 +1339,6 @@ fn the_base_picker_marks_the_base_reported_after_it_opened() {
         h.wait_for("≡ f0000.rs");
         h.keys(&["d"]);
         h.wait_for("Diff source");
-        // The source list opens on Uncommitted, the one above Base.
         h.keys(&["down", "return"]);
         h.wait_for("Base branch");
         h.wait_for("dev");
@@ -1369,7 +1347,6 @@ fn the_base_picker_marks_the_base_reported_after_it_opened() {
     });
 }
 
-/// The route over files of `lines` lines each, at `width` by `height`, open and drawn.
 fn route_of(lines: &[usize], width: u16, height: u16) -> Diffs {
     let files: Vec<Value> = lines.iter().enumerate().map(|(index, lines)| hunk_file(index, *lines)).collect();
     let h = mount_with(Route::Home, Value::Array(files), width, height);
@@ -1381,7 +1358,6 @@ fn route_of(lines: &[usize], width: u16, height: u16) -> Diffs {
 }
 
 impl Diffs {
-    /// Opens the file menu of `file`'s tree row and runs its one action.
     fn menu_on_row(&self, file: &str) {
         let (x, y) = self.find(&format!("≡ {file}"));
         self.app.mouse(MouseEventKind::Down(MouseButton::Right), x, y);

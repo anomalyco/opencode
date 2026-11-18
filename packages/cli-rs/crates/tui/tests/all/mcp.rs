@@ -1,9 +1,4 @@
-//! The MCP servers and skills dialogs (E.17b) over a fixture server.
-//!
-//! The `*_matches_typescript` tests are P-COMP proofs: they serve the responses of
-//! `parity/component/E.17b-mcp.tsx`, hide the screen behind the dialog (the TS script renders the
-//! dialog alone), send the same keys, and compare the cells with the fixtures it wrote. The other
-//! tests run each action and check the requests it sent (P-REQ). No test touches a real service.
+//! TypeScript: `parity/component/E.17b-mcp.tsx`.
 
 use crate::support::{self, Fake, Harness, Log, WAIT, deref_harness, list};
 
@@ -14,13 +9,10 @@ use opencode_tui::{Args, Deps, Route};
 use serde_json::{Value, json};
 
 const DIRECTORY: &str = "/tmp/opencode/app";
-/// The location query every MCP and skill request carries.
 const QUERY: &str = "location%5Bdirectory%5D=%2Ftmp%2Fopencode%2Fapp";
 
-/// One request: method, path with query, and JSON body.
 type Logged = (String, String, Value);
 
-/// `SERVERS` of `E.17b-mcp.tsx`.
 fn servers() -> Value {
     json!([
         { "name": "linear", "status": { "status": "failed", "error": "MCP error -32000: Connection closed" } },
@@ -31,7 +23,6 @@ fn servers() -> Value {
     ])
 }
 
-/// `SKILLS` of `E.17b-mcp.tsx`.
 fn skills() -> Value {
     let skill = |id: &str, description: Option<&str>| {
         let mut skill = json!({
@@ -49,8 +40,6 @@ fn skills() -> Value {
     ])
 }
 
-/// Serves the location, the MCP list and skills (`None` answers the skill list with a declared error), the prompt catalog,
-/// and the writes; logs every request.
 fn fake(servers: Arc<Mutex<Value>>, skills: Option<Value>) -> Fake {
     Fake::new(move |seen| match (seen.method.as_str(), seen.path.as_str()) {
         ("GET", "/api/location") => (
@@ -116,7 +105,6 @@ impl Kit {
         kit
     }
 
-    /// Runs a command as the palette and the slash autocomplete (E.3) do.
     fn run(&self, command: &str) {
         self.tui.keymap.dispatch(command, None);
     }
@@ -144,7 +132,6 @@ impl Kit {
 #[test]
 fn mcp_dialog_matches_typescript() {
     let kit = Kit::new();
-    // Both commands are in the palette under their slash names.
     for (id, slash, group) in [("mcp.list", "mcps", "Agent"), ("prompt.skills", "skills", "Prompt")] {
         let command = kit
             .tui
@@ -202,7 +189,6 @@ fn mcp_dialog_reads_the_list_once_and_space_toggles_each_server() {
     kit.run("mcp.list");
     kit.wait_for("Sign in required");
     assert_eq!(kit.requests("GET", "/api/mcp"), [("GET".into(), format!("/api/mcp?{QUERY}"), Value::Null)]);
-    // Sorted: docs, figma, github, linear, notion, sentry.
     let space_at = |downs: usize| {
         kit.app.press("home");
         for _ in 0..downs {
@@ -211,7 +197,6 @@ fn mcp_dialog_reads_the_list_once_and_space_toggles_each_server() {
         kit.app.press("space");
     };
 
-    // github is connected: disconnect. The action title follows the selection.
     space_at(2);
     kit.wait_for("disconnect space");
     kit.wait_requests("POST", "/api/experimental/mcp/", 1);
@@ -222,7 +207,6 @@ fn mcp_dialog_reads_the_list_once_and_space_toggles_each_server() {
     kit.wait_requests("POST", "/api/experimental/mcp/", 3);
     // figma is pending: no request.
     space_at(1);
-    // docs is disabled: connect, which fails with a toast and leaves the row as it was.
     space_at(0);
     kit.wait_requests("POST", "/api/experimental/mcp/", 4);
     kit.wait_for("docs is disabled");
@@ -238,7 +222,6 @@ fn mcp_dialog_reads_the_list_once_and_space_toggles_each_server() {
             format!("/api/experimental/mcp/docs/connect?{QUERY}"),
         ]
     );
-    // Every toggle is a bodiless POST that the server answers with 204 (docs: 400).
     assert!(kit.requests("POST", "/api/experimental/mcp/").iter().all(|(_, _, body)| body.is_null()));
     // notion signs in through its integration: the integration dialog opens (E.17a) instead of a toggle. This
     // fixture serves no integrations, so it shows none.
@@ -273,7 +256,6 @@ fn mcp_error_view_goes_back_copies_and_investigates() {
     }
     kit.app.press("return");
     kit.wait_for("MCP server: linear");
-    // Escape goes back to the list, on the failed server.
     kit.app.press("escape");
     kit.wait_for("view error enter");
     assert!(kit.app.text().contains("retry space"));
@@ -351,7 +333,6 @@ fn skills_dialog_shows_a_failed_read() {
 }
 
 impl Kit {
-    /// Opens the skills dialog through the palette command and picks `id`.
     fn slash_dialog_pick(&self, id: &str) {
         self.tui.keymap.dispatch("prompt.skills", None);
         self.wait_for("bisect");

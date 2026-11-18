@@ -25,15 +25,12 @@ use opencode_tui::{Deps, Route};
 const ID: &str = "test.limits";
 const SIBLING: &str = "test.sibling";
 
-/// What a view returns, given the view to give content through.
 type Subject = Rc<dyn Fn(&mut v2::View) -> v2::Node>;
 
 thread_local! {
     static SUBJECT: RefCell<Subject> = RefCell::new(Rc::new(|_| v2::Node::text(vec![abi::Span::new("empty")])));
     static BESIDE: RefCell<Subject> = RefCell::new(Rc::new(|_| v2::Node::text(vec![abi::Span::new("sibling")])));
-    /// The route's views, as the plugin counts them.
     static VIEWS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
-    /// Each view of the route and of the sibling, and whether it heard that its plugin woke.
     static HEARD: RefCell<Vec<(&'static str, bool, bool)>> = const { RefCell::new(Vec::new()) };
 }
 
@@ -44,9 +41,7 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         let subject = SUBJECT.with(|subject| subject.borrow().clone());
         subject(cx)
     }));
-    // Its waker draws its mounts again, for the rows that change the tree in one mount.
     WAKE_ROUTE.with(|waker| *waker.borrow_mut() = setup.waker());
-    // P2's surfaces show the same tree: a panel and an overlay, which its commands open and close.
     let view = |cx: &mut v2::View<'_>| {
         let subject = SUBJECT.with(|subject| subject.borrow().clone());
         subject(cx)
@@ -78,7 +73,6 @@ thread_local! {
 }
 
 thread_local! {
-    /// The sibling's waker: a wake draws its surface again.
     static WAKER: RefCell<Option<abi::Waker>> = const { RefCell::new(None) };
 }
 
@@ -157,7 +151,6 @@ fn text(text: &str) -> v2::Node {
     v2::Node::text(vec![abi::Span::new(text)])
 }
 
-/// A head row, `middle`, and a foot row.
 fn framed(middle: v2::Node) -> v2::Node {
     v2::Node::column(vec![text("head"), middle, text("foot")])
 }
@@ -173,7 +166,6 @@ fn placeholder(id: Option<&str>, why: &str) -> v2::Node {
     node
 }
 
-/// A patch of one hunk that changes `lines` lines.
 fn modified(lines: usize) -> String {
     let mut patch = format!("--- a/f.rs\n+++ b/f.rs\n@@ -1,{lines} +1,{lines} @@\n");
     for line in 0..lines {
@@ -182,7 +174,6 @@ fn modified(lines: usize) -> String {
     patch
 }
 
-/// A patch of `hunks` hunks of one changed line each.
 fn hunks(hunks: usize) -> String {
     let mut patch = "--- a/f.rs\n+++ b/f.rs\n".to_owned();
     for hunk in 0..hunks {
@@ -215,14 +206,12 @@ fn small() -> Limits {
     }
 }
 
-/// A row: its limits, the tree the view returns, the tree the contract says shows, and what the host counts.
 struct Row {
     name: &'static str,
     limits: Limits,
     subject: Subject,
     shows: Subject,
     placeholders: u64,
-    /// The patches parsed and the code highlighted, as the subject opens.
     parses: u64,
     /// The nodes the host holds for the plugin.
     nodes: u64,
@@ -241,7 +230,6 @@ fn rows() -> Vec<Row> {
     let line = |bytes: usize| text(&"x".repeat(bytes));
     let code_at_limit = 4 + 2 * 47 + rust_lines(47).len() as u64 / 1024;
     vec![
-        // Nodes: a column, a head, a box of 36 texts and a foot are 40.
         Row {
             name: "nodes at the limit",
             limits: small(),
@@ -252,7 +240,6 @@ fn rows() -> Vec<Row> {
             nodes: 40,
             content: 0,
         },
-        // One more: the box fits whole and the foot crosses.
         Row {
             name: "nodes one over",
             limits: small(),
@@ -286,8 +273,6 @@ fn rows() -> Vec<Row> {
             nodes: 40,
             content: 0,
         },
-        // Rows: the column, the head, the foot and the patch itself are 4, its 66 lines (63 and 3 of headers) 66, and
-        // its hunk 30: 100.
         Row {
             name: "rows at the limit",
             limits: Limits { text: 1 << 20, ..small() },
@@ -397,8 +382,6 @@ fn rows() -> Vec<Row> {
             nodes: 3,
             content: 0,
         },
-        // Markdown: a line is a row (review carbon, the mutant CM13). The column, the head, the foot and the node are
-        // 4, and 96 short lines 96; with 98 the column opens and the Markdown is the node that crosses.
         Row {
             name: "markdown at the limit",
             limits: small(),
@@ -497,7 +480,6 @@ fn given(cx: &mut v2::View, bytes: impl FnOnce() -> Vec<u8>) -> v2::ContentRef {
     handle
 }
 
-/// Markdown of `lines` short lines.
 fn markdown(lines: usize) -> v2::Node {
     v2::Node::Markdown { id: None, source: source("x\n".repeat(lines)) }
 }
@@ -588,7 +570,6 @@ fn a_plugin_spends_its_own_share_of_what_all_plugins_may_hold() {
         let others = || limits::total().nodes - limits::held(ID).nodes - limits::held(SIBLING).nodes;
         let shares = |others: u64| Limits { nodes: 100, plugin_nodes: 10, all_nodes: others + 14, ..small() };
         for (beside, admitted) in [(1, 9), (6, 6)] {
-            // The sibling's next view is a column of `beside` texts; its waker draws it, with the route closed.
             harness.tui.navigate(Route::Home);
             settle(&harness);
             let _limits = limits::set(shares(others()));
@@ -672,7 +653,6 @@ pub(crate) fn png(width: u32, height: u32, pixel: impl Fn(u32, u32) -> [u8; 4]) 
     out
 }
 
-/// An image node 16 cells wide and 8 high.
 fn image(content: v2::Source) -> v2::Node {
     let size = |cells| Some(abi::Width::Cells(cells));
     let layout = abi::Layout { width: size(16), height: size(8), ..abi::Layout::default() };
@@ -698,7 +678,6 @@ fn drawn_in_the_frame(bytes: &[u8]) -> Vec<opentui::native::Cell> {
     app.render().cells
 }
 
-/// The cells of `frame` at the top left, 16 by 8.
 fn corner(frame: &opentui::native::Capture) -> Vec<opentui::native::Cell> {
     (0..8).flat_map(|y| (0..16).map(move |x| (x, y))).map(|(x, y)| frame.cell(x, y).unwrap().clone()).collect()
 }
@@ -800,7 +779,6 @@ fn show_in(harness: &Harness, command: &str, subject: Subject) -> opentui::nativ
 fn panels_and_overlays_are_held_to_the_limits() {
     let texts = |count: usize| v2::Node::column((0..count).map(|index| text(&format!("t{index}"))).collect());
     for carrier in CARRIERS {
-        // A panel opens beside a session that shows.
         let deps = Deps {
             builtins: vec![
                 builtin(carrier, abi::Plugin { id: ID, setup }),
@@ -867,7 +845,6 @@ fn a_tree_at_the_clients_limits_renders() {
         let over = Rc::new(at_the_limits(1));
         show(&harness, subject(move |_| (*over).clone()));
         let frame = caught_up(&harness);
-        // The placeholder costs nothing.
         assert_eq!(limits::held(ID).nodes, 20_000, "held past the limits");
         let twin = {
             let _limits = support::unlimited();
@@ -896,13 +873,11 @@ fn caught_up(harness: &Harness) -> opentui::native::Capture {
 }
 
 thread_local! {
-    /// The test plugin's waker: a wake draws its mounts again.
     static WAKE_ROUTE: RefCell<Option<abi::Waker>> = const { RefCell::new(None) };
     /// Which tree the rows that draw a mount again show: the first, then the second.
     static PHASE: std::cell::Cell<u8> = const { std::cell::Cell::new(0) };
 }
 
-/// Draws the route's mount again in its next phase.
 fn next_phase(harness: &Harness) {
     PHASE.with(|phase| phase.set(1));
     WAKE_ROUTE.with(|waker| waker.borrow().as_ref().expect("the plugin's waker").wake());
@@ -941,7 +916,6 @@ fn a_keep_counts_what_it_keeps_and_a_release_gives_content_back() {
         let (shown, wanted) = (frame.text(), twin.text());
         assert!(frame.cells == twin.cells, "{carrier:?}: not the twin's frame\n{shown}\n---\n{wanted}");
         assert_eq!(held, 40, "{carrier:?}: held with the keep");
-        // A release.
         let _limits = limits::set(Limits { text: 1 << 20, ..small() });
         PHASE.with(|phase| phase.set(0));
         show(
@@ -1050,7 +1024,6 @@ fn an_image_job_holds_its_bytes_until_it_is_done() {
         harness.tui.navigate(Route::Home);
         settle(&harness);
         assert_eq!(limits::held(ID).images, 0, "{carrier:?}: held after the job ended");
-        // A PNG cut short decodes to nothing; the next, on another handle, has the room it gave back.
         let mut cut = png(16, 16, gradient);
         cut.truncate(cut.len() - 40);
         let good = png(16, 16, |x, y| gradient(y, x));
@@ -1138,7 +1111,6 @@ fn phase() -> u8 {
     PHASE.with(std::cell::Cell::get)
 }
 
-/// `lines` lines of code under `id`: two rows a line, and one for the node.
 fn code_lines(id: &str, lines: usize) -> v2::Node {
     code(source(rust_lines(lines))).with_id(id)
 }
@@ -1155,8 +1127,6 @@ fn a_keep_is_admitted_as_the_subtree_it_stands_for() {
         let same = |name: &str, frame: &opentui::native::Capture, twin: opentui::native::Capture| {
             assert!(frame.cells == twin.cells, "{carrier:?}, {name}\n{}\n---\n{}", frame.text(), twin.text());
         };
-        // Seven keyed rows in room for six nodes: m4 is the placeholder, m5 and m6 its run. A revision that keeps all
-        // seven under a new head keeps that shape, in one view and with one placeholder.
         let (frame, views, placeholders) = revisions(
             &harness,
             Limits { nodes: 6, ..small() },
@@ -1174,7 +1144,6 @@ fn a_keep_is_admitted_as_the_subtree_it_stands_for() {
         shown.push(placeholder(Some("m4"), "too many nodes"));
         same("absorbed keeps", &frame, twin(subject(move |_| v2::Node::column(shown.clone()))));
         assert_eq!((views, placeholders), (1, 1), "{carrier:?}: absorbed keeps, views and placeholders");
-        // A placeholder past the rows, kept beside a node that is past them too: one placeholder.
         let (frame, _, placeholders) = revisions(
             &harness,
             Limits { text: 1 << 20, ..small() },
@@ -1189,7 +1158,6 @@ fn a_keep_is_admitted_as_the_subtree_it_stands_for() {
             || v2::Node::column(vec![code_lines("f", 20), placeholder(Some("b"), "too large to build at once")]);
         same("kept placeholder", &frame, twin(subject(move |_| shown())));
         assert_eq!(placeholders, 1, "{carrier:?}: kept placeholder, placeholders");
-        // A keep counts its rows: the code beside it is past them.
         let (frame, ..) = revisions(
             &harness,
             Limits { text: 1 << 20, ..small() },
@@ -1464,7 +1432,6 @@ fn images_are_given_back_and_decode_two_at_a_time() {
         let (jobs, taken_now) = (opencode_plugin::image::jobs(ID), opencode_plugin::image::taken(ID));
         drop(hold);
         assert!(taken, "{carrier:?}: the workers never took two");
-        // Each view of the route's open gives six handles of its own.
         assert!(jobs >= 6 && taken_now == 2, "{carrier:?}: {jobs} jobs, {taken_now} a worker took");
         done(&harness);
     }
@@ -1484,14 +1451,12 @@ fn what_a_mount_holds_goes_and_its_host_work_is_timed() {
             assert!(done, "{carrier:?}: a job never ended");
             settle(harness);
         };
-        // The copy in is host time.
         let hold = opencode_plugin::image::hold(ID);
         show(&harness, picture(png(16, 16, gradient)));
         let before = monitor.host_time(ID);
         drop(hold);
         decoded(&harness);
         assert!(monitor.host_time(ID) > before, "{carrier:?}: the copy in is not host time");
-        // A release gives the image back, the mount still there.
         PHASE.with(|phase| phase.set(0));
         let picture_bytes = Rc::new(png(16, 16, gradient));
         show(
@@ -1523,7 +1488,6 @@ fn what_a_mount_holds_goes_and_its_host_work_is_timed() {
         harness.tui.plugins.toggle(&opencode_tui::plugins::host::host(&harness.tui), ID, false);
         harness.tui.plugins.toggle(&opencode_tui::plugins::host::host(&harness.tui), ID, true);
         settle(&harness);
-        // A list's window, mounted by a scroll with no view, is host time.
         let items = || {
             let items = (0..100)
                 .map(|index| v2::ListItem::new(text(&format!("i{index}")).with_id(format!("i{index}")), 1))

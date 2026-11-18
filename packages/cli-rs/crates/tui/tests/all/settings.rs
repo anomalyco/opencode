@@ -151,7 +151,6 @@ fn experiments_dialog_matches_typescript() {
     assert_dialog(&app, "E.18a/experiments-on", "Experiments");
 }
 
-/// The cell column of `needle` in `line`.
 fn column(line: &str, needle: &str) -> u16 {
     line[..line.find(needle).unwrap()].chars().count() as u16
 }
@@ -159,7 +158,6 @@ fn column(line: &str, needle: &str) -> u16 {
 /// The footer of the row titled `title`, without the marks of the selected row's `‹ value ›` or `value ↵`.
 fn footer(app: &TestApp, title: &str) -> String {
     let screen = app.text();
-    // The home behind the dialog shows at the start of some rows (the prompt's `┃`).
     let line = screen
         .lines()
         .find_map(|line| {
@@ -186,7 +184,6 @@ fn left_and_right_cycle_values_and_numbers_step_within_bounds() {
     app.press("return");
     assert_eq!(footer(&app, "Animations"), "off");
 
-    // Three values wrap both ways.
     settings::show(&tui, Some("session.verbosity"));
     app.type_text("verbosity");
     assert_eq!(footer(&app, "Verbosity"), "low");
@@ -195,7 +192,6 @@ fn left_and_right_cycle_values_and_numbers_step_within_bounds() {
     app.press("right");
     assert_eq!(footer(&app, "Verbosity"), "low");
 
-    // Numbers step and clamp; the bound is not written again.
     settings::show(&tui, None);
     app.type_text("volume");
     for _ in 0..8 {
@@ -208,7 +204,6 @@ fn left_and_right_cycle_values_and_numbers_step_within_bounds() {
     app.press("right");
     assert_eq!(footer(&app, "Leader timeout"), "2250 ms");
 
-    // Color mode changes the theme as `cli.json` does.
     settings::show(&tui, Some("theme.mode"));
     app.type_text("color mode");
     app.press("right");
@@ -228,7 +223,6 @@ fn the_palette_lists_settings_while_filtering_and_opens_the_one_chosen() {
     assert!(filtered.contains("Thinking"), "{filtered}");
     app.press("return");
     wait_for(&app, "Search settings");
-    // Opened on Thinking, which Right changes.
     app.press("right");
     assert_eq!(footer(&app, "Thinking"), "show");
     assert!(tui.dialogs.is_open());
@@ -293,7 +287,6 @@ fn the_devtools_bar_follows_the_setting_and_opens_panels() {
     let bar = screen.lines().last().unwrap();
     assert_eq!(bar.trim_end(), " ↻ Server  ○ UI  Theme  Tools  Experiments", "{screen}");
 
-    // A click on Theme opens its panel above the item; Escape closes it.
     let row = app.size().1 - 1;
     app.click(column(bar, "Theme"), row);
     let panel = wait_for(&app, "Name");
@@ -302,7 +295,6 @@ fn the_devtools_bar_follows_the_setting_and_opens_panels() {
     app.press("escape");
     assert!(!app.text().contains("Switch to light"));
 
-    // Tools writes the render switches into the config.
     app.click(column(bar, "Tools"), row);
     wait_for(&app, "[ ] Time to first draw");
     let text = app.text();
@@ -315,7 +307,6 @@ fn the_devtools_bar_follows_the_setting_and_opens_panels() {
     // A click hits what the last frame drew.
     app.render();
 
-    // Experiments opens the dialog; turning the setting off hides the bar.
     app.click(column(bar, "Experiments"), row);
     wait_for(&app, "TUI tools");
     app.press("escape");
@@ -344,7 +335,6 @@ fn the_devtools_bar_frees_what_it_draws_again() {
     let _tui = support::mount_empty(&app, support::component_info(json!({ "debug": { "devtools": true } })), None);
     let bar = wait_for(&app, "Experiments").lines().last().unwrap().to_owned();
     let marker = Rc::new(());
-    // A label and its item.
     support::mark_at(&app, "Theme", 2, &marker);
     app.click(column(&bar, "Tools"), app.size().1 - 1);
     wait_for(&app, "[ ] Time to first draw");
@@ -380,8 +370,6 @@ fn a_devtools_click_survives_redraws_between_press_and_release() {
     }
 }
 
-// P-FILE ------------------------------------------------------------------------------------------------------
-
 const ORIGINAL: &str = "{\n  // my settings\n  \"$schema\": \"https://opencode.ai/v2/cli.json\",\n  \"session\": { \"thinking\": \"hide\" }\n}\n";
 
 #[test]
@@ -398,7 +386,6 @@ fn settings_writes_match_typescript_and_typescript_reads_them() {
     settings::show(&tui, Some("session.thinking"));
     app.type_text("thinking");
     app.press("right");
-    // The write runs on a blocking thread; the footer follows when it lands.
     assert!(app.wait_until(WAIT, || footer(&app, "Thinking") == "show"));
     app.press("escape");
     experiments::show(&tui);
@@ -412,7 +399,6 @@ fn settings_writes_match_typescript_and_typescript_reads_them() {
         "{\n  // my settings\n  \"$schema\": \"https://opencode.ai/v2/cli.json\",\n  \"session\": {\n    \"thinking\": \"show\"\n  },\n  \"experimental\": {\n    \"client-mcp\": true\n  }\n}\n"
     );
 
-    // TS reads what Rust wrote, then writes a setting the Rust dialog shows on its next open.
     let twin = opencode_util::temp::tempdir().unwrap();
     let twin_file = support::xdg_paths(twin.path()).config.join("cli.json");
     std::fs::create_dir_all(twin_file.parent().unwrap()).unwrap();
@@ -575,7 +561,6 @@ fn an_outside_theme_change_restyles_each_kind_of_open_dialog_in_place() {
     ];
     let info =
         || opencode_local::cli_config::merge(&[Some(json!({ "theme": { "name": "opencode" }, "animations": false }))]);
-    // The rows' cells, but the prompt's: the home route mounts again in the new theme with another placeholder.
     let rows = |screen: &opentui::native::Capture| -> Vec<Vec<opentui::native::Cell>> {
         (0..screen.height)
             .filter(|&y| !screen.row(y).contains("Ask anything"))

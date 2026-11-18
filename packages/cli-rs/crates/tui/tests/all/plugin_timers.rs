@@ -13,7 +13,6 @@ use opencode_tui::{Deps, Route};
 use crate::support;
 
 thread_local! {
-    /// The ticks of [`ticking`]'s `every`.
     static TICKS: Cell<u32> = const { Cell::new(0) };
 }
 
@@ -32,7 +31,6 @@ fn ticking(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-/// [`ticking`] in Luau.
 #[cfg(luau)]
 const TICKING: &str = r#"local plugin = require("@opencode/plugin")
 return plugin.define(function(setup)
@@ -92,11 +90,9 @@ fn ticks_without_frames(carrier: Carrier) {
     let ticks = TICKS.get();
     let ticking = h.app.idle(Duration::from_secs(5));
     assert_eq!(ticking.frames, 0, "{carrier:?}: the ticks painted frames: {ticking:?}");
-    // Luau's ticks are its own; the Rust ones count theirs.
     if matches!(carrier, Carrier::InProcess | Carrier::CAbi) {
         assert_eq!(TICKS.get() - ticks, 5, "{carrier:?}: it did not tick once a second");
     }
-    // Nor ever: ticks with no paint between them do not add up to the frame's bound of effects (big-boi tm-2).
     let long = h.app.idle(Duration::from_secs(400));
     assert_eq!(long.frames, 0, "{carrier:?}: 400 s of ticks painted frames: {long:?}");
     assert!(h.tui.plugins.set_active(&host, "test.tick", false));
@@ -151,11 +147,9 @@ export default {{ id: "example.timer", setup(api) {{
 }
 
 thread_local! {
-    /// The ticks of [`every_of_a_mount`]'s `every`.
     static MOUNT_TICKS: Cell<u32> = const { Cell::new(0) };
 }
 
-/// A route whose key starts a 50 ms `every` whose tick awaits a fetch: the mount's, as its handler started it.
 fn every_of_a_mount(setup: &mut abi::Setup) -> Result<(), String> {
     let tasks = setup.tasks();
     let layer = abi::interact::Layer::default()
@@ -179,7 +173,6 @@ fn every_of_a_mount(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-/// [`every_of_a_mount`] in Luau: it counts its ticks in its storage.
 #[cfg(luau)]
 const EVERY_OF_A_MOUNT: &str = r#"local plugin = require("@opencode/plugin")
 return plugin.define(function(setup)
@@ -240,7 +233,6 @@ fn an_every_a_mount_started_ends_with_that_mount() {
             h.app.render();
         }
         h.app.press("x");
-        // Each tick's fetch is answered on the server's thread.
         let open = h.app.wait_until(support::WAIT, || {
             h.app.advance(Duration::from_millis(5));
             ticks() >= 3
@@ -258,11 +250,9 @@ fn an_every_a_mount_started_ends_with_that_mount() {
 }
 
 thread_local! {
-    /// The budget's clock of the rows below: each tick of their plugins moves it by what the tick costs.
     static BUDGET: Cell<Duration> = const { Cell::new(Duration::ZERO) };
 }
 
-/// A 20 ms `every` whose tick costs 500 µs on the budget's clock, half the frame budget.
 fn cheap_ticks(setup: &mut abi::Setup) -> Result<(), String> {
     setup.tasks().every(setup.host(), Duration::from_millis(20), |_| async {
         BUDGET.set(BUDGET.get() + Duration::from_micros(500));
@@ -271,7 +261,6 @@ fn cheap_ticks(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-/// The TUI, settled, with the budget's clock injected.
 fn budgeted() -> support::Harness {
     let h = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
     h.app.idle(Duration::from_secs(3));
@@ -290,7 +279,6 @@ fn a_fast_timer_with_cheap_ticks_is_not_slow() {
     assert!(!h.tui.plugins.monitor().is_slow("test.cheap"), "500 µs ticks every 20 ms were slow");
 }
 
-/// Two 20 ms timers 10 ms apart, each tick costing 700 µs on the budget's clock: one ticks at 20 ms, the other at 30.
 fn two_timers(setup: &mut abi::Setup) -> Result<(), String> {
     let tasks = setup.tasks();
     let tick = || BUDGET.set(BUDGET.get() + Duration::from_micros(700));
@@ -320,7 +308,6 @@ fn a_tick_after_a_paint_leaves_no_frame_open_for_good() {
     h.app.advance(Duration::from_millis(25));
     h.app.render();
     h.app.advance(Duration::from_millis(33));
-    // At 58 ms the frame of the ticks at 30, 40 and 50 ms has ended (at 54 ms), and no tick ran since.
     let (own, _) = h.tui.plugins.monitor().spent(slot);
     assert_eq!(own, Duration::ZERO, "a frame stayed open and summed {own:?} of ticks");
 }

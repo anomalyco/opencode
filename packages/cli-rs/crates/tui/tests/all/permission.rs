@@ -11,7 +11,6 @@ use opencode_tui::Deps;
 use opencode_tui::routes::session::permission::{always_lines, presentation};
 use serde_json::{Value, json};
 
-/// A mutating request as the server saw it.
 #[derive(Debug, PartialEq)]
 struct Sent {
     method: &'static str,
@@ -30,7 +29,6 @@ struct Fixture {
 fn fake(fixture: Fixture, sent: Arc<Mutex<Vec<Sent>>>) -> Fake {
     Fake::new(move |seen| match (seen.method.as_str(), seen.path.as_str()) {
         ("GET", "/api/session/ses_root") => (200, json!({ "data": session("ses_root", None) })),
-        // The root's children, which a child's arrival reads.
         ("GET", "/api/session") => (200, json!({ "data": [session("ses_child", Some("ses_root"))], "cursor": {} })),
         ("GET", "/api/session/ses_child") => (200, json!({ "data": session("ses_child", Some("ses_root")) })),
         ("GET", "/api/session/ses_root/message" | "/api/session/ses_child/message") => {
@@ -38,7 +36,6 @@ fn fake(fixture: Fixture, sent: Arc<Mutex<Vec<Sent>>>) -> Fake {
         }
         ("GET", "/api/session/ses_root/permission") => (200, json!({ "data": fixture.root })),
         ("GET", "/api/session/ses_child/permission") => (200, json!({ "data": fixture.child })),
-        // The goal footer's RPC read (E.14); no goal is set.
         ("POST", path) if path.starts_with("/api/rpc/") => (200, json!({ "output": null })),
         ("POST", path) => {
             sent.lock().unwrap().push(Sent { method: "POST", path: path.to_owned(), body: seen.body.clone() });
@@ -374,7 +371,6 @@ mod model {
     /// A child of `ses_a`, so its requests ask what to do differently on reject.
     const C: &str = "ses_c";
 
-    /// xorshift64*: deterministic for a seed, and enough to pick events.
     struct Rng(u64);
 
     impl Rng {
@@ -498,7 +494,6 @@ mod model {
         save: bool,
     }
 
-    /// What the prompt shows, as TS derives it.
     #[derive(Clone, Debug, PartialEq)]
     enum Shown {
         Hidden,
@@ -544,7 +539,6 @@ mod model {
             self.pending.iter().find(|ask| ask.id == id).unwrap()
         }
 
-        /// The keys that mean something to the shown prompt.
         fn keys(&self) -> &'static [&'static str] {
             match self.shown {
                 Shown::Hidden => &[],
@@ -657,15 +651,10 @@ mod model {
     struct Observation {
         question: bool,
         rejecting: bool,
-        /// The fullscreen hint says "minimize".
         minimize: bool,
-        /// The body lists the patterns "Always allow" saves.
         always: bool,
-        /// The request whose command the body shows.
         request: Option<String>,
-        /// Registered question layers, counted by their fullscreen command.
         question_keys: usize,
-        /// Registered reject layers, counted by their cancel command.
         reject_keys: usize,
         focus: Focus,
     }
@@ -794,7 +783,6 @@ mod model {
                 Step::Switch(session) => {
                     self.tui.navigate(support::session_route(session));
                     model.viewed = session;
-                    // TS mounts the other session's prompt from the start.
                     model.shown = Shown::Hidden;
                     model.settle()
                 }

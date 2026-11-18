@@ -21,7 +21,6 @@ use opencode_tui::routes::session::form::{
 use opencode_tui::{Deps, Route};
 use serde_json::{Value, json};
 
-/// A mutating request as the server saw it.
 #[derive(Debug, PartialEq)]
 struct Sent {
     method: &'static str,
@@ -30,7 +29,6 @@ struct Sent {
     directory: Option<String>,
 }
 
-/// One session's `forms` and the `global` forms at `/project`.
 #[derive(Default)]
 struct Fixture {
     forms: Vec<Value>,
@@ -51,7 +49,6 @@ fn fake(fixture: Fixture, sent: Arc<Mutex<Vec<Sent>>>) -> Fake {
             ("GET", "/api/session/ses_root/permission") => (200, json!({ "data": [] })),
             ("GET", "/api/session/ses_root/form") => (200, json!({ "data": list(&fixture.forms) })),
             ("GET", "/api/form") => (200, support::list("/project", json!(list(&fixture.global)))),
-            // The goal footer's RPC read (E.14); no goal is set.
             ("POST", path) if path.starts_with("/api/rpc/") => (200, json!({ "output": null })),
             (method @ ("POST" | "DELETE"), path) => {
                 let method = if method == "POST" { "POST" } else { "DELETE" };
@@ -167,11 +164,9 @@ fn every_field_kind_fills_in_and_submits_from_the_review() {
     assert!(screen.contains("Type your answer"), "{screen}");
     assert!(!screen.contains("reason"), "hidden until agree is no:\n{screen}");
 
-    // Text: typed, then committed by Tab.
     harness.app.type_text("Ada");
     harness.wait_for("Ada");
     harness.app.press("tab");
-    // Integer: the range is the placeholder, and a value out of range stays with an error.
     harness.wait_for("1-5");
     harness.app.type_text("9");
     harness.app.press("tab");
@@ -179,10 +174,8 @@ fn every_field_kind_fills_in_and_submits_from_the_review() {
     harness.app.press("backspace");
     harness.app.type_text("3");
     harness.app.press("tab");
-    // Boolean: Enter picks Yes and moves on.
     harness.wait_for("1. Yes");
     harness.app.press("enter");
-    // Multiselect: Space toggles; typing on the custom row opens its editor; Enter commits it.
     harness.wait_for("3. [ ] Type your own answer");
     harness.app.press("space");
     harness.wait_for("1. [✓] A");
@@ -207,8 +200,6 @@ fn every_field_kind_fills_in_and_submits_from_the_review() {
     );
 }
 
-/// A theme switch restyles the form in place, keeping its answers and the editor's text: each cell equals the form
-/// mounted in the new theme and filled in the same way.
 #[test]
 fn a_theme_switch_keeps_the_answers_and_the_editor() {
     let fields = json!([
@@ -307,7 +298,6 @@ fn a_global_form_shows_over_home_and_replies_with_its_directory() {
         Route::Home,
     );
     harness.wait_for("MCP server needs a token");
-    // The home prompt is disabled: typing fills the form.
     harness.app.type_text("abc");
     harness.wait_for("abc");
     harness.app.press("enter");
@@ -472,14 +462,12 @@ fn the_helpers_follow_util_form() {
     assert_eq!(keys(&answered), ["kind", "detail", "link"]);
 }
 
-/// The fixture's form: the fields, with the message the TS script sets.
 fn parity_form(fields: Value) -> Forms {
     let mut form = form("ses_root", "frm_1", "Deploy settings", fields);
     form["metadata"] = json!({ "message": "Pick how to deploy." });
     mount(Fixture { forms: vec![form], ..Fixture::default() }, support::session_route("ses_root"))
 }
 
-/// The rows of `cells` whose cell at `x` is the prompt's border, cut to `width` columns from `x`.
 fn panel(cells: &Cells, x: u32, width: u32) -> Cells {
     let rows: Vec<u32> =
         (0..cells.height).filter(|&y| cells.cell(x, y).is_some_and(|cell| cell.symbol == "┃")).collect();

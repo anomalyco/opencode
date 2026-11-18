@@ -12,7 +12,6 @@
 
 use std::fmt::Debug;
 
-/// xorshift64*: small, fast, and the same sequence on every platform.
 pub struct Rng(u64);
 
 impl Rng {
@@ -27,7 +26,6 @@ impl Rng {
         self.0.wrapping_mul(0x2545_f491_4f6c_dd1d)
     }
 
-    /// A number below `n` (which is nonzero).
     pub fn below(&mut self, n: usize) -> usize {
         (self.next() % n as u64) as usize
     }
@@ -40,7 +38,6 @@ impl Rng {
 /// A check that failed: its property, its check site, the command after which it did, and what differed.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Failure {
-    /// The property, the same name in every client and the fixture.
     pub property: &'static str,
     /// The check site within the property; the shrinker keeps a candidate only when it fails the same one.
     pub site: &'static str,
@@ -67,12 +64,10 @@ fn environment(key: &str) -> Option<String> {
     std::env::var(key).ok().filter(|value| !value.is_empty())
 }
 
-/// How many seeds a seeded test that is not a [`Model`] runs: `MODEL_SEEDS`, or `default`.
 pub fn seeds_or(default: u64) -> u64 {
     environment("MODEL_SEEDS").map_or(default, |text| text.parse().expect("MODEL_SEEDS is a number"))
 }
 
-/// Whether `MODEL_SKIP` turns `property` off.
 pub fn skipped(property: &str) -> bool {
     static SKIP: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
     SKIP.get_or_init(|| environment("MODEL_SKIP").unwrap_or_default().split(',').map(str::to_owned).collect())
@@ -112,7 +107,6 @@ pub fn check<M: Model>(model: &M, seeds: u64, steps: usize) {
             trace.join("\n"),
             last.detail
         );
-        // A plugin's shims may have silenced the panic hook; the report is printed either way.
         eprintln!("{report}");
         panic!("{report}");
     }

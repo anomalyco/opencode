@@ -100,7 +100,6 @@ fn routes() -> Vec<MemoryRoute> {
     routes
 }
 
-/// The far end of the client MCP socket and the URL and headers it opened with.
 type Opened = Arc<Mutex<Vec<(String, Vec<(String, String)>, client_mcp::Remote)>>>;
 
 struct Harness {
@@ -117,10 +116,8 @@ fn mount() -> Harness {
     mount_with(None)
 }
 
-/// Where sockets open, and with which credentials.
 type Endpoint = Arc<Mutex<(url::Url, Option<Auth>)>>;
 
-/// A transport whose socket endpoint moves, as a managed service's does when it restarts.
 struct Moving {
     memory: Memory,
     endpoint: Endpoint,
@@ -244,12 +241,10 @@ impl Harness {
         reply.into_inner().expect("a reply")
     }
 
-    /// The cell where `label` starts on screen.
     fn at(&self, label: &str) -> Option<(u16, u16)> {
         at(&self.app.text(), label)
     }
 
-    /// The subagent rows on screen, top to bottom.
     fn rows(&self) -> Vec<&'static str> {
         let text = self.app.text();
         let mut rows: Vec<_> = ["Scan", "Lint", "Test"]
@@ -260,7 +255,6 @@ impl Harness {
         rows.into_iter().map(|(_, title)| title).collect()
     }
 
-    /// The subagent rows drawn as the selection, with the focused action background.
     fn focused(&self) -> Vec<&'static str> {
         let focused = self.tui.page().background.action.primary.focused;
         let capture = self.app.render();
@@ -274,7 +268,6 @@ impl Harness {
             .collect()
     }
 
-    /// One durable event of a subagent, as a running subagent streams them.
     fn emit(&self, kind: &str, session: &str) {
         let seq = self.next.get() + 1;
         self.next.set(seq);
@@ -367,7 +360,6 @@ fn the_client_mcp_socket_follows_a_restarted_service() {
     let harness = mount_with(Some(endpoint.clone()));
     harness.experiment(true);
     assert!(harness.wait(|harness| harness.opened.lock().unwrap().len() == 1));
-    // The service restarts on a new port with a new password, and the event stream reconnects to it.
     *endpoint.lock().unwrap() = at("http://127.0.0.1:5000/", "new");
     harness.memory.emit(&json!({ "id": "evt_again", "type": "server.connected", "data": {} }));
     assert!(harness.wait(|harness| harness.opened.lock().unwrap().len() == 2));
@@ -392,7 +384,6 @@ fn the_subagents_tab_interrupts_a_running_subagent_and_hides_the_queued_dock() {
     assert!(!text.contains("1 queued"), "the dock hides under the composer");
     harness.tui.keymap.dispatch("composer.subagent.interrupt", None);
     assert!(harness.wait(|harness| { !harness.requests("POST", "/api/session/ses_c/interrupt").is_empty() }));
-    // Escape closes the composer, and the dock and the prompt come back.
     harness.app.press("escape");
     assert!(harness.wait(|harness| harness.app.text().contains("1 queued")));
     assert!(!harness.app.text().contains("Subagents"));
@@ -437,7 +428,6 @@ fn a_theme_switch_restyles_the_dock_the_composer_and_the_terminal_in_place() {
 fn terminal_select_opens_the_terminal_list_and_enter_shows_the_terminal() {
     let harness = mount();
     harness.tui.keymap.dispatch("terminal.select", None);
-    // The foreground process names the terminal.
     support::wait_for_all(&harness.app, &["+ New terminal", "vim"]);
     harness.app.press("down");
     harness.app.press("enter");
@@ -517,7 +507,6 @@ fn the_shell_output_dialog_waits_while_the_server_holds_back_a_live_character() 
     assert!(harness.app.text().contains("waiting"));
     harness.app.wait_until(Duration::from_millis(500), || false);
     assert_eq!(held(&harness), 1, "the dialog read the held-back character again at once");
-    // The next poll, a second later, tries again.
     harness.app.advance(Duration::from_secs(1));
     assert!(harness.wait(|harness| held(harness) == 2));
 }
@@ -542,7 +531,6 @@ fn the_subagent_selection_follows_the_keys_while_subagents_stream_under_a_restin
         assert_eq!(harness.rows(), rows, "the order holds");
         assert_eq!(harness.focused(), [rows[expected]], "after {key}");
     }
-    // Moving the pointer selects the row under it (`onMouseMove`).
     let (x, y) = harness.at(&format!("Explore: {} ()", rows[2])).unwrap();
     harness.app.hover(x, y);
     assert!(harness.wait(|harness| harness.focused() == [rows[2]]));
@@ -561,7 +549,6 @@ fn a_finished_subagent_leaves_the_selection_on_its_row_index() {
     };
     harness.app.press("down");
     assert!(harness.wait(|harness| harness.focused() == [rows[1]]));
-    // As in TS, the selection is an index: the next subagent moves up into it.
     harness.emit("session.execution.succeeded", id(rows[1]));
     assert!(harness.wait(|harness| harness.rows() == [rows[0], rows[2]]));
     assert_eq!(harness.focused(), [rows[2]]);

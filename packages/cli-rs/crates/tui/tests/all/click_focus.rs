@@ -95,7 +95,6 @@ fn mount() -> Focus {
         events: true,
         ..support::deps(Arc::new(memory.clone()))
     };
-    // The TUI's own options, as `app::run` builds the app.
     let options = AppOptions { capture_stderr: false, ..opencode_tui::app::options() };
     let harness = support::mount_on(TestApp::with_options(160, 30, options), deps, Args::default());
     let remotes: Arc<Mutex<Vec<Remote>>> = Arc::default();
@@ -133,7 +132,6 @@ impl Focus {
         self.tui.app.focused().is_some_and(|widget| widget.id() == textarea.id())
     }
 
-    /// Clicks `at`, types `text`, and asserts the prompt took it.
     fn click_then_type(&self, what: &str, at: (u16, u16), text: &str) {
         let before = self.prompt_text();
         self.app.click(at.0, at.1);
@@ -166,7 +164,6 @@ impl Focus {
             deliver.try_send(Incoming::Text(text.into())).unwrap();
         }
         self.app.wait_until(Duration::from_millis(200), || false);
-        // Inside the terminal, a few cells right of the session pane's prompt.
         let (x, y) = self.find("╹▀", 0);
         let line = self.app.text().lines().nth(y as usize).unwrap().to_owned();
         (x + line.trim().chars().count() as u16 + 5, 10)
@@ -190,14 +187,10 @@ fn clicks_outside_the_prompt_leave_it_focused() {
     h.wait_for("ctrl+p commands");
     assert!(h.prompt_focused(), "the session did not focus its prompt");
     let (width, _) = h.tui.app.size();
-    // The transcript's empty rows, under the title.
     h.click_then_type("transcript", (20, 8), "a");
-    // The sidebar's title, at the right.
     let (_, y) = h.find("Fix the parser", 1);
     h.click_then_type("sidebar", (width - 10, y), "b");
-    // The open tab in the tab strip.
     h.click_then_type("tab strip", (5, 0), "c");
-    // The footer's hints under the prompt.
     let (x, y) = h.find("shift+tab agents", 0);
     h.click_then_type("footer", (x + 2, y), "d");
     h.tui.toasts.show(ToastOptions::new(Variant::Info, "Saved the draft"));
@@ -223,7 +216,6 @@ fn a_click_inside_a_dialog_leaves_its_filter_focused() {
     let h = mount();
     h.wait_for("ctrl+p commands");
     h.app.press("ctrl+p");
-    // A group header in the list does not take the filter's focus.
     let (x, y) = h.find("Suggested", 0);
     h.app.click(x, y);
     h.app.type_text("zq");
@@ -246,7 +238,6 @@ fn a_click_on_the_terminal_focuses_it_and_one_on_the_session_pane_gives_it_back(
     let h = mount();
     h.wait_for("ctrl+p commands");
     let at = h.open_terminal();
-    // The terminal took the focus when it opened; the prompt has it back.
     h.tui.keymap.dispatch("pane.focus.left", None);
     assert!(h.prompt_focused());
     h.sent();
@@ -254,7 +245,6 @@ fn a_click_on_the_terminal_focuses_it_and_one_on_the_session_pane_gives_it_back(
     h.app.type_text("t");
     assert!(h.sent().ends_with(b"t"), "a click on the terminal did not focus it:\n{}", h.app.text());
     assert_eq!(h.prompt_text(), "");
-    // `session-frame.tsx:300-322`: a click on the session pane returns the focus to the prompt.
     h.click_then_type("session pane", (20, 8), "g");
 }
 
@@ -274,11 +264,9 @@ fn a_click_on_a_panel_focuses_its_host() {
 }
 
 thread_local! {
-    /// The `on_mount(true)` and `on_mount(false)` calls of [`probe`]'s claim.
     static MOUNTS: std::cell::Cell<(usize, usize)> = const { std::cell::Cell::new((0, 0)) };
 }
 
-/// A plugin whose `prompt.footer` claim counts its mounts and unmounts and always shows the same node.
 fn probe(setup: &mut abi::Setup) -> Result<(), String> {
     let at = || abi::Placement::append("prompt.footer");
     setup.slot(at(), |_, _, _| abi::Render::Show(abi::Node::text([abi::Span::new("probe claim")])));
@@ -299,7 +287,6 @@ fn a_pane_focus_switch_dims_the_footer_hints_without_remounting_the_footer() {
     h.wait_for("ctrl+p commands");
     let reads = || h.memory.requests().iter().filter(|logged| logged.path == "/api/rpc/opencode.goal/get").count();
     h.wait("the goal read", || reads() >= 1);
-    // The `c` of `ctrl+p commands`, wherever the panel puts it.
     let fg = || {
         h.app.advance(Duration::from_millis(1));
         let (x, y) = h.find("ctrl+p commands", 0);
@@ -315,7 +302,6 @@ fn a_pane_focus_switch_dims_the_footer_hints_without_remounting_the_footer() {
     assert!(!h.prompt_focused());
     let dimmed = fg();
     assert_ne!(dimmed, active, "the hints did not dim");
-    // The event stream's `server.connected` may read the goal again, and the panel's layout may settle.
     h.app.wait_until(Duration::from_millis(200), || false);
     let (before, mounts, widget) = (reads(), MOUNTS.with(|mounts| mounts.get()), claim());
     assert!(widget.is_some() && mounts.0 > mounts.1, "{mounts:?}");

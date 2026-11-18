@@ -1,5 +1,3 @@
-//! Scrolling, message navigation, the scrollbar, and groups (E.8) over a long fixture session.
-
 use crate::support::{self, Fake, Harness, WAIT, deref_harness};
 
 use std::rc::Rc;
@@ -70,7 +68,6 @@ fn read(id: &str, path: &str) -> Value {
     })
 }
 
-/// 30 turns: a question, then two reads and a three-paragraph answer.
 fn turns(count: u64) -> Vec<Value> {
     (1..=count)
         .flat_map(|turn| {
@@ -138,7 +135,6 @@ impl Nav {
         self.idle()
     }
 
-    /// The row a line shows on, if it does.
     fn row(screen: &str, text: &str) -> Option<usize> {
         screen.lines().position(|line| line.contains(text))
     }
@@ -169,15 +165,12 @@ fn line_half_page_and_page_scroll_by_their_distances() {
     let at = Nav::row(&start, anchor).unwrap();
     assert!(!start.contains("Jump to latest"), "{start}");
 
-    // `session.line.up` (ctrl+alt+y) moves the content down one row.
     let screen = h.press("ctrl+alt+y");
     assert_eq!(Nav::row(&screen, anchor), Some(at + 1), "{screen}");
     assert!(screen.contains("Jump to latest ↓"), "{screen}");
     let screen = h.press("ctrl+alt+e");
     assert_eq!(Nav::row(&screen, anchor), Some(at), "{screen}");
 
-    // Half a page is a quarter of the view, a page half of it (`index.tsx:933-968`); the view is 15
-    // rows tall at 80x30 with the prompt below it.
     let before = h.app.text();
     let half = h.press("ctrl+alt+u");
     let moved = shift(&before, &half).unwrap();
@@ -197,7 +190,6 @@ fn line_half_page_and_page_scroll_by_their_distances() {
 #[test]
 fn page_up_backfills_then_last_returns_to_the_tail() {
     let h = open(turns(30), Info::default());
-    // Paging up all the way mounts older rows and pages, and every page keeps its line.
     let mut screen = h.app.text();
     for _ in 0..400 {
         if screen.contains("┃  Question 1\n") {
@@ -248,7 +240,6 @@ fn first_mounts_the_head_and_newer_rows_mount_on_the_way_down() {
     h.press("ctrl+g");
     let head = h.wait_for("┃  Question 1\n");
     assert!(head.contains("Jump to latest ↓"), "{head}");
-    // The thumb in half rows: `▀` and `▄` are one, `█` two.
     let thumb = |screen: &str| {
         screen
             .lines()
@@ -273,7 +264,6 @@ fn first_mounts_the_head_and_newer_rows_mount_on_the_way_down() {
     }
     assert!(screen.contains("Answer 60 three."), "{screen}");
     assert!(!screen.contains("Jump to latest"), "{screen}");
-    // Message navigation mounts every row (`ensureAllRows`).
     h.press("ctrl+g");
     h.wait_for("┃  Question 1\n");
     let screen = settle(&h, h.dispatch("session.message.next"));
@@ -306,7 +296,6 @@ fn message_navigation_aligns_messages_with_the_top() {
     let screen = settle(&h, h.press("alt+end"));
     assert_eq!(Nav::row(&screen, "Question 30"), Some(TOP + 1), "{screen}");
 
-    // Walking back past the loaded history loads older pages.
     for _ in 0..80 {
         h.dispatch("session.message.user.previous");
     }
@@ -339,7 +328,6 @@ fn a_failed_transcript_read_toasts_its_message() {
 
 #[test]
 fn groups_open_on_click_and_follow_grouping_and_verbosity() {
-    // Low, the default, folds a turn's calls into one activity summary.
     let screen = open(turns(3), Info::default()).app.text();
     assert!(screen.contains("+ 2 reads") && !screen.contains("Explored"), "{screen}");
 
@@ -348,11 +336,9 @@ fn groups_open_on_click_and_follow_grouping_and_verbosity() {
     let h = open(turns(3), medium);
     let screen = h.app.text();
     assert!(screen.contains("→ Explored: 2 reads"), "{screen}");
-    // E.7a's read row.
     let read = "→ Read";
     assert!(!screen.contains(read), "{screen}");
 
-    // A click opens the group; the reads show below its header.
     let (x, _) = position(&screen, "→ Explored: 2 reads");
     let lines: Vec<_> = screen.lines().collect();
     let last = lines.iter().rposition(|line| line.contains("→ Explored")).unwrap();
@@ -360,16 +346,13 @@ fn groups_open_on_click_and_follow_grouping_and_verbosity() {
     let opened = h.wait_for(read);
     let lines: Vec<_> = opened.lines().collect();
     let header = lines.iter().rposition(|line| line.contains("→ Explored")).unwrap();
-    // The calls stack under the header with no blank line (`Children` in `tool` mode).
     assert!(lines[header + 1].contains(read) && lines[header + 2].contains(read), "{opened}");
 
-    // Grouping off shows every call, and back on folds them again.
     let screen = settle(&h, h.dispatch("session.toggle.exploration_grouping"));
     assert!(!screen.contains("Explored") && screen.contains(read), "{screen}");
     let screen = settle(&h, h.dispatch("session.toggle.exploration_grouping"));
     assert!(screen.contains("Explored"), "{screen}");
 
-    // High opens every exploration group the reader did not close.
     let high =
         Info { session: Some(Session { verbosity: Some(Verbosity::High), ..Session::default() }), ..Info::default() };
     let h = open(turns(3), high);
@@ -377,7 +360,6 @@ fn groups_open_on_click_and_follow_grouping_and_verbosity() {
     let lines: Vec<_> = screen.lines().collect();
     let header = lines.iter().rposition(|line| line.contains("→ Explored")).unwrap();
     assert!(lines[header + 1].contains(read), "{screen}");
-    // The cycle goes on to Low, which folds a turn's calls into one activity summary.
     let screen = settle(&h, h.dispatch("session.verbosity.cycle"));
     assert!(screen.contains("+ 2 reads"), "{screen}");
     assert!(!screen.contains("Explored"), "{screen}");
@@ -430,7 +412,6 @@ fn a_tab_reopens_where_the_reader_left_it() {
     let restored = h.app.wait_until(WAIT, || transcript(&h.app.text()) == left);
     assert!(restored, "{left:#?}\n=====\n{:#?}", transcript(&h.app.text()));
 
-    // Back at the bottom, the anchor is gone: the tab reopens at its newest rows.
     h.press("end");
     let bottom = transcript(&h.wait_for("Answer 30 three."));
     switch("ses_m");
@@ -439,7 +420,6 @@ fn a_tab_reopens_where_the_reader_left_it() {
     let found = h.app.wait_until(WAIT, || transcript(&h.app.text()) == bottom);
     assert!(found, "{bottom:#?}\n=====\n{}", h.app.text());
 
-    // The oldest rows, outside the newest window, mount again around the anchor.
     h.press("ctrl+g");
     h.wait_for("┃  Question 1\n");
     let first = transcript(&h.idle());
@@ -461,7 +441,6 @@ fn navigation_frees_the_view_it_replaces() {
     }
     h.wait_for("Answer 3 three.");
     support::mark(&h.app, &h.tui.frame.main(), 0, &marker);
-    // The rows still take the pointer: a click on a prompt opens its actions.
     let (x, y) = h.find("Question 3");
     h.app.hover(x, y);
     h.app.click(x, y);
@@ -472,7 +451,6 @@ fn navigation_frees_the_view_it_replaces() {
     assert_eq!(Rc::strong_count(&marker), 1);
 }
 
-/// Lets frames and follow-up timers run, then reads the screen.
 fn settle(h: &Nav, _: String) -> String {
     for _ in 0..4 {
         h.app.advance(Duration::from_millis(5));

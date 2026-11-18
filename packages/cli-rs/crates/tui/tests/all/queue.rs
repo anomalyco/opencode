@@ -132,7 +132,6 @@ impl Kit {
             .lock()
             .unwrap()
             .iter()
-            // The goal footer's RPC `get` is a read, as P-REQ counts it.
             .filter(|seen| seen.method != "GET" && !(seen.path.starts_with("/api/rpc/") && seen.path.ends_with("/get")))
             .map(|seen| format!("{} {} {}", seen.method, seen.path, seen.body))
             .collect()
@@ -227,7 +226,6 @@ fn a_failed_steer_keeps_the_dialog_and_toasts() {
 #[test]
 fn a_pending_steer_moves_to_the_queue_or_is_deleted() {
     let kit = Kit::new(vec![pending("msg_05", "Steer this", "steer")]);
-    // A steer still in the inbox shows in the transcript, and the dock stays hidden.
     let screen = kit.wait_for("Steer this");
     assert!(!screen.contains("queued"), "{screen}");
     kit.click("Steer this");
@@ -254,7 +252,6 @@ fn message_actions_revert_and_fork() {
     for option in ["Jump to", "Revert", "Copy", "Fork"] {
         assert!(screen.contains(option), "{option}: {screen}");
     }
-    // Jump to closes it.
     kit.app.press("enter");
     kit.wait_gone("Message Actions");
     assert!(kit.writes().is_empty(), "{:?}", kit.writes());

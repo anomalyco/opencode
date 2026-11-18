@@ -28,10 +28,8 @@ use opentui::app::ProxyError;
 
 const ID: &str = "test.mail";
 
-/// A message: who sent it (a thread, or a key from [`KEYED`] on) and its number.
 type Note = (u32, u32);
 const KEYED: u32 = 1000;
-/// The message whose update fails.
 const FAILS: Note = (u32::MAX, 0);
 
 #[derive(Default)]
@@ -40,9 +38,7 @@ struct Mail {
     spawner: Option<abi::Spawner>,
     waker: Option<abi::Waker>,
     arrived: Vec<Note>,
-    /// How many updates send one more message, as a thread that refills each freed place does.
     refill: u32,
-    /// The messages that had arrived when each wake handler ran.
     woken: Vec<usize>,
 }
 
@@ -108,17 +104,13 @@ pub(crate) fn drain(harness: &Harness) {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Command {
-    /// A thread sends `count` numbered messages, and is joined.
     Send(u32),
-    /// A thread replaces under key `key` `count` times, and is joined.
     Replace(u32, u32),
     /// The UI thread runs: what waits is delivered.
     Frame,
-    /// The plugin manager's toggle.
     Toggle,
 }
 
-/// What one send returned.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Sent {
     Ok,
@@ -126,7 +118,6 @@ enum Sent {
     Closed,
 }
 
-/// Runs `sends` on a thread of its own with the plugin's sender, and joins it.
 fn on_thread(sends: Vec<(Option<u32>, Note)>) -> Vec<Sent> {
     let Some(sender) = mail(|mail| mail.sender.clone()) else { return vec![Sent::Closed; sends.len()] };
     std::thread::spawn(move || {
@@ -164,7 +155,6 @@ struct Reference {
 }
 
 impl Reference {
-    /// What a send may return, and what it does when it is `Ok`.
     fn send(&mut self, key: Option<u32>, note: Note, sent: Sent) -> Result<(), String> {
         let expected = if self.closed {
             Sent::Closed
@@ -360,7 +350,6 @@ fn a_stop_flag_ends_a_thread_and_a_failure_closes_the_mailbox() {
             })
             .unwrap();
         spawner.spawn("boom", |_| panic!("a mail thread panicked")).unwrap();
-        // The report is handled as a paint starts.
         harness.wait("the panic failed the plugin", || {
             harness.app.advance(Duration::from_millis(1));
             harness.app.render();
@@ -384,7 +373,6 @@ fn a_stop_flag_ends_a_thread_and_a_failure_closes_the_mailbox() {
 #[derive(Debug)]
 struct Slow;
 
-/// The senders of the slow and the wide plugins, and the wide numbers that arrived.
 #[derive(Default)]
 struct Senders {
     slow: Option<abi::Sender<Slow>>,
@@ -556,7 +544,6 @@ fn a_refilled_mailbox_holds_back_no_report_and_no_wake() {
     }
 }
 
-/// Sends `count` messages from a thread, and joins it; how many were accepted.
 fn flood(count: u32) -> usize {
     let sender = mail(|mail| mail.sender.clone()).unwrap();
     std::thread::spawn(move || (0..count).filter(|number| sender.send((9, *number)).is_ok()).count()).join().unwrap()
@@ -580,13 +567,11 @@ fn a_mailbox_full_at_the_end_of_13_frames_is_a_backlog() {
         };
         assert_eq!(flood(abi::BOUND as u32), abi::BOUND, "{carrier:?}: a burst to the bound");
         frame(&harness);
-        // Each update puts one more in: the mailbox stays at its bound.
         mail(|mail| mail.refill = u32::MAX);
         assert_eq!(flood(abi::BOUND as u32 + 1), abi::BOUND, "{carrier:?}: one refused");
         for _ in 0..12 {
             paint();
         }
-        // Its calls fill each frame's budget, which P4c's cause counts too: the backlog's own news tells them apart.
         let backlog = || monitor.report(ID).unwrap_or_default().contains("backlog");
         assert!(!backlog(), "{carrier:?}: a backlog after 12 full ends");
         paint();
@@ -598,10 +583,8 @@ fn a_mailbox_full_at_the_end_of_13_frames_is_a_backlog() {
         for _ in 0..120 {
             paint();
         }
-        // Its calls, which filled each frame's budget, may keep it slow by P4c's cause; the backlog has gone.
         let report = monitor.report(ID).unwrap_or_default();
         assert!(!report.contains("backlog"), "{carrier:?}: a backlog 120 frames after it ended: {report}");
-        // Disabled and enabled again, and backlogged again: slow again, and nothing more is told.
         let host = opencode_tui::plugins::host::host(&harness.tui);
         harness.tui.plugins.toggle(&host, ID, false).unwrap().unwrap();
         harness.tui.plugins.toggle(&host, ID, true).unwrap().unwrap();

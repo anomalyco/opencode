@@ -33,7 +33,6 @@ fn carriers(test: fn()) {
     ABI.set(false);
 }
 
-/// Home with the plugin list of `plugins`, over a server that answers `/api/plugin` with no plugin; and its log.
 fn open(plugins: &[&str]) -> (Harness, Log) {
     open_with(serde_json::json!({ "plugins": plugins }), Vec::new())
 }
@@ -75,12 +74,10 @@ fn settle(harness: &Harness) {
     }
 }
 
-/// The plugin list reads the manager sent.
 fn reads(log: &Log) -> usize {
     log.lock().unwrap().iter().filter(|seen| seen.path == "/api/plugin" && seen.method == "GET").count()
 }
 
-/// The commands that can be reached now, by ID.
 fn commands(harness: &Harness) -> BTreeSet<String> {
     harness.tui.keymap.commands().into_iter().map(|command| command.id).collect()
 }
@@ -91,8 +88,6 @@ fn screen(harness: &Harness) -> String {
     text.lines().filter(|line| !line.contains("Ask anything")).collect::<Vec<_>>().join("\n")
 }
 
-/// Enables or disables plugin `id` as the host's own toggles do (the slow toast's Disable, Enable again): the registry,
-/// then the route mounts again.
 fn toggle(harness: &Harness, id: &str, active: bool) {
     let host = host(&harness.tui);
     assert_eq!(harness.tui.plugins.toggle(&host, id, active), Some(Ok(())), "{id}");
@@ -144,7 +139,6 @@ fn the_manager_shows_the_plugins_only_while_its_list_shows_on() {
     assert!(!harness.app.text().contains("check for updates"), "{}", harness.app.text());
     opencode_tui::plugins::host::add(&harness.tui, watcher().into());
     harness.wait_for("test.watch");
-    // The skipped row's error, with a change under it.
     harness.app.press("enter");
     harness.wait_for("TUI plugin error");
     toggle(&harness, "test.watch", false);
@@ -160,7 +154,6 @@ fn the_manager_shows_the_plugins_only_while_its_list_shows_on() {
 }
 
 thread_local! {
-    /// What [`watcher`] heard: the plugins as it read them, at each change.
     static HEARD: RefCell<Vec<Vec<String>>> = const { RefCell::new(Vec::new()) };
 }
 
@@ -184,7 +177,6 @@ fn boom() -> abi::Plugin {
     abi::Plugin { id: "test.boom", setup }
 }
 
-/// `id status` of each plugin, as a plugin reads them.
 fn listed(plugins: &[abi::PluginEntry]) -> Vec<String> {
     plugins
         .iter()
@@ -232,7 +224,6 @@ fn a_plugin_hears_each_change_of_the_plugin_list_once_on() {
             n = n.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
             let step = (n >> 16) % 6;
             match step {
-                // Enter on the home footer plugin's row, as the user toggles it.
                 0 => {
                     harness.dispatch("plugins.list");
                     harness.wait_for("show internal");
@@ -309,11 +300,9 @@ impl Backend for Shadow {
 }
 
 thread_local! {
-    /// The replacement manager's next setups fail.
     static SHADOW_FAILS: Cell<bool> = const { Cell::new(false) };
 }
 
-/// Fails the replacement manager and opens the host's list on its row.
 fn fail_shadow(harness: &Harness) {
     harness.dispatch("shadow.boom");
     settle(harness);
@@ -324,7 +313,6 @@ fn fail_shadow(harness: &Harness) {
     harness.wait_for("failed, enter enables it again");
     harness.app.type_text("opencode.plugins");
     settle(harness);
-    // The host's own list, which no plugin's dialog or route replaces (review carbon-9).
     assert_eq!(harness.tui.dialogs.key().as_deref(), Some("host.plugins"));
 }
 
@@ -356,7 +344,6 @@ fn the_host_lists_the_plugins_while_the_manager_has_failed_on() {
     harness.app.press("escape");
     settle(&harness);
     fail_shadow(&harness);
-    // A row's error, and Back to the list on it.
     harness.app.press("escape");
     settle(&harness);
     harness.dispatch("plugins.list");
@@ -370,7 +357,6 @@ fn the_host_lists_the_plugins_while_the_manager_has_failed_on() {
     harness.wait_for("failed, enter enables it again");
     harness.app.press("escape");
     settle(&harness);
-    // A failed built-in shows, in the error color; Back from its error is on its row.
     harness.dispatch("plugins.list");
     harness.wait_for("test.crash");
     let error = harness.tui.page().text.feedback.error.base;
@@ -392,7 +378,6 @@ fn the_host_lists_the_plugins_while_the_manager_has_failed_on() {
     });
     harness.app.press("escape");
     settle(&harness);
-    // A restart whose setup fails leaves the manager failed and the host's list up (review carbon-3).
     fail_shadow(&harness);
     SHADOW_FAILS.set(true);
     harness.app.press("enter");
@@ -407,7 +392,6 @@ fn the_host_lists_the_plugins_while_the_manager_has_failed_on() {
     }
     harness.dispatch("plugins.list");
     harness.wait_for("failed, enter enables it again");
-    // Its own error shows on its own key.
     harness.app.type_text("opencode.plugins");
     settle(&harness);
     harness.app.press("space");
@@ -416,7 +400,6 @@ fn the_host_lists_the_plugins_while_the_manager_has_failed_on() {
     settle(&harness);
     harness.app.press("escape");
     settle(&harness);
-    // A run of the submit by name starts nothing.
     harness.dispatch("plugins.list");
     harness.wait_for("failed, enter enables it again");
     harness.app.type_text("opencode.plugins");
@@ -424,7 +407,6 @@ fn the_host_lists_the_plugins_while_the_manager_has_failed_on() {
     harness.dispatch("dialog.select.submit");
     settle(&harness);
     assert!(matches!(manager_status(&harness), opencode_plugin::Status::Failed(_)), "a submit by name restarted it");
-    // The user's enter does, and the manager that runs serves `/plugins`.
     harness.app.press("enter");
     settle(&harness);
     assert_eq!(manager_status(&harness), opencode_plugin::Status::Active);
@@ -590,7 +572,6 @@ fn a_held_build_that_shares_an_id_is_a_row_of_its_own_on() {
     harness.dispatch("plugins.list");
     harness.wait_for("show internal");
     harness.app.type_text("held-build");
-    // Listed by the manager that runs, not by the host's list.
     let shown = harness.wait_for("enable enter");
     assert!(shown.contains("show internal") && !shown.contains("enables it again"), "{shown}");
     // The user may release it, as any held build: the manager that runs is untouched until it loads.
@@ -604,11 +585,9 @@ fn a_held_build_that_shares_an_id_is_a_row_of_its_own_on() {
 }
 
 thread_local! {
-    /// What [`reader`] read of the plugin list, as JSON.
     static READ: RefCell<String> = const { RefCell::new(String::new()) };
 }
 
-/// A plugin that reads the plugin list as it changes and on its command.
 fn reader() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         let read = |host: &dyn abi::Read| READ.set(serde_json::to_string(&host.plugins()).unwrap());
@@ -631,7 +610,6 @@ fn secrets() -> [abi::Plugin; 2] {
     [abi::Plugin { id: "test.setup", setup }, abi::Plugin { id: "test.run", setup: run }]
 }
 
-/// A build that fails to load, with a private marker.
 struct Unloadable;
 
 impl Backend for Unloadable {
@@ -752,7 +730,6 @@ fn the_newest_server_list_shows_whatever_order_the_replies_come_in_on() {
     let harness = support::mount(100, 30, deps);
     opencode_tui::features::location::navigate_home(&harness.tui, Some(opencode_store::Location::new("/tmp/other")));
     settle(&harness);
-    // In one open: its read, then a read on `plugin.updated`.
     harness.dispatch("plugins.list");
     harness.wait_for("show internal");
     assert!(harness.app.wait_until(support::WAIT, || gated.held.lock().unwrap().len() == 1));
@@ -776,7 +753,6 @@ fn the_newest_server_list_shows_whatever_order_the_replies_come_in_on() {
     assert!(!shown.contains("first.pkg"), "{shown}");
 }
 
-/// A plugin that does nothing, under `id`.
 fn quiet(id: &'static str) -> abi::Plugin {
     fn setup(_: &mut abi::Setup) -> Result<(), String> {
         Ok(())
@@ -842,7 +818,6 @@ fn toggles_in_one_filtered_open_reach_the_selected_plugin_alone() {
 }
 
 thread_local! {
-    /// The runs of the picker's own actions.
     static PICKED: Cell<u32> = const { Cell::new(0) };
 }
 
@@ -1154,13 +1129,10 @@ fn a_panicking_plugin_list_handler_fails_its_plugin() {
 }
 
 thread_local! {
-    /// The time the monitor reads in [`a_plugin_hears_when_a_plugin_becomes_slow_and_stops`], and what a call of
-    /// `slowly.work` takes on it.
     static CLOCK: Cell<Duration> = const { Cell::new(Duration::ZERO) };
     static COST: Cell<Duration> = const { Cell::new(Duration::ZERO) };
 }
 
-/// A plugin whose command takes [`COST`] on [`CLOCK`].
 fn slowly() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         setup.command(Command::new("slowly.work"), |_, _| {
@@ -1206,7 +1178,6 @@ fn a_plugin_hears_when_a_plugin_becomes_slow_and_stops_on() {
     frames(2000, 4);
     assert!(slowly(), "{:?}", HEARD.with_borrow(Clone::clone));
     let heard = HEARD.with_borrow(Vec::len);
-    // Slower frames change the cost, not that it is slow.
     frames(3000, 2);
     opencode_tui::plugins::host::tell_plugins(&harness.tui);
     settle(&harness);
@@ -1218,7 +1189,6 @@ fn a_plugin_hears_when_a_plugin_becomes_slow_and_stops_on() {
     monitor.set_limits(limits);
 }
 
-/// A plugin whose keyed select takes its title from its command's input.
 fn titled() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         setup.command(Command::new("titled.show"), |host, input| {
@@ -1243,8 +1213,6 @@ fn a_keyed_select_shown_again_takes_its_new_title() {
     harness.wait_for("Second title");
 }
 
-/// A plugin whose keyed select is centered when its command's input says `on`, and whose alert and confirm are extra
-/// large and centered (contract 2.x additions).
 fn presented() -> abi::Plugin {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         setup.command(Command::new("presented.select"), |host, input| {

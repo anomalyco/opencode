@@ -124,7 +124,6 @@ fn a_session_moves_to_a_worktree() {
     let setup = Setup::new(support::session_route("ses_a"), &[]);
     setup.wait_session("ses_a");
     let screen = setup.open_worktrees();
-    // A session adds `move`; the session's checkout is current.
     assert!(screen.contains("move ctrl+m"), "{screen}");
     let current = screen.find("Current").unwrap();
     let other = screen.find("Other").unwrap();
@@ -151,7 +150,6 @@ fn picking_a_worktree_goes_home_there() {
     setup.app.press("return");
     let home = setup.app.wait_until(WAIT, || setup.tui.route() == Route::Home);
     assert!(home, "{:?}", setup.tui.route());
-    // The home prompt works in the picked checkout.
     setup.wait_for("/project-spike");
     assert!(setup.requests("POST", "/api/session/ses_a/move").is_empty());
 }
@@ -163,7 +161,6 @@ fn going_home_from_home_works_in_the_new_location() {
     assert_eq!(location().as_deref(), Some(DIRECTORY));
     opencode_tui::features::location::navigate_home(&setup.tui, Some(opencode_store::Location::new("/project-spike")));
     assert_eq!(location().as_deref(), Some("/project-spike"));
-    // A remount (a theme change) keeps it.
     setup.tui.navigate(Route::Home);
     assert_eq!(location().as_deref(), Some("/project-spike"));
 }
@@ -190,7 +187,6 @@ fn a_new_worktree_is_staged_on_home_and_created_by_the_first_submit() {
     let id = sessions[0].1["id"].as_str().unwrap().to_owned();
     let prompts = setup.wait_request("POST", &format!("/api/session/{id}/prompt"));
     assert_eq!(prompts[0].1["text"], "hello");
-    // The worktree, then its location, then the session.
     let order: Vec<String> = setup
         .log()
         .into_iter()
@@ -219,7 +215,6 @@ fn quick_switch_opens_pinned_sessions_and_deletes_drop_pins() {
     setup.app.press("ctrl+x");
     setup.app.press("2");
     assert_eq!(setup.tui.route(), support::session_route("ses_a"));
-    // An empty slot does nothing.
     setup.app.press("ctrl+x");
     setup.app.press("3");
     assert_eq!(setup.tui.route(), support::session_route("ses_a"));

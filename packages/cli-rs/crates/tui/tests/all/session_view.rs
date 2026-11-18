@@ -188,7 +188,6 @@ impl Harness {
         self.tui.data.apply(&[event]);
     }
 
-    /// `session.step.ended` of `ses_a`'s reply `message`, with `input` tokens.
     fn ended(&self, seq: u64, message: &str, input: u64) {
         let tokens = json!({ "input": input, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } });
         self.apply(
@@ -198,7 +197,6 @@ impl Harness {
         );
     }
 
-    /// The number the next widget gets, which counts the widgets created so far.
     fn next_widget(&self) -> u32 {
         View::new(&self.app).id()
     }
@@ -209,7 +207,6 @@ impl Harness {
         self.app.text()
     }
 
-    /// The usage limits requests, by the directory they asked for.
     fn limits(&self) -> Vec<Option<String>> {
         self.memory
             .requests()
@@ -266,7 +263,6 @@ fn the_sidebar_and_footer_skip_other_sessions_and_follow_their_own() {
     // The limit section reads the usage limits outside the store on any change.
     run(1);
 
-    // Runs of sessions outside the family rebuild no section and no footer.
     let before = h.next_widget();
     (2..=20).for_each(run);
     assert_eq!(h.next_widget(), before + 1, "{}", h.app.text());
@@ -305,7 +301,6 @@ fn the_sidebar_usage_goes_on_a_revert_or_a_list_change() {
     assert!(!h.app.text().contains("6% used"), "{}", h.app.text());
 }
 
-/// A sidebar claim that reads another location's models inside the messages visitor.
 fn elsewhere(setup: &mut abi::Setup) -> Result<(), String> {
     setup.slot(abi::Placement::append("sidebar.content"), |read, input, _| {
         let session = input.session_id.clone().unwrap_or_default();
@@ -442,7 +437,6 @@ impl Transport for Gated {
 
 #[test]
 fn the_sidebar_limit_shows_once_the_limits_load() {
-    // TS reads the limits reactively. Here the store is idle when they load.
     let gated =
         Arc::new(Gated { memory: Memory::new(routes()), asked: AtomicBool::new(false), release: Semaphore::new(0) });
     let deps = Deps {
@@ -458,7 +452,6 @@ fn the_sidebar_limit_shows_once_the_limits_load() {
     h.settle();
     gated.release.add_permits(1);
     h.wait_for("Running low on Big Pickle");
-    // The usage limits toast covers the section.
     h.tui.toasts.dismiss();
     h.wait_for("$5 remaining");
 }
@@ -510,7 +503,6 @@ fn usage_limits_are_kept_per_location() {
     h.wait_for("$5 left");
     assert_eq!(h.limits(), [Some(DIRECTORY.to_owned())]);
 
-    // The worktree's session reads its own location's limits, not the project's.
     h.tui.navigate(support::session_route("ses_wt"));
     h.wait_for("Worktree work");
     h.wait_for("$4 left");

@@ -29,7 +29,6 @@ fn status(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-/// The home at `width` columns, with two connected MCP servers and `plugins` in the config.
 fn mount(width: u16, plugins: &[&str], builtins: Vec<opencode_plugin::Builtin>) -> Harness {
     let servers = json!([
         { "name": "github", "status": { "status": "connected" } },
@@ -80,7 +79,6 @@ fn a_status_claim_updates_while_the_footer_keeps_its_node() {
     });
 }
 
-/// The cells of the footer's three rows (the prompt's placeholder above them is random).
 fn footer(h: &Harness) -> Vec<opentui::testing::Cell> {
     let frame = h.app.render();
     frame.cells[((frame.height - 3) * frame.width) as usize..].to_vec()
@@ -109,14 +107,11 @@ fn library() -> Vec<u8> {
     library
 }
 
-/// How [`footer_frames`] runs the footer.
 #[derive(Clone, Copy, Debug)]
 enum Run {
     Linked,
     /// Through the byte shims of the C ABI (`Loopback`), in process.
     Loopback,
-    /// Its own source, built as a library file and opened by the loader, as an external plugin is (P6a review, big-boi
-    /// medium 7).
     Library,
 }
 
@@ -187,7 +182,6 @@ fn a_nested_status_claim_stays_across_the_footer_thresholds() {
 }
 
 thread_local! {
-    /// The box of `test.toggle` is shown.
     static SHOWN: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
 }
 
@@ -224,7 +218,6 @@ fn a_hidden_and_shown_box_keeps_its_nested_claim() {
     assert!(h.app.render().text().contains("label status none"), "{}", h.app.text());
 }
 
-/// A `home.footer.status` claim whose root grows: `L` at its start and `R` at its end.
 fn growing(setup: &mut abi::Setup) -> Result<(), String> {
     use abi::{Layout, Node, Render, Span};
     setup.slot(abi::Placement::append("home.footer.status"), |_, _, _| {

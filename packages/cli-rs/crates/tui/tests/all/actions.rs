@@ -15,7 +15,6 @@ use serde_json::{Value, json};
 
 const LOCATION: &str = "/project";
 
-/// One session `ses_a` with its messages and inbox, the location catalog, and every write the actions send.
 fn fake(session: Value, messages: Vec<Value>, inbox: Vec<Value>) -> Fake {
     Fake::new(move |seen| {
         let body = &seen.body;
@@ -98,7 +97,6 @@ fn assistant(id: &str, created: u64, content: Value) -> Value {
     })
 }
 
-/// Two turns: a question with a reply (reasoning, text, and a tool call), then a question with a text reply.
 fn turns() -> Vec<Value> {
     vec![
         user("msg_01", 1_772_539_200_000, "Read the parser"),
@@ -152,7 +150,6 @@ impl Kit {
         Self { harness: support::mount(width, height, deps), seen }
     }
 
-    /// The transcript and the prompt's catalog are in.
     fn ready(&self) {
         self.wait_for("Fixed it.");
         self.wait_for("Model M");
@@ -164,7 +161,6 @@ impl Kit {
             .lock()
             .unwrap()
             .iter()
-            // The goal footer's RPC `get` is a read, as P-REQ counts it.
             .filter(|seen| seen.method != "GET" && !(seen.path.starts_with("/api/rpc/") && seen.path.ends_with("/get")))
             .map(|seen| format!("{} {} {}", seen.method, seen.url(), seen.body))
             .collect()
@@ -203,7 +199,6 @@ fn rename_opens_the_dialog_by_key_and_renames_or_generates_by_slash() {
     kit.app.press("return");
     assert_eq!(kit.wait_writes(1), [r#"PATCH /api/session/ses_a {"title":"Ship docs"}"#]);
 
-    // A bare `/rename` asks for a generated title, then reads the session back.
     kit.clear();
     kit.app.type_text("/rename");
     // The first Enter takes the slash completion, as in TS; the second submits.
@@ -239,10 +234,8 @@ fn timeline_lists_prompts_newest_first_and_moving_jumps_the_transcript() {
 
     kit.app.press("down");
     kit.app.press("escape");
-    let found = kit.app.wait_until(WAIT, || {
-        // Below the tab strip: the bar row above the prompt, then the prompt.
-        kit.app.text().lines().nth(2).is_some_and(|line| line.contains("First question"))
-    });
+    let found =
+        kit.app.wait_until(WAIT, || kit.app.text().lines().nth(2).is_some_and(|line| line.contains("First question")));
     assert!(found, "{}", kit.app.text());
     assert!(kit.writes().is_empty(), "{:?}", kit.writes());
 }
@@ -253,7 +246,6 @@ fn fork_forks_the_whole_session_or_before_a_prompt_and_opens_it() {
     kit.ready();
     kit.tui.keymap.dispatch("session.fork", None);
     let screen = kit.wait_for("Fork session");
-    // The dialog's rows; the transcript above it shows the same prompts.
     let screen = &screen[screen.find("Fork session").unwrap()..];
     let order = ["Full session", "Fix the bug in parse", "Read the parser"];
     let positions: Vec<_> = order.iter().map(|text| screen.find(text).unwrap()).collect();
@@ -429,7 +421,6 @@ fn redo_clears_a_staged_revert_and_is_off_without_one() {
 
 #[test]
 fn keymap_conditions_read_the_store_under_a_store_read() {
-    // Rows render under `tui.data.read`; a keymap query from a row runs conditions that read the store again.
     let kit = Kit::new(session("ses_a", json!({ "revert": { "messageID": "msg_03" } })), turns(), vec![]);
     kit.wait_for("1 message reverted");
     let commands = kit.tui.data.read(|_| kit.tui.keymap.commands());
@@ -476,7 +467,6 @@ fn copies_and_the_parent_report_their_outcome() {
     // Without a terminal, every copy fails, as TS reports a rejected clipboard write.
     let kit = Kit::new(session("ses_a", json!({ "parentID": "ses_p" })), turns(), vec![]);
     kit.ready();
-    // A child session shows the composer, whose mode leaves the base-mode keys out (E.13b).
     kit.tui.keymap.dispatch("messages.copy", None);
     kit.wait_for("Failed to copy to clipboard");
     kit.tui.keymap.dispatch("session.copy.id", None);
@@ -520,7 +510,6 @@ fn export_saves_markdown_or_sanitized_json_and_shows_the_path() {
     kit.wait_for("Fixed it.");
     kit.leader("x");
     kit.wait_for("Export session");
-    // Markdown with thinking and tools by default; Enter saves to a file.
     kit.app.press("return");
     kit.wait_for("Session exported");
     assert_eq!(kit.reads("/api/experimental/session/ses_export_md/export"), 1);
@@ -584,7 +573,6 @@ fn export_saves_markdown_or_sanitized_json_and_shows_the_path() {
     kit.wait_for("Fixed it.");
     kit.leader("x");
     kit.wait_for("Export session");
-    // Right switches the format to JSON; Down past Location and Space turn Sanitize on; Enter saves.
     kit.app.press("right");
     kit.wait_for("Sanitize");
     kit.app.press("down");
@@ -606,7 +594,6 @@ fn export_saves_markdown_or_sanitized_json_and_shows_the_path() {
     kit.wait_for("Fixed it.");
     kit.leader("x");
     kit.wait_for("Export session");
-    // Down and Space move Location to temp (#62490); Enter saves there and the result names that path.
     kit.app.press("down");
     kit.app.press("space");
     kit.wait_for("‹ temp ›");

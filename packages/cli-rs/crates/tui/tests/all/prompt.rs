@@ -14,7 +14,6 @@ use opencode_tui::{Deps, Route};
 use opentui::prelude::*;
 use serde_json::{Value, json};
 
-/// A request the fixture saw: method, path, and JSON body.
 type Seen = Arc<Mutex<Vec<(String, String, Value)>>>;
 
 /// Serves a session `ses_a` (agent `build`, model `p/m`), the location catalog, and the prompt
@@ -125,7 +124,6 @@ fn session(id: &str) -> Value {
 pub(crate) struct Setup {
     harness: Harness,
     seen: Seen,
-    /// Lets the agent and model reads answer.
     catalog: Arc<AtomicBool>,
     reject: Arc<AtomicBool>,
     _home: opencode_util::temp::TempDir,
@@ -148,7 +146,6 @@ impl Setup {
         Self::build(route, home, true)
     }
 
-    /// The fixture on `route`, `width` columns wide, answering each of `reads`' GET paths with its value.
     pub(crate) fn serving(route: Route, reads: Vec<(&str, Value)>, width: u16) -> Self {
         let reads = reads.into_iter().map(|(path, value)| (path.to_owned(), value)).collect();
         Self::build_with(route, opencode_util::temp::tempdir().unwrap(), true, reads, width)
@@ -228,7 +225,6 @@ fn typing_edits_through_the_input_layer_and_enter_submits() {
     assert!(setup.app.app().focused().is_some_and(|widget| widget.id() == setup.textarea().id()));
 
     setup.app.type_text("hllo worlx");
-    // `input.word.backward` (alt+b), `input.move.right`, `input.line.end`, `input.backspace`.
     setup.app.press("alt+b");
     setup.app.press("alt+b");
     setup.app.press("right");
@@ -237,13 +233,11 @@ fn typing_edits_through_the_input_layer_and_enter_submits() {
     setup.app.press("backspace");
     setup.app.type_text("d");
     assert_eq!(setup.textarea().text(), "hello world");
-    // Shift+Enter, and Ctrl+J (a legacy `\n`, `linefeed`), insert newlines (`input.newline`).
     setup.app.press("shift+return");
     setup.app.type_text("a");
     setup.app.feed(b"\n");
     setup.app.type_text("b");
     assert_eq!(setup.textarea().text(), "hello world\na\nb");
-    // The textarea's own keys are off: the managed layer edits it.
     assert!(setup.textarea().keymap().is_empty());
 
     setup.app.press("return");
@@ -332,7 +326,6 @@ fn history_steps_through_submitted_prompts_and_is_written_as_typescript_writes_i
     // A typed prompt is kept as the draft while Up recalls the newest entry (#63262).
     setup.app.press("up");
     assert_eq!(setup.textarea().text(), "second");
-    // An edited entry does not step.
     setup.app.press("ctrl+e");
     setup.app.type_text("!");
     setup.app.press("ctrl+a");
@@ -344,7 +337,6 @@ fn history_steps_through_submitted_prompts_and_is_written_as_typescript_writes_i
     assert_eq!(setup.textarea().text(), "one\ntwo");
 }
 
-// #63262 (`history-composer.test.tsx`): Down past the newest entry brings back the draft and its shell mode.
 #[test]
 fn down_past_the_newest_entry_restores_the_draft_text_and_shell_mode() {
     let setup = Setup::new(session_route());
@@ -389,7 +381,6 @@ fn shell_mode_runs_the_command_and_its_keys_leave_it() {
     setup.app.type_text("!");
     setup.wait_for("Shell");
     assert_eq!(setup.textarea().text(), "");
-    // Backspace at the start leaves it; `!` later in the text is just text.
     setup.app.press("backspace");
     setup.wait_for("Build");
     setup.app.type_text("a!");
@@ -397,7 +388,6 @@ fn shell_mode_runs_the_command_and_its_keys_leave_it() {
     setup.app.press("ctrl+c");
     assert_eq!(setup.textarea().text(), "");
 
-    // Escape leaves it too.
     setup.app.type_text("!");
     setup.wait_for("Shell");
     setup.app.press("escape");
@@ -430,7 +420,6 @@ fn ctrl_c_clears_then_exits_and_long_prompts_go_to_history() {
     let history = setup.wait_history(1);
     assert!(history.contains("a prompt long enough to keep"), "{history}");
     assert!(!history.contains("short"), "{history}");
-    // On an empty prompt Ctrl+C is `app.exit`.
     setup.app.press("ctrl+c");
     assert!(setup.app.app().is_quitting());
 }
@@ -441,12 +430,10 @@ fn drafts_survive_route_changes() {
     setup.ready();
     setup.app.type_text("unfinished");
     setup.tui.navigate(Route::Home);
-    // The home's logo (E.1).
     setup.wait_for("█▀▀█");
     setup.tui.navigate(session_route());
     setup.ready();
     assert_eq!(setup.textarea().text(), "unfinished");
-    // Taking the draft removes it.
     setup.app.press("ctrl+c");
     setup.tui.navigate(Route::Home);
     setup.tui.navigate(session_route());
@@ -473,7 +460,6 @@ fn escape_twice_interrupts_a_running_session() {
 #[test]
 fn home_prompt_creates_a_session_and_opens_it() {
     let setup = Setup::new(Route::Home);
-    // The home (E.1) focuses its prompt.
     setup.ready();
     setup.app.type_text("Reply with ok");
     setup.app.press("return");
@@ -492,8 +478,6 @@ fn home_prompt_creates_a_session_and_opens_it() {
     assert!(!toast, "{}", setup.app.text());
 }
 
-// `recover` (`prompt/index.tsx:1258-1277`): a failed create goes home with what was typed in the new session since,
-// and its tab closes.
 #[test]
 fn a_failed_create_goes_home_with_the_newer_text_and_closes_its_tab() {
     let setup = Setup::new(Route::Home);
@@ -541,14 +525,11 @@ fn home_prompt_shows_a_placeholder_example_and_a_shell_one_in_shell_mode() {
         ["ls -la", "git status", "pwd"].iter().any(|example| screen.contains(&format!("\"{example}\""))),
         "{screen}"
     );
-    // A session's prompt has none.
     let setup = Setup::new(session_route());
     setup.ready();
     assert!(!setup.app.text().contains("Ask anything"), "{}", setup.app.text());
 }
 
-/// A theme switch restyles home in place: the logo, the prompt in shell mode with its text, and the footer; each
-/// cell equals home mounted in the new theme and typed the same way.
 #[test]
 fn a_theme_switch_restyles_home_in_place() {
     support::assert_restyles_in_place(
@@ -596,7 +577,6 @@ fn an_early_enter_is_dropped_when_the_text_changes_before_the_catalog_loads() {
     assert_eq!(setup.textarea().text(), "Reply with ok");
 }
 
-/// Runs `parity/oracle/E.2-history.ts`: the real `PromptHistoryProvider` on `state`.
 fn typescript_history(root: &Path, state: &Path, ops: Value) -> Value {
     use std::io::Write;
     let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../parity/oracle/E.2-history.ts");
@@ -650,7 +630,6 @@ fn history_file_is_shared_with_typescript() {
     );
     assert_eq!(moves, json!(["second \"quoted\" ünïcode", "ls -la", "first", null]));
     let typescript = std::fs::read_to_string(state.join("prompt-history.jsonl")).unwrap();
-    // TypeScript's load rewrites every entry as it serializes them: the Rust lines survive unchanged.
     assert_eq!(typescript, format!("{rust}{}\n", entry));
 
     let home = opencode_util::temp::TempDir::new().unwrap();

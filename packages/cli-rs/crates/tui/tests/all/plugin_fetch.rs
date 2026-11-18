@@ -15,7 +15,6 @@ use opencode_plugin::abi;
 use opencode_tui::{Deps, Route};
 use serde_json::{Value, json};
 
-/// Where requests go now, as the managed service's transport reroutes them: an origin and a password.
 type Endpoint = Arc<Mutex<(String, String)>>;
 
 /// A server that answers the stats and `session.generate`, holding each generate until [`Server::release`], and
@@ -38,7 +37,6 @@ impl Server {
         self.gate.add_permits(1);
     }
 
-    /// The requests to `path`, with the URL each went to.
     fn sent(&self, path: &str) -> Vec<(Seen, String)> {
         self.log.lock().unwrap().iter().filter(|(seen, _)| seen.path.ends_with(path)).cloned().collect()
     }
@@ -88,7 +86,6 @@ impl Transport for Server {
     }
 }
 
-/// `/probe/<status>/<body>`: the status with a text, a JSON or an empty body.
 fn probe_response(probe: &str) -> Response {
     let (status, kind) = probe.split_once('/').unwrap();
     let (content_type, body) = match kind {
@@ -103,7 +100,6 @@ fn probe_response(probe: &str) -> Response {
     }
 }
 
-/// The answer to `question`: sixty items for `long`.
 fn answer(question: &str) -> String {
     match question {
         "long" => (1..=60).map(|item| format!("- item {item:02}\n")).collect(),
@@ -122,7 +118,6 @@ fn stats() -> Value {
     } })
 }
 
-/// Session `ses_a` over `server`, with `plugins` in the config.
 fn mount(server: &Server, plugins: &[&str]) -> Harness {
     let config = json!({ "animations": false, "plugins": plugins });
     let deps = Deps {
@@ -315,7 +310,6 @@ thread_local! {
     static PROBED: std::cell::RefCell<Vec<Result<Value, String>>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
-/// A plugin whose `probe.fetch` fetches the path it is given and keeps the reply in [`PROBED`].
 fn probe_setup(setup: &mut abi::Setup) -> Result<(), String> {
     let command = abi::Command::new("probe.fetch");
     setup.command(command, |host, path| {

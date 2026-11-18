@@ -1,6 +1,3 @@
-//! The transcript (E.6a) over a fixture server: user messages, Markdown text, reasoning, the
-//! footer and token usage, windowing with backfill of older pages, and streamed deltas.
-
 use crate::support::{self, Harness, WAIT, deref_harness};
 
 use std::collections::HashMap;
@@ -111,7 +108,6 @@ impl View {
         self.tui.data.apply(&[event]);
     }
 
-    /// One wheel step up over the transcript, then the follow-up the transcript schedules.
     fn scroll_up(&self) -> String {
         self.app.scroll(10, 5, false);
         self.app.advance(Duration::from_millis(1));
@@ -119,7 +115,6 @@ impl View {
     }
 }
 
-/// Medium verbosity draws each reasoning block; low, the default, folds them into one summary.
 fn medium() -> Session {
     Session { verbosity: Some(Verbosity::Medium), ..Session::default() }
 }
@@ -159,33 +154,25 @@ fn user_markdown_reasoning_and_footer_render_as_the_typescript_rows() {
     let h = open(80, 30, "ses_r", messages, Info { session: Some(medium()), ..info });
     let screen = h.wait_for("The parser drops");
 
-    // The user message on its raised surface, behind the agent bar, with its chips.
     assert!(screen.contains("┃  Why does the parser fail?"), "{screen}");
     assert!(screen.contains("┃   skill  rust\n"), "{screen}");
     assert!(screen.contains("┃   file  parser.rs\n"), "{screen}");
-    // Markdown with its markers concealed, padded 3 from the left.
     assert!(screen.contains("     The parser drops the last token in next()."), "{screen}");
-    // `session.thinking` defaults to hide: one collapsed header with the summary title.
     assert!(screen.contains("+ Thought: Reading the parser · 1.5s"), "{screen}");
     assert!(!screen.contains("The loop stops early."), "{screen}");
-    // The footer: agent, model, the turn's duration since the prompt, and tokens per second
-    // over the step's streaming time (50 tokens in 1.5 s).
     assert!(screen.contains("Build · provider/model · 3.0s · 33.3 tok/s"), "{screen}");
-    // `debug.turn_tokens`: the turn's usage summary.
     assert!(screen.contains("+ Tokens: 1 step · latest: 1,250 new · 3,000 cached · 4,250 total"), "{screen}");
     // Rows keep the TS order.
     let order = ["Why does the parser fail?", "Thought", "The parser drops", "Build ·", "Tokens"];
     let positions: Vec<_> = order.iter().map(|text| screen.find(text).unwrap()).collect();
     assert!(positions.is_sorted(), "{screen}");
 
-    // A click opens the reasoning block; the body shows behind its bar.
     let row = screen.lines().position(|line| line.contains("+ Thought")).unwrap();
     h.app.click(8, row as u16);
     let expanded = h.wait_for("The loop stops early.");
     // Open, the group header drops the title (`group-view.tsx:186`).
     assert!(expanded.contains("- Thought · 1.5s"), "{expanded}");
 
-    // `session.toggle.thinking` shows every block open.
     let shown = Info { session: Some(Session { thinking: Some(Visibility::Show), ..medium() }), ..Info::default() };
     let messages = vec![assistant(
         "msg_2",
@@ -238,10 +225,8 @@ fn a_streamed_reply_updates_in_place_and_gains_its_footer() {
     ];
     let h = open(80, 20, "ses_s", messages, Info { session: Some(medium()), ..Info::default() });
     let screen = h.wait_for("Thinking");
-    // Reasoning that is not done shows the spinner's label.
     assert!(screen.contains("Thinking"), "{screen}");
 
-    // Text streams into a new row, delta by delta.
     h.apply(event(
         "session.text.started",
         1,
@@ -266,7 +251,6 @@ fn a_streamed_reply_updates_in_place_and_gains_its_footer() {
     let screen = h.wait_for("The plan has three steps.");
     assert!(!screen.contains("two steps"), "{screen}");
 
-    // The step ends: the message completes, the reasoning is done, and the footer shows.
     h.apply(event(
         "session.step.ended",
         5,
@@ -366,17 +350,13 @@ thread_local! {
     static SEEN: std::cell::RefCell<Vec<opencode_plugin::abi::v2::TranscriptView>> = const {
         std::cell::RefCell::new(Vec::new())
     };
-    /// The next [`open`] loads the [`minimap`] plugin.
     static PLUGGED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-    /// The [`minimap`] has a surface whose `layout` is told about the transcript.
     static MAPPED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-    /// What that `layout` was told.
     static TOLD: std::cell::RefCell<Vec<opencode_plugin::abi::v2::TranscriptView>> = const {
         std::cell::RefCell::new(Vec::new())
     };
 }
 
-/// A plugin whose commands read the published transcript and move it to its top.
 fn minimap(setup: &mut opencode_plugin::abi::Setup) -> Result<(), String> {
     use opencode_plugin::abi::{Command, v2};
     setup.command(Command::new("mini.read"), |host, _| {
@@ -400,7 +380,6 @@ fn minimap(setup: &mut opencode_plugin::abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-/// The transcript with the [`minimap`], `mapped` with its surface, at its newest rows.
 fn mapped(mapped: bool) -> View {
     PLUGGED.with(|plugged| plugged.set(true));
     MAPPED.with(|cell| cell.set(mapped));
@@ -437,7 +416,6 @@ fn a_plugins_jump_to_the_top_backfills_each_time() {
     let first = read(&h);
     mini(&h, "mini.top");
     let second = read(&h);
-    // An older page's request reaches the server on the client's own thread.
     let asked = || h.older.load(Ordering::SeqCst) > first.1;
     assert!(
         second.0 < first.0 || h.app.wait_until(WAIT, asked),
@@ -574,7 +552,6 @@ fn the_footer_measures_throughput_from_the_first_token() {
     assert!(!screen.contains("ttft"), "{screen}");
 }
 
-/// The built-in `opencode.latex` plugin (P.2) draws `latex` fences in assistant text as Unicode math.
 #[test]
 fn mermaid_fences_render_as_diagrams() {
     let text = "The flow:\n\n```mermaid\nflowchart LR\n  A[Idea] --> B[Parse]\n```";
@@ -587,8 +564,6 @@ fn mermaid_fences_render_as_diagrams() {
     assert!(!screen.contains("flowchart LR"), "{screen}");
 }
 
-/// A theme switch restyles the transcript in place, as TS's rows follow the theme: the fences keep their widgets, the
-/// reader's position stays, and the screen equals the transcript mounted in the new theme.
 #[test]
 fn a_theme_switch_restyles_the_transcript_in_place() {
     let text = "The fix:\n\n```rust\nfn main() {\n    let x = \"value\"; // note\n}\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n```mermaid\nflowchart LR\n  A[Idea] --> B[Parse]\n```\n\nDone.";
@@ -696,8 +671,6 @@ fn a_theme_switch_builds_no_fence_or_diff_again() {
     assert_eq!(counts, [counts[0]; 2], "widgets per switch at 1 and 12 edit diffs");
 }
 
-/// `session.markdown` reaches the text already shown, as TS's `conceal` prop follows `markdownMode()`
-/// (`message-parts.tsx:195`), and the fence keeps its widget.
 #[test]
 fn a_markdown_mode_change_shows_the_source_in_place() {
     let text = "Some **bold** text.\n\n```rust\nlet x = 1;\n```";
@@ -726,8 +699,6 @@ fn a_markdown_mode_change_shows_the_source_in_place() {
     assert_eq!(switched.cells, fresh.app.render().cells, "{}", switched.text());
 }
 
-/// Groups and the turn's usage restyle in place: an open group and the open usage table stay open, and each cell
-/// equals the rows mounted in the new theme.
 #[test]
 fn a_theme_switch_restyles_groups_in_place() {
     let read = |id: &str, path: &str| {
@@ -787,7 +758,6 @@ fn latex_fences_render_as_math() {
         assistant("msg_2", 1500, json!([{ "type": "text", "text": text }]), Some(4000)),
     ];
     let h = open(60, 20, "ses_l", messages, Info::default());
-    // opentui-tex's radical (`parity/deviations/P2-latex-opentui-tex.md`).
     let screen = h.wait_for("√ b² - 4ac");
     assert!(!screen.contains("\\frac"), "{screen}");
     let rule = screen.lines().position(|line| line.contains("─────────────")).unwrap();

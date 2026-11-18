@@ -20,10 +20,8 @@ use opentui::native::ClipboardOutcome;
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
 
-/// A 1×1 PNG.
 const PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
-/// The baseline routes, with a model that takes images.
 fn fake() -> Fake {
     Fake::new(|seen| match (seen.method.as_str(), seen.path.as_str()) {
         ("GET", "/api/model") => {
@@ -114,7 +112,6 @@ fn long_pastes_collapse_into_parts_that_send_their_text() {
     setup.app.type_text("see ");
     setup.app.paste("one\r\ntwo\r\nthree");
     setup.wait_text("see [Pasted ~3 lines] ");
-    // More than 150 characters on one line collapses too.
     let long = "x".repeat(151);
     setup.app.paste(&long);
     setup.wait_text("see [Pasted ~3 lines] [Pasted ~1 lines] ");
@@ -146,7 +143,6 @@ fn a_second_paste_or_a_click_expands_a_paste_and_backspace_removes_it() {
     setup.app.press("ctrl+c");
     setup.app.paste("g\nh\ni");
     setup.wait_text("[Pasted ~3 lines] ");
-    // The label is one unit: two Backspaces take the space, then the whole part.
     setup.app.press("backspace");
     setup.app.press("backspace");
     setup.wait_text("");
@@ -174,7 +170,6 @@ fn undo_submits_the_restored_paste_and_a_fragment_as_text() {
         setup.wait_text(restored);
         assert_eq!(setup.submit()["text"], sent, "fragment: {fragment}");
     }
-    // An expanded paste comes back on undo as the paste.
     let setup = Setup::new();
     setup.app.paste("a\nb\nc");
     setup.app.type_text("and ");
@@ -183,7 +178,6 @@ fn undo_submits_the_restored_paste_and_a_fragment_as_text() {
     let (x, y) = setup.find("[Pasted");
     setup.app.click(x, y);
     setup.wait_text("a\nb\nc and [Pasted ~3 lines] ");
-    // One undo for the inserted text, one for the deleted label.
     setup.app.press("super+z");
     setup.wait_text(" and [Pasted ~3 lines] ");
     setup.app.press("super+z");
@@ -275,7 +269,6 @@ fn clipboard_images_attach_preview_and_open_in_the_dialog() {
     capture.0.clipboard.borrow_mut().extend([read(), read()]);
     setup.app.press("ctrl+v");
     setup.wait_text("[Image 1] ");
-    // The same image again keeps its label.
     setup.app.press("ctrl+v");
     setup.wait_text("[Image 1] [Image 1] ");
 
@@ -296,7 +289,6 @@ fn clipboard_images_attach_preview_and_open_in_the_dialog() {
             { "uri": uri, "name": "clipboard", "mention": { "start": 10, "end": 19, "text": "[Image 1]" } },
         ])
     );
-    // Sent untrimmed, as TS sends `inputText`.
     assert_eq!(sent["text"], "[Image 1] [Image 1] ");
 }
 
@@ -316,7 +308,6 @@ fn clipboard_text_pastes_and_read_errors_toast() {
     setup.wait_for("Clipboard read timed out");
     setup.app.press("ctrl+v");
     setup.wait_for("Clipboard read is not supported on this system");
-    // An empty clipboard changes nothing; an empty terminal paste reads the clipboard too.
     setup.app.paste("");
     setup.app.advance(Duration::from_millis(5));
     assert_eq!(setup.text(), "[Pasted ~3 lines] ");
@@ -337,14 +328,12 @@ fn pasted_paths_attach_files_and_svgs_paste_their_text() {
     setup.wait_text("[Image 1] ");
     setup.app.paste(&format!("{}", svg.display()));
     setup.wait_text("[Image 1] [SVG: logo.svg] ");
-    // A path that is not an attachment is plain text.
     setup.app.paste("/tmp/notes.txt");
     setup.wait_text("[Image 1] [SVG: logo.svg] /tmp/notes.txt");
 
     let sent = setup.submit();
     assert_eq!(sent["text"], "[Image 1] <svg/> /tmp/notes.txt");
     let url = url::Url::from_file_path(&png).unwrap();
-    // A local server also gets the file's URL; the path itself stays in the TUI.
     assert_eq!(
         sent["files"],
         json!([{
@@ -369,7 +358,6 @@ fn previews_show_above_the_prompt_and_a_click_opens_the_dialog() {
     assert!(y < prompt, "the preview sits above the prompt");
     setup.app.click(x, y);
     let screen = setup.wait_for("Image 1 of 1");
-    // The dialog covers the prompt; its footer says the image did not load.
     let (_, title) = setup.find("Image 1 of 1");
     assert!(setup.find("No preview").1 > title, "{screen}");
     setup.app.press("escape");
@@ -454,13 +442,11 @@ fn stash_file_is_shared_with_typescript() {
         results,
         json!([["from rust", "[Pasted ~3 lines] "], "[Pasted ~3 lines] ", ["from rust", "from typescript"],])
     );
-    // TypeScript's load rewrote the Rust lines as it serializes them, unchanged.
     let file = std::fs::read_to_string(state.join("prompt-stash.jsonl")).unwrap();
     let lines: Vec<&str> = file.lines().collect();
     assert_eq!(lines[0], rust.lines().next().unwrap());
     assert_eq!(lines.len(), 2);
 
-    // A new Rust TUI reads the TypeScript file: pop gives the TypeScript entry, then the Rust one.
     let home = opencode_util::temp::TempDir::new().unwrap();
     std::fs::create_dir_all(home.path().join("state")).unwrap();
     std::fs::copy(state.join("prompt-stash.jsonl"), home.path().join("state/prompt-stash.jsonl")).unwrap();
@@ -542,7 +528,6 @@ fn a_stash_made_while_the_stash_loads_is_kept() {
     setup.wait_stash_file(|file| file.lines().count() == 2 && file.contains("\"early\""));
 }
 
-/// Runs `parity/oracle/E.4-stash.ts`: the real `PromptStashProvider` on `state`.
 fn run_typescript(root: &Path, state: &Path, ops: Value) -> Value {
     use std::io::Write;
     let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../parity/oracle/E.4-stash.ts");

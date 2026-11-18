@@ -1,8 +1,3 @@
-//! Regressions for the `carbon` review of MS3 and MS4 (`reviews/ms3-ms4.review-carbon.md`), over the in-memory
-//! transport with its request log (P-REQ): `session.new` and `tui.prompt.append` (carbon-5), OpenCode Console usage
-//! limits that load, refresh, show in the prompt, and warn by themselves (carbon-6), `--agent` and `--model`, and
-//! groups that stay open across a remount of the session view (V15).
-
 use crate::support::{self, WAIT};
 
 use std::rc::Rc;
@@ -82,7 +77,6 @@ fn session(id: &str, directory: &str, title: &str, agent: Option<&str>) -> Value
     })
 }
 
-/// An answer that groups its two reads under "Explored".
 fn grouped() -> Value {
     let read = |id: &str, path: &str| {
         json!({
@@ -228,7 +222,6 @@ fn animations_off() -> Value {
     json!({ "animations": false })
 }
 
-/// Medium verbosity draws tool groups; low, the default, folds them into one summary.
 fn medium_verbosity() -> Value {
     json!({ "animations": false, "session": { "verbosity": "medium" } })
 }
@@ -261,7 +254,6 @@ impl Harness {
         self.server.memory.requests().iter().filter(|logged| logged.method == method && logged.path == path).count()
     }
 
-    /// Mutating requests: everything but reads and the goal plugin's read RPC.
     fn writes(&self) -> Vec<String> {
         self.log()
             .into_iter()
@@ -338,7 +330,6 @@ fn tui_prompt_append_appends_to_the_prompt_of_the_current_location() {
     h.server.memory.emit(&append("evt_elsewhere", "/elsewhere", "nope "));
     h.server.memory.emit(&append("evt_here", DIRECTORY, "world"));
     h.wait("the append", || h.prompt_text() == "hello world");
-    // The cursor moved to the end.
     h.app.type_text("!");
     h.wait("typing after it", || h.prompt_text() == "hello world!");
 }
@@ -360,7 +351,6 @@ fn console_limits_load_show_in_the_prompt_reload_after_a_turn_and_warn_once() {
             "location": { "directory": DIRECTORY }, "data": { "sessionID": session },
         })
     };
-    // Another session's turn does not reload them.
     h.server.memory.emit(&succeeded("evt_other", "ses_other"));
     h.settle();
     assert_eq!(h.count("GET", LIMITS), 1);
@@ -406,8 +396,6 @@ fn startup_model_keeps_a_saved_session_model_and_leads_the_fallback() {
     h.wait("the fallback", || h.tui.local.current() == Some(Model::new("demo", "other")));
 }
 
-// The prompt footer shows `Local`'s agent and model, with the agent through `Locale.titlecase` (`\b\w`,
-// `packages/tui/src/util/locale.ts:3-5`), as the assistant footer does.
 #[test]
 fn the_prompt_footer_shows_the_local_agent_titlecased_per_word() {
     let h = mount(Route::Home, Args::default(), animations_off());

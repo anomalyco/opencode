@@ -1,7 +1,3 @@
-//! Tool rows (E.7b) over a fixture server: webfetch, websearch, subagent, execute, patch, todowrite,
-//! question, and skill, each running and finished; a subagent click opens the child session, and an
-//! execute click opens its dialog.
-
 use crate::support::{self, Fake, Harness, Log, WAIT, deref_harness};
 
 use std::sync::Arc;
@@ -13,7 +9,6 @@ use opencode_tui::{Deps, Route};
 use opentui::prelude::Color;
 use serde_json::{Value, json};
 
-/// Serves the session, an empty child session, and their messages; logs every request.
 fn fake(messages: Vec<Value>) -> Fake {
     Fake::new(move |seen| match (seen.method.as_str(), seen.path.as_str()) {
         ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
@@ -207,7 +202,6 @@ fn a_subagent_row_opens_its_child_session() {
     let found = h.app.wait_until(WAIT, || h.tui.route() == Route::Session { id: SessionID("ses_child".into()) });
     assert!(found, "still on {:?}", h.tui.route());
     h.wait_for("Child work");
-    // The title comes from the session's own read; its messages are a read of their own, which may go out later.
     let read = h
         .app
         .wait_until(WAIT, || support::lines(&h.log).iter().any(|line| line == "GET /api/session/ses_child/message"));
@@ -274,11 +268,9 @@ fn execute_lists_its_calls_and_opens_the_dialog() {
     let theme = h.tui.page();
     assert_eq!(h.fg("✗ execute"), theme.text.feedback.error.base);
 
-    // A nested call expands its inputs.
     h.click("read [path=src/a.rs]");
     h.wait_for("path: src/a.rs");
 
-    // The finished call opens the dialog with its code and output.
     let (x, y) = h.find("✓ execute");
     h.app.click(x + 2, y);
     h.app.advance(Duration::from_millis(1));

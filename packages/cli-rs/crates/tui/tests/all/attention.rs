@@ -24,7 +24,6 @@ fn mount(config: &str) -> (Harness, Memory) {
     (harness, memory)
 }
 
-/// The loudest sample of the next second of the engine's mix, if the engine exists.
 fn loudest(tui: &Tui) -> Option<f32> {
     let audio = tui.attention.sound.audio()?;
     let mut samples = vec![0.0; 48_000 * 2];

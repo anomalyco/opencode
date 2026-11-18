@@ -1,6 +1,3 @@
-//! Footers that follow the terminal size (`useTerminalDimensions`) refresh on a resize alone, with no store
-//! change: the home footer, the prompt footer and the sidebar footer.
-
 use crate::support::{self, DIRECTORY, Fake, Harness};
 
 use std::sync::Arc;

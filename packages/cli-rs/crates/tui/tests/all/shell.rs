@@ -22,7 +22,6 @@ fn a_theme_change_keeps_a_pending_leader_and_the_focus() {
     app.press("escape");
     assert!(!tui.dialogs.is_open());
 
-    // A focused prompt stays focused across a theme change.
     let prompt = tui.textarea.borrow().clone().unwrap();
     app.app().focus(&prompt);
     app.type_text("draft");

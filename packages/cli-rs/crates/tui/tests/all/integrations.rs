@@ -1,10 +1,4 @@
-//! "Connect an integration" (E.17a) over a fixture server.
-//!
-//! `integrations_match_typescript` is the P-COMP proof: it serves the responses of
-//! `parity/component/E.17a-integrations.tsx`, hides the screen behind the dialog (the TS script renders the
-//! dialog alone), sends the same keys, and compares the cells with the fixtures it wrote. The other tests run
-//! each flow and check the requests it sent (P-REQ). No test touches a real service or opens a browser: the
-//! URL opener is a sink.
+//! TypeScript: `parity/component/E.17a-integrations.tsx`.
 
 use crate::support::{self, Fake, Harness, Log, WAIT, deref_harness, list};
 
@@ -18,10 +12,8 @@ use opencode_tui::{Args, Deps, Route};
 use serde_json::{Value, json};
 
 const DIRECTORY: &str = "/tmp/opencode/app";
-/// The location query every integration request carries.
 const QUERY: &str = "location%5Bdirectory%5D=%2Ftmp%2Fopencode%2Fapp";
 
-/// One request: method, path with query, and JSON body.
 type Logged = (String, String, Value);
 
 fn credential(id: &str, label: &str, status: Option<Value>) -> Value {
@@ -32,7 +24,6 @@ fn credential(id: &str, label: &str, status: Option<Value>) -> Value {
     value
 }
 
-/// `INTEGRATIONS` of `E.17a-integrations.tsx`.
 fn integrations() -> Value {
     json!([
         {
@@ -81,7 +72,6 @@ fn integrations() -> Value {
     ])
 }
 
-/// `ATTEMPT` of `E.17a-integrations.tsx`.
 fn attempt() -> Value {
     json!({
         "attemptID": "att_1", "url": "https://github.com/login/device", "instructions": "Enter code ABCD-1234",
@@ -89,8 +79,6 @@ fn attempt() -> Value {
     })
 }
 
-/// Serves the integrations, the catalog, and every write; logs every request. `status` is what OAuth and
-/// command status polls answer, and `mode` the OAuth attempt's mode.
 fn fake(integrations: Value, status: Arc<Mutex<Value>>, mode: &'static str) -> Fake {
     Fake::new(move |seen| match (seen.method.as_str(), seen.path.as_str()) {
         ("GET", "/api/location") => (
@@ -110,13 +98,11 @@ fn fake(integrations: Value, status: Arc<Mutex<Value>>, mode: &'static str) -> F
             ),
         ),
         ("GET", "/api/mcp") => (200, list(DIRECTORY, json!([]))),
-        // A wrong key is rejected with the server's message.
         ("POST", "/api/integration/anthropic/connect/key") => {
             (400, json!({ "_tag": "BadRequest", "message": "Invalid API key" }))
         }
         ("POST", path) if path.ends_with("/connect/oauth") => {
             let mut attempt = attempt();
-            // `paste`: an automatic attempt that also takes the redirect URL.
             attempt["mode"] = json!(if mode == "paste" { "auto" } else { mode });
             if mode == "paste" {
                 attempt["paste"] = json!(true);
@@ -263,7 +249,6 @@ fn integrations_match_typescript() {
     open(&["down", "return", "down", "return"], "submit", "E.17a/key");
     open(&["down", "down", "return"], "Deployment", "E.17a/form");
     open(&["down", "down", "return", "return"], "Waiting for authorization", "E.17a/oauth");
-    // The OpenAI sign-in's prompts: the instructions sit in the description, under a blank row.
     open_with("code", &["down", "return", "return"], "Authorization code", "E.17a/oauth-code");
     open_with("paste", &["down", "return", "return"], "Redirect URL", "E.17a/oauth-paste");
 }
@@ -278,7 +263,6 @@ fn an_api_key_connects_and_opens_the_provider_models() {
     kit.down(1);
     kit.app.press("return");
     kit.wait_for("submit");
-    // An empty key sends nothing.
     kit.app.press("return");
     kit.app.type_text("sk-test");
     // Counted before the submit: the catalog read after it can land during the key press.
@@ -303,7 +287,6 @@ fn a_rejected_key_shows_the_error_and_stays() {
     kit.connect();
     kit.down(3);
     kit.app.press("return");
-    // Anthropic's account needs sign-in; picking it asks for a key again.
     kit.wait_for("Connected accounts");
     kit.down(1);
     kit.app.press("return");
@@ -337,7 +320,6 @@ fn oauth_sends_the_form_answer_opens_the_sink_and_completes() {
     );
     kit.app.press("return");
     assert_eq!(*kit.opened.borrow(), ["https://github.com/login/device"]);
-    // A plain click on the link opens it too (`Link`'s `onMouseUp`), and the dialog stays open.
     let screen = kit.app.text();
     let (y, x) = screen
         .lines()
@@ -359,7 +341,6 @@ fn oauth_sends_the_form_answer_opens_the_sink_and_completes() {
     assert!(polled, "polled {} times", polls());
     *kit.status.lock().unwrap() = json!({ "status": "complete", "time": { "created": 1, "expires": 2 } });
     assert!(kit.poll_until(|| kit.app.text().contains("Connected GitHub Copilot")));
-    // A finished attempt is not cancelled.
     assert_eq!(kit.writes().len(), 1);
 }
 
@@ -425,7 +406,6 @@ fn a_pasted_redirect_url_completes_an_automatic_oauth() {
     let screen = kit.wait_for("Redirect URL");
     assert!(screen.contains("Waiting for authorization… Press enter to open the"), "{screen}");
     assert!(screen.contains("copy link"), "{screen}");
-    // Enter on an empty field opens the link.
     kit.app.press("return");
     assert!(kit.app.wait_until(WAIT, || kit.opened.borrow().len() == 1), "{:?}", kit.opened.borrow());
     kit.app.type_text("http://localhost:1455/cb?code=abc");
@@ -439,7 +419,6 @@ fn a_pasted_redirect_url_completes_an_automatic_oauth() {
             json!({ "code": "http://localhost:1455/cb?code=abc" })
         )
     );
-    // The attempt still settles through its status.
     *kit.status.lock().unwrap() = json!({ "status": "complete", "time": { "created": 1, "expires": 2 } });
     assert!(kit.poll_until(|| kit.app.text().contains("Connected OpenAI")), "{}", kit.app.text());
 }
@@ -455,7 +434,6 @@ fn accounts_activate_rename_and_remove() {
     kit.wait_for("rename");
     kit.app.press("return");
     kit.wait_writes(1);
-    // Rename home.
     kit.app.press("ctrl+r");
     kit.wait_for("Rename account");
     for _ in 0..4 {
@@ -507,7 +485,6 @@ fn an_mcp_sign_in_goes_straight_to_its_method() {
         kit.writes(),
         [write("POST", &format!("/api/integration/mcp_notion/connect/oauth?{QUERY}"), json!({ "methodID": "mcp" }))]
     );
-    // MCP integrations stay out of the connect list.
     kit.app.press("escape");
     kit.connect();
     assert!(!kit.app.text().contains("Notion"));

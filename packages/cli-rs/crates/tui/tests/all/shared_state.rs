@@ -21,8 +21,6 @@ use opencode_ui::path::Flavor;
 use opentui::testing::TestApp;
 use serde_json::{Value, json};
 
-/// Serves `ses_b` in `/project-b` with its project-local primary agent `reviewer`, which `/project`
-/// lacks, and the prompt writes.
 fn fake() -> Fake {
     Fake::new(|seen| {
         let directory = Some(seen.param("location[directory]")).filter(|value| !value.is_empty());
@@ -130,12 +128,10 @@ impl Setup {
         self.wait("the prompt", || self.writes("/prompt").len() >= prompts);
     }
 
-    /// A durable `ses_b` event, as another client's switch or this one's commit reports it.
     fn emit(&self, kind: &str, data: Value) {
         self.emit_batch(&[(kind, data)]);
     }
 
-    /// Durable `ses_b` events that the store applies in one batch.
     fn emit_batch(&self, events: &[(&str, Value)]) {
         let events: Vec<V2Event> = events
             .iter()
@@ -158,8 +154,6 @@ impl Setup {
     }
 }
 
-/// carbon-3: a session in another project keeps its project-local agent, and a submit does not switch it
-/// to `build`.
 #[test]
 fn a_session_in_another_location_keeps_its_own_agent() {
     let setup = Setup::new(&[]);
@@ -170,8 +164,6 @@ fn a_session_in_another_location_keeps_its_own_agent() {
     assert!(setup.writes("/agent").is_empty(), "the submit switched the agent: {:?}", setup.writes("/agent"));
 }
 
-/// carbon-3: home's `/cd` moves the model and agent state to the new directory, as the prompt's own
-/// catalog moves.
 #[test]
 fn cd_on_home_moves_the_agents_to_the_new_directory() {
     let setup = Setup::at(Route::Home, &[]);
@@ -198,14 +190,12 @@ fn home_follows_the_canonical_default_location() {
         Deps { directory: "/project/".into(), route: Route::Home, events: true, ..support::deps(Arc::new(server)) };
     let h = support::mount(100, 30, deps);
     h.wait("the home agents", || !h.tui.local.agents().is_empty());
-    // The location read follows the stream's `server.connected`, apart from the agents' read.
     h.wait("the server's directory", || {
         opencode_tui::features::location::current(&h.tui).map(|location| location.directory).as_deref()
             == Some("/project")
     });
 }
 
-/// `fake`'s answers, with the event stream from [`Memory`].
 struct Canonical {
     events: Memory,
     fake: Fake,
@@ -230,7 +220,6 @@ fn acknowledged_commits_clear_the_drafts() {
     setup.tui.local.set(&Model::new("openai", "gpt-5"), false);
     setup.submit("switch", 1);
     assert_eq!(setup.writes("/agent")[0]["agent"], "build");
-    // The model acknowledgment clears the model draft, which `Local` reports.
     let changed = Rc::new(std::cell::Cell::new(false));
     let _listener = setup.tui.local.subscribe({
         let changed = changed.clone();
@@ -249,7 +238,6 @@ fn acknowledged_commits_clear_the_drafts() {
         setup.tui.tabs.tabs(&setup.tui).iter().any(|tab| tab.title.as_deref() == Some("Acknowledged"))
     });
     assert!(changed.get());
-    // Another client switches the model, then the agent.
     setup.emit(
         "session.model.selected",
         json!({ "sessionID": "ses_b", "model": { "providerID": "anthropic", "id": "claude-haiku" } }),
@@ -291,7 +279,6 @@ fn a_switch_batched_with_the_acknowledgments_shows() {
 fn pins_keep_other_clients_pins_and_prune_deleted_sessions() {
     let setup = Setup::new(&[("session.json", r#"{"pinned":["ses_old"]}"#)]);
     assert_eq!(pins::list(&setup.tui), [SessionID("ses_old".into())]);
-    // The TS TUI pins `ses_ts` meanwhile.
     std::fs::write(setup.state().join("session.json"), r#"{"pinned":["ses_old","ses_ts"]}"#).unwrap();
     pins::toggle(&setup.tui, &SessionID("ses_b".into()));
     let pinned = r#"{"pinned":["ses_old","ses_ts","ses_b"]}"#;

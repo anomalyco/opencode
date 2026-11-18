@@ -61,7 +61,6 @@ fn mount(app: &TestApp, memory: &Memory, route: Route, args: Args) -> std::rc::R
     opencode_tui::mount_with(app, Deps { route, events: true, ..support::deps(Arc::new(memory.clone())) }, args)
 }
 
-/// The writes so far, as `METHOD path`.
 fn writes(memory: &Memory) -> Vec<String> {
     memory
         .requests()

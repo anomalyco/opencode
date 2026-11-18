@@ -138,8 +138,6 @@ fn compactions_show_their_status_summary_and_queue() {
         "payload": {}, "delivery": "queue",
     })];
     let h = open(40, session(json!({})), messages, inbox, Info::default());
-    // The inbox and the messages are separate reads. A rule on each side of the status; the summary as Markdown under
-    // it. With animations off a running compaction's spinner is `⋯`.
     let screen = h.wait_for_all(&[
         "─ Compaction · 1.3K in · 300 out ─",
         "   The user asked about parsing.",
@@ -181,7 +179,6 @@ fn shell_skill_notice_and_switch_messages_render_as_one_line_each() {
     ];
     let h = open(50, session(json!({})), messages, Vec::new(), Info::default());
     let screen = h.wait_for("Explore finished");
-    // The shell's output collapses to its tail; a nonzero exit is the block's error.
     assert!(screen.contains("┃  $ seq 15"), "{screen}");
     assert!(screen.contains("┃  (8 earlier lines)"), "{screen}");
     assert!(screen.contains("┃  out 15"), "{screen}");
@@ -194,13 +191,11 @@ fn shell_skill_notice_and_switch_messages_render_as_one_line_each() {
     assert!(screen.contains("   ◈ Instructions updated"), "{screen}");
     assert!(screen.contains("   ↳ Explore finished · Review   the"), "{screen}");
 
-    // A click opens the whole output.
     h.app.click(10, h.row("$ seq 15"));
     let open = h.wait_for("out 1\n");
     assert!(open.contains("out 6"), "{open}");
     assert!(!open.contains("earlier lines"), "{open}");
 
-    // A click on a subagent's completion opens its session.
     h.app.click(8, h.row("Explore finished"));
     assert!(h.app.wait_until(WAIT, || matches!(
         h.tui.route(),
@@ -266,7 +261,6 @@ fn the_revert_banner_counts_reverted_prompts_and_a_click_clears_it() {
     assert!(screen.contains("┃  M src/parser.rs +4 -2"), "{screen}");
     assert!(screen.contains("┃  A src/new.rs +10"), "{screen}");
     assert!(screen.contains("or /redo to restore"), "{screen}");
-    // Messages from the boundary on are hidden.
     assert!(screen.contains("Keep this"), "{screen}");
     assert!(!screen.contains("Undo this"), "{screen}");
 
@@ -276,8 +270,6 @@ fn the_revert_banner_counts_reverted_prompts_and_a_click_clears_it() {
     );
 }
 
-/// A theme switch restyles these rows in place: an open shell output stays open, and each cell equals the rows
-/// mounted in the new theme.
 #[test]
 fn a_theme_switch_restyles_these_rows_in_place() {
     let png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
@@ -393,7 +385,6 @@ fn a_long_running_shell_call_shows_the_background_hint() {
     let h = open(20, session(json!({})), messages, Vec::new(), Info::default());
     let screen = h.wait_for("to move running work to the background");
     assert!(screen.contains("   Press ctrl+b to move running work to the background"), "{screen}");
-    // The call finishes: the hint goes.
     h.apply(
         "session.tool.success",
         1,
@@ -407,7 +398,6 @@ fn a_long_running_shell_call_shows_the_background_hint() {
 
 #[test]
 fn image_previews_show_three_and_count_the_rest() {
-    // A 1x1 PNG.
     let png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
     let image = |name: &str, data: &str| json!({ "data": data, "mime": "image/png", "name": name, "source": { "type": "inline" } });
     let mut message = user("msg_1", 1000, "Look at these");
@@ -416,7 +406,6 @@ fn image_previews_show_three_and_count_the_rest() {
     let on = Info { session: Some(Session { image_preview: Some(true), ..Session::default() }), ..Info::default() };
     let h = open(24, session(json!({})), vec![message.clone()], Vec::new(), on);
     let screen = h.wait_for("+1 more");
-    // An image that does not decode says so.
     assert!(screen.contains("No preview"), "{screen}");
     in_order(&screen, &["No preview", "+1 more", "Look at these"]);
 

@@ -27,13 +27,11 @@ use opentui::testing::{Capture, TestApp};
 const WIDTH: u16 = 40;
 const HEIGHT: u16 = 14;
 
-/// A host with a theme to switch; nothing else.
 struct TestHost {
     app: TestApp,
     keymap: DialogKeymap,
     theme: RefCell<Theme>,
     clicks: Rc<RefCell<Vec<String>>>,
-    /// The host's code view of a fence ([`apply_fenced`]).
     code: std::cell::OnceCell<Text>,
 }
 
@@ -67,25 +65,21 @@ fn host(theme_index: usize) -> TestHost {
     }
 }
 
-/// A root that fills the screen, as a slot's column does.
 fn root(host: &TestHost) -> View {
     let root = View::new(&host.app).column().width(Length::percent(100.0)).height(Length::percent(100.0));
     host.app.root().add(&root);
     root
 }
 
-/// Adopts `nodes` into `tree` in `host`'s theme; a click records its action in the host.
 fn apply(host: &TestHost, tree: &mut Tree, parent: &View, nodes: &[v2::Node]) -> Result<(), Refused> {
     apply_acting(host, tree, parent, nodes, recorder(host))
 }
 
-/// Records each click's action in `host`.
 fn recorder(host: &TestHost) -> Act {
     let clicks = host.clicks.clone();
     Rc::new(move |action| clicks.borrow_mut().push(format!("{action:?}")))
 }
 
-/// [`apply`], with clicks running `act`.
 fn apply_acting(host: &TestHost, tree: &mut Tree, parent: &View, nodes: &[v2::Node], act: Act) -> Result<(), Refused> {
     apply_in(host, tree, parent, nodes, act, None)
 }
@@ -168,7 +162,6 @@ fn lower(node: &v2::Node, pending: &mut Vec<v2::Node>) -> Option<abi::Node> {
             bg: bg.clone(),
             layout: *layout,
             on_click: on_click.clone(),
-            // A hidden box takes no room: the twin leaves it out.
             children: children
                 .iter()
                 .filter(|child| !child.is_hidden())
@@ -216,7 +209,6 @@ fn fresh(nodes: &[v2::Node], theme_index: usize, scrolled: &dyn Fn(&str) -> Opti
     frame(&host)
 }
 
-/// The fresh twin's builder.
 struct Twin<'a> {
     host: &'a TestHost,
     theme: Theme,
@@ -227,7 +219,6 @@ struct Twin<'a> {
 }
 
 impl Twin<'_> {
-    /// The widget of `node` and its children.
     fn built(&mut self, node: &v2::Node) -> Option<AnyWidget> {
         let app = &self.host.app;
         match node {
@@ -249,7 +240,6 @@ impl Twin<'_> {
                 self.scrolls.push((id.clone().unwrap_or_default(), scroll.clone()));
                 Some(scroll.as_any())
             }
-            // With no draw a canvas paints nothing: an empty box of its layout.
             v2::Node::Canvas { layout, .. } => {
                 let view = View::new(app);
                 lay_out(&view, layout);
@@ -376,11 +366,9 @@ fn frame(host: &TestHost) -> Seen {
 
 #[derive(Clone, Debug)]
 enum Command {
-    /// A tree to adopt.
     Tree(Vec<v2::Node>),
     /// A theme switch; the host adopts the last tree again in it.
     Theme(usize),
-    /// A wheel step over a cell, down or up.
     Wheel(u16, u16, bool),
 }
 
@@ -459,13 +447,11 @@ impl Generator<'_> {
                     sticky: None,
                     anchor: None,
                     split: None,
-                    // P2: a box that takes the focus or the pointer draws as one that does not.
                     interact: abi::interact::Interact {
                         focusable: self.chance(15),
                         pointer: self.chance(15),
                         ..abi::interact::Interact::default()
                     },
-                    // P6a: a hidden box draws as one that is not there.
                     visible: !self.chance(10),
                 }
             }
@@ -572,7 +558,6 @@ impl Generator<'_> {
         layout
     }
 
-    /// `tree` changed in one place: a node replaced, removed, added, or two children swapped.
     fn mutate(&mut self, tree: &mut v2::Node) {
         let paths = paths(tree);
         let path = self.rng.pick(&paths).clone();
@@ -581,7 +566,6 @@ impl Generator<'_> {
         self.scrolls = SCROLLS.iter().copied().filter(|id| !used.contains(*id)).collect();
         let op = self.rng.below(7);
         if op == 5 {
-            // A subtree with an id moves to the front of another box, where a keep may name it.
             let moving: Vec<&Vec<usize>> =
                 paths.iter().filter(|path| !path.is_empty() && at(tree, path).id().is_some()).collect();
             let targets: Vec<&Vec<usize>> =
@@ -611,7 +595,6 @@ impl Generator<'_> {
         let node = at(tree, &path);
         match op {
             0 => {
-                // The same kind and id, with new properties.
                 let id = node.id().map(str::to_owned);
                 let mut fresh = self.node(path.len());
                 for _ in 0..8 {
@@ -669,7 +652,6 @@ impl Generator<'_> {
     }
 }
 
-/// The paths of every node of `tree`, by child index.
 fn paths(tree: &v2::Node) -> Vec<Vec<usize>> {
     let mut out = vec![Vec::new()];
     for (index, child) in tree.children().iter().enumerate() {
@@ -856,7 +838,6 @@ impl Model for Reconcile {
                             adopted = nodes.clone();
                         }
                         (Err(_), false) => {
-                            // no-effects: a refused tree leaves the frame as it was.
                             if host.app.render() != before {
                                 return fail("no-effects", "a refused tree changed the frame".into());
                             }
@@ -941,7 +922,6 @@ fn the_oracles_can_fail() {
     assert!(valid(&[v2::Node::Keep { key: "a".into() }], &a));
 }
 
-/// A card list in the shape of the diff viewer's: a column of `files` cards, each a header row and a body text.
 fn cards(files: usize, reviewed: &[usize], keep: bool) -> Vec<v2::Node> {
     let cards = (0..files)
         .map(|file| {
@@ -1017,7 +997,6 @@ fn a_prepend_or_a_reparent_moves_what_it_must() {
         let want = fresh(&expand(&prepended, &cards(files, &[], false)).unwrap(), 0, &|_| None).capture;
         assert_eq!(host.app.render(), want, "{files} {keep}");
     }
-    // The column's own layout changes: it is built again alone, and its 20 cards move into it.
     {
         let host = host(0);
         let parent = root(&host);
@@ -1122,11 +1101,9 @@ fn a_refused_tree_changes_nothing() {
     assert_eq!(apply(&host, &mut tree, &parent, &twice), Err(Refused::Duplicate("card-0".into())));
     let unknown = vec![v2::Node::column(vec![v2::Node::Keep { key: "card-9".into() }])];
     assert_eq!(apply(&host, &mut tree, &parent, &unknown), Err(Refused::Unknown("card-9".into())));
-    // A keep of a card and a node with an id inside that card.
     let inside =
         vec![v2::Node::column(vec![v2::Node::Keep { key: "cards".into() }, v2::Node::text(vec![]).with_id("card-1")])];
     assert_eq!(apply(&host, &mut tree, &parent, &inside), Err(Refused::Duplicate("card-1".into())));
-    // A keep of a card inside a kept list.
     let nested =
         vec![v2::Node::column(vec![v2::Node::Keep { key: "cards".into() }, v2::Node::Keep { key: "card-1".into() }])];
     assert_eq!(apply(&host, &mut tree, &parent, &nested), Err(Refused::Duplicate("card-1".into())));
@@ -1137,7 +1114,6 @@ fn a_refused_tree_changes_nothing() {
     assert_ne!(host.app.render(), frame);
 }
 
-/// A column of a title and a scroll that grows, of `rows` rows; row `changed` says so.
 fn scrolling(id: &str, rows: usize, changed: Option<usize>) -> Vec<v2::Node> {
     let lines = (0..rows)
         .map(|row| {
@@ -1301,7 +1277,6 @@ fn a_tree_the_layout_cannot_take_is_refused() {
     host.app.render();
 }
 
-/// A scroll of `rows` rows, `height` rows tall, with id `sc`.
 fn rows_scroll(rows: usize, height: u16, layout: abi::Layout) -> v2::Node {
     let rows = (0..rows).map(|row| v2::Node::text(vec![abi::Span::new(format!("row {row}"))])).collect();
     v2::Node::Scroll {
@@ -1518,7 +1493,6 @@ fn a_kept_fence_counts_against_the_one_a_tree_holds() {
         }
         let alone = [v2::Node::column(vec![v2::Node::keep("card"), text("no fence")]).with_id("page")];
         assert_eq!(apply_fenced(&host, &mut tree, &parent, &alone), Ok(()), "{first:?}");
-        // The keep of a keep still counts the fence it stood for.
         let again = [v2::Node::column(vec![v2::Node::keep("card"), fresh()]).with_id("page")];
         assert_eq!(apply_fenced(&host, &mut tree, &parent, &again), Err(Refused::Fence), "{first:?}");
         assert_eq!(apply(&host, &mut tree, &parent, &alone), Err(Refused::Fence), "outside a fence claim: {first:?}");

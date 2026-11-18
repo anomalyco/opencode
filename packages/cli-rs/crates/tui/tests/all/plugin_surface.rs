@@ -26,27 +26,22 @@ use opentui::widget::Widget;
 const ID: &str = "test.board";
 const ITEMS: usize = 6;
 
-/// One view call, as the plugin saw it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Call {
     generation: u64,
     full: bool,
     bad: bool,
-    /// Cards it built rather than kept.
     built: usize,
 }
 
 #[derive(Default)]
 struct Board {
     values: Vec<u32>,
-    /// Views left that return a tree the host refuses.
     bad: u32,
     calls: Vec<Call>,
     waker: Option<abi::Waker>,
-    /// The surface reads the palette.
     palette: bool,
     palettes: Vec<String>,
-    /// The content handle each card shows, which the plugin releases when it builds the card again.
     handles: Vec<Option<v2::ContentRef>>,
 }
 
@@ -115,12 +110,10 @@ fn view(cx: &mut v2::View<'_>) -> v2::Node {
     v2::Node::column(children).with_id("board")
 }
 
-/// The patch card `index` shows at `value`.
 fn patch(index: usize, value: u32) -> String {
     format!("@@ -1 +1 @@\n-item {index}\n+item {index} is {value}\n")
 }
 
-/// How the TUI runs the test plugin.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Carrier {
     Linked,
@@ -167,7 +160,6 @@ enum Command {
     Open,
     Home,
     Bump(usize),
-    /// The plugin's waker, as from its own thread.
     Wake,
     Theme(usize),
     /// The next view returns a tree with a keep the host does not hold.
@@ -253,7 +245,6 @@ impl Model for Surfaces {
                     if !calls.is_empty() {
                         return fail("work", format!("a theme change called the view: {calls:?}"));
                     }
-                    // On home the footer mounts its slot again, the claims of 1.x with it: that is the footer's.
                     let done = reconcile::work().since(work);
                     if mounted.is_some() && (done.created > 0 || done.removed > 0 || done.parses > 0) {
                         return fail("work", format!("a theme change rebuilt widgets: {done:?}"));
@@ -317,8 +308,6 @@ fn surface_mounts_hold_their_properties() {
     }
 }
 
-/// `carrier-equal`: the same commands on both carriers give equal frames, cells with their styles, and equal call logs
-/// at every step. Each carrier is the twin of the other.
 struct Equal;
 
 impl Model for Equal {
@@ -416,7 +405,6 @@ fn a_second_refusal_in_a_row_fails_the_plugin() {
         apply(&harness, Command::Bump(1));
         apply(&harness, Command::Wake);
         assert_eq!(board(|board| board.calls.len()), calls, "a failed plugin got a view");
-        // Nothing of the failed plugin's mount stays, and its route shows the host's screen for a missing route.
         assert_eq!(surface::ledger_of(ID), Ledger::default(), "{carrier:?}");
         assert!(!harness.app.render().text().contains("card 0"), "{carrier:?}");
     }
@@ -450,17 +438,12 @@ fn a_theme_change_calls_only_a_surface_that_reads_the_palette() {
 }
 
 thread_local! {
-    /// The views `test.parts` returned.
     static PART_VIEWS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     /// `test.parts` keeps its whole page from its second view on, not only the box and the item.
     static PART_ROOT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-    /// Whether `test.parts` keeps its box and its list's item from its second view on; else it writes them out.
     static PART_KEEPS: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
 }
 
-/// A plugin whose route shows tool call outputs of `ses_p` by reference: `call_1`, `call_2` alone and inside a box
-/// it keeps from its second view on, and a user message's id, which names no tool call. A whole tree asked for has no
-/// keeps.
 fn parts(setup: &mut abi::Setup) -> Result<(), String> {
     let part = |part: &str| v2::Node::Markdown {
         id: None,
@@ -543,19 +526,16 @@ fn part_output(root: bool, carrier: Carrier) {
     PART_ROOT.set(false);
 }
 
-/// What a tool call's success says it output: `text`.
 fn output(text: &str) -> serde_json::Value {
     serde_json::json!({ "content": [{ "type": "text", "text": text }], "executed": true })
 }
 
-/// A step of the tool call `call_2` of `ses_p`, at `seq`.
 fn call_2(harness: &Harness, kind: &str, seq: u64, extra: serde_json::Value) {
     let ids = serde_json::json!({ "sessionID": "ses_p", "assistantMessageID": "msg_3", "id": "call_2" });
     harness.tui.data.apply(&[tool_event(kind, seq, support::merge(ids, extra))]);
     settle(harness);
 }
 
-/// `test.parts`'s route on `carrier` over the session `ses_p`, whose `call_2` has not started.
 fn parts_harness(carrier: Carrier) -> Harness {
     PART_VIEWS.set(0);
     let session = support::merge(support::session("ses_p", "Parts"), serde_json::json!({ "agent": "build" }));
@@ -623,7 +603,6 @@ fn a_kept_output_is_admitted_as_one_written_out() {
         PART_KEEPS.set(keeps);
         PART_ROOT.set(root);
         let harness = parts_harness(carrier);
-        // Each stage runs the call again and completes it with its output.
         let over = "x".repeat(88);
         let stages = [
             (1, "small output", "small output"),
@@ -723,7 +702,6 @@ fn a_node_the_layout_cannot_take_does_not_end_the_tui() {
 thread_local! {
     /// The handle the first mount of `test.alias` gave.
     static FIRST: std::cell::Cell<Option<v2::ContentRef>> = const { std::cell::Cell::new(None) };
-    /// The replies `test.owned` got.
     static REPLIES: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
 }
 
@@ -863,12 +841,9 @@ fn late_reply(loopback: bool) {
 }
 
 thread_local! {
-    /// The sizes the views of `test.room` were given, by surface.
     static ROOM: RefCell<Vec<(&'static str, u16, u16)>> = const { RefCell::new(Vec::new()) };
 }
 
-/// A route of a title over a growing scroll of 40 rows, and a claim in the footer's status row that grows; both log
-/// their input size.
 fn room(setup: &mut abi::Setup) -> Result<(), String> {
     setup.surface(v2::Surface::new("room", v2::Place::Route("room".into()), |cx| {
         ROOM.with(|room| room.borrow_mut().push(("route", cx.input.width, cx.input.height)));
@@ -918,7 +893,6 @@ fn a_surface_gets_the_room_it_is_given() {
 }
 
 thread_local! {
-    /// What `test.retry`'s next view returns, and the handle of content a refused view gave.
     static RETRY: std::cell::Cell<(u8, Option<v2::ContentRef>)> = const { std::cell::Cell::new((0, None)) };
 }
 
@@ -980,7 +954,6 @@ thread_local! {
     static RESTYLE: RefCell<Vec<(&'static str, u64)>> = const { RefCell::new(Vec::new()) };
     /// The renders of its claim of ABI 1.x.
     static KEPT_RENDERS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
-    /// The palette modes its palette's view got.
     static PAL_MODES: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
 }
 
@@ -1020,7 +993,6 @@ fn restyling(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-/// The cell where `text` starts on `harness`'s screen.
 fn cell_of(harness: &Harness, text: &str) -> opentui::testing::Cell {
     let capture = harness.app.render();
     let (x, y) = harness.find(text);
@@ -1189,7 +1161,6 @@ fn a_mounts_widgets_are_freed_with_it() {
     for carrier in CARRIERS {
         board(|board| *board = Board { values: vec![0; ITEMS], ..Board::default() });
         let harness = open_tui(carrier);
-        // The text, its card, the board and the surface's root.
         let marked = |harness: &Harness| {
             let marker = Rc::new(());
             support::mark_at(&harness.app, "card 0: 0", 4, &marker);
@@ -1272,7 +1243,6 @@ fn a_revision_crosses_bytes_that_follow_the_change() {
     assert!(small.1.sent.abs_diff(large.1.sent) <= 2, "the requests grew with the cards: {small:?} {large:?}");
     assert_eq!(small.1.received - small.0.received, large.1.received - large.0.received, "{small:?} {large:?}");
     assert!(small.1.received > small.0.received);
-    // A surface that does not read the palette is not sent one: its request is the mount, its size and two numbers.
     assert!(small.1.sent < 512, "{small:?}");
     let theme = crossed_by(410, |harness| {
         harness.tui.theme.borrow_mut().set("tokyonight");
@@ -1282,11 +1252,9 @@ fn a_revision_crosses_bytes_that_follow_the_change() {
 }
 
 thread_local! {
-    /// The card `test.hide` leaves out, and whether each of its views was asked for a whole tree.
     static HIDE: RefCell<(Option<usize>, Vec<bool>)> = const { RefCell::new((None, Vec::new())) };
 }
 
-/// A route of three memoized cards, one of which a command hides and shows again, unchanged.
 fn hiding(setup: &mut abi::Setup) -> Result<(), String> {
     let hide = abi::Command::new("hide.toggle");
     setup.command(hide, |_, input| {
@@ -1331,11 +1299,9 @@ fn a_card_left_out_is_built_again_when_it_comes_back() {
 }
 
 thread_local! {
-    /// Whether `test.dup`'s next view repeats an id, and whether each of its views was asked for a whole tree.
     static DUP: RefCell<(bool, Vec<bool>)> = const { RefCell::new((false, Vec::new())) };
 }
 
-/// A route of two texts, which a command makes share one id.
 fn duplicating(setup: &mut abi::Setup) -> Result<(), String> {
     let arm = abi::Command::new("dup.arm");
     setup.command(arm, |_, _| DUP.with(|dup| dup.borrow_mut().0 = true));
@@ -1377,7 +1343,6 @@ fn a_duplicate_id_fails_the_plugin_without_a_retry() {
     }
 }
 
-/// A route of one text, with a command of its own: leaving it takes that command's keymap layer away.
 fn page(setup: &mut abi::Setup) -> Result<(), String> {
     let command = abi::Command::new("page.go").scope(abi::Scope::Route("page".into()));
     setup.command(command, |_, _| {});
@@ -1419,11 +1384,9 @@ fn a_route_opens_with_one_view() {
 }
 
 thread_local! {
-    /// How often `tally.bump` ran.
     static TALLIED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
-/// A route with a palette command of its own, `tally.bump` on key `1`.
 fn tally(setup: &mut abi::Setup) -> Result<(), String> {
     let command = abi::Command::new("tally.bump")
         .title("Bump the tally")
@@ -1465,7 +1428,6 @@ fn a_routes_commands_are_in_the_palette() {
         assert_eq!(TALLIED.get(), 1, "{carrier:?}: its key runs it on the route");
         let screen = palette(&harness);
         assert!(!screen.contains("No results"), "{carrier:?}: {screen}");
-        // Under the palette its key is the palette's: it filters.
         harness.app.press("1");
         settle(&harness);
         assert_eq!(TALLIED.get(), 1, "{carrier:?}: its key ran it under a dialog");

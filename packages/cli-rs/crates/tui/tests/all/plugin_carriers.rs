@@ -55,7 +55,6 @@ pub fn library() -> Vec<u8> {
     library
 }
 
-/// A carrier of this test: one of the in-process ones, or the real library.
 #[derive(Clone, Copy, Debug)]
 enum Run {
     In(Carrier),
@@ -71,15 +70,12 @@ fn open(run: Run) -> Board {
     open_on(run, 80, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) })
 }
 
-/// [`open`] `width` cells wide with `deps`, such as a session on screen.
 fn open_on(run: Run, width: u16, mut deps: Deps) -> Board {
     let plugin = abi::Plugin { id: ID, setup: board::setup };
     if let Run::In(carrier) = run {
         deps.builtins.push(builtin(carrier, plugin));
     }
     let harness = support::mount(width, 30, deps);
-    // Carriers are compared, not their speed: on a clock that does not move, the frame budget hands each burst over
-    // in one frame on every carrier (Pl).
     let still = std::time::Instant::now();
     harness.tui.plugins.monitor().set_clock(move || still);
     // The meter animates only while the client's animations run.
@@ -121,7 +117,6 @@ fn observe(harness: &Harness) -> Seen {
     (harness.app.render().cells, toasts, format!("{status:?}"))
 }
 
-/// Runs the script on `run`, and returns what each checkpoint saw.
 fn script(run: Run) -> Vec<(&'static str, Seen)> {
     let board = open(run);
     let (app, tui) = (&board.harness.app, &board.harness.tui);
@@ -133,7 +128,6 @@ fn script(run: Run) -> Vec<(&'static str, Seen)> {
     let mut seen = Vec::new();
     tui.navigate(route.clone());
     settle(&board.harness);
-    // The cards' scroll takes the page below the header: a growing scroll in a route has rows (P1's full-page route).
     let screen = board.harness.app.render().text();
     let cards = screen.lines().filter(|line| line.trim_start().starts_with("card ")).count();
     assert!(cards >= 3, "{run:?}: the cards' scroll shows {cards} cards");
@@ -156,10 +150,6 @@ fn script(run: Run) -> Vec<(&'static str, Seen)> {
     seen.push(("theme", observe(&board.harness)));
     dispatch("board.toast", None);
     seen.push(("toast", observe(&board.harness)));
-    // Contract ergonomics 2.6 and 2.9: `/inspect`, the command's alias, which no fuzzy match of `board-facts` finds,
-    // typed in the composer, reads the host's facts and asks in a prompt filled with its value under its description;
-    // the edited name goes to the prompt's action, and the page shows the facts within its layout's widths. The home
-    // screen is not compared: its composer's placeholder is drawn at random.
     tui.navigate(Route::Home);
     settle(&board.harness);
     app.type_text("/inspect");
@@ -203,7 +193,6 @@ fn script(run: Run) -> Vec<(&'static str, Seen)> {
     settle(&board.harness);
     seen.push(("remount", observe(&board.harness)));
     dispatch("board.thread-panic", None);
-    // The report is handled as a paint starts.
     board.harness.wait("the thread's panic failed the plugin", || {
         app.advance(Duration::from_millis(1));
         app.render();
@@ -213,7 +202,6 @@ fn script(run: Run) -> Vec<(&'static str, Seen)> {
             .any(|entry| entry.id == ID && matches!(entry.status, opencode_plugin::Status::Failed(_)))
     });
     seen.push(("thread panic", observe(&board.harness)));
-    // Later frames report nothing more.
     for _ in 0..5 {
         app.advance(Duration::from_millis(16));
     }
@@ -579,7 +567,6 @@ fn files(run: Run) -> Vec<(&'static str, Seen)> {
     seen.push(("steps", observe(&board.harness)));
     dispatch("files.step", Some("-2"));
     seen.push(("back", observe(&board.harness)));
-    // The reads show in the next view, which the `Nearest` causes.
     dispatch("files.read", None);
     dispatch("files.near", Some("12"));
     seen.push(("near", observe(&board.harness)));
@@ -653,7 +640,6 @@ fn input_is_equal_on_every_carrier() {
 fn panels_overlays_and_reads_are_equal_on_every_carrier() {
     let run = |run: Run| {
         let session = support::Fake::new(|seen| support::base(seen, support::DIRECTORY));
-        // Wide enough for the panel beside the session, whose composer takes the focus the panel gives back.
         let board = open_on(run, 120, support::deps(Arc::new(session)));
         let (app, tui) = (&board.harness.app, &board.harness.tui);
         // The session's catalog first: its model shows on the composer's row once `/api/model` answers, which is no
@@ -686,15 +672,12 @@ fn panels_overlays_and_reads_are_equal_on_every_carrier() {
         app.press("b");
         app.press("w");
         step("blur", &mut seen);
-        // P3's input in the panel: its edits and its enter come to the panel's handler.
         let (x, y) = support::at(&app.render().text(), "say").expect("the input shows");
-        // One cell in: the panel's left edge is the splitter's.
         app.click(x + 1, y);
         // Keys no layer of the board binds: a layer whose scope holds takes its key before the field.
         app.type_text("yo");
         app.press("enter");
         step("say", &mut seen);
-        // The plugin gives its field the focus, away from the composer: what the user types next is the field's.
         app.press("b");
         settle(&board.harness);
         tui.keymap.dispatch("board.say", None);
@@ -806,8 +789,6 @@ fn a_dialog_surface_is_equal_on_every_carrier() {
     }
 }
 
-/// The board's claims in a session whose answer streams a `board` call that finishes, one that fails, and a `board`
-/// fence, then takes another theme; what each checkpoint sees, with the composer's random placeholder blanked.
 fn claimed(run: Run) -> Vec<(&'static str, Seen)> {
     let session = support::merge(support::session("ses_c", "Claims"), serde_json::json!({ "agent": "build" }));
     let messages = serde_json::json!([
@@ -824,7 +805,6 @@ fn claimed(run: Run) -> Vec<(&'static str, Seen)> {
         "/api/session/ses_c/permission" | "/api/session/ses_c/inbox" => (200, serde_json::json!({ "data": [] })),
         _ => support::not_found(),
     });
-    // Each call in its own row: grouping folds finished calls, claimed or not (E.8).
     let session = opencode_local::cli_config::Session {
         grouping: Some(opencode_local::cli_config::Grouping::None),
         verbosity: Some(opencode_local::cli_config::Verbosity::Medium),
@@ -906,7 +886,6 @@ fn claimed(run: Run) -> Vec<(&'static str, Seen)> {
 #[test]
 fn a_claimed_part_is_equal_on_every_carrier() {
     let linked = claimed(Run::In(Carrier::Linked));
-    // The guard: each checkpoint sees a new frame, and the claim draws.
     assert!(linked.windows(2).all(|pair| pair[0].1.0 != pair[1].1.0), "a checkpoint saw what the one before did");
     // Each claimed part holds its card's one memo value until its mount ends: the finished call, the fence, and the
     // declined call, whose library keeps its table too.

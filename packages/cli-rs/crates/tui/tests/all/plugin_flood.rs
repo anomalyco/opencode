@@ -28,9 +28,7 @@ use opencode_plugin::abi::{self, v2};
 use opencode_tui::{Deps, Route};
 
 const PLUGINS: [&str; 2] = ["test.flood.a", "test.flood.b"];
-/// What one update costs on the monitor's clock: a plugin's millisecond takes four.
 const COST: Duration = Duration::from_micros(300);
-/// What the key's handler costs on the monitor's clock: it counts in its plugin's frame budget.
 const KEY_COST: Duration = Duration::from_micros(400);
 const FRAME: Duration = Duration::from_millis(1);
 
@@ -47,9 +45,7 @@ thread_local! {
     /// The monitor's clock, past its start: only updates and the key's handler move it.
     static CLOCK: Cell<Duration> = const { Cell::new(Duration::ZERO) };
     static SENDERS: RefCell<[Option<abi::Sender<u32>>; 2]> = const { RefCell::new([None, None]) };
-    /// Plugin b's waker, whose wake handler shows a toast.
     static WAKER_B: RefCell<Option<abi::Waker>> = const { RefCell::new(None) };
-    /// What a draw of `a`'s canvas costs on the monitor's clock.
     static DRAW_COST: Cell<Duration> = const { Cell::new(Duration::ZERO) };
 }
 
@@ -123,13 +119,11 @@ fn open(carrier: Carrier, all: Duration) -> Harness {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Command {
-    /// Plugin `0`'s thread sends `1` numbered messages, and is joined.
     Send(usize, u32),
     /// The user presses the key of `a`'s route, read by the poll that also hands the wakes waiting: the wake first.
     Key,
     /// A poll hands the wakes waiting, with no input.
     Poll,
-    /// The UI thread paints a frame.
     Frame,
 }
 
@@ -148,7 +142,6 @@ struct Flood {
 impl Flood {
     fn run_all(&self, commands: &[Command]) -> Run {
         let harness = open(self.carrier, self.all);
-        // What each plugin's sends were accepted and has not arrived yet.
         let mut waiting: [std::collections::VecDeque<u32>; 2] = Default::default();
         // Each plugin numbers its own messages, so a twin without another plugin's sends numbers them alike.
         let mut numbers = [0u32; 2];
@@ -159,7 +152,6 @@ impl Flood {
             frames_of_b: Vec::new(),
             failure: Some(Failure { property, site: property, step, detail }),
         };
-        // What each plugin's calls took in the frame now open, and its updates in it.
         let (mut spent, mut updates) = ([Duration::ZERO; 2], [0usize; 2]);
         // After the commands, frames until the scheduler has handed everything over: the first takes the wakes still
         // waiting for the UI thread.
@@ -197,7 +189,6 @@ impl Flood {
             if ran > u64::from(command == Command::Frame) {
                 return fail("backlog", step, format!("{command:?} ran {ran} drains"));
             }
-            // Check what the step logged.
             let events: Vec<Event> = LOG.with(|log| log.borrow()[seen..].to_vec());
             seen += events.len();
             if command == Command::Key && events.first() != Some(&Event::Key) {
@@ -347,7 +338,6 @@ fn wakes_before_a_paint_ask_for_one_drain() {
     }
 }
 
-/// Sends `count` messages from plugin `plugin`'s thread, and joins it.
 fn send(plugin: usize, count: u32) {
     let sender = SENDERS.with(|senders| senders.borrow()[plugin].clone()).unwrap();
     std::thread::spawn(move || (0..count).for_each(|number| drop(sender.send(number)))).join().unwrap();

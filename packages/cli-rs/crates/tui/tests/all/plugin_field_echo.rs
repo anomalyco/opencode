@@ -16,9 +16,7 @@ use opencode_tui::{Deps, Route};
 const ID: &str = "test.echo";
 
 thread_local! {
-    /// The value the probe's view gives its field, and the edit it says it heard.
     static VALUE: RefCell<(String, Option<u64>)> = const { RefCell::new((String::new(), None)) };
-    /// The edits the probe heard, with their `seq`.
     static EDITS: RefCell<Vec<(u64, String)>> = const { RefCell::new(Vec::new()) };
 }
 
@@ -55,7 +53,6 @@ fn show(h: &Harness, value: &str, seen: Option<u64>) -> String {
     field(h)
 }
 
-/// The text of the field, on the line under the page's title.
 fn field(h: &Harness) -> String {
     let screen = h.app.render().text();
     let mut lines = screen.lines().skip_while(|line| !line.contains("echo page"));
@@ -69,12 +66,9 @@ fn turns(h: &Harness) {
     }
 }
 
-/// The probe: a route `fe` of a title over the field `field`, whose value and heard edit `fe.set` draws again;
-/// `fe.focus` focuses it. It records the field's edits.
 fn probe(setup: &mut abi::Setup) -> Result<(), String> {
     let command = |name: &str| abi::Command::new(name).scope(abi::Scope::Route("fe".into()));
     setup.command(command("fe.focus"), |host, _| host.focus("field"));
-    // The view reads `VALUE` as the call draws the route again.
     setup.command(command("fe.set"), |_, _| ());
     let surface = v2::Surface::new("fe", v2::Place::Route("fe".into()), |_| {
         let title = v2::Node::text(vec![abi::Span::new("echo page")]);
