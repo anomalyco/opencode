@@ -22,6 +22,7 @@ import { VideoGeneration } from "../../video-generation.js"
 
 export const name = "experimental_video_generate"
 export const MAX_INPUT_BYTES = 100 * 1024 * 1024
+const CHUNK = 4 * 1024 * 1024
 const URL_TYPES: Record<string, string> = {
   mp4: "video/mp4",
   mov: "video/quicktime",
@@ -118,12 +119,15 @@ export const track = Effect.fnUntraced(function* (input: {
   const run = Effect.gen(function* () {
     const job = yield* input.videos.wait(input.videoID)
     if (job.status === "error") return yield* Effect.fail(new Error(job.error))
-    // The blob is on the server's disk; the copy is a workspace write.
+    // The blob is on the server's disk; the copy is a workspace write, streamed so a video is never held in memory.
     const files = yield* Effect.forEach(job.blobs, (blob, index) =>
       Effect.gen(function* () {
         const file = videoPath(input.path, index)
         const content = yield* input.blobs.read(blob.id)
-        yield* input.environment.files.write(file, yield* input.fs.readFile(content.path))
+        yield* input.environment.files.write(file, new Uint8Array())
+        yield* input.fs
+          .stream(content.path, { chunkSize: CHUNK })
+          .pipe(Stream.runForEach((chunk) => input.environment.files.append(file, chunk)))
         return file
       }),
     )

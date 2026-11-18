@@ -2,14 +2,12 @@ export * as VideoGeneration from "./video-generation.js"
 
 import { randomUUID } from "node:crypto"
 import { and, eq, lte, sql } from "drizzle-orm"
-import { Media } from "@opencode/ai/effect"
 import {
   type VideoCompleted,
   type VideoError,
   VideoErrorReason,
   VideoID,
   type VideoJob,
-  type VideoRequest,
   type VideoRunning,
 } from "@opencode/schema/generate"
 import { Model } from "@opencode/schema/model"
@@ -392,16 +390,6 @@ const layer = Layer.effect(
     return Service.of({ start, get, wait, cancel })
   }),
 )
-
-/** The media of an HTTP request, which arrives as inline files. */
-export function fromRequest(input: VideoRequest): Generate.VideoInput {
-  return {
-    ...input,
-    start: input.start && Media.image(Media.base64(input.start.data, input.start.mime)),
-    end: input.end && Media.image(Media.base64(input.end.data, input.end.mime)),
-    references: input.references?.map((file) => Media.base64(file.data, file.mime)),
-  }
-}
 
 // A job that never recorded finishing is treated as finished at its deadline.
 function expired(job: Job, now: number) {

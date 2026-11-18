@@ -12,7 +12,13 @@ import {
   type VideoModel,
   type VideoStatus,
 } from "@opencode/ai/effect"
-import type { DecisionRequest, DecisionResult, ImageRequest, ImageResult } from "@opencode/schema/generate"
+import type {
+  DecisionRequest,
+  DecisionResult,
+  ImageRequest,
+  ImageResult,
+  VideoRequest,
+} from "@opencode/schema/generate"
 import { Money } from "@opencode/schema/money"
 import { SessionID } from "@opencode/schema/session-id"
 import { Context, Effect, Layer, Schema, Stream } from "effect"
@@ -39,6 +45,16 @@ export interface VideoInput {
   readonly aspect?: VideoAspectRatio
   readonly resolution?: string
   readonly sound?: boolean
+}
+
+/** A public video request, whose media arrives as inline files. */
+export function videoInput(input: VideoRequest): VideoInput {
+  return {
+    ...input,
+    start: input.start && Media.image(Media.base64(input.start.data, input.start.mime)),
+    end: input.end && Media.image(Media.base64(input.end.data, input.end.mime)),
+    references: input.references?.map((file) => Media.base64(file.data, file.mime)),
+  }
 }
 
 /** A finished video. `stream` downloads it as it is read, so a long video is never held in memory. */
