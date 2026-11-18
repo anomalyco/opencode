@@ -108,7 +108,7 @@ export const Basic = {
 function CheckedIndicator() {
   return (
     <ContextMenu.ItemIndicator>
-      <Icon name="check-small" />
+      <Icon name="check" />
     </ContextMenu.ItemIndicator>
   )
 }

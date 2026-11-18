@@ -229,6 +229,7 @@ describe("FileSystemSearch", () => {
         const search = yield* FileSystemSearch.Service
         const entries = yield* search.find({ query: "ts", type: "file" })
         expect(observed?.cwd).toBe(directory)
+        expect(observed?.hidden).toBe(true)
         expect(entries.map((entry) => entry.path)).toEqual([RelativePath.make("remote.ts")])
       }).pipe(Effect.provide(layer))
     }),

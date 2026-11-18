@@ -28,4 +28,5 @@ export default {
   "export.success.description": "セッションを {{filename}} に保存しました",
   "export.failed.title": "セッションのエクスポートに失敗しました",
   "export.failed.description": "セッションのエクスポート中にエラーが発生しました",
+  "usage.toggle": "セッションのコンテキストを切り替え",
 }

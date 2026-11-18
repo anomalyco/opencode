@@ -110,6 +110,7 @@ export const DialogConnectProvider: Component<{
       size="normal"
       fit
       anchored
+      containerClass="!bg-v2-background-bg-base"
       preventBackdropDismiss={view().preventBackdropDismiss}
       onCloseAutoFocus={(event) => {
         if (view().completed && props.selection && props.onDone) {
@@ -177,7 +178,7 @@ export const DialogConnectProvider: Component<{
                       return (
                         <>
                           <Show when={index() > 0}>
-                            <Icon name="chevron-right" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+                            <Icon name="chevron-right" class="shrink-0 text-v2-icon-icon-muted" />
                           </Show>
                           <Switch>
                             <Match when={last()}>
@@ -246,7 +247,7 @@ export const DialogConnectProvider: Component<{
               triggerTabIndex={0}
               class="me-3 flex min-w-0 shrink-0 !cursor-default items-center gap-1.5 rounded-sm text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted focus-visible:outline-none focus-visible:text-v2-text-text-base"
             >
-              <Icon name="server" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+              <Icon name="server" class="shrink-0 text-v2-icon-icon-muted" />
               <span class="max-w-40 truncate">{language.t("provider.connect.remote.label", { server: server() })}</span>
             </Tooltip>
           )}
@@ -286,7 +287,7 @@ const methodLabel = (language: ReturnType<typeof useLanguage>, value: ProviderCo
   value.type === "key" ? (value.label ?? language.t("provider.connect.method.apiKey")) : value.label
 
 const METHOD_ICON = {
-  oauth: "window-cursor",
+  oauth: "select-element",
   key: "keyboard",
   command: "terminal",
   external: "server",
@@ -836,13 +837,12 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
               class="group flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] leading-5 tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
               onClick={() => props.controller.input({ type: "method.selected", index: index() })}
             >
-              <Icon name={METHOD_ICON[item.type]} size="small" class="shrink-0 text-v2-icon-icon-muted" />
+              <Icon name={METHOD_ICON[item.type]} class="shrink-0 text-v2-icon-icon-muted" />
               <span class="min-w-0 flex-1 truncate font-[530] text-v2-text-text-base">
                 {methodLabel(language, item)}
               </span>
               <Icon
                 name="chevron-right"
-                size="small"
                 class="shrink-0 text-v2-icon-icon-muted opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
               />
             </button>
@@ -884,7 +884,7 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
   function ErrorLine(input: { children: JSX.Element }) {
     return (
       <div class="flex items-start gap-2 text-v2-text-text-base">
-        <Icon name="circle-ban-sign" size="small" class="mt-0.5 shrink-0 text-v2-state-fg-danger" />
+        <Icon name="circle-ban-sign" class="mt-0.5 shrink-0 text-v2-state-fg-danger" />
         <span role="alert">{input.children}</span>
       </div>
     )
@@ -1064,7 +1064,6 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
               >
                 <Icon
                   name="chevron-right"
-                  size="small"
                   class="shrink-0 text-v2-icon-icon-muted transition-transform"
                   classList={{ "rotate-90": pasteOpen() }}
                 />
@@ -1176,7 +1175,7 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
                     >
                       <span class="flex size-4 shrink-0 items-center justify-center">
                         <Show when={input.body.activeID === account.id}>
-                          <Icon name="check" size="small" class="text-v2-icon-icon-base" />
+                          <Icon name="check" class="text-v2-icon-icon-base" />
                         </Show>
                       </span>
                       <span class="min-w-0 truncate font-[440] text-v2-text-text-base">{account.label}</span>
@@ -1382,7 +1381,7 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
                     </div>
                     <div data-slot="settings-row-control" class="size-4">
                       <Show when={checked()}>
-                        <Icon name="check" size="small" class="shrink-0 text-v2-icon-icon-base" />
+                        <Icon name="check" class="shrink-0 text-v2-icon-icon-base" />
                       </Show>
                     </div>
                   </button>
@@ -1428,7 +1427,7 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
                               onClick={() => collapse(group.provider.id, expanded())}
                             >
                               <span class="settings-models-group-chevron">
-                                <Icon name="chevron-down" size="small" classList={{ collapsed: !expanded() }} />
+                                <Icon name="chevron-down" classList={{ collapsed: !expanded() }} />
                               </span>
                               <span class="settings-models-group-label">
                                 <ProviderModelIcon provider={group.provider} class="shrink-0" />

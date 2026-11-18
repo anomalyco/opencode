@@ -894,7 +894,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&directory);
         assert_eq!(
             error.to_string(),
-            "opencode-pty protocol mismatch: service=7, client=8"
+            "opencode-pty protocol mismatch: service=7, client=9"
         );
     }
 }

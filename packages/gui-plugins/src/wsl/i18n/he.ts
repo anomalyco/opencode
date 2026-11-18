@@ -50,4 +50,5 @@ export default {
   "error.commandTimeout": "תם הזמן הקצוב של {{command}} {{args}} לאחר {{timeout}}ms",
   "error.failedPort": "לא ניתן להקצות יציאה",
   "menu.remove": "הסרה",
+  "error.busy": "{{distro}} עסוק במשימה אחרת. נסה שוב כשהיא תסתיים.",
 }

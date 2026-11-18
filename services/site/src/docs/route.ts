@@ -34,19 +34,30 @@ export function docsRoute(url: URL, accept: string, slugs: Record<DocsSet["id"],
 
 /**
  * docs.opencode.ai (and docs.dev.opencode.ai) served the V1 docs from their own app, under /docs and
- * at its root: every address there is the same path on the V1 docs here, permanently.
+ * at its root: every address there is the same path under /docs here, permanently, which takes it to
+ * its V2 page or on to the V1 docs as for any other /docs path.
  */
 export function docsHostRedirect(url: URL) {
   if (!url.hostname.startsWith("docs.")) return
   const path = url.pathname.replace(/^\/docs(?=\/|$)/, "") || "/"
-  return `https://${url.hostname.slice("docs.".length)}${v1Docs.base.slice(0, -1)}${path}${url.search}`
+  return `https://${url.hostname.slice("docs.".length)}${latestDocs.base.slice(0, -1)}${path}${url.search}`
 }
 
-// Pages that moved, by slug: V2's own move, and V1's Go and Zen pages, which became Console pages.
+// Pages that moved, by slug: V2's own move, V1's Go and Zen pages, which became Console pages, and
+// V1 pages whose V2 page has another address.
 const moved = new Map([
   ["console/inference", "console/api/inference"],
   ["go", "console/go"],
   ["zen", "console/models"],
+  ["rules", "instructions"],
+  ["sdk", "build/sdk"],
+  ["server", "api"],
+  ["keybinds", "cli/keybinds"],
+  ["tui", "cli/tui"],
+  ["web", "cli/web"],
+  ["acp", "cli/acp"],
+  ["modes", "agents"],
+  ["custom-tools", "build/plugins/server"],
 ])
 
 // The V1 docs app's other names for its languages (its middleware), and English's.

@@ -2175,10 +2175,14 @@ story("code block content replaces complete blocks of its languages, and actions
     status: "active",
   })
 
-  // Only the shell block gets the action, before its Copy button; the TypeScript block is untouched.
+  // Only the shell block gets the action, before its Wrap and Copy buttons; the TypeScript block is untouched.
   await expect(root.locator('[data-slot="markdown-code-actions"]')).toHaveCount(1)
   const shell = blocks.nth(3)
-  await expect(shell.locator('[data-slot="markdown-code-actions"] + [data-slot="markdown-copy-button"]')).toHaveCount(1)
+  await expect(
+    shell.locator(
+      '[data-slot="markdown-code-toolbar"] > [data-slot="markdown-code-actions"]:first-child + [data-slot="markdown-wrap-button"] + [data-slot="markdown-copy-button"]',
+    ),
+  ).toHaveCount(1)
   await shell.hover()
   await shell.getByRole("button", { name: "Run in terminal" }).click()
   await expect(page.locator("body")).toHaveAttribute("data-ran", "echo hi in /repo")

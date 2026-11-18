@@ -1,22 +1,20 @@
 import { describe, expect, test } from "bun:test"
 import path from "node:path"
-import { parseProgram } from "../src/runtime/execute.js"
-import { Interpreter } from "../src/runtime/interpreter.js"
-import { createBuiltins } from "../src/runtime/intrinsics.js"
-import { getOwn, Native, nativeRule, Obj, remove, set } from "../src/runtime/objects.js"
+import { parseProgram } from "../src/language/runtime/execute.js"
+import { Interpreter } from "../src/language/runtime/interpreter.js"
+import { createBuiltins } from "../src/language/runtime/intrinsics.js"
+import { getOwn, Native, nativeRule, Obj, remove, set } from "../src/language/runtime/objects.js"
 import { CodeMode } from "../src/index.js"
-import { decode, encode } from "../src/snapshot/codec.js"
-import { Lost, PendingThrow } from "../src/runtime/model.js"
-import { normalizeError } from "../src/runtime/errors.js"
+import { decode, encode } from "../src/language/snapshot/codec.js"
+import { Lost, PendingThrow } from "../src/language/runtime/model.js"
+import { normalizeError } from "../src/language/runtime/errors.js"
 import { Effect } from "effect"
-import { ToolRuntime } from "../src/tool-runtime.js"
-import { nodeId, sourceOf } from "../src/runtime/source.js"
+import { nodeId, sourceOf } from "../src/language/runtime/source.js"
 
 // Groundwork for suspending and resuming a run: everything the state refers to has a stable name.
 
 const interpreter = () =>
   new Interpreter<never>({
-    tools: ToolRuntime.make(ToolRuntime.prepare<never>({}), undefined, {}),
     builtins: createBuiltins(),
   })
 

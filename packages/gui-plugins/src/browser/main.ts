@@ -2,6 +2,7 @@ import { builtinMainContext } from "@opencode/plugin/gui/builtin"
 import type { Plugin } from "@opencode/plugin/gui/main"
 import type { Pane } from "./pane"
 import { RefsStore } from "./refs"
+import { viewportToolbarAvailable } from "./viewport-toolbar-machine"
 import { BrowserPane } from "./ipc"
 import {
   createMainPaneState,
@@ -39,6 +40,7 @@ const setup: Plugin.MainSetup = (ctx) => {
                   storage: builtinMainContext(ctx).storage,
                   refs,
                   embeds: ctx.embeds,
+                  toolbar: viewportToolbarAvailable(ctx.app.channel),
                   emit: (window, value) => provider.emit("event", value, window),
                 }),
               })
@@ -85,6 +87,8 @@ const setup: Plugin.MainSetup = (ctx) => {
     inspect: async (input, caller) => (await pane()).inspect(caller.window, input.binding, input.tabID, input.enabled),
     highlight: async (input, caller) => (await pane()).highlight(caller.window, input.binding, input.tabID, input.ref),
     zoom: async (input, caller) => (await pane()).zoom(caller.window, input.binding, input.tabID, input.zoom),
+    setViewport: async (input, caller) =>
+      (await pane()).setViewport(caller.window, input.binding, input.tabID, input.viewport),
     site: async (input, caller) => (await pane()).site(caller.window, input.binding, input.tabID),
     clearSite: async (input, caller) => (await pane()).clearSite(caller.window, input.binding, input.tabID),
     close: async (input, caller) => (await pane()).close(caller.window, input.binding),

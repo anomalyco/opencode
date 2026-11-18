@@ -21,7 +21,7 @@ use opencode_pty::service::{
 };
 use windows_sys::Win32::Foundation::{ERROR_PRIVILEGE_NOT_HELD, WAIT_OBJECT_0};
 use windows_sys::Win32::System::Threading::{
-    OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject,
+    OpenProcess, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE, TerminateProcess, WaitForSingleObject,
 };
 
 /// A unique temporary path, removed when dropped even if a test fails.
@@ -188,6 +188,23 @@ fn wait_dead(pid: u32) {
     }
 }
 
+/// Kills a test descendant even when an assertion fails first.
+struct KillOnDrop(u32);
+
+impl Drop for KillOnDrop {
+    fn drop(&mut self) {
+        // SAFETY: the PID belongs to this test's own descendant.
+        let handle = unsafe { OpenProcess(PROCESS_TERMINATE, 0, self.0) };
+        if handle.is_null() {
+            return;
+        }
+        // SAFETY: OpenProcess returned a new, uniquely owned handle.
+        let handle = unsafe { OwnedHandle::from_raw_handle(handle) };
+        // SAFETY: the owned handle has PROCESS_TERMINATE access and is still valid.
+        unsafe { TerminateProcess(handle.as_raw_handle(), 1) };
+    }
+}
+
 fn newlines(bytes: &[u8]) -> u64 {
     bytes.iter().filter(|&&byte| byte == b'\n').count() as u64
 }
@@ -223,7 +240,7 @@ impl GrandchildTree {
     }
 }
 
-fn grandchild_tree(name: &str, keep_parent_alive: bool) -> GrandchildTree {
+fn grandchild_tree(name: &str, exit_code: Option<u32>) -> GrandchildTree {
     let pid_file = TempPath::new(&format!("{name}-pid"));
     let inner = Script::powershell(
         &format!("{name}-grandchild"),
@@ -242,7 +259,14 @@ fn grandchild_tree(name: &str, keep_parent_alive: bool) -> GrandchildTree {
             inner.0.0.display()
         ),
     ];
-    if keep_parent_alive {
+    if let Some(code) = exit_code {
+        lines.extend([
+            ":wait".to_string(),
+            format!("if exist \"{}\" exit /b {code}", pid_file.0.display()),
+            "ping -n 2 127.0.0.1 >nul".to_string(),
+            "goto wait".to_string(),
+        ]);
+    } else {
         lines.push("ping -n 60 127.0.0.1".to_string());
     }
     GrandchildTree {
@@ -534,7 +558,7 @@ fn signal_stops_a_process_and_keeps_its_record() {
             signal: Some("SIGTERM".into())
         }
     );
-    // What is left of the job is killed again without an error.
+    // A late signal succeeds while the record is still listed.
     service.signal(info.id, ProcessSignal::Kill).unwrap();
     service.terminate(info.id).unwrap();
     assert!(service.signal(info.id, ProcessSignal::Kill).is_err());
@@ -543,7 +567,7 @@ fn signal_stops_a_process_and_keeps_its_record() {
 #[test]
 fn signal_reaches_a_grandchild_in_the_job() {
     let service = TerminalService::default();
-    let tree = grandchild_tree("grandchild", true);
+    let tree = grandchild_tree("grandchild", None);
     let (info, _file) = tree.start(&service);
     let grandchild = read_pid(&tree.pid_file.0);
     assert!(alive(grandchild));
@@ -557,7 +581,7 @@ fn signal_reaches_a_grandchild_in_the_job() {
 #[test]
 fn terminate_does_not_hang_on_a_grandchild() {
     let service = TerminalService::default();
-    let tree = grandchild_tree("terminate", true);
+    let tree = grandchild_tree("terminate", None);
     let (info, _file) = tree.start(&service);
     let grandchild = read_pid(&tree.pid_file.0);
     assert!(alive(grandchild));
@@ -582,8 +606,9 @@ fn a_noisy_grandchild_still_exits_after_the_drain() {
             # Prove the pipe is live before the parent exits.
             [Console]::Out.Write('x')
             [Console]::Out.Flush()
-            [System.IO.File]::WriteAllText('{}', 'started')
-            while ($true) {{
+            $marker = '{}'
+            [System.IO.File]::WriteAllText($marker, "$PID")
+            while ([System.IO.File]::Exists($marker)) {{
                 [Console]::Out.Write('x')
             }}
             "#,
@@ -609,6 +634,7 @@ fn a_noisy_grandchild_still_exits_after_the_drain() {
         ],
     );
     let (info, file) = start(&service, |file| cmd(&outer.0.display().to_string(), file));
+    let _grandchild = KillOnDrop(read_pid(&marker.0));
     let finished = run(&service, info.id, &file);
     assert_eq!(finished.exit.exit_code, Some(0));
     assert!(
@@ -620,11 +646,11 @@ fn a_noisy_grandchild_still_exits_after_the_drain() {
 }
 
 #[test]
-fn signal_after_a_normal_exit_kills_a_leftover_grandchild() {
+fn signal_and_terminate_after_a_successful_exit_spare_the_grandchild() {
     let service = TerminalService::default();
-    let tree = grandchild_tree("leftover", false);
+    let tree = grandchild_tree("leftover", Some(0));
     let (info, _file) = tree.start(&service);
-    let grandchild = read_pid(&tree.pid_file.0);
+    let grandchild = KillOnDrop(read_pid(&tree.pid_file.0));
     // A descendant holds the pipe, so the exit waits for at most the drain.
     let started = Instant::now();
     let exit = service.wait(info.id).unwrap().recv().unwrap();
@@ -636,7 +662,7 @@ fn signal_after_a_normal_exit_kills_a_leftover_grandchild() {
     assert_eq!(exit.exit_code, Some(0));
     assert_eq!(exit.signal, None);
     // The process keeps its record after the exit; the grandchild still runs.
-    assert!(alive(grandchild));
+    assert!(alive(grandchild.0));
     assert_eq!(
         service.get(info.id).unwrap().lifecycle,
         TerminalLifecycle::Exited {
@@ -646,9 +672,23 @@ fn signal_after_a_normal_exit_kills_a_leftover_grandchild() {
     );
     assert_eq!(service.list(ProcessMode::Pipe).unwrap().len(), 1);
     service.signal(info.id, ProcessSignal::Kill).unwrap();
-    wait_dead(grandchild);
     service.terminate(info.id).unwrap();
     assert!(service.list(ProcessMode::Pipe).unwrap().is_empty());
+    let pid = grandchild.0;
+    assert!(alive(pid));
+    drop(grandchild);
+    wait_dead(pid);
+}
+
+#[test]
+fn a_failed_exit_terminates_the_grandchild() {
+    let service = TerminalService::default();
+    let tree = grandchild_tree("failed", Some(3));
+    let (info, _file) = tree.start(&service);
+    let grandchild = read_pid(&tree.pid_file.0);
+    let exit = service.wait(info.id).unwrap().recv().unwrap();
+    assert_eq!(exit.exit_code, Some(3));
+    wait_dead(grandchild);
 }
 
 #[test]

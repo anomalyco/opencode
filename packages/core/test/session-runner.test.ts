@@ -391,6 +391,7 @@ const layer = Layer.unwrap(
     const instructionContext = Layer.mock(InstructionDiscovery.Service, {
       project: true,
       global: true,
+      claude: true,
       load: () => Effect.succeed(Instructions.empty),
     })
     const skillInstructions = Layer.mock(SkillInstructions.Service, {
@@ -2923,6 +2924,10 @@ describe("SessionRunnerLLM", () => {
       scenario(`preserves the session request prefix during ${reason} compaction (${route.id})`, function* (s) {
         const agents = yield* Agent.Service
         const hooks = yield* PluginHooks.Service
+        const compaction = yield* SessionCompaction.Service
+        // The idle step past the threshold would start a background summary, which keeps the next prompt verbatim
+        // instead of summarizing it; this covers the summary written when compaction is due.
+        yield* compaction.transform((editor) => editor.configure({ background: false }))
         const agentID = Agent.ID.make("reviewer")
         const variant = Model.VariantID.make("test-variant")
         s.currentModel = LanguageModel.make({

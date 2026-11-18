@@ -158,6 +158,7 @@ export type IconName =
   | "task"
   | "terminal"
   | "terminal-active"
+  | "text-wrap"
   | "trash"
   | "unified"
   | "warning"

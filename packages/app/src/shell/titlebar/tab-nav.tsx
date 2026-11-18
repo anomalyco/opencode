@@ -81,6 +81,10 @@ export function TabNavItem(
     label?: string
     /** Hides the project avatar under a header that already names the project; shortcut hints still show. */
     hideAvatar?: boolean
+    /** Marks a session whose notifications are muted. */
+    muted?: boolean
+    /** Menu items shown above an open tab's own. */
+    menuItems?: () => JSX.Element
     fallbackTitle?: string
     fallbackDirectory?: string
     onNavigate: () => void
@@ -90,6 +94,7 @@ export function TabNavItem(
     pressed?: boolean
     hidden?: boolean
     orientation?: "horizontal" | "vertical"
+    contextMenuExtra?: () => JSX.Element
   },
 ) {
   const language = useLanguage()
@@ -142,11 +147,14 @@ export function TabNavItem(
 
     if (!props.session) return
 
-    if (props.active && !serverCtx()?.notification.session.manuallyUnread(props.session.id)) return
+    const shown = !props.active || !!serverCtx()?.notification.session.manuallyUnread(props.session.id)
 
-    if (props.attention) return "attention"
+    if (shown && props.attention) return "attention"
 
-    if (!props.unread) return
+    // A muted session shows its bell in place of the unread dot, the selected one included.
+    if (props.muted) return "muted"
+
+    if (!shown || !props.unread) return
 
     // As in the inbox, an unread run that ended in failure gets the danger dot instead of the accent one.
     return props.session.outcome === "failed" ? "failed" : "unread"
@@ -577,6 +585,7 @@ export function TabNavItem(
           <span data-mark="attention" data-slot="tab-status-dot" />
           <span data-mark="unread" data-slot="tab-status-dot" />
           <span data-mark="failed" data-slot="tab-status-dot" />
+          <MutedIcon data-mark="muted" />
         </span>
         <Show when={actions}>
           <IconButton
@@ -588,7 +597,7 @@ export function TabNavItem(
               event.stopPropagation()
             }}
             onClick={closeTab}
-            icon={<Icon name="xmark-small" />}
+            icon={<Icon name="close" />}
             aria-label={language.t("common.closeTab")}
           />
         </Show>
@@ -638,6 +647,14 @@ export function TabNavItem(
             props.menu(() => startRename("menu"))
           ) : (
             <>
+              <Show when={props.menuItems}>
+                {(items) => (
+                  <>
+                    {items()()}
+                    <Menu.Separator />
+                  </>
+                )}
+              </Show>
               <Menu.Item disabled={!props.session} onSelect={() => startRename("menu")}>
                 {language.t("common.rename")}
               </Menu.Item>
@@ -652,6 +669,14 @@ export function TabNavItem(
                 {language.t("common.export")}…
               </Menu.Item>
               <SessionReadMenuItem server={props.server} session={props.session} />
+              <Show when={props.contextMenuExtra}>
+                {(extra) => (
+                  <>
+                    <Menu.Separator />
+                    {extra()()}
+                  </>
+                )}
+              </Show>
               <Menu.Separator />
               <TabCloseMenuItems
                 orientation={props.orientation}
@@ -671,6 +696,27 @@ export function TabNavItem(
   )
 }
 
+/** The bell-slash a muted session shows where its status and close button sit. */
+export function MutedIcon(props: { "data-mark"?: string; class?: string }) {
+  return (
+    <svg
+      data-mark={props["data-mark"]}
+      class={props.class}
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <path
+        d="M11.8903 4.13451C11.8879 4.1287 11.8854 4.12291 11.8829 4.11711M11.8829 4.11711C11.2378 2.611 9.74194 1.55566 7.99993 1.55566C5.66838 1.55566 3.77771 3.44633 3.77771 5.77789V9.55566C3.77771 10.5379 2.98215 11.3334 1.99993 11.3334H4.6666M11.8829 4.11711L4.6666 11.3334M11.8829 4.11711L14.2222 1.77789M4.6666 11.3334L1.77771 14.2223M8.43744 11.3334H13.9999C13.0177 11.3334 12.2222 10.5379 12.2222 9.55566V7.54873M9.33327 13.675C9.06704 14.135 8.56962 14.4446 7.99993 14.4446C7.43024 14.4446 6.93282 14.135 6.6666 13.675"
+        stroke="currentColor"
+      />
+    </svg>
+  )
+}
+
 export function DraftTabItem(
   props: TabCloseActions & {
     ref?: Ref<HTMLDivElement>
@@ -686,6 +732,7 @@ export function DraftTabItem(
     pressed?: boolean
     hidden?: boolean
     orientation?: "horizontal" | "vertical"
+    contextMenuExtra?: () => JSX.Element
   },
 ) {
   const language = useLanguage()
@@ -808,13 +855,21 @@ export function DraftTabItem(
             }}
             class="hover-reveal relative z-10"
             onClick={closeTab}
-            icon={<Icon name="xmark-small" />}
+            icon={<Icon name="close" />}
             aria-label={language.t("common.closeTab")}
           />
         </div>
       </div>
       <Menu.Context.Portal>
         <Menu.Context.Content>
+          <Show when={props.contextMenuExtra}>
+            {(extra) => (
+              <>
+                {extra()()}
+                <Menu.Separator />
+              </>
+            )}
+          </Show>
           <TabCloseMenuItems
             orientation={props.orientation}
             onClose={props.onClose}

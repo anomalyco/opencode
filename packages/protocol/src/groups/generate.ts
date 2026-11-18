@@ -3,6 +3,8 @@ import { Model } from "@opencode/schema/model"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
 import {
+  ForbiddenError,
+  VideoNotFoundError,
   InvalidRequestError,
   LocationNotFoundError,
   ModelNotFoundError,
@@ -66,6 +68,34 @@ export const GenerateGroup = HttpApiGroup.make("server.generate")
         summary: "Generate images",
         description:
           "Generate or edit images with an image model using the server's base configuration and return them as base64. Stateless: nothing is stored.",
+      }),
+    ),
+  )
+  .add(
+    HttpApiEndpoint.post("generate.video.create", "/api/experimental/generate/video", {
+      payload: Generate.VideoRequest,
+      success: Schema.Struct({ data: Generate.VideoRunning }).annotate({ identifier: "GenerateVideoCreateResponse" }),
+      error: [...errors, ForbiddenError],
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "experimental.generate.video.create",
+        summary: "Create a video generation",
+        description:
+          "Submit a video job to a video model using the server's base configuration and return its ID once the provider accepted it. The server polls the job and stores the finished videos as blobs; read the job with GET /api/experimental/generate/video/:id and the video with GET /api/experimental/blob/:id. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
+      }),
+    ),
+  )
+  .add(
+    HttpApiEndpoint.get("generate.video.get", "/api/experimental/generate/video/:id", {
+      params: { id: Generate.VideoID },
+      success: Schema.Struct({ data: Generate.VideoJob }).annotate({ identifier: "GenerateVideoGetResponse" }),
+      error: [VideoNotFoundError, ForbiddenError, LocationNotFoundError],
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "experimental.generate.video.get",
+        summary: "Read a video generation",
+        description:
+          "Read a video job: running, completed with its videos' blobs, or error with a reason. Jobs survive a server restart, which resumes polling running ones. A job is not found 24 hours after it finished, or once none of its blobs remain. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
       }),
     ),
   )

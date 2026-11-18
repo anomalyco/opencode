@@ -52,7 +52,7 @@ impl Daemon {
             }
             thread::sleep(Duration::from_millis(10));
         };
-        assert_eq!(registration.protocol, 8);
+        assert_eq!(registration.protocol, 9);
         Self {
             child,
             root,
@@ -317,7 +317,7 @@ fn rename_is_served() {
     assert!(daemon.registration.features.is_empty());
     assert!(matches!(
         daemon.request(Request::Ping),
-        Response::Pong { protocol: 8, features, .. } if features.is_empty()
+        Response::Pong { protocol: 9, features, .. } if features.is_empty()
     ));
     let (owner, response) = daemon.own(None);
     assert!(matches!(response, Response::Owned));

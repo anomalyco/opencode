@@ -130,8 +130,7 @@ export function RecentSessions() {
     reloads.delete(server)
   }
 
-  // Order follows each server's last snapshot, so the moments the iOS app reloads its list reload page one here:
-  // run end, a new root session, archive and unarchive, and the window coming back. Bursts coalesce per server.
+  // Order follows each server's last snapshot, so only a new root session reloads page one. Bursts coalesce per server.
   const reload = (item: Connection) => {
     cancelReload(item.server)
     reloads.set(
@@ -331,19 +330,6 @@ export function RecentSessions() {
     reloads.forEach((timer) => clearTimeout(timer))
   })
 
-  const reloadAll = () => connections().forEach(reload)
-
-  const onVisible = () => {
-    if (document.visibilityState === "visible") reloadAll()
-  }
-
-  window.addEventListener("focus", reloadAll)
-  document.addEventListener("visibilitychange", onVisible)
-  onCleanup(() => {
-    window.removeEventListener("focus", reloadAll)
-    document.removeEventListener("visibilitychange", onVisible)
-  })
-
   // The store is local and long-lived; drop duplicates a previous version or a manual edit left behind.
   createEffect(() => {
     if (!ready()) return
@@ -477,7 +463,7 @@ export function RecentSessions() {
     connections().forEach((item) => {
       onCleanup(
         item.ctx.data.listen(({ details }) => {
-          if (recentReloadsOn(details, item.ctx.data.session.get)) reload(item)
+          if (recentReloadsOn(details)) reload(item)
         }),
       )
     })
@@ -1058,7 +1044,7 @@ function RecentSessionTab(props: RecentSessionTabProps & { dragging?: boolean })
   )
 }
 
-function DeleteSessionDialog(props: { title: string | undefined; onConfirm: () => void }) {
+export function DeleteSessionDialog(props: { title: string | undefined; onConfirm: () => void }) {
   const language = useLanguage()
   const dialog = useDialog()
   const layer = useDialogLayer()
