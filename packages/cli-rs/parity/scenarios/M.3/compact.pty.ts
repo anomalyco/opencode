@@ -11,8 +11,10 @@ export default definePty({
   setup: (root) => config(root, { mono: true }),
   steps: [
     { ...opened, until: { screen: "Permission" }, checkpoint: "permission" },
-    { keys: "\x1b", settle: 300, checkpoint: "reject" },
-    { keys: "\x1b", settle: 300 },
+    // Each Esc waits for the stage it opens: a lone ESC is a key only once the program's timer expires, and before
+    // that the next step's arrow would join it as Alt+Left.
+    { keys: "\x1b", until: { screen: "Reject permission" }, settle: 300, checkpoint: "reject" },
+    { keys: "\x1b", until: { screen: "Allow once" }, settle: 300 },
     { keys: "\x1b[D", settle: 200 },
     { keys: "\x1b[D", settle: 200 },
     { keys: "\r", until: { screen: "Deploy the build" }, settle: 400, checkpoint: "form" },
