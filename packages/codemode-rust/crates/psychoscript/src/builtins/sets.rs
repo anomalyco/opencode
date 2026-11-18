@@ -373,6 +373,9 @@ fn set_method(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
         || (matches!(name, "intersection" | "difference" | "isDisjointFrom") && own <= size);
     if asks {
         fuel::native(vm);
+        if builtin_has(vm, &has) {
+            return ask_builtin(vm, name, target, result.as_obj(), has, other);
+        }
     }
     let phase = if asks { ASKING } else { KEYS };
     let slots = [
@@ -437,26 +440,8 @@ fn set_method_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> 
             ASKING => {
                 let found = vm.truthy(&r.get());
                 let item = fr.get(vm, SM_ITEM);
-                match (name, result) {
-                    ("intersection", Some(res)) => {
-                        if found {
-                            let key = vm.map_key(&item);
-                            table(vm, res).set(key, item, Value::Undef);
-                            fuel::native(vm);
-                        }
-                    }
-                    ("difference", Some(res)) => {
-                        if found {
-                            let key = vm.map_key(&item);
-                            table(vm, res).delete(key);
-                            fuel::native(vm);
-                        }
-                    }
-                    _ => {
-                        if found == (name == "isDisjointFrom") {
-                            return set_done(vm, Value::Bool(false));
-                        }
-                    }
+                if answer(vm, name, result, item, found) {
+                    return set_done(vm, Value::Bool(false));
                 }
                 fuel::step(vm);
             }
@@ -526,6 +511,80 @@ fn set_method_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> 
         if let Some(step) = take_key(vm, fr, item, name, target, result)? {
             return Ok(step);
         }
+    }
+}
+
+/// Whether `f` is a Map's, Set's or WeakMap's own `has`, which runs no program code: asking it needs no frame.
+fn builtin_has(vm: &Vm, f: &Value) -> bool {
+    let Value::Obj(id) = f else { return false };
+    let Kind::Native { f, .. } = vm.heap[*id as usize].kind else {
+        return false;
+    };
+    let plain: [crate::vm::NativeFn; 3] = [
+        super::collections::SET_HAS,
+        super::collections::MAP_HAS,
+        weak_has,
+    ];
+    plain.into_iter().any(|g| std::ptr::fn_addr_eq(f, g))
+}
+
+/// The walk that asks a built-in `has` about each own item, run here as the reference runs it.
+fn ask_builtin(
+    vm: &mut Vm,
+    name: &str,
+    target: Id,
+    result: Option<Id>,
+    has: Value,
+    other: Value,
+) -> Res {
+    let walk = if name == "difference" {
+        result.unwrap_or(target)
+    } else {
+        target
+    };
+    let mut i = 0;
+    loop {
+        let entry = {
+            let m = table(vm, walk);
+            if i >= m.entries.len() {
+                break;
+            }
+            m.entries[i]
+        };
+        i += 1;
+        let Some((item, _)) = entry else { continue };
+        let r = vm.call_counted(&has, other, &[item])?;
+        let found = vm.truthy(&r);
+        if answer(vm, name, result, item, found) {
+            vm.bytecode_builtin();
+            return Ok(Value::Bool(false));
+        }
+        fuel::step(vm);
+    }
+    vm.bytecode_builtin();
+    Ok(set_result(result))
+}
+
+/// What `has(item)` answered, for the methods that ask: whether that decides the result as `false`.
+fn answer(vm: &mut Vm, name: &str, result: Option<Id>, item: Value, found: bool) -> bool {
+    match (name, result) {
+        ("intersection", Some(res)) => {
+            if found {
+                let key = vm.map_key(&item);
+                table(vm, res).set(key, item, Value::Undef);
+                fuel::native(vm);
+            }
+            false
+        }
+        ("difference", Some(res)) => {
+            if found {
+                let key = vm.map_key(&item);
+                table(vm, res).delete(key);
+                fuel::native(vm);
+            }
+            false
+        }
+        _ => found == (name == "isDisjointFrom"),
     }
 }
 

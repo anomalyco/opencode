@@ -205,6 +205,10 @@ fn set_add(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     Ok(this)
 }
 
+/// `Set.prototype.has` and `Map.prototype.has`, which the Set methods may call directly (see `sets::builtin_has`).
+pub(crate) const SET_HAS: crate::vm::NativeFn = map_has::<true>;
+pub(crate) const MAP_HAS: crate::vm::NativeFn = map_has::<false>;
+
 fn map_has<const SET: bool>(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = map_of::<SET>(vm, &this, "has")?;
     let key = vm.map_key(&arg(args, 0));
