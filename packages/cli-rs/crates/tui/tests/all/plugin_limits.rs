@@ -124,8 +124,17 @@ fn open(carrier: Carrier) -> Harness {
         ..support::deps(Arc::new(support::empty()))
     };
     let harness = support::mount(100, 30, deps);
+    still(&harness);
     settle(&harness);
     harness
+}
+
+/// Stops the plugin monitor's clock: a frame and its twin are compared, and a slow runner's real time could find a
+/// built-in slow between them, whose toast covers one of the two (preview 44303912167, Windows). A row that measures
+/// host time puts the real clock back.
+fn still(harness: &Harness) {
+    let now = std::time::Instant::now();
+    harness.tui.plugins.monitor().set_clock(move || now);
 }
 
 fn settle(harness: &Harness) {
@@ -815,6 +824,7 @@ fn panels_and_overlays_are_held_to_the_limits() {
             ..support::deps(Arc::new(support::Fake::new(|seen| support::base(seen, support::DIRECTORY))))
         };
         let harness = support::mount(100, 30, deps);
+        still(&harness);
         settle(&harness);
         for command in ["limits.panel", "limits.overlay"] {
             let (frame, held) = {
@@ -1408,6 +1418,8 @@ fn a_long_line_costs_its_rows() {
 fn trees_of_abi_1_are_held_to_the_limits() {
     for carrier in CARRIERS {
         let harness = open(carrier);
+        // Host time is measured: the real clock.
+        harness.tui.plugins.monitor().set_clock(std::time::Instant::now);
         let host_time = harness.tui.plugins.monitor().host_time(OLD);
         harness.tui.navigate(Route::Plugin { id: OLD.to_owned(), name: "old".to_owned() });
         settle(&harness);
@@ -1518,6 +1530,8 @@ fn what_a_mount_holds_goes_and_its_host_work_is_timed() {
     for carrier in CARRIERS {
         let harness = open(carrier);
         let _limits = limits::set(Limits { plugin_content: 1 << 20, all_content: 1 << 20, ..small() });
+        // Host time is measured: the real clock.
+        harness.tui.plugins.monitor().set_clock(std::time::Instant::now);
         let monitor = harness.tui.plugins.monitor().clone();
         let decoded = |harness: &Harness| {
             let done = harness.app.wait_until(Duration::from_secs(10), || opencode_plugin::image::jobs(ID) == 0);
