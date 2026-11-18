@@ -2170,14 +2170,9 @@ story(
 
     // The app's own icon component, outside every plugin, draws the artwork by the same name.
     await page.evaluate(async (fixture) => {
-      const { createComponent, createRoot, Icon } = await import(fixture)
+      const { mountAppIcon } = await import(fixture)
 
-      createRoot(() => {
-        const holder = document.createElement("div")
-        holder.dataset.testid = "app-icon"
-        holder.append(createComponent(Icon, { name: "acme:goal" }))
-        document.body.append(holder)
-      })
+      mountAppIcon("acme:goal")
     }, fixture)
     await expect(page.getByTestId("app-icon").locator("use")).toHaveAttribute("href", href)
 
