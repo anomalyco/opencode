@@ -50,8 +50,15 @@ export default defineApp({
     { checkpoint: "project", until: "[Project]" },
     { keys: ["shift+tab"] },
     { keys: ["/"] },
-    // The user types once the field shows: on the JS host the view that shows it comes after the frame, and keys typed
-    // before it go to the page.
+    // The user types once the field shows, and a moment after: on the JS host the view that shows it comes after the
+    // frame, and its keybinds reload the plugin's registrations, which mount the page again; keys typed before the
+    // field has the focus again go to the page.
+    // Its placeholder is in the host's field color, TS's in OpenTUI's input's (F16-plugin-contract-gaps).
+    {
+      checkpoint: "searching",
+      until: "Search titles",
+      deviation: [{ file: "F16-plugin-contract-gaps", cells: 29, styleOnly: true }],
+    },
     { wait: 300 },
     { type: "theme" },
     // The field the same key shows takes the focus once its view is adopted, so the typing is its search. Its text is
