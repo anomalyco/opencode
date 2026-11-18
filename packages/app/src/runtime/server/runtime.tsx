@@ -34,6 +34,7 @@ import { createServerNotificationState } from "@/shell/notifications/notificatio
 import { createNotificationCoordinator } from "@/shell/notifications/coordinator"
 import { useCurrentRoute } from "@/shell/state/layout"
 import { createSessionPreferences } from "@/shell/state/session-preferences"
+import { createMessageFavorites } from "@/session/favorites"
 import { useTabs } from "@/shell/tabs/tabs"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { createDesktopData } from "./data"
@@ -54,6 +55,7 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
     const server = useServers()
     const models = createGlobalModels()
     const sessionPreferences = createSessionPreferences()
+    const messageFavorites = createMessageFavorites()
     const notificationCoordinator = createNotificationCoordinator()
     const owner = getOwner()
 
@@ -128,6 +130,7 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
       },
       models,
       sessionPreferences,
+      messageFavorites,
       /** Runs each keyed sound and system notification once across windows; notifications only while none has focus. */
       notifications: notificationCoordinator,
       /** The live controller of a server, or undefined while it is unlisted or rejects our credentials. Reactive. */

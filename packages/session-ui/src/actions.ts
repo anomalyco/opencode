@@ -38,6 +38,11 @@ export type SessionUserActions = {
   openAttachment?: (file: PromptAttachment) => void
   /** Opens the model picker, which a budget notice offers when a budget pauses the model in use. */
   chooseModel?: () => void
+  /** Saves a message locally so the user can find it again from the favorites list. */
+  favorites?: {
+    has: (messageID: string) => boolean
+    toggle: (input: { messageID: string; role: "user" | "assistant"; text: string; created: number }) => void
+  }
   revert?: (input: { sessionID: string; messageID: string }) => Promise<void> | void
   /** Starts a new session with the history before this message and its prompt in the composer. */
   fork?: (input: { sessionID: string; messageID: string }) => Promise<void> | void

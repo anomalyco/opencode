@@ -350,6 +350,8 @@ const source = {
   "ui.message.wrapLines": "Wrap lines",
   "ui.message.unwrapLines": "Don't wrap lines",
   "ui.message.copyMessage": "Copy message",
+  "ui.message.favorite": "Add to favorites",
+  "ui.message.unfavorite": "Remove from favorites",
   "ui.message.copyFullMessage": "Copy full message",
   "ui.message.forkMessage": "Fork from here",
   "ui.message.revertMessage": "Revert to here",

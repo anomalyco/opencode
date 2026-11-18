@@ -15,6 +15,7 @@ import { promptLength } from "@/composer/prompt-parts"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useData, useServer } from "@/runtime/server/current"
+import { useGlobal } from "@/runtime/server/runtime"
 import { useServerSDK } from "@/runtime/server/client"
 import { showToast } from "@/shell/notifications/toast"
 import { errorMessage } from "@/shell/layout/helpers"
@@ -65,6 +66,8 @@ export function createActiveSessionRegion(input: {
   const command = useCommand()
   const data = useData()
   const server = useServerSDK()
+  const connection = useServer()
+  const global = useGlobal()
   const dialog = useDialog()
   const language = useLanguage()
   const local = useLocal()
@@ -294,7 +297,7 @@ export function createActiveSessionRegion(input: {
     showToast({ title: language.t("common.requestFailed") })
   }
 
-  const handoffs = useServer().ctx.handoff
+  const handoffs = connection.ctx.handoff
 
   const pendingSteer: TimelinePendingActions = {
     // A prompt held for its Location's agents and models shows as sending until it has a server row.
@@ -405,6 +408,7 @@ export function createActiveSessionRegion(input: {
           revert: revertMessage,
           fork: forkMessage,
           pending: pendingSteer,
+          favorites: { store: global.messageFavorites, server: connection.key },
           chooseModel: () => command.trigger("model.choose"),
           openAttachment,
         }),

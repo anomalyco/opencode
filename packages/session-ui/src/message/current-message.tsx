@@ -76,6 +76,7 @@ export function SessionAssistantContent(props: {
   toolOpen?: boolean
   onToolOpenChange?: (open: boolean) => void
   onContentRendered?: () => void
+  favorites?: NonNullable<SessionUserActions["favorites"]>
 }) {
   return (
     <Switch>
@@ -91,6 +92,7 @@ export function SessionAssistantContent(props: {
             turnTokensPerSecond={props.turnTokensPerSecond}
             sources={props.sources}
             onOpenSources={props.onOpenSources}
+            favorites={props.favorites}
           />
         )}
       </Match>

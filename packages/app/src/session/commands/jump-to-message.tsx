@@ -20,11 +20,19 @@ export function JumpToMessage(props: {
   onQuery?: (value: string) => void
   status?: string
   opening?: boolean
+  title?: string
+  description?: string
+  empty?: string
+  noMatches?: string
+  /** Keeps the caller's order, for lists that sort by when they were saved rather than by message time. */
+  preserveOrder?: boolean
   onJump: (prompt: JumpPrompt) => void
   onRetry?: () => void
   onClose: () => void
 }) {
   const language = useLanguage()
+  const title = () => props.title ?? language.t("dialog.jump.title")
+  const description = () => props.description ?? language.t("dialog.jump.description")
 
   const [localQuery, setLocalQuery] = createSignal(props.initialQuery ?? "")
 
@@ -47,12 +55,10 @@ export function JumpToMessage(props: {
   )
 
   const prompts = createMemo(() =>
-    props.prompts
-      .toSorted((a, b) => b.created - a.created)
-      .map((prompt) => ({
-        prompt,
-        text: prompt.text.replace(/\s+/g, " ").trim(),
-      })),
+    (props.preserveOrder ? props.prompts : props.prompts.toSorted((a, b) => b.created - a.created)).map((prompt) => ({
+      prompt,
+      text: prompt.text.replace(/\s+/g, " ").trim(),
+    })),
   )
 
   const rows = createMemo(() => {
@@ -84,14 +90,14 @@ export function JumpToMessage(props: {
   return (
     <Dialog class="command-palette command-palette-compact fork-dialog" size="large" fit>
       <div class="sr-only">
-        <DialogTitle>{language.t("dialog.jump.title")}</DialogTitle>
+        <DialogTitle>{title()}</DialogTitle>
       </div>
       <DialogBody class="command-palette-body">
         <SearchList
           query={query()}
           onQuery={setQuery}
           placeholder={language.t("common.search.placeholder")}
-          label={language.t("dialog.jump.title")}
+          label={title()}
           ref={(handle) => (list = handle)}
           field={(field) => (
             <>
@@ -105,7 +111,7 @@ export function JumpToMessage(props: {
                   value={query()}
                   readOnly={props.opening}
                   placeholder={language.t("common.search.placeholder")}
-                  aria-label={language.t("dialog.jump.title")}
+                  aria-label={title()}
                   spellcheck={false}
                   autocorrect="off"
                   autocomplete="off"
@@ -121,9 +127,7 @@ export function JumpToMessage(props: {
                 />
               </div>
               <div class="fork-dialog-section flex items-center justify-between gap-2">
-                <DialogTitleGroup
-                  description={rows().length && props.status ? props.status : language.t("dialog.jump.description")}
-                />
+                <DialogTitleGroup description={rows().length && props.status ? props.status : description()} />
                 <Show when={props.onRetry}>
                   {(retry) => (
                     <Button class="shrink-0" size="small" variant="neutral" onClick={retry()}>
@@ -136,7 +140,12 @@ export function JumpToMessage(props: {
           )}
           items={rows()}
           key={(row) => row.prompt.id}
-          empty={props.status ?? language.t(prompts().length ? "dialog.jump.noMatches" : "dialog.jump.empty")}
+          empty={
+            props.status ??
+            (prompts().length
+              ? (props.noMatches ?? language.t("dialog.jump.noMatches"))
+              : (props.empty ?? language.t("dialog.jump.empty")))
+          }
           onSelect={(row) => props.onJump(row.prompt)}
           onClose={props.onClose}
         >
