@@ -368,6 +368,29 @@ fn a_task_awaits_a_confirm_then_a_fetch_on_every_carrier() {
     }
 }
 
+// Expected (carbon ar-1, on every carrier): while the host's own plugin list is open, the board's task's confirm is
+// refused, and the task goes on with no answer at once instead of waiting for a close that never comes.
+#[test]
+fn a_tasks_dialog_the_host_refuses_answers_it_with_none_on_every_carrier() {
+    let run = |run: Run| {
+        let board = open(run);
+        let (app, tui) = (&board.harness.app, &board.harness.tui);
+        let options =
+            opencode_ui::dialog::DialogOptions::new(opencode_ui::dialog::DialogSize::Medium).key("host.plugins");
+        tui.dialogs.replace(|cx| opentui::prelude::View::new(&cx.app), None, options);
+        tui.keymap.dispatch("board.ask", None);
+        board.harness.wait("the refused confirm's answer", || {
+            app.advance(Duration::from_millis(1));
+            tui.toasts.current().is_some()
+        });
+        assert_eq!(tui.dialogs.key().as_deref(), Some("host.plugins"), "{run:?}: the host's list was replaced");
+        observe(&board.harness).1
+    };
+    for carrier in [Run::In(Carrier::Linked), Run::In(CARRIERS[1]), Run::Library] {
+        assert_eq!(run(carrier), ["Info None asked None"], "{carrier:?}");
+    }
+}
+
 /// The board's `files` route on `run`: a windowed list whose estimates are not its files' heights, through a `To`, hunk
 /// steps, a `Nearest`, the wheel and a resize. Each checkpoint's frame shows the offset, the header `layout` painted
 /// from the top file, where the last step landed, and how many `layout` calls ran.

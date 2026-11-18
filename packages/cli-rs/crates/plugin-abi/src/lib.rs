@@ -2453,7 +2453,8 @@ pub enum Dialog {
     ErrorDetails(ErrorDetails),
     /// P8: `dialog`, whose `dismissed` runs once as it closes, after its own action if that ran as it closed: so a
     /// plugin that waits for an answer hears of each close, also escape, the backdrop, another plugin's dialog that
-    /// replaces it, or its unload (TS settles the dialog's promise in each case).
+    /// replaces it, or its unload (TS settles the dialog's promise in each case). One the host does not open, as
+    /// while its own plugin list or approval shows, runs `dismissed` at once.
     Dismissable {
         dialog: Box<Dialog>,
         dismissed: Action,
@@ -4004,7 +4005,7 @@ impl Setup<'_> {
     }
 
     /// What starts the plugin's tasks ([`task`]): handlers that wait for a dialog's answer or a reply in a straight
-    /// line. The first call registers what drives them: two hidden commands, `<id>.task.answer` and
+    /// line. The first call registers what drives them: hidden commands, `<id>.task.answer.0` to `.7` and
     /// `<id>.task.closed`, a reply handler, a wake handler and a dispose callback; a later call returns the same tasks.
     pub fn tasks(&mut self) -> task::Tasks {
         if let Some(shared) = &self.registered.tasks {
@@ -4170,6 +4171,10 @@ impl Registered {
         }
         self.link.revoke();
         self.disposers.clear();
+        // Its tasks drop here, each inside a catch, not later wherever the host drops the registrations.
+        if let Some(tasks) = &self.tasks {
+            tasks.abandon();
+        }
     }
 
     pub fn manifest(&self) -> &Manifest {
