@@ -320,7 +320,7 @@
     user-select: text;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
     min-inline-size: 0;
     flex: 1;
   }
@@ -351,7 +351,7 @@
     font-family: var(--v2-font-family-sans);
     font-size: 12px;
     font-weight: 440;
-    line-height: var(--line-height-tight);
+    line-height: var(--line-height-compact);
     letter-spacing: 0.05px;
     color: var(--v2-text-text-muted);
     overflow-wrap: anywhere;
@@ -367,13 +367,7 @@
     padding-inline: 10px;
 
     &[data-editing="true"] .question-custom-field[data-component="text-input-v2"] {
-      background:
-        linear-gradient(180deg, var(--v2-alpha-light-2), var(--v2-alpha-light-0)), var(--v2-background-bg-base);
-      box-shadow: inset 0 0 0 1px var(--v2-border-border-focus);
-
       [data-slot="text-input-v2-input"] {
-        padding-inline: 8px;
-
         &::placeholder {
           color: var(--v2-text-text-faint);
         }

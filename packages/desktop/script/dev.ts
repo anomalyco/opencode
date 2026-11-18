@@ -1,5 +1,19 @@
 import { $ } from "bun"
-import { constants, setPriority } from "node:os"
+import { Database } from "bun:sqlite"
+import { Option, Schema } from "effect"
+import { createHash } from "node:crypto"
+import {
+  closeSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  readlinkSync,
+  rmSync,
+} from "node:fs"
+import { constants, homedir, hostname, setPriority, tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { prepareDevElectron } from "./dev-electron"
@@ -17,8 +31,9 @@ async function main() {
 
   if (options.server.type === "build") process.env.OPENCODE_DESKTOP_SERVER_CHANNEL = "local"
   process.env.OPENCODE_DESKTOP_ISOLATED_SERVER ??= "1"
+  cloneLockedDevProfile()
   await prepareDesktop()
-  await prepareServer(options.server)
+  await prepareDevServer(options.server)
   await startDesktop(options.electron)
 }
 
@@ -47,6 +62,16 @@ function selectOptions(): DevOptions {
     server: download >= 0 ? { type: "download", version: args[download + 1] } : { type: "build" },
     electron: args.filter((_, index) => !consumed.has(index)),
   }
+}
+
+async function prepareDevServer(source: ServerSource) {
+  if (process.env.OPENCODE_DESKTOP_REUSE_SERVER !== "1") return prepareServer(source)
+
+  if (source.type === "download") {
+    return downloadCliToResources(source.version, windowsify("resources/opencode-cli-dev"))
+  }
+
+  process.env.OPENCODE_DESKTOP_CLI_DEV = join(import.meta.dirname, "../../cli")
 }
 
 async function prepareServer(source: ServerSource) {
@@ -81,6 +106,127 @@ function buildWebUi() {
         : `Pairing web UI build failed with code ${code}; run 'bun run --cwd packages/app build' to see why`,
     ),
   )
+}
+
+function defaultDevUserData() {
+  if (process.platform === "win32") {
+    return join(process.env.APPDATA ?? join(homedir(), "AppData", "Roaming"), "ai.opencode.desktop.dev")
+  }
+
+  if (process.platform === "darwin") {
+    return join(homedir(), "Library", "Application Support", "ai.opencode.desktop.dev")
+  }
+
+  return join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "ai.opencode.desktop.dev")
+}
+
+function isPidAlive(pid: number) {
+  if (!Number.isInteger(pid) || pid <= 0) return false
+
+  try {
+    process.kill(pid, 0)
+
+    return true
+  } catch (error) {
+    return error instanceof Error && "code" in error && error.code === "EPERM"
+  }
+}
+
+function isProfileLocked(userData: string) {
+  if (process.platform === "win32") {
+    const lockfile = join(userData, "lockfile")
+
+    if (!existsSync(lockfile)) return false
+
+    try {
+      const fd = openSync(lockfile, "r+")
+      closeSync(fd)
+
+      return false
+    } catch {
+      return true
+    }
+  }
+
+  // On macOS and Linux, Chromium's SingletonLock is a dangling symlink targeting `<hostname>-<pid>`.
+  const singleton = join(userData, "SingletonLock")
+  let target: string
+
+  try {
+    target = readlinkSync(singleton)
+  } catch {
+    return false
+  }
+
+  const dash = target.lastIndexOf("-")
+
+  if (dash <= 0) return true
+  const lockHost = target.slice(0, dash)
+  const pid = Number(target.slice(dash + 1))
+
+  if (lockHost && lockHost !== hostname()) return true
+
+  return isPidAlive(pid)
+}
+
+const RegisteredServicePid = Schema.fromJsonString(Schema.Struct({ pid: Schema.Number }))
+
+function hasLiveRegisteredService(serviceFile: string) {
+  if (!existsSync(serviceFile)) return false
+
+  try {
+    const decoded = Option.getOrUndefined(Schema.decodeUnknownOption(RegisteredServicePid)(readFileSync(serviceFile, "utf8")))
+
+    return decoded ? isPidAlive(decoded.pid) : false
+  } catch {
+    return false
+  }
+}
+
+// When OpenCode Dev is already running, snapshot only its small desktop profile (`drafts.sqlite` + window state)
+// into a per-worktree temp userData dir while sharing the main OpenCode database (`~/.local/share/opencode`) in place.
+function cloneLockedDevProfile() {
+  if (process.env.OPENCODE_DESKTOP_USER_DATA || process.env.OPENCODE_DESKTOP_TEST_ROOT) return
+  const sourceDir = defaultDevUserData()
+
+  if (!isProfileLocked(sourceDir)) return
+  const slug = createHash("sha1").update(import.meta.dirname).digest("hex").slice(0, 8)
+  const cloneDir = join(tmpdir(), `opencode-desktop-dev-${slug}`)
+  mkdirSync(cloneDir, { recursive: true })
+
+  const sourceDb = join(sourceDir, "drafts.sqlite")
+  const cloneDb = join(cloneDir, "drafts.sqlite")
+
+  if (existsSync(sourceDb)) {
+    for (const suffix of ["", "-wal", "-shm"]) rmSync(`${cloneDb}${suffix}`, { force: true })
+    const db = new Database(sourceDb, { readonly: true })
+    db.exec(`VACUUM INTO ${JSON.stringify(cloneDb.replaceAll("\\", "/"))}`)
+    db.close()
+  }
+
+  for (const entry of readdirSync(sourceDir)) {
+    if (
+      entry === "opencode.settings" ||
+      entry === "Local State" ||
+      entry === "Preferences" ||
+      entry.startsWith("window-state-")
+    ) {
+      copyFileSync(join(sourceDir, entry), join(cloneDir, entry))
+    }
+  }
+
+  const isolatedServiceFile = join(sourceDir, "opencode", "service-local.json")
+
+  if (hasLiveRegisteredService(isolatedServiceFile)) {
+    process.env.XDG_STATE_HOME = sourceDir
+    process.env.OPENCODE_DESKTOP_REUSE_SERVICE_FILE = isolatedServiceFile
+  }
+
+  process.env.OPENCODE_DESKTOP_USER_DATA = cloneDir
+  process.env.OPENCODE_DESKTOP_REUSE_SERVER = "1"
+  process.env.OPENCODE_DESKTOP_ISOLATED_SERVER = "0"
+  process.env.OPENCODE_DESKTOP_REMOTE_DEBUGGING_PORT ??= "0"
+  console.log(`OpenCode Dev is already running; cloned UI state into ${cloneDir} and reusing live background server`)
 }
 
 async function startDesktop(args: string[]) {

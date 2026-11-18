@@ -165,7 +165,7 @@ export const UsageRecorded = Event.durable({
   ...options,
   schema: {
     ...Base,
-    source: Schema.Literals(["title", "compaction"]),
+    source: Schema.Literals(["title", "compaction", "generate"]),
     cost: Money.USD,
     tokens: TokenUsage.Info,
   },
@@ -350,6 +350,17 @@ export namespace Step {
     },
   })
   export type Started = typeof Started.Type
+
+  /** Records when the provider streamed the first output token, before the rest of the response. */
+  export const FirstToken = Event.durable({
+    type: "session.step.first-token",
+    ...options,
+    schema: {
+      ...Base,
+      assistantMessageID: SessionMessage.ID,
+    },
+  })
+  export type FirstToken = typeof FirstToken.Type
 
   /** Records the provider response-body boundary independently of tool settlement. */
   export const Streamed = Event.durable({
@@ -684,6 +695,7 @@ export const Definitions = Event.inventory(
   Shell.Started,
   Shell.Ended,
   Step.Started,
+  Step.FirstToken,
   Step.Streamed,
   Step.Ended,
   Step.Failed,

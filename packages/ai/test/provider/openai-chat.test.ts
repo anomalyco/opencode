@@ -1247,6 +1247,85 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  // A mid-session model switch can keep the same provider metadata key while the new model reads reasoning from a
+  // declared field of its own; details replayed from the earlier model are refused by some endpoints.
+  it.effect("does not replay reasoning details when the model declares another reasoning field", () =>
+    Effect.gen(function* () {
+      const details = [
+        { type: "reasoning.text", text: "thinking", signature: "signed", format: "anthropic-claude-v1", index: 0 },
+      ]
+      const replay = yield* compileRequest(
+        ai.request({
+          model: LanguageModel.update(model, { compatibility: { reasoningField: "reasoning_content" } }),
+          messages: [
+            Message.assistant([
+              {
+                type: "reasoning",
+                text: "thinking",
+                providerMetadata: { openai: { reasoningField: "reasoning", reasoningDetails: details } },
+              },
+              { type: "text", text: "Hello" },
+            ]),
+          ],
+        }),
+      )
+
+      expect(replay.body.messages).toEqual([{ role: "assistant", content: "Hello", reasoning_content: "thinking" }])
+    }),
+  )
+
+  it.effect("keeps replayed reasoning details when the model declares reasoning_details", () =>
+    Effect.gen(function* () {
+      const details = [
+        { type: "reasoning.text", text: "thinking", signature: "signed", format: "anthropic-claude-v1", index: 0 },
+      ]
+      const replay = yield* compileRequest(
+        ai.request({
+          model: LanguageModel.update(model, { compatibility: { reasoningField: "reasoning_details" } }),
+          messages: [
+            Message.assistant([
+              {
+                type: "reasoning",
+                text: "thinking",
+                providerMetadata: { openai: { reasoningField: "reasoning", reasoningDetails: details } },
+              },
+              { type: "text", text: "Hello" },
+            ]),
+          ],
+        }),
+      )
+
+      expect(replay.body.messages).toEqual([{ role: "assistant", content: "Hello", reasoning_details: details }])
+    }),
+  )
+
+  it.effect("keeps replayed reasoning details when the model declares no reasoning field", () =>
+    Effect.gen(function* () {
+      const details = [
+        { type: "reasoning.text", text: "thinking", signature: "signed", format: "anthropic-claude-v1", index: 0 },
+      ]
+      const replay = yield* compileRequest(
+        ai.request({
+          model,
+          messages: [
+            Message.assistant([
+              {
+                type: "reasoning",
+                text: "thinking",
+                providerMetadata: { openai: { reasoningField: "reasoning", reasoningDetails: details } },
+              },
+              { type: "text", text: "Hello" },
+            ]),
+          ],
+        }),
+      )
+
+      expect(replay.body.messages).toEqual([
+        { role: "assistant", content: "Hello", reasoning: "thinking", reasoning_details: details },
+      ])
+    }),
+  )
+
   it.effect("reports the cost the endpoint billed", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(

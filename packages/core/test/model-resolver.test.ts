@@ -49,6 +49,7 @@ function model(packageName: string | undefined, options: RequestOptions = {}) {
     limit: options.limit ?? { context: 100, output: 20 },
   }
   AISDKNative.rewrite(info, {
+    builtins: Provider.builtinPackages,
     specifier: packageName,
     providerID: info.providerID,
     canonical: info.canonical,
@@ -865,9 +866,10 @@ describe("ModelResolver", () => {
       })
       expect(resolved.options?.headers).toMatchObject({ "chatgpt-account-id": "acct_123" })
       expect(headers.authorization).toBe("Bearer chatgpt-token")
+      expect(prepared.body).not.toHaveProperty("instructions")
       expect(prepared.body).toMatchObject({
-        instructions: "Base instructions.\nProject instructions.",
         input: [
+          { role: "developer", content: "Base instructions.\nProject instructions." },
           { role: "user", content: [{ type: "input_text", text: "Hello" }] },
           { role: "developer", content: "Updated instructions." },
         ],

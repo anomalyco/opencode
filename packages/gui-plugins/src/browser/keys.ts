@@ -14,10 +14,12 @@ export type PageShortcut = {
 // opening, closing or switching tabs, focusing the address field, opening settings, and toggling the file tree.
 const shellKeys = ["t", "w", "l", "n", "1", "2", "3", "4", "5", "6", "7", "8", "9", ",", "\\"]
 
-// Shifted chords with the platform's modifier that belong to the app shell rather than the page: reopening a tab,
-// switching side-panel tabs, toggling the side panel, opening the command palette, or running session commands. New Window and Close Window
-// (⇧⌘N, ⇧⌘W) stay unclaimed: only their menu accelerators handle them, and claiming a chord also blocks the menu.
+// Shifted shortcuts for the shell and browser pane. Leave ⇧⌘N and ⇧⌘W to the window menu accelerators:
+// forwarding either chord would block its menu action.
 const shellShiftKeys = ["t", "[", "]", "r", "p", "l", "e", "o", "s"]
+
+// ⇧⌘M toggles the device toolbar, which only builds that offer the toolbar register; elsewhere the page keeps it.
+const toolbarShiftKey = "m"
 
 // The side panel's launchers: Review, Browser and Open file, with ⌃⌘ on macOS and Ctrl+Alt elsewhere. Only a typed
 // Latin letter counts, so AltGr (Ctrl+Alt) typing on other layouts stays with the page.
@@ -58,7 +60,7 @@ export function pageReload(input: PageKey, mac: boolean) {
  * browser pane or app shell, or `undefined` when the key belongs to the page (typing, editing, clipboard, find,
  * history, or in-page shortcuts like ⌘K and ⌘B).
  */
-export function pageShortcut(input: PageKey, mac: boolean): PageShortcut | undefined {
+export function pageShortcut(input: PageKey, mac: boolean, toolbar: boolean): PageShortcut | undefined {
   const key = pageLetter(input)
   const mod = mac ? input.meta && !input.control : input.control && !input.meta
   const launcher = mac ? input.meta && input.control && !input.alt : input.control && input.alt && !input.meta
@@ -70,7 +72,7 @@ export function pageShortcut(input: PageKey, mac: boolean): PageShortcut | undef
       (input.alt
         ? !input.shift && (key === "arrowleft" || key === "arrowright")
         : input.shift
-          ? shellShiftKeys.includes(key)
+          ? shellShiftKeys.includes(key) || (toolbar && key === toolbarShiftKey)
           : shellKeys.includes(key)))
 
   if (!matched) return undefined

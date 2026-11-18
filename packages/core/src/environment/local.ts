@@ -64,6 +64,7 @@ export const makeLocalDriver = (spawner: ChildProcessSpawner["Service"]): Driver
         yield* attempt(from, () => fs.rename(from, destination))
       }),
     mkdir: (value) => attempt(value, () => fs.mkdir(value, { recursive: true }).then(() => undefined)),
+    append: (value, bytes) => attempt(value, () => fs.appendFile(value, bytes)),
   }
 
   return { spawner, overrides }

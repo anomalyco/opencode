@@ -17,6 +17,7 @@ import {
   type ServerOriginal,
 } from "./machine"
 import { useRedeemPairing } from "./redeem"
+import { redeemPairingLink } from "./pairing"
 
 export type ServerConnectControllerOptions =
   | { readonly surface: "screen"; readonly target: Extract<ServerConnectTarget, { kind: "connect" }> }
@@ -32,14 +33,35 @@ export type ServerConnectControllerOptions =
       readonly closing?: Accessor<boolean>
     }
 
-export function createServerConnectController(options: ServerConnectControllerOptions) {
-  const language = useLanguage()
+type ServerConnectIO = {
+  camera: ServerCameraSupport
+  probeCamera: () => Promise<boolean>
+  pageHref?: string
+  fetch?: typeof globalThis.fetch
+  check: ReturnType<typeof useCheckServerHealth>
+  exchange: typeof redeemPairingLink
+  servers: Pick<ReturnType<typeof useServers>, "list" | "add" | "remove">
+}
+
+function useServerConnectIO(): ServerConnectIO {
   const platform = usePlatform()
-  const servers = useServers()
-  const check = useCheckServerHealth()
+
+  return {
+    camera: cameraSupport(platform.platform),
+    probeCamera,
+    pageHref: platform.platform === "web" ? location.href : undefined,
+    fetch: platform.fetch,
+    check: useCheckServerHealth(),
+    exchange: redeemPairingLink,
+    servers: useServers(),
+  }
+}
+
+export function createServerConnectController(options: ServerConnectControllerOptions, io = useServerConnectIO()) {
+  const language = useLanguage()
   // Shared with the scanner, so a retry after a failed check reuses the token of a spent one-time code.
-  const redeem = useRedeemPairing()
-  const initial = startServerConnect(options.target, cameraSupport(platform.platform))
+  const redeem = useRedeemPairing(io.exchange, io.pageHref)
+  const initial = startServerConnect(options.target, io.camera)
   const [machine, setMachine] = createSignal(initial.state)
   let timer: ReturnType<typeof setTimeout> | undefined
   let cameraTimer: ReturnType<typeof setTimeout> | undefined
@@ -70,7 +92,7 @@ export function createServerConnectController(options: ServerConnectControllerOp
     if (effect.type === "camera.probe") {
       clearTimeout(cameraTimer)
       cameraTimer = setTimeout(() => dispatch({ type: "camera.timed-out", attempt: effect.attempt }), effect.timeoutMs)
-      void Promise.try(probeCamera).then(
+      void Promise.try(io.probeCamera).then(
         (available) => dispatch({ type: "camera.settled", attempt: effect.attempt, available }),
         () => dispatch({ type: "camera.settled", attempt: effect.attempt, available: false }),
       )
@@ -93,19 +115,23 @@ export function createServerConnectController(options: ServerConnectControllerOp
           error: { type: "connection-failed", url: effect.http.url },
         })
 
-      void Promise.try(() => check(effect.http)).then((result) => {
-        if (result.type === "healthy") return dispatch({ type: "submit.succeeded", attempt: effect.attempt, http: effect.http })
+      void Promise.try(() => io.check(effect.http)).then(
+        (result) => {
+          if (result.type === "healthy")
+            return dispatch({ type: "submit.succeeded", attempt: effect.attempt, http: effect.http })
 
-        // A 401 says which sign-ins the server accepts, so a local-only one can switch the form to its accounts.
-        if (result.type === "unauthorized")
-          return dispatch({
-            type: "submit.failed",
-            attempt: effect.attempt,
-            error: { type: "credentials", methods: result.methods ?? [] },
-          })
+          // A 401 says which sign-ins the server accepts, so a local-only one can switch the form to its accounts.
+          if (result.type === "unauthorized")
+            return dispatch({
+              type: "submit.failed",
+              attempt: effect.attempt,
+              error: { type: "credentials", methods: result.methods ?? [] },
+            })
 
-        return failed()
-      }, failed)
+          return failed()
+        },
+        failed,
+      )
 
       return
     }
@@ -136,6 +162,7 @@ export function createServerConnectController(options: ServerConnectControllerOp
 
     if (effect.type === "save") {
       const action = effect.action
+      const servers = io.servers
 
       if (action.type === "connect") {
         // Signing in again keeps the name the user gave this server.
@@ -143,7 +170,11 @@ export function createServerConnectController(options: ServerConnectControllerOp
           (server): server is ServerConnection.Http => server.type === "http" && server.http.url === action.http.url,
         )
 
-        servers.add(existing ? { ...existing, http: action.http } : { type: "http", http: action.http })
+        servers.add(
+          existing
+            ? { ...existing, http: action.http }
+            : { type: "http", displayName: action.displayName, http: action.http },
+        )
 
         return
       }
@@ -165,7 +196,7 @@ export function createServerConnectController(options: ServerConnectControllerOp
   const localAccount = async (
     effect: Extract<ServerConnectEffect, { type: "connect.local" }>,
   ): Promise<ServerConnectEvent> => {
-    const api = OpenCode.make({ baseUrl: effect.url, fetch: platform.fetch ?? globalThis.fetch })
+    const api = OpenCode.make({ baseUrl: effect.url, fetch: io.fetch })
     const session = await (effect.create
       ? api.experimental.auth.register({ username: effect.username, password: effect.password })
       : api.experimental.auth.login({ username: effect.username, password: effect.password })
@@ -175,7 +206,7 @@ export function createServerConnectController(options: ServerConnectControllerOp
 
     const http = { url: effect.url, password: session.token }
 
-    if ((await check(http)).type === "healthy") return { type: "submit.succeeded", attempt: effect.attempt, http }
+    if ((await io.check(http)).type === "healthy") return { type: "submit.succeeded", attempt: effect.attempt, http }
 
     return { type: "submit.failed", attempt: effect.attempt, error: { type: "connection-failed", url: effect.url } }
   }
@@ -192,12 +223,12 @@ export function createServerConnectController(options: ServerConnectControllerOp
     if (effect.preferredUrl && effect.preferredUrl !== redeemed.pairing.url) {
       const http = { url: effect.preferredUrl, password }
 
-      if ((await check(http)).type === "healthy") return { type: "submit.succeeded", attempt: effect.attempt, http }
+      if ((await io.check(http)).type === "healthy") return { type: "submit.succeeded", attempt: effect.attempt, http }
     }
 
     const http = { url: redeemed.pairing.url, password }
 
-    if ((await check(http)).type === "healthy") return { type: "submit.succeeded", attempt: effect.attempt, http }
+    if ((await io.check(http)).type === "healthy") return { type: "submit.succeeded", attempt: effect.attempt, http }
 
     return { type: "submit.failed", attempt: effect.attempt, error: { type: "connection-failed", url: http.url } }
   }
@@ -219,7 +250,7 @@ export function createServerConnectController(options: ServerConnectControllerOp
   const view = createMemo(() =>
     selectServerConnectView(machine(), {
       surface: options.surface,
-      pageHref: platform.platform === "web" ? location.href : undefined,
+      pageHref: io.pageHref,
       t: (key) => language.t(key),
     }),
   )

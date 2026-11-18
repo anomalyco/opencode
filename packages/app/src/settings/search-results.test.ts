@@ -75,6 +75,10 @@ describe("settings search index", () => {
         .map((item) => item.page),
     ).toEqual(["Desktop notifications", "Sound effects"])
     expect(rankSettings("follow-up behavior", items)[0].page).toBe("Preferences / General")
+    expect(rankSettings("fold long messages", items)[0]).toMatchObject({
+      page: "Preferences / Timeline",
+      view: { tab: "general", target: "settings-fold-user-messages" },
+    })
     expect(rankSettings("new question UI", items)[0].view).toMatchObject({
       tab: "experimental",
       target: "settings-new-question-ui",

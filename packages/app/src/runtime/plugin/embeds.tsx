@@ -3,7 +3,7 @@ import { createEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { observeReducedMotion, prefersReducedMotion } from "@opencode/ui/motion"
 import type { EmbedProps, Embeds } from "@opencode/plugin/gui"
-import type { Bridge } from "@opencode/plugin/gui/host"
+import type { Bridge, BridgeLayout } from "@opencode/plugin/gui/host"
 import {
   createEmbedStillState,
   INITIAL_FLIGHT_STATE,
@@ -270,6 +270,8 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
       dispatchSnapshot({ type: "sync", id, visible: props.visible, shown, covered: cover })
   }
 
+  const scrollport = () => element?.parentElement?.closest<HTMLElement>("[data-embed-clip]")
+
   const measure = () => {
     if (!element) return
     const id = props.id
@@ -281,10 +283,21 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
     const top = Math.round(rect.top * zoom)
     const right = Math.round(rect.right * zoom)
     const bottom = Math.round(rect.bottom * zoom)
-    const shown = props.visible && current().documentVisible && !props.input.moving()
+    const port = scrollport()
+    const clip = port && scrollClip(port, rect, zoom)
+
+    const shown =
+      props.visible &&
+      current().documentVisible &&
+      !props.input.moving() &&
+      (!clip || (clip.width > 0 && clip.height > 0))
+
     // A dialog's scrim covers the box like floating content does, so it dims a still of the page
     // instead of a blank box, and the page does not blink out and back as the dialog opens and closes.
-    const cover = !!props.frozen || props.input.dialog() || covered(rect)
+    const cover =
+      !!props.frozen ||
+      props.input.dialog() ||
+      covered(clip ? new DOMRect(clip.x / zoom, clip.y / zoom, clip.width / zoom, clip.height / zoom) : rect)
 
     // Keep the embed on screen as a still under the floating content. The native view
     // stays visible until the still is on screen, so the box never flashes blank.
@@ -299,7 +312,7 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
     const ring = props.radius ? cardRing(element) : undefined
     const viewport = { width: Math.round(window.innerWidth * zoom), height: Math.round(window.innerHeight * zoom) }
 
-    const next = `${id}:${visible}:${left}:${top}:${right}:${bottom}:${viewport.width}:${viewport.height}:${color}:${ring?.color}:${ring?.width}:${window.devicePixelRatio}`
+    const next = `${id}:${visible}:${left}:${top}:${right}:${bottom}:${clip?.x}:${clip?.y}:${clip?.width}:${clip?.height}:${viewport.width}:${viewport.height}:${color}:${ring?.color}:${ring?.width}:${window.devicePixelRatio}`
 
     if (next === layout) return
     layout = next
@@ -326,9 +339,10 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
 
     if (!visible && selectStillOnscreen(current().still)) dispatchStill(OFFSCREEN_STILL_EVENT)
 
-    const box = {
+    const box: BridgeLayout = {
       visible,
       bounds: { x: left, y: top, width: Math.max(0, right - left), height: Math.max(0, bottom - top) },
+      ...(clip && { clip }),
       viewport,
       radius: Math.round((props.radius ?? 0) * zoom),
     }
@@ -390,9 +404,16 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
       },
     ),
   )
-  // ResizeObserver runs after layout in the same frame; measuring here instead of on the next
-  // animation frame keeps the native view in step with a region drag.
-  createResizeObserver(() => element, measure)
+  // Measure in the same frame as a resize, including when wrapped controls move a fixed-size embed.
+  createResizeObserver(() => [element, element?.parentElement, scrollport()], measure)
+  createEventListener(
+    document,
+    "scroll",
+    (event) => {
+      if (event.target instanceof Element && event.target.contains(element ?? null)) measure()
+    },
+    { capture: true, passive: true },
+  )
   createEventListener(window, "resize", () => schedule(300))
   // A layout transition elsewhere, such as the chat column's width while the side pane opens, can
   // move the box without resizing it. Track it from when it actually runs, and settle on its end.
@@ -408,7 +429,7 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
   portals.observe(document.body, { childList: true })
   onCleanup(() => portals.disconnect())
   const appearance = new MutationObserver(() => schedule(300))
-  appearance.observe(document.documentElement, { attributes: true, attributeFilter: ["style", "data-theme"] })
+  appearance.observe(document.documentElement, { attributes: true, attributeFilter: ["style", "data-theme", "dir"] })
   onCleanup(() => appearance.disconnect())
   createEventListener(window.matchMedia("(prefers-color-scheme: dark)"), "change", () => schedule(300))
   createEventListener(document, "visibilitychange", () =>
@@ -472,6 +493,24 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
       {props.children}
     </div>
   )
+}
+
+// The client box excludes the scrollbar track, including a left-side RTL scrollbar.
+function scrollClip(port: HTMLElement, rect: DOMRect, zoom: number) {
+  const area = port.getBoundingClientRect()
+  const left = area.left + port.clientLeft
+  const top = area.top + port.clientTop
+  const x = Math.max(0, Math.round(rect.left * zoom), Math.ceil(left * zoom))
+  const y = Math.max(0, Math.round(rect.top * zoom), Math.ceil(top * zoom))
+  const right = Math.min(window.innerWidth, left + port.clientWidth)
+  const bottom = Math.min(window.innerHeight, top + port.clientHeight)
+
+  return {
+    x,
+    y,
+    width: Math.max(0, Math.min(Math.round(rect.right * zoom), Math.floor(right * zoom)) - x),
+    height: Math.max(0, Math.min(Math.round(rect.bottom * zoom), Math.floor(bottom * zoom)) - y),
+  }
 }
 
 // Decodes a JPEG still, so it paints in the frame it enters the DOM. Undefined when there is none or it cannot decode.

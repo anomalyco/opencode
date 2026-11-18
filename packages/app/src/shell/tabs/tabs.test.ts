@@ -1,7 +1,8 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, setSystemTime, test } from "bun:test"
 import { createRoot, getOwner, onCleanup } from "solid-js"
 import { createTabMemory } from "./memory"
 import {
+  latestClosedTime,
   listClosedTabs,
   nextTabAfterClose,
   pushClosedTab,
@@ -180,7 +181,11 @@ describe("tab memory", () => {
 })
 
 describe("closed tab stack", () => {
-  test("records session tabs with their index", () => {
+  afterEach(() => setSystemTime())
+
+  test("records session tabs with their index and close time", () => {
+    setSystemTime(1_000)
+
     const stack = pushClosedTab([], sessionTab("a"), 2, {
       title: "Alpha",
       directory: "/project",
@@ -188,8 +193,23 @@ describe("closed tab stack", () => {
     })
 
     expect(stack).toEqual([
-      { tab: sessionTab("a"), index: 2, info: { title: "Alpha", directory: "/project", prompted: true } },
+      {
+        tab: sessionTab("a"),
+        index: 2,
+        info: { title: "Alpha", directory: "/project", prompted: true },
+        closed: 1_000,
+      },
     ])
+  })
+
+  test("reports when the tab a reopen would take closed, counting untimed closes as oldest", () => {
+    setSystemTime(2_000)
+
+    const stack = pushClosedTab([{ tab: sessionTab("a"), index: 0 }], sessionTab("b"), 1)
+
+    expect(latestClosedTime(stack, [])).toBe(2_000)
+    expect(latestClosedTime(stack, [sessionTab("b")])).toBe(0)
+    expect(latestClosedTime(stack, [sessionTab("a"), sessionTab("b")])).toBeUndefined()
   })
 
   test("ignores draft tabs", () => {
@@ -210,6 +230,8 @@ describe("closed tab stack", () => {
   })
 
   test("keeps only the newest close record for a session", () => {
+    setSystemTime(3_000)
+
     const stack = pushClosedTab(
       pushClosedTab([], sessionTab("a"), 1, { title: "Old", directory: "/old", prompted: true }),
       sessionTab("a"),
@@ -218,7 +240,7 @@ describe("closed tab stack", () => {
     )
 
     expect(stack).toEqual([
-      { tab: sessionTab("a"), index: 3, info: { title: "New", directory: "/new", prompted: true } },
+      { tab: sessionTab("a"), index: 3, info: { title: "New", directory: "/new", prompted: true }, closed: 3_000 },
     ])
   })
 

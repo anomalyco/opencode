@@ -12,4 +12,12 @@ export default {
   noChanges: "변경 없음",
   "settings.wrapLines.title": "줄 바꿈",
   "settings.wrapLines.description": "가로로 스크롤하는 대신 모바일 diff에 긴 줄을 넣습니다.",
+  "menu.count.one": "파일 {{count}}개 변경됨",
+  "menu.count.other": "파일 {{count}}개 변경됨",
+  "folder.more": "{{count}} · 나머지는 표시되지 않음",
+  "folder.failed": "변경 사항을 불러올 수 없습니다",
+  "command.open": "검토 열기",
+  "load.failed": "변경 사항을 불러올 수 없습니다",
+  "load.timeout": "서버 응답 시간이 너무 오래 걸렸습니다",
+  offline: "이 서버에 연결할 수 없습니다",
 }

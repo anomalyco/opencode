@@ -1,5 +1,7 @@
 # @opencode/codemode
 
+- `src/language/` is the language layer (compiler, VM, runtime, stdlib, prelude, scheduler, snapshots, and the Effect driver); `src/codemode/` is Code Mode, built on it (tools, schemas, catalog, `search`, `scanTools`, OpenAPI, hooks, `maxToolCalls`). Nothing in `src/language/` imports from the rest of `src` (`test/language-boundary.test.ts`), and the language never knows what a tool is: Code Mode gives programs its functions through `Host` and `Runtime.make`.
 - `interpreter-support.md` is a checklist, not a changelog: check off newly added support and add unchecked items for significant gaps. Leave it alone for fixes and refactors.
-- Program values are `Value` (`src/interpreter/objects.ts`). Host values are `unknown` and enter only through `fromHost` and `fromJson`; do not widen program-facing signatures to `unknown`.
+- Program values are `Value` (`src/language/runtime/objects.ts`). Host values are `unknown` and enter only through `fromHost` and `fromJson`; do not widen program-facing signatures to `unknown`.
 - Each built-in object kind is one `Obj` subclass (`Wrapper` or `Opaque`) that overrides the hooks it needs. Ask the object instead of adding `instanceof` ladders.
+- The core VM, compiler, prelude, snapshot, and stdlib modules must not import `effect`; in `src/language/`, Effect lives only in the host boundary and driver (`runtime.ts`, `host-function.ts`, `runtime/driver.ts`, `runtime/execute.ts`, `runtime/extensions.ts`). `src/codemode/` uses Effect freely.

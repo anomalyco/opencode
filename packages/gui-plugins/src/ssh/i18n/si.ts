@@ -37,4 +37,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "සේවාදායකය එක් කරන්න",
   "menu.delete": "මකන්න",
+  "error.unavailable": "SSH ලබා ගත නොහැක",
 }

@@ -9,6 +9,8 @@ export function ConnectMethodSwitch(props: {
   /** The credentials form signs in to the server's own accounts, so the switch offers an account, not a password. */
   localAuth?: boolean
   disabled?: boolean
+  align?: "start" | "center"
+  class?: string
   onChange: (method: ConnectMethod) => void
 }) {
   const language = useLanguage()
@@ -17,7 +19,8 @@ export function ConnectMethodSwitch(props: {
   return (
     <div
       data-component="server-connect-method"
-      class="flex min-h-7 flex-wrap items-center justify-center gap-1 text-[13px]"
+      class={`flex min-h-7 flex-wrap items-center gap-1 text-[13px] ${props.class ?? ""}`}
+      classList={{ "justify-center": props.align !== "start", "justify-start": props.align === "start" }}
     >
       <span class="text-v2-text-text-faint">
         {language.t(props.method === "link" ? "server.connect.password.prompt" : "server.connect.link.prompt")}

@@ -32,7 +32,7 @@ export function legacyRedirect(request: Legacy): Response | undefined {
   // links (`/go` about 75k requests a day, `/zen` 46k). Exact paths only: /zen/v1/* and /zen/go/v1/*
   // are the inference API, which a prefix match here would break.
   const moved = (request.locale ? localizedMoves : moves).get(request.path.replace(/(.)\/$/, "$1"))
-  if (moved && read) return redirect(302, `${moved}${request.search}`, "no-store")
+  if (moved && read) return redirect(301, `${moved}${request.search}`)
 
   // The legacy dashboard and its sign-in, now the Console. The V1 CLI's "create a key at /auth" and
   // V1's usage-limit link /workspace/<id>/go (about 50k requests a day).
@@ -49,6 +49,10 @@ export function legacyRedirect(request: Legacy): Response | undefined {
   // V1 share links. Sharing is discontinued: opncd.ai/share/<id> explains that (410). Hundreds a day.
   const share = request.path.match(/^\/s\/([^/]+)\/?$/)
   if (share) return redirect(301, `https://opncd.ai/share/${share[1]}`)
+
+  // The IDE extensions page, removed in Nov 2026: its V1 docs page covers the extensions. Old links and
+  // search results.
+  if (/^\/ide\/?$/.test(request.path) && read) return redirect(301, `/v1/docs/ide/${request.search}`)
 
   // The V2 docs' first address, before they moved to /docs in Nov 2026. Apps up to v2.2.5 (Help menu,
   // settings links, the opencode skill), the READMEs and install script of those releases, search

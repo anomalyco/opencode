@@ -514,7 +514,7 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
                   </div>
                 </Show>
                 <IconButton
-                  icon={<Icon name="outline-chevron-down" size="normal" />}
+                  icon={<Icon name="chevron-down" size="normal" />}
                   variant="ghost"
                   size="large"
                   disabled={sending()}

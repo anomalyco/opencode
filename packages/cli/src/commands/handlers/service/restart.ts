@@ -4,14 +4,12 @@ import { Service } from "@opencode/client/effect/service"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { ServiceConfig } from "../../../services/service-config"
-import { ServerConnection } from "../../../services/server-connection"
 
 export default Runtime.handler(
   Commands.commands.service.commands.restart,
   Effect.fn("cli.service.restart")(function* () {
     const options = yield* ServiceConfig.options()
-    // Keep this explicit: automatic service replacement must preserve terminals.
-    yield* ServerConnection.shutdownPersistentPty(options).pipe(Effect.ignore)
+    // No explicit daemon shutdown: stopping without a handoff drops the daemon's owner, which stops it with its processes.
     yield* Service.stop(options)
     const transport = yield* Service.ensure(options)
     process.stdout.write(transport.url + EOL)

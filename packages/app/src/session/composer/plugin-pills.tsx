@@ -113,11 +113,6 @@ function PluginPill(props: { pill: ComposerPill; input: ComposerPillProps; align
                     data-composer-pill-panel
                     class="w-80 p-1"
                   >
-                    <div class="px-2 pt-1 pb-1.5 text-[11px] font-[530] tracking-[0.05px] leading-[var(--line-height-tight)] text-v2-text-text-faint">
-                      <span dir="auto" class="line-clamp-3 break-words">
-                        {current().title ?? current().label}
-                      </span>
-                    </div>
                     {/* Untracked: the content renders once per open; its own reactivity updates it in place. */}
                     {untrack(() =>
                       menu()({
@@ -197,11 +192,13 @@ function PillIcon(props: { name?: IconName; tone?: ComposerPillTone }) {
   return (
     <Show when={props.name}>
       {(name) => (
-        <Icon
-          name={name()}
-          size="small"
-          class={`shrink-0 ${props.tone ? tones[props.tone] : "text-v2-icon-icon-muted"}`}
-        />
+        <span data-composer-pill-icon class="flex size-4 shrink-0 items-center justify-center">
+          <Icon
+            name={name()}
+            size="small"
+            class={`shrink-0 ${props.tone ? tones[props.tone] : "text-v2-icon-icon-muted"}`}
+          />
+        </span>
       )}
     </Show>
   )

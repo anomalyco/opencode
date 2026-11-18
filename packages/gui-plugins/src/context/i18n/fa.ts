@@ -28,4 +28,5 @@ export default {
   "export.success.description": "جلسه در {{filename}} ذخیره شد",
   "export.failed.title": "جلسه صادر نشد",
   "export.failed.description": "هنگام صادر کردن جلسه خطایی روی داد",
+  "usage.toggle": "نمایش/پنهان کردن زمینه جلسه",
 }

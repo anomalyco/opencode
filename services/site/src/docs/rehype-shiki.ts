@@ -7,8 +7,8 @@ import { bundledLanguages, createCssVariablesTheme, createHighlighter, isSpecial
 // square"): a header with the block's label and a Copy button over the highlighted code. Shiki colours
 // with CSS variables that docs.css maps to David's code colours (docs-variants.css --token-*: commands,
 // flags, strings, operators, output), which are light-dark() pairs, so the page's theme picks them. By kind:
-// - shell (bash, sh): "Terminal". With `$ ` prompts, the prompts and the output lines are muted and
-//   Copy takes the commands only.
+// - shell (bash, sh): "Terminal" (document.tsx names it, a tree and a diff in the page's language).
+//   With `$ ` prompts, the prompts and the output lines are muted and Copy takes the commands only.
 // - a `├──` tree in a text fence: the site's FileTree, without Copy.
 // - diff: +/- rows; Copy leaves the removed lines out.
 // - `title="…"` in the fence's meta: the title as the label, with the file's icon when it names a file.
@@ -70,10 +70,8 @@ async function frame(code: Element): Promise<ElementContent> {
   const file = title?.replace(/ \(excerpt\)$/, "")
   const named = file !== undefined && /[./]/.test(file) && !/\s/.test(file)
 
-  if ((lang === "text" || lang === "plaintext") && !title && /[├└]──/.test(text))
-    return jsx("CodeFrame", { variant: "fileTree", kind: "tree", label: "Files" }, [
-      jsx("FileTree", { tree: text }, []),
-    ])
+  if (["text", "txt", "plaintext"].includes(lang) && !title && /[├└]──/.test(text))
+    return jsx("CodeFrame", { variant: "fileTree", kind: "tree" }, [jsx("FileTree", { tree: text }, [])])
 
   if (shells.has(lang)) {
     const lines = text.split("\n")
@@ -84,7 +82,7 @@ async function frame(code: Element): Promise<ElementContent> {
       {
         variant: "terminal",
         kind: "terminal",
-        label: title ?? "Terminal",
+        label: title,
         copy: prompted ? lines.filter((line) => line.startsWith("$ ")).join("\n") : text,
         method: lang,
       },
@@ -98,7 +96,7 @@ async function frame(code: Element): Promise<ElementContent> {
       {
         variant: "codeDiff",
         kind: named ? "file" : "code",
-        label: title ?? "Diff",
+        label: title,
         file: named ? file : undefined,
         copy: text
           .split("\n")
@@ -124,8 +122,17 @@ async function frame(code: Element): Promise<ElementContent> {
   )
 }
 
+// Each block highlighted once per build: the V1 docs repeat the same blocks in every language.
+const highlights = new Map<string, Promise<Element>>()
+
 /** The code highlighted as one `pre`, on the frame's surface (Shiki's own background dropped). */
 async function highlight(text: string, requested: string) {
+  const key = `${requested}\0${text}`
+  if (!highlights.has(key)) highlights.set(key, highlightOnce(text, requested))
+  return structuredClone(await highlights.get(key)!)
+}
+
+async function highlightOnce(text: string, requested: string) {
   const shiki = await highlighter
   // With the languages it embeds, so a Markdown block's YAML frontmatter or nested fences are
   // highlighted whatever page loaded them first.
