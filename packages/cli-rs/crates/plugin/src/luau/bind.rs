@@ -579,7 +579,11 @@ fn objects(lua: &Lua, current: &Rc<Slot>) -> mlua::Result<(Table, Table, Functio
     let timer = {
         let current = current.clone();
         lua.create_function(move |_, (_this, ms): (Value, f64)| {
-            let delay = std::time::Duration::from_millis(if ms.is_finite() && ms > 0.0 { ms as u64 } else { 0 });
+            // The time asked for, a part of a millisecond kept; one too long to wait (`math.huge`) never fires.
+            let delay = match ms {
+                ms if ms.is_nan() || ms <= 0.0 => std::time::Duration::ZERO,
+                ms => std::time::Duration::try_from_secs_f64(ms / 1000.0).unwrap_or(std::time::Duration::MAX),
+            };
             Ok(match current.get().host()?.try_timer(delay) {
                 Ok(id) => (Some(id.0), None),
                 Err(error) => (None, Some(error)),

@@ -6799,8 +6799,9 @@ export type Plugin = {
     json: Json,
     --- Sorts `list` in place by `less` (`a < b` when left out) and returns it; equal items keep their order.
     sort: <T>(list: { T }, less: ((T, T) -> boolean)?) -> { T },
-    --- Waits `ms` milliseconds on the host's clock, at least 20: `true`, or `nil` and why the host took no timer (32
-    --- of the plugin wait) or cancelled it (`"cancelled"`). Only a task waits.
+    --- Waits `ms` milliseconds on the host's clock, at least 20 and a part of one kept (`math.huge` waits for ever):
+    --- `true`, or `nil` and why the host took no timer (32 of the plugin wait) or cancelled it (`"cancelled"`). Only
+    --- a task waits.
     sleep: (ms: number) -> (boolean?, string?),
     --- Runs `f(host)` every `ms` milliseconds in a task of its own, until `f` returns `false` or a sleep fails.
     every: (ms: number, f: (host: Host) -> boolean?) -> (),

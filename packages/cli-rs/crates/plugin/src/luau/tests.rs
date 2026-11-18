@@ -2964,3 +2964,34 @@ end)
     host.app.advance(Duration::from_millis(1000));
     assert_eq!(said(&host).len(), 6, "a disabled plugin's sleeps returned: {:?}", said(&host));
 }
+
+// Expected (carbon tm2-3): `plugin.sleep` waits the time asked for, a part of a millisecond kept (20.9 ms is not over at
+// 20 ms), and `math.huge` waits for ever rather than 20 ms.
+#[test]
+fn plugin_sleep_keeps_a_part_of_a_millisecond_and_waits_for_ever_on_math_huge() {
+    let host = host();
+    let registry = tasking(
+        &host,
+        r#"
+        setup:command({ name = "nap" }, function(host)
+            plugin.spawn(function()
+                plugin.sleep(math.huge)
+                host:toast({ variant = "info", message = "huge" })
+            end)
+            plugin.sleep(20.9)
+            host:toast({ variant = "info", message = "fraction" })
+        end)
+        "#,
+    );
+    // `run` lets 1 ms pass after the command.
+    run(&host, "nap", None);
+    host.app.advance(Duration::from_millis(18));
+    assert!(said(&host).is_empty(), "{:?}", said(&host));
+    host.app.advance(Duration::from_millis(1));
+    assert!(said(&host).is_empty(), "20.9 ms was over at 20 ms: {:?}", said(&host));
+    host.app.advance(Duration::from_millis(1));
+    assert_eq!(said(&host), ["fraction"]);
+    host.app.advance(Duration::from_secs(3600));
+    assert_eq!(said(&host), ["fraction"], "math.huge woke");
+    assert_eq!(failure(&registry, "test.luau"), None);
+}
