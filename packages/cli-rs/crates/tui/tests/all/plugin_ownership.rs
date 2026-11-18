@@ -91,9 +91,10 @@ enum Outcome {
     /// The fetch is answered, the program runs, and its one reply comes, with the ID the call got.
     Delivered,
     /// No reply comes; a fetch the mount closed before is not sent, a program does not start, and a TypeScript fetch
-    /// rejects with an `AbortError` and is freed, while the server still holds it.
+    /// rejects with an `AbortError` and is freed, while the server still holds it. A Rust or C plugin hears the cancel
+    /// once in its reply's place (`Setup::on_cancelled`), and a Luau task's wait returns `nil, "cancelled"`.
     Cancelled,
-    /// The program ran once, and no reply comes.
+    /// The program ran once, and no reply comes: the cancel comes in its place, as for [`Outcome::Cancelled`].
     Unanswered,
     /// The effect applies: to the mount that asked, or to the activation.
     Applied,
@@ -231,6 +232,127 @@ fn request_ownership_over_the_pipe() {
 #[test]
 fn request_ownership_in_luau() {
     table(Carrier::Luau);
+}
+
+// Expected (await-cancel, contract-ergonomics 2.1): a task a mount's key started, parked on that mount's fetch, goes
+// on once with `cancelled` as the mount closes, while the server still holds the fetch; nothing follows, also not once
+// the route opens again and the server answers. In process, through the C ABI and in Luau.
+#[test]
+fn a_task_parked_on_its_mounts_fetch_goes_on_once_cancelled() {
+    #[cfg_attr(not(feature = "luau"), allow(unused_mut))]
+    let mut carriers = vec![Carrier::InProcess, Carrier::CAbi];
+    #[cfg(feature = "luau")]
+    carriers.push(Carrier::Luau);
+    for carrier in carriers {
+        parked(carrier);
+    }
+}
+
+fn parked(carrier: Carrier) {
+    let (fake, gate, served, asked) = held();
+    PARKED.with_borrow_mut(Vec::clear);
+    let h = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(fake)) });
+    let host = opencode_tui::plugins::host::host(&h.tui);
+    let definition = match carrier {
+        Carrier::CAbi => {
+            let entries = abi::export_plugin!(@loopback "test.parked", parked_plugin);
+            opencode_plugin::loader::native::loopback(&host, entries).unwrap().0
+        }
+        #[cfg(feature = "luau")]
+        Carrier::Luau => {
+            let sources = opencode_plugin::luau::Sources::from_files([
+                ("plugin.toml", "id = \"test.parked\""),
+                ("init.luau", &parked_script()),
+            ]);
+            opencode_plugin::luau::define(&sources, None).unwrap().0
+        }
+        _ => abi::Plugin { id: "test.parked", setup: parked_plugin }.into(),
+    };
+    opencode_tui::plugins::host::add(&h.tui, definition);
+    let route = Route::Plugin { id: "test.parked".into(), name: "probe".into() };
+    let resumed = || match carrier {
+        #[cfg(feature = "luau")]
+        Carrier::Luau => {
+            let stored = opencode_plugin::Host::storage_read(&*h.tui, "plugin.test.parked.seen");
+            let seen: Vec<String> = stored.and_then(|json| serde_json::from_str(&json).ok()).unwrap_or_default();
+            seen
+        }
+        _ => PARKED.with_borrow(Vec::clone),
+    };
+    h.tui.navigate(route.clone());
+    turns(&h, 3);
+    h.app.press("x");
+    assert!(h.app.wait_until(support::WAIT, || asked.load(Ordering::SeqCst) == 1), "{carrier:?}: never sent");
+    turns(&h, 3);
+    assert!(resumed().is_empty(), "{carrier:?}: the task went on while its fetch was held");
+    h.tui.navigate(Route::Home);
+    h.app.wait_until(support::WAIT, || {
+        h.app.advance(Duration::from_millis(1));
+        !resumed().is_empty()
+    });
+    assert_eq!(resumed(), ["cancelled"], "{carrier:?}: the close did not resume the task once with the cancel");
+    h.tui.navigate(route);
+    turns(&h, 3);
+    *gate.0.lock().unwrap() = true;
+    gate.1.notify_all();
+    assert!(h.app.wait_until(support::WAIT, || served.load(Ordering::SeqCst) == 1), "{carrier:?}: never served");
+    h.app.wait_until(Duration::from_millis(300), || {
+        h.app.advance(Duration::from_millis(1));
+        false
+    });
+    assert_eq!(resumed(), ["cancelled"], "{carrier:?}: the held reply reached the task after its cancel");
+}
+
+thread_local! {
+    /// What the Rust task of [`parked_plugin`] got: its fetch's error, or `ok`.
+    static PARKED: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+}
+
+/// A route whose key starts a task that waits on a fetch: the mount's, as its handler asked for it.
+fn parked_plugin(setup: &mut abi::Setup) -> Result<(), String> {
+    let tasks = setup.tasks();
+    let layer = Layer::default().scope(LayerScope::Global).keys(vec![Bind::new("x", "probe")]);
+    let surface = v2::Surface::new("probe", v2::Place::Route("probe".into()), |_| page()).layers(vec![layer]).on(
+        move |host, event| match event {
+            Event::Key(key) if key.bind.as_deref() == Some("probe") => {
+                tasks.spawn(host, |cx| async move {
+                    let reply = cx.fetch(abi::Fetch::new("GET", "/api/hold")).await;
+                    PARKED.with_borrow_mut(|seen| seen.push(reply.err().unwrap_or_else(|| "ok".to_owned())));
+                });
+                Handled::Consume
+            }
+            _ => Handled::Pass,
+        },
+    );
+    setup.surface(surface);
+    Ok(())
+}
+
+/// [`parked_plugin`] in Luau: the surface's handler is the task; it records in its storage what its fetch gave.
+#[cfg(feature = "luau")]
+fn parked_script() -> String {
+    let page = luau_literal(&serde_json::to_value(page()).unwrap());
+    format!(
+        r#"local plugin = require("@opencode/plugin")
+local PAGE = {page}
+return plugin.define(function(setup)
+    setup:storageKey("seen")
+    local layer = {{ scope = "global", keys = {{ {{ key = "x", name = "probe" }} }} }}
+    setup:surface({{ name = "probe", place = {{ type = "route", name = "probe" }}, layers = {{ layer }} }},
+        function() return PAGE end,
+        function(host, event)
+            if event.type == "key" and event.bind == "probe" then
+                local _, err = host:fetch({{ method = "GET", path = "/api/hold" }})
+                local seen = host:storageGet("seen") or {{}}
+                table.insert(seen, err or "ok")
+                host:storageSet("seen", seen)
+                return "consume"
+            end
+            return "pass"
+        end)
+end)
+"#
+    )
 }
 
 /// The program that witnesses its launch in `mark`, and its arguments: a tiny program of this crate's, on every
@@ -411,16 +533,22 @@ fn check(carrier: Carrier, row: Row, seen: &Seen) -> Result<(), String> {
     };
     // A fetch whose mount closed before its dispatch is not sent.
     let sent = usize::from(!matches!(row.close, Close::BeforeDispatch | Close::Racing));
-    let cancelled = match (row.kind, pipe) {
-        (Kind::Fetch, false) => seen.replies.is_empty() && seen.sent == sent,
-        (Kind::Fetch, true) => replied("AbortError 0") && seen.sent == sent,
-        (Kind::Foreground, _) => seen.replies.is_empty() && seen.launched == 0,
+    // The cancel comes once, in the reply's place, and no reply after it, also not to the mount opened again. The pipe's
+    // carrier has no promise of a program: it hears nothing.
+    let told = match (row.kind, pipe) {
+        (Kind::Fetch, true) => replied("AbortError 0"),
+        (Kind::Foreground, true) => seen.replies.is_empty(),
+        _ => replied("cancelled"),
+    };
+    let cancelled = match row.kind {
+        Kind::Fetch => told && seen.sent == sent,
+        Kind::Foreground => told && seen.launched == 0,
         _ => unreachable!("an effect's row runs in run_effect"),
     };
     let held = match outcome {
         Outcome::Delivered => delivered,
         Outcome::Cancelled => cancelled,
-        Outcome::Unanswered => seen.replies.is_empty() && seen.launched == 1,
+        Outcome::Unanswered => told && seen.launched == 1,
         Outcome::Applied | Outcome::Dropped => unreachable!("an effect's row runs in run_effect"),
     };
     // The control closed another mount, which began and ended, or it would be told from no close at all (bigboi's
@@ -798,6 +926,7 @@ fn probe(setup: &mut abi::Setup) -> Result<(), String> {
         host.overlay(Overlay { surface: "other".into(), anchor: Anchor::Point { x: 0, y: 0 }, width: 20, height: 1 });
     });
     setup.on_reply(|_, id, result| SEEN.with_borrow_mut(|seen| seen.1.push((id, format!("{result:?}")))));
+    setup.on_cancelled(|_, id| SEEN.with_borrow_mut(|seen| seen.1.push((id, "cancelled".to_owned()))));
     let layer = Layer::default().scope(LayerScope::Global).keys(vec![Bind::new("x", "probe")]);
     let surface = v2::Surface::new("probe", v2::Place::Route("probe".into()), |_| page())
         .mounts()
