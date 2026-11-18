@@ -16,26 +16,19 @@ pub fn tail(text: &str, limit: usize) -> &str {
 mod tests {
     use super::*;
 
-    const SAMPLES: [&str; 4] = ["", "ascii", "ab😀cd", "😀é€\u{FFFD}😀"];
-
     #[test]
-    fn every_tail_keeps_whole_characters_within_the_limit() {
-        for text in SAMPLES {
-            let length = text.encode_utf16().count();
-            for limit in 0..=length + 1 {
-                let tail = tail(text, limit);
-                let units = tail.encode_utf16().count();
-                assert!(text.ends_with(tail), "{text:?} {limit}");
-                assert!(units <= limit, "{text:?} {limit}");
-                assert!(units + 1 >= limit.min(length), "{text:?} {limit}");
+    fn tail_is_the_longest_suffix_within_the_utf16_budget() {
+        for a in ["", "x", "é", "€", "😀"] {
+            for b in ["", "ab", "\u{301}", "😀", "😀😀"] {
+                let text = format!("{a}{b}{a}");
+                for limit in 0..=text.encode_utf16().count() + 1 {
+                    let suffix = tail(&text, limit);
+                    let units = suffix.encode_utf16().count();
+                    let prefix = text.strip_suffix(suffix).unwrap();
+                    assert!(units <= limit);
+                    assert!(prefix.chars().next_back().is_none_or(|c| units + c.len_utf16() > limit));
+                }
             }
         }
-    }
-
-    #[test]
-    fn a_cut_through_a_surrogate_pair_drops_the_whole_character() {
-        assert_eq!(tail("😀x", 2), "x");
-        assert_eq!(tail("😀x", 3), "😀x");
-        assert_eq!(tail("ab😀", 1), "");
     }
 }
