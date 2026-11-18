@@ -26,6 +26,12 @@ export function ThoughtRow(props: {
 
     if (total < 60) return i18n.t("ui.message.duration.seconds", { count: numfmt.format(total) })
 
+    if (total >= 3600)
+      return i18n.t("ui.message.duration.hoursMinutes", {
+        hours: numfmt.format(Math.floor(total / 3600)),
+        minutes: numfmt.format(Math.floor((total % 3600) / 60)),
+      })
+
     return i18n.t("ui.message.duration.minutesSeconds", {
       minutes: numfmt.format(Math.floor(total / 60)),
       seconds: numfmt.format(total % 60),

@@ -1286,10 +1286,15 @@ export function createNextTimelineRowRenderer(input: {
           duration:
             total < 60
               ? i18n.t("ui.message.duration.seconds", { count: numfmt.format(total) })
-              : i18n.t("ui.message.duration.minutesSeconds", {
-                  minutes: numfmt.format(Math.floor(total / 60)),
-                  seconds: numfmt.format(total % 60),
-                }),
+              : total >= 3600
+                ? i18n.t("ui.message.duration.hoursMinutes", {
+                    hours: numfmt.format(Math.floor(total / 3600)),
+                    minutes: numfmt.format(Math.floor((total % 3600) / 60)),
+                  })
+                : i18n.t("ui.message.duration.minutesSeconds", {
+                    minutes: numfmt.format(Math.floor(total / 60)),
+                    seconds: numfmt.format(total % 60),
+                  }),
         })
       })
 
