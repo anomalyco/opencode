@@ -42,6 +42,8 @@ libc.workspace = true
 
 [dev-dependencies]
 opencode-util.workspace = true
+# The operations table test's Rust column (`client::probe`).
+opencode-api-types = { workspace = true, features = ["probe"] }
 # The LaTeX and Mermaid built-ins, run through the C ABI's byte shims in the loader's tests.
 opencode-latex.workspace = true
 opencode-mermaid.workspace = true

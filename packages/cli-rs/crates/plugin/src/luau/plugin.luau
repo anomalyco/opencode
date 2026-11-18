@@ -226,6 +226,43 @@ function plugin.all(fns: { () -> (any, any) }): ({ any }?, any)
     return results, nil
 end
 
+-- Typed calls ---------------------------------------------------------------------------------------------------------
+--
+-- `plugin.client.session.inbox.list({ sessionID = id })` sends operation `session.inbox.list` of the API and waits
+-- for it, as `host:fetch` does: it returns the operation's output (the reply's `data` where the operation answers in
+-- `data`, the base64 of the bytes of one that answers with bytes), or `nil, err`. The host builds the request from the
+-- generated operations table, with the encodings of the API's own client, and refuses an operation it does not have,
+-- a required field left out and a field the operation does not take. Only a task can wait, as for `host:fetch`.
+
+-- The waiting call of the running plugin's setup, once setup has run.
+local calling: ((string, any) -> (any, string?))? = nil
+
+-- The namespace of operations under `prefix` (`session`, `session.inbox`); called, it is that operation.
+local namespaces: { [string]: any } = {}
+local function namespace(prefix: string): any
+    local known = namespaces[prefix]
+    if known then
+        return known
+    end
+    local space = setmetatable({}, {
+        __index = function(_, key: string)
+            return namespace(if prefix == "" then key else `{prefix}.{key}`)
+        end,
+        __call = function(_, input: any)
+            if calling == nil then
+                error(`plugin.client.{prefix} waits, and only a task can: a handler of setup's, or plugin.spawn`, 2)
+            end
+            return calling(prefix, input)
+        end,
+        __newindex = function()
+            error("plugin.client is read-only", 2)
+        end,
+    })
+    namespaces[prefix] = space
+    return space
+end
+plugin.client = namespace("")
+
 -- How many answer commands the dialogs take turns on: dialog `n` answers through `<id>.task.answer.<n % SLOTS>`, so an
 -- answer that runs late, after the next dialog showed, still reaches its own dialog's task. The commands, the
 -- generation from 1 and the close's input are the Rust SDK's tasks' (`task::ANSWERS`).
@@ -260,6 +297,30 @@ local function tasked(raw)
     end
     host.foreground = function(self, spec)
         return request("host:foreground", foreground, self, spec)
+    end
+    -- `plugin.client`'s calls: the host builds and sends the request, and says how its reply reads.
+    local call = host.call
+    host.call = nil
+    calling = function(name: string, input: any): (any, string?)
+        local co = task(`plugin.client.{name}`, 4)
+        local id, why, reply = call(host, name, input)
+        if id == nil then
+            return nil, why
+        end
+        requests[id] = co
+        local body, err = park(co, function()
+            requests[id] = nil
+        end)
+        if err ~= nil then
+            return nil, err
+        end
+        if reply ~= "data" then
+            return body, nil
+        end
+        if type(body) ~= "table" then
+            return nil, "the reply is not an object with data"
+        end
+        return body.data, nil
     end
     raw.onReply(raw, function(_, id: number, value: any, err: string?)
         local co = requests[id]
