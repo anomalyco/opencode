@@ -119,8 +119,16 @@ impl Activation {
 
     /// Takes the plugin's `commands`, each enabled as it says.
     pub(crate) fn commands(&self, commands: &[abi::Command]) {
-        let mut known = self.commands.borrow_mut();
-        known.extend(commands.iter().map(|command| (command.name.clone(), command.enabled)));
+        let changed = {
+            let mut known = self.commands.borrow_mut();
+            let changed =
+                commands.iter().any(|command| known.get(&command.name).is_some_and(|on| *on != command.enabled));
+            known.extend(commands.iter().map(|command| (command.name.clone(), command.enabled)));
+            changed
+        };
+        if changed {
+            self.commands_changed();
+        }
     }
 
     /// Whether its command `name` is enabled: a disabled one binds no key and is in neither the palette nor the slash
@@ -131,10 +139,21 @@ impl Activation {
 
     /// Enables or disables its command `name`; `plugin` names it in the log when it has no such command.
     pub(crate) fn set_enabled(&self, plugin: &str, name: &str, enabled: bool) {
-        match self.commands.borrow_mut().get_mut(name) {
-            Some(known) => *known = enabled,
-            None => log::warn!("plugin {plugin}: set-enabled of {name:?}, which is not one of its commands"),
+        let changed = match self.commands.borrow_mut().get_mut(name) {
+            Some(known) => std::mem::replace(known, enabled) != enabled,
+            None => {
+                log::warn!("plugin {plugin}: set-enabled of {name:?}, which is not one of its commands");
+                false
+            }
+        };
+        if changed {
+            self.commands_changed();
         }
+    }
+
+    /// Tells the host its commands' states changed, once the call that changed them returned.
+    fn commands_changed(&self) {
+        crate::defer(&self.host, |host| host.commands_changed());
     }
 
     /// Its ID, which no other activation gets.

@@ -335,6 +335,8 @@ interface Plugin {
   batch: number
   // P8: who hears each snapshot, and the manifest the host was last told.
   listeners: Array<(key: string) => void>
+  // What runs at the end of each call into the plugin, inside it (the layer's ask of its commands' `enabled`).
+  afterCall: Array<() => void>
   told?: string
 }
 
@@ -667,6 +669,14 @@ function context(plugin: Plugin) {
     // P8: a command of the plugin's goes, as a V2 keymap layer made in a component ends with it.
     // The host remounts a component after a reload in a later message than the one that ends the last mount: a command
     // goes only if nothing registered it again meanwhile, so a remount changes nothing.
+    // Contract ergonomics 2.5: command `name`'s state, told the host as it changes ([`enable`]).
+    enable(name: string, enabled: boolean) {
+      const command = plugin.commands.find((command) => command.name === name)
+      if (command) enable(plugin, command, enabled)
+    },
+    afterCall(run: () => void) {
+      plugin.afterCall.push(run)
+    },
     uncommand(name: string) {
       setTimeout(() => {
         const index = plugin.commands.findIndex((command) => command.name === name)
@@ -951,6 +961,7 @@ function candidate(definition: Plugin["definition"], target: string, dir: string
     batch: 0,
     listening: {},
     listeners: [],
+    afterCall: [],
   }
 }
 
@@ -1071,6 +1082,7 @@ function call(seq: number, plugin: Plugin, request: Json) {
       reply?.resolve(request.result)
     }
     if (result instanceof Promise) result.catch((error) => fail(plugin, `${request.type} rejected: ${thrown(error)}`))
+    for (const run of plugin.afterCall) run()
   } catch (caught) {
     const call = { command: "run-command", input: "handle" }[request.type as string] ?? `on-${request.type}`
     error = `${call} threw: ${thrown(caught)}`
@@ -1128,6 +1140,9 @@ async function handle(message: Json) {
     case "theme":
       themeMode = message.mode
       if (message.palette) palette = message.palette
+      // What reads the theme's mode follows it (carbon ce-2).
+      for (const known of plugins.values())
+        if (known.active) within(known, () => known.listeners.forEach((listener) => listener("theme")))
       return
     case "deactivate":
       if (plugin) within(plugin, () => deactivate(plugin))

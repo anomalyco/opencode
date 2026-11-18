@@ -1055,6 +1055,7 @@ impl Scripts {
             watches: RefCell::default(),
             continues: None,
             relay: RefCell::default(),
+            states: RefCell::default(),
         };
         (load.state, load.registered) = (Loading::Loaded(Rc::new(loaded)), false);
     }
@@ -1614,6 +1615,7 @@ impl Scripts {
                             watches: RefCell::default(),
                             continues: None,
                             relay: RefCell::default(),
+                            states: RefCell::default(),
                         };
                         (load.state, load.registered) = (Loading::Loaded(Rc::new(loaded)), false);
                         drop(loads);
@@ -2382,6 +2384,7 @@ mod tests {
             watches: RefCell::default(),
             continues: None,
             relay: RefCell::default(),
+            states: RefCell::default(),
         })
     }
 

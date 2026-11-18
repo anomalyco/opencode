@@ -47,7 +47,11 @@
   {"keys":["d"]},
   {"checkpoint":"delete","until":"This cannot be undone.","fixture":"P.8/session-manager/delete"},
   {"keys":["enter"]},
-  {"checkpoint":"deleted","until":"Deleted 1 session","fixture":"P.8/session-manager/deleted"}
+  {"checkpoint":"deleted","until":"Deleted 1 session","fixture":"P.8/session-manager/deleted"},
+  {"keys":["pagedown"]},
+  {"checkpoint":"paged-down","until":"Plan the release","fixture":"P.8/session-manager/paged-down"},
+  {"keys":["pageup"]},
+  {"checkpoint":"paged-up","until":"Plan the release","fixture":"P.8/session-manager/paged-up"}
  ],
  "requests": {
   "writes": [

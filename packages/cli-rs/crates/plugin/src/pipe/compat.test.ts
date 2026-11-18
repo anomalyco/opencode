@@ -44,6 +44,19 @@ function host(answer: (key: string) => Json = () => [], limit = 128) {
       fake.commands.set(command.name, run)
       fake.meta.set(command.name, command)
     },
+    // As `host.ts`'s: a command's state the host holds, told as it changes, and what runs as each call ends.
+    enable(name: string, enabled: boolean) {
+      const meta = fake.meta.get(name)
+      if (meta) meta.enabled = enabled
+    },
+    afterCalls: [] as Array<() => void>,
+    afterCall(run: () => void) {
+      fake.afterCalls.push(run)
+    },
+    // A call into the plugin ends.
+    called() {
+      for (const run of fake.afterCalls) run()
+    },
     uncommand() {},
     storage() {},
     // Contract 2.x, step D: the renderer claims, as `host.ts` keeps them, each ended by its disposer.
@@ -227,6 +240,128 @@ test("a command's enabled is followed as what it reads changes", () => {
   expect(fake.meta.get("t.here").enabled).toBe(false)
   expect(ran).toEqual(["here"])
   expect(fake.watches.has("route")).toBe(true)
+})
+
+// Carbon ce-1: two layers that hold the same command (session-manager's `pageup` while listing and while searching,
+// each layer enabled by the other's opposite): the host holds it enabled while either is, and its run is the enabled
+// layer's, whichever is newer. A layer that drops it (file-browser's `commands: []`) or ends disables it at once,
+// where it stayed enabled until `uncommand`'s 250 ms; another live layer that holds it keeps it.
+test("a command two layers hold is enabled while either is, and goes with the last", () => {
+  const fake = host()
+  const ctx = plugin("t.shared", fake)
+  const ran: string[] = []
+  const [searching, setSearching] = solid.createSignal(false)
+  const [listed, setListed] = solid.createSignal(true)
+  const page = (run: (input?: string) => unknown) => [{ id: "t.page", bind: "pageup", run }]
+  ctx.keymap.layer(() => ({ enabled: !searching(), commands: page(() => ran.push("list")) }))
+  let end = () => {}
+  solid.createRoot((dispose: () => void) => {
+    end = dispose
+    ctx.keymap.layer(() => ({ enabled: searching(), commands: page((input?: string) => ran.push(`search ${input}`)) }))
+  })
+  const state = () => fake.meta.get("t.page").enabled
+  expect(state()).toBe(true)
+  fake.commands.get("t.page")!()
+  setSearching(true)
+  expect(state()).toBe(true)
+  fake.commands.get("t.page")!("x")
+  expect(ran).toEqual(["list", "search x"])
+  // The newer layer ends while it is the enabled one: the older, disabled, is all that holds the command.
+  end()
+  expect(state()).toBe(false)
+  expect(fake.commands.get("t.page")!()).toBe(false)
+  setSearching(false)
+  expect(state()).toBe(true)
+  ctx.keymap.layer(() => ({ commands: listed() ? [{ id: "t.drop", bind: "j", run() {} }] : [] }))
+  expect(fake.meta.get("t.drop").enabled).toBe(true)
+  setListed(false)
+  expect(fake.meta.get("t.drop").enabled).toBe(false)
+})
+
+// Carbon ce-2: a command's `enabled` that reads a field's focus (file-browser's `!inputFocused()`), the open panel
+// (@cleocode/goal) or the theme's mode follows it: each is a signal the layer follows, so a command disabled while
+// the field had the focus is enabled once it lost it, where it stayed disabled for good.
+test("a command's enabled follows a field's focus, the open panel and the theme", () => {
+  const fake = host()
+  const app = { version: "", channel: "" }
+  const base = { id: "t.reads", options: {}, app, themeMode: "dark", data: { on: () => () => {} } }
+  const ctx = context(base, fake) as Json
+  const refs: Json = {}
+  ctx.keymap.layer(() => ({
+    commands: [
+      { id: "t.explore", bind: "j", enabled: () => !refs.search?.focused, run() {} },
+      { id: "t.panel", bind: "g", enabled: () => !!ctx.ui.panel.current(), run() {} },
+      { id: "t.light", bind: "l", enabled: () => ctx.themeMode === "light", run() {} },
+    ],
+  }))
+  const field = () => h("input", { id: "search", ref: (el: Json) => (refs.search = el) })
+  ctx.ui.router.register({ name: "f", render: field })
+  const route = fake.surfaces.find((surface: Json) => surface.place.type === "route")
+  route.view({ mount: { surface: "f", key: "a", generation: 1 }, input: { width: 40, height: 10 } })
+  // The ref came with the view, outside a call: the next call's end asks again.
+  fake.called()
+  const state = (name: string) => fake.meta.get(name).enabled
+  expect([state("t.explore"), state("t.panel"), state("t.light")]).toEqual([true, false, false])
+  refs.search.focus()
+  expect(state("t.explore")).toBe(false)
+  refs.search.blur()
+  expect(state("t.explore")).toBe(true)
+  ctx.ui.slot({ append: "session.panel", render: () => h("text", { children: "panel" }) })
+  fake.push("route", { type: "session", id: "ses_1" })
+  expect(ctx.ui.panel.open("notes")).toBe(true)
+  expect(state("t.panel")).toBe(true)
+  const panel = fake.surfaces.find((surface: Json) => surface.place.type === "panel")
+  panel.options.unmount({ surface: panel.name, key: "a", generation: 1 })
+  expect(state("t.panel")).toBe(false)
+  base.themeMode = "light"
+  fake.push("theme", undefined)
+  expect(state("t.light")).toBe(true)
+})
+
+// Carbon ce-2: an `enabled` that reads only what the layer cannot follow (a plain variable) leaves its command enabled
+// on the host, which sends its key, and the run asks it, as TS asks it as the key comes: it can never latch off. One
+// that reads a signal and a plain variable is asked again as each call into the plugin ends.
+test("an enabled the layer cannot follow is asked as the key comes, and after each call", () => {
+  const fake = host()
+  const ctx = plugin("t.plain", fake)
+  const ran: string[] = []
+  let open = false
+  const [shown] = solid.createSignal(true)
+  ctx.keymap.layer(() => ({
+    commands: [
+      { id: "t.plain", bind: "p", enabled: () => open, run: () => ran.push("plain") },
+      { id: "t.mixed", bind: "m", enabled: () => shown() && open, run: () => ran.push("mixed") },
+      { id: "t.open", run: () => void (open = !open) },
+    ],
+  }))
+  expect([fake.meta.get("t.plain").enabled, fake.meta.get("t.mixed").enabled]).toEqual([true, false])
+  expect(fake.commands.get("t.plain")!()).toBe(false)
+  fake.commands.get("t.open")!()
+  fake.called()
+  expect([fake.meta.get("t.plain").enabled, fake.meta.get("t.mixed").enabled]).toEqual([true, true])
+  fake.commands.get("t.plain")!()
+  fake.commands.get("t.mixed")!()
+  expect(ran).toEqual(["plain", "mixed"])
+})
+
+// Carbon ce-2: what a command's `enabled` or its layer reads stays watched while it reads it, and no longer: one that
+// named 140 sessions one after another leaves the host's 128 watches free for the rest, where each stayed watched for
+// good.
+test("a command's enabled holds only the reads it makes now", async () => {
+  const fake = host((key) => (key.startsWith("messages:") ? [] : undefined))
+  const ctx = plugin("t.many", fake)
+  const [session, setSession] = solid.createSignal("s0")
+  ctx.keymap.layer(() => ({
+    commands: [{ id: "t.many", enabled: () => ctx.data.session.message.list(session()).length >= 0, run() {} }],
+  }))
+  // A layer whose commands are what it reads: the factory's reads, likewise.
+  ctx.keymap.layer(() => ({
+    commands: ctx.data.session.message.list(`f${session()}`).length ? [] : [{ id: "t.listed", run() {} }],
+  }))
+  for (let index = 1; index < 140; index++) setSession(`s${index}`)
+  await turn()
+  await expect(ctx.data.session.message.sync("other")).resolves.toBeUndefined()
+  expect(fake.watches.size).toBeLessThanOrEqual(128)
 })
 
 // CT-1: a component that mounts again registers its layer's commands without an `id` under the names it gave them

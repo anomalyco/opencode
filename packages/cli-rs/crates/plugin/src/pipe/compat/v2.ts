@@ -15,9 +15,11 @@ import {
   batch,
   createComponent,
   createContext,
+  createComputed,
   createEffect,
   createRoot,
   createSignal,
+  getListener,
   getOwner,
   onCleanup,
   runWithOwner,
@@ -75,9 +77,13 @@ const REMOUNT = 250
 // A keymap layer's commands as the layer last registered them, its `target`, and whether its component ended.
 interface Registration {
   retired: boolean
-  // The layer's own `enabled`, as it last said: a disabled layer's commands are disabled (contract ergonomics 2.5).
-  on?: boolean
+  // The layer's own `enabled`, a value or a function: a disabled layer's commands are disabled (contract ergonomics
+  // 2.5).
+  enabled?: unknown
   commands: Map<string, Json>
+  // What the host is to hold each of its commands: its `enabled` as the layer follows it, or enabled where the layer
+  // cannot follow it, as the command's run asks it then (carbon ce-2).
+  states: Map<string, boolean>
   target?: () => unknown
   mode?: string
 }
@@ -94,6 +100,10 @@ export interface Carrier {
   // A key layer of the activation, contract 2.0's `Setup::layer`, whose handler hears its events.
   layer?(layer: Json, handler: (event: Json) => unknown): void
   command(command: Json, run: (input?: string) => unknown): void
+  // Contract ergonomics 2.5: the host holds command `name` enabled or not (`set-enabled`).
+  enable?(name: string, enabled: boolean): void
+  // Runs `run` at the end of each call into the plugin, inside it: what it asks for is the call's.
+  afterCall?(run: () => void): void
   uncommand(name: string): void
   storage(keys: string[]): void
   on(types: string[], handler: (event: Json) => unknown): void
@@ -194,7 +204,10 @@ export function context(base: Base, carrier: Carrier) {
   // What each live key layer's `enabled` reads, which stays watched as a mount's reads do: the layer follows it.
   const layered = new Set<{ keys: Set<string> }>()
   const failed = (key: string) => carrier.readError?.(key)
+  // Bumped as the theme changes, which the JS host tells as the listened key `theme`.
+  const themed = createRoot(() => createSignal(0))
   carrier.listen((key) => {
+    if (key === "theme") return themed[1]((count) => count + 1)
     pushed.add(key)
     const version = versions.get(key)
     version?.[1]((value) => value + 1)
@@ -958,6 +971,8 @@ export function context(base: Base, carrier: Carrier) {
       // a registration without a remount; a component that registers anew as it mounts (opencode-navigator names each
       // binding by a count) reloaded without end (CT-21). Any other end ends its components at once.
       unmount(mount: Json, handover?: boolean) {
+        // The panel closed: it is no longer the plugin's current one.
+        if (place.type === "panel" && !handover) setPanelName("")
         const at = `${mount.surface}\u0000${mount.key}\u0000${mount.generation}`
         const entry = rendered.get(at)
         rendered.delete(at)
@@ -1017,7 +1032,7 @@ export function context(base: Base, carrier: Carrier) {
     if (path === "session.panel") {
       const panel = cx.input.panel ?? {}
       return {
-        name: panelName,
+        name: panelName(),
         sessionID: slot.session_id ?? "",
         width: panel.width ?? cx.input.width,
         presentation: panel.fullscreen ? "fullscreen" : "panel",
@@ -1027,7 +1042,9 @@ export function context(base: Base, carrier: Carrier) {
     if (path.startsWith("sidebar.") || path === "session.composer.top") return { sessionID: slot.session_id ?? "" }
     return {}
   }
-  let panelName = ""
+  // The panel the plugin opened, until its mount ends: a signal, so what reads `ui.panel.current()` (a key layer's
+  // `enabled`, @cleocode/goal's) follows it (carbon ce-2).
+  const [panelName, setPanelName] = createRoot(() => createSignal(""))
   const panels: string[] = []
 
   const raw = OpenCode.make({
@@ -1121,40 +1138,96 @@ export function context(base: Base, carrier: Carrier) {
   // owner, and a mode a component pushes as it mounts is its mount's: a command, which runs as the plugin, reads `base`
   // there (oc-context-grid's escape never left its page). TS has one input mode.
   const modes: string[] = []
+  const living = (name: string) => (registrations.get(name) ?? []).filter((at) => !at.retired && at.commands.has(name))
+  // The newest live layer that holds `name` and takes the key now runs it, as the topmost such layer does in TS; one
+  // disabled, out of its target or its mode, or whose command's `enabled` says no as the key comes, is passed over
+  // (carbon ce-1). None: the command declines.
   const dispatch = (name: string, input?: string) => {
-    const live = (registrations.get(name) ?? []).filter((at) => !at.retired && at.commands.has(name))
-    const command = live.at(-1)?.commands.get(name)
-    if (!command || live.at(-1)?.on === false) return false
-    const target = live.at(-1)?.target
-    if (target && !within(target(), focusedNode)) return false
-    const mode = live.at(-1)?.mode
-    if (mode !== undefined && modes.at(-1) !== mode && (read("input-mode", { type: "input-mode" }) ?? "base") !== mode)
-      return false
-    const enabled = typeof command.enabled === "function" ? command.enabled() : command.enabled !== false
-    return enabled ? command.run(input) : false
+    const live = living(name)
+    for (let index = live.length - 1; index >= 0; index--) {
+      const at = live[index]!
+      const command = at.commands.get(name)
+      if (!allows(at.enabled)) continue
+      if (at.target && !within(at.target(), focusedNode)) continue
+      const mode = at.mode
+      const current = () => read("input-mode", { type: "input-mode" }) ?? "base"
+      if (mode !== undefined && modes.at(-1) !== mode && current() !== mode) continue
+      if (!enabledNow(command)) continue
+      return command.run(input)
+    }
+    return false
   }
-  // A command's `enabled`, a value or a function of what the plugin reads; one that throws counts as enabled, and the
-  // command's run asks it again.
-  const enabledNow = (command: Json) => {
-    if (typeof command.enabled !== "function") return command.enabled !== false
+  // What the host was told of each command name: enabled while any live layer that holds it holds it enabled, so a
+  // disabled layer leaves the same command of an enabled one bound, and a layer that drops it or ends disables it at
+  // once (carbon ce-1).
+  const told = new Map<string, boolean>()
+  const resync = (name: string) => {
+    const on = living(name).some((at) => at.states.get(name) !== false)
+    if (told.get(name) === on) return
+    told.set(name, on)
+    carrier.enable?.(name, on)
+  }
+  // Each call into the plugin asks every command's `enabled` again as it ends: one that also reads what the layer does
+  // not follow (a variable a handler sets) is told the host then (carbon ce-2).
+  const [rechecked, recheck] = createRoot(() => createSignal(0))
+  // A microtask later too, for what a promise it resolved goes on to set.
+  carrier.afterCall?.(() => {
+    recheck((count) => count + 1)
+    queueMicrotask(() => recheck((count) => count + 1))
+  })
+  // Follows the `enabled` of `registration`'s command `name`. One that read something the layer follows is the
+  // command's state; one that read nothing followed (a plain field, a constant function) leaves it enabled on the host,
+  // which then sends the key to the command, whose run asks it, as TS asks it as the key comes: it never latches off
+  // (carbon ce-2). Its reads stay watched while it is followed, and no longer.
+  const track = (registration: Registration, name: string, command: Json) =>
+    createComputed(() => {
+      rechecked()
+      const reads = { keys: new Set<string>() }
+      layered.add(reads)
+      onCleanup(() => layered.delete(reads))
+      const asks = [registration.enabled, command.enabled].filter((enabled) => typeof enabled === "function")
+      let state = registration.enabled !== false && command.enabled !== false
+      if (asks.length) {
+        const before = rendering
+        rendering = { pending: false, keys: reads.keys }
+        try {
+          const value = asks.every((enabled) => !!(enabled as () => unknown)())
+          // `rechecked` is one of its sources.
+          state = ((getListener() as Json)?.sources?.length ?? 0) > 1 ? value && state : true
+        } catch {
+          state = true
+        } finally {
+          rendering = before
+        }
+      }
+      registration.states.set(name, state)
+      resync(name)
+    })
+  // An `enabled`, a value or a function of what the plugin reads, as it says now; one that throws counts as enabled,
+  // and the command's run asks it again.
+  const allows = (enabled: unknown) => {
+    if (typeof enabled !== "function") return enabled !== false
     try {
-      return !!command.enabled()
+      return !!enabled()
     } catch {
       return true
     }
   }
+  const enabledNow = (command: Json) => allows(command.enabled)
   const commands = (registration: Registration, scope?: string) => {
-    const names: string[] = []
-    for (const [name, command] of registration.commands) {
-      names.push(name)
+    const names = [...registration.commands.keys()]
+    for (const name of names) {
       const known = registrations.get(name) ?? []
       if (!known.includes(registration)) registrations.set(name, [...known.filter((at) => !at.retired), registration])
+    }
+    for (const [name, command] of registration.commands) track(registration, name, command)
+    for (const [name, command] of registration.commands) {
       carrier.command(
         {
           name,
-          // Contract ergonomics 2.5: its state as the layer and the command say now, which the layer follows as it
-          // changes (`set-enabled`), so the host binds no key of a disabled command and lists it nowhere.
-          enabled: registration.on !== false && enabledNow(command),
+          // Contract ergonomics 2.5: its state as every live layer that holds it says now, which the layer follows as
+          // it changes (`set-enabled`), so the host binds no key of a disabled command and lists it nowhere.
+          enabled: told.get(name) ?? true,
           title: command.title ?? name,
           group: command.group,
           slash: command.slash?.name,
@@ -1281,7 +1354,9 @@ export function context(base: Base, carrier: Carrier) {
     get theme() {
       return theme()
     },
+    // A signal's read, so what reads it (a key layer's `enabled`) follows a theme change (carbon ce-2).
     get themeMode() {
+      themed[0]()
       return base.themeMode
     },
     // Contract 2.x, step D: a renderer of the fences whose info string resolves to `language`, as TS's, a fence claim
@@ -1313,40 +1388,50 @@ export function context(base: Base, carrier: Carrier) {
       // nothing, though the host lists them a little longer (`uncommand`). Its `target` makes its commands decline
       // while that node lacks the plugin's focus. Its `priority` and `bindings` are not mapped.
       layer(factory: () => Json) {
-        const registration: Registration = { retired: false, commands: new Map<string, Json>() }
-        const reads = { keys: new Set<string>() }
+        const registration: Registration = { retired: false, commands: new Map<string, Json>(), states: new Map() }
         let names: string[] = []
         const apply = () => {
+          // What the factory reads this run, which stays watched until it runs again (carbon ce-2: kept for good, the
+          // reads of a layer whose `enabled` named one session after another filled the host's 128).
+          const reads = { keys: new Set<string>() }
+          layered.add(reads)
+          onCleanup(() => layered.delete(reads))
           const before = rendering
           rendering = { pending: false, keys: reads.keys }
+          let layer: Json
           try {
-            const layer = factory()
-            registration.on = typeof layer?.enabled === "function" ? !!layer.enabled() : layer?.enabled !== false
-            // A mode of the plugin's own (`modal`, one it pushes) is active only while it is the input mode (CT-31):
-            // its commands are bound everywhere and decline elsewhere, so the key goes on.
-            const own = typeof layer?.mode === "string" && layer.mode !== "global" && layer.mode !== "base"
-            const scope = layer?.mode === "global" || own ? undefined : "base"
-            registration.mode = own ? layer.mode : undefined
-            registration.target = typeof layer?.target === "function" ? layer.target : undefined
-            registration.commands = new Map(named(layer?.commands ?? [], scope))
-            const next = commands(registration, scope)
-            names.forEach((name) => carrier.uncommand(name))
-            names = next
+            layer = factory()
           } finally {
             rendering = before
           }
+          registration.enabled = layer?.enabled
+          // A mode of the plugin's own (`modal`, one it pushes) is active only while it is the input mode (CT-31): its
+          // commands are bound everywhere and decline elsewhere, so the key goes on.
+          const own = typeof layer?.mode === "string" && layer.mode !== "global" && layer.mode !== "base"
+          const scope = layer?.mode === "global" || own ? undefined : "base"
+          registration.mode = own ? layer.mode : undefined
+          registration.target = typeof layer?.target === "function" ? layer.target : undefined
+          registration.commands = new Map(named(layer?.commands ?? [], scope))
+          for (const name of [...registration.states.keys()])
+            if (!registration.commands.has(name)) registration.states.delete(name)
+          const next = commands(registration, scope)
+          // A command the layer no longer lists is disabled now, unless another live layer holds it, where it went
+          // only with `uncommand`'s delay (carbon ce-1: file-browser's `commands: []` held its keys 250 ms on).
+          for (const name of names) if (!registration.commands.has(name)) resync(name)
+          names.forEach((name) => carrier.uncommand(name))
+          names = next
           carrier.changed()
         }
         const owner = getOwner()
-        layered.add(reads)
         createRoot((dispose) => {
           createEffect(apply)
           if (owner)
             runWithOwner(owner, () =>
               onCleanup(() => {
                 registration.retired = true
-                layered.delete(reads)
                 dispose()
+                // Its commands are disabled at once, unless another live layer holds them (carbon ce-1).
+                names.forEach(resync)
                 names.forEach((name) => carrier.uncommand(name))
                 names = []
                 carrier.changed()
@@ -1609,7 +1694,7 @@ export function context(base: Base, carrier: Carrier) {
       panel: {
         open(name: string, options?: Json) {
           if (route().type !== "session" || !panels.length) return false
-          panelName = name
+          setPanelName(name)
           void carrier.effect({
             type: "open-panel",
             surface: panels[0],
@@ -1620,7 +1705,7 @@ export function context(base: Base, carrier: Carrier) {
         close() {
           for (const name of panels) void carrier.effect({ type: "close-panel", surface: name })
         },
-        current: () => (panelName ? { name: panelName, sessionID: route().sessionID ?? "" } : undefined),
+        current: () => (panelName() ? { name: panelName(), sessionID: route().sessionID ?? "" } : undefined),
       },
       tabs: {
         enabled: () => !!read("tabs-enabled", { type: "tabs-enabled" }),
