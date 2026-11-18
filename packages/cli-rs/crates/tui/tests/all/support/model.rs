@@ -1,14 +1,5 @@
-//! The harness of the seeded model tests (O-124), in the shape of OpenTUI's
-//! `packages/rust/crates/opentui/tests/support/model.rs`: generate a command list from a seed, run it against the
-//! real host and its oracles, and on a failure shrink the list (drop chunks of n/2 down to 1, then simplify each
-//! command) and print the trace.
-//!
-//! Environment: `MODEL_SEED=<n>` runs one seed, `MODEL_SEEDS=<n>` sets how many seeds run, `MODEL_SKIP=<property,...>`
-//! ignores failures of the named properties.
-//!
-//! Every run is also a run of the plugin C ABI (Pc, synthesis 4.14: "every model again through the transcripts"):
-//! what crosses it is fed to the protocol machine of `opencode_plugin::conformance`, and a broken rule fails the run
-//! as the property `abi-protocol`, after the model's own checks.
+//! Generate deterministic command traces, check the host and ABI after each run, and shrink failures while preserving
+//! their property and check site. `MODEL_SEED`, `MODEL_SEEDS`, and `MODEL_SKIP` select the cases.
 
 use std::fmt::Debug;
 
@@ -199,8 +190,6 @@ impl Model for Toy {
     }
 }
 
-// Expected (review bigboi-10): the shrinker deletes again after a simplification, to a fixed point, and it keeps the
-// check site, so it does not take a failure at another site of the same property for this one.
 #[test]
 fn the_shrinker_keeps_the_site_and_reaches_a_fixed_point() {
     let x = Failure { property: "p", site: "x", step: 2, detail: String::new() };

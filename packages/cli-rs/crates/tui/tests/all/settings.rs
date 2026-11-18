@@ -1,11 +1,4 @@
-//! Settings, experiments, debug, and the DevTools bar (E.18a).
-//!
-//! - P-COMP: `parity/component/E.18a-settings.tsx` renders the TS dialogs alone; here they open over the whole
-//!   TUI, so the comparison covers the dialog panel (the cells with the panel background in the fixture).
-//! - P-ORACLE: every field of `SETTINGS` against the TS table, through `parity/oracle/E.18a-settings.ts`.
-//! - `TestApp`: changes, the palette's settings rows, the debug dialog, and the bar.
-//! - P-FILE: settings writes go to a `cli.json` in a temporary home, and the TS `Config` service reads them
-//!   back through `parity/oracle/F.5-config.ts` (skipped without bun and `node_modules`).
+//! Settings, experiment, debug, and developer-tool interactions.
 
 use crate::support::{self, WAIT, wait_for};
 
@@ -55,8 +48,7 @@ fn assert_dialog(app: &TestApp, name: &str, title: &str) {
     assert!(comparison.is_equal(), "P-COMP {name} (panel {left}..={right} x {top}..={bottom}): {comparison}");
 }
 
-// The P-COMP fixtures show only the first screen and two filters; this compares every field of every row with
-// the TS table itself, read live through `parity/oracle/E.18a-settings.ts`.
+// Visible fixtures cover only a subset of settings; compare the entire settings table with the reference.
 #[test]
 fn settings_table_matches_the_typescript_table() {
     if support::ts_root().is_none() {
@@ -392,7 +384,6 @@ fn settings_writes_match_typescript_and_typescript_reads_them() {
     wait_for(&app, "TUI tools");
     app.press("right");
     assert!(app.wait_until(WAIT, || { tui.settings.experiment("client-mcp") }));
-    // The bytes TS writes for the same two updates (`Config.update` through the F.5 oracle).
     let text = std::fs::read_to_string(&file).unwrap();
     assert_eq!(
         text,

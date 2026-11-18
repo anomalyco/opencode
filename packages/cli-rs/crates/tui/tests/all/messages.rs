@@ -1,6 +1,4 @@
-//! The transcript's other rows (E.6b) over a fixture server: compactions (running, done, failed,
-//! queued), shell, skill, notice and switch messages, errors and retries, the revert banner, the
-//! background hint, images, and the free-limit stop that offers OpenCode Go.
+//! Transcript messages, notices, errors, retries, and interaction with their rows.
 
 use crate::support::{self, Fake, Harness, Log, WAIT, deref_harness};
 
@@ -256,7 +254,7 @@ fn the_revert_banner_counts_reverted_prompts_and_a_click_clears_it() {
         ],
     }});
     let h = open(30, session(revert), messages, Vec::new(), Info::default());
-    // The session can load before its messages, and TS then also counts 0 for a moment.
+    // Wait for messages as well as the session before checking the revert count.
     let screen = h.wait_for("┃  2 messages reverted");
     assert!(screen.contains("┃  M src/parser.rs +4 -2"), "{screen}");
     assert!(screen.contains("┃  A src/new.rs +10"), "{screen}");
@@ -347,8 +345,7 @@ fn a_theme_switch_restyles_these_rows_in_place() {
     );
 }
 
-/// The store takes events off the UI thread and the transcript syncs on its next frame, so a theme switch in between
-/// restyles against messages the rows were not rendered from: here a revert that hides the newest message.
+/// Switch themes between a store update and its next UI flush.
 #[test]
 fn a_theme_switch_before_the_sync_restyles_against_the_messages_the_store_holds() {
     let messages = vec![

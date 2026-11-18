@@ -1,5 +1,4 @@
-//! The `animations` switch (`rs-animations-off`): with it off a running session draws the TS still glyphs and asks
-//! for no frames; turning it on or off at run time takes effect at once.
+//! Animation and idle-frame behavior on the app clock.
 
 use crate::support;
 
@@ -90,8 +89,7 @@ fn mount_with(tabs: Value, animations: bool, active: &Value) -> (support::Harnes
     (h, memory)
 }
 
-/// Whether a spinner frame past the first shows. A running tab's still indicator is the first frame, `⠋`, as in
-/// TS (`TabIndicator`).
+/// Detect an advancing spinner; a busy tab also shows its first glyph when animation is off.
 fn moving(screen: &str) -> bool {
     screen.chars().any(|c| ('⠀'..='⣿').contains(&c) && c != '⠋')
 }
@@ -110,8 +108,7 @@ fn frames(h: &support::Harness, span: Duration) -> usize {
         .count()
 }
 
-/// Lets the startup polls (the data migration's status) start and end: two seconds for their timers, then no read in
-/// flight and a stretch that asks for no frame, since a reply can land after any fixed stretch on a loaded machine.
+/// Drain startup timers and reads before measuring idle frames.
 fn settle(h: &support::Harness, memory: &Memory) {
     frames(h, Duration::from_secs(2));
     h.wait("the startup polls to end", || memory.in_flight() == 0 && frames(h, Duration::from_millis(400)) == 0);
@@ -203,7 +200,6 @@ fn a_spinner_out_of_sight_costs_no_frames_and_no_wakeups() {
         let hiding = h.app.idle(Duration::from_secs(1));
         let hidden = h.app.idle(Duration::from_secs(4));
         if case == "a dialog beside it" {
-            // The palette leaves the rows in view, so they still move, as in TS.
             assert!(h.app.text().contains(" npm test"), "{case}:\n{}", h.app.text());
             assert!((100..=104).contains(&hidden.frames), "{case}: {hidden:?}");
             continue;

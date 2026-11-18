@@ -1,5 +1,4 @@
-//! A reconnect reads the location again, config included (review carbon-2 of MS6), also when the connection
-//! status never showed the stream down: a `resync` or a fast reconnect leaves only the new `server.connected`.
+//! A reconnect must refresh state even if the UI never observes the disconnected status.
 
 use crate::support::{self, WAIT};
 
@@ -66,8 +65,7 @@ impl Transport for Transcript {
     }
 }
 
-// R4-1: the events of a turn lost with the old stream (a stall after Ctrl+Z) reach the open session through its reads
-// on the next `server.connected`, as TS reads the session and its rows again when the connection turns connected.
+// The next connection's reads recover events missed during suspension.
 #[test]
 fn a_reconnect_reads_the_open_transcript_again() {
     let user = |id: &str, text: &str, created: u64| json!({ "id": id, "type": "user", "text": text, "time": { "created": created } });

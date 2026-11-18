@@ -1,6 +1,4 @@
-//! The terminal pane (E.13a) through the whole TUI, over the in-memory transport and a fake socket, for the paths the
-//! P-APP scenario `E.13a/terminal` does not reach: `/terminal` creating a terminal, input written before the pane
-//! mounts, a stored selection whose terminal is gone, and a server without terminals.
+//! Terminal panes against a fake socket and recorded requests.
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -125,8 +123,7 @@ impl Terminal {
 
     fn attach(&self) {
         assert!(self.wait(|harness| !harness.remotes.lock().unwrap().is_empty()), "no socket opened");
-        // A replay that ends before the pane is laid out has no size to send pending input at (as in TS, where the
-        // server is never that fast). The pane mounted before its socket opened, so one frame lays it out.
+        // Lay out the pane before completing replay: input needs the terminal dimensions.
         self.app.render();
         let deliver = self.remotes.lock().unwrap()[0].deliver.clone();
         for text in [

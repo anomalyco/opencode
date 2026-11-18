@@ -1,4 +1,4 @@
-//! TypeScript: `parity/component/E.17b-mcp.tsx`.
+//! MCP and skill dialogs.
 
 use crate::support::{self, Fake, Harness, Log, WAIT, deref_harness, list};
 
@@ -223,8 +223,6 @@ fn mcp_dialog_reads_the_list_once_and_space_toggles_each_server() {
         ]
     );
     assert!(kit.requests("POST", "/api/experimental/mcp/").iter().all(|(_, _, body)| body.is_null()));
-    // notion signs in through its integration: the integration dialog opens (E.17a) instead of a toggle. This
-    // fixture serves no integrations, so it shows none.
     space_at(4);
     kit.wait_for("No integrations available");
     assert_eq!(kit.toggles().len(), 4);

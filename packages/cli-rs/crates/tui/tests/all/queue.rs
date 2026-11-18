@@ -1,6 +1,4 @@
-//! Queued prompts and pending prompt actions (E.10b) over a fixture server that logs every request: the dock, the
-//! queued prompts dialog (steer, delete, undo), the pending steer dialog, and the message actions dialog. Writes
-//! answer 204 where the server does; `fail` answers the inbox writes with a 409.
+//! Interact with queued prompts through the dock and message dialogs.
 
 use crate::support::{self, Fake, Harness, Log, WAIT, deref_harness};
 

@@ -1,5 +1,4 @@
-//! The diff viewer's lifetime (`reviews/ms3-ms4.review-carbon.md` carbon-1): a viewer goes with its panel, so its
-//! file menu and its last-turn watch end when the panel closes.
+//! Exercise the diff viewer's lifecycle and controls over real input and recorded server responses.
 
 use crate::support;
 
@@ -148,8 +147,7 @@ impl Diffs {
             .count()
     }
 
-    /// A turn of `session` starts and ends within one turn of the UI: the store applies both before the UI hears of
-    /// the first, as on a loaded machine (`steps/flakes-8.md`).
+    /// Deliver start and end in the same UI turn so both events arrive before the next sync.
     fn short_turn(&self, session: &str) {
         for (kind, status) in [
             ("session.execution.started", SessionStatus::Running),
@@ -171,9 +169,8 @@ impl Diffs {
         }
     }
 
-    /// Waits until the diff loaded after the `before`-th read has landed in the viewer: the read was sent, its reply
-    /// taken, and the content it gives held. A reload releases the content of the load before as it starts, so until its
-    /// reply is drawn the viewer holds none.
+    /// Wait for the requested diff to become visible; observing a request alone does not guarantee the reply has
+    /// rendered.
     fn reloaded(&self, before: usize) {
         let held = || opencode_plugin::surface::ledger_of("opencode.diffs").content_bytes;
         let landed = self
@@ -311,7 +308,7 @@ fn a_large_added_file_shows_its_start_and_end() {
         h.tui.keymap.dispatch("diff.first", None);
         h.wait_for("row-0000");
         h.app.resize(if width == 80 { 160 } else { 80 }, 20);
-        // The viewer draws again at the new width first (TS awaits a flush).
+        // Render at the new width before checking the layout.
         h.app.render();
         h.tui.keymap.dispatch("diff.last", None);
         h.wait_for("row-7499");
@@ -357,9 +354,6 @@ fn the_viewer_runs_on_both_carriers() {
         assert!(found, "abi {abi}: {failed:?}\n{}", h.app.text());
     }
 }
-
-// The scenarios of synthesis 4.9 by name, and the hunk rules the host's verbs and reads now hold (P6c). Each opens the
-// full-screen route from Home, with the file tree beside the cards, over files of one modified hunk each.
 
 fn hunk_file(index: usize, lines: usize) -> Value {
     let body: String = (0..lines)
@@ -692,7 +686,6 @@ fn ctrl_c_closes_one_level_of_the_viewer() {
     });
 }
 
-/// The viewer's settings as the TUI config holds them now.
 fn diffs_setting(h: &Diffs) -> serde_json::Value {
     h.tui.settings.info().to_value()["diffs"].clone()
 }
@@ -882,8 +875,6 @@ fn the_docked_footer_follows_the_panels_focus() {
     assert_eq!(footer(&h), focused, "the footer did not light again");
 }
 
-// Expected (TS's turn watch, `steps/flakes-8.md`): a turn that starts and ends before the UI hears of its start still
-// loads the last turn's diff again, on both carriers; another session's turn loads nothing.
 #[test]
 fn a_turn_too_short_to_see_running_loads_the_diff_again() {
     for abi in [false, true] {
@@ -1136,8 +1127,6 @@ fn the_viewers_dialogs_end_with_it() {
     });
 }
 
-// Expected (carbon's review of P6c, 4): a plugin's image preview takes only images the host decodes, as an image node
-// would, and has the key `images`, which `Dialog::Close` closes.
 #[test]
 fn a_plugin_image_preview_is_bounded_and_keyed() {
     let h = route(1, 4, 120, 30);

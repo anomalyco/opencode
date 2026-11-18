@@ -1,10 +1,4 @@
-//! System dialogs (E.18b): themes, status, pair, highlights, update and the home notice, the plugin manager,
-//! and error details.
-//!
-//! - P-COMP: `parity/component/E.18b-system.tsx` renders the TS dialogs alone; here they open over the whole TUI,
-//!   so the comparison covers the dialog panel (the cells with the panel background in the fixture).
-//! - `TestApp` and P-REQ: behavior, and the requests each dialog sends to a test transport. Pairing and updating
-//!   are only ever proven here: they change real state.
+//! System dialogs, plugin management, and update notices.
 
 use std::rc::Rc;
 use std::sync::Arc;
@@ -285,7 +279,7 @@ fn plugin_manager(app: &TestApp, extra: Value) -> (Mounted, fn() -> u32) {
     plugin_manager_on(app, extra, false)
 }
 
-/// [`plugin_manager`] on the linked carrier, or with `abi` across the C ABI's byte shims (P6b: the manager is a plugin).
+/// Open the plugin manager linked or through the C ABI.
 fn plugin_manager_on(app: &TestApp, extra: Value, abi: bool) -> (Mounted, fn() -> u32) {
     let mounted = mount_on(app, support::component_info(extra), plugin_server(), abi);
     ACTIVATIONS.set(0);
@@ -497,7 +491,6 @@ fn a_configured_typescript_plugin_is_listed_as_skipped_with_its_reason() {
     mounted.tui.keymap.dispatch("plugins.list", None);
     let screen = wait_for(&app, "skipped, local");
     assert!(screen.contains("./broken.ts"), "{screen}");
-    // TUI rows sort by label: `./broken.ts` comes before `team.tui`.
     assert!(screen.contains("view error enter"), "{screen}");
     app.press("enter");
     let screen = wait_for(&app, "TUI plugin error");

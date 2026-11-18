@@ -103,8 +103,7 @@ fn open(messages: Vec<Value>, info: Info) -> Nav {
     let fake = fake(messages, older.clone(), failing.clone());
     let deps =
         Deps { config: support::config(info), route: support::session_route("ses_n"), ..support::deps(Arc::new(fake)) };
-    // The transcript keeps the 15-row view these cases were written for (E.12 took the session header and
-    // the column gaps out, so it grew by five rows at 80x30).
+    // Keep a 15-row transcript viewport for the paging assertions.
     let h = Nav { harness: support::mount(80, 25, deps), older, failing };
     h.wait_for(&format!("Answer {last} three."));
     h
@@ -303,9 +302,6 @@ fn message_navigation_aligns_messages_with_the_top() {
     assert_eq!(Nav::row(&screen, "Question 1"), Some(TOP + 1), "{screen}");
 }
 
-/// A failed transcript read shows the error's message alone as a toast, without its tag: a session's first page, and
-/// an older page whichever move asked for it (deviation `O89-transcript-read-toast` for all but `session.first`, which
-/// toasts in TS too).
 #[test]
 fn a_failed_transcript_read_toasts_its_message() {
     for command in ["session open", "session.page.up", "session.message.user.previous", "session.first"] {
@@ -400,8 +396,6 @@ fn a_tab_reopens_where_the_reader_left_it() {
     let left = transcript(&screen);
     assert!(left.iter().any(|line| line.contains("Jump to latest ↓")), "{screen}");
 
-    // Another tab opens at its newest rows; back on the first, the reader's rows show where they were
-    // (`sessionTabs.setScrollAnchor`, `restoreScrollPosition`).
     switch("ses_m");
     let other = h.app.wait_until(WAIT, || {
         let screen = h.app.text();

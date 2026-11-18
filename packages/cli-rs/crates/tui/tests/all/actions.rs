@@ -1,7 +1,4 @@
-//! The session actions (E.10a) over a fixture server that logs every request: rename, timeline, fork, compact,
-//! undo, redo, the copies, export, the parent session, and the revert commit before a prompt. Writes answer 204
-//! where the server does. The dialogs' cells are compared with the TypeScript ones in
-//! `parity/component/E.10a-actions.tsx` (`dialogs_match_typescript`).
+//! Session commands through a request-recording server.
 
 use crate::support::{self, Fake, Harness, Log, WAIT, deref_harness};
 
@@ -201,7 +198,7 @@ fn rename_opens_the_dialog_by_key_and_renames_or_generates_by_slash() {
 
     kit.clear();
     kit.app.type_text("/rename");
-    // The first Enter takes the slash completion, as in TS; the second submits.
+    // The first Enter accepts completion; the second submits.
     kit.app.press("return");
     let completed = kit.app.wait_until(WAIT, || kit.prompt_text() != "/rename");
     assert!(completed, "{:?}", kit.prompt_text());
@@ -263,13 +260,10 @@ fn fork_forks_the_whole_session_or_before_a_prompt_and_opens_it() {
     kit.app.press("return");
     assert_eq!(kit.wait_writes(1), [r#"POST /api/session/ses_a/fork {"before":"msg_03"}"#]);
     kit.wait_for("Forked session");
-    // The fork's composer holds the prompt it was forked before.
     let found = kit.app.wait_until(WAIT, || kit.prompt_text() == "Fix the bug\nin parse");
     assert!(found, "{:?}\n{}", kit.prompt_text(), kit.app.text());
 }
 
-// `dialog-fork.tsx:24-48`: the fork's composer gets the prompt it was forked before with its attachments
-// (`restorePrompt`), and the fork opens known, with the session the server returned.
 #[test]
 fn fork_before_a_prompt_keeps_its_attachments_and_opens_the_returned_session() {
     let mut messages = turns();
@@ -349,8 +343,6 @@ fn undo_reverts_to_the_last_prompt_and_puts_it_back_in_the_prompt() {
     assert!(kit.writes().is_empty(), "{:?}", kit.writes());
 }
 
-// `projectedPromptInput` and `appendToSessionPrompt` (`codec.ts:14-37`, `draft-stash.ts:37-47`): the undone prompt
-// comes back with its files and their mentions, after the composer's own parts, in normal mode.
 #[test]
 fn undo_puts_the_attachments_back_after_the_composer_parts() {
     let mut messages = turns();
@@ -446,8 +438,6 @@ fn a_prompt_commits_a_staged_revert_before_it_is_sent() {
     assert!(commit < prompt, "{writes:?}");
 }
 
-// The accepted submit keeps its target after the composer unmounts (`prompt/index.tsx:1281,1341-1380`): leaving the
-// session while the revert commits still sends the replacement.
 #[test]
 fn leaving_the_session_while_the_revert_commits_still_sends_the_prompt() {
     let kit = Kit::new(session("ses_a", json!({ "revert": { "messageID": "msg_03" } })), turns(), vec![]);
@@ -464,7 +454,6 @@ fn leaving_the_session_while_the_revert_commits_still_sends_the_prompt() {
 
 #[test]
 fn copies_and_the_parent_report_their_outcome() {
-    // Without a terminal, every copy fails, as TS reports a rejected clipboard write.
     let kit = Kit::new(session("ses_a", json!({ "parentID": "ses_p" })), turns(), vec![]);
     kit.ready();
     kit.tui.keymap.dispatch("messages.copy", None);
@@ -610,7 +599,7 @@ fn export_saves_markdown_or_sanitized_json_and_shows_the_path() {
 #[test]
 fn dialogs_match_typescript() {
     let mut failed = Vec::new();
-    // The TS fixtures render in UTC; the Rust footers use local time, so shift the prompts by the local offset.
+    // Shift prompt times by the local offset to compare against UTC recordings.
     let offset = i64::from(opencode_util::time::Zone::Local.offset(1_772_539_200_000)) * 1000;
     let shifted: Vec<Value> = turns()
         .into_iter()

@@ -1,5 +1,4 @@
-//! Attention sounds (E.19b) through the whole TUI: an event the notifications plugin reacts to hands its sound to the
-//! audio engine. Tests never open a playback device, so the engine mixes without one and the test reads the mix.
+//! Deliver notification sounds through the TUI to the test audio engine.
 
 use std::sync::Arc;
 use std::time::Duration;

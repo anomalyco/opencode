@@ -1,7 +1,4 @@
-//! The mouse pointer shape (OSC 22) over the TUI. TS never asks for one (Core 0.8.1's renderables set none and
-//! `packages/tui/src` never calls `setMousePointer`). The Rust TUI shows the hand over every element that acts on
-//! a click and the resize shape over the pane resize handle, a deliberate deviation
-//! (`parity/deviations/W01-hand-pointer.md`). Text, the transcript, and the prompt keep the default pointer.
+//! Inspect the pointer shape for clickable and non-clickable cells.
 
 use crate::support::{self, WAIT};
 

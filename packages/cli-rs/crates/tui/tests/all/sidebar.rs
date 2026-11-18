@@ -1,5 +1,4 @@
-//! The sidebar's MCP and footer sections on the one plugin API (O-67): clicks that run commands, a fold and a
-//! dismissal kept in plugin storage, their settings listeners, and the MCP section through the C ABI's byte shims.
+//! MCP sidebar actions and persisted section state.
 
 use crate::support::{self, DIRECTORY, Fake, deref_harness, list};
 

@@ -1,10 +1,4 @@
-//! Tabs and panes (E.12) through the whole TUI, with real roots in a temp dir:
-//!
-//! - P-FILE: `tabs.json` and `layout.json` as the TS storage and tab model read and write them
-//!   (`parity/oracle/E.12-tabs.ts`), under the same lock;
-//! - `session.deleted` of the open tab, `/clear`, and a plugin panel with its resize handle.
-//!
-//! The cell-level proofs are the P-APP scenarios `E.12/tab-strip` and `E.12/rail-resize`.
+//! Session tabs and panes over temporary shared storage.
 
 use crate::support::{self, Harness, WAIT, deref_harness};
 
@@ -142,8 +136,7 @@ fn clear_closes_the_tab_and_goes_home() {
     assert!(screen.lines().next().unwrap().contains("Fix the parser"), "{screen}");
 }
 
-// `createSessionRetention` (`packages/client/src/solid/retention.ts`, limit 3 in `session-tabs.tsx:140-146`): of the
-// sessions viewed and left, only the last three keep their transcripts.
+// Open tabs retain transcripts; background retention keeps the three most recently viewed roots.
 #[test]
 fn only_the_last_three_viewed_sessions_keep_their_transcripts() {
     let ids: Vec<String> = (1..=6).map(|n| format!("ses_{n}")).collect();
@@ -182,8 +175,6 @@ fn only_the_last_three_viewed_sessions_keep_their_transcripts() {
     assert_eq!(held, ids[3..].iter().collect::<Vec<_>>());
 }
 
-// The prefetch effect (`session-tabs.tsx:285-325`): a persisted background tab reads its permissions after a delay,
-// so its tab shows that it waits on the user.
 #[test]
 fn a_background_tab_reads_its_pending_permission() {
     let home = opencode_util::temp::tempdir().unwrap();
@@ -251,8 +242,7 @@ fn closing_a_session_whose_tab_another_tui_closed_selects_its_former_neighbour()
     assert_eq!(ids(), ["ses_a", "ses_c"]);
 }
 
-// Another client holding `tabs.json`'s lock delays the writes, not the UI thread that queues them
-// (`context/storage.tsx` returns a pending promise).
+// A held file lock should delay the write but leave the UI responsive.
 #[test]
 fn a_held_tabs_lock_does_not_block_the_ui() {
     let h = mount(100, json!({ "animations": false }));
@@ -266,7 +256,6 @@ fn a_held_tabs_lock_does_not_block_the_ui() {
     });
     let started = std::time::Instant::now();
     h.tui.navigate(support::session_route("ses_b"));
-    // The first write now waits on the lock; give it time to start.
     std::thread::sleep(std::time::Duration::from_millis(200));
     opencode_tui::tabs::reorder(&h.tui, "ses_b", 0);
     let elapsed = started.elapsed();
@@ -372,10 +361,6 @@ fn a_closed_busy_tab_stops_the_pulse_ticks() {
     assert!(closed.frames <= 1 && closed.wakeups <= rest.wakeups + closed.frames, "{closed:?}, at rest {rest:?}");
 }
 
-// A busy tab in the background animates with nothing else going on, and stops once it is idle. The strip and the
-// full rail pulse at 20 fps. The compact rail has no pulse: its spinner paints each step of TS's 80 ms interval,
-// 12.5 frames a second. Without a frame source of its own it stalled until input came (the user saw it step 2-3
-// times a second). A rail that hides while its tab works (the terminal narrows to the strip) leaves nothing ticking.
 #[test]
 fn a_busy_tab_paints_on_its_own_and_stops_when_idle() {
     let execution = |kind: &str, seq: u64| {
@@ -511,8 +496,6 @@ fn a_split_panel_shows_beside_the_session_and_resizes() {
     h.open("ses_b");
     assert!(h.app.wait_until(WAIT, || h.tui.panels.current().is_none()));
 }
-
-// P-FILE: the TS client reads what Rust wrote and Rust reads what TS wrote, under the same lock.
 
 #[test]
 fn tabs_and_layout_are_shared_with_the_typescript_client() {

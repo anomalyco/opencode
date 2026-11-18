@@ -134,8 +134,7 @@ fn ide_mentions_insert_file_parts_with_their_lines() {
     let marks = setup.textarea().extmarks();
     assert_eq!(marks.len(), 1);
     assert_eq!((marks[0].start, marks[0].end), (8, 25));
-    // One line, outside the project: an absolute path and no end. `normalizeMentionPath` gives `path.resolve` with
-    // `/` separators, so on Windows the path takes the working directory's drive, `D:/elsewhere/a b.ts`.
+    // A drive-less absolute path gains the current drive on Windows.
     ide.notify("at_mentioned", json!({ "filePath": "/elsewhere/a b.ts", "lineStart": 4, "lineEnd": 4 }));
     let elsewhere = format!("{}#4", Flavor::NATIVE.resolve(&["/elsewhere/a b.ts"]).replace('\\', "/"));
     setup.wait("the second mention", || setup.textarea().text().ends_with(&format!("@{elsewhere} ")));

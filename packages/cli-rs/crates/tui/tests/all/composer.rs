@@ -1,6 +1,4 @@
-//! The composer, the shell output dialog, and the client MCP tools (E.13b) through the whole TUI, over the in-memory
-//! transport, for the paths the P-APP scenario `E.13b/composer` does not reach: the client MCP experiment and its
-//! tools, interrupting a subagent, picking a terminal, the queued dock, and the output text.
+//! Exercise the composer, shell output, and client MCP tools against an in-memory transport.
 
 use crate::support::{self, WAIT};
 
@@ -518,7 +516,7 @@ fn the_subagent_selection_follows_the_keys_while_subagents_stream_under_a_restin
     assert!(harness.wait(|harness| harness.rows().len() == 3));
     let rows = harness.rows();
     assert_eq!(harness.focused(), [rows[0]]);
-    // The pointer rests on the first row, where the prompt was. Rows redrawn under it must not take the selection.
+    // A stationary pointer must not change selection when rows redraw beneath it.
     let (x, y) = harness.at(&format!("Explore: {} ()", rows[0])).unwrap();
     harness.app.hover(x, y);
     for (key, expected) in [("down", 1), ("down", 2), ("up", 1)] {

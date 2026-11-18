@@ -1,6 +1,4 @@
-//! Worktrees (E.11b) over a fixture server that records requests: `session.move` in a session and on home,
-//! a new worktree staged on home and created by the first submit, and the quick switch slots with their
-//! pins. No test touches a real service or repository.
+//! Worktree selection, creation, and session moves through the TUI.
 
 use crate::support::{self, DIRECTORY, Fake, Harness, Log, WAIT, deref_harness};
 

@@ -1,4 +1,4 @@
-//! A fake IDE MCP server for the editor context tests (E.5), shared by `editor.rs` and the P-APP runner.
+//! Fake IDE MCP server shared by the editor tests and app replay.
 use std::sync::{Arc, Mutex};
 
 use futures_util::{SinkExt, StreamExt};

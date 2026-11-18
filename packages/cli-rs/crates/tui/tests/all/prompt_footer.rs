@@ -1,6 +1,4 @@
-//! The prompt footer and its goal on the one plugin API (O-67): the goal read a mount starts, a `changed` event that
-//! comes before that read returns, a remount while it is in flight, the narrow busy footer, and the goal panel through
-//! the C ABI's byte shims (`Loopback`).
+//! Goal footer updates across pending reads and mount changes.
 
 use crate::support::{self, DIRECTORY, Harness};
 

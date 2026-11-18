@@ -1,5 +1,4 @@
-//! The session view's follow-ups to `rs-ms34-session`, over the in-memory transport with its request log
-//! (P-REQ): `session.submit_scroll` after a send, and usage limits kept per location as TS keys them.
+//! Session viewport behavior and its store subscriptions.
 
 use crate::support::{self, WAIT};
 
@@ -235,7 +234,6 @@ impl Harness {
 
 #[test]
 fn a_send_returns_to_the_newest_rows_unless_submit_scroll_is_keep() {
-    // `onSubmit` calls `toBottom` unless `session.submit_scroll` is `keep` (`index.tsx:1650-1652`).
     let h = mount("ses_a", json!({ "animations": false }));
     h.send_while_away();
     h.wait("the newest rows", || {

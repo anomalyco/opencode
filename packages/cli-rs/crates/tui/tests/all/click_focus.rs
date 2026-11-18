@@ -1,8 +1,4 @@
-//! Which clicks move the keyboard focus (`rs-click-focus`). TS runs the renderer with `autoFocus: false`
-//! (`app.tsx:258`), so a click moves no focus by itself: the transcript, the sidebar, the tabs, the footer, and a
-//! toast leave the prompt focused. Only the prompt (`prompt/index.tsx:1838-1844`), an embedded terminal
-//! (`EmbeddedTerminal.forwardMouse`), and a panel's host (`panel-host.tsx:34`) take it, and a click on the session
-//! pane while the right pane has it gives it back to the prompt (`session-frame.tsx:300-322`).
+//! Focus follows handled clicks, not every mouse press.
 
 use crate::support;
 

@@ -1,4 +1,4 @@
-//! TypeScript: `parity/component/E.11a-sessions.tsx`.
+//! Session list and open-dialog navigation.
 
 use crate::support::{self, Fake, Harness, Log, WAIT, deref_harness};
 
@@ -175,8 +175,7 @@ impl Kit {
         };
         let harness = support::mount_on(support::dark_app(100, 34), deps, Args::default());
         let kit = Self { harness, log, state, _home: home };
-        // The scoped sessions go into the store, as the TS script remembers them. The read names the
-        // `directory`, so `dialog_reads` leaves it out.
+        // Exclude the background list read, identifiable by its directory, from dialog reads.
         let ids: Vec<&str> = match mode {
             Mode::List => vec!["ses_a", "ses_b", "ses_c"],
             Mode::Open => vec!["ses_r1", "ses_r2", "ses_r3"],
@@ -219,10 +218,7 @@ impl Kit {
             .collect()
     }
 
-    /// The dialog's reads, in order: location, projects, and sessions. The home's own list read
-    /// (by `directory`; a theme change that alters the colors remounts the home, which reads again) and the
-    /// prompt's catalog reads after connect are left out; TS does not order those against the
-    /// dialog.
+    /// Dialog reads in order, excluding the background session list.
     fn dialog_reads(&self) -> Vec<String> {
         self.requests()
             .into_iter()
@@ -365,8 +361,6 @@ fn open_reads_the_worktrees_again_on_worktree_updated() {
     harness.wait("worktree.updated read nothing", || reads() == 2);
 }
 
-// Both dialogs read the store's projects (`dialog-open.tsx:210,239`, `dialog-session-list.tsx:138-157`), so a
-// project renamed while one is open shows its new name.
 #[test]
 fn open_and_session_list_follow_project_updated() {
     let (harness, memory) = evented();

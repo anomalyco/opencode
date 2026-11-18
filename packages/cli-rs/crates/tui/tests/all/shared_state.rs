@@ -1,9 +1,4 @@
-//! The MS1 review fixes carbon-3 and carbon-7 through the whole TUI:
-//!
-//! - model and agent state follow the open session's location, and acknowledged commits clear their
-//!   drafts (`context/local.tsx`);
-//! - `session.json` and `prompt-history.jsonl` keep what another client wrote, prompts submitted before
-//!   the history loads are kept, and `session.deleted` prunes its pin.
+//! Session-scoped selection and shared-file merges across independent writers.
 
 use crate::support::{self, Fake, Harness, Log, WAIT, deref_harness, list};
 
@@ -174,8 +169,6 @@ fn cd_on_home_moves_the_agents_to_the_new_directory() {
     setup.wait("the new directory's agents", || setup.tui.local.agents().iter().any(|agent| agent.id.0 == "reviewer"));
 }
 
-/// MS6 carbon-3: home follows the default location once the server names its canonical directory, so the
-/// agents load when the start directory is spelled differently.
 #[test]
 fn home_follows_the_canonical_default_location() {
     let fake = Fake::new(|seen| {
@@ -210,8 +203,6 @@ impl Transport for Canonical {
     }
 }
 
-/// carbon-3: once the session reports the agent and model a submit committed, the drafts give way, so a
-/// later switch from another client shows.
 #[test]
 fn acknowledged_commits_clear_the_drafts() {
     let setup = Setup::new(&[]);
@@ -249,8 +240,6 @@ fn acknowledged_commits_clear_the_drafts() {
     setup.wait("the other client's agent", || setup.agent().as_deref() == Some("reviewer"));
 }
 
-/// carbon-3: the acknowledgments and another client's switch in one batch: TS handles each event in turn, so
-/// the drafts give way and the switch shows.
 #[test]
 fn a_switch_batched_with_the_acknowledgments_shows() {
     let setup = Setup::new(&[]);
@@ -273,8 +262,6 @@ fn a_switch_batched_with_the_acknowledgments_shows() {
     setup.wait("the other client's agent", || setup.agent().as_deref() == Some("reviewer"));
 }
 
-/// carbon-7: a pin keeps the pins another client wrote after this one read the file, and
-/// `session.deleted` prunes it.
 #[test]
 fn pins_keep_other_clients_pins_and_prune_deleted_sessions() {
     let setup = Setup::new(&[("session.json", r#"{"pinned":["ses_old"]}"#)]);
@@ -293,7 +280,6 @@ fn pins_keep_other_clients_pins_and_prune_deleted_sessions() {
     assert!(!pins::list(&setup.tui).contains(&SessionID("ses_b".into())));
 }
 
-/// carbon-7: a prompt submitted while the history still loads is kept, in memory and in the file.
 #[test]
 fn a_prompt_appended_before_the_history_loads_is_kept() {
     let state = opencode_util::temp::tempdir().unwrap();
@@ -316,8 +302,6 @@ fn a_prompt_appended_before_the_history_loads_is_kept() {
     assert_eq!(step(-1, "early").unwrap()["text"], "old");
 }
 
-/// carbon-7: a save past the limit keeps a line the TS TUI appended after this one loaded; the next
-/// load trims the file to the newest 50.
 #[test]
 fn a_save_past_the_limit_keeps_lines_another_client_appended() {
     let full: String = (0..50).map(|n| format!("{{\"text\":\"{n}\",\"pasted\":[]}}\n")).collect();

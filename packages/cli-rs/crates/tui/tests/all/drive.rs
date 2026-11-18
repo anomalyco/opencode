@@ -1,4 +1,4 @@
-//! H.4: the real TUI on a headless app, driven over the `OPENCODE_DRIVE` endpoint by a client on another thread.
+//! Drive the headless TUI over its simulation endpoint from another thread.
 
 use crate::support;
 

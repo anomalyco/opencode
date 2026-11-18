@@ -1,4 +1,4 @@
-//! TypeScript: `packages/tui/test/ui/session-link.test.tsx`.
+//! Session links through rendered Markdown and mouse input.
 
 use crate::support::{self, DIRECTORY, Harness, Seen};
 

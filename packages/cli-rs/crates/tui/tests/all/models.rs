@@ -1,9 +1,4 @@
-//! Models and usage (E.16) over the fixture server of `parity/fixtures/E.16/server.json`:
-//!
-//! - P-COMP: each dialog against the cells `parity/component/E.16-models.tsx` wrote from the TS dialog;
-//! - P-REQ: the dialogs and commands send reads only, never `/api/experimental/session/stats`;
-//! - P-FILE: `model.json` as the TS model preference repository reads and writes it, in a temp dir;
-//! - the commands and keys through the whole TUI.
+//! Model selection and usage dialogs against recorded cells and server responses.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -89,7 +84,7 @@ impl Transport for Server {
     }
 }
 
-/// The TS fixtures render in UTC; the Rust dialogs use local time, so each `resetsAt` moves by the local offset.
+/// Shift reset times by the local offset; the fixture records them in UTC.
 fn shift_resets(value: &mut Value) {
     match value {
         Value::Object(fields) => fields.iter_mut().for_each(|(key, field)| match field.as_i64() {
@@ -241,7 +236,7 @@ fn go_upsell_art_matches_typescript_when_still() {
     );
     kit.wait_for("subscribe");
     support::wait_fixture(&kit.app, "E.16/go-upsell-art");
-    // Without 24-bit color TS draws the logo's seven full blocks as "█"; Rust cannot tell and keeps its half blocks.
+    // Without truecolor the reference uses full blocks for the logo; this renderer keeps its half blocks.
     let fixtures = opencode_parity::fixtures_dir();
     let expected = opencode_parity::Fixture::load(fixtures.join("E.16/go-upsell-art-256.json")).unwrap();
     let comparison = opencode_parity::compare(&expected, &opencode_parity::Fixture::from_capture(&kit.app.render()));
@@ -421,7 +416,6 @@ fn ctrl_f_favorites_the_selected_model() {
 fn cycle_commands_move_through_recents_favorites_agents_and_variants() {
     let h = mount();
     let local = h.tui.local.clone();
-    // F2: the first recent model, since the current one is not recent.
     h.app.press("f2");
     assert_eq!(local.current(), Some(Model::new("anthropic", "claude-haiku")));
     h.tui.keymap.dispatch("model.cycle_favorite", None);
@@ -451,9 +445,6 @@ fn ctrl_t_cycles_the_variant_and_saves_it() {
     h.wait_file(|file| file["variant"]["anthropic/claude-sonnet"] == "low");
 }
 
-// Expected: a `model.json` reload that read the file before a pending write landed does not undo the change the write
-// carries. Actual: the stale reload replaced the preferences, so a `ctrl+t` made while an earlier write's reload was
-// in flight fell back to the default variant (`high`), the `ctrl_t_cycles_the_variant_and_saves_it` flake.
 #[test]
 fn a_reload_that_read_the_file_before_a_pending_write_keeps_the_change() {
     let h = mount();
@@ -531,7 +522,7 @@ fn model_json_is_shared_with_the_typescript_client() {
             "variant": { "anthropic/claude-sonnet": "default" },
         })
     );
-    // TS writes under the same lock, and the running Rust TUI picks it up through its watcher.
+    // An independent writer uses the same lock; the TUI should pick up its update through the watcher.
     run(&oracle, &["recent", h.state.to_str().unwrap(), "openai", "gpt-5-mini"]);
     let local = h.tui.local.clone();
     let reloaded = h.app.wait_until(WAIT, || local.recent().first() == Some(&Model::new("openai", "gpt-5-mini")));

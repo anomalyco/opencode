@@ -1,5 +1,4 @@
-//! The prompt (E.2) over a fixture server that records requests: editing through the `input.*`
-//! layer, submit, queue, history, drafts, shell mode, clear, interrupt, and a new session from home.
+//! Prompt editing and submission over a request-recording transport.
 
 use crate::support::{self, Harness, WAIT, deref_harness, list};
 
@@ -490,7 +489,7 @@ fn a_failed_create_goes_home_with_the_newer_text_and_closes_its_tab() {
     let opened = setup.app.wait_until(WAIT, || setup.tui.route() == Route::Session { id: id.clone() });
     assert!(opened, "{:?}", setup.tui.route());
     setup.app.type_text("follow up");
-    // The create fails only now, so the route cannot go home before the wait above sees the session.
+    // Release the failure only after the session becomes visible.
     setup.reject.store(false, Ordering::SeqCst);
     setup.wait_for("Creating a session failed");
     let home = setup.app.wait_until(WAIT, || setup.tui.route() == Route::Home);
@@ -501,7 +500,6 @@ fn a_failed_create_goes_home_with_the_newer_text_and_closes_its_tab() {
     assert!(tabs.iter().all(|tab| tab.session_id != id.0), "{tabs:?}");
 }
 
-// `routes/session/index.tsx:350-370`: a session the server does not have closes its tab instead of staying blank.
 #[test]
 fn a_missing_session_closes_its_tab() {
     let setup = Setup::new(support::session_route("ses_gone"));
@@ -599,8 +597,7 @@ fn typescript_history(root: &Path, state: &Path, ops: Value) -> Value {
     serde_json::from_str(stdout.lines().last().unwrap_or_default()).unwrap()
 }
 
-/// P-FILE: the TypeScript TUI reads the history the Rust prompt writes, rewrites it byte for byte,
-/// and the Rust prompt reads what TypeScript appends.
+/// Check history-file interoperability in both directions.
 #[test]
 fn history_file_is_shared_with_typescript() {
     let Some(root) = support::ts_root() else { return };

@@ -35,14 +35,13 @@ mod plugin_builtins;
 mod plugin_canvas;
 mod plugin_carriers;
 mod plugin_claim;
-// The JS host's rows (TypeScript plugins): in a build with the `ts` feature only (ts-feature).
 #[cfg(feature = "ts")]
 mod plugin_compat;
-// The JS host's rows (TypeScript plugins): in a build with the `ts` feature only (ts-feature).
 mod plugin_contain;
 #[cfg(feature = "ts")]
 mod plugin_fences;
 mod plugin_fetch;
+mod plugin_field_echo;
 mod plugin_flood;
 pub mod plugin_input;
 mod plugin_limits;
@@ -52,16 +51,12 @@ mod plugin_machines;
 mod plugin_mail;
 mod plugin_manager;
 mod plugin_model;
-// The JS host's rows (TypeScript plugins): in a build with the `ts` feature only (ts-feature).
 #[cfg(feature = "ts")]
 mod plugin_npm;
-// The JS host's rows (TypeScript plugins): in a build with the `ts` feature only (ts-feature).
-mod plugin_field_echo;
 #[cfg(feature = "ts")]
 mod plugin_ownership;
 mod plugin_p0a;
 mod plugin_pending_focus;
-// The JS host's rows (TypeScript plugins): in a build with the `ts` feature only (ts-feature).
 #[cfg(feature = "ts")]
 mod plugin_pipe;
 #[cfg(feature = "ts")]
