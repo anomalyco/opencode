@@ -1,4 +1,4 @@
-//! TypeScript: `component/session-tabs.tsx:542-1273`, `component/session-tabs-rail.tsx`.
+//! Vertical session tab rail.
 
 use opencode_store::Location;
 use opencode_ui::theme::tint;
@@ -209,7 +209,6 @@ impl Component for Rail {
         let new_tab = tui.tabs.new_tab();
         let stride = self.stride(compact);
         let top = self.top(compact);
-        // Keep the active row in view, as the TS rail scrolls to it after layout.
         let viewport = (height - top).max(1);
         let active_index = if new_tab { Some(items.len()) } else { items.iter().position(|item| item.selected) };
         if let Some(index) = active_index {

@@ -1,7 +1,4 @@
-//! Queued prompts (E.10b, row V14): the dock above the prompt (`QueuedPromptDock`,
-//! `routes/session/index.tsx:2481-2514`), `session.queued_prompts` (`:1409-1415`), and the pending actions the dock,
-//! the queued prompts dialog, the pending steer dialog, and an empty submit share (`requestPending`,
-//! `mutatePending`, and `undoPending`, `:760-787`).
+//! Session inbox dock and actions on queued prompts.
 
 use opencode_api::generated::{
     SessionInboxCancelInput, SessionInboxDelivery, SessionInboxInfo, SessionInboxUpdateInput, SessionInboxUser,

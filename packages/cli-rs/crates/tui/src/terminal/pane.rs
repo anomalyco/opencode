@@ -1,11 +1,4 @@
-//! One terminal in the right pane: `component/terminal-pane.tsx`.
-//!
-//! The pane reads the terminal's snapshot, sizes the embedded terminal to the server's size, writes the snapshot's
-//! checkpoint, then connects with `takeover` from the snapshot's output tail. Output, resizes, and the end of the
-//! replay go through one queue in order, and wait while the embedded terminal is not yet at the server's size: a
-//! resize carries a checkpoint of the screen at the new size. Input waits for the replay to end. The box's own size,
-//! two columns narrower for the terminal's left offset and the scrollbar gutter, is what a controller asks the server
-//! for: a size-only frame claims control and resizes the terminal.
+//! Restore the server-sized terminal from its checkpoint before applying live output.
 
 use std::collections::VecDeque;
 

@@ -1,6 +1,4 @@
-//! The terminal's colors from the theme: `terminalPalette` (`component/terminal-pane.tsx:322-377`). The 16 ANSI
-//! colors (OSC 4) and the default foreground and background (OSC 10 and 11), written into the terminal after every
-//! checkpoint, since a reset clears them.
+//! Derive the terminal ANSI palette and default colors from the session theme.
 
 use opencode_ui::theme::{Theme, ThemeMode};
 use opentui::style::Color;

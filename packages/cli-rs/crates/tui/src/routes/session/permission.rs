@@ -1,12 +1,4 @@
-//! The permission prompt (E.9a, row V17): `routes/session/permission.tsx`, `util/permission.ts`,
-//! `context/permission.tsx`, and the session route's permission parts (`routes/session/index.tsx:207-283`,
-//! `:1615-1622`).
-//!
-//! The session route owns one [`Permission`] in the region above the prompt. A root session prompts for the
-//! first pending request of itself and its descendants; a child session for its own. The prompt hides the
-//! session prompt and the composer while it shows. Ctrl+F (`permission.prompt.fullscreen`) moves it to a full-screen overlay. In
-//! `autoaccept` mode (`session.permissions` in `cli.json`, or `--auto`) every request is answered `once`
-//! instead.
+//! Session-family permission requests and their prompt, denial, and auto-accept paths.
 
 use std::collections::HashSet;
 
@@ -165,7 +157,7 @@ impl Permission {
             *inner.family.borrow_mut() = family;
         }
         if tui.config().permissions == Permissions::Autoaccept {
-            // `prompted` is empty in this mode (`index.tsx:208-215`): a request shown before it began goes.
+            // Hide any existing prompt when entering auto-accept mode.
             if inner.shown() {
                 inner.show(tui, Prompt::Hidden);
             }
@@ -203,9 +195,8 @@ impl Drop for Permission {
     }
 }
 
-/// `useToolPermission`: whether the tool call `part` waits on the session's first pending request, so the
-/// transcript draws it in the warning color. It takes the store's state, since the transcript asks while
-/// it reads the store.
+/// Is this call waiting on the session's first permission request? Read from the supplied state so the transcript can
+/// check inside its store read.
 pub fn tool_pending(tui: &Tui, state: &State, session: &SessionID, part: &str) -> bool {
     if tui.config().permissions == Permissions::Autoaccept {
         return false;
@@ -439,7 +430,7 @@ impl Inner {
         };
         let view = self.question_view(&tui, &request, selected, expanded);
         if expanded {
-            // TS sets `top: -height + 1` from the region at the bottom of the screen, which keeps the first row.
+            // Leave the first screen row visible above the fullscreen prompt.
             view.absolute()
                 .position(Edge::Top, 1)
                 .position(Edge::Bottom, 1)

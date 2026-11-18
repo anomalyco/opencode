@@ -1,6 +1,4 @@
-//! The revert banner (E.6b): `RevertMessage` (`routes/session/index.tsx:1562-1567,2253-2333`). After `/undo` the
-//! transcript ends with how many messages were reverted, the files it changed back, and how to restore them; a click
-//! clears the revert.
+//! Show the undo boundary and changed files; clearing the revert restores the hidden messages.
 
 use opencode_api::generated::{FileDiffInfo, FileDiffInfoStatus, SessionRevertClearInput};
 use unicode_width::UnicodeWidthStr;

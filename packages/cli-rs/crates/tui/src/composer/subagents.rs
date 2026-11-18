@@ -1,4 +1,4 @@
-//! TypeScript: `routes/session/composer/subagents-tab.tsx`.
+//! Subagent tree and session selection.
 
 use opencode_api::generated::{SessionInfo, SessionInterruptInput};
 use opencode_store::SessionStatus;
@@ -26,7 +26,7 @@ pub(super) struct Entry {
 pub(super) struct State {
     entries: Vec<Entry>,
     selected: usize,
-    /// The session the selection was last centered on (`selectedSessionID`).
+    /// Session at the center of the selection.
     centered: Option<SessionID>,
     was_active: bool,
     offset: usize,
@@ -291,7 +291,7 @@ fn walk<'a>(
             format!("{lines}{}", if last { "└─ " } else { "├─ " })
         };
         out.push((session, prefix));
-        // A cycle in `parentID` would recurse forever; TS has the same walk, so stop at a session already listed.
+        // A repeated parent ID ends the walk.
         if out[..out.len() - 1].iter().any(|(seen, _)| seen.id == session.id) {
             continue;
         }

@@ -6,9 +6,7 @@ use crate::prelude::*;
 pub struct Plugin {
     root: View,
     content: Option<RouteMount>,
-    /// Not synced yet. The TUI syncs a route it has just mounted, in the same turn (`Tui::navigate`); the plugin's
-    /// content drew as it mounted, so that first sync brings nothing new (review bigboi-7: a route's first frame ran
-    /// two views).
+    /// Mount draws the plugin view. Its first sync in the same turn needs no second draw.
     fresh: Cell<bool>,
 }
 

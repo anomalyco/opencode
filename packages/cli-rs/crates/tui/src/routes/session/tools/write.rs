@@ -1,5 +1,4 @@
-//! The write tool (E.7a): `Write` (`routes/session/index.tsx:3156-3190`). Once written, the file
-//! with line numbers in a block; before that, one line.
+//! Display a completed write with its highlighted, numbered contents.
 
 use super::diagnostics;
 use super::dispatch::{

@@ -1,4 +1,4 @@
-//! TypeScript: `routes/session/composer/shell-tab.tsx`.
+//! Shell tab and its output dialog.
 
 use opencode_api::generated::{LocationQueryInput, SessionMessageShellStatus, ShellRemoveInput};
 use opencode_store::Shell;

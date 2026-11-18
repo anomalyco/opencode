@@ -1,4 +1,4 @@
-//! TypeScript: `ui/pane-resize.ts`, `ui/pane-resize-handle.tsx`.
+//! Drag handling for pane resize.
 
 use std::time::Instant;
 

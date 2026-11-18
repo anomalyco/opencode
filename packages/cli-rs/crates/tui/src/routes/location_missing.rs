@@ -1,9 +1,4 @@
-//! The session location view (E.1, row T18, `routes/session/location-missing.tsx`): when the server reports
-//! the open session's directory missing, the prompt gives way to "Session location unavailable" with one
-//! action, "Choose directory", which moves the session (`session.move`).
-//!
-//! The directory comes from the worktrees dialog (E.11b). The session route owns one [`LocationMissing`]
-//! beside its prompt and hides the prompt while [`LocationMissing::active`].
+//! Offer to move the session when the server cannot find its working directory.
 
 use opencode_api::generated::{AbsolutePath, ProjectID, SessionMoveInput, WorktreeCreateInput};
 

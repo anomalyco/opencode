@@ -1,7 +1,4 @@
-//! Errors and retries (E.6b): `ExecutionError`, the footer's error notices (`FreeLimitNotice`,
-//! `UsageLimitNotice` with `useLimitNotice`, or the plain `Error:` line), and `AssistantRetry`
-//! (`routes/session/index.tsx:1966-1973,2035-2049,2514-2566`, `component/usage.tsx:255-332`). Also the free-limit
-//! stop that restores the prompt and offers OpenCode Go (`index.tsx:646-759`).
+//! Transcript errors, usage-limit notices, retries, and free-limit prompt recovery.
 
 use std::collections::HashSet;
 
@@ -346,7 +343,7 @@ fn retry_reset(delay: Option<f64>, base: f64) -> Option<f64> {
     Some(base + delay)
 }
 
-/// The first `"key": "value"` string in `body`, as the TS regexes find it.
+/// Extract the first string value for `key` from `body`.
 fn json_string<'a>(body: &'a str, key: &str) -> Option<&'a str> {
     let needle = format!("\"{key}\"");
     let mut rest = body;
@@ -479,8 +476,7 @@ mod tests {
         assert!(far.contains(" AM") || far.contains(" PM"), "{far:?}");
     }
 
-    /// Each screen's `Date.now()` runs on the sim's fixed clock (`OPENCODE_DRIVE_NOW`). A process reads that once,
-    /// so a child of this test binary sets it.
+    /// The simulation clock reads `OPENCODE_DRIVE_NOW` once per process; set it in a child.
     #[test]
     fn screens_read_the_sim_clock() {
         const FIXED: f64 = 1_600_000_000_000.0;

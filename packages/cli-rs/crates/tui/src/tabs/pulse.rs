@@ -1,5 +1,4 @@
-//! The tab pulse (W08, `component/tab-pulse.tsx`): the running sweep, the unread glow, the edge flash, and the
-//! completion pulse under a tab. Without animations only the glow shows, held still, as in TS.
+//! Tab activity, completion, and unread indicators. With animations off, only the static glow remains.
 
 use std::time::Duration;
 
@@ -252,7 +251,7 @@ impl Pulse {
                 || self.flash.clock.is_some())
     }
 
-    /// `setEnabled`: turning off settles every stage at once; turning on resumes a running sweep where it was.
+    /// Disabling animations settles pending stages; enabling resumes the running sweep.
     pub fn set_enabled(&mut self, enabled: bool) {
         if std::mem::replace(&mut self.enabled, enabled) == enabled {
             return;

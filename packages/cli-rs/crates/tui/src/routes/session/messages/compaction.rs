@@ -1,4 +1,4 @@
-//! TypeScript: `routes/session/index.tsx:2171-2251`.
+//! Transcript rows for running, queued, and completed compactions.
 
 use opencode_api::generated::{SessionMessageCompaction, TokenUsageInfo};
 use opencode_ui::motion::Spinner;
@@ -160,8 +160,7 @@ impl Queued {
     }
 }
 
-/// The messages in row order: running compactions after the rest, since they wait for the turn
-/// (`reduceSessionRows`).
+/// Running compactions follow the other rows because they wait for the turn.
 pub fn running_last(messages: &[SessionMessageInfo]) -> impl Iterator<Item = &SessionMessageInfo> {
     let running = |message: &&SessionMessageInfo| {
         matches!(message, SessionMessageInfo::Compaction(SessionMessageCompaction::Running(_)))

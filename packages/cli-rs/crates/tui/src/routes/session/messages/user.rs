@@ -1,6 +1,4 @@
-//! User messages (E.6a): `UserMessage` (`routes/session/index.tsx:2354-2479`). The text on a raised
-//! surface behind a bar in the agent's color, its images (E.6b), then skill and file chips. A click
-//! opens E.10b's pending steer or message actions dialog.
+//! User prompts, attachments, and mention chips.
 
 use opencode_api::generated::{PromptFileSource, SessionInboxDelivery, SessionMessageUser};
 use opencode_ui::theme::ThemeMode;
@@ -50,8 +48,7 @@ impl User {
             hovering.set(hovered);
             paint_body(&body, &live.get(), hovered);
         }));
-        // A release (`onMouseUp`) opens the pending steer dialog for a prompt waiting to steer, else the message
-        // actions (E.10b); a release that ends a text selection opens neither.
+        // A release ending a selection must not open message actions.
         let id = Rc::new(RefCell::new(String::new()));
         let (weak, session, clicked) = (cx.tui.weak(), cx.session.clone(), id.clone());
         body.mouse_pointer(MousePointer::POINTER).on_mouse(move |_, event| {

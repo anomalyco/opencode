@@ -1,4 +1,4 @@
-//! TypeScript: `routes/session/index.tsx:3352-3450`.
+//! Expandable nested calls and code-mode execution results.
 
 use opencode_api::generated::SessionMessageAssistantTool;
 use opencode_ui::tool_info::{ExecuteCall, ExecuteStatus, execute_call_summary, execute_calls};
@@ -128,7 +128,7 @@ impl Execute {
             inner.output.clear();
             inner.output.visible(preview.is_some());
             for (index, line) in preview.iter().flat_map(|text| text.split('\n')).enumerate() {
-                // TS sets `paddingLeft={3}` on the text too, but Core lays a text out without it.
+                // The reference renderer ignores text padding here; pad only its container.
                 inner.output.add(
                     &Text::new(&inner.app, format!("{}{line}", if index == 0 { "↳ " } else { "  " })).fg(inner
                         .theme

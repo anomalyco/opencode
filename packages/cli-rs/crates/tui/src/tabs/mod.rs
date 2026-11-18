@@ -1,8 +1,4 @@
-//! Session tabs (E.12, rows W01, W02, W08): the state of `context/session-tabs.tsx`, its commands
-//! (`app.tsx:849-902,1317-1321`), and the strip and rail that draw it. Layout: `docs/architecture.md`.
-//!
-//! `app::Tui` holds one [`Tabs`]. `Tui::navigate` calls [`route_changed`], `Tui::sync` calls [`sync`], and
-//! `features::events` passes `session.deleted` to [`session_deleted`] first.
+//! Session tab state, persistence, and navigation.
 
 pub mod model;
 pub mod pulse;
@@ -30,8 +26,7 @@ const VIEW_RETRY_MAX_DELAY: Duration = Duration::from_secs(5);
 const PREFETCH_DELAY: Duration = Duration::from_millis(300);
 const RETAINED: usize = 3;
 
-/// `createSessionRetention` (`packages/client/src/solid/retention.ts`): the recently viewed roots, newest first,
-/// and each evicted session with its root and message count then.
+/// Recently viewed roots in recency order, plus evicted sessions with their original root and message count.
 #[derive(Default)]
 struct Retention {
     previous: Option<String>,
@@ -88,7 +83,7 @@ pub struct Tabs {
     file: RefCell<Persisted>,
     /// The revision of the latest write.
     writes: Cell<u64>,
-    /// Writes not in `tabs.json` yet, in the order they were made, with their revisions.
+    /// Outstanding `tabs.json` writes in revision order.
     pending: Arc<Mutex<Vec<(u64, Write)>>>,
     writer: std::cell::OnceCell<opencode_local::serial::Serial>,
     history: RefCell<History>,
@@ -213,9 +208,7 @@ pub fn install(tui: &Rc<Tui>) {
             }
         }));
     }
-    // Terminal focus reports set the focus. TS also counts `useKeyboard`: the keymap consumes shortcuts before
-    // it (`E.12/tab-strip` posts no `session.view` after them), but typed text reaches it (`H.5/permission-reply`
-    // posts `session.view` without a focus report).
+    // Shortcuts go through the keymap before keyboard focus tracking; typed text marks the session viewed.
     let weak = tui.weak();
     tui.app.on_key_capture(move |_, key| {
         let typed = matches!(key.code, KeyCode::Char(_))
@@ -243,8 +236,7 @@ fn load(storage: &Storage) -> Persisted {
         .unwrap_or_default()
 }
 
-/// Takes `tabs.json` as it is now. Not a write's own result: another client's write may land after it, and its
-/// reload may arrive first.
+/// Reload from disk: another client's newer write can arrive before this client's own completion.
 fn reload(tui: &Tui, storage: &Storage) {
     let mut file = load(storage);
     // Writes still waiting on the lock land over this file, so the memory copy keeps them.
@@ -330,7 +322,7 @@ pub fn route_changed(tui: &Tui) {
     tabs.history.borrow_mut().record(&root);
     if !open.iter().any(|tab| tab.session_id == root) {
         let fallback = tabs.new_tab.get().then(|| NEW_SESSION_TAB_TITLE.to_owned());
-        // `title`'s order: an untitled session's timestamped default comes after the new tab's "New session" (D131).
+        // Prefer the new-tab title to the timestamp fallback.
         let (known, timestamped) = tui.data.read(|state| {
             let info = state.session(&SessionID(root.clone()));
             (info.and_then(|info| info.title.clone()), info.map(crate::dialogs::session_list::title))
@@ -384,9 +376,7 @@ pub fn sync(tui: &Tui, changes: &Changes) {
     acknowledge(tui);
 }
 
-/// The prefetch effect (`session-tabs.tsx:285-325`): when the open tabs change or the connection comes back, reads
-/// each tab's session and children, then the info and VCS of their locations, and after [`PREFETCH_DELAY`] the
-/// transcripts, inboxes, permissions and forms of the tabs in the background, so they show their states.
+/// Prefetch tab families and location metadata when tabs change or the connection returns.
 fn prefetch(tui: &Tui, changes: &Changes) {
     if !Tabs::enabled(tui) {
         return;
@@ -438,9 +428,7 @@ fn prefetch(tui: &Tui, changes: &Changes) {
     tui.tabs.prefetch.set(Some(timer));
 }
 
-/// `createSessionRetention` with the open tabs kept (`session-tabs.tsx:140-146`): the open root, the open tabs, and
-/// the [`RETAINED`] roots viewed last keep their transcripts; every other session's are evicted. Only navigation
-/// advances recency. A session evicted already is evicted again only once a background turn refilled it.
+/// Keep transcripts for open tabs, the active root, and the most recently viewed roots; evict the rest.
 fn retain(tui: &Tui) {
     let viewed = match tui.route() {
         Route::Session { id } => Some(id.0),
@@ -675,13 +663,7 @@ fn cycle(tui: &Tui, forward: bool, unread: bool) {
     }
 }
 
-/// Applies `mutation` to the scope in memory now, and to `tabs.json` under the storage lock on one worker
-/// thread, so the writes land in the order they were made. Then the memory copy reloads the file, with the writes
-/// not in it yet replayed.
-///
-/// Each job writes every pending mutation at once. The queue is held only to copy them: a job waiting on
-/// another client's lock must not block the UI thread that queues the next one. They leave the queue once
-/// written, so a reload meanwhile replays them.
+/// Update memory immediately and serialize writes under the storage lock. Replay pending writes over a reload.
 fn update(tui: &Tui, mutation: impl Fn(&mut Scope) + Send + Sync + 'static) {
     let mutation: Mutation = Arc::new(mutation);
     let cwd = tui.tabs.cwd.borrow().clone();
@@ -746,8 +728,7 @@ fn changed(tui: &Tui) {
     track(tui);
     crate::frame::refresh(tui);
     crate::features::attention::program_status::sync(tui);
-    // The plugins read the tabs (`ui.tabs.list`), also after another client's write; and a tab opened without being
-    // shown needs its session's title and status (TS `openTabSessions`).
+    // Notify plugins of tab changes and fetch the titles and statuses of background tabs.
     crate::plugins::host::local_changed(tui);
     prefetch(tui, &Changes::default());
 }

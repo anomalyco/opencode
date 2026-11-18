@@ -1,10 +1,4 @@
-//! Exploration, reasoning, instruction, and activity groups (E.8): the grouping tree of
-//! `grouping/tree.ts` and `grouping/session.ts`, the mount budget of `mount-budget.ts`, and the group
-//! views of `group-view.tsx`.
-//!
-//! [`project`] folds the flat rows of `list::reduce` into groups by each row's path, as
-//! `projectEntries` does. A group is one transcript row; [`GroupView`] draws its header and, while it
-//! is open or not grouped, its children.
+//! Fold transcript entries into expandable exploration, reasoning, instruction, and activity groups.
 
 use std::collections::HashSet;
 

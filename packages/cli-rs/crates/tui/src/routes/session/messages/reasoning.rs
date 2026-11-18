@@ -1,4 +1,4 @@
-//! TypeScript: `message-parts.tsx:43-171`.
+//! Expandable assistant reasoning.
 
 use opencode_api::generated::{SessionMessageAssistant, SessionMessageAssistantReasoning};
 use opencode_ui::motion::Spinner;

@@ -1,6 +1,4 @@
-//! The todowrite tool (E.7b): `TodoWrite` (`routes/session/index.tsx:3636-3660`) and `TodoItem`
-//! (`component/todo-item.tsx`). Once written, the list in a block; before that, or for an empty list,
-//! one line.
+//! Todo tool summary and checklist.
 
 use opencode_ui::tool_info::{Todo as Item, TodoStatus, parse_todos, todo_marker};
 

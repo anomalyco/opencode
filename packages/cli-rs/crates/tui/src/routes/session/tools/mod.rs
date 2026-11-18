@@ -1,4 +1,4 @@
-//! Tool rows: the core tools (E.7a) and the rest (E.7b).
+//! Session tool views.
 
 pub mod diagnostics;
 pub mod dispatch;

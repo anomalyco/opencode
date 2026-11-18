@@ -1,6 +1,4 @@
-//! The edit tool (E.7a): `Edit` (`routes/session/index.tsx:3452-3514`). Once the edit has a patch,
-//! its diff in a block (split above 120 columns unless `diffs.view` says otherwise); before that, the
-//! path or "Preparing edit…".
+//! Display the edit diff when a patch is available.
 
 use opencode_local::cli_config::{DiffView as ConfigDiffView, DiffWrap};
 use opentui::widget::DiffView;

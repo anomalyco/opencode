@@ -1,6 +1,4 @@
-//! The background hint (E.6b): `BackgroundToolHint` (`routes/session/index.tsx:1897-1929`). Once a shell call of
-//! the running step has run for three seconds, the transcript ends with how to move it to the background.
-//! Subagents always run in the background.
+//! Offer to background a running shell after three seconds. Subagents already run in the background.
 
 use opencode_api::generated::{SessionMessageAssistantContentItem, SessionMessageAssistantToolState};
 use opencode_ui::tool_info::canonical_tool_name;

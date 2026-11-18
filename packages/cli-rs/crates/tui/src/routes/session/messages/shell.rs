@@ -1,7 +1,4 @@
-//! Shell messages (E.6b): `ShellMessage` through `ShellDisplay` and `BlockTool`
-//! (`routes/session/index.tsx:2335-2352,2896-2978,2996-3154`). A `!` command on a raised block: the command, its
-//! output collapsed to ten lines until a click opens it, and why it failed. While the shell runs, its output is
-//! read every second.
+//! Shell commands with their collapsible output and exit status.
 
 use opencode_api::client::Client;
 use opencode_api::generated::{
@@ -18,7 +15,7 @@ use super::list::Context;
 
 use crate::prelude::*;
 
-/// `SHELL_DISPLAY_LIMIT`: the most output kept, in UTF-16 code units from the end, and read per request.
+/// Output retention and request limit, in UTF-16 code units.
 const LIMIT: usize = 1024 * 1024;
 const MAX_LINES: usize = 10;
 
@@ -62,9 +59,8 @@ struct Read {
     timer: Option<TimerId>,
 }
 
-/// `loadBackgroundOutput` (`routes/session/index.tsx:3040-3086`): the output read so far from
-/// `GET /api/shell/{id}/output`, stripped and capped at the last [`LIMIT`] code units, starting on a whole character.
-/// Shell messages and the shell tool both read through it.
+/// Retain the tail of shell output across pages. Advance by the server cursor, not the length of the stripped display
+/// text.
 #[derive(Default)]
 pub(crate) struct Output {
     pub(crate) text: String,
@@ -128,7 +124,7 @@ impl Output {
         })
     }
 
-    /// Takes in a finished read; `true` when a drain was asked while it ran.
+    /// Append the finished read and report whether another drain is pending.
     pub(crate) fn finish(&mut self, (chunks, cursor, skipped): Pages) -> bool {
         for chunk in chunks {
             let next = strip_ansi(&format!("{}{chunk}", self.text));
@@ -518,7 +514,7 @@ mod tests {
         assert_eq!(collapsed.input, format!("{}…", "x".repeat(39)));
     }
 
-    // `tput sgr0` prints `ESC ( B ESC [ m`; TS `strip-ansi` drops both, so the output reads `okdone`.
+    // `tput sgr0` resets the character set before the SGR reset; neither sequence produces text.
     #[test]
     fn the_output_drops_a_charset_reset() {
         let mut output = Output::default();
@@ -526,8 +522,7 @@ mod tests {
         assert_eq!(output.text, "okdone");
     }
 
-    // `session-shell-output.test.tsx`: the pages come to `LIMIT + 1` code units, so the tail would start on the
-    // emoji's second half.
+    // The cap falls between the emoji's surrogate halves.
     #[test]
     fn the_retained_tail_starts_on_a_whole_character() {
         let rest = format!("{}{}", format!("{}\n", "x".repeat(1023)).repeat(1023), "x".repeat(1023));

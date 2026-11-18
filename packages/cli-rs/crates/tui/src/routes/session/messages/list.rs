@@ -1,12 +1,5 @@
-//! The transcript (E.6a): the rows of `reduceSessionRows` (`routes/session/rows.ts`), mounted tail
-//! first and windowed as `routes/session/index.tsx:418-513` does, with older pages loaded when the
-//! reader scrolls near the top.
-//!
-//! A row is one TS `SessionRow`: a message, an assistant part (text, reasoning, tool), an assistant
-//! footer, or a turn's token usage. Each row owns its widgets and updates them in place; a sync
-//! updates only the rows whose message changed. Groups (E.8) are rows too, folded by
-//! `grouping::project`. Queued inputs (E.10b) are not here yet. The background hint and the
-//! revert banner (E.6b) follow the rows.
+//! Window the transcript from the tail. A store update refreshes the rows owned by changed messages; scrolling toward
+//! the head loads older pages.
 
 use std::collections::HashSet;
 use std::hash::{DefaultHasher, Hash, Hasher};
@@ -110,16 +103,16 @@ struct Inner {
     /// Set when rows mount above the window, so the reader's rows stay in place.
     pin: RefCell<Option<Pin>>,
     loading: Cell<bool>,
-    /// How many messages were loaded when the last group-boundary page was asked for.
+    /// Message count at the last group-boundary page request.
     boundary: Cell<Option<usize>>,
     layer: RefCell<Option<Disposer>>,
     /// The settings listener, until the transcript drops.
     settings: RefCell<Option<Disposer>>,
     width: Cell<Option<u16>>,
-    /// `Viewport::Transcript` (rich plugins P3), published while the transcript lives.
+    /// Plugin viewport published for the lifetime of the transcript.
     published: RefCell<Option<opencode_plugin::behave::Publication>>,
     specs_revision: Cell<u64>,
-    /// The messages before the mounted window, for the specs' revision and the window's start it was counted at.
+    /// Number of preceding messages at this window start and revision.
     above: RefCell<Option<(u64, Start, u32)>>,
 }
 
@@ -180,7 +173,6 @@ impl Transcript {
             // that changed.
             .layout_mode(LayoutMode::List);
         let hint = Text::new(app, "Loading session history…").fg(theme.text.feedback.info.base).visible(false);
-        // `index.tsx:1573`: one row under the transcript for the history and "Jump to latest" hints.
         let status = View::new(app).row().height(1).shrink(0.0).justify(Justify::End).child(&hint);
         let root = View::new(app).column().grow(1.0).basis(Length::Auto).min_height(0).child(&scroll).child(&status);
         let background = background::Hint::new(app, &theme);
@@ -415,7 +407,7 @@ impl Transcript {
     /// Mounts [`BACKFILL_CHUNK`] rows on each side of `key` (`restoreScrollPosition`). Returns whether
     /// the row exists.
     pub fn mount_around(&self, tui: &Tui, key: &RowKey) -> bool {
-        // The rows the store holds now, which the next sync may not have rendered yet.
+        // Use the store's rows even if the next sync has yet to paint them.
         self.0.render(tui, |_| false);
         let window = {
             let specs = self.0.specs.borrow();
@@ -658,7 +650,7 @@ impl Inner {
         let stops = tui.data.read(|state| {
             let visible = Visible::of(state, &session);
             let messages = visible.messages;
-            // Queued prompts show in the dock (E.10b), not the transcript (`rows.ts:63-67`).
+            // Queued prompts belong to the dock rather than the transcript.
             let queued: HashSet<&str> = crate::routes::session::queued::ids(state, &session).collect();
             let mut rows = reduce(messages, self.view.get().turn_tokens.is_some());
             rows.retain(|spec| !matches!(spec, Spec::Message(id) if queued.contains(id.as_str())));
@@ -740,8 +732,7 @@ impl Inner {
         let keys = Keys::read(tui);
         tui.data.read(|state| {
             let visible = Visible::of(state, &session);
-            // The store may have changed since the last render (the next sync renders that), so the remembered
-            // positions can name messages it no longer shows.
+            // A stored position can refer to a message removed between renders.
             let positions =
                 visible.messages.iter().enumerate().map(|(index, message)| (message.id().to_owned(), index)).collect();
             let cx = self.context(tui, state, &visible, &keys, &positions, &paint);
@@ -1007,7 +998,7 @@ impl Inner {
     }
 
     fn follow(&self, tui: &Tui, down: bool) {
-        // Rows mounted since the last frame are not in the content's size yet.
+        // Newly mounted rows contribute to content size only after layout.
         let frame = tui.app.frame_number();
         if self.pin.borrow().as_ref().is_some_and(|pin| frame <= pin.frame + 1) {
             return;
@@ -1076,7 +1067,7 @@ struct Visible<'a> {
     session: &'a SessionID,
     info: Option<&'a SessionInfo>,
     all: &'a [SessionMessageInfo],
-    /// The messages before the revert boundary, which hides the ones after it (`rows.ts:70`).
+    /// Visible messages before the revert boundary.
     messages: &'a [SessionMessageInfo],
 }
 
@@ -1162,7 +1153,7 @@ pub struct Context<'a> {
     pub app: &'a App,
     pub theme: &'a Theme,
     pub syntax: &'a SyntaxTheme,
-    /// Reasoning's syntax: every style in `text.muted` (`thinking-syntax.ts`).
+    /// Syntax theme for reasoning text, with all tokens muted.
     pub thinking_syntax: &'a SyntaxTheme,
     pub renderers: &'a CodeBlockRenderers,
     pub claims: &'a ToolClaims,

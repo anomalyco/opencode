@@ -1,6 +1,4 @@
-//! The apply_patch tool (E.7b): `ApplyPatch` (`routes/session/index.tsx:3516-3634`). One block per
-//! patched file with its diff; when the metadata has only the applied resources, one block per
-//! resource; before either, one block that names the target while it patches or fails.
+//! Render patch metadata by file, falling back to the applied resource list.
 
 use opencode_local::cli_config::{DiffView as ConfigDiffView, DiffWrap};
 use opentui::widget::DiffView;

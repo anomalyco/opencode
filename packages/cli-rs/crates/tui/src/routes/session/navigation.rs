@@ -1,6 +1,4 @@
-//! Message navigation (E.8): next and previous message, next and previous user message, the last user
-//! message, and jumping to a message (`message-navigation.ts`, `routes/session/index.tsx:845-894,
-//! 1224-1271`).
+//! Navigate between transcript messages, loading earlier history as needed.
 
 use std::collections::HashSet;
 
@@ -98,7 +96,6 @@ impl Inner {
                         let Some(tui) = inner.tui.upgrade() else { return };
                         match result {
                             Ok(()) => after_layout(&tui.app.clone(), move || inner.to_message(&tui, next, user_only)),
-                            // TS's `prependHistory` drops it (deviation `O89-transcript-read-toast`).
                             Err(error) => tui.toasts.error(error.tui_message()),
                         }
                     }),

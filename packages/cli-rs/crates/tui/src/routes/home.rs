@@ -1,4 +1,4 @@
-//! TypeScript: `routes/home.tsx`, `component/logo.tsx`.
+//! Home route, prompt and footer.
 
 use opencode_ui::theme::tint;
 
@@ -16,7 +16,7 @@ pub struct Home {
     root: View,
     logo: View,
     prompt: crate::prompt::editor::Prompt,
-    /// The global form overlay (E.9b); while it holds the keys, the prompt must not take the focus.
+    /// A global form owns input while visible; the prompt must not take focus.
     forms: crate::features::home_forms::HomeForms,
     slot: Rc<RefCell<Rc<opencode_plugin::SlotMount>>>,
     footer: View,

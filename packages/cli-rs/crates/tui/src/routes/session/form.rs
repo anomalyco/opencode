@@ -1,12 +1,4 @@
-//! The form prompt (E.9b, rows V18 and T30): `routes/session/form.tsx` and `util/form.ts`.
-//!
-//! A tool or an MCP server asks the user to fill a form. [`FormPrompt`] shows one form, one field per tab, with a
-//! review tab before submitting. [`Host`] keeps the prompt of the first pending form in a region; the session route
-//! (above its prompt, [`SessionForms`]) and home (an overlay, `features::home_forms`) each own one. While a form
-//! shows, the keymap is in [`FORM_MODE`], so base-mode keys (the prompt's, the palette's) wait.
-//!
-//! A remount keeps the answers in progress: dropping a prompt whose form is still pending stashes its draft, and
-//! the next prompt for that form takes it, as `drafts` in TS does.
+//! Session and global forms own the input while visible. A pending form keeps its draft across remounts.
 
 use std::collections::HashSet;
 
@@ -83,8 +75,8 @@ impl Host {
     }
 }
 
-/// The session route's forms: the session's and its descendants', then the global forms of its location. A child
-/// session shows only the global ones (`routes/session/index.tsx:214-220`). A permission request comes first.
+/// Prioritize permission requests, then session-family forms, then this location's global forms. Child sessions show
+/// only global forms.
 pub struct SessionForms {
     host: Host,
     session: SessionID,
@@ -241,8 +233,7 @@ impl Drop for FormPrompt {
         for id in inner.handlers.take() {
             tui.app.remove_handler(id);
         }
-        // A reply or cancel removes the form from the store first, so a form still listed was only hidden by
-        // navigation and is worth restoring.
+        // A form still in the store can return after navigation; replying or cancelling removes it first.
         let info = &inner.form.info;
         let pending = tui.data.read(|state| {
             state

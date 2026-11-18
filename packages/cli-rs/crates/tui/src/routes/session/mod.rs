@@ -1,16 +1,4 @@
-//! The session route (T.1): the regions later steps fill (`routes/session/index.tsx`).
-//!
-//! ```text
-//! transcript    messages::list (E.6a), sticky to the bottom; a running reply shows its own progress there
-//! queued        queued::Queued (E.10b), the queued prompts dock; it hides while the composer shows
-//! composer top  the `session.composer.top` plugin slot (P.1)
-//! composer      composer::Composer (E.13b); while it shows, it replaces everything below it
-//! permission    permission::Permission (E.9a); the prompt and the composer hide while it shows
-//! form          form::SessionForms (E.9b); after a permission request, and it hides the prompt too
-//! prompt        prompt::editor::mount (E.2)
-//! ```
-//! The column is the session pane of `frame::SessionFrame` (E.12); TS has no session header, the title shows
-//! in the tab strip. The sidebar (E.14) mounts beside the column.
+//! Session route: transcript, docks, prompts, and sidebar.
 
 pub mod actions;
 pub mod form;
@@ -141,9 +129,7 @@ impl RouteView for Session {
     }
 
     fn sync(&self, tui: &Tui, changes: &Changes) {
-        // A full sync (a reconnect) reads again what the store invalidated, as TS does when the connection
-        // turns connected (`routes/session/index.tsx:339-347`, `routes/session/rows.ts:123-129`): events
-        // lost with the old stream would otherwise stay missing. Reads still valid return at once.
+        // Reconnect invalidates cached reads because the client can miss events while disconnected.
         if changes.all {
             form::quiet(tui, tui.data.session_sync(&self.id, true));
             form::quiet(tui, tui.data.message_sync(&self.id));
@@ -211,8 +197,7 @@ fn composer_slot(tui: &Tui, parent: &View, id: &SessionID) -> opencode_plugin::S
     )
 }
 
-/// Awaits the transcript's first read; a failure shows the error's message as a toast, where TS shows nothing
-/// (deviation `O89-transcript-read-toast`).
+/// Await the initial transcript read and toast its error.
 fn load(tui: &Tui, task: Task<()>) {
     tui.app.spawn(
         task,
@@ -251,9 +236,7 @@ fn prewarm(tui: &Tui, id: &SessionID, task: Task<()>) {
     });
 }
 
-/// Awaits the session's read (`routes/session/index.tsx:340-370`). A failure shows as an error toast; a session the
-/// server does not have closes its tab, or goes home with tabs off, while it is still open. A transport error keeps
-/// it: TS reads only while connected.
+/// Load the session. A missing session closes its tab, or returns home when tabs are off.
 fn missing(tui: &Tui, id: &SessionID, task: Task<()>) {
     let id = id.clone();
     tui.app.spawn(

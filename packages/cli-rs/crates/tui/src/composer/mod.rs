@@ -1,11 +1,5 @@
-//! Composer tabs (E.13b, row V20): `routes/session/composer/index.tsx` and its tabs.
-//!
-//! The composer takes the prompt's place under the transcript: a raised panel with the Subagents, Shell, and (while
-//! the server offers terminals) Terminals tabs. `session.child.first` (Down on an empty prompt) opens it on the
-//! Subagents tab, `terminal.select` on the Terminals tab, and a child session shows it instead of a prompt. A prompted
-//! permission request hides it, whatever opened it. While it is
-//! open it pushes the `composer` input mode: Left and Right switch tabs, Escape and Ctrl+C close it (a child session
-//! goes to its parent instead), and each tab binds its `composer.*` commands.
+//! Session composer tabs for subagents, shells, and terminals. The open composer owns the input until a permission
+//! prompt takes it.
 
 mod shell;
 mod subagents;

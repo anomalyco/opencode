@@ -1,6 +1,4 @@
-//! Images in the transcript (E.6b): `SessionImages` (`routes/session/index.tsx:2651-2725`) on opentui-rust's
-//! `ImageView`. With `session.image_preview` on, a user message or tool result shows up to three images side by side,
-//! then `+N more`. A `data:` URI decodes in place; a `media:<hash>` ref reads its bytes from the server once.
+//! Image previews for user messages and tool results. Inline data decodes locally; media references fetch by hash.
 
 use opencode_api::generated::{
     ExperimentalMediaGetInput, MediaHash, PromptFileAttachment, PromptFileSource, SessionMessageAssistantTool,
@@ -186,7 +184,7 @@ pub fn tool_images(tool: &SessionMessageAssistantTool) -> Vec<String> {
         .filter_map(|item| match item {
             ToolContent::File(file)
                 if file.mime.starts_with("image/")
-                    // An emptied `data:` URI is a payload the store dropped while previews were off.
+                    // An empty data URI marks a payload discarded while previews are off.
                     && ((file.uri.starts_with("data:image/") && !file.uri.ends_with(','))
                         || media_hash(&file.uri).is_some()) =>
             {

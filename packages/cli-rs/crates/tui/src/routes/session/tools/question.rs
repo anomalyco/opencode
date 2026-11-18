@@ -1,7 +1,4 @@
-//! The question tool (E.7b): `Question` (`routes/session/index.tsx:3662-3696`). Once answered, each
-//! question and its answer in a block; before that, one line with the count.
-//!
-//! The row only shows the call. The user answers in the question form, which is E.9b's.
+//! Show pending and answered questions in the transcript. The separate form collects answers.
 
 use super::dispatch::{Block, BlockTool, Header, Inline, InlineTool, Props, content_width};
 use crate::prelude::*;

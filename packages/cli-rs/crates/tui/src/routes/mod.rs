@@ -1,4 +1,4 @@
-//! Routes (T.1, row T01): `home`, `session`, and `plugin` (`context/route.tsx`).
+//! Home, session, and plugin route views.
 
 pub mod home;
 pub mod location_missing;
@@ -24,8 +24,7 @@ pub trait RouteView {
     fn focus_target(&self) -> Option<AnyWidget> {
         None
     }
-    /// Takes the page theme after a theme switch in place, as TS's views follow their theme: every widget keeps its
-    /// state, the focus and the scroll positions. Returns false, by default, when the view must mount again instead.
+    /// Apply the page theme without losing focus, scroll position, or widget state. Return false to request a remount.
     fn restyle(&self, _tui: &Tui) -> bool {
         false
     }

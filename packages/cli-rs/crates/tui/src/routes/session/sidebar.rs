@@ -1,11 +1,4 @@
-//! The session sidebar (E.14, row V19, `routes/session/sidebar.tsx`, `component/session-frame.tsx:106-130,
-//! 325-397`): the title, the `sidebar.content` slot in a scroll box, and the `sidebar.footer` slot, on the
-//! raised background, 42 columns wide.
-//!
-//! It is the frame's right pane while the terminal is wider than 120 columns beside the tab rail, and an
-//! overlay over a dimmed session otherwise. `session.sidebar` in `cli.json` (`auto` or `hide`) decides
-//! whether it shows by itself; `session.sidebar.toggle` (`<leader>b`) writes it and opens or closes it. A child
-//! session never shows it. An open panel takes the right pane instead.
+//! Sidebar content and footer slots for the current session.
 
 use opencode_local::cli_config::Sidebar as SidebarSetting;
 use opencode_plugin::{SlotInput, SlotMount, slot};
@@ -28,7 +21,7 @@ struct Inner {
     overlay: View,
     content: View,
     footer: View,
-    /// The `sidebar.content` and `sidebar.footer` slots, mounted while the sidebar shows (TS `<Show>`).
+    /// Keep claims mounted only while the sidebar is visible.
     slots: RefCell<Vec<SlotMount>>,
     open: Cell<bool>,
     placed: Cell<Place>,
