@@ -1,6 +1,6 @@
-//! One activation of a plugin of the one API (O-67), on either path: the claims and routes it has mounted, which the
-//! host renders again with [`abi::Changed::woken`] when the plugin's thread wakes it, and after each of its commands
-//! and event handlers, whose state a render may show.
+//! One activation of a plugin of the one API, on either path: the claims and routes it has mounted, which the host
+//! renders again with [`abi::Changed::woken`] when the plugin's thread wakes it, and after each of its commands and
+//! event handlers, whose state a render may show.
 
 use std::cell::{Cell, RefCell};
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -46,7 +46,7 @@ pub(crate) struct Activation {
     on_message: RefCell<Option<Deliver>>,
     /// Fails the plugin after a thread of it panicked.
     on_panic: RefCell<Option<Report>>,
-    /// What holds input for it: its mounts and itself (P2). They end with it.
+    /// What holds input for it: its mounts and itself. They end with it.
     owners: RefCell<Vec<Weak<crate::interact::Owner>>>,
     /// A wake of the plugin's waker waits for its wake handlers, which run once the messages put in before it are
     /// handed over, and before those put in later: the place it took in the mailbox.
@@ -55,8 +55,8 @@ pub(crate) struct Activation {
     monitor: RefCell<Option<(Rc<crate::contain::Monitor>, crate::contain::Slot)>>,
     /// Its timers that wait (2.3), at most [`abi::MAX_TIMERS`]: the app's timer of each, by request.
     scheduled: RefCell<std::collections::HashMap<abi::RequestId, TimerId>>,
-    /// Its commands, by name, and whether each is enabled now (contract ergonomics 2.5): as its manifest listed them,
-    /// then as [`abi::Host::set_enabled`] set them.
+    /// Its commands, by name, and whether each is enabled now: as its manifest listed them, then as
+    /// [`abi::Host::set_enabled`] set them.
     commands: RefCell<std::collections::HashMap<String, bool>>,
 }
 
@@ -274,9 +274,9 @@ impl Activation {
     }
 
     /// The scheduler's drain takes the wake, as the plugin's first turn in it starts: until then the wake stays
-    /// pending, so a thread's sends and replaces post no other and wake the UI thread once a drain at most (review
-    /// carbon 4.2). A send or a wake from now on posts another once no `Woken` is on its way, so none is lost between
-    /// what this one sees and what it handles.
+    /// pending, so a thread's sends and replaces post no other and wake the UI thread once a drain at most. A send or
+    /// a wake from now on posts another once no `Woken` is on its way, so none is lost between what this one sees and
+    /// what it handles.
     pub(crate) fn take_wake(&self) {
         let hinted = self.wake.consume();
         between(0);
@@ -294,7 +294,7 @@ impl Activation {
             return Step::Idle;
         }
         // A thread's report, or a wake, goes before the messages put in after it, so a thread that sends as fast as
-        // the updates run does not hold either back (review bigboi 8).
+        // the updates run does not hold either back.
         let message = self.mailbox.take_one(self.hinted.get());
         between(1);
         if let Some(message) = message {
@@ -332,8 +332,8 @@ impl Activation {
         if let Some((id, news)) = monitor.backlog(slot, self.mailbox.full(), self.mailbox.stats().refused) {
             crate::defer(&self.host, move |host| host.slow(&id, &news));
         }
-        // The paints close the frames, which tell the plugin list of each change the backlog makes to slow, also
-        // once it ends with no mail to say so (review carbon-12).
+        // The paints close the frames, which tell the plugin list of each change the backlog makes to slow, also once
+        // it ends with no mail to say so.
         if monitor.open_over() && monitor.wants_close() {
             crate::close_at_paint(&self.host, &monitor);
         }

@@ -1,32 +1,7 @@
-//! The conformance suite of the plugin C ABI (Pc, `rich-plugins/synthesis.md` 4.6 and 4.14): golden transcripts of
-//! every request and reply that the host and a library exchange through the C ABI in a scripted session.
-//!
-//! A transcript is recorded from the reference, the conformance plugin of `examples/conformance`, linked into the
-//! loader's tests and called through the C ABI's byte shims. It is then checked on both sides of the C ABI:
-//!
-//! - **The host side.** The host runs the same script against a plugin that answers from the transcript; what the host
-//!   sends and shows must equal the transcript. So a host change that changes the C ABI changes a transcript, and a
-//!   transcript change without a host change fails.
-//! - **The library side** ([`replay`], `plugin test --conformance`). A host that sends the transcript's requests and
-//!   answers its host requests drives a library; what the library answers and asks must equal the transcript. The
-//!   library is the reference built as a `cdylib`, or the same plugin written in C against `opencode_plugin.h`.
-//!
-//! Each side also runs as a later minor of the other ([`replay`]'s `future`; the host side in the tests): fields and
-//! requests it does not know must change nothing.
-//!
-//! What crosses on the UI thread is seen through a tap the loader calls ([`Event`], [`watch`]). The same tap feeds
-//! [`Protocol`], the C ABI's machine as `opencode_plugin.h` states it, which the models of the plugin tests run under.
-//!
-//! What a transcript holds, and how it compares:
-//!
-//! - Bytes the host sends are kept as JSON values, and compare exactly, but for two numbers the host draws from
-//!   process-wide counters: a mount's `generation`, numbered by first appearance, and the content handles, counted from
-//!   the first `next` of the transcript ([`Normal`]).
-//! - Bytes the library sends are kept as the host reads them: decoded with the host's own types and written again, so
-//!   field order, white space, defaults left out and fields the host does not know do not count, and everything the
-//!   host reads does ([`canonical`]).
-//! - A status compares exactly, and so does the text of an error or a panic, which the user reads in the plugin manager.
-//! - Calls of the plugin's own threads are not in it: their order is the scheduler's.
+//! Records ABI calls from a reference plugin, then replays both sides independently. Host requests and observed UI
+//! state must match the transcript. Library replies compare as decoded values: omitted defaults and unknown fields
+//! do not alter the verdict. Normalize process-wide mount generations and content handles by first appearance.
+//! Unordered worker-thread calls are outside the transcript.
 
 #![allow(unsafe_code)]
 
@@ -141,20 +116,20 @@ pub enum Step {
     },
     /// Closes the route, the claimed call, or the Markdown.
     Close,
-    /// The user presses `key` (P2), as the keymap names one (`ctrl+g`); what its handler asked for applies after it.
+    /// The user presses `key`, as the keymap names one (`ctrl+g`); what its handler asked for applies after it.
     Press {
         key: String,
     },
-    /// The user pastes `text` (P2).
+    /// The user pastes `text`.
     Paste {
         text: String,
     },
-    /// The user clicks the screen cell at `x`, `y` (P2): a press and a release.
+    /// The user clicks the screen cell at `x`, `y`: a press and a release.
     Click {
         x: u16,
         y: u16,
     },
-    /// A select runs the plugin's search `name` for `query` over `options` (P2); what it answers is recorded as seen.
+    /// A select runs the plugin's search `name` for `query` over `options`; what it answers is recorded as seen.
     Search {
         name: String,
         query: String,
@@ -165,7 +140,7 @@ pub enum Step {
     /// The user disables the plugin, or enables it again.
     Disable,
     Enable,
-    /// The plugin list changed (P6b): the host tells the plugins that hear it.
+    /// The plugin list changed: the host tells the plugins that hear it.
     Plugins,
     /// The theme's mode, `dark` or `light`.
     Mode {
@@ -444,9 +419,9 @@ pub enum Kind {
     View,
     Render,
     Fence,
-    /// A canvas's list (P5): bytes, not JSON.
+    /// A canvas's list: bytes, not JSON.
     Draw,
-    /// What a `layout` returns (P3).
+    /// What a `layout` returns.
     Layout,
     /// What a renderer claim's view returns (Pr): a tree as a view's, or none.
     Claim,
@@ -617,8 +592,7 @@ pub fn diff(expected: &[Entry], got: &[Entry]) -> Option<String> {
 
 // The protocol machine.
 
-/// The C ABI's machine as `opencode_plugin.h` states it, fed the tap's events (4.14, "every model again through the
-/// transcripts"). It is written from the header, not from the loader:
+/// Checks ABI lifecycle and request ordering against the C header.
 ///
 /// - At most one call into a library runs, and the host is not entered again from it: no call starts while one runs.
 /// - The host table's `call` and `theme_mode` answer inside a call of the host's (they are the UI thread's), never
@@ -630,7 +604,7 @@ pub fn diff(expected: &[Entry], got: &[Entry]) -> Option<String> {
 /// - A message goes only to an instance whose manifest takes messages; a view only of a
 ///   surface the manifest lists, and of no mount that ended; a draw or a layout only of a surface that declares one;
 ///   input only to a surface with a handler or a layer of the manifest; a claim's view and a search only of what the
-///   manifest declares; a change of the plugin list (P6b) only to an instance whose manifest hears it.
+///   manifest declares; a change of the plugin list only to an instance whose manifest hears it.
 /// - A render, a view, a claim's view, a draw, a layout or a search reads only: every request of it that asks for
 ///   something is answered `ERROR`.
 /// - Every request is one the contract names, and so is every host request ([`EFFECTS`], [`READS`]).

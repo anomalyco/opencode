@@ -1,10 +1,5 @@
-//! The keyed reconcile (synthesis 3.4, P1): a tree a plugin returns is adopted into the widgets of the tree before it,
-//! not mounted again. A node whose id and kind stay keeps its widget, and the host writes only what changed; a
-//! [`Node::Keep`] adopts the subtree last mounted under that id as it is. A tree that breaks the contract (an id twice,
-//! a keep of an id the host does not hold, content the mount does not have) is refused whole and changes nothing.
-//!
-//! Every widget the reconcile creates, removes, writes or moves is counted in [`work`], per thread and outside any
-//! mount, so a test can bound the work of a revision whatever replaced the mount.
+//! Reconciles keyed plugin trees with mounted widgets. Matching keys and kinds retain widget state. A keep reuses
+//! the last accepted subtree; an invalid tree is refused as a whole.
 
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
@@ -167,8 +162,8 @@ pub enum Refused {
     /// A size in percent that is not a finite number of 0 or more, which OpenTUI's layout refuses with an error that
     /// ends the TUI.
     Number,
-    /// A node with state, verbs or events without an id (synthesis 4.2): a scroll, a canvas, a list or its item, an
-    /// input, an anchor, a split, a diff with hunks. Without one another node's state could pass to it.
+    /// A node with state, verbs or events without an id: a scroll, a canvas, a list or its item, an input, an anchor,
+    /// a split, a diff with hunks. Without one another node's state could pass to it.
     Unkeyed,
     /// A split on a box that is not a row: the user drags the width of its first child.
     Split,
@@ -254,7 +249,7 @@ pub struct Tree {
 }
 
 /// What a keep of an id of the tree stands for, as validation admitted its nodes: a keep is admitted as the subtree it
-/// stands for would be (reviews bigboi 5, carbon 1).
+/// stands for would be.
 #[derive(Clone, Debug, Default)]
 struct Admitted {
     /// The ids of nodes past the tree's nodes or rows, whose subtree no widget holds: one a placeholder took, one in
@@ -266,8 +261,8 @@ struct Admitted {
     rows: HashMap<String, u64>,
     /// The ids whose subtree holds a fence node, kept subtrees and list items' data included: how many, and the
     /// nearest id above that holds them too. A keep of an id counts them as its spelled-out subtree would, and carries
-    /// the entries under it, so a later keep of one of them counts it still (bigboi's reviews of contract 2.x). Only
-    /// a tree's one fence node and the ids above it have an entry.
+    /// the entries under it, so a later keep of one of them counts it still. Only a tree's one fence node and the ids
+    /// above it have an entry.
     fences: HashMap<String, (u32, Option<String>)>,
 }
 
@@ -297,8 +292,7 @@ pub(crate) struct Mounted {
     pub extra: Extra,
     /// It or a node under it shows a tool call's output, which the host reads again each revision.
     dynamic: bool,
-    /// The node that reads a tool call's output this placeholder stands for: a keep reads the output again
-    /// (review bigboi 4).
+    /// The node that reads a tool call's output this placeholder stands for: a keep reads the output again.
     stood: Option<Box<Node>>,
 }
 
@@ -352,11 +346,8 @@ type Edits = Rc<RefCell<std::collections::VecDeque<(u64, String)>>>;
 /// The `seq` of the last edit reported by any field: an edit's number is the field's own across a field built again.
 static EDITS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// Whether `value`, which a tree gives a field made after its plugin heard edit `seen` (`None`: every edit reported),
-/// is that edit's echo: the plugin catching up with the user, over the pipe in a tree made before the keys that
-/// followed came (`P.8/session-manager`'s search lost letters). An echo answers the edits up to it, which go from
-/// `edits`; the ones after it are what the user typed since, and stay. A value the edit did not have is the plugin's
-/// own, also when an older edit had it (carbon cf-2: a clear to `""` after a backspace to `""`), and replaces the text.
+/// A tree may echo an edit before it receives later keystrokes. Acknowledge the prefix through `seen` and preserve
+/// newer local edits. A value that differs from the acknowledged edit is an explicit replacement.
 fn echo(edits: &mut std::collections::VecDeque<(u64, String)>, value: &str, seen: Option<u64>) -> bool {
     let Some(heard) = seen.or_else(|| edits.back().map(|(seq, _)| *seq)) else { return false };
     if !edits.iter().any(|(seq, text)| *seq == heard && text == value) {
@@ -500,7 +491,7 @@ impl Tree {
 
     /// `nodes`, which the last apply adopted, as it adopted them: each node over a limit is its placeholder, and the
     /// nodes a placeholder stands for are gone. An owner keeps this, not the tree it was offered, so what a limit
-    /// refused is not held (review bigboi 5).
+    /// refused is not held.
     pub fn admitted(&mut self, mut nodes: Vec<Node>) -> Vec<Node> {
         let over = std::mem::take(&mut self.over);
         if !over.is_empty() {
@@ -584,8 +575,8 @@ impl Tree {
         });
     }
 
-    /// Whether nothing in the tree shows what the host reads again each revision (a tool call's output): a keep of
-    /// its root then changes nothing, and the host may skip the pass (P6a).
+    /// Whether nothing in the tree shows what the host reads again each revision (a tool call's output): a keep of its
+    /// root then changes nothing, and the host may skip the pass.
     pub fn is_static(&self) -> bool {
         !self.nodes.iter().any(|node| node.dynamic)
     }
@@ -636,8 +627,8 @@ impl Tree {
     }
 
     /// Shows in the tree's inputs what the user typed into them before their widgets went, taking it from `drafts`:
-    /// where the tree gives the input the value the draft was typed over. A new value replaces the text, as it does
-    /// in a mounted input (review carbon-11).
+    /// where the tree gives the input the value the draft was typed over. A new value replaces the text, as it does in
+    /// a mounted input.
     pub(crate) fn restore_drafts(&self, drafts: &mut Drafts) {
         if drafts.is_empty() {
             return;
@@ -728,8 +719,8 @@ impl Tree {
         best.map(|(_, id)| id)
     }
 
-    /// The ids of the boxes and the fields that can take the focus, in the mounted items of lists too: none in a hidden box, which
-    /// OpenTUI focuses not (review carbon-5).
+    /// The ids of the boxes and the fields that can take the focus, in the mounted items of lists too: none in a
+    /// hidden box, which OpenTUI focuses not.
     pub fn focusable(&self) -> Vec<String> {
         let field = crate::loader::native::serves(abi::FOCUS_INPUT);
         fn walk(nodes: &[Mounted], field: bool, out: &mut Vec<String>) {
@@ -882,7 +873,7 @@ impl Tree {
                             return Err(Refused::Unknown(key.clone()));
                         }
                         // What the tree holds under the id, as it holds it, with the tool call outputs under it as
-                        // they are now: one admitted otherwise than it shows asks for a whole tree (review bigboi 4).
+                        // they are now: one admitted otherwise than it shows asks for a whole tree.
                         let mut rows = self.tree.admitted.rows.get(key.as_str()).copied().unwrap_or(0);
                         if let (true, None) = (built, missing)
                             && let Some(kept) = find(&self.tree.nodes, key).filter(|kept| kept.dynamic)
@@ -1257,11 +1248,11 @@ struct Cost {
     hunks: u64,
 }
 
-/// The bytes of a node's text that cost the host a row, however its lines break: a line of 1 MiB wraps and lays out
-/// as about 1,024 rows do (review carbon 2.3; `steps/plugins-pl.md`, 4 ms for a text of 1 MiB).
+/// The bytes of a node's text that cost the host a row, however its lines break: a line of 1 MiB wraps and lays out as
+/// about 1,024 rows do.
 const ROW_BYTES: u64 = 1024;
-/// What a patch's hunk costs the host, in rows: each is a diff view of its own, with its code views, and costs about
-/// what 30 texts do (`steps/plugins-pl.md`, the probe of `plugin_limits.rs`).
+/// What a patch's hunk costs the host, in rows: each is a diff view of its own, with its code views, and costs
+/// about what 30 texts do.
 const HUNK_ROWS: u64 = 30;
 /// What a line of code costs the host, in rows: its first frame highlights it.
 const CODE_ROWS: u64 = 2;
@@ -1316,7 +1307,7 @@ pub struct Measure {
     pub chunked: bool,
 }
 
-/// What `text` costs: past one node's text it is not read (review bigboi 2), else it is, and counted.
+/// What `text` costs: past one node's text it is not read, else it is, and counted.
 pub fn measure(text: &str) -> Measure {
     let bytes = text.len() as u64;
     if bytes > limits::get().text {
@@ -1330,7 +1321,7 @@ pub fn measure(text: &str) -> Measure {
 }
 
 /// What a mount's content costs, by handle: content never changes, so each handle's bytes are read once a mount, and
-/// those past one node's text never (review bigboi 2).
+/// those past one node's text never.
 #[derive(Default)]
 pub(crate) struct Measures(RefCell<HashMap<ContentRef, Measure>>);
 
@@ -1594,8 +1585,7 @@ impl Pass<'_, '_> {
                         if let (Some(cell), Some(next)) = (click, click_of(new)) {
                             *cell.borrow_mut() = next.clone();
                         }
-                        // Shown or hidden on the widget it has: its children, and the claims a slot of it put in
-                        // it, stay where they are (P6a review, big-boi).
+                        // Hiding a widget preserves its children and mounted slot claims.
                         if old.node.is_hidden() != new.is_hidden() {
                             view.visible(!new.is_hidden());
                         }
@@ -2084,8 +2074,8 @@ impl Pass<'_, '_> {
             (Node::Code { .. }, Extra::Code(code, _)) => {
                 code.fg(theme.text.base).line_number_fg(theme.text.muted).syntax_theme((*self.syntax()).clone());
             }
-            // Under a keep too: the code view in it is the host's, which restyles with its fence (carbon c2a-3), its
-            // code on the fence's new background as a fresh build puts it (carbon c2d-3).
+            // Under a keep too: the code view in it is the host's, which restyles with its fence, its code on the
+            // fence's new background as a fresh build puts it.
             (Node::Fence { bg: Some(bg), .. }, Extra::Fence(view)) => {
                 view.bg(fill(theme, Some(bg)));
                 if let Some(fence) = self.env.fence {
@@ -2189,7 +2179,7 @@ impl Pass<'_, '_> {
                 if *row {
                     view.row();
                 }
-                // P6c: a sticky box paints over the siblings it is pinned above, as CSS's sticky stacks.
+                // a sticky box paints over the siblings it is pinned above, as CSS's sticky stacks.
                 if sticky.is_some() {
                     view.z_index(1);
                 }

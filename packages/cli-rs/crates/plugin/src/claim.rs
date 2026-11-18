@@ -1,39 +1,5 @@
-//! The host's side of renderer claims ([`abi::claim`], synthesis 4.11, phase Pr): each part a claim draws is a
-//! [`Mount`] of its own, with a generation, a reconciled tree ([`Tree`]), and the content and memo values its views
-//! gave. The owner of the part asks [`Mount::show`] with each revision of the part, and draws its own row whenever
-//! that says no: a tool row draws the host's view of the call, and a fence the claim took keeps its block and shows
-//! the host's code view in it.
-//!
-//! The claim shows a part only while its view accepts it. The host's own row comes back:
-//!
-//! - for a revision the view declines (returns `None`);
-//! - once a view of it took longer than the overrun limit, or returned a tree the host refused (a keep the host does
-//!   not hold is asked for once more as a whole tree, any other refusal is the plugin's error): for the rest of the
-//!   part's mount, which a remount ends, and for a fence a new theme too, as Markdown builds the block again;
-//! - for every part of the plugin, once a view panicked: the plugin fails, and the host mounts the route again
-//!   without its claims, as it does when the user disables or reloads it.
-//!
-//! A view on the pipe answers after the frame (contract 2.x, step D): it says "not yet" ([`Viewed::Pending`]), what
-//! shows stays (the host's row for a part's first view), and the tree is taken in a later view, which the JS host's
-//! answer asks for by waking the plugin's parts; a view at a paint that takes it swaps the rows as below.
-//!
-//! A revision that changes the part's phase ([`abi::claim::Phase`]) is viewed at once, as is a part's first. One that
-//! only streams new content is viewed as the next paint starts, with the newest content then, and the row that shows
-//! stays until then; a wake of the plugin or a handler of it that ran before that paint joins that one view, which
-//! sees the plugin's state as it is then (final re-review big-boi 12). So a part gets at most one view a frame while it
-//! streams, besides its first, a phase change and the whole tree asked for after a refusal, and what changed before a
-//! paint shows in that paint. A view at the paint that changes which row shows the part tells the owner
-//! ([`Mount::on_switch`]), which swaps its rows in that paint.
-//!
-//! A theme change restyles a tool call's tree in place with no call, unless the claim reads the palette: then it is
-//! viewed again, also where it declined the revision. Markdown builds a claimed fence again in the new theme, once for
-//! each style it sets: the claim takes the last build only, so a fence is a new mount and gets one view.
-//!
-//! What a part holds is its plugin's, as a surface's mount (review bigboi 1, carbon-3): its nodes, its content and its
-//! decoded images are charged to the plugin and to the total ([`crate::limits`]), content past the plugin's share is
-//! not kept, an image decodes on a worker within its reservation and goes with its content's release, and the host's
-//! work for the part is the plugin's host time. Over a limit a node is a placeholder, as in a surface; only a fault of
-//! the view itself falls the part back.
+//! Each claimed transcript part owns a mount, its widgets and its content handles. If the plugin declines the part
+//! or fails, the transcript shows the host renderer.
 
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
@@ -88,7 +54,7 @@ pub(crate) enum Viewed {
     Overran,
     /// It panicked, its result was refused, or its plugin is no longer called.
     Failed,
-    /// Not yet: the view answers after the frame, and what shows stays until it does (the pipe's, contract 2.x, step D).
+    /// The asynchronous view has no reply yet; keep displaying the previous result.
     #[cfg_attr(not(feature = "ts"), allow(dead_code))]
     Pending,
 }
@@ -200,7 +166,7 @@ pub(crate) struct Registered {
     plugin: Rc<str>,
     /// Times the host's own work for its parts' nodes, as the plugin's host time.
     host_time: HostTime,
-    /// What a claim's view holds of the input (P2): its plugin's activation's, as a claim has no handler of its own.
+    /// What a claim's view holds of the input: its plugin's activation's, as a claim has no handler of its own.
     input: Rc<crate::interact::Owner>,
     viewer: Rc<dyn Viewer>,
     /// Draws the plugin's parts again when it is woken or a handler of it ran.
@@ -587,7 +553,7 @@ impl Core {
         let part = self.part.borrow().clone().expect("a part to view");
         let width = self.input_width();
         self.width.set(width);
-        // Only a claim that declares the palette gets it, as a surface (P4): it is most of a request's bytes.
+        // Only a claim that declares the palette gets it, as a surface: it is most of a request's bytes.
         let palette = match self.claim.entry.palette {
             true => self.claim.palette(host, theme),
             false => v2::Palette::default(),
@@ -694,8 +660,8 @@ impl Core {
             _ => None,
         };
         let fence: Option<&dyn Fn(Option<Color>) -> Option<AnyWidget>> = code.is_some().then_some(&fence_view);
-        // A claim has no draw call (P5): a canvas in its tree draws nothing. It has no handler (P2): a box's pointer
-        // and hover events reach none, and its clicks run through `act` (P1).
+        // A claim has no draw call: a canvas in its tree draws nothing. It has no handler: a box's pointer and hover
+        // events reach none, and its clicks run through `act`.
         let env = Env {
             host,
             theme,
@@ -788,19 +754,18 @@ impl Shows for Core {
 /// A wake of the plugin, or a handler of it that ran, draws the part again: the plugin's own state may have changed
 /// what its view returns. A part the host's row shows for the rest of its mount is not asked. A part viewed in this
 /// frame already, by a revision or another wake, is viewed at the next paint with what is newest then, as a revision
-/// that streams is (review bigboi 12): one view a frame, whichever way it is asked for. A part whose view waits for
-/// the paint already gets the plugin's change there. A handler that ran between paints is viewed as the next paint
-/// starts, as a streaming revision is, so the two share one view in the first paint in either order; a wake drained
-/// at a paint's start is viewed at once, in that paint.
+/// that streams is: one view a frame, whichever way it is asked for. A part whose view waits for the paint already
+/// gets the plugin's change there. A handler that ran between paints is viewed as the next paint starts, as a
+/// streaming revision is, so the two share one view in the first paint in either order; a wake drained at a paint's
+/// start is viewed at once, in that paint.
 impl Drawn for Core {
     fn woken(&self, host: &dyn Host) {
         // A view that waits for the paint sees the plugin's state then.
         if self.fallen.get() || self.part.borrow().is_none() || self.waiting.get() {
             return;
         }
-        // Between paints a handler's change waits for the next one too, so a revision that streams before then joins
-        // that one view, whichever came first (re-review final pass, big-boi 12). A wake's drain is the paint's start
-        // already: a view now lands in that paint.
+        // Coalesce handler and streaming revisions until paint. Draining a wake at paint can update the view
+        // immediately.
         if !crate::schedule::draining() || self.viewed.get() == Some(host.app().frame_number()) {
             if let Some(core) = self.this.upgrade() {
                 core.wait();
@@ -953,8 +918,7 @@ struct FenceCode {
     app: App,
     holder: View,
     look: RefCell<(Theme, bool)>,
-    /// The background its code is on: a fence node's (TS's `defaultRender().bg`, contract 2.x, step D: good-fences
-    /// moves it onto its box's), else the transcript's.
+    /// Use the fence node’s background if specified; otherwise inherit the transcript background.
     bg: Cell<Option<Color>>,
     code: RefCell<Option<Code>>,
 }
@@ -1026,9 +990,9 @@ impl FenceCode {
 }
 
 /// A fence's delimiter that no line of `code` closes early, per CommonMark: backticks one longer than its longest run
-/// of them, at least three; tildes so for an `info` that holds a backtick, which a backtick fence's may not (carbon
-/// c2a-2). OpenTUI's block does not say which delimiter opened the fence; this is it whenever that was three backticks
-/// and the code holds no such run.
+/// of them, at least three; tildes so for an `info` that holds a backtick, which a backtick fence's may not. OpenTUI's
+/// block does not say which delimiter opened the fence; this is it whenever that was three backticks and the code
+/// holds no such run.
 fn delimiter(info: &str, code: &str) -> String {
     let mark = if info.contains('`') { '~' } else { '`' };
     let longest = code.split(|c| c != mark).map(str::len).max().unwrap_or(0);

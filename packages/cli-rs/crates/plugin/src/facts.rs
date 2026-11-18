@@ -1,5 +1,4 @@
-//! The host facts a plugin reads that no data of the server holds (contract ergonomics 2.9): the user's locale, the UTC
-//! offset of a time, and a text as the host's text layout counts it.
+//! Plugin reads backed by the local host: locale, UTC offset and terminal text measurements.
 
 use opencode_plugin_abi as abi;
 use opentui::prelude::*;
@@ -57,8 +56,6 @@ pub fn measure(app: &App, text: &str) -> abi::Measure {
 mod tests {
     use super::*;
 
-    // Expected: the first variable set wins, as POSIX orders them; its codeset and modifier go, and `_` becomes `-`;
-    // `C` and `POSIX` name no locale.
     #[test]
     fn the_locale_is_the_first_variable_set() {
         let vars = |pairs: &'static [(&'static str, &'static str)]| {
@@ -80,8 +77,6 @@ mod tests {
         assert_eq!(locale().unwrap_or_default(), expected);
     }
 
-    // Expected (win-locale): with no POSIX variable set, a plugin on Windows is told the user's default locale; a set
-    // `LANG` still wins.
     #[cfg(windows)]
     #[test]
     fn a_posix_locale_wins_over_the_windows_one() {
@@ -106,8 +101,6 @@ mod tests {
         assert_eq!(utc_offset(1_700_000_000_000).to_string(), expected);
     }
 
-    // Expected: the offset is the process's zone, as `TZ` names it: 0 in UTC, two hours east in `Etc/GMT-2` (POSIX's
-    // sign is the other way round), five west in `Etc/GMT+5`.
     #[test]
     fn the_offset_follows_tz() {
         for (zone, offset) in [("UTC", 0), ("Etc/GMT-2", 7_200), ("Etc/GMT+5", -18_000)] {
@@ -122,8 +115,6 @@ mod tests {
         }
     }
 
-    // Expected: a wide character takes two cells, an `e` with a combining accent one cell and one grapheme, a family
-    // joined by zero-width joiners one grapheme of two cells, and a line break neither, `\r\n` as `\n` (cf-3).
     #[test]
     fn the_measure_counts_cells_and_graphemes_as_the_host_draws() {
         let app = opentui::testing::TestApp::new(40, 4);

@@ -1,14 +1,5 @@
-//! Wakes are scheduled, not only queued (synthesis 4.2, phase Pl). A wake marks its plugin's activation ready, once
-//! however many messages its mailbox holds. The UI thread then hands the ready plugins their `update` calls in turn,
-//! one a plugin a round, under the frame budget of P4c's monitor: a plugin gets at least one a frame, and more while
-//! its updates in the frame stay under [`contain::Limits::frame`] and all plugins' under [`contain::Limits::all`]. What
-//! is left waits for the next frame.
-//!
-//! Input comes before any `update`: a wake only marks its plugin ready and asks for one drain of its app, which runs
-//! as the next paint starts. OpenTUI's poll hands a wake and the input read with it in one batch, the wake first
-//! (review bigboi 1), and the paint comes after the whole batch, so every update runs after the input that came
-//! before it. An app has at most one drain asked for at a time, however many wakes come (review bigboi 7). So a
-//! plugin that floods its mailbox delays its own messages, and no key and no other plugin (`backlog`).
+//! Drains ready plugins in round-robin order within the frame budget. Multiple wakes for one activation mark it
+//! ready only once.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -161,8 +152,7 @@ fn drain(app: &App) {
     }
     let left = QUEUE.with(|queue| {
         let mut queue = queue.borrow_mut();
-        // The plugin served first goes last, so when the total budget binds each one's turn to go first comes round
-        // (review carbon 4.3).
+        // The plugin served first goes last, so when the total budget binds each one's turn to go first comes round.
         if let Some(first) =
             queue.ready.iter().position(|known| known.upgrade().and_then(|known| known.app()) == Some(app_key))
         {

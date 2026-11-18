@@ -67,8 +67,8 @@ pub(crate) fn declare(keys: &mut Vec<String>, key: &str) -> Result<(), String> {
 }
 
 /// Refuses a merge of `fields` into what `name` holds when the value it makes is past [`VALUE_BYTES`]: the fields
-/// over the stored object, as the host merges them (a value that is no object is replaced by the fields). A merge that
-/// replaces a field with one of its size keeps the value's size, so it stays legal (final re-review big-boi).
+/// over the stored object, as the host merges them (a value that is no object is replaced by the fields). A merge
+/// that replaces a field with one of its size keeps the value's size, so it stays legal.
 pub(crate) fn bounded_merge(
     host: &dyn Host,
     name: &Name,

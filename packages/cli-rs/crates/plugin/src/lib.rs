@@ -1,7 +1,4 @@
-//! The plugin host (P.1, P.4, O-67): the TUI's side of the one plugin API, `opencode-plugin-abi`. Built-ins and
-//! external plugins reach the TUI only through that API, in process or over the C ABI. [`Registry`] starts them,
-//! resolves their slot claims and mounts them; [`loader`] finds and loads external plugins; [`node`] turns what a
-//! plugin draws into widgets. The TUI implements [`Host`] once, and that is the only code here that sees it.
+//! The plugin registry activates plugins, resolves slot claims and routes calls through `opencode-plugin-abi`.
 
 mod activation;
 pub mod behave;
@@ -52,7 +49,7 @@ use opentui::prelude::*;
 use opentui::widget::CodeBlock;
 
 /// Whether a switch such as `OPENCODE_PLUGIN_JS` or `OPENCODE_PLUGIN_LUAU`, as `value`, turns its plugins off: `0`,
-/// `false` or `off`, in any case (O-166, O-178). Unset, empty or anything else leaves them on.
+/// `false` or `off`, in any case. Unset, empty or anything else leaves them on.
 pub fn turned_off(value: Option<&std::ffi::OsStr>) -> bool {
     value.and_then(|value| value.to_str()).is_some_and(|value| {
         let value = value.trim();
@@ -68,8 +65,7 @@ pub trait Host: 'static {
     fn app(&self) -> &App;
     /// The page theme.
     fn theme(&self) -> Theme;
-    /// Whether the page theme resolved dark or light (TS `api.themeMode`). By default, from the page background's
-    /// luminance.
+    /// Whether the page theme resolved dark or light. By default, from the page background's luminance.
     fn theme_mode(&self) -> ThemeMode {
         let color = self.theme().background.base;
         let luminance = 0.2126 * f64::from(color.r) + 0.7152 * f64::from(color.g) + 0.0722 * f64::from(color.b);
@@ -114,8 +110,8 @@ pub trait Host: 'static {
                 .title(format!("Plugin failed: {id}")),
         );
     }
-    /// Says that plugin `id` became slow (synthesis 4.4), once a session: `cost` is what a slow frame of it costs.
-    /// Called outside every plugin callback.
+    /// Says that plugin `id` became slow, once a session: `cost` is what a slow frame of it costs. Called outside
+    /// every plugin callback.
     fn slow(&self, id: &str, cost: &str) {
         self.toast(
             &abi::Toast::new(abi::Variant::Warning, format!("{cost}. Run /plugins to disable it."))
@@ -129,8 +125,7 @@ pub trait Host: 'static {
     /// failed): the dialog it opened, if that activation is no longer [`Registry::live`], so nothing of an old build can
     /// run (4.14). Called outside every plugin callback.
     fn revoked(&self, _id: &str) {}
-    /// Says that the project plugin of `target` waits for the user's approval (rich-plugins 3.9): once a build, as the
-    /// loader finds it. Called outside every plugin callback.
+    /// Notifies the user once per project build that needs approval, outside plugin callbacks.
     fn pending(&self, target: &str) {
         self.toast(
             &abi::Toast::new(
@@ -230,7 +225,7 @@ pub trait Host: 'static {
         markdown.set_markdown(text)
     }
 
-    // What the renders of the one API (O-67) read, on both paths.
+    // What the renders of the one API read, on both paths.
 
     /// Calls `f` with what renders read. A read only records a load it needs; the host starts the load once the
     /// plugin callback around the read has returned. By default the theme only.
@@ -249,8 +244,6 @@ pub trait Host: 'static {
         None
     }
 
-    // Contract 2.0's input and surfaces (P2, [`interact`]).
-
     /// The input registrations of the plugins; without one, a host routes no plugin input.
     fn router(&self) -> Option<&interact::Router> {
         None
@@ -261,8 +254,8 @@ pub trait Host: 'static {
     }
     /// Gives the composer the focus, as when a plugin's surface that had it goes.
     fn focus_composer(&self) {}
-    /// A plugin's command was enabled or disabled (contract ergonomics 2.5): what lists or matches the keymap's commands
-    /// follows it, such as a pending key sequence the command no longer completes or an open slash list (carbon ce-5).
+    /// A plugin's command was enabled or disabled: what lists or matches the keymap's commands follows it, such as
+    /// a pending key sequence the command no longer completes or an open slash list.
     fn commands_changed(&self) {}
     /// The plugins moved the focus ([`interact::refocus`]): the host's own idea of which pane has the input follows it.
     fn focus_moved(&self) {}
@@ -672,7 +665,7 @@ pub(crate) fn linked(id: impl Into<String>, run: LinkedSetup, external: bool) ->
                 | abi::v2::Place::Overlay(_)
                 | abi::v2::Place::Dialog(_) => Vec::new(),
             };
-            // P3: `layout` and the scroll handler run as calls of the plugin, as its view does.
+            // `layout` and the scroll handler run as calls of the plugin, as its view does.
             let laying = scope.clone();
             let calls = behave::Calls {
                 plugin: setup.id().to_owned(),
@@ -744,11 +737,11 @@ pub(crate) fn tui_command(
     keyed_command(plugin, command, enabled, move |input, _| run(input))
 }
 
-/// [`tui_command`] whose `run` also gets the key that ran it, if a key did. It holds while `enabled` does: else it binds
-/// no key and is in neither the palette nor the slash list. A run that answers [`abi::interact::Handled::Pass`]
-/// declines its key, which goes on to the next binding as if the command were not there (contract ergonomics 2.5).
-/// A slash name or alias the prompt could not complete (empty, or with whitespace, `/` or a control character) is left
-/// out, and `plugin` logs it.
+/// [`tui_command`] whose `run` also gets the key that ran it, if a key did. It holds while `enabled` does: else it
+/// binds no key and is in neither the palette nor the slash list. A run that answers
+/// [`abi::interact::Handled::Pass`] declines its key, which goes on to the next binding as if the command were not
+/// there. A slash name or alias the prompt could not complete (empty, or with whitespace, `/` or a control
+/// character) is left out, and `plugin` logs it.
 pub(crate) fn keyed_command(
     plugin: &str,
     command: &abi::Command,
@@ -819,7 +812,7 @@ struct Scope {
     mount: RefCell<Option<Weak<()>>>,
     monitor: Rc<contain::Monitor>,
     slot: contain::Slot,
-    /// What its calls hold of the input (P2).
+    /// What its calls hold of the input.
     owners: Rc<Owners>,
     /// An external plugin on an in-process carrier (Luau): an overrun fails it, as it fails a library; a built-in's is
     /// a host bug.
@@ -866,11 +859,11 @@ impl loader::native::Answers for Scope {
 /// Mounts an overlay surface into its frame.
 type OverlayFn = Rc<dyn Fn(&dyn Host, &View) -> Option<Box<dyn Claimed>>>;
 
-/// The mount a call is of closed: what it asks of the input applies nowhere (carbon own-1).
+/// The mount a call is of closed: what it asks of the input applies nowhere.
 #[derive(Debug)]
 struct Closed;
 
-/// What a plugin's calls hold of the input (P2), on either carrier: the owner of the running call, the activation's own,
+/// What a plugin's calls hold of the input, on either carrier: the owner of the running call, the activation's own,
 /// and the overlay surfaces. Its verbs are effects, which run once the call returns.
 pub(crate) struct Owners {
     id: String,
@@ -956,7 +949,7 @@ impl Owners {
 
     /// The mount that owns a request the running call makes (a fetch, a program): its route's for a route's command,
     /// its input owner's for a handler; `None` for the activation's own calls (setup, a global command, an event),
-    /// whose requests are the activation's. Its reply comes only while the owner lives (bigboi's last pass).
+    /// whose requests are the activation's. Its reply comes only while the owner lives.
     pub(crate) fn owning(&self) -> Option<Weak<()>> {
         if let Some(forced) = self.forced.borrow().clone() {
             return forced;
@@ -976,8 +969,8 @@ impl Owners {
 
     /// The mount the running call is of: its input owner, else the owner of the mount it belongs to (a route's
     /// command, or an input whose owner went before its effects applied); `Err` when that mount closed, whose call
-    /// then affects nothing, neither the activation nor a mount opened since (carbon own-1); `Ok(None)` for the
-    /// activation's own calls.
+    /// then affects nothing, neither the activation nor a mount opened since; `Ok(None)` for the activation's own
+    /// calls.
     fn mount_owner(&self) -> Result<Option<Rc<interact::Owner>>, Closed> {
         let forced = self.forced.borrow().clone();
         if forced.is_none()
@@ -1020,7 +1013,7 @@ impl Owners {
         self.owner_of(id).ok()?.rect(id)
     }
 
-    /// The ID of the running call's mount (big-boi 4).
+    /// The ID of the running call's mount.
     pub(crate) fn mount_id(&self) -> Option<abi::v2::MountId> {
         let owned = self.current.borrow().as_ref().and_then(|owner| owner.id().cloned());
         owned.or_else(|| self.called.borrow().clone())
@@ -1034,7 +1027,7 @@ impl Owners {
         result
     }
 
-    /// The mount of the running call's owner: the one a verb or a read of its scrolls names (P3).
+    /// The mount of the running call's owner: the one a verb or a read of its scrolls names.
     pub(crate) fn mounted(&self) -> Option<Weak<()>> {
         self.current.borrow().as_ref().and_then(|owner| owner.mounted())
     }
@@ -1112,7 +1105,7 @@ impl Owners {
         Box::new(move |host| owner.blur(host))
     }
 
-    /// Enables or disables the plugin's command `name` (contract ergonomics 2.5).
+    /// Enables or disables the plugin's command `name`.
     pub(crate) fn set_enabled(&self, name: &str, enabled: bool) -> Effect {
         let (activation, plugin, name) = (self.activation.clone(), self.id.clone(), name.to_owned());
         Box::new(move |_| activation.set_enabled(&plugin, &name, enabled))
@@ -1157,9 +1150,9 @@ impl Scope {
         storage::name(&self.id, key).map_err(|error| log::warn!("plugin {}: {error}", self.id)).ok()
     }
 
-    /// Calls `f` as one call of the plugin, `export`, unless it failed or its activation ended, as a claim still mounted
-    /// after a disable may ask: a panic fails it. The call is timed; an overrun of a built-in is a host bug, which fails
-    /// no plugin (synthesis 4.4).
+    /// Calls `f` as one call of the plugin, `export`, unless it failed or its activation ended, as a claim still
+    /// mounted after a disable may ask: a panic fails it. The call is timed; an overrun of a built-in is a host bug,
+    /// which fails no plugin.
     fn call<R>(self: &Rc<Self>, export: &'static str, host: &dyn Host, f: impl FnOnce(&Scoped<'_>) -> R) -> Option<R> {
         self.call_timed(export, host, f).0
     }
@@ -1292,7 +1285,7 @@ impl Scope {
     ) -> Option<R> {
         alive.upgrade()?;
         let outer = self.mount.replace(Some(alive.clone()));
-        // What it asks of the input is the mount's too, as on the other carriers (carbon own-1).
+        // What it asks of the input is the mount's too, as on the other carriers.
         let answer = self.owners.owned_by(alive, || self.run(export, handler));
         *self.mount.borrow_mut() = outer;
         answer
@@ -1610,7 +1603,7 @@ impl abi::Host for Scoped<'_> {
 
     fn try_foreground(&self, program: abi::Foreground) -> Result<abi::RequestId, String> {
         // The program starts later, once the turn is done: only if its plugin is still active then, and the mount that
-        // owns it is still open (bigboi's freeze pass).
+        // owns it is still open.
         let (owner, mount) = (Rc::downgrade(self.scope), self.scope.owners.owning());
         let alive = Box::new(move || {
             let active =
@@ -1679,8 +1672,7 @@ impl Staged {
         }
     }
 
-    /// Whether [`abi::Host::set_variant`] selects `variant`: a model is selected, and it has `variant` (TS
-    /// `ui.model.variant.set`).
+    /// Whether [`abi::Host::set_variant`] selects `variant`: a model is selected, and it has `variant`.
     pub(crate) fn variant_known(&self, read: &dyn abi::Read, variant: Option<&str>) -> bool {
         let Some((provider, model)) = &self.model else {
             return read.model().is_some()
@@ -1741,7 +1733,7 @@ impl Scoped<'_> {
     /// the plugin's [`abi::Setup::on_reply`] handlers with, on the effect queue, unless the plugin is disposed first;
     /// [`REFUSED`] without room for it.
     fn request(&self, send: impl FnOnce(&dyn Host, abi::RequestId, Reply) + 'static) -> Result<abi::RequestId, String> {
-        // An ID is a promise of a reply: none is given unless the request's effect has room (bigboi's final pass).
+        // An ID is a promise of a reply: none is given unless the request's effect has room.
         let staged = self.scope.call.borrow().as_ref().map_or(0, |call| call.effects.len());
         if !has_room(staged) {
             log::warn!("plugin {}: {REFUSED}", self.scope.id);
@@ -2163,7 +2155,7 @@ impl Setup<'_> {
         self.registration.failure = Some(failure);
     }
 
-    /// What the activation runs as the plugins the host lists change: the plugin's `on_plugins` handlers (P6b).
+    /// What the activation runs as the plugins the host lists change: the plugin's `on_plugins` handlers.
     pub(crate) fn on_plugins(&mut self, run: Rc<dyn Fn()>) {
         self.registration.plugins = Some(run);
     }
@@ -2176,7 +2168,7 @@ impl Setup<'_> {
         }
     }
 
-    /// Claims a place in the slot tree (TS `ui.slot`).
+    /// Claims a place in the slot tree.
     pub(crate) fn slot(
         &mut self,
         placement: Placement,
@@ -2207,7 +2199,7 @@ impl Setup<'_> {
         });
     }
 
-    /// The plugin a render's mount is charged to, and what times the host's work for it (review carbon 2.4).
+    /// The plugin a render's mount is charged to, and what times the host's work for it.
     fn charge(&self) -> node::Charge {
         let (monitor, slot) = (self.monitor.clone(), self.monitor.slot(&self.artifact()));
         (Rc::from(self.id), Rc::new(move |work| monitor.host(slot, work)))
@@ -2397,7 +2389,7 @@ impl Setup<'_> {
     /// again when that activation is woken or a handler of the plugin ran.
     pub(crate) fn renderer_claim(&mut self, entry: abi::claim::Entry, viewer: Rc<dyn claim::Viewer>, owners: &Owners) {
         let target = entry.target.clone();
-        // What its parts hold is the plugin's, and the host's work for them its host time, as a surface's (bigboi 1).
+        // What its parts hold is the plugin's, and the host's work for them its host time, as a surface's.
         let (monitor, slot) = (self.monitor.clone(), self.monitor.slot(&self.artifact()));
         let host_time: surface::HostTime = Rc::new(move |work| monitor.host(slot, work));
         let registered = claim::Registered::new(
@@ -2416,12 +2408,12 @@ impl Setup<'_> {
         }
     }
 
-    /// Registers the route `Route::Plugin { id, name }` shows (TS `ui.router.register`).
+    /// Registers the route `Route::Plugin { id, name }` shows.
     pub(crate) fn route(&mut self, name: impl Into<String>, render: impl Fn(&dyn Host) -> Box<dyn Claimed> + 'static) {
         self.registration.routes.push((name.into(), Rc::new(render)));
     }
 
-    /// Renders Markdown fences of `language` (TS `markdown.registerCodeBlockRenderer`).
+    /// Renders Markdown fences of `language`.
     pub(crate) fn code_block(
         &mut self,
         language: impl Into<String>,
@@ -2430,7 +2422,7 @@ impl Setup<'_> {
         self.registration.code_blocks.push((language.into(), Rc::new(render)));
     }
 
-    /// Registers a keymap layer: commands, their palette and slash entries, and keybinds (TS `keymap.layer`).
+    /// Registers a keymap layer: commands, their palette and slash entries, and keybinds.
     #[cfg(test)]
     pub(crate) fn layer(&mut self, layer: opencode_ui::keymap::KeymapLayer<opencode_ui::dialog::FocusId>) {
         match self.host.keymap().layer(layer) {
@@ -2449,20 +2441,18 @@ impl Setup<'_> {
 struct Registration {
     /// The activation, unique in the registry.
     generation: u64,
-    /// The first activation of the chain it goes on from: a reload of a JS plugin's registrations hands it their
-    /// activation of the JS host, so the dialogs they showed are its own ([`Registry::owns`], FT-4). The chain's
-    /// activations are the plugin's from that one to this, as one plugin has one activation at a time: one number,
-    /// where a list of each grew with the reloads (big-boi's catalog review).
+    /// First activation in the chain. Reloading JS registrations preserves ownership of dialogs shown earlier in
+    /// the chain.
     continues: Option<u64>,
     /// A call of the activation that panicked, if one did.
     failure: Option<ErrorFn>,
     claims: Vec<(Placement, ClaimRender)>,
     routes: Vec<(String, RouteRender)>,
-    /// The panel surfaces (P2), each mounting into the panel the host shows.
+    /// The panel surfaces, each mounting into the panel the host shows.
     panels: Vec<(String, PanelRender)>,
     /// The dialog surfaces, each mounting into the body of the dialog the host shows.
     dialogs: Vec<(String, DialogRender)>,
-    /// The searches a select names (P2).
+    /// The searches a select names.
     searches: Vec<(String, SearchCall)>,
     code_blocks: Vec<(String, CodeBlockRender)>,
     inline_math: Vec<InlineMathRender>,
@@ -2470,7 +2460,7 @@ struct Registration {
     tools: Vec<(String, Rc<claim::Registered>)>,
     disposers: Vec<Disposer>,
     cleanups: Vec<Box<dyn FnOnce()>>,
-    /// Runs the plugin's handlers of a change of the plugins the host lists (P6b).
+    /// Runs the plugin's handlers of a change of the plugins the host lists.
     plugins: Option<Rc<dyn Fn()>>,
 }
 
@@ -2493,7 +2483,7 @@ pub enum Source {
     Added,
     /// A `plugins` entry of `cli.json`, or a directory found in a `plugins` directory, that is not loaded.
     Configured,
-    /// Loaded from a native build (P.4).
+    /// Loaded from a native build.
     External,
 }
 
@@ -2505,7 +2495,7 @@ pub enum Status {
     Skipped(String),
     /// An external plugin that failed to load or crashed, with the error.
     Failed(String),
-    /// Found in a project's `plugins` directory and not approved (rich-plugins 3.9): not loaded, and it claims nothing.
+    /// A project plugin awaiting approval. It has no active claims.
     Pending,
     /// Found in a project's `plugins` directory, and the user declined this build: not loaded, and not asked again.
     Declined,
@@ -2516,7 +2506,7 @@ pub enum Status {
 pub struct Entry {
     /// What names this entry and no other ([`Registry::toggle_entry`]): `plugin:<id>` for a plugin of the registry,
     /// `held:<target>` for a build held back, `target:<target>` for a target that did not load. An ID alone is not
-    /// enough: a held build may share its ID with a loaded plugin (review bigboi-3).
+    /// enough: a held build may share its ID with a loaded plugin.
     pub key: String,
     /// The plugin ID, or the configured target of a skipped entry, or its package's name ([`Registry::set_label`]).
     pub id: String,
@@ -2527,7 +2517,7 @@ pub struct Entry {
     /// Whether the plugin has an activation, failed or not (TS `registered().active`): the plugin manager offers
     /// to disable it.
     pub active: bool,
-    /// What its calls cost, while it is slow (synthesis 4.4).
+    /// What its calls cost, while it is slow.
     pub slow: Option<String>,
 }
 
@@ -2543,13 +2533,11 @@ impl Entry {
     }
 }
 
-/// Why a configured TypeScript TUI plugin is listed but not loaded (deviation of F16 until P.4).
+/// Reason a configured script plugin is listed but not loaded.
 pub const SKIPPED: &str = "TypeScript TUI plugins do not run in opencode-native yet";
 /// Why a TypeScript plugin directory the JS host found no TUI module in is not loaded, before what its resolution
 /// said.
 pub const NO_TUI_MODULE: &str = "it has no TUI module";
-/// Why a TypeScript plugin (a directory, a package named by npm or a server plugin's TUI part) is not loaded while the
-/// JS host is off (FT-10, js-npm).
 pub const SKIPPED_JS_OFF: &str = "TypeScript TUI plugins run on the JS host, which OPENCODE_PLUGIN_JS turns off: unset it to turn the JS host back on";
 /// Why a TypeScript plugin is not loaded in a build without the `ts` feature, which has no JS host at all (ts-feature).
 pub const SKIPPED_NO_TS: &str =
@@ -2565,7 +2553,7 @@ pub const SKIPPED_NO_LUAU: &str = if cfg!(feature = "luau") {
 /// the `ts` feature, which has none to turn on.
 pub const SKIPPED_OFF: &str = if cfg!(feature = "ts") { SKIPPED_JS_OFF } else { SKIPPED_NO_TS };
 /// Why a TypeScript plugin is not loaded when no Bun runs the JS host: neither the local server's opencode binary nor
-/// `bun` on the path (O-166).
+/// `bun` on the path.
 pub const SKIPPED_NO_BUN: &str = "TypeScript TUI plugins run on the JS host, which needs Bun: neither the server's opencode nor bun on the path runs it; install Bun 1.4 or newer, or set OPENCODE_BUN to its absolute path";
 
 struct Plugin {
@@ -2605,8 +2593,8 @@ pub struct SetupFailed {
     pub kept: bool,
 }
 
-/// An external plugin's build that crashed or hung the client (synthesis 4.5). Its library is not opened again, by
-/// this client or the next, until the user enables it or another build takes its target.
+/// An external plugin's build that crashed or hung the client. Its library is not opened again, by this client or the
+/// next, until the user enables it or another build takes its target.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Crashed {
     /// The ID its build described, for the manager.
@@ -2647,7 +2635,7 @@ pub struct Registry {
     monitor: Rc<contain::Monitor>,
     crashed: RefCell<Vec<Crashed>>,
     forget: RefCell<Option<Forget>>,
-    /// Every external plugin is held: a second crash that named no plugin (synthesis 4.5).
+    /// Every external plugin is held: a second crash that named no plugin.
     safe: Cell<bool>,
     /// Why every external plugin is held, when no parent guards the client.
     unsupervised: RefCell<Option<String>>,
@@ -2655,13 +2643,12 @@ pub struct Registry {
     released: RefCell<Vec<String>>,
     /// The targets held now, never opened: by target, with the ID their crash named, and why.
     held: RefCell<Vec<(String, Hold)>>,
-    /// What names a target that is not loaded in place of its path: its package's name (FT-15).
+    /// What names a target that is not loaded in place of its path: its package's name.
     labels: RefCell<HashMap<String, String>>,
 }
 
 impl Registry {
-    /// The built-ins, enabled unless a `cli.json` `plugins` entry disables them (`plugin/context.tsx:313-330`).
-    /// Every entry that names no built-in is a TypeScript plugin; it is listed as skipped.
+    /// Configures built-ins and lists unmatched entries as skipped until an external loader resolves them.
     pub fn new<'a>(builtins: Vec<Builtin>, targets: impl IntoIterator<Item = &'a str>) -> Self {
         Self::define(builtins.into_iter().map(Definition::from).collect(), targets)
     }
@@ -2704,7 +2691,7 @@ impl Registry {
         }
     }
 
-    /// Times every plugin call and keeps the budget (synthesis 4.4).
+    /// Times every plugin call and keeps the budget.
     pub fn monitor(&self) -> &Rc<contain::Monitor> {
         &self.monitor
     }
@@ -2807,8 +2794,8 @@ impl Registry {
         self.release_target(host, &target)
     }
 
-    /// [`Registry::release`] of the build held at `target`. The crash list must keep its end first (review bigboi,
-    /// inherited): else the build stays held, and the user is told why.
+    /// [`Registry::release`] of the build held at `target`. The crash list must keep its end first: else the build
+    /// stays held, and the user is told why.
     fn release_target(&self, host: &Rc<dyn Host>, target: &str) -> Option<Result<(), String>> {
         let hold = self.held.borrow().iter().find(|(known, _)| known == target).map(|(_, hold)| hold.clone())?;
         if let Hold::Unsupervised(reason) = hold {
@@ -2906,12 +2893,12 @@ impl Registry {
         }
     }
 
-    /// Adds external plugin `definition`, or replaces the one loaded from the same target, and activates it
-    /// unless a `plugins` entry or the plugin manager disabled it. A replacement keeps its place, so slot
-    /// order holds across a reload. A replacement of a running plugin starts before the running one stops: when its
-    /// setup fails, it is disposed and the running one keeps running (TS `context.tsx`); one that panicked is replaced
-    /// as an inactive one is, since nothing of it runs to keep; for an active built-in of its ID
-    /// the target is listed as failed. Any other setup that fails leaves the plugin listed as failed and not active.
+    /// Adds external plugin `definition`, or replaces the one loaded from the same target, and activates it unless a
+    /// `plugins` entry or the plugin manager disabled it. A replacement keeps its place, so slot order holds across a
+    /// reload. A replacement of a running plugin starts before the running one stops: when its setup fails, it is
+    /// disposed and the running one keeps running; one that panicked is replaced as an inactive one is, since nothing
+    /// of it runs to keep; for an active built-in of its ID the target is listed as failed. Any other setup that fails
+    /// leaves the plugin listed as failed and not active.
     pub fn load(&self, host: &Rc<dyn Host>, definition: Definition) -> Option<SetupFailed> {
         let target = definition.target()?.to_owned();
         self.set_unloaded(&target, None);
@@ -3107,16 +3094,16 @@ impl Registry {
         true
     }
 
-    /// The plugin manager's toggle of plugin `id` (TS `plugins.tsx`), `None` when it does not exist. A setup that fails
-    /// as it enables the plugin returns its error for the manager to show, and leaves the plugin as it was: enabled or
-    /// not, and listed as the last load left it, so a later reload of a disabled plugin starts nothing.
+    /// The plugin manager's toggle of plugin `id`, `None` when it does not exist. A setup that fails as it enables the
+    /// plugin returns its error for the manager to show, and leaves the plugin as it was: enabled or not, and listed
+    /// as the last load left it, so a later reload of a disabled plugin starts nothing.
     pub fn toggle(&self, host: &Rc<dyn Host>, id: &str, active: bool) -> Option<Result<(), String>> {
         // A held target is not loaded: enabling it lets the loader open it; there is nothing to disable.
         if self.with_plugin(id, |_| ()).is_none() {
             return if active { self.release(host, id) } else { None };
         }
         // A plugin that failed while active is listed failed by its activation's failure, which the restart ends: kept
-        // as its listed failure, so a setup that fails again leaves the row failed (review carbon-3).
+        // as its listed failure, so a setup that fails again leaves the row failed.
         let before = self.with_plugin(id, |plugin| {
             let failed = plugin.failed.clone().or_else(|| plugin.active.as_ref().and(plugin.definition.failure()));
             (plugin.enabled, failed)
@@ -3155,7 +3142,7 @@ impl Registry {
         Some(self.start(host, id))
     }
 
-    /// Runs the `on_plugins` handlers of every active plugin (P6b): what [`Registry::entries`] lists changed. A failed
+    /// Runs the `on_plugins` handlers of every active plugin: what [`Registry::entries`] lists changed. A failed
     /// plugin's calls are refused. Called outside every plugin callback.
     pub fn tell_plugins(&self) {
         let heard: Vec<Rc<dyn Fn()>> = self
@@ -3284,9 +3271,8 @@ impl Registry {
         .unwrap_or(false)
     }
 
-    /// Whether what activation `generation` of plugin `id` showed is the running activation's: it is that one, or one
-    /// it goes on from (a reload of a JS plugin's registrations, FT-4), and it has not failed. A dialog of such an
-    /// activation stays open and acts.
+    /// True if the running activation owns this generation, including earlier registrations in the same JS
+    /// activation chain. Failed activations own no dialogs.
     pub fn owns(&self, id: &str, generation: u64) -> bool {
         self.with_plugin(id, |plugin| {
             plugin.active.as_ref().is_some_and(|(_, registration)| {
@@ -3481,8 +3467,8 @@ impl Registry {
     }
 }
 
-/// A mounted plugin route. The route that shows it syncs it with each change batch.
-/// A mounted panel surface of a plugin (P2): it ends when it drops.
+/// A mounted plugin route. The route that shows it syncs it with each change batch. A mounted panel surface of a
+/// plugin: it ends when it drops.
 pub struct PanelMount(Box<dyn Claimed>);
 
 /// What tells a dialog surface's handler that its dialog closed ([`PanelMount::close`]).
@@ -3584,7 +3570,7 @@ impl SlotMount {
 }
 
 /// The claims appended to a mounted slot, in claim order after a hidden marker that follows its content. A claim on a
-/// slot inside it shows here while that slot is not mounted (TS `survivingAncestor`).
+/// slot inside it shows here while that slot is not mounted.
 struct Nested {
     parent: View,
     marker: View,

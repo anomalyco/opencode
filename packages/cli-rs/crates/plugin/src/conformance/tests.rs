@@ -371,9 +371,6 @@ fn record() -> Vec<Transcript> {
         .collect()
 }
 
-// Expected (`drift`): the transcripts are what the reference records now from their scripts, one for each script, so a
-// change of the host or the SDK that changes what crosses the C ABI, or what the user sees, changes a transcript; and
-// one written by hand fails. `CONFORMANCE_WRITE=1` writes them again.
 #[test]
 fn the_transcripts_are_what_the_reference_records() {
     let recorded = record();
@@ -397,7 +394,6 @@ fn the_transcripts_are_what_the_reference_records() {
     }
 }
 
-// Expected: the golden file is what `write` writes, so a reader and the writer agree on its format.
 #[test]
 fn the_transcripts_read_back_as_written() {
     let golden = golden().unwrap();
@@ -444,10 +440,6 @@ fn host_side(transcript: &Transcript, future: bool) -> Result<(), String> {
     }
 }
 
-// Expected: the host, given the transcript's answers, sends what the transcript has and shows what it has, also when
-// the library is of a later minor: its table is longer and says minor 1, every object it sends carries a field the
-// host does not know, and inside each call it asks the host something no host knows, which is answered ERROR and
-// changes nothing.
 #[test]
 fn the_host_replays_every_transcript() {
     for transcript in golden().unwrap() {
@@ -477,15 +469,11 @@ fn both_sides(name: &str, library: &[u8]) {
     }
 }
 
-// Expected: the reference built as a `cdylib`, with its own std and allocator, answers and asks what every transcript
-// has, also against a host of a later minor; and the host loading it records each.
 #[test]
 fn the_reference_library_conforms() {
     both_sides("the Rust library", &rust_library());
 }
 
-// Expected: the same plugin written in C against `opencode_plugin.h` alone, built with symbols hidden and every
-// warning an error, conforms as the Rust library does: the header is proven by a C compiler, field by field.
 #[cfg(unix)]
 #[test]
 fn the_c_library_conforms() {
@@ -493,8 +481,6 @@ fn the_c_library_conforms() {
     both_sides("the C library", &library);
 }
 
-// Expected: the linked reference replays on the library side too, so the side a mutant of a transcript's library half
-// fails is checked without a build.
 #[test]
 fn the_linked_reference_replays_every_transcript() {
     for transcript in golden().unwrap() {
@@ -508,11 +494,6 @@ fn the_linked_reference_replays_every_transcript() {
     }
 }
 
-// Expected (unknown kinds, synthesis 4.6): a library of a later minor whose view holds a node kind this host does not
-// know has the tree refused whole, the kind named in the failure, and nothing after it: the transcript holds as
-// recorded up to that view's reply, the user then sees the plugin failed and no tree, and the host calls the library no
-// more, not even to destroy it. (The SDK lowers a kind the host lacks to the author's fallback before it crosses: the
-// transcript `fence-older`, for the `fence` node of a host without `fence-node`.)
 #[test]
 fn a_kind_the_host_does_not_know_is_refused_whole() {
     let mut transcript =
@@ -535,9 +516,6 @@ fn a_kind_the_host_does_not_know_is_refused_whole() {
     assert!(rest.iter().all(|entry| matches!(entry, Entry::Observe { .. })), "the host called on: {rest:?}");
 }
 
-// Expected: `stopped` and `report` are "any thread", so a library may call them on the UI thread inside a call, as a C
-// plugin can (the SDK calls them only from its threads). The host answers `stopped` 0 while the plugin is active, and
-// a report fails the plugin once, with the report's text, after the call; the transcript holds both crossings.
 #[test]
 fn a_library_may_ask_stopped_and_report_on_the_ui_thread() {
     let mut transcript =
@@ -588,11 +566,6 @@ fn fenced_with(load: &Load<'_>, features: &'static [u8]) -> String {
     host.app.text()
 }
 
-// Expected (bigboi's review and recheck of contract 2.x): a library reads the host's features as a JSON array of
-// strings, element by element, each decoded whole and compared by its bytes and its length: a name spelled with escapes
-// is the name; a name that only holds the feature's quoted spelling, is longer, or goes on after an escaped NUL is not;
-// and a name of any length before it does not hide it. The Rust SDK and the C plugin each draw the fence node exactly
-// when `fence-node` is stated, and lower it to text otherwise.
 #[test]
 fn a_library_reads_the_features_it_is_offered_as_json() {
     // `%` stands for a backslash: the escapes are the test data, written so no tool decodes them on the way.
@@ -638,9 +611,6 @@ fn a_library_reads_the_features_it_is_offered_as_json() {
     }
 }
 
-// Expected (P2's `search`, read only as in process): a library's search that asks the host for an effect is answered
-// ERROR, and nothing of it applies, the plugin staying active with its answer taken; through any library (the player)
-// and through a real one (the C plugin). In process a search gets the host's reads alone, so it cannot ask.
 #[test]
 fn a_search_asks_for_nothing() {
     let mut transcript =
@@ -685,8 +655,6 @@ unsafe extern "C" fn answers_ok(_: *mut c_void, _: Bytes, out: *mut Owned) -> i3
     abi::OK
 }
 
-// Expected: on the library side a host of a later minor refuses a library that answers a request it cannot know with
-// anything but ERROR; the reference answers ERROR.
 #[test]
 fn a_library_that_takes_an_unknown_request_fails_the_later_host() {
     let api = PluginApi { call: Some(answers_ok), ..reference() };
@@ -739,9 +707,6 @@ unsafe extern "C" fn size_only(
     }
 }
 
-// Expected: the later host of the library side is later in each way it claims: a library that refuses a request with
-// a field it does not know, one that refuses a host whose minor is not its own, and one that refuses a table longer
-// than its own each pass the transcripts as they are and fail them against the later host.
 #[test]
 fn a_library_that_takes_only_its_own_minor_fails_the_later_host() {
     let transcript =
@@ -828,10 +793,6 @@ fn mutants(entry: &Entry) -> Vec<(Side, Option<Entry>)> {
     }
 }
 
-// Expected: a transcript changed without a change of the host fails the side that writes what changed: for every entry
-// of every transcript, each part the host writes changed (or the entry dropped) fails the host side, and each part
-// the library writes changed fails the library side, against the linked reference. The unchanged transcripts pass
-// both (the tests above).
 #[test]
 fn a_transcript_changed_without_the_host_fails() {
     let mut lived = Vec::new();
@@ -858,8 +819,6 @@ fn a_transcript_changed_without_the_host_fails() {
     assert!(lived.is_empty(), "changes no side noticed:\n{}", lived.join("\n"));
 }
 
-// Expected: what the reference records keeps every rule of the C ABI's machine: the transcripts are themselves runs of
-// the protocol, and its rules hold on both carriers' libraries (the model tests run under it too).
 #[test]
 fn every_transcript_keeps_the_protocol() {
     for header in scripts().unwrap() {
@@ -1239,11 +1198,6 @@ fn rule(row: &Row) -> bool {
     row.major == ABI_MAJOR && row.size == "full" && row.requires_minor < ABI_MINOR + 1 && described
 }
 
-// Expected: the version gate is exact. Each table of the grid is taken or refused, with the words of the golden rows,
-// and the verdict follows the rule of the header: the major is the one the host serves (1.x is refused as any other,
-// O-169), the table covers 2.0's, `requires_minor` is at most the host's minor, and `describe` answers metadata the
-// host reads, with a nonempty ID, that requires no feature it lacks (big-boi's drop-abi1 check: as load refuses it). A minor above the host's is taken; a field the host does not know is
-// ignored. `CONFORMANCE_WRITE=1` writes the rows again.
 #[test]
 fn the_version_gate_is_exact() {
     let rows: Vec<Row> = grid().into_iter().map(|row| Row { verdict: verdict(&row), ..row }).collect();
@@ -1279,11 +1233,6 @@ fn breaks(events: &[Event<'_>]) -> bool {
     protocol.broken().is_some()
 }
 
-// Expected: the protocol machine takes a run that keeps the header's rules, and refuses each kind of break: a call
-// inside a call, a host request outside one, a message to a plugin without a handler, a view of a surface it does not
-// have or of a mount that ended, a call after a panic or an error or a handler reply that is not `null`, a destroy of
-// a failed instance or twice, a render granted an effect, the host panicking, and a request no contract names, also
-// one of ABI 1.3 (O-169).
 #[test]
 fn the_protocol_machine_refuses_what_the_header_forbids() {
     let call = |request: &'static str| Event::Call { instance: 1, request: request.as_bytes() };
@@ -1389,7 +1338,7 @@ fn the_protocol_machine_refuses_what_the_header_forbids() {
     created(&mut protocol, r#"{"id":"p","commands":[],"fences":[],"slots":[],"routes":[],"storage":[]}"#);
     protocol.event(&Event::Call { instance: 1, request: br#"{"type":"message","message":"1"}"# });
     assert!(protocol.broken().is_some(), "a plugin without a handler got a message");
-    // P6b: a change of the plugin list only to a plugin that hears it.
+    // a change of the plugin list only to a plugin that hears it.
     for (manifest, broken) in [(r#""plugins":true,"#, false), ("", true)] {
         let mut protocol = Protocol::default();
         let text = format!(r#"{{"id":"p",{manifest}"commands":[],"fences":[],"slots":[],"routes":[],"storage":[]}}"#);
@@ -1409,7 +1358,6 @@ fn the_protocol_machine_refuses_what_the_header_forbids() {
     assert_eq!(protocol.broken(), None);
     protocol.event(&toast);
     assert!(protocol.broken().is_some(), "a layout was granted an effect");
-    // P2's handlers answer a `Handled` and Pr's claims a tree or none; a claim's view reads only.
     let declared = r#"{"id":"p","commands":[],"fences":[],"slots":[],"routes":[],"storage":[],"surfaces":[{"name":"s","place":{"type":"route","name":"s"},"handler":true}],"claims":[{"target":{"type":"tool","name":"t"}}]}"#;
     let input = r#"{"type":"input","to":{"type":"surface","surface":0},"event":{"type":"paste","text":"x"}}"#;
     let claim = r#"{"type":"claim","claim":0,"mount":{"surface":"t","key":"c","generation":1},"input":{"width":1,"height":0,"palette":{"mode":"dark","colors":{}}},"part":{"type":"fence","language":"t","info":"t","code":"","streaming":false,"closed":true},"next":0}"#;
