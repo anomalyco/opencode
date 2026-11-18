@@ -1130,8 +1130,9 @@ impl Live {
                 if self.owner.0 != super::btw::ID {
                     return tui.markdown(text).as_any();
                 }
-                let markdown = super::host::markdown(tui);
-                links.borrow_mut().push(session_links::attach(tui, &markdown));
+                let renderers = super::host::code_blocks(tui);
+                let markdown = super::host::markdown_with(tui, &renderers);
+                links.borrow_mut().push(session_links::attach(tui, &markdown, &renderers));
                 markdown.set_markdown(text).as_any()
             },
             &mut |_, path| {

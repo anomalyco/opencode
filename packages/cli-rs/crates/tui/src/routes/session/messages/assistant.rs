@@ -20,7 +20,7 @@ pub struct TextPart {
 impl TextPart {
     pub fn new(cx: &Context<'_>) -> Self {
         let markdown = opencode_ui::markdown::view(cx.app, cx.theme, cx.syntax, cx.renderers, cx.conceal, true);
-        let links = session_links::attach(cx.tui, &markdown);
+        let links = session_links::attach(cx.tui, &markdown, cx.renderers);
         let root = View::new(cx.app).padding_edge(Edge::Left, 3).shrink(0.0).child(&markdown);
         Self { root, markdown, _links: links, streaming: Cell::new(true) }
     }

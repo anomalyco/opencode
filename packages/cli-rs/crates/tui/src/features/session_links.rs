@@ -8,6 +8,7 @@
 
 use std::collections::HashSet;
 
+use opencode_ui::markdown::CodeBlockRenderers;
 use opentui::widget::{InlineContext, InlineSpan, Markdown};
 
 use crate::prelude::*;
@@ -27,11 +28,16 @@ pub struct Registry {
     links: RefCell<Vec<Weak<Links>>>,
 }
 
-/// Makes `markdown` show session links: registers the inline hook and the click handler.
-pub fn attach(tui: &Tui, markdown: &Markdown) -> Rc<Links> {
+/// Makes `markdown`, a view made with `renderers`, show session links: registers the inline hook, after the inline
+/// math renderer's, and the click handler.
+pub fn attach(tui: &Tui, markdown: &Markdown, renderers: &CodeBlockRenderers) -> Rc<Links> {
     let used: Rc<RefCell<HashMap<SessionID, Option<String>>>> = Rc::default();
     let links = Rc::new(Links { markdown: markdown.clone(), used: used.clone(), pressed: Cell::new(None) });
-    markdown.inline_hook(bind!(tui, |tui, spans, cx| link_spans(&tui, &used, spans, cx), else spans));
+    let weak = tui.weak();
+    opencode_ui::markdown::inline_hook(markdown, renderers, move |spans, cx| match weak.upgrade() {
+        Some(tui) => link_spans(&tui, &used, spans, cx),
+        None => spans,
+    });
     let (weak, this) = (tui.weak(), Rc::downgrade(&links));
     markdown.on_mouse(move |cx, event| {
         let (Some(tui), Some(links)) = (weak.upgrade(), this.upgrade()) else { return };

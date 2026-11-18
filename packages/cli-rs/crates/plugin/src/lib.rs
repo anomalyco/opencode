@@ -321,6 +321,8 @@ type SetupFn = Rc<dyn Fn(&mut Setup<'_>) -> Result<(), String>>;
 pub type ErrorFn = Rc<dyn Fn() -> Option<String>>;
 /// Renders a fenced code block in the theme, or returns `None` to keep the default code view.
 type CodeBlockRender = Rc<dyn Fn(&CodeBlock<'_>, &Theme) -> Option<AnyWidget>>;
+/// Renders inline math's TeX in the theme as one row, or returns `None` to show the TeX.
+type InlineMathRender = Rc<dyn Fn(&str, &Theme) -> Option<Vec<Span<'static>>>>;
 
 /// A built-in, in the order the registry activates it.
 pub enum Builtin {
@@ -528,6 +530,16 @@ pub(crate) fn linked(id: impl Into<String>, run: LinkedSetup, external: bool) ->
                 })
             });
             setup.registration.code_blocks.push((language.clone(), render));
+        }
+        for render in api.inline_math() {
+            let (render, scope) = (render.clone(), scope.clone());
+            let render: InlineMathRender = Rc::new(move |tex, theme| {
+                let host = scope.host.upgrade()?;
+                // Inline math is a fence's render on one row, and counts as one.
+                let line = scope.call("render-fence", &*host, |read| render(read, tex)).flatten()?;
+                Some(line.iter().map(|span| node::styled(theme, span, None)).collect())
+            });
+            setup.registration.inline_math.push(render);
         }
         for (index, claim, render) in api.renders() {
             let (render, scope) = (render.clone(), scope.clone());
@@ -2445,6 +2457,7 @@ struct Registration {
     /// The searches a select names (P2).
     searches: Vec<(String, SearchCall)>,
     code_blocks: Vec<(String, CodeBlockRender)>,
+    inline_math: Vec<InlineMathRender>,
     /// The tool claims, by the tool they claim.
     tools: Vec<(String, Rc<claim::Registered>)>,
     disposers: Vec<Disposer>,
@@ -3332,12 +3345,15 @@ impl Registry {
 
     /// The code-block renderers of the active plugins, drawing in the theme `theme` returns when they render, so a
     /// Markdown restyled for a new theme draws its fences in it. At one language the plugin last in activation order
-    /// wins; a plugin keeps its place.
+    /// wins; a plugin keeps its place. The same holds for the inline math renderer.
     pub fn code_blocks(&self, theme: Rc<dyn Fn() -> Theme>) -> CodeBlockRenderers {
         let mut renderers = CodeBlockRenderers::default();
         for (language, render) in self.by_activation(|registration| &registration.code_blocks) {
             let theme = theme.clone();
             renderers.register(language, Rc::new(move |block| render(block, &theme())));
+        }
+        if let Some(render) = self.by_activation(|registration| &registration.inline_math).pop() {
+            renderers.register_math(Rc::new(move |tex| render(tex, &theme())));
         }
         renderers
     }

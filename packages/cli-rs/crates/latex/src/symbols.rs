@@ -106,6 +106,7 @@ const ORDINARY: &[(&str, &str)] = &[
     ("neg", "¬"),
     ("lnot", "¬"),
     ("prime", "′"),
+    ("degree", "°"),
     ("backprime", "‵"),
     ("clubsuit", "♣"),
     ("diamondsuit", "♢"),

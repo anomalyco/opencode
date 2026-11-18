@@ -67,11 +67,13 @@ pub struct Options {
     /// Unicode super- and subscript characters where every script character has one.
     pub compact_scripts: bool,
     pub color: Option<String>,
+    /// Inline math: compact scripts take every super- and subscript letter Unicode has, not only TS's.
+    pub inline: bool,
 }
 
 impl Default for Options {
     fn default() -> Self {
-        Self { display: true, compact_scripts: true, color: None }
+        Self { display: true, compact_scripts: true, color: None, inline: false }
     }
 }
 
@@ -90,6 +92,7 @@ pub fn layout(node: &Node, options: &Options) -> Option<Layout> {
     let context = Context {
         display: options.display,
         compact: options.compact_scripts,
+        inline: options.inline,
         style: Style { color: options.color.clone(), ..Style::default() },
         variant: None,
     };
@@ -108,6 +111,7 @@ pub fn layout(node: &Node, options: &Options) -> Option<Layout> {
 struct Context {
     display: bool,
     compact: bool,
+    inline: bool,
     style: Style,
     variant: Option<Variant>,
 }
@@ -218,21 +222,23 @@ fn layout_root(body: &Node, index: Option<&Node>, context: &Context) -> Block {
 }
 
 fn layout_scripts(base: &Node, superscript: Option<&Node>, subscript: Option<&Node>, context: &Context) -> Block {
-    let present = |node: &Node| simple_text(node).as_deref() != Some("");
+    // A script that lays out to nothing, such as `{}` or an empty `\textcolor`, adds no geometry (opentui-tex).
+    let present = |node: &Node| layout_node(node, context).width > 0;
     let (superscript, subscript) = (superscript.filter(|n| present(n)), subscript.filter(|n| present(n)));
-    if matches!(base, Node::Brace { .. }) || (matches!(base, Node::Operator { limits: true, .. }) && context.display) {
+    let target = script_target(base);
+    if matches!(target, Node::Brace { .. })
+        || (matches!(target, Node::Operator { limits: true, .. }) && context.display)
+    {
         return layout_over_under(base, superscript, subscript, context);
     }
 
     let base = layout_node(base, context);
     if context.compact && base.height == 1 {
-        let compact = |node: Option<&Node>, table: &[(char, char)]| match node {
-            Some(node) => simple_text(node).and_then(|text| map_script(&text, table)),
+        let compact = |node: Option<&Node>, superscript: bool| match node {
+            Some(node) => script_text(node, superscript, context.inline),
             None => Some(String::new()),
         };
-        if let (Some(superscript), Some(subscript)) =
-            (compact(superscript, SUPERSCRIPTS), compact(subscript, SUBSCRIPTS))
-        {
+        if let (Some(superscript), Some(subscript)) = (compact(superscript, true), compact(subscript, false)) {
             let scripts = text_box(&(superscript + &subscript), &context.style);
             return hpack(vec![base, scripts]);
         }
@@ -270,6 +276,26 @@ fn layout_over_under(base: &Node, over: Option<&Node>, under: Option<&Node>, con
         overlay(&mut result, under, (width - under.width) / 2, over_height + base.height);
     }
     result
+}
+
+/// The node whose kind places scripts: the base under its styles and inner scripts.
+fn script_target(node: &Node) -> &Node {
+    match node {
+        Node::Variant { body, .. } | Node::Color { body, .. } | Node::Scripts { base: body, .. } => script_target(body),
+        node => node,
+    }
+}
+
+/// `node` as compact script characters, when it is plain text that has them all: TS's characters, or with `inline`
+/// every one Unicode has.
+pub(crate) fn script_text(node: &Node, superscript: bool, inline: bool) -> Option<String> {
+    let table = match (superscript, inline) {
+        (true, false) => SUPERSCRIPTS,
+        (false, false) => SUBSCRIPTS,
+        (true, true) => INLINE_SUPERSCRIPTS,
+        (false, true) => INLINE_SUBSCRIPTS,
+    };
+    map_script(&simple_text(node)?, table)
 }
 
 fn layout_delimited(left: &str, body: &Node, right: &str, context: &Context) -> Block {
@@ -408,7 +434,10 @@ fn delimiter_box(delimiter: &str, height: i32, baseline: i32, left: bool, style:
     if height <= 1 {
         return text_box(delimiter, style);
     }
-    let glyphs = delimiter_glyphs(delimiter);
+    // Combining marks typed after a delimiter stay on its middle row (opentui-tex).
+    let split = delimiter.chars().next().map_or(0, char::len_utf8);
+    let (base, marks) = delimiter.split_at(split);
+    let glyphs = delimiter_glyphs(base);
     let width = glyphs.iter().map(|glyph| cell_width(glyph)).max().unwrap_or(0);
     let mut result = blank(width, height, baseline);
     for y in 0..height {
@@ -419,8 +448,13 @@ fn delimiter_box(delimiter: &str, height: i32, baseline: i32, left: bool, style:
         };
         set_cell(&mut result, 0, y, glyph, style);
     }
-    if (delimiter == "{" || delimiter == "}") && height >= 3 {
+    if (base == "{" || base == "}") && height >= 3 {
         set_cell(&mut result, 0, height / 2, if left { "⎨" } else { "⎬" }, style);
+    }
+    if !marks.is_empty() {
+        let glyph = result.cells[baseline.clamp(0, height - 1) as usize][0].as_ref().map_or("", |cell| &cell.text);
+        let marked = format!("{glyph}{marks}");
+        set_cell(&mut result, 0, baseline, &marked, style);
     }
     result
 }
@@ -526,6 +560,8 @@ fn node_role(node: &Node) -> Option<Role> {
         // bars and radical hooks breathing room without adding padding inside the construct itself.
         Node::Operator { .. } | Node::Fraction { .. } | Node::Root { .. } | Node::Matrix { .. } => Some(Role::Operator),
         Node::Scripts { base, .. } => node_role(base),
+        // A styled operator spaces as one (opentui-tex): `\mathbf{\sin}x`.
+        Node::Variant { body, .. } | Node::Color { body, .. } => node_role(body),
         _ => None,
     }
 }
@@ -681,6 +717,122 @@ const SUBSCRIPTS: &[(char, char)] = &[
     ('u', 'ᵤ'),
     ('v', 'ᵥ'),
     ('x', 'ₓ'),
+];
+
+/// TS's superscripts and every other Latin and Greek superscript letter Unicode has.
+const INLINE_SUPERSCRIPTS: &[(char, char)] = &[
+    ('0', '⁰'),
+    ('1', '¹'),
+    ('2', '²'),
+    ('3', '³'),
+    ('4', '⁴'),
+    ('5', '⁵'),
+    ('6', '⁶'),
+    ('7', '⁷'),
+    ('8', '⁸'),
+    ('9', '⁹'),
+    ('+', '⁺'),
+    ('-', '⁻'),
+    ('=', '⁼'),
+    ('(', '⁽'),
+    (')', '⁾'),
+    ('a', 'ᵃ'),
+    ('b', 'ᵇ'),
+    ('c', 'ᶜ'),
+    ('d', 'ᵈ'),
+    ('e', 'ᵉ'),
+    ('f', 'ᶠ'),
+    ('g', 'ᵍ'),
+    ('h', 'ʰ'),
+    ('i', 'ⁱ'),
+    ('j', 'ʲ'),
+    ('k', 'ᵏ'),
+    ('l', 'ˡ'),
+    ('m', 'ᵐ'),
+    ('n', 'ⁿ'),
+    ('o', 'ᵒ'),
+    ('p', 'ᵖ'),
+    ('r', 'ʳ'),
+    ('s', 'ˢ'),
+    ('t', 'ᵗ'),
+    ('u', 'ᵘ'),
+    ('v', 'ᵛ'),
+    ('w', 'ʷ'),
+    ('x', 'ˣ'),
+    ('y', 'ʸ'),
+    ('z', 'ᶻ'),
+    ('A', 'ᴬ'),
+    ('B', 'ᴮ'),
+    ('D', 'ᴰ'),
+    ('E', 'ᴱ'),
+    ('G', 'ᴳ'),
+    ('H', 'ᴴ'),
+    ('I', 'ᴵ'),
+    ('J', 'ᴶ'),
+    ('K', 'ᴷ'),
+    ('L', 'ᴸ'),
+    ('M', 'ᴹ'),
+    ('N', 'ᴺ'),
+    ('O', 'ᴼ'),
+    ('P', 'ᴾ'),
+    ('R', 'ᴿ'),
+    ('T', 'ᵀ'),
+    ('U', 'ᵁ'),
+    ('V', 'ⱽ'),
+    ('W', 'ᵂ'),
+    ('α', 'ᵅ'),
+    ('β', 'ᵝ'),
+    ('γ', 'ᵞ'),
+    ('δ', 'ᵟ'),
+    ('ε', 'ᵋ'),
+    ('θ', 'ᶿ'),
+    ('ι', 'ᶥ'),
+    ('ϕ', 'ᵠ'),
+    ('φ', 'ᵠ'),
+    ('χ', 'ᵡ'),
+    ('′', '′'),
+];
+
+/// TS's subscripts and the Greek subscript letters Unicode has.
+const INLINE_SUBSCRIPTS: &[(char, char)] = &[
+    ('0', '₀'),
+    ('1', '₁'),
+    ('2', '₂'),
+    ('3', '₃'),
+    ('4', '₄'),
+    ('5', '₅'),
+    ('6', '₆'),
+    ('7', '₇'),
+    ('8', '₈'),
+    ('9', '₉'),
+    ('+', '₊'),
+    ('-', '₋'),
+    ('=', '₌'),
+    ('(', '₍'),
+    (')', '₎'),
+    ('a', 'ₐ'),
+    ('e', 'ₑ'),
+    ('h', 'ₕ'),
+    ('i', 'ᵢ'),
+    ('j', 'ⱼ'),
+    ('k', 'ₖ'),
+    ('l', 'ₗ'),
+    ('m', 'ₘ'),
+    ('n', 'ₙ'),
+    ('o', 'ₒ'),
+    ('p', 'ₚ'),
+    ('r', 'ᵣ'),
+    ('s', 'ₛ'),
+    ('t', 'ₜ'),
+    ('u', 'ᵤ'),
+    ('v', 'ᵥ'),
+    ('x', 'ₓ'),
+    ('β', 'ᵦ'),
+    ('γ', 'ᵧ'),
+    ('ρ', 'ᵨ'),
+    ('ϕ', 'ᵩ'),
+    ('φ', 'ᵩ'),
+    ('χ', 'ᵪ'),
 ];
 
 const DOUBLE_STRUCK: &[(char, char)] =

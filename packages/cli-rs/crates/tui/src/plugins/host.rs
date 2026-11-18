@@ -1853,11 +1853,16 @@ pub fn tool_claims(tui: &Tui) -> opencode_plugin::claim::ToolClaims {
 /// An empty [`abi::Node::Markdown`] widget: Markdown in the page theme with the plugins' fences, markers hidden unless
 /// `session.markdown` is `source`.
 pub fn markdown(tui: &Tui) -> opentui::widget::Markdown {
+    markdown_with(tui, &code_blocks(tui))
+}
+
+/// [`markdown`] with `renderers`, which the caller keeps for a later inline hook.
+pub fn markdown_with(tui: &Tui, renderers: &CodeBlockRenderers) -> opentui::widget::Markdown {
     let page = tui.page();
     let conceal = tui.config().info.session.as_ref().and_then(|session| session.markdown)
         != Some(opencode_local::cli_config::Markdown::Source);
     let syntax = opencode_ui::code::syntax_theme(&page);
-    opencode_ui::markdown::view(&tui.app, &page, &syntax, &code_blocks(tui), conceal, false)
+    opencode_ui::markdown::view(&tui.app, &page, &syntax, renderers, conceal, false)
 }
 
 #[cfg(test)]

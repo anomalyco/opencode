@@ -1,12 +1,16 @@
 //! The LaTeX plugin (P.2, `docs/P.2.md`): `opencode.latex` draws `latex` and `math` Markdown fences as Unicode
-//! math in terminal cells, as `packages/latex/src/plugin.ts` does. [`parse`] and [`layout`] port the TypeScript
-//! parser and layout; [`plugin`] renders the fences (`markdown.ts`), on the one plugin API (O-67).
+//! math in terminal cells, as `packages/latex/src/plugin.ts` does, and inline Markdown math on one row, which TS
+//! does not. [`parse`] and [`layout`] port the TypeScript parser and layout with opentui-tex's fixes; [`inline`]
+//! writes math on one row; [`plugin`] renders both (`markdown.ts`), on the one plugin API (O-67).
 
+pub mod inline;
 pub mod layout;
 pub mod parse;
 mod symbols;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tex_rows;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -22,7 +26,7 @@ pub fn plugin() -> Plugin {
     Plugin { id: "opencode.latex", setup }
 }
 
-/// One renderer for both fence languages, as TS registers.
+/// One renderer for both fence languages, as TS registers, and the inline math renderer.
 fn setup(setup: &mut Setup) -> Result<(), String> {
     register(setup, Rc::default());
     Ok(())
@@ -38,6 +42,13 @@ fn register(setup: &mut Setup, shown: Shown) {
         let render = render.clone();
         setup.code_block(language, move |_, fence| render(fence));
     }
+    setup.inline_math(|_, tex| inline_line(tex));
+}
+
+/// Inline math's row in the styles of display math, without colors so it takes the text's; `None` when the TeX
+/// does not parse, so the TeX shows as typed.
+pub fn inline_line(tex: &str) -> Option<Line> {
+    formula(&inline::render(tex).ok()?, true).into_iter().next()
 }
 
 /// Lays out `source` as display math (TS `renderLatex` in strict mode).
@@ -72,14 +83,14 @@ fn renderer(shown: Shown) -> impl Fn(&Fence) -> Fenced {
         if streaming {
             shown.insert(fence.key, fence.code.clone());
         }
-        Fenced::Lines { lines: formula(&layout), fg: None, drag: false }
+        Fenced::Lines { lines: formula(&layout, false), fg: None, drag: false }
     }
 }
 
 /// The formula's rows: structure in the muted text color, relations bold. The host draws them in a row that
 /// scrolls sideways instead of wrapping. TS adds a row of top margin; the Rust Markdown already puts a blank row
-/// between blocks.
-fn formula(layout: &Layout) -> Vec<Line> {
+/// between blocks. `inline` rows have no colors, so they take the text's.
+fn formula(layout: &Layout, inline: bool) -> Vec<Line> {
     layout
         .cells
         .iter()
@@ -97,7 +108,7 @@ fn formula(layout: &Layout) -> Vec<Line> {
                             || ('\u{2500}'..='\u{257f}').contains(&c)
                     });
                 let span = Span {
-                    fg: Some(if structural { "text.muted" } else { "text.base" }.into()),
+                    fg: (!inline).then(|| if structural { "text.muted" } else { "text.base" }.into()),
                     bold: style.is_some_and(|style| style.bold)
                         || ["=", "<", ">", "≠", "≡", "≤", "≥", "≈"].contains(&char),
                     italic: style.is_some_and(|style| style.italic),
