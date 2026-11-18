@@ -1,6 +1,6 @@
 //! Luau plugins in the real TUI (spike `luau-spike`): an example draws and sends what its Rust twin does, a dialog's
 //! answer comes back, and a plugin that spins is failed on CPU time while the TUI keeps drawing. The ownership table's
-//! Luau column is `plugin_ownership`, and the force-input port's is in `ports`.
+//! Luau column is `plugin_ownership`.
 
 use std::path::Path;
 use std::sync::Arc;

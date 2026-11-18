@@ -1,11 +1,11 @@
-//! The public SDK alone (O-67): the quick start, a plugin author's fixture and the three ports under
-//! `crates/plugin/examples` build on this crate and pull in no OpenTUI and no crate of the TUI.
+//! The public SDK alone (O-67): the quick start and a plugin author's fixture under `crates/plugin/examples` build on
+//! this crate and pull in no OpenTUI and no crate of the TUI.
 
 use std::path::Path;
 use std::process::Command;
 
-/// The quick start, the author's fixture, then the ports.
-const PLUGINS: [&str; 5] = ["hello", "author", "subagents-sidebar", "force-input", "session-usage"];
+/// The quick start and the author's fixture.
+const PLUGINS: [&str; 2] = ["hello", "author"];
 /// What a plugin on the SDK never depends on.
 const INTERNAL: [&str; 4] = ["opentui", "opentui-sys", "opencode-ui", "opencode-tui"];
 
@@ -13,7 +13,7 @@ const INTERNAL: [&str; 4] = ["opentui", "opentui-sys", "opencode-ui", "opencode-
 fn plugins_on_the_sdk_pull_in_no_tui() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
     let examples = root.join("plugin/examples");
-    for fixture in ["hello", "author"] {
+    for fixture in PLUGINS {
         let check = cargo()
             .args(["check", "--quiet", "--locked", "--manifest-path"])
             .arg(examples.join(fixture).join("Cargo.toml"))

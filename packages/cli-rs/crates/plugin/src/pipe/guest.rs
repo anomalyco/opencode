@@ -455,7 +455,7 @@ impl Guest {
     /// (a component's key layer, enabled or disabled, retitled, or gone with its mount) replaces their keymap layers in
     /// place, as TS's keymap follows a layer; any other change takes a reload, which mounts its surfaces again. A
     /// reload for a layer remounted the plugin's route, so what the user typed in its field until the new mount's field
-    /// took the focus was lost (`ports_trio`'s session-manager search lost a letter).
+    /// took the focus was lost (session-manager's port lost a letter of its search).
     pub(crate) fn activated(self: &Rc<Self>, manifest: Manifest, holds: Vec<String>, effects: Vec<HostRequest>) {
         if self.ended() {
             return;

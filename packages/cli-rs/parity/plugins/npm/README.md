@@ -38,7 +38,7 @@ host through the V2 compatibility layer. Before a scenario runs, each side unpac
 | `opencode-good-fences.tgz` | `opencode-good-fences@0.1.0` (contract 2.x, addition 3) | `sha512-JgzWS0Fsx3WeFvQQC8v7ohjvkgB0T2U35yx96HoihfECEozv79ROjPZdhSWzWC5qaqoplXk5/lI1/kIsLQDvZA==` |
 
 `integrity.json` pins the same digests; TS's recorder (`parity/app/scenarios.test.tsx`) and the Rust rows
-(`crates/tui/tests/all/{app,ports}.rs`) refuse a tarball whose SHA-512 is not its pin before they unpack it.
+(`crates/tui/tests/all/{app,plugin_published}.rs`) refuse a tarball whose SHA-512 is not its pin before they unpack it.
 
 A scope's `/` is `__` in the file name. Check one against the registry:
 

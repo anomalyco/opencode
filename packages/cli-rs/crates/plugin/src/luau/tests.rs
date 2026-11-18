@@ -2186,7 +2186,7 @@ fn heavy_calls() {
 #[test]
 #[ignore]
 fn measure_idle_memory_and_compile() {
-    for name in ["hello", "counter", "force-input"] {
+    for name in ["hello", "counter"] {
         let sources = Sources::read(&example(name)).unwrap();
         println!("idle VM {name}: {} bytes", idle_memory(&sources).unwrap());
     }

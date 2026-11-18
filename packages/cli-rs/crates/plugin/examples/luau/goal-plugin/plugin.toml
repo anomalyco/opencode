@@ -1,7 +1,0 @@
-# The port of `@prevalentware/opencode-goal-plugin`'s TUI (`examples/goal-plugin`) in Luau.
-# Its ID is the original's, as the native port's is.
-id = "local.goal-mode.tui"
-name = "Goal"
-version = "0.1.98"
-contract = "2.0"
-description = "the session's goal in the sidebar, and a summary that sends its prompts"

@@ -45,7 +45,7 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   `priority` and `bindings` are not mapped. A layer's and a command's `enabled` are the command's state on the host
   (contract ergonomics 2.5): a disabled command stays registered, binds no key and is in neither the palette nor the
   slash list, as TS binds no disabled command, and the layer follows what they read, telling the host each change
-  with no reload (opencode-command-hotkeys' palette entries off a session, `ports_trio`). Its `target` holds
+  with no reload (opencode-command-hotkeys' palette entries off a session). Its `target` holds
   its commands to the plugin's focus in that node, elsewhere they decline (CT-20: @slkiser/opencode-quota's window
   Escape kept Goal's select open), but the focus is the layer's record of what the plugin focused or the user edited:
   the host's focus by a click or Tab does not reach it, so a target the user clicks into still declines. A command

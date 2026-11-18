@@ -1,7 +1,0 @@
-# The port of `opencode-session-usage` (`examples/session-usage`) in Luau.
-# Its ID is the native port's, which replaces the built-in usage limits panel, as the original does.
-id = "opencode.sidebar.limit"
-name = "Session usage"
-version = "0.1.8"
-contract = "2.0"
-description = "what the session tree cost, and the OpenCode Go usage meters, in the sidebar"

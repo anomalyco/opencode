@@ -63,7 +63,7 @@ fn scenarios() {
             false => &[false],
         };
         for &abi in carriers {
-            let (passed, report) = run(recording, abi, None);
+            let (passed, report) = run(recording, abi);
             let name = format!("{}{}", recording.scenario, if abi { " (C ABI)" } else { "" });
             eprintln!("{} {name}\n{report}", if passed { "ok  " } else { "FAIL" });
             if !passed {
@@ -74,84 +74,20 @@ fn scenarios() {
     assert!(failed.is_empty(), "P-APP scenarios failed: {failed:?} (reports above)");
 }
 
-#[cfg(feature = "ts")]
-/// The ports trio (`ports_trio.rs`): the published packages of the P.8 recordings that have ports, by scenario, and
-/// the port each is swapped for.
-const PORTS: [(&str, &str); 10] = [
-    ("P.8/sidebar-tokens", "sidebar-tokens"),
-    ("P.8/sidebar-prompt", "sidebar-prompt"),
-    ("P.8/session-usage", "session-usage"),
-    ("P.8/subagents", "subagents-sidebar"),
-    ("P.8/force-input", "force-input"),
-    ("P.8/context-grid", "context-grid"),
-    ("P.8/command-hotkeys", "command-hotkeys"),
-    ("P.8/session-manager", "session-manager"),
-    ("P.8/queue-manager", "queue-manager"),
-    ("P.8/goal-plugin", "goal-plugin"),
-];
-
-/// What a recording's published package is swapped for: its native port's library, or its Luau port.
-#[cfg(feature = "ts")]
-#[derive(Clone, Copy, Debug)]
-enum Swap {
-    Native(&'static str),
-    #[cfg(luau)]
-    Luau(&'static str),
-}
-
-// Expected (ports trio): each port, native and in Luau, in place of the published package TS ran, draws the cells of
-// each of TS's checkpoints and sends TS's requests, as the package itself does on the JS host (`scenarios`).
-#[cfg(feature = "ts")]
-#[test]
-fn ports_replay_the_ts_recordings() {
-    if !support::in_utc() {
-        return;
-    }
-    let mut failed = Vec::new();
-    for (scenario, port) in PORTS {
-        let recordings = Recording::all(Some(scenario)).unwrap_or_else(|error| panic!("{error}"));
-        let recording = recordings.iter().find(|recording| recording.scenario == scenario).expect(scenario);
-        #[cfg_attr(not(luau), allow(unused_mut))]
-        let mut swaps = vec![Swap::Native(port)];
-        #[cfg(luau)]
-        swaps.push(Swap::Luau(port));
-        for swap in swaps {
-            let (passed, report) = run(recording, false, Some(swapped(swap)));
-            let name = format!("{scenario} as {swap:?}");
-            eprintln!("{} {name}\n{report}", if passed { "ok  " } else { "FAIL" });
-            if !passed {
-                failed.push(name);
-            }
-        }
-    }
-    assert!(failed.is_empty(), "ports differ from TS's recordings: {failed:?} (reports above)");
-}
-
-/// Runs one recording, with the built-ins on the C ABI's byte shims when `abi`, and its published package swapped for
-/// the port in `swapped` (a root and the port's directory); returns whether it passed and its report.
-fn run(
-    recording: &Recording,
-    abi: bool,
-    swapped: Option<(opencode_util::temp::TempDir, std::path::PathBuf)>,
-) -> (bool, String) {
+/// Runs one recording, with the built-ins on the C ABI's byte shims when `abi`; returns whether it passed and its report.
+fn run(recording: &Recording, abi: bool) -> (bool, String) {
     let memory = Memory::new(routes(recording));
     let app = TestApp::new(recording.width, recording.height);
-    let npm = swapped.is_none() && recording.env.get("OPENCODE_PARITY_PLUGIN").is_some_and(|plugin| plugin == "npm");
     #[cfg(feature = "ts")]
-    let config_text = match (&swapped, npm) {
-        (Some((_, dir)), _) => swap_config(&recording.config, dir),
-        (None, true) => npm_config(&recording.config),
-        (None, false) => recording.config.to_string(),
+    let npm = recording.env.get("OPENCODE_PARITY_PLUGIN").is_some_and(|plugin| plugin == "npm");
+    #[cfg(feature = "ts")]
+    let config_text = match npm {
+        true => npm_config(&recording.config),
+        false => recording.config.to_string(),
     };
+    // An npm scenario is skipped before it runs in such a build.
     #[cfg(not(feature = "ts"))]
-    let config_text = {
-        // An npm scenario is skipped before it runs in such a build; a port swapped in for its package is not.
-        let _ = npm;
-        match &swapped {
-            Some((_, dir)) => swap_config(&recording.config, dir),
-            None => recording.config.to_string(),
-        }
-    };
+    let config_text = recording.config.to_string();
     let config = cli_config::decode_text(&config_text).unwrap_or_default();
     #[cfg(feature = "ts")]
     let cache = (!recording.cache.is_empty()).then(|| cache(&recording.cache));
@@ -236,15 +172,6 @@ fn run(
         opencode_tui::plugins::host::external_with(&tui, external, Some(config));
         root
     });
-    // Ports trio: the port, which the loader loads from where the swapped entry names it.
-    if let Some((root, _)) = &swapped {
-        let external = opencode_tui::plugins::host::External {
-            config_dir: root.path().join("config"),
-            cwd: root.path().to_path_buf(),
-            dev: Vec::new(),
-        };
-        opencode_tui::plugins::host::external(&tui, external);
-    }
     // The editor context's sources (E.5): the fake IDE server and the Zed database the TS side had.
     let ide = recording.ide.as_ref().map(|_| ide::Ide::start());
     let zed = recording.zed.as_ref().map(|zed| {
@@ -645,7 +572,7 @@ fn npm_config(config: &serde_json::Value) -> String {
         let _ = std::fs::remove_dir_all(&into);
         std::fs::create_dir_all(&into).expect("the npm package's directory");
         let tarball = parity.join("plugins/npm").join(format!("{}.tgz", name.replace('/', "__")));
-        crate::ports::pinned(&tarball);
+        crate::plugin_published::pinned(&tarball);
         let status = std::process::Command::new("tar")
             .arg("-xzf")
             .arg(&tarball)
@@ -656,44 +583,6 @@ fn npm_config(config: &serde_json::Value) -> String {
             .expect("tar");
         assert!(status.success(), "cannot unpack {}", tarball.display());
         *target = into.to_string_lossy().into_owned();
-    }
-    config.to_string()
-}
-
-#[cfg(feature = "ts")]
-/// A directory holding `swap`'s port, as a plugin directory a `plugins` entry names: a native library, or a Luau plugin
-/// with Luau plugins on; and the directory.
-fn swapped(swap: Swap) -> (opencode_util::temp::TempDir, std::path::PathBuf) {
-    let root = opencode_util::temp::tempdir().expect("port root");
-    std::fs::create_dir_all(root.path().join("config")).expect("config directory");
-    let dir = match swap {
-        Swap::Native(name) => {
-            let dir = root.path().join(name);
-            std::fs::create_dir_all(&dir).expect("the port's directory");
-            std::fs::write(dir.join(opencode_plugin::loader::entry_file()), crate::ports::build(name))
-                .expect("library");
-            dir
-        }
-        #[cfg(luau)]
-        Swap::Luau(name) => {
-            let dir = root.path().join(format!("{name}.luau"));
-            let examples = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../plugin/examples/luau");
-            crate::plugin_pipe::copy(&examples.join(name), &dir);
-            dir
-        }
-    };
-    (root, dir)
-}
-
-/// The recording's config with each `plugins` entry naming `dir`, the port, and keeping its options.
-fn swap_config(config: &serde_json::Value, dir: &std::path::Path) -> String {
-    let mut config = config.clone();
-    let target = serde_json::Value::String(dir.to_string_lossy().into_owned());
-    for entry in config.get_mut("plugins").and_then(serde_json::Value::as_array_mut).into_iter().flatten() {
-        match entry {
-            serde_json::Value::Object(map) => drop(map.insert("package".to_owned(), target.clone())),
-            entry => *entry = target.clone(),
-        }
     }
     config.to_string()
 }
@@ -711,7 +600,7 @@ fn cache(packages: &BTreeMap<String, String>) -> opencode_util::temp::TempDir {
         std::fs::create_dir_all(&generation).expect("the generation");
         let manifest = serde_json::json!({ "dependencies": { name: version } });
         std::fs::write(generation.join("package.json"), manifest.to_string()).expect("the generation's package.json");
-        crate::ports::unpack(name, &generation.join("node_modules").join(name));
+        crate::plugin_published::unpack(name, &generation.join("node_modules").join(name));
     }
     cache
 }
