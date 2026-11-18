@@ -451,7 +451,11 @@ impl Connect {
         let primary = match &attempt {
             Some(attempt) => vec![
                 action(
-                    if oauth_code(&attempt.instructions).is_some() { "copy code" } else { "copy link" },
+                    if super::integration::oauth_code(&attempt.instructions).is_some() {
+                        "copy code"
+                    } else {
+                        "copy link"
+                    },
                     "c",
                     Connect::copy,
                 ),
@@ -701,27 +705,13 @@ impl Connect {
 
     fn copy(&self) {
         let Some(attempt) = self.attempt.borrow().clone() else { return };
-        let value = oauth_code(&attempt.instructions).unwrap_or(attempt.url);
+        let value = super::integration::oauth_code(&attempt.instructions).unwrap_or(attempt.url);
         if crate::features::selection::put(&self.local.app, &value) {
             self.local.toasts.show(ToastOptions::new(Variant::Info, "Copied to clipboard"));
             return;
         }
         self.local.toasts.error("Could not copy to the clipboard");
     }
-}
-
-// `/[A-Z0-9]{4}-[A-Z0-9]{4,5}/`.
-fn oauth_code(text: &str) -> Option<String> {
-    let chars: Vec<char> = text.chars().collect();
-    let code = |c: &char| c.is_ascii_uppercase() || c.is_ascii_digit();
-    (0..chars.len()).find_map(|start| {
-        let head = chars.get(start..start + 4)?;
-        if !head.iter().all(code) || chars.get(start + 4) != Some(&'-') {
-            return None;
-        }
-        let tail = chars[start + 5..].iter().take(5).take_while(|c| code(c)).count();
-        (tail >= 4).then(|| chars[start..start + 5 + tail].iter().collect())
-    })
 }
 
 #[cfg(test)]
@@ -741,13 +731,5 @@ mod tests {
         assert_eq!(old, json!({ "lastSeenAt": now as i64, "other": 1 }));
         let mut off = json!({ "dontShow": true, "lastSeenAt": 5.0 });
         assert_eq!(claim(&mut off, now), Claim::DontShow(Some(5.0)));
-    }
-
-    #[test]
-    fn finds_the_device_code() {
-        assert_eq!(oauth_code("Enter code ABCD-1234 at the page").as_deref(), Some("ABCD-1234"));
-        assert_eq!(oauth_code("code WXYZ-12345!").as_deref(), Some("WXYZ-12345"));
-        assert_eq!(oauth_code("abcd-1234"), None);
-        assert_eq!(oauth_code("ABCD-123"), None);
     }
 }
