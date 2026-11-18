@@ -1115,6 +1115,28 @@ fn a_key_a_js_listener_lets_go_is_heard_once_by_each_native_listener() {
     assert_eq!(heard, ["above:ctrl+o", "below:ctrl+o"]);
 }
 
+// Expected (cg2-1): what the user types into the composer never waits for a JS listener of every key, even one that
+// can take keys: with every answer of the JS host held back, the letters show at once; a key it may take still waits.
+#[test]
+fn composer_typing_never_waits_for_a_js_key_listener() {
+    let Some(config) = config() else { return };
+    let (pipe, _log) = probe(config);
+    let (harness, tui) = (&pipe.harness, &pipe.harness.tui);
+    // The first run registers the listener, which reloads the plugin's registrations once.
+    for step in ["pass", "take"] {
+        tui.keymap.dispatch("v2probe.listen", Some(step));
+        pipe.settle();
+    }
+    pipe.scripts().hold_answers(true);
+    harness.app.type_text("ab");
+    assert_eq!(harness.text(), "ab", "the typing waited for the JS host");
+    harness.app.press("ctrl+p");
+    assert!(!tui.dialogs.is_open(), "the key the listener may take did not wait for it");
+    pipe.scripts().hold_answers(false);
+    pipe.settle();
+    assert!(!tui.dialogs.is_open(), "the listener did not take its key");
+}
+
 // Expected (ce-4): a JS palette command whose key declines is still listed as the palette that key opens shows.
 #[test]
 fn a_declining_palette_command_stays_in_the_palette_its_key_opens() {

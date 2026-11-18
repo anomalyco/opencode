@@ -730,34 +730,47 @@ test("keys reach keyInput, useKeyboard and a focused field", () => {
   expect(fake.toasts()).toEqual([])
 })
 
-// cg2-1: a listener of every key can take a key only where the plugin can: the global layer while a `keypress`
-// listener is subscribed, and a route's while the field the plugin focused there has an `onKeyDown`. Elsewhere it only
-// hears the key, which the host lets go on at once: a field with only `onInput` holds no typing.
-test("a listener takes keys only while the plugin can take one", () => {
+// cg2-1: a listener of every key holds a key for the answer only while a handler can take it: one whose source calls
+// `preventDefault` says so up front, and one that took a key through a helper says so from then on. A handler that
+// only hears keys (most `useKeyboard`s, a field with only `onInput` or an `onKeyDown` that never takes one) costs the
+// user's typing no round trip.
+test("a listener takes keys only while a handler can take one", () => {
   const fake = host()
   const ctx = plugin("t.taking", fake)
-  const listener = () => {}
-  ctx.renderer.keyInput.on("keypress", listener)
   const global = { layer: 0 }
-  expect(fake.takes(global)).toBe(true)
-  ctx.renderer.keyInput.off("keypress", listener)
+  const hears = () => {}
+  ctx.renderer.keyInput.on("keypress", hears)
   expect(fake.takes(global)).toBe(false)
-  ctx.renderer.keyInput.on("keypress", listener)
+  const takes = (event: Json) => event.preventDefault()
+  ctx.renderer.keyInput.on("keypress", takes)
+  expect(fake.takes(global)).toBe(true)
+  ctx.renderer.keyInput.off("keypress", takes)
+  expect(fake.takes(global)).toBe(false)
+  // Through a helper: it holds keys once it took one.
+  const prevent = (event: Json) => event.preventDefault()
+  const helped = (event: Json) => event.name === "x" && prevent(event)
+  ctx.renderer.keyInput.on("keypress", helped)
+  expect(fake.takes(global)).toBe(false)
+  expect(fake.layers[0].handler({ type: "key", key: "y" })).toBe("pass")
+  expect(fake.takes(global)).toBe(false)
+  expect(fake.layers[0].handler({ type: "key", key: "x" })).toBe("consume")
   expect(fake.takes(global)).toBe(true)
   const fields: Json = {}
   ctx.ui.router.register({
     name: "fields",
     render: () => [
       h("input", { ref: (el: Json) => (fields.typed = el), onInput: () => {} }),
-      h("input", { ref: (el: Json) => (fields.keyed = el), onKeyDown: () => {} }),
+      h("input", { ref: (el: Json) => (fields.heard = el), onKeyDown: () => {} }),
+      h("input", { ref: (el: Json) => (fields.keyed = el), onKeyDown: (event: Json) => event.preventDefault() }),
     ],
   })
   const index = fake.surfaces.findIndex((surface: Json) => surface.place.type === "route")
-  const route = fake.surfaces[index]
-  route.view({ mount: { surface: "fields", key: "a", generation: 1 }, input: { width: 40, height: 10 } })
+  fake.surfaces[index].view({ mount: { surface: "fields", key: "a", generation: 1 }, input: { width: 40, height: 10 } })
   const surface = { surface: index }
   expect(fake.takes(surface)).toBe(false)
   fields.typed.focus()
+  expect(fake.takes(surface)).toBe(false)
+  fields.heard.focus()
   expect(fake.takes(surface)).toBe(false)
   fields.keyed.focus()
   expect(fake.takes(surface)).toBe(true)

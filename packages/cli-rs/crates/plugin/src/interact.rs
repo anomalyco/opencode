@@ -400,7 +400,7 @@ impl Owner {
     }
 
     /// Whether the composer or another text input has the focus.
-    fn typing(&self) -> bool {
+    pub(crate) fn typing(&self) -> bool {
         self.host.upgrade().is_some_and(|host| {
             host.composer_focused() || host.app().focused().is_some_and(|widget| widget.element().is_editor())
         })
@@ -1402,7 +1402,7 @@ pub enum Pasted {
 /// Whether the focus is in the widget with id `id`.
 /// Whether `key` (the host's keybind syntax) types text in an input: an alternative whose first stroke is one character
 /// or `space`, with no modifier but Shift.
-fn printable(key: &str) -> bool {
+pub(crate) fn printable(key: &str) -> bool {
     key.split(',').filter_map(|alternative| alternative.split_whitespace().next()).any(|stroke| {
         let (modifiers, name) = match stroke.strip_suffix("++") {
             Some(modifiers) => (modifiers, "+"),

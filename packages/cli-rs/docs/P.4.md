@@ -701,8 +701,10 @@ It is the second timing tier. No frame waits for the JS host:
 - **Input** (P2): a key, a paste or a press cannot wait a round trip, so the host answers from what the plugin declared:
   a bind's key, a paste of a layer that takes pastes and a pointer event on a node that asks for them are consumed, and
   those handlers' answers are advisory. A key of a listener of every key that can take one now (the JS host says so,
-  `taking`) is held, as a key command's is, until the handler answers: `consume` takes it, anything else lets it go
-  on, below the listeners that heard it (contract gaps 2, cg2-1, cg2-5). One that cannot only hears it. A key that
+  `taking`: the compat layer, for a handler whose source calls `preventDefault` or that took a key before) is held, as
+  a key command's is, until the handler answers: `consume` takes it, anything else lets it go on, below the listeners
+  that heard it (contract gaps 2, cg2-1, cg2-5). One that cannot only hears it, and so does a setup layer's listener for
+  what the user types into the composer or another text input. A key that
   changes how the next ones route (a mode switch) declares `hold`: the keys after it wait until its `release-keys`
   effect applied, or 50 ms. A handler's effects are its mount's: the overlay it opens, the focus, its mode.
 - **Trees** are revisions of a mount, one in flight: the host adopts it in its next frame, or refuses it and gets a

@@ -713,6 +713,20 @@ export function context(base: Base, carrier: Carrier) {
   // `focus` of the node's id); any node emits `focused` and `blurred`, as OpenTUI's renderables do.
   let focusedNode: VNode | undefined
   const FOCUSABLE = new Set(["input", "textarea", "scrollbox"])
+  // cg2-1: whether a key handler can take a key, which the host holds a key for the answer for: one whose source
+  // calls `preventDefault` says so up front, as TS's runs synchronously and the host cannot wait; one that took a key
+  // all the same (through a helper) says so from then on. Any other only hears keys, which go on at once.
+  const takers = new WeakSet<object>()
+  const mayTake = (handler: unknown) =>
+    typeof handler === "function" &&
+    (takers.has(handler) || Function.prototype.toString.call(handler).includes("preventDefault"))
+  let globalTaking: (() => void) | undefined
+  const took = (handler: unknown) => {
+    if (typeof handler !== "function" || takers.has(handler)) return
+    takers.add(handler)
+    taking()
+    globalTaking?.()
+  }
   // cg2-1: a route's or panel's listener of every key (by surface name, its index) takes a key only while the field the
   // plugin focused is in its tree and has an `onKeyDown`; the host holds a key for the answer only then, and otherwise
   // the key goes on at once.
@@ -720,7 +734,7 @@ export function context(base: Base, carrier: Carrier) {
   const taking = () => {
     for (const [surface, index] of fieldListeners) {
       const roots = [...rendered.entries()].filter(([at]) => at.startsWith(`${surface}\u0000`)).map(([, at]) => at.root)
-      const on = !!focusedNode?.props.onKeyDown && roots.some((root) => within(root, focusedNode))
+      const on = mayTake(focusedNode?.props.onKeyDown) && roots.some((root) => within(root, focusedNode))
       carrier.taking?.({ surface: index }, on)
     }
   }
@@ -782,8 +796,11 @@ export function context(base: Base, carrier: Carrier) {
       const node = focusedNode && find(idOf(focusedNode))
       if (node !== focusedNode || !node?.props.onKeyDown) return "pass"
       const key = keyEvent(event)
-      node.props.onKeyDown(key)
-      return key.defaultPrevented ? "consume" : "pass"
+      const handler = node.props.onKeyDown
+      handler(key)
+      if (!key.defaultPrevented) return "pass"
+      took(handler)
+      return "consume"
     }
     const node = (event.type === "change" || event.type === "submit") && find(event.node)
     if (!node) return
@@ -847,24 +864,33 @@ export function context(base: Base, carrier: Carrier) {
   // the plugin registers with its first one, as most plugins never listen. A listener's `preventDefault` takes the key.
   const keyInput = new EventEmitter()
   let listening = false
-  keyInput.on("newListener", (name) => {
+  keyInput.on("newListener", (name, first) => {
     if (name !== "keypress" || listening || !carrier.layer) return
     listening = true
     const layer = carrier.layer({ scope: "global", any: true }, (event: Json) => {
       if (event.type !== "key") return "pass"
       const key = keyEvent(event)
+      const heard = keyInput.listeners("keypress")
       keyInput.emit("keypress", key)
-      return key.defaultPrevented ? "consume" : "pass"
+      if (!key.defaultPrevented) return "pass"
+      heard.forEach(took)
+      return "consume"
     })
     carrier.changed()
-    // cg2-1: it takes a key while a `keypress` listener may, and only hears one once the last left.
+    // cg2-1: it takes a key only while a `keypress` listener can ([`mayTake`]); otherwise it only hears the key, which
+    // the host lets go on at once.
     if (typeof layer !== "number") return
-    carrier.taking?.({ layer }, true)
+    const listeners = (added?: unknown) => {
+      const on = [...keyInput.listeners("keypress"), added].some(mayTake)
+      carrier.taking?.({ layer }, on)
+    }
+    globalTaking = () => listeners()
+    listeners(first)
     keyInput.on("removeListener", (removed) => {
-      if (removed === "keypress" && keyInput.listenerCount("keypress") === 0) carrier.taking?.({ layer }, false)
+      if (removed === "keypress") listeners()
     })
-    keyInput.on("newListener", (added) => {
-      if (added === "keypress") carrier.taking?.({ layer }, true)
+    keyInput.on("newListener", (added, handler) => {
+      if (added === "keypress") listeners(handler)
     })
   })
   // A surface's scrolls (CT-2): a scroll box's state is the host's read of it, which follows it as it moves, and a move
