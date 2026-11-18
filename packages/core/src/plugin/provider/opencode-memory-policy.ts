@@ -117,7 +117,7 @@ const CORRECTION_TERMS = 2
 
 /**
  * Sparse, at the moments a coding agent is most likely to lack what a teammate knows: when the task arrives (a new,
- * unforked session's first prompt, with the files attached to it), and when a command fails (the task again, with the
+ * unforked session's first prompt, with the files attached to it or named in it), and when a command fails (the task again, with the
  * end of the command's output and the files the agent worked on as context), at most twice per session. Console returns
  * only the few entries above its relevance bar, within its token budget, and never the same revision twice in a session.
  * Injected entries come whole, so using one takes no `read`. A message reads as a correction when it says so (instead,
@@ -128,7 +128,10 @@ export const initial: Policy = {
     if (moment.type === "prompt") {
       const text = moment.text.trim()
       if (!text || session.fork || session.time.busy !== undefined) return undefined
-      return { query: text.slice(0, MAX_QUERY), context: within({ repo: signals.repo, files: moment.files }) }
+      return {
+        query: text.slice(0, MAX_QUERY),
+        context: within({ repo: signals.repo, files: [...new Set([...moment.files, ...mentioned(text)])] }),
+      }
     }
     const output = moment.output.trim()
     if (!output || signals.injected.failure >= FAILURE_INJECTIONS) return undefined
@@ -175,6 +178,22 @@ export function summary(hit: Pick<Hit, "id" | "kind" | "title" | "snippet" | "re
   const snippet = line(hit.snippet)
   const preview = snippet.length > MAX_SNIPPET ? `${snippet.slice(0, MAX_SNIPPET - 1)}…` : snippet
   return `- ${line(hit.id)} r${hit.revision} ${hit.kind}: ${line(hit.title)}${preview ? ` — ${preview}` : ""}`
+}
+
+/**
+ * Paths a task names, such as `src/pricing.ts` or `apps/server/`: words with a slash, or a name with a file extension.
+ * Console matches them against the paths entries are about, so a word that only looks like a path matches nothing.
+ */
+function mentioned(text: string) {
+  return text
+    .split(/[\s`'"()[\]{}<>,;]+/)
+    .map((word) => word.replace(/[.:!?]+$/, ""))
+    .filter(
+      (word) =>
+        !word.includes("://") &&
+        /[A-Za-z]/.test(word) &&
+        (/^[\w.@-]+(?:\/[\w.@-]+)+\/?$/.test(word) || /^[\w@-][\w.@-]*\.[A-Za-z][A-Za-z0-9]{0,5}$/.test(word)),
+    )
 }
 
 /** The context without empty parts, the most recent files only. */

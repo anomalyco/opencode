@@ -826,6 +826,16 @@ describe("OpencodeMemoryPolicy.initial", () => {
       query: "Fix it",
       context: { repo: "github.com/acme/app", files: ["src/a.ts"] },
     })
+    // Paths the task names count as its files; versions, URLs and sentences' full stops don't.
+    expect(
+      inject(
+        task(
+          "Add discount() to src/pricing.ts, test it in `test/pricing.test.ts` and apps/api/. Bump to 1.2, see https://x.io/a.md or README.md.",
+        ),
+        signals(),
+        session(),
+      )?.context,
+    ).toEqual({ files: ["src/pricing.ts", "test/pricing.test.ts", "apps/api/", "README.md"] })
     expect(inject(task("   "), signals(), session())).toBeUndefined()
     expect(
       inject(task("Keep going"), signals(), session({ time: { created: 0, updated: 0, busy: 1 } })),
