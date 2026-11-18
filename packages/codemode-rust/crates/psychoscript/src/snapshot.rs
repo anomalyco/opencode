@@ -712,6 +712,9 @@ impl Enc<'_, '_> {
                     .map(|f| self.frame(f))
                     .collect::<R<Vec<_>>>()?,
             ));
+            if !s.splits.is_empty() {
+                items.push(json!(s.splits));
+            }
         }
         Ok(out)
     }
@@ -1402,12 +1405,20 @@ impl Dec<'_> {
                 .collect::<R<Vec<_>>>()?,
             _ => Vec::new(),
         };
+        let splits = match j.get(5) {
+            Some(J::Array(items)) => items
+                .iter()
+                .map(|s| Ok((u32_(at(s, 0)?)?, u32_(at(s, 1)?)?)))
+                .collect::<R<Vec<_>>>()?,
+            _ => Vec::new(),
+        };
         Ok(Box::new(SavedFrame {
             frame,
             stack: self.slots(at(j, 1)?)?,
             handlers: self.handlers(at(j, 2)?)?,
             started: boolean(at(j, 3)?)?,
             above,
+            splits,
         }))
     }
 

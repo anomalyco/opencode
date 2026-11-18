@@ -97,6 +97,10 @@ pub struct SavedFrame {
     // Boxed as the job stack holds them, so parking and restoring move the boxes instead of copying frames.
     #[allow(clippy::vec_box)]
     pub above: Vec<Box<Frame>>,
+    /// For each generator frame among `above` (by its index there), where in `stack` that generator's own stack
+    /// starts: a running generator runs on its own stack, so the frames a search parked across one are kept as one
+    /// segment and split again when they are restored (see `park_search`).
+    pub splits: Vec<(u32, u32)>,
 }
 
 /// How `run` left its base frame. The value is packed: returning a two-word `Value` through memory stalls the
@@ -1648,6 +1652,7 @@ impl<'rt> Vm<'rt> {
                 handlers: Vec::new(),
                 started,
                 above: Vec::new(),
+                splits: Vec::new(),
             })
         });
         saved.stack.clear();
@@ -1663,6 +1668,9 @@ impl<'rt> Vm<'rt> {
     }
 
     fn restore_frame(&mut self, saved: &mut SavedFrame) -> bool {
+        if !saved.splits.is_empty() {
+            return self.restore_split(saved);
+        }
         let Some(mut frame) = saved.frame.take() else {
             return false;
         };
@@ -1675,6 +1683,51 @@ impl<'rt> Vm<'rt> {
         self.frames.push(frame);
         if !saved.above.is_empty() {
             self.restore_above(saved, base, hbase);
+        }
+        true
+    }
+
+    /// `restore_frame` for frames a search parked across running generators: the segment is split again, each
+    /// generator getting its resumer's stack back and the VM switching to the generator's own, as `enter_generator`
+    /// does.
+    #[cold]
+    #[inline(never)]
+    fn restore_split(&mut self, saved: &mut SavedFrame) -> bool {
+        let Some(mut first) = saved.frame.take() else {
+            return false;
+        };
+        let flat = std::mem::take(&mut saved.stack);
+        let splits = std::mem::take(&mut saved.splits);
+        let below = self.stack.len();
+        let hbase = self.handlers.len() as u32;
+        first.base = below + 2;
+        first.is_base = true;
+        first.hbase = hbase;
+        self.handlers.append(&mut saved.handlers);
+        let end = |r: usize| splits.get(r).map_or(flat.len(), |s| s.1 as usize);
+        self.stack.extend_from_slice(&flat[..end(0)]);
+        self.frames.push(first);
+        // The region of the segment the frames being restored are in: 0 below the first generator.
+        let mut region = 0;
+        for (j, mut f) in saved.above.drain(..).enumerate() {
+            if region < splits.len() && splits[region].0 as usize == j {
+                let start = splits[region].1 as usize;
+                let own = flat[start..end(region + 1)].to_vec();
+                let resumer = std::mem::replace(&mut self.stack, own);
+                if let FrameKind::Generator(g, _) = f.kind
+                    && let Kind::Generator(GenState::Running(s)) = &mut self.heap[g as usize].kind
+                {
+                    s.stack = resumer;
+                }
+                region += 1;
+            }
+            // A base kept relative to the first frame's: its index in the segment, less two.
+            f.base = match region {
+                0 => f.base + below + 2,
+                r => f.base + 2 - splits[r - 1].1 as usize,
+            };
+            f.hbase += hbase;
+            self.frames.push(f);
         }
         true
     }
@@ -1697,6 +1750,8 @@ impl<'rt> Vm<'rt> {
         for (i, f) in self.frames.iter().enumerate().rev() {
             match f.kind {
                 FrameKind::Async(c) => return Some(c),
+                // A generator resumed from bytecode parks with the frames that resumed it.
+                FrameKind::Generator(g, _) if !f.is_base && !self.is_async_generator(g) => {}
                 FrameKind::Generator(..) => return None,
                 FrameKind::Native(crate::native::NativeOp::Settle, _) if f.is_base && i == 0 => {
                     self.coroutines.push(Coroutine {
@@ -1721,6 +1776,12 @@ impl<'rt> Vm<'rt> {
             .iter()
             .rposition(|f| matches!(f.kind, FrameKind::Async(a) if a == c))
             .unwrap_or(0);
+        if self.frames[k + 1..]
+            .iter()
+            .any(|f| matches!(f.kind, FrameKind::Generator(..)))
+        {
+            return self.park_split(c, k);
+        }
         let mut parked: Vec<Box<Frame>> = self.frames.drain(k..).collect();
         let first = parked.remove(0);
         let (base, hbase) = (first.base, first.hbase);
@@ -1731,6 +1792,7 @@ impl<'rt> Vm<'rt> {
                 handlers: Vec::new(),
                 started: true,
                 above: Vec::new(),
+                splits: Vec::new(),
             })
         });
         saved.stack.clear();
@@ -1746,6 +1808,75 @@ impl<'rt> Vm<'rt> {
                 f
             })
             .collect();
+        let is_base = first.is_base;
+        saved.frame = Some(first);
+        self.coroutines[c as usize].saved = Some(saved);
+        let result = match self.coroutines[c as usize].promise {
+            Some(p) => Value::Obj(p),
+            None => Value::Undef,
+        };
+        (result, is_base)
+    }
+
+    /// `park_search` across running generators, whose frames run on stacks of their own: the parked frames' slots
+    /// are kept as one segment, the regions below each generator (each in that generator's keeping as its resumer's
+    /// stack) followed by the generators' own, with where each generator's starts (`SavedFrame::splits`). A parked
+    /// frame's base is kept as its index in the segment less two.
+    #[cold]
+    #[inline(never)]
+    fn park_split(&mut self, c: u32, k: usize) -> (Value, bool) {
+        let mut parked: Vec<Box<Frame>> = self.frames.drain(k..).collect();
+        let first = parked.remove(0);
+        let (base, hbase) = (first.base, first.hbase);
+        // The stacks of the regions, bottom up: each generator keeps the one below it, the VM the topmost.
+        let gens: Vec<(usize, Id)> = parked
+            .iter()
+            .enumerate()
+            .filter_map(|(j, f)| match f.kind {
+                FrameKind::Generator(g, _) => Some((j, g)),
+                _ => None,
+            })
+            .collect();
+        let mut regions: Vec<Vec<Slot>> = gens
+            .iter()
+            .map(|(_, g)| match &mut self.heap[*g as usize].kind {
+                Kind::Generator(GenState::Running(s)) => std::mem::take(&mut s.stack),
+                _ => Vec::new(),
+            })
+            .collect();
+        regions.push(std::mem::take(&mut self.stack));
+        let mut flat: Vec<Slot> = regions[0].drain(base - 2..).collect();
+        self.stack = std::mem::take(&mut regions[0]);
+        let mut splits = Vec::with_capacity(gens.len());
+        let mut region = 0;
+        for (j, f) in parked.iter_mut().enumerate() {
+            if region < gens.len() && gens[region].0 == j {
+                splits.push((j as u32, flat.len() as u32));
+                flat.append(&mut regions[region + 1]);
+                region += 1;
+            }
+            f.base = match region {
+                0 => f.base - base,
+                r => splits[r - 1].1 as usize + f.base - 2,
+            };
+            f.hbase -= hbase;
+        }
+        let mut saved = self.coroutines[c as usize].saved.take().unwrap_or_else(|| {
+            Box::new(SavedFrame {
+                frame: None,
+                stack: Vec::new(),
+                handlers: Vec::new(),
+                started: true,
+                above: Vec::new(),
+                splits: Vec::new(),
+            })
+        });
+        saved.stack = flat;
+        saved.handlers.clear();
+        saved.handlers.extend(self.handlers.drain(hbase as usize..));
+        saved.started = true;
+        saved.above = parked;
+        saved.splits = splits;
         let is_base = first.is_base;
         saved.frame = Some(first);
         self.coroutines[c as usize].saved = Some(saved);
@@ -3291,6 +3422,7 @@ impl<'rt> Vm<'rt> {
                             handlers: Vec::new(),
                             started: false,
                             above: Vec::new(),
+                            splits: Vec::new(),
                         }));
                         self.heap[g as usize].kind = if is_async {
                             Kind::AsyncGenerator(Box::new(AsyncGen {
