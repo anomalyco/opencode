@@ -2,6 +2,23 @@
 
 use std::cmp::Ordering;
 
+use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
+
+/// `encodeURIComponent`, for both path parameters and the location header.
+pub fn encode_component(value: &str) -> String {
+    const COMPONENT: &AsciiSet = &NON_ALPHANUMERIC
+        .remove(b'-')
+        .remove(b'_')
+        .remove(b'.')
+        .remove(b'!')
+        .remove(b'~')
+        .remove(b'*')
+        .remove(b'\'')
+        .remove(b'(')
+        .remove(b')');
+    utf8_percent_encode(value, COMPONENT).to_string()
+}
+
 /// `a.localeCompare(b)` for the root locale, as Bun's ICU orders ASCII: punctuation and symbols
 /// first in ICU's order, then digits, then letters without regard to case; ties go to lowercase
 /// first, then to code points. Other characters sort after letters by code point.
