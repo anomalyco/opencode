@@ -642,6 +642,8 @@ export function context(base: Base, carrier: Carrier) {
   const PRESS = `${id}.compat.press`
   const ANSWER = `${id}.compat.answer`
   const DISMISS = `${id}.compat.dismiss`
+  // The host closed a showing of `ui.dialog.show`, or did not open it (input: its key).
+  const UNSHOWN = `${id}.compat.unshown`
   const QUERY = `${id}.compat.query`
   // The search of the select on screen, which the host tells each query.
   let searching: ((query: string) => void) | undefined
@@ -666,6 +668,9 @@ export function context(base: Base, carrier: Carrier) {
   // answers nothing, as TS resolves it with undefined (bigboi P8-7). A close after its answer finds nothing to settle.
   carrier.command({ name: DISMISS, title: DISMISS }, (input) => {
     if (input === String(asked)) settle()
+  })
+  carrier.command({ name: UNSHOWN, title: UNSHOWN }, (input) => {
+    if (shown && input === shown.key) unshow()
   })
   const settle = () => {
     const resolve = answering
@@ -720,9 +725,13 @@ export function context(base: Base, carrier: Carrier) {
     dialogs.delete(was.key)
     was.onClose?.()
   }
+  // Each send waits for its close: one the host did not open (as while its plugin manager shows) retires the showing at
+  // once, so a later `dialog.set` does not open it (big-boi ds-11).
   const sendShown = () => {
     if (!shown) return
-    void carrier.effect({ type: "dialog", dialog: { type: "surface", surface: DIALOG, key: shown.key, ...presented() } })
+    const dialog = { type: "surface", surface: DIALOG, key: shown.key, ...presented() }
+    const dismissed = { type: "command", name: UNSHOWN, input: shown.key }
+    void carrier.effect({ type: "dialog", dialog: { type: "dismissable", dialog, dismissed } })
   }
   // A dialog of the plugin's own ends with its activation, and a dialog it asked answers nothing (carbon-5).
   carrier.cleanup?.(() => {

@@ -674,6 +674,21 @@ impl Tree {
         cleared
     }
 
+    /// The tree's scrolls that hold `widget`, innermost first, each with its id if it has one.
+    pub(crate) fn scrolls_holding(&self, widget: &AnyWidget) -> Vec<(Option<String>, ScrollBox)> {
+        let path: Vec<u32> = std::iter::successors(widget.parent(), |widget| widget.parent()).map(|w| w.id()).collect();
+        let mut holding = Vec::new();
+        each(&self.nodes, &mut |node| {
+            if let Extra::Scroll(scroll) = &node.extra
+                && let Some(at) = path.iter().position(|id| *id == scroll.id())
+            {
+                holding.push((at, node.node.id().map(str::to_owned), scroll.clone()));
+            }
+        });
+        holding.sort_by_key(|(at, ..)| *at);
+        holding.into_iter().map(|(_, id, scroll)| (id, scroll)).collect()
+    }
+
     /// Where the scroll with id `id` is scrolled, as of the last frame.
     pub fn scroll_position(&self, id: &str) -> Option<(f64, f64)> {
         fn find<'a>(nodes: &'a [Mounted], id: &str) -> Option<&'a Mounted> {

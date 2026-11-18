@@ -268,7 +268,7 @@ fn book(plugin: &Rc<str>, f: impl FnOnce(&mut Ledger)) {
 /// One mount of a surface.
 pub(crate) struct Surface {
     pub(crate) root: View,
-    app: App,
+    pub(crate) app: App,
     owner: Weak<dyn Host>,
     /// The plugin's ID, which its canvases' lists are charged to.
     plugin: Rc<str>,
@@ -323,6 +323,10 @@ pub(crate) struct Surface {
     remounted: RefCell<Option<String>>,
     /// Times the host's own work for the mount's nodes, as the plugin's host time.
     host_time: HostTime,
+    /// What the user typed into the fields over the values the tree gave, which the next adopted tree shows where it
+    /// gives the same values: the mount this one replaces in place handed it (a registration reload of a dialog
+    /// surface), or this mount's tree was wiped (its activation ended before that reload remounts it).
+    handed: RefCell<crate::reconcile::Drafts>,
 }
 
 /// The decoded bytes of an image source: held by the mount, or by the job decoding it, by its number.
@@ -657,6 +661,7 @@ impl Surface {
             holder: RefCell::new(None),
             remounted: RefCell::new(None),
             host_time,
+            handed: RefCell::default(),
         });
         book(&mounted.plugin, |ledger| ledger.mounts += 1);
         if mounted.viewer.draws() {
@@ -686,6 +691,19 @@ impl Surface {
             input.deliver.clone(),
             (mounted.id.clone(), mounted.alive()),
         );
+        let found = Rc::downgrade(&mounted);
+        // A scroll with an id brings the node into view once the solve laid it out, as its `To` verb does; one without
+        // one does so from the last frame's layout.
+        owned.set_reveal(Rc::new(move |node: &str, widget: &AnyWidget| {
+            let Some(mounted) = found.upgrade() else { return };
+            let scrolls = mounted.state.borrow().tree.scrolls_holding(widget);
+            for (id, scroll) in scrolls {
+                match id {
+                    Some(id) => behave::reveal(&mounted, &id, node),
+                    None => drop(scroll.scroll_into_view(widget)),
+                }
+            }
+        }));
         let deliver: interact::Deliver =
             input.deliver.clone().unwrap_or_else(|| Rc::new(|_, _, _| abi::interact::Handled::Pass));
         if matches!(surface.at, v2::Place::Dialog(_)) {
@@ -826,6 +844,12 @@ impl Surface {
                     book(&self.plugin, |ledger| ledger.memo_entries += size - state.booked);
                     (state.memo, state.booked, state.refused) = (memo, size, false);
                     drop(state);
+                    let mut handed = self.handed.borrow_mut();
+                    if !handed.is_empty() {
+                        self.state.borrow().tree.restore_drafts(&mut handed);
+                        handed.clear();
+                    }
+                    drop(handed);
                     self.settle_pending(host);
                     return;
                 }
@@ -915,6 +939,7 @@ impl Surface {
         *self.behave.borrow_mut() = behave::State::default();
         self.images.release_all();
         let mut state = self.state.borrow_mut();
+        state.tree.take_drafts(&mut self.handed.borrow_mut());
         state.tree.clear(&self.root);
         state.last = None;
         state.dropped.clear();
@@ -1395,6 +1420,16 @@ impl Claimed for Rc<Surface> {
         Some(Box::new(move |host| {
             deliver(host, &activation, &event);
         }))
+    }
+
+    fn drafts(&self) -> crate::reconcile::Drafts {
+        let mut drafts = std::mem::take(&mut *self.handed.borrow_mut());
+        self.state.borrow().tree.take_drafts(&mut drafts);
+        drafts
+    }
+
+    fn hand(&self, drafts: crate::reconcile::Drafts) {
+        *self.handed.borrow_mut() = drafts;
     }
 
     fn clear_field(&self, host: &dyn Host) -> bool {

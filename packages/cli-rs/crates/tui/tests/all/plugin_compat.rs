@@ -2120,3 +2120,42 @@ fn the_bundled_opencode_as_bun_installs_nothing_either() {
     config.bun_version = found.bun_version;
     assert_installs_nothing(missing_package(config));
 }
+
+// Expected (big-boi ds-2): a registration after setup reloads the plugin's registrations while its own dialog shows, with
+// an uncontrolled field in it: the dialog stays, and what the user typed stays with its caret, so a key after the reload
+// edits the text where the caret was (`abXcd`), not a field emptied by the reload.
+#[test]
+fn a_dialog_field_keeps_its_draft_across_a_reload() {
+    let Some(config) = config() else { return };
+    let (pipe, log) = probe(config);
+    let drafts = || calls(&log).into_iter().filter_map(|call| call.get("draft").cloned()).collect::<Vec<_>>();
+    pipe.harness.tui.keymap.dispatch("v2probe.draft", None);
+    pipe.harness.wait("the field has the focus", || {
+        pipe.settle();
+        opencode_plugin::behave::mounts(pipe.harness.app.app(), PROBE, "compat.dialog")
+            .pop()
+            .is_some_and(|mount| mount.focused.as_deref() == Some("draft"))
+    });
+    pipe.harness.app.type_text("abcd");
+    pipe.harness.wait("the field heard abcd", || {
+        pipe.settle();
+        drafts().last() == Some(&json!("abcd"))
+    });
+    pipe.harness.app.press("left");
+    pipe.harness.app.press("left");
+    pipe.harness.tui.keymap.dispatch("v2probe.relayer", None);
+    pipe.settle();
+    std::thread::sleep(Duration::from_millis(400));
+    pipe.harness.wait("the field has the focus again", || {
+        pipe.settle();
+        opencode_plugin::behave::mounts(pipe.harness.app.app(), PROBE, "compat.dialog")
+            .pop()
+            .is_some_and(|mount| mount.focused.as_deref() == Some("draft"))
+    });
+    pipe.harness.app.type_text("X");
+    pipe.harness.wait("the field heard the key", || {
+        pipe.settle();
+        drafts().len() > 4
+    });
+    assert_eq!(drafts().last(), Some(&json!("abXcd")), "{:?}", drafts());
+}

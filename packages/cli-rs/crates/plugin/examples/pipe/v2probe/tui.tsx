@@ -168,6 +168,13 @@ export default Plugin.define({
           },
         },
         { id: "v2probe.unshow", run: () => context.ui.dialog.clear() },
+        // A dialog of its own with an uncontrolled field, which a registration after setup reloads under (big-boi ds-2).
+        {
+          id: "v2probe.draft",
+          run: () =>
+            context.ui.dialog.show(() => <input id="draft" focused onInput={(value: string) => log({ draft: value })} />),
+        },
+        { id: "v2probe.relayer", run: () => context.keymap.layer(() => ({ commands: [{ id: "v2probe.relayered", run() {} }] })) },
         {
           id: "v2probe.color",
           run: () => {

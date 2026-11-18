@@ -506,6 +506,10 @@ impl Host for Tui {
         self.dialogs.is_open()
     }
 
+    fn reveal(&self, widget: &AnyWidget) {
+        super::panel::reveal(self, widget);
+    }
+
     fn modal_holds(&self, view: &View) -> bool {
         // The dialogs replace each other, so one under the dialogs' host is in the dialog on top.
         let host = self.dialogs.host().id();
@@ -756,6 +760,10 @@ pub struct Reads {
     pub(super) surface: RefCell<Option<Rc<super::panel::Body>>>,
     /// The plugin and activation whose dialog is on screen, until it closes.
     pub(super) owner: RefCell<Option<(String, u64)>>,
+    /// The showing `owner` was recorded for, by number, and the last number given: a close clears the owner of its own
+    /// showing only, whichever activation updated it since (big-boi ds-1).
+    pub(super) showing: Cell<u64>,
+    pub(super) showings: Cell<u64>,
     /// The action the next plugin dialog runs as it closes (`abi::Dialog::Dismissable`), until that dialog takes it.
     pub(super) dismissed: RefCell<Option<((String, u64), abi::Action)>>,
     pub(super) select: RefCell<Option<Rc<super::panel::Picker>>>,

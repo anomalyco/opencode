@@ -47,6 +47,8 @@ pub(crate) type Deliver = Rc<dyn Fn(&dyn Host, &Rc<Owner>, &Event) -> Handled>;
 pub(crate) type Lookup = Rc<dyn Fn(&str) -> Option<AnyWidget>>;
 /// Of the owner's nodes whose widgets are on a path of widget ids, nearest first, the id of the nearest.
 pub(crate) type Nearest = Rc<dyn Fn(&[u32]) -> Option<String>>;
+/// Scrolls the scrolls of the owner's tree that hold node `id`, whose widget is the one given, so that it shows.
+pub(crate) type Reveal = Rc<dyn Fn(&str, &AnyWidget)>;
 
 /// What one owner holds of the input.
 pub struct Owner {
@@ -70,6 +72,8 @@ pub struct Owner {
     composer: Cell<bool>,
     /// A dialog surface's mount: its layers of no mode are the host dialogs' mode's, and it sets no mode of its own.
     dialog: Cell<bool>,
+    /// Brings a widget of the mount's tree into view in the scrolls of the tree that hold it.
+    reveal: RefCell<Option<Reveal>>,
     layers: RefCell<Vec<Disposer>>,
     mode: RefCell<Option<Mode>>,
     /// The ids of its tree's nodes, and of its focusable ones.
@@ -278,6 +282,7 @@ impl Owner {
             ended: Cell::new(false),
             composer: Cell::new(false),
             dialog: Cell::new(false),
+            reveal: RefCell::default(),
             layers: RefCell::default(),
             mode: RefCell::default(),
             ids: RefCell::default(),
@@ -319,6 +324,21 @@ impl Owner {
     /// Whether a dialog of the host other than its own is over it, which takes its focus and its pointer.
     fn modal_over(&self, host: &dyn Host) -> bool {
         host.modal_open() && !self.on_top(host)
+    }
+
+    /// Whether a focus may go to it now: it lives and no host dialog but its own is over it.
+    pub(crate) fn eligible(&self, host: &dyn Host) -> bool {
+        self.alive() && self.root.is_some() && !self.modal_over(host)
+    }
+
+    /// Whether its tree names a node: the pipe's mount shows a placeholder of none until the JS host's first revision.
+    pub(crate) fn named(&self) -> bool {
+        !self.ids.borrow().is_empty()
+    }
+
+    /// Sets what brings a widget of the mount's tree into view ([`Owner::focus`]).
+    pub(crate) fn set_reveal(&self, reveal: Reveal) {
+        *self.reveal.borrow_mut() = Some(reveal);
     }
 
     /// The scope of the surface is the focus in its root: a slot claim.
@@ -406,7 +426,7 @@ impl Owner {
             let (typed, other): (Vec<&Bind>, Vec<&Bind>) = layer
                 .keys
                 .iter()
-                .filter(|bind| self.takes(bind))
+                .filter(|bind| self.takes(bind) && !self.closing_key(host, bind))
                 .partition(|bind| layer.scope == LayerScope::Global && printable(&bind.key));
             for (binds, typed) in [(other, false), (typed, true)] {
                 if binds.is_empty() {
@@ -449,6 +469,16 @@ impl Owner {
             return false;
         }
         true
+    }
+
+    /// Whether `bind` of a dialog surface's layer would take escape, which closes the dialog as it closes the host's own:
+    /// such a bind is left out.
+    fn closing_key(&self, host: &dyn Host, bind: &Bind) -> bool {
+        let closes = self.dialog.get() && escapes(host, &bind.key);
+        if closes {
+            log::warn!("plugin {}: a dialog surface's bind may not take escape, which closes the dialog", self.plugin);
+        }
+        closes
     }
 
     /// The keymap command of `bind`, which calls the handler and holds the keys after it if it asks.
@@ -649,7 +679,14 @@ impl Owner {
         }
         let focusable = self.focusable.borrow().iter().any(|known| known == id);
         match self.lookup.as_ref().and_then(|lookup| lookup(id)).filter(|_| focusable && self.alive()) {
-            Some(widget) => refocus(host, || host.app().focus(&widget)),
+            Some(widget) => {
+                refocus(host, || host.app().focus(&widget));
+                // What takes the focus shows: the scrolls of the tree that hold it, then the host's around the mount.
+                if let Some(reveal) = self.reveal.borrow().clone() {
+                    reveal(id, &widget);
+                }
+                host.reveal(&widget);
+            }
             // A node the tree does not hold yet waits for the mount's next view, which may show it; one it holds that
             // takes no focus (a text, a node in a hidden box) is refused.
             None if self.alive() && self.lookup.is_some() && !self.has(id) => {
@@ -846,6 +883,7 @@ impl Router {
             .map(|other| other.heard())
             .find(|heard| *heard != Heard::Nobody);
         let heard = heard.unwrap_or_default();
+        let escape = event.code == KeyCode::Escape && event.modifiers.without_locks().is_empty();
         let (key, text) = key_of(event);
         let key = Event::Key(input::Key { bind: None, key, text });
         let mut visited = match &heard {
@@ -861,7 +899,8 @@ impl Router {
             }
             visited.push(address);
             *self.listened.borrow_mut() = Some((*event, visited.clone()));
-            if delivered(&deliver, host, &owner, &key) == Handled::Consume {
+            // A dialog surface's listener hears escape and does not take it: it closes the dialog as the host's own.
+            if delivered(&deliver, host, &owner, &key) == Handled::Consume && !(escape && owner.dialog.get()) {
                 taken = true;
                 break;
             }
@@ -1419,6 +1458,13 @@ fn delivered(deliver: &Deliver, host: &dyn Host, owner: &Rc<Owner>, event: &Even
         Some(user) => crate::behave::as_user(user, || deliver(host, owner, event)),
         None => deliver(host, owner, event),
     }
+}
+
+/// Whether key `key` is or holds escape, however it is spelled.
+fn escapes(host: &dyn Host, key: &str) -> bool {
+    let keymap = host.keymap();
+    let Ok(escape) = keymap.keymap().parse_key("escape") else { return false };
+    keymap.keymap().parse_key_sequence(key).is_ok_and(|parts| parts.iter().any(|part| part.stroke == escape.stroke))
 }
 
 /// Whether key `key` is or holds the reserved chord, however it is spelled (`ctrl+c`, `Control + C`).
