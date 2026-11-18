@@ -43,7 +43,7 @@ const it = testEffect(
       return Layer.mergeAll(
         Layer.succeed(Fixture, input),
         Config.testLayer(),
-        worktreeLayer(input.sourceDirectory, input.projectID, database, bus, input.root.path),
+        worktreeLayer(input.sourceDirectory, input.projectID, database, bus, input.root.path, input.globalTmp.path),
       )
     }),
   ).pipe(Layer.provideMerge(infrastructure)),
@@ -56,6 +56,7 @@ function worktreeLayer(
   database: Database.Interface,
   bus: Bus.Interface,
   data: string,
+  tmp: string,
   workspaceID?: Workspace.ID,
 ) {
   return AppNodeBuilder.build(
@@ -63,7 +64,7 @@ function worktreeLayer(
     [
       Database.node.replace(Layer.succeed(Database.Service, database)),
       Bus.node.replace(Layer.succeed(Bus.Service, bus)),
-      Global.node.replace(Global.layerWith({ data })),
+      Global.node.replace(Global.layerWith({ data, tmp })),
       Location.node.replace(
         Layer.succeed(
           Location.Service,
@@ -106,6 +107,7 @@ const fixtureWorktree = Effect.fnUntraced(function* () {
 function makeFixture() {
   return Effect.gen(function* () {
     const root = yield* tmpdirScoped()
+    const globalTmp = yield* tmpdirScoped("opencode-core-worktree-global-")
     yield* Effect.promise(() => initRepo(root.path))
     const sourceDirectory = abs(yield* Effect.promise(() => fs.realpath(root.path)))
     const projectID = Project.ID.make("worktree-project")
@@ -120,7 +122,7 @@ function makeFixture() {
       .values({ project_id: projectID, directory: sourceDirectory })
       .run()
       .pipe(Effect.orDie)
-    return { root, sourceDirectory, projectID, db }
+    return { root, globalTmp, sourceDirectory, projectID, db }
   })
 }
 
@@ -249,7 +251,7 @@ describe("Worktree", () => {
       const input = yield* setup()
       const worktree = yield* fixtureWorktree()
       const global = yield* Global.Service
-      const parent = path.join(global.data, "worktree", "worktr")
+      const parent = path.join(global.tmp, "worktree", "worktr")
 
       const created = yield* worktree.create({
         from: input.sourceDirectory,
@@ -320,7 +322,8 @@ describe("Worktree", () => {
       const selected = yield* projects.resolve(clone)
       const database = yield* Database.Service
       const bus = yield* Bus.Service
-      const context = yield* Layer.build(worktreeLayer(main, selected.id, database, bus, root.path))
+      const globalTmp = yield* tmpdirScoped("opencode-core-worktree-global-")
+      const context = yield* Layer.build(worktreeLayer(main, selected.id, database, bus, root.path, globalTmp.path))
       const worktrees = Context.get(context, Worktree.Service)
       const config = yield* Config.Test
       yield* config.setEntries([
@@ -713,6 +716,7 @@ describe("Worktree", () => {
     Effect.gen(function* () {
       const input = yield* setup()
       const worktrees = yield* fixtureWorktree()
+      const global = yield* Global.Service
       const parent = abs(path.join(input.root.path, "configured"))
       const registration = yield* worktrees.transform((editor) => editor.configure({ directory: parent }))
       const created = yield* worktrees.create({ name: "configured" })
@@ -724,7 +728,7 @@ describe("Worktree", () => {
       yield* registration.dispose
       const fallback = yield* worktrees.create({ name: "default" })
       expect(fallback.directory).toBe(
-        abs(path.join(input.root.path, "worktree", input.projectID.slice(0, 6), "default")),
+        abs(path.join(global.tmp, "worktree", input.projectID.slice(0, 6), "default")),
       )
     }),
   )
@@ -891,6 +895,7 @@ describe("Worktree", () => {
       const config = yield* Config.Test
       const worktrees = yield* fixtureWorktree()
       const bus = yield* Bus.Service
+      const global = yield* Global.Service
       const reloaded = yield* Queue.unbounded<void>()
       const strategies = yield* WorktreeStrategies.Service
       const documents = [
@@ -928,7 +933,7 @@ describe("Worktree", () => {
       yield* bus.publish(Event.Updated, {})
       yield* Queue.take(reloaded)
       const third = yield* worktrees.create({ name: "three" })
-      expect(third.directory).toBe(abs(path.join(input.root.path, "worktree", input.projectID.slice(0, 6), "three")))
+      expect(third.directory).toBe(abs(path.join(global.tmp, "worktree", input.projectID.slice(0, 6), "three")))
     }),
   )
   ;["relative", "absolute", "home"].forEach((mode) => {

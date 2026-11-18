@@ -14,7 +14,7 @@ export const CreateInput = Schema.Struct({
   branch: optional(Schema.Trim.pipe(Schema.check(Schema.isNonEmpty()))),
   directory: optional(AbsolutePath).annotate({
     description:
-      "Parent directory for the new worktree. Uses the project's canonical configuration, then defaults to the server's data directory under worktree/<first six project ID characters>.",
+      "Parent directory for the new worktree. Uses the project's canonical configuration, then defaults to the server's temporary directory under worktree/<first six project ID characters>.",
   }),
   name: optional(Schema.String),
 }).annotate({ identifier: "Worktree.CreateInput" })

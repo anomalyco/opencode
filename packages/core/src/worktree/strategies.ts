@@ -48,7 +48,7 @@ const layer = Layer.effect(
     const state = State.create({
       name: "worktree",
       initial: () => ({
-        directory: AbsolutePath.make(path.join(global.data, "worktree", location.project.id.slice(0, 6))),
+        directory: AbsolutePath.make(path.join(global.tmp, "worktree", location.project.id.slice(0, 6))),
         strategies: new Map<Worktree.StrategyID, Strategy>([[git.id, git]]),
         selected: git.id,
       }),
