@@ -2042,7 +2042,7 @@ story("composer pills show per session, open their rows, and fail only their own
   await expect(page.locator("body")).toHaveAttribute("data-picked", "12")
 })
 
-story("a composer pill with a menu opens the plugin's content under the host's heading", async ({ page }) => {
+story("a composer pill with a menu opens only the plugin's content, named by the view", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountComposerPills, until, ComposerPill } = await import(fixture)
 
@@ -2078,7 +2078,9 @@ story("a composer pill with a menu opens the plugin's content under the host's h
 
   await pill.click()
   const popover = page.locator('[data-slot="session-plugin-pill-popover"]')
-  await expect(popover.getByText("Ship the release")).toBeVisible()
+  // The popover is the plugin's alone: the title names it but the host draws no heading.
+  await expect(popover).toHaveAttribute("aria-label", "Ship the release")
+  await expect(popover.getByText("Ship the release")).toHaveCount(0)
   await expect(popover.locator('[data-slot="session-plugin-pill-row"]')).toHaveCount(0)
   await expect(popover.getByTestId("goal-pause")).toHaveText("Pause /repo")
 
