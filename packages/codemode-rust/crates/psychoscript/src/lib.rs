@@ -8,36 +8,20 @@
 //! Host work is a [`Future`](std::future::Future) instead of an Effect; [`Runtime::execute_async`] runs on any
 //! executor, and [`Runtime::execute`] drives it on the calling thread.
 
-mod builtins;
-mod bytecode;
-mod compiler;
-mod conversion;
-mod convert;
-mod cross;
-mod exec;
-mod extension;
-mod hooks;
-mod host;
-mod iteration;
-mod native;
-mod object;
-pub mod openapi;
-mod ops;
-mod program;
-mod promise;
-mod reach;
-mod run;
-mod schema;
-mod search;
-mod snapshot;
-mod streaming;
-mod strings;
+mod codemode;
+mod language;
+
+// The modules of both layers by their short names, so their files name each other as `crate::vm`, `crate::tool`.
+use codemode::{hooks, program, run, schema, search, tool};
+use language::{
+    builtins, bytecode, compiler, conversion, convert, cross, exec, extension, host, iteration,
+    native, object, ops, promise, reach, snapshot, streaming, strings, value, vm,
+};
+
+pub use codemode::openapi;
 #[cfg(feature = "test262")]
 #[doc(hidden)]
-pub mod test262;
-mod tool;
-mod value;
-mod vm;
+pub use language::test262;
 
 pub use extension::{Extension, HostError, HostFunction, HostValue, SnapshotHooks};
 pub use hooks::{CallResult, ExtensionInvocation, Hooks, ToolInvocation};
