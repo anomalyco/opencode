@@ -180,37 +180,18 @@ pub fn with_primitive_list(
     c.finish(vm, r)
 }
 
-/// A prelude `for...of` over `source`: opened as the reference opens it (free for a value it walks itself, else a
-/// call of its `Symbol.iterator` method), `body` run on each value, and a back-edge spent after each. `body`
-/// returning `false` leaves the loop, closing the iterator as a `return` inside the loop does; returns whether it
-/// left early.
-pub fn for_of(
-    vm: &mut Vm,
-    source: &Value,
-    mut body: impl FnMut(&mut Vm, Value) -> Result<bool, Value>,
-) -> Result<bool, Value> {
+/// A prelude `for...of` over `source` that collects its values: opened as the reference opens it (free for a value it
+/// walks itself, else a call of its `Symbol.iterator` method), and a back-edge spent after each value. Nothing runs
+/// between the steps, so the loop never leaves early and closes nothing.
+pub fn for_of(vm: &mut Vm, source: &Value) -> Result<Vec<Value>, Value> {
     let open = vm.open_fuel(source, ITER_FOR_OF);
     let it = vm.get_iterator(source)?;
     vm.fuel(open);
     let next = vm.record_next_of(source, &it)?;
+    let mut values = Vec::new();
     while let Some(x) = vm.iter_step_with(&it, next)? {
-        match body(vm, x) {
-            Ok(true) => step(vm),
-            Ok(false) => {
-                let close = vm.close_fuel(&it);
-                vm.iter_close(&it)?;
-                vm.fuel(close);
-                return Ok(true);
-            }
-            Err(e) => {
-                if vm.fatal.is_none() {
-                    let close = vm.close_fuel(&it);
-                    let _ = vm.iter_close(&it);
-                    vm.fuel(close);
-                }
-                return Err(e);
-            }
-        }
+        values.push(x);
+        step(vm);
     }
-    Ok(false)
+    Ok(values)
 }

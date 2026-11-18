@@ -444,12 +444,8 @@ fn promise_combinator<const K: u8>(vm: &mut Vm, _this: Value, args: &[Value], ca
     // The reference adds the items in its internal `$vmCombine`, a back-edge each, after its own call.
     fuel::native(vm);
     if matches!(items, Value::Obj(id) if matches!(vm.heap[id as usize].kind, Kind::Array(_))) {
-        let mut list = Vec::new();
-        return match fuel::for_of(vm, &items, |_, v| {
-            list.push(v);
-            Ok(true)
-        }) {
-            Ok(_) => {
+        return match fuel::for_of(vm, &items) {
+            Ok(list) => {
                 vm.bytecode_builtin();
                 Ok(combine(vm, K, list))
             }

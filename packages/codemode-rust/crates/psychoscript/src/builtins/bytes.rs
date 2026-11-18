@@ -458,11 +458,7 @@ fn collect(
         )));
     }
     if mapper.is_none() && steps_natively(vm, source) {
-        let mut values = Vec::new();
-        fuel::for_of(vm, source, |_, v| {
-            values.push(v);
-            Ok(true)
-        })?;
+        let values = fuel::for_of(vm, source)?;
         return convert(vm, &values, into);
     }
     let (f, this_arg) = mapper.unwrap_or_default();
