@@ -459,6 +459,9 @@ fn read_pairs(
     if !matches!(init, Value::Obj(_)) || is_runtime_reference(vm, init) {
         return Err(vm.type_error(if headers {
             "new Headers(...) expects a record of names to values, iterable [name, value] pairs, or Headers."
+        } else if !is_runtime_reference(vm, init) {
+            // What is neither an object nor a runtime reference (a symbol) gets the reference's other wording.
+            "new URLSearchParams(...) expects a query string, data object, iterable pairs, or URLSearchParams."
         } else {
             "new URLSearchParams(...) expects a query string, data object, or synchronous iterable pairs."
         }));

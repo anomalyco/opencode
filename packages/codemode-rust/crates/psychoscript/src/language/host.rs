@@ -228,6 +228,8 @@ pub(crate) trait Embedder: Sync {
     fn call_blocking(&self, vm: &mut Vm<'_>, args: &[Option<Json>]) -> Res;
     /// The names under a namespace path, as `Object.keys` lists them.
     fn namespace_keys(&self, path: &str) -> Vec<String>;
+    /// Fails when a path whose names are listed names nothing in the namespace.
+    fn require_namespace(&self, vm: &mut Vm<'_>, path: &str) -> Result<(), Value>;
     /// Stops the work of a started durable call to `path` when the run ends for real.
     fn cancel(&self, path: &str, data: Json);
     /// Whether a call in flight to `path` that a snapshot saved can start again, as a durable call when `durable`.
@@ -275,6 +277,9 @@ impl Embedder for NoEmbedder {
     }
     fn namespace_keys(&self, _: &str) -> Vec<String> {
         Vec::new()
+    }
+    fn require_namespace(&self, _: &mut Vm<'_>, _: &str) -> Result<(), Value> {
+        Ok(())
     }
     fn cancel(&self, _: &str, _: Json) {}
     fn restorable(&self, path: &str, _: bool) -> Result<(), String> {

@@ -85,6 +85,15 @@ impl Embedder for Setup {
         self.registry.children(path)
     }
 
+    fn require_namespace(&self, vm: &mut Vm<'_>, path: &str) -> Result<(), Value> {
+        if self.registry.exists(path) {
+            return Ok(());
+        }
+        let message = format!("Unknown tool namespace '{path}'.");
+        let proto = vm.realm.error_proto;
+        Err(vm.failure(proto, &message, DiagnosticKind::UnknownTool))
+    }
+
     fn cancel(&self, path: &str, data: Json) {
         if let Some(tool) = self.registry.get(path)
             && let Execute::Durable(d) = &tool.execute

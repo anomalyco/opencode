@@ -81,6 +81,15 @@ impl<'rt> Vm<'rt> {
         self.atoms.text(key).to_owned()
     }
 
+    /// A key's text in a message about a nullish base, made without calling the program, as the reference's
+    /// `coerceToString` does.
+    fn key_message(&mut self, k: &Value) -> String {
+        match k {
+            Value::Obj(_) => crate::builtins::builtin_string(self, k).unwrap_or_default(),
+            k => self.quiet_string(k),
+        }
+    }
+
     #[inline(never)]
     pub fn get_obj(&mut self, id: Id, key: Atom) -> Value {
         let mut cur = id;
@@ -208,6 +217,12 @@ impl<'rt> Vm<'rt> {
                         });
                     }
                 }
+                if self.is_namespace(*id) {
+                    return Err(self.namespace_key_error());
+                }
+            }
+            (Value::Obj(id), Value::Sym(_)) if self.is_namespace(*id) => {
+                return Err(self.namespace_key_error());
             }
             (Value::Str(s), Value::Num(n)) => {
                 let i = *n as usize;
@@ -219,7 +234,7 @@ impl<'rt> Vm<'rt> {
                 }
             }
             (Value::Undef | Value::Null, _) => {
-                let k = self.quiet_string(k);
+                let k = self.key_message(k);
                 let t = if let Value::Null = v {
                     "null"
                 } else {
@@ -497,6 +512,11 @@ impl<'rt> Vm<'rt> {
 
     #[inline(never)]
     pub fn set_elem(&mut self, v: &Value, k: &Value, val: Value) -> Result<(), Value> {
+        if let (Value::Obj(id), Value::Num(_) | Value::Sym(_)) = (v, k)
+            && self.is_namespace(*id)
+        {
+            return Err(self.namespace_key_error());
+        }
         if let (Value::Obj(id), Value::Num(n)) = (v, k) {
             let o = &mut self.heap[*id as usize];
             if o.flags == 0
@@ -513,14 +533,15 @@ impl<'rt> Vm<'rt> {
                 }
             }
         }
+        // The reference resolves the base as a read does, so a nullish one fails as a read.
         if v.is_nullish() {
-            let k = self.quiet_string(k);
+            let k = self.key_message(k);
             let t = if let Value::Null = v {
                 "null"
             } else {
                 "undefined"
             };
-            return Err(self.type_error(&format!("Cannot set properties of {t} (setting '{k}').")));
+            return Err(self.type_error(&format!("Cannot read properties of {t} (reading '{k}').")));
         }
         let a = self.key_of(k)?;
         self.set(v, a, val)
@@ -926,6 +947,12 @@ impl<'rt> Vm<'rt> {
             .collect()
     }
 
+    /// A namespace path read with a number or a symbol, which the reference refuses.
+    #[cold]
+    fn namespace_key_error(&mut self) -> Value {
+        self.type_error("tools paths must use string property names.")
+    }
+
     /// The reference's `enumerableSource`: the value whose own enumerable properties `label` (`Object.keys(...)`,
     /// `for...in`, `Object spread`, ...) reads. Null and undefined have none to read, and a promise or a namespace
     /// is not data; anything else reads as its own properties (a primitive as an empty object, a string as its
@@ -972,10 +999,22 @@ impl<'rt> Vm<'rt> {
     /// A `for...in` source: a namespace lists its names, and null and undefined iterate nothing.
     #[inline(never)]
     pub(crate) fn for_in_source(&mut self, v: &Value) -> Result<(), Value> {
-        if v.is_nullish() || matches!(v, Value::Obj(id) if self.is_namespace(*id)) {
-            return Ok(());
+        match v {
+            Value::Obj(id) if self.is_namespace(*id) => self.require_namespace(*id),
+            v if v.is_nullish() => Ok(()),
+            v => self.enumerable_source("for...in", v),
         }
-        self.enumerable_source("for...in", v)
+    }
+
+    /// A namespace whose names are listed, as the reference's `namespaceKeys`: a path that names neither a tool
+    /// nor a namespace fails as an unknown one.
+    pub(crate) fn require_namespace(&mut self, id: Id) -> Result<(), Value> {
+        let Kind::ToolRef(path) = &self.heap[id as usize].kind else {
+            return Ok(());
+        };
+        let path = path.clone();
+        let embedder = self.host.embedder;
+        embedder.require_namespace(self, &path)
     }
 
     #[inline(never)]

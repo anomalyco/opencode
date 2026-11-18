@@ -186,6 +186,7 @@ fn object_keys(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     if let Value::Obj(id) = v
         && (vm.is_namespace(id) || !vm.is_promise(id))
     {
+        vm.require_namespace(id)?;
         let keys = vm.own_keys(id);
         let items = keys
             .into_iter()

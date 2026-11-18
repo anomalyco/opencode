@@ -634,15 +634,19 @@ fn promise_try(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Res {
     )
 }
 
-fn this_promise(vm: &mut Vm, this: &Value) -> Result<Id, Value> {
+fn this_promise(vm: &mut Vm, this: &Value, method: &str) -> Result<Id, Value> {
     match vm.as_promise(this) {
         Some(p) => Ok(p),
-        None => Err(vm.type_error("Promise.prototype method called on incompatible receiver")),
+        None => Err(super::incompatible(
+            vm,
+            &format!("Promise.prototype.{method}"),
+            this,
+        )),
     }
 }
 
 fn promise_then(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let p = this_promise(vm, &this)?;
+    let p = this_promise(vm, &this, "then")?;
     let on_ful = reaction_handler(vm, arg(args, 0), "then")?;
     let on_rej = reaction_handler(vm, arg(args, 1), "then")?;
     let derived = vm.new_promise();
@@ -658,7 +662,7 @@ fn promise_then(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 }
 
 fn promise_catch(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let p = this_promise(vm, &this)?;
+    let p = this_promise(vm, &this, "catch")?;
     let on_rej = reaction_handler(vm, arg(args, 0), "catch")?;
     let derived = vm.new_promise();
     vm.perform_then(
@@ -691,7 +695,7 @@ fn reaction_handler(vm: &mut Vm, f: Value, method: &str) -> Res {
 }
 
 fn promise_finally(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
-    let p = this_promise(vm, &this)?;
+    let p = this_promise(vm, &this, "finally")?;
     let cleanup = reaction_handler(vm, arg(args, 0), "finally")?;
     let derived = vm.new_promise();
     if vm.is_callable(&cleanup) {
