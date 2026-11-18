@@ -769,6 +769,9 @@
             "user_scroll": {
               "type": "boolean"
             },
+            "scrollbar": {
+              "type": "boolean"
+            },
             "type": {
               "const": "scroll"
             }

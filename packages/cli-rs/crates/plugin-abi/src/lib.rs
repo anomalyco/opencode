@@ -3271,8 +3271,9 @@ pub trait Host: Read {
     /// 2.0: closes the plugin's overlay `surface`, if it shows.
     fn close_overlay(&self, _surface: &str) {}
     /// 2.0: gives the focus to the node with id `id` of the running call's mount: a box with
-    /// [`interact::Interact::focusable`], or, on a host with [`FOCUS_INPUT`], a [`v2::Node::Input`], as a click does, so
-    /// what the user types goes into the field. Any other node, one in a hidden box, another plugin's node and a host
+    /// [`interact::Interact::focusable`], or, on a host with [`FOCUS_INPUT`], a [`v2::Node::Input`] or a
+    /// [`v2::Node::Scroll`], as a click does, so what the user types goes into the field, and the arrows and the page
+    /// keys scroll the scroll. Any other node, one in a hidden box, another plugin's node and a host
     /// widget are refused, as is any focus while a host dialog is open, but for a node of the plugin's own dialog
     /// surface ([`v2::Place::Dialog`]) while its dialog is on top; a host without [`FOCUS_INPUT`] refuses a field.
     /// A call the user did not cause may ask for it too, as a click can: the host does not refuse it. A node the

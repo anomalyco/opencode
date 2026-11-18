@@ -232,7 +232,7 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *   the palette, the user's scroll): the host answers OPENCODE_ERROR to any other. None of the input requests ("focus",
  *   "set-mode", "overlay", ...) is taken during `create`, which has no input yet. A "focus" names a box that is
  *   focusable, or, on a host with the feature "focus-input", an "input" with an id, which then takes what the user
- *   types; a node in a hidden box, and any focus while a host dialog is open, is not taken, but for a node of the
+ *   types, or a "scroll" with an id, which then scrolls on the arrows and the page keys; a node in a hidden box, and any focus while a host dialog is open, is not taken, but for a node of the
  *   plugin's own dialog surface while its dialog is on top. A node the mount's tree does not hold yet takes the focus
  *   if the mount's next view (the one after the call) shows it, and is dropped if it does not: a later view, after a
  *   resize or a theme, does not apply it. A global command's focus of a node no mount holds yet names the mount that

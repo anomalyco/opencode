@@ -120,7 +120,7 @@ pub fn schema() -> Value {
         Spinner { label: string() } { id: nullable(string()) },
         Scroll { } { id: nullable(string()), height: nullable(uint16()), follow: boolean(),
             layout: reference("Layout"), children: array(reference("Node")),
-            notify_top: nullable(string()), user_scroll: boolean() },
+            notify_top: nullable(string()), user_scroll: boolean(), scrollbar: boolean() },
         Diff { content: reference("Source") } { id: nullable(string()), view: reference("DiffView"),
             filetype: nullable(string()), hunks: nullable(string()), wrap: reference("Wrap"), padding: uint16() },
         Input { } { id: nullable(string()), value: string(), placeholder: string(),
@@ -964,6 +964,7 @@ mod tests {
                 children: vec![],
                 notify_top: Some("file".into()),
                 user_scroll: true,
+                scrollbar: true,
             },
             Node::Diff {
                 id: Some("d".into()),

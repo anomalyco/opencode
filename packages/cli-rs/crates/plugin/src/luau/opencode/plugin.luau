@@ -898,6 +898,7 @@ export type Node = ({
     children: { Node }?,
     notify_top: string?,
     user_scroll: boolean?,
+    scrollbar: boolean?,
     type: "scroll",
 } | {
     content: Source,
