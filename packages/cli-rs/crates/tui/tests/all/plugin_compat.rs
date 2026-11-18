@@ -1096,6 +1096,21 @@ fn a_restarted_js_hosts_commands_take_its_setups_states() {
     assert!(!reachable(), "the restarted plugin's disabled command is reachable");
 }
 
+/// The probe's live activation, by its generation.
+fn generation(pipe: &Pipe) -> Option<u64> {
+    (1..512).find(|generation| pipe.harness.tui.plugins.live(PROBE, *generation))
+}
+
+/// Waits until the host took a reload of the probe's registrations past activation `before`. The reload is the host's
+/// own work after the JS host answered (the loader reconciles), so a settle that saw the JS host idle may come first.
+fn reloaded(pipe: &Pipe, before: Option<u64>) {
+    pipe.harness.wait("the probe's registrations reloaded", || {
+        pipe.harness.app.advance(Duration::from_millis(1));
+        generation(pipe).is_some_and(|now| Some(now) != before)
+    });
+    pipe.settle();
+}
+
 // Expected (carbon ce-5): a command enabled after a reload of the plugin's registrations was sent, but before the host
 // took it, is enabled on the guest that takes the plugin over. Everything the JS host sends is handed over at once, so
 // the `set-enabled` comes to the guest that handed over, and `^` is taken.
@@ -1104,6 +1119,7 @@ fn a_state_set_as_the_registrations_reload_goes_to_the_new_guest() {
     let Some(config) = config() else { return };
     let (pipe, log) = probe(config);
     let (harness, tui) = (&pipe.harness, &pipe.harness.tui);
+    let before = generation(&pipe);
     pipe.scripts().hold_answers(true);
     tui.keymap.dispatch("v2probe.lateCaret", None);
     harness.wait("the reload and the state came", || {
@@ -1115,7 +1131,8 @@ fn a_state_set_as_the_registrations_reload_goes_to_the_new_guest() {
             .is_some_and(|at| types[at..].iter().any(|kind| kind == "effects"))
     });
     pipe.scripts().hold_answers(false);
-    pipe.settle();
+    // Typed before the host took the reload, `^` would meet the guest that handed over (compat-flakes).
+    reloaded(&pipe, before);
     harness.app.type_text("^");
     pipe.settle();
     assert_eq!((harness.text(), calls(&log)), (String::new(), vec![json!({ "caret": true })]));
@@ -1193,11 +1210,12 @@ fn composer_typing_never_waits_for_a_js_key_listener() {
     let Some(config) = config() else { return };
     let (pipe, _log) = probe(config);
     let (harness, tui) = (&pipe.harness, &pipe.harness.tui);
-    // The first run registers the listener, which reloads the plugin's registrations once.
-    for step in ["pass", "take"] {
-        tui.keymap.dispatch("v2probe.listen", Some(step));
-        pipe.settle();
-    }
+    // The first run registers the listener's layer, which reloads the plugin's registrations once: until the host took
+    // that reload, the layer holds nothing, and holding the JS host's answers would hold the reload back too
+    // (compat-flakes).
+    let before = generation(&pipe);
+    tui.keymap.dispatch("v2probe.listen", Some("take"));
+    reloaded(&pipe, before);
     pipe.scripts().hold_answers(true);
     harness.app.type_text("ab");
     assert_eq!(harness.text(), "ab", "the typing waited for the JS host");
