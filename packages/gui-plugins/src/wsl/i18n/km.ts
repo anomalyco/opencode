@@ -53,4 +53,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} អស់ពេលបន្ទាប់ពី {{timeout}}ms",
   "error.failedPort": "បរាជ័យក្នុងការទទួលបានច្រក",
   "menu.remove": "ផ្អាក",
+  "error.busy": "{{distro}} កំពុងរវល់ជាមួយកិច្ចការផ្សេង។ ព្យាយាមម្តងទៀតនៅពេលវាបញ្ចប់។",
 }

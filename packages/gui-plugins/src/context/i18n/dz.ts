@@ -28,4 +28,5 @@ export default {
   "export.success.description": "{{filename}} ལུ་སྲུང་བཞག་འབད་ཡོད་པའི་ལཱ་ཡུན་འདི་ཨིན།",
   "export.failed.title": "ལཱ་ཡུན་ཕྱིར་འདྲེན་འབད་ནི་ལུ་འཐུས་ཤོར་འབྱུང་ཡོདཔ།",
   "export.failed.description": "ལཱ་ཡུན་ཕྱིར་འདྲེན་འབད་བའི་སྐབས་འཛོལ་བ་བྱུང་ཡོདཔ།",
+  "usage.toggle": "ལཱ་ཡུན་གྱི་སྐབས་དོན་སོར་སྟོན།",
 }

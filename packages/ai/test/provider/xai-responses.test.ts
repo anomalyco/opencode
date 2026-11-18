@@ -287,9 +287,9 @@ describe("xAI Responses route", () => {
       const unstored = yield* send(false, yield* completed(yield* channelDriver(step(false, "First")), "resp_1"))
       expect(unstored.mode).toBe("full")
       expect(JSON.parse(unstored.message)).toMatchObject({
-        instructions: "You are terse.",
         store: false,
         input: [
+          { type: "message", role: "developer", content: "You are terse." },
           { type: "message", role: "user", content: [{ type: "input_text", text: "First" }] },
           { type: "message", role: "user", content: [{ type: "input_text", text: "Second" }] },
         ],

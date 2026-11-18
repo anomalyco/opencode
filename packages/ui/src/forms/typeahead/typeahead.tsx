@@ -1,5 +1,5 @@
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { createEffect, createSignal, For, type JSX, on, onCleanup, Show, untrack } from "solid-js"
+import { createEffect, createMemo, createSignal, For, type JSX, on, onCleanup, Show, untrack } from "solid-js"
 import { Icon } from "@opencode/ui/icon"
 import { abort } from "@opencode/util/abort"
 import { useI18n } from "../../context/i18n"
@@ -28,6 +28,8 @@ export function Typeahead<T>(props: {
   source: (query: string, signal: AbortSignal) => Promise<T[]>
   /** Preloaded opening results, including a failed request that the user can retry. */
   initial?: { items: T[]; failed?: boolean }
+  /** A local option placed before the remote results while the search is empty. */
+  emptyQueryItem?: T
   /** Narrows earlier results while the request for the current query is pending. */
   match: (item: T, query: string) => boolean
   key: (item: T) => string
@@ -99,7 +101,14 @@ export function Typeahead<T>(props: {
   const changeInput = (value: string) =>
     dispatch({ type: "input.changed", input: value, delayMs: props.delay, match: props.match })
 
-  const items = () => selectTypeaheadItems(machine())
+  const items = createMemo(() => {
+    const results = selectTypeaheadItems(machine())
+
+    return props.emptyQueryItem !== undefined && !selectTypeaheadInput(machine()).trim()
+      ? [props.emptyQueryItem, ...results]
+      : results
+  })
+
   const stale = () => selectTypeaheadStale(machine())
   const pending = () => selectTypeaheadPending(machine())
   const animateHeight = () => selectTypeaheadAnimateHeight(machine())
@@ -126,7 +135,7 @@ export function Typeahead<T>(props: {
           aria-hidden="true"
           class="group grid size-3.5 shrink-0 place-items-center text-v2-icon-icon-muted *:[grid-area:1/1] *:transition-opacity *:duration-150 data-[pending]:*:delay-150"
         >
-          <Icon name="magnifying-glass" size="small" class="group-data-[pending]:opacity-0" />
+          <Icon name="magnifying-glass" class="group-data-[pending]:opacity-0" />
           <Loader class="size-3 opacity-0 group-data-[pending]:opacity-100" />
         </span>
         <input
@@ -157,7 +166,7 @@ export function Typeahead<T>(props: {
               input?.focus()
             }}
           >
-            <Icon name="circle-xmark" size="small" />
+            <Icon name="close" />
           </button>
         </Show>
       </div>
@@ -199,14 +208,14 @@ export function Typeahead<T>(props: {
                 >
                   {props.children(item)}
                   <Show when={props.selected === props.key(item)}>
-                    <Icon name="check" size="small" class="ms-auto shrink-0 text-v2-icon-icon-muted" />
+                    <Icon name="check" class="ms-auto shrink-0 text-v2-icon-icon-muted" />
                   </Show>
                 </div>
               )}
             </For>
           </MenuScroll>
           {/* Stays mounted while a retry or a newer query is pending, so the list never collapses to nothing. */}
-          <Show when={items().length === 0}>
+          <Show when={items().length === 0 || selectTypeaheadFailed(machine())}>
             <div
               class="mx-1 flex h-9 items-center px-2 py-1 text-v2-text-text-faint"
               classList={{ invisible: !selectTypeaheadAnswered(machine()) }}

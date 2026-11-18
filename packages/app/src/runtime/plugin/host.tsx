@@ -22,11 +22,19 @@ import {
   type ParentProps,
 } from "solid-js"
 import { createStore } from "solid-js/store"
-import { LifetimeContext, liveAccessor, PluginContext, type Bridge, type Entry } from "@opencode/plugin/gui/host"
+import {
+  LifetimeContext,
+  liveAccessor,
+  PluginContext,
+  pluginIconName,
+  type Bridge,
+  type Entry,
+} from "@opencode/plugin/gui/host"
 import type { BuiltinCatalog, BuiltinContext } from "@opencode/plugin/gui/builtin"
 import { Predicate } from "effect"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { pluralCategory, resolveTemplate } from "@opencode/ui/context/i18n"
+import { registerIcons } from "@opencode/ui/icons/registry"
 import {
   LinkHandler,
   type BaseContext,
@@ -802,6 +810,19 @@ function createHost(input: HostInput) {
 
     const stores: Stores = {}
 
+    // Each declared icon under its app-wide name, which `ctx.icons` gives the plugin.
+    const declared = Object.entries(definition.icons ?? {}).map(([name, source]) => ({
+      name,
+      id: pluginIconName(plugin, name),
+      source,
+    }))
+
+    const icons = Object.fromEntries(declared.map((icon) => [icon.name, icon.id]))
+
+    // The artwork draws from before setup until the plugin goes away. A value that is not an SVG document throws
+    // here, which fails the plugin as it starts.
+    own(registerIcons(Object.fromEntries(declared.map((icon) => [icon.id, icon.source]))))
+
     const gui = input.plugin?.(plugin)
 
     const context = {
@@ -860,6 +881,7 @@ function createHost(input: HostInput) {
       use: liveOf,
       main: mainClient,
       stores,
+      icons,
       t(key: string, params?: Record<string, string | number | boolean>) {
         const template = messages()[key]
 

@@ -11,6 +11,7 @@ import { Model } from "../../model.js"
 import { Permission } from "../../permission.js"
 import { Session } from "../../session.js"
 import { SessionSchema } from "../../session/schema.js"
+import { SubagentDepth } from "../../session/subagent-depth.js"
 import { SubagentJob } from "../../session/subagent-job.js"
 
 export const name = "subagent"
@@ -20,7 +21,7 @@ const backgroundResult = (sessionID: SessionSchema.ID) => ({
   status: "running" as const,
   output: [
     `The subagent is working in the background (sessionID: ${sessionID}). You will receive a <subagent> message when it goes idle, and again after each later round of work.`,
-    "DO NOT sleep, poll for progress, ask the subagent for status, or duplicate this subagent's work; avoid working with the same files or topics it is using.",
+    "DO NOT sleep, poll, proactively check on its progress, or duplicate this subagent's work.",
     "Work on non-overlapping tasks, or briefly tell the user what you launched and end your response.",
     "To send it follow-ups or change its instructions while it runs, call subagent again with this sessionID.",
   ].join("\n"),
@@ -50,7 +51,7 @@ export const Output = Schema.Struct({
 export const description = [
   "Spawns an agent in a child session to work on the specified task.",
   "Subagents always run in the background: the call returns immediately with a sessionID, and you receive a `<subagent>` message each time the child goes idle, including after later work.",
-  "Keep working on non-overlapping tasks, or briefly tell the user what you launched and end your response. Do not sleep, poll for progress, or ask the child for status.",
+  "Keep working on non-overlapping tasks, or briefly tell the user what you launched and end your response. Do not sleep, poll, or proactively check on the child's progress.",
   "New child sessions start with fresh context, so include all relevant context and instructions when you don't pass a sessionID.",
   "Pass the returned sessionID to continue that specific child conversation. A follow-up to a running child joins its current run.",
 ].join("\n")
@@ -114,20 +115,12 @@ export const Plugin = {
                     (error) => new ToolFailure({ message: `Parent session not found: ${context.sessionID}`, error }),
                   ),
                 )
-              let current = parent
-              let depth = 0
-              while (current.parentID) {
-                depth++
-                current = yield* sessions
-                  .get(current.parentID)
-                  .pipe(
-                    Effect.mapError(
-                      (error) => new ToolFailure({ message: `Parent session not found: ${current.parentID}`, error }),
-                    ),
-                  )
-              }
-              const limit = Config.latest(yield* config.entries(), "experimental")?.subagent_depth ?? 1
-              if (depth >= limit)
+              const limit = yield* SubagentDepth.reached(parent, sessions, config).pipe(
+                Effect.mapError(
+                  (error) => new ToolFailure({ message: `Parent session not found: ${error.sessionID}`, error }),
+                ),
+              )
+              if (limit !== undefined)
                 return yield* new ToolFailure({
                   message: `Subagent depth limit reached (${limit}). Increase "experimental.subagent_depth" to allow nested subagents.`,
                 })

@@ -281,9 +281,9 @@ export const content = {
       body: "Deja que los agentes usen tu navegador real.",
       title: "OpenCode | Browse, tu navegador real para agentes de programación",
       description:
-        "Browse permite a OpenCode y otros clientes MCP usar tu navegador real. Los agentes controlan pestañas en segundo plano con Playwright y te devuelven los inicios de sesión y el 2FA.",
+        "Browse permite a OpenCode y otros clientes MCP usar tu navegador real. Los agentes leen, hacen clic, escriben, hacen capturas, graban pestañas y te devuelven los inicios de sesión y el 2FA.",
       intro:
-        "Un servidor MCP y una extensión de Chromium que permiten a tus agentes usar tu navegador real, con tus pestañas, tus sesiones iniciadas y tus extensiones. Abren y controlan pestañas con Playwright, hacen capturas y graban la pantalla, en pestañas en segundo plano agrupadas para no molestarte. Cuando te toca a ti, para iniciar sesión, un código 2FA o un pago, te devuelven la pestaña y siguen en cuanto haces clic en Continuar.",
+        "Un servidor MCP y una extensión de Chromium que permiten a tus agentes usar tu navegador real, con tus pestañas, tus sesiones iniciadas y tus extensiones. Abren pestañas en segundo plano, agrupadas para no molestarte, y leen páginas, hacen clic, escriben, hacen capturas y graban pestañas. Cuando te toca a ti, para iniciar sesión, un código 2FA o un pago, te devuelven la pestaña y siguen en cuanto haces clic en Continuar.",
       features: {
         "your-real-browser": {
           title: "Tu navegador real",
@@ -303,7 +303,7 @@ export const content = {
         },
         "record-and-capture": {
           title: "Graba y captura",
-          body: "Capturas de pantalla, grabaciones de pantalla y tráfico de red en formato HAR.",
+          body: "Capturas de pantalla, grabaciones de pestañas y tráfico de red.",
         },
         "any-mcp-client": {
           title: "Todo cliente MCP",
@@ -313,9 +313,9 @@ export const content = {
           title: "Todas tus sesiones iniciadas",
           body: "Los agentes usan los sitios en los que ya has iniciado sesión. Sin claves, sin configuración.",
         },
-        allowlists: {
-          title: "Lista blanca",
-          body: "Limita las pestañas de una sesión a los sitios que indiques.",
+        "allowed-sites": {
+          title: "Sitios permitidos",
+          body: "Mantén la pestaña de un agente en los sitios que indiques.",
         },
       },
       install:
@@ -466,7 +466,7 @@ export const content = {
     },
     colors: {
       title: "Colores",
-      body: "El logo y el logotipo usan una sola tinta con tres opacidades, y una tinta más clara para fondos oscuros. Los valores de abajo son esa tinta sobre blanco o sobre #0B0B0B, como en los archivos estándar. Haz clic en un valor para copiarlo.",
+      body: "El logo y el logotipo usan una sola tinta con tres opacidades, y una tinta más clara para fondos oscuros. Los valores de abajo son los colores de los archivos estándar. Úsalos solo para el logo y el logotipo, no para otros textos ni fondos. Haz clic en un valor para copiarlo.",
       palettes: {
         light: {
           name: "Claro",

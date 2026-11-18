@@ -37,4 +37,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "Ավելացնել սերվեր",
   "menu.delete": "Ջնջել",
+  "error.unavailable": "SSH-ն հասանելի չէ",
 }

@@ -2,7 +2,7 @@ import { ImagePreview } from "@opencode/ui/image-preview"
 import { useDialog } from "@opencode/ui/context/dialog"
 import type { ReferenceInfo } from "@opencode/client/promise"
 import type { Links, MountedSession } from "@opencode/plugin/gui"
-import { createComponent, createEffect, createMemo, on, onCleanup } from "solid-js"
+import { createComponent, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { Predicate } from "effect"
 import type { ComposerSuggestion } from "./types"
 import { createComposerEditor, type ComposerEditorModel } from "./editor/interaction"
@@ -33,6 +33,7 @@ import type { PromptHistoryComment } from "./history/entry"
 import { createComposerHistory } from "./history/store"
 import { createComposerSubmit } from "./submit"
 import { composerSubmitView } from "./machine"
+import { isComposerPopoverOpen } from "./suggestions/machine"
 import { useAttachmentDestination } from "./attachments/destination"
 import { parseClientSlashCommand } from "./client-slash-command"
 
@@ -73,6 +74,8 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     ),
   )
   let editor: HTMLDivElement | undefined
+  // The element `prompt.stop` binds its keys to.
+  const [editorElement, setEditorElement] = createSignal<HTMLDivElement>()
   // A path attachment's image is read through the server, which can see both local and uploaded paths.
   const pathImages = new Map<string, Promise<string | undefined>>()
   const pathImageReads = new AbortController()
@@ -204,6 +207,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
   const sessions = createServerSessionEntries({
     server: server.key,
     known: createKnownServerSessions(() => server.ctx),
+    apply: server.ctx.data.session.apply,
     projects: server.ctx.projects.list,
     load: async (search, signal) => {
       const page = await serverSDK.api.session.list({ parentID: null, search, archived: false, limit: 50 }, { signal })
@@ -456,6 +460,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     onEditor(element) {
       // SAFETY: the editor's only `setEditor` call passes its editable root, a `<div>` (`editor/editor.tsx`).
       editor = element as HTMLDivElement
+      setEditorElement(editor)
 
       if (adapter.kind === "active-session") adapter.setEditor(editor)
     },
@@ -605,6 +610,20 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       category: language.t("command.category.session"),
       disabled: mode() === "normal",
       onSelect: () => void controller.dispatch({ type: "mode.normal" }),
+    },
+    {
+      id: "prompt.stop",
+      title: language.t("command.prompt.stop"),
+      category: language.t("command.category.session"),
+      keybind: "escape,ctrl+g",
+      editable: true,
+      target: editorElement,
+      disabled: !adapter.working() && !submitView().held,
+      // An open list, a queued prompt being edited and shell mode each take the key first in the editor.
+      skip: (event) =>
+        isComposerPopoverOpen(controller.state) ||
+        (event.key === "Escape" && (!!options?.queue?.editing() || mode() === "shell")),
+      onSelect: () => void submission.stop(),
     },
   ])
 

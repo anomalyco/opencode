@@ -260,7 +260,7 @@ export default function TerminalPanel(props: {
                       class="flex items-center"
                     >
                       <IconButton
-                        icon={<Icon name="plus-small" size="large" />}
+                        icon={<Icon name="plus" size="large" />}
                         variant="ghost"
                         disabled={terminal().creating()}
                         onClick={() => void terminal().new()}

@@ -12,19 +12,24 @@ export const PICKER_SEARCH_TIMEOUT_MS = 10_000
 
 export type PickerSuggestion = { readonly absolute: string; readonly type: "file" | "directory" }
 
-/** What the input resolves and searches against. `fallback` is the base for relative input before a root opens. */
+/**
+ * What the input resolves and searches against. `fallback` is the base for relative input before a root opens;
+ * `committed` is the selection as the input shows it.
+ */
 export type PickerComboboxContext = {
   readonly policy: PickerPolicy
   readonly home: string
   readonly root: string
   readonly fallback: string
   readonly locationDirectory: string | undefined
+  readonly committed: string
 }
 
 /**
- * The path input and its suggestion list. Only `open` holds items, and only for its `input`, so a key pressed while the
- * next search runs never acts on the previous query's results. `active` is null until the user steps or hovers;
- * `step` is an arrow key pressed while the search runs.
+ * The path input and its suggestion list. The input shows the committed selection; typed input is a draft that only
+ * changes the selection once committed (Enter, a suggestion, or `submitted`). Only `open` holds items, and only for
+ * its `input`, so a key pressed while the next search runs never acts on the previous query's results. `active` is
+ * null until the user steps or hovers; `step` is an arrow key pressed while the search runs.
  */
 export type PickerComboboxState =
   | { readonly status: "closed"; readonly attempt: number; readonly input: string }
@@ -45,6 +50,8 @@ export type PickerComboboxEvent =
   | { readonly type: "context.changed" }
   | { readonly type: "item.hovered"; readonly index: number }
   | { readonly type: "item.clicked"; readonly index: number }
+  | { readonly type: "synced" }
+  | { readonly type: "submitted" }
   | { readonly type: "key.down"; readonly key: string; readonly shiftKey: boolean; readonly composing: boolean }
   | { readonly type: "search.resolved"; readonly attempt: number; readonly items: readonly PickerSuggestion[] }
   | { readonly type: "search.failed"; readonly attempt: number }
@@ -54,9 +61,9 @@ export type PickerComboboxEvent =
 export type PickerComboboxEffect =
   | { readonly type: "search.start"; readonly attempt: number; readonly query: string; readonly timeoutMs: number }
   | { readonly type: "search.cancel" }
-  | { readonly type: "selection.clear" }
-  | { readonly type: "choose.directory"; readonly path: string }
-  | { readonly type: "choose.file"; readonly absolute: string }
+  | { readonly type: "choose.directory"; readonly path: string; readonly submit?: true }
+  | { readonly type: "choose.file"; readonly absolute: string; readonly submit?: true }
+  | { readonly type: "submit" }
 
 export type PickerComboboxTransition = {
   readonly state: PickerComboboxState
@@ -86,11 +93,22 @@ export function transitionPickerCombobox(
     const input = cleanPickerInput(event.value)
 
     // Trailing whitespace cleans to the same input; the running search or open list still matches it.
-    if (input === state.input && (state.status !== "closed" || !input)) {
-      return result(state, [{ type: "selection.clear" }])
-    }
+    if (input === state.input && (state.status !== "closed" || !input)) return unchanged(state)
 
-    return withInput(state, input, context, [{ type: "selection.clear" }])
+    return withInput(state, input, context, [])
+  }
+
+  // A selection that settles while the user types keeps the draft; picking in the tree closes the list first.
+  if (event.type === "synced") {
+    if (state.status !== "closed" || state.input === context.committed) return unchanged(state)
+
+    return result(close(state, context.committed))
+  }
+
+  if (event.type === "submitted") {
+    if (!state.input || state.input === context.committed) return result(state, [{ type: "submit" }])
+
+    return commit(state, context, true)
   }
 
   if (event.type === "cleared") {
@@ -168,6 +186,13 @@ export function pickerComboboxView(state: PickerComboboxState) {
   }
 }
 
+// Escape closes an open list or drops a draft; only then does the input keep it from the dialog.
+export function ownsPickerEscape(state: PickerComboboxState, committed: string) {
+  if (state.status === "disposed") return false
+
+  return (state.status === "open" && state.items.length > 0) || state.input !== committed
+}
+
 function key(
   state: LiveCombobox,
   event: Extract<PickerComboboxEvent, { type: "key.down" }>,
@@ -176,9 +201,13 @@ function key(
   const items = state.status === "open" ? state.items : []
 
   if (event.key === "Escape") {
-    if (state.status !== "open" || items.length === 0) return unchanged(state)
+    if (state.status === "open" && items.length > 0) {
+      return { ...result(close(state, state.input)), preventDefault: true, stopPropagation: true }
+    }
 
-    return { ...result(close(state, state.input)), preventDefault: true, stopPropagation: true }
+    if (state.input === context.committed) return unchanged(state)
+
+    return { ...result(close(state, context.committed), cancel(state)), preventDefault: true, stopPropagation: true }
   }
 
   if (event.key === "Tab") {
@@ -207,26 +236,32 @@ function key(
   }
 
   if (event.key !== "Enter" || event.composing) return unchanged(state)
-  const active = effectiveActiveIndex(state)
 
-  if (state.status === "open" && active >= 0) return handled(choose(state, state.items[active]!, context))
-  const value = state.input ? resolve(state.input, context) : undefined
-
-  if (!value) return handled(unchanged(state))
-
-  return handled(
-    result(close(state, displayInputDirectory(value, context.home)), [
-      ...cancel(state),
-      { type: "choose.directory", path: state.input },
-    ]),
-  )
+  return handled(commit(state, context, false))
 }
 
-function choose(state: LiveCombobox, item: PickerSuggestion, context: PickerComboboxContext) {
+// Enter and a confirm with a draft both choose the highlighted suggestion, or else the typed path.
+function commit(state: LiveCombobox, context: PickerComboboxContext, submit: boolean) {
+  const active = effectiveActiveIndex(state)
+
+  if (state.status === "open" && active >= 0) return choose(state, state.items[active]!, context, submit)
+  const value = state.input ? resolve(state.input, context) : undefined
+
+  if (!value) return unchanged(state)
+
+  return result(close(state, displayInputDirectory(value, context.home)), [
+    ...cancel(state),
+    chosenDirectory(state.input, submit),
+  ])
+}
+
+function choose(state: LiveCombobox, item: PickerSuggestion, context: PickerComboboxContext, submit = false) {
   if (item.type === "file") {
     return result(close(state, displayPickerPath(item.absolute, state.input, context.home)), [
       ...cancel(state),
-      { type: "choose.file", absolute: item.absolute },
+      submit
+        ? { type: "choose.file", absolute: item.absolute, submit }
+        : { type: "choose.file", absolute: item.absolute },
     ])
   }
 
@@ -236,8 +271,12 @@ function choose(state: LiveCombobox, item: PickerSuggestion, context: PickerComb
 
   return result(close(state, displayInputDirectory(value, context.home)), [
     ...cancel(state),
-    { type: "choose.directory", path: item.absolute },
+    chosenDirectory(item.absolute, submit),
   ])
+}
+
+function chosenDirectory(path: string, submit: boolean): PickerComboboxEffect {
+  return submit ? { type: "choose.directory", path, submit } : { type: "choose.directory", path }
 }
 
 function withInput(
