@@ -8,7 +8,7 @@ import type { OpenCodeClient } from "@opencode/client"
 export const resolveIntegration = (client: OpenCodeClient, name: string, location: { directory: string }) =>
   Effect.gen(function* () {
     const servers = yield* Effect.promise(() => client.mcp.list({ location }))
-    const server = servers.data.find((entry) => entry.name === name)
+    const server = servers.data.find((entry) => entry.id === name)
     if (!server) return yield* Effect.fail(new Error(`MCP server not found: ${name}`))
     const integrationID = server.integrationID
     if (!integrationID) return undefined

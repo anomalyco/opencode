@@ -26,6 +26,9 @@ export const Protocol = Schema.Literals(["legacy", "auto", "2026-07-28"]).annota
 export class LocalConfig extends Schema.Class<LocalConfig>("Mcp.LocalConfig")({
   type: Schema.Literal("local"),
   command: Schema.String.pipe(Schema.Array),
+  title: Schema.String.pipe(optional).annotate({
+    description: "Display name for this MCP server. Defaults to the title the server reports, then the server's ID.",
+  }),
   cwd: Schema.String.pipe(optional).annotate({
     description: "Working directory for the MCP server process. Relative paths resolve from the workspace directory.",
   }),
@@ -57,6 +60,9 @@ export class OAuthConfig extends Schema.Class<OAuthConfig>("Mcp.OAuthConfig")({
 export class RemoteConfig extends Schema.Class<RemoteConfig>("Mcp.RemoteConfig")({
   type: Schema.Literal("remote"),
   url: Schema.String,
+  title: Schema.String.pipe(optional).annotate({
+    description: "Display name for this MCP server. Defaults to the title the server reports, then the server's ID.",
+  }),
   headers: Schema.Record(Schema.String, Schema.String).pipe(optional),
   oauth: Schema.Union([OAuthConfig, Schema.Literal(false)]).pipe(optional),
   disabled: Schema.Boolean.pipe(optional),
@@ -114,10 +120,13 @@ export type SubscriptionStatus = typeof SubscriptionStatus.Type
 
 export interface Server extends Schema.Schema.Type<typeof Server> {}
 export const Server = Schema.Struct({
-  name: Schema.String,
+  id: Schema.String,
+  name: Schema.String.annotate({ description: "Deprecated: same as `id`. Use `id`. Removed in the next minor." }),
+  title: Schema.String.annotate({
+    description:
+      "Display name: the configured `title`, else the title the connected server reports, else the server's ID.",
+  }),
   status: Status,
-  // Display title from the connected server's `serverInfo.title`; absent while disconnected or when not provided.
-  title: optional(Schema.String),
   // Set for remote servers registered as OAuth integrations; lets clients act on the right integration
   // without matching by name, which could collide with provider or plugin integrations.
   integrationID: optional(IntegrationID),

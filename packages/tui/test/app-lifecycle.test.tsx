@@ -1065,8 +1065,8 @@ test("error investigations repeatedly seed editable home drafts without creating
         return json({
           location,
           data: [
-            { name: "alpha", status: { status: "failed", error: "Alpha connection refused" } },
-            { name: "beta", status: { status: "failed", error: "Beta initialization failed" } },
+            { id: "alpha", name: "alpha", title: "alpha", status: { status: "failed", error: "Alpha connection refused" } },
+            { id: "beta", name: "beta", title: "beta", status: { status: "failed", error: "Beta initialization failed" } },
           ],
         })
       if (url.pathname === "/api/session" && request.method === "POST") created++

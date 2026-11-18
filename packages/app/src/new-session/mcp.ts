@@ -79,7 +79,7 @@ export function createDraftMcpControls(input: { draftID: string; worktree: () =>
 
     if (entries.length === 0) return true
     const catalog = await sdk.api.mcp.list({ location: { directory } }, { signal })
-    const missing = entries.find(([name, enabled]) => enabled && !catalog.data.some((server) => server.name === name))
+    const missing = entries.find(([name, enabled]) => enabled && !catalog.data.some((server) => server.id === name))
 
     if (missing) throw new Error(language.t("session.summary.mcp.unavailable", { name: missing[0] }))
 
@@ -87,7 +87,7 @@ export function createDraftMcpControls(input: { draftID: string; worktree: () =>
 
     const results = await Promise.all(
       entries.flatMap(([name, enabled]) => {
-        const status = catalog.data.find((server) => server.name === name)?.status.status
+        const status = catalog.data.find((server) => server.id === name)?.status.status
 
         if (!status || (enabled ? status === "connected" : status === "disabled")) return []
 
@@ -99,13 +99,13 @@ export function createDraftMcpControls(input: { draftID: string; worktree: () =>
     const current = await sdk.api.mcp.list({ location: { directory } }, { signal })
 
     const unresolved = entries.find(([name, enabled]) => {
-      const status = current.data.find((server) => server.name === name)?.status.status
+      const status = current.data.find((server) => server.id === name)?.status.status
 
       return enabled ? status !== "connected" : status !== undefined && status !== "disabled"
     })
 
     if (!unresolved) return true
-    const status = current.data.find((server) => server.name === unresolved[0])?.status.status
+    const status = current.data.find((server) => server.id === unresolved[0])?.status.status
     throw new Error(
       language.t(status === "needs_auth" ? "session.summary.mcp.signInBeforeSend" : "session.summary.mcp.notReady", {
         name: unresolved[0],

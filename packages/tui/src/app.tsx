@@ -560,22 +560,22 @@ function App() {
     for (const server of data.location.mcp.server.list() ?? []) {
       const status = server.status
       if (status.status !== "failed" && status.status !== "needs_auth") {
-        delete mcpAlerted[server.name]
+        delete mcpAlerted[server.id]
         continue
       }
-      if (mcpAlerted[server.name] === status.status) continue
-      mcpAlerted[server.name] = status.status
+      if (mcpAlerted[server.id] === status.status) continue
+      mcpAlerted[server.id] = status.status
       if (status.status === "needs_auth")
         toast.show({
           variant: "warning",
           title: "MCP server needs authentication",
-          message: `Connect "${server.name}" to use its tools.`,
+          message: `Connect "${server.title}" to use its tools.`,
           action: { label: "Open MCP servers", run: () => keymap.dispatch("mcp.list") },
         })
       else
         toast.show({
           variant: "error",
-          title: `MCP server failed: ${server.name}`,
+          title: `MCP server failed: ${server.title}`,
           message: "Run /mcps to view details.",
           action: { label: "Open MCP servers", run: () => keymap.dispatch("mcp.list") },
         })

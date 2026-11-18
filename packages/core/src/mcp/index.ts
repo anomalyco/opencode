@@ -101,7 +101,8 @@ const unavailable = (server: ServerName, status: Status) => {
 }
 
 type ServerEntry = {
-  readonly config: Mcp.ServerConfig
+  // Replaced in place when only the title changes, so renaming a server keeps its connection.
+  config: Mcp.ServerConfig
   status: Status
   readonly startup: Latch.Latch
   // The connection attempt in flight: when it began and a latch that opens once it settles.
@@ -849,6 +850,11 @@ export const layer = (options?: Options) =>
         for (const [name, entry] of entries) {
           const updated = servers.get(name)
           if (isDeepStrictEqual(entry.config, updated)) continue
+          if (updated && isDeepStrictEqual({ ...entry.config, title: undefined }, { ...updated, title: undefined })) {
+            entry.config = updated
+            yield* bus.publish(McpEvent.StatusChanged, { server: name })
+            continue
+          }
           yield* (updated ? replaceServer(name, updated) : removeServer(name, entry)).pipe(locks.withLock(name))
         }
         for (const [name, updated] of servers) {
@@ -913,9 +919,10 @@ export const layer = (options?: Options) =>
             .toSorted(([a], [b]) => a.localeCompare(b))
             .map(
               ([name, entry]): ServerInfo => ({
+                id: name,
                 name,
+                title: entry.config.title ?? entry.connection.client?.title ?? name,
                 status: entry.status,
-                title: entry.connection.client?.title,
                 integrationID: entry.integrationID,
               }),
             )
