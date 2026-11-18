@@ -13,7 +13,9 @@
 //! them in a row its layout bounds at both widths, and asks for a name in a prompt filled with a value under a
 //! description (contract ergonomics 2.6 and 2.9). `board.hotkey`, on `ctrl+p` and in the palette, starts disabled, so
 //! the host's own `ctrl+p` takes the key; `board.gate` enables or disables it, and `board.passing` makes its run decline
-//! the key, which goes on to the host as if it were not there (contract ergonomics 2.5).
+//! the key, which goes on to the host as if it were not there (contract ergonomics 2.5). `board.dialog` shows its
+//! dialog surface `ask` (2.7), whose field the command focuses, whose key moves the focus to its long scroll, and whose
+//! close the board toasts.
 //!
 //! Its `files` route is P3's: a windowed list of files whose estimates are not their heights, each an anchor of group
 //! `file` with its hunks in group `hunk`. Commands bring a file to the top, step between hunks and show a file with
@@ -34,8 +36,8 @@ use opencode_plugin_abi::interact::{Anchor, Bind, Event, Handled, Interact, Laye
 use opencode_plugin_abi::task::Cx;
 use opencode_plugin_abi::types::SessionMessageAssistantToolState;
 use opencode_plugin_abi::{
-    Action, Border, Command, Confirm, Dialog, Fetch, Host, Layout, Prompt, Rgba, Select, SelectAction, SelectOption,
-    SendError, Setup, Span, TitleAlign, Toast, Variant, Width, v2,
+    Action, Border, Command, Confirm, Dialog, DialogSurface, Fetch, Host, Layout, PanelSize, Prompt, Rgba, Select,
+    SelectAction, SelectOption, SendError, Setup, Span, TitleAlign, Toast, Variant, Width, v2,
 };
 
 pub const CARDS: usize = 6;
@@ -59,6 +61,8 @@ struct Board {
     facts: Option<String>,
     /// A box with a top and a bottom border title shows under the header (CT-26).
     titled: bool,
+    /// What the dialog's field told its handler.
+    answered: Vec<String>,
 }
 
 /// The files: how many `layout` calls ran, the header's width the last one was told, and where the last step landed.
@@ -185,6 +189,7 @@ pub fn setup(setup: &mut Setup) -> Result<(), String> {
         board.values[0] += 1;
     });
     notes(setup, &board);
+    asking(setup, &board);
     // The plugin's own layer hears the key the route's handler passes. A global bind takes a key with a modifier: a
     // plain letter is the user's typing in the composer (FT-14).
     let global = board.clone();
@@ -313,6 +318,39 @@ fn files_view(files: &Files) -> v2::Node {
         *notify_top = Some("file".into());
     }
     v2::Node::column(vec![head, list]).layout(Layout::default().grow())
+}
+
+/// The dialog surface `ask` (contract ergonomics 2.7): a field, which the command that shows it focuses, and a long
+/// scroll, which its key `ctrl+l` focuses; its handler hears the field's edits and the dialog's close.
+fn asking(setup: &mut Setup, board: &Rc<RefCell<Board>>) {
+    setup.command(command("board.dialog"), |host, _| {
+        host.dialog(Dialog::Surface(DialogSurface::new("ask").title("Ask the board").size(PanelSize::Large)));
+        host.focus("answer");
+    });
+    let (viewed, heard) = (board.clone(), board.clone());
+    let surface = v2::Surface::new("ask", v2::Place::Dialog("ask".into()), move |cx| {
+        let lines = (0..40).map(|line| v2::Node::text(vec![Span::new(format!("line {line}"))])).collect();
+        v2::Node::column(vec![
+            v2::Node::text(vec![Span::new(format!(
+                "answered {} at {}",
+                viewed.borrow().answered.join(" "),
+                cx.read.focused().node.unwrap_or_default()
+            ))]),
+            v2::Node::input("").with_id("answer").placeholder("answer"),
+            v2::Node::scroll(lines).with_id("lines").scrollbar().layout(Layout::default().height(Width::Cells(5))),
+        ])
+    })
+    .layers(vec![Layer::default().keys(vec![Bind::new("ctrl+l", "lines")])])
+    .on(move |host, event| {
+        match event {
+            Event::Key(key) if key.bind.as_deref() == Some("lines") => host.focus("lines"),
+            Event::Change { text, .. } => heard.borrow_mut().answered.push(format!("a:{text}")),
+            Event::Closed { surface, .. } => host.toast(Toast::new(Variant::Info, format!("{surface} closed"))),
+            _ => return Handled::Pass,
+        }
+        Handled::Consume
+    });
+    setup.surface(surface);
 }
 
 /// The panel `notes`, its overlay `menu`, and the select of cards with its search.
