@@ -152,23 +152,10 @@ async fn deleted_before_first_poll(read: &str) {
 }
 
 #[tokio::test]
-async fn a_session_read_started_before_a_deletion_does_not_resurrect_it() {
-    deleted_before_first_poll("session").await;
-}
-
-#[tokio::test]
-async fn a_message_read_started_before_a_deletion_does_not_resurrect_it() {
-    deleted_before_first_poll("message").await;
-}
-
-#[tokio::test]
-async fn a_permission_read_started_before_a_deletion_does_not_resurrect_it() {
-    deleted_before_first_poll("permission").await;
-}
-
-#[tokio::test]
-async fn a_form_read_started_before_a_deletion_does_not_resurrect_it() {
-    deleted_before_first_poll("form").await;
+async fn inflight_reads_cannot_resurrect_deleted_sessions() {
+    for case in ["session", "message", "permission", "form"] {
+        deleted_before_first_poll(case).await;
+    }
 }
 
 #[tokio::test]

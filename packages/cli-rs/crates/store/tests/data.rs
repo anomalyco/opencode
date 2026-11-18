@@ -574,38 +574,10 @@ async fn bulk_history(mode: &str) {
 }
 
 #[tokio::test]
-async fn bulk_history_success() {
-    bulk_history("success").await;
-}
-
-#[tokio::test]
-async fn bulk_history_failure() {
-    bulk_history("failure").await;
-}
-
-#[tokio::test]
-async fn bulk_history_cancel() {
-    bulk_history("cancel").await;
-}
-
-#[tokio::test]
-async fn bulk_history_cancel_retry() {
-    bulk_history("cancel-retry").await;
-}
-
-#[tokio::test]
-async fn bulk_history_cancel_page() {
-    bulk_history("cancel-page").await;
-}
-
-#[tokio::test]
-async fn bulk_history_join_cancel() {
-    bulk_history("join-cancel").await;
-}
-
-#[tokio::test]
-async fn bulk_history_join_failure() {
-    bulk_history("join-failure").await;
+async fn bulk_reads_settle_all_joiners() {
+    for case in ["success", "failure", "cancel", "cancel-retry", "cancel-page", "join-cancel", "join-failure"] {
+        bulk_history(case).await;
+    }
 }
 
 /// The TS `activityFixture`: `session.active` answers through `read`; listed sessions by ID.
@@ -689,28 +661,16 @@ async fn preserves_activity(kind: &str) {
 }
 
 #[tokio::test]
-async fn preserves_execution_succeeded_activity_when_an_older_snapshot_arrives() {
-    preserves_activity("session.execution.succeeded").await;
-}
-
-#[tokio::test]
-async fn preserves_execution_failed_activity_when_an_older_snapshot_arrives() {
-    preserves_activity("session.execution.failed").await;
-}
-
-#[tokio::test]
-async fn preserves_execution_interrupted_activity_when_an_older_snapshot_arrives() {
-    preserves_activity("session.execution.interrupted").await;
-}
-
-#[tokio::test]
-async fn preserves_execution_started_activity_when_an_older_snapshot_arrives() {
-    preserves_activity("session.execution.started").await;
-}
-
-#[tokio::test]
-async fn preserves_session_deleted_activity_when_an_older_snapshot_arrives() {
-    preserves_activity("session.deleted").await;
+async fn late_snapshots_preserve_live_activity() {
+    for case in [
+        "session.execution.succeeded",
+        "session.execution.failed",
+        "session.execution.interrupted",
+        "session.execution.started",
+        "session.deleted",
+    ] {
+        preserves_activity(case).await;
+    }
 }
 
 #[tokio::test]
