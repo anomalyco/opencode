@@ -55,6 +55,7 @@ export const finishBytes = (bytes: Uint8Array, into: Obj, offset: number): Value
 const constructBytes = <R>(ctx: Interpreter<R>, args: Array<Value>, proto: Obj) => {
   const source = args[0]
   // There is no ArrayBuffer: `.buffer` is a Uint8Array over the whole memory, and an offset or length makes a view of it.
+  // JS would copy any Uint8Array given with an offset and ignore the offset; here every such call makes a shared view.
   if (source instanceof Bytes && (args[1] !== undefined || args[2] !== undefined)) {
     const offset = args[1] === undefined ? 0 : coerceToInteger(args[1])
     const length = args[2] === undefined ? source.bytes.length - offset : coerceToInteger(args[2])
