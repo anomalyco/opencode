@@ -62,7 +62,10 @@ const scale = new Set([...SCALE.light, ...SCALE.dark, "#000000"])
 
 const files = (
   await Promise.all(ROOTS.map((root) => Array.fromAsync(new Bun.Glob(`${root}/**/*.css`).scan({ cwd: repo() }))))
-).flat()
+)
+  .flat()
+  // Glob hands back backslash paths on Windows, and every exception below is written with forward slashes.
+  .map((file) => file.replaceAll("\\", "/"))
 
 const entries = (
   await Promise.all(
