@@ -451,6 +451,11 @@ programs.push(
   during(objects, "for (let j = 0; j < 1000; j++) { 'abc'.slice(v); Math.min(v, v); new Error(v); [1, 2].at(v); see(j) }"),
   during(objects, "for (let j = 0; j < 1000; j++) { [s, 'a', o].sort(); [n, 2, 1].toSorted(); [3, 1].sort(); see(j) }"),
   after(objects, "const big = Array.from({ length: 5000 }, (_, i) => i % 2 ? { toString: () => 'x' + i } : 'y' + i); big.sort()"),
+  // A namespace converts for nothing and starts no conversion; a promise costs its $vmToPrimitive call and stays.
+  after(objects + "; const pr = Promise.resolve(1)",
+    "for (let j = 0; j < 300; j++) { String(tools); [1, 2].join(tools.t); Math.max(o, tools); [1, 2].slice(o, tools.t.echo); String(pr); Math.max(pr, v); [pr].join(); `${pr}`; ({ [pr]: 1 }) }"),
+  after(objects + "; const pr = Promise.resolve(1)",
+    "for (let j = 0; j < 300; j++) { try { 'abc'.at(v, pr) } catch {} try { 'abc'.indexOf(pr) } catch {} try { 'abc'.padStart(v, tools) } catch {} try { Object.keys(pr) } catch {} try { ({ ...tools }) } catch {} }"),
 )
 
 // JSON.stringify with a replacer, a property list or a toJSON of the program's runs the reference's internal walk.
