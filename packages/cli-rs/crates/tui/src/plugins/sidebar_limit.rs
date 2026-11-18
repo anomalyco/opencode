@@ -1,6 +1,4 @@
-//! The sidebar's limit section (E.14, row F05, `feature-plugins/sidebar/limit.tsx`): what the OpenCode Console
-//! workspace's limits leave for the selected model, in the error color when it is out or reached. Hidden when
-//! no limit applies to the model. It is a plugin of the one API (O-67), on contract 2.0 (P6a).
+//! Sidebar warning for the selected model's remaining workspace allowance.
 
 use opencode_plugin::abi::v2::{Node, Place, Surface};
 use opencode_plugin::abi::{self, Placement, Span};

@@ -1,4 +1,4 @@
-//! TypeScript: `feature-plugins/system/stats.tsx`, `stats-data.ts`.
+//! Session statistics poster.
 
 use opencode_api::client::Client;
 use opencode_api::generated::{ExperimentalSessionStatsInput, ExperimentalSessionStatsInputTools, SessionStatsInfo};
@@ -45,11 +45,10 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
             Some(Err(_)) => Node::text([Span::new("Could not load stats. Reopen /stats to try again.")])
                 .fg("text.feedback.error.base"),
         };
-        // The terminal's height, as the poster reads it: on a resize the host's watch calls the view before a layout
-        // gives the route its new room, so the input's is the last frame's (review carbon-1).
+        // Use the terminal height during resize; the view notification precedes layout of the new route size.
         page(node, cx.read.info().size.1)
     });
-    // As TS's `StatsPage` resource: each mount asks afresh, and a reply after the route went is dropped.
+    // Fetch on each mount and discard replies after unmount.
     let mounted = state.clone();
     // The calendar and the logo compute their colors from the theme's, so a theme change calls the view (the 1.x route
     // rendered again on one).
@@ -124,7 +123,7 @@ const DIGITS: [(char, [&str; 5]); 15] = [
     ('T', ["111", "010", "010", "010", "010"]),
 ];
 
-/// The page's scroll, which keeps where it was scrolled while the route shows.
+/// Stable key for the page's scroll offset.
 const PAGE: &str = "page";
 
 fn page(content: Node, height: u16) -> Node {

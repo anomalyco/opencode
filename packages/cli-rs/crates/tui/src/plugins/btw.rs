@@ -1,8 +1,4 @@
-//! `/btw` (E.14, row F03, `feature-plugins/prompt/btw.tsx`): `session.aside` asks a one-shot side question with
-//! the session's context through `session.generate`, without adding to the conversation, and shows the answer
-//! in a large dialog. While answers are pending, a `/btw` spinner shows in `prompt.footer.status`. It is a plugin of
-//! the one API (O-67): the spinner is a contract 2.0 surface (P6a), and the answer a dialog of the API both majors
-//! share, whose body is a node of 1.x (2.0 has no keyed dialog).
+//! `/btw` asks a side question with session context and shows the answer without interrupting the session.
 
 use opencode_api::client::Client;
 use opencode_api::generated::{SessionGenerateInput, SessionGenerateOutput};

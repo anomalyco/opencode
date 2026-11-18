@@ -1,5 +1,4 @@
-//! The plugins' one route for I/O (O-67): a built-in builds its request with a generated `*_call` builder and turns it
-//! into an [`abi::Fetch`] here; the host sends a fetch through its own client, on the transport the TUI runs on now.
+//! Route built-in plugin requests through the same fetch interface as external plugins.
 
 use opencode_api::client::{Body, Call};
 use opencode_plugin::abi;

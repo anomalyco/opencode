@@ -1,7 +1,4 @@
-//! The viewer's tree: the header, the cards, the footer and the file tree, from the viewer's state. The cards are a
-//! windowed list (P3): only those near the view have widgets, and a card that did not change is kept whole
-//! ([`v2::View::memo`]). A card's header sticks to the top of its card, its hunks are anchors a step walks, and the
-//! fixed edge above the list takes the color of the card at the top from `layout`.
+//! Diff cards form a virtual list: build only cards near the viewport and retain their state across revisions.
 
 use std::rc::Rc;
 
@@ -474,9 +471,7 @@ fn tree_pane(viewer: &Viewer, cx: &mut v2::View<'_>) -> Node {
     )
 }
 
-/// The fixed top edge takes the reviewed color of the card at the top, in the frame that shows it. The edge is there
-/// only with the cards, so a frame without their scroll (loading, a message) paints nothing, and logs no paint of a
-/// missing box (PL-10).
+/// Paint the fixed edge from the top card only when the cards are visible.
 pub fn layout(geometry: &Geometry) -> LayoutReply {
     if geometry.scroll(FILES).is_none() {
         return LayoutReply::default();
@@ -489,7 +484,6 @@ pub fn layout(geometry: &Geometry) -> LayoutReply {
 mod tests {
     use super::*;
 
-    // Expected (PL-10): the edge is painted only in a frame that has the cards' scroll.
     #[test]
     fn the_edge_is_painted_only_with_the_cards() {
         assert!(layout(&Geometry::default()).paints.is_empty());

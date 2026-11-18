@@ -1,7 +1,4 @@
-//! Diff file menu (E.15b, row DLG49, `feature-plugins/system/diff-viewer-file-menu.tsx`): one row under a
-//! right-clicked file heading or tree row that marks the file complete or incomplete. An overlay of the plugin's,
-//! owned by the viewer's mount: it takes the focus, so the viewer's keys wait; Escape and a press outside close it,
-//! and Enter or a click of the row runs it.
+//! Context menu for a file heading or file-tree entry.
 
 use opencode_plugin::abi::interact::{Anchor, Bind, Button, Event, Handled, Interact, Layer, Overlay, PointerKind};
 use opencode_plugin::abi::v2::{self, Node};

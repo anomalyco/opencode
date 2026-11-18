@@ -1,7 +1,4 @@
-//! The sidebar's MCP section (E.14, row F06, `feature-plugins/sidebar/mcp.tsx`): each server of the session's
-//! location with its status. Above two servers the header folds the list, and the folded header counts the
-//! active servers and the errors. A click on a server opens the MCP dialog on it, and on its error when it failed
-//! (`mcp.list` with the server's name). It is a plugin of the one API (O-67), on contract 2.0 (P6a).
+//! Foldable MCP status list for the session's location.
 
 use opencode_api::generated::McpServer;
 use opencode_plugin::abi::v2::{Node, Place, Surface};

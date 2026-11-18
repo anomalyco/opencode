@@ -33,14 +33,13 @@ pub struct Plugins {
     pub(crate) published: RefCell<Option<opencode_plugin::contain::Snapshot>>,
     #[cfg(feature = "ts")]
     pub scripts: RefCell<Option<Rc<opencode_plugin::pipe::Scripts>>>,
-    /// The plugins as the plugins that read them last heard of them (P6b), and whether a tell is queued.
+    /// Last plugin list delivered to subscribers.
     told: RefCell<Vec<opencode_plugin::Entry>>,
     telling: Cell<bool>,
     /// The host's own `/plugins` while the plugin manager has failed.
     fallback: RefCell<Option<Disposer>>,
     server_parts: RefCell<Vec<String>>,
-    /// The plugins not loaded the user was told of this run, and whether the server's plugins were heard yet: the one
-    /// notice waits for them, so it names their TUI parts too.
+    /// Wait for both local and server plugins before reporting skipped entries once per run.
     told_skipped: RefCell<std::collections::HashSet<String>>,
     heard_server: Cell<bool>,
 }
@@ -108,8 +107,7 @@ impl Host for Tui {
             Some(serde_json::Value::Object(object)) => object.into_iter().chain(fields.clone()).collect(),
             _ => fields.clone(),
         };
-        // The plugin's bound holds for the value the merge makes under the lock, which another client's writes may have
-        // grown since this client read it (re-review final pass, the storage bound).
+        // Check the merged size under the storage lock; another client can enlarge the value.
         queue(self, key, Some(serde_json::Value::Object(shown).to_string()), move |storage, key| {
             let merge = move |stored: &mut Value| match stored.as_object_mut() {
                 Some(object) => object.extend(fields),
@@ -141,8 +139,7 @@ impl Host for Tui {
         };
         let mut options = ToastOptions::new(variant, toast.message.clone());
         options.title = toast.title.clone();
-        // A toast about a session offers to open it, unless the session's family is on screen.
-        // A plugin's toast waits behind the host's own notice of a plugin (PL-2).
+        // Only offer to open a session outside the visible family. Queue plugin toasts behind host failure notices.
         let Some(session) = toast.session.as_ref().map(|id| SessionID(id.clone())) else {
             return self.toasts.show_behind_kept(options);
         };
@@ -161,15 +158,14 @@ impl Host for Tui {
     }
 
     fn failed(&self, id: &str) {
-        // After what the failing call asked for, as in TS, where its toast showed before the error was thrown: a toast
-        // replaces the one on screen, so the report must come last.
+        // Show the failure report after the failing call's effects so an earlier toast cannot hide it.
         let title = format!("Plugin failed: {id}");
         self.app.defer(bind!(self, |tui, _| failed_toast(&tui, title.clone(), String::new())));
         self.reads.changed(self);
     }
 
     fn slow(&self, id: &str, cost: &str) {
-        // A frame that made it slow may close after the plugin failed or was turned off: then it has its own report.
+        // A failed or disabled plugin already has its own report.
         if !self.plugins.entries().iter().any(|entry| entry.id == id && entry.status == Status::Active) {
             return;
         }
@@ -177,7 +173,7 @@ impl Host for Tui {
             .title(format!("Plugin is slow: {id}"))
             .keep();
         tell_plugins(self);
-        // Disabling the manager would leave no `/plugins` (review carbon-3).
+        // Keep the manager available to reopen `/plugins`.
         if id == super::manager::ID {
             return self.toasts.show(options);
         }
@@ -204,9 +200,7 @@ impl Host for Tui {
         // A dialog surface on screen mounts again from the registration that replaced the one that ended.
         let reloaded = id.to_owned();
         self.app.defer(bind!(self, |tui, _| super::panel::remount(&tui, &reloaded)));
-        // A reload of the plugin's registrations replaced the one that ended, which has the panel too: the panel stays
-        // open and mounts again from the new one, as TS takes a registration without closing it (CT-29). A plugin that
-        // failed or ended loses it.
+        // Keep the panel open across registration reloads and remount its new surface.
         let kept = self.panels.current().is_some_and(|target| {
             target.plugin == id
                 && self.plugins.has_panel(id, &target.name)
@@ -366,7 +360,7 @@ impl Host for Tui {
             return false;
         }
         let root = |session: &str| self.data.read(|state| state.root(&SessionID(session.to_owned()))).0;
-        // The tabs as the call's earlier edits left them (TS `ui.tabs` acts on each in order).
+        // Apply tab edits in call order.
         let (mut open, mut current) = (self.tabs.open_ids(self), self.tabs.current(self));
         for edit in staged {
             match edit {
@@ -391,7 +385,7 @@ impl Host for Tui {
         }
         match edit {
             abi::TabEdit::Open { .. } | abi::TabEdit::Focus { .. } => true,
-            // `move` takes any session of a tab's family; `close` only the tab's own ID, as in TS.
+            // Move accepts any session in a tab family; close requires the tab's own ID.
             abi::TabEdit::Move { session, .. } => open.contains(&root(session)),
             abi::TabEdit::Close { session } => session.clone().or(current).is_some_and(|id| open.contains(&id)),
         }
@@ -590,9 +584,7 @@ impl Host for Tui {
     }
 }
 
-/// Counts each change of the host's own state (its local state and settings) in [`Host::local_revision`], once and
-/// before the watchers hear it, so every view after it hears it as `local` once (review carbon-6). Called before any
-/// claim mounts: listeners run in the order they subscribed.
+/// Advance the shared local revision before notifying watchers, once per change.
 pub(crate) fn count_local(tui: &Tui) {
     let revision = tui.reads.revision.clone();
     let local = tui.local.subscribe(move || revision.set(revision.get() + 1));
@@ -649,7 +641,7 @@ fn queue(
         pending.fetch_add(1, Ordering::SeqCst);
         let (key, proxy) = (key.to_owned(), tui.app.proxy());
         let writer = tui.reads.writer.get_or_init(|| {
-            // A write refused under the lock leaves the disk as it was: what this client showed for it goes.
+            // A refused write leaves the disk unchanged; invalidate its optimistic value.
             let weak = tui.weak();
             tui.app.on_message(move |_, _: &Refused| {
                 if let Some(tui) = weak.upgrade() {
@@ -679,7 +671,7 @@ fn queue(
     }
 }
 
-/// Posted when a plugin storage write was refused under the lock.
+/// Notification of a storage write refused under the lock.
 struct Refused;
 
 /// Waits until every plugin storage write queued so far is on disk.
@@ -738,14 +730,11 @@ pub struct Reads {
     key: Cell<SessionID>,
     /// The JSON text of each storage key read or written, so a write shows at once and storage works without disk.
     stored: RefCell<HashMap<String, Option<String>>>,
-    /// The one worker that writes the plugins' storage, so writes land in the order they were made.
+    /// Serialize plugin storage writes.
     writer: OnceCell<Serial>,
     /// The writes queued and not yet on disk.
     pending: Arc<AtomicUsize>,
-    /// A write was refused under the lock since the keys were last read from disk: what `stored` shows for it is no
-    /// file's. It stays set until a reload from disk with no write pending, so neither a correction that could not be
-    /// posted nor one skipped while another write was queued leaves the cache apart from the files (re-review last
-    /// pass).
+    /// Reload disk state after a refused write before trusting the cache.
     dirty: Arc<AtomicBool>,
     /// The mounted claims' pushes, which a storage write calls with `local` from the effect queue.
     watchers: RefCell<Vec<Weak<Push>>>,
@@ -760,8 +749,7 @@ pub struct Reads {
     pub(super) surface: RefCell<Option<Rc<super::panel::Body>>>,
     /// The plugin and activation whose dialog is on screen, until it closes.
     pub(super) owner: RefCell<Option<(String, u64)>>,
-    /// The showing `owner` was recorded for, by number, and the last number given: a close clears the owner of its own
-    /// showing only, whichever activation updated it since (big-boi ds-1).
+    /// A close clears only its own showing, even when a new activation owns the next one.
     pub(super) showing: Cell<u64>,
     pub(super) showings: Cell<u64>,
     /// The action the next plugin dialog runs as it closes (`abi::Dialog::Dismissable`), until that dialog takes it.
@@ -1096,7 +1084,7 @@ fn set_setting(tui: &Tui, name: &str, value: Value) {
     });
 }
 
-/// A registry entry as a plugin reads it: without the error, which may hold another plugin's secrets (review bigboi-2).
+/// Omit error text from plugin-visible entries: it may contain another plugin's secrets.
 fn entry(entry: opencode_plugin::Entry) -> abi::PluginEntry {
     let status = match entry.status {
         Status::Active => abi::PluginStatus::Active,
@@ -1140,7 +1128,7 @@ pub fn tell_plugins(tui: &Tui) {
         if *tui.plugins.told.borrow() == entries {
             return;
         }
-        // The manager that serves `/plugins`, not a held build of its ID (review bigboi-3).
+        // Identify the active manager, not a held build sharing its ID.
         let manager = opencode_plugin::Entry::plugin_key(super::manager::ID);
         let failed = |entries: &[opencode_plugin::Entry]| {
             entries.iter().any(|entry| entry.key == manager && matches!(entry.status, Status::Failed(_)))
@@ -1159,9 +1147,7 @@ pub fn tell_plugins(tui: &Tui) {
 pub(super) const APPROVAL: &str = "host.approval";
 pub(super) const FALLBACK: &str = "host.plugins";
 
-/// Whether the host's approval question or its own `/plugins` is on screen: then no plugin's dialog, route or
-/// navigation replaces or clears it, which would dismiss the question, or show a lookalike of it, or take the way to
-/// recover from the user (review carbon-9). What plugin `id` asked for, `what`, is dropped.
+/// Block plugin navigation and dialogs while the host approval question or fallback manager is visible.
 fn guarded(tui: &Tui, id: &str, what: &str) -> bool {
     let guarded = matches!(tui.dialogs.key().as_deref(), Some(APPROVAL | FALLBACK));
     if guarded {
@@ -1187,8 +1173,7 @@ fn status(status: opencode_store::SessionStatus) -> abi::SessionStatus {
     }
 }
 
-/// The built-ins in TS order (`plugin/builtins.ts`), with the ones from other crates ([`crate::Deps::builtins`],
-/// Mermaid and LaTeX) in their TS place after `stats`, and the diff viewer last. The storybook (F14) is excepted (Q17).
+/// Register built-ins in palette order, including the renderers supplied through [`crate::Deps::builtins`].
 fn builtins(external: Vec<Builtin>, abi: bool) -> Vec<Builtin> {
     // On the other carrier each plugin's calls cross the C ABI's byte shims ([`Builtin::Abi`]).
     let carried = |builtin: Builtin| match builtin {
@@ -1250,8 +1235,7 @@ pub fn install(tui: &Rc<Tui>) {
     super::contain::install(tui);
     tui.plugins.activate(&host(tui));
     tell_plugins(tui);
-    // The plugins read the keymap (`keymap.pending()`, `keymap.active()`, `keymap.commands()`): the pending keys, and
-    // the layers and focus that decide what a key reaches, as TS's keymap selectors follow its state.
+    // Notify plugin keymap readers when pending keys, layers, or focus change.
     let keymap = tui.keymap.keymap().on_state(bind!(tui, |tui| local_changed(&tui)));
     tui.layers.borrow_mut().push(keymap);
     crate::features::events::subscribe(tui, ["plugin.updated", "server.connected"], |tui, event| {
@@ -1312,13 +1296,8 @@ fn sync_server_plugins(tui: &Tui) {
     );
 }
 
-/// The TUI parts of the active server plugins, which TS loads from the server's list (`serverTuiPlugins`,
-/// `context.tsx:96-103`, `301-305`): with the JS host the loader loads them, from the local path or the package
-/// cache the server reports, holding for approval those the user's own configuration does not name (O-162); without
-/// it they are listed as not loaded, unless their target is listed already, and a part the server no longer lists
-/// leaves the list. A local path from a server on another machine names nothing here, and is left out.
+/// Reconcile TUI entries supplied by the active server plugins.
 fn set_server_parts(tui: &Rc<Tui>, plugins: &[PluginInfo]) {
-    // Only the client that loads external plugins has TS's reconcile to stand in for.
     let Some(loader) = tui.plugins.loader.borrow().clone() else { return };
     let here = same_machine(tui.startup.args.local, tui.data.client().base_url());
     let typed: Vec<ServerPart> = plugins
@@ -1368,8 +1347,7 @@ fn set_server_parts(tui: &Rc<Tui>, plugins: &[PluginInfo]) {
     }
 }
 
-/// Tells the user once a run, in the host's notice lane, which TypeScript plugins are not loaded and why: the ones not
-/// told yet, grouped by reason, once the server's plugins were heard (FT-10).
+/// Report each skipped TypeScript plugin once per run, grouped by reason.
 fn tell_skipped(tui: &Tui) {
     if !tui.plugins.heard_server.get() || tui.plugins.loader.borrow().is_none() {
         return;
@@ -1411,9 +1389,7 @@ fn tell_skipped(tui: &Tui) {
     tui.toasts.show(options);
 }
 
-/// Whether the server runs on this machine, so the paths it reports are this machine's: one the client started or the
-/// service (no `--server`), or a `--server` on a loopback address. A loopback port may still be a tunnel to another
-/// machine; a path it reports then needs approval like any the user's configuration does not name (O-162).
+/// Trust server filesystem paths only for a local server.
 fn same_machine(local: bool, url: &url::Url) -> bool {
     local
         || match url.host() {
@@ -1424,10 +1400,7 @@ fn same_machine(local: bool, url: &url::Url) -> bool {
         }
 }
 
-/// The `plugins` entries of the user's own configuration as written, in the order TS applies them, removals (`-…`)
-/// included (carbon recheck-1): the global opencode config's (TS `ConfigDiscovery`: `opencode.json`, then
-/// `opencode.jsonc`, in the global config directory), then `cli.json`'s. Each is a package's spec, a path or a
-/// selector; a file that does not parse names none.
+/// Apply global config entries and removals in configuration order.
 fn user_plugins(tui: &Tui, config_dir: &Path) -> Vec<String> {
     let global = ["opencode.json", "opencode.jsonc"]
         .iter()
@@ -1479,8 +1452,7 @@ fn pending_toast(tui: &Tui, target: &str, message: &str) {
 pub struct External {
     pub config_dir: PathBuf,
     pub cwd: PathBuf,
-    /// Targets loaded beside the configured ones, which a config change keeps and settings never save: `plugin dev`'s
-    /// library (review bigboi-9).
+    /// Extra plugin targets that survive config reloads without being persisted, including `plugin dev`.
     pub dev: Vec<String>,
 }
 
@@ -1494,7 +1466,7 @@ pub type JsHost = opencode_plugin::pipe::Config;
 #[cfg(not(feature = "ts"))]
 pub enum JsHost {}
 
-/// Whether a JS host runs the TypeScript plugins: never in a build without the `ts` feature.
+/// Whether this client can run JavaScript plugins.
 fn js_host(tui: &Tui) -> bool {
     #[cfg(feature = "ts")]
     return tui.plugins.scripts.borrow().is_some();
@@ -1525,8 +1497,7 @@ pub fn external(tui: &Rc<Tui>, external: External) {
     external_with(tui, external, scripts);
 }
 
-/// [`external`], with the TypeScript plugins on a JS host that runs as `scripts` says (P7); without one they are listed
-/// as skipped.
+/// Load external plugins using the given JS host configuration. Without a host, list TypeScript plugins as skipped.
 pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<JsHost>) {
     let builds: Vec<Build> =
         external.dev.iter().map(|library| Build::new(Path::new(library).with_file_name("build.log"))).collect();
@@ -1541,7 +1512,6 @@ pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<JsHost>)
     let entries = configured(tui, tui.plugins.skipped());
     let project = opencode_plugin::loader::project_root(&external.cwd);
     let loader = Loader::new(Rc::new(Native), external.config_dir, external.cwd, entries);
-    // Luau plugins (O-178): on in a build with them, unless `OPENCODE_PLUGIN_LUAU=0` turns them off.
     #[cfg(luau)]
     let loader = match opencode_plugin::luau::enabled() {
         true => {
@@ -1612,7 +1582,7 @@ pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<JsHost>)
         tell_plugins(&tui);
         tell_skipped(&tui);
     }));
-    // The server's plugins may have been heard before there was a loader.
+    // Server entries can arrive before the loader starts.
     let server = tui.reads.server.borrow().1.clone();
     set_server_parts(tui, &server);
     tell_skipped(tui);
@@ -1622,12 +1592,10 @@ pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<JsHost>)
 /// author saves in an editor and looks back at the TUI later, past the 5 s of a toast's default (dx-fresh).
 const FAILED_BUILD: Duration = Duration::from_secs(24 * 60 * 60);
 
-/// `plugin dev`'s `build.log` beside its library, which its builds in the background publish in the watched directory:
-/// empty after a build that passed, the compiler's output after one that failed. A failed build keeps the running
-/// version and said so only in the log file (PL-7).
+/// Watch the development build log; an empty log means success.
 struct Build {
     log: PathBuf,
-    /// When the log was written last, and whether a build had failed then.
+    /// Last log timestamp and failure state.
     seen: Cell<(Option<std::time::SystemTime>, bool)>,
 }
 
@@ -1642,7 +1610,7 @@ impl Build {
         (meta.as_ref().and_then(|meta| meta.modified().ok()), meta.is_some_and(|meta| meta.len() > 0))
     }
 
-    /// Tells a build since the last look: one that failed names its log, and the first to pass after it says so.
+    /// Report build failure and the first subsequent recovery.
     fn tell(&self, tui: &Tui) {
         let now = Self::read(&self.log);
         let (written, failed) = self.seen.replace(now);
@@ -1672,7 +1640,7 @@ pub fn held(tui: &Tui, target: &str) -> Option<(Result<Artifact, String>, Option
     Some((loader.held(target)?, loader.unsaved()))
 }
 
-/// Reconciles the external plugins with their directories now, as the watcher does after a change.
+/// Reconcile external plugins against the current contents of their directories.
 pub fn reconcile(tui: &Rc<Tui>) {
     let loader = tui.plugins.loader.borrow().clone();
     if let Some(loader) = loader {
@@ -1680,12 +1648,7 @@ pub fn reconcile(tui: &Rc<Tui>) {
     }
 }
 
-/// Records the user's `decision` on `artifact`, the build of `target` they were shown, once the build on the disk is
-/// identified again, and applies it: an approved build loads at once. `done` gets `Ok(false)` when nothing was recorded
-/// as the build changed since (bigboi-1), and an error when the decision cannot be saved (bigboi-7). A TypeScript
-/// plugin's tree is hashed off the UI thread (FT-2), so `done` runs in a later turn; a library's, at once. An answer
-/// the user gave again on `target` before the hash ended supersedes this one: it records nothing, and `done` does not
-/// run (review jsnpm-5).
+/// Recheck the on-disk artifact before applying the user's decision about a build.
 pub fn decide(
     tui: &Rc<Tui>,
     target: &str,

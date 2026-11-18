@@ -1,7 +1,4 @@
-//! The sidebar footer (E.14, row F08, `feature-plugins/sidebar/footer.tsx`): the "Getting started" card while
-//! no provider is connected and it was not dismissed (from 22 rows), then the location as `directory:branch`,
-//! which brightens under the pointer and opens the working directory menu (E.20) on a click. It is a plugin of the
-//! one API (O-67), on contract 2.0 (P6a).
+//! Sidebar footer with the session location and dismissible getting-started card.
 
 use opencode_plugin::abi::v2::{Node, Place, Surface};
 use opencode_plugin::abi::{self, Click, Command, Justify, Layout, Placement, Span, Wrap};

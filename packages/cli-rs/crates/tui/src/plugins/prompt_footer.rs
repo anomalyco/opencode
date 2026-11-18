@@ -1,12 +1,4 @@
-//! The prompt footer plugin (E.14, row F02, `feature-plugins/prompt/footer.tsx`), appended to `prompt.footer`:
-//!
-//! - the running subagents and shells of the session (a click opens the first child), its goal (`goal.rs`),
-//!   and its context use and cost, as far as they fit;
-//! - otherwise the `agents` and `commands` hints, which read as disabled while the session pane does not own the input;
-//! - in shell mode, `esc exit shell mode`.
-//!
-//! It is a plugin of the one API (O-67), on contract 2.0 (P6a). Each mount of a session's footer counts in [`Goals`],
-//! which reads the goal: the surface hears its mounts begin and end ([`Event::Mount`]).
+//! Prompt footer for session activity, hints, and status.
 
 use opencode_plugin::abi::interact::{Event, Handled};
 use opencode_plugin::abi::v2::{Node, Place, Surface};

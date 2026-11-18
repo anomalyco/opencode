@@ -1,4 +1,4 @@
-//! TypeScript: `diff-viewer-file-tree-utils.ts`, `diff-viewer-file-tree.tsx`.
+//! Display and navigate the diff viewer's file tree.
 
 use std::collections::BTreeSet;
 

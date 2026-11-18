@@ -1,4 +1,4 @@
-//! TypeScript: `feature-plugins/system/diff-viewer.tsx`.
+//! Diff viewer keyboard help.
 
 use opencode_plugin::abi::{Dialog, Host, Layout, Node, Panel, PanelSize, Read, Span, Width};
 
