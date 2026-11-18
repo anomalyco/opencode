@@ -322,30 +322,62 @@ fn array_from(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Res {
         .items
         .iter()
         .any(|p| vm.atoms.index(p.key).is_some());
-    let mut out = Vec::with_capacity(n);
     // With a mapper, the reference's `arrayFromLike`.
-    if mapper.is_some() {
+    if let Some(f) = mapper {
         fuel::handoff(vm);
+        let out = vm.new_array(Vec::with_capacity(n));
+        let op = crate::native::NativeOp::ArrayFromLike;
+        let slots = [
+            f,
+            this_arg,
+            src,
+            Value::Num(n as f64),
+            Value::Num(0.0),
+            Value::Bool(has_indexes),
+            out,
+        ];
+        return vm.enter_native(op, callee, Value::Undef, &slots);
     }
+    let mut out = Vec::with_capacity(n);
     for i in 0..n {
-        let v = if has_indexes {
-            vm.get_elem(&src, &Value::Num(i as f64))?
-        } else {
-            Value::Undef
-        };
-        out.push(match mapper {
-            Some(f) => {
-                let v = vm.call_counted(&f, this_arg, &[v, Value::Num(i as f64)])?;
-                fuel::step(vm);
-                v
-            }
-            None => v,
+        out.push(match has_indexes {
+            true => vm.get_elem(&src, &Value::Num(i as f64))?,
+            false => Value::Undef,
         });
     }
-    if mapper.is_some() {
-        vm.bytecode_builtin();
-    }
     Ok(vm.new_array(out))
+}
+
+/// The step of `Array.from` over an array-like value with a mapper: the slots are the mapper, its receiver, the
+/// source, its length, the next index, whether the source has indexes to read, and the result.
+pub(crate) fn from_like_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
+    let out = fr.slot(vm, 6).obj().unwrap_or(0);
+    let mut i = fr.index(vm, 4);
+    match input {
+        Input::Returned(r) => {
+            if let Kind::Array(items) = &mut vm.heap[out as usize].kind {
+                items.push(r.get());
+            }
+            fuel::step(vm);
+            i += 1;
+            fr.set_index(vm, 4, i);
+        }
+        Input::Threw(e) => return Err(e),
+        Input::Start | Input::Finished => {}
+    }
+    if i >= fr.index(vm, 3) {
+        vm.bytecode_builtin();
+        return Ok(Step::Done(Value::Obj(out)));
+    }
+    let v = match fr.get(vm, 5) {
+        Value::Bool(true) => {
+            let src = fr.get(vm, 2);
+            vm.get_elem(&src, &Value::Num(i as f64))?
+        }
+        _ => Value::Undef,
+    };
+    let (f, this_arg) = (fr.slot(vm, 0), fr.slot(vm, 1));
+    fr.call_slots(vm, f, this_arg, [Slot::pack(v), Slot::index(i)])
 }
 
 fn a_push(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
@@ -632,33 +664,58 @@ fn integers(
     c.finish(vm, r)
 }
 
-fn a_to_locale_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
+fn a_to_locale_string(vm: &mut Vm, this: Value, _args: &[Value], callee: Id) -> Res {
     fuel::method(vm);
     let id = dense_id(vm, &this)?;
     fuel::native(vm);
+    let empty = vm.static_str("");
+    let op = crate::native::NativeOp::ToLocaleString;
+    vm.enter_native(op, callee, Value::Obj(id), &[empty, Value::Num(0.0)])
+}
+
+/// The step of `toLocaleString`: the slots are the text so far and the next index.
+pub(crate) fn to_locale_string_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
+    let id = fr.this_slot(vm).obj().unwrap_or(0);
+    let mut i = fr.index(vm, 1);
+    match input {
+        Input::Returned(r) => {
+            let s = vm.string_of(&r.get())?;
+            fuel::native(vm);
+            let out = fr.get(vm, 0);
+            let Value::Str(o) = out else {
+                return Ok(Step::Done(out));
+            };
+            if vm.text(o).len() + vm.text(s).len() > crate::ops::MAX_STRING_LEN {
+                return Err(vm.range_error("Invalid string length"));
+            }
+            let joined = vm.concat_strs(&[o, s]);
+            fr.set(vm, 0, joined);
+            i += 1;
+            fuel::step(vm);
+        }
+        Input::Threw(e) => return Err(e),
+        Input::Start | Input::Finished => {}
+    }
     let key = vm.atoms.intern_static("toLocaleString");
-    let mut out = String::new();
-    let mut i = 0;
     while i < len(vm, id) {
-        if i > 0 {
-            out.push(',');
+        if i > 0
+            && let Value::Str(o) = fr.get(vm, 0)
+        {
+            let comma = vm.static_id(",");
+            let joined = vm.concat_strs(&[o, comma]);
+            fr.set(vm, 0, joined);
         }
         let item = read(vm, id, i);
         if !item.is_nullish() {
             let f = vm.get(&item, key)?;
-            let r = vm.call_counted(&f, item, &[])?;
-            let s = vm.string_of(&r)?;
-            fuel::native(vm);
-            out.push_str(vm.text(s));
-            if out.len() > crate::ops::MAX_STRING_LEN {
-                return Err(vm.range_error("Invalid string length"));
-            }
+            fr.set_index(vm, 1, i);
+            return fr.call_slots(vm, Slot::pack(f), Slot::pack(item), []);
         }
         i += 1;
         fuel::step(vm);
     }
     vm.bytecode_builtin();
-    Ok(vm.string_val(out))
+    Ok(Step::Done(fr.get(vm, 0)))
 }
 
 fn a_reverse(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
@@ -1598,7 +1655,7 @@ fn a_flat(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     })
 }
 
-fn a_flat_map(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+fn a_flat_map(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     // A returned array is read like the callback methods read theirs: live, skipping indexes not in it. The fuel is
     // the reference's `Array$prototype$flatMap`, which runs its loops itself.
     fuel::method(vm);
@@ -1606,17 +1663,44 @@ fn a_flat_map(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     fuel::native(vm);
     let f = callback(vm, args, "Array.flatMap")?;
     fuel::native(vm);
-    let this_arg = arg(args, 1);
-    let mut out = Vec::new();
     let n = len(vm, id);
-    let order = visit_order(vm, id, n);
-    let mut walked = 0;
-    let mut k = 0;
-    while let Some(i) = visit_at(&order, n, k) {
-        k += 1;
-        holes(vm, &mut walked, i);
-        if let Some(v) = present(vm, id, i) {
-            match vm.call_counted(&f, this_arg, &[v, Value::Num(i as f64), this])? {
+    let order = match visit_order(vm, id, n) {
+        Some(o) => vm.new_array(o.into_iter().map(|i| Value::Num(i as f64)).collect()),
+        None => Value::Undef,
+    };
+    let out = vm.new_array(Vec::new());
+    let zero = Value::Num(0.0);
+    let op = crate::native::NativeOp::FlatMap;
+    vm.enter_native(
+        op,
+        callee,
+        this,
+        &[
+            f,
+            arg(args, 1),
+            Value::Num(n as f64),
+            zero,
+            order,
+            zero,
+            out,
+            zero,
+        ],
+    )
+}
+
+/// The step of `flatMap`: the slots are the callback, its receiver, the length, the position, the visit order of a
+/// sparse array, the positions walked, the result, and the index of the running call.
+pub(crate) fn flat_map_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
+    let this = fr.this_slot(vm);
+    let id = this.obj().unwrap_or(0);
+    let out = fr.slot(vm, 6).obj().unwrap_or(0);
+    let order = fr.slot(vm, 4).obj();
+    let n = fr.index(vm, 2);
+    let (mut k, mut walked) = (fr.index(vm, 3), fr.index(vm, 5));
+    match input {
+        Input::Returned(r) => {
+            let mut flat = Vec::new();
+            match r.get() {
                 Value::Obj(inner) if matches!(vm.heap[inner as usize].kind, Kind::Array(_)) => {
                     let m = len(vm, inner);
                     let inner_order = visit_order(vm, inner, m);
@@ -1626,7 +1710,7 @@ fn a_flat_map(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
                         j += 1;
                         holes(vm, &mut inner_walked, at);
                         if let Some(v) = present(vm, inner, at) {
-                            out.push(v);
+                            flat.push(v);
                         }
                         fuel::step(vm);
                         inner_walked = at + 1;
@@ -1634,15 +1718,38 @@ fn a_flat_map(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
                     let end = len(vm, inner).min(m);
                     holes(vm, &mut inner_walked, end);
                 }
-                r => out.push(r),
+                r => flat.push(r),
             }
+            if let Kind::Array(items) = &mut vm.heap[out as usize].kind {
+                items.extend(flat);
+            }
+            fuel::step(vm);
+            walked = fr.index(vm, 7) + 1;
+        }
+        Input::Threw(e) => return Err(e),
+        Input::Start | Input::Finished => {}
+    }
+    loop {
+        let i = match order {
+            None => (k < n).then_some(k),
+            Some(o) => items(vm, o).get(k).map(|v| v.as_num() as usize),
+        };
+        let Some(i) = i else { break };
+        k += 1;
+        holes(vm, &mut walked, i);
+        if let Some(v) = present(vm, id, i) {
+            fr.set_index(vm, 3, k);
+            fr.set_index(vm, 5, walked);
+            fr.set_index(vm, 7, i);
+            let (f, this_arg) = (fr.slot(vm, 0), fr.slot(vm, 1));
+            return fr.call_slots(vm, f, this_arg, [Slot::pack(v), Slot::index(i), this]);
         }
         fuel::step(vm);
         walked = i + 1;
     }
     holes(vm, &mut walked, n);
     vm.bytecode_builtin();
-    Ok(vm.new_array(out))
+    Ok(Step::Done(Value::Obj(out)))
 }
 
 fn a_fill(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {

@@ -3,7 +3,7 @@
 use super::{arg, fuel};
 use crate::native::{FOR_OF_SLOTS, Flow, ForOf, Frame, enter_for_of};
 use crate::object::*;
-use crate::value::{Id, Value};
+use crate::value::{Id, Slot, Value};
 use crate::vm::{Reaction, Res, Vm};
 
 pub fn setup(vm: &mut Vm) {
@@ -207,7 +207,7 @@ fn map_clear<const SET: bool>(vm: &mut Vm, this: Value, _args: &[Value], _: Id) 
     Ok(Value::Undef)
 }
 
-fn map_for_each<const SET: bool>(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+fn map_for_each<const SET: bool>(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     // The reference's `collectionForEach`, over `$Table("entries")`.
     fuel::method(vm);
     let id = map_of::<SET>(vm, &this, "forEach")?;
@@ -216,9 +216,31 @@ fn map_for_each<const SET: bool>(vm: &mut Vm, this: Value, args: &[Value], _: Id
     let f = super::require_callback(vm, &arg(args, 0), label)?;
     fuel::native(vm);
     fuel::native(vm);
+    let op = crate::native::NativeOp::MapForEach;
+    vm.enter_native(
+        op,
+        callee,
+        Value::Obj(id),
+        &[f, arg(args, 1), Value::Num(0.0)],
+    )
+}
+
+/// The step of a Map's or Set's `forEach`: entries added while it runs are visited too.
+pub(crate) fn map_for_each_step(
+    vm: &mut Vm,
+    fr: Frame,
+    input: crate::native::Input,
+) -> Result<crate::native::Step, Value> {
+    use crate::native::{Input, Step};
+    let this = fr.this_slot(vm);
+    let id = this.obj().unwrap_or(0);
+    let mut i = fr.index(vm, 2);
+    match input {
+        Input::Returned(_) => fuel::step(vm),
+        Input::Threw(e) => return Err(e),
+        Input::Start | Input::Finished => {}
+    }
     let is_set = matches!(vm.heap[id as usize].kind, Kind::Set(_));
-    let this_arg = arg(args, 1);
-    let mut i = 0;
     loop {
         let entry = {
             let m = table(vm, id);
@@ -229,13 +251,14 @@ fn map_for_each<const SET: bool>(vm: &mut Vm, this: Value, args: &[Value], _: Id
         };
         i += 1;
         if let Some((k, v)) = entry {
+            fr.set_index(vm, 2, i);
             let v = if is_set { k } else { v };
-            vm.call_counted(&f, this_arg, &[v, k, this])?;
-            fuel::step(vm);
+            let (f, this_arg) = (fr.slot(vm, 0), fr.slot(vm, 1));
+            return fr.call_slots(vm, f, this_arg, [Slot::pack(v), Slot::pack(k), this]);
         }
     }
     vm.bytecode_builtin();
-    Ok(Value::Undef)
+    Ok(Step::Done(Value::Undef))
 }
 
 fn map_iter<const SET: bool>(vm: &mut Vm, this: &Value, name: &str, kind: IterKind) -> Res {

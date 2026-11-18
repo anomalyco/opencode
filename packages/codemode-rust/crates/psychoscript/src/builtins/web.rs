@@ -633,25 +633,25 @@ fn pairs_for_each(
     args: &[Value],
     pairs: Vec<(String, String)>,
     label: &str,
+    callee: Id,
 ) -> Res {
     let f = require_callback(vm, &arg(args, 0), label)?;
     let this_arg = arg(args, 1);
     // The reference hands the pairs to its prelude's `pairsForEach`.
     super::fuel::handoff(vm);
+    let mut calls = Vec::with_capacity(3 * pairs.len());
     for (k, v) in pairs {
         let (k, v) = (js_text(vm, k), js_text(vm, v));
-        vm.call_counted(&f, this_arg, &[v, k, *this])?;
-        super::fuel::step(vm);
+        calls.extend([v, k, *this]);
     }
-    vm.bytecode_builtin();
-    Ok(Value::Undef)
+    crate::native::enter_call_list(vm, callee, f, this_arg, 3, calls, Value::Undef)
 }
 
-fn p_for_each(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+fn p_for_each(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     let id = this_params(vm, &this, "forEach")?;
     requires_args(vm, args, "URLSearchParams", "forEach", 1)?;
     let pairs = params_mut(vm, id).list.clone();
-    pairs_for_each(vm, &this, args, pairs, "URLSearchParams.forEach")
+    pairs_for_each(vm, &this, args, pairs, "URLSearchParams.forEach", callee)
 }
 
 fn p_to_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
@@ -886,11 +886,11 @@ fn h_set(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     Ok(Value::Undef)
 }
 
-fn h_for_each(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+fn h_for_each(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     let id = this_headers(vm, &this, "forEach")?;
     requires_args(vm, args, "Headers", "forEach", 1)?;
     let pairs = header_entries(&headers_mut(vm, id).list);
-    pairs_for_each(vm, &this, args, pairs, "Headers.forEach")
+    pairs_for_each(vm, &this, args, pairs, "Headers.forEach", callee)
 }
 
 fn h_iter(vm: &mut Vm, this: &Value, name: &str, kind: IterKind) -> Res {

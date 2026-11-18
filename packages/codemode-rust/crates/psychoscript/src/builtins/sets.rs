@@ -2,8 +2,9 @@
 //! WeakSet.
 
 use super::{arg, describe_value, fuel, incompatible, require_callback};
+use crate::native::{FOR_OF_SLOTS, Flow, ForOf, Frame, enter_for_of};
 use crate::object::*;
-use crate::value::{Id, Value};
+use crate::value::{Id, Slot, Value};
 use crate::vm::{Res, Vm};
 
 pub fn setup(vm: &mut Vm) {
@@ -117,10 +118,67 @@ fn map_get_or_insert_computed(vm: &mut Vm, this: Value, args: &[Value], _: Id) -
     get_or_insert_computed(vm, id, args, "Map.getOrInsertComputed")
 }
 
+// The slots of a `groupBy` frame, after the loop's: the callback, the next index, the item being grouped, the
+// `[key, item]` pairs so far (an internal array), and whether it groups into an object.
+const GROUP_F: usize = FOR_OF_SLOTS;
+const GROUP_INDEX: usize = FOR_OF_SLOTS + 1;
+const GROUP_ITEM: usize = FOR_OF_SLOTS + 2;
+const GROUP_PAIRS: usize = FOR_OF_SLOTS + 3;
+const GROUP_OBJECT: usize = FOR_OF_SLOTS + 4;
+
 /// Walks an iterable one step at a time, calling the grouping callback between steps, with the fuel of the
 /// reference's `groupBy`: its `$Callback` and `$Table("groups")`, then for each item the callback, an object key's
 /// `$Table("groupKey")` and `String`, and `$Table("group")`.
-fn group_by(vm: &mut Vm, args: &[Value], kind: &str) -> Result<Vec<(Value, Value)>, Value> {
+pub(crate) struct GroupBy;
+
+impl ForOf for GroupBy {
+    fn item(vm: &mut Vm, fr: Frame, x: Value) -> Result<Flow, Value> {
+        fr.set(vm, GROUP_ITEM, x);
+        let (f, index) = (fr.slot(vm, GROUP_F), fr.slot(vm, GROUP_INDEX));
+        Ok(Flow::Call(fr.catching(
+            vm,
+            f,
+            Slot::UNDEF,
+            [Slot::pack(x), index],
+        )?))
+    }
+
+    fn returned(vm: &mut Vm, fr: Frame, r: Slot) -> Result<Flow, Value> {
+        let index = fr.index(vm, GROUP_INDEX);
+        fr.set_index(vm, GROUP_INDEX, index + 1);
+        if fr.index(vm, GROUP_OBJECT) != 0 {
+            fuel::native(vm);
+            fuel::native(vm);
+        }
+        fuel::native(vm);
+        let item = fr.get(vm, GROUP_ITEM);
+        if let Some(pairs) = fr.slot(vm, GROUP_PAIRS).obj()
+            && let Kind::Array(items) = &mut vm.heap[pairs as usize].kind
+        {
+            items.extend([r.get(), item]);
+        }
+        Ok(Flow::Next)
+    }
+
+    fn finish(vm: &mut Vm, fr: Frame) -> Res {
+        vm.bytecode_builtin();
+        let pairs = match fr
+            .slot(vm, GROUP_PAIRS)
+            .obj()
+            .map(|p| &vm.heap[p as usize].kind)
+        {
+            Some(Kind::Array(items)) => items.clone(),
+            _ => Vec::new(),
+        };
+        let pairs = pairs.chunks(2).map(|p| (p[0], p[1]));
+        if fr.index(vm, GROUP_OBJECT) != 0 {
+            return object_groups(vm, pairs);
+        }
+        Ok(map_groups(vm, pairs))
+    }
+}
+
+fn group_by(vm: &mut Vm, args: &[Value], kind: &str, callee: Id) -> Res {
     fuel::method(vm);
     fuel::method(vm);
     let items = arg(args, 0);
@@ -130,26 +188,20 @@ fn group_by(vm: &mut Vm, args: &[Value], kind: &str) -> Result<Vec<(Value, Value
     let f = require_callback(vm, &arg(args, 1), &format!("{kind}.groupBy"))?;
     fuel::native(vm);
     fuel::native(vm);
-    let object = kind == "Object";
-    let mut out = Vec::new();
-    let mut index = 0.0;
-    fuel::for_of(vm, &items, |vm, item| {
-        let key = vm.call_counted(&f, Value::Undef, &[item, Value::Num(index)])?;
-        index += 1.0;
-        if object {
-            fuel::native(vm);
-            fuel::native(vm);
-        }
-        fuel::native(vm);
-        out.push((key, item));
-        Ok(true)
-    })?;
-    vm.bytecode_builtin();
-    Ok(out)
+    let object = Value::Num((kind == "Object") as u8 as f64);
+    let pairs = vm.new_array(Vec::new());
+    let own = [f, Value::Num(0.0), Value::Undef, pairs, object];
+    enter_for_of(
+        vm,
+        crate::native::NativeOp::GroupBy,
+        callee,
+        Value::Undef,
+        items,
+        &own,
+    )
 }
 
-fn map_group_by(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
-    let pairs = group_by(vm, args, "Map")?;
+fn map_groups(vm: &mut Vm, pairs: impl Iterator<Item = (Value, Value)>) -> Value {
     let proto = vm.realm.map_proto;
     let id = vm.alloc(Obj::new(Some(proto), Kind::Map(Box::default())));
     for (k, item) in pairs {
@@ -167,11 +219,10 @@ fn map_group_by(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
             }
         }
     }
-    Ok(Value::Obj(id))
+    Value::Obj(id)
 }
 
-fn object_group_by(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
-    let pairs = group_by(vm, args, "Object")?;
+fn object_groups(vm: &mut Vm, pairs: impl Iterator<Item = (Value, Value)>) -> Res {
     let id = vm.alloc(Obj::new(None, Kind::Ordinary));
     for (k, item) in pairs {
         let atom = vm.key_of(&k)?;
@@ -188,6 +239,14 @@ fn object_group_by(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
         }
     }
     Ok(Value::Obj(id))
+}
+
+fn map_group_by(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Res {
+    group_by(vm, args, "Map", callee)
+}
+
+fn object_group_by(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Res {
+    group_by(vm, args, "Object", callee)
 }
 
 // ---------- Set composition ----------

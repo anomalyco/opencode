@@ -12,8 +12,8 @@ mod numfmt;
 mod object;
 pub mod regexp;
 mod regexp_syntax;
-mod sets;
-mod string;
+pub(crate) mod sets;
+pub(crate) mod string;
 mod uri;
 pub mod web;
 

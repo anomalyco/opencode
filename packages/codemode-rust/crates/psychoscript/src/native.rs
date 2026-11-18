@@ -40,15 +40,36 @@ pub enum NativeOp {
     FillCollection,
     /// A promise handler, a `finally` cleanup, a thenable job, an executor or a `Promise.try` callback.
     Settle,
+    /// A callback called on a list of arguments fixed when it starts (see `enter_call_list`).
+    CallList,
+    /// `Map.prototype.forEach` and `Set.prototype.forEach`.
+    MapForEach,
+    /// `Array.prototype.flatMap`.
+    FlatMap,
+    /// `Array.from` over an array-like value, with a mapper.
+    ArrayFromLike,
+    /// `Array.prototype.toLocaleString`.
+    ToLocaleString,
+    /// `Object.groupBy` and `Map.groupBy`.
+    GroupBy,
+    /// `replace` and `replaceAll` with a callback.
+    ReplaceWith,
 }
 
-const OPS: [NativeOp; 6] = [
+const OPS: [NativeOp; 13] = [
     NativeOp::ArrayEach,
     NativeOp::ArrayReduce,
     NativeOp::SortWith,
     NativeOp::ArrayFromIterable,
     NativeOp::FillCollection,
     NativeOp::Settle,
+    NativeOp::CallList,
+    NativeOp::MapForEach,
+    NativeOp::FlatMap,
+    NativeOp::ArrayFromLike,
+    NativeOp::ToLocaleString,
+    NativeOp::GroupBy,
+    NativeOp::ReplaceWith,
 ];
 
 impl NativeOp {
@@ -120,6 +141,13 @@ pub fn step(vm: &mut Vm, op: NativeOp, base: usize, input: Input) -> Result<Step
             for_of_step::<crate::builtins::collections::FillCollection>(vm, frame, input)
         }
         NativeOp::Settle => crate::promise::settle_step(vm, frame, input),
+        NativeOp::CallList => call_list_step(vm, frame, input),
+        NativeOp::MapForEach => crate::builtins::collections::map_for_each_step(vm, frame, input),
+        NativeOp::FlatMap => crate::builtins::array::flat_map_step(vm, frame, input),
+        NativeOp::ArrayFromLike => crate::builtins::array::from_like_step(vm, frame, input),
+        NativeOp::ToLocaleString => crate::builtins::array::to_locale_string_step(vm, frame, input),
+        NativeOp::GroupBy => for_of_step::<crate::builtins::sets::GroupBy>(vm, frame, input),
+        NativeOp::ReplaceWith => crate::builtins::string::replace_with_step(vm, frame, input),
     }
 }
 
@@ -547,4 +575,62 @@ fn close_done(vm: &mut Vm, fr: Frame, result: Option<Slot>) -> Result<Step, Valu
         return Err(stash);
     }
     Ok(Step::Done(stash))
+}
+
+// The slots of a `CallList` frame: the callback, its receiver, the result, how many calls, the next one, and how many
+// arguments each takes; then the arguments of every call.
+const LIST_F: usize = 0;
+const LIST_THIS: usize = 1;
+const LIST_RESULT: usize = 2;
+const LIST_N: usize = 3;
+const LIST_K: usize = 4;
+const LIST_ARITY: usize = 5;
+const LIST_ARGS: usize = 6;
+
+/// Pushes a frame that calls `f` once per entry of `calls`, each `arity` arguments, as a counted call with a back-edge
+/// after it, as the prelude loops over a list do; it ends as a bytecode built-in's call with `result`.
+pub fn enter_call_list(
+    vm: &mut Vm,
+    callee: crate::value::Id,
+    f: Value,
+    this_arg: Value,
+    arity: usize,
+    calls: Vec<Value>,
+    result: Value,
+) -> Res {
+    let n = calls.len() / arity.max(1);
+    let mut slots = vec![
+        f,
+        this_arg,
+        result,
+        Value::Num(n as f64),
+        Value::Num(0.0),
+        Value::Num(arity as f64),
+    ];
+    slots.extend(calls);
+    vm.enter_native(NativeOp::CallList, callee, Value::Undef, &slots)
+}
+
+fn call_list_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Value> {
+    let mut k = fr.index(vm, LIST_K);
+    match input {
+        Input::Returned(_) => {
+            crate::builtins::fuel::step(vm);
+            k += 1;
+            fr.set_index(vm, LIST_K, k);
+        }
+        Input::Threw(e) => return Err(e),
+        Input::Start | Input::Finished => {}
+    }
+    if k >= fr.index(vm, LIST_N) {
+        vm.bytecode_builtin();
+        return Ok(Step::Done(fr.get(vm, LIST_RESULT)));
+    }
+    let arity = fr.index(vm, LIST_ARITY);
+    let at = fr.base() + LIST_ARGS + k * arity;
+    let args: Vec<Slot> = vm.stack[at..at + arity].to_vec();
+    let (f, this) = (fr.slot(vm, LIST_F), fr.slot(vm, LIST_THIS));
+    vm.stack.extend_from_slice(&[f, this]);
+    vm.stack.extend_from_slice(&args);
+    vm.native_call(arity)
 }

@@ -578,6 +578,17 @@ programs.push(
     "await new Promise((done) => done(S(1)))",
     "await Promise.try((x) => S(x) + x, 1)",
     "await Promise.resolve({ then(done) { done(S(1)) } })",
+    "(() => { const r = []; new Map([[1, 'a'], [2, 'b']]).forEach((v, k) => r.push(S(k) + v)); return r })()",
+    "(() => { const r = []; new Set([1, 2]).forEach((v) => r.push(S(v) + v)); return r })()",
+    "(() => { const r = []; new URLSearchParams('a=1&b=2').forEach((v) => r.push(S(v) + v)); return r })()",
+    "[1, , 2].flatMap((x) => [S(x), x])",
+    "Array.from({ length: 2 }, (_, i) => S(i) + i)",
+    "[1, { toLocaleString: () => String(S(2)) }].toLocaleString()",
+    "Object.groupBy([1, 2, 3], (x) => S(x) + (x % 2))",
+    "[...Map.groupBy([1, 2], (x) => S(x) + x)]",
+    "'abcab'.replace('b', (m) => S(1) + m)",
+    "'abcab'.replaceAll('b', (m, i) => S(i) + i)",
+    "'a1b2'.replace(/(\\d)/g, (m, d) => S(d) + d)",
   ].map(
     (expr) => `const log = []; const S = (x) => { log.push('call ' + x); const n = search({ query: Promise.resolve('echo') }).items.length; log.push('answer ' + x); return n }
      Promise.resolve().then(() => log.push('job')); const r = ${expr}; return [r, log]`,

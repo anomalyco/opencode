@@ -1031,50 +1031,55 @@ pub fn string_replace(
         }
         return Ok(Value::Str(s));
     }
+    if template.is_none() {
+        let mut gaps = Vec::with_capacity(found.len());
+        let mut calls = Vec::with_capacity(found.len());
+        let mut last = 0;
+        for f in &found {
+            gaps.push(vm.str_val(&subject.slice(last, f.start)));
+            let mut cargs = Vec::with_capacity(f.captures.len() + 4);
+            let whole = subject.slice(f.start, f.end);
+            cargs.push(vm.string_val(whole));
+            for c in &f.captures {
+                let v = match c {
+                    Some(c) => vm.str_val(c),
+                    None => Value::Undef,
+                };
+                cargs.push(v);
+            }
+            cargs.push(Value::Num(f.start as f64));
+            cargs.push(Value::Str(s));
+            if let Some(groups) = &f.groups {
+                let gid = vm.new_object();
+                for (name, v) in groups {
+                    let k = vm.atoms.intern(name);
+                    let v = match v {
+                        Some(v) => vm.str_val(v),
+                        None => Value::Undef,
+                    };
+                    vm.define(gid, k, v);
+                }
+                cargs.push(Value::Obj(gid));
+            }
+            calls.push(cargs);
+            last = f.end;
+        }
+        let tail = vm.str_val(&subject.slice(last, subject.len()));
+        return super::string::enter_replace_with(vm, *rep, gaps, calls, tail, true);
+    }
     let mut out = String::new();
     let mut last = 0;
     for f in &found {
         out.push_str(&subject.slice(last, f.start));
-        match &template {
-            Some(t) => out.push_str(&substitute(
+        if let Some(t) = &template {
+            out.push_str(&substitute(
                 t,
                 &subject,
                 f.start,
                 f.end,
                 &f.captures,
                 f.groups.as_deref(),
-            )),
-            None => {
-                let mut cargs = Vec::with_capacity(f.captures.len() + 4);
-                let whole = subject.slice(f.start, f.end);
-                cargs.push(vm.string_val(whole));
-                for c in &f.captures {
-                    let v = match c {
-                        Some(c) => vm.str_val(c),
-                        None => Value::Undef,
-                    };
-                    cargs.push(v);
-                }
-                cargs.push(Value::Num(f.start as f64));
-                cargs.push(Value::Str(s));
-                if let Some(groups) = &f.groups {
-                    let gid = vm.new_object();
-                    for (name, v) in groups {
-                        let k = vm.atoms.intern(name);
-                        let v = match v {
-                            Some(v) => vm.str_val(v),
-                            None => Value::Undef,
-                        };
-                        vm.define(gid, k, v);
-                    }
-                    cargs.push(Value::Obj(gid));
-                }
-                let r = vm.call_counted(rep, Value::Undef, &cargs)?;
-                let r = vm.string_of(&r)?;
-                super::fuel::native(vm);
-                super::fuel::step(vm);
-                out.push_str(vm.text(r));
-            }
+            ));
         }
         if out.len() > MAX_STRING_LEN {
             return Err(vm.range_error("Invalid string length"));

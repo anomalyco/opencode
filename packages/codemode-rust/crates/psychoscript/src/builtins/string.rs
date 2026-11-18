@@ -816,32 +816,132 @@ fn replace_in(vm: &mut Vm, c: &mut Conversions, s: StrId, args: &[Value], all: b
         }
         return Ok(Value::Str(s));
     }
+    if callable {
+        let mut gaps = Vec::with_capacity(positions.len());
+        let mut calls = Vec::with_capacity(positions.len());
+        let mut last = 0;
+        for pos in positions {
+            gaps.push(vm.str_val(&subject[last..pos]));
+            let offset = subject[..pos].encode_utf16().count() as f64;
+            calls.push(vec![Value::Str(pat), Value::Num(offset), Value::Str(s)]);
+            last = pos + needle.len();
+        }
+        let tail = vm.str_val(&subject[last..]);
+        return enter_replace_with(vm, rep, gaps, calls, tail, false);
+    }
     let mut out = String::new();
     let mut last = 0;
     for pos in positions {
         out.push_str(&subject[last..pos]);
-        match &template {
-            Some(t) => out.push_str(&expand_replacement(t, &needle, pos, &subject)),
-            None => {
-                let offset = subject[..pos].encode_utf16().count() as f64;
-                let r = vm.call_counted(
-                    &rep,
-                    Value::Undef,
-                    &[Value::Str(pat), Value::Num(offset), Value::Str(s)],
-                )?;
-                let r = vm.string_of(&r)?;
-                super::fuel::native(vm);
-                super::fuel::step(vm);
-                out.push_str(vm.text(r));
-            }
+        if let Some(t) = &template {
+            out.push_str(&expand_replacement(t, &needle, pos, &subject));
         }
         last = pos + needle.len();
     }
     out.push_str(&subject[last..]);
-    if callable {
-        vm.bytecode_builtin();
-    }
     Ok(vm.string_val(out))
+}
+
+// The slots of a `replace` frame with a callback: the callback, the text so far, the next match, how many there are,
+// and whether the text is checked against the longest string after each; then, for each match, the text before it and
+// its call's arguments (an internal array), then the text after the last.
+const REP_F: usize = 0;
+const REP_OUT: usize = 1;
+const REP_K: usize = 2;
+const REP_N: usize = 3;
+const REP_CHECK: usize = 4;
+const REP_MATCHES: usize = 5;
+
+/// Pushes a frame that replaces each match with what the callback `f` returns for it, as the reference's prelude
+/// `replaceWith` does once the matches are found: the result as a string, then `String`'s fifty and a back-edge.
+pub(crate) fn enter_replace_with(
+    vm: &mut Vm,
+    f: Value,
+    gaps: Vec<Value>,
+    calls: Vec<Vec<Value>>,
+    tail: Value,
+    check: bool,
+) -> Res {
+    let empty = vm.static_str("");
+    let n = calls.len();
+    let mut slots = vec![
+        f,
+        empty,
+        Value::Num(0.0),
+        Value::Num(n as f64),
+        Value::Bool(check),
+    ];
+    for (gap, args) in gaps.into_iter().zip(calls) {
+        let args = vm.new_array(args);
+        slots.extend([gap, args]);
+    }
+    slots.push(tail);
+    let callee = match f {
+        Value::Obj(id) => id,
+        _ => 0,
+    };
+    vm.enter_native(
+        crate::native::NativeOp::ReplaceWith,
+        callee,
+        Value::Undef,
+        &slots,
+    )
+}
+
+/// The step of a `replace` frame.
+pub(crate) fn replace_with_step(
+    vm: &mut Vm,
+    fr: crate::native::Frame,
+    input: crate::native::Input,
+) -> Result<crate::native::Step, Value> {
+    use crate::native::{Input, Step};
+    let mut k = fr.index(vm, REP_K);
+    let append = |vm: &mut Vm, piece: Value| {
+        if let (Value::Str(o), Value::Str(p)) = (fr.get(vm, REP_OUT), piece) {
+            let joined = vm.concat_strs(&[o, p]);
+            fr.set(vm, REP_OUT, joined);
+        }
+    };
+    match input {
+        Input::Returned(r) => {
+            let r = vm.string_of(&r.get())?;
+            super::fuel::native(vm);
+            super::fuel::step(vm);
+            append(vm, Value::Str(r));
+            if matches!(fr.get(vm, REP_CHECK), Value::Bool(true))
+                && let Value::Str(o) = fr.get(vm, REP_OUT)
+                && vm.text(o).len() > MAX_STRING_LEN
+            {
+                return Err(vm.range_error("Invalid string length"));
+            }
+            k += 1;
+            fr.set_index(vm, REP_K, k);
+        }
+        Input::Threw(e) => return Err(e),
+        Input::Start | Input::Finished => {}
+    }
+    let n = fr.index(vm, REP_N);
+    if k >= n {
+        let tail = fr.get(vm, REP_MATCHES + 2 * n);
+        append(vm, tail);
+        vm.bytecode_builtin();
+        return Ok(Step::Done(fr.get(vm, REP_OUT)));
+    }
+    let gap = fr.get(vm, REP_MATCHES + 2 * k);
+    append(vm, gap);
+    let args = match fr
+        .get(vm, REP_MATCHES + 2 * k + 1)
+        .as_obj()
+        .map(|a| &vm.heap[a as usize].kind)
+    {
+        Some(crate::object::Kind::Array(items)) => items.clone(),
+        _ => Vec::new(),
+    };
+    let f = fr.slot(vm, REP_F);
+    vm.stack.extend_from_slice(&[f, crate::value::Slot::UNDEF]);
+    vm.stack
+        .extend(args.iter().map(|v| crate::value::Slot::pack(*v)));
+    vm.native_call(args.len())
 }
 
 /// `replace` by code units, for a subject or pattern beyond ASCII: matches and an empty pattern's positions fall
@@ -889,30 +989,28 @@ fn replace16(
         }
         return Ok(Value::Str(s));
     }
+    if callable {
+        let mut gaps = Vec::with_capacity(positions.len());
+        let mut calls = Vec::with_capacity(positions.len());
+        let mut last = 0;
+        for pos in positions {
+            gaps.push(Value::Str(vm.atoms.alloc_units(&subject[last..pos])));
+            calls.push(vec![Value::Str(pat), Value::Num(pos as f64), Value::Str(s)]);
+            last = pos + needle.len();
+        }
+        let tail = Value::Str(vm.atoms.alloc_units(&subject[last..]));
+        return enter_replace_with(vm, *rep, gaps, calls, tail, false);
+    }
     let mut out: Vec<u16> = Vec::with_capacity(subject.len());
     let mut last = 0;
     for pos in positions {
         out.extend_from_slice(&subject[last..pos]);
-        match &template {
-            Some(t) => expand_replacement16(&mut out, t, &needle, pos, &subject),
-            None => {
-                let r = vm.call_counted(
-                    rep,
-                    Value::Undef,
-                    &[Value::Str(pat), Value::Num(pos as f64), Value::Str(s)],
-                )?;
-                let r = vm.string_of(&r)?;
-                super::fuel::native(vm);
-                super::fuel::step(vm);
-                out.extend(vm.atoms.sref(r).iter16());
-            }
+        if let Some(t) = &template {
+            expand_replacement16(&mut out, t, &needle, pos, &subject);
         }
         last = pos + needle.len();
     }
     out.extend_from_slice(&subject[last..]);
-    if callable {
-        vm.bytecode_builtin();
-    }
     Ok(Value::Str(vm.atoms.alloc_units(&out)))
 }
 

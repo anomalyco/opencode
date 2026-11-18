@@ -1049,6 +1049,7 @@ impl<'rt> Vm<'rt> {
     /// Runs the native frame a built-in called from native code pushed, to its result.
     fn drive_entered(&mut self, counted: bool) -> Res {
         self.entered = false;
+        self.host.meter.bytecode = false;
         if let Some(f) = self.frames.last_mut() {
             f.is_base = true;
             f.argc = counted as u32;
@@ -1184,7 +1185,9 @@ impl<'rt> Vm<'rt> {
                 args.clear();
                 self.arg_pool.push(args);
                 if self.entered {
+                    // The frame says how its call ends when it finishes; nothing set before that counts.
                     self.entered = false;
+                    self.host.meter.bytecode = false;
                     if let Some(f) = self.frames.last_mut() {
                         f.argc = 1;
                     }
