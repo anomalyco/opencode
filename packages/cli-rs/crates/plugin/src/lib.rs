@@ -427,6 +427,7 @@ pub(crate) fn linked(id: impl Into<String>, run: LinkedSetup, external: bool) ->
             keys: RefCell::default(),
             activation: activation.clone(),
             replies: RefCell::default(),
+            cancelled: RefCell::default(),
             failure: failure.clone(),
             call: RefCell::default(),
             revoked: RefCell::default(),
@@ -461,6 +462,7 @@ pub(crate) fn linked(id: impl Into<String>, run: LinkedSetup, external: bool) ->
             return Err(error);
         }
         *scope.replies.borrow_mut() = api.replies().to_vec();
+        *scope.cancelled.borrow_mut() = api.cancelled().to_vec();
         if !api.wakes().is_empty() {
             let (wakes, scope) = (api.wakes().to_vec(), scope.clone());
             activation.on_wake(Rc::new(move || scope.run("on-wake", |host| wakes.iter().for_each(|run| run(host)))));
@@ -719,6 +721,8 @@ struct Scope {
     keys: RefCell<Vec<String>>,
     activation: Rc<Activation>,
     replies: RefCell<Vec<abi::ReplyFn>>,
+    /// The handlers of [`abi::Setup::on_cancelled`].
+    cancelled: RefCell<Vec<abi::CancelledFn>>,
     failure: Rc<RefCell<Option<String>>>,
     /// What the running call asked for, while one runs.
     call: RefCell<Option<Call>>,
@@ -735,6 +739,35 @@ struct Scope {
     /// An external plugin on an in-process carrier (Luau): an overrun fails it, as it fails a library; a built-in's is
     /// a host bug.
     external: bool,
+}
+
+/// A linked plugin's replies and cancels, on the C ABI's path ([`loader::native::reply_to`]), so that a mount's close
+/// cancels its requests the same way on both.
+impl loader::native::Answers for Scope {
+    fn live(&self) -> bool {
+        !self.activation.disposed()
+    }
+
+    fn running(&self) -> bool {
+        !self.activation.disposed() && self.failure.borrow().is_none()
+    }
+
+    fn owner(&self) -> Weak<dyn Host> {
+        self.host.clone()
+    }
+
+    fn answer(self: Rc<Self>, request: abi::Request) {
+        let abi::Request::Reply { id, result } = request else { return };
+        let replies = self.replies.borrow().clone();
+        self.run("on-reply", |host| replies.iter().for_each(|run| run(host, id, result.clone())));
+    }
+
+    fn cancel(self: Rc<Self>, request: abi::RequestId) {
+        let cancelled = self.cancelled.borrow().clone();
+        if !cancelled.is_empty() && !self.activation.disposed() {
+            self.run("on-cancelled", |host| cancelled.iter().for_each(|run| run(host, request)));
+        }
+    }
 }
 
 /// Mounts an overlay surface into its frame.
@@ -1586,31 +1619,11 @@ impl Scoped<'_> {
             return Err(REFUSED.to_owned());
         }
         let id = next_request();
-        let scope = Rc::downgrade(self.scope);
-        // A request a mount's command asked for ends with the mount: a reply for a mount that closed, also one opened
-        // again since, is dropped when it arrives.
+        let scope: Weak<dyn loader::native::Answers> = Rc::downgrade(self.scope) as Weak<Scope>;
+        // A request a mount's call asked for ends with the mount, as over the C ABI: one whose mount closed first is
+        // cancelled, and a reply for a mount that closed, also one opened again since, is dropped.
         let mount = self.scope.mount.borrow().clone();
-        let live = move || mount.as_ref().is_none_or(|mount| mount.upgrade().is_some());
-        self.defer_reserved(move |host| {
-            if scope.upgrade().is_none_or(|scope| scope.activation.disposed()) || !live() {
-                return;
-            }
-            send(
-                host,
-                Box::new(move |result| {
-                    let Some(host) = scope.upgrade().map(|scope| scope.host.clone()) else { return };
-                    // The reply runs on the effect queue, in order with the effects queued before it.
-                    defer(&host, move |_| {
-                        let Some(scope) = scope.upgrade().filter(|scope| !scope.activation.disposed()) else { return };
-                        if !live() {
-                            return;
-                        }
-                        let replies = scope.replies.borrow().clone();
-                        scope.run("on-reply", |host| replies.iter().for_each(|run| run(host, id, result.clone())));
-                    });
-                }),
-            );
-        });
+        self.defer_reserved(move |host| loader::native::reply_to(&scope, host, id, mount, send));
         Ok(id)
     }
 

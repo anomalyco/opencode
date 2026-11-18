@@ -200,6 +200,7 @@ fn define(library: Library, options: Option<&str>) -> Result<(Definition, ErrorF
                 owners,
                 monitor,
                 slot,
+                cancels: manifest.cancelled,
             });
             if manifest.wake {
                 let woken = Rc::downgrade(&guest);
@@ -1343,6 +1344,8 @@ struct Guest {
     owners: Rc<crate::Owners>,
     monitor: Rc<crate::contain::Monitor>,
     slot: crate::contain::Slot,
+    /// Its manifest has [`abi::Manifest::cancelled`]: it hears of a request its mount's close cancelled.
+    cancels: bool,
 }
 
 /// However the guest goes, by a disposal or by the host dropping the registry, a failed instance is not destroyed:
@@ -1513,9 +1516,10 @@ pub(crate) trait Answers {
     fn owner(&self) -> Weak<dyn Host>;
     /// Hands it the reply, as its `on-reply` call.
     fn answer(self: Rc<Self>, request: Request);
-    /// The host cancelled `request`, as the mount that owns it closed: no reply comes. A library hears nothing of it,
-    /// as a plugin in process does; the JS host settles the promise that waits for the reply.
-    fn cancel(self: Rc<Self>, _request: abi::RequestId) {}
+    /// The host cancelled `request`, as the mount that owns it closed: no reply comes. It is told once, never after the
+    /// reply: a plugin whose manifest has [`abi::Manifest::cancelled`] as [`Request::Cancelled`] (a library, or one in
+    /// process), the JS host as the rejection of the promise that waits for the reply.
+    fn cancel(self: Rc<Self>, request: abi::RequestId);
 }
 
 impl Answers for Guest {
@@ -1534,13 +1538,19 @@ impl Answers for Guest {
     fn answer(self: Rc<Self>, request: Request) {
         self.handle("on-reply", &request);
     }
+
+    fn cancel(self: Rc<Self>, request: abi::RequestId) {
+        if self.cancels && self.live() {
+            self.handle("on-cancelled", &Request::Cancelled { id: request });
+        }
+    }
 }
 
 /// Calls `send` unless the instance `guest` names is destroyed or its activation ended, as a call that panicked after
 /// the one that asked for it ends it, or the mount that owns it closed: a fetch or a program in the foreground. Its
 /// reply goes to the instance as `request` on the effect queue, unless the instance is destroyed or that mount closed
 /// by then, as in process: a reply never reaches a mount opened again.
-fn reply_to(
+pub(crate) fn reply_to(
     guest: &Weak<dyn Answers>,
     host: &dyn Host,
     request: abi::RequestId,

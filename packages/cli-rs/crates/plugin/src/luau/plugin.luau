@@ -36,8 +36,7 @@ plugin.HIDE = table.freeze({ type = "hide" })
 -- and a waiting call there fails; setup may start one with `plugin.spawn`.
 --
 -- A task parked when its plugin is disabled, fails or reloads is dropped with the VM and never goes on. A task parked on
--- a fetch whose mount closes is not told yet: the host cancels the request and the task stays parked for the rest of
--- the activation. Start a flow that waits from a command or an event, not from `onMount`, until then.
+-- a request whose mount closes before the reply goes on once with `nil, "cancelled"`: the host cancelled the request.
 
 -- What a task's coroutine yields once its function returned, ready for the next, and what a waiting call yields. Any
 -- other yield is the plugin's own `coroutine.yield`, which fails the task.
@@ -233,7 +232,7 @@ end
 local SLOTS = 8
 
 -- The setup object a plugin's setup gets: the host's, with each handler a task, the waiting calls on `host`, and the
--- hidden commands the dialogs answer and close through. The reply handler is this module's.
+-- hidden commands the dialogs answer and close through. The reply and cancel handlers are this module's.
 local function tasked(raw)
     local host = raw.host
     local fetch, foreground, dialog = host.fetch, host.foreground, host.dialog
@@ -271,6 +270,14 @@ local function tasked(raw)
             else
                 wake(co, value, nil)
             end
+        end
+    end)
+    -- A request its mount's close cancelled gets no reply: its task goes on with the error in its place.
+    raw.onCancelled(raw, function(_, id: number)
+        local co = requests[id]
+        if co then
+            requests[id] = nil
+            wake(co, nil, "cancelled")
         end
     end)
 

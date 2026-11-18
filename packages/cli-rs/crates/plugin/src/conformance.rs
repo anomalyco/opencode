@@ -771,6 +771,7 @@ const REQUESTS: &[&str] = &[
     "input",
     "search",
     "plugins",
+    "cancelled",
 ];
 
 /// The requests that run handlers, whose reply is `null`.
@@ -786,6 +787,7 @@ const HANDLERS: &[&str] = &[
     "unmount",
     "message",
     "plugins",
+    "cancelled",
 ];
 
 /// The requests that read only.
