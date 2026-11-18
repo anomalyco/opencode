@@ -4,8 +4,9 @@
 // twice. Each plugin's nearest `.luaurc` must say `"languageMode": "strict"` and alias `opencode` to the generated stub
 // (crates/plugin/src/luau/opencode), which types `require("@opencode/plugin")`.
 //
-// The release is the one the runtime vendors, read from Cargo.lock (`luau0-src 0.22.0+luau740` is 0.740), so the
-// analyzer moves with a Luau bump. It comes from Luau's release zip, checked against the sha256 in `releases` below,
+// The release is the one the runtime vendors, read from Cargo.lock (`luau0-src 0.22.0+luau740` is 0.740, and the
+// fork's `0.24.1+luau747.sk.aa9d8201` is 0.747, whose analyzer it does not change), so the analyzer moves with a Luau
+// bump. It comes from Luau's release zip, checked against the sha256 in `releases` below,
 // as opentui-native.ts checks OpenTUI's: a release binary rather than a build, one download and no C++ build. A
 // release with no row fails; add its rows from `gh release view <release> -R luau-lang/luau --json assets`. Zips are
 // kept in `$XDG_CACHE_HOME/opencode/luau`.
@@ -41,7 +42,7 @@ const platforms: Record<string, { zip: "ubuntu" | "macos" | "windows"; binary: s
 const root = path.resolve(import.meta.dir, "..")
 const stub = path.join(root, "crates", "plugin", "src", "luau", "opencode")
 const vendored = (await Bun.file(path.join(root, "Cargo.lock")).text()).match(
-  /^name = "luau0-src"\nversion = "[^"+]*\+luau(\d+)"/m,
+  /^name = "luau0-src"\nversion = "[^"+]*\+luau(\d+)[."]/m,
 )?.[1]
 const release = `0.${vendored ?? fail("Cargo.lock has no luau0-src <version>+luau<release>")}`
 const platform = `${process.platform}-${process.arch}`
