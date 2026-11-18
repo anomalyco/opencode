@@ -12,6 +12,7 @@ import {
   sansDefault,
   sansFontFamily,
   terminalFontFamily,
+  type WorkSteps,
 } from "./model"
 
 const schema = Persistence.withInitial(settingsPersistence, defaultSettings)
@@ -33,6 +34,22 @@ describe("settings timeline detail migration", () => {
       thinking: { placement: "separate", details: "expanded" },
     })
     expect(settings.appearance.fontSize).toBe(16)
+    expect(decode(encode(settings))).toEqual(settings)
+  })
+
+  test("fills work step defaults without rewriting timeline detail or other saved settings", () => {
+    const timelineDetail = timelinePresets[4].value
+
+    const settings = decode({
+      general: { timelineDetail, followUpBehavior: "queue" },
+      appearance: { fontSize: 17, tabLayout: "vertical" },
+    })
+
+    expect(settings.general.workSteps).toEqual(defaultSettings.general.workSteps)
+    expect(settings.general.workStepsEnabled).toBe(false)
+    expect(settings.general.timelineDetail).toEqual(timelineDetail)
+    expect(settings.general.followUpBehavior).toBe("queue")
+    expect(settings.appearance).toMatchObject({ fontSize: 17, tabLayout: "vertical" })
     expect(decode(encode(settings))).toEqual(settings)
   })
 })
@@ -92,6 +109,7 @@ describe("settings schema", () => {
     expect(decode({})).toEqual({
       general: {
         timelineDetail: timelinePresets[2].value,
+        workSteps: { view: "standard", collapseTiming: "completion", foldedReplies: "all" },
         showCustomAgents: true,
         showTurnDiffs: false,
         backgroundActivity: "left",
@@ -102,6 +120,7 @@ describe("settings schema", () => {
         sidebarOrganize: "list",
         mobileTitlebarPosition: "top",
         followUpBehavior: "steer",
+        workStepsEnabled: false,
       },
       appearance: {
         fontSize: 14,
@@ -132,6 +151,35 @@ describe("settings schema", () => {
   test.each(["list", "projects", "customize", "recent"])("round trips saved side-tab organization %s", (mode) => {
     const settings = decode({ general: { sidebarOrganize: mode } })
     expect(decode(encode(settings)).general.sidebarOrganize).toBe(mode)
+  })
+
+  test.each([
+    ["view", "verbose"],
+    ["collapseTiming", "next-input"],
+    ["foldedReplies", "final"],
+  ] as const)("round trips work steps %s and preserves its siblings", (key, value) => {
+    const timelineDetail = timelinePresets[4].value
+    const workSteps: WorkSteps = { ...defaultSettings.general.workSteps, [key]: value }
+
+    const settings = decode({
+      general: { timelineDetail, followUpBehavior: "queue", workSteps },
+      appearance: { fontSize: 18 },
+    })
+
+    expect(settings.general.workSteps).toEqual(workSteps)
+    expect(settings.general.timelineDetail).toEqual(timelineDetail)
+    expect(settings.general.followUpBehavior).toBe("queue")
+    expect(settings.appearance.fontSize).toBe(18)
+    expect(decode(encode(settings))).toEqual(settings)
+  })
+
+  test("defaults work steps off and round trips the experiment switch", () => {
+    const defaults = decode({})
+    expect(defaults.general.workStepsEnabled).toBe(false)
+
+    const enabled = decode({ general: { workStepsEnabled: true } })
+    expect(enabled.general.workStepsEnabled).toBe(true)
+    expect(decode(encode(enabled)).general.workStepsEnabled).toBe(true)
   })
 
   test("the retired Recent sessions switch does not opt into Recent organization", () => {
