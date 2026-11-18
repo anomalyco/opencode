@@ -27,8 +27,10 @@ export default function BrowserSettings(props: { target?: string }) {
   // How each browser's import ended, by choice, kept while the page is open so every row keeps its own answer.
   const [results, setResults] = createSignal<ReadonlyMap<string, JobMessage>>(new Map())
   // Advanced is closed until the person opens it, which this device remembers; a settings search that lands on one of
-  // its rows shows it open for that visit.
-  const advanced = () => advancedOpen(preferences.value.advanced, props.target)
+  // its rows shows it open as the page arrives. After that the person's own toggle wins: the search's target stays set
+  // for the whole visit, so the one they closed it over no longer opens it.
+  const [closedOver, setClosedOver] = createSignal<string>()
+  const advanced = () => advancedOpen(preferences.value.advanced, props.target === closedOver() ? undefined : props.target)
 
   const jobs = createProfileJobs({
     cookies: true,
@@ -174,11 +176,14 @@ export default function BrowserSettings(props: { target?: string }) {
             aria-expanded={advanced()}
             class="group flex w-full items-center gap-1 rounded-[4px] text-start outline-none focus-visible:shadow-[0_0_0_1px_var(--v2-border-border-focus)]"
             style={{ font: "inherit", color: "inherit", "letter-spacing": "inherit" }}
-            onClick={() =>
+            onClick={() => {
+              const open = !advanced()
+
+              setClosedOver(open ? undefined : props.target)
               preferences.update((draft) => {
-                draft.advanced = !advanced()
+                draft.advanced = open
               })
-            }
+            }}
           >
             <span class="shrink-0">{ctx.t("settings.advanced")}</span>
             <Show when={!advanced()}>
