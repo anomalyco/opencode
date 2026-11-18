@@ -41,6 +41,8 @@ export async function check(ctx: Context, client: Client) {
 
   // Every settled check says what happened; only an install already underway stays quiet.
   switch (state.status) {
+    case "disabled":
+      return void showToast({ title: ctx.t("action.unavailable"), description: ctx.t("check.unavailable") })
     case "download-required":
       return install(ctx, client)
     case "up-to-date":

@@ -28,6 +28,7 @@ const document = (experimental?: ConstructorParameters<typeof ConfigExperimental
 
 const implicit = (state: Flag.State): Record<Flag.Key, Flag.State> => ({
   ...Record.map(ConfigFlag.registry, () => state),
+  todo: { enabled: false, source: "default" },
   full_codemode: { enabled: false, source: "default" },
 })
 
@@ -39,7 +40,7 @@ describe("Flag.resolve", () => {
     ["latest", false],
     ["my-branch", false],
     ["unknown", false],
-  ] as const)("applies %s build defaults and leaves full_codemode off", (channel, enabled) => {
+  ] as const)("applies %s build defaults and leaves opt-in-only flags off", (channel, enabled) => {
     expect(Flag.resolve({ entries: [], channel })).toEqual(implicit({ enabled, source: "default" }))
   })
 
