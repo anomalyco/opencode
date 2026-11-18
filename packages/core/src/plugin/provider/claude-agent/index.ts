@@ -8,6 +8,7 @@ import { ClaudeInstructions } from "./instructions.js"
 import { ClaudeIntegration } from "./integration.js"
 import { ClaudeProvider } from "./provider.js"
 import { ClaudeSessionHooks } from "./session.js"
+import { Credential } from "../../../credential.js"
 import { Environment } from "../../../environment/index.js"
 import { EnvironmentUnavailable } from "../../../environment/unavailable.js"
 import { Location } from "../../../location.js"
@@ -27,7 +28,10 @@ export const make = (io: ClaudeIO.Interface, registry = ClaudeSessions.registry(
       if (Option.isSome(location) && location.value.workspaceID !== undefined) return
       if (Option.isSome(environment) && environment.value.spawner === EnvironmentUnavailable.spawner) return
 
-      const status = yield* ClaudeStatus.make(io, () => ClaudeProvider.connection(ctx))
+      const credentials = yield* Credential.Service
+      const status = yield* ClaudeStatus.make(io, () =>
+        ClaudeProvider.connection(ctx).pipe(Effect.provideService(Credential.Service, credentials)),
+      )
       const sessions = yield* registry.attach({ io, status, storage: ctx.storage, directory: ctx.location.directory })
       yield* ctx.event
         .subscribe({
