@@ -911,6 +911,52 @@ fn a_session_panel_stays_open_across_a_reload() {
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
 }
 
+// Expected (CT-38): a session panel's input puts it full screen and back, gives the focus to its field, and closes it, as
+// TS's `PanelInput` does (oc-models-pro's ctrl+y and escape, btw-sidechat's focus as its panel mounts). They were
+// missing: the plugin's handler threw.
+#[test]
+fn a_session_panel_toggles_focuses_and_closes_itself() {
+    let Some(config) = config() else { return };
+    let log = log_file();
+    let options = json!({ "log": log.to_string_lossy() });
+    let server = Arc::new(support::Fake::new(|seen| support::base(seen, support::DIRECTORY)));
+    let pipe = crate::plugin_pipe::open_on(&[("v2probe", Some(options))], config, (120, 30), Vec::new(), server);
+    pipe.active(PROBE);
+    pipe.harness.tui.navigate(Route::Session { id: opencode_api::generated::SessionID("ses_a".into()) });
+    pipe.harness.wait("the session shows", || {
+        pipe.harness.app.advance(Duration::from_millis(1));
+        matches!(pipe.harness.tui.route(), Route::Session { .. })
+    });
+    pipe.settle();
+    pipe.harness.tui.keymap.dispatch("v2probe.panel", None);
+    assert_eq!(logged(&pipe, &log, 1), [json!({ "opened": true })]);
+    pipe.harness.wait("the panel shows", || {
+        pipe.harness.app.advance(Duration::from_millis(1));
+        pipe.harness.app.text().contains("probe panel probe.panel")
+    });
+    pipe.settle();
+    let run = |command: &str| {
+        pipe.harness.tui.keymap.dispatch(command, None);
+        pipe.settle();
+    };
+    let presentation = || pipe.harness.tui.panels.presentation();
+    run("v2probe.panel-full");
+    assert_eq!(presentation(), opencode_tui::panel::Presentation::Fullscreen);
+    run("v2probe.panel-full");
+    assert_eq!(presentation(), opencode_tui::panel::Presentation::Panel);
+    // The panel took the focus as it mounted: the session pane takes it back, then the panel's input gives it to its
+    // field, where the keys typed next go, in the right half.
+    run("pane.focus.left");
+    run("v2probe.panel-focus");
+    pipe.harness.app.type_text("zq");
+    pipe.settle();
+    let typed = pipe.harness.app.text().lines().find_map(|line| line.find("zq").map(|at| line[..at].chars().count()));
+    assert!(typed.is_some_and(|column| column >= 60), "zq at {typed:?}:\n{}", pipe.harness.app.text());
+    run("v2probe.panel-close");
+    assert!(pipe.harness.tui.panels.current().is_none(), "the panel is open");
+    assert_eq!(pipe.status(PROBE), Some(Status::Active));
+}
+
 // Expected (O-170): a plugin that imports the `effect` package fails to load alone, naming the package, and the client
 // goes on: the JS host serves what the TUI plugin API defines, not libraries a plugin expects the host to happen to
 // have. The row held the opposite when the host served effect (CT-13).

@@ -18,6 +18,9 @@ import path from "node:path"
 // version of it ran. The file it writes to is the one `marker.txt` beside it names, if any: a project's plugin runs
 // from a copy of its files.
 const MODULE = true
+type PanelInput = { name: string; close: () => void; toggleFullscreen: () => void; focus: () => void }
+// The session panel's input as it last rendered.
+let shownPanel: PanelInput | undefined
 const named = path.join(import.meta.dir, "marker.txt")
 const marker = existsSync(named) ? readFileSync(named, "utf8").trim() : path.join(import.meta.dir, "..", ".v2probe.log.jsonl")
 appendFileSync(marker, JSON.stringify({ module: MODULE }) + "\n")
@@ -184,6 +187,10 @@ export default Plugin.define({
         { id: "v2probe.restless", run: () => context.ui.router.navigate({ type: "plugin", name: "restless" }) },
         { id: "v2probe.grow", run: () => context.ui.router.navigate({ type: "plugin", name: "grow" }) },
         { id: "v2probe.panel", run: () => log({ opened: context.ui.panel.open("probe.panel") }) },
+        // What the panel's input does (CT-38): close it, full screen and back, and take the focus.
+        { id: "v2probe.panel-close", run: () => shownPanel?.close() },
+        { id: "v2probe.panel-full", run: () => shownPanel?.toggleFullscreen() },
+        { id: "v2probe.panel-focus", run: () => shownPanel?.focus() },
         { id: "v2probe.settle", run: () => context.ui.router.navigate({ type: "plugin", name: "settle" }) },
         // A handler that rejects later, after a reload perhaps (carbon-5).
         {
@@ -310,12 +317,18 @@ export default Plugin.define({
       },
     })
     // A session panel whose render registers a key layer, as opencode-self-improvement's /memory panel does: the panel
-    // stays open (CT-29).
+    // stays open (CT-29). It keeps its input for the panel commands, and has a field to take the focus (CT-38).
     context.ui.slot({
       append: "session.panel",
-      render: (panel: { name: string }) => {
+      render: (panel: PanelInput) => {
+        shownPanel = panel
         context.keymap.layer(() => ({ commands: [{ id: "v2probe.panel-key", run() {} }] }))
-        return <text>{`probe panel ${panel.name}`}</text>
+        return (
+          <box>
+            <text>{`probe panel ${panel.name}`}</text>
+            <input placeholder="probe field" />
+          </box>
+        )
       },
     })
     // Two pages sized from their own width (contract 2.x, addition 1, R3): `grow` widens its box by a cell each time

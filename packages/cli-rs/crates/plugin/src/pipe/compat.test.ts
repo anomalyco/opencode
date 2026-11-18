@@ -1222,6 +1222,40 @@ test("data collections load through the client", async () => {
   expect(fake.toasts()).toEqual([])
 })
 
+// CT-38: a session panel's input has TS's `close`, `toggleFullscreen` and `focus` (oc-models-pro, btw-sidechat), which
+// were missing, so the plugin threw: close closes the panel's surface, toggleFullscreen opens it full screen and back,
+// and focus gives the focus to the panel's first field, as the request of its mount.
+test("a session panel closes, toggles and focuses itself", async () => {
+  const fake = host()
+  const ctx = plugin("t.panel", fake)
+  let input: Json
+  ctx.ui.slot({
+    append: "session.panel",
+    render: (props: Json) => {
+      input = props
+      return h("box", { children: [h("text", { children: "Notes" }), h("input", { placeholder: "Ask" })] })
+    },
+  })
+  const index = fake.surfaces.findIndex((surface: Json) => surface.place.type === "panel")
+  const name = fake.surfaces[index].name
+  const mount = { surface: name, key: "k", generation: 1 }
+  const draw = (fullscreen: boolean) =>
+    fake.surfaces[index].view({ mount, input: { width: 40, height: 10, slot: { session_id: "s" }, panel: { fullscreen } } })
+  draw(false)
+  input.close()
+  input.toggleFullscreen()
+  draw(true)
+  input.toggleFullscreen()
+  input.focus()
+  await turn()
+  expect(fake.effects.map(({ type, surface, fullscreen, mount }: Json) => ({ type, surface, fullscreen, mount }))).toEqual([
+    { type: "close-panel", surface: name, fullscreen: undefined, mount: undefined },
+    { type: "open-panel", surface: name, fullscreen: true, mount: undefined },
+    { type: "open-panel", surface: name, fullscreen: undefined, mount: undefined },
+    { type: "focus", surface: undefined, fullscreen: undefined, mount },
+  ])
+})
+
 // CT-36: a plugin that lists the status, permissions and forms of each of 900 sessions (sesh, agents-view,
 // op1/threads). The statuses come from the one read of every session the host has loaded, with no read of each session,
 // which churned 1,800 watches past the host's bound; the permissions load at most 4 at once, where 900 fetches went in
