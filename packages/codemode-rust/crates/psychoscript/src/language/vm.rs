@@ -880,12 +880,7 @@ impl<'rt> Vm<'rt> {
             self.host.meter.fuel = self.roundtrip_every as i32;
             self.suspend_wanted = true;
         }
-        if self
-            .host
-            .shared
-            .requested
-            .load(std::sync::atomic::Ordering::Relaxed)
-        {
+        if self.host.shared.requested() {
             self.suspend_wanted = true;
         }
     }
@@ -3866,13 +3861,7 @@ impl<'rt> Vm<'rt> {
             if self.suspended {
                 return Ok(());
             }
-            if self.suspend_wanted
-                || self
-                    .host
-                    .shared
-                    .requested
-                    .load(std::sync::atomic::Ordering::Relaxed)
-            {
+            if self.suspend_wanted || self.host.shared.requested() {
                 self.suspended = true;
                 return Ok(());
             }

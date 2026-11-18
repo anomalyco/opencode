@@ -207,6 +207,44 @@ pub fn random_run_id() -> String {
     )
 }
 
+/// What a run tells whoever may suspend it from another thread (Code Mode's suspenders), and asks of them.
+pub(crate) trait SuspendWatch: Send + Sync {
+    /// Whether a suspend is waiting for the run to reach a step boundary.
+    fn requested(&self) -> bool;
+    /// Whether anyone can suspend the run, so synchronous calls only record themselves when it matters.
+    fn watched(&self) -> bool;
+    /// A synchronous host call starts, named by its key and path: a suspend is refused until it returns.
+    fn enter_sync(&self, key: String, path: String);
+    fn leave_sync(&self);
+}
+
+/// No one can suspend the run.
+struct Unwatched;
+
+impl SuspendWatch for Unwatched {
+    fn requested(&self) -> bool {
+        false
+    }
+    fn watched(&self) -> bool {
+        false
+    }
+    fn enter_sync(&self, _: String, _: String) {}
+    fn leave_sync(&self) {}
+}
+
+impl RunHost<'_> {
+    /// A synchronous host call starts: a suspend is refused until it returns (`SuspendWatch::enter_sync`).
+    pub(crate) fn enter_sync(&self, call: u64, path: String) {
+        if self.shared.watched() {
+            self.shared.enter_sync(self.key(call), path);
+        }
+    }
+
+    pub(crate) fn leave_sync(&self) {
+        self.shared.leave_sync();
+    }
+}
+
 /// The host state of one run.
 pub struct RunHost<'rt> {
     pub setup: &'rt Setup,
@@ -225,8 +263,8 @@ pub struct RunHost<'rt> {
     pub results: Vec<ResultRoot>,
     /// Calls a resumed run starts again when it begins.
     pub restarts: Vec<(Id, String, Json, u64, Start)>,
-    /// What a suspend asks of the run, shared with its [`Suspender`](crate::Suspender)s.
-    pub shared: Arc<crate::program::Shared>,
+    /// Whoever may suspend the run: what they ask of it, and the synchronous call that refuses them meanwhile.
+    pub shared: Arc<dyn SuspendWatch>,
     /// Suggestions attached to failure values, by error object.
     pub suggestions: FxHashMap<Id, Vec<String>>,
     pub(crate) promise_like: Option<Id>,
@@ -281,7 +319,7 @@ impl<'rt> RunHost<'rt> {
             calls: Vec::new(),
             results: Vec::new(),
             restarts: Vec::new(),
-            shared: Arc::default(),
+            shared: Arc::new(Unwatched),
             suggestions: FxHashMap::default(),
             promise_like: None,
             interrupted: false,
@@ -486,10 +524,9 @@ pub(crate) fn start_tool<'rt>(vm: &mut Vm<'rt>, p: Id, path: &str, args: Crossed
         && hooks.tool_after.is_none()
         && let Execute::Sync(f) = &admitted.tool.execute
     {
-        let shared = vm.host.shared.clone();
-        shared.enter_sync(&vm.host, admitted.call, tool_expression(path));
+        vm.host.enter_sync(admitted.call, tool_expression(path));
         let raw = f(admitted.input, vm.host.sync_context(admitted.call));
-        shared.leave_sync();
+        vm.host.leave_sync();
         let s = finish(path, admitted.tool, raw);
         if let Settlement::Interrupted = s {
             interrupt(vm);
@@ -978,8 +1015,7 @@ fn run_search(vm: &mut Vm, args: &[Option<Json>]) -> Result<Json, Box<Failed>> {
     admit_call(vm, "search", &input)?;
     let ctx = vm.host.context();
     let key = ctx.key();
-    let shared = vm.host.shared.clone();
-    shared.enter_sync(&vm.host, ctx.call, "search".into());
+    vm.host.enter_sync(ctx.call, "search".into());
     let hooks = &setup.hooks;
     let call = ToolInvocation {
         name: "search".into(),
@@ -989,12 +1025,12 @@ fn run_search(vm: &mut Vm, args: &[Option<Json>]) -> Result<Json, Box<Failed>> {
     if let Some(before) = &hooks.tool_before
         && let Err(e) = block_on(before(&call))
     {
-        shared.leave_sync();
+        vm.host.leave_sync();
         return Err(Failed::new(DiagnosticKind::ToolFailure, e.message));
     }
     let registry = &setup.registry;
     let result = search::search(registry.entries(), registry.word_index(), &input);
-    shared.leave_sync();
+    vm.host.leave_sync();
     if let Some(after) = &hooks.tool_after {
         after(&call, CallResult::Success(&result));
     }
@@ -1638,18 +1674,17 @@ fn extension_native(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Re
     });
     match &f.body {
         Body::Sync(body) => {
-            let shared = vm.host.shared.clone();
             let call_id = vm.host.next_call();
-            shared.enter_sync(&vm.host, call_id, label.clone());
+            vm.host.enter_sync(call_id, label.clone());
             if let (Some(call), Some(before)) = (&invocation, &hooks.extension_before)
                 && let Err(e) = block_on(before(call))
             {
-                shared.leave_sync();
+                vm.host.leave_sync();
                 let thrown = HostValue::Error(Box::new(e));
                 return Err(from_host(vm, &thrown, &label, None, 0).unwrap_or_else(|e| e));
             }
             let result = body(host_args);
-            shared.leave_sync();
+            vm.host.leave_sync();
             vm.host.next_epoch();
             if let (Some(call), Some(after)) = (&invocation, &hooks.extension_after) {
                 report(after.as_ref(), call, &result);

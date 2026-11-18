@@ -120,24 +120,6 @@ impl Shared {
         self.inner.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    /// A synchronous host call starts: a suspend is refused until it returns.
-    pub(crate) fn enter_sync(&self, host: &crate::host::RunHost, call: u64, path: String) {
-        if !self.watched.load(Ordering::Relaxed) {
-            return;
-        }
-        self.lock().sync_call = Some(RunningCall {
-            key: host.key(call),
-            path,
-        });
-    }
-
-    pub(crate) fn leave_sync(&self) {
-        if !self.watched.load(Ordering::Relaxed) {
-            return;
-        }
-        self.lock().sync_call = None;
-    }
-
     fn set_waker(&self, waker: &Waker) {
         if self.watched.load(Ordering::Relaxed) {
             self.lock().waker = Some(waker.clone());
@@ -168,6 +150,26 @@ impl Shared {
         self.requested.store(false, Ordering::Relaxed);
         drop(inner);
         self.answered.notify_all();
+    }
+}
+
+impl crate::host::SuspendWatch for Shared {
+    fn requested(&self) -> bool {
+        self.requested.load(Ordering::Relaxed)
+    }
+
+    fn watched(&self) -> bool {
+        self.watched.load(Ordering::Relaxed)
+    }
+
+    fn enter_sync(&self, key: String, path: String) {
+        self.lock().sync_call = Some(RunningCall { key, path });
+    }
+
+    fn leave_sync(&self) {
+        if self.watched.load(Ordering::Relaxed) {
+            self.lock().sync_call = None;
+        }
     }
 }
 
@@ -251,11 +253,11 @@ impl<'a> Program<'a> {
         Self::with(rt, state)
     }
 
-    fn with(rt: &'a Runtime, state: State<'a>) -> Self {
-        let shared = match &state {
-            State::Running(r) => r.vm.host.shared.clone(),
-            _ => Arc::default(),
-        };
+    fn with(rt: &'a Runtime, mut state: State<'a>) -> Self {
+        let shared = Arc::<Shared>::default();
+        if let State::Running(r) = &mut state {
+            r.vm.host.shared = shared.clone();
+        }
         Self {
             rt,
             state,
