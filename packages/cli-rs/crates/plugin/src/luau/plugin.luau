@@ -264,10 +264,11 @@ local function namespace(prefix: string): any
 end
 plugin.client = namespace("")
 
--- How many answer commands the dialogs take turns on: dialog `n` answers through `<id>.task.answer.<n % SLOTS>`, so an
--- answer that runs late, after the next dialog showed, still reaches its own dialog's task. The commands, the
--- generation from 1 and the close's input are the Rust SDK's tasks' (`task::ANSWERS`).
-local SLOTS = 8
+-- How many answer commands the dialogs take turns on. A dialog takes a command no dialog holds, and holds it until its
+-- answer or its close runs; the host runs a dialog's answer before its close, so an answer that runs late, after other
+-- dialogs showed, still reaches its own dialog (big-boi `acf-1`). A dialog that finds every command held answers `nil`
+-- at once. The commands, the generation from 1 and the close's input are the Rust SDK's tasks' (`task::ANSWERS`).
+local SLOTS = 64
 
 -- The setup object a plugin's setup gets: the host's, with each handler a task, the waiting calls on `host`, and the
 -- hidden commands the dialogs answer and close through. The reply and cancel handlers are this module's.
@@ -277,9 +278,16 @@ local function tasked(raw)
     local closed = `{raw.id}.task.closed`
     -- Requests in flight, by ID, and the dialogs shown by tasks that have not closed, by number, with what they ask.
     local requests: { [number]: thread } = {}
-    local dialogs: { [number]: { co: thread, kind: string } } = {}
-    -- The dialog each answer command answers for: the last one shown on it.
+    local dialogs: { [number]: { co: thread, kind: string, slot: number? } } = {}
+    -- The dialog that holds each answer command, until its answer or its close runs.
     local slots: { [number]: number } = {}
+    -- Frees the answer command dialog `number` holds, if it holds one.
+    local function free(number: number)
+        local asked = dialogs[number]
+        if asked and asked.slot and slots[asked.slot] == number then
+            slots[asked.slot] = nil
+        end
+    end
     local shown = 0
 
     local function request(name: string, send, self, spec): (any, string?)
@@ -352,17 +360,28 @@ local function tasked(raw)
         shape.type = kind
         -- A keyed select stays open on a pick and is replaced in place without its close: the task would never hear.
         shape.key = nil
+        local slot: number? = nil
         if kind ~= "alert" then
-            slots[number % SLOTS] = number
-            shape.action = { type = "command", name = `{raw.id}.task.answer.{number % SLOTS}` }
+            for at = 0, SLOTS - 1 do
+                if slots[at] == nil then
+                    slot = at
+                    break
+                end
+            end
+            if slot == nil then
+                return nil
+            end
+            slots[slot] = number
+            shape.action = { type = "command", name = `{raw.id}.task.answer.{slot}` }
         end
-        dialogs[number] = { co = co, kind = kind }
+        dialogs[number] = { co = co, kind = kind, slot = slot }
         dialog(self, {
             type = "dismissable",
             dialog = shape,
             dismissed = { type = "command", name = closed, input = tostring(number) },
         })
         return park(co, function()
+            free(number)
             dialogs[number] = nil
         end)
     end
@@ -378,10 +397,12 @@ local function tasked(raw)
     host.alert = function(self, spec)
         ask("host:alert", self, "alert", spec)
     end
-    -- An answer is for the dialog last shown on its command: the host closes it and runs its action, then its close.
+    -- An answer is for the dialog that holds its command, which it frees: the host closes it and runs its action, then
+    -- its close.
     for slot = 0, SLOTS - 1 do
         raw.command(raw, { name = `{raw.id}.task.answer.{slot}` }, function(_, input: string?)
             local number = slots[slot]
+            slots[slot] = nil
             local asked = number and dialogs[number]
             if asked then
                 dialogs[number :: number] = nil
@@ -396,6 +417,7 @@ local function tasked(raw)
         local number = tonumber(input)
         local asked = number and dialogs[number]
         if asked then
+            free(number :: number)
             dialogs[number :: number] = nil
             wake(asked.co, nil)
         end

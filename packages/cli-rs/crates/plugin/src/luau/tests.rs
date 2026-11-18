@@ -2721,3 +2721,35 @@ fn a_late_answer_reaches_its_own_dialog() {
     assert_eq!(select.key, None);
     assert_eq!(failure(&registry, "test.luau"), None);
 }
+
+// Expected (big-boi acf-1): an answer that runs after eight more dialogs replaced its own reaches its own dialog's
+// task, not the ninth's: a dialog holds its answer command until its answer or close runs, and no other takes it.
+#[test]
+fn an_answer_after_eight_replacements_reaches_its_own_dialog() {
+    let host = host();
+    let registry = tasking(
+        &host,
+        r#"
+        setup:command({ name = "ask" }, function(host)
+            for at = 1, 9 do
+                plugin.spawn(function()
+                    local answer = host:prompt({ title = `prompt {at}` })
+                    host:toast({ variant = "info", message = `{at} {tostring(answer)}` })
+                end)
+            end
+        end)
+        "#,
+    );
+    run(&host, "ask", None);
+    let dialog = |at: usize| match &host.dialogs.borrow()[at] {
+        (_, abi::Dialog::Dismissable { dialog, .. }) => answers(dialog),
+        other => panic!("{other:?}"),
+    };
+    let (first, ninth) = (dialog(0), dialog(8));
+    assert_ne!(first, ninth, "the ninth prompt took the first one's answer command");
+    run(&host, &first, Some("first"));
+    assert_eq!(said(&host), ["1 first"]);
+    run(&host, &ninth, Some("ninth"));
+    assert_eq!(said(&host), ["1 first", "9 ninth"]);
+    assert_eq!(failure(&registry, "test.luau"), None);
+}
