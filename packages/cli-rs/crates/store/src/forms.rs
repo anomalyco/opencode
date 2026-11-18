@@ -209,28 +209,9 @@ impl Data {
 /// Global forms name their location in a header (`formRequestOptions`).
 fn form_client(client: &Client, owner: &str, location: Option<&Location>) -> Client {
     match (owner, location) {
-        (GLOBAL, Some(location)) => client.with_header("x-opencode-directory", encode_component(&location.directory)),
+        (GLOBAL, Some(location)) => {
+            client.with_header("x-opencode-directory", opencode_api::js::encode_component(&location.directory))
+        }
         _ => client.clone(),
-    }
-}
-
-/// `encodeURIComponent`.
-fn encode_component(value: &str) -> String {
-    value
-        .bytes()
-        .map(|byte| match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'!' | b'~' | b'*' | b'\'' | b'(' | b')' => {
-                (byte as char).to_string()
-            }
-            _ => format!("%{byte:02X}"),
-        })
-        .collect()
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn encodes_like_encode_uri_component() {
-        assert_eq!(super::encode_component("/tmp/a b&c=d/é(x)!"), "%2Ftmp%2Fa%20b%26c%3Dd%2F%C3%A9(x)!");
     }
 }

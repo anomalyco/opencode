@@ -160,7 +160,7 @@ fn interpolate(path: &str, params: &[(String, String)]) -> error::Result<String>
         };
         used.push(key);
         pathname.push_str(&rest[..open]);
-        pathname.push_str(&encode_uri_component(value));
+        pathname.push_str(&opencode_api::js::encode_component(value));
         rest = &rest[open + close + 2..];
     }
     pathname.push_str(rest);
@@ -173,19 +173,6 @@ fn interpolate(path: &str, params: &[(String, String)]) -> error::Result<String>
         return Ok(pathname);
     }
     Ok(format!("{pathname}?{query}"))
-}
-
-// `encodeURIComponent`.
-fn encode_uri_component(value: &str) -> String {
-    value
-        .bytes()
-        .map(|byte| match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'!' | b'~' | b'*' | b'\'' | b'(' | b')' => {
-                (byte as char).to_string()
-            }
-            byte => format!("%{byte:02X}"),
-        })
-        .collect()
 }
 
 #[cfg(test)]
@@ -217,10 +204,10 @@ mod tests {
                 "delete": { "operationId": "session.message.delete" },
             },
         }});
-        let params = pairs(&[("sessionID", "ses 1/2"), ("limit", "5"), ("messageID", "msg_1"), ("q", "a b&c")]);
+        let params = pairs(&[("sessionID", "ses 1/é(x)!&="), ("limit", "5"), ("messageID", "msg_1"), ("q", "a b&c")]);
         assert_eq!(
             resolve_operation(&spec, "session.message.delete", &params).unwrap(),
-            ("DELETE", "/api/session/ses%201%2F2/message/msg_1?limit=5&q=a+b%26c".to_owned())
+            ("DELETE", "/api/session/ses%201%2F%C3%A9(x)!%26%3D/message/msg_1?limit=5&q=a+b%26c".to_owned())
         );
         assert_eq!(
             resolve_operation(&spec, "session.get", &pairs(&[("sessionID", "ses/a"), ("workspace", "work")])).unwrap(),

@@ -583,7 +583,7 @@ impl Run {
             })?;
             // A global form is found through its location.
             if session == "global" {
-                call.header("x-opencode-directory", &opencode_api::client::path_param(&self.input.directory)?)?;
+                call.header("x-opencode-directory", &opencode_api::js::encode_component(&self.input.directory))?;
             }
             self.input.client.empty(call).await
         };

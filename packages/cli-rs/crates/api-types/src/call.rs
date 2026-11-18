@@ -7,12 +7,11 @@
 use std::marker::PhantomData;
 
 use bytes::Bytes;
-use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
-use crate::js::js_string;
+use crate::js::{encode_component, js_string};
 
 /// One request of the API, whose reply decodes as `T` ([`Call::decode`]). A builder never fails: an input that does not
 /// serialize is kept as [`Call::error`], which whoever sends the call reports instead of sending it.
@@ -82,9 +81,7 @@ impl<T> Call<T> {
 
     /// A path parameter: `String(value)` encoded like `encodeURIComponent`.
     pub fn param<V: Serialize + ?Sized>(&mut self, value: &V) -> String {
-        self.value(value)
-            .map(|value| utf8_percent_encode(&js_string(&value), COMPONENT).to_string())
-            .unwrap_or_default()
+        self.value(value).map(|value| encode_component(&js_string(&value))).unwrap_or_default()
     }
 
     /// Adds a query value, bracket-encoded like `appendQuery`.
@@ -187,22 +184,10 @@ pub fn encode(pairs: &[(String, String)]) -> String {
 /// A path parameter: `String(value)` encoded like `encodeURIComponent`.
 pub fn path_param<V: Serialize + ?Sized>(value: &V) -> Result<String, String> {
     let value = serde_json::to_value(value).map_err(|error| format!("encode request: {error}"))?;
-    Ok(utf8_percent_encode(&js_string(&value), COMPONENT).to_string())
+    Ok(encode_component(&js_string(&value)))
 }
 
 /// A trailing wildcard path, each segment encoded like `encodeURIComponent`.
 pub fn path_wildcard(value: &str) -> String {
-    value.split('/').map(|segment| utf8_percent_encode(segment, COMPONENT).to_string()).collect::<Vec<_>>().join("/")
+    value.split('/').map(encode_component).collect::<Vec<_>>().join("/")
 }
-
-/// The characters `encodeURIComponent` escapes: everything except `A-Z a-z 0-9 - _ . ! ~ * ' ( )`.
-const COMPONENT: &AsciiSet = &NON_ALPHANUMERIC
-    .remove(b'-')
-    .remove(b'_')
-    .remove(b'.')
-    .remove(b'!')
-    .remove(b'~')
-    .remove(b'*')
-    .remove(b'\'')
-    .remove(b'(')
-    .remove(b')');

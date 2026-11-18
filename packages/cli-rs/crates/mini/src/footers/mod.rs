@@ -1868,18 +1868,7 @@ fn form_client(target: &Target, form: &FormInfo) -> Client {
     if form.session_id != GLOBAL {
         return target.client.clone();
     }
-    // `encodeURIComponent`.
-    let directory: String = target
-        .directory
-        .bytes()
-        .map(|byte| match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'!' | b'~' | b'*' | b'\'' | b'(' | b')' => {
-                char::from(byte).to_string()
-            }
-            _ => format!("%{byte:02X}"),
-        })
-        .collect();
-    target.client.with_header("x-opencode-directory", directory)
+    target.client.with_header("x-opencode-directory", opencode_api::js::encode_component(&target.directory))
 }
 
 /// `openUrl`: a form's URL is not trusted to name a web link, so anything else fails before a process starts.
