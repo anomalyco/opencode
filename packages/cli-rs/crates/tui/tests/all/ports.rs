@@ -875,6 +875,49 @@ fn the_published_session_usage_asks_for_the_sessions_location_first() {
     assert!(limits.first().is_some_and(|first| first.contains("location%5Bdirectory%5D=%2Felsewhere")), "{limits:#?}");
 }
 
+// Expected (await-cancel): session-usage's sidebar closes while its run waits on a page of the session's messages. The
+// sidebar's mount handler started the run, so its requests are the activation's (`Host::try_fetch`): the run goes on
+// with the page once the server answers, the sidebar opened again shows the total, and the next
+// `session.usage.updated` starts a run, as the last one ended. On the Rust port over the C ABI and on the Luau port.
+#[test]
+fn session_usage_ends_a_run_its_sidebar_closed_during() {
+    #[cfg_attr(not(feature = "luau"), allow(unused_mut))]
+    let mut carriers = vec![Carrier::Port("session-usage")];
+    #[cfg(feature = "luau")]
+    carriers.push(Carrier::Luau("session-usage"));
+    for carrier in carriers {
+        closed_mid_run(carrier);
+    }
+}
+
+fn closed_mid_run(carrier: Carrier<'_>) {
+    let grown = Arc::new(Mutex::new(false));
+    let gate = Arc::new((Mutex::new(false), std::sync::Condvar::new()));
+    let (served, held) = (usage(grown.clone(), false), gate.clone());
+    let handler = move |seen: &Seen| {
+        if seen.path == "/api/session/ses_p/message" {
+            let (open, wake) = &*held;
+            drop(wake.wait_timeout_while(open.lock().unwrap(), Duration::from_secs(10), |open| !*open).unwrap());
+        }
+        served(seen)
+    };
+    let h = open_as(&[carrier], 170, handler, false, None).unwrap();
+    h.wait(&format!("{carrier:?}: the run asks for a page"), || !h.sent("/api/session/ses_p/message").is_empty());
+    h.tui.navigate(Route::Home);
+    h.wait(&format!("{carrier:?}: the sidebar closes"), || !h.app.text().contains("Usage"));
+    *gate.0.lock().unwrap() = true;
+    gate.1.notify_all();
+    h.tui.navigate(support::session_route("ses_p"));
+    h.wait(&format!("{carrier:?}: the total"), || h.app.text().contains("≈ $2.50 session total"));
+    *grown.lock().unwrap() = true;
+    h.events.emit(&json!({
+        "id": "evt_usage", "created": 2, "type": "session.usage.updated",
+        "location": { "directory": DIRECTORY },
+        "data": { "sessionID": "ses_c", "cost": 0, "tokens": { "input": 2_000_000, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } } },
+    }));
+    h.wait(&format!("{carrier:?}: the next run"), || h.app.text().contains("≈ $3.50 session total"));
+}
+
 fn totals(carrier: Carrier<'_>) {
     let grown = Arc::new(Mutex::new(false));
     let Some(h) = open_as(&[carrier], 170, usage(grown.clone(), false), false, None) else { return };
