@@ -233,8 +233,9 @@ pub fn mentions(text: &str) -> impl Iterator<Item = Mention> + '_ {
             if !suffix || !after {
                 continue;
             }
-            let start = match at.checked_sub(PREFIX.len()) {
-                Some(start) if &text[start..at] == PREFIX && before(start) => start,
+            // `strip_suffix`, not a slice nine bytes back, which can land inside a multibyte character.
+            let start = match text[..at].strip_suffix(PREFIX).map(str::len) {
+                Some(start) if before(start) => start,
                 _ if before(at) => at,
                 _ => continue,
             };
@@ -299,6 +300,60 @@ mod tests {
         assert_eq!(found(&format!("中文{KNOWN}.")), [KNOWN]);
         assert_eq!(found(&format!("{KNOWN} {KNOWN}")), [KNOWN, KNOWN]);
         assert_eq!(mentions(&prefixed).next().map(|mention| mention.id(&prefixed)), Some(KNOWN));
+    }
+
+    /// The regex's lookarounds see one UTF-16 unit, never a word character outside ASCII, so any non-ASCII
+    /// character beside an ID (or its prefix) is a boundary. The prefix check must not slice inside one.
+    #[test]
+    fn mentions_treat_non_ascii_neighbours_as_boundaries() {
+        let prefixed = format!("@session:{KNOWN}");
+        // The report: no prefix, and nine bytes back lands inside '现'.
+        assert_eq!(found(&format!("现abcd文{KNOWN}")), [KNOWN]);
+        for (text, want) in [
+            (KNOWN.to_owned(), vec![KNOWN.to_owned()]),
+            (format!("现{KNOWN}现"), vec![KNOWN.to_owned()]),
+            (format!("é{KNOWN}"), vec![KNOWN.to_owned()]),
+            (format!("e\u{301}{KNOWN}\u{301}"), vec![KNOWN.to_owned()]),
+            (format!("🙂{KNOWN}🙂"), vec![KNOWN.to_owned()]),
+            (format!("文{prefixed}文"), vec![prefixed.clone()]),
+            (prefixed.clone(), vec![prefixed.clone()]),
+            (format!("中文中文{prefixed}"), vec![prefixed.clone()]),
+            (format!("ab{KNOWN}"), vec![]),
+            (format!("文x{KNOWN}"), vec![]),
+            (format!("文session:{KNOWN}"), vec![]),
+            (format!("文@session{KNOWN}"), vec![]),
+            (format!("文@Session:{KNOWN}"), vec![]),
+            (format!("文x@session:{KNOWN}"), vec![]),
+            (format!("@@session:{KNOWN}"), vec![]),
+            (format!("{KNOWN}{KNOWN}"), vec![]),
+            (format!("{KNOWN}文{KNOWN}"), vec![KNOWN.to_owned(), KNOWN.to_owned()]),
+            (format!("{KNOWN}{prefixed}"), vec![KNOWN.to_owned()]),
+            (format!("{KNOWN}:{KNOWN}"), vec![KNOWN.to_owned()]),
+            (format!("{prefixed} {prefixed}"), vec![prefixed.clone(), prefixed.clone()]),
+            (format!("SES_{}", &KNOWN[4..]), vec![]),
+        ] {
+            assert_eq!(found(&text), want, "{text}");
+        }
+    }
+
+    #[test]
+    fn mentions_never_panic_on_mixed_scripts() {
+        // A seeded walk over pieces that put every byte offset of every width next to an ID and its prefix.
+        let pieces = ["a", "_", ":", "@", "-", "/", " ", "现", "é", "\u{301}", "🙂", "@session:", "ses_", KNOWN];
+        let mut seed = 0x9e37_79b9_7f4a_7c15_u64;
+        let mut next = move || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed as usize
+        };
+        for _ in 0..20_000 {
+            let text: String = (0..next() % 12).map(|_| pieces[next() % pieces.len()]).collect();
+            for mention in mentions(&text) {
+                let shown = text.get(mention.start..mention.end);
+                assert!(shown.is_some_and(|shown| shown.strip_prefix(PREFIX).unwrap_or(shown) == KNOWN), "{text}");
+            }
+        }
     }
 
     #[test]
