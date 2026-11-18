@@ -53,8 +53,8 @@ const PREFIX = "video:"
  */
 const LEADER = "video-leader"
 const TTL = Duration.minutes(1)
-/** A submission still unanswered after this long belongs to a server that stopped. */
-const SUBMIT = Duration.minutes(2)
+/** A submission still unanswered after this long belongs to a server that stopped; real ones take seconds to minutes. */
+const SUBMIT = Duration.minutes(30)
 
 export interface StartOptions {
   /** Where the model and its credentials are resolved; defaults to the server's base configuration. */
@@ -342,7 +342,9 @@ const layer = Layer.effect(
     })
 
     // Every server tries for the lease every 20 s; the one holding it scans every 5 s. A lost lease stops its polls.
+    // A claim that fails, such as on a busy database, counts as not leading, so two servers never poll at once.
     const elect = claim().pipe(
+      Effect.catchCause((cause) => Effect.logWarning("video leader claim failed", { cause }).pipe(Effect.as(false))),
       Effect.flatMap((held) =>
         Effect.gen(function* () {
           if (!held && leading) yield* FiberMap.clear(polls)
