@@ -1833,13 +1833,13 @@ export type AutomationTriggerEvery = {
     tz: string?,
 }
 
+--- A stored blob, such as a generated video, which outlives the job that made it
 export type BlobID = string
 
 export type BlobInfo = {
     id: BlobID,
     mime: string,
     bytes: number,
-    expiresAt: number,
 }
 
 export type CommandInfo = {
@@ -2633,7 +2633,7 @@ export type GenerateVideoError = {
     reason: GenerateVideoErrorReason,
 }
 
---- failed: the provider failed the job. cancelled: the provider cancelled it. expired: the provider expired it. unknown: the provider gave no result in time
+--- failed: the provider failed the job. cancelled: the provider cancelled it. expired: the provider expired it. unknown: the provider gave no result in time, or the server stopped while submitting the job
 export type GenerateVideoErrorReason = ("failed" | "cancelled" | "expired" | "unknown")
 
 export type GenerateVideoID = string
