@@ -1,7 +1,7 @@
-//! An author's plugin, pinned to the source of the 2.0 SDK (big-boi 14, carbon-4). `tests/sdk.rs` builds it as an
-//! outside crate against this SDK, and against what a later 2.x adds (the SDK's `next` feature: a node kind and an
-//! event kind more). Do not edit it to follow the SDK: a change this crate would need is a break of the 2.x source
-//! promise (`README.md`, "Source compatibility within 2.x").
+//! An author's plugin, pinned to the source of the 2.0 SDK. `tests/sdk.rs` builds it as an outside crate against this
+//! SDK, and against what a later 2.x adds (the SDK's `next` feature: a node kind and an event kind more). Do not edit
+//! it to follow the SDK: a change this crate would need is a break of the 2.x source promise (`README.md`, "Source
+//! compatibility within 2.x").
 //!
 //! A route whose every mount keeps a pad of its own. A key counts in the mount it is pressed in, an edit keeps that
 //! mount's draft, the layout tells the mount its width, a note is content the view gives the host and releases when

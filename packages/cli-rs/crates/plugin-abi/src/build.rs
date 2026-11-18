@@ -1,4 +1,4 @@
-//! Constructors and setters of the types a plugin builds (carbon-4, big-boi 14). The contract's types are
+//! Constructors and setters of the types a plugin builds. The contract's types are
 //! `#[non_exhaustive]` to a plugin's crate, so it builds one from `Type::new(what it must have)` (or `Default`) and a
 //! setter for each other field, named for the field; a field or a variant a later 2.x adds is then no break of its
 //! source. Struct variants a plugin builds (a scroll verb, a target, an edit) do not grow: a later 2.x adds a variant
@@ -596,8 +596,6 @@ impl Node {
 mod tests {
     use super::*;
 
-    // Expected: each kind of setter does what the macro says: a value converts, an option is set to `Some`, and a
-    // flag is set; a constructor sets what it takes and leaves the rest as the type's default.
     #[test]
     fn setters_convert_wrap_and_flag() {
         let command = Command::new("a.b").title("Title").group("Group").palette().arguments().scope(Scope::Base);
@@ -607,7 +605,7 @@ mod tests {
         );
         assert!(command.palette && command.arguments && !command.description.is_some());
         assert_eq!(command.scope, Scope::Base);
-        // Contract ergonomics 2.5: enabled unless it says otherwise, which the JSON carries only then.
+        // Enabled unless it says otherwise, which the JSON carries only then.
         assert!(command.enabled && !Command::new("a.b").disabled().enabled);
         assert_eq!(serde_json::to_value(Command::new("a.b").disabled()).unwrap()["enabled"], false);
         assert!(serde_json::to_value(Command::new("a.b")).unwrap().get("enabled").is_none());
@@ -636,8 +634,6 @@ mod tests {
         assert_eq!((toast.title.as_deref(), toast.session), (Some("t"), None));
     }
 
-    // Expected: a prompt is a struct inside the dialog, and its JSON is what the struct variant wrote: the tag beside
-    // the fields, and no placeholder when it has none.
     #[test]
     fn a_prompt_writes_the_json_of_the_variant() {
         let dialog = crate::Dialog::Prompt(Prompt::new("Name", Action::command("n")).placeholder("type"));
@@ -654,7 +650,6 @@ mod tests {
         assert_eq!((json["value"].as_str(), json["description"].as_str()), (Some("Old title"), Some("/tmp/project")));
     }
 
-    // Expected: the diff setters reach a diff, and leave any other node as it was.
     #[test]
     fn node_setters_reach_their_variant_only() {
         let diff = Node::diff(Source::Text("x".to_owned())).filetype("rust").hunks("h").diff_padding(2);

@@ -1,19 +1,8 @@
-//! Renderer claims of contract 2.0 (`rich-plugins/synthesis.md` 4.2 and 4.11, phase Pr): a plugin claims the tool
-//! calls of one tool, or the Markdown fences of one language, and draws each claimed part in the transcript with a
-//! keyed tree ([`v2::Node`]), as a surface does. The host's own row is the fallback: it draws the part whenever the
-//! claim declines it (its view returns `None`), and when the claim cannot (its plugin failed, a view took longer than
-//! the overrun limit, it returned a tree the host refused, the plugin is disabled or reloads). A tree refused for a keep
-//! the host does not hold is asked for once more, whole.
+//! A renderer claim draws a tool call or fenced block as a keyed tree. The host shows its own row if the claim
+//! declines or fails. If a keep refers to a missing subtree, the host asks once for a complete tree.
 //!
-//! Each claimed part is a mount ([`v2::MountId`]) with a generation of its own; what the view gave the host (content,
-//! memo values) goes with the part. The view gets the part as it is now ([`Part`]), and the surface input with the
-//! part's width; its height is 0, as a part is as tall as its tree. It runs in the frame that first shows the part,
-//! again when the part or its width changes, and while the part streams (the same state with new content) at most
-//! once a frame, with the newest content, whichever row shows the part until then. A part that leaves the transcript
-//! forgets its tree.
-//!
-//! A plugin registers claims with [`crate::Setup::claim`], on either carrier: in process with Rust values, and over the
-//! C ABI as [`crate::Manifest::claims`] and [`crate::Request::Claim`], answered by a [`Reply`].
+//! Each part owns its mount, content handles and memo values. Its width comes from the transcript; its height
+//! comes from its tree. Streaming revisions within one phase coalesce to the newest value per frame.
 
 use std::rc::Rc;
 

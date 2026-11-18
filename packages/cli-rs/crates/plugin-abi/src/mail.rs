@@ -1,23 +1,9 @@
-//! Threads and messages of ABI 2.0 (`rich-plugins/synthesis.md` 4.2, "Threads and wakes"): a plugin's own threads
-//! send messages to its [`crate::Setup::messages`] handler, which the host runs on the UI thread as the plugin's
-//! `update`.
+//! Plugin worker threads send messages to a bounded mailbox; the UI thread runs [`crate::Setup::messages`].
+//! [`Sender::send`] returns the message if the mailbox is full or closed. [`Sender::replace`] coalesces pending
+//! messages with the same nonempty key.
 //!
-//! The host holds one mailbox a plugin, of [`BOUND`] entries. A send never blocks and never drops a message in
-//! silence: [`Sender::send`] puts the message at the end, or hands it back as [`SendError::Full`] at once, and as
-//! [`SendError::Closed`] once the plugin has left `active` (it was disabled, failed, or replaced). [`Sender::replace`]
-//! keeps one entry a key: the newer message takes the place of the one that waits, so a flood of progress holds one
-//! entry; an empty key is no key. A thread decides what `Full` means: wait, merge, or give up.
-//!
-//! A message is what JSON carries: a library gets it as JSON, so on every carrier a send first writes the message as
-//! JSON and reads it back as `M`, on the sending thread, and hands back one that does not come back as itself
-//! ([`SendError::Unencodable`]: a `NaN`, a map with keys that are not strings, a serializer that fails). The host
-//! keeps the sender's JSON text as it is, and in process the value that text reads back as, with the text's length,
-//! which counts against the mailbox's bytes as the text does over the C ABI (review carbon-10): so what one carrier
-//! delivers and refuses, the other does too.
-//!
-//! [`Spawner::spawn`] starts a thread named after the plugin, with a [`Stop`] flag that is set when the plugin leaves
-//! `active`, and catches a panic on it: the host fails the plugin and says so once. A thread cannot be killed; it ends
-//! when it sees the flag.
+//! Messages must round-trip through JSON even in process; the encoded length counts against the mailbox budget.
+//! Threads stop cooperatively through [`Stop`]. An uncaught worker panic fails the plugin.
 
 use std::any::Any;
 use std::marker::PhantomData;

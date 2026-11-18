@@ -1,19 +1,6 @@
-//! Phase P3 of contract 2.0 (synthesis 3.5, 4.2, 4.4): scroll behaviors as node data, scroll verbs, geometry reads,
-//! the `layout` call after the solve, and the published `Viewport::Transcript`.
-//!
-//! - **Behaviors** are node data the host resolves after each solve, with no plugin call: [`Edge`] on a box pins it
-//!   to its scroll's edge while its parent is in view (CSS sticky); [`Anchor`] makes a node one of a named group a
-//!   [`Scroll::Step`] or [`Read::top_anchor`](crate::Read::top_anchor) walks; a [`super::Node::Diff`] with `hunks`
-//!   publishes the first row of each hunk as anchor `{id}#{index}`.
-//! - **Verbs** ([`Scroll`]) are effects of a handler: they apply when the call returns. [`Scroll::To`] resolves after
-//!   the solve of the frame, against its final geometry, again in each round until it moves nothing; the others
-//!   resolve at once, against the last settled frame. A [`Scroll::Step`] reports where it landed as
-//!   [`ScrollEvent::Landed`] before the next event is routed.
-//! - **Reads** ([`ScrollState`], [`AnchorAt`], [`TranscriptView`]) answer from the last settled frame and the current
-//!   offset, so a handler after a wheel step reads what is on screen.
-//! - **`layout`** ([`super::Surface::layout`]) runs after geometry is final, only in a frame where something the
-//!   surface named ([`Notify`]) changed. It returns paint-time properties ([`Paint`]) or asks for a view again; it
-//!   cannot move anything, so it never starts another solve.
+//! Scroll commands and geometry for plugin surfaces. Reads use the last settled frame and the current scroll
+//! offset. [`Scroll::To`] resolves against final layout; [`Scroll::Step`] reports [`ScrollEvent::Landed`] before
+//! the next input event. A layout callback can request a repaint or another view, but cannot move a widget.
 
 use serde::{Deserialize, Serialize};
 
@@ -228,8 +215,8 @@ pub struct Top {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct Geometry {
-    /// The mount this call is for (big-boi 4): two mounts of one surface, with the same tree and the same rects, tell
-    /// their models apart by it. A 2.0 host names it in every call.
+    /// The mount this call is for: two mounts of one surface, with the same tree and the same rects, tell their models
+    /// apart by it. A 2.0 host names it in every call.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mount: Option<MountId>,
     /// The rects of the nodes it named.

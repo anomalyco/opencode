@@ -1,6 +1,6 @@
-//! A canvas's display list (synthesis 4.2, layer 2 of `boundary-fable.md`): what a plugin draws into a
-//! [`crate::v2::Node::Canvas`], which the host keeps and replays on every frame it paints until the plugin presents
-//! another. The plugin owns the cells inside the canvas; the host owns its rectangle, its clip and the clock.
+//! A canvas's display list: what a plugin draws into a [`crate::v2::Node::Canvas`], which the host keeps and replays
+//! on every frame it paints until the plugin presents another. The plugin owns the cells inside the canvas; the host
+//! owns its rectangle, its clip and the clock.
 //!
 //! A list is bytes, the same on every carrier: a version byte, then records. A record is its operation (one byte), the
 //! length of its payload (`u32`, little-endian) and the payload, so a reader skips an operation it does not know.
@@ -527,8 +527,6 @@ mod tests {
     const RED: Rgba = Rgba::new(255, 0, 0, 255);
     const BLUE: Rgba = Rgba::new(0, 0, 255, 128);
 
-    // Expected: the builder writes the bytes of the format's table, written out here by hand, and they read back as
-    // the operations it was given.
     #[test]
     fn a_list_is_the_bytes_of_its_table() {
         let style = Style { fg: Some(RED), bold: true, underline: true, ..Style::new() };
@@ -556,8 +554,6 @@ mod tests {
         );
     }
 
-    // Expected: every operation reads back as written, cells in their order with their styles, and a rect without a
-    // background reads back without one; each style bit alone reads back as that bit; the run counts its cells.
     #[test]
     fn every_operation_reads_back() {
         let lit = Style::new().bg(BLUE).fg(RED);
@@ -587,7 +583,6 @@ mod tests {
         assert_eq!(check(list.as_bytes()), Ok(Checked { ops: 6 }), "a run of three cells counts three");
     }
 
-    // Expected: a record of a kind this version does not know is counted and skipped, and the records after it read.
     #[test]
     fn an_unknown_operation_is_skipped() {
         let mut bytes = vec![VERSION, 99, 3, 0, 0, 0, 1, 2, 3];
@@ -599,10 +594,6 @@ mod tests {
         assert_eq!(ops(&bytes).count(), 2);
     }
 
-    // Expected: bytes that are not a list are refused whole, whatever came before the fault: no version, another
-    // version, a record cut short or longer than the list, a fixed record of another length, text that is not UTF-8,
-    // a character that is not one, alone or in a run of cells, a partial cell, cells of no width, an unknown border,
-    // and a pop without a clip.
     #[test]
     fn a_list_the_host_cannot_read_is_refused() {
         let good = List::new().fill(0, 0, 1, 1, RED).clone().into_bytes();
@@ -637,8 +628,6 @@ mod tests {
         assert!(malformed(List::new().pop().as_bytes()));
     }
 
-    // Expected: a list at a limit is drawn, and one over it is not: one byte, one operation, one cell of a run, one
-    // byte of a text, one clip open more. Each is a resource limit; a list that is malformed too is refused as such.
     #[test]
     fn a_list_over_a_limit_is_not_drawn() {
         let over = |list: &List| match check(list.as_bytes()) {

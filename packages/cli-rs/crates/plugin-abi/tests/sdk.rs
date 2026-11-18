@@ -1,5 +1,5 @@
-//! The public SDK alone (O-67): the quick start and a plugin author's fixture under `crates/plugin/examples` build on
-//! this crate and pull in no OpenTUI and no crate of the TUI.
+//! The public SDK alone: the quick start and a plugin author's fixture under `crates/plugin/examples` build on this
+//! crate and pull in no OpenTUI and no crate of the TUI.
 
 use std::path::Path;
 use std::process::Command;
@@ -39,9 +39,6 @@ fn plugins_on_the_sdk_pull_in_no_tui() {
     }
 }
 
-// Expected (big-boi 14, carbon-4): the pinned author crate, written against the 2.0 SDK, builds as a crate outside the
-// workspace on this SDK, and on what a later 2.x adds (the `next` feature: a node kind and an event kind more), so the
-// 2.x source promise holds for a plugin with two mounts, a key, a layout, released content, a worker and a wildcard.
 #[test]
 fn a_pinned_plugin_builds_through_the_next_sdk() {
     let crate_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -54,8 +51,6 @@ fn a_pinned_plugin_builds_through_the_next_sdk() {
     }
 }
 
-// Expected: the README's quick start shows `examples/hello` as it is, so what an author copies is what the tests build
-// and load (`the_quick_start_plugin_loads_from_a_plugins_directory_and_runs` in `opencode-plugin`).
 #[test]
 fn the_readme_quick_start_is_the_hello_example() {
     let crate_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -74,9 +69,6 @@ fn the_readme_quick_start_is_the_hello_example() {
     }
 }
 
-// Expected: the guide (`docs/plugins.md`) shows its examples as the files the tests build, load and run: the quick
-// start in Rust, in Luau (with its manifest) and in TypeScript, and the task module's own example, which the doc tests
-// compile. The guide's Luau wait is run from the guide itself (`the_guides_luau_wait_runs_as_written`).
 #[test]
 fn the_guide_shows_its_examples_as_they_are() {
     let crate_dir = Path::new(env!("CARGO_MANIFEST_DIR"));

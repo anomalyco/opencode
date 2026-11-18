@@ -1,19 +1,7 @@
-//! Contract 2.0's input and surfaces (`rich-plugins/synthesis.md` 3.8 and 4.2, phase P2): a docked panel and an
-//! overlay beside the route and the slot ([`crate::v2::Place`]); focus; key layers with scopes, priorities and modes,
-//! whose handler returns [`Handled::Consume`] or [`Handled::Pass`]; a listener of every key ([`Layer::any`]); pointer
-//! and hover events of a node ([`Interact`]); and the geometry of a mount's nodes ([`crate::Read::rect`]).
+//! Input events, key layers, panels and overlays for plugin surfaces. The host applies handler effects before
+//! routing the next event in the batch, so a mode change affects the next key.
 //!
-//! A handler runs on the UI thread, inline, as a command does. The host applies what it asks for (an edit of the
-//! composer, a mode, a focus) when it returns, before it routes the next event of the same batch, so a key that
-//! switches a mode is never overtaken by the key after it.
-//!
-//! Everything a mount makes is the mount's: its layers, its mode, its pointer capture, the keys a hold buffers and the
-//! overlays it opened. When the mount ends, the host revokes all of it. A layer registered in setup
-//! ([`crate::Setup::layer`]) is the plugin's and lives until the plugin leaves `active`.
-//!
-//! A library has all of it over the C ABI: a handler is the request [`crate::Request::Input`], the host's verbs and
-//! reads are requests of the plugin's ([`crate::HostRequest::Focus`] and the rest), and it behaves as a plugin of
-//! [`crate::Plugin`] does (`carrier-equal`).
+//! A mount owns its layers, mode, pointer capture, held keys and overlays. Setup layers live until deactivation.
 
 use std::rc::Rc;
 
@@ -21,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Color, Host};
 
-/// What a handler did with an event: took it, or passed it on down the host's order (synthesis 4.2).
+/// What a handler did with an event: took it, or passed it on down the host's order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(not(feature = "host"), non_exhaustive)]
@@ -56,11 +44,11 @@ pub enum Event {
     /// has ended ([`crate::Dialog::Surface`]).
     #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Closed { surface: String },
-    /// P3: a scroll of the mount: the user moved one that asks with `user_scroll`, or a step of the plugin's own
-    /// landed. The answer does not matter.
+    /// A scroll of the mount: the user moved one that asks with `user_scroll`, or a step of the plugin's own landed.
+    /// The answer does not matter.
     #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Scroll { event: crate::v2::ScrollEvent },
-    /// P3: the text of the mount's [`crate::v2::Node::Input`] `node` changed, after each edit. `seq` numbers the edit,
+    /// The text of the mount's [`crate::v2::Node::Input`] `node` changed, after each edit. `seq` numbers the edit,
     /// higher for each later one, which a view's [`crate::v2::Node::Input`] `seen` names. The answer does not matter.
     #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Change {
@@ -69,16 +57,16 @@ pub enum Event {
         #[serde(default)]
         seq: u64,
     },
-    /// P3: the mount's [`crate::v2::Node::Input`] `node` was submitted: enter on one line, the submit key on many. The
+    /// The mount's [`crate::v2::Node::Input`] `node` was submitted: enter on one line, the submit key on many. The
     /// answer does not matter.
     #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Submit { node: String, text: String },
-    /// P6a: mount `mount` began (`mounted`), before its first view, or it is ending, for a surface that asks
+    /// Mount `mount` began (`mounted`), before its first view, or it is ending, for a surface that asks
     /// ([`crate::v2::Surface::mounts`]), as a 1.x claim's `on_mount`. A new mount may begin before the one it replaces
-    /// ends, also with the same input: `mount` tells them apart. `slot` is a slot surface's input. The plugin hears it,
-    /// not the mount, at the begin as at the end, which has no mount left: what its handler starts is the plugin's and
-    /// outlives the mount, as a fetch of setup is the activation's ([`Host::try_fetch`]). So a read a next mount shows
-    /// survives the mount that asked, which may end first. The answer does not matter.
+    /// ends, also with the same input: `mount` tells them apart. `slot` is a slot surface's input. The plugin hears
+    /// it, not the mount, at the begin as at the end, which has no mount left: what its handler starts is the plugin's
+    /// and outlives the mount, as a fetch of setup is the activation's ([`Host::try_fetch`]). So a read a next mount
+    /// shows survives the mount that asked, which may end first. The answer does not matter.
     #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Mount {
         mount: crate::v2::MountId,
@@ -252,9 +240,9 @@ pub struct Bind {
     /// key from its own thread.
     #[serde(default, skip_serializing_if = "is_false")]
     pub hold: bool,
-    /// P6c: the name of the user's keybind for it, such as `diff.next_hunk`: the config's keys for that name take it,
-    /// else the keybind's default, and `key` when the host knows no keybind of that name. [`Read::shortcut`] of the
-    /// name shows them.
+    /// The name of the user's keybind for it, such as `diff.next_hunk`: the config's keys for that name take it, else
+    /// the keybind's default, and `key` when the host knows no keybind of that name. [`Read::shortcut`] of the name
+    /// shows them.
     ///
     /// [`Read::shortcut`]: crate::Read::shortcut
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -306,8 +294,8 @@ pub struct PanelInput {
     pub fullscreen: bool,
     /// The panel has the input.
     pub focused: bool,
-    /// P6c: full screen because the session's room is too narrow to show the panel beside it; an open of the panel
-    /// beside the session shows it full screen still.
+    /// Full screen because the session's room is too narrow to show the panel beside it; an open of the panel beside
+    /// the session shows it full screen still.
     #[serde(default, skip_serializing_if = "is_false")]
     pub forced: bool,
 }
@@ -317,8 +305,7 @@ pub struct PanelInput {
 #[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub struct OpenPanel {
     pub surface: String,
-    /// The session it shows beside, which must be on screen; without one, the session on screen (TS
-    /// `ui.panel.open`).
+    /// The session it shows beside, which must be on screen; without one, the session on screen.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<String>,
     #[serde(default, skip_serializing_if = "is_false")]

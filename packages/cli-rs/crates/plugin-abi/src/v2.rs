@@ -1,15 +1,6 @@
-//! Contract 2.0 of the rich-plugin design (`rich-plugins/synthesis.md` 4.1 to 4.6), as phase P1 builds it: a keyed
-//! tree of host-owned widgets per surface, which the host reconciles by key ([`Node`], [`Node::Keep`]), mounts with
-//! generations ([`MountId`]), content by handle ([`Source`]), a host-scrolled [`Node::Scroll`], and the palette in a
-//! surface's input ([`SurfaceInput`]). P5 adds [`Node::Canvas`], drawn by a retained display list
-//! ([`crate::canvas`]) that [`Surface::draw`] returns.
-//!
-//! P1 runs it on the linked path only: a built-in registers a surface with [`crate::Setup::surface`] and the host
-//! calls its view with Rust values. The C ABI of 2.0 is P4's; until then a surface of an external plugin is never
-//! mounted. The leaf types (colors, spans, layout, clicks) are those of ABI 1.x.
-//!
-//! The schema of these types is generated from them (`bun script/gen/plugin-schema.ts`, which runs the `schema`
-//! example) into `crates/plugin-abi/schema/v2.json`.
+//! Keyed surface trees for the plugin ABI. Each [`MountId`] identifies one generation of a mounted surface.
+//! [`Node::Keep`] reuses a subtree from the last accepted view. A [`Node::Canvas`] replays the display list
+//! returned by [`Surface::draw`].
 
 use std::any::Any;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -69,20 +60,20 @@ pub enum Node {
         /// Whether what does not fit in the box draws outside it.
         #[serde(default, skip_serializing_if = "is_visible")]
         overflow: Overflow,
-        /// P3: pinned to this edge of its scroll while its parent is in view, never past the parent's end.
+        /// Pinned to this edge of its scroll while its parent is in view, never past the parent's end.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         sticky: Option<geometry::Edge>,
-        /// P3: one of a group of its scroll's anchors; it needs an id.
+        /// One of a group of its scroll's anchors; it needs an id.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         anchor: Option<Anchor>,
-        /// P3: a row whose first child the user resizes by dragging; it needs an id, which keeps the width.
+        /// A row whose first child the user resizes by dragging; it needs an id, which keeps the width.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         split: Option<Split>,
         /// Focus, pointer and hover ([`crate::interact`]); its fields sit beside the box's own.
         #[serde(default, flatten)]
         interact: Interact,
-        /// P6a: `false` hides the box and all it holds, which then take no room, not even a gap (TS `visible`). A slot
-        /// surface whose root box is hidden shows nothing in its slot, as a 1.x claim's `Render::Hide`.
+        /// `false` hides the box and all it holds, which then take no room, not even a gap. A slot surface whose root
+        /// box is hidden shows nothing in its slot, as a 1.x claim's `Render::Hide`.
         #[serde(default = "yes", skip_serializing_if = "is_true")]
         visible: bool,
     },
@@ -144,19 +135,19 @@ pub enum Node {
         layout: Layout,
         #[serde(default)]
         children: Vec<Node>,
-        /// P3: `layout` is called when the top anchor of this group changes.
+        /// `layout` is called when the top anchor of this group changes.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         notify_top: Option<String>,
-        /// P3: the surface hears [`ScrollEvent::UserScroll`] when the user moves it.
+        /// The surface hears [`ScrollEvent::UserScroll`] when the user moves it.
         #[serde(default, skip_serializing_if = "is_false")]
         user_scroll: bool,
-        /// A scrollbar shows while its content overflows (TS's `<scrollbox>`).
+        /// A scrollbar shows while its content overflows.
         #[serde(default, skip_serializing_if = "is_false")]
         scrollbar: bool,
     },
-    /// A patch in the host's diff view: its own highlighting, colors and line numbers. An added file over 3,000
-    /// lines mounts its chunks near the view. 2.0 (P6c): `#[non_exhaustive]`: build it with [`Node::diff`] and the
-    /// `with_` setters, so a field a later 2.x adds is no break of a plugin's source.
+    /// A patch in the host's diff view: its own highlighting, colors and line numbers. An added file over 3,000 lines
+    /// mounts its chunks near the view. `#[non_exhaustive]`: build it with [`Node::diff`] and the `with_` setters, so
+    /// a field a later 2.x adds is no break of a plugin's source.
     #[non_exhaustive]
     Diff {
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -167,17 +158,17 @@ pub enum Node {
         /// The language to highlight as, such as `rust`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         filetype: Option<String>,
-        /// P3: the first row of each hunk is anchor `{id}#{index}` of this group; it needs an id.
+        /// The first row of each hunk is anchor `{id}#{index}` of this group; it needs an id.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         hunks: Option<String>,
-        /// P6c: how its lines wrap; at words by default.
+        /// How its lines wrap; at words by default.
         #[serde(default, skip_serializing_if = "is_word")]
         wrap: Wrap,
-        /// P6c: cells inside its left and right edges.
+        /// Cells inside its left and right edges.
         #[serde(default, skip_serializing_if = "is_zero")]
         padding: u16,
     },
-    /// P3: a text field whose text and cursor are the host's. With an id, the surface's handler hears
+    /// A text field whose text and cursor are the host's. With an id, the surface's handler hears
     /// [`crate::interact::Event::Change`] with the text after each edit, and [`crate::interact::Event::Submit`] on
     /// enter (one line) or the submit key, and, on a host with [`crate::FOCUS_INPUT`], [`crate::Host::focus`] gives it
     /// the focus, as a click does. A changed `value` replaces the text, unless it is the echo of an edit (`seen`).
@@ -201,7 +192,7 @@ pub enum Node {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         seen: Option<u64>,
     },
-    /// P3: a list the host scrolls and windows: only the items near the view have widgets. An item is the unit of
+    /// A list the host scrolls and windows: only the items near the view have widgets. An item is the unit of
     /// reconcile: a [`Node::Keep`] in a list names one of its items or a node inside the same item.
     #[cfg_attr(not(feature = "host"), non_exhaustive)]
     List {
@@ -221,7 +212,7 @@ pub enum Node {
         #[serde(default, skip_serializing_if = "is_false")]
         user_scroll: bool,
     },
-    /// P3: source code in the host's code view, highlighted as `filetype` with the host's grammars and theme.
+    /// Source code in the host's code view, highlighted as `filetype` with the host's grammars and theme.
     #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Code {
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -235,7 +226,7 @@ pub enum Node {
         #[serde(default, skip_serializing_if = "is_default_layout")]
         layout: Layout,
     },
-    /// P3: an image from content bytes (PNG, JPEG, WebP or GIF), in the host's image view.
+    /// An image from content bytes (PNG, JPEG, WebP or GIF), in the host's image view.
     #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Image {
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -250,12 +241,12 @@ pub enum Node {
     /// hold in the last accepted tree is a contract error: the host refuses the tree whole.
     #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Keep { key: String },
-    /// Cells the plugin draws itself (P5): its surface's [`Surface::draw`] returns a display list
-    /// ([`crate::canvas`]), which the host keeps under the canvas's id while the id stays in the mount and replays on
-    /// every frame it paints. The host asks for a list as it paints the canvas, at the canvas's size in that frame: when
-    /// it first shows, when its size or `version` changed, and once a frame while `animate` is set; never while it is
-    /// hidden, out of view or of no size, and what it missed meanwhile it asks for in the frame that shows it. Its
-    /// cells cannot be selected or copied. A canvas must have an id.
+    /// Cells the plugin draws itself: its surface's [`Surface::draw`] returns a display list ([`crate::canvas`]),
+    /// which the host keeps under the canvas's id while the id stays in the mount and replays on every frame it
+    /// paints. The host asks for a list as it paints the canvas, at the canvas's size in that frame: when it first
+    /// shows, when its size or `version` changed, and once a frame while `animate` is set; never while it is hidden,
+    /// out of view or of no size, and what it missed meanwhile it asks for in the frame that shows it. Its cells
+    /// cannot be selected or copied. A canvas must have an id.
     #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Canvas {
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -284,7 +275,7 @@ pub enum Node {
         layout: Layout,
     },
     /// A kind a later 2.x minor adds, which only the SDK's own tests and its `next` feature have: what an author's
-    /// fallback for an older host is checked against (big-boi 13). No host knows it.
+    /// fallback for an older host is checked against. No host knows it.
     #[cfg(any(test, feature = "next"))]
     #[doc(hidden)]
     Later {
@@ -391,15 +382,15 @@ pub struct SurfaceInput {
     /// A panel surface's presentation; `None` elsewhere. A change of it calls the view again.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub panel: Option<PanelInput>,
-    /// P6a: what changed since the mount's last view, as a 1.x render hears it: `all` on its first view and on a
-    /// whole tree ([`Self::full`]), the change batch that called it, `local` or `size` for a change of the host's own
-    /// state or of the room, and `woken` after the plugin's own handlers, a wake, or a `layout` that asked to draw
-    /// again. A view that reads the host's state may answer [`Node::Keep`] of its last tree's root when nothing it read
-    /// changed: the host then keeps the mount as it is, with no work. A claim's view always hears `all`.
+    /// What changed since the mount's last view, including `all` on its first view and on a whole tree
+    /// ([`Self::full`]), the change batch that called it, `local` or `size` for a change of the host's own state or of
+    /// the room, and `woken` after the plugin's own handlers, a wake, or a `layout` that asked to draw again. A view
+    /// that reads the host's state may answer [`Node::Keep`] of its last tree's root when nothing it read changed: the
+    /// host then keeps the mount as it is, with no work. A claim's view always hears `all`.
     #[serde(default, skip_serializing_if = "is_unchanged")]
     pub changed: Changed,
-    /// P6a: a slot surface's input, as a 1.x claim gets it (the session, the prompt's state); `None` elsewhere. Its
-    /// size is [`Self::width`] and [`Self::height`].
+    /// A slot surface's input, including the session and the prompt state; `None` elsewhere. Its size is
+    /// [`Self::width`] and [`Self::height`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub slot: Option<SlotInput>,
 }
@@ -450,8 +441,8 @@ pub struct MountId {
     pub generation: u64,
 }
 
-/// Where a surface shows: a route of the plugin, or a slot claim (P1); a docked panel or an overlay, which the plugin
-/// opens with [`crate::Host::open_panel`] and [`crate::Host::overlay`] (P2).
+/// Where a surface shows: a route of the plugin, or a slot claim; a docked panel or an overlay, which the plugin opens
+/// with [`crate::Host::open_panel`] and [`crate::Host::overlay`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(not(feature = "host"), non_exhaustive)]
 pub enum Place {
@@ -479,14 +470,14 @@ pub struct Surface {
     pub view: ViewFn,
     /// Draws the surface's canvases ([`Node::Canvas`]); without it a canvas shows nothing.
     pub draw: Option<DrawFn>,
-    /// P3: called after geometry is final, in a frame where something in `notify` changed.
+    /// Called after geometry is final, in a frame where something in `notify` changed.
     pub layout: Option<LayoutFn>,
     pub notify: Vec<Notify>,
     /// What its events come to: its layers' keys, its nodes' pointer and hover, an overlay's close.
     pub handler: Option<HandlerFn>,
     /// The key layers each mount of it registers, which end with the mount.
     pub layers: Vec<Layer>,
-    /// P6a: its handler hears [`crate::interact::Event::Mount`] as each mount begins and ends.
+    /// Its handler hears [`crate::interact::Event::Mount`] as each mount begins and ends.
     pub mounts: bool,
 }
 
@@ -584,10 +575,10 @@ impl<'a> View<'a> {
         (self.release)(handle)
     }
 
-    /// `node`, when the host serving the plugin has its kind, else what `fallback` builds (synthesis 4.6, big-boi 13):
-    /// a kind a later 2.x minor or an optional feature adds ([`Node::since`], [`Node::feature`]) is lowered here, by
-    /// the author, so the tree the SDK encodes for an older host holds no kind that host does not know. A tree that
-    /// still holds one is refused by the SDK before it crosses ([`unknown_to`], [`unknown_feature`]).
+    /// `node`, when the host serving the plugin has its kind, else what `fallback` builds: a kind a later 2.x minor or
+    /// an optional feature adds ([`Node::since`], [`Node::feature`]) is lowered here, by the author, so the tree the
+    /// SDK encodes for an older host holds no kind that host does not know. A tree that still holds one is refused by
+    /// the SDK before it crosses ([`unknown_to`], [`unknown_feature`]).
     pub fn or(&mut self, node: Node, fallback: impl FnOnce(&mut Self) -> Node) -> Node {
         let abi = self.read.abi();
         let known = abi.has_minor(node.since()) && node.feature().is_none_or(|feature| abi.has_feature(feature));
@@ -721,9 +712,7 @@ impl Memo {
     /// value whose [`Node::Keep`] it holds, with the values inside it; the rest goes. The host calls it once it
     /// accepted the view's tree.
     pub fn finish(&mut self, accepted: &[Node]) {
-        // A view that answered a keep of its whole tree (P6a: it heard nothing it shows change, whether or not its memos
-        // ran) leaves the table as it was: every subtree its values built is still in the tree, and none it built now
-        // is (review carbon-2).
+        // Keeping the whole root preserves all previously accepted memo values.
         if let [Node::Keep { .. }] = accepted {
             self.staged.clear();
             self.hits.clear();
@@ -1189,9 +1178,6 @@ mod tests {
         node
     }
 
-    // Expected (`keep-full`): memo remembers a value only for the node the accepted tree holds: a candidate the view
-    // built and left out for another node with its id, a slot, which carries no id, and a duplicate key all build
-    // again. A memo inside a kept one stays with it, so after the outer value changes an unchanged inner one keeps.
     #[test]
     fn memo_remembers_only_what_the_host_accepted() {
         let text = |text: &str| Node::text(vec![Span::new(text)]);
@@ -1234,8 +1220,6 @@ mod tests {
         assert_eq!(children[0], Node::Keep { key: "commit".into() }, "the inner memo was dropped with its kept parent");
     }
 
-    // Expected: memo builds on first use and keeps while the value is equal; a changed value, a full input, or a key
-    // the view before did not use builds again, with the key as the subtree's id.
     #[test]
     fn memo_keeps_an_equal_value_and_builds_otherwise() {
         let mut memo = Memo::default();
@@ -1252,8 +1236,6 @@ mod tests {
         assert!(matches!(view(&mut memo, false, card(2)), Node::Text { .. }));
     }
 
-    // Expected (big-boi's review of P6c): a view that keeps its whole tree with a literal keep of its root keeps every
-    // value, so the next view keeps the cards that did not change.
     #[test]
     fn a_literal_keep_of_the_root_keeps_every_value() {
         let mut memo = Memo::default();
