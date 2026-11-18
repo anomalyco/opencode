@@ -31,14 +31,16 @@ function tab(id: Browser.TabID, url: string, title = "", generation = 0): Browse
   return { id, url, title, loading: false, canGoBack: false, canGoForward: false, generation }
 }
 
-function registered(restore?: Browser.State, binding = "b1"): PaneMachineEvent {
+function registered(restore?: Browser.State, binding = "b1", saved?: Browser.State): PaneMachineEvent {
   return {
     type: "registered",
     binding,
     window: 1,
     storageKey: `server\n${binding}`,
     restore,
-    saved: { tabs: [], focusedTabID: null },
+    saved: saved
+      ? { tabs: saved.tabs.map((tab) => ({ id: tab.id, url: tab.url })), focusedTabID: saved.focusedTabID }
+      : { tabs: [], focusedTabID: null },
   }
 }
 
@@ -178,14 +180,36 @@ describe("binding close reason", () => {
     expect(attachmentFailure(new Error("socket hang up"))).toBe("closed")
   })
 
-  test("a missing session and the window's close forget the saved tabs; other closes keep them", () => {
+  test("only a missing session forgets the saved tabs; a window that detaches keeps them", () => {
     const removes = (event: BindingEvent) =>
       play(attached(), on(event)).effects.some((effect) => effect.type === "remove-restore")
 
     expect(removes({ type: "attachment.ended", outcome: "missing" })).toBe(true)
-    expect(removes({ type: "client.closed" })).toBe(true)
+    expect(removes({ type: "client.closed" })).toBe(false)
     expect(removes({ type: "owner.closed" })).toBe(false)
     expect(removes({ type: "attachment.ended", outcome: "closed" })).toBe(false)
+  })
+
+  test("a window that detaches suspends its binding with its tabs, so the pane keeps showing them", () => {
+    const restore = { tabs: [tab(tabA, dashboard)], focusedTabID: tabA }
+
+    for (const event of [{ type: "client.closed" }, { type: "owner.closed" }] as const) {
+      const closed = play(attached(restore), on(event))
+
+      expect(closeEvents(closed.effects)).toEqual([
+        { state: { tabs: [tab(tabA, dashboard, "", 1)], focusedTabID: tabA }, error: "browser.pane.suspended" },
+      ])
+    }
+  })
+
+  test("a window that registers with no tabs restores the tabs saved for its session", () => {
+    const saved = { tabs: [tab(tabA, dashboard)], focusedTabID: tabA }
+    const resumed = play(createPaneState(), registered({ tabs: [], focusedTabID: null }, "b1", saved))
+
+    expect(Array.from(entry(resumed.state).tabs.values())).toEqual([
+      { status: "unloaded", tab: tab(tabA, dashboard, "", 1) },
+    ])
+    expect(entry(resumed.state).focusedTabID).toBe(tabA)
   })
 
   test("disposing the pane suspends every binding with its tabs and refuses new ones", () => {

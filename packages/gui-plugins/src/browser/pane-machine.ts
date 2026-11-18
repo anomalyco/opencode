@@ -84,7 +84,7 @@ export type BindingEvent =
   | { readonly type: "register.timed-out" }
   /** The window navigated or was destroyed. */
   | { readonly type: "owner.closed" }
-  /** The window closed the binding; its saved tabs are forgotten. */
+  /** The window detached the binding, as when it leaves the session; its tabs stay for the next registration. */
   | { readonly type: "client.closed" }
   | { readonly type: "pane.disposed" }
   | { readonly type: "request.started"; readonly requestID: string }
@@ -228,7 +228,9 @@ export function transitionBinding(state: BindingState, event: BindingEvent): Bin
   if (state.status === "closed") return { state, effects: [] }
   const reason = closeReason(state, event)
 
-  if (reason) return close(state, reason, event.type === "client.closed" || reason === "browser.pane.missing")
+  // Only a session that no longer exists forgets its tabs. A window that navigated or detached its registration keeps
+  // them: they are saved per server and session, and the pane restores them when it registers again.
+  if (reason) return close(state, reason, reason === "browser.pane.missing")
 
   if (event.type === "control.unrecognized")
     return {
@@ -254,7 +256,7 @@ export function transitionBinding(state: BindingState, event: BindingEvent): Bin
 function closeReason(state: ActiveBinding, event: BindingEvent): PaneCloseReason | undefined {
   if (event.type === "handshake.unsupported") return "browser.pane.unsupported"
 
-  if (event.type === "owner.closed" || event.type === "client.closed") return "browser.pane.registration.closed"
+  if (event.type === "owner.closed" || event.type === "client.closed") return "browser.pane.suspended"
 
   if (event.type === "pane.disposed") return "browser.pane.suspended"
 
@@ -449,18 +451,22 @@ function publish(state: AttachedBinding, error?: string): AttachedTransition {
 }
 
 function createConnecting(event: Extract<PaneMachineEvent, { readonly type: "registered" }>): ActiveBinding {
-  const restore = event.restore ?? {
-    tabs: event.saved.tabs.map((tab) => ({
-      id: tab.id,
-      url: tab.url,
-      title: "",
-      loading: false,
-      canGoBack: false,
-      canGoForward: false,
-      generation: 0,
-    })),
-    focusedTabID: event.saved.focusedTabID,
-  }
+  // A window that just mounted registers with an empty inventory; the tabs saved for this server and session are what
+  // it restores from. A window that already shows tabs keeps its own inventory, which is newer than the saved one.
+  const restore = event.restore?.tabs.length
+    ? event.restore
+    : {
+        tabs: event.saved.tabs.map((tab) => ({
+          id: tab.id,
+          url: tab.url,
+          title: "",
+          loading: false,
+          canGoBack: false,
+          canGoForward: false,
+          generation: 0,
+        })),
+        focusedTabID: event.saved.focusedTabID,
+      }
 
   const tabs = new Map(
     restore.tabs.map((tab): [Browser.TabID, TabSlot] => [
