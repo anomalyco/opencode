@@ -1762,7 +1762,8 @@ pub(crate) fn fail(
 }
 
 /// A waiting effect, with its host and its depth: how many dispatches of effects led to it ([`dispatch`]).
-type Queued = (Weak<dyn Host>, u32, Effect);
+/// An effect, with its host, its depth ([`CHAIN`]), and whether a timer's work queued it ([`ticking`]).
+type Queued = (Weak<dyn Host>, u32, bool, Effect);
 
 thread_local! {
     /// The plugins' effects that wait, in the order they were asked for, on both paths.
@@ -1830,7 +1831,11 @@ const IDLE_CLOSE: std::time::Duration = std::time::Duration::from_millis(50);
 fn close_idle(host: &Weak<dyn Host>, monitor: &Rc<contain::Monitor>) {
     let Some(strong) = host.upgrade() else { return };
     let (host, monitor, painted) = (host.clone(), monitor.clone(), monitor.painted());
-    strong.app().set_timeout(IDLE_CLOSE, move |_| closed(&host, &monitor, monitor.close_idle(painted)));
+    strong.app().set_timeout(IDLE_CLOSE, move |_| match monitor.close_idle(painted) {
+        Some(news) => closed(&host, &monitor, news),
+        // Other work runs in the frame: a paint ends it, as for that work's own call.
+        None => close_at_paint(&host, &monitor),
+    });
 }
 
 /// What a close of the frames found: plugins that became slow are told, a change of slow is told, and a frame still
@@ -1872,7 +1877,8 @@ pub(crate) fn is_ticking() -> bool {
 /// when the host routes its next message ([`flush`]).
 pub(crate) fn defer(host: &Weak<dyn Host>, effect: impl FnOnce(&dyn Host) + 'static) {
     let Some(strong) = host.upgrade() else { return };
-    EFFECTS.with(|effects| effects.borrow_mut().push_back((host.clone(), DEPTH.get(), Box::new(effect))));
+    let queued = (host.clone(), DEPTH.get(), TICKING.get(), Box::new(effect) as Effect);
+    EFFECTS.with(|effects| effects.borrow_mut().push_back(queued));
     // Each effect asks for a drain of its own, as each was deferred before; a drain finds the queue empty once an
     // earlier one or a message ran it.
     strong.app().defer(|_| flush());
@@ -1886,12 +1892,20 @@ pub fn flush() {
     if FLUSHING.with(|flushing| flushing.replace(true)) {
         return;
     }
-    while let Some((host, depth, effect)) = next_effect() {
+    while let Some((host, depth, timed, effect)) = next_effect() {
         if let Some(host) = host.upgrade() {
             let outer = DEPTH.replace(depth);
-            behave::as_user(false, || effect(&*host));
+            // What a timer's work queued is the timer's work too: it asks for no paint of its own ([`close_idle`]).
+            ticking(timed, || behave::as_user(false, || effect(&*host)));
             DEPTH.set(outer);
         }
+    }
+    // The queue drained, not stopped by the frame's bound: what comes next, a later turn's, counts afresh. A drain that
+    // goes on without emptying keeps its count, so the bound holds for it; ticks with no paint between them no longer
+    // add up to it (big-boi tm-2).
+    if EFFECTS.with(|effects| effects.borrow().is_empty()) {
+        let (at, _, asked) = RAN.get();
+        RAN.set((at, 0, asked));
     }
     FLUSHING.with(|flushing| flushing.set(false));
 }

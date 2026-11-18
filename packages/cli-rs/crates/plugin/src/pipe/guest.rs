@@ -566,6 +566,15 @@ impl Guest {
         let results: Vec<serde_json::Value> = effects
             .into_iter()
             .map(|request| {
+                // A JS plugin keeps its own timers (`setTimeout`). The pipe answers no timer, so it gives no ID for one
+                // whose reply would never come (big-boi tm-3).
+                if matches!(request, HostRequest::Timer { .. }) {
+                    log::warn!(
+                        "plugin {}: a JS plugin keeps time with setTimeout: the host refuses a timer",
+                        self.id()
+                    );
+                    return serde_json::Value::Null;
+                }
                 behave::as_user(user, || behave::calling(export, || handle(&mut ctx, request))).unwrap_or_else(
                     |error| {
                         log::warn!("plugin {}: {error}", self.id());

@@ -104,6 +104,12 @@ pub const MIN_TIMER: std::time::Duration = std::time::Duration::from_millis(20);
 /// The most timers of a plugin that wait at once ([`Host::try_timer`]): the host refuses one more.
 pub const MAX_TIMERS: usize = 32;
 
+/// `delay` in the whole milliseconds of [`HostRequest::Timer`], a part of one counted as one: a timer never fires
+/// before its time (big-boi tm-4).
+fn timer_ms(delay: std::time::Duration) -> u64 {
+    u64::try_from(delay.as_nanos().div_ceil(1_000_000)).unwrap_or(u64::MAX)
+}
+
 /// The optional features this crate's host side knows ([`HostApi::features`]).
 pub const FEATURES: &[&str] = &[IMAGE_BOUNDS, FOCUS_INPUT, FENCE_NODE];
 
@@ -3697,8 +3703,7 @@ impl Host for HostHandle {
     }
 
     fn try_timer(&self, delay: std::time::Duration) -> Result<RequestId, String> {
-        let ms = u64::try_from(delay.as_millis()).unwrap_or(u64::MAX);
-        self.requested(&HostRequest::Timer { ms })
+        self.requested(&HostRequest::Timer { ms: timer_ms(delay) })
     }
 
     fn dialog(&self, dialog: Dialog) {
@@ -4858,6 +4863,15 @@ mod tests {
 
     // Expected (carbon's review of P6c, 6 and CM10): the header reader names the size of each format, past a JPEG's fill
     // bytes and standalone markers, and nothing for a header of no pixels or a segment length under 2.
+    // Expected (big-boi tm-4): a timer's delay crosses the C ABI in whole milliseconds rounded up, so a sleep of 20.9 ms
+    // never fires at 20 ms, as one in process does not.
+    #[test]
+    fn a_timers_delay_rounds_up_to_whole_milliseconds() {
+        let ms = |micros: u64| timer_ms(std::time::Duration::from_micros(micros));
+        assert_eq!([ms(0), ms(1), ms(20_000), ms(20_900), ms(20_001)], [0, 1, 20, 21, 21]);
+        assert_eq!(timer_ms(std::time::Duration::MAX), u64::MAX);
+    }
+
     #[test]
     fn image_size_reads_each_format_header() {
         let png = |width: u32, height: u32| {
