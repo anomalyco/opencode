@@ -30,6 +30,7 @@ import {
 } from "./model-machine"
 import { PageIcon } from "./page-icon"
 import { artifactLink, artifactWebURL } from "./artifact-link"
+import { attachable } from "./prompt-gate"
 import { remotePath, workspacePrefix } from "./remote-address"
 import { viewportToolbarAvailable } from "./viewport-toolbar-machine"
 import barStyles from "./bar.css?inline"
@@ -162,14 +163,18 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
   // The agent's first step lists the browser tools only when this desktop attached to the session before the prompt
   // reached the server. A draft's session is created by the send itself, so the send waits here for the attachment.
   ctx.add(BuiltinPromptGate, {
-    async ready(input) {
+    ready(input) {
+      // A prompt that cannot gain from an attachment waits for nothing, not even for the model's chunk.
+      if (!attachable(input.session, navigator.onLine)) return
       dispatchModel({ type: "load.requested" })
       const loading = untrack(modelState)
+      const loaded = loading.status === "loading" ? loads.get(loading.attempt) : undefined
 
-      if (loading.status === "loading") await loads.get(loading.attempt)
+      if (!loaded) return untrack(model)?.ready(input.session, input.signal)
 
-      if (input.signal.aborted || ctx.signal.aborted) return
-      await untrack(model)?.ready(input.session, input.signal)
+      return loaded.then(() => {
+        if (!input.signal.aborted && !ctx.signal.aborted) return untrack(model)?.ready(input.session, input.signal)
+      })
     },
   })
 

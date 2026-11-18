@@ -2,6 +2,7 @@ import { FileVerificationError } from "@opencode/util/file-verification"
 import { builtinContext } from "@opencode/plugin/gui/builtin"
 import { FileSource } from "../file/contract"
 import { ACTIVATION_DELAY_MS } from "./activation-delay"
+import { attachable } from "./prompt-gate"
 import { batch, createRoot, createSignal, getOwner, onCleanup, untrack } from "solid-js"
 import { createStore, reconcile, unwrap } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -43,7 +44,7 @@ import {
   sessionFailure,
   sessionPending,
   sessionRegistration,
-  sessionSettled,
+  sessionAttaching,
   sessionSuspended,
   sessionTab,
   sessionTabs,
@@ -518,7 +519,15 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       dispatch({ type: "ipc.changed", ipc: untrack(ipc) })
       wakeCurrent()
     },
-    { otherwise: () => dispatch({ type: "ipc.changed", ipc: untrack(ipc) }) },
+    {
+      // A pane that is starting and one that does not run are both no pane here, and they differ: a starting one
+      // attaches by itself, so a prompt waits for it, and one that failed to start never does.
+      otherwise: () =>
+        createKeyed(
+          () => ipc().status,
+          () => dispatch({ type: "ipc.changed", ipc: untrack(ipc) }),
+        ),
+    },
   )
 
   const attach = (ref: SessionRef) => {
@@ -690,22 +699,36 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     if (current) openURL(session, workspaceFileURL(current.root, path, session.server.builtin ? undefined : session.id))
   }
 
+  // The window has a network connection, as far as the system knows.
+  const [online, setOnline] = createSignal(navigator.onLine)
+  makeEventListener(window, "online", () => setOnline(true))
+  makeEventListener(window, "offline", () => setOnline(false))
+
+  // A prompt waits only while an attachment for its session is in flight on a server that can answer it.
+  const attaching = (session: SessionRef) => sessionAttaching(machine(), session.key, attachable(session, online()))
+
   // A prompt is about to go to the session. Its first step lists the browser tools only if the server already holds
-  // this desktop's attachment, so the session attaches now, routed or not, and the send waits until the desktop took
-  // it or cannot. The host stops waiting through `signal`.
+  // this desktop's attachment, so the session attaches now, routed or not, and the send waits while that is in flight
+  // and can still succeed. In every other state it resolves at once: a server that is not connected or not compatible,
+  // a window that is offline, a session another desktop owns, one the server lacks or has no browser for, one with no
+  // location, a pane that does not run. The server going away, this plugin being disposed and the host's `signal` each
+  // end a wait at once.
   const ready = (session: SessionRef, signal: AbortSignal) => {
-    if (!session.server.compatible) return Promise.resolve()
+    if (!untrack(() => attachable(session, online()))) return Promise.resolve()
     attach(session)
     dispatch({ type: "session.wake", sessionKey: session.key })
 
-    if (sessionSettled(untrack(machine), session.key) || signal.aborted) return Promise.resolve()
+    if (!untrack(() => attaching(session)) || signal.aborted) return Promise.resolve()
     const settled = Promise.withResolvers<void>()
 
     const dispose = createRoot((dispose) => {
       createKeyed(
-        () => sessionSettled(machine(), session.key),
+        () => !attaching(session),
         () => settled.resolve(),
       )
+      // The plugin's owner disposes this root before the machine hears of it, which would leave the wait to the host's
+      // timeout.
+      onCleanup(() => settled.resolve())
 
       return dispose
     }, owner)

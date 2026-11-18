@@ -438,6 +438,14 @@ export function sessionSettled(state: State, sessionKey: string) {
   return phase.reason === "unlisted" || (phase.reason === "ipc" && state.ipc.status !== "pending")
 }
 
+/**
+ * Whether a prompt to the session waits for its attachment: only while one is in flight and can still succeed, on a
+ * session whose server could answer it (`reachable`, see `attachable`). In every other state the prompt goes at once.
+ */
+export function sessionAttaching(state: State, sessionKey: string, reachable: boolean) {
+  return reachable && !sessionSettled(state, sessionKey)
+}
+
 export function sessionSuspended(state: State, sessionKey: string) {
   return attachmentOf(state, sessionKey)?.phase.status === "suspended"
 }

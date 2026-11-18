@@ -156,6 +156,8 @@ describe("browser pane machine", () => {
     expect(sessionSettled(starting, key)).toBe(false)
     expect(sessionSettled(transition(starting, { type: "ipc.changed", ipc: active }).state, key)).toBe(false)
     expect(sessionSettled(replay(attach(), createInitialState({ status: "inactive" })).state, key)).toBe(true)
+    // One that was starting and then failed to start: the prompt that waited for it goes.
+    expect(sessionSettled(transition(starting, { type: "ipc.changed", ipc: { status: "inactive" } }).state, key)).toBe(true)
 
     // The server evicted the idle attachment: the prompt's wake registers it again, and the prompt waits for that.
     const evicted = transition(ready(), paneState(ready(), inventory(tab(tabA)), "browser.pane.suspended")).state

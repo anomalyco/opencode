@@ -1,4 +1,4 @@
-import { expect, spyOn, test } from "bun:test"
+import { afterEach, expect, jest, spyOn, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
 import type { IpcClient, SessionRef, SetupContext } from "@opencode/plugin/gui"
 import { liveAccessor } from "@opencode/plugin/gui/host"
@@ -20,12 +20,31 @@ const tab = (digit: string, url = `https://${digit}.example/`): Browser.Tab => (
 })
 
 // The real model over the pane's main-process Ipc, faked at its boundary, with two shell sessions on one server.
-function fixture() {
+// `given` is what the window knows of that server, the sessions' location and the pane's Ipc as the model starts.
+// With `slow`, main takes a registration only once the test calls `answer`, as while it attaches to the server.
+function fixture(
+  given: { connected?: boolean; compatible?: boolean; local?: boolean; located?: boolean; ipc?: "active" | "pending" | "inactive"; slow?: boolean } = {},
+) {
   const bindings = new Map<string, string>()
   const listeners = new Set<(value: { binding: string; event: PaneEvent }) => void>()
   // What main rejects the next commands with, first in, first out.
   const rejections: string[] = []
-  const server = { id: "browser-test", compatible: true, builtin: true, data: { on: () => () => undefined, session: { status: () => "idle" } } }
+  const [connected, setConnected] = createSignal(given.connected ?? true)
+  const [ipc, setIpc] = createSignal(given.ipc ?? "active")
+  const answered = Promise.withResolvers<void>()
+
+  if (!given.slow) answered.resolve()
+
+  const server = {
+    id: "browser-test",
+    compatible: given.compatible ?? true,
+    get connected() {
+      return connected()
+    },
+    local: given.local ?? true,
+    builtin: true,
+    data: { on: () => () => undefined, session: { status: () => "idle" } },
+  }
 
   const refs = ["ses_alpha", "ses_beta"].map((id) => ({
     key: `${server.id}\n${id}`,
@@ -33,7 +52,7 @@ function fixture() {
     tab: id,
     server,
     pending: false,
-    location: { directory: "/repo" },
+    location: given.located === false ? undefined : { directory: "/repo" },
   }))
 
   const [current, setCurrent] = createSignal(refs[0])
@@ -41,6 +60,7 @@ function fixture() {
   const pane: PaneClient = {
     register: async (input) => {
       bindings.set(input.session, input.binding)
+      await answered.promise
     },
     load: async () => undefined,
     command: async () => {
@@ -66,7 +86,11 @@ function fixture() {
     },
   }
 
-  const live = liveAccessor(() => ({ status: "active" as const, generation: 1, value: pane }))
+  const live = liveAccessor(() => {
+    const status = ipc()
+
+    return status === "active" ? { status, generation: 1, value: pane } : { status }
+  })
   const history = { value: { visits: [] }, set: () => undefined }
 
   const fake = {
@@ -97,8 +121,132 @@ function fixture() {
   // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
   const sessions = refs.map((ref) => ref as unknown as SessionRef)
 
-  return { ...owned, sessions, route: setCurrent, refs, emit, send, rejections }
+  return { ...owned, sessions, route: setCurrent, refs, emit, send, rejections, setConnected, setIpc, answer: answered.resolve, registered: () => Array.from(bindings.keys()) }
 }
+
+// Runs the promise jobs queued so far, which the fake clock does not: more turns than a registration takes.
+const turns = async () => {
+  for (const _ of Array.from({ length: 32 })) await Promise.resolve()
+}
+
+// Whether the promise is still pending once every queued job ran.
+const waits = async (promise: Promise<void>) => {
+  const state = { done: false }
+
+  void promise.then(() => (state.done = true))
+  await turns()
+
+  return !state.done
+}
+
+afterEach(() => void jest.useRealTimers())
+
+// What the system says of the network, which nothing but the navigator's own property can change. Returns the undo.
+const network = (online: boolean) => {
+  const own = Object.getOwnPropertyDescriptor(navigator, "onLine")
+
+  Object.defineProperty(navigator, "onLine", { configurable: true, get: () => online })
+
+  return () => (own ? Object.defineProperty(navigator, "onLine", own) : Reflect.deleteProperty(navigator, "onLine"))
+}
+
+// A prompt waits for the desktop's attachment only while one is in flight on a server that can answer it. In every
+// other state the gate resolves in the same tick: no timer runs, and nothing is asked of a server that cannot answer.
+test.each([
+  { state: "the server is not connected, or is reconnecting", given: { connected: false } },
+  { state: "the server is one this app cannot talk to", given: { compatible: false } },
+  { state: "the session has no location yet", given: { located: false } },
+  { state: "the window is offline and the server is on another computer", given: { local: false }, offline: true },
+  { state: "the pane's plugin is disabled or failed", given: { ipc: "inactive" as const } },
+  { state: "another desktop owns the session", error: "browser.pane.replaced" },
+  { state: "the server has no browser for the session", error: "browser.pane.unsupported" },
+  { state: "the server does not have the session", error: "browser.pane.missing" },
+  { state: "the desktop is attached already", attached: true },
+  { state: "the plugin was disposed", disposed: true },
+])("a prompt does not wait when $state", async (row) => {
+  jest.useFakeTimers()
+  const restore = network(!row.offline)
+  const app = fixture(row.given)
+  const session = app.sessions[1]
+  const never = new AbortController().signal
+
+  try {
+    // An earlier prompt met the state: what main answered it with is how the session stands now.
+    if (row.error || row.attached) {
+      const first = app.model.ready(session, never)
+      await turns()
+      app.send(session.id, row.error ? { type: "state", state: null, error: row.error } : { type: "state", state: { tabs: [tab("b")], focusedTabID: tab("b").id } })
+      expect(await waits(first)).toBe(false)
+    }
+
+    if (row.disposed) app.dispose()
+    const registered = app.registered().length
+    expect(await waits(app.model.ready(session, never))).toBe(false)
+
+    // Nothing was started that could not answer.
+    if (!row.attached) expect(app.registered().length).toBe(registered)
+  } finally {
+    restore()
+    app.dispose()
+  }
+})
+
+test.each([
+  { name: "the desktop has attached", end: "answer" },
+  { name: "the server goes away", end: "disconnect" },
+  { name: "the plugin is disposed", end: "dispose" },
+  { name: "the host stops waiting", end: "abort" },
+  { name: "the pane's plugin stops", end: "ipc" },
+] as const)("a prompt waits while the attachment is in flight, until $name", async (row) => {
+  jest.useFakeTimers()
+  const app = fixture({ slow: true })
+  const session = app.sessions[1]
+  const host = new AbortController()
+
+  try {
+    const waiting = app.model.ready(session, host.signal)
+
+    expect(await waits(waiting)).toBe(true)
+    expect(app.registered()).toContain(session.id)
+    // No timer of the gate's own ends the wait: the host's does.
+    jest.advanceTimersByTime(900)
+    expect(await waits(waiting)).toBe(true)
+
+    if (row.end === "answer") app.answer()
+
+    if (row.end === "disconnect") app.setConnected(false)
+
+    if (row.end === "dispose") app.dispose()
+
+    if (row.end === "abort") host.abort()
+
+    if (row.end === "ipc") app.setIpc("inactive")
+    expect(await waits(waiting)).toBe(false)
+  } finally {
+    app.dispose()
+  }
+})
+
+test("a prompt waits for a pane that is still starting, and for one whose server is on this computer while offline", async () => {
+  jest.useFakeTimers()
+  const restore = network(false)
+  const starting = fixture({ ipc: "pending" })
+  const local = fixture({ local: true, slow: true })
+  const never = new AbortController().signal
+
+  try {
+    const first = starting.model.ready(starting.sessions[1], never)
+    expect(await waits(first)).toBe(true)
+    starting.setIpc("inactive")
+    expect(await waits(first)).toBe(false)
+
+    expect(await waits(local.model.ready(local.sessions[1], never))).toBe(true)
+  } finally {
+    restore()
+    starting.dispose()
+    local.dispose()
+  }
+})
 
 test("drops page details when a tab closes or its binding is suspended", () => {
   const app = fixture()
