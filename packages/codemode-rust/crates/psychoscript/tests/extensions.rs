@@ -634,3 +634,188 @@ fn boundary_types_match_the_reference() {
         failures.join("\n")
     );
 }
+
+/// One of the extensions the reference's `extensions` cases make runtimes from (`library` in
+/// `conformance/catalog.ts`); each function records its arguments in `seen`. An unknown name is a fresh extension.
+fn library(name: &str, seen: &Arc<Mutex<Vec<Json>>>) -> Extension {
+    let saw = |name: &'static str, seen: &Arc<Mutex<Vec<Json>>>| {
+        let seen = seen.clone();
+        move |args: &[HostValue]| {
+            let args: Vec<Json> = args.iter().map(describe).collect();
+            seen.lock().unwrap().push(json!([name, args]));
+        }
+    };
+    let number = |v: &HostValue| v.as_f64().unwrap_or(f64::NAN);
+    let id = |label: &'static str| {
+        HostValue::object([(
+            "id",
+            HostFunction::new("id", 0, move |_| Ok(label.into())).into(),
+        )])
+    };
+    match name {
+        "later" => {
+            let saw = saw("later", seen);
+            Extension::new("later").function(
+                "later",
+                HostFunction::new_async("later", 1, move |args| {
+                    saw(&args);
+                    async move { Ok(HostValue::Number(number(&args[0]) + 1.0)) }
+                }),
+            )
+        }
+        "files" => {
+            let saw = saw("read", seen);
+            Extension::new("files").function(
+                "read",
+                HostFunction::new("read", 0, move |args| {
+                    saw(&args);
+                    Ok("text".into())
+                }),
+            )
+        }
+        "glob" => {
+            let saw = saw("Glob", seen);
+            Extension::new("glob").function(
+                "Glob",
+                HostFunction::new("", 1, move |args| {
+                    saw(&args);
+                    let pattern = args[0].as_str().unwrap_or_default().to_owned();
+                    Ok(HostValue::object([(
+                        "match",
+                        HostFunction::new("match", 1, move |args| {
+                            Ok(args[0]
+                                .as_str()
+                                .unwrap_or_default()
+                                .ends_with(&pattern)
+                                .into())
+                        })
+                        .into(),
+                    )]))
+                })
+                .constructible(),
+            )
+        }
+        "sum" => {
+            let saw = saw("Sum", seen);
+            Extension::new("sum").function(
+                "Sum",
+                HostFunction::new("", 0, move |args| {
+                    saw(&args);
+                    let total: f64 = args.iter().map(number).sum();
+                    Ok(HostValue::object([("total", total.into())]))
+                })
+                .constructible(),
+            )
+        }
+        "plain" => Extension::new("plain")
+            .function("plain", HostFunction::new("plain", 0, |_| Ok(1.0.into()))),
+        "bun" => Extension::new("bun")
+            .object(
+                "Bun",
+                HostValue::object([(
+                    "file",
+                    HostFunction::new("file", 1, |args| {
+                        Ok(HostValue::object([(
+                            "name",
+                            args.into_iter().next().unwrap_or_default(),
+                        )]))
+                    })
+                    .into(),
+                )]),
+            )
+            .module("bun", "Bun"),
+        "one" => Extension::new("one")
+            .object("A", id("a"))
+            .module("shared", "A"),
+        "two" => Extension::new("two")
+            .object("B", id("b"))
+            .module("shared", "B"),
+        "fs" => Extension::new("fs").object(
+            "fs",
+            HostValue::object([
+                (
+                    "readFile",
+                    HostFunction::new("readFile", 1, |args| {
+                        Ok(format!("text of {}", args[0].as_str().unwrap_or_default()).into())
+                    })
+                    .into(),
+                ),
+                (
+                    "promises",
+                    HostValue::object([(
+                        "readFile",
+                        HostFunction::new_async("readFile", 1, |args| async move {
+                            Ok(args.into_iter().next().unwrap_or_default())
+                        })
+                        .into(),
+                    )]),
+                ),
+            ]),
+        ),
+        other => Extension::new(other).function("f", HostFunction::new("f", 0, |_| Ok(1.0.into()))),
+    }
+}
+
+/// Runtimes made with some extensions, runs that pick some of them (`RunOptions::extensions`), constructible
+/// globals, module names and imports that can't be resolved, against the reference's `extensions` section of
+/// `conformance/catalog.json`, which `bun conformance/catalog.ts` generates.
+#[test]
+fn extension_configuration_matches_the_reference() {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../conformance/catalog.json"
+    );
+    let fixture: Json = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let cases = fixture["extensions"].as_array().unwrap();
+    assert!(cases.len() >= 38);
+    let names = |v: &Json| -> Vec<String> {
+        v.as_array()
+            .unwrap()
+            .iter()
+            .map(|n| n.as_str().unwrap().to_owned())
+            .collect()
+    };
+    let mut failures = Vec::new();
+    for case in cases {
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let rt = names(&case["runtime"])
+            .iter()
+            .fold(Runtime::new(), |rt, name| {
+                rt.extension(library(name, &seen))
+            });
+        let options = match &case["extensions"] {
+            Json::Null => psychoscript::RunOptions::new(),
+            picked => psychoscript::RunOptions::new().extensions(names(picked)),
+        };
+        let code = case["code"].as_str().unwrap();
+        let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            rt.execute_with(code, &serde_json::Map::new(), &options)
+        }));
+        let recorded = match run {
+            Ok(outcome) => json!({ "outcome": match outcome.result {
+                Ok(value) => json!({ "ok": true, "value": value }),
+                Err(d) => json!({ "ok": false, "kind": d.kind.name(), "message": d.message }),
+            }}),
+            Err(panic) => {
+                json!({ "thrown": panic.downcast_ref::<String>().cloned().unwrap_or_default() })
+            }
+        };
+        let mut actual = recorded;
+        actual["seen"] = Json::Array(seen.lock().unwrap().clone());
+        let mut expected = case.clone();
+        for key in ["runtime", "extensions", "code"] {
+            expected.as_object_mut().unwrap().remove(key);
+        }
+        if !same(&actual, &expected) {
+            failures.push(format!(
+                "{code}\n  expected {expected}\n  actual   {actual}"
+            ));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "{} mismatches:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
+}

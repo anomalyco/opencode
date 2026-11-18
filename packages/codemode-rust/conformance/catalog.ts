@@ -515,6 +515,137 @@ for (const code of boundaryPrograms) {
   })
 }
 
+// Extension configuration: runtimes made with some of `library`'s extensions, runs that pick some of them, and what
+// each run gave and what its host functions received (`seen`). Picking an extension the runtime wasn't made with
+// throws; `thrown` records the message. The Rust side builds the same library by name.
+let seen: Array<unknown> = []
+const saw = (name: string, args: ReadonlyArray<unknown>) => void seen.push([name, args.map(describe)])
+const library: Record<string, unknown> = {
+  later: Extension.make({
+    name: "later",
+    globals: {
+      later: async (n: number) => {
+        saw("later", [n])
+        return n + 1
+      },
+    },
+  }),
+  files: Extension.make({
+    name: "files",
+    globals: {
+      read: () => {
+        saw("read", [])
+        return "text"
+      },
+    },
+  }),
+  glob: Extension.make({
+    name: "glob",
+    globals: {
+      Glob: Extension.constructible((pattern: string) => {
+        saw("Glob", [pattern])
+        return { match: (name: string) => name.endsWith(pattern) }
+      }),
+    },
+  }),
+  sum: Extension.make({
+    name: "sum",
+    globals: {
+      Sum: Extension.constructible((...values: Array<number>) => {
+        saw("Sum", values)
+        return Effect.succeed({ total: values.reduce((total, value) => total + value, 0) })
+      }),
+    },
+  }),
+  plain: Extension.make({ name: "plain", globals: { plain: () => 1 } }),
+  bun: Extension.make({
+    name: "bun",
+    globals: { Bun: { file: (path: string) => ({ name: path }) } },
+    modules: { bun: "Bun" },
+  }),
+  one: Extension.make({ name: "one", globals: { A: { id: () => "a" } }, modules: { shared: "A" } }),
+  two: Extension.make({ name: "two", globals: { B: { id: () => "b" } }, modules: { shared: "B" } }),
+  fs: Extension.make({
+    name: "fs",
+    globals: { fs: { readFile: (path: string) => `text of ${path}`, promises: { readFile: async (path: string) => path } } },
+  }),
+}
+type ExtensionCase = { runtime: Array<string>; extensions?: Array<string>; code: string }
+const configurationCases: Array<ExtensionCase> = [
+  // A run gets all of the runtime's extensions, or only the ones it picks.
+  { runtime: ["later", "files"], code: `return [typeof read, typeof later]` },
+  { runtime: ["later", "files"], extensions: ["later"], code: `return [typeof read, typeof later, await later(1)]` },
+  { runtime: ["later", "files"], extensions: [], code: `return [typeof read, typeof later]` },
+  { runtime: ["later", "files"], extensions: ["files", "later", "files"], code: `return [read(), await later(2)]` },
+  { runtime: ["later", "files"], extensions: ["other"], code: `1` },
+  // A constructible global works with new and gives what the host function returns.
+  { runtime: ["glob"], code: `const g = new Glob(".ts"); return [g.match("a.ts"), g.match("a.js")]` },
+  { runtime: ["glob"], code: `return Glob(".ts").match("a.ts")` },
+  { runtime: ["glob"], code: `return new Glob(...[".ts"]).match("a.ts")` },
+  { runtime: ["glob"], code: `new (new Glob(".ts").match)("a")` },
+  { runtime: ["glob"], code: `return [typeof Glob, Glob.length, new Glob("x") instanceof Object]` },
+  { runtime: ["sum"], code: `return new Sum(1, 2).total + 1` },
+  { runtime: ["sum"], code: `return new Sum(...[1, 2]).total + 1` },
+  { runtime: ["sum"], code: `return new Sum((async () => { await null; return 1 })(), 2).total + 1` },
+  { runtime: ["plain"], code: `new plain()` },
+  { runtime: ["plain", "later"], code: `try { new later(1) } catch (e) { return e.message }` },
+  // An extension's module names load its globals, only in runs that get it; a later extension's name wins.
+  {
+    runtime: ["bun"],
+    code: `import Loaded, { file } from "bun"
+return [file("a").name, Loaded === Bun, typeof require("bun").file, typeof (await import("bun")).file]`,
+  },
+  { runtime: ["bun"], code: `return [typeof require("node:bun").file, require("Bun") === Bun]` },
+  { runtime: ["bun"], extensions: [], code: `import { file } from "bun"` },
+  { runtime: [], code: `import { file } from "bun"` },
+  { runtime: ["one", "two"], code: `return require("shared").id()` },
+  { runtime: ["two", "one"], code: `return require("shared").id()` },
+  { runtime: ["one", "two"], extensions: ["one"], code: `return require("shared").id()` },
+  // An import that can't be resolved says why.
+  ...[
+    `import yaml from "yaml"`,
+    `import ws from "ws"`,
+    `import pkg from "@scope/pkg"`,
+    `import x from "./local.js"`,
+    `import x from "../up.js"`,
+    `import x from "/abs.js"`,
+    `import x from "file:///a.js"`,
+    `import x from "node:sqlite"`,
+    `import x from "bun"`,
+    `import x from "bun:sqlite"`,
+    `import x from "fs/extra"`,
+    `import x from "zlib"`,
+    `try { await import("child_process") } catch (e) { return e.message }`,
+    `try { require("./x") } catch (e) { return e.message }`,
+    `import { writeFile } from "fs"`,
+  ].map((code) => ({ runtime: ["fs"], code })),
+  { runtime: [], code: `require("fs")` },
+]
+const configuration: Array<unknown> = []
+for (const item of configurationCases) {
+  seen = []
+  const extension = (name: string) => library[name] ?? Extension.make({ name, globals: { f: () => 1 } })
+  const runtime = CodeMode.make({ extensions: item.runtime.map(extension) })
+  let recorded: Record<string, unknown>
+  try {
+    const result = await Effect.runPromise(
+      runtime.execute(
+        item.code,
+        undefined,
+        item.extensions === undefined ? undefined : { extensions: item.extensions.map(extension) },
+      ),
+    )
+    recorded = {
+      outcome: result.ok
+        ? { ok: true, value: result.value }
+        : { ok: false, kind: result.error.kind, message: result.error.message },
+    }
+  } catch (error) {
+    recorded = { thrown: (error as Error).message }
+  }
+  configuration.push({ ...item, extensions: item.extensions ?? null, ...recorded, seen })
+}
+
 const expected = {
   tools: specs,
   namespaces,
@@ -531,6 +662,7 @@ const expected = {
   programs: await Promise.all(programs.map(async (code) => ({ code, ...(await outcome(code)) }))),
   openapi,
   boundary,
+  extensions: configuration,
 }
 writeRecording(join(import.meta.dir, "catalog.json"), expected)
 console.log(
