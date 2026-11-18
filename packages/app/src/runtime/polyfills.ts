@@ -1,5 +1,16 @@
-// Safari before 17.4 lacks Map.groupBy and Promise.withResolvers, and Promise.try arrived in Safari 18.2. Electron's
-// Chromium has all three, so these only matter for the web app.
+// Safari before 17 lacks URL.canParse, before 17.4 lacks Map.groupBy and Promise.withResolvers, and Promise.try
+// arrived in Safari 18.2. Electron's Chromium has all four, so these only matter for the web app.
+if (typeof URL.canParse !== "function") {
+  URL.canParse = function canParse(url: string | URL, base?: string | URL) {
+    try {
+      new URL(url, base)
+      return true
+    } catch {
+      return false
+    }
+  } as typeof URL.canParse
+}
+
 if (!Map.groupBy) {
   Map.groupBy = function groupBy<K, T>(items: Iterable<T>, callback: (item: T, index: number) => K) {
     const groups = new Map<K, T[]>()

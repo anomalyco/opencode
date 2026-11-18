@@ -1,12 +1,15 @@
 import { afterEach, beforeEach, expect, test } from "bun:test"
 
-const native = { groupBy: Map.groupBy, withResolvers: Promise.withResolvers, try: Promise.try }
+const native = { canParse: URL.canParse, groupBy: Map.groupBy, withResolvers: Promise.withResolvers, try: Promise.try }
+
+const urls: Partial<typeof URL> = URL
 
 const maps: Partial<typeof Map> = Map
 
 const promises: Partial<typeof Promise> = Promise
 
 beforeEach(async () => {
+  delete urls.canParse
   delete maps.groupBy
   delete promises.withResolvers
   delete promises.try
@@ -14,9 +17,18 @@ beforeEach(async () => {
 })
 
 afterEach(() => {
+  urls.canParse = native.canParse
   Map.groupBy = native.groupBy
   Promise.withResolvers = native.withResolvers
   Promise.try = native.try
+})
+
+test("URL.canParse validates absolute and relative URLs without native support", () => {
+  expect(URL.canParse("https://opencode.ai/docs")).toBe(true)
+  expect(URL.canParse("/docs", "https://opencode.ai")).toBe(true)
+  expect(URL.canParse(new URL("https://opencode.ai"))).toBe(true)
+  expect(URL.canParse("not a url")).toBe(false)
+  expect(URL.canParse("http://[", "https://opencode.ai")).toBe(false)
 })
 
 test("Map.groupBy keeps first-seen key order and passes the index", () => {
