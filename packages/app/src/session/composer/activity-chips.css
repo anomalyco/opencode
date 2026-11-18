@@ -56,6 +56,8 @@
     grid-column: 1 / -1;
     grid-template-columns: subgrid;
     align-items: center;
+    /* The table's gap in place of a menu row's own 8px, which would shift each row's columns off the table's. */
+    column-gap: 6px;
   }
 
   [data-component="menu-v2-item"] {
