@@ -292,7 +292,10 @@ mod tests {
         assert_eq!(date(pacific(1_700_200_000_000.0)), "2023-11-16");
         let east = |time: f64| time + 2.0 * 3_600_000.0;
         let midnight = 1_700_179_200_000.0 - 2.0 * 3_600_000.0;
-        assert_eq!((bucket(midnight, midnight + 3_600_000.0, &east), bucket(midnight - 3_600_000.0, midnight, &east)), (0, 1));
+        assert_eq!(
+            (bucket(midnight, midnight + 3_600_000.0, &east), bucket(midnight - 3_600_000.0, midnight, &east)),
+            (0, 1)
+        );
     }
 
     #[test]
@@ -313,7 +316,7 @@ mod tests {
             session("c", Some("a"), 1.0),
             session("d", Some("b"), 0.5),
         ];
-        let groups = groups(&sessions, &[0, 1, 2, 3], Mode::Directory, true, 10.0, str::to_owned);
+        let groups = groups(&sessions, &[0, 1, 2, 3], Mode::Directory, true, 10.0, &|time| time, str::to_owned);
         let prefixes: Vec<String> = rows(&groups, &HashSet::new())
             .into_iter()
             .filter_map(|row| match row {
