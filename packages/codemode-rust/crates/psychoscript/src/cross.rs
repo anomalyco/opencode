@@ -3,7 +3,8 @@
 //! holding a promise, a `toJSON` of the program's, or shared objects revisited too often crosses through the
 //! reference's internal walk (`$vmCross` over the `visit` generators of `$vmJsonVisitor`), which awaits each promise it
 //! meets. The walk here is a heap object (`Kind::Cross`), so a run suspended while it awaits saves it, and it spends
-//! the fuel that bytecode spends, in the same order.
+//! the fuel that bytecode spends, in the same order. A `toJSON` it calls runs from a native frame (`frame_step`), as
+//! the reference calls it from its bytecode, so it can park for `search(...)`, suspend and be saved in a snapshot.
 
 use std::rc::Rc;
 
@@ -11,7 +12,7 @@ use rustc_hash::FxHashSet;
 
 use crate::Json;
 use crate::object::*;
-use crate::value::{Id, Value};
+use crate::value::{Id, Slot, Value};
 use crate::vm::{NATIVE_FUEL, Reaction, Res, Vm};
 
 /// The depth the fast path allows.
@@ -218,12 +219,7 @@ impl FastWalk {
             vm.get(cur, tj)?
         };
         if vm.is_callable(&to_json) {
-            if !builtin_to_json(vm, id, &to_json) {
-                return Ok(None);
-            }
-            let key = vm.static_str("");
-            let r = vm.call(&to_json, *cur, &[key])?;
-            return Ok(Some(Some(leaf(vm, &r))));
+            return Ok(builtin_to_json(vm, id, &to_json).map(Some));
         }
         match &vm.heap[id as usize].kind {
             Kind::Bytes(_) => {
@@ -314,28 +310,26 @@ fn is_plain(vm: &Vm, id: Id) -> bool {
     matches!(o.kind, Kind::Ordinary) && o.proto == Some(vm.realm.object_proto)
 }
 
-/// Whether `f` is the `toJSON` of a Date or URL `id` is, which the fast path applies itself.
-fn builtin_to_json(vm: &mut Vm, id: Id, f: &Value) -> bool {
+/// The JSON of a Date or URL `id` whose `toJSON` `f` is its prototype's, which the fast path makes itself without
+/// calling it, as the reference does (even when the program replaced the prototype's method); `None` for any other.
+fn builtin_to_json(vm: &mut Vm, id: Id, f: &Value) -> Option<Json> {
     let proto = match vm.heap[id as usize].kind {
         Kind::Date(_) => vm.realm.std.date,
         Kind::Url(_) => vm.realm.std.url,
-        _ => return false,
+        _ => return None,
     };
     if proto == 0 {
-        return false;
+        return None;
     }
     let k = vm.names.to_json;
-    matches!((vm.get_obj(proto, k), f), (Value::Obj(a), Value::Obj(b)) if a == *b)
-}
-
-/// A primitive's JSON, or null.
-fn leaf(vm: &Vm, v: &Value) -> Json {
-    match v {
-        Value::Str(s) => Json::String(crate::convert::host_string(vm, *s)),
-        Value::Num(n) => number(*n),
-        Value::Bool(b) => Json::Bool(*b),
-        _ => Json::Null,
+    if !matches!((vm.get_obj(proto, k), f), (Value::Obj(a), Value::Obj(b)) if a == *b) {
+        return None;
     }
+    Some(match &vm.heap[id as usize].kind {
+        Kind::Date(t) if t.is_finite() => Json::String(crate::builtins::date::iso_string(*t)),
+        Kind::Url(u) => Json::String(u.url.as_str().to_owned()),
+        _ => Json::Null,
+    })
 }
 
 /// The reference's `toPlainJson`: what the walk built, as host JSON; `None` for undefined.
@@ -453,41 +447,61 @@ pub fn start(vm: &mut Vm, roots: Vec<Value>, target: Target) -> Id {
 }
 
 /// The settled value a walk awaited (`resumed`), or the walk's start: runs it until it awaits again or ends, then
-/// hands its outcome to its target.
+/// hands its outcome to its target. At a `toJSON` it pushes a native frame that calls it and runs the rest of the walk
+/// (`frame_step`), whose result is then the tool call's promise.
 pub fn advance(vm: &mut Vm, id: Id, resumed: Option<Result<Value, Value>>) -> Result<(), Value> {
-    match walk(vm, id, resumed)? {
+    let resume = match resumed {
+        None => Resume::Start,
+        Some(r) => Resume::Settled(r),
+    };
+    match walk(vm, id, resume)? {
         Walked::Await(awaited) => {
             wait(vm, id, awaited);
             Ok(())
         }
+        Walked::Call(call) => enter_frame(vm, id, CALL, call).map(|_| ()),
         Walked::Done(target, outcome) => finish(vm, target, outcome),
     }
+}
+
+/// How a run of the walk starts: from where it is, with the settled value it awaited, or with what a `toJSON` it
+/// called returned.
+enum Resume {
+    Start,
+    Settled(Result<Value, Value>),
+    Called(Value),
 }
 
 /// How far a run of the walk got.
 enum Walked {
     /// It awaits this.
     Await(Value),
+    /// It calls a `toJSON`: the function, its receiver and the key.
+    Call([Value; 3]),
     /// It ended, with every root crossed or an error.
     Done(Target, Result<Vec<Option<Json>>, Value>),
 }
 
-/// Runs the walk until it awaits or ends; only a fatal error is an `Err`.
-fn walk(vm: &mut Vm, id: Id, resumed: Option<Result<Value, Value>>) -> Result<Walked, Value> {
+/// Runs the walk until it awaits, calls a `toJSON` or ends; only a fatal error is an `Err`.
+fn walk(vm: &mut Vm, id: Id, resume: Resume) -> Result<Walked, Value> {
     let Kind::Cross(mut c) = std::mem::replace(&mut vm.heap[id as usize].kind, Kind::Ordinary)
     else {
         return Err(vm.type_error("The crossing is not running."));
     };
-    let r = match resumed {
-        Some(Err(e)) => Err(e),
-        resumed => step(vm, &mut c, resumed.map(|r| r.unwrap_or_default())),
+    let r = match resume {
+        Resume::Settled(Err(e)) => Err(e),
+        resume => step(vm, &mut c, resume),
     };
     match r {
-        Ok(Some(awaited)) => {
+        Ok(Pause::Await(awaited)) => {
             vm.heap[id as usize].kind = Kind::Cross(c);
             Ok(Walked::Await(awaited))
         }
-        Ok(None) => {
+        Ok(Pause::Call(call)) => {
+            vm.heap[id as usize].kind = Kind::Cross(c);
+            Ok(Walked::Call(call))
+        }
+        Ok(Pause::Done) => {
             let crossed = c.crossed.iter().map(|v| plain_json(vm, v)).collect();
             Ok(Walked::Done(c.target, Ok(crossed)))
         }
@@ -502,8 +516,13 @@ fn wait(vm: &mut Vm, id: Id, awaited: Value) {
     vm.perform_then(p, Reaction::Cross(id));
 }
 
-/// `search(...)`: its result once its arguments have crossed. When their walk awaits, a call from bytecode (`direct`)
-/// parks its frames up to the nearest async function until the walk ends (`Vm::park`); any other cannot wait.
+const SEARCH_CANT_WAIT: &str = "search(...) can't wait for a promise in its input here, in a callback or a generator; \
+                                await it first, e.g. search({ query: await query }).";
+
+/// `search(...)`: its result once its arguments have crossed. Their walk runs in a native frame (`frame_step`) whose
+/// result is the search's. When the walk awaits, a call from bytecode (`direct`) parks its frames, this one with
+/// them, up to the nearest async function as an `await` there would, and they continue once the promise settled; any
+/// other cannot wait.
 pub fn search_call(vm: &mut Vm, args: &[Value], direct: bool) -> Res {
     if let Some(json) = fast_all(vm, args)? {
         return crate::host::search_value(vm, &json);
@@ -516,22 +535,132 @@ pub fn search_call(vm: &mut Vm, args: &[Value], direct: bool) -> Res {
             coroutine: coroutine.unwrap_or(u32::MAX),
         },
     );
-    match walk(vm, id, None)? {
-        Walked::Done(_, Ok(json)) => crate::host::search_value(vm, &json),
-        Walked::Done(_, Err(e)) => Err(e),
+    enter_frame(vm, id, WALK, [Value::Undef; 3])
+}
+
+// The slots of a crossing's native frame: the walk, the `toJSON` call it makes (function, receiver, key), where the
+// frame is, and its result once the walk awaits or ends (a tool call's promise).
+const F_CROSS: usize = 0;
+const F_FN: usize = 1;
+const F_THIS: usize = 2;
+const F_KEY: usize = 3;
+const F_PHASE: usize = 4;
+const F_OUT: usize = 5;
+
+/// Where a crossing's frame is: about to call the `toJSON` in its slots, about to run the walk from its start,
+/// waiting for a `toJSON` it called, or parked with its search's frames until the promise its walk awaits settles.
+const CALL: usize = 0;
+const WALK: usize = 1;
+const CALLED: usize = 2;
+const PARKED: usize = 3;
+
+/// Pushes a native frame that runs the walk `id` from `phase`.
+fn enter_frame(vm: &mut Vm, id: Id, phase: usize, call: [Value; 3]) -> Res {
+    let out = match &vm.heap[id as usize].kind {
+        Kind::Cross(c) => match c.target {
+            Target::Tool { promise, .. } => Value::Obj(promise),
+            _ => Value::Undef,
+        },
+        _ => Value::Undef,
+    };
+    vm.enter_native_with(
+        crate::native::NativeOp::Callbacks,
+        crate::builtins::object::SUB_CROSS,
+        Value::Undef,
+        Value::Undef,
+        &[
+            Value::Obj(id),
+            call[0],
+            call[1],
+            call[2],
+            Value::Num(phase as f64),
+            out,
+        ],
+    )
+}
+
+/// The step of a crossing's native frame: calls the `toJSON`s of the program the walk meets as bytecode calls them,
+/// so they can park for `search(...)` and suspend, and hands each result back to the walk. A tool call's or the
+/// result's walk that awaits leaves the rest to a job (`Reaction::Cross`); a search's parks its frames.
+pub(crate) fn frame_step(
+    vm: &mut Vm,
+    fr: crate::native::Frame,
+    input: crate::native::Input,
+) -> Result<crate::native::Step, Value> {
+    use crate::native::{Input, Step};
+    let Value::Obj(id) = fr.get(vm, F_CROSS) else {
+        return Ok(Step::Done(Value::Undef));
+    };
+    let phase = fr.index(vm, F_PHASE);
+    let resume = match input {
+        Input::Start if phase == CALL => return call_to_json(vm, fr),
+        Input::Start => Resume::Start,
+        Input::Returned(r) if phase == CALLED => Resume::Called(r.get()),
+        Input::Returned(r) | Input::Finished(r) => Resume::Settled(Ok(r.get())),
+        Input::Threw(e) => Resume::Settled(Err(e)),
+    };
+    match walk(vm, id, resume)? {
+        Walked::Call(call) => {
+            fr.set(vm, F_FN, call[0]);
+            fr.set(vm, F_THIS, call[1]);
+            fr.set(vm, F_KEY, call[2]);
+            call_to_json(vm, fr)
+        }
         Walked::Await(awaited) => {
-            if coroutine.is_none() {
-                return Err(vm.invalid_data(
-                    "search(...) can't wait for a promise in its input here, in a callback or a generator; await it \
-                     first, e.g. search({ query: await query }).",
-                ));
+            let coroutine = match &vm.heap[id as usize].kind {
+                Kind::Cross(c) => match c.target {
+                    Target::Search { coroutine } => Some(coroutine),
+                    _ => None,
+                },
+                _ => None,
+            };
+            match coroutine {
+                None => {
+                    wait(vm, id, awaited);
+                    Ok(Step::Done(fr.get(vm, F_OUT)))
+                }
+                Some(u32::MAX) => Err(vm.invalid_data(SEARCH_CANT_WAIT)),
+                Some(c) => {
+                    vm.await_value(awaited, c);
+                    fr.set_index(vm, F_PHASE, PARKED);
+                    // The loop parks frames after a call that asks for it, as after `search(...)` itself; what the
+                    // promise settles with comes back to this frame, a rejection through the handler.
+                    let park = vm.native_fn("", 0, park, Value::Num(c as f64));
+                    fr.catching(vm, Slot::pack(park), Slot::UNDEF, [])
+                }
             }
-            wait(vm, id, awaited);
-            vm.park = true;
-            vm.park_coroutine = coroutine.unwrap_or(0);
-            Ok(Value::Undef)
+        }
+        Walked::Done(Target::Search { .. }, Ok(json)) => {
+            Ok(Step::Done(crate::host::search_value(vm, &json)?))
+        }
+        Walked::Done(Target::Search { .. }, Err(e)) => Err(e),
+        Walked::Done(target, outcome) => {
+            finish(vm, target, outcome)?;
+            Ok(Step::Done(fr.get(vm, F_OUT)))
         }
     }
+}
+
+/// Calls the `toJSON` in the frame's slots as bytecode calls it; what it throws comes back to the frame.
+fn call_to_json(vm: &mut Vm, fr: crate::native::Frame) -> Result<crate::native::Step, Value> {
+    fr.set_index(vm, F_PHASE, CALLED);
+    let (f, this, key) = (fr.slot(vm, F_FN), fr.slot(vm, F_THIS), fr.slot(vm, F_KEY));
+    fr.catching(vm, f, this, [key])
+}
+
+/// Asks the loop to park the frames of the search with the coroutine in its data, and costs nothing. A snapshot names
+/// it with the host's natives (`host::snapshot_natives`): the heap may still hold one when the run suspends.
+pub(crate) fn park(vm: &mut Vm, _this: Value, _args: &[Value], callee: Id) -> Res {
+    if let Kind::Native {
+        data: Value::Num(c),
+        ..
+    } = vm.heap[callee as usize].kind
+    {
+        vm.park = true;
+        vm.park_coroutine = c as u32;
+    }
+    vm.bytecode_builtin();
+    Ok(Value::Undef)
 }
 
 fn finish(
@@ -569,12 +698,29 @@ enum Act {
     Read,
     /// The innermost visit has its value past the promise check.
     Value(Value),
+    /// The innermost visit has its value past its `toJSON`.
+    Classify(Value),
     /// The innermost visit returned this.
     Return(Value),
 }
 
-/// Runs the walk: `Some(promise)` when it awaits one, `None` when every root has crossed.
-fn step(vm: &mut Vm, c: &mut Cross, resumed: Option<Value>) -> Result<Option<Value>, Value> {
+/// Where a run of the walk stopped.
+enum Pause {
+    /// It awaits this promise.
+    Await(Value),
+    /// The innermost visit calls a `toJSON` (function, receiver, key) and goes on with what it returns.
+    Call([Value; 3]),
+    /// Every root has crossed.
+    Done,
+}
+
+/// Runs the walk until it pauses.
+fn step(vm: &mut Vm, c: &mut Cross, resume: Resume) -> Result<Pause, Value> {
+    let resumed = match resume {
+        Resume::Called(v) => return run(vm, c, Act::Classify(v), false),
+        Resume::Settled(r) => Some(r.unwrap_or_default()),
+        Resume::Start => None,
+    };
     match (c.waiting, resumed) {
         (Waiting::Root, Some(v)) => {
             c.waiting = Waiting::No;
@@ -597,23 +743,18 @@ fn step(vm: &mut Vm, c: &mut Cross, resumed: Option<Value>) -> Result<Option<Val
     }
 }
 
-fn run(
-    vm: &mut Vm,
-    c: &mut Cross,
-    mut act: Act,
-    mut root_awaited: bool,
-) -> Result<Option<Value>, Value> {
+fn run(vm: &mut Vm, c: &mut Cross, mut act: Act, mut root_awaited: bool) -> Result<Pause, Value> {
     loop {
         act = match act {
             Act::Root => {
                 let at = c.crossed.len();
                 if at == c.roots.len() {
-                    return Ok(None);
+                    return Ok(Pause::Done);
                 }
                 let root = c.roots[at];
                 if matches!(c.target, Target::Result) && !root_awaited && thenable(vm, &root) {
                     c.waiting = Waiting::Root;
-                    return Ok(Some(root));
+                    return Ok(Pause::Await(root));
                 }
                 root_awaited = false;
                 // `$vmJsonVisitor(...)`, the root `visit` generator, and the first `next`.
@@ -648,42 +789,43 @@ fn run(
                         vm.fuel(1);
                     }
                     c.waiting = Waiting::Value;
-                    return Ok(Some(val));
+                    return Ok(Pause::Await(val));
                 }
                 Act::Value(val)
             }
-            Act::Value(mut val) => {
-                let key = c.stack.last().expect("visit").key;
+            Act::Value(val) => {
                 if let Value::Obj(_) = val {
                     let tj = vm.names.to_json;
                     let f = vm.get(&val, tj)?;
                     if vm.is_callable(&f) {
-                        val = vm.call_counted(&f, val, &[key])?;
+                        let key = c.stack.last().expect("visit").key;
+                        return Ok(Pause::Call([f, val, key]));
                     }
                 }
-                match classify(vm, &val, &c.ancestors)? {
-                    Class::Undefined => Act::Return(Value::Undef),
-                    Class::Data => Act::Return(val),
-                    Class::Null => Act::Return(Value::Null),
-                    Class::Special => Act::Return(special(vm, &val)?),
-                    Class::Set | Class::Object => {
-                        let target = match val {
-                            Value::Obj(id) if matches!(vm.heap[id as usize].kind, Kind::Set(_)) => {
-                                let items = match &vm.heap[id as usize].kind {
-                                    Kind::Set(m) => {
-                                        m.entries.iter().flatten().map(|(k, _)| *k).collect()
-                                    }
-                                    _ => Vec::new(),
-                                };
-                                vm.new_array(items)
-                            }
-                            v => v,
-                        };
-                        c.ancestors.push(target);
-                        enter(vm, c, target)?
-                    }
-                }
+                Act::Classify(val)
             }
+            Act::Classify(val) => match classify(vm, &val, &c.ancestors)? {
+                Class::Undefined => Act::Return(Value::Undef),
+                Class::Data => Act::Return(val),
+                Class::Null => Act::Return(Value::Null),
+                Class::Special => Act::Return(special(vm, &val)?),
+                Class::Set | Class::Object => {
+                    let target = match val {
+                        Value::Obj(id) if matches!(vm.heap[id as usize].kind, Kind::Set(_)) => {
+                            let items = match &vm.heap[id as usize].kind {
+                                Kind::Set(m) => {
+                                    m.entries.iter().flatten().map(|(k, _)| *k).collect()
+                                }
+                                _ => Vec::new(),
+                            };
+                            vm.new_array(items)
+                        }
+                        v => v,
+                    };
+                    c.ancestors.push(target);
+                    enter(vm, c, target)?
+                }
+            },
             Act::Return(v) => {
                 c.stack.pop();
                 if c.stack.is_empty() {

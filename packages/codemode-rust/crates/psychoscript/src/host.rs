@@ -1413,12 +1413,13 @@ fn result_from_host(
 }
 
 /// Natives the host makes, which a snapshot names like the built-ins'.
-pub fn snapshot_natives() -> [crate::vm::NativeFn; 4] {
+pub fn snapshot_natives() -> [crate::vm::NativeFn; 5] {
     [
         search_native,
         require_native,
         import_native,
         extension_native,
+        crate::cross::park,
     ]
 }
 

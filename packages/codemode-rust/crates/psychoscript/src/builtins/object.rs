@@ -1246,6 +1246,8 @@ pub(crate) const SUB_PAIRS: u16 = 3;
 pub(crate) const SUB_PAIR: u16 = 4;
 /// `JSON.stringify`'s internal walk (`convert::stringify_step`).
 pub(crate) const SUB_STRINGIFY: u16 = 5;
+/// A crossing to the host that calls a `toJSON` of the program's (`cross::frame_step`).
+pub(crate) const SUB_CROSS: u16 = 6;
 
 /// The steps of this family's native frames (`native::NativeOp::Callbacks`), by sub-op; see `native.rs`.
 pub(crate) fn family_step(
@@ -1262,6 +1264,7 @@ pub(crate) fn family_step(
         SUB_PAIRS => for_of_step::<super::web::Pairs>(vm, fr, input),
         SUB_PAIR => for_of_step::<super::web::Pair>(vm, fr, input),
         SUB_STRINGIFY => convert::stringify_step(vm, fr, input),
+        SUB_CROSS => crate::cross::frame_step(vm, fr, input),
         _ => Ok(crate::native::Step::Done(Value::Undef)),
     }
 }
