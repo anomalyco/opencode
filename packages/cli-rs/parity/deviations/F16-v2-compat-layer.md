@@ -22,7 +22,10 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   it; other first reads in a handler (tabs, the model, a panel's state) answer before their snapshot came. A plugin
   watches at most 128 reads; one no live mount or store holds goes when a new one needs its place, and one the host could not
   answer rejects its `sync` and is reported once. `data.session.sync` and `message.sync` answer what the host has
-  loaded; they do not load a session the host has not.
+  loaded; they do not load a session the host has not. A session, `data.session.get` and `status` come from the one
+  read of every session the host has loaded, with no read a session (CT-36: opencode-sesh asks the status of each of
+  900 sessions, which churned 1,800 watches past the bound); a session the host has not loaded reads as nothing and
+  `idle`, also while it runs, where TS's status map holds every running session.
 - **An async setup that waits on the host** (a `client` call, a `sync`) hands the plugin to the host at its first such
   wait, with what it registered so far; what it registers after is taken as a reload of its registrations, and a throw
   after fails the plugin, where TS keeps the plugin inactive until setup resolves.
@@ -170,6 +173,9 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   returns the renderer and an async one a resolved promise, so `P.8/quick-switch` draws as TS),
   `usePaste`, `onFocus`, `onBlur`, `useSelectionHandler`, `onAnimationTick`, `useTimeline`, `alignSelf` and
   `flexBasis`. `minWidth` and `maxWidth` are the layout's `min_width` and `max_width`. `ui.panel.open`, `ui.tabs.*` and `ui.model.variant.set` answer whether they did, as in TS.
+  A session panel's input has `close`, `toggleFullscreen` and `focus` (CT-38); the contract has no focus of a pane, so
+  `focus()` gives the focus to the panel's first field or scroll, which moves the input to the panel, and in a panel
+  with neither does nothing (reported).
   `data.project.permission` has no client call to load it through and would need a contract read; the location's
   `mcp.resource` list is not mapped yet, though it could load through `client.mcp.resource.catalog` as those below.
   A `<select>` draws as OpenTUI's renderable draws it, rows of the options that fit with the selected one marked
@@ -211,7 +217,10 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   changes it (`agent.updated`, `permission.asked`, `form.replied`, …); `form.reply` and `cancel` go through
   `client.session.form` and load the list again. A list answers `undefined` until its load came, where TS's store
   answers what it holds, and nothing keeps it live between events (`P.8/skills-data`: opencode-skills-tui's skills).
-  A live store would need the contract to give a plugin these collections as reads.
+  At most 4 of a plugin's loads run at once, the others in turn; an event that names a session reloads only that
+  session's permissions, and a location's forms load once for all its sessions (CT-36: agents-view and op1/threads
+  list each of 900 sessions' permissions and forms, 1,800 fetches at once). A live store would need the contract to
+  give a plugin these collections as reads.
 - **OpenTUI's exports**: the layer exports every name the installed `@opentui/core` and `@opentui/solid` export, so a
   plugin's import of one links. Beyond the colors, attributes, small data (enums, border sets), Solid's renderer, and
   styled text (`StyledText`, `t`, `fg`, `bg`, `bold` and the other attribute helpers, `link`, `stringToStyledText`,
