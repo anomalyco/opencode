@@ -801,6 +801,11 @@ struct Hold {
     input: VecDeque<(Held, Past)>,
     /// Input put back now, which the intercepts let through.
     replaying: bool,
+    /// A plugin's dialog surface just opened and none of its nodes took the focus yet: the input waits for that focus
+    /// (or the mount's end, or [`crate::interact::OPENING`]), so what the user typed as it opened is its field's
+    /// (big-boi ds-3). The number tells this wait from an earlier one, and the timer is its deadline.
+    opening: Option<(u64, TimerId)>,
+    openings: u64,
 }
 
 /// A call input waits for: its sequence, the key that ran it if a key did (it goes back if the call declines it), and
@@ -838,7 +843,7 @@ impl Past {
 
 impl Hold {
     fn holding(&self) -> bool {
-        !self.owners.is_empty() || self.settling > 0
+        !self.owners.is_empty() || self.settling > 0 || self.opening.is_some()
     }
 
     /// Ends owner `seq`, if it still owns its entry, and puts its key back if `put_back`: its deadline, to cancel.
@@ -2271,6 +2276,16 @@ impl Scripts {
     /// [`HELD`] the owners end as at their deadline, and the input goes on after the turn, none of it dropped (cg2-1).
     fn take(&self, input: Held) -> bool {
         let mut past = self.past();
+        // Input while a plugin's dialog that just opened has not focused its field yet waits for that focus; escape does
+        // not, as it closes the dialog at once.
+        let escape = matches!(&input, Held::Key(key) if key.code == opentui::input::KeyCode::Escape);
+        let opening = {
+            let hold = self.hold.borrow();
+            !escape && !hold.holding() && !hold.replaying
+        };
+        if opening && let Some(host) = self.host.upgrade() {
+            self.await_opening(&*host, true);
+        }
         let mut hold = self.hold.borrow_mut();
         if !hold.holding() || hold.replaying {
             return false;
@@ -2310,7 +2325,8 @@ impl Scripts {
         let timers: Vec<TimerId> = {
             let mut hold = self.hold.borrow_mut();
             hold.input.clear();
-            hold.owners.drain(..).filter_map(|owner| owner.timer).collect()
+            let opening = hold.opening.take().map(|(_, timer)| timer);
+            hold.owners.drain(..).filter_map(|owner| owner.timer).chain(opening).collect()
         };
         self.cancel(timers);
     }
@@ -2414,6 +2430,9 @@ impl Scripts {
     /// Puts the held input back in order once nothing holds it. A put-back key that starts a hold keeps the rest held.
     fn release(&self) {
         let Some(host) = self.host.upgrade() else { return };
+        if self.await_opening(&*host, false) {
+            return;
+        }
         loop {
             let input = {
                 let mut hold = self.hold.borrow_mut();
@@ -2436,6 +2455,51 @@ impl Scripts {
             *self.replayed.borrow_mut() = Past::default();
             self.hold.borrow_mut().replaying = false;
         }
+    }
+
+    /// Whether the input waits for a plugin's dialog surface on top to focus its field: one that just opened, whose first
+    /// tree and focus come with the JS host's next revisions. It goes on once a node of that dialog takes the focus, the
+    /// dialog's mount ends, or [`crate::interact::OPENING`] passes. `incoming`: input comes now, which the wait takes.
+    fn await_opening(&self, host: &dyn Host, incoming: bool) -> bool {
+        {
+            let hold = self.hold.borrow();
+            if hold.holding() || hold.replaying || (hold.input.is_empty() && !incoming) {
+                return false;
+            }
+        }
+        let Some(owner) = host.router().and_then(|router| router.opening(host)) else { return false };
+        let token = {
+            let mut hold = self.hold.borrow_mut();
+            hold.openings += 1;
+            hold.openings
+        };
+        let timed = self.this.clone();
+        let timer = host.app().set_timeout(crate::interact::OPENING, move |_| {
+            if let Some(scripts) = timed.upgrade() {
+                scripts.opened(token);
+            }
+        });
+        self.hold.borrow_mut().opening = Some((token, timer));
+        let (focused, owner_host) = (self.this.clone(), self.host.clone());
+        owner.when_focused(Box::new(move || {
+            // After the focus applied, in the order of what the effects did.
+            if let Some(host) = owner_host.upgrade() {
+                host.app().defer(move |_| {
+                    if let Some(scripts) = focused.upgrade() {
+                        scripts.opened(token);
+                    }
+                });
+            }
+        }));
+        true
+    }
+
+    /// The wait for an opening dialog `token` ended: the input goes on.
+    fn opened(&self, token: u64) {
+        let timer = self.hold.borrow_mut().opening.take_if(|(waiting, _)| *waiting == token);
+        let Some((_, timer)) = timer else { return };
+        self.cancel([timer]);
+        self.release();
     }
 }
 

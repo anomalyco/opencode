@@ -2159,3 +2159,24 @@ fn a_dialog_field_keeps_its_draft_across_a_reload() {
     });
     assert_eq!(drafts().last(), Some(&json!("abXcd")), "{:?}", drafts());
 }
+
+// Expected (big-boi ds-3): keys typed right after the key that opens a JS plugin's dialog with a focused field go to that
+// field once it has the focus, in order, not to the composer under it and not lost.
+#[test]
+fn keys_typed_as_a_dialog_opens_go_to_its_field() {
+    let Some(config) = config() else { return };
+    let (pipe, log) = probe(config);
+    let ahead = || calls(&log).into_iter().filter_map(|call| call.get("ahead").cloned()).collect::<Vec<_>>();
+    pipe.harness.app.press("f2");
+    pipe.harness.app.type_text("ab");
+    pipe.harness.app.wait_until(Duration::from_secs(5), || {
+        pipe.settle();
+        ahead().last() == Some(&json!("ab"))
+    });
+    assert_eq!(ahead().last(), Some(&json!("ab")), "{:?}", ahead());
+    pipe.harness.tui.dialogs.clear();
+    pipe.settle();
+    let screen = pipe.harness.app.text();
+    let composed = screen.lines().any(|line| line.trim_start_matches([' ', '┃']).starts_with("ab"));
+    assert!(!composed, "the keys reached the composer:\n{screen}");
+}
