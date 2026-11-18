@@ -95,10 +95,13 @@ export type Attachment = {
    */
   readonly shown: boolean
   /**
-   * What an agent's activity asks of the pane, kept while it cannot be applied: the strip cannot be written yet, or the
-   * inventory that carries the tab has not arrived. It applies once both are there, and a newer one replaces it.
+   * What an agent's activity asked of the pane, kept while it cannot be decided: the strip cannot be written yet, or
+   * the inventory that carries the tab has not arrived. It holds only what was asked. Once both are there, the driver
+   * asks again with what is true then (`present-held`), so it is decided as a request that arrives at that moment is.
+   * A newer request replaces it, and it is dropped, not applied, when the person acts first, the run ends, the tab
+   * closes, the session leaves the screen, its binding is superseded, or `HELD_REQUEST_TTL_MS` passes.
    */
-  readonly held?: Presentation
+  readonly held?: Held
   readonly unseen: readonly Browser.TabID[]
   /** The person's prompts that wait in the session's inbox, by inbox ID, with how each will be delivered. */
   readonly prompts: Readonly<Record<string, "steer" | "queue">>
@@ -110,16 +113,15 @@ export type Attachment = {
   readonly reveal?: { readonly tabID: Browser.TabID; readonly token: number; readonly timing: boolean }
 }
 
-/**
- * What an agent's activity on a tab asks of the pane. `select`: the tab is selected, which opens a closed pane, always
- * behind the click guard. `onScreen`: the person saw the session when the agent asked, so the tab needs no unseen mark.
- * `visible`: the open pane already shows the tab.
- */
-export type Presentation = {
+/** How long a kept show request may wait for the state it needs before it is dropped. */
+export const HELD_REQUEST_TTL_MS = 5_000
+
+/** A kept show request: the binding it came through, the tab, and what it asked. `token` names its expiry timer. */
+export type Held = {
+  readonly attempt: number
   readonly tabID: Browser.TabID
-  readonly select: boolean
-  readonly onScreen: boolean
-  readonly visible: boolean
+  readonly reveal: "none" | "pane" | "tab"
+  readonly token: number
 }
 
 /**
@@ -147,6 +149,10 @@ export type Event =
   /** The pane now shows the revealed tab to the person: it is the tab on screen, in a window that is not hidden. */
   | { readonly type: "reveal.drawn"; readonly sessionKey: string; readonly token: number }
   | { readonly type: "reveal.elapsed"; readonly sessionKey: string; readonly token: number }
+  /** A kept show request waited `HELD_REQUEST_TTL_MS`. */
+  | { readonly type: "held.expired"; readonly sessionKey: string; readonly token: number }
+  /** The person no longer sees the session: another one is routed, or the window is hidden or minimized. */
+  | { readonly type: "screen.left"; readonly sessionKey: string }
   | {
       readonly type: "pane.activity"
       /**
@@ -239,6 +245,19 @@ export type Event =
 
 export type MachineEffect =
   | { readonly type: "present-file"; readonly sessionKey: string; readonly path: string; readonly select: boolean }
+  /** Starts the time after which `held.expired` drops the kept show request. */
+  | { readonly type: "expire-held"; readonly sessionKey: string; readonly token: number; readonly delayMs: number }
+  /**
+   * The state a kept show request waited for is there: the driver sends it again as `pane.activity`, with what is true
+   * now for the screen, the pane and the person's setting.
+   */
+  | {
+      readonly type: "present-held"
+      readonly sessionKey: string
+      readonly attempt: number
+      readonly tabID: Browser.TabID
+      readonly reveal: "none" | "pane" | "tab"
+    }
   /** Starts the delay after which `reveal.elapsed` shows the revealed page. */
   | { readonly type: "expire-reveal"; readonly sessionKey: string; readonly token: number }
   | {
@@ -584,13 +603,23 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
       const dismissed = event.running && (attachment.side === "dismissed" || (attachment.side === "open" && attachment.shown))
       const side = event.open ? "open" : dismissed ? "dismissed" : "closed"
 
-      return side === attachment.side ? { state, effects: [] } : put(state, key, { ...attachment, side, reveal: event.open ? attachment.reveal : undefined })
+      if (side === attachment.side) return { state, effects: [] }
+
+      // The person closed the pane: a show request kept from before that does not open it again.
+      const held = attachment.side === "open" && !event.open ? undefined : attachment.held
+
+      return put(state, key, { ...attachment, side, held, reveal: event.open ? attachment.reveal : undefined })
     }
 
     case "execution.ended":
-      if (attachment.side !== "dismissed" && !attachment.shown) return { state, effects: [] }
+      // A show request kept from the run that ended, or was stopped, does not land after it.
+      if (attachment.side !== "dismissed" && !attachment.shown) return unhold(state, key, attachment)
 
-      return put(state, key, { ...attachment, side: attachment.side === "dismissed" ? "closed" : attachment.side, shown: false })
+      return put(state, key, { ...attachment, held: undefined, side: attachment.side === "dismissed" ? "closed" : attachment.side, shown: false })
+    case "held.expired":
+      return attachment.held?.token === event.token ? unhold(state, key, attachment) : { state, effects: [] }
+    case "screen.left":
+      return unhold(state, key, attachment)
     case "reveal.drawn": {
       const reveal = attachment.reveal
 
@@ -617,25 +646,8 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
       return select && !attachment.shown ? put(state, key, { ...attachment, shown: true }, effects) : { state, effects }
     }
 
-    case "pane.activity": {
-      if (!current(phase, event.attempt)) return { state, effects: [] }
-
-      // Off screen only a preview acts: its tab is selected in the session's strip, so it shows when the person returns.
-      if (!event.onScreen && event.reveal !== "tab") return { state, effects: [] }
-
-      const select =
-        event.enabled &&
-        attachment.side !== "dismissed" &&
-        (!event.onScreen || (event.room && (event.reveal === "tab" || (event.reveal === "pane" && !event.opened))))
-
-      return present(state, key, attachment, {
-        tabID: event.tabID,
-        select,
-        onScreen: event.onScreen,
-        // The strip's selected tab is not on show while its pane is closed.
-        visible: event.onScreen && event.opened && event.visible,
-      })
-    }
+    case "pane.activity":
+      return current(phase, event.attempt) ? present(state, key, attachment, event) : { state, effects: [] }
 
     case "session.capability.changed":
       if (phase.status !== "blocked" || phase.reason !== "unsupported") return {state,effects:[]}
@@ -663,12 +675,16 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
     case "session.command": {
       const reveal = attachment.reveal
 
-      // The person's own command ends the guard, so their navigation or tab switch is never held. Selecting the
-      // revealed tab in the strip answers with tabs.focus for it, which is the reveal itself, not the person.
-      if (!reveal || (event.action.type === "tabs.focus" && event.action.tabID === reveal.tabID))
+      // Selecting the revealed tab in the strip answers with tabs.focus for it, which is the reveal itself, not the
+      // person.
+      if (reveal && event.action.type === "tabs.focus" && event.action.tabID === reveal.tabID)
         return command(state, key, attachment, event)
 
-      return command(state, key, { ...attachment, reveal: undefined }, event)
+      // The person's own command ends the guard, so their navigation or tab switch is never held back, and a show
+      // request kept from before it does not take the pane from what they just chose.
+      if (!reveal && !attachment.held) return command(state, key, attachment, event)
+
+      return command(state, key, { ...attachment, reveal: undefined, held: undefined }, event)
     }
 
     case "command.settled": {
@@ -757,40 +773,84 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
   }
 }
 
-// Applies what an agent's activity asks of the pane, or keeps it until it can be applied: the strip must be writable and
-// the inventory must carry the tab. Nothing is dropped for arriving first.
-function present(state: Open, key: string, attachment: Attachment, request: Presentation): Transition {
-  if (!attachment.strip.located || !attachment.browser?.tabs.some((tab) => tab.id === request.tabID))
-    return attachment.held === request ? { state, effects: [] } : put(state, key, { ...attachment, held: request })
-  const settled = { ...attachment, held: undefined }
+// The strip must be writable and the inventory must carry the tab before a show request can be decided.
+function presentable(attachment: Attachment, tabID: Browser.TabID) {
+  return attachment.strip.located && !!attachment.browser?.tabs.some((tab) => tab.id === tabID)
+}
 
-  // The agent worked in the tab the person is looking at.
-  if (request.visible)
-    return attachment.shown && !attachment.held ? { state, effects: [] } : put(state, key, { ...settled, shown: true })
-  const marked = attachment.unseen.includes(request.tabID) ? attachment.unseen : [...attachment.unseen, request.tabID]
+// Decides what an agent's activity does to the pane, from what the event says is true now. A request that arrives
+// before the strip or its tab's inventory is kept as asked, with a bound, and nothing is dropped for arriving first.
+function present(
+  state: Open,
+  key: string,
+  attachment: Attachment,
+  event: Extract<Event, { type: "pane.activity" }>,
+): Transition {
+  if (!presentable(attachment, event.tabID)) {
+    const token = state.issued + 1
+    const held = { attempt: event.attempt, tabID: event.tabID, reveal: event.reveal, token }
 
-  if (!request.select)
-    return marked === attachment.unseen && !attachment.held ? { state, effects: [] } : put(state, key, { ...settled, unseen: marked })
-  const focus: MachineEffect = { type: "focus-strip-tab", sessionKey: key, tabID: request.tabID }
+    return put(state, key, { ...attachment, held }, [{ type: "expire-held", sessionKey: key, token, delayMs: HELD_REQUEST_TTL_MS }], token)
+  }
+
+  // A newer request replaces a kept one.
+  const settled = attachment.held ? { ...attachment, held: undefined } : attachment
+  const unchanged = settled === attachment ? { state, effects: [] } : put(state, key, settled)
+
+  // Off screen only a preview acts: its tab is selected in the session's strip, so it shows when the person returns.
+  if (!event.onScreen && event.reveal !== "tab") return unchanged
+
+  // The agent worked in the tab the person is looking at. The strip's selected tab is not on show while its pane is
+  // closed.
+  if (event.onScreen && event.opened && event.visible) return settled.shown ? unchanged : put(state, key, { ...settled, shown: true })
+  const marked = settled.unseen.includes(event.tabID) ? settled.unseen : [...settled.unseen, event.tabID]
+
+  const select =
+    event.enabled &&
+    settled.side !== "dismissed" &&
+    (!event.onScreen || (event.room && (event.reveal === "tab" || (event.reveal === "pane" && !event.opened))))
+
+  if (!select) return marked === settled.unseen ? unchanged : put(state, key, { ...settled, unseen: marked })
+  const focus: MachineEffect = { type: "focus-strip-tab", sessionKey: key, tabID: event.tabID }
   const token = state.issued + 1
-  const reveal = { token, tabID: request.tabID, timing: false }
+  const reveal = { token, tabID: event.tabID, timing: false }
 
-  // Nobody was looking when the agent asked: the tab waits selected, with its mark. Its guard waits too, since the
-  // person may be back before the selection lands, or a request kept since then may land in front of them. The delay
-  // starts only when the pane shows them the tab, so it costs nothing until then.
-  if (!request.onScreen) return put(state, key, { ...settled, unseen: marked, reveal }, [focus], token)
+  // Nobody is looking: the tab waits selected, with its mark. Its guard waits too, since the person may be back before
+  // the selection lands. The delay starts only when the pane shows them the tab, so it costs nothing until then.
+  if (!event.onScreen) return put(state, key, { ...settled, unseen: marked, reveal }, [focus], token)
 
   return put(state, key, { ...settled, shown: true, reveal }, [focus], token)
 }
 
-// A kept request lands with the state that makes it possible.
+// Drops a kept show request without applying it.
+function unhold(state: Open, key: string, attachment: Attachment): Transition {
+  return attachment.held ? put(state, key, { ...attachment, held: undefined }) : { state, effects: [] }
+}
+
+// The state a kept request waited for may be there now. It is not decided here from what was true when it arrived:
+// the driver sends it again with what is true now. One that came through a binding since superseded is dropped.
 function settle(result: { readonly state: Open; readonly effects: readonly MachineEffect[] }, key: string): Transition {
   const attachment = result.state.sessions[key]
+  const held = attachment?.held
 
-  if (!attachment?.held) return result
-  const applied = present(result.state, key, attachment, attachment.held)
+  if (!attachment || !held) return result
 
-  return { state: applied.state, effects: [...result.effects, ...applied.effects] }
+  if (!current(attachment.phase, held.attempt)) {
+    const dropped = unhold(result.state, key, attachment)
+
+    return { state: dropped.state, effects: result.effects }
+  }
+
+  if (!presentable(attachment, held.tabID)) return result
+  const landed = unhold(result.state, key, attachment)
+
+  return {
+    state: landed.state,
+    effects: [
+      ...result.effects,
+      { type: "present-held", sessionKey: key, attempt: held.attempt, tabID: held.tabID, reveal: held.reveal },
+    ],
+  }
 }
 
 // Writes held while the session's location was unknown land once the server reports it. A held focus lands only for
@@ -1004,6 +1064,12 @@ function paneState(
       ? moved(attachment, event.state) ? undefined : attachment.failure
       : { id: state.issued + 1, code: event.error, action: undefined }
 
+  // A tab the desktop had and has no more closed: a show request kept for it has nothing to show.
+  const closed =
+    !!attachment.held &&
+    !!attachment.browser?.tabs.some((tab) => tab.id === attachment.held?.tabID) &&
+    !event.state?.tabs.some((tab) => tab.id === attachment.held?.tabID)
+
   // The strip gets the inventory's tabs first, so a kept request selects a tab the strip already has.
   return settle(
     put(
@@ -1011,6 +1077,7 @@ function paneState(
       key,
       {
         ...attachment,
+        held: closed ? undefined : attachment.held,
         phase: { status: "ready", attempt: phase.attempt },
         browser: event.state,
         unseen: attachment.unseen.filter(id => event.state?.tabs.some(tab => tab.id === id)),

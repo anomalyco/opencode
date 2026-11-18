@@ -136,6 +136,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const registerTimers = new Map<string, ReturnType<typeof setTimeout>>()
   const retryTimers = new Map<string, ReturnType<typeof setTimeout>>()
   const revealTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  const heldTimers = new Map<string, ReturnType<typeof setTimeout>>()
   const listeners = new Map<string, (event: PaneEvent) => void>()
   const inspectors = new Map<string, Set<(event: InspectEvent) => void>>()
   // Each tab's last recorded page, so a state that repeats it does not write the history again.
@@ -166,6 +167,21 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       return schedule(revealTimers, effect.sessionKey, ACTIVATION_DELAY_MS, () =>
         dispatch({ type: "reveal.elapsed", sessionKey: effect.sessionKey, token: effect.token }),
       )
+
+    if (effect.type === "expire-held")
+      return schedule(heldTimers, effect.sessionKey, effect.delayMs, () =>
+        dispatch({ type: "held.expired", sessionKey: effect.sessionKey, token: effect.token }),
+      )
+
+    if (effect.type === "present-held") {
+      const drive = drives.get(effect.sessionKey)
+
+      // Asked again as a request that arrives now, so the screen, the pane and the setting are read now.
+      if (drive)
+        dispatch({ ...presentation(drive), type: "pane.activity", attempt: effect.attempt, tabID: effect.tabID, reveal: effect.reveal, visible: layout.state(key(effect.tabID), drive.ref) === "visible" })
+
+      return
+    }
 
     if (effect.type === "present-file") {
       const view = sessions.current()
@@ -300,6 +316,16 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     })
   }
 
+  // What is true now for an agent's show request. On screen means the person can see the session: it is routed, in a
+  // window that is neither hidden nor minimized.
+  const presentation = (drive: Drive) => ({
+    sessionKey: drive.ref.key,
+    enabled: ctx.stores.preferences.value.agentPages !== false,
+    onScreen: sessions.current()?.key === drive.ref.key && document.visibilityState === "visible",
+    room: !layout.narrow() && builtinContext(ctx).layout.fitsSide(),
+    opened: layout.side.opened(drive.ref),
+  })
+
   const receive = (drive: Drive, attempt: number, event: PaneEvent) => {
     const sessionKey = drive.ref.key
 
@@ -344,13 +370,9 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     if (event.type === "focus") return dispatch({ type: "pane.focus", sessionKey, attempt, tabID: event.tabID })
 
     if (event.type === "activity" || event.type === "preview") {
-      // On screen means the person can see the session now: it is routed, in a window that is neither hidden nor minimized.
-      const presentation = { sessionKey, attempt, enabled: ctx.stores.preferences.value.agentPages !== false,
-        onScreen: sessions.current()?.key === sessionKey && document.visibilityState === "visible", room: !layout.narrow() && builtinContext(ctx).layout.fitsSide(), opened: layout.side.opened(drive.ref) }
+      if (event.type === "preview") return dispatch({ ...presentation(drive), attempt, type: "pane.file", path: event.path })
 
-      if (event.type === "preview") return dispatch({ ...presentation, type: "pane.file", path: event.path })
-
-      return dispatch({ ...presentation, type: "pane.activity", tabID: event.tabID, reveal: event.reveal, visible: layout.state(key(event.tabID), drive.ref) === "visible" })
+      return dispatch({ ...presentation(drive), attempt, type: "pane.activity", tabID: event.tabID, reveal: event.reveal, visible: layout.state(key(event.tabID), drive.ref) === "visible" })
     }
 
     if (event.type === "inspect") return inspectors.get(sessionKey)?.forEach((listener) => listener(event))
@@ -468,6 +490,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
   const detach = (sessionKey: string) => {
     cancel(revealTimers, sessionKey)
+    cancel(heldTimers, sessionKey)
     const drive = drives.get(sessionKey)
     drives.delete(sessionKey)
     drive?.dispose()
@@ -602,6 +625,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     (sessionKey) => {
       dispatch({ type: "session.routed", sessionKey })
       wakeCurrent()
+      // The route moved on: the person no longer sees this session.
+      onCleanup(() => dispatch({ type: "screen.left", sessionKey }))
     },
     { otherwise: () => dispatch({ type: "session.routed", sessionKey: undefined }) },
   )
@@ -609,7 +634,14 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   makeEventListener(document, "visibilitychange", wakeCurrent)
   // The window is neither hidden nor minimized, so the person sees what a pane draws.
   const [windowShown, setWindowShown] = createSignal(document.visibilityState === "visible")
-  makeEventListener(document, "visibilitychange", () => setWindowShown(document.visibilityState === "visible"))
+  makeEventListener(document, "visibilitychange", () => {
+    const shown = document.visibilityState === "visible"
+    const view = sessions.current()
+
+    setWindowShown(shown)
+
+    if (!shown && view) dispatch({ type: "screen.left", sessionKey: view.key })
+  })
   makeEventListener(document, "pointerdown", wakeCurrent)
   makeEventListener(document, "keydown", wakeCurrent)
 

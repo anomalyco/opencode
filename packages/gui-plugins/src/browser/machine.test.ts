@@ -3,6 +3,7 @@ import { Browser } from "@opencode/plugin-browser/rpc"
 import {
   addressFocusTab,
   createInitialState,
+  HELD_REQUEST_TTL_MS,
   REGISTER_TIMEOUT_MS,
   sessionSupported,
   sessionError,
@@ -121,44 +122,13 @@ describe("browser pane machine", () => {
     ["no room beside the chat", { room: false }, "mark"],
     ["navigate, popup, focus, implicit open or quiet tab", { reveal: "none" }, "mark"],
     ["superseded binding", { attempt: -1 }, "none"],
-    ["since-closed tab", { tabID: tabB }, "none"],
+    ["a tab the inventory does not have yet", { tabID: tabB }, "kept"],
   ] as const)("agent navigation, preview or new tab: %s", (_label, input, expected) => {
     const start = ready()
     const next = transition(start, { ...activity(start), ...input })
-    expect(types(next.effects)).toEqual(expected === "open" || expected === "select" ? ["focus-strip-tab"] : [])
+    expect(types(next.effects)).toEqual(expected === "open" || expected === "select" ? ["focus-strip-tab"] : expected === "kept" ? ["expire-held"] : [])
     expect(attachment(next.state)?.unseen).toEqual(expected === "mark" || expected === "select" ? [tabA] : [])
     expect(revealGuard(next.state, key, tabA) !== undefined).toBe(expected === "open" || expected === "select")
-  })
-
-  // Every way an agent's request selects a tab ends behind the guard, whether or not anyone was looking when it asked:
-  // the person may be back before the selection lands.
-  test.each([
-    ["on screen, kept for the inventory", true, "inventory"],
-    ["off screen, kept for the inventory", false, "inventory"],
-    ["on screen, kept for the strip", true, "strip"],
-    ["off screen, kept for the strip", false, "strip"],
-  ] as const)("a show request made %s lands behind the guard", (_label, onScreen, kept) => {
-    const start = kept === "inventory" ? ready() : replay(attach(key, false)).state
-    const listed = kept === "inventory" ? start : transition(start, paneState(start, inventory(tab(tabA)))).state
-    const tabID = kept === "inventory" ? tabB : tabA
-    const early = transition(listed, { ...activity(listed), tabID, onScreen })
-    expect(early.effects).toEqual([])
-    expect(revealGuard(early.state, key, tabID)).toBeUndefined()
-
-    const landed =
-      kept === "inventory"
-        ? transition(early.state, paneState(early.state, inventory(tab(tabA), tab(tabB))))
-        : transition(early.state, { type: "session.located", sessionKey: key, located: true })
-
-    expect(types(landed.effects)).toContain("focus-strip-tab")
-    const token = revealGuard(landed.state, key, tabID)
-    expect(token).toBeDefined()
-    expect(attachment(landed.state)?.unseen).toEqual(onScreen ? [] : [tabID])
-
-    // The guard holds until the pane shows the tab to the person, then for the delay.
-    const drawn = transition(landed.state, { type: "reveal.drawn", sessionKey: key, token: token ?? -1 })
-    expect(drawn.effects).toEqual([{ type: "expire-reveal", sessionKey: key, token: token ?? -1 }])
-    expect(revealGuard(drawn.state, key, tabID)).toBe(token)
   })
 
   test("a tab selected while nobody looked keeps its guard through the pane opening for it", () => {
@@ -237,47 +207,126 @@ describe("browser pane machine", () => {
     expect(transition(hidden, activity(hidden)).effects).toEqual([])
   })
 
-  test("a show request that arrives before its tab's inventory lands with it, after the strip has the tab", () => {
-    const start = ready()
-    const early = transition(start, { ...activity(start), tabID: tabB })
-    expect(early.effects).toEqual([])
-    const landed = transition(early.state, paneState(early.state, inventory(tab(tabA), tab(tabB))))
+  // A show request that arrives before the strip can be written (`strip`) or before its tab's inventory (`inventory`).
+  const kept = (waits: "inventory" | "strip", asked: Partial<Extract<Event, { type: "pane.activity" }>> = {}) => {
+    const start = waits === "inventory" ? ready() : replay(attach(key, false)).state
+    const listed = waits === "inventory" ? start : transition(start, paneState(start, inventory(tab(tabA)))).state
+    const tabID = waits === "inventory" ? tabB : tabA
 
-    expect(landed.effects).toEqual([
-      { type: "sync-strip", sessionKey: key, keep: [tabA, tabB], open: [tabB] },
-      { type: "record-history", sessionKey: key },
-      { type: "focus-strip-tab", sessionKey: key, tabID: tabB },
-    ])
-    expect(revealGuard(landed.state, key, tabB)).toBeDefined()
-    // It lands once.
-    expect(types(transition(landed.state, paneState(landed.state, inventory(tab(tabA), tab(tabB)))).effects)).not.toContain("focus-strip-tab")
-  })
+    return { tabID, early: transition(listed, { ...activity(listed), tabID, ...asked }) }
+  }
 
-  test("a show request that arrives before the strip can be written lands when it can", () => {
-    const start = replay(attach(key, false)).state
-    const listed = transition(start, paneState(start, inventory(tab(tabA)))).state
-    const early = transition(listed, activity(listed))
-    expect(early.effects).toEqual([])
-    const located = transition(early.state, { type: "session.located", sessionKey: key, located: true })
+  // The state the request waited for arrives.
+  const arrive = (waits: "inventory" | "strip", state: State) =>
+    waits === "inventory"
+      ? transition(state, paneState(state, inventory(tab(tabA), tab(tabB))))
+      : transition(state, { type: "session.located", sessionKey: key, located: true })
 
-    expect(located.effects).toEqual([
-      { type: "sync-strip", sessionKey: key, keep: [tabA], open: [tabA] },
-      { type: "focus-strip-tab", sessionKey: key, tabID: tabA },
-    ])
-    expect(revealGuard(located.state, key, tabA)).toBeDefined()
-  })
+  // The driver answers `present-held` by sending the request again with what is true at that moment.
+  const asked = (result: { state: State; effects: readonly MachineEffect[] }, now: Partial<Extract<Event, { type: "pane.activity" }>> = {}) => {
+    const effect = result.effects.find((item) => item.type === "present-held")
 
-  test("a newer request replaces a kept one, and a kept mark lands as a mark", () => {
-    const start = ready()
+    if (effect?.type !== "present-held") throw new Error("expected the kept request to be asked again")
 
-    const kept = replay(
-      [{ ...activity(start), tabID: tabB }, { ...activity(start), tabID: tabC, reveal: "none" }],
-      start,
-    ).state
+    return transition(result.state, { ...activity(result.state), ...now, attempt: effect.attempt, tabID: effect.tabID, reveal: effect.reveal })
+  }
 
-    const landed = transition(kept, paneState(kept, inventory(tab(tabA), tab(tabB), tab(tabC))))
+  test.each(["inventory", "strip"] as const)("a show request that arrives before the %s is kept as asked, with a bound", (waits) => {
+    const { tabID, early } = kept(waits, { reveal: "pane", onScreen: false, opened: true, enabled: false, room: false, visible: true })
+    const held = attachment(early.state)?.held
+
+    // Only the binding, the tab and what was asked: nothing of the screen, the pane or the setting at that moment.
+    expect(held).toEqual({ attempt: attempt(early.state), tabID, reveal: "pane", token: held?.token ?? -1 })
+    expect(early.effects).toEqual([{ type: "expire-held", sessionKey: key, token: held?.token ?? -1, delayMs: HELD_REQUEST_TTL_MS }])
+    expect(revealGuard(early.state, key, tabID)).toBeUndefined()
+
+    // What it waited for arrives: the machine decides nothing itself, and the request lands once.
+    const landed = arrive(waits, early.state)
     expect(types(landed.effects)).not.toContain("focus-strip-tab")
-    expect(attachment(landed.state)?.unseen).toEqual([tabC])
+    expect(landed.effects.at(-1)).toEqual({ type: "present-held", sessionKey: key, attempt: attempt(early.state), tabID, reveal: "pane" })
+    expect(attachment(landed.state)?.held).toBeUndefined()
+    expect(types(arrive(waits, landed.state).effects)).not.toContain("present-held")
+  })
+
+  // "open": selected behind the guard. "select": selected behind the guard, with its mark. "mark": only the mark.
+  test.each([
+    ["asked off screen, the person is back", "inventory", { onScreen: false }, {}, "open"],
+    ["asked off screen, the person is back", "strip", { onScreen: false }, {}, "open"],
+    ["asked on screen, nobody looks now", "inventory", {}, { onScreen: false }, "select"],
+    ["asked on screen, nobody looks now", "strip", {}, { onScreen: false }, "select"],
+    ["asked for a closed pane, which shows another tab now", "inventory", { reveal: "pane" }, { opened: true }, "mark"],
+    ["asked with the setting on, which is off now", "strip", {}, { enabled: false }, "mark"],
+    ["asked with room beside the chat, which is gone now", "inventory", {}, { room: false }, "mark"],
+    ["asked for a tab the pane shows by now", "strip", {}, { opened: true, visible: true }, "none"],
+  ] as const)("a kept show request is decided from what is true when it lands: %s (%s)", (_label, waits, then, now, expected) => {
+    const { tabID, early } = kept(waits, then)
+    const next = asked(arrive(waits, early.state), now)
+
+    expect(types(next.effects)).toEqual(expected === "open" || expected === "select" ? ["focus-strip-tab"] : [])
+    expect(revealGuard(next.state, key, tabID) !== undefined).toBe(expected === "open" || expected === "select")
+    expect(attachment(next.state)?.unseen).toEqual(expected === "select" || expected === "mark" ? [tabID] : [])
+
+    if (expected === "none") return
+    // The guard holds until the pane shows the tab to the person, then for the delay.
+    const token = revealGuard(next.state, key, tabID) ?? -1
+    const drawn = transition(next.state, { type: "reveal.drawn", sessionKey: key, token })
+    expect(drawn.effects).toEqual(expected === "mark" ? [] : [{ type: "expire-reveal", sessionKey: key, token }])
+  })
+
+  test.each([
+    ["the person runs a browser command", (): Event[] => [{ type: "session.command", sessionKey: key, action: { type: "reload", tabID: tabA }, focusAddress: false }]],
+    ["the person selects a tab", (): Event[] => [{ type: "session.command", sessionKey: key, action: { type: "tabs.focus", tabID: tabA }, focusAddress: false }]],
+    ["the person closes the pane", (): Event[] => [side(true), side(false)]],
+    ["the run ends or is stopped", (): Event[] => [{ type: "execution.ended", sessionKey: key }]],
+    ["the session leaves the screen", (): Event[] => [{ type: "screen.left", sessionKey: key }]],
+    ["its bound passes", (state: State): Event[] => [{ type: "held.expired", sessionKey: key, token: attachment(state)?.held?.token ?? -1 }]],
+  ] as const)("a kept show request is dropped, not applied, when %s first", (_label, events) => {
+    for (const waits of ["inventory", "strip"] as const) {
+      const { early } = kept(waits)
+      const dropped = replay(events(early.state), early.state).state
+      expect(attachment(dropped)?.held).toBeUndefined()
+      const landed = arrive(waits, dropped)
+      expect(types(landed.effects)).not.toContain("present-held")
+      expect(types(landed.effects)).not.toContain("focus-strip-tab")
+    }
+  })
+
+  test("a kept show request is dropped when its tab closes or its binding is superseded first", () => {
+    // The desktop had the tab when the request arrived, and has it no more.
+    const closing = kept("strip")
+    const closed = transition(closing.early.state, paneState(closing.early.state, inventory(tab(tabC))))
+    expect(attachment(closed.state)?.held).toBeUndefined()
+    expect(types(arrive("strip", closed.state).effects)).not.toContain("present-held")
+
+    // Main closed the binding; the next registration is another attempt, whose inventory lands nothing of the old one.
+    const { early } = kept("inventory")
+    const lost = transition(early.state, paneState(early.state, inventory(tab(tabA)), "browser.pane.registration.closed")).state
+    const again = transition(lost, { type: "retry.due", sessionKey: key, attempt: attempt(lost) }).state
+    expect(attempt(again)).not.toBe(attempt(early.state))
+    const landed = arrive("inventory", again)
+    expect(types(landed.effects)).not.toContain("present-held")
+    expect(attachment(landed.state)?.held).toBeUndefined()
+  })
+
+  test("an old bound cannot drop a newer kept request, and a request that can be decided replaces a kept one", () => {
+    const { early } = kept("inventory")
+    const first = attachment(early.state)?.held?.token ?? -1
+    const newer = transition(early.state, { ...activity(early.state), tabID: tabC })
+    expect(attachment(newer.state)?.held?.tabID).toBe(tabC)
+    expect(transition(newer.state, { type: "held.expired", sessionKey: key, token: first }).state).toBe(newer.state)
+
+    // A request for a tab the desktop has is decided at once, and the kept one is gone.
+    const live = transition(newer.state, { ...activity(newer.state), reveal: "none" })
+    expect(attachment(live.state)?.held).toBeUndefined()
+    expect(attachment(live.state)?.unseen).toEqual([tabA])
+    expect(types(arrive("inventory", live.state).effects)).not.toContain("present-held")
+  })
+
+  test("the strip's echo of a reveal is not the person's command: it keeps the guard", () => {
+    const start = ready()
+    const reveal = transition(start, activity(start)).state
+    const echo = transition(reveal, { type: "session.command", sessionKey: key, action: { type: "tabs.focus", tabID: tabA }, focusAddress: false })
+    expect(revealGuard(echo.state, key, tabA)).toBeDefined()
   })
 
   test("only the newly revealed page is held back, and an old timer cannot expose it", () => {
