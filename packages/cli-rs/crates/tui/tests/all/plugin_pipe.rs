@@ -768,6 +768,13 @@ fn three_ends_in_a_minute_fail_every_plugin() {
             pipe.scripts().pid() != Some(pid)
         });
         if end < 2 {
+            // The next starts as the loader reconciles again, which a settle with no JS host does not wait for
+            // (pipe-flakes: under load it had not started, and the next end found none).
+            pipe.harness.wait(&format!("a JS host started after end {end}"), || {
+                pipe.harness.app.advance(Duration::from_millis(1));
+                std::thread::sleep(Duration::from_millis(1));
+                pipe.scripts().pid().is_some()
+            });
             pipe.settle();
         }
     }
