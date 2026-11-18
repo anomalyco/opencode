@@ -12,7 +12,9 @@ export function useProjectNavigation() {
   const mobile = createMediaQuery("(max-width: 767px)")
 
   return () => {
-    if (mobile() || settings.appearance.tabLayout() !== "vertical") return false
+    // The navigation prototype keeps Home in the sidebar.
+    if (mobile() || settings.appearance.tabLayout() !== "vertical" || settings.appearance.navigationPrototype())
+      return false
     const mode = settings.general.sidebarOrganize()
 
     return mode === "projects" || mode === "customize"

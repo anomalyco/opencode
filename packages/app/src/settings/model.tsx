@@ -137,7 +137,7 @@ const generalSchema = Persistence.struct({
   newTimeline: Persistence.optional(Schema.Boolean),
   // Browser-style session tab grouping across vertical and horizontal tabs.
   tabGroups: Persistence.optional(Schema.Boolean),
-  sidebarOrganize: Schema.Literals(["projects", "list", "customize", "recent"]),
+  sidebarOrganize: Schema.Literals(["projects", "list", "customize", "recent", "consolidated"]),
   mobileTitlebarPosition: Schema.Literals(["top", "bottom"]),
   // Owned by the review plugin, which copies it out once; kept so settings rewrites cannot drop it first.
   mobileDiffWrap: Persistence.optional(Schema.Boolean),
@@ -151,6 +151,8 @@ const appearanceSchema = Persistence.struct({
   terminal: Schema.String,
   // "inbox" is experimental: the vertical layout with a server-wide session inbox in place of tabs.
   tabLayout: Schema.Literals(["horizontal", "vertical", "inbox"]),
+  // Prototype (local/dev desktop builds): tabs at `tabLayout`'s position, or one list of every session.
+  navigation: Persistence.optional(Schema.Literals(["tabs", "list"])),
   sidebarOpen: Persistence.optional(Schema.Boolean),
   reduceMotion: Schema.Literals(["system", "on", "off"]),
 })
@@ -348,11 +350,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
   init: () => {
     const [store, setStore, , ready] = persisted({ key: "settings.v3" }, settingsPersistence, defaultSettings)
 
-    const sidebarOrganizeOptions: SidebarOrganize[] = recentSessionsAvailable(
-      usePlatform().platform,
-      import.meta.env.VITE_OPENCODE_CHANNEL,
-    )
-      ? ["list", "projects", "customize", "recent"]
+    const prototypes = recentSessionsAvailable(usePlatform().platform, import.meta.env.VITE_OPENCODE_CHANNEL)
+
+    const sidebarOrganizeOptions: SidebarOrganize[] = prototypes
+      ? ["list", "projects", "customize", "recent", "consolidated"]
       : ["list", "projects", "customize"]
 
     const showCustomAgents = withFallback(
@@ -491,9 +492,29 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setTerminalFont(value: string) {
           setStore("appearance", "terminal", value.trim() ? value : "")
         },
-        tabLayout: withFallback(() => store.appearance?.tabLayout, defaultSettings.appearance.tabLayout),
+        // The List layout always uses the sidebar, and the prototype has no Inbox, so both read as side tabs.
+        tabLayout: createMemo((): TabLayout => {
+          const stored = store.appearance?.tabLayout ?? defaultSettings.appearance.tabLayout
+          const prototype = prototypes && store.general?.sidebarOrganize === "consolidated"
+
+          if (prototype && (store.appearance?.navigation === "list" || stored === "inbox")) return "vertical"
+
+          return stored
+        }),
+        /** Where tabs go when the prototype's Tabs layout is chosen, whatever the List layout forces meanwhile. */
+        tabPosition: createMemo(() => (store.appearance?.tabLayout === "horizontal" ? "horizontal" : "vertical")),
         setTabLayout(value: TabLayout) {
           setStore("appearance", "tabLayout", value)
+        },
+        /** The navigation prototype (Experimental → Consolidated): pinned sessions and groups, and Tabs or List. */
+        navigationPrototype: createMemo(() => prototypes && store.general?.sidebarOrganize === "consolidated"),
+        navigation: createMemo(() =>
+          prototypes && store.general?.sidebarOrganize === "consolidated" && store.appearance?.navigation === "list"
+            ? "list"
+            : "tabs",
+        ),
+        setNavigation(value: "tabs" | "list") {
+          setStore("appearance", "navigation", value)
         },
         sidebarOpen: withFallback(() => store.appearance?.sidebarOpen, true),
         setSidebarOpen(value: boolean) {
