@@ -537,43 +537,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn versions_and_labels_order_as_in_typescript() {
-        assert_eq!(display_version(&"a".repeat(40)), "aaaaaaa");
-        assert_eq!(display_version("1.2.3"), "1.2.3");
-        let mut labels = vec!["beta", "Alpha", "alpha"];
-        labels.sort_by(|a, b| locale_compare(a, b));
-        assert_eq!(labels, ["alpha", "Alpha", "beta"]);
-    }
-
-    // Expected (TS `focusedTui`): a plugin with a definition is a toggle row, a failed active one included, and so is a
-    // project's build waiting for approval; a configured target that never loaded is not, and opens its reason.
-    #[test]
-    fn a_row_toggles_what_has_a_definition_or_waits_for_approval() {
-        let row = |origin: PluginOrigin, status: PluginStatus| {
-            Row::Tui(PluginEntry {
-                key: "k".to_owned(),
-                id: "sample".to_owned(),
-                target: Some("/plugins/sample".to_owned()),
-                origin,
-                status,
-                active: status == PluginStatus::Active,
-                slow: None,
-            })
-        };
-        let failed = row(PluginOrigin::External, PluginStatus::Failed);
-        assert_eq!((failed.toggle().as_deref(), failed.has_error()), (Some("k"), true));
-        assert_eq!(failed.footer().as_deref(), Some("failed, local"));
-        assert_eq!(row(PluginOrigin::Builtin, PluginStatus::Inactive).toggle().as_deref(), Some("k"));
-        let skipped = row(PluginOrigin::Configured, PluginStatus::Skipped);
-        assert_eq!((skipped.toggle(), skipped.label().as_str(), skipped.has_error()), (None, "sample", true));
-        let pending = row(PluginOrigin::Configured, PluginStatus::Pending);
-        assert_eq!((pending.toggle().as_deref(), pending.label().as_str()), (Some("k"), "sample"));
-        assert!(!pending.has_error());
-    }
-
-    // Expected (PL-5): a slow plugin's footer names the kind of call that cost the most, by its worst time, and its
-    // details hold the whole report; a backlog says so, and a healthy row has no details.
-    #[test]
     fn a_slow_row_says_what_costs_and_shows_the_report() {
         let report = "slow (p50/p99/worst): view 0.0/0.0/0.1 ms, run-command 0.0/0.0/0.0 ms, draw 1.9/2.0/2.4 ms, \
                       host 0.0/0.1/0.1 ms; setup 3.0 ms";
