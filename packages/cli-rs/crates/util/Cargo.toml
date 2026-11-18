@@ -21,6 +21,7 @@ ring = { workspace = true, optional = true }
 windows-sys = { workspace = true, features = [
     "Wdk_System_SystemServices",
     "Win32_Foundation",
+    "Win32_Globalization",
     "Win32_Security",
     "Win32_Security_Authorization",
     "Win32_Storage_FileSystem",

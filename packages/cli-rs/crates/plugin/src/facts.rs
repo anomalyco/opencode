@@ -6,9 +6,20 @@ use opentui::prelude::*;
 use unicode_segmentation::UnicodeSegmentation;
 
 /// The user's locale as a BCP 47 tag, from the first of `LC_ALL`, `LC_MESSAGES` and `LANG` that is set, as POSIX
-/// orders them; `None` when that names none (`C`, `POSIX`, empty).
+/// orders them; when that names none (unset, `C`, `POSIX`, empty), the user's default locale on Windows (win-locale), and
+/// elsewhere `None`.
 pub fn locale() -> Option<String> {
-    locale_of(|name| std::env::var(name).ok())
+    locale_of(|name| std::env::var(name).ok()).or_else(system_locale)
+}
+
+#[cfg(windows)]
+fn system_locale() -> Option<String> {
+    opencode_util::win::user_locale()
+}
+
+#[cfg(not(windows))]
+fn system_locale() -> Option<String> {
+    None
 }
 
 /// [`locale`] over the variables `var` gives.
@@ -60,6 +71,32 @@ mod tests {
         assert_eq!(locale_of(vars(&[("LANG", "C.UTF-8")])), None);
         assert_eq!(locale_of(vars(&[("LANG", "POSIX")])), None);
         assert_eq!(locale_of(vars(&[])), None);
+    }
+
+    // Runs with the variables `a_posix_locale_wins_over_the_windows_one` sets: what a plugin is told.
+    #[test]
+    fn the_locale_here() {
+        let Some(expected) = std::env::var("FACTS_LOCALE").ok() else { return };
+        assert_eq!(locale().unwrap_or_default(), expected);
+    }
+
+    // Expected (win-locale): with no POSIX variable set, a plugin on Windows is told the user's default locale; a set
+    // `LANG` still wins.
+    #[cfg(windows)]
+    #[test]
+    fn a_posix_locale_wins_over_the_windows_one() {
+        let user = opencode_util::win::user_locale().unwrap();
+        for (lang, expected) in [(None, user.as_str()), (Some("de_DE.UTF-8"), "de-DE")] {
+            let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+            command.args(["--exact", "facts::tests::the_locale_here", "--test-threads=1"]);
+            command.env_remove("LC_ALL").env_remove("LC_MESSAGES").env_remove("LANG").env("FACTS_LOCALE", expected);
+            if let Some(lang) = lang {
+                command.env("LANG", lang);
+            }
+            let output = command.output().unwrap();
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            assert!(output.status.success() && stdout.contains("1 passed"), "{lang:?}:\n{stdout}");
+        }
     }
 
     // Runs in the zone `TZ` names, which `the_offset_follows_tz` sets with the offset it must read.
