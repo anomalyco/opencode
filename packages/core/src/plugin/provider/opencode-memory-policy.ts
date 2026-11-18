@@ -94,6 +94,11 @@ export interface Policy {
         readonly maxTokens?: number
       }
     | undefined
+  /**
+   * Whether a finished shell command failed, which makes it a failure moment. Runs on every shell command, so it must
+   * be cheap.
+   */
+  readonly failed: (command: string, output: string, exitCode: number) => boolean
   /** The longest an injection may hold back the model request that follows its moment; a slower one delivers nothing. */
   readonly timeout: Duration.Input
   /** The message that delivers `entries` to the session at `moment`. */
@@ -146,6 +151,10 @@ export const initial: Policy = {
       }),
     }
   },
+  // A pipe into `tail` or `head` exits 0 however the command before it ended, so a piped command counts as failed when
+  // its output says so.
+  failed: (command, output, exitCode) =>
+    output.trim() !== "" && (exitCode !== 0 || (/(?<!\|)\|(?!\|)/.test(command) && FAILURE.test(output))),
   timeout: "3 seconds",
   render: (entries, moment) =>
     [
@@ -207,6 +216,9 @@ function within(context: Context): Context {
   }
 }
 
+/** What test runners, compilers and interpreters print when something failed. */
+const FAILURE =
+  /\b[1-9]\d* (?:fail|failed|failing|failures?|errors?)\b|\(fail\)|^\s*(?:error|Error|ERROR)\b[:[]|\b\w*Error: |Traceback \(most recent call last\)|\bFAILED\b|\bpanicked at\b|✘/m
 const CORRECTION =
   /\b(?:instead|rather|actually|wrong|incorrect|outdated|deprecated|obsolete|no longer|not anymore|stop|don'?t|do not|never|shouldn'?t|should not|isn'?t|is not|doesn'?t|does not|not \w+ but)\b|^\s*no\b/i
 const STOP = new Set(

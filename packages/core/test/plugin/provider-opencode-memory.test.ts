@@ -715,14 +715,19 @@ describe("OpencodePlugin memory", () => {
         yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 0, output: "ok" })
         yield* ran(session.id, "shell", { command: "test -f x" }, { exitCode: 1, output: "" })
         const output = `${"x".repeat(3000)}\nTypeError: boom`
-        yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 1, output })
+        // Piped through tail, the failing test run exits 0; its output still says it failed.
+        yield* ran(session.id, "shell", { command: "bun test 2>&1 | tail -40" }, { exitCode: 0, output })
         const after = request(session.id, "Fix the deploy")
         yield* hooks.trigger("session", "context", after)
         expect(console.state.requests.at(-1)?.body).toEqual({
           sessionID: session.id,
           moment: "failure",
           query: "Fix the deploy",
-          context: { files: ["src/config.ts", "src/deploy.ts"], errors: [output.slice(-2000)], commands: ["bun test"] },
+          context: {
+            files: ["src/config.ts", "src/deploy.ts"],
+            errors: [output.slice(-2000)],
+            commands: ["bun test 2>&1 | tail -40"],
+          },
         })
         expect(texts(after).at(-1)).toContain('<workspace-memory for="failure">')
         expect(synthetic.map((item) => item.description)).toEqual(["1 memory entry for this failure"])
@@ -892,6 +897,18 @@ describe("OpencodeMemoryPolicy.initial", () => {
     expect(
       OpencodeMemoryPolicy.initial.inject(failure, signals({ injected: { prompt: 1, failure: 2 } }), session()),
     ).toBeUndefined()
+  })
+
+  test("counts a command as failed by its exit code, or by its output when a pipe hides the exit code", () => {
+    const failed = OpencodeMemoryPolicy.initial.failed
+    expect(failed("bun test", "error: x\n 1 fail", 1)).toBe(true)
+    expect(failed("test -f x", "", 1)).toBe(false)
+    expect(failed("bun test 2>&1 | tail -20", "error: ACME_DB_URL is not set\n 1 pass\n 1 fail", 0)).toBe(true)
+    expect(failed("pytest | tail", "Traceback (most recent call last):\n  ...", 0)).toBe(true)
+    expect(failed("bun test 2>&1 | tail -5", " 4 pass\n 0 fail", 0)).toBe(false)
+    // Unpiped, a zero exit is a success whatever it prints, as a search for errors is.
+    expect(failed("grep -rn error: src", "src/a.ts:1: error: x", 0)).toBe(false)
+    expect(failed("make || echo done", "Error: x", 0)).toBe(false)
   })
 
   test("reads a message as a correction only with correcting words and two shared terms", () => {

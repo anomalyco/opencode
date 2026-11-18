@@ -349,7 +349,9 @@ export const make = Effect.fnUntraced(function* (
         output: Schema.decodeUnknownOption(ShellOutput)(event.result.output),
       })
       // A command still running in the background, or one a signal ended, has no exit code yet.
-      if (Option.isNone(shell) || !shell.value.output.exitCode) return Effect.void
+      if (Option.isNone(shell) || shell.value.output.exitCode === null) return Effect.void
+      if (!policy.failed(shell.value.input.command, shell.value.output.output, shell.value.output.exitCode))
+        return Effect.void
       return begin(event.sessionID, {
         type: "failure",
         command: shell.value.input.command,
