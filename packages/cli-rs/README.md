@@ -141,6 +141,9 @@ Known gap: the release binary keeps line-table debug info (about 180 MB). `strip
 a directory under `~/.config/opencode/plugins/`, or a package that `opencode-native plugin add <name>` installs. It also
 loads native plugins, shared libraries on a C ABI.
 
+[`docs/plugins.md`](docs/plugins.md) explains plugins in one place: the contract and the four ways a plugin runs against
+it, how a handler waits (tasks, `await`, timers), the limits, and the shortest plugin in Rust, Luau and TypeScript.
+
 - To write a native plugin, start with the quick start in [`crates/plugin-abi/README.md`](crates/plugin-abi/README.md).
   `opencode-native plugin dev <crate dir>` builds it, runs the TUI with it and reloads it on each change, and
   `opencode-native plugin test <crate dir> [--command NAME] [--wait TEXT]` prints its screen with no server. Neither is

@@ -1,9 +1,10 @@
 # opencode-plugin-abi
 
 The SDK of native TUI plugins for `opencode-native`. A plugin is a shared library that depends on this crate alone and
-exports itself with `plugin!`, which holds every `unsafe` the C ABI needs. The host loads it at startup and again when it changes. The design, the
-lifecycle and the callback rules are in [`docs/P.4.md`](../../docs/P.4.md). Every type is documented in the rustdoc
-(`cargo doc -p opencode-plugin-abi --open`).
+exports itself with `plugin!`, which holds every `unsafe` the C ABI needs. The host loads it at startup and again when
+it changes. [`docs/plugins.md`](../../docs/plugins.md) explains how plugins work, on this carrier and the others (Luau,
+and TypeScript on the JS host). The design, the lifecycle and the callback rules are in
+[`docs/P.4.md`](../../docs/P.4.md). Every type is documented in the rustdoc (`cargo doc -p opencode-plugin-abi --open`).
 
 Plugins load on Linux (`.so`), macOS (`.dylib`) and Windows (`.dll`). The host opens libraries with `dlopen`, and
 with `LoadLibraryW` on Windows.
@@ -132,25 +133,10 @@ A plugin binary carries its ABI version. The host is ABI 2.0:
 `Host::try_fetch` and `Host::try_foreground` return `Result<RequestId, String>`: an `Err` is a request the host did
 not take, as while the effects that wait fill its queue, and no reply comes for it; an ID always gets its one reply.
 
-A request belongs to what asked for it, on every carrier. One a mount's call asks for (a command of the route it
-shows, or a handler of the mount's input) is that mount's: once the mount closes, it is not sent, a program does not
-start, and its reply is dropped, also when the surface opens again under the same key. One from setup, a global
-command, an event, a wake, or the mount's begin and end (`Event::Mount`, which the plugin hears, not the mount) is the
-activation's, and its reply comes unless the plugin is disposed first.
-
 A handler that waits for a dialog's answer or a reply can do it in a straight line: `Setup::tasks` starts tasks,
-`async` code whose `Cx` awaits `confirm`, `prompt`, `select`, `alert`, `fetch`, `foreground` and `blocking` (module
-`task`). A request whose mount closes before its reply is cancelled: its wait gets the error `task::CANCELLED`, once
-(`Setup::on_cancelled` hears it in a plain handler). A task keeps the owner of the call that started it
-(`Host::owner`): what it asks for after a wait is that mount's or the activation's still, whichever call goes on with
-it (`Host::set_owner`).
-
-A plugin keeps time on the host's clock, with no thread of its own: `cx.sleep(duration)` waits, and
-`tasks.every(host, period, |cx| …)` ticks until its future gives `ControlFlow::Break`. A timer waits at least
-`MIN_TIMER` (20 ms; a shorter one is lengthened to it), at most `MAX_TIMERS` (32) of a plugin wait at once (one more is
-refused through its reply), and it is owned and cancelled as a fetch is: an `every` a mount started is that mount's
-task, and ends with it. A sleep dropped before its time (a race's loser) lets its timer go (`Host::cancel_timer`). A
-tick whose plugin changes nothing on screen costs a wake and no frame, however long it runs.
+`async` code whose `Cx` awaits `confirm`, `prompt`, `select`, `alert`, `fetch`, `foreground`, `sleep` and `blocking`
+(module `task`). [`docs/plugins.md`](../../docs/plugins.md), section 2, explains tasks, who owns a request, what a
+mount's close cancels, and timers.
 
 ### The source promise of 2.x
 
