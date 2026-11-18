@@ -113,7 +113,9 @@ fn a_v2_plugins_commands_arrive_once_each_in_order() {
         }
         pipe.settle();
     }
-    assert_eq!(calls(&log), sent);
+    // The swap ends the JS host, and its round runs again on the next, which a settle while none runs does not wait for
+    // (pipe-flakes: under load the last round was not logged yet).
+    assert_eq!(logged(&pipe, &log, sent.len()), sent);
     // The last item shows; a restart resets the plugin's state, as it resets any plugin's on the JS host. The restarted
     // footer's first render waits for its reads, which a settle does not (`drawn`).
     pipe.harness.wait("the restarted footer drew", || {
