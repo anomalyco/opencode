@@ -226,10 +226,10 @@ fn over() -> List {
 /// Shapes for a canvas of `width` x `height`, some partly or wholly outside it.
 fn art(seed: u8, count: usize, width: u16, height: u16) -> Vec<Shape> {
     let mut rng = Rng::new(u64::from(seed) * 7919 + count as u64);
-    shapes(&mut rng, width, height, 0)
+    shapes(&mut rng, width, height, 0, false)
 }
 
-fn shapes(rng: &mut Rng, width: u16, height: u16, depth: u8) -> Vec<Shape> {
+fn shapes(rng: &mut Rng, width: u16, height: u16, depth: u8, opaque: bool) -> Vec<Shape> {
     const COLORS: [abi::Rgba; 5] = [
         abi::Rgba::new(200, 40, 40, 255),
         abi::Rgba::new(40, 200, 90, 255),
@@ -239,23 +239,34 @@ fn shapes(rng: &mut Rng, width: u16, height: u16, depth: u8) -> Vec<Shape> {
     ];
     const TEXTS: [&str; 6] = ["ab", "score 120", "█▓░", "x", "界x", "e\u{301}"];
     const CHARS: [char; 6] = ['#', '@', '█', '·', 'o', '─'];
+    let colors = if opaque { &COLORS[..4] } else { COLORS.as_slice() };
+    let texts: &[&str] = if opaque { &["ab", "a b", "█▓", "x"] } else { &TEXTS };
+    let chars: &[char] = if opaque { &['#', '@', '█', ' ', 'o'] } else { &CHARS };
     let x = |rng: &mut Rng| rng.below(usize::from(width) + 4) as i16 - 2;
     let y = |rng: &mut Rng| rng.below(usize::from(height) + 2) as i16 - 1;
-    let size = |rng: &mut Rng, of: u16| rng.below(usize::from(of) + 3) as u16;
-    let color = |rng: &mut Rng| *rng.pick(&COLORS);
+    let size = |rng: &mut Rng, of: u16| {
+        if opaque { 2 + rng.below(usize::from(of)) as u16 } else { rng.below(usize::from(of) + 3) as u16 }
+    };
+    let color = |rng: &mut Rng| *rng.pick(colors);
     let pen = |rng: &mut Rng| {
-        let fg = (rng.below(5) > 0).then(|| color(rng));
-        Pen(fg, (rng.below(2) == 0).then(|| color(rng)), if rng.below(3) == 0 { rng.below(64) as u8 } else { 0 })
+        let fg = (rng.below(if opaque { 4 } else { 5 }) > 0).then(|| color(rng));
+        Pen(
+            fg,
+            (rng.below(2) == 0).then(|| color(rng)),
+            if opaque || rng.below(3) == 0 { rng.below(64) as u8 } else { 0 },
+        )
     };
     (0..1 + rng.below(5))
         .map(|_| match rng.below(if depth < 2 { 6 } else { 5 }) {
             0 => Shape::Fill(x(rng), y(rng), size(rng, width), size(rng, height), color(rng)),
-            1 => Shape::Text(x(rng), y(rng), rng.pick(&TEXTS), pen(rng)),
-            2 => Shape::Cell(x(rng), y(rng), *rng.pick(&CHARS), pen(rng)),
+            1 => Shape::Text(x(rng), y(rng), rng.pick(texts), pen(rng)),
+            2 => Shape::Cell(x(rng), y(rng), *rng.pick(chars), pen(rng)),
             3 => {
                 let columns = 1 + rng.below(5) as u16;
-                let cells = (0..rng.below(12)).map(|_| (*rng.pick(&CHARS), pen(rng))).collect();
-                Shape::Cells(x(rng), y(rng), columns, cells)
+                let at = opaque.then(|| (x(rng), y(rng)));
+                let cells = (0..rng.below(12)).map(|_| (*rng.pick(chars), pen(rng))).collect();
+                let (x, y) = at.unwrap_or_else(|| (x(rng), y(rng)));
+                Shape::Cells(x, y, columns, cells)
             }
             4 => {
                 let border = *rng.pick(&[
@@ -270,7 +281,7 @@ fn shapes(rng: &mut Rng, width: u16, height: u16, depth: u8) -> Vec<Shape> {
             _ => {
                 let (left, top) = (x(rng), y(rng));
                 let (clip_width, clip_height) = (size(rng, width), size(rng, height));
-                Shape::Clip(left, top, clip_width, clip_height, shapes(rng, width, height, depth + 1))
+                Shape::Clip(left, top, clip_width, clip_height, shapes(rng, width, height, depth + 1, opaque))
             }
         })
         .collect()
@@ -822,113 +833,63 @@ struct Raster {
     glyph: bool,
 }
 
-/// The cells of a canvas by a rasterizer of this test's own, which shares no code with OpenTUI's painter: opaque
-/// fills, text, cells and runs of cells of one column each, rects with a border of each style (two cells or more each
-/// way) and a fill or none, under nested clips. A cell's space drawn without a background over a glyph leaves the
-/// cell as it was, as the renderer blends a cell and keeps a glyph under a transparent space; text's spaces overwrite.
-fn raster(shapes: &[Shape], width: u16, height: u16) -> Vec<Vec<Raster>> {
-    /// A clip as left, top, right and bottom.
-    type Clip = (i32, i32, i32, i32);
-    struct Grid(Vec<Vec<Raster>>);
-    impl Grid {
-        fn at(&mut self, clip: Clip, x: i32, y: i32) -> Option<&mut Raster> {
-            if x < clip.0 || y < clip.1 || x >= clip.2 || y >= clip.3 {
-                return None;
+/// Resolve one cell in drawing order, independently of OpenTUI. Nested clips can only exclude this point.
+fn raster(shapes: &[Shape], x: i16, y: i16, mut cell: Raster) -> Raster {
+    let inside = |left: i16, top: i16, width: u16, height: u16| {
+        (0..i32::from(width)).contains(&(i32::from(x) - i32::from(left)))
+            && (0..i32::from(height)).contains(&(i32::from(y) - i32::from(top)))
+    };
+    for shape in shapes {
+        let glyph = match shape {
+            Shape::Fill(l, t, w, h, bg) if inside(*l, *t, *w, *h) => {
+                cell = Raster { char: ' ', fg: None, bg: *bg, bits: 0, glyph: false };
+                continue;
             }
-            Some(&mut self.0[y as usize][x as usize])
-        }
-
-        /// A glyph; `cell` for a cell's, whose space without a background over a glyph leaves the cell as it was.
-        fn glyph(&mut self, clip: Clip, x: i32, y: i32, char: char, pen: &Pen, cell: bool) {
-            let keeps = cell;
-            let Some(cell) = self.at(clip, x, y) else { return };
-            if keeps && char == ' ' && pen.1.is_none() && cell.char != ' ' {
-                return;
+            Shape::Clip(l, t, w, h, children) if inside(*l, *t, *w, *h) => {
+                cell = raster(children, x, y, cell);
+                continue;
             }
-            *cell = Raster { char, fg: pen.0, bg: pen.1.unwrap_or(cell.bg), bits: pen.2, glyph: true };
-        }
-
-        fn fill(&mut self, clip: Clip, x: i32, y: i32, color: abi::Rgba) {
-            if let Some(cell) = self.at(clip, x, y) {
-                *cell = Raster { char: ' ', fg: None, bg: color, bits: 0, glyph: false };
+            Shape::Text(l, t, text, pen) if *t == y && *l <= x => {
+                text.chars().nth((x - l) as usize).map(|ch| (ch, *pen, false))
             }
-        }
-
-        fn walk(&mut self, shapes: &[Shape], clip: Clip) {
-            for shape in shapes {
-                match shape {
-                    Shape::Fill(x, y, width, height, color) => {
-                        for row in 0..i32::from(*height) {
-                            for column in 0..i32::from(*width) {
-                                self.fill(clip, i32::from(*x) + column, i32::from(*y) + row, *color);
-                            }
-                        }
-                    }
-                    Shape::Text(x, y, text, pen) => {
-                        for (index, char) in text.chars().enumerate() {
-                            self.glyph(clip, i32::from(*x) + index as i32, i32::from(*y), char, pen, false);
-                        }
-                    }
-                    Shape::Cell(x, y, char, pen) => self.glyph(clip, i32::from(*x), i32::from(*y), *char, pen, true),
-                    Shape::Cells(x, y, width, cells) => {
-                        let width = usize::from(*width).max(1);
-                        for (index, (char, pen)) in cells.iter().enumerate() {
-                            let (column, row) = ((index % width) as i32, (index / width) as i32);
-                            self.glyph(clip, i32::from(*x) + column, i32::from(*y) + row, *char, pen, true);
-                        }
-                    }
-                    Shape::Rect(x, y, width, height, border, color, background) => {
-                        let glyphs = match border {
-                            abi::BorderStyle::Single => ['┌', '┐', '└', '┘', '─', '│'],
-                            abi::BorderStyle::Double => ['╔', '╗', '╚', '╝', '═', '║'],
-                            abi::BorderStyle::Rounded => ['╭', '╮', '╰', '╯', '─', '│'],
-                            abi::BorderStyle::Heavy => ['┏', '┓', '┗', '┛', '━', '┃'],
-                        };
-                        let (x, y, right, bottom) = (
-                            i32::from(*x),
-                            i32::from(*y),
-                            i32::from(*x) + i32::from(*width) - 1,
-                            i32::from(*y) + i32::from(*height) - 1,
-                        );
-                        for row in y..=bottom {
-                            for column in x..=right {
-                                let edge = match (column == x, column == right, row == y, row == bottom) {
-                                    (true, _, true, _) => Some(glyphs[0]),
-                                    (_, true, true, _) => Some(glyphs[1]),
-                                    (true, _, _, true) => Some(glyphs[2]),
-                                    (_, true, _, true) => Some(glyphs[3]),
-                                    (_, _, true, _) | (_, _, _, true) => Some(glyphs[4]),
-                                    (true, _, _, _) | (_, true, _, _) => Some(glyphs[5]),
-                                    _ => None,
-                                };
-                                match (edge, background) {
-                                    (Some(char), _) => {
-                                        self.glyph(clip, column, row, char, &Pen(Some(*color), *background, 0), false)
-                                    }
-                                    (None, Some(fill)) => self.fill(clip, column, row, *fill),
-                                    (None, None) => {}
-                                }
-                            }
-                        }
-                    }
-                    Shape::Clip(x, y, width, height, inner) => {
-                        let (x, y) = (i32::from(*x), i32::from(*y));
-                        let inner_clip = (
-                            clip.0.max(x),
-                            clip.1.max(y),
-                            clip.2.min(x + i32::from(*width)),
-                            clip.3.min(y + i32::from(*height)),
-                        );
-                        self.walk(inner, inner_clip);
-                    }
-                }
+            Shape::Cell(l, t, ch, pen) if (*l, *t) == (x, y) => Some((*ch, *pen, true)),
+            Shape::Cells(l, t, w, cells) if x >= *l && y >= *t && i32::from(x - l) < i32::from(*w) => {
+                let at = (y - t) as usize * usize::from(*w) + (x - l) as usize;
+                cells.get(at).map(|(ch, pen)| (*ch, *pen, true))
             }
+            Shape::Rect(l, t, w, h, border, fg, bg) if inside(*l, *t, *w, *h) => {
+                let edges = match border {
+                    abi::BorderStyle::Single => ['┌', '┐', '└', '┘', '─', '│'],
+                    abi::BorderStyle::Double => ['╔', '╗', '╚', '╝', '═', '║'],
+                    abi::BorderStyle::Rounded => ['╭', '╮', '╰', '╯', '─', '│'],
+                    abi::BorderStyle::Heavy => ['┏', '┓', '┗', '┛', '━', '┃'],
+                };
+                let edge = match (x == *l, (x - l) as u16 + 1 == *w, y == *t, (y - t) as u16 + 1 == *h) {
+                    (true, _, true, _) => 0,
+                    (_, true, true, _) => 1,
+                    (true, _, _, true) => 2,
+                    (_, true, _, true) => 3,
+                    (_, _, true, _) | (_, _, _, true) => 4,
+                    (true, _, _, _) | (_, true, _, _) => 5,
+                    _ => {
+                        if let Some(bg) = bg {
+                            cell = Raster { char: ' ', fg: None, bg: *bg, bits: 0, glyph: false };
+                        }
+                        continue;
+                    }
+                };
+                Some((edges[edge], Pen(Some(*fg), *bg, 0), false))
+            }
+            _ => None,
+        };
+        // A transparent cell-space keeps the existing glyph; a space in a text operation replaces it.
+        if let Some((ch, pen, blend)) = glyph
+            && !(blend && ch == ' ' && pen.1.is_none() && cell.char != ' ')
+        {
+            cell = Raster { char: ch, fg: pen.0, bg: pen.1.unwrap_or(cell.bg), bits: pen.2, glyph: true };
         }
     }
-    let blank = Raster { char: ' ', fg: None, bg: BG, bits: 0, glyph: false };
-    let mut grid = Grid(vec![vec![blank; usize::from(width)]; usize::from(height)]);
-    grid.walk(shapes, (0, 0, i32::from(width), i32::from(height)));
-    grid.0
+    cell
 }
 
 /// The first cell of the canvas in `frame` that differs from what [`raster`] computes for `shapes`, if any.
@@ -944,8 +905,10 @@ fn unlike_raster(frame: &Capture, shapes: &[Shape], (width, height): (u16, u16))
         Attributes::INVERSE,
         Attributes::STRIKETHROUGH,
     ];
-    for (y, row) in raster(shapes, width, height).iter().enumerate() {
-        for (x, want) in row.iter().enumerate() {
+    let blank = Raster { char: ' ', fg: None, bg: BG, bits: 0, glyph: false };
+    for y in 0..height {
+        for x in 0..width {
+            let want = raster(shapes, x as i16, y as i16, blank);
             let got = frame.cell(left + x as u32, top + y as u32).unwrap();
             let mut same = got.symbol.chars().next().unwrap_or(' ') == want.char && got.bg == color(want.bg);
             if want.glyph {
@@ -2139,60 +2102,6 @@ fn a_canvas_counts_in_the_trees_bounds() {
     assert_eq!((built.created, built.removed), (1, 1), "a layout builds it again: {built:?}");
 }
 
-/// Opaque shapes for [`raster`]: one-column characters, spaces among them, every style bit, and rects of two cells
-/// or more each way.
-fn opaque(seed: u64, width: u16, height: u16) -> Vec<Shape> {
-    fn shapes(rng: &mut Rng, width: u16, height: u16, depth: u8) -> Vec<Shape> {
-        const COLORS: [abi::Rgba; 4] = [
-            abi::Rgba::new(200, 40, 40, 255),
-            abi::Rgba::new(40, 200, 90, 255),
-            abi::Rgba::new(230, 230, 230, 255),
-            abi::Rgba::new(250, 200, 0, 255),
-        ];
-        const TEXTS: [&str; 4] = ["ab", "a b", "█▓", "x"];
-        const CHARS: [char; 5] = ['#', '@', '█', ' ', 'o'];
-        let x = |rng: &mut Rng| rng.below(usize::from(width) + 4) as i16 - 2;
-        let y = |rng: &mut Rng| rng.below(usize::from(height) + 2) as i16 - 1;
-        let size = |rng: &mut Rng, of: u16| 2 + rng.below(usize::from(of)) as u16;
-        let color = |rng: &mut Rng| *rng.pick(&COLORS);
-        let pen = |rng: &mut Rng| {
-            Pen((rng.below(4) > 0).then(|| color(rng)), (rng.below(2) == 0).then(|| color(rng)), rng.below(64) as u8)
-        };
-        (0..1 + rng.below(5))
-            .map(|_| match rng.below(if depth < 2 { 6 } else { 5 }) {
-                0 => Shape::Fill(x(rng), y(rng), size(rng, width), size(rng, height), color(rng)),
-                1 => Shape::Text(x(rng), y(rng), rng.pick(&TEXTS), pen(rng)),
-                2 => Shape::Cell(x(rng), y(rng), *rng.pick(&CHARS), pen(rng)),
-                3 => {
-                    let columns = 1 + rng.below(5) as u16;
-                    Shape::Cells(
-                        x(rng),
-                        y(rng),
-                        columns,
-                        (0..rng.below(12)).map(|_| (*rng.pick(&CHARS), pen(rng))).collect(),
-                    )
-                }
-                4 => {
-                    let border = *rng.pick(&[
-                        abi::BorderStyle::Single,
-                        abi::BorderStyle::Double,
-                        abi::BorderStyle::Rounded,
-                        abi::BorderStyle::Heavy,
-                    ]);
-                    let background = (rng.below(2) == 0).then(|| color(rng));
-                    Shape::Rect(x(rng), y(rng), size(rng, width), size(rng, height), border, color(rng), background)
-                }
-                _ => {
-                    let (left, top) = (x(rng), y(rng));
-                    let (clip_width, clip_height) = (size(rng, width), size(rng, height));
-                    Shape::Clip(left, top, clip_width, clip_height, shapes(rng, width, height, depth + 1))
-                }
-            })
-            .collect()
-    }
-    shapes(&mut Rng::new(seed.wrapping_mul(31) + 7), width, height, 0)
-}
-
 // Expected (carbon 5, a replayed frame equals a drawn one, the independent oracle): over seeded opaque lists of every
 // operation, every style bit and no foreground, the canvas's cells on the frame that draws the list and on one that
 // replays it are what this test's rasterizer computes, with no code of OpenTUI's painter: characters and backgrounds
@@ -2200,7 +2109,7 @@ fn opaque(seed: u64, width: u16, height: u16) -> Vec<Shape> {
 #[test]
 fn seeded_lists_have_the_cells_a_rasterizer_computes() {
     for seed in 0..model::seeds_or(40) {
-        let shapes = opaque(seed, 12, 4);
+        let shapes = shapes(&mut Rng::new(seed.wrapping_mul(31) + 7), 12, 4, 0, true);
         FIXED.with(|cell| *cell.borrow_mut() = Some(shapes.clone()));
         PAD.with(|cell| *cell.borrow_mut() = Pad::default());
         let harness = open_tui(80, 24, vec![abi::Plugin { id: ID, setup }.into()]);
