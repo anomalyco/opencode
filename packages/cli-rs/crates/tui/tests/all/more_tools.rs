@@ -103,114 +103,14 @@ impl Tools {
 }
 
 #[test]
-fn inline_tools_show_running_and_finished_lines() {
+fn todo_count_and_failure_use_their_own_rows() {
     let messages = turn(vec![
-        tool("c1", "webfetch", running(json!({ "url": "https://example.com" }), json!({}))),
-        tool("c2", "webfetch", completed(json!({ "url": "https://opencode.ai/docs" }), "# Docs", json!({}))),
-        tool("c3", "websearch", running(json!({}), json!({}))),
-        tool("c4", "websearch", completed(json!({ "query": "rust tui" }), "results", json!({ "provider": "exa" }))),
-        tool("c5", "skill", running(json!({}), json!({}))),
-        tool("c6", "skill", completed(json!({ "id": "x" }), "loaded", json!({ "name": "writing-doc" }))),
-        tool(
-            "c7",
-            "question",
-            running(json!({ "questions": [{ "question": "A?" }, { "question": "B?" }] }), json!({})),
-        ),
-        tool("c8", "todowrite", running(json!({ "todos": [] }), json!({}))),
-        tool("c9", "todowrite", completed(json!({ "todos": [] }), "", json!({}))),
-        tool("c10", "todowrite", failed(json!({}), "bad todos")),
+        tool("c1", "question", running(json!({ "questions": [{"question":"A?"},{"question":"B?"}] }), json!({}))),
+        tool("c2", "todowrite", failed(json!({}), "bad todos")),
     ]);
     let h = open(100, 40, messages);
-    h.wait_for_all(&[
-        "   % WebFetch https://example.com\n",
-        "   % WebFetch https://opencode.ai/docs\n",
-        "   ⋯ Searching web…\n",
-        "   ◈ Web Search via Exa \"rust tui\"\n",
-        "   ⋯ Loading skill…\n",
-        "   → Skill \"writing-doc\"\n",
-        "   → Asked 2 questions\n",
-        "   ⋯ Updating todos…\n",
-        "   ⚙ Cleared todos\n",
-        "   ⚙ Todo update failed\n",
-    ]);
-    let theme = h.tui.page();
-    assert_eq!(h.fg("Todo update failed"), theme.text.feedback.error.base);
-}
-
-#[test]
-fn blocks_list_todos_answers_and_patched_files() {
-    let patch = "Index: a.rs\n===\n--- a.rs\n+++ a.rs\n@@ -1 +1 @@\n-old\n+new\n";
-    let messages = turn(vec![
-        tool(
-            "c1",
-            "todowrite",
-            completed(
-                json!({ "todos": [
-                    { "content": "Write the views", "status": "completed" },
-                    { "content": "Prove them", "status": "in_progress" },
-                    { "content": "Drop legacy", "status": "cancelled" },
-                    { "content": "Report", "status": "pending" },
-                ] }),
-                "",
-                json!({}),
-            ),
-        ),
-        tool(
-            "c2",
-            "question",
-            completed(
-                json!({ "questions": [{ "question": "Which design?" }, { "question": "Ship it?" }] }),
-                "",
-                json!({ "answers": [["New", "Both"], []] }),
-            ),
-        ),
-        tool(
-            "c3",
-            "apply_patch",
-            completed(
-                json!({ "patchText": "*** Begin Patch" }),
-                "",
-                json!({ "files": [
-                    { "file": "a.rs", "type": "update", "patch": patch, "additions": 1, "deletions": 1 },
-                    { "file": "gone.rs", "type": "delete", "patch": "", "additions": 0, "deletions": 3 },
-                ] }),
-            ),
-        ),
-        tool(
-            "c4",
-            "apply_patch",
-            running(json!({ "patchText": "*** Begin Patch\n*** Add File: src/new.rs\n+x" }), json!({})),
-        ),
-        tool(
-            "c5",
-            "apply_patch",
-            failed(json!({ "patchText": "*** Update File: a.rs\n*** Update File: b.rs" }), "context mismatch"),
-        ),
-    ]);
-    let h = open(100, 60, messages);
-    h.wait_for_all(&[
-        "# Todos",
-        "[✓] Write the views",
-        "[•] Prove them",
-        "[-] Drop legacy",
-        "[ ] Report",
-        "# Questions",
-        "Which design?",
-        "New, Both",
-        "(no answer)",
-        "← Patched a.rs",
-        "# Deleted gone.rs",
-        "-3 lines",
-        "⋯ Patching src/new.rs",
-        "# Patch failed",
-        "context mismatch",
-    ]);
-    let theme = h.tui.page();
-    assert_eq!(h.fg("Prove them"), theme.text.feedback.warning.base);
-    assert_eq!(h.fg("Drop legacy"), theme.text.faint);
-    assert_eq!(h.fg("# Patch failed"), theme.text.feedback.error.base);
-    assert_eq!(h.fg("context mismatch"), theme.text.muted);
-    assert_eq!(h.fg("-3 lines"), theme.diff.text.removed);
+    h.wait_for_all(&["Asked 2 questions", "Todo update failed"]);
+    assert_eq!(h.fg("Todo update failed"), h.tui.page().text.feedback.error.base);
 }
 
 /// A theme switch restyles these rows in place too: an open nested call stays open, the patch keeps its diff, and

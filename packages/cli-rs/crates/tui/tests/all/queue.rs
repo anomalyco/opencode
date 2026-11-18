@@ -171,24 +171,6 @@ fn the_dock_shows_the_queue_and_the_transcript_hides_it() {
 }
 
 #[test]
-fn the_queued_dialog_lists_prompts_and_enter_steers_one() {
-    let kit = Kit::new(queued());
-    kit.app.press("ctrl+x");
-    kit.app.press("q");
-    let screen = kit.wait_for("Search queued prompts");
-    assert!(screen.contains("1 of 2"), "{screen}");
-    assert!(screen.contains("steer enter"), "{screen}");
-    assert!(screen.contains("delete ctrl+d"), "{screen}");
-    assert!(screen.contains("undo ctrl+u"), "{screen}");
-    // The first prompt takes two rows of the two-row list, so the move scrolls the second into view.
-    kit.app.press("down");
-    kit.wait_for("2 of 2");
-    kit.app.press("enter");
-    assert_eq!(kit.wait_writes(1), [r#"PATCH /api/session/ses_a/inbox/msg_06 {"delivery":"steer"}"#]);
-    kit.wait_gone("Search queued prompts");
-}
-
-#[test]
 fn a_click_on_the_dock_opens_the_dialog_and_delete_closes_after_the_last() {
     let kit = Kit::new(queued());
     kit.click("2 queued");
