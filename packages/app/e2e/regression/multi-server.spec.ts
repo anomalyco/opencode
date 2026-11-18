@@ -200,9 +200,13 @@ test("a session its server never answers for says the server is unreachable, the
   const sessions = [sessionA]
   await setup(page, { tabs: [], a: { sessions } })
   const metadata = await holdRoute(page, new RegExp(`/api/session/${late.id}(\\?|$)`), { method: "GET" })
+  // Only the session route asks for the transcript, in the step that starts its wait. The titlebar asks for the same
+  // metadata before the route's chunk has loaded, so the held request alone does not say the route is waiting.
+  const waiting = page.waitForRequest(new RegExp(`/api/session/${late.id}/message\\?`))
   await page.clock.install()
   await page.goto(sessionHref(late.id))
   await metadata.arrived
+  await waiting
   const unreachable = page.getByText("Can't reach this server", { exact: true })
   await expect(unreachable).toHaveCount(0)
 
