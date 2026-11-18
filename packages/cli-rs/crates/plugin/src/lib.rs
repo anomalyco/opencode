@@ -15,7 +15,7 @@ pub mod interact;
 pub mod limits;
 mod list;
 pub mod loader;
-#[cfg(feature = "luau")]
+#[cfg(luau)]
 pub mod luau;
 pub mod mailbox;
 pub mod node;
@@ -23,7 +23,7 @@ pub mod node;
 pub mod pipe;
 // A build with `luau` and without `ts` has no JS host: the Luau carrier walks its plugin directories with the pipe's
 // tree walker alone, of which what only the JS host calls goes unused.
-#[cfg(all(feature = "luau", not(feature = "ts")))]
+#[cfg(all(luau, not(feature = "ts")))]
 pub mod pipe {
     #[allow(dead_code)]
     pub(crate) mod tree;
@@ -2451,6 +2451,13 @@ pub const SKIPPED_JS_OFF: &str = "TypeScript TUI plugins run on the JS host, whi
 /// Why a TypeScript plugin is not loaded in a build without the `ts` feature, which has no JS host at all (ts-feature).
 pub const SKIPPED_NO_TS: &str =
     "this build of opencode-native has no TypeScript plugin support (built without the ts feature)";
+/// Why a Luau plugin is not loaded in a build without Luau: built without the `luau` feature, or on x86_64 Windows
+/// MSVC, where Luau is off until OpenTUI's library links beside it (build.rs).
+pub const SKIPPED_NO_LUAU: &str = if cfg!(feature = "luau") {
+    "Luau plugins do not run on x86_64 Windows yet: OpenTUI's library there does not link beside Luau"
+} else {
+    "this build of opencode-native has no Luau plugin support (built without the luau feature)"
+};
 /// Why a TypeScript plugin is not loaded when no JS host runs: [`SKIPPED_JS_OFF`], or [`SKIPPED_NO_TS`] in a build without
 /// the `ts` feature, which has none to turn on.
 pub const SKIPPED_OFF: &str = if cfg!(feature = "ts") { SKIPPED_JS_OFF } else { SKIPPED_NO_TS };

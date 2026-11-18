@@ -83,7 +83,7 @@ enum Carrier {
     CAbi,
     Pipe,
     /// A Luau plugin (spike `luau-spike`), in process on the linked path.
-    #[cfg(feature = "luau")]
+    #[cfg(luau)]
     Luau,
 }
 
@@ -212,7 +212,7 @@ fn request_ownership_over_the_pipe() {
 }
 
 // Expected (luau-spike 1.2): a Luau plugin is on the linked path, so every row holds for it as in process.
-#[cfg(feature = "luau")]
+#[cfg(luau)]
 #[test]
 fn request_ownership_in_luau() {
     table(Carrier::Luau);
@@ -223,9 +223,9 @@ fn request_ownership_in_luau() {
 // the route opens again and the server answers. In process, through the C ABI and in Luau.
 #[test]
 fn a_task_parked_on_its_mounts_fetch_goes_on_once_cancelled() {
-    #[cfg_attr(not(feature = "luau"), allow(unused_mut))]
+    #[cfg_attr(not(luau), allow(unused_mut))]
     let mut carriers = vec![Carrier::InProcess, Carrier::CAbi];
-    #[cfg(feature = "luau")]
+    #[cfg(luau)]
     carriers.push(Carrier::Luau);
     for carrier in carriers {
         parked(carrier);
@@ -242,7 +242,7 @@ fn parked(carrier: Carrier) {
             let entries = abi::export_plugin!(@loopback "test.parked", parked_plugin);
             opencode_plugin::loader::native::loopback(&host, entries).unwrap().0
         }
-        #[cfg(feature = "luau")]
+        #[cfg(luau)]
         Carrier::Luau => {
             let sources = opencode_plugin::luau::Sources::from_files([
                 ("plugin.toml", "id = \"test.parked\""),
@@ -255,7 +255,7 @@ fn parked(carrier: Carrier) {
     opencode_tui::plugins::host::add(&h.tui, definition);
     let route = Route::Plugin { id: "test.parked".into(), name: "probe".into() };
     let resumed = || match carrier {
-        #[cfg(feature = "luau")]
+        #[cfg(luau)]
         Carrier::Luau => {
             let stored = opencode_plugin::Host::storage_read(&*h.tui, "plugin.test.parked.seen");
             let seen: Vec<String> = stored.and_then(|json| serde_json::from_str(&json).ok()).unwrap_or_default();
@@ -313,7 +313,7 @@ fn parked_plugin(setup: &mut abi::Setup) -> Result<(), String> {
 }
 
 /// [`parked_plugin`] in Luau: the surface's handler is the task; it records in its storage what its fetch gave.
-#[cfg(feature = "luau")]
+#[cfg(luau)]
 fn parked_script() -> String {
     let page = luau_literal(&serde_json::to_value(page()).unwrap());
     format!(
@@ -752,7 +752,7 @@ enum Probe {
     Native(Harness),
     Pipe(Pipe, PathBuf),
     /// The Luau probe, which records what it saw in its storage.
-    #[cfg(feature = "luau")]
+    #[cfg(luau)]
     Luau(Harness),
 }
 
@@ -770,7 +770,7 @@ impl Probe {
             pipe.active("example.probe");
             return Probe::Pipe(pipe, log);
         }
-        #[cfg(feature = "luau")]
+        #[cfg(luau)]
         if carrier == Carrier::Luau {
             let harness = support::mount(80, 24, Deps { route: Route::Home, ..deps });
             let init = luau_script(row, mark);
@@ -803,7 +803,7 @@ impl Probe {
         match self {
             Probe::Native(harness) => harness,
             Probe::Pipe(pipe, _) => &pipe.harness,
-            #[cfg(feature = "luau")]
+            #[cfg(luau)]
             Probe::Luau(harness) => harness,
         }
     }
@@ -812,7 +812,7 @@ impl Probe {
         match self {
             Probe::Native(_) => "test.probe",
             Probe::Pipe(..) => "example.probe",
-            #[cfg(feature = "luau")]
+            #[cfg(luau)]
             Probe::Luau(_) => "test.probe",
         }
     }
@@ -833,7 +833,7 @@ impl Probe {
                 .filter_map(|line| line.strip_prefix("other "))
                 .map(|mounted| mounted == "true")
                 .collect(),
-            #[cfg(feature = "luau")]
+            #[cfg(luau)]
             Probe::Luau(harness) => luau_seen(harness, "other").iter().filter_map(serde_json::Value::as_bool).collect(),
         }
     }
@@ -847,7 +847,7 @@ impl Probe {
                 lines(log).into_iter().filter(|line| line.starts_with("asked")).map(|_| None).collect()
             }
             // 0 names no request: an effect, or a request the host did not take.
-            #[cfg(feature = "luau")]
+            #[cfg(luau)]
             Probe::Luau(harness) => {
                 luau_seen(harness, "asked").iter().map(|id| id.as_u64().filter(|id| *id != 0)).collect()
             }
@@ -863,7 +863,7 @@ impl Probe {
                 .into_iter()
                 .filter_map(|line| line.strip_prefix("settled ").map(|settled| (None, settled.to_owned())))
                 .collect(),
-            #[cfg(feature = "luau")]
+            #[cfg(luau)]
             Probe::Luau(harness) => luau_seen(harness, "replies")
                 .iter()
                 .map(|reply| (reply["id"].as_u64(), reply["text"].as_str().unwrap_or_default().to_owned()))
@@ -1084,7 +1084,7 @@ export default {{ id: "example.probe", setup(api) {{
 }
 
 /// What the Luau probe recorded under `field` of its storage.
-#[cfg(feature = "luau")]
+#[cfg(luau)]
 fn luau_seen(harness: &Harness, field: &str) -> Vec<serde_json::Value> {
     let stored = opencode_plugin::Host::storage_read(&*harness.tui, "plugin.test.probe.seen");
     let seen: serde_json::Value = stored.and_then(|json| serde_json::from_str(&json).ok()).unwrap_or_default();
@@ -1092,7 +1092,7 @@ fn luau_seen(harness: &Harness, field: &str) -> Vec<serde_json::Value> {
 }
 
 /// A JSON value as a Luau literal.
-#[cfg(feature = "luau")]
+#[cfg(luau)]
 fn luau_literal(value: &serde_json::Value) -> String {
     match value {
         serde_json::Value::Null => "nil".to_owned(),
@@ -1115,7 +1115,7 @@ fn luau_literal(value: &serde_json::Value) -> String {
 
 /// The probe in Luau: the same calls as the Rust one, which record in its storage what the calls got and what the
 /// replies said; its program is the Rust one's.
-#[cfg(feature = "luau")]
+#[cfg(luau)]
 fn luau_script(row: Row, mark: &Path) -> String {
     let (command, args) = witness(mark);
     let (kind, origin, close) = (format!("{:?}", row.kind), format!("{:?}", row.origin), format!("{:?}", row.close));

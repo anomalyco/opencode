@@ -123,7 +123,7 @@ pub(crate) enum Carrier<'a> {
     Npm(&'a str),
     /// The port's Luau twin (`crates/plugin/examples/luau/<name>`, spike `luau-spike`), in `<config>/plugins` as a user
     /// installs one, which the loader loads with Luau plugins on.
-    #[cfg(feature = "luau")]
+    #[cfg(luau)]
     Luau(&'a str),
 }
 
@@ -192,7 +192,7 @@ pub(crate) fn open_with(
                 unpack(name, &plugin);
                 plugin
             }
-            #[cfg(feature = "luau")]
+            #[cfg(luau)]
             Carrier::Luau(name) => {
                 let plugin = config.join("plugins").join(format!("{name}.luau"));
                 crate::plugin_pipe::copy(
@@ -769,9 +769,9 @@ fn the_published_session_usage_asks_for_the_sessions_location_first() {
 // `session.usage.updated` starts a run, as the last one ended. On the Rust port over the C ABI and on the Luau port.
 #[test]
 fn session_usage_ends_a_run_its_sidebar_closed_during() {
-    #[cfg_attr(not(feature = "luau"), allow(unused_mut))]
+    #[cfg_attr(not(luau), allow(unused_mut))]
     let mut carriers = vec![Carrier::Port("session-usage")];
-    #[cfg(feature = "luau")]
+    #[cfg(luau)]
     carriers.push(Carrier::Luau("session-usage"));
     for carrier in carriers {
         closed_mid_run(carrier);
@@ -785,9 +785,9 @@ fn session_usage_ends_a_run_its_sidebar_closed_during() {
 // Luau port.
 #[test]
 fn goal_plugin_counts_an_active_goals_time_each_second() {
-    #[cfg_attr(not(feature = "luau"), allow(unused_mut))]
+    #[cfg_attr(not(luau), allow(unused_mut))]
     let mut carriers = vec![Carrier::Port("goal-plugin")];
-    #[cfg(feature = "luau")]
+    #[cfg(luau)]
     carriers.push(Carrier::Luau("goal-plugin"));
     for carrier in carriers {
         let sampled = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() - 10;

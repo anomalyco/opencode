@@ -46,7 +46,7 @@ mod plugin_fetch;
 mod plugin_flood;
 pub mod plugin_input;
 mod plugin_limits;
-#[cfg(feature = "luau")]
+#[cfg(luau)]
 mod plugin_luau;
 mod plugin_machines;
 mod plugin_mail;

@@ -217,7 +217,7 @@ impl Host for Tui {
 
     fn pending(&self, target: &str) {
         let held = held(self, target).and_then(|(artifact, _)| artifact.ok());
-        #[cfg(feature = "luau")]
+        #[cfg(luau)]
         if held.as_ref().is_some_and(opencode_plugin::luau::approves) {
             let message =
                 "This project wants to run a Luau plugin inside opencode. Run /plugins to approve or decline it.";
@@ -1359,7 +1359,7 @@ fn tell_skipped(tui: &Tui) {
     for entry in tui.plugins.entries() {
         let Status::Skipped(reason) = &entry.status else { continue };
         let starting = reason == opencode_plugin::loader::STARTING;
-        #[cfg(feature = "luau")]
+        #[cfg(luau)]
         let starting = starting || reason == opencode_plugin::luau::STARTING;
         if !entry.key.starts_with("target:") || starting || !told.insert(entry.key) {
             continue;
@@ -1522,7 +1522,7 @@ pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<JsHost>)
     let project = opencode_plugin::loader::project_root(&external.cwd);
     let loader = Loader::new(Rc::new(Native), external.config_dir, external.cwd, entries);
     // Luau plugins (O-178): on in a build with them, unless `OPENCODE_PLUGIN_LUAU=0` turns them off.
-    #[cfg(feature = "luau")]
+    #[cfg(luau)]
     let loader = match opencode_plugin::luau::enabled() {
         true => {
             let proxy = tui.app.proxy();

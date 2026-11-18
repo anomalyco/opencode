@@ -154,7 +154,8 @@ it, how a handler waits (tasks, `await`, timers), the limits, and the shortest p
   process, in a sandboxed Luau VM of its own with a CPU budget and a 32 MiB heap; a project's plugin waits for the
   user's approval. `crates/plugin/examples/luau` holds the examples, and `crates/plugin/src/luau/opencode` the type stub
   that `luau-analyze` and luau-lsp read (`bun run check:luau-types` checks the examples). `OPENCODE_PLUGIN_LUAU=0` turns
-  Luau plugins off.
+  Luau plugins off. Not yet on x86_64 Windows, whose OpenTUI v0.9.2 library doesn't link beside Luau: a Luau plugin is
+  listed as skipped there.
 - [`docs/P.4.md`](docs/P.4.md) is the reference: discovery, the JS host, and how to debug a TypeScript plugin.
 
 `/plugins` shows each plugin's state, and the error of one that failed or was skipped ("view error"). The log (`opencode.log` in the `log`

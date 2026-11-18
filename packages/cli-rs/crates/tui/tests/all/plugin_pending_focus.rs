@@ -24,7 +24,7 @@ thread_local! {
 enum Carrier {
     Linked,
     CAbi,
-    #[cfg(feature = "luau")]
+    #[cfg(luau)]
     Luau,
 }
 
@@ -32,7 +32,7 @@ fn carriers() -> Vec<Carrier> {
     vec![
         Carrier::Linked,
         Carrier::CAbi,
-        #[cfg(feature = "luau")]
+        #[cfg(luau)]
         Carrier::Luau,
     ]
 }
@@ -85,7 +85,7 @@ fn open(carrier: Carrier) -> Harness {
             let entries = abi::export_plugin!(@loopback "test.focus", probe);
             opencode_plugin::loader::native::loopback(&host, entries).unwrap().0
         }
-        #[cfg(feature = "luau")]
+        #[cfg(luau)]
         Carrier::Luau => {
             let sources = opencode_plugin::luau::Sources::from_files([
                 ("plugin.toml", "id = \"test.focus\""),
@@ -146,7 +146,7 @@ fn page(wide: bool, show: bool) -> v2::Node {
 }
 
 /// The probe in Luau.
-#[cfg(feature = "luau")]
+#[cfg(luau)]
 const LUAU: &str = r#"local plugin = require("@opencode/plugin")
 local show = false
 local function text(text) return { type = "text", spans = { { text = text } } } end

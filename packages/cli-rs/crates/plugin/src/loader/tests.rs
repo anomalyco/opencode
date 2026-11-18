@@ -2282,3 +2282,18 @@ fn a_build_without_ts_says_it_has_no_typescript_plugin_support() {
     assert_eq!(entry(&registry.entries(), "tui-pkg@1.0.0").status, skipped);
     assert_eq!(entry(&registry.entries(), &native).status, Status::Pending);
 }
+
+// Expected (win-x64-link): a build without Luau, by feature or on x86_64 Windows MSVC, lists a Luau plugin directory as
+// skipped, saying it has no Luau support, not a TypeScript reason; a native build beside it loads.
+#[cfg(not(luau))]
+#[test]
+fn a_build_without_luau_says_it_has_no_luau_plugin_support() {
+    let project = Project::new();
+    write(&project.global().join("plugin.toml"), "id = \"hello\"\n");
+    let native = project.plugin("native", "id=native");
+    let (host, registry) = (host(), Registry::define(Vec::new(), []));
+    project.loader(Rc::new(Fake::default()), Vec::new()).reconcile(&dynamic(&host), &registry);
+    let skipped = Status::Skipped(crate::SKIPPED_NO_LUAU.to_owned());
+    assert_eq!(entry(&registry.entries(), &project.global().to_string_lossy()).status, skipped);
+    assert_eq!(entry(&registry.entries(), &native).status, Status::Pending);
+}
