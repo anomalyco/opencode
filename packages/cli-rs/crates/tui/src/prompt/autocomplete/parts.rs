@@ -1,11 +1,4 @@
-//! Mentions as prompt parts: each `@file`, `@agent`, and `@skill` in the text is an atomic extmark,
-//! highlighted and deleted as one unit, tied to its entry in the `PromptInfo`'s `files`, `agents`, or
-//! `skills` (`component/prompt/index.tsx:765-880`, `insertPart` in `autocomplete.tsx`). Compact pastes
-//! (`pasted`) and pasted attachments (E.4) are parts on the same marks.
-//!
-//! The `PromptInfo` keeps each part's `mention` (`start`, `end`, `text`), or a paste's `source`. Every
-//! edit moves the marks; [`sync`] then copies their ranges into the parts and drops the parts whose
-//! marks went.
+//! Atomic prompt extmarks for file, agent, and skill mentions.
 
 use opencode_api::generated::{PromptAgentAttachment, PromptInputSkillAttachment};
 use opentui::widget::{ExtmarkId, ExtmarkOptions};
@@ -55,8 +48,7 @@ impl Kind {
 #[derive(Default)]
 pub struct Parts {
     marks: RefCell<Vec<(ExtmarkId, Kind, usize)>>,
-    /// Pastes whose marks an edit removed. TS keeps a paste's text on its extmark; here [`sync`] keeps it by mark id
-    /// until undo or redo brings the mark back.
+    /// Keep removed paste data by mark ID so undo and redo can restore it.
     dropped: RefCell<Vec<Dropped>>,
 }
 
@@ -114,8 +106,7 @@ pub fn insert(prompt: &Inner, start: u32, text: &str, kind: Kind, part: Value) {
     prompt.parts.marks.borrow_mut().push((id, kind, list.len() - 1));
 }
 
-/// The skills dialog's pick: `@id ` at the cursor, unless the prompt has the skill
-/// (`prompt.skills` in `component/prompt/index.tsx`).
+/// Insert the selected skill at the cursor unless the prompt already includes it.
 pub fn insert_skill(prompt: &Inner, id: &str) {
     if has(prompt, Kind::Skill, "id", &json!(id)) {
         return;
@@ -135,7 +126,7 @@ pub fn insert_skill(prompt: &Inner, id: &str) {
     prompt.parts.marks.borrow_mut().push((mark, Kind::Skill, skills.len() - 1));
 }
 
-/// Marks the mentions of the `PromptInfo` the textarea now shows (`restoreExtmarksFromPrompt`).
+/// Restore mention extmarks for the displayed prompt.
 pub fn restore(prompt: &Inner) {
     prompt.textarea.clear_extmarks();
     prompt.parts.clear();
@@ -154,9 +145,7 @@ pub fn restore(prompt: &Inner) {
     }
 }
 
-/// Paints the marks of `old`'s styles in `new`'s, as TS's marks follow their style IDs. A mark's style is fixed when
-/// it is added, so each is added again, in creation order (which [`sync`] reads from the IDs), over the same range;
-/// its part follows the new ID. A mark an edit removed keeps its old style if undo brings it back.
+/// Reapply mention styles without changing text, selection, or edit history.
 pub fn restyle(prompt: &Inner, old: &Theme, new: &Theme) {
     const SCOPES: [&str; 4] = ["extmark.file", "extmark.agent", "extmark.skill", "extmark.paste"];
     let (old, new) = (opencode_ui::code::syntax_theme(old), opencode_ui::code::syntax_theme(new));
@@ -183,7 +172,6 @@ pub fn restyle(prompt: &Inner, old: &Theme, new: &Theme) {
 /// (`syncExtmarksWithPromptParts`). Files without a mention stay.
 pub fn sync(prompt: &Inner) {
     let mut marks = prompt.textarea.extmarks();
-    // Marks in creation order, as TS lists them.
     marks.sort_by_key(|mark| mark.id);
     let mut mapped = prompt.parts.marks.borrow().clone();
     let mut info = prompt.prompt.borrow_mut();

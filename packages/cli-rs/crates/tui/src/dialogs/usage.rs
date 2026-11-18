@@ -1,6 +1,4 @@
-//! Usage dialog (E.16): `/usage` in `component/usage.tsx`, on the limit math of `util/usage-limits.ts`.
-//!
-//! The limits come from `GET /api/experimental/usage/limits`, which asks OpenCode Console.
+//! Workspace usage limits and account status.
 
 use opencode_api::generated::{
     ModelInfo, ProviderInfo, UsageLimitsBudget, UsageLimitsBudgetCoverage, UsageLimitsBudgetPer,
@@ -229,7 +227,7 @@ fn rows(local: &Local) -> Vec<Row> {
 fn build(cx: &Rc<DialogCx>, local: &Rc<Local>) -> View {
     let error = cx.theme.text.feedback.error.base;
     let state = local.usage();
-    // Reopen once the limits arrive or sign-in changes, since the three states lay out differently.
+    // Reopen on a state change because signed-out, loading, and ready states use different layouts.
     let shown = state.as_ref().map(Option::is_some);
     let weak = Rc::downgrade(local);
     let reopened = Rc::new(Cell::new(false));

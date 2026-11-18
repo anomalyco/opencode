@@ -1,7 +1,4 @@
-//! Name worktree dialog (E.11b, row DLG27): `component/dialog-worktree-name.tsx`.
-//!
-//! "Name worktree" asks for a name; `tab` (`dialog.worktree.generate`) fills in a generated one, and an empty
-//! or symbol-only name becomes a generated one on Enter.
+//! Choose or generate a name for a new worktree.
 
 use opencode_ui::prompt::{PromptAction, PromptProps, prompt};
 

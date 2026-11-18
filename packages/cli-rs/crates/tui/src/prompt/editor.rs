@@ -1,9 +1,4 @@
-//! The prompt editor (E.2, rows P01, P02, P13, P14): the textarea, its keymap layers, and the
-//! composer state (`component/prompt/index.tsx`).
-//!
-//! The textarea has no key bindings of its own. While it is focused, the keymap's managed textarea
-//! layer runs the 36 `input.*` commands on it through `Tui::textarea` (U.2), and the layers here add
-//! submit, queue, clear, history, shell mode, interrupt, and background.
+//! Prompt editing, focus, draft lifecycle, and key bindings.
 
 use futures_util::FutureExt;
 use futures_util::future::BoxFuture;
@@ -53,7 +48,7 @@ pub struct Shared {
     pub complete: autocomplete::Shared,
     pub editor: editor_context::Context,
     pub stash: super::stash::Stash,
-    /// The prompt last mounted, whose pastes a copy expands (E.4).
+    /// Mounted prompt used to expand collapsed pastes on copy.
     pub(crate) current: RefCell<Weak<Inner>>,
     /// Each session's last pending interrupt request, which waits for the ones before it. It outlives the composer
     /// that sent it, as a later prompt from another composer must still wait for it.
@@ -75,9 +70,7 @@ impl Shared {
         }
     }
 
-    /// Resolves once every interrupt request for `session` has its answer, at once without one. A submit's
-    /// requests wait for it, so the server sees them in the order they were made, as TS's fetches start in call
-    /// order (`ctrl+⏎ interrupt & send`).
+    /// Wait for this session's pending interrupts before sending its next prompt.
     pub(crate) fn interrupted(&self, session: &SessionID) -> BoxFuture<'static, ()> {
         let pending = self.pending_interrupt(session);
         async move {
@@ -93,9 +86,7 @@ impl Shared {
         self.interrupts.borrow().get(session).cloned()
     }
 
-    /// Runs `run` at once, or once every pending interrupt of `session` has its answer, so what a slash command
-    /// sends reaches the server after them, as a prompt does; TS runs it at once (deviation
-    /// O89-slash-after-interrupt).
+    /// Run the command after earlier interrupts of the same session finish.
     pub(crate) fn after_interrupts(&self, tui: &Tui, session: Option<&SessionID>, run: impl FnOnce(&Tui) + 'static) {
         match session.and_then(|session| self.pending_interrupt(session)) {
             Some(pending) => {
@@ -176,11 +167,10 @@ pub struct Inner {
     pub(crate) parts: parts::Parts,
     pub(crate) history: super::history::Cursor,
     pub(crate) autocomplete: OnceCell<Autocomplete>,
-    /// Pastes waiting for files or the clipboard (E.4).
+    /// Outstanding file and clipboard pastes.
     pub(crate) paste: super::paste::Queue,
     previews: super::attach::Previews,
-    /// `--prompt`, or an Enter pressed before the catalogs loaded, until it is submitted (`home.tsx:68-79`,
-    /// `session/index.tsx:623-630`; deviation `P02-early-enter`).
+    /// Pending submission while the catalogs load; editing the text cancels it.
     pub(crate) startup: RefCell<Option<(String, SessionInboxDelivery)>>,
     pub(crate) staging: super::r#move::Move,
     /// `props.disabled`: a home form holds the keys, so a click does not focus the prompt.
@@ -201,13 +191,12 @@ impl Prompt {
         self.inner.mode.get()
     }
 
-    /// The prompt's state, for views beside it that read its mode and focus it (E.10b's queued undo).
+    /// Weak reference for views that inspect the prompt mode or request focus.
     pub(crate) fn weak(&self) -> Weak<Inner> {
         Rc::downgrade(&self.inner)
     }
 
-    /// Paints in the page theme in place, as TS's prompt follows it: the text, cursor, undo history, mentions and
-    /// focus stay. The footer's plugin claims take the theme in place, or mount again when one cannot.
+    /// Restyle in place to preserve text, cursor, undo history, and focus.
     pub fn restyle(&self, tui: &Tui) {
         let inner = &self.inner;
         let theme = tui.page();
@@ -301,7 +290,6 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
     let padding = if width < 44 { 1 } else { 2 };
     let cursor = crate::features::system_commands::cursor(&tui.config());
     let textarea = Textarea::new(app)
-        // Core's textarea sets no pointer shape, so the TS TUI keeps the default pointer everywhere.
         .mouse_pointer(MousePointer::DEFAULT)
         .set_keymap(Keymap::new())
         .cursor_style(cursor.0, cursor.1)
@@ -403,8 +391,7 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         disabled: Cell::new(false),
         this: this.clone(),
     });
-    // `prompt/index.tsx:1838-1844`: a left press focuses the prompt unless it is disabled. With the right pane
-    // active, the session frame takes the release instead.
+    // A click returns focus to the enabled prompt, including from a docked pane.
     inner.textarea.on_mouse(bind!(inner, |prompt, cx, event| {
         let MouseEventKind::Down(button) = event.kind else { return };
         let Some(tui) = prompt.tui.upgrade() else { return };
@@ -419,8 +406,7 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
     connect(&inner);
     connect_location(&inner);
     install_layers(tui, &inner);
-    // After the prompt's layers, as TS renders it after them: the newer layer runs first, so its
-    // `prompt.clear` wins while the popup shows.
+    // Register completion last so its clear action wins while the popup is open.
     let _ = inner.autocomplete.set(autocomplete::mount(tui, &inner, &inner.root));
     *tui.textarea.borrow_mut() = Some(inner.textarea.clone());
     *tui.prompt.current.borrow_mut() = Rc::downgrade(&inner);
@@ -499,8 +485,7 @@ impl Inner {
         prompt["text"] = Value::String(text.to_owned());
         prompt["mode"] = Value::String(self.mode.get().as_str().to_owned());
         self.restore(prompt);
-        // Replacing the text calls no change handler, so the completion hears of it here, as TS's `setText` tells it:
-        // the popup of the old text closes, and one the new text starts opens.
+        // Replacing all text bypasses the change handler; explicitly resync completion.
         if let Some(complete) = self.autocomplete.get() {
             complete.on_input(&self.textarea.text());
         }
@@ -682,8 +667,7 @@ impl Inner {
             Mode::Shell => Display { agent: Some("Shell".into()), ..display },
             Mode::Normal => display,
         };
-        // `borderHighlight` tints toward the highlight as the agent label fades in; `tint` returns an opaque
-        // color, so a border token with alpha draws at full strength as in TS.
+        // Tinting produces an opaque border, even when the source token has alpha.
         let border =
             opencode_ui::theme::tint(theme.border.base, highlight, if display.agent.is_some() { 1.0 } else { 0.0 });
         self.frame.border_color(border);
@@ -758,9 +742,7 @@ impl Inner {
         cut.trim_end().to_owned()
     }
 
-    /// The scanner in the agent's color, `[⋯]` with animations off (`component/prompt/index.tsx:1913-1919`). It
-    /// mounts when the session starts running and drops when it stops, so it starts at its first frame each time
-    /// and no timer runs while idle.
+    /// Activity scanner in the agent's color. Show a still glyph when animations are disabled.
     fn show_spinner(&self, tui: &Tui, theme: &Theme, running: bool, color: Color) {
         let mut spinner = self.spinner.borrow_mut();
         if !running {
@@ -886,8 +868,7 @@ fn connect(inner: &Rc<Inner>) {
     }));
 }
 
-/// The footer's location brightens under the pointer, and a click opens the working directory dialog (E.20,
-/// `useWorkingDirectoryActions`). While a reply runs the footer shows the interrupt hint instead.
+/// Show and open the working directory from the footer.
 fn connect_location(inner: &Rc<Inner>) {
     inner.location_box.on_resize(bind!(inner, |prompt, _, rect| {
         let width = rect.width.max(0.0) as u16;
@@ -950,8 +931,7 @@ fn install_layers(tui: &Tui, inner: &Rc<Inner>) {
     };
 
     let layers = vec![
-        // The prompt's commands in the order of `promptCommands`, which the palette keeps; then `session.cd`, whose TS
-        // layer is older.
+        // Palette order follows layer registration order.
         KeymapLayer::global(vec![
             command("prompt.clear", "Clear prompt", "Prompt", |prompt, tui| {
                 prompt.clear(tui);

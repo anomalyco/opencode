@@ -1,6 +1,4 @@
-//! Queued prompts dialog (E.10b, row DLG41): `openQueuedPrompts` (`routes/session/index.tsx:788-844`). The
-//! session's queued prompts with `1 of n` footers; Enter steers one, `queued_prompt.delete` cancels it, and
-//! `queued_prompt.undo` takes it back into the composer. The list follows the inbox while the dialog is open.
+//! Inspect, steer, undo, or delete queued prompts.
 
 use opencode_ui::select::{FooterHint, Group, Select, SelectAction};
 
@@ -87,7 +85,7 @@ impl List {
         });
     }
 
-    /// Cancels the prompt; the dialog closes when it was the last one.
+    /// Cancel the prompt and close the dialog if the queue is empty.
     fn delete(&self, inbox: &str) {
         let (Some(tui), Some(view)) = (self.tui.upgrade(), self.view.upgrade()) else { return };
         let last = tui.data.read(|state| queued::prompts(state, &view.session).len() == 1);

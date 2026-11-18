@@ -1,5 +1,4 @@
-//! Model usage dialog (E.16): `DialogUsageModel` in `component/usage.tsx`, every limit on one model, the one
-//! setting what's left marked.
+//! Limits for one model, highlighting the binding limit.
 
 use opencode_api::generated::ModelInfo;
 use opencode_ui::dialog::layout;

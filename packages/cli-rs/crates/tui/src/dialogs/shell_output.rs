@@ -1,8 +1,4 @@
-//! Shell output dialog (E.13b, row DLG18): `packages/tui/src/component/dialog-shell-output.tsx`.
-//!
-//! The composer's Shell tab opens it for a running command. It polls the shell's info and output while it is open,
-//! even after the command exits, so the last flush shows: the newest 64 KiB first, then each new page, one second
-//! apart once it has caught up.
+//! Interactive shell output with paging, live follow, and copy actions.
 
 use opencode_api::client::Client;
 use opencode_api::error::Error;
@@ -229,7 +225,7 @@ impl Poll {
         let mut output = self.output.borrow_mut();
         let mut next = output.take().unwrap_or_default();
         next.push_str(&loaded.page.output);
-        // Like `next.slice(-PAGE_BYTES)` in UTF-16 code units, without starting on half a character.
+        // The tail limit counts UTF-16 units but must not split a character.
         let tail = text_boundary::tail(&next, PAGE_BYTES as usize);
         if tail.len() < next.len() {
             self.omitted.set(true);

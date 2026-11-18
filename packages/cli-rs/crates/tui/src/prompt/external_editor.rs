@@ -1,9 +1,4 @@
-//! External editor (E.5, row P09): `prompt.editor` (`<leader>e`, `/editor`) opens the prompt in `$VISUAL` or
-//! `$EDITOR` and reads it back (`openEditor` in `editor.ts`, `prompt.editor` in `component/prompt/index.tsx`).
-//!
-//! The prompt goes to a temporary `.md` file. The terminal is released to the editor while it runs and taken
-//! back when it exits; the UI waits meanwhile, as TS's suspended renderer does. Mentions that survive the edit
-//! keep their parts, moved to where their text now is.
+//! Edit the prompt in `$VISUAL` or `$EDITOR`, then restore its mentions.
 
 use std::path::PathBuf;
 

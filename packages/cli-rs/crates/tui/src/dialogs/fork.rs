@@ -1,6 +1,4 @@
-//! Fork dialog (E.10a, row DLG37): `routes/session/dialog-fork.tsx`. "Full session", then the session's prompts,
-//! newest first. A pick forks the session before that prompt (`POST /api/session/:id/fork`), opens the fork, and
-//! puts the prompt back in its composer.
+//! Fork a session in full or before a selected prompt.
 
 use opencode_api::generated::{SessionForkInput, SessionMessageID};
 use opencode_ui::dialog::{DIALOG_LIST_INSET, layout_with};
@@ -47,7 +45,7 @@ pub fn show(tui: &Tui, session: SessionID, message: Option<String>, on_move: OnM
     );
 }
 
-/// `fork`: shows "Forking session…", forks, then opens the fork with the prompt it was forked before.
+/// Open the fork with the selected prompt ready to edit.
 fn fork(tui: &Tui, session: SessionID, message: Option<String>) {
     pending(tui);
     let prompt = message.as_deref().and_then(|message| {

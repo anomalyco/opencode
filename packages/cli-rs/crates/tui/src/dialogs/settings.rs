@@ -1,10 +1,4 @@
-//! Settings dialog (E.18a): `packages/tui/src/component/dialog-config.tsx`.
-//!
-//! [`SETTINGS`] is the TS `settings` table. The dialog lists them by category with the current value as the
-//! footer; Enter and Right step to the next value, Left to the previous one. Each change is one `cli.json`
-//! update by path, queued on a worker thread because the file lock blocks. [`Live`] holds the resolved config
-//! that every reader queries; writes and outside `cli.json` edits replace it, so everything follows a change
-//! without a restart.
+//! Settings writes run on a worker because the config lock blocks. File changes refresh the live configuration.
 
 use std::cell::Ref;
 use std::collections::VecDeque;
@@ -120,7 +114,7 @@ use Lit::Str as S;
 
 use crate::prelude::*;
 
-/// The TS `settings` table, in its order (`dialog-config.tsx:27-382`).
+/// Settings in display order.
 pub const SETTINGS: &[Setting] = &[
     choice(
         "Theme",
@@ -452,7 +446,7 @@ pub const SETTINGS: &[Setting] = &[
 
 type Listener = Rc<dyn Fn(&Tui)>;
 
-/// What a write runs when it lands, in the order writes were queued.
+/// Completion callbacks in write order.
 type Done = Box<dyn FnOnce(&Tui)>;
 
 pub struct Live {
@@ -494,7 +488,7 @@ impl Live {
         }
     }
 
-    /// The resolved config now (`useConfig().data`). Keep the borrow short: a change replaces it.
+    /// Borrow the current configuration briefly; a change replaces it.
     pub fn config(&self) -> Ref<'_, Resolved> {
         self.resolved.borrow()
     }
@@ -676,8 +670,7 @@ pub fn display(tui: &Tui, setting: &Setting) -> String {
         .map_or_else(|| js_string(&current), |label| (*label).to_owned())
 }
 
-/// Steps `SETTINGS[index]` by `direction` and writes it (`change` in `dialog-config.tsx`).
-/// While `saving` holds, the dialog's previous step is still being written and this one is ignored, as in TS.
+/// Step the selected value and save it. Ignore additional steps until the write completes.
 fn change(tui: &Tui, saving: &Rc<Cell<bool>>, index: usize, direction: i32) {
     if saving.get() {
         return;
@@ -721,7 +714,7 @@ fn options(tui: &Tui) -> Vec<SelectOption<usize>> {
         .collect()
 }
 
-/// The palette's settings rows (`settingOptions` in `command-palette.tsx`), shown while filtering.
+/// Settings commands shown while filtering the palette.
 pub fn palette_options(tui: &Tui) -> Vec<SelectOption<String>> {
     SETTINGS
         .iter()

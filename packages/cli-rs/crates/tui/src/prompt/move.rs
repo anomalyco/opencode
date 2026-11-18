@@ -1,9 +1,4 @@
-//! Worktrees from the prompt (E.11b, rows P16 and P17): `session.move` (`/worktrees`) and
-//! `component/prompt/move.tsx`.
-//!
-//! `/worktrees` opens the worktrees dialog for the prompt's project. Picking a checkout goes home there. A
-//! new worktree is created at once from a session; on home it is staged, the footer says "(new worktree)",
-//! and the first submit creates it ("Creating worktree…", then "Creating session…") before the session.
+//! Move the current session to a worktree or stage one for the next session.
 
 use opencode_api::generated::{LocationGetInput, LocationQueryInput, ProjectID, SessionInfo, WorktreeCreateInput};
 use opencode_store::Location;

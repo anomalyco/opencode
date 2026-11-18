@@ -1,9 +1,4 @@
-//! The Go upsell's art (E.16): `component/go-upsell-art.ts`. Rings radiate from the GO logo while a shimmer crosses
-//! it, at 30 frames a second while animations run; with them off it shows the frame halfway through the period.
-//!
-//! Colors are quantized after every mix, as Core 0.8.4's `RGBA` setters store bytes. TS takes its half-block path
-//! only when the terminal reports 24-bit color; OpenTUI's Rust crates expose no color depth, so this always takes it
-//! (DLG07).
+//! Animate the Go logo with a shimmer and expanding rings.
 
 use std::cell::OnceCell;
 use std::f64::consts::PI;

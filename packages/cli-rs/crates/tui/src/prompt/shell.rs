@@ -1,4 +1,4 @@
-//! TypeScript: `component/prompt/index.tsx:964-1020`.
+//! Shell-mode prompt and bindings.
 
 use opencode_ui::dialog::FocusId;
 

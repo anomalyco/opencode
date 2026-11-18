@@ -1,13 +1,4 @@
-//! Worktrees dialog (E.11b, row DLG26): `component/dialog-workspaces.tsx`.
-//!
-//! "Worktrees" lists a project's checkouts: the current one first under "Current", then the others, with
-//! the session subdirectories under each. Enter picks one for the caller (`/worktrees` in the prompt, the
-//! location-missing view). `ctrl+a` names a new worktree, `ctrl+d` twice deletes one (asking again when it
-//! has file changes), `ctrl+r` asks the server to look for worktrees, and in a session `ctrl+m` moves the
-//! session there.
-//!
-//! Like the open dialog, each change of the loading or deleting state builds the dialog again, restoring the
-//! filter and the selection, so the list's lock and current marker follow it (TS props are reactive).
+//! Select, create, or remove a project worktree.
 
 use opencode_api::generated::{
     AbsolutePath, LocationGetInput, LocationQueryInput, ProjectID, SessionMoveInput, VcsStatusInput, WorktreeDirectory,
@@ -600,8 +591,7 @@ impl Workspaces {
                                 state.removing = None;
                                 state.working = false;
                             }
-                            // TS leaves a home dialog that stays open showing the deletion; this reads
-                            // the list again instead.
+                            // Refresh a home dialog that stays open after deletion.
                             if !workspaces.removed_current(deleting_current) {
                                 workspaces.reopen(None);
                             } else if workspaces.shown.get() {

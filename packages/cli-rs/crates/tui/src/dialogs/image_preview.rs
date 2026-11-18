@@ -1,9 +1,4 @@
-//! Image preview dialog (E.4, row DLG09): `packages/tui/src/component/dialog-image-preview.tsx`.
-//!
-//! "Image N of M": one image at a time, fitted to the dialog (extra large, centered), with Left and Right
-//! (or the footer's previous and next) moving through them. The footer names the image by its prompt
-//! label, or `No preview` when it does not load. A `media:` ref reads its bytes from the server once
-//! (`createMediaSource`).
+//! Full-size image preview with navigation between attachments.
 
 use opencode_api::generated::{ExperimentalMediaGetInput, MediaHash};
 use opencode_ui::dialog::{DialogCx, FooterAction, FooterProps, layout};

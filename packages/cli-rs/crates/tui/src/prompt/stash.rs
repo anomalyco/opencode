@@ -1,11 +1,4 @@
-//! The prompt stash (E.4, row P04): `prompt.stash`, `prompt.stash.pop`, and `prompt.stash.list` over
-//! `<state>/prompt-stash.jsonl`, shared by every prompt of the app (`prompt/stash.tsx`,
-//! `component/prompt/index.tsx:882-946`).
-//!
-//! F.5's `jsonl` owns the format and writes the file. The UI keeps its own copy of the entries, so
-//! commands answer at once, as TS's store does. The file is touched on one worker thread in order: the
-//! load first, then each change under the file's lock, against what the file holds then, so entries
-//! another TUI stashed meanwhile stay.
+//! Persistent prompt stash shared across sessions.
 
 use std::path::{Path, PathBuf};
 
@@ -29,8 +22,7 @@ pub struct Stash {
 }
 
 impl Stash {
-    /// Loads `<state>/prompt-stash.jsonl` on the worker; until then the stash holds what was stashed
-    /// meanwhile, which then goes after the file's entries.
+    /// Load the stash on a worker. Keep entries added during the read after the entries from disk.
     pub fn load(app: &App, state: Option<PathBuf>) -> Self {
         let Some(state) = state else { return Self::default() };
         let writer = Serial::new("prompt-stash.jsonl");
@@ -61,8 +53,7 @@ impl Stash {
         self.entries.borrow().is_empty()
     }
 
-    /// `push({prompt})`, stamped now; the oldest entries past the limit go. A failed save shows an
-    /// error toast; TS ignores it (deviation O89-stash-save-toast). The entry stays in memory.
+    /// Timestamp and append a prompt, evicting the oldest entries beyond the limit. Report persistence errors.
     pub fn push(&self, tui: &Tui, prompt: Value) {
         let entry = jsonl::stash_entry(prompt, opencode_util::time::now_ms());
         {

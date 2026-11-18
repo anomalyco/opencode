@@ -1,6 +1,4 @@
-//! Execute dialog (E.7b): `DialogExecute` (`routes/session/dialog-execute.tsx`). The code and the
-//! output of a code-mode `execute` call, with copy actions. It follows the call while it runs: the
-//! transcript row passes each new state to [`Live::set`].
+//! Code-mode execution details and nested tool calls.
 
 use opencode_api::generated::{SessionMessageAssistantTool, SessionMessageAssistantToolState, ToolContent};
 use opencode_ui::dialog::{DIALOG_INSET, DialogCx, FooterAction, FooterProps, footer};

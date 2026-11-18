@@ -1,4 +1,4 @@
-//! TypeScript: `packages/tui/src/component/dialog-mcp.tsx`.
+//! MCP server status and actions.
 
 use opencode_api::generated::{
     ExperimentalMcpConnectInput, ExperimentalMcpDisconnectInput, LocationQueryInput, McpServer, McpServerStatus,
@@ -76,7 +76,7 @@ pub fn show_server(tui: &Tui, initial: Option<String>, details: bool) {
                 handle.move_to(name);
             }
             *mcp.select.borrow_mut() = Some(handle);
-            // The footer reads the selection through the handle, which exists only now.
+            // Refresh the footer once the selection handle exists.
             mcp.refresh();
             if let Some(tui) = mcp.tui.upgrade() {
                 // Refreshes the list after each store flush that touched the location.

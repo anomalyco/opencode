@@ -1,16 +1,4 @@
-//! Pastes (E.4, rows P06 and CB02): terminal pastes and `prompt.paste` (Ctrl+V) in the prompt
-//! (`component/prompt/index.tsx:373-394,470-493,1407-1522,1798-1851`, `clipboard.ts:24-52`).
-//!
-//! - A paste of three or more lines, or of more than 150 characters, becomes `[Pasted ~N lines]`: an atomic
-//!   mark tied to a `pasted` part that keeps the text. Submitting sends the text; clicking the mark, or
-//!   pasting the same text again right after it, expands it in place. `prompt.paste: "full"` turns this off.
-//! - A paste that names image, PDF, or SVG files attaches them ([`super::attach`]).
-//! - `prompt.paste` reads the clipboard as `image/png`, else `text/plain`: an image attaches as
-//!   `[Image N]`, text pastes as above. An empty terminal paste does the same, for terminals that paste an
-//!   image clipboard as nothing.
-//!
-//! Pastes run one after another. A paste whose file or clipboard read finishes after the prompt changed
-//! (its text or mode, or the prompt went) is dropped, as in TS.
+//! Clipboard and terminal pastes, including collapsed text and file attachments.
 
 use std::collections::VecDeque;
 
@@ -75,8 +63,7 @@ pub fn connect(inner: &Rc<Inner>) {
         }
         enqueue(&prompt, Job::Text(text.replace("\r\n", "\n").replace('\r', "\n")));
     }));
-    // A plugin's mode of the composer ends as the composer loses the focus (synthesis 3.8), and so does a capture that
-    // began with the focus there; also when the composer went with its route, before it heard of its focus.
+    // Losing composer focus ends its plugin mode and any pointer capture started there.
     let (tui, id) = (inner.tui.clone(), inner.textarea.id());
     inner.textarea.on_focus(move |_, focused| {
         if let (false, Some(tui)) = (focused, tui.upgrade()) {
@@ -96,8 +83,7 @@ pub fn connect(inner: &Rc<Inner>) {
                 .extmarks_at(cursor)
                 .into_iter()
                 .find(|mark| matches!(prompt.parts.get(mark.id), Some((Kind::Pasted, _))));
-            // TS prevents the press's default, so the click selects nothing. The press already started a selection
-            // here; without ending it, the release would select across the expanded text.
+            // End the press selection so release does not trigger copy-on-select.
             if mark.is_some_and(|mark| expand(&prompt, mark.id)) {
                 cx.app().clear_selection();
             }
@@ -225,7 +211,7 @@ fn insert(prompt: &Inner, normalized: &str, pasted: &str) {
         .tui
         .upgrade()
         .is_none_or(|tui| tui.settings.info().prompt.and_then(|prompt| prompt.paste) != Some(PromptPaste::Full));
-    // `pastedContent.length` counts UTF-16 units.
+    // Count UTF-16 units for the paste threshold.
     if (lines >= 3 || pasted.encode_utf16().count() > 150) && compact {
         // The same text pasted right after its mark expands it.
         let cursor = prompt.textarea.cursor_offset();

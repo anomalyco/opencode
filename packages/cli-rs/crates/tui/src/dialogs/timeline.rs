@@ -1,5 +1,4 @@
-//! Timeline dialog (E.10a, row DLG39): `routes/session/dialog-timeline.tsx`. The session's prompts, newest
-//! first; moving jumps the transcript to the prompt, and Enter opens the message actions (E.10b).
+//! Browse prompts newest first and jump to the highlighted message.
 
 use opencode_util::time::Zone;
 

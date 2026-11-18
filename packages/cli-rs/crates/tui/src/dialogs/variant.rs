@@ -1,4 +1,4 @@
-//! Variant dialog (E.16): `component/dialog-variant.tsx`, "Select variant".
+//! Select the current model's variant.
 
 use crate::local::Local;
 use crate::prelude::*;

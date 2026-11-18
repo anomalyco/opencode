@@ -15,7 +15,7 @@ pub struct Previews {
     paints: Paints,
 }
 
-/// The files, height, and option the previews were last built for.
+/// Files, height, and option used by the preview cache.
 type Shown = (Vec<(Option<String>, Option<String>, usize)>, u16, bool);
 
 impl Previews {

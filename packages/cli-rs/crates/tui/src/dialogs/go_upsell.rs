@@ -1,4 +1,4 @@
-//! TypeScript: `component/dialog-go-upsell.tsx`, `routes/session/index.tsx:633-758`.
+//! OpenCode Go subscription offer and device sign-in.
 
 use opencode_api::generated::{
     ConnectionInfo, IntegrationAttempt, IntegrationAttemptID, IntegrationID, IntegrationMethod, IntegrationMethodID,
@@ -64,9 +64,8 @@ pub struct Offer {
     pub on_subscribe: Rc<dyn Fn()>,
 }
 
-/// Offers OpenCode Go at most once a day across clients, unless "don't show again" was chosen
-/// (`routes/session/index.tsx:682-757`). The session route calls this when `provider.free-limit` stops a turn and
-/// the prompt came back empty-handed.
+/// Offer at most once a day across clients. Respect dismissal preferences and check the current session before showing
+/// the offer.
 pub fn offer(local: &Rc<Local>, offer: Offer, now: f64) {
     if local.dialogs.is_open() {
         return;
@@ -276,7 +275,7 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
     let compact = short || height < if narrow { 26 } else { 22 };
     let mut art = None;
     if compact {
-        // TS's scrollbox takes its whole `maxHeight`, so the panel reaches the buttons at the bottom.
+        // Reserve the full scroll area to keep the buttons at the bottom.
         let top = if short { 1 } else { height / 4 + 1 };
         let footer_rows = if narrow { ACTIONS.len() as u16 } else { 1 };
         let gaps = if short { 1 } else { 4 };

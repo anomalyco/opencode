@@ -1,5 +1,4 @@
-//! Status dialog (E.18b): `packages/tui/src/component/dialog-status.tsx`, `opencode.status` (`/status`,
-//! `<leader>s`). It lists the default location's MCP servers and follows the store while it is open.
+//! Status of services at the default location.
 
 use opencode_api::generated::{McpServer, McpServerStatus};
 use opencode_store::Catalog;
@@ -92,7 +91,7 @@ fn color(theme: &Theme, status: &McpServerStatus) -> Color {
     }
 }
 
-/// The muted text after the name; an unknown status shows its name, as the TS `Switch` fallback does.
+/// Display unknown statuses by name.
 fn describe(status: &McpServerStatus) -> String {
     match status {
         McpServerStatus::Connected(_) => "Connected".to_owned(),

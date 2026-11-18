@@ -1,13 +1,4 @@
-//! "Connect an integration" (E.17a, row DLG10): `component/dialog-integration.tsx`.
-//!
-//! The list of integrations (`/connect`, the model dialog's connect action, the prompt without a model, the
-//! sidebar's getting-started link, and the MCP dialog for a server that signs in through an integration), the
-//! accounts of a connected integration (activate, rename, remove), the method picker, and the four ways to
-//! connect: an API key, OAuth in the browser (an automatic or a pasted code), an external connect, and a command.
-//! A method with a form asks its fields first (`form.rs`).
-//!
-//! Everything reads and refreshes the catalog of [`Local`]. Browsers open through `Local::open_url`, which tests
-//! replace.
+//! Manage integration accounts and connect using a key, browser, external link, or command.
 
 mod form;
 
@@ -62,8 +53,7 @@ pub fn show(local: &Rc<Local>, on_connected: Option<OnConnected>) {
     open_list(Flow { local: local.clone(), on_connected }, None);
 }
 
-/// `DialogIntegration { integrationID, autoConnect }`, which the MCP dialog (E.17b) opens for a server that needs
-/// sign-in: the integration's accounts or methods at once. Without `on_connected`, a connect closes the dialog.
+/// Open the named integration's sign-in method directly from the MCP dialog.
 pub fn show_auto_connect(tui: &Tui, integration: &IntegrationID, on_connected: Option<OnConnected>) {
     open_list(Flow { local: tui.local.clone(), on_connected }, Some(integration.clone()));
 }
@@ -200,7 +190,7 @@ fn listed(local: &Local, only: Option<&IntegrationID>) -> Vec<IntegrationInfo> {
 
 fn open_list(flow: Flow, only: Option<IntegrationID>) {
     let local = flow.local.clone();
-    // An auto-connect may name an integration that appeared after the catalog was read.
+    // Refresh the catalog in case it predates the requested integration.
     if local.integrations().is_none() || only.as_ref().is_some_and(|id| flow.latest(id).is_none()) {
         local.load_integrations();
     }
@@ -726,8 +716,7 @@ fn key_prompt(flow: &Flow, integration: IntegrationInfo, title: String, answer: 
     );
 }
 
-/// An error line that starts empty, and its setter. With `boxed`, the line sits in a `<box gap={1}>` that the
-/// layout keeps even while empty, as the TS descriptions that wrap their `<Show>` in a box do.
+/// Error message and its setter. A boxed line reserves spacing even when empty.
 fn error_slot(cx: &Rc<DialogCx>, boxed: bool) -> (View, Rc<dyn Fn(String)>) {
     let line = Text::new(&cx.app, "").fg(cx.theme.text.feedback.error.base).visible(false);
     let slot = View::new(&cx.app).gap(1).child(&line);
@@ -948,8 +937,8 @@ impl Oauth {
         );
     }
 
-    /// `OAuthAuto` for an attempt with `paste`: a field for the URL the browser was redirected to, for a browser
-    /// that cannot reach this machine. Enter on an empty field opens the link; the status poll still settles it.
+    /// Accept the redirect URL from another machine. An empty submission opens the link; polling still detects
+    /// completion.
     fn paste(self: &Rc<Self>) {
         let me = self.clone();
         self.flow.local.dialogs.replace(

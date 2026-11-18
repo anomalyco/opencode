@@ -1,4 +1,4 @@
-//! Agent dialog (E.16): `component/dialog-agent.tsx`, "Select agent".
+//! Agent picker.
 
 use crate::local::Local;
 use crate::prelude::*;

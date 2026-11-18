@@ -1,9 +1,4 @@
-//! Prompt history (E.2, row P03): `<state>/prompt-history.jsonl`, shared by every prompt of the app
-//! (`prompt/history.tsx`), and Up and Down in the prompt (`component/prompt/index.tsx:1022-1096`).
-//!
-//! F.5's `jsonl::History` owns the format and the entries in memory; each prompt keeps its own [`Cursor`]
-//! (`usePromptHistory`). Stepping and appending run on the UI thread. The file, which the TS TUI shares, is touched on one worker thread in order: the load
-//! first, then each new entry under the file's lock (`jsonl::save_history`).
+//! Shared prompt history and per-editor navigation.
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -27,13 +22,12 @@ pub struct History {
 #[derive(Default)]
 struct Memory {
     history: jsonl::History,
-    /// Entries appended before the file was read, `None` once it is; they go after its entries.
+    /// Entries added during the initial read follow the entries loaded from disk.
     early: Option<Vec<Value>>,
 }
 
 impl History {
-    /// Loads `<state>/prompt-history.jsonl` on the worker; until then the history holds what was
-    /// appended meanwhile.
+    /// Load history on the worker and preserve entries added during the read.
     pub fn load(_app: &App, state: Option<PathBuf>) -> Self {
         let Some(state) = state else { return Self::default() };
         let memory = Arc::new(Mutex::new(Memory { early: Some(Vec::new()), ..Memory::default() }));

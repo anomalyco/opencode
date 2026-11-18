@@ -1,4 +1,4 @@
-//! TypeScript: `packages/tui/src/component/dialog-experiments.tsx`.
+//! Opt-in feature settings.
 
 use opencode_ui::select::select;
 
@@ -12,9 +12,7 @@ pub struct Experiment {
     pub description: &'static str,
 }
 
-/// In-flight features anyone can opt into. Each entry is temporary: an experiment either graduates (delete the
-/// entry, make the behavior unconditional) or dies (delete the entry and the branch it gated). `new-designs`
-/// graduated here: the Rust client draws only the new designs, though the TypeScript TUI still lists it.
+/// Experiments available in the settings dialog.
 pub const EXPERIMENTS: &[Experiment] = &[Experiment {
     id: "client-mcp",
     title: "TUI tools",
@@ -35,8 +33,7 @@ fn options(tui: &Tui) -> Vec<SelectOption<&'static str>> {
         .collect()
 }
 
-/// Flips experiment `id`. All experiments are booleans, so either direction toggles. While `saving` holds, the
-/// previous change is still being written and this one is ignored, as in TS.
+/// Toggle the experiment unless its previous save is pending.
 fn toggle(tui: &Tui, saving: &Rc<Cell<bool>>, id: &'static str) {
     if saving.get() {
         return;

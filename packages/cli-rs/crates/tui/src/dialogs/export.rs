@@ -1,7 +1,4 @@
-//! Export dialogs (E.10a, rows DLG31 and DLG32): `ui/dialog-export-options.tsx` and `ui/dialog-export-result.tsx`,
-//! as they look under `new-designs`. The options pick a format (Markdown with or without thinking and tools, or
-//! JSON, sanitized or not), where a saved file goes, and an action (copy or save to a file); the result shows where
-//! the file went.
+//! Session export options and result dialogs.
 
 use opencode_ui::dialog::{DIALOG_INSET, FooterAction, FooterProps, layout_with};
 use opencode_ui::select::{ActionRun, FooterHint, Group, SelectAction};

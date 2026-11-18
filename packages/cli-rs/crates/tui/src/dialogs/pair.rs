@@ -1,8 +1,4 @@
-//! Pair dialog (E.18b): `packages/tui/src/component/dialog-pair.tsx`, `server.pair` (`/pair`, `/web`).
-//!
-//! It reads `GET /api/info` and asks `POST /api/pair` for a one-time code, then shows a connect link for each
-//! server URL, one for this device on `localhost`, and a QR code of the first link (`renderUnicodeCompact`).
-//! Opening the dialog creates a pairing code on the server, so tests prove it against a test transport only.
+//! Pair a device with the active server.
 
 use opencode_api::generated::{PairingCode, ServerInfo};
 use opencode_ui::dialog::{DialogCx, layout};

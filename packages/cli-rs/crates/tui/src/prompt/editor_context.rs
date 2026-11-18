@@ -1,15 +1,4 @@
-//! IDE editor context (E.5, row P08): the file and selection open in the IDE the terminal runs in
-//! (`context/editor.ts`, `editor.ts`, `editor-zed.ts`).
-//!
-//! Two sources, tried in this order on every connection attempt:
-//!
-//! - the IDE's MCP server over a WebSocket, at `CLAUDE_CODE_SSE_PORT` or `OPENCODE_EDITOR_SSE_PORT`, else at the
-//!   port of the best `~/.claude/ide/<port>.lock` for the directory. It sends `selection_changed` and
-//!   `at_mentioned` notifications;
-//! - in a Zed terminal, Zed's SQLite database (`OPENCODE_ZED_DB`, else Zed's default path), read every second.
-//!
-//! A task on the runtime owns the socket and the polling; it posts what it reads to the UI thread, where
-//! [`Context`] keeps the state the prompt shows. Changing the directory replaces the task.
+//! Track the terminal's editor selection and turn IDE mentions into prompt attachments.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -51,8 +40,7 @@ impl Source {
     }
 }
 
-/// `resolveZedDbPath`'s candidates: `OPENCODE_ZED_DB`, then Zed's macOS and Linux paths under the home directory.
-/// On Windows, Zed's `%LOCALAPPDATA%\Zed` comes last, which TS does not read (deviation W11-zed-windows-db).
+/// Resolve the Zed database override before the platform's default locations.
 fn zed_db_candidates(env: Option<String>, home: Option<&Path>, local_app_data: Option<String>) -> Vec<PathBuf> {
     let db = |dir: PathBuf| dir.join("db").join("0-stable").join("db.sqlite");
     env.map(PathBuf::from)
@@ -686,8 +674,7 @@ fn server_info(result: &Value) -> bool {
         })
 }
 
-/// Reading Zed's workspace database (`editor-zed.ts`) through the system SQLite, loaded at run time. Without the
-/// library there is no Zed context (deviation P08-zed-system-sqlite).
+/// Read workspace selections from Zed using dynamically loaded system SQLite. Missing SQLite disables this source.
 pub mod zed {
     use std::path::Path;
 
@@ -850,7 +837,7 @@ pub mod zed {
         }
     }
 
-    /// The longest workspace path that contains `cwd`, in UTF-16 units as TS measures it; 0 for none.
+    /// Longest containing workspace path in UTF-16 units, or zero if no path contains `cwd`.
     fn workspace_score(paths: Option<&str>, cwd: &Path) -> usize {
         let Some(paths) = paths else { return 0 };
         let list: Vec<String> = match serde_json::from_str::<serde_json::Value>(paths) {
@@ -880,7 +867,7 @@ pub mod zed {
         text.char_indices().map(|(index, c)| index + c.len_utf8()).find(|end| *end >= offset).unwrap_or(text.len())
     }
 
-    /// The 1-based line and UTF-16 column of byte index `index` (`offsetsToSelection`).
+    /// Convert a byte offset to a one-based line and UTF-16 column.
     fn position(text: &str, index: usize) -> Position {
         let before = &text[..index];
         let line_start = before.rfind('\n').map_or(0, |at| at + 1);
@@ -901,7 +888,7 @@ mod sqlite {
 
     #[cfg(target_os = "macos")]
     const LIBRARY: &str = "/usr/lib/libsqlite3.dylib";
-    // The SQLite Windows itself uses, in System32 since Windows 10.
+    // Use the SQLite library provided by Windows.
     #[cfg(windows)]
     const LIBRARY: &str = "winsqlite3.dll";
     #[cfg(not(any(target_os = "macos", windows)))]

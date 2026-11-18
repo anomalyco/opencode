@@ -1,8 +1,4 @@
-//! A connect method's form, one dialog per field (`formAnswer` and its field dialogs in
-//! `component/dialog-integration.tsx:862-1247`).
-//!
-//! Each field replaces the dialog. Closing a field's dialog cancels the whole form; the next field's `replace`
-//! closes the previous one too, so each step resolves once and ignores the close that follows.
+//! Collect integration credentials one field at a time.
 
 use opencode_api::generated::{
     FormAnswer, FormBooleanField, FormExternalField, FormField, FormMultiselectField, FormStringField, FormValue,
@@ -34,7 +30,7 @@ struct Run {
     done: RefCell<Option<Done>>,
 }
 
-/// Asks `fields` in order and calls `done` with the answer, or `None` when a field's dialog was closed.
+/// Ask the fields in order. Closing a field dialog returns `None`.
 pub(super) fn answer(
     local: &Rc<Local>,
     title: String,
@@ -369,7 +365,7 @@ fn custom(local: &Rc<Local>, title: String, field: Rc<FormMultiselectField>, sel
     );
 }
 
-/// `externalAnswer`: open the field's link, then confirm once it was opened.
+/// Confirm only after opening the external link.
 fn external(local: &Rc<Local>, title: String, field: FormExternalField, opened: bool, resolve: Resolve) {
     let mut open = SelectOption::new(if opened { "Open link again" } else { "Open link" }, true);
     open.description = Some(field.url.clone());

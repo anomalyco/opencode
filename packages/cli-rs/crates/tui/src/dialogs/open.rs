@@ -1,8 +1,4 @@
-//! Open dialog (E.11a, row DLG14): `packages/tui/src/component/dialog-open.tsx`.
-//!
-//! "Open": recent root sessions (those awaiting input first) and the projects, in two sections
-//! with `alt+up`/`alt+down` between them. An exact session ID finds a session outside the recent
-//! list. `right` on a Git project lists its worktrees, where `ctrl+n` creates one.
+//! Open a recent session or worktree.
 
 use opencode_api::generated::{
     ProjectID, SessionGetInput, SessionInfo, SessionListInput, SessionListInputOrder, WorktreeCreateInput,
@@ -25,7 +21,7 @@ pub const KEY: &str = "open";
 const RECENT_LIMIT: usize = 8;
 
 thread_local! {
-    /// `openSessions` in `app.tsx:555`: the last recent read, shown at once when the dialog reopens.
+    /// Show the last recent-session result immediately on reopen.
     static RECENT: RefCell<Vec<SessionInfo>> = const { RefCell::new(Vec::new()) };
     static OPEN: RefCell<Weak<Open>> = const { RefCell::new(Weak::new()) };
 }
@@ -276,7 +272,7 @@ impl Open {
                     let mut state = open.state.borrow_mut();
                     state.recent = Some(recent.is_ok());
                     if let Ok(response) = recent {
-                        // A session deleted while the read was in flight stays out.
+                        // Do not resurrect sessions deleted during the read.
                         let sessions: Vec<SessionInfo> = tui.data.read(|store| {
                             response.data.into_iter().filter(|session| !store.is_missing(&session.id)).collect()
                         });
@@ -291,8 +287,7 @@ impl Open {
         );
     }
 
-    /// Reads the requests of running sessions and the root sessions that wait on one, so their rows show and sort
-    /// by attention (`dialog-open.tsx:178-196`).
+    /// Read pending requests so sessions needing attention appear in priority order.
     fn sync_attention(&self) {
         let Some(tui) = self.tui() else { return };
         let state = self.state.borrow();
@@ -426,7 +421,6 @@ impl Open {
             }
         };
         drop(state);
-        // Hidden when empty, so it takes no place in the footer row and draws no band (TS renders nothing).
         self.footer.visible(line.is_some());
         if let Some(line) = line {
             self.footer.add(&line);
@@ -729,7 +723,7 @@ impl Open {
             async move { client.worktree_create(&input).await },
             bind!(self, |open, _, result| {
                 let Some(tui) = open.tui() else { return };
-                // The prompt closed or was replaced while the request ran.
+                // Ignore a completion for a prompt that no longer exists.
                 let Some(current) = open.prompt.borrow().clone() else { return };
                 match result {
                     Ok(created) => {

@@ -1,12 +1,4 @@
-//! Prompt autocomplete (E.3, rows P05, P11, K04; `component/prompt/autocomplete.tsx`).
-//!
-//! `/` at the start of the prompt lists slash commands: the keymap's and the server's. `@` at a word
-//! start lists skills, references, subagents, and files from `/api/fs/find`. The argument of `/cd`
-//! lists directories from `/api/fs/list`, with recent directories first. A pick becomes a prompt part
-//! ([`parts`]); a command without arguments runs.
-//!
-//! While the popup shows, the keymap is in the `autocomplete` mode, so the prompt's own layers
-//! (submit, history, shell mode) are off and this module's layer takes the keys.
+//! Slash-command, mention, file, and directory completion for the prompt.
 
 pub mod cd;
 pub use opencode_ui::prompt_input::parse;
@@ -58,8 +50,7 @@ pub enum Mode {
 pub struct Shared {
     frecency: Arc<Mutex<Option<Frecency>>>,
     recents: Arc<Mutex<Option<Value>>>,
-    /// The last recents change sent; a written file replaces memory only if no newer change was sent, and the
-    /// loaded file only if none was.
+    /// Apply a disk result only if it does not predate an in-memory edit.
     recents_writes: Arc<AtomicU64>,
     writer: Rc<OnceCell<Serial>>,
     loaded: Rc<Cell<bool>>,
@@ -161,7 +152,7 @@ impl Shared {
         });
     }
 
-    /// Changes the project's list in memory now and in storage on a blocking thread.
+    /// Update project recents in memory and serialize persistence on a worker.
     fn update_recents(&self, tui: &Tui, project: &str, change: impl Fn(&mut Vec<Value>) + Send + Clone + 'static) {
         let project = project.to_owned();
         let apply = move |value: &mut Value, change: &dyn Fn(&mut Vec<Value>)| {
@@ -217,8 +208,7 @@ fn load_frecency(slot: &Mutex<Option<Frecency>>, state: &Path, cwd: &Path) {
 #[derive(Clone, Copy)]
 struct RecentsChanged;
 
-/// Tells the UI that the recents in memory changed, so an open `/cd` picker lists them, as TS's store redraws it.
-/// Waits while the UI queue is full.
+/// Notify an open directory picker when recents change; retry a full UI queue.
 fn recents_changed(proxy: &AppProxy) {
     while let Err(ProxyError::Full) = proxy.send(RecentsChanged) {
         std::thread::sleep(Duration::from_millis(5));
@@ -303,10 +293,9 @@ pub struct Open {
     selected: usize,
     offset: usize,
     placed: f64,
-    /// The popup's entry on the keymap's mode stack, handed on rather than pushed again, so the stack stays as it was:
-    /// a dialog opened over the list stays above it.
+    /// Transfer the popup's mode entry on remount so a dialog above it still receives keys first.
     entry: Option<Disposer>,
-    /// The last file or directory search's results and the search they answer, unless one was still on its way.
+    /// Cached file or directory results and the search that produced them.
     results: Option<(Results, Requested)>,
 }
 
@@ -322,7 +311,7 @@ struct State {
     dismissed: RefCell<Option<String>>,
     confirming: RefCell<Option<String>>,
     results: RefCell<Results>,
-    /// The search the last request was for, since the popup opened.
+    /// Last search requested for this open popup.
     requested: RefCell<Requested>,
     loading: Cell<bool>,
     generation: Cell<u64>,
@@ -439,9 +428,7 @@ impl Autocomplete {
         Some(Open { mode, index, selected, offset, placed, entry, results })
     }
 
-    /// Opens the popup where `open` was, over the prompt's text as it is now: a remount of the route keeps an open
-    /// list open, as TS's stays open while a plugin loads. The options are those of now, the selection kept by its
-    /// place, as TS keeps `selected` until the search changes; a file or directory search is not asked again.
+    /// Restore the open popup at its previous position against the current prompt text.
     pub fn reopen(&self, open: Open) {
         let state = &self.0;
         state.placed.set(Some(open.placed));
@@ -561,10 +548,7 @@ impl State {
         self.request_redraw();
     }
 
-    /// Follows the prompt's place while the popup shows, as TS polls its anchor every 50 ms
-    /// (`autocomplete.tsx:120-133`): a prompt laid out, moved or resized after the popup drew (one mounted again by a
-    /// plugin's load and typed into before its first frame) draws the popup again at its height
-    /// (select-search-flake).
+    /// Track the prompt's anchor while the popup is open, including the first layout after remount.
     fn follow(&self, tui: &Tui) {
         if self.follow.get().is_some() {
             return;
@@ -636,9 +620,7 @@ impl State {
         })
     }
 
-    /// Runs the file (`/api/fs/find`) or directory (`/api/fs/list`) search for `search`, unless the
-    /// last one since the popup opened was for the same search (TS refetches when its source
-    /// changes).
+    /// Start a search unless this popup already requested the same input.
     fn fetch(&self, tui: &Tui, mode: Mode, search: &str, location: &Location) {
         let key = (mode, search.to_owned(), location.directory.clone());
         if self.requested.borrow().as_ref() == Some(&key) {
@@ -772,9 +754,7 @@ impl State {
         ROWS.min(count).min(anchor.max(1))
     }
 
-    /// The prompt's row on the screen, or the row of the prompt this popup was reopened from while this one has no
-    /// layout yet: a second remount before the screen laid out again hands that row on, not the new prompt's 0
-    /// (select-search-flake).
+    /// Use the previous anchor until the remounted prompt has a layout.
     fn anchor_row(&self) -> f64 {
         let rect = self.anchor.rect();
         match self.placed.get() {
@@ -844,7 +824,7 @@ impl State {
             self.hide(true);
         }
         self.editing.set(false);
-        // TS handles the pick's own edit after it; a reopened trigger shows again.
+        // Recheck completion after applying the edit: the new text can open another list.
         self.on_input(&prompt.textarea.text());
     }
 
@@ -1345,8 +1325,7 @@ fn home() -> String {
 mod tests {
     use super::*;
 
-    /// P-ORACLE: `parity/oracle/E.3-fuzzy.ts` ran fuzzysort as the `options` memo does; the order must be the
-    /// same, ties and the limit of ten included.
+    /// Compare the ranked options, including ties and truncation, against the reference ordering.
     #[test]
     fn rank_matches_fuzzysort() {
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../parity/fixtures/E.3/fuzzy.json");
