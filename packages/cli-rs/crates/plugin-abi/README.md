@@ -141,14 +141,15 @@ activation's, and its reply comes unless the plugin is disposed first.
 A handler that waits for a dialog's answer or a reply can do it in a straight line: `Setup::tasks` starts tasks,
 `async` code whose `Cx` awaits `confirm`, `prompt`, `select`, `alert`, `fetch`, `foreground` and `blocking` (module
 `task`). A request whose mount closes before its reply is cancelled: its wait gets the error `task::CANCELLED`, once
-(`Setup::on_cancelled` hears it in a plain handler).
+(`Setup::on_cancelled` hears it in a plain handler). A task keeps the owner of the call that started it
+(`Host::owner`): what it asks for after a wait is that mount's or the activation's still, whichever call goes on with
+it (`Host::set_owner`).
 
 A plugin keeps time on the host's clock, with no thread of its own: `cx.sleep(duration)` waits, and
 `tasks.every(host, period, |cx| …)` ticks until its future gives `ControlFlow::Break`. A timer waits at least
 `MIN_TIMER` (20 ms; a shorter one is lengthened to it), at most `MAX_TIMERS` (32) of a plugin wait at once (one more is
-refused through its reply), and it is owned and cancelled as a fetch is. A mount's timer's reply runs as a call of that
-mount, so an `every` a mount started ends with it. A tick whose plugin changes nothing on screen costs a wake and no
-frame, however long it runs.
+refused through its reply), and it is owned and cancelled as a fetch is: an `every` a mount started is that mount's
+task, and ends with it. A tick whose plugin changes nothing on screen costs a wake and no frame, however long it runs.
 
 ### The source promise of 2.x
 

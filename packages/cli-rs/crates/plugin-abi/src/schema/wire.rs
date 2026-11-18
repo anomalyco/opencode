@@ -310,6 +310,8 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
                 Selection { } { },
                 ClearSelection { } { },
                 Timer { ms: uint64() } { },
+                Owner { } { },
+                SetOwner { } { owner: nullable(uint64()) },
                 Title { title: string() } { },
                 Theme { } { },
                 Themes { } { },

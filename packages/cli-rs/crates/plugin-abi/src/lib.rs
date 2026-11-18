@@ -2121,6 +2121,12 @@ pub enum HostRequest {
     Timer {
         ms: u64,
     },
+    /// [`Host::owner`]: answers the number.
+    Owner,
+    /// [`Host::set_owner`].
+    SetOwner {
+        owner: Option<u64>,
+    },
     /// [`Host::set_title`], once the current call returns.
     Title {
         title: String,
@@ -3248,17 +3254,26 @@ pub trait Host: Read {
     }
     /// Starts a timer: [`Setup::on_reply`] gets `null` with the ID this returns once `delay` passed on the host's
     /// clock, on the UI thread, with no thread of the plugin's. A delay under [`MIN_TIMER`] waits [`MIN_TIMER`]. It is
-    /// owned as a fetch is ([`Host::try_fetch`]): a mount's timer ends with its mount, which [`Setup::on_cancelled`]
-    /// hears, and every timer ends with the activation. Unlike a fetch's, a mount's timer's reply is a call of that
-    /// mount, so what it asks for next, a sleep loop's next timer, is the mount's too, and ends with it. The delay
-    /// crosses the C ABI in whole milliseconds, a part of one counted as one. A JS plugin on the pipe keeps its own
-    /// timers: the pipe refuses this request. With [`MAX_TIMERS`] of the plugin's timers waiting, the reply
-    /// is that refusal, at once. An error is a timer the host did not take, as for [`Host::try_fetch`]: no reply comes
-    /// for it. A host without timers, by default, takes none.
+    /// owned as a fetch is ([`Host::try_fetch`], [`Host::set_owner`]): a mount's timer ends with its mount, which
+    /// [`Setup::on_cancelled`] hears, and every timer ends with the activation. The delay crosses the C ABI in whole
+    /// milliseconds, a part of one counted as one. A JS plugin on the pipe keeps its own timers: the pipe refuses this
+    /// request. With [`MAX_TIMERS`] of the plugin's timers waiting, the reply is that refusal, at once. An error is a
+    /// timer the host did not take, as for [`Host::try_fetch`]: no reply comes for it. A host without timers, by
+    /// default, takes none.
     #[must_use = "a timer the host did not take gets no reply"]
     fn try_timer(&self, _delay: std::time::Duration) -> Result<RequestId, String> {
         Err("the host has no timers".to_owned())
     }
+    /// The owner of what the running call asks for now ([`Host::try_fetch`]), as a number of the host's: `0` for the
+    /// activation, another for a mount. A plugin that goes on with work in a later call (a task) keeps it, and gives it
+    /// back with [`Host::set_owner`], so the work stays its starting mount's.
+    fn owner(&self) -> u64 {
+        0
+    }
+    /// Makes `owner`, a number [`Host::owner`] gave, the owner of what the running call asks for from now on: its
+    /// requests are that mount's, and end with it, also when it has closed already; and its input verbs act on it.
+    /// `None` gives the call its own owner back. It lasts until the call returns.
+    fn set_owner(&self, _owner: Option<u64>) {}
     /// Sets the terminal title (TS `renderer.setTerminalTitle`). The host sets its own again with its next
     /// change, such as a route change.
     fn set_title(&self, _title: &str) {}
@@ -3746,6 +3761,14 @@ impl Host for HostHandle {
 
     fn try_timer(&self, delay: std::time::Duration) -> Result<RequestId, String> {
         self.requested(&HostRequest::Timer { ms: timer_ms(delay) })
+    }
+
+    fn owner(&self) -> u64 {
+        self.read(&HostRequest::Owner).unwrap_or(0)
+    }
+
+    fn set_owner(&self, owner: Option<u64>) {
+        let _ = self.request(&HostRequest::SetOwner { owner });
     }
 
     fn dialog(&self, dialog: Dialog) {

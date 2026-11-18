@@ -1142,6 +1142,12 @@ pub(crate) fn handle(ctx: &mut Ctx, request: HostRequest) -> Result<serde_json::
             ctx.effects.push(Effect::Timer(id, std::time::Duration::from_millis(ms), owning(ctx)));
             return Ok(serde_json::to_value(id).unwrap_or_default());
         }
+        HostRequest::Owner => return Ok(crate::owner_id(owning(ctx).as_ref()).into()),
+        HostRequest::SetOwner { owner } => {
+            if let Some(owners) = &ctx.owners {
+                owners.set_owner(owner);
+            }
+        }
         HostRequest::Title { title } => ctx.effects.push(Effect::Title(title)),
         HostRequest::Theme => return read(ctx, &mut |read| serde_json::to_value(read.theme())),
         HostRequest::Themes => return read(ctx, &mut |read| serde_json::to_value(read.themes())),
@@ -1312,6 +1318,8 @@ fn effect(request: &HostRequest) -> bool {
         | HostRequest::KeymapCommands
         | HostRequest::Shortcuts { .. }
         | HostRequest::Selection
+        | HostRequest::Owner
+        | HostRequest::SetOwner { .. }
         | HostRequest::Theme
         | HostRequest::Themes
         | HostRequest::ScrollState { .. }
@@ -1448,6 +1456,7 @@ impl Guest {
             });
             instance.shared().ctx.borrow_mut().read_only = false;
             self.busy.set(false);
+            self.owners.end_call();
             timed
         };
         let (effects, undo) = self.taken();
@@ -1555,10 +1564,6 @@ pub(crate) trait Answers {
     fn owner(&self) -> Weak<dyn Host>;
     /// Hands it the reply, as its `on-reply` call.
     fn answer(self: Rc<Self>, request: Request);
-    /// [`Answers::answer`] as a call of the mount `mount` stands for ([`Keep::Owner`]).
-    fn answer_as(self: Rc<Self>, request: Request, _mount: &Weak<()>) {
-        self.answer(request);
-    }
     /// The host cancelled `request`, as the mount that owns it closed: no reply comes. It is told once, never after the
     /// reply: a plugin whose manifest has [`abi::Manifest::cancelled`] as [`Request::Cancelled`] (a library, or one in
     /// process), the JS host as the rejection of the promise that waits for the reply.
@@ -1590,11 +1595,6 @@ impl Answers for Guest {
         self.handle("on-reply", &request);
     }
 
-    fn answer_as(self: Rc<Self>, request: Request, mount: &Weak<()>) {
-        let owners = self.owners.clone();
-        owners.owned_by(mount, || self.handle("on-reply", &request));
-    }
-
     fn release(&self, request: abi::RequestId) {
         self.activation.cancel_timer(request);
     }
@@ -1623,7 +1623,6 @@ pub(crate) fn reply_to(
     host: &dyn Host,
     request: abi::RequestId,
     mount: Option<Weak<()>>,
-    keep: Keep,
     send: impl FnOnce(&dyn Host, crate::Reply),
 ) {
     let Some(running) = guest.upgrade().filter(|guest| guest.live()) else { return };
@@ -1645,25 +1644,13 @@ pub(crate) fn reply_to(
                 // A mount's request its mount's close cancelled already ([`cancel_closed`]) waits no more.
                 let waiting = mount.is_none() || take_inflight(request);
                 let Some(guest) = guest.upgrade().filter(|_| waiting) else { return };
-                let reply = Request::Reply { id: request, result };
-                match (&mount, keep) {
-                    (Some(mount), _) if mount.upgrade().is_none() => guest.cancel(request),
-                    (Some(mount), Keep::Owner) => guest.answer_as(reply, mount),
-                    _ => guest.answer(reply),
+                match mount.as_ref().is_none_or(|mount| mount.upgrade().is_some()) {
+                    true => guest.answer(Request::Reply { id: request, result }),
+                    false => guest.cancel(request),
                 }
             });
         }),
     );
-}
-
-/// Whose call a request's reply is ([`reply_to`]).
-#[derive(Clone, Copy, PartialEq)]
-pub(crate) enum Keep {
-    /// The activation's, as a fetch's or a program's: what the reply's call asks for next is the activation's.
-    Activation,
-    /// Its mount's, if a mount owns it, as a timer's: a sleep loop a mount started stays that mount's, and ends with
-    /// it (timers).
-    Owner,
 }
 
 /// The most requests of one instance's mounts that wait for their reply at once: so many cancels fit in one frame's
@@ -1815,7 +1802,7 @@ fn run(host: &dyn Host, effect: Effect, id: &str, guest: &Weak<dyn Answers>, gen
         Effect::Stored => host.storage_changed(),
         Effect::Navigate(route) => host.navigate(id, &route),
         Effect::Fetch(request, fetch, mount) => {
-            reply_to(guest, host, request, mount, Keep::Activation, |host, reply| host.fetch(fetch, reply));
+            reply_to(guest, host, request, mount, |host, reply| host.fetch(fetch, reply));
         }
         // The host shows it only while its activation is live. What a setup that failed or a destroyed instance asked
         // for has none, and shows nowhere.
@@ -1838,13 +1825,12 @@ fn run(host: &dyn Host, effect: Effect, id: &str, guest: &Weak<dyn Answers>, gen
                 let open = owning.as_ref().is_none_or(|mount| mount.upgrade().is_some());
                 open && owner.upgrade().is_some_and(|guest| guest.running())
             });
-            let start = |host: &dyn Host, reply| host.foreground(program, alive, reply);
-            reply_to(guest, host, request, mount, Keep::Activation, start);
+            reply_to(guest, host, request, mount, |host, reply| host.foreground(program, alive, reply));
         }
         // Setup asks before its activation exists: the timer finds it as it starts.
         Effect::Timer(request, delay, mount) => {
             let Some(activation) = guest.upgrade().and_then(|guest| guest.activation()) else { return };
-            reply_to(guest, host, request, mount, Keep::Owner, move |host, reply| {
+            reply_to(guest, host, request, mount, move |host, reply| {
                 activation.start_timer(host.app(), request, delay, reply);
             });
         }

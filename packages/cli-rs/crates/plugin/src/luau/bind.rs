@@ -538,6 +538,9 @@ fn objects(lua: &Lua, current: &Rc<Slot>) -> mlua::Result<(Table, Table, Functio
         "blur" => |h, _lua| h.blur();
         "setMode" => |h, _lua, mode: Option<String>| h.set_mode(mode.as_deref());
         "releaseKeys" => |h, _lua| h.release_keys();
+        // A task's owner, which the prelude keeps for the task and gives back as it goes on (`abi::Host::set_owner`).
+        "owner" => |h, _lua| h.owner();
+        "setOwner" => |h, _lua, owner: Option<u64>| h.set_owner(owner);
     }
     // A request that gets an ID answers `id, nil`, or `nil, why` when the host does not take it. The prelude puts its
     // waiting `host:fetch` and `host:foreground` in their place, and keeps `setup:onReply` and `setup:onCancelled` to itself.

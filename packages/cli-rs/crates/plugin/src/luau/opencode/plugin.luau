@@ -11,8 +11,9 @@
 --
 -- A handler that acts is a task: `local ok = host:confirm({ ... })` and `local body, err = host:fetch({ ... })` wait in
 -- a straight line, and the plugin goes on with other calls meanwhile. A fetch its mount asked for, when that mount
--- closes before the reply, returns `nil, "cancelled"` once: the host cancelled the request. `plugin.sleep` and
--- `plugin.every` keep time on the host's clock, with no thread.
+-- closes before the reply, returns `nil, "cancelled"` once: the host cancelled the request. A task keeps the owner of
+-- the handler that started it: what it asks for after a wait is still that mount's, or the activation's.
+-- `plugin.sleep` and `plugin.every` keep time on the host's clock, with no thread.
 
 -- The contract's definitions ----------------------------------------------------------------------------------------
 
@@ -506,6 +507,11 @@ export type HostRequest = ({
 } | {
     ms: number,
     type: "timer",
+} | {
+    type: "owner",
+} | {
+    owner: number?,
+    type: "set-owner",
 } | {
     title: string,
     type: "title",
@@ -6804,6 +6810,7 @@ export type Plugin = {
     --- a task waits.
     sleep: (ms: number) -> (boolean?, string?),
     --- Runs `f(host)` every `ms` milliseconds in a task of its own, until `f` returns `false` or a sleep fails.
+    --- Started from a mount's handler, it is that mount's and ends when the mount closes.
     every: (ms: number, f: (host: Host) -> boolean?) -> (),
 }
 

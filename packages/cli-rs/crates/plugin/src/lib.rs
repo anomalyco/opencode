@@ -799,12 +799,6 @@ impl loader::native::Answers for Scope {
         self.run("on-reply", |host| replies.iter().for_each(|run| run(host, id, result.clone())));
     }
 
-    fn answer_as(self: Rc<Self>, request: abi::Request, mount: &Weak<()>) {
-        let abi::Request::Reply { id, result } = request else { return };
-        let replies = self.replies.borrow().clone();
-        self.run_owned(mount, "on-reply", |host| replies.iter().for_each(|run| run(host, id, result.clone())));
-    }
-
     fn release(&self, request: abi::RequestId) {
         self.activation.cancel_timer(request);
     }
@@ -844,6 +838,40 @@ pub(crate) struct Owners {
     input: Rc<interact::Owner>,
     /// The plugin's overlay surfaces, by name, each mounting into the frame the host gives it.
     overlays: RefCell<Vec<(String, OverlayFn)>>,
+    /// The owner the plugin set for the rest of the running call ([`abi::Host::set_owner`]): `Some(None)` the
+    /// activation, `Some(Some(mount))` a mount, which may have closed. It wins over the call's own until the call ends.
+    forced: RefCell<Option<Option<Weak<()>>>>,
+}
+
+/// The last number [`abi::Host::owner`] gave a mount, and each mount's number: an entry goes once its mount is gone.
+type OwnerIds = (u64, Vec<(u64, Weak<()>)>);
+
+thread_local! {
+    static OWNER_IDS: RefCell<OwnerIds> = const { RefCell::new((0, Vec::new())) };
+}
+
+/// The number of owner `mount` ([`abi::Host::owner`]): `0` for the activation.
+pub(crate) fn owner_id(mount: Option<&Weak<()>>) -> u64 {
+    let Some(mount) = mount else { return 0 };
+    OWNER_IDS.with_borrow_mut(|(next, known)| {
+        if let Some((id, _)) = known.iter().find(|(_, known)| Weak::ptr_eq(known, mount)) {
+            return *id;
+        }
+        known.retain(|(_, known)| known.strong_count() > 0);
+        *next += 1;
+        known.push((*next, mount.clone()));
+        *next
+    })
+}
+
+/// The owner number `id` names ([`owner_id`]): `None` for the activation; a mount that is gone, or a number the host
+/// never gave, is a closed mount, whose requests are cancelled.
+pub(crate) fn owner_mount(id: u64) -> Option<Weak<()>> {
+    (id != 0).then(|| {
+        OWNER_IDS.with_borrow(|(_, known)| {
+            known.iter().find(|(known, _)| *known == id).map_or_else(Weak::new, |(_, mount)| mount.clone())
+        })
+    })
 }
 
 impl Owners {
@@ -858,6 +886,7 @@ impl Owners {
             owned: RefCell::default(),
             input,
             overlays: RefCell::default(),
+            forced: RefCell::default(),
         })
     }
 
@@ -881,7 +910,20 @@ impl Owners {
     /// its input owner's for a handler; `None` for the activation's own calls (setup, a global command, an event),
     /// whose requests are the activation's. Its reply comes only while the owner lives (bigboi's last pass).
     pub(crate) fn owning(&self) -> Option<Weak<()>> {
+        if let Some(forced) = self.forced.borrow().clone() {
+            return forced;
+        }
         self.owned.borrow().clone().or_else(|| self.mounted())
+    }
+
+    /// Sets the owner of what the running call asks for from now on, or gives it its own back ([`Owners::forced`]).
+    pub(crate) fn set_owner(&self, owner: Option<u64>) {
+        *self.forced.borrow_mut() = owner.map(owner_mount);
+    }
+
+    /// The call ended: an owner it set ends with it.
+    pub(crate) fn end_call(&self) {
+        self.forced.take();
     }
 
     /// The mount the running call is of: its input owner, else the owner of the mount it belongs to (a route's
@@ -889,10 +931,13 @@ impl Owners {
     /// then affects nothing, neither the activation nor a mount opened since (carbon own-1); `Ok(None)` for the
     /// activation's own calls.
     fn mount_owner(&self) -> Result<Option<Rc<interact::Owner>>, Closed> {
-        if let Some(current) = self.current.borrow().clone() {
+        let forced = self.forced.borrow().clone();
+        if forced.is_none()
+            && let Some(current) = self.current.borrow().clone()
+        {
             return Ok(Some(current));
         }
-        let Some(owned) = self.owned.borrow().clone() else { return Ok(None) };
+        let Some(owned) = forced.unwrap_or_else(|| self.owned.borrow().clone()) else { return Ok(None) };
         let mounts = self.activation.owners();
         let own = mounts.into_iter().find(|owner| owner.mounted().is_some_and(|mount| Weak::ptr_eq(&mount, &owned)));
         own.map(Some).ok_or(Closed)
@@ -1113,6 +1158,9 @@ impl Scope {
             }
         });
         let call = std::mem::replace(&mut *self.call.borrow_mut(), outer).unwrap_or_default();
+        if self.call.borrow().is_none() {
+            self.owners.end_call();
+        }
         let out = out.map(|out| out.map_err(|panic| abi::panic_message(&*panic)));
         match (&out, &mut *self.call.borrow_mut()) {
             (Some(Err(_)), _) => call.undo.restore(host),
@@ -1465,16 +1513,24 @@ impl abi::Host for Scoped<'_> {
     }
 
     fn try_fetch(&self, fetch: abi::Fetch) -> Result<abi::RequestId, String> {
-        self.request(loader::native::Keep::Activation, move |host, _, reply| host.fetch(fetch, reply))
+        self.request(move |host, _, reply| host.fetch(fetch, reply))
     }
 
     fn try_timer(&self, delay: std::time::Duration) -> Result<abi::RequestId, String> {
         let activation = Rc::downgrade(&self.scope.activation);
-        self.request(loader::native::Keep::Owner, move |host, id, reply| {
+        self.request(move |host, id, reply| {
             if let Some(activation) = activation.upgrade() {
                 activation.start_timer(host.app(), id, delay, reply);
             }
         })
+    }
+
+    fn owner(&self) -> u64 {
+        owner_id(self.scope.owners.owning().as_ref())
+    }
+
+    fn set_owner(&self, owner: Option<u64>) {
+        self.scope.owners.set_owner(owner);
     }
 
     fn dialog(&self, dialog: abi::Dialog) {
@@ -1567,13 +1623,13 @@ impl abi::Host for Scoped<'_> {
     fn try_foreground(&self, program: abi::Foreground) -> Result<abi::RequestId, String> {
         // The program starts later, once the turn is done: only if its plugin is still active then, and the mount that
         // owns it is still open (bigboi's freeze pass).
-        let (owner, mount) = (Rc::downgrade(self.scope), self.scope.mount.borrow().clone());
+        let (owner, mount) = (Rc::downgrade(self.scope), self.scope.owners.owning());
         let alive = Box::new(move || {
             let active =
                 owner.upgrade().is_some_and(|scope| !scope.activation.disposed() && scope.failure.borrow().is_none());
             active && mount.as_ref().is_none_or(|mount| mount.upgrade().is_some())
         });
-        self.request(loader::native::Keep::Activation, move |host, _, reply| host.foreground(program, alive, reply))
+        self.request(move |host, _, reply| host.foreground(program, alive, reply))
     }
 
     fn set_title(&self, title: &str) {
@@ -1696,11 +1752,7 @@ impl Scoped<'_> {
     /// Queues `send` like an effect, unless the plugin is disposed by then, and returns the ID its reply comes back to
     /// the plugin's [`abi::Setup::on_reply`] handlers with, on the effect queue, unless the plugin is disposed first;
     /// [`REFUSED`] without room for it.
-    fn request(
-        &self,
-        keep: loader::native::Keep,
-        send: impl FnOnce(&dyn Host, abi::RequestId, Reply) + 'static,
-    ) -> Result<abi::RequestId, String> {
+    fn request(&self, send: impl FnOnce(&dyn Host, abi::RequestId, Reply) + 'static) -> Result<abi::RequestId, String> {
         // An ID is a promise of a reply: none is given unless the request's effect has room (bigboi's final pass).
         let staged = self.scope.call.borrow().as_ref().map_or(0, |call| call.effects.len());
         if !has_room(staged) {
@@ -1711,9 +1763,9 @@ impl Scoped<'_> {
         let scope: Weak<dyn loader::native::Answers> = Rc::downgrade(self.scope) as Weak<Scope>;
         // A request a mount's call asked for ends with the mount, as over the C ABI: one whose mount closed first is
         // cancelled, and a reply for a mount that closed, also one opened again since, is dropped.
-        let mount = self.scope.mount.borrow().clone();
+        let mount = self.scope.owners.owning();
         self.defer_reserved(move |host| {
-            loader::native::reply_to(&scope, host, id, mount, keep, move |host, reply| send(host, id, reply));
+            loader::native::reply_to(&scope, host, id, mount, move |host, reply| send(host, id, reply));
         });
         Ok(id)
     }
