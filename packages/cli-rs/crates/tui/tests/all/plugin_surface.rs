@@ -1695,8 +1695,8 @@ fn dialog_probe(setup: &mut abi::Setup) -> Result<(), String> {
     }));
     let record = |_: &dyn abi::Host, event: &abi::interact::Event| {
         let line = match event {
-            abi::interact::Event::Change { node, text } if node == "name" => format!("change {text}"),
-            abi::interact::Event::Change { node, text } => format!("change {node} {text}"),
+            abi::interact::Event::Change { node, text, .. } if node == "name" => format!("change {text}"),
+            abi::interact::Event::Change { node, text, .. } => format!("change {node} {text}"),
             abi::interact::Event::Closed { surface } => format!("closed {surface}"),
             // Big-boi's ds-7: a bind of escape that would take it.
             abi::interact::Event::Key(key) if key.bind.as_deref() == Some("esc") => {
