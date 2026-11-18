@@ -10,6 +10,9 @@ import { pascal, Types } from "../rust/types.ts"
 const root = new URL("..", import.meta.url).pathname.replace(/script\/$/, "")
 const directory = `${root}crates/api/src/generated`
 const typesFile = `${root}crates/api-types/src/types.rs`
+const clientFile = `${root}crates/api-types/src/client.rs`
+const operationsFile = `${root}crates/plugin/src/luau/operations.json`
+const samplesFile = `${root}crates/plugin/src/luau/client-samples.json`
 const resolveEncoding = SchemaAST.resolveAt<{ readonly _tag: string }>("~httpApiEncoding")
 // As `resolveHttpApiStatus` in httpapi-codegen: a no-content success (204) keeps its status on the
 // context annotations.
@@ -88,7 +91,7 @@ const document = SchemaRepresentation.toRepresentations(
 )
 const representation = new Map(roots.map((item, index) => [item, document.representations[index]]))
 const types = new Types(document.references)
-for (const name of ["Client", "Call", "Error", "SseResponse"]) types.name(name)
+for (const name of ["Client", "Call", "Error", "SseResponse", "Reply", "Sse"]) types.name(name)
 
 const methods = plans.map((plan) =>
   emitMethod(types, {
@@ -135,13 +138,47 @@ await Bun.write(
 )
 await Bun.write(
   `${directory}/methods.rs`,
-  `${header}#![allow(clippy::all, clippy::pedantic)]\n\nuse super::types::*;\nuse crate::client::{Call, Client};\nuse crate::error::Error;\nuse crate::transport::SseResponse;\n\nimpl Client {\n${methods.join("\n\n")}\n}\n`,
+  `${header}#![allow(clippy::all, clippy::pedantic)]\n\nuse super::types::*;\nuse crate::client::{Call, Client};\nuse crate::error::Error;\nuse crate::transport::SseResponse;\nuse opencode_api_types::client;\n\nimpl Client {\n${methods.map((method) => method.method).join("\n\n")}\n}\n`,
 )
+await Bun.write(
+  clientFile,
+  `${header}//! The API's requests, one builder per endpoint, typed by what each answers and with no transport
+//! (\`design/contract-ergonomics.md\` 2.2 B): \`opencode-api\`'s \`Client\` sends them with its credentials, and a plugin
+//! sends them through its host with \`cx.call\`.
+#![allow(clippy::all, clippy::pedantic)]
+
+use crate::call::{Call, Reply, Sse, path_wildcard};
+use crate::types::*;
+
+${methods.map((method) => method.builder).join("\n\n")}
+
+/// The request of operation \`name\` (\`session.inbox.list\`) built from \`input\`, whose fields are the operation's JSON
+/// names, or \`None\` for an operation the client does not have: the Rust column of the operations' table test.
+#[cfg(feature = "probe")]
+pub fn probe(name: &str, input: &serde_json::Value) -> Option<Result<Call<serde_json::Value>, String>> {
+    fn field<T: serde::de::DeserializeOwned>(input: &serde_json::Value, name: &str) -> Result<T, String> {
+        serde_json::from_value(input.get(name).cloned().unwrap_or_default()).map_err(|error| format!("{name}: {error}"))
+    }
+    match name {
+${methods.map((method) => `        ${method.probe}`).join("\n")}
+        _ => None,
+    }
+}
+`,
+)
+// The operations table, by name, for the Luau prelude's `plugin.client` and the Luau stub's types.
+const operations = Object.fromEntries(methods.map((method) => [method.name, method.operation]))
+if (Object.keys(operations).length !== methods.length) throw new Error("two endpoints have one client name")
+// One operation a line: diffs stay readable, and the carrier embeds no indentation.
+const lines = (rows: Array<[string, unknown]>) =>
+  `{\n${rows.map(([name, row]) => `${JSON.stringify(name)}:${JSON.stringify(row)}`).join(",\n")}\n}\n`
+await Bun.write(operationsFile, lines(Object.entries(operations)))
+await Bun.write(samplesFile, lines(methods.map((method) => [method.name, method.sample])))
 await Bun.write(
   `${directory}/mod.rs`,
   `${header}//! Types and methods generated from \`ClientApi\` by \`script/gen/api.ts\` (F.2).\n\nmod methods;\n\npub use opencode_api_types::types;\npub use types::*;\n\n/// Endpoints in the generated client.\npub const ENDPOINTS: usize = ${plans.length};\n`,
 )
-const format = Bun.spawnSync(["rustfmt", "--edition", "2024", `${directory}/mod.rs`, typesFile], {
+const format = Bun.spawnSync(["rustfmt", "--edition", "2024", `${directory}/mod.rs`, typesFile, clientFile], {
   stdout: "inherit",
   stderr: "inherit",
 })

@@ -10,8 +10,13 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-bytes.workspace = true
+bytes = { workspace = true, features = ["serde"] }
 indexmap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 url.workspace = true
+percent-encoding.workspace = true
+
+[features]
+# The operations table test's Rust column: `client::probe` builds any request from JSON. For tests only.
+probe = []

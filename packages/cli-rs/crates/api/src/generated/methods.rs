@@ -5,6 +5,7 @@ use super::types::*;
 use crate::client::{Call, Client};
 use crate::error::Error;
 use crate::transport::SseResponse;
+use opencode_api_types::client;
 
 impl Client {
     /// `GET /api/info` (`info`)
@@ -12,7 +13,7 @@ impl Client {
         self.json(Self::server_info_call()?).await
     }
     pub fn server_info_call() -> Result<Call, Error> {
-        Ok(Call::new("GET", "/api/info".to_owned(), 200, &[400, 401]))
+        client::server_info().try_into()
     }
 
     /// `POST /api/pair` (`pair`)
@@ -20,7 +21,7 @@ impl Client {
         self.json(Self::server_pair_call()?).await
     }
     pub fn server_pair_call() -> Result<Call, Error> {
-        Ok(Call::new("POST", "/api/pair".to_owned(), 200, &[400, 401]))
+        client::server_pair().try_into()
     }
 
     /// `GET /auth/connect/:code` (`connect`)
@@ -28,7 +29,7 @@ impl Client {
         self.json(Self::server_connect_call(input)?).await
     }
     pub fn server_connect_call(input: &ServerConnectInput) -> Result<Call, Error> {
-        Ok(Call::new("GET", format!("/auth/connect/{}", crate::client::path_param(&input.code)?), 200, &[400, 401]))
+        client::server_connect(input).try_into()
     }
 
     /// `GET /api/location` (`get`)
@@ -36,11 +37,7 @@ impl Client {
         self.json(Self::location_get_call(input)?).await
     }
     pub fn location_get_call(input: &LocationGetInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/location".to_owned(), 200, &[400, 401, 404]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::location_get(input).try_into()
     }
 
     /// `POST /api/location/reload` (`reload`)
@@ -48,7 +45,7 @@ impl Client {
         self.empty(Self::location_reload_call()?).await
     }
     pub fn location_reload_call() -> Result<Call, Error> {
-        Ok(Call::new("POST", "/api/location/reload".to_owned(), 204, &[400, 401, 503]))
+        client::location_reload().try_into()
     }
 
     /// `GET /api/agent` (`list`)
@@ -56,11 +53,7 @@ impl Client {
         self.json(Self::agent_list_call(input)?).await
     }
     pub fn agent_list_call(input: &AgentListInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/agent".to_owned(), 200, &[400, 401, 404]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::agent_list(input).try_into()
     }
 
     /// `GET /api/agent/:agentID` (`get`)
@@ -68,16 +61,7 @@ impl Client {
         self.json(Self::agent_get_call(input)?).await
     }
     pub fn agent_get_call(input: &AgentGetInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "GET",
-            format!("/api/agent/{}", crate::client::path_param(&input.agent_id)?),
-            200,
-            &[400, 401, 404],
-        );
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::agent_get(input).try_into()
     }
 
     /// `GET /api/plugin` (`list`)
@@ -85,11 +69,7 @@ impl Client {
         self.json(Self::plugin_list_call(input)?).await
     }
     pub fn plugin_list_call(input: &PluginListInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/plugin".to_owned(), 200, &[400, 401, 404]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::plugin_list(input).try_into()
     }
 
     /// `GET /api/plugin/gui` (`gui`)
@@ -97,12 +77,7 @@ impl Client {
         self.json(Self::plugin_gui_call(input)?).await
     }
     pub fn plugin_gui_call(input: &PluginGuiInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/plugin/gui".to_owned(), 200, &[400, 401, 404]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        call.query("id", &input.id)?;
-        Ok(call)
+        client::plugin_gui(input).try_into()
     }
 
     /// `POST /api/plugin/check` (`check`)
@@ -110,15 +85,7 @@ impl Client {
         self.json(Self::plugin_check_call(input)?).await
     }
     pub fn plugin_check_call(input: &PluginCheckInput) -> Result<Call, Error> {
-        let mut call = Call::new("POST", "/api/plugin/check".to_owned(), 200, &[400, 401, 404]);
-        call.object();
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        if let Some(value) = &input.target {
-            call.field("target", value)?;
-        }
-        Ok(call)
+        client::plugin_check(input).try_into()
     }
 
     /// `POST /api/plugin/update` (`update`)
@@ -126,13 +93,7 @@ impl Client {
         self.empty(Self::plugin_update_call(input)?).await
     }
     pub fn plugin_update_call(input: &PluginUpdateInput) -> Result<Call, Error> {
-        let mut call = Call::new("POST", "/api/plugin/update".to_owned(), 204, &[400, 401, 404, 503]);
-        call.object();
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        call.field("targets", &input.targets)?;
-        Ok(call)
+        client::plugin_update(input).try_into()
     }
 
     /// `GET /api/session` (`list`)
@@ -140,35 +101,7 @@ impl Client {
         self.json(Self::session_list_call(input)?).await
     }
     pub fn session_list_call(input: &SessionListInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/session".to_owned(), 200, &[400, 401]);
-        if let Some(value) = &input.limit {
-            call.query("limit", value)?;
-        }
-        if let Some(value) = &input.order {
-            call.query("order", value)?;
-        }
-        if let Some(value) = &input.search {
-            call.query("search", value)?;
-        }
-        if let Some(value) = &input.parent_id {
-            call.query("parentID", value)?;
-        }
-        if let Some(value) = &input.archived {
-            call.query("archived", value)?;
-        }
-        if let Some(value) = &input.directory {
-            call.query("directory", value)?;
-        }
-        if let Some(value) = &input.project {
-            call.query("project", value)?;
-        }
-        if let Some(value) = &input.subpath {
-            call.query("subpath", value)?;
-        }
-        if let Some(value) = &input.cursor {
-            call.query("cursor", value)?;
-        }
-        Ok(call)
+        client::session_list(input).try_into()
     }
 
     /// `POST /api/session` (`create`)
@@ -176,33 +109,7 @@ impl Client {
         self.data(Self::session_create_call(input)?).await
     }
     pub fn session_create_call(input: &SessionCreateInput) -> Result<Call, Error> {
-        let mut call = Call::new("POST", "/api/session".to_owned(), 200, &[400, 401, 404]);
-        call.object();
-        if let Some(value) = &input.id {
-            call.field("id", value)?;
-        }
-        if let Some(value) = &input.parent_id {
-            call.field("parentID", value)?;
-        }
-        if let Some(value) = &input.title {
-            call.field("title", value)?;
-        }
-        if let Some(value) = &input.agent {
-            call.field("agent", value)?;
-        }
-        if let Some(value) = &input.model {
-            call.field("model", value)?;
-        }
-        if let Some(value) = &input.location {
-            call.field("location", value)?;
-        }
-        if let Some(value) = &input.metadata {
-            call.field("metadata", value)?;
-        }
-        if let Some(value) = &input.permissions {
-            call.field("permissions", value)?;
-        }
-        Ok(call)
+        client::session_create(input).try_into()
     }
 
     /// `GET /api/session/active` (`active`)
@@ -210,7 +117,7 @@ impl Client {
         self.data(Self::session_active_call()?).await
     }
     pub fn session_active_call() -> Result<Call, Error> {
-        Ok(Call::new("GET", "/api/session/active".to_owned(), 200, &[400, 401]))
+        client::session_active().try_into()
     }
 
     /// `GET /api/session/:sessionID` (`get`)
@@ -218,12 +125,7 @@ impl Client {
         self.data(Self::session_get_call(input)?).await
     }
     pub fn session_get_call(input: &SessionGetInput) -> Result<Call, Error> {
-        Ok(Call::new(
-            "GET",
-            format!("/api/session/{}", crate::client::path_param(&input.session_id)?),
-            200,
-            &[400, 401, 404],
-        ))
+        client::session_get(input).try_into()
     }
 
     /// `DELETE /api/session/:sessionID` (`remove`)
@@ -231,12 +133,7 @@ impl Client {
         self.empty(Self::session_remove_call(input)?).await
     }
     pub fn session_remove_call(input: &SessionRemoveInput) -> Result<Call, Error> {
-        Ok(Call::new(
-            "DELETE",
-            format!("/api/session/{}", crate::client::path_param(&input.session_id)?),
-            204,
-            &[400, 401, 404],
-        ))
+        client::session_remove(input).try_into()
     }
 
     /// `POST /api/session/:sessionID/fork` (`fork`)
@@ -244,17 +141,7 @@ impl Client {
         self.data(Self::session_fork_call(input)?).await
     }
     pub fn session_fork_call(input: &SessionForkInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "POST",
-            format!("/api/session/{}/fork", crate::client::path_param(&input.session_id)?),
-            200,
-            &[400, 401, 404],
-        );
-        call.object();
-        if let Some(value) = &input.before {
-            call.field("before", value)?;
-        }
-        Ok(call)
+        client::session_fork(input).try_into()
     }
 
     /// `POST /api/session/:sessionID/agent` (`switchAgent`)
@@ -262,15 +149,7 @@ impl Client {
         self.empty(Self::session_switch_agent_call(input)?).await
     }
     pub fn session_switch_agent_call(input: &SessionSwitchAgentInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "POST",
-            format!("/api/session/{}/agent", crate::client::path_param(&input.session_id)?),
-            204,
-            &[400, 401, 404],
-        );
-        call.object();
-        call.field("agent", &input.agent)?;
-        Ok(call)
+        client::session_switch_agent(input).try_into()
     }
 
     /// `POST /api/session/:sessionID/model` (`switchModel`)
@@ -278,15 +157,7 @@ impl Client {
         self.empty(Self::session_switch_model_call(input)?).await
     }
     pub fn session_switch_model_call(input: &SessionSwitchModelInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "POST",
-            format!("/api/session/{}/model", crate::client::path_param(&input.session_id)?),
-            204,
-            &[400, 401, 404],
-        );
-        call.object();
-        call.field("model", &input.model)?;
-        Ok(call)
+        client::session_switch_model(input).try_into()
     }
 
     /// `PATCH /api/session/:sessionID` (`update`)
@@ -294,26 +165,7 @@ impl Client {
         self.empty(Self::session_update_call(input)?).await
     }
     pub fn session_update_call(input: &SessionUpdateInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "PATCH",
-            format!("/api/session/{}", crate::client::path_param(&input.session_id)?),
-            204,
-            &[400, 401, 404],
-        );
-        call.object();
-        if let Some(value) = &input.title {
-            call.field("title", value)?;
-        }
-        if let Some(value) = &input.metadata {
-            call.field("metadata", value)?;
-        }
-        if let Some(value) = &input.permissions {
-            call.field("permissions", value)?;
-        }
-        if let Some(value) = &input.archived {
-            call.field("archived", value)?;
-        }
-        Ok(call)
+        client::session_update(input).try_into()
     }
 
     /// `POST /api/session/:sessionID/move` (`move`)
@@ -321,18 +173,7 @@ impl Client {
         self.empty(Self::session_move_call(input)?).await
     }
     pub fn session_move_call(input: &SessionMoveInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "POST",
-            format!("/api/session/{}/move", crate::client::path_param(&input.session_id)?),
-            204,
-            &[400, 401, 404],
-        );
-        call.object();
-        call.field("directory", &input.directory)?;
-        if let Some(value) = &input.delivery {
-            call.field("delivery", value)?;
-        }
-        Ok(call)
+        client::session_move(input).try_into()
     }
 
     /// `POST /api/session/:sessionID/prompt` (`prompt`)
@@ -340,36 +181,7 @@ impl Client {
         self.data(Self::session_prompt_call(input)?).await
     }
     pub fn session_prompt_call(input: &SessionPromptInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "POST",
-            format!("/api/session/{}/prompt", crate::client::path_param(&input.session_id)?),
-            200,
-            &[400, 401, 404, 409],
-        );
-        call.object();
-        if let Some(value) = &input.id {
-            call.field("id", value)?;
-        }
-        call.field("text", &input.text)?;
-        if let Some(value) = &input.files {
-            call.field("files", value)?;
-        }
-        if let Some(value) = &input.agents {
-            call.field("agents", value)?;
-        }
-        if let Some(value) = &input.skills {
-            call.field("skills", value)?;
-        }
-        if let Some(value) = &input.metadata {
-            call.field("metadata", value)?;
-        }
-        if let Some(value) = &input.delivery {
-            call.field("delivery", value)?;
-        }
-        if let Some(value) = &input.resume {
-            call.field("resume", value)?;
-        }
-        Ok(call)
+        client::session_prompt(input).try_into()
     }
 
     /// `POST /api/session/:sessionID/command` (`command`)
@@ -377,28 +189,7 @@ impl Client {
         self.empty(Self::session_command_call(input)?).await
     }
     pub fn session_command_call(input: &SessionCommandInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "POST",
-            format!("/api/session/{}/command", crate::client::path_param(&input.session_id)?),
-            204,
-            &[400, 401, 404, 500],
-        );
-        call.object();
-        call.field("name", &input.name)?;
-        call.field("text", &input.text)?;
-        if let Some(value) = &input.files {
-            call.field("files", value)?;
-        }
-        if let Some(value) = &input.agents {
-            call.field("agents", value)?;
-        }
-        if let Some(value) = &input.skills {
-            call.field("skills", value)?;
-        }
-        if let Some(value) = &input.delivery {
-            call.field("delivery", value)?;
-        }
-        Ok(call)
+        client::session_command(input).try_into()
     }
 
     /// `POST /api/session/:sessionID/synthetic` (`synthetic`)
@@ -406,30 +197,7 @@ impl Client {
         self.data(Self::session_synthetic_call(input)?).await
     }
     pub fn session_synthetic_call(input: &SessionSyntheticInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "POST",
-            format!("/api/session/{}/synthetic", crate::client::path_param(&input.session_id)?),
-            200,
-            &[400, 401, 404, 409],
-        );
-        call.object();
-        if let Some(value) = &input.id {
-            call.field("id", value)?;
-        }
-        call.field("text", &input.text)?;
-        if let Some(value) = &input.description {
-            call.field("description", value)?;
-        }
-        if let Some(value) = &input.metadata {
-            call.field("metadata", value)?;
-        }
-        if let Some(value) = &input.delivery {
-            call.field("delivery", value)?;
-        }
-        if let Some(value) = &input.resume {
-            call.field("resume", value)?;
-        }
-        Ok(call)
+        client::session_synthetic(input).try_into()
     }
 
     /// `POST /api/session/:sessionID/shell` (`shell`)
@@ -437,18 +205,7 @@ impl Client {
         self.empty(Self::session_shell_call(input)?).await
     }
     pub fn session_shell_call(input: &SessionShellInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "POST",
-            format!("/api/session/{}/shell", crate::client::path_param(&input.session_id)?),
-            204,
-            &[400, 401, 404],
-        );
-        call.object();
-        if let Some(value) = &input.id {
-            call.field("id", value)?;
-        }
-        call.field("command", &input.command)?;
-        Ok(call)
+        client::session_shell(input).try_into()
     }
 
     /// `POST /api/session/:sessionID/compact` (`compact`)
@@ -456,20 +213,7 @@ impl Client {
         self.data(Self::session_compact_call(input)?).await
     }
     pub fn session_compact_call(input: &SessionCompactInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "POST",
-            format!("/api/session/{}/compact", crate::client::path_param(&input.session_id)?),
-            200,
-            &[400, 401, 404, 409],
-        );
-        call.object();
-        if let Some(value) = &input.id {
-            call.field("id", value)?;
-        }
-        if let Some(value) = &input.delivery {
-            call.field("delivery", value)?;
-        }
-        Ok(call)
+        client::session_compact(input).try_into()
     }
 
     /// `POST /api/session/:sessionID/revert/stage` (`revert.stage`)
@@ -480,18 +224,7 @@ impl Client {
         self.data(Self::session_revert_stage_call(input)?).await
     }
     pub fn session_revert_stage_call(input: &SessionRevertStageInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "POST",
-            format!("/api/session/{}/revert/stage", crate::client::path_param(&input.session_id)?),
-            200,
-            &[400, 401, 404, 409, 500],
-        );
-        call.object();
-        call.field("messageID", &input.message_id)?;
-        if let Some(value) = &input.files {
-            call.field("files", value)?;
-        }
-        Ok(call)
+        client::session_revert_stage(input).try_into()
     }
 
     /// `DELETE /api/session/:sessionID/revert` (`revert.clear`)
@@ -499,12 +232,7 @@ impl Client {
         self.empty(Self::session_revert_clear_call(input)?).await
     }
     pub fn session_revert_clear_call(input: &SessionRevertClearInput) -> Result<Call, Error> {
-        Ok(Call::new(
-            "DELETE",
-            format!("/api/session/{}/revert", crate::client::path_param(&input.session_id)?),
-            204,
-            &[400, 401, 404, 409, 500],
-        ))
+        client::session_revert_clear(input).try_into()
     }
 
     /// `POST /api/session/:sessionID/revert/commit` (`revert.commit`)
@@ -512,12 +240,7 @@ impl Client {
         self.empty(Self::session_revert_commit_call(input)?).await
     }
     pub fn session_revert_commit_call(input: &SessionRevertCommitInput) -> Result<Call, Error> {
-        Ok(Call::new(
-            "POST",
-            format!("/api/session/{}/revert/commit", crate::client::path_param(&input.session_id)?),
-            204,
-            &[400, 401, 404, 409],
-        ))
+        client::session_revert_commit(input).try_into()
     }
 
     /// `GET /api/session/:sessionID/context` (`context`)
@@ -525,12 +248,7 @@ impl Client {
         self.data(Self::session_context_call(input)?).await
     }
     pub fn session_context_call(input: &SessionContextInput) -> Result<Call, Error> {
-        Ok(Call::new(
-            "GET",
-            format!("/api/session/{}/context", crate::client::path_param(&input.session_id)?),
-            200,
-            &[400, 401, 404, 500],
-        ))
+        client::session_context(input).try_into()
     }
 
     /// `GET /api/session/:sessionID/diff` (`diff`)
@@ -538,22 +256,7 @@ impl Client {
         self.data(Self::session_diff_call(input)?).await
     }
     pub fn session_diff_call(input: &SessionDiffInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "GET",
-            format!("/api/session/{}/diff", crate::client::path_param(&input.session_id)?),
-            200,
-            &[400, 401, 404, 500],
-        );
-        if let Some(value) = &input.from {
-            call.query("from", value)?;
-        }
-        if let Some(value) = &input.to {
-            call.query("to", value)?;
-        }
-        if let Some(value) = &input.context {
-            call.query("context", value)?;
-        }
-        Ok(call)
+        client::session_diff(input).try_into()
     }
 
     /// `GET /api/session/:sessionID/inbox` (`inbox.list`)
@@ -561,12 +264,7 @@ impl Client {
         self.data(Self::session_inbox_list_call(input)?).await
     }
     pub fn session_inbox_list_call(input: &SessionInboxListInput) -> Result<Call, Error> {
-        Ok(Call::new(
-            "GET",
-            format!("/api/session/{}/inbox", crate::client::path_param(&input.session_id)?),
-            200,
-            &[400, 401, 404],
-        ))
+        client::session_inbox_list(input).try_into()
     }
 
     /// `DELETE /api/session/:sessionID/inbox/:inboxID` (`inbox.cancel`)
@@ -574,16 +272,7 @@ impl Client {
         self.empty(Self::session_inbox_cancel_call(input)?).await
     }
     pub fn session_inbox_cancel_call(input: &SessionInboxCancelInput) -> Result<Call, Error> {
-        Ok(Call::new(
-            "DELETE",
-            format!(
-                "/api/session/{}/inbox/{}",
-                crate::client::path_param(&input.session_id)?,
-                crate::client::path_param(&input.inbox_id)?
-            ),
-            204,
-            &[400, 401, 404],
-        ))
+        client::session_inbox_cancel(input).try_into()
     }
 
     /// `PATCH /api/session/:sessionID/inbox/:inboxID` (`inbox.update`)
@@ -591,19 +280,7 @@ impl Client {
         self.empty(Self::session_inbox_update_call(input)?).await
     }
     pub fn session_inbox_update_call(input: &SessionInboxUpdateInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "PATCH",
-            format!(
-                "/api/session/{}/inbox/{}",
-                crate::client::path_param(&input.session_id)?,
-                crate::client::path_param(&input.inbox_id)?
-            ),
-            204,
-            &[400, 401, 404, 409],
-        );
-        call.object();
-        call.field("delivery", &input.delivery)?;
-        Ok(call)
+        client::session_inbox_update(input).try_into()
     }
 
     /// `POST /api/session/:sessionID/generate` (`generate`)
@@ -611,15 +288,7 @@ impl Client {
         self.data(Self::session_generate_call(input)?).await
     }
     pub fn session_generate_call(input: &SessionGenerateInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "POST",
-            format!("/api/session/{}/generate", crate::client::path_param(&input.session_id)?),
-            200,
-            &[400, 401, 404, 503],
-        );
-        call.object();
-        call.field("prompt", &input.prompt)?;
-        Ok(call)
+        client::session_generate(input).try_into()
     }
 
     /// `POST /api/session/:sessionID/interrupt` (`interrupt`)
@@ -627,16 +296,7 @@ impl Client {
         self.json(Self::session_interrupt_call(input)?).await
     }
     pub fn session_interrupt_call(input: &SessionInterruptInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "POST",
-            format!("/api/session/{}/interrupt", crate::client::path_param(&input.session_id)?),
-            200,
-            &[400, 401, 404],
-        );
-        if let Some(value) = &input.resume {
-            call.query("resume", value)?;
-        }
-        Ok(call)
+        client::session_interrupt(input).try_into()
     }
 
     /// `POST /api/session/:sessionID/background` (`background`)
@@ -644,12 +304,7 @@ impl Client {
         self.empty(Self::session_background_call(input)?).await
     }
     pub fn session_background_call(input: &SessionBackgroundInput) -> Result<Call, Error> {
-        Ok(Call::new(
-            "POST",
-            format!("/api/session/{}/background", crate::client::path_param(&input.session_id)?),
-            204,
-            &[400, 401, 404],
-        ))
+        client::session_background(input).try_into()
     }
 
     /// `GET /api/session/:sessionID/message/:messageID` (`message.get`)
@@ -657,16 +312,7 @@ impl Client {
         self.data(Self::session_message_get_call(input)?).await
     }
     pub fn session_message_get_call(input: &SessionMessageGetInput) -> Result<Call, Error> {
-        Ok(Call::new(
-            "GET",
-            format!(
-                "/api/session/{}/message/{}",
-                crate::client::path_param(&input.session_id)?,
-                crate::client::path_param(&input.message_id)?
-            ),
-            200,
-            &[400, 401, 404],
-        ))
+        client::session_message_get(input).try_into()
     }
 
     /// `GET /api/session/:sessionID/form` (`form.list`)
@@ -674,12 +320,7 @@ impl Client {
         self.data(Self::session_form_list_call(input)?).await
     }
     pub fn session_form_list_call(input: &SessionFormListInput) -> Result<Call, Error> {
-        Ok(Call::new(
-            "GET",
-            format!("/api/session/{}/form", crate::client::path_param(&input.session_id)?),
-            200,
-            &[400, 401, 404],
-        ))
+        client::session_form_list(input).try_into()
     }
 
     /// `POST /api/session/:sessionID/form` (`form.create`)
@@ -687,22 +328,7 @@ impl Client {
         self.data(Self::session_form_create_call(input)?).await
     }
     pub fn session_form_create_call(input: &SessionFormCreateInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "POST",
-            format!("/api/session/{}/form", crate::client::path_param(&input.session_id)?),
-            200,
-            &[400, 401, 404, 409],
-        );
-        call.object();
-        if let Some(value) = &input.id {
-            call.field("id", value)?;
-        }
-        call.field("title", &input.title)?;
-        if let Some(value) = &input.metadata {
-            call.field("metadata", value)?;
-        }
-        call.field("fields", &input.fields)?;
-        Ok(call)
+        client::session_form_create(input).try_into()
     }
 
     /// `GET /api/session/:sessionID/form/:formID` (`form.get`)
@@ -710,16 +336,7 @@ impl Client {
         self.data(Self::session_form_get_call(input)?).await
     }
     pub fn session_form_get_call(input: &SessionFormGetInput) -> Result<Call, Error> {
-        Ok(Call::new(
-            "GET",
-            format!(
-                "/api/session/{}/form/{}",
-                crate::client::path_param(&input.session_id)?,
-                crate::client::path_param(&input.form_id)?
-            ),
-            200,
-            &[400, 401, 404],
-        ))
+        client::session_form_get(input).try_into()
     }
 
     /// `POST /api/session/:sessionID/form/:formID/reply` (`form.reply`)
@@ -727,19 +344,7 @@ impl Client {
         self.empty(Self::session_form_reply_call(input)?).await
     }
     pub fn session_form_reply_call(input: &SessionFormReplyInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "POST",
-            format!(
-                "/api/session/{}/form/{}/reply",
-                crate::client::path_param(&input.session_id)?,
-                crate::client::path_param(&input.form_id)?
-            ),
-            204,
-            &[400, 401, 404, 409],
-        );
-        call.object();
-        call.field("answer", &input.answer)?;
-        Ok(call)
+        client::session_form_reply(input).try_into()
     }
 
     /// `DELETE /api/session/:sessionID/form/:formID` (`form.cancel`)
@@ -747,20 +352,7 @@ impl Client {
         self.empty(Self::session_form_cancel_call(input)?).await
     }
     pub fn session_form_cancel_call(input: &SessionFormCancelInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "DELETE",
-            format!(
-                "/api/session/{}/form/{}",
-                crate::client::path_param(&input.session_id)?,
-                crate::client::path_param(&input.form_id)?
-            ),
-            204,
-            &[400, 401, 404, 409],
-        );
-        if let Some(value) = &input.message {
-            call.query("message", value)?;
-        }
-        Ok(call)
+        client::session_form_cancel(input).try_into()
     }
 
     /// `PUT /api/session/:sessionID/environment` (`environment`)
@@ -768,15 +360,7 @@ impl Client {
         self.empty(Self::session_environment_call(input)?).await
     }
     pub fn session_environment_call(input: &SessionEnvironmentInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "PUT",
-            format!("/api/session/{}/environment", crate::client::path_param(&input.session_id)?),
-            204,
-            &[400, 401, 404],
-        );
-        call.object();
-        call.field("variables", &input.variables)?;
-        Ok(call)
+        client::session_environment(input).try_into()
     }
 
     /// `POST /api/session/:sessionID/view` (`view`)
@@ -784,15 +368,7 @@ impl Client {
         self.empty(Self::session_view_call(input)?).await
     }
     pub fn session_view_call(input: &SessionViewInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "POST",
-            format!("/api/session/{}/view", crate::client::path_param(&input.session_id)?),
-            204,
-            &[400, 401, 404],
-        );
-        call.object();
-        call.field("idle", &input.idle)?;
-        Ok(call)
+        client::session_view(input).try_into()
     }
 
     /// `GET /api/experimental/session/stats` (`stats`)
@@ -803,23 +379,7 @@ impl Client {
         self.data(Self::experimental_session_stats_call(input)?).await
     }
     pub fn experimental_session_stats_call(input: &ExperimentalSessionStatsInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/experimental/session/stats".to_owned(), 200, &[400, 401]);
-        if let Some(value) = &input.from {
-            call.query("from", value)?;
-        }
-        if let Some(value) = &input.to {
-            call.query("to", value)?;
-        }
-        if let Some(value) = &input.project {
-            call.query("project", value)?;
-        }
-        if let Some(value) = &input.timezone {
-            call.query("timezone", value)?;
-        }
-        if let Some(value) = &input.tools {
-            call.query("tools", value)?;
-        }
-        Ok(call)
+        client::experimental_session_stats(input).try_into()
     }
 
     /// `POST /api/experimental/session/import` (`import`)
@@ -830,14 +390,7 @@ impl Client {
         self.data(Self::experimental_session_import_call(input)?).await
     }
     pub fn experimental_session_import_call(input: &ExperimentalSessionImportInput) -> Result<Call, Error> {
-        let mut call = Call::new("POST", "/api/experimental/session/import".to_owned(), 200, &[400, 401, 404, 409]);
-        call.object();
-        call.field("info", &input.info)?;
-        call.field("messages", &input.messages)?;
-        if let Some(value) = &input.location {
-            call.field("location", value)?;
-        }
-        Ok(call)
+        client::experimental_session_import(input).try_into()
     }
 
     /// `GET /api/experimental/session/:sessionID/export` (`export`)
@@ -848,16 +401,7 @@ impl Client {
         self.data(Self::experimental_session_export_call(input)?).await
     }
     pub fn experimental_session_export_call(input: &ExperimentalSessionExportInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "GET",
-            format!("/api/experimental/session/{}/export", crate::client::path_param(&input.session_id)?),
-            200,
-            &[400, 401, 404, 500],
-        );
-        if let Some(value) = &input.sanitize {
-            call.query("sanitize", value)?;
-        }
-        Ok(call)
+        client::experimental_session_export(input).try_into()
     }
 
     /// `POST /api/experimental/session/:sessionID/skill` (`skill`)
@@ -865,18 +409,7 @@ impl Client {
         self.empty(Self::experimental_session_skill_call(input)?).await
     }
     pub fn experimental_session_skill_call(input: &ExperimentalSessionSkillInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "POST",
-            format!("/api/experimental/session/{}/skill", crate::client::path_param(&input.session_id)?),
-            204,
-            &[400, 401, 404],
-        );
-        call.object();
-        call.field("id", &input.id)?;
-        if let Some(value) = &input.resume {
-            call.field("resume", value)?;
-        }
-        Ok(call)
+        client::experimental_session_skill(input).try_into()
     }
 
     /// `POST /api/experimental/session/:sessionID/wait` (`wait`)
@@ -884,12 +417,7 @@ impl Client {
         self.empty(Self::experimental_session_wait_call(input)?).await
     }
     pub fn experimental_session_wait_call(input: &ExperimentalSessionWaitInput) -> Result<Call, Error> {
-        Ok(Call::new(
-            "POST",
-            format!("/api/experimental/session/{}/wait", crate::client::path_param(&input.session_id)?),
-            204,
-            &[400, 401, 404, 503],
-        ))
+        client::experimental_session_wait(input).try_into()
     }
 
     /// `GET /api/experimental/session/:sessionID/instructions/entries` (`instructions.entry.list`)
@@ -902,12 +430,7 @@ impl Client {
     pub fn experimental_session_instructions_entry_list_call(
         input: &ExperimentalSessionInstructionsEntryListInput,
     ) -> Result<Call, Error> {
-        Ok(Call::new(
-            "GET",
-            format!("/api/experimental/session/{}/instructions/entries", crate::client::path_param(&input.session_id)?),
-            200,
-            &[400, 401, 404],
-        ))
+        client::experimental_session_instructions_entry_list(input).try_into()
     }
 
     /// `PUT /api/experimental/session/:sessionID/instructions/entries/:key` (`instructions.entry.put`)
@@ -920,19 +443,7 @@ impl Client {
     pub fn experimental_session_instructions_entry_put_call(
         input: &ExperimentalSessionInstructionsEntryPutInput,
     ) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "PUT",
-            format!(
-                "/api/experimental/session/{}/instructions/entries/{}",
-                crate::client::path_param(&input.session_id)?,
-                crate::client::path_param(&input.key)?
-            ),
-            204,
-            &[400, 401, 404, 413],
-        );
-        call.object();
-        call.field("value", &input.value)?;
-        Ok(call)
+        client::experimental_session_instructions_entry_put(input).try_into()
     }
 
     /// `DELETE /api/experimental/session/:sessionID/instructions/entries/:key` (`instructions.entry.remove`)
@@ -945,16 +456,7 @@ impl Client {
     pub fn experimental_session_instructions_entry_remove_call(
         input: &ExperimentalSessionInstructionsEntryRemoveInput,
     ) -> Result<Call, Error> {
-        Ok(Call::new(
-            "DELETE",
-            format!(
-                "/api/experimental/session/{}/instructions/entries/{}",
-                crate::client::path_param(&input.session_id)?,
-                crate::client::path_param(&input.key)?
-            ),
-            204,
-            &[400, 401, 404],
-        ))
+        client::experimental_session_instructions_entry_remove(input).try_into()
     }
 
     /// `GET /api/experimental/session/:sessionID/log` (`log`)
@@ -965,19 +467,7 @@ impl Client {
         self.sse(Self::experimental_session_log_call(input)?).await
     }
     pub fn experimental_session_log_call(input: &ExperimentalSessionLogInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "GET",
-            format!("/api/experimental/session/{}/log", crate::client::path_param(&input.session_id)?),
-            200,
-            &[400, 401, 404],
-        );
-        if let Some(value) = &input.after {
-            call.query("after", value)?;
-        }
-        if let Some(value) = &input.follow {
-            call.query("follow", value)?;
-        }
-        Ok(call)
+        client::experimental_session_log(input).try_into()
     }
 
     /// `GET /api/session/:sessionID/message` (`list`)
@@ -985,25 +475,7 @@ impl Client {
         self.json(Self::message_list_call(input)?).await
     }
     pub fn message_list_call(input: &MessageListInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "GET",
-            format!("/api/session/{}/message", crate::client::path_param(&input.session_id)?),
-            200,
-            &[400, 401, 404, 500],
-        );
-        if let Some(value) = &input.limit {
-            call.query("limit", value)?;
-        }
-        if let Some(value) = &input.order {
-            call.query("order", value)?;
-        }
-        if let Some(value) = &input.cursor {
-            call.query("cursor", value)?;
-        }
-        if let Some(value) = &input.r#type {
-            call.query("type", value)?;
-        }
-        Ok(call)
+        client::message_list(input).try_into()
     }
 
     /// `GET /api/model` (`list`)
@@ -1011,14 +483,7 @@ impl Client {
         self.json(Self::model_list_call(input)?).await
     }
     pub fn model_list_call(input: &ModelListInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/model".to_owned(), 200, &[400, 401, 404, 503]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        if let Some(value) = &input.types {
-            call.query("types", value)?;
-        }
-        Ok(call)
+        client::model_list(input).try_into()
     }
 
     /// `GET /api/model/default` (`default`)
@@ -1026,11 +491,7 @@ impl Client {
         self.json(Self::model_default_call(input)?).await
     }
     pub fn model_default_call(input: &ModelDefaultInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/model/default".to_owned(), 200, &[400, 401, 404, 503]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::model_default(input).try_into()
     }
 
     /// `POST /api/experimental/generate/text` (`text`)
@@ -1041,14 +502,7 @@ impl Client {
         self.data(Self::experimental_generate_text_call(input)?).await
     }
     pub fn experimental_generate_text_call(input: &ExperimentalGenerateTextInput) -> Result<Call, Error> {
-        let mut call =
-            Call::new("POST", "/api/experimental/generate/text".to_owned(), 200, &[400, 401, 404, 422, 502, 503]);
-        call.object();
-        call.field("prompt", &input.prompt)?;
-        if let Some(value) = &input.model {
-            call.field("model", value)?;
-        }
-        Ok(call)
+        client::experimental_generate_text(input).try_into()
     }
 
     /// `POST /api/experimental/generate/image` (`image`)
@@ -1059,24 +513,7 @@ impl Client {
         self.data(Self::experimental_generate_image_call(input)?).await
     }
     pub fn experimental_generate_image_call(input: &ExperimentalGenerateImageInput) -> Result<Call, Error> {
-        let mut call =
-            Call::new("POST", "/api/experimental/generate/image".to_owned(), 200, &[400, 401, 404, 422, 502, 503]);
-        call.object();
-        call.field("model", &input.model)?;
-        call.field("prompt", &input.prompt)?;
-        if let Some(value) = &input.images {
-            call.field("images", value)?;
-        }
-        if let Some(value) = &input.n {
-            call.field("n", value)?;
-        }
-        if let Some(value) = &input.aspect {
-            call.field("aspect", value)?;
-        }
-        if let Some(value) = &input.resolution {
-            call.field("resolution", value)?;
-        }
-        Ok(call)
+        client::experimental_generate_image(input).try_into()
     }
 
     /// `POST /api/experimental/generate/video` (`video.create`)
@@ -1089,33 +526,7 @@ impl Client {
     pub fn experimental_generate_video_create_call(
         input: &ExperimentalGenerateVideoCreateInput,
     ) -> Result<Call, Error> {
-        let mut call =
-            Call::new("POST", "/api/experimental/generate/video".to_owned(), 200, &[400, 401, 403, 404, 422, 502, 503]);
-        call.object();
-        call.field("model", &input.model)?;
-        call.field("prompt", &input.prompt)?;
-        if let Some(value) = &input.start {
-            call.field("start", value)?;
-        }
-        if let Some(value) = &input.end {
-            call.field("end", value)?;
-        }
-        if let Some(value) = &input.references {
-            call.field("references", value)?;
-        }
-        if let Some(value) = &input.duration {
-            call.field("duration", value)?;
-        }
-        if let Some(value) = &input.aspect {
-            call.field("aspect", value)?;
-        }
-        if let Some(value) = &input.resolution {
-            call.field("resolution", value)?;
-        }
-        if let Some(value) = &input.sound {
-            call.field("sound", value)?;
-        }
-        Ok(call)
+        client::experimental_generate_video_create(input).try_into()
     }
 
     /// `GET /api/experimental/generate/video/:id` (`video.get`)
@@ -1126,12 +537,7 @@ impl Client {
         self.data(Self::experimental_generate_video_get_call(input)?).await
     }
     pub fn experimental_generate_video_get_call(input: &ExperimentalGenerateVideoGetInput) -> Result<Call, Error> {
-        Ok(Call::new(
-            "GET",
-            format!("/api/experimental/generate/video/{}", crate::client::path_param(&input.id)?),
-            200,
-            &[400, 401, 403, 404],
-        ))
+        client::experimental_generate_video_get(input).try_into()
     }
 
     /// `POST /api/experimental/generate/decisions` (`decisions`)
@@ -1142,13 +548,7 @@ impl Client {
         self.data(Self::experimental_generate_decisions_call(input)?).await
     }
     pub fn experimental_generate_decisions_call(input: &ExperimentalGenerateDecisionsInput) -> Result<Call, Error> {
-        let mut call =
-            Call::new("POST", "/api/experimental/generate/decisions".to_owned(), 200, &[400, 401, 404, 422, 502, 503]);
-        call.object();
-        call.field("model", &input.model)?;
-        call.field("input", &input.input)?;
-        call.field("questions", &input.questions)?;
-        Ok(call)
+        client::experimental_generate_decisions(input).try_into()
     }
 
     /// `GET /api/experimental/voice/models` (`models`)
@@ -1156,7 +556,7 @@ impl Client {
         self.data(Self::experimental_voice_models_call()?).await
     }
     pub fn experimental_voice_models_call() -> Result<Call, Error> {
-        Ok(Call::new("GET", "/api/experimental/voice/models".to_owned(), 200, &[400, 401, 404, 503]))
+        client::experimental_voice_models().try_into()
     }
 
     /// `POST /api/experimental/voice/session` (`session`)
@@ -1167,14 +567,7 @@ impl Client {
         self.data(Self::experimental_voice_session_call(input)?).await
     }
     pub fn experimental_voice_session_call(input: &ExperimentalVoiceSessionInput) -> Result<Call, Error> {
-        let mut call = Call::new("POST", "/api/experimental/voice/session".to_owned(), 200, &[400, 401, 404, 503]);
-        call.object();
-        call.field("model", &input.model)?;
-        if let Some(value) = &input.session {
-            call.field("session", value)?;
-        }
-        call.field("transport", &input.transport)?;
-        Ok(call)
+        client::experimental_voice_session(input).try_into()
     }
 
     /// `GET /api/provider` (`list`)
@@ -1182,11 +575,7 @@ impl Client {
         self.json(Self::provider_list_call(input)?).await
     }
     pub fn provider_list_call(input: &ProviderListInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/provider".to_owned(), 200, &[400, 401, 404, 503]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::provider_list(input).try_into()
     }
 
     /// `GET /api/provider/:providerID` (`get`)
@@ -1194,16 +583,7 @@ impl Client {
         self.json(Self::provider_get_call(input)?).await
     }
     pub fn provider_get_call(input: &ProviderGetInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "GET",
-            format!("/api/provider/{}", crate::client::path_param(&input.provider_id)?),
-            200,
-            &[400, 401, 404, 503],
-        );
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::provider_get(input).try_into()
     }
 
     /// `GET /api/integration` (`list`)
@@ -1211,11 +591,7 @@ impl Client {
         self.json(Self::integration_list_call(input)?).await
     }
     pub fn integration_list_call(input: &IntegrationListInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/integration".to_owned(), 200, &[400, 401, 404]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::integration_list(input).try_into()
     }
 
     /// `GET /api/integration/:integrationID` (`get`)
@@ -1223,16 +599,7 @@ impl Client {
         self.json(Self::integration_get_call(input)?).await
     }
     pub fn integration_get_call(input: &IntegrationGetInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "GET",
-            format!("/api/integration/{}", crate::client::path_param(&input.integration_id)?),
-            200,
-            &[400, 401, 404],
-        );
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::integration_get(input).try_into()
     }
 
     /// `POST /api/integration/:integrationID/connect/key` (`connect.key`)
@@ -1240,24 +607,7 @@ impl Client {
         self.empty(Self::integration_connect_key_call(input)?).await
     }
     pub fn integration_connect_key_call(input: &IntegrationConnectKeyInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "POST",
-            format!("/api/integration/{}/connect/key", crate::client::path_param(&input.integration_id)?),
-            204,
-            &[400, 401, 404],
-        );
-        call.object();
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        call.field("key", &input.key)?;
-        if let Some(value) = &input.answer {
-            call.field("answer", value)?;
-        }
-        if let Some(value) = &input.label {
-            call.field("label", value)?;
-        }
-        Ok(call)
+        client::integration_connect_key(input).try_into()
     }
 
     /// `POST /api/integration/:integrationID/connect/external` (`connect.external`)
@@ -1265,24 +615,7 @@ impl Client {
         self.empty(Self::integration_connect_external_call(input)?).await
     }
     pub fn integration_connect_external_call(input: &IntegrationConnectExternalInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "POST",
-            format!("/api/integration/{}/connect/external", crate::client::path_param(&input.integration_id)?),
-            204,
-            &[400, 401, 404],
-        );
-        call.object();
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        call.field("methodID", &input.method_id)?;
-        if let Some(value) = &input.answer {
-            call.field("answer", value)?;
-        }
-        if let Some(value) = &input.label {
-            call.field("label", value)?;
-        }
-        Ok(call)
+        client::integration_connect_external(input).try_into()
     }
 
     /// `POST /api/integration/:integrationID/connect/oauth` (`oauth.connect`)
@@ -1293,24 +626,7 @@ impl Client {
         self.json(Self::integration_oauth_connect_call(input)?).await
     }
     pub fn integration_oauth_connect_call(input: &IntegrationOauthConnectInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "POST",
-            format!("/api/integration/{}/connect/oauth", crate::client::path_param(&input.integration_id)?),
-            200,
-            &[400, 401, 404],
-        );
-        call.object();
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        call.field("methodID", &input.method_id)?;
-        if let Some(value) = &input.answer {
-            call.field("answer", value)?;
-        }
-        if let Some(value) = &input.label {
-            call.field("label", value)?;
-        }
-        Ok(call)
+        client::integration_oauth_connect(input).try_into()
     }
 
     /// `GET /api/integration/:integrationID/connect/oauth/:attemptID` (`oauth.status`)
@@ -1321,20 +637,7 @@ impl Client {
         self.json(Self::integration_oauth_status_call(input)?).await
     }
     pub fn integration_oauth_status_call(input: &IntegrationOauthStatusInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "GET",
-            format!(
-                "/api/integration/{}/connect/oauth/{}",
-                crate::client::path_param(&input.integration_id)?,
-                crate::client::path_param(&input.attempt_id)?
-            ),
-            200,
-            &[400, 401, 404],
-        );
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::integration_oauth_status(input).try_into()
     }
 
     /// `POST /api/integration/:integrationID/connect/oauth/:attemptID/complete` (`oauth.complete`)
@@ -1342,24 +645,7 @@ impl Client {
         self.empty(Self::integration_oauth_complete_call(input)?).await
     }
     pub fn integration_oauth_complete_call(input: &IntegrationOauthCompleteInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "POST",
-            format!(
-                "/api/integration/{}/connect/oauth/{}/complete",
-                crate::client::path_param(&input.integration_id)?,
-                crate::client::path_param(&input.attempt_id)?
-            ),
-            204,
-            &[400, 401, 404],
-        );
-        call.object();
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        if let Some(value) = &input.code {
-            call.field("code", value)?;
-        }
-        Ok(call)
+        client::integration_oauth_complete(input).try_into()
     }
 
     /// `DELETE /api/integration/:integrationID/connect/oauth/:attemptID` (`oauth.cancel`)
@@ -1367,20 +653,7 @@ impl Client {
         self.empty(Self::integration_oauth_cancel_call(input)?).await
     }
     pub fn integration_oauth_cancel_call(input: &IntegrationOauthCancelInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "DELETE",
-            format!(
-                "/api/integration/{}/connect/oauth/{}",
-                crate::client::path_param(&input.integration_id)?,
-                crate::client::path_param(&input.attempt_id)?
-            ),
-            204,
-            &[400, 401, 404],
-        );
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::integration_oauth_cancel(input).try_into()
     }
 
     /// `POST /api/integration/:integrationID/connect/command` (`command.connect`)
@@ -1391,21 +664,7 @@ impl Client {
         self.json(Self::integration_command_connect_call(input)?).await
     }
     pub fn integration_command_connect_call(input: &IntegrationCommandConnectInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "POST",
-            format!("/api/integration/{}/connect/command", crate::client::path_param(&input.integration_id)?),
-            200,
-            &[400, 401, 404],
-        );
-        call.object();
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        call.field("methodID", &input.method_id)?;
-        if let Some(value) = &input.label {
-            call.field("label", value)?;
-        }
-        Ok(call)
+        client::integration_command_connect(input).try_into()
     }
 
     /// `GET /api/integration/:integrationID/connect/command/:attemptID` (`command.status`)
@@ -1416,20 +675,7 @@ impl Client {
         self.json(Self::integration_command_status_call(input)?).await
     }
     pub fn integration_command_status_call(input: &IntegrationCommandStatusInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "GET",
-            format!(
-                "/api/integration/{}/connect/command/{}",
-                crate::client::path_param(&input.integration_id)?,
-                crate::client::path_param(&input.attempt_id)?
-            ),
-            200,
-            &[400, 401, 404],
-        );
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::integration_command_status(input).try_into()
     }
 
     /// `DELETE /api/integration/:integrationID/connect/command/:attemptID` (`command.cancel`)
@@ -1437,20 +683,7 @@ impl Client {
         self.empty(Self::integration_command_cancel_call(input)?).await
     }
     pub fn integration_command_cancel_call(input: &IntegrationCommandCancelInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "DELETE",
-            format!(
-                "/api/integration/{}/connect/command/{}",
-                crate::client::path_param(&input.integration_id)?,
-                crate::client::path_param(&input.attempt_id)?
-            ),
-            204,
-            &[400, 401, 404],
-        );
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::integration_command_cancel(input).try_into()
     }
 
     /// `POST /api/experimental/integration/wellknown` (`wellknown.add`)
@@ -1463,13 +696,7 @@ impl Client {
     pub fn experimental_integration_wellknown_add_call(
         input: &ExperimentalIntegrationWellknownAddInput,
     ) -> Result<Call, Error> {
-        let mut call = Call::new("POST", "/api/experimental/integration/wellknown".to_owned(), 204, &[400, 401, 404]);
-        call.object();
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        call.field("url", &input.url)?;
-        Ok(call)
+        client::experimental_integration_wellknown_add(input).try_into()
     }
 
     /// `GET /api/mcp` (`list`)
@@ -1477,11 +704,7 @@ impl Client {
         self.json(Self::mcp_list_call(input)?).await
     }
     pub fn mcp_list_call(input: &McpListInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/mcp".to_owned(), 200, &[400, 401, 404]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::mcp_list(input).try_into()
     }
 
     /// `GET /api/mcp/resource` (`resource.catalog`)
@@ -1492,11 +715,7 @@ impl Client {
         self.json(Self::mcp_resource_catalog_call(input)?).await
     }
     pub fn mcp_resource_catalog_call(input: &McpResourceCatalogInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/mcp/resource".to_owned(), 200, &[400, 401, 404]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::mcp_resource_catalog(input).try_into()
     }
 
     /// `PUT /api/experimental/mcp/:server` (`add`)
@@ -1504,18 +723,7 @@ impl Client {
         self.empty(Self::experimental_mcp_add_call(input)?).await
     }
     pub fn experimental_mcp_add_call(input: &ExperimentalMcpAddInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "PUT",
-            format!("/api/experimental/mcp/{}", crate::client::path_param(&input.server)?),
-            204,
-            &[400, 401, 404],
-        );
-        call.object();
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        call.field("config", &input.config)?;
-        Ok(call)
+        client::experimental_mcp_add(input).try_into()
     }
 
     /// `DELETE /api/experimental/mcp/:server` (`remove`)
@@ -1523,16 +731,7 @@ impl Client {
         self.empty(Self::experimental_mcp_remove_call(input)?).await
     }
     pub fn experimental_mcp_remove_call(input: &ExperimentalMcpRemoveInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "DELETE",
-            format!("/api/experimental/mcp/{}", crate::client::path_param(&input.server)?),
-            204,
-            &[400, 401, 404],
-        );
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::experimental_mcp_remove(input).try_into()
     }
 
     /// `POST /api/experimental/mcp/:server/connect` (`connect`)
@@ -1540,16 +739,7 @@ impl Client {
         self.empty(Self::experimental_mcp_connect_call(input)?).await
     }
     pub fn experimental_mcp_connect_call(input: &ExperimentalMcpConnectInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "POST",
-            format!("/api/experimental/mcp/{}/connect", crate::client::path_param(&input.server)?),
-            204,
-            &[400, 401, 404],
-        );
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::experimental_mcp_connect(input).try_into()
     }
 
     /// `POST /api/experimental/mcp/:server/disconnect` (`disconnect`)
@@ -1557,16 +747,7 @@ impl Client {
         self.empty(Self::experimental_mcp_disconnect_call(input)?).await
     }
     pub fn experimental_mcp_disconnect_call(input: &ExperimentalMcpDisconnectInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "POST",
-            format!("/api/experimental/mcp/{}/disconnect", crate::client::path_param(&input.server)?),
-            204,
-            &[400, 401, 404],
-        );
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::experimental_mcp_disconnect(input).try_into()
     }
 
     /// `POST /api/experimental/client-mcp/token` (`client.token`)
@@ -1577,15 +758,7 @@ impl Client {
         self.json(Self::experimental_mcp_client_token_call(input)?).await
     }
     pub fn experimental_mcp_client_token_call(input: &ExperimentalMcpClientTokenInput) -> Result<Call, Error> {
-        let mut call = Call::new("POST", "/api/experimental/client-mcp/token".to_owned(), 200, &[400, 401, 403, 404]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        call.query("name", &input.name)?;
-        if let Some(value) = &input.x_opencode_ticket {
-            call.header("x-opencode-ticket", value)?;
-        }
-        Ok(call)
+        client::experimental_mcp_client_token(input).try_into()
     }
 
     /// `GET /api/credential` (`list`)
@@ -1593,7 +766,7 @@ impl Client {
         self.data(Self::credential_list_call()?).await
     }
     pub fn credential_list_call() -> Result<Call, Error> {
-        Ok(Call::new("GET", "/api/credential".to_owned(), 200, &[400, 401]))
+        client::credential_list().try_into()
     }
 
     /// `POST /api/credential` (`create`)
@@ -1601,20 +774,7 @@ impl Client {
         self.data(Self::credential_create_call(input)?).await
     }
     pub fn credential_create_call(input: &CredentialCreateInput) -> Result<Call, Error> {
-        let mut call = Call::new("POST", "/api/credential".to_owned(), 200, &[400, 401, 409]);
-        call.object();
-        if let Some(value) = &input.id {
-            call.field("id", value)?;
-        }
-        call.field("integrationID", &input.integration_id)?;
-        if let Some(value) = &input.label {
-            call.field("label", value)?;
-        }
-        call.field("value", &input.value)?;
-        if let Some(value) = &input.activate {
-            call.field("activate", value)?;
-        }
-        Ok(call)
+        client::credential_create(input).try_into()
     }
 
     /// `PATCH /api/credential/:credentialID` (`update`)
@@ -1622,15 +782,7 @@ impl Client {
         self.empty(Self::credential_update_call(input)?).await
     }
     pub fn credential_update_call(input: &CredentialUpdateInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "PATCH",
-            format!("/api/credential/{}", crate::client::path_param(&input.credential_id)?),
-            204,
-            &[400, 401],
-        );
-        call.object();
-        call.field("label", &input.label)?;
-        Ok(call)
+        client::credential_update(input).try_into()
     }
 
     /// `POST /api/credential/:credentialID/activate` (`activate`)
@@ -1638,12 +790,7 @@ impl Client {
         self.empty(Self::credential_activate_call(input)?).await
     }
     pub fn credential_activate_call(input: &CredentialActivateInput) -> Result<Call, Error> {
-        Ok(Call::new(
-            "POST",
-            format!("/api/credential/{}/activate", crate::client::path_param(&input.credential_id)?),
-            204,
-            &[400, 401],
-        ))
+        client::credential_activate(input).try_into()
     }
 
     /// `DELETE /api/credential/:credentialID` (`remove`)
@@ -1651,12 +798,7 @@ impl Client {
         self.empty(Self::credential_remove_call(input)?).await
     }
     pub fn credential_remove_call(input: &CredentialRemoveInput) -> Result<Call, Error> {
-        Ok(Call::new(
-            "DELETE",
-            format!("/api/credential/{}", crate::client::path_param(&input.credential_id)?),
-            204,
-            &[400, 401],
-        ))
+        client::credential_remove(input).try_into()
     }
 
     /// `GET /api/project` (`list`)
@@ -1664,11 +806,7 @@ impl Client {
         self.json(Self::project_list_call(input)?).await
     }
     pub fn project_list_call(input: &ProjectListInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/project".to_owned(), 200, &[400, 401]);
-        if let Some(value) = &input.archived {
-            call.query("archived", value)?;
-        }
-        Ok(call)
+        client::project_list(input).try_into()
     }
 
     /// `PATCH /api/project/:projectID` (`update`)
@@ -1676,26 +814,7 @@ impl Client {
         self.json(Self::project_update_call(input)?).await
     }
     pub fn project_update_call(input: &ProjectUpdateInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "PATCH",
-            format!("/api/project/{}", crate::client::path_param(&input.project_id)?),
-            200,
-            &[400, 401, 404],
-        );
-        call.object();
-        if let Some(value) = &input.canonical {
-            call.field("canonical", value)?;
-        }
-        if let Some(value) = &input.name {
-            call.field("name", value)?;
-        }
-        if let Some(value) = &input.icon {
-            call.field("icon", value)?;
-        }
-        if let Some(value) = &input.commands {
-            call.field("commands", value)?;
-        }
-        Ok(call)
+        client::project_update(input).try_into()
     }
 
     /// `GET /api/form` (`list`)
@@ -1703,11 +822,7 @@ impl Client {
         self.json(Self::form_list_call(input)?).await
     }
     pub fn form_list_call(input: &FormListInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/form".to_owned(), 200, &[400, 401, 404]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::form_list(input).try_into()
     }
 
     /// `GET /api/permission/request` (`request.list`)
@@ -1718,11 +833,7 @@ impl Client {
         self.json(Self::permission_request_list_call(input)?).await
     }
     pub fn permission_request_list_call(input: &PermissionRequestListInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/permission/request".to_owned(), 200, &[400, 401, 404]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::permission_request_list(input).try_into()
     }
 
     /// `GET /api/permission/saved` (`saved.list`)
@@ -1733,11 +844,7 @@ impl Client {
         self.data(Self::permission_saved_list_call(input)?).await
     }
     pub fn permission_saved_list_call(input: &PermissionSavedListInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/permission/saved".to_owned(), 200, &[400, 401, 404]);
-        if let Some(value) = &input.project_id {
-            call.query("projectID", value)?;
-        }
-        Ok(call)
+        client::permission_saved_list(input).try_into()
     }
 
     /// `PATCH /api/permission/saved/:id` (`saved.update`)
@@ -1748,20 +855,7 @@ impl Client {
         self.data(Self::permission_saved_update_call(input)?).await
     }
     pub fn permission_saved_update_call(input: &PermissionSavedUpdateInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "PATCH",
-            format!("/api/permission/saved/{}", crate::client::path_param(&input.id)?),
-            200,
-            &[400, 401, 404, 409],
-        );
-        call.object();
-        if let Some(value) = &input.action {
-            call.field("action", value)?;
-        }
-        if let Some(value) = &input.resource {
-            call.field("resource", value)?;
-        }
-        Ok(call)
+        client::permission_saved_update(input).try_into()
     }
 
     /// `DELETE /api/permission/saved/:id` (`saved.remove`)
@@ -1769,12 +863,7 @@ impl Client {
         self.empty(Self::permission_saved_remove_call(input)?).await
     }
     pub fn permission_saved_remove_call(input: &PermissionSavedRemoveInput) -> Result<Call, Error> {
-        Ok(Call::new(
-            "DELETE",
-            format!("/api/permission/saved/{}", crate::client::path_param(&input.id)?),
-            204,
-            &[400, 401],
-        ))
+        client::permission_saved_remove(input).try_into()
     }
 
     /// `POST /api/session/:sessionID/permission` (`create`)
@@ -1782,31 +871,7 @@ impl Client {
         self.data(Self::permission_create_call(input)?).await
     }
     pub fn permission_create_call(input: &PermissionCreateInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "POST",
-            format!("/api/session/{}/permission", crate::client::path_param(&input.session_id)?),
-            200,
-            &[400, 401, 404],
-        );
-        call.object();
-        if let Some(value) = &input.id {
-            call.field("id", value)?;
-        }
-        call.field("action", &input.action)?;
-        call.field("resources", &input.resources)?;
-        if let Some(value) = &input.save {
-            call.field("save", value)?;
-        }
-        if let Some(value) = &input.metadata {
-            call.field("metadata", value)?;
-        }
-        if let Some(value) = &input.source {
-            call.field("source", value)?;
-        }
-        if let Some(value) = &input.agent {
-            call.field("agent", value)?;
-        }
-        Ok(call)
+        client::permission_create(input).try_into()
     }
 
     /// `GET /api/session/:sessionID/permission` (`list`)
@@ -1814,12 +879,7 @@ impl Client {
         self.data(Self::permission_list_call(input)?).await
     }
     pub fn permission_list_call(input: &PermissionListInput) -> Result<Call, Error> {
-        Ok(Call::new(
-            "GET",
-            format!("/api/session/{}/permission", crate::client::path_param(&input.session_id)?),
-            200,
-            &[400, 401, 404],
-        ))
+        client::permission_list(input).try_into()
     }
 
     /// `GET /api/session/:sessionID/permission/:requestID` (`get`)
@@ -1827,16 +887,7 @@ impl Client {
         self.data(Self::permission_get_call(input)?).await
     }
     pub fn permission_get_call(input: &PermissionGetInput) -> Result<Call, Error> {
-        Ok(Call::new(
-            "GET",
-            format!(
-                "/api/session/{}/permission/{}",
-                crate::client::path_param(&input.session_id)?,
-                crate::client::path_param(&input.request_id)?
-            ),
-            200,
-            &[400, 401, 404],
-        ))
+        client::permission_get(input).try_into()
     }
 
     /// `POST /api/session/:sessionID/permission/:requestID/reply` (`reply`)
@@ -1844,22 +895,7 @@ impl Client {
         self.empty(Self::permission_reply_call(input)?).await
     }
     pub fn permission_reply_call(input: &PermissionReplyInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "POST",
-            format!(
-                "/api/session/{}/permission/{}/reply",
-                crate::client::path_param(&input.session_id)?,
-                crate::client::path_param(&input.request_id)?
-            ),
-            204,
-            &[400, 401, 404],
-        );
-        call.object();
-        call.field("decision", &input.decision)?;
-        if let Some(value) = &input.message {
-            call.field("message", value)?;
-        }
-        Ok(call)
+        client::permission_reply(input).try_into()
     }
 
     /// `GET /api/fs/read/*` (`read`)
@@ -1867,16 +903,7 @@ impl Client {
         self.binary(Self::file_read_call(input)?).await
     }
     pub fn file_read_call(input: &FileReadInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "GET",
-            format!("/api/fs/read/{}", crate::client::path_wildcard(&input.path)),
-            200,
-            &[400, 401, 404],
-        );
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::file_read(input).try_into()
     }
 
     /// `GET /api/fs/list` (`list`)
@@ -1884,14 +911,7 @@ impl Client {
         self.json(Self::file_list_call(input)?).await
     }
     pub fn file_list_call(input: &FileListInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/fs/list".to_owned(), 200, &[400, 401, 404]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        if let Some(value) = &input.path {
-            call.query("path", value)?;
-        }
-        Ok(call)
+        client::file_list(input).try_into()
     }
 
     /// `GET /api/fs/find` (`find`)
@@ -1899,18 +919,7 @@ impl Client {
         self.json(Self::file_find_call(input)?).await
     }
     pub fn file_find_call(input: &FileFindInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/fs/find".to_owned(), 200, &[400, 401, 404]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        call.query("query", &input.query)?;
-        if let Some(value) = &input.r#type {
-            call.query("type", value)?;
-        }
-        if let Some(value) = &input.limit {
-            call.query("limit", value)?;
-        }
-        Ok(call)
+        client::file_find(input).try_into()
     }
 
     /// `POST /api/experimental/fs/write` (`write`)
@@ -1921,13 +930,7 @@ impl Client {
         self.json(Self::experimental_file_write_call(input)?).await
     }
     pub fn experimental_file_write_call(input: &ExperimentalFileWriteInput) -> Result<Call, Error> {
-        let mut call = Call::new("POST", "/api/experimental/fs/write".to_owned(), 200, &[400, 401, 404]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        call.query("path", &input.path)?;
-        call.bytes(input.payload.clone());
-        Ok(call)
+        client::experimental_file_write(input).try_into()
     }
 
     /// `POST /api/experimental/fs/watch` (`watch`)
@@ -1935,13 +938,7 @@ impl Client {
         self.empty(Self::experimental_file_watch_call(input)?).await
     }
     pub fn experimental_file_watch_call(input: &ExperimentalFileWatchInput) -> Result<Call, Error> {
-        let mut call = Call::new("POST", "/api/experimental/fs/watch".to_owned(), 204, &[400, 401, 404, 503]);
-        call.object();
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        call.field("path", &input.path)?;
-        Ok(call)
+        client::experimental_file_watch(input).try_into()
     }
 
     /// `DELETE /api/experimental/fs/watch` (`unwatch`)
@@ -1949,13 +946,7 @@ impl Client {
         self.empty(Self::experimental_file_unwatch_call(input)?).await
     }
     pub fn experimental_file_unwatch_call(input: &ExperimentalFileUnwatchInput) -> Result<Call, Error> {
-        let mut call = Call::new("DELETE", "/api/experimental/fs/watch".to_owned(), 204, &[400, 401, 404]);
-        call.object();
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        call.field("path", &input.path)?;
-        Ok(call)
+        client::experimental_file_unwatch(input).try_into()
     }
 
     /// `GET /api/command` (`list`)
@@ -1963,11 +954,7 @@ impl Client {
         self.json(Self::command_list_call(input)?).await
     }
     pub fn command_list_call(input: &CommandListInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/command".to_owned(), 200, &[400, 401, 404]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::command_list(input).try_into()
     }
 
     /// `GET /api/skill` (`list`)
@@ -1975,11 +962,7 @@ impl Client {
         self.json(Self::skill_list_call(input)?).await
     }
     pub fn skill_list_call(input: &SkillListInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/skill".to_owned(), 200, &[400, 401, 404]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::skill_list(input).try_into()
     }
 
     /// `POST /api/rpc/:rpcID/:method` (`call`)
@@ -1987,24 +970,7 @@ impl Client {
         self.json(Self::rpc_call_call(input)?).await
     }
     pub fn rpc_call_call(input: &RpcCallInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "POST",
-            format!(
-                "/api/rpc/{}/{}",
-                crate::client::path_param(&input.rpc_id)?,
-                crate::client::path_param(&input.method)?
-            ),
-            200,
-            &[400, 401, 404, 500],
-        );
-        call.object();
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        if let Some(value) = &input.input {
-            call.field("input", value)?;
-        }
-        Ok(call)
+        client::rpc_call(input).try_into()
     }
 
     /// `GET /api/event` (`subscribe`)
@@ -2015,11 +981,7 @@ impl Client {
         self.sse(Self::event_subscribe_call(input)?).await
     }
     pub fn event_subscribe_call(input: &EventSubscribeInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/event".to_owned(), 200, &[400, 401]);
-        if let Some(value) = &input.types {
-            call.query("types", value)?;
-        }
-        Ok(call)
+        client::event_subscribe(input).try_into()
     }
 
     /// `GET /api/pty` (`list`)
@@ -2027,11 +989,7 @@ impl Client {
         self.json(Self::pty_list_call(input)?).await
     }
     pub fn pty_list_call(input: &PtyListInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/pty".to_owned(), 200, &[400, 401, 404]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::pty_list(input).try_into()
     }
 
     /// `POST /api/pty` (`create`)
@@ -2039,27 +997,7 @@ impl Client {
         self.json(Self::pty_create_call(input)?).await
     }
     pub fn pty_create_call(input: &PtyCreateInput) -> Result<Call, Error> {
-        let mut call = Call::new("POST", "/api/pty".to_owned(), 200, &[400, 401, 404]);
-        call.object();
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        if let Some(value) = &input.command {
-            call.field("command", value)?;
-        }
-        if let Some(value) = &input.args {
-            call.field("args", value)?;
-        }
-        if let Some(value) = &input.cwd {
-            call.field("cwd", value)?;
-        }
-        if let Some(value) = &input.title {
-            call.field("title", value)?;
-        }
-        if let Some(value) = &input.env {
-            call.field("env", value)?;
-        }
-        Ok(call)
+        client::pty_create(input).try_into()
     }
 
     /// `GET /api/pty/:ptyID` (`get`)
@@ -2067,12 +1005,7 @@ impl Client {
         self.json(Self::pty_get_call(input)?).await
     }
     pub fn pty_get_call(input: &PtyGetInput) -> Result<Call, Error> {
-        let mut call =
-            Call::new("GET", format!("/api/pty/{}", crate::client::path_param(&input.pty_id)?), 200, &[400, 401, 404]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::pty_get(input).try_into()
     }
 
     /// `PUT /api/pty/:ptyID` (`update`)
@@ -2080,19 +1013,7 @@ impl Client {
         self.json(Self::pty_update_call(input)?).await
     }
     pub fn pty_update_call(input: &PtyUpdateInput) -> Result<Call, Error> {
-        let mut call =
-            Call::new("PUT", format!("/api/pty/{}", crate::client::path_param(&input.pty_id)?), 200, &[400, 401, 404]);
-        call.object();
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        if let Some(value) = &input.title {
-            call.field("title", value)?;
-        }
-        if let Some(value) = &input.size {
-            call.field("size", value)?;
-        }
-        Ok(call)
+        client::pty_update(input).try_into()
     }
 
     /// `DELETE /api/pty/:ptyID` (`remove`)
@@ -2100,16 +1021,7 @@ impl Client {
         self.empty(Self::pty_remove_call(input)?).await
     }
     pub fn pty_remove_call(input: &PtyRemoveInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "DELETE",
-            format!("/api/pty/{}", crate::client::path_param(&input.pty_id)?),
-            204,
-            &[400, 401, 404],
-        );
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::pty_remove(input).try_into()
     }
 
     /// `POST /api/pty/:ptyID/connect-token` (`connect.token`)
@@ -2117,19 +1029,7 @@ impl Client {
         self.json(Self::pty_connect_token_call(input)?).await
     }
     pub fn pty_connect_token_call(input: &PtyConnectTokenInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "POST",
-            format!("/api/pty/{}/connect-token", crate::client::path_param(&input.pty_id)?),
-            200,
-            &[400, 401, 403, 404],
-        );
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        if let Some(value) = &input.x_opencode_ticket {
-            call.header("x-opencode-ticket", value)?;
-        }
-        Ok(call)
+        client::pty_connect_token(input).try_into()
     }
 
     /// `GET /api/experimental/session/:sessionID/terminal/read` (`persistentPty.read`)
@@ -2140,16 +1040,7 @@ impl Client {
         self.data(Self::experimental_persistent_pty_read_call(input)?).await
     }
     pub fn experimental_persistent_pty_read_call(input: &ExperimentalPersistentPtyReadInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "GET",
-            format!("/api/experimental/session/{}/terminal/read", crate::client::path_param(&input.session_id)?),
-            200,
-            &[400, 401, 503],
-        );
-        if let Some(value) = &input.lines {
-            call.query("lines", value)?;
-        }
-        Ok(call)
+        client::experimental_persistent_pty_read(input).try_into()
     }
 
     /// `GET /api/experimental/session/:sessionID/terminal` (`persistentPty.list`)
@@ -2160,12 +1051,7 @@ impl Client {
         self.data(Self::experimental_persistent_pty_list_call(input)?).await
     }
     pub fn experimental_persistent_pty_list_call(input: &ExperimentalPersistentPtyListInput) -> Result<Call, Error> {
-        Ok(Call::new(
-            "GET",
-            format!("/api/experimental/session/{}/terminal", crate::client::path_param(&input.session_id)?),
-            200,
-            &[400, 401, 503],
-        ))
+        client::experimental_persistent_pty_list(input).try_into()
     }
 
     /// `POST /api/experimental/session/:sessionID/terminal` (`persistentPty.create`)
@@ -2178,26 +1064,7 @@ impl Client {
     pub fn experimental_persistent_pty_create_call(
         input: &ExperimentalPersistentPtyCreateInput,
     ) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "POST",
-            format!("/api/experimental/session/{}/terminal", crate::client::path_param(&input.session_id)?),
-            200,
-            &[400, 401, 503],
-        );
-        call.object();
-        if let Some(value) = &input.command {
-            call.field("command", value)?;
-        }
-        call.field("args", &input.args)?;
-        if let Some(value) = &input.cwd {
-            call.field("cwd", value)?;
-        }
-        call.field("title", &input.title)?;
-        call.field("env", &input.env)?;
-        if let Some(value) = &input.size {
-            call.field("size", value)?;
-        }
-        Ok(call)
+        client::experimental_persistent_pty_create(input).try_into()
     }
 
     /// `POST /api/experimental/persistent-pty/shutdown` (`persistentPty.shutdown`)
@@ -2205,7 +1072,7 @@ impl Client {
         self.empty(Self::experimental_persistent_pty_shutdown_call()?).await
     }
     pub fn experimental_persistent_pty_shutdown_call() -> Result<Call, Error> {
-        Ok(Call::new("POST", "/api/experimental/persistent-pty/shutdown".to_owned(), 204, &[400, 401, 503]))
+        client::experimental_persistent_pty_shutdown().try_into()
     }
 
     /// `POST /api/experimental/persistent-pty/handoff` (`persistentPty.handoff`)
@@ -2213,7 +1080,7 @@ impl Client {
         self.json(Self::experimental_persistent_pty_handoff_call()?).await
     }
     pub fn experimental_persistent_pty_handoff_call() -> Result<Call, Error> {
-        Ok(Call::new("POST", "/api/experimental/persistent-pty/handoff".to_owned(), 200, &[400, 401, 503]))
+        client::experimental_persistent_pty_handoff().try_into()
     }
 
     /// `GET /api/experimental/persistent-pty/:ptyID` (`persistentPty.get`)
@@ -2224,12 +1091,7 @@ impl Client {
         self.data(Self::experimental_persistent_pty_get_call(input)?).await
     }
     pub fn experimental_persistent_pty_get_call(input: &ExperimentalPersistentPtyGetInput) -> Result<Call, Error> {
-        Ok(Call::new(
-            "GET",
-            format!("/api/experimental/persistent-pty/{}", crate::client::path_param(&input.pty_id)?),
-            200,
-            &[400, 401, 404, 503],
-        ))
+        client::experimental_persistent_pty_get(input).try_into()
     }
 
     /// `PUT /api/experimental/persistent-pty/:ptyID` (`persistentPty.update`)
@@ -2242,23 +1104,7 @@ impl Client {
     pub fn experimental_persistent_pty_update_call(
         input: &ExperimentalPersistentPtyUpdateInput,
     ) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "PUT",
-            format!("/api/experimental/persistent-pty/{}", crate::client::path_param(&input.pty_id)?),
-            200,
-            &[400, 401, 404, 501, 503],
-        );
-        call.object();
-        if let Some(value) = &input.attachment_id {
-            call.field("attachmentID", value)?;
-        }
-        if let Some(value) = &input.size {
-            call.field("size", value)?;
-        }
-        if let Some(value) = &input.title {
-            call.field("title", value)?;
-        }
-        Ok(call)
+        client::experimental_persistent_pty_update(input).try_into()
     }
 
     /// `GET /api/experimental/persistent-pty/:ptyID/snapshot` (`persistentPty.snapshot`)
@@ -2271,12 +1117,7 @@ impl Client {
     pub fn experimental_persistent_pty_snapshot_call(
         input: &ExperimentalPersistentPtySnapshotInput,
     ) -> Result<Call, Error> {
-        Ok(Call::new(
-            "GET",
-            format!("/api/experimental/persistent-pty/{}/snapshot", crate::client::path_param(&input.pty_id)?),
-            200,
-            &[400, 401, 404, 503],
-        ))
+        client::experimental_persistent_pty_snapshot(input).try_into()
     }
 
     /// `DELETE /api/experimental/persistent-pty/:ptyID` (`persistentPty.remove`)
@@ -2289,12 +1130,7 @@ impl Client {
     pub fn experimental_persistent_pty_remove_call(
         input: &ExperimentalPersistentPtyRemoveInput,
     ) -> Result<Call, Error> {
-        Ok(Call::new(
-            "DELETE",
-            format!("/api/experimental/persistent-pty/{}", crate::client::path_param(&input.pty_id)?),
-            204,
-            &[400, 401, 404, 503],
-        ))
+        client::experimental_persistent_pty_remove(input).try_into()
     }
 
     /// `POST /api/experimental/persistent-pty/:ptyID/connect-token` (`persistentPty.connectToken`)
@@ -2307,16 +1143,7 @@ impl Client {
     pub fn experimental_persistent_pty_connect_token_call(
         input: &ExperimentalPersistentPtyConnectTokenInput,
     ) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "POST",
-            format!("/api/experimental/persistent-pty/{}/connect-token", crate::client::path_param(&input.pty_id)?),
-            200,
-            &[400, 401, 403, 404, 503],
-        );
-        if let Some(value) = &input.x_opencode_ticket {
-            call.header("x-opencode-ticket", value)?;
-        }
-        Ok(call)
+        client::experimental_persistent_pty_connect_token(input).try_into()
     }
 
     /// `GET /api/experimental/media/:hash` (`media.get`)
@@ -2324,12 +1151,7 @@ impl Client {
         self.binary(Self::experimental_media_get_call(input)?).await
     }
     pub fn experimental_media_get_call(input: &ExperimentalMediaGetInput) -> Result<Call, Error> {
-        Ok(Call::new(
-            "GET",
-            format!("/api/experimental/media/{}", crate::client::path_param(&input.hash)?),
-            200,
-            &[400, 401, 404],
-        ))
+        client::experimental_media_get(input).try_into()
     }
 
     /// `GET /api/experimental/blob/:id` (`blob.get`)
@@ -2337,12 +1159,7 @@ impl Client {
         self.binary(Self::experimental_blob_get_call(input)?).await
     }
     pub fn experimental_blob_get_call(input: &ExperimentalBlobGetInput) -> Result<Call, Error> {
-        Ok(Call::new(
-            "GET",
-            format!("/api/experimental/blob/{}", crate::client::path_param(&input.id)?),
-            200,
-            &[400, 401, 404],
-        ))
+        client::experimental_blob_get(input).try_into()
     }
 
     /// `POST /api/experimental/automation` (`automation.create`)
@@ -2353,21 +1170,7 @@ impl Client {
         self.data(Self::experimental_automation_create_call(input)?).await
     }
     pub fn experimental_automation_create_call(input: &ExperimentalAutomationCreateInput) -> Result<Call, Error> {
-        let mut call = Call::new("POST", "/api/experimental/automation".to_owned(), 200, &[400, 401, 403, 404]);
-        call.object();
-        if let Some(value) = &input.session_id {
-            call.field("sessionID", value)?;
-        }
-        if let Some(value) = &input.directory {
-            call.field("directory", value)?;
-        }
-        call.field("name", &input.name)?;
-        call.field("trigger", &input.trigger)?;
-        call.field("action", &input.action)?;
-        if let Some(value) = &input.expires {
-            call.field("expires", value)?;
-        }
-        Ok(call)
+        client::experimental_automation_create(input).try_into()
     }
 
     /// `GET /api/experimental/automation` (`automation.list`)
@@ -2378,14 +1181,7 @@ impl Client {
         self.data(Self::experimental_automation_list_call(input)?).await
     }
     pub fn experimental_automation_list_call(input: &ExperimentalAutomationListInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/experimental/automation".to_owned(), 200, &[400, 401, 403, 404]);
-        if let Some(value) = &input.session_id {
-            call.query("sessionID", value)?;
-        }
-        if let Some(value) = &input.directory {
-            call.query("directory", value)?;
-        }
-        Ok(call)
+        client::experimental_automation_list(input).try_into()
     }
 
     /// `GET /api/experimental/automation/:automationID` (`automation.get`)
@@ -2396,12 +1192,7 @@ impl Client {
         self.data(Self::experimental_automation_get_call(input)?).await
     }
     pub fn experimental_automation_get_call(input: &ExperimentalAutomationGetInput) -> Result<Call, Error> {
-        Ok(Call::new(
-            "GET",
-            format!("/api/experimental/automation/{}", crate::client::path_param(&input.automation_id)?),
-            200,
-            &[400, 401, 403, 404],
-        ))
+        client::experimental_automation_get(input).try_into()
     }
 
     /// `POST /api/experimental/automation/:automationID/pause` (`automation.pause`)
@@ -2412,12 +1203,7 @@ impl Client {
         self.data(Self::experimental_automation_pause_call(input)?).await
     }
     pub fn experimental_automation_pause_call(input: &ExperimentalAutomationPauseInput) -> Result<Call, Error> {
-        Ok(Call::new(
-            "POST",
-            format!("/api/experimental/automation/{}/pause", crate::client::path_param(&input.automation_id)?),
-            200,
-            &[400, 401, 403, 404],
-        ))
+        client::experimental_automation_pause(input).try_into()
     }
 
     /// `POST /api/experimental/automation/:automationID/resume` (`automation.resume`)
@@ -2428,12 +1214,7 @@ impl Client {
         self.data(Self::experimental_automation_resume_call(input)?).await
     }
     pub fn experimental_automation_resume_call(input: &ExperimentalAutomationResumeInput) -> Result<Call, Error> {
-        Ok(Call::new(
-            "POST",
-            format!("/api/experimental/automation/{}/resume", crate::client::path_param(&input.automation_id)?),
-            200,
-            &[400, 401, 403, 404],
-        ))
+        client::experimental_automation_resume(input).try_into()
     }
 
     /// `DELETE /api/experimental/automation/:automationID` (`automation.delete`)
@@ -2441,12 +1222,7 @@ impl Client {
         self.empty(Self::experimental_automation_delete_call(input)?).await
     }
     pub fn experimental_automation_delete_call(input: &ExperimentalAutomationDeleteInput) -> Result<Call, Error> {
-        Ok(Call::new(
-            "DELETE",
-            format!("/api/experimental/automation/{}", crate::client::path_param(&input.automation_id)?),
-            204,
-            &[400, 401, 403, 404],
-        ))
+        client::experimental_automation_delete(input).try_into()
     }
 
     /// `GET /api/experimental/artifacts/providers` (`artifacts.providers`)
@@ -2457,12 +1233,7 @@ impl Client {
         self.json(Self::experimental_artifacts_providers_call(input)?).await
     }
     pub fn experimental_artifacts_providers_call(input: &ExperimentalArtifactsProvidersInput) -> Result<Call, Error> {
-        let mut call =
-            Call::new("GET", "/api/experimental/artifacts/providers".to_owned(), 200, &[400, 401, 403, 404, 503]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::experimental_artifacts_providers(input).try_into()
     }
 
     /// `GET /api/experimental/artifacts` (`artifacts.list`)
@@ -2473,17 +1244,7 @@ impl Client {
         self.json(Self::experimental_artifacts_list_call(input)?).await
     }
     pub fn experimental_artifacts_list_call(input: &ExperimentalArtifactsListInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/experimental/artifacts".to_owned(), 200, &[400, 401, 403, 404, 503]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        if let Some(value) = &input.session_id {
-            call.query("sessionID", value)?;
-        }
-        if let Some(value) = &input.provider {
-            call.query("provider", value)?;
-        }
-        Ok(call)
+        client::experimental_artifacts_list(input).try_into()
     }
 
     /// `POST /api/experimental/artifacts` (`artifacts.create`)
@@ -2494,23 +1255,7 @@ impl Client {
         self.json(Self::experimental_artifacts_create_call(input)?).await
     }
     pub fn experimental_artifacts_create_call(input: &ExperimentalArtifactsCreateInput) -> Result<Call, Error> {
-        let mut call = Call::new("POST", "/api/experimental/artifacts".to_owned(), 200, &[400, 401, 403, 404, 503]);
-        call.object();
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        call.field("title", &input.title)?;
-        call.field("files", &input.files)?;
-        if let Some(value) = &input.entry {
-            call.field("entry", value)?;
-        }
-        if let Some(value) = &input.provider {
-            call.field("provider", value)?;
-        }
-        if let Some(value) = &input.session_id {
-            call.field("sessionID", value)?;
-        }
-        Ok(call)
+        client::experimental_artifacts_create(input).try_into()
     }
 
     /// `GET /api/experimental/artifacts/:artifactID` (`artifacts.get`)
@@ -2521,16 +1266,7 @@ impl Client {
         self.json(Self::experimental_artifacts_get_call(input)?).await
     }
     pub fn experimental_artifacts_get_call(input: &ExperimentalArtifactsGetInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "GET",
-            format!("/api/experimental/artifacts/{}", crate::client::path_param(&input.artifact_id)?),
-            200,
-            &[400, 401, 403, 404, 503],
-        );
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::experimental_artifacts_get(input).try_into()
     }
 
     /// `PATCH /api/experimental/artifacts/:artifactID` (`artifacts.update`)
@@ -2541,27 +1277,7 @@ impl Client {
         self.json(Self::experimental_artifacts_update_call(input)?).await
     }
     pub fn experimental_artifacts_update_call(input: &ExperimentalArtifactsUpdateInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "PATCH",
-            format!("/api/experimental/artifacts/{}", crate::client::path_param(&input.artifact_id)?),
-            200,
-            &[400, 401, 403, 404, 503],
-        );
-        call.object();
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        if let Some(value) = &input.title {
-            call.field("title", value)?;
-        }
-        call.field("files", &input.files)?;
-        if let Some(value) = &input.entry {
-            call.field("entry", value)?;
-        }
-        if let Some(value) = &input.session_id {
-            call.field("sessionID", value)?;
-        }
-        Ok(call)
+        client::experimental_artifacts_update(input).try_into()
     }
 
     /// `DELETE /api/experimental/artifacts/:artifactID` (`artifacts.delete`)
@@ -2569,16 +1285,7 @@ impl Client {
         self.empty(Self::experimental_artifacts_delete_call(input)?).await
     }
     pub fn experimental_artifacts_delete_call(input: &ExperimentalArtifactsDeleteInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "DELETE",
-            format!("/api/experimental/artifacts/{}", crate::client::path_param(&input.artifact_id)?),
-            204,
-            &[400, 401, 403, 404, 503],
-        );
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::experimental_artifacts_delete(input).try_into()
     }
 
     /// `GET /api/experimental/artifacts/:artifactID/view/*` (`artifacts.view`)
@@ -2589,20 +1296,7 @@ impl Client {
         self.binary(Self::experimental_artifacts_view_call(input)?).await
     }
     pub fn experimental_artifacts_view_call(input: &ExperimentalArtifactsViewInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "GET",
-            format!(
-                "/api/experimental/artifacts/{}/view/{}",
-                crate::client::path_param(&input.artifact_id)?,
-                crate::client::path_wildcard(&input.path)
-            ),
-            200,
-            &[400, 401, 403, 404, 503],
-        );
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::experimental_artifacts_view(input).try_into()
     }
 
     /// `GET /api/experimental/job` (`job.list`)
@@ -2613,20 +1307,7 @@ impl Client {
         self.data(Self::experimental_job_list_call(input)?).await
     }
     pub fn experimental_job_list_call(input: &ExperimentalJobListInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/experimental/job".to_owned(), 200, &[400, 401, 404]);
-        if let Some(value) = &input.session_id {
-            call.query("sessionID", value)?;
-        }
-        if let Some(value) = &input.kind {
-            call.query("kind", value)?;
-        }
-        if let Some(value) = &input.status {
-            call.query("status", value)?;
-        }
-        if let Some(value) = &input.descendants {
-            call.query("descendants", value)?;
-        }
-        Ok(call)
+        client::experimental_job_list(input).try_into()
     }
 
     /// `GET /api/shell` (`list`)
@@ -2634,11 +1315,7 @@ impl Client {
         self.json(Self::shell_list_call(input)?).await
     }
     pub fn shell_list_call(input: &ShellListInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/shell".to_owned(), 200, &[400, 401, 404]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::shell_list(input).try_into()
     }
 
     /// `POST /api/shell` (`create`)
@@ -2646,22 +1323,7 @@ impl Client {
         self.json(Self::shell_create_call(input)?).await
     }
     pub fn shell_create_call(input: &ShellCreateInput) -> Result<Call, Error> {
-        let mut call = Call::new("POST", "/api/shell".to_owned(), 200, &[400, 401, 404]);
-        call.object();
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        call.field("command", &input.command)?;
-        if let Some(value) = &input.cwd {
-            call.field("cwd", value)?;
-        }
-        if let Some(value) = &input.timeout {
-            call.field("timeout", value)?;
-        }
-        if let Some(value) = &input.metadata {
-            call.field("metadata", value)?;
-        }
-        Ok(call)
+        client::shell_create(input).try_into()
     }
 
     /// `GET /api/shell/:id` (`get`)
@@ -2669,12 +1331,7 @@ impl Client {
         self.json(Self::shell_get_call(input)?).await
     }
     pub fn shell_get_call(input: &ShellGetInput) -> Result<Call, Error> {
-        let mut call =
-            Call::new("GET", format!("/api/shell/{}", crate::client::path_param(&input.id)?), 200, &[400, 401, 404]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::shell_get(input).try_into()
     }
 
     /// `GET /api/shell/:id/output` (`output`)
@@ -2682,22 +1339,7 @@ impl Client {
         self.json(Self::shell_output_call(input)?).await
     }
     pub fn shell_output_call(input: &ShellOutputInput) -> Result<Call, Error> {
-        let mut call = Call::new(
-            "GET",
-            format!("/api/shell/{}/output", crate::client::path_param(&input.id)?),
-            200,
-            &[400, 401, 404],
-        );
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        if let Some(value) = &input.cursor {
-            call.query("cursor", value)?;
-        }
-        if let Some(value) = &input.limit {
-            call.query("limit", value)?;
-        }
-        Ok(call)
+        client::shell_output(input).try_into()
     }
 
     /// `DELETE /api/shell/:id` (`remove`)
@@ -2705,12 +1347,7 @@ impl Client {
         self.empty(Self::shell_remove_call(input)?).await
     }
     pub fn shell_remove_call(input: &ShellRemoveInput) -> Result<Call, Error> {
-        let mut call =
-            Call::new("DELETE", format!("/api/shell/{}", crate::client::path_param(&input.id)?), 204, &[400, 401, 404]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::shell_remove(input).try_into()
     }
 
     /// `GET /api/reference` (`list`)
@@ -2718,11 +1355,7 @@ impl Client {
         self.json(Self::reference_list_call(input)?).await
     }
     pub fn reference_list_call(input: &ReferenceListInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/reference".to_owned(), 200, &[400, 401, 404]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::reference_list(input).try_into()
     }
 
     /// `GET /api/worktree` (`list`)
@@ -2730,9 +1363,7 @@ impl Client {
         self.json(Self::worktree_list_call(input)?).await
     }
     pub fn worktree_list_call(input: &WorktreeListInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/worktree".to_owned(), 200, &[400, 401, 404]);
-        call.query("projectID", &input.project_id)?;
-        Ok(call)
+        client::worktree_list(input).try_into()
     }
 
     /// `POST /api/worktree` (`create`)
@@ -2740,22 +1371,7 @@ impl Client {
         self.json(Self::worktree_create_call(input)?).await
     }
     pub fn worktree_create_call(input: &WorktreeCreateInput) -> Result<Call, Error> {
-        let mut call = Call::new("POST", "/api/worktree".to_owned(), 200, &[400, 401, 404]);
-        call.object();
-        call.field("projectID", &input.project_id)?;
-        if let Some(value) = &input.from {
-            call.field("from", value)?;
-        }
-        if let Some(value) = &input.branch {
-            call.field("branch", value)?;
-        }
-        if let Some(value) = &input.directory {
-            call.field("directory", value)?;
-        }
-        if let Some(value) = &input.name {
-            call.field("name", value)?;
-        }
-        Ok(call)
+        client::worktree_create(input).try_into()
     }
 
     /// `DELETE /api/worktree` (`remove`)
@@ -2763,12 +1379,7 @@ impl Client {
         self.empty(Self::worktree_remove_call(input)?).await
     }
     pub fn worktree_remove_call(input: &WorktreeRemoveInput) -> Result<Call, Error> {
-        let mut call = Call::new("DELETE", "/api/worktree".to_owned(), 204, &[400, 401, 404]);
-        call.object();
-        call.field("projectID", &input.project_id)?;
-        call.field("directory", &input.directory)?;
-        call.field("force", &input.force)?;
-        Ok(call)
+        client::worktree_remove(input).try_into()
     }
 
     /// `POST /api/worktree/refresh` (`refresh`)
@@ -2776,10 +1387,7 @@ impl Client {
         self.empty(Self::worktree_refresh_call(input)?).await
     }
     pub fn worktree_refresh_call(input: &WorktreeRefreshInput) -> Result<Call, Error> {
-        let mut call = Call::new("POST", "/api/worktree/refresh".to_owned(), 204, &[400, 401, 404]);
-        call.object();
-        call.field("projectID", &input.project_id)?;
-        Ok(call)
+        client::worktree_refresh(input).try_into()
     }
 
     /// `POST /api/vcs/init` (`init`)
@@ -2787,14 +1395,7 @@ impl Client {
         self.empty(Self::vcs_init_call(input)?).await
     }
     pub fn vcs_init_call(input: &VcsInitInput) -> Result<Call, Error> {
-        let mut call = Call::new("POST", "/api/vcs/init".to_owned(), 204, &[400, 401, 404, 409, 501, 503]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        if let Some(value) = &input.provider {
-            call.query("provider", value)?;
-        }
-        Ok(call)
+        client::vcs_init(input).try_into()
     }
 
     /// `GET /api/vcs` (`get`)
@@ -2802,11 +1403,7 @@ impl Client {
         self.json(Self::vcs_get_call(input)?).await
     }
     pub fn vcs_get_call(input: &VcsGetInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/vcs".to_owned(), 200, &[400, 401, 404]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::vcs_get(input).try_into()
     }
 
     /// `GET /api/vcs/base` (`base`)
@@ -2814,11 +1411,7 @@ impl Client {
         self.json(Self::vcs_base_call(input)?).await
     }
     pub fn vcs_base_call(input: &VcsBaseInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/vcs/base".to_owned(), 200, &[400, 401, 404, 503]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::vcs_base(input).try_into()
     }
 
     /// `GET /api/vcs/status` (`status`)
@@ -2826,11 +1419,7 @@ impl Client {
         self.json(Self::vcs_status_call(input)?).await
     }
     pub fn vcs_status_call(input: &VcsStatusInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/vcs/status".to_owned(), 200, &[400, 401, 404]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::vcs_status(input).try_into()
     }
 
     /// `GET /api/vcs/branch` (`branch.list`)
@@ -2838,17 +1427,7 @@ impl Client {
         self.json(Self::vcs_branch_list_call(input)?).await
     }
     pub fn vcs_branch_list_call(input: &VcsBranchListInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/vcs/branch".to_owned(), 200, &[400, 401, 404]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        if let Some(value) = &input.search {
-            call.query("search", value)?;
-        }
-        if let Some(value) = &input.limit {
-            call.query("limit", value)?;
-        }
-        Ok(call)
+        client::vcs_branch_list(input).try_into()
     }
 
     /// `GET /api/vcs/diff` (`diff`)
@@ -2856,21 +1435,7 @@ impl Client {
         self.json(Self::vcs_diff_call(input)?).await
     }
     pub fn vcs_diff_call(input: &VcsDiffInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/vcs/diff".to_owned(), 200, &[400, 401, 404, 503]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        call.query("mode", &input.mode)?;
-        if let Some(value) = &input.base {
-            call.query("base", value)?;
-        }
-        if let Some(value) = &input.context {
-            call.query("context", value)?;
-        }
-        if let Some(value) = &input.untracked {
-            call.query("untracked", value)?;
-        }
-        Ok(call)
+        client::vcs_diff(input).try_into()
     }
 
     /// `POST /api/debug/heap-dump` (`heapDump`)
@@ -2878,11 +1443,7 @@ impl Client {
         self.json(Self::debug_heap_dump_call(input)?).await
     }
     pub fn debug_heap_dump_call(input: &DebugHeapDumpInput) -> Result<Call, Error> {
-        let mut call = Call::new("POST", "/api/debug/heap-dump".to_owned(), 200, &[400, 401, 500]);
-        if let Some(value) = &input.directory {
-            call.query("directory", value)?;
-        }
-        Ok(call)
+        client::debug_heap_dump(input).try_into()
     }
 
     /// `GET /api/debug/location` (`location.list`)
@@ -2890,7 +1451,7 @@ impl Client {
         self.json(Self::debug_location_list_call()?).await
     }
     pub fn debug_location_list_call() -> Result<Call, Error> {
-        Ok(Call::new("GET", "/api/debug/location".to_owned(), 200, &[400, 401]))
+        client::debug_location_list().try_into()
     }
 
     /// `DELETE /api/debug/location` (`location.evict`)
@@ -2898,11 +1459,7 @@ impl Client {
         self.empty(Self::debug_location_evict_call(input)?).await
     }
     pub fn debug_location_evict_call(input: &DebugLocationEvictInput) -> Result<Call, Error> {
-        let mut call = Call::new("DELETE", "/api/debug/location".to_owned(), 204, &[400, 401]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::debug_location_evict(input).try_into()
     }
 
     /// `GET /api/experimental/migration/v1` (`v1.status`)
@@ -2910,7 +1467,7 @@ impl Client {
         self.json(Self::experimental_migration_v1_status_call()?).await
     }
     pub fn experimental_migration_v1_status_call() -> Result<Call, Error> {
-        Ok(Call::new("GET", "/api/experimental/migration/v1".to_owned(), 200, &[400, 401]))
+        client::experimental_migration_v1_status().try_into()
     }
 
     /// `GET /api/websearch/provider` (`providers`)
@@ -2921,11 +1478,7 @@ impl Client {
         self.json(Self::websearch_providers_call(input)?).await
     }
     pub fn websearch_providers_call(input: &WebsearchProvidersInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/websearch/provider".to_owned(), 200, &[400, 401, 404, 503]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::websearch_providers(input).try_into()
     }
 
     /// `POST /api/websearch` (`query`)
@@ -2933,16 +1486,7 @@ impl Client {
         self.json(Self::websearch_query_call(input)?).await
     }
     pub fn websearch_query_call(input: &WebsearchQueryInput) -> Result<Call, Error> {
-        let mut call = Call::new("POST", "/api/websearch".to_owned(), 200, &[400, 401, 404, 503]);
-        call.object();
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        call.field("query", &input.query)?;
-        if let Some(value) = &input.provider_id {
-            call.field("providerID", value)?;
-        }
-        Ok(call)
+        client::websearch_query(input).try_into()
     }
 
     /// `GET /api/experimental/usage/limits` (`limits`)
@@ -2953,11 +1497,7 @@ impl Client {
         self.json(Self::experimental_usage_limits_call(input)?).await
     }
     pub fn experimental_usage_limits_call(input: &ExperimentalUsageLimitsInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/experimental/usage/limits".to_owned(), 200, &[400, 401, 404, 503]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::experimental_usage_limits(input).try_into()
     }
 
     /// `GET /api/config` (`get`)
@@ -2965,11 +1505,7 @@ impl Client {
         self.json(Self::config_get_call(input)?).await
     }
     pub fn config_get_call(input: &ConfigGetInput) -> Result<Call, Error> {
-        let mut call = Call::new("GET", "/api/config".to_owned(), 200, &[400, 401, 404]);
-        if let Some(value) = &input.location {
-            call.query("location", value)?;
-        }
-        Ok(call)
+        client::config_get(input).try_into()
     }
 
     /// `GET /api/config/shell` (`shells`)
@@ -2977,7 +1513,7 @@ impl Client {
         self.json(Self::config_shells_call()?).await
     }
     pub fn config_shells_call() -> Result<Call, Error> {
-        Ok(Call::new("GET", "/api/config/shell".to_owned(), 200, &[400, 401, 404]))
+        client::config_shells().try_into()
     }
 
     /// `PATCH /api/experimental/config` (`update`)
@@ -2985,9 +1521,6 @@ impl Client {
         self.empty(Self::experimental_config_update_call(input)?).await
     }
     pub fn experimental_config_update_call(input: &ExperimentalConfigUpdateInput) -> Result<Call, Error> {
-        let mut call = Call::new("PATCH", "/api/experimental/config".to_owned(), 204, &[400, 401, 404]);
-        call.object();
-        call.field("shell", &input.shell)?;
-        Ok(call)
+        client::experimental_config_update(input).try_into()
     }
 }
