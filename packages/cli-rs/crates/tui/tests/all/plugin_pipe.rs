@@ -2839,10 +2839,12 @@ fn a_stage_that_finds_other_bytes_hashes_off_the_ui_thread() {
     std::fs::remove_dir_all(&staged).unwrap();
     let before = opencode_plugin::loader::approval::hashed();
     opencode_tui::plugins::host::reconcile(&pipe.harness.tui);
-    pipe.settle();
     let listed =
         || pipe.harness.tui.plugins.entries().into_iter().find(|entry| entry.target.as_deref() == Some(&target));
-    assert_eq!(listed().map(|entry| entry.status), Some(Status::Pending));
+    // The walk that hashes the new build runs off the UI thread and may begin after a settle saw none running
+    // (ownership-harness): the row waits for its result, the build asked about.
+    pipe.until("the new build is asked about", || listed().is_some_and(|entry| entry.status == Status::Pending));
+    pipe.settle();
     let Some((Ok(held), _)) = opencode_tui::plugins::host::held(&pipe.harness.tui, &target) else {
         panic!("the new build is not asked about")
     };
