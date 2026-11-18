@@ -241,9 +241,8 @@ fn string_ctor(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     if args.is_empty() {
         return Ok(vm.static_str(""));
     }
-    fuel::with_primitives(vm, &[Hint::String], [args[0]], false, |vm, [v]| match v {
-        Value::Sym(s) => Ok(vm.atom_val(s)),
-        v => Ok(Value::Str(vm.string_of(&v)?)),
+    fuel::with_primitives(vm, &[Hint::String], [args[0]], false, |vm, [v]| {
+        Ok(Value::Str(vm.string_of(&v)?))
     })
 }
 

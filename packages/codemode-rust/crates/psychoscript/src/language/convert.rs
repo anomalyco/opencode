@@ -373,7 +373,9 @@ fn write_json(
         Value::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
         Value::Num(n) => write_number(out, *n),
         Value::Str(s) => quote_str(vm, out, *s),
-        Value::Undef | Value::Uninit | Value::Sym(_) => return Ok(false),
+        // The reference's walk takes a symbol for an object with no fields.
+        Value::Sym(_) => out.push_str("{}"),
+        Value::Undef | Value::Uninit => return Ok(false),
         Value::Obj(id) => {
             let id = *id;
             if vm.heap[id as usize].is_callable() {
@@ -1472,7 +1474,7 @@ fn format_inner(vm: &mut Vm, out: &mut String, v: &Value, seen: &mut Vec<Id>) {
         Value::Str(s) => quote_str(vm, out, *s),
         Value::Num(n) => write_num(out, *n),
         Value::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
-        Value::Sym(s) => out.push_str(vm.atoms.text(*s)),
+        Value::Sym(s) => out.push_str(crate::ops::symbol_text(*s)),
         Value::Obj(id) => {
             let id = *id;
             if seen.len() > MAX_VALUE_DEPTH {

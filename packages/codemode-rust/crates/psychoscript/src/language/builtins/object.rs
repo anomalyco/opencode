@@ -503,6 +503,10 @@ fn proto_to_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
     {
         return Ok(vm.static_str("[object Error]"));
     }
+    // The reference has no tag of its own for a symbol.
+    if let Value::Sym(_) = this {
+        return Ok(vm.static_str("[object Object]"));
+    }
     let t = format!("[object {}]", tag_of(vm, &this));
     Ok(vm.static_str(&t))
 }

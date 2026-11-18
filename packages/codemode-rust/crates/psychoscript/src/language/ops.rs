@@ -78,6 +78,9 @@ impl<'rt> Vm<'rt> {
     }
 
     pub fn key_text(&self, key: Atom) -> String {
+        if key <= SYM_ASYNC_ITERATOR {
+            return symbol_text(key).to_owned();
+        }
         self.atoms.text(key).to_owned()
     }
 
@@ -1158,7 +1161,7 @@ impl<'rt> Vm<'rt> {
             Value::Null => 0.0,
             Value::Undef | Value::Uninit => f64::NAN,
             Value::Sym(_) => {
-                return Err(self.type_error("Cannot convert a Symbol value to a number"));
+                return Err(self.type_error("Cannot convert a symbol to a number"));
             }
             Value::Obj(id) => {
                 // A namespace is not an object to the reference: it converts without a call, as "[object Object]".
@@ -1187,9 +1190,8 @@ impl<'rt> Vm<'rt> {
             Value::Bool(b) => return Ok(self.static_id(if *b { "true" } else { "false" })),
             Value::Null => return Ok(self.static_id("null")),
             Value::Undef | Value::Uninit => return Ok(self.static_id("undefined")),
-            Value::Sym(_) => {
-                return Err(self.type_error("Cannot convert a Symbol value to a string"));
-            }
+            // The reference's ToString of a symbol is its host's `String`, which names it.
+            Value::Sym(s) => return Ok(self.static_id(symbol_text(*s))),
             Value::Obj(id) => {
                 if self.is_namespace(*id) {
                     return Ok(self.static_id("[object Object]"));
@@ -1339,6 +1341,10 @@ impl<'rt> Vm<'rt> {
         let pa = self.op_primitive(&a, &b, Hint::Default)?;
         let pb = self.op_primitive(&b, &a, Hint::Default)?;
         if matches!(pa, Value::Str(_)) || matches!(pb, Value::Str(_)) {
+            // The host's `+`, unlike its `String`, refuses to make a symbol text.
+            if matches!(pa, Value::Sym(_)) || matches!(pb, Value::Sym(_)) {
+                return Err(self.type_error("Cannot convert a symbol to a string"));
+            }
             let x = self.string_of(&pa)?;
             let y = self.string_of(&pb)?;
             return self.concat_ids(x, y);
@@ -2181,4 +2187,13 @@ pub fn without_holes(items: &[Value]) -> Vec<Value> {
         }
     }
     out
+}
+
+/// How the reference's host names one of its two symbols.
+pub(crate) fn symbol_text(s: Atom) -> &'static str {
+    if s == SYM_ITERATOR {
+        "Symbol(codemode.iterator)"
+    } else {
+        "Symbol(codemode.async-iterator)"
+    }
 }
