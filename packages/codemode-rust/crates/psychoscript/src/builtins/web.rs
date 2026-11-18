@@ -41,7 +41,9 @@ pub fn setup(vm: &mut Vm) {
     let pp = vm.plain(op);
     vm.realm.std.params = pp;
     super::accessors(vm, pp, &["size"]);
-    vm.ctor("URLSearchParams", 0, params_ctor, pp, Value::Undef);
+    // Both constructors keep the native that reads one pair of an iterable (see `Pairs`) as their data.
+    let pair = vm.native_fn("", 1, read_pair, Value::Undef);
+    vm.ctor("URLSearchParams", 0, params_ctor, pp, pair);
     vm.methods(
         pp,
         &[
@@ -63,7 +65,7 @@ pub fn setup(vm: &mut Vm) {
 
     let hp = vm.plain(op);
     vm.realm.std.headers = hp;
-    vm.ctor("Headers", 0, headers_ctor, hp, Value::Undef);
+    vm.ctor("Headers", 0, headers_ctor, hp, pair);
     vm.methods(
         hp,
         &[
@@ -428,77 +430,181 @@ fn is_iterable(vm: &mut Vm, v: &Value) -> bool {
 }
 
 /// `[name, value]` pairs from an iterable (each read in full as strings, then checked), or a record of names to
-/// values, as the reference's `readPairs` reads them.
+/// values, as the reference's `readPairs` reads them: the record's pairs, or `None` once a native frame that reads
+/// the iterable's pairs and finishes the constructor `callee` was pushed (see `Pairs`).
 fn read_pairs(
     vm: &mut Vm,
     init: &Value,
-    label: &str,
     headers: bool,
-) -> Result<Vec<(String, String)>, Value> {
+    callee: Id,
+) -> Result<Option<Vec<(String, String)>>, Value> {
     // The fuel is the prelude's `readPairs`: `$IsIterable`, then per pair `$IsIterable` and a `String` per part, and
     // `$Pairs` at the end (see `fuel.rs`).
     super::fuel::method(vm);
     super::fuel::native(vm);
-    let pairs = read_pairs_in(vm, init, label, headers)?;
+    if is_iterable(vm, init) {
+        let rows = vm.new_array(Vec::new());
+        let helper = vm.native_data(callee);
+        crate::native::enter_for_of_sub(
+            vm,
+            crate::native::NativeOp::Callbacks,
+            super::object::SUB_PAIRS,
+            callee,
+            Value::Undef,
+            *init,
+            &[rows, Value::Bool(headers), helper],
+        )?;
+        return Ok(None);
+    }
+    if !matches!(init, Value::Obj(_)) || is_runtime_reference(vm, init) {
+        return Err(vm.type_error(if headers {
+            "new Headers(...) expects a record of names to values, iterable [name, value] pairs, or Headers."
+        } else {
+            "new URLSearchParams(...) expects a query string, data object, or synchronous iterable pairs."
+        }));
+    }
+    let Value::Obj(id) = init else {
+        return Ok(Some(Vec::new()));
+    };
+    let mut out = Vec::new();
+    for (k, v) in vm.own_entries(*id) {
+        let name = vm.atoms.text(k).to_owned();
+        let value = builtin_string(vm, &v)?;
+        out.push(usv_pair(headers, name, value));
+    }
     super::fuel::native(vm);
-    Ok(pairs)
+    Ok(Some(out))
 }
 
-fn read_pairs_in(
-    vm: &mut Vm,
-    init: &Value,
-    label: &str,
-    headers: bool,
-) -> Result<Vec<(String, String)>, Value> {
-    if !is_iterable(vm, init) {
-        if !matches!(init, Value::Obj(_)) || is_runtime_reference(vm, init) {
-            return Err(vm.type_error(if headers {
-                "new Headers(...) expects a record of names to values, iterable [name, value] pairs, or Headers."
-            } else {
-                "new URLSearchParams(...) expects a query string, data object, or synchronous iterable pairs."
-            }));
-        }
-        let Value::Obj(id) = init else {
-            return Ok(Vec::new());
-        };
-        let mut out = Vec::new();
-        for (k, v) in vm.own_entries(*id) {
-            let name = vm.atoms.text(k).to_owned();
-            let value = builtin_string(vm, &v)?;
-            out.push(usv_pair(headers, name, value));
-        }
-        return Ok(out);
+fn pairs_label(headers: bool) -> &'static str {
+    if headers {
+        "new Headers(...)"
+    } else {
+        "new URLSearchParams(...)"
     }
-    let mut rows = Vec::new();
-    super::fuel::for_of(vm, init, |vm, pair| {
+}
+
+// The own slots of a `Pairs` frame: the rows read so far (an internal array of `Pair` results), whether it builds
+// Headers, and the native that pushes a `Pair` frame (the constructor's data).
+const PAIRS_ROWS: usize = crate::native::FOR_OF_SLOTS;
+const PAIRS_HEADERS: usize = PAIRS_ROWS + 1;
+const PAIRS_HELPER: usize = PAIRS_ROWS + 2;
+
+/// The outer loop of `readPairs` over an iterable of pairs; each pair is read by a `Pair` frame, called through a
+/// native so that a throw there closes this loop's iterator too. It ends as the constructor does.
+pub(crate) struct Pairs;
+
+impl crate::native::ForOf for Pairs {
+    fn item(
+        vm: &mut Vm,
+        fr: crate::native::Frame,
+        pair: Value,
+    ) -> Result<crate::native::Flow, Value> {
         super::fuel::native(vm);
         if !is_iterable(vm, &pair) || matches!(pair, Value::Str(_)) {
+            let label = pairs_label(vm.truthy(&fr.get(vm, PAIRS_HEADERS)));
             return Err(vm.type_error(&format!("{label} expects iterable [name, value] pairs.")));
         }
-        let mut strings = Vec::new();
-        super::fuel::for_of(vm, &pair, |vm, p| {
-            let s = vm.string_of(&p)?;
-            super::fuel::native(vm);
-            strings.push(vm.text(s).to_owned());
-            Ok(true)
-        })?;
-        rows.push(strings);
-        Ok(true)
-    })?;
-    if rows.iter().any(|r| r.len() != 2) {
-        return Err(vm.type_error(&format!("{label} expects iterable [name, value] pairs.")));
+        let helper = fr.slot(vm, PAIRS_HELPER);
+        let args = [crate::value::Slot::pack(pair)];
+        Ok(crate::native::Flow::Call(fr.catching_list(
+            vm,
+            helper,
+            crate::value::Slot::UNDEF,
+            &args,
+            crate::native::Step::CallUncounted,
+        )))
     }
-    Ok(rows
-        .into_iter()
-        .map(|mut r| {
-            let v = r.pop().unwrap_or_default();
-            let k = r.pop().unwrap_or_default();
-            usv_pair(headers, k, v)
-        })
-        .collect())
+
+    fn returned(
+        vm: &mut Vm,
+        fr: crate::native::Frame,
+        r: crate::value::Slot,
+    ) -> Result<crate::native::Flow, Value> {
+        let rows = fr.get(vm, PAIRS_ROWS).as_obj().unwrap_or(0);
+        if let Kind::Array(items) = &mut vm.heap[rows as usize].kind {
+            items.push(r.get());
+        }
+        Ok(crate::native::Flow::Next)
+    }
+
+    fn finish(vm: &mut Vm, fr: crate::native::Frame) -> Res {
+        let headers = vm.truthy(&fr.get(vm, PAIRS_HEADERS));
+        let rows = fr.get(vm, PAIRS_ROWS).as_obj().unwrap_or(0);
+        let rows: Vec<Vec<Value>> = match &vm.heap[rows as usize].kind {
+            Kind::Array(rows) => rows
+                .iter()
+                .map(|r| match r.as_obj().map(|r| &vm.heap[r as usize].kind) {
+                    Some(Kind::Array(parts)) => parts.clone(),
+                    _ => Vec::new(),
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
+        if rows.iter().any(|r| r.len() != 2) {
+            let label = pairs_label(headers);
+            return Err(vm.type_error(&format!("{label} expects iterable [name, value] pairs.")));
+        }
+        let pairs = rows
+            .into_iter()
+            .map(|r| {
+                let text = |v: &Value| match v {
+                    Value::Str(s) => vm.text(*s).to_owned(),
+                    _ => String::new(),
+                };
+                usv_pair(headers, text(&r[0]), text(&r[1]))
+            })
+            .collect();
+        super::fuel::native(vm);
+        if headers {
+            return finish_headers(vm, pairs);
+        }
+        Ok(new_params(vm, pairs))
+    }
 }
 
-fn params_ctor(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+/// The native a `Pairs` frame calls on each pair: it pushes a `Pair` frame over it.
+fn read_pair(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Res {
+    let parts = vm.new_array(Vec::new());
+    crate::native::enter_for_of_sub(
+        vm,
+        crate::native::NativeOp::Callbacks,
+        super::object::SUB_PAIR,
+        callee,
+        Value::Undef,
+        arg(args, 0),
+        &[parts],
+    )
+}
+
+/// The inner loop of `readPairs` over one pair: each part made a string. Its own slot is the strings so far, an
+/// internal array, which it returns.
+pub(crate) struct Pair;
+
+impl crate::native::ForOf for Pair {
+    fn item(
+        vm: &mut Vm,
+        fr: crate::native::Frame,
+        part: Value,
+    ) -> Result<crate::native::Flow, Value> {
+        let s = vm.string_of(&part)?;
+        super::fuel::native(vm);
+        let parts = fr
+            .get(vm, crate::native::FOR_OF_SLOTS)
+            .as_obj()
+            .unwrap_or(0);
+        if let Kind::Array(items) = &mut vm.heap[parts as usize].kind {
+            items.push(Value::Str(s));
+        }
+        Ok(crate::native::Flow::Next)
+    }
+
+    fn finish(vm: &mut Vm, fr: crate::native::Frame) -> Res {
+        Ok(fr.get(vm, crate::native::FOR_OF_SLOTS))
+    }
+}
+
+fn params_ctor(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     requires_new(vm, &this, "URLSearchParams")?;
     let init = arg(args, 0);
     let list = match init {
@@ -511,7 +617,10 @@ fn params_ctor(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
         Value::Obj(id) if matches!(vm.heap[id as usize].kind, Kind::SearchParams(_)) => {
             params_mut(vm, id).list.clone()
         }
-        _ => read_pairs(vm, &init, "new URLSearchParams(...)", false)?,
+        _ => match read_pairs(vm, &init, false, callee)? {
+            Some(list) => list,
+            None => return Ok(Value::Undef),
+        },
     };
     Ok(new_params(vm, list))
 }
@@ -764,18 +873,26 @@ fn headers_mut<'a>(vm: &'a mut Vm, id: Id) -> &'a mut HeaderList {
     }
 }
 
-fn headers_ctor(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
+fn headers_ctor(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
     requires_new(vm, &this, "Headers")?;
     let init = arg(args, 0);
     let pairs = match init {
         Value::Undef => Vec::new(),
-        Value::Obj(_) => read_pairs(vm, &init, "new Headers(...)", true)?,
+        Value::Obj(_) => match read_pairs(vm, &init, true, callee)? {
+            Some(pairs) => pairs,
+            None => return Ok(Value::Undef),
+        },
         _ => {
             return Err(vm.type_error(
                 "new Headers(...) expects a record of names to values, iterable [name, value] pairs, or Headers.",
             ));
         }
     };
+    finish_headers(vm, pairs)
+}
+
+/// The rest of `new Headers(...)` once its pairs are read: each name and value checked and normalized.
+fn finish_headers(vm: &mut Vm, pairs: Vec<(String, String)>) -> Res {
     let mut list = Vec::with_capacity(pairs.len());
     for (k, v) in pairs {
         let n = header_name(vm, &k)?;

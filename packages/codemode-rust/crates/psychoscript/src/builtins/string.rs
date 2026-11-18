@@ -1471,23 +1471,60 @@ math1!(m_round, |x| {
     if v == 0.0 && x < 0.0 { -0.0 } else { v }
 });
 
-fn m_sum_precise(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
+fn m_sum_precise(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Res {
     // The reference's prelude `Math$sumPrecise`: a back-edge per value, then `$SumPrecise`.
     super::fuel::method(vm);
-    let mut values = Vec::new();
-    super::fuel::for_of(vm, &arg(args, 0), |vm, v| {
-        let Value::Num(n) = v else {
+    let source = arg(args, 0);
+    if !vm.is_iterable(&source) {
+        return Err(vm.not_iterable(&source, crate::bytecode::ITER_FOR_OF));
+    }
+    let values = vm.new_array(Vec::new());
+    crate::native::enter_for_of_sub(
+        vm,
+        crate::native::NativeOp::Callbacks,
+        super::object::SUB_SUM_PRECISE,
+        callee,
+        Value::Undef,
+        source,
+        &[values],
+    )
+}
+
+/// `Math.sumPrecise` over its values: its own slot is the numbers read so far, an internal array.
+pub(crate) struct SumPrecise;
+
+impl crate::native::ForOf for SumPrecise {
+    fn item(vm: &mut Vm, fr: crate::native::Frame, x: Value) -> Result<crate::native::Flow, Value> {
+        let Value::Num(_) = x else {
             return Err(vm.type_error("Math.sumPrecise expects an iterable of numbers."));
         };
-        if values.len() >= crate::ops::MAX_ARRAY_LEN {
+        let values = fr
+            .get(vm, crate::native::FOR_OF_SLOTS)
+            .as_obj()
+            .unwrap_or(0);
+        let Kind::Array(items) = &mut vm.heap[values as usize].kind else {
+            return Ok(crate::native::Flow::Next);
+        };
+        if items.len() >= crate::ops::MAX_ARRAY_LEN {
             return Err(vm.range_error("Invalid array length"));
         }
-        values.push(n);
-        Ok(true)
-    })?;
-    super::fuel::native(vm);
-    vm.bytecode_builtin();
-    Ok(Value::Num(super::numfmt::sum_precise(&values)))
+        items.push(x);
+        Ok(crate::native::Flow::Next)
+    }
+
+    fn finish(vm: &mut Vm, fr: crate::native::Frame) -> Res {
+        let values = fr
+            .get(vm, crate::native::FOR_OF_SLOTS)
+            .as_obj()
+            .unwrap_or(0);
+        let values: Vec<f64> = match &vm.heap[values as usize].kind {
+            Kind::Array(items) => items.iter().map(Value::as_num).collect(),
+            _ => Vec::new(),
+        };
+        super::fuel::native(vm);
+        vm.bytecode_builtin();
+        Ok(Value::Num(super::numfmt::sum_precise(&values)))
+    }
 }
 
 fn m_atan2(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {

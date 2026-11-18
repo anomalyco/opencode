@@ -234,29 +234,43 @@ fn object_assign(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     Ok(target)
 }
 
-fn object_from_entries(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
+fn object_from_entries(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Res {
     // The reference's for...of over the entries: each entry is read as it comes, and a bad one closes the iterator.
     // Its fuel is the prelude's `Object$fromEntries` (see `fuel.rs`).
     fuel::method(vm);
     let source = arg(args, 0);
-    let open = vm.open_fuel(&source, crate::bytecode::ITER_FOR_OF);
-    let it = vm.get_iterator_in(&source, crate::bytecode::ITER_FOR_OF)?;
-    vm.fuel(open);
-    let next = vm.record_next_of(&source, &it)?;
-    let id = vm.new_object();
-    while let Some(item) = vm.iter_step_with(&it, next)? {
-        if let Err(e) = from_entry(vm, id, &item) {
-            if vm.fatal.is_none() {
-                let close = vm.close_fuel(&it);
-                let _ = vm.iter_close(&it);
-                vm.fuel(close);
-            }
-            return Err(e);
-        }
-        fuel::step(vm);
+    if !vm.is_iterable(&source) {
+        return Err(vm.not_iterable(&source, crate::bytecode::ITER_FOR_OF));
     }
-    vm.bytecode_builtin();
-    Ok(Value::Obj(id))
+    let id = vm.new_object();
+    crate::native::enter_for_of_sub(
+        vm,
+        crate::native::NativeOp::Callbacks,
+        SUB_FROM_ENTRIES,
+        callee,
+        Value::Undef,
+        source,
+        &[Value::Obj(id)],
+    )
+}
+
+/// `Object.fromEntries` over its entries: its own slot is the object it fills.
+struct FromEntries;
+
+impl crate::native::ForOf for FromEntries {
+    fn item(vm: &mut Vm, fr: crate::native::Frame, x: Value) -> Result<crate::native::Flow, Value> {
+        let id = fr
+            .get(vm, crate::native::FOR_OF_SLOTS)
+            .as_obj()
+            .unwrap_or(0);
+        from_entry(vm, id, &x)?;
+        Ok(crate::native::Flow::Next)
+    }
+
+    fn finish(vm: &mut Vm, fr: crate::native::Frame) -> Res {
+        vm.bytecode_builtin();
+        Ok(fr.get(vm, crate::native::FOR_OF_SLOTS))
+    }
 }
 
 /// One entry: `$IsObject`, `String` of its key, `$Define`.
@@ -445,13 +459,14 @@ fn proto_to_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
     Ok(vm.static_str(&t))
 }
 
-fn proto_to_locale_string(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
+fn proto_to_locale_string(vm: &mut Vm, this: Value, _args: &[Value], callee: Id) -> Res {
     if this.is_nullish() || is_tool_ref(vm, &this) {
         return Err(vm.type_error("Object.prototype.toLocaleString called on null or undefined."));
     }
     let k = vm.names.to_string;
     let f = vm.get(&this, k)?;
-    vm.call(&f, this, &[])
+    // The reference hands on to `toString` as `call` does (`invokeMethod`).
+    invoke(vm, callee, f, this, &[])
 }
 
 fn proto_value_of(vm: &mut Vm, this: Value, _args: &[Value], _: Id) -> Res {
@@ -668,21 +683,51 @@ fn aggregate_error_ctor(vm: &mut Vm, this: Value, args: &[Value], callee: Id) ->
     } else {
         fuel::method(vm);
     }
-    let mut errors = Vec::new();
-    fuel::for_of(vm, &arg(args, 0), |_, v| {
-        errors.push(v);
-        Ok(true)
-    })?;
-    fuel::native(vm);
-    let arr = vm.new_array(errors);
-    if let Value::Obj(id) = e {
-        let ek = vm.names.errors;
-        vm.define_hidden(id, ek, arr);
+    let source = arg(args, 0);
+    if !vm.is_iterable(&source) {
+        return Err(vm.not_iterable(&source, crate::bytecode::ITER_FOR_OF));
     }
-    if called {
-        vm.bytecode_builtin();
+    let errors = vm.new_array(Vec::new());
+    let own = [e, errors, Value::Bool(called)];
+    crate::native::enter_for_of_sub(
+        vm,
+        crate::native::NativeOp::Callbacks,
+        SUB_AGGREGATE,
+        callee,
+        Value::Undef,
+        source,
+        &own,
+    )
+}
+
+/// `AggregateError` reading its errors: its own slots are the error, the errors read so far (an internal array) and
+/// whether it was called without `new`.
+struct Aggregate;
+
+impl crate::native::ForOf for Aggregate {
+    fn item(vm: &mut Vm, fr: crate::native::Frame, x: Value) -> Result<crate::native::Flow, Value> {
+        let errors = fr.get(vm, crate::native::FOR_OF_SLOTS + 1).as_obj();
+        if let Some(errors) = errors
+            && let Kind::Array(items) = &mut vm.heap[errors as usize].kind
+        {
+            items.push(x);
+        }
+        Ok(crate::native::Flow::Next)
     }
-    Ok(e)
+
+    fn finish(vm: &mut Vm, fr: crate::native::Frame) -> Res {
+        let base = crate::native::FOR_OF_SLOTS;
+        let (e, errors) = (fr.get(vm, base), fr.get(vm, base + 1));
+        fuel::native(vm);
+        if let Value::Obj(id) = e {
+            let ek = vm.names.errors;
+            vm.define_hidden(id, ek, errors);
+        }
+        if vm.truthy(&fr.get(vm, base + 2)) {
+            vm.bytecode_builtin();
+        }
+        Ok(e)
+    }
 }
 
 fn error_is_error(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
@@ -1187,12 +1232,31 @@ fn global_is_finite(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
     })
 }
 
+// The sub-ops of `NativeOp::Callbacks`; a number keeps its meaning once a snapshot may hold it.
+/// `Object.fromEntries`.
+pub(crate) const SUB_FROM_ENTRIES: u16 = 0;
+/// `AggregateError` reading its errors.
+pub(crate) const SUB_AGGREGATE: u16 = 1;
+/// `Math.sumPrecise` (`builtins::string::SumPrecise`).
+pub(crate) const SUB_SUM_PRECISE: u16 = 2;
+/// The pairs of `new URLSearchParams(...)` and `new Headers(...)`, and the parts of one pair (`builtins::web`).
+pub(crate) const SUB_PAIRS: u16 = 3;
+pub(crate) const SUB_PAIR: u16 = 4;
+
 /// The steps of this family's native frames (`native::NativeOp::Callbacks`), by sub-op; see `native.rs`.
 pub(crate) fn family_step(
-    _vm: &mut Vm,
-    _sub: u16,
-    _fr: crate::native::Frame,
-    _input: crate::native::Input,
+    vm: &mut Vm,
+    sub: u16,
+    fr: crate::native::Frame,
+    input: crate::native::Input,
 ) -> Result<crate::native::Step, Value> {
-    Ok(crate::native::Step::Done(Value::Undef))
+    use crate::native::for_of_step;
+    match sub {
+        SUB_FROM_ENTRIES => for_of_step::<FromEntries>(vm, fr, input),
+        SUB_AGGREGATE => for_of_step::<Aggregate>(vm, fr, input),
+        SUB_SUM_PRECISE => for_of_step::<super::string::SumPrecise>(vm, fr, input),
+        SUB_PAIRS => for_of_step::<super::web::Pairs>(vm, fr, input),
+        SUB_PAIR => for_of_step::<super::web::Pair>(vm, fr, input),
+        _ => Ok(crate::native::Step::Done(Value::Undef)),
+    }
 }
