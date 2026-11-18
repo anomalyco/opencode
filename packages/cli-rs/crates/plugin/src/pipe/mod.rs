@@ -801,8 +801,9 @@ struct Hold {
     input: VecDeque<(Held, Past)>,
     /// Input put back now, which the intercepts let through.
     replaying: bool,
-    /// A plugin's dialog surface just opened and none of its nodes took the focus yet: the input waits for that focus
-    /// (or the mount's end, or [`crate::interact::OPENING`]), so what the user typed as it opened is its field's
+    /// A plugin's dialog surface just opened and showed no tree of the plugin's yet: the input waits for that tree and
+    /// the focus it asks for (or the mount's end, or [`crate::interact::OPENING`]), so what the user typed as it opened
+    /// is its field's
     /// (big-boi ds-3). The number tells this wait from an earlier one, and the timer is its deadline.
     opening: Option<(u64, TimerId)>,
     openings: u64,
@@ -1072,6 +1073,13 @@ impl Scripts {
     #[doc(hidden)]
     pub fn waiting(&self) -> usize {
         self.waiting.borrow().len()
+    }
+
+    /// Whether input waits for a call, its effects, or a dialog that opened.
+    #[doc(hidden)]
+    pub fn holds_input(&self) -> bool {
+        let hold = self.hold.borrow();
+        hold.holding() || !hold.input.is_empty()
     }
 
     /// The types of what the JS host sent while the tests hold it ([`Scripts::hold_answers`]), in order.
@@ -2457,9 +2465,9 @@ impl Scripts {
         }
     }
 
-    /// Whether the input waits for a plugin's dialog surface on top to focus its field: one that just opened, whose first
-    /// tree and focus come with the JS host's next revisions. It goes on once a node of that dialog takes the focus, the
-    /// dialog's mount ends, or [`crate::interact::OPENING`] passes. `incoming`: input comes now, which the wait takes.
+    /// Whether the input waits for a plugin's dialog surface on top to show its first tree: one that just opened, whose
+    /// tree and focus come with the JS host's next revisions. It goes on once that tree showed and the focus it asked
+    /// for settled, the dialog's mount ends, or [`crate::interact::OPENING`] passes. `incoming`: input comes now, which the wait takes.
     fn await_opening(&self, host: &dyn Host, incoming: bool) -> bool {
         {
             let hold = self.hold.borrow();

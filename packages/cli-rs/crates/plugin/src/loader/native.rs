@@ -2121,7 +2121,7 @@ impl Viewer for Remote {
             (viewing.give)(handle, bytes.0);
         }
         reply.released.into_iter().for_each(|handle| (viewing.release)(handle));
-        Some(Viewed { node: Some(reply.node), memo: Some(reply.memo) })
+        Some(Viewed { node: Some(reply.node), memo: Some(reply.memo), stand_in: false })
     }
 
     fn draws(&self) -> bool {

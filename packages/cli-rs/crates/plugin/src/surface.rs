@@ -154,6 +154,8 @@ pub(crate) struct Viewed {
     pub node: Option<Node>,
     /// The values the memo table of a library holds after the view; `None` for a table in the host.
     pub memo: Option<usize>,
+    /// The node stands in for the plugin's first tree, which it has not given yet (the pipe's placeholder).
+    pub stand_in: bool,
 }
 
 /// A view in process: the plugin's own function, as one call of it, on the mount's memo table in the host; and the
@@ -183,7 +185,7 @@ impl Viewer for Linked {
             node = Some((self.view)(&mut v2::View::new(read, input, mount, memo, &mut content, release)));
         });
         called.then_some(())?;
-        Some(Viewed { node: Some(node?), memo: None })
+        Some(Viewed { node: Some(node?), memo: None, stand_in: false })
     }
 
     fn draws(&self) -> bool {
@@ -576,6 +578,8 @@ struct Called {
     memo: v2::Memo,
     /// The values a library's own table holds after the call; `None` when the table is `memo`.
     remote: Option<usize>,
+    /// [`Viewed::stand_in`].
+    stand_in: bool,
 }
 
 /// The content a view gave, which goes with its tree when the host refuses it.
@@ -783,9 +787,10 @@ impl Surface {
     /// Settles a focus the mount's calls asked for before its tree held the node, with this view, the mount's next one
     /// that gives a tree ([`Owner::settle_pending`]). A view that gives none (the pipe's, while the JS host builds the
     /// revision) leaves it waiting; the last tree adopted again in a new theme ([`Surface::restyle`]) is no view.
-    fn settle_pending(&self, host: &dyn Host) {
+    /// `shows`: the view is the plugin's tree, not one standing in for it.
+    fn settle_pending(&self, host: &dyn Host, shows: bool) {
         if let Some(owner) = self.holder() {
-            owner.settle_pending(host);
+            owner.settle_pending(host, shows);
         }
     }
 
@@ -820,7 +825,7 @@ impl Surface {
                 self.state.borrow_mut().memo = called.memo;
                 return;
             };
-            let (mut memo, remote) = (called.memo, called.remote);
+            let (mut memo, remote, shows) = (called.memo, called.remote, !called.stand_in);
             // A keep of the last tree's root keeps the mount as it is: nothing to adopt and no frame (P6a), when the
             // pass would change nothing: no node shows what the host reads again (a tool call's output), and the tree
             // is in the theme of the moment. The memo table stays as it is: the next view discards what this one staged.
@@ -830,7 +835,7 @@ impl Surface {
                 book(&self.plugin, |ledger| ledger.memo_entries += size - state.booked);
                 (state.memo, state.booked) = (memo, size);
                 drop(state);
-                self.settle_pending(host);
+                self.settle_pending(host, shows);
                 return;
             }
             let result = self.adopt(host, &theme, vec![node], &called.staged, full);
@@ -850,7 +855,7 @@ impl Surface {
                         handed.clear();
                     }
                     drop(handed);
-                    self.settle_pending(host);
+                    self.settle_pending(host, shows);
                     return;
                 }
                 Err(refused) => {
@@ -1059,7 +1064,7 @@ impl Surface {
             return None;
         };
         let staged = Staged { given: given.take() };
-        Some(Called { node: viewed.node, staged, memo, remote: viewed.memo })
+        Some(Called { node: viewed.node, staged, memo, remote: viewed.memo, stand_in: viewed.stand_in })
     }
 
     /// Adopts `nodes`, with the content `staged` gives, or refuses them and changes nothing.

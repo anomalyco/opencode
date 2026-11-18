@@ -2161,7 +2161,8 @@ fn a_dialog_field_keeps_its_draft_across_a_reload() {
 }
 
 // Expected (big-boi ds-3): keys typed right after the key that opens a JS plugin's dialog with a focused field go to that
-// field once it has the focus, in order, not to the composer under it and not lost.
+// field once it has the focus, in order, not to the composer under it and not lost. A dialog with nothing to focus
+// holds them only until its first view.
 #[test]
 fn keys_typed_as_a_dialog_opens_go_to_its_field() {
     let Some(config) = config() else { return };
@@ -2179,4 +2180,12 @@ fn keys_typed_as_a_dialog_opens_go_to_its_field() {
     let screen = pipe.harness.app.text();
     let composed = screen.lines().any(|line| line.trim_start_matches([' ', '┃']).starts_with("ab"));
     assert!(!composed, "the keys reached the composer:\n{screen}");
+    // A dialog with nothing to focus lets the keys go on as its first view shows, not after the wait's deadline (each
+    // turn of a settle is a millisecond of the app's clock).
+    pipe.harness.app.press("f3");
+    pipe.harness.app.type_text("x");
+    pipe.settle();
+    let screen = pipe.harness.app.text();
+    assert!(screen.contains("Plain dialog"), "{screen}");
+    assert!(!pipe.scripts().holds_input(), "the keys wait for a dialog with nothing to focus");
 }
