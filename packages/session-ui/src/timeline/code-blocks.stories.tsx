@@ -46,6 +46,7 @@ export const LongLines = {
 // The timeline scrolls inside its own pane below the setting, as it does in the app.
 function CodeBlockTimeline(props: { wrap: boolean }) {
   const [wrap, setWrap] = createSignal(props.wrap)
+
   const document: SessionDocument = {
     sessionID: CURRENT_SESSION_ID,
     status: { type: "idle" },

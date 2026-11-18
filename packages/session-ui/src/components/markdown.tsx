@@ -293,11 +293,13 @@ function codeOverflow() {
 
 function measureCodeOverflow(wrappers: HTMLElement[]) {
   wrappers.forEach((wrapper) => wrapper.toggleAttribute("data-code-measure", true))
+
   const overflow = wrappers.map((wrapper) => {
     const pre = wrapper.querySelector(":scope > pre")
 
     return !!pre && pre.scrollWidth > pre.clientWidth
   })
+
   wrappers.forEach((wrapper, index) => {
     wrapper.removeAttribute("data-code-measure")
     wrapper.toggleAttribute("data-code-overflow", overflow[index])

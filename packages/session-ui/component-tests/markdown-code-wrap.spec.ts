@@ -44,8 +44,10 @@ story("code block actions sit in the block's top corner over the block's own bac
   await expect(root.locator('[data-component="markdown"]')).toHaveAttribute("data-markdown-ready", "")
   const blocks = root.locator('[data-component="markdown-code"]')
   const toolbar = (block: Locator) => block.locator('[data-slot="markdown-code-toolbar"]')
+
   const fill = (block: Locator) =>
     toolbar(block).evaluate((element) => getComputedStyle(element, "::before").backgroundColor)
+
   const background = (block: Locator) =>
     block.locator(":scope > pre").evaluate((element) => getComputedStyle(element).backgroundColor)
 

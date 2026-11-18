@@ -294,9 +294,11 @@ test("wraps the code blocks of a cached view when the setting is on", async ({ p
     )
   })
   await page.goto(sessionHref(fixture.sourceID))
+
   const markdown = page.locator(
     `[data-timeline-part-id="${expected[fixture.sourceID].answerID}"] [data-component="markdown"]`,
   )
+
   await expect(markdown).toHaveAttribute("data-markdown-ready", "")
   await expect(markdown).toHaveAttribute("data-code-wrap", "")
   await expect(markdown.locator('[data-component="markdown-code"] > pre').first()).toHaveCSS("white-space", "pre-wrap")
