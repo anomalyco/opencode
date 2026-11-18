@@ -331,11 +331,13 @@ impl fmt::Debug for HostFunction {
 }
 
 /// A named group of globals, the counterpart of the reference's `Extension.make`. Programs can also load a global
-/// by its Node module name with `import`, `require` and `import()`.
+/// by its Node module name with `import`, `require` and `import()`, or by a module name the extension gives it
+/// ([`Extension::module`]).
 #[derive(Clone, Debug)]
 pub struct Extension {
     name: String,
     globals: Vec<(String, HostValue)>,
+    modules: Vec<(String, String)>,
     snapshot: Option<SnapshotHooks>,
 }
 
@@ -362,8 +364,27 @@ impl Extension {
         Self {
             name: name.into(),
             globals: Vec::new(),
+            modules: Vec::new(),
             snapshot: None,
         }
+    }
+
+    /// A module name that loads one of this extension's globals, the reference's `modules` option:
+    /// `.module("bun", "Bun")` makes `import { file } from "bun"` and `require("bun")` load the global `Bun`. A global's
+    /// own name, and Node's names for the built-in ones, still load it first. When two extensions of a run name the
+    /// same module, the one added to the runtime later wins.
+    pub fn module(mut self, name: impl Into<String>, global: impl Into<String>) -> Self {
+        let (name, global) = (name.into(), global.into());
+        match self.modules.iter_mut().find(|(n, _)| *n == name) {
+            Some(entry) => entry.1 = global,
+            None => self.modules.push((name, global)),
+        }
+        self
+    }
+
+    /// The module names that load this extension's globals, each with the global it loads.
+    pub fn modules(&self) -> &[(String, String)] {
+        &self.modules
     }
 
     /// The `snapshot` hooks: without them, functions inside this extension's results are lost on resume, and calling

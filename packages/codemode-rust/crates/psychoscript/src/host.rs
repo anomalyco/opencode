@@ -1636,23 +1636,19 @@ fn module(vm: &mut Vm, specifier: &str) -> Res {
     if let Some(v) = vm.host.modules.get(&name) {
         return Ok(*v);
     }
+    // A module name an extension of this run gives one of its globals; a later extension's wins.
+    let extensions = vm.host.extensions.clone();
+    let named = extensions.iter().rev().find_map(|e| {
+        e.modules()
+            .iter()
+            .find(|(m, _)| *m == name)
+            .map(|(_, global)| global.as_str())
+    });
     let found = match global_value(vm, &name) {
         Some(v) => Some(v),
-        None => match name.as_str() {
-            "fs/promises" => match global_value(vm, "fs") {
-                Some(fs @ Value::Obj(_)) => {
-                    let key = vm.atoms.intern("promises");
-                    match vm.get(&fs, key)? {
-                        Value::Undef => None,
-                        v => Some(v),
-                    }
-                }
-                _ => None,
-            },
-            "url" => pick(vm, &["URL", "URLSearchParams"]),
-            "util" => pick(vm, &["TextEncoder", "TextDecoder"]),
-            "buffer" => pick(vm, &["Buffer", "atob", "btoa"]),
-            _ => None,
+        None => match named.and_then(|global| global_value(vm, global)) {
+            Some(v) => Some(v),
+            None => alias(vm, &name)?,
         },
     };
     let Some(found) = found else {
@@ -1664,6 +1660,26 @@ fn module(vm: &mut Vm, specifier: &str) -> Res {
     };
     vm.host.modules.insert(name, found);
     Ok(found)
+}
+
+/// The globals that provide Node's other names for them.
+fn alias(vm: &mut Vm, name: &str) -> Result<Option<Value>, Value> {
+    Ok(match name {
+        "fs/promises" => match global_value(vm, "fs") {
+            Some(fs @ Value::Obj(_)) => {
+                let key = vm.atoms.intern("promises");
+                match vm.get(&fs, key)? {
+                    Value::Undef => None,
+                    v => Some(v),
+                }
+            }
+            _ => None,
+        },
+        "url" => pick(vm, &["URL", "URLSearchParams"]),
+        "util" => pick(vm, &["TextEncoder", "TextDecoder"]),
+        "buffer" => pick(vm, &["Buffer", "atob", "btoa"]),
+        _ => None,
+    })
 }
 
 fn pick(vm: &mut Vm, names: &[&str]) -> Option<Value> {
