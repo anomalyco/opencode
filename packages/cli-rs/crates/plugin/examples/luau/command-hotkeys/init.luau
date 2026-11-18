@@ -113,9 +113,10 @@ local function parse(options: any): { Binding }?
     return bindings
 end
 
--- TS `ctx.client.session.command`.
-local function command(session: string, name: string, text: string): plugin.Fetch
-    return { method = "POST", path = `/api/session/{session}/command`, body = { name = name, text = text } }
+-- TS `ctx.client.session.command`: the error, if it failed.
+local function command(session: string, name: string, text: string): string?
+    local _, err = plugin.client.session.command({ sessionID = session, name = name, text = text })
+    return err
 end
 
 return plugin.define(function(setup)
@@ -134,29 +135,27 @@ return plugin.define(function(setup)
     -- dialog, as TS's does.
     local function run(host: plugin.Host, session: string, binding: Binding): boolean
         if not binding.goal then
-            local _, err = host:fetch(command(session, binding.command :: string, binding.text))
-            return err ~= nil
+            return command(session, binding.command :: string, binding.text) ~= nil
         end
         local function away(): boolean
             local route = host:route()
             return host:mode() ~= nil or route.type ~= "session" or route.id ~= session
         end
-        local body, err = host:fetch({ method = "GET", path = `/api/session/{session}` })
+        local info, err = plugin.client.session.get({ sessionID = session })
         if err then
             return true
         elseif away() then
             return false
         end
-        local location = body and body.data and body.data.location
-        local directory = trimmed(location and location.directory)
+        local directory = trimmed(info and info.location.directory)
         if not directory then
             return true
         end
-        local reply, failure = host:fetch({
-            method = "POST",
-            path = "/api/rpc/opencode.goal/get",
-            query = { { "location[directory]", directory } },
-            body = { input = { sessionID = session } },
+        local reply, failure = plugin.client.rpc.call({
+            rpcID = "opencode.goal",
+            method = "get",
+            location = { directory = directory },
+            input = { sessionID = session },
         })
         if failure then
             return true
@@ -178,7 +177,7 @@ return plugin.define(function(setup)
         elseif goal.status ~= "active" then
             return true
         end
-        local _, toggled = host:fetch(command(session, "goal", verb))
+        local toggled = command(session, "goal", verb)
         return toggled ~= nil and not toggled:find(race, 1, true)
     end
 

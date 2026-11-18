@@ -120,14 +120,6 @@ local function select(host: plugin.Host, rows: { Row }, target: number)
     )
 end
 
-local function page(cursor: string?): plugin.Fetch
-    local query: { { string } } = { { "limit", tostring(PAGE_SIZE) }, { "order", "desc" } }
-    if cursor then
-        table.insert(query, { "cursor", cursor })
-    end
-    return { method = "GET", path = "/api/session", query = query }
-end
-
 -- The list is read: TS's `setSessions` with the selection on the session it came from.
 local function finished()
     state.sessions = state.pages
@@ -160,7 +152,7 @@ local function refresh(host: plugin.Host)
     plugin.spawn(function()
         local cursor: string? = nil
         repeat
-            local body, failure = host:fetch(page(cursor))
+            local body, failure = plugin.client.session.list({ limit = PAGE_SIZE, order = "desc", cursor = cursor })
             if reads ~= this then
                 return
             elseif failure then
@@ -176,15 +168,14 @@ local function refresh(host: plugin.Host)
         done(nil)
     end)
     plugin.spawn(function()
-        local body, failure = host:fetch({ method = "GET", path = "/api/project" })
+        local list, failure = plugin.client.project.list()
         if reads ~= this then
             return
         elseif failure then
             return done(failure)
         end
-        local list = if body and body.data then body.data else (body or {})
         state.projects = {}
-        for _, project in list do
+        for _, project in list or {} do
             local name = type(project.name) == "string" and project.name:match("^%s*(.-)%s*$")
             state.projects[project.id] = if name and name ~= "" then name else (project.canonical or "")
         end
@@ -321,7 +312,7 @@ local function rename(host: plugin.Host, rows: { Row })
         state.busy = false
         return
     end
-    local _, failure = host:fetch({ method = "PATCH", path = `/api/session/{id}`, body = { title = title } })
+    local _, failure = plugin.client.session.update({ sessionID = id, title = title })
     state.busy = false
     if failure then
         return host:toast({ variant = "error", message = failure })
@@ -399,7 +390,7 @@ local function remove(host: plugin.Host, title: string, lines: { string }, yes: 
     end
     local done, failed = {}, 0
     for _, id in ids do
-        local _, failure = host:fetch({ method = "DELETE", path = `/api/session/{id}` })
+        local _, failure = plugin.client.session.remove({ sessionID = id })
         if not failure or notFound(failure) then
             table.insert(done, id)
         elseif not group then
