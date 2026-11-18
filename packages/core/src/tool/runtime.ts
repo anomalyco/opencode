@@ -19,19 +19,19 @@ export const codecFor = (schema: JsonSchema.JsonSchema) => {
   return codec
 }
 
-export const isDynamicField = (value: unknown): value is (codeMode: boolean) => unknown =>
-  typeof value === "function" && !("~standard" in value) && !Schema.isSchema(value)
-
-export const resolveField = <T>(value: Tool.Dynamic<T>, codeMode: boolean): T =>
-  isDynamicField(value) ? (value(codeMode) as T) : value
+const codeModeOverrides = (tool: Tool.Info<any, any>, codeMode: boolean) =>
+  codeMode && typeof tool.options?.codemode === "object" && tool.options.codemode !== null
+    ? tool.options.codemode
+    : undefined
 
 export const definition = (tool: Tool.Info<any, any>, codeMode = false): ToolDefinition => {
-  const output = resolveField(tool.output, codeMode)
+  const overrides = codeModeOverrides(tool, codeMode)
+  const output = overrides?.output ?? tool.output
   return {
     type: "tool",
     name: effectiveName(tool),
-    description: resolveField(tool.description, codeMode),
-    inputSchema: inputJsonSchema(resolveField(tool.input, codeMode)),
+    description: overrides?.description ?? tool.description,
+    inputSchema: inputJsonSchema(overrides?.input ?? tool.input),
     ...(tool.freeform && { freeform: tool.freeform }),
     ...(output === undefined ? {} : { outputSchema: outputJsonSchema(output) }),
   }
@@ -39,8 +39,8 @@ export const definition = (tool: Tool.Info<any, any>, codeMode = false): ToolDef
 
 export const execute = (tool: Tool.Info<any, any>, input: unknown, context: Tool.Context) =>
   Effect.gen(function* () {
-    const codeMode = context.codeMode === true
-    const decoded = yield* decodeInput(tool, resolveField(tool.input, codeMode), input)
+    const overrides = codeModeOverrides(tool, context.codeMode === true)
+    const decoded = yield* decodeInput(tool, overrides?.input ?? tool.input, input)
     // Tool implementations declare `Tool.Error` but plugins can fail with anything at
     // runtime. A foreign typed failure would slip past every `catchTag("Tool.Error")`
     // downstream and leave its call permanently unsettled, so the declared contract is
@@ -55,7 +55,7 @@ export const execute = (tool: Tool.Info<any, any>, input: unknown, context: Tool
             }),
       ),
     )
-    const outputSchema = resolveField(tool.output, codeMode)
+    const outputSchema = overrides?.output ?? tool.output
     if (outputSchema === undefined) {
       if ("output" in result) return yield* Effect.die("Tool result declared output without an output schema")
       return {
@@ -303,6 +303,8 @@ export const effectiveName = (tool: Pick<Tool.Info, "name" | "options">) =>
   tool.options?.namespace === undefined
     ? normalizedName(tool)
     : `${tool.options.namespace.replaceAll(".", "_")}_${normalizedName(tool)}`
+
+export const defaultCodeMode = (tool: Pick<Tool.Info, "options">) => (tool.options?.codemode ?? true) === true
 
 /** For `Effect.mapError`: keep a `ToolFailure` as is, wrap anything else with `message`. */
 export const toolFailure = (message: string) => (error: unknown) =>

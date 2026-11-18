@@ -7,7 +7,7 @@ import { PluginPromise } from "@opencode/core/plugin/promise"
 import { Tool } from "@opencode/core/tool"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
-import { Cause, Deferred, Effect, Exit, Fiber, Option } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Option, Schema } from "effect"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -134,5 +134,94 @@ it.live("Promise tools that rethrow a decline attach it to the tool failure", ()
 
     const exit = yield* execute(yield* tools.snapshot(), "guarded")
     expect(Option.getOrUndefined(Exit.findErrorOption(exit))?.error).toBe(declined)
+  }),
+)
+
+it.live("Promise tools infer codemode override schemas and pass info and codeMode to hooks", () =>
+  Effect.gen(function* () {
+    type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
+
+    const plugins = yield* Plugin.Service
+    const tools = yield* Tool.Service
+    const seen: Array<{ tool: string; codeMode: boolean; override: boolean }> = []
+    yield* PluginPromise.fromPromise({
+      id: "override-promise-tool",
+      async setup(context) {
+        await context.tool.hook("execute.before", (event) => {
+          seen.push({
+            tool: event.tool,
+            codeMode: event.codeMode,
+            override: typeof event.info?.options?.codemode === "object",
+          })
+        })
+        await context.tool.transform((editor) => {
+          editor.add({
+            name: "shell_like",
+            description: "Direct shell",
+            input: Schema.Struct({ command: Schema.String, background: Schema.optionalKey(Schema.Boolean) }),
+            output: Schema.String,
+            options: {
+              codemode: {
+                description: "Code Mode shell",
+                input: Schema.Struct({ command: Schema.String }),
+                output: Schema.Struct({ summary: Schema.String }),
+              },
+            },
+            execute: async (input, ctx) => {
+              const _inputExact: Equal<
+                typeof input,
+                { readonly command: string; readonly background?: boolean } | { readonly command: string }
+              > = true
+              const background = "background" in input ? input.background : undefined
+              const _backgroundOptional: Equal<typeof background, boolean | undefined> = true
+              void _inputExact
+              void _backgroundOptional
+              const text = `${input.command}:${String(background ?? "none")}`
+              return { output: ctx.codeMode ? { summary: text } : text }
+            },
+          })
+          editor.add({
+            name: "plain_typed",
+            description: "Unchanged plain tool",
+            input: Schema.Struct({ count: Schema.Number }),
+            execute: async (input) => {
+              const _unchanged: Equal<typeof input, { readonly count: number }> = true
+              void _unchanged
+              return { content: String(input.count) }
+            },
+          })
+        })
+      },
+    }).effect(yield* PluginHost.make(plugins, "test"))
+
+    const direct = yield* tools.snapshot()
+    expect(
+      (yield* direct.execute({
+        sessionID: Session.ID.make("ses_promise_override"),
+        agent: Agent.ID.make("build"),
+        messageID: SessionMessage.ID.make("msg_promise_override"),
+        call: { type: "tool-call", id: "call_direct", name: "shell_like", input: { command: "ls", background: true } },
+      })).output,
+    ).toBe("ls:true")
+
+    const promoted = yield* tools.snapshot(undefined, { tools: { codemode: new Set(["shell_like"]) } })
+    expect(
+      (yield* promoted.execute({
+        sessionID: Session.ID.make("ses_promise_override"),
+        agent: Agent.ID.make("build"),
+        messageID: SessionMessage.ID.make("msg_promise_override"),
+        call: {
+          type: "tool-call",
+          id: "call_cm",
+          name: "execute",
+          input: { code: 'return await tools.shell_like({ command: "pwd" })' },
+        },
+      })).output,
+    ).toMatchObject({ output: JSON.stringify({ summary: "pwd:none" }) })
+    expect(seen).toEqual([
+      { tool: "shell_like", codeMode: false, override: true },
+      { tool: "execute", codeMode: false, override: false },
+      { tool: "shell_like", codeMode: true, override: true },
+    ])
   }),
 )

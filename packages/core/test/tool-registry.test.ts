@@ -754,19 +754,21 @@ describe("Tool", () => {
   )
 
   it.effect(
-    "resolves function-form fields once per registration and picks direct or Code Mode forms per placement",
+    "keeps tools with options.codemode overrides direct by default and applies overrides when placed in Code Mode",
     () =>
       Effect.gen(function* () {
+        type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
+
         const service = yield* Tool.Service
         const hooks = yield* PluginHooks.Service
-        const hooked: Array<{ phase: string; tool: string; codeMode: boolean; dynamic: boolean }> = []
+        const hooked: Array<{ phase: string; tool: string; codeMode: boolean; override: boolean }> = []
         yield* hooks.register("tool", "execute.before", (event) =>
           Effect.sync(() => {
             hooked.push({
               phase: "before",
               tool: event.tool,
               codeMode: event.codeMode,
-              dynamic: typeof event.info?.description === "function",
+              override: typeof event.info?.options?.codemode === "object",
             })
           }),
         )
@@ -776,35 +778,60 @@ describe("Tool", () => {
               phase: "after",
               tool: event.tool,
               codeMode: event.codeMode,
-              dynamic: typeof event.info?.description === "function",
+              override: typeof event.info?.options?.codemode === "object",
             })
           }),
         )
-        const resolutions: boolean[] = []
         const directInput = Schema.Struct({ command: Schema.String, background: Schema.optionalKey(Schema.Boolean) })
         const codeModeInput = Schema.Struct({ command: Schema.String })
+        const codeModeOutput = Schema.Struct({ summary: Schema.String })
         yield* service.transform((editor) => {
           editor.add({
             name: "shell",
-            description: (codeMode) => {
-              resolutions.push(codeMode)
-              return codeMode ? "Code Mode shell" : "Direct shell"
+            description: "Direct shell",
+            input: directInput,
+            output: Schema.String,
+            options: {
+              codemode: {
+                description: "Code Mode shell",
+                input: codeModeInput,
+                output: codeModeOutput,
+              },
+              pinned: true,
             },
-            input: (codeMode) => (codeMode ? codeModeInput : directInput),
-            output: (codeMode) => (codeMode ? Schema.Struct({ summary: Schema.String }) : Schema.String),
-            options: { codemode: false, pinned: true },
             execute: (input, context) => {
+              const _inputExact: Equal<
+                typeof input,
+                { readonly command: string; readonly background?: boolean } | { readonly command: string }
+              > = true
+              const background = "background" in input ? input.background : undefined
+              const _backgroundOptional: Equal<typeof background, boolean | undefined> = true
+              void _inputExact
+              void _backgroundOptional
               const summary = `${input.command}:${"background" in input ? String(input.background) : "omitted"}:${String(Boolean(context.codeMode))}`
               return Effect.succeed({ output: context.codeMode ? { summary } : summary })
             },
           })
-          editor.add({ ...make(), name: "glob", options: { codemode: false } })
+          editor.add({
+            name: "glob",
+            description: "Find files",
+            input: Schema.Struct({ pattern: Schema.String }),
+            output: Schema.String,
+            options: { codemode: false },
+            execute: (input) => {
+              const _unchanged: Equal<typeof input, { readonly pattern: string }> = true
+              void _unchanged
+              return Effect.succeed({ output: input.pattern })
+            },
+          })
           editor.add({ ...make(), name: "mcp_search" })
         })
 
-        expect(resolutions).toEqual([false, true])
-        expect(typeof (yield* service.list()).find((tool) => tool.id === "shell")?.description).toBe("function")
+        const listed = (yield* service.list()).find((tool) => tool.id === "shell")
+        expect(listed?.description).toBe("Direct shell")
+        expect(typeof listed?.options?.codemode).toBe("object")
 
+        // An override object does not move the tool into Code Mode: it stays direct unless promoted, and Tool.check skips it.
         const direct = yield* service.snapshot()
         expect(direct.definitions.map((tool) => tool.name)).toEqual(["glob", "shell", "execute"])
         expect(direct.definitions.find((tool) => tool.name === "shell")?.description).toBe("Direct shell")
@@ -822,6 +849,16 @@ describe("Tool", () => {
             },
           })).output,
         ).toBe("ls:true:false")
+        expect(
+          yield* service.check({
+            code: 'return await tools.shell({ command: "build" })',
+            tools: ["shell"],
+            bindings: {},
+            permissions: [],
+            limits: {},
+            context: { sessionID, ...identity, progress: () => Effect.void },
+          }),
+        ).toMatchObject({ ok: false, error: { kind: "UnknownTool" } })
 
         const policy = { hidden: new Set(["glob"]), codemode: new Set(["shell"]) }
         const promoted = yield* service.snapshot(undefined, { tools: policy })
@@ -833,7 +870,7 @@ describe("Tool", () => {
         expect(shellListing.line).not.toContain("background")
         expect(promoted.codeModeCatalog?.tools.find((tool) => tool.name === "shell")).toMatchObject({ pinned: true })
 
-        // Decodes and encodes Code Mode calls with the Code Mode schemas and passes context.codeMode = true.
+        // Decodes and encodes Code Mode calls with the Code Mode override schemas and passes context.codeMode = true.
         const executed = yield* promoted.execute({
           ...call("execute"),
           call: {
@@ -855,36 +892,30 @@ describe("Tool", () => {
         expect(denied.definitions.find((tool) => tool.name === "shell")?.inputSchema.properties).toHaveProperty(
           "background",
         )
-        // Neither snapshots nor executions re-ran the field functions.
-        expect(resolutions).toEqual([false, true])
 
-        // Updating options edits the function-form source directly, and Tool.check uses the Code Mode form.
+        // Plugin edits to tool.description only change the direct form; options.codemode stays intact.
         yield* service.transform((editor) => {
-          expect(typeof editor.get("shell")?.description).toBe("function")
+          expect(editor.get("shell")?.description).toBe("Direct shell")
           editor.update("shell", (tool) => {
-            expect(typeof tool.description).toBe("function")
-            tool.options = { ...tool.options, codemode: true }
+            tool.description = "Edited direct shell"
           })
         })
+        expect((yield* service.snapshot()).definitions.find((tool) => tool.name === "shell")?.description).toBe(
+          "Edited direct shell",
+        )
         expect(
-          yield* service.check({
-            code: 'return await tools.shell({ command: "build", background: true })',
-            tools: ["shell"],
-            bindings: {},
-            permissions: [],
-            limits: {},
-            context: { sessionID, ...identity, progress: () => Effect.void },
-          }),
-        ).toMatchObject({ ok: true, value: { summary: "build:omitted:true" } })
+          codeModeListings((yield* service.snapshot(undefined, { tools: policy })).codeModeCatalog!).find(
+            (tool) => tool.path === "shell",
+          )?.line,
+        ).toContain("Code Mode shell")
+
         expect(hooked).toEqual([
-          { phase: "before", tool: "shell", codeMode: false, dynamic: true },
-          { phase: "after", tool: "shell", codeMode: false, dynamic: true },
-          { phase: "before", tool: "execute", codeMode: false, dynamic: false },
-          { phase: "before", tool: "shell", codeMode: true, dynamic: true },
-          { phase: "after", tool: "shell", codeMode: true, dynamic: true },
-          { phase: "after", tool: "execute", codeMode: false, dynamic: false },
-          { phase: "before", tool: "shell", codeMode: true, dynamic: true },
-          { phase: "after", tool: "shell", codeMode: true, dynamic: true },
+          { phase: "before", tool: "shell", codeMode: false, override: true },
+          { phase: "after", tool: "shell", codeMode: false, override: true },
+          { phase: "before", tool: "execute", codeMode: false, override: false },
+          { phase: "before", tool: "shell", codeMode: true, override: true },
+          { phase: "after", tool: "shell", codeMode: true, override: true },
+          { phase: "after", tool: "execute", codeMode: false, override: false },
         ])
       }),
   )

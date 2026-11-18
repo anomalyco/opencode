@@ -163,12 +163,13 @@ it.effect("repairs nested Code Mode calls against the Code Mode input schema", (
     yield* registry.transform((draft) =>
       draft.add({
         name: "inspect",
-        options: { codemode: false },
         description: "Inspect",
-        input: (codeMode) =>
-          codeMode
-            ? Schema.Struct({ count: Schema.Int, detail: Schema.optionalKey(Schema.Boolean) })
-            : Schema.Struct({ count: Schema.Int }),
+        input: Schema.Struct({ count: Schema.Int }),
+        options: {
+          codemode: {
+            input: Schema.Struct({ count: Schema.Int, detail: Schema.optionalKey(Schema.Boolean) }),
+          },
+        },
         execute: (input) => Effect.sync(() => executed.push(input)).pipe(Effect.as({ content: "ok" })),
       }),
     )

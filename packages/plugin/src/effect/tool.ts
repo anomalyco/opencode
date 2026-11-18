@@ -9,8 +9,13 @@ export interface ToolEditor {
   list(): readonly (Tool.Info & { readonly id: string })[]
   get(id: string): (Tool.Info & { readonly id: string }) | undefined
   namespace(namespace: Tool.Namespace): void
-  add<Input extends Tool.ValueSchema<any>, Output extends Tool.ValueSchema<any> | undefined>(
-    tool: Tool.Info<Input, Output>,
+  add<
+    Input extends Tool.ValueSchema<any>,
+    Output extends Tool.ValueSchema<any> | undefined = undefined,
+    CMInput extends Tool.ValueSchema<any> = Input,
+    CMOutput extends Tool.ValueSchema<any> | undefined = Output,
+  >(
+    tool: Tool.Info<Input, Output, CMInput, CMOutput>,
   ): void
   /** Updates an existing tool; missing IDs are ignored. */
   update(id: string, update: (tool: Types.Mutable<Tool.Info>) => void): void

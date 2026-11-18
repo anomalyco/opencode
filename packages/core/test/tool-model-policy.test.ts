@@ -170,10 +170,10 @@ const setupContext = Effect.gen(function* () {
       const variant = name === "read" || name === "shell"
       editor.add({
         name,
-        description: variant ? (codeMode) => (codeMode ? `Code Mode ${name}` : `Direct ${name}`) : `Direct ${name}`,
+        description: `Direct ${name}`,
         input: Schema.Struct({}),
         output: Schema.String,
-        options: { codemode: false, ...(variant ? { pinned: true } : {}) },
+        options: variant ? { codemode: { description: `Code Mode ${name}` }, pinned: true } : { codemode: false },
         execute: () => Effect.succeed({ output: name }),
       })
     }

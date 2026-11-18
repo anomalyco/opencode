@@ -370,9 +370,15 @@ export const Plugin = {
         editor.add({
           name,
           // When placed in Code Mode, shell is pinned so the catalog always lists it, however many other tools there are.
-          options: { codemode: false, pinned: true },
-          description: (codeMode) => description(undefined, codeMode),
-          input: (codeMode) => (codeMode ? CodeModeInput : Input),
+          options: {
+            codemode: {
+              description: description(undefined, true),
+              input: CodeModeInput,
+            },
+            pinned: true,
+          },
+          description: description(),
+          input: Input,
           output: StructuredOutput,
           execute: (input, context) => {
             // Code Mode input has no background parameter.

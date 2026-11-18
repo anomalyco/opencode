@@ -43,30 +43,40 @@ export interface Namespace {
   readonly description: string
 }
 
-export interface Options {
+export interface Options<
+  CMInput extends ValueSchema<any> = ValueSchema<any>,
+  CMOutput extends ValueSchema<any> | undefined = ValueSchema<any> | undefined,
+> {
   readonly namespace?: string
   readonly permission?: string
-  readonly codemode?: boolean
+  readonly codemode?:
+    | boolean
+    | {
+        readonly description?: string
+        readonly input?: CMInput
+        readonly output?: CMOutput
+      }
   readonly pinned?: boolean
 }
 
 export type ValueSchema<A = unknown> = Schema.Codec<A, any> | StandardSchemaV1<any, A> | JsonSchema.JsonSchema
 
-/** A tool field that may depend on whether the tool is shown or run inside Code Mode. */
-export type Dynamic<T> = T | ((codeMode: boolean) => T)
-
-type SchemaInput<S> = S extends Schema.Codec<infer A, any> ? A : S extends StandardSchemaV1<any, infer A> ? A : unknown
-
-type SchemaOutput<S> = S extends undefined
-  ? never
+type InputValue<S> = 0 extends 1 & S
+  ? any
   : S extends Schema.Codec<infer A, any>
     ? A
-    : S extends StandardSchemaV1<infer A, any>
+    : S extends StandardSchemaV1<any, infer A>
       ? A
-      : any
-
-type InputValue<S> = 0 extends 1 & S ? any : SchemaInput<S>
-type OutputValue<S> = 0 extends 1 & S ? any : SchemaOutput<S>
+      : unknown
+type OutputValue<S> = 0 extends 1 & S
+  ? any
+  : S extends undefined
+    ? never
+    : S extends Schema.Codec<infer A, any>
+      ? A
+      : S extends StandardSchemaV1<infer A, any>
+        ? A
+        : any
 
 export class Error extends Schema.TaggedError<Error>()("Tool.Error", {
   message: Schema.String,
@@ -102,23 +112,17 @@ export interface Result<Output extends ValueSchema<any> | undefined = ValueSchem
 export type Info<
   Input extends ValueSchema<any> = ValueSchema<any>,
   Output extends ValueSchema<any> | undefined = ValueSchema<any> | undefined,
+  CMInput extends ValueSchema<any> = Input,
+  CMOutput extends ValueSchema<any> | undefined = Output,
 > = {
   readonly name: string
-  readonly input: Dynamic<Input>
+  readonly input: Input
   readonly freeform?: Freeform
-  readonly description: Dynamic<string>
-  readonly execute: (input: InputValue<Input>, context: Context) => Effect.Effect<Result<Output>, Error>
-  readonly output?: Dynamic<Output>
-  readonly options?: Options
-}
-
-export declare namespace Info {
-  export type Form<
-    Input extends ValueSchema<any> = ValueSchema<any>,
-    Output extends ValueSchema<any> | undefined = ValueSchema<any> | undefined,
-  > = Omit<Info<Input, Output>, "description" | "input" | "output"> & {
-    readonly description: string
-    readonly input: Input
-    readonly output?: Output
-  }
+  readonly description: string
+  readonly execute: (
+    input: InputValue<Input> | InputValue<CMInput>,
+    context: Context,
+  ) => Effect.Effect<Result<Output | CMOutput>, Error>
+  readonly output?: Output
+  readonly options?: Options<CMInput, CMOutput>
 }

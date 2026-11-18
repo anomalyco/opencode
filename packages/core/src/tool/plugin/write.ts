@@ -38,11 +38,16 @@ export const Plugin = {
       .transform((editor) =>
         editor.add({
           name,
-          options: { codemode: false, pinned: true, permission: "edit" },
-          description: (codeMode) =>
-            codeMode
-              ? "Create a new file or overwrite an existing file on the local filesystem, creating missing parent directories automatically. Prefer `edit` for partial changes to existing files."
-              : "Writes a file to the local filesystem, overwriting if one exists.\n\nMissing parent directories are created automatically.\n\nUse this tool to create new files or overwrite existing files. For partial changes, use the edit tool instead.",
+          options: {
+            codemode: {
+              description:
+                "Create a new file or overwrite an existing file on the local filesystem, creating missing parent directories automatically. Prefer `edit` for partial changes to existing files.",
+            },
+            pinned: true,
+            permission: "edit",
+          },
+          description:
+            "Writes a file to the local filesystem, overwriting if one exists.\n\nMissing parent directories are created automatically.\n\nUse this tool to create new files or overwrite existing files. For partial changes, use the edit tool instead.",
           input: Input,
           output: Output,
           execute: (input, context) =>
