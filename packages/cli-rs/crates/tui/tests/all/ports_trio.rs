@@ -62,8 +62,9 @@ fn trio(npm: &str, port: &str, drive: impl Fn(Carrier<'_>) -> Option<Observed>) 
 /// The cells of rows `rows` from column `from` to the right edge: each row's text, then each run of cells with one
 /// foreground, background and attributes, as `count×style`.
 fn cells(h: &Port, from: u16, rows: std::ops::Range<u16>) -> Vec<String> {
+    // The text and the cells of one frame: a second render settles again, and may take what a plugin sent since.
     let capture = h.app.render();
-    let text: Vec<String> = h.app.text().lines().map(str::to_owned).collect();
+    let text: Vec<String> = capture.text().lines().map(str::to_owned).collect();
     rows.map(|y| {
         let line: String =
             text.get(usize::from(y)).map(|line| line.chars().skip(usize::from(from)).collect()).unwrap_or_default();
