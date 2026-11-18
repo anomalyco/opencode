@@ -5567,7 +5567,7 @@
             }
           }
         },
-        "description": "Submit a video job to a video model using the server's base configuration and return its ID once the provider accepted it. The server polls the job and stores the finished video as a blob for 7 days; read the job with GET /api/experimental/generate/video/:id and the video with GET /api/experimental/blob/:id. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
+        "description": "Submit a video job to a video model using the server's base configuration and return its ID once the provider accepted it. The server polls the job and stores the finished videos as blobs; read the job with GET /api/experimental/generate/video/:id and the video with GET /api/experimental/blob/:id. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
         "summary": "Create a video generation",
         "requestBody": {
           "content": {
@@ -5655,7 +5655,7 @@
             }
           }
         },
-        "description": "Read a video job: running, completed with the video's blob, or error with a reason. Jobs are kept in memory, so a server restart forgets them; a finished video's blob stays readable. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
+        "description": "Read a video job: running, completed with its videos' blobs, or error with a reason. Jobs survive a server restart, which resumes polling running ones. A job is not found 24 hours after it finished, or once none of its blobs remain. Behind the video_generate flag. Experimental: may change without compatibility guarantees.",
         "summary": "Read a video generation"
       }
     },
@@ -12335,7 +12335,7 @@
             }
           }
         },
-        "description": "Stream a stored blob's bytes, such as a generated video, with single byte Range, ETag and 304 Not Modified support. Blobs are deleted 7 days after they're written. Experimental: may change without compatibility guarantees.",
+        "description": "Stream a stored blob's bytes, such as a generated video, with single byte Range, ETag and 304 Not Modified support. Blobs are kept until removed. Experimental: may change without compatibility guarantees.",
         "summary": "Read a blob"
       }
     },
@@ -16674,7 +16674,8 @@
       },
       "Blob.ID": {
         "type": "string",
-        "pattern": "^video_[0-9a-f]{12}[0-9A-Za-z]{14}_(0|[1-9][0-9]{0,2})$"
+        "pattern": "^blob_[0-9a-f]{12}[0-9A-Za-z]{14}$",
+        "description": "A stored blob, such as a generated video, which outlives the job that made it"
       },
       "Blob.Info": {
         "type": "object",
@@ -16687,13 +16688,9 @@
           },
           "bytes": {
             "type": "number"
-          },
-          "expiresAt": {
-            "type": "number",
-            "description": "Epoch milliseconds after which the blob may be deleted. Read it with GET /api/experimental/blob/:id"
           }
         },
-        "required": ["id", "mime", "bytes", "expiresAt"],
+        "required": ["id", "mime", "bytes"],
         "additionalProperties": false
       },
       "BlobNotFoundErrorEncoded": {
@@ -19916,7 +19913,7 @@
       "Generate.VideoErrorReason": {
         "type": "string",
         "enum": ["failed", "cancelled", "expired", "unknown"],
-        "description": "failed: the provider failed the job. cancelled: the provider cancelled it. expired: the provider expired it. unknown: the provider gave no result in time"
+        "description": "failed: the provider failed the job. cancelled: the provider cancelled it. expired: the provider expired it. unknown: the provider gave no result in time, or the server stopped while submitting the job"
       },
       "Generate.VideoID": {
         "type": "string",

@@ -19,7 +19,7 @@ export const makeBlobGet = Effect.gen(function* () {
       const etag = `"${id}"`
       const headers = {
         ...ContentHeaders.download({ mime: blob.mime }),
-        "cache-control": "private, max-age=604800, immutable",
+        "cache-control": "private, max-age=31536000, immutable",
         etag,
         "accept-ranges": "bytes",
       }

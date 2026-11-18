@@ -72,3 +72,23 @@ story("code block actions sit in the block's top corner over the block's own bac
   await page.keyboard.press("Shift+Tab")
   await expect(toolbar(block)).toHaveCSS("opacity", "1")
 })
+
+// The fill sits over the block's 0.5px border, and one that reaches the hairline paints over it while hovered.
+story("the fill behind code block actions stays inside the block's border", async ({ mount, page }) => {
+  const root = await mount("current-session-code-blocks--long-lines")
+  const block = root.locator('[data-component="markdown-code"]').nth(2)
+  const toolbar = block.locator('[data-slot="markdown-code-toolbar"]')
+  const box = (await block.boundingBox())!
+  await page.mouse.move(box.x + 40, box.y + box.height / 2)
+  await expect(toolbar).toHaveCSS("opacity", "1")
+
+  const fill = await toolbar.evaluate((element) => {
+    const bar = element.getBoundingClientRect()
+    const style = getComputedStyle(element, "::before")
+
+    return { top: bar.top + parseFloat(style.top), right: bar.right - parseFloat(style.right) }
+  })
+
+  expect(fill.top - box.y).toBeGreaterThanOrEqual(1)
+  expect(box.x + box.width - fill.right).toBeGreaterThanOrEqual(1)
+})

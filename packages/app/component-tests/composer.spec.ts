@@ -216,7 +216,8 @@ story(
     await input.fill("")
     await input.press("ArrowUp")
     await expect(input).toHaveText("Explain the latest changes")
-    await input.press("ControlOrMeta+u")
+    await component.getByRole("button", { name: "Add images and files", exact: true }).click()
+    await page.getByRole("menuitem", { name: /^Images and files/ }).click()
     await input.press("ArrowDown")
     await expect(input).toBeEmpty()
   },
