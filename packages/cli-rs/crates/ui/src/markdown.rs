@@ -1,8 +1,4 @@
-//! Markdown wrapper (U.4a, U.4c): assistant text as the transcript shows it (`TextPart`,
-//! `packages/tui/src/routes/session/message-parts.tsx`), on opentui-rust's `Markdown` widget.
-//!
-//! The widget has its own parser and styles spans through the syntax theme's `markup.*` scopes, as Core does;
-//! `parity/deviations/V03-markdown-widget.md` lists what differs.
+//! Transcript Markdown with syntax-theme styles for markup spans.
 
 use std::rc::Rc;
 

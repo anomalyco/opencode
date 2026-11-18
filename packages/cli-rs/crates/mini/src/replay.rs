@@ -1,13 +1,4 @@
-//! The session transcript as scrollback commits (`stream-v2.transport.ts`, `stream-v2.fragment.ts`): hydration
-//! from the message list, live events, and replay on resume and resize.
-//!
-//! [`Transcript`] is a plain state machine on the UI thread: it turns messages and events into [`Commit`]s and
-//! remembers what it already showed, so a message that arrives both live and in a later list prints once. The
-//! network side ([`connect`], [`messages`]) runs on tokio and posts what it reads to the UI thread.
-//!
-//! Tools, shells, permissions, and forms reach this module but are drawn by M.3 and M.4: tool parts go through
-//! [`crate::tools::commits`], and requests through [`crate::footers`]. Events of other sessions and this session's
-//! tool events also go to the subagent tracker ([`crate::subagents`]) through [`Output::subagents`].
+//! Rebuilds scrollback from session history and follows live events without duplicating entries.
 
 use std::sync::{Arc, Mutex};
 
@@ -168,8 +159,7 @@ pub struct Output {
     pub patch: Option<Patch>,
     /// `session.renamed`.
     pub title: Option<String>,
-    /// Events for the footer views of M.3 (permissions, forms, the queue), and the forms of no session
-    /// (`sessionID: "global"`).
+    /// Includes sessionless forms owned by `global`.
     pub footer: Vec<V2Event>,
     /// Events for the subagent tracker: other sessions' events, and this session's tool events, which name the
     /// child sessions its subagent calls start.
@@ -1762,8 +1752,7 @@ mod tests {
         }
     }
 
-    /// A dropped stream finds the service again before it subscribes once more (`stream-v2.transport.ts:1550-1561`),
-    /// so a managed service that restarted on another port or password is followed.
+    /// Rediscover before resubscribing: a restarted service can have a different address or password.
     #[tokio::test]
     async fn a_dropped_stream_finds_the_service_again() {
         let down = Arc::new(Down::default());
@@ -1870,7 +1859,6 @@ mod tests {
         let form = event("form.cancelled", json!({ "sessionID": "global", "id": "frm_1" }));
         let global = transcript.event(&form);
         assert_eq!((global.footer, global.subagents.len()), (vec![form], 0));
-        // A pending prompt moved between queue and steer updates the footer (`stream-v2.transport.ts:1080-1085`).
         let changed = event("session.inbox.delivery.changed", json!({ "inboxID": "msg_p", "delivery": "steer" }));
         assert_eq!(transcript.event(&changed).footer, [changed]);
     }
@@ -2167,10 +2155,8 @@ mod tests {
         assert_eq!(fragments.end(&part, "final").previous, "abcdef");
     }
 
-    /// The hydration model (M6): a server that makes prompts and streams answers, a stream that drops, reads that
-    /// return in any order, and resizes. After every quiet point, the rows since the last clear show each listed
-    /// message exactly once and whole. The harness drives [`Transcript`] as `Mini::incoming`, `Mini::resized` and
-    /// `Mini::replay_on_resize` do.
+    /// Hydration model: reads may finish out of order or cross a disconnect. The visible transcript must converge to
+    /// the server's ordered messages.
     mod model {
         use super::*;
         use std::collections::VecDeque;
@@ -2486,15 +2472,14 @@ mod tests {
             commands
         }
 
-        /// S4: a relist in flight when the stream drops must not clear the reconnect's rows and print its older list.
+        /// A stale relist cannot clear a newer reconnect's rows.
         #[test]
         fn a_drop_during_a_relist_keeps_the_reconnects_rows() {
             let commands = [Command::Complete(0), Command::Resize, Command::User, Command::Drop, Command::Complete(1)];
             assert_eq!(play(&commands), Ok(0));
         }
 
-        /// S5: a relist holds at most its limit of events; one more drops them and starts a new read, and the
-        /// older read no longer applies.
+        /// Exceeding the buffered event limit invalidates the pending read.
         #[test]
         fn an_overflow_relists() {
             let mut transcript = Transcript::new("ses_1", true, true, true, None);

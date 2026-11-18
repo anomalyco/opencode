@@ -1,5 +1,4 @@
-//! The resolved semantic tokens of one theme view (`ResolvedThemeTokens` in `packages/theme/src/tui/types.ts`).
-//! Field names follow the TypeScript tokens; [`Tokens::visit`] lists every token under its TypeScript path.
+//! Semantic tokens for one resolved theme view.
 
 use opentui::style::Color;
 

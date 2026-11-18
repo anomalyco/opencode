@@ -1,5 +1,3 @@
-//! Confirm dialog (U.3): `packages/tui/src/ui/dialog-confirm.tsx`.
-
 use crate::dialog::{DIALOG_INSET, DialogButton, DialogButtons, DialogCx, HeaderProps, header, layout_view};
 use crate::keymap::{KeymapLayer, TuiCommand};
 use crate::tool_info::titlecase;

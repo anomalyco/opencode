@@ -1,5 +1,4 @@
-//! Code wrapper (U.4a): the syntax theme the TUI derives from its theme, and highlighted code as the Write tool
-//! shows it (`<line_number>` around `<code>`, `packages/tui/src/routes/session/index.tsx`).
+//! Syntax highlighting and numbered code views.
 
 use opentui::prelude::*;
 use opentui::syntax::SyntaxTheme;
@@ -7,10 +6,7 @@ use opentui::widget::{Code, LineNumbers};
 
 use crate::theme::{Paints, Theme, contrast};
 
-/// The capture styles for code, Markdown, and the prompt, from the TUI theme: a port of `generateSyntax`
-/// (`packages/theme/src/tui/syntax.ts`). Rules apply in order, so a scope listed twice keeps its last style.
-///
-/// A name without a style falls back to its first dotted part, as in Core: `string.special.path` takes `string`.
+/// Maps theme tokens to capture styles for code, Markdown and the prompt.
 pub fn syntax_theme(theme: &Theme) -> SyntaxTheme {
     let syntax = &theme.syntax;
     let markdown = &theme.markdown;

@@ -1,6 +1,3 @@
-//! The form footer (`footer.form.tsx`, `form.shared.ts`): one field at a time, choices as numbered rows, typed
-//! answers in a field, and a review before the answers are sent.
-
 use indexmap::IndexMap;
 use opencode_api::generated::{FormAnswer, FormField, FormInfo, FormValue};
 use opencode_ui::form::{

@@ -1,7 +1,3 @@
-//! P-ORACLE for U.5: decodes the tool parts of `parity/oracle/U.5-tool-info.ts` as the generated API type, runs
-//! them through the Rust port, and compares with the TypeScript output in `parity/fixtures/U.5/tool-info.json`.
-//! Regenerate it with `bun run fixtures`.
-
 use opencode_api_types::{SessionMessageAssistantTool, ToolContent};
 use opencode_ui::tool_info::{
     ToolInline, execute_call_summary, execute_calls, primitive_input_summary, read_display_text, tool_inline_info,

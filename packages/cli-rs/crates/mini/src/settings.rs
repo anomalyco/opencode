@@ -1,5 +1,4 @@
-//! Mini settings (`mini.*` in `cli.json`, `runtime.boot.ts:resolveMiniSettings`) and the changes the `/settings`
-//! panel makes, with the verbosity presets of `verbosity.ts`.
+//! Mini preferences and verbosity presets.
 
 use opencode_local::cli_config::{Info, Mini, MiniWorkSpinner, Visibility};
 

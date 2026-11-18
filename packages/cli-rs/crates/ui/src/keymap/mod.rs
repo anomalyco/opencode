@@ -1,8 +1,4 @@
-//! TUI keymap layer and command registry (U.2): `packages/tui/src/context/keymap.tsx` on `opentui::keymap`.
-//!
-//! [`TuiKeymap`] installs what the TypeScript `Keymap.Provider` installs, takes layers of [`TuiCommand`]s as
-//! `Keymap.createLayer` does, keeps the input mode stack, and formats shortcuts. [`Keybinds`] resolves the
-//! `keybinds` config.
+//! Command registration, key layers, input modes and shortcut formatting.
 
 mod config;
 #[rustfmt::skip]
@@ -37,7 +33,7 @@ pub const COMMAND_PALETTE_COMMAND: &str = "command.palette.show";
 /// The keymap data [`TuiKeymap::conditions_changed`] sets, which no layer requires.
 const CONDITIONS_KEY: &str = "conditions";
 
-/// The key aliases the keymap expands in a binding as its layer registers (TS `keymap.tsx`), each `(alias, key)`.
+/// Key aliases expanded during layer registration.
 const ALIASES: &[(&str, &str)] = &[("enter", "return"), ("esc", "escape"), ("pgdown", "pagedown"), ("pgup", "pageup")];
 
 /// `alias` in `input` replaced by `value` where `addons::key_aliases` replaces it: `@opentui/keymap`'s pattern,
@@ -386,7 +382,7 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
         let keymap = Keymap::new();
         let textarea_bindings: Vec<Binding<T>> =
             EDIT_COMMANDS.iter().flat_map(|(_, name, _)| keybinds.get(name).iter().cloned()).collect();
-        // The order of `keymap.tsx:78-136`. EDIT_COMMANDS lists the 36 `input.*` names in that file's order.
+        // Preserve the editing commands' registration order.
         let addons = vec![
             addons::comma_bindings(&keymap),
             addons::key_aliases(&keymap, ALIASES),
@@ -600,7 +596,7 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
                 bindings.extend(configured.iter().cloned());
                 continue;
             }
-            // A name the config knows and binds to nothing (`"none"`) takes no key of its own (carbon's review of P6c, 5).
+            // A known command bound to `none` takes no key.
             if let Bind::Key(key) = &command.bind
                 && !generated::DEFINITIONS.iter().any(|definition| definition.name == id)
             {
@@ -710,9 +706,7 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
         Hold(self, self.held.take().unwrap_or_default())
     }
 
-    /// Names the commands of TS's first command layer, in its order: `app.tsx` registers them in one layer before any
-    /// other, where this TUI declares them with their features, in many layers. The keymap lists the newest layer
-    /// first, so [`Self::commands`] lists these last, in this order.
+    /// Built-in commands retain their order even when different components register them.
     pub fn set_first_layer(&self, ids: impl IntoIterator<Item = String>) {
         *self.first_layer.borrow_mut() = ids.into_iter().collect();
     }
@@ -882,7 +876,6 @@ fn publish_mode<T: Clone + PartialEq + 'static>(keymap: &Keymap<T>, mode: &str) 
     }
 }
 
-/// `formatOptions` of `keymap.tsx:496-515`.
 fn format_options(leader: Option<&Key>) -> FormatOptions {
     let owned =
         |pairs: &[(&str, &str)]| pairs.iter().map(|(name, value)| ((*name).to_owned(), (*value).to_owned())).collect();

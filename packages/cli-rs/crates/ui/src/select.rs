@@ -1,8 +1,4 @@
-//! Select dialog (U.3): `packages/tui/src/ui/dialog-select.tsx` and `ui/select-controller.ts`.
-//!
-//! [`select`] builds `DialogSelect` inside a dialog: a search input, options grouped by category, fuzzy filtering
-//! with `fuzzysort`'s scores and order ([`fuzzy`]), keyboard and mouse selection, actions with their shortcuts in
-//! the footer, and the `dialog.select.*` commands. It returns a [`Select`] handle, the TS `DialogSelectRef`.
+//! A filterable select dialog with keyboard and mouse navigation.
 
 use crate::bind;
 use crate::dialog::{
@@ -809,7 +805,6 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         self.render();
     }
 
-    // The options effect of `dialog-select.tsx:290-350`.
     fn options_changed(&self) {
         if self.props().search.is_some() {
             return;
@@ -874,7 +869,6 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         }
     }
 
-    // The search effect of `dialog-select.tsx:351-380`.
     fn search_changed(&self, query_changed: bool, current_changed: bool) {
         let (query, count) = (self.filter(), self.count());
         let current = self.current();

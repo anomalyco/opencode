@@ -1,14 +1,5 @@
-//! Footer views for requests and panels (`footer.view.tsx`, `footer.permission.tsx`, `footer.form.tsx`,
-//! `footer.menu.tsx`, `footer.command.tsx`; row M05).
-//!
-//! A pending permission or form replaces the composer (`pickBlockerView`): the first permission, else the first
-//! form. With the composer showing, `command.palette.show` opens the command menu, which leads to the agent and
-//! model panels, and `session.queued_prompts` opens the pending prompts, where Enter toggles steer and queue,
-//! `queued_prompt.delete` cancels a prompt, and `queued_prompt.undo` takes it back into the draft.
-//!
-//! Child sessions (`crate::subagents`) add their permissions and forms after the session's own, and global forms
-//! come last. `session.child.first` opens the subagent panel, which leads to the inspector of one child, and
-//! `composer.subagent.interrupt` interrupts the inspected one.
+//! Pending permissions take precedence over forms; either replaces the composer. Child-session requests can also
+//! appear here.
 
 pub mod form;
 pub mod menu;
@@ -305,7 +296,6 @@ impl Footers {
         self.0.paint();
     }
 
-    /// `state.phase === "running"`, for "Show status".
     pub fn set_running(&self, running: bool) {
         self.0.state.borrow_mut().running = running;
     }
@@ -2165,7 +2155,6 @@ fn setting_entries(settings: &MiniSettings, saving: Option<Key>) -> Vec<Entry<Pi
         .collect()
 }
 
-/// The footer's layers (`footer.view.tsx:560-613`, the panels' and the request bodies' keys).
 fn install_layers(inner: &Rc<Inner>) {
     let when = |check: fn(&Inner) -> bool| Condition::when(bind!(inner, |inner| check(&inner)));
     fn composer(inner: &Inner) -> bool {

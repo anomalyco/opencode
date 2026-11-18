@@ -1,9 +1,3 @@
-//! Prompt dialog (U.3): `packages/tui/src/ui/dialog-prompt.tsx`.
-//!
-//! A one-line text field with a title, an optional description, footer actions bound to keymap commands while the
-//! field has focus, and a busy state. [`prompt`] returns a [`Prompt`] handle for what TS props change later:
-//! the busy state and the value.
-
 use crate::bind;
 use crate::dialog::{
     DialogCx, DialogSize, FocusId, FooterAction, FooterProps, HeaderProps, footer, header, layout_view,
@@ -233,7 +227,6 @@ impl Prompt {
         } else {
             theme.text.base
         });
-        // The `Spinner` with `animations: false`; the animated frames come with U.6.
         inner.busy_line.set_text(format!("⋯ {}", inner.props.busy_text.as_deref().unwrap_or("Working…"))).visible(busy);
         self.render_footer();
     }

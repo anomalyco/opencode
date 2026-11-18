@@ -30,8 +30,7 @@ pub mod tool_info;
 
 use opentui::prelude::MousePointer;
 
-/// The mouse pointer over an element: the hand when a click on it acts, else the default. TS sets no pointer shape;
-/// the hand is a deliberate deviation (`parity/deviations/W01-hand-pointer.md`).
+/// Show a hand pointer only over actionable elements.
 pub fn click_pointer(clickable: bool) -> MousePointer {
     if clickable { MousePointer::POINTER } else { MousePointer::DEFAULT }
 }
@@ -65,9 +64,8 @@ fn terminal_title_uncut(title: &str) -> String {
     out
 }
 
-/// Untrusted text (model, tool, server or file data) as it may be written to the terminal outside the renderer:
-/// escape sequences removed, then every other C0 control except newline and tab, DEL, and C1. Text without them
-/// is returned as it is. TS writes such text raw (`parity/deviations/O89-terminal-text.md`).
+/// Strips escape sequences, DEL and C0/C1 controls except tab and newline before writing untrusted text outside the
+/// renderer.
 pub fn terminal_text(text: &str) -> std::borrow::Cow<'_, str> {
     static ANSI: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
         // `ansi-regex` 6.3, as `normalizeText` in the attention feature.
@@ -92,8 +90,6 @@ mod tests {
         assert_eq!(super::terminal_title("plain"), "plain");
     }
 
-    // Expected (reviews bigboi-2, carbon-3): a title is cut to the 4091 bytes OpenTUI takes, on a character boundary,
-    // after the controls are replaced.
     #[test]
     fn terminal_title_fits_opentui() {
         use super::{TITLE_BYTES, terminal_title};

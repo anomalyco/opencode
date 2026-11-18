@@ -1,5 +1,4 @@
-//! The subagent inspector (`footer.subagent.tsx`): the selected child's status, title, and transcript, which
-//! sticks to its end as entries arrive, with the hints to go back, interrupt it, scroll, and step to the next.
+//! The selected child's transcript follows new entries at the tail.
 
 use opencode_ui::motion::{SPINNER_FRAMES, Spinner};
 use opentui::widget::ScrollEdge;

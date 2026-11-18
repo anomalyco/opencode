@@ -1,5 +1,4 @@
-//! The status row under the composer (`footerStatuslinePolicy` in `footer.width.ts`): required groups first, then
-//! optional information stage by stage while it fits the width.
+//! Required status groups take space before optional groups.
 
 use std::collections::BTreeMap;
 
@@ -231,7 +230,6 @@ mod tests {
 
     #[test]
     fn stages_fill_the_width_in_order() {
-        // The lines TS mini shows at 60 columns (`parity/scenarios/M.2/queue.pty.ts`).
         assert_eq!(line(&running(60, false)), "▪ esc interrupt · build · model · demo · ctrl+p menu");
         assert_eq!(line(&running(60, true)), "▪ esc stop · ctrl+x q 2 pending · build · model · demo");
         // Narrower: the model shortens to eight cells first, and nothing after a stage that does not fit.

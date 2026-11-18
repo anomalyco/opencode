@@ -1,7 +1,3 @@
-//! P-COMP proofs of the dialog kit (U.3): each test opens the Rust dialog the way the matching
-//! `parity/component/U.3-*.tsx` script opens the TypeScript one, sends the same keys, and compares the cells with
-//! the fixture that script wrote.
-
 use opencode_parity::assert_fixture;
 use opencode_ui::dialog::{DialogKeymap, Dialogs, route_keys};
 use opencode_ui::keymap::{Keybinds, Options};
@@ -25,8 +21,7 @@ fn theme() -> Theme {
     Catalog::default().load("opencode", ThemeMode::Dark).unwrap().theme
 }
 
-// Inside the TUI providers the TypeScript screen has the page background (`context/theme.tsx:317`), which the
-// backdrop blends over, so the app clears with it too.
+// Clear the test app to the page color so translucent dialog backdrops blend against the right background.
 fn kit(width: u16, height: u16) -> Kit {
     let app = TestApp::with_options(
         width,
@@ -74,8 +69,6 @@ fn alert_confirms_on_enter_and_closes() {
     assert!(kit.app.render().text().trim().is_empty());
 }
 
-// Expected (plugins-pa, carbon-6): with `dismiss`, Escape closes the confirm without either action, as the header and
-// the backdrop do; with `cancel_first`, Enter runs the cancel button.
 #[test]
 fn a_confirm_can_dismiss_on_escape_and_start_on_cancel() {
     for (dismiss, cancel_first, key, chosen) in [
@@ -217,8 +210,6 @@ fn replace_closes_the_previous_dialog_and_restores_focus_after_the_last() {
     assert!(input.is_focused());
 }
 
-// Expected (plugins-pt R3-b): an open dialog holds the stack, and with it the keymap, until its owner releases it;
-// the release runs no close handler. A prompt's layers hold its `DialogCx` too.
 #[test]
 fn a_release_frees_the_open_dialog_without_its_close_handler() {
     for name in ["alert", "prompt"] {
@@ -395,7 +386,6 @@ fn select_matches_typescript_when_opened_moved_and_filtered() {
     assert_fixture(&kit.app.render(), "U.3/select-empty");
 }
 
-// The list of parity/component/U.3-select-scroll.tsx: 30 options in three categories, one with a detail row.
 fn open_long(kit: &Kit) {
     let options: Vec<_> = ["Alpha", "Beta", "Gamma"]
         .iter()
@@ -466,8 +456,6 @@ fn palette_scrolls_as_typescript_at_80x20() {
     }
 }
 
-/// P-ORACLE: `parity/fixtures/U.3/fuzzy.json` holds fuzzysort's order for DialogSelect's call over the keybind
-/// corpus (`parity/oracle/U.3-fuzzy.ts`); the port must give the same order, ties included.
 #[test]
 fn fuzzy_order_matches_fuzzysort() {
     let fixture: serde_json::Value =
@@ -498,7 +486,6 @@ fn fuzzy_order_matches_fuzzysort() {
     assert!(failures.is_empty(), "{} cases differ:\n{}", failures.len(), failures.join("\n"));
 }
 
-// The global layer of parity/component/U.3-palette.tsx; returns the commands that ran.
 fn palette_commands(kit: &Kit) -> Rc<RefCell<Vec<String>>> {
     let ran = Rc::new(RefCell::new(Vec::new()));
     let command = |id: &str, title: &str, group: &str| {
@@ -634,9 +621,6 @@ fn prompt_placeholder_and_busy_match_typescript() {
     assert_eq!(*submitted.borrow(), 1);
 }
 
-/// P-ORACLE: `parity/fixtures/U.3/path.json` holds the TypeScript `formatPath` and `abbreviateHome` results
-/// (`parity/oracle/U.3-path.ts`). `abbreviateHome` of a relative input resolves against the process's working
-/// directory, which differs between the two runs, so those cases are skipped.
 #[test]
 fn path_formatting_matches_typescript() {
     let fixture: serde_json::Value =
@@ -722,8 +706,6 @@ fn numbered(count: usize, title: impl Fn(usize) -> String) -> Vec<SelectOption<u
     (0..count).map(|i| SelectOption::new(title(i), i)).collect()
 }
 
-// Expected (r2 review, bigboi-ui-3): in a 12-row terminal the list has no rows (TS `floor(12 / 2) - 6`), and
-// opening or resizing a picker there does not underflow its height.
 #[test]
 fn a_select_opens_and_resizes_in_a_twelve_row_terminal() {
     let kit = kit(72, 12);
@@ -737,8 +719,6 @@ fn a_select_opens_and_resizes_in_a_twelve_row_terminal() {
     kit.app.render();
 }
 
-// Expected (r2 review, carbon-ui-4): the list and its footer follow the terminal size, as TS
-// `useTerminalDimensions()` does, so a resized select draws as one opened at the new size.
 #[test]
 fn a_select_follows_a_terminal_resize() {
     for ((width, height), (to_width, to_height)) in [((80, 50), (48, 22)), ((48, 22), (80, 50))] {
@@ -752,8 +732,6 @@ fn a_select_follows_a_terminal_resize() {
     }
 }
 
-// Expected (r2 review, carbon-ui-5): rows are as tall as the title they draw. A long title cut before its line
-// breaks takes one row, so a move keeps the next row in view; titles that do break keep the `…` while rows are below.
 #[test]
 fn multi_line_titles_scroll_by_the_rows_they_draw() {
     let kit = kit(72, 30);
@@ -779,9 +757,6 @@ fn multi_line_titles_scroll_by_the_rows_they_draw() {
     assert!(screen.contains('…'), "{screen}");
 }
 
-// Expected (O-89): TS dialogs read the theme reactively (`ui/dialog.tsx:44,82`), so a theme set while a dialog is
-// open restyles it in place. Built again in the new theme, each kind draws what it draws when opened in that theme
-// after the same keys: filter, selection, scroll, typed text and cursor, the active button and focus carry over.
 #[test]
 fn a_theme_change_restyles_the_open_dialog_in_place() {
     let light = Catalog::default().load("opencode", ThemeMode::Light).unwrap().theme;
@@ -853,9 +828,6 @@ fn a_prompt_rebuilt_while_saving_stays_busy() {
     assert_eq!(*submitted.borrow(), 2);
 }
 
-// Expected (r2 review, carbon-ui-7): a toast queued behind a hovered one updates `+N more` in the same surface (TS
-// keeps `ToastSurface` mounted), so a selection made on it stays; and the toast's width follows a resize, as TS
-// `useTerminalDimensions()` does.
 #[test]
 fn a_queued_toast_keeps_the_selection_and_a_resize_narrows_the_toast() {
     let kit = kit(70, 12);

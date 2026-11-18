@@ -1,9 +1,4 @@
-//! Attachments, shared by the TUI and mini (E.4, rows P06 and P10): pasted or dropped paths of images, PDFs, and
-//! SVGs become prompt files (`component/prompt/local-attachment.ts`), labelled `[Image N]` or `[PDF N]`
-//! (`prompt/attachment.ts`).
-//!
-//! [`may_attach`] decides from the text alone whether a paste names attachable files, so plain text pastes
-//! insert at once; only then does [`resolve`] read the files, on a blocking thread.
+//! Converts pasted or dropped images and documents to prompt attachments.
 
 use std::path::Path;
 

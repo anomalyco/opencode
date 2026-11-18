@@ -1,5 +1,3 @@
-//! The image previews above the composer (`footer.prompt.tsx:277-310`), shown with `prompt.image_preview`.
-
 use opencode_ui::prompt_input::attach::data_uri;
 use opentui::native::ImageFit;
 use opentui::widget::ImageView;

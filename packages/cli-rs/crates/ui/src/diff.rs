@@ -1,7 +1,4 @@
-//! Diff wrapper (U.4a): a patch as the Edit and apply-patch tools show it, a port of `PatchDiff`
-//! (`packages/tui/src/component/patch-diff.tsx`) on opentui-rust's `Diff`. Each hunk is its own diff, and every
-//! hunk after the first gets a header row. An added file over 3,000 lines goes in chunks that mount only near the
-//! view ([`Chunked`]), as TS `VirtualAddedPatch` does where it has the scroll box (the diff viewer).
+//! Renders tool patches as split or unified diffs.
 
 use std::cell::RefCell;
 
@@ -18,7 +15,7 @@ pub struct Hunk {
     pub patch: String,
 }
 
-/// `splitPatchHunks` (`packages/tui/src/util/diff.ts`): a patch with at most one hunk stays whole.
+/// Keep single-hunk patches intact.
 pub fn split_hunks(patch: &str) -> Vec<Hunk> {
     let mut offset = 0;
     let starts: Vec<usize> = patch

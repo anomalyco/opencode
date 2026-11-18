@@ -1,6 +1,4 @@
-//! The serial prompt queue (`runtime.queue.ts`) as a state machine the shell drives. Local operations (`/new`,
-//! `/compact`) and turns run one at a time. A prompt submitted while an ordinary turn runs goes to the server's
-//! inbox right away (steer by default, queue with `prompt.queue`) instead of waiting here.
+//! Serializes local operations and turns. Follow-up prompts can reach the server while a turn is running.
 
 use std::collections::VecDeque;
 
@@ -173,8 +171,7 @@ mod tests {
         let steer = RunPrompt { delivery: Some(Delivery::Steer), ..text("two") };
         assert_eq!(queue.submit(steer), Submitted::Admit);
         assert_eq!(queue.submit(text("three")), Submitted::Admit);
-        // Follow-ups reach the server in order: after the turn's own prompt, one at a time
-        // (`runtime.queue.ts:266-275`).
+        // Send follow-ups one at a time after admitting the turn's own prompt.
         assert_eq!(queue.next_admission(), None);
         queue.first_admitted();
         let Some((sent, Delivery::Steer)) = queue.next_admission() else { panic!("two steers") };
@@ -212,7 +209,7 @@ mod tests {
         assert!(matches!(queue.pump(), Some(Work::Run(_))));
     }
 
-    /// The queue model (M4): random submits of prompts, commands, shells, `/new` and `/compact`, and the answers to
+    /// The queue model: random submits of prompts, commands, shells, `/new` and `/compact`, and the answers to
     /// the work they start, in any order. The harness drives [`Queue`] as `Mini::enqueue`, `pump`, `send`,
     /// `admit_next`, `settle` and `finish` do. The session changes only while no turn is active, so `Mini::settle`
     /// needs no guard, and every follow-up reaches the session of the turn it was submitted during.

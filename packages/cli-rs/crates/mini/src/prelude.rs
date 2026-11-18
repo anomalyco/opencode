@@ -1,5 +1,3 @@
-//! The items most modules of the crate use. A module takes them with `use crate::prelude::*;`.
-
 pub use std::cell::{Cell, RefCell};
 pub use std::collections::{HashMap, HashSet};
 pub use std::path::PathBuf;

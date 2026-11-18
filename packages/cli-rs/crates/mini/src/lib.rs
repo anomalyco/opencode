@@ -1,11 +1,4 @@
-//! `mini`: the minimal interactive interface (`packages/tui/src/mini`). The app lives in a footer at the bottom
-//! of the main screen, and the session's transcript is written to the terminal's scrollback above it.
-//!
-//! M.1 owns the shell: the split-footer lifecycle (`shell`), the scrollback writer (`scrollback`), the
-//! transcript and its replay (`replay`), the theme and monochrome output (`theme`), piped stdin (`stdin`), and
-//! signals and traces (`signals`). The prompt (`prompt`, M.2), the request footers (`footers`, M.3), the
-//! tool output, settings, spinners, splash, and variants (M.4), and the child sessions (`subagents`, M.5) fill
-//! the stubs M.1 leaves.
+//! Mini owns a footer on the terminal's main screen. The session transcript goes to scrollback above it.
 
 use std::path::PathBuf;
 use std::time::Instant;

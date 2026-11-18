@@ -1,9 +1,3 @@
-//! Signals and diagnostics of the mini host (`packages/cli/src/mini-host.ts:32-86,161-164`): SIGUSR2 reloads the
-//! theme, `OPENCODE_SHOW_TTFD` prints the time to the first frame, and `OPENCODE_DIRECT_TRACE` writes a JSONL
-//! trace of what mini sends and receives.
-//!
-//! SIGINT and SIGTERM stay with the renderer, which ends the app; mini then closes as on any exit.
-
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};

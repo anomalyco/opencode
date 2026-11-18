@@ -1,5 +1,4 @@
-//! `@opencode/util/activity-calendar` for `stats` (C.3) and the TUI's `/stats` poster (E.14): Monday-first weeks
-//! of activity levels with month labels, and the time zone both send with the stats request.
+//! Monday-first activity weeks for the CLI and TUI stats views.
 
 use opencode_api_types::SessionStatsActivity;
 use opencode_util::time::{Date, MONTHS, Zone};

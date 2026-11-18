@@ -1,7 +1,3 @@
-//! U.4a proofs. P-ORACLE: `code::syntax_theme` against the TypeScript `generateSyntax` for a few themes
-//! (`parity/oracle/U.4a-syntax.ts`). P-COMP: the Markdown, code, and diff wrappers against the TypeScript renders of
-//! the same corpus (`parity/component/U.4a-*.tsx`). Regenerate both with `bun run fixtures`.
-
 use indexmap::IndexMap;
 use opencode_parity::{Fixture, app, compare, fixtures_dir};
 use opencode_ui::theme::{Catalog, TerminalColors, Theme, ThemeMode, from_hex, generate_system};
@@ -142,14 +138,12 @@ fn markdown_fences_match_typescript() {
     assert_parity(&markdown_app(&corpus("fences"), true).render(), "U.4a/markdown-fences");
 }
 
-/// U.4c: `session.markdown = "raw"`, markers shown.
 #[test]
 fn raw_markdown_matches_typescript() {
     assert_parity(&markdown_app(&corpus("prose"), false).render(), "U.4c/markdown-raw");
 }
 
-/// U.4c: grid tables with one column of cell padding. The `---:` column is right-aligned, where TS left-aligns it
-/// (`parity/deviations/OT2112-table-alignment.md`): 14 cells.
+/// Numeric alignment markers right-align table columns.
 #[test]
 fn markdown_table_matches_typescript() {
     let corpus: serde_json::Value =
@@ -159,15 +153,12 @@ fn markdown_table_matches_typescript() {
     assert_parity_within(&capture, "U.4c/markdown-table", &[deviation]);
 }
 
-/// U.4c: thematic breaks, drawn as Core draws them: the `conceal` scope's color, else the text color.
 #[test]
 fn markdown_rules_match_typescript() {
-    // Also in parity/component/U.4c-markdown.tsx.
     let rules = "Before the rules.\n\n- - -\n\nBetween them.\n\n***\n\nAfter the rules.";
     assert_parity(&markdown_app(rules, true).render(), "U.4c/markdown-rules");
 }
 
-/// U.4c: a registered code-block renderer draws its fences, and streamed text ends as one parse of the whole text.
 #[test]
 fn markdown_renders_fences_and_streams() {
     let text = "Before.\n\n```mermaid\ngraph TD\n```\n\nAfter **all**.";
@@ -280,8 +271,6 @@ fn patch_matches_typescript() {
     assert_parity(&app.render(), "U.4a/diff");
 }
 
-/// The added JSON file of TS `diff-viewer.test.tsx` "virtualizes a large added file": 7,502 lines, one of them very
-/// long.
 fn large_added_patch() -> String {
     let rows = (0..7500).map(|index| {
         let repeat = if index == 777 {
@@ -302,8 +291,6 @@ fn large_added_patch() -> String {
     )
 }
 
-// Expected (r2 review, bigboi-ui-6): an added file over 3,000 lines mounts only the 128-line chunks near the view,
-// as TS `VirtualAddedPatch` does: fewer than 2,000 lines at the start and at the end, and every row in place.
 #[test]
 fn a_large_added_file_mounts_only_the_chunks_in_view() {
     let app = TestApp::new(80, 24);

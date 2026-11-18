@@ -1,7 +1,5 @@
-//! The mini theme (`packages/tui/src/mini/theme.ts`): the TUI theme mapped to the few roles the split footer
-//! and the scrollback use. Scrollback is immutable once written, so its colors are quantized to the terminal's
-//! palette slots, and a palette change later still reads well. `mini.mono` uses the terminal's default colors
-//! only.
+//! Scrollback is immutable, so its colors use palette slots that still track terminal palette changes. Mono mode uses
+//! only terminal defaults.
 
 use opencode_ui::theme::{
     Catalog, TerminalColors, Theme as UiTheme, ThemeMode, discover, generate_system, terminal_mode,
@@ -363,7 +361,6 @@ fn oklab(color: Color) -> (f64, f64, f64) {
     )
 }
 
-/// `prefixes` of `mono.ts`: status glyphs at the start of a line.
 fn prefix(c: char) -> Option<&'static str> {
     Some(match c {
         '\u{2192}' => "->",
@@ -374,7 +371,6 @@ fn prefix(c: char) -> Option<&'static str> {
     })
 }
 
-/// `markdown` of `mono.ts`: ASCII for the characters text commonly uses.
 fn ascii(c: char) -> Option<&'static str> {
     prefix(c).or(Some(match c {
         '\u{a0}' => " ",

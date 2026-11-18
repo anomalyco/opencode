@@ -1,6 +1,4 @@
-//! Shimmering and fading text: `component/shimmer-text.tsx` and `component/fade-in-text.tsx`, both on
-//! `component/masked-text.ts`. The text is painted, then each cell's foreground moves toward a target color by a
-//! per-column strength, through the same native color matrix the TypeScript renderables use.
+//! Paints shimmer and fade effects through a mask over the text.
 
 use super::curve::{clamp, coast, intensity_at, smootherstep};
 use super::{Motion, channels, millis, running};

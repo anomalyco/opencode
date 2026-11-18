@@ -1,6 +1,4 @@
-//! What the footer prompt submits (`RunPrompt`, `RunPromptPart` in `mini/types.ts`), how a submitted prompt goes
-//! on the wire (`promptFiles`, `promptAgents`, `promptSkills` in `stream-v2.transport.ts`), and how a listed user
-//! message becomes a prompt again for history (`messagePrompt` in `session.shared.ts`).
+//! Converts between editable prompts, wire requests and history entries.
 
 use opencode_api::generated::{
     PromptBase64, PromptFileAttachment, PromptFileSource, PromptFileSourceInline, PromptMention,
@@ -285,7 +283,6 @@ pub fn is_compact(text: &str) -> bool {
     text.trim().to_lowercase() == "/compact"
 }
 
-/// `/settings`, which opens M.4's settings view.
 pub fn is_settings(text: &str) -> bool {
     text.trim().to_lowercase() == "/settings"
 }

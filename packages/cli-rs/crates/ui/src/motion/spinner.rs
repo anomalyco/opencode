@@ -1,5 +1,3 @@
-//! The spinner: `component/spinner.tsx` and `component/spinner-renderable.ts`.
-
 use super::text::{paint_shaded, shimmer_strength_at};
 use super::{Motion, OneCellMotion, channels, millis, one_cell_frame, rgba, running};
 use opentui::App;
@@ -8,7 +6,6 @@ use opentui::widget::{Component, Constraint, Custom, Element, Painter, Widget};
 use std::rc::Rc;
 use std::time::Duration;
 
-/// The braille dots every TUI spinner uses (`component/spinner-frames.ts`).
 pub const SPINNER_FRAMES: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 pub const SPINNER_INTERVAL: Duration = Duration::from_millis(80);
 
@@ -253,9 +250,7 @@ impl Component for SpinnerView {
                 SpinnerColor::Solid(color) => *color,
                 SpinnerColor::Each(color) => color(index, char, self.glyphs.len(), glyphs.len()),
             };
-            // An explicit transparent background makes OpenTUI blend an alpha glyph into the cell
-            // (`spinner-renderable.ts` draws on `"transparent"`); without one the alpha reaches the terminal
-            // as a full-strength color.
+            // A transparent background makes OpenTUI blend translucent glyphs with the underlying cell.
             painter.text(x, 0, glyph, Style::new().fg(color).bg(Color::TRANSPARENT));
             x += painter.text_width(glyph) as i32;
         }

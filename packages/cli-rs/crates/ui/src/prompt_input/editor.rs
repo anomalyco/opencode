@@ -1,5 +1,4 @@
-//! The external editor and mention realignment, shared by the TUI and mini (`openEditor` in `editor.ts`,
-//! `normalizePromptContent`, `realignPromptMentions`).
+//! Launches the external editor and realigns mentions to the edited text.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -13,8 +12,7 @@ pub fn edit(command: &str, text: &str, cwd: &Path) -> Result<Option<String>, Str
     result
 }
 
-/// `<millis>.md` in the temp directory as `editor.ts` names it, but created new and readable only by its owner,
-/// since `text` may be a pasted secret and the directory is shared. A taken name moves to the next millisecond.
+/// Use an owner-only, newly created temp file: the draft may contain a pasted secret.
 fn create(text: &str) -> std::io::Result<std::path::PathBuf> {
     use std::io::Write;
     let mut stamp =

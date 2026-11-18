@@ -1,5 +1,4 @@
-//! Models and variants (`variant.shared.ts`, `catalog.shared.ts`'s providers): the provider catalog the status row
-//! names models from and the model panel lists, and variant cycling, saved per model in `model.json`.
+//! Catalog display names and per-model variant selection.
 
 use indexmap::IndexMap;
 use opencode_api::client::Client;

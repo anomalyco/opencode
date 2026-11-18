@@ -1,6 +1,4 @@
-//! The prompt's history ring (`prompt.shared.ts`): the session's earlier prompts and those sent since. Up at the
-//! start of the text saves the draft and steps back; Down at the end steps forward, and past the newest entry
-//! restores the draft.
+//! Stepping back saves the draft; stepping past the newest entry restores it.
 
 use super::parts::RunPrompt;
 

@@ -1,5 +1,4 @@
-//! V2 theme documents as JSON: the schema check (`schema.ts`), merging and expansion (`expand.ts`), and mode
-//! selection (`select.ts`) from `packages/theme/src/tui`.
+//! Validates, expands and selects a mode from V2 theme documents.
 
 use opencode_util::json_object;
 use serde_json::{Map, Value};

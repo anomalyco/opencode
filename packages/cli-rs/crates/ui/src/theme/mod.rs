@@ -1,10 +1,4 @@
-//! Themes (U.1): the built-in, custom, and `system` themes, resolved into semantic tokens the way
-//! `packages/theme/src/tui` and `packages/tui/src/theme` do, plus the TUI's theme state (`context/theme.tsx`).
-//!
-//! Built-in themes come from `generated/themes.json`, which `script/gen/themes.ts` writes from the TypeScript
-//! sources: V1 themes arrive already migrated, so their documents match by construction. Custom V1 themes and the
-//! `system` theme are migrated here at runtime. `parity/fixtures/U.1/tokens.json` holds the TypeScript resolver's
-//! tokens for every theme and mode; `tests/theme_oracle.rs` compares them with this resolver.
+//! Resolves built-in, custom and terminal themes to semantic tokens.
 
 mod catalog;
 mod color;

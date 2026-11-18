@@ -1,6 +1,3 @@
-//! P-ORACLE for U.1: resolves the inputs of `parity/oracle/U.1-themes.ts` in Rust and compares every token with the
-//! TypeScript resolver's, from `parity/fixtures/U.1/tokens.json`. Regenerate it with `bun run fixtures`.
-
 use indexmap::IndexMap;
 use opencode_ui::theme::{Catalog, TerminalColors, Theme, ThemeMode, generate_system, terminal_mode};
 use opentui::style::Color;

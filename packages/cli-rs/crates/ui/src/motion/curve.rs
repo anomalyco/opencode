@@ -1,5 +1,4 @@
-//! Easing curves shared by the sweeps, from `packages/tui/src/component/tab-pulse.tsx`. All math is `f64`, as in
-//! JavaScript, so values match the TypeScript ones bit for bit before they are narrowed to a cell mask's `f32`.
+//! Use `f64` for the easing calculation and narrow only the final mask value.
 
 pub fn clamp(value: f64) -> f64 {
     value.clamp(0.0, 1.0)

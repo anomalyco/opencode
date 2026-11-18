@@ -1,6 +1,4 @@
-//! The requests the footer prompt makes: the completion catalogs (`catalog.shared.ts`), the file search, the
-//! session's prompt history (`resolveCurrentSession`), and the turns it sends (`admitPrompt`, `runShellTurn`,
-//! `session.compact`, `session.inbox.update` in `stream-v2.transport.ts` and `runtime.ts`).
+//! Session-scoped completion, history and prompt requests.
 
 use opencode_api::client::{Call, Client};
 use opencode_api::error::Error;

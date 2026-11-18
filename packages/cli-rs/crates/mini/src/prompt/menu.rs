@@ -1,6 +1,4 @@
-//! The footer menu (`footer.menu.tsx`) the autocomplete shows below the prompt, and its selection window
-//! (`createFooterMenuState` on `ui/select-controller.ts`). Only the flat form is here; the grouped form belongs to
-//! M.3's command and selection views.
+//! Flat scrolling menu for prompt completions.
 
 use crate::prelude::*;
 
