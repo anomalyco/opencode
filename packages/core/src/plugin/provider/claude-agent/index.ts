@@ -10,6 +10,7 @@ import { ClaudeIntegration } from "./integration.js"
 import { ClaudeProvider } from "./provider.js"
 import { ClaudeSessionHooks } from "./session.js"
 import { ClaudeWebSearchProvider } from "./websearch.js"
+import { Credential } from "../../../credential.js"
 import { Environment } from "../../../environment/index.js"
 import type { PluginInternal } from "../../internal.js"
 
@@ -26,9 +27,10 @@ export const make = (io: ClaudeIO.Interface, registry = ClaudeSessions.registry(
       const remote = Option.isSome(environment) && !environment.value.local
       if (remote) return
 
+      const credentials = yield* Credential.Service
       const status = yield* ClaudeStatus.make(
         io,
-        () => ClaudeProvider.connection(ctx),
+        () => ClaudeProvider.connection(ctx).pipe(Effect.provideService(Credential.Service, credentials)),
         () => ClaudeProvider.configDirs(ctx),
       )
       const sessions = yield* registry.attach({ io, status, storage: ctx.storage, directory: ctx.location.directory })
