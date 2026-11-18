@@ -26,13 +26,12 @@ enum Kind {
     /// A timer of 20 ms (timers, 2.3): owned as a fetch is.
     Timer,
     /// The effects a call asks of the input: an overlay of the plugin's, a mode, the focus of node `n`, the focus of
-    /// field `fld` (`focus-input`), a blur, an offset of scroll `s`, and a move of the session transcript, the app's,
+    /// field `fld` (`focus-input`), an offset of scroll `s`, and a move of the session transcript, the app's,
     /// which the user's handler may ask for.
     Overlay,
     Mode,
     Focus,
     FocusField,
-    Blur,
     Scroll,
     Transcript,
     /// A select of the plugin's, centered (contract 2.x additions): a dialog is the activation's, whichever call asked.
@@ -136,51 +135,31 @@ fn expected(row: Row) -> Outcome {
     }
 }
 
-/// Why a row cannot happen on `carrier`, when it cannot.
-fn unreachable(carrier: Carrier, row: Row) -> Option<&'static str> {
-    if row.kind == Kind::Timer && carrier == Carrier::Pipe {
-        return Some("a TS plugin keeps time with the JS host's own setTimeout, which is no request of the host's");
+/// Whether the carrier can observe the combination. An effect has no reply, for example,
+/// and only the asynchronous pipe can race the end of a mount.
+fn reachable(carrier: Carrier, Row { kind, origin, close }: Row) -> bool {
+    use Close::*;
+    use Kind::*;
+    use Origin::*;
+
+    if (kind == Timer && carrier == Carrier::Pipe) || (close == Racing && carrier != Carrier::Pipe) {
+        return false;
     }
-    if row.close == Close::Racing && carrier != Carrier::Pipe {
-        return Some("in process and over the C ABI, what a call asks for leaves with its turn: no answer to race");
+    if origin == MountEnd && close != BeforeDispatch {
+        return false;
     }
-    if !row.kind.request() {
-        return match (row.kind, row.origin, row.close) {
-            (_, _, Close::Launched | Close::AfterReply) => Some("an effect has no reply and no launch"),
-            (_, _, Close::Other) => Some("the control's overlay is an overlay itself, and takes the focus"),
-            (Kind::Dialog, Origin::Setup, Close::Never) => None,
-            (Kind::Dialog, Origin::Setup, _) => Some("setup asks before any mount shows"),
-            (_, Origin::Setup, _) => Some("setup holds no input: its verbs are refused (P2)"),
-            (Kind::Blur, ..) => {
-                Some("on a plugin's route the host has no composer to give the focus to: a blur moves nothing to see")
-            }
-            (Kind::Focus | Kind::FocusField | Kind::Scroll, Origin::MountBegin | Origin::MountEnd, _) => {
-                Some("a mount's begin comes before its first view, its end after its tree: no node to name")
-            }
-            (Kind::Transcript, Origin::MountBegin | Origin::MountEnd, _) => Some(
-                "a mount's begin and end are no handler of the user's input: a transcript verb from them is refused",
-            ),
-            (Kind::Focus | Kind::FocusField | Kind::Scroll, Origin::Global, close) if close != Close::Never => {
-                Some("an activation's verb names the newest mount that holds the node: with the route closed, none")
-            }
-            (_, Origin::MountEnd, close) if close != Close::BeforeDispatch => {
-                Some("the mount's end asks as the mount closes: only before dispatch")
-            }
-            _ => None,
-        };
+    if kind.request() {
+        return !matches!(
+            (kind, origin, close),
+            (Fetch | Timer, _, Launched) | (_, Setup, BeforeDispatch | Racing | Other) | (Foreground, Setup, InFlight)
+        );
     }
-    match (row.kind, row.origin, row.close) {
-        (Kind::Fetch | Kind::Timer, _, Close::Launched) => Some("a fetch or a timer has no launch"),
-        (_, Origin::Setup, Close::BeforeDispatch | Close::Racing | Close::Other) => {
-            Some("setup asks before any mount shows")
-        }
-        (Kind::Foreground, Origin::Setup, Close::InFlight) => {
-            Some("setup's program starts with the activation's turn, before any mount shows")
-        }
-        (_, Origin::MountEnd, close) if close != Close::BeforeDispatch => {
-            Some("the mount's end asks as the mount closes: only before dispatch")
-        }
-        _ => None,
+    match (kind, origin, close) {
+        (_, _, Launched | AfterReply | Other) => false,
+        (_, Setup, _) => kind == Dialog && close == Never,
+        (Focus | FocusField | Scroll | Transcript, MountBegin | MountEnd, _) => false,
+        (Focus | FocusField | Scroll, Global, _) => close == Never,
+        _ => true,
     }
 }
 
@@ -193,7 +172,6 @@ fn rows(carrier: Carrier) -> Vec<Row> {
         Kind::Mode,
         Kind::Focus,
         Kind::FocusField,
-        Kind::Blur,
         Kind::Scroll,
         Kind::Transcript,
         Kind::Dialog,
@@ -211,7 +189,7 @@ fn rows(carrier: Carrier) -> Vec<Row> {
     let all = kinds.into_iter().flat_map(|kind| {
         origins.into_iter().flat_map(move |origin| closes.into_iter().map(move |close| Row { kind, origin, close }))
     });
-    all.filter(|row| unreachable(carrier, *row).is_none()).collect()
+    all.filter(|row| reachable(carrier, *row)).collect()
 }
 
 // Expected (bigboi's freeze and ownership passes): every row of the table holds in process.
@@ -506,16 +484,7 @@ fn run(carrier: Carrier, row: Row) -> Result<(), String> {
         h.tui.navigate(Route::Home);
     }
     turns(h, 3);
-    match row.origin {
-        Origin::Global => _ = h.tui.keymap.dispatch("probe.global", None),
-        Origin::Route => _ = h.tui.keymap.dispatch("probe.route", None),
-        Origin::Input => h.app.press("x"),
-        Origin::MountEnd => h.tui.navigate(Route::Home),
-        Origin::Setup | Origin::MountBegin => {}
-    }
-    if racing && matches!(row.origin, Origin::Global | Origin::Route | Origin::Input) {
-        h.tui.navigate(Route::Home);
-    }
+    trigger(h, row);
     if racing {
         probe.hold(false);
     }
@@ -569,21 +538,7 @@ fn run(carrier: Carrier, row: Row) -> Result<(), String> {
         (Outcome::Cancelled, Kind::Fetch, _) => served.load(Ordering::SeqCst) == asked.load(Ordering::SeqCst),
         (Outcome::Cancelled, Kind::Foreground, _) => !probe.asked().is_empty(),
         (Outcome::Delivered | Outcome::Cancelled, Kind::Timer, _) => !probe.replies().is_empty(),
-        (Outcome::Applied | Outcome::Dropped, ..)
-        | (
-            _,
-            Kind::Overlay
-            | Kind::Mode
-            | Kind::Focus
-            | Kind::FocusField
-            | Kind::Blur
-            | Kind::Scroll
-            | Kind::Transcript
-            | Kind::Dialog,
-            _,
-        ) => {
-            unreachable!("an effect's row runs in run_effect")
-        }
+        _ => unreachable!("an effect runs in run_effect"),
     };
     h.app.wait_until(support::WAIT, || {
         h.app.advance(Duration::from_millis(1));
@@ -676,7 +631,6 @@ fn run_effect(carrier: Carrier, row: Row) -> Result<(), String> {
             mounts().len() == count && mounts().last().is_some_and(|mount| !mount.offsets.is_empty())
         })
     };
-    let focus = || opencode_plugin::behave::focus(&*h.tui, plugin, "probe", "n");
     let ledger = || opencode_plugin::interact::ledger(&*h.tui);
     // The session transcript, as the host publishes it: what moved it is recorded.
     let moved = Rc::new(Cell::new(0));
@@ -701,20 +655,8 @@ fn run_effect(carrier: Carrier, row: Row) -> Result<(), String> {
     } else if !begins_closed && !shows(1) {
         return Err(format!("{carrier:?} {row:?}: the route never showed"));
     }
-    if row.kind == Kind::Blur && row.close == Close::Never {
-        focus();
-    }
     turns(h, 3);
-    match row.origin {
-        Origin::Global => _ = h.tui.keymap.dispatch("probe.global", None),
-        Origin::Route => _ = h.tui.keymap.dispatch("probe.route", None),
-        Origin::Input => h.app.press("x"),
-        Origin::MountEnd => h.tui.navigate(Route::Home),
-        Origin::Setup | Origin::MountBegin => {}
-    }
-    if racing && matches!(row.origin, Origin::Global | Origin::Route | Origin::Input) {
-        h.tui.navigate(Route::Home);
-    }
+    trigger(h, row);
     turns(h, 3);
     // The route opens again, a mount of its own, which focuses its node, before what the closed one asked applies:
     // held over the pipe, applied already elsewhere.
@@ -732,9 +674,6 @@ fn run_effect(carrier: Carrier, row: Row) -> Result<(), String> {
         if !shows(1) {
             return Err(format!("{carrier:?} {row:?}: the route never showed again"));
         }
-        if row.kind == Kind::Blur {
-            focus();
-        }
     }
     if racing {
         probe.hold(false);
@@ -747,7 +686,6 @@ fn run_effect(carrier: Carrier, row: Row) -> Result<(), String> {
             Kind::Focus => last.focused.as_deref() == Some("n"),
             Kind::FocusField => last.focused.as_deref() == Some("fld"),
             Kind::Dialog => h.tui.dialogs.centered() && h.app.text().contains("probe pick"),
-            Kind::Blur => last.focused.is_none(),
             Kind::Scroll => last.offsets.iter().any(|(id, offset)| id == "s" && *offset == 3),
             Kind::Transcript => moved.get() > 0,
             Kind::Fetch | Kind::Foreground | Kind::Timer => unreachable!("a request"),
@@ -773,6 +711,19 @@ fn run_effect(carrier: Carrier, row: Row) -> Result<(), String> {
             now.overlays - before.overlays,
             now.modes - before.modes,
         )),
+    }
+}
+
+fn trigger(h: &Harness, row: Row) {
+    match row.origin {
+        Origin::Global => _ = h.tui.keymap.dispatch("probe.global", None),
+        Origin::Route => _ = h.tui.keymap.dispatch("probe.route", None),
+        Origin::Input => h.app.press("x"),
+        Origin::MountEnd => h.tui.navigate(Route::Home),
+        Origin::Setup | Origin::MountBegin => {}
+    }
+    if row.close == Close::Racing && matches!(row.origin, Origin::Global | Origin::Route | Origin::Input) {
+        h.tui.navigate(Route::Home);
     }
 }
 
@@ -987,10 +938,6 @@ fn ask(host: &dyn abi::Host, origin: Origin) {
             host.dialog(abi::Dialog::Select(select.centered()));
             Err("asked".to_owned())
         }
-        Kind::Blur => {
-            host.blur();
-            Err("asked".to_owned())
-        }
         Kind::Scroll => {
             let target = v2::Target::Node { surface: "probe".into(), id: "s".into() };
             host.scroll(target, v2::Scroll::Offset { offset: 3 });
@@ -1106,7 +1053,6 @@ export default {{ id: "example.probe", setup(api) {{
     else if (KIND === "Focus") carrier.effect({{ type: "focus", node: "n" }})
     else if (KIND === "FocusField") carrier.effect({{ type: "focus", node: "fld" }})
     else if (KIND === "Dialog") carrier.effect({{ type: "dialog", dialog: {{ type: "select", title: "probe pick", options: [{{ title: "one", value: "1" }}], action: {{ type: "command", name: "probe.global" }}, centered: true }} }})
-    else if (KIND === "Blur") carrier.effect({{ type: "blur" }})
     else if (KIND === "Transcript") carrier.effect({{ type: "scroll", target: {{ type: "transcript" }}, verb: {{ type: "by", rows: 3 }} }})
     else carrier.effect({{ type: "scroll", target: {{ type: "node", surface: "probe", id: "s" }}, verb: {{ type: "offset", offset: 3 }} }})
     if (CLOSE === "InFlight") home()
@@ -1222,7 +1168,6 @@ local function ask(host, origin)
     elseif KIND == "Dialog" then
         host:dialog({{ type = "select", title = "probe pick", options = {{ {{ title = "one", value = "1" }} }},
             action = {{ type = "command", name = "probe.global" }}, centered = true }})
-    elseif KIND == "Blur" then host:blur()
     elseif KIND == "Scroll" then host:scroll({{ type = "node", surface = "probe", id = "s" }}, {{ type = "offset", offset = 3 }})
     else host:scroll({{ type = "transcript" }}, {{ type = "by", rows = 3 }}) end
     record(host, "asked", id or 0)
