@@ -31,11 +31,7 @@
   font-size: 12px;
   line-height: 18px;
   letter-spacing: 0.05px;
-}
-
-[data-slot="goal-glyph"],
-[data-slot="goal-status"] {
-  color: var(--v2-icon-icon-accent);
+  color: var(--v2-text-text-accent);
 
   &[data-status="paused"] {
     color: var(--v2-state-fg-warning);
@@ -43,86 +39,5 @@
 
   &[data-status="complete"] {
     color: var(--v2-state-fg-success);
-  }
-}
-
-[data-slot="goal-status"][data-status="active"] {
-  color: var(--v2-text-text-accent);
-}
-
-/*
- * One 2.4s loop: the core holds, then vanishes as the ripple under it spreads and fades, and grows back before the
- * ripple, invisible by then, snaps home.
- */
-:is([data-slot="goal-ripple"], [data-slot="goal-core"]) {
-  transform-box: fill-box;
-  transform-origin: center;
-}
-
-[data-slot="goal-ripple"] {
-  animation:
-    goal-ripple-spread 2.4s infinite,
-    goal-ripple-fade 2.4s infinite;
-}
-
-[data-slot="goal-core"] {
-  animation: goal-core 2.4s infinite;
-}
-
-@keyframes goal-ripple-spread {
-  0%,
-  16.667% {
-    transform: scale(1);
-    animation-timing-function: cubic-bezier(0.2, 0.6, 0.35, 1);
-  }
-
-  91.667%,
-  100% {
-    transform: scale(2.8);
-  }
-}
-
-@keyframes goal-ripple-fade {
-  0%,
-  16.667% {
-    opacity: 1;
-    animation-timing-function: cubic-bezier(0.3, 0.4, 0.5, 1);
-  }
-
-  91.667%,
-  100% {
-    opacity: 0;
-  }
-}
-
-@keyframes goal-core {
-  0%,
-  16.666% {
-    transform: scale(1);
-    opacity: 1;
-  }
-
-  16.667%,
-  33.333% {
-    transform: scale(0);
-    opacity: 0;
-    animation-timing-function: cubic-bezier(0.33, 0, 0.2, 1);
-  }
-
-  75%,
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-:root[data-motion="reduce"] :is([data-slot="goal-ripple"], [data-slot="goal-core"]) {
-  animation: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  [data-slot="goal-ripple"],
-  [data-slot="goal-core"] {
-    animation: none;
   }
 }

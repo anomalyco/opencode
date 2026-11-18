@@ -17,18 +17,20 @@ import {
   type GoalEvent,
 } from "./machine"
 
-const status = {
-  active: { label: "active", status: "statusActive" },
-  paused: { label: "paused", status: "statusPaused" },
-  complete: { label: "reached", status: "statusFinished" },
-} as const
-
 /**
  * The session's `/goal` above its composer: the status as a pill with its own glyph, and a popover with the
  * objective, the last reason and the actions that apply. The server's goal plugin owns the goal and serves it over
  * its RPC; a bare `/goal` shows the last reason.
  */
 const setup: Plugin.Setup<typeof GoalDefinition> = (ctx) => {
+  // The pill and the popover's status line of each goal status. The pill shows the plugin's own glyphs: the host
+  // colors a paused and a reached goal by `tone`, and the active glyph carries the accent color itself.
+  const status = {
+    active: { label: "active", status: "statusActive", icon: ctx.icons.active, tone: undefined },
+    paused: { label: "paused", status: "statusPaused", icon: ctx.icons.paused, tone: "warning" },
+    complete: { label: "reached", status: "statusFinished", icon: ctx.icons.complete, tone: "success" },
+  } as const
+
   const [goalState, setGoalState] = createSignal(createGoalState())
   // Ends a subscription, snapshot fetch, retry timer or command by its id.
   const running = new Map<number, () => void>()
@@ -206,9 +208,10 @@ const setup: Plugin.Setup<typeof GoalDefinition> = (ctx) => {
 
       if (!current) return
 
-      return { label: ctx.t(status[current.status].label) }
+      const view = status[current.status]
+
+      return { label: ctx.t(view.label), icon: view.icon, tone: view.tone }
     },
-    icon: (input) => <GoalGlyph status={goal(input)?.status ?? "active"} />,
     menu: (input) => {
       const busy = () => selectGoalBusy(goalState(), input.session.key)
 
@@ -279,35 +282,6 @@ const setup: Plugin.Setup<typeof GoalDefinition> = (ctx) => {
       )
     },
   })
-}
-
-function GoalGlyph(props: { status: Goal.Status }) {
-  return (
-    <svg
-      data-slot="goal-glyph"
-      data-status={props.status}
-      viewBox="0 0 16 16"
-      width="16"
-      height="16"
-      fill="none"
-      aria-hidden="true"
-    >
-      <circle cx="8" cy="8" r="6.5" stroke="currentColor" />
-      <Switch>
-        <Match when={props.status === "active"}>
-          {/* The core sends out a ripple that fades as it spreads, then grows back. */}
-          <circle data-slot="goal-ripple" cx="8" cy="8" r="2" fill="currentColor" />
-          <circle data-slot="goal-core" cx="8" cy="8" r="2" fill="currentColor" />
-        </Match>
-        <Match when={props.status === "paused"}>
-          <circle cx="8" cy="8" r="4" fill="currentColor" opacity="0.5" />
-        </Match>
-        <Match when={props.status === "complete"}>
-          <path d="M5 8 7.5 11 11 5.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" />
-        </Match>
-      </Switch>
-    </svg>
-  )
 }
 
 export default setup
