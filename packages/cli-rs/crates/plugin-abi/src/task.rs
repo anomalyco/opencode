@@ -599,13 +599,14 @@ impl Shared {
         }
         let _polling = Polling::new(self, host);
         deliver(self);
-        self.poll(0);
+        self.poll(None);
     }
 
-    /// [`Shared::enter`] for a handler that starts tasks, whose call may be a mount's: it polls only the tasks `deliver`
-    /// started (and those they start). A task that was waiting and became ready meanwhile goes on in a call of the
-    /// activation's, the host's wake, rather than with this call's host, as a resumed task is the activation's (carbon
-    /// `ac-2`). On a host that offers no waker it goes on here.
+    /// [`Shared::enter`] for a handler that starts tasks, whose call may be a mount's: it polls each task `deliver`
+    /// started (and each those start) once, up to its first wait, which is all of a task that is this call's. Any task
+    /// ready after that, one of them that woke itself or one that was waiting already, goes on in a call of the
+    /// activation's, as a resumed task is the activation's (carbon and big-boi `ac-2`): the host's wake, or on a host
+    /// that offers no waker, the plugin's next reply, answer, close, cancel or wake.
     fn start(&self, host: &dyn Host, deliver: impl FnOnce(&Self)) {
         if self.host.get().is_some() {
             return deliver(self);
@@ -613,22 +614,21 @@ impl Shared {
         let _polling = Polling::new(self, host);
         let floor = self.next.get();
         deliver(self);
-        self.poll(floor);
+        self.poll(Some(floor));
         let waiting = !lock(&self.queue.ready).is_empty();
-        match &self.queue.host {
-            Some(waker) if waiting && !self.disposed.get() => waker.wake(),
-            Some(_) => {}
-            None => self.poll(0),
+        if let Some(waker) = self.queue.host.as_ref().filter(|_| waiting && !self.disposed.get()) {
+            waker.wake();
         }
     }
 
-    /// Polls the ready tasks numbered `floor` or later until none is ready; the others stay ready, in their order.
-    fn poll(&self, floor: u64) {
-        let mut earlier = VecDeque::new();
+    /// Polls the ready tasks until none is ready. With `first`, only the first poll of each task numbered `first` or
+    /// later; the others stay ready, in their order.
+    fn poll(&self, first: Option<u64>) {
+        let (mut later, mut polled) = (VecDeque::new(), std::collections::HashSet::new());
         while !self.disposed.get() {
             let Some(id) = lock(&self.queue.ready).pop_front() else { break };
-            if id < floor {
-                earlier.push_back(id);
+            if first.is_some_and(|floor| id < floor || !polled.insert(id)) {
+                later.push_back(id);
                 continue;
             }
             let Some(mut task) = self.tasks.borrow_mut().remove(&id) else { continue };
@@ -640,7 +640,7 @@ impl Shared {
             }
         }
         let mut ready = lock(&self.queue.ready);
-        earlier.into_iter().rev().for_each(|id| ready.push_front(id));
+        later.into_iter().rev().for_each(|id| ready.push_front(id));
     }
 
     /// Drops every task, with `host` as the host of their destructors, and takes no more.
@@ -1105,6 +1105,65 @@ mod tests {
         assert_eq!(mount.fetches.get(), 0, "the replaced dialog's task went on with the mount's host");
         run(&registered, &closing, "closed", Some("1"));
         assert_eq!((mount.fetches.get(), closing.fetches.get()), (0, 1));
+    }
+
+    // Expected (big-boi ac-2): a task polled in the call that starts it goes only to its first wait there. One that woke
+    // itself and is ready again goes on in the host's wake, so what it asks for after is the activation's, not the
+    // starting mount's.
+    #[test]
+    fn a_new_task_that_wakes_itself_goes_on_in_the_hosts_wake() {
+        let (registered, tasks, woken) = plugin();
+        let (mount, wake) = (Fake::default(), Fake::default());
+        tasks.spawn(&mount, |cx| async move {
+            let mut yielded = false;
+            std::future::poll_fn(|context| {
+                if std::mem::replace(&mut yielded, true) {
+                    return Poll::Ready(());
+                }
+                context.waker().wake_by_ref();
+                Poll::Pending
+            })
+            .await;
+            drop(cx.fetch(Fetch::new("GET", "/after")).await);
+        });
+        assert_eq!((mount.fetches.get(), woken.load(Ordering::SeqCst)), (0, 1), "it went on with the mount's host");
+        registered.wakes().iter().for_each(|run| run(&wake));
+        assert_eq!(wake.fetches.get(), 1);
+    }
+
+    // Expected (big-boi ac-2): on a host with no waker, a waiting task that becomes ready while another starts is not
+    // polled with the starting call's host either: it goes on at the plugin's next call of the activation's.
+    #[test]
+    fn without_a_waker_a_ready_task_waits_for_a_call_of_the_activation() {
+        let mut registered = Registered::new("t", None);
+        let tasks = registered.setup().tasks();
+        let (first, mount, later) = (Fake::default(), Fake::default(), Fake::default());
+        let signal: Rc<RefCell<(bool, Option<std::task::Waker>)>> = Rc::default();
+        let waiting = signal.clone();
+        tasks.spawn(&first, move |cx| async move {
+            std::future::poll_fn(|context| {
+                let mut signal = waiting.borrow_mut();
+                if signal.0 {
+                    return Poll::Ready(());
+                }
+                signal.1 = Some(context.waker().clone());
+                Poll::Pending
+            })
+            .await;
+            drop(cx.fetch(Fetch::new("GET", "/after")).await);
+        });
+        let firing = signal.clone();
+        tasks.spawn(&mount, move |_| async move {
+            let waker = {
+                let mut signal = firing.borrow_mut();
+                signal.0 = true;
+                signal.1.take()
+            };
+            waker.into_iter().for_each(std::task::Waker::wake);
+        });
+        assert_eq!(mount.fetches.get(), 0, "the older task went on with the mount's host");
+        reply(&registered, &later, 99, Ok(Value::Null));
+        assert_eq!(later.fetches.get(), 1);
     }
 
     // Expected (carbon ac-2): a waiting task that becomes ready while another task starts (here the new one wakes it)
