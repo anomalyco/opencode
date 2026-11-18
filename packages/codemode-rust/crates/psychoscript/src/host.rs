@@ -892,7 +892,7 @@ fn failure_value(
 
 /// `search(...)` called other than from bytecode, which `call_op` runs itself (`cross::search_call`).
 fn search_native(vm: &mut Vm, _this: Value, args: &[Value], _callee: Id) -> Res {
-    crate::cross::search_call(vm, args, false)
+    crate::cross::search_call(vm, args)
 }
 
 /// What `search(...)` answers for its crossed arguments.
@@ -1554,8 +1554,6 @@ fn wrap(vm: &mut Vm, f: &HostFunction, label: &str, entry: Option<(&str, bool)>)
 }
 
 fn extension_native(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Res {
-    // Whether bytecode made the call, so it can wait for a promise in its arguments where it is.
-    let direct = vm.host.meter.counted;
     let Value::Num(index) = vm.native_data(callee) else {
         return Ok(Value::Undef);
     };
@@ -1571,7 +1569,7 @@ fn extension_native(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Re
         entry.entry,
     );
     let extension_name = extension.clone();
-    let host_args = match extension_args(vm, &f, args, &label, callee, direct)? {
+    let host_args = match extension_args(vm, &f, args, &label, callee)? {
         Ok(host_args) => host_args,
         Err(made) => return Ok(made),
     };
@@ -1657,7 +1655,6 @@ fn extension_args(
     args: &[Value],
     label: &str,
     callee: Id,
-    direct: bool,
 ) -> Result<Result<Vec<HostValue>, Value>, Value> {
     let is_async = matches!(f.body, Body::Async(_));
     match host_args(vm, args, label) {
@@ -1668,7 +1665,7 @@ fn extension_args(
             Ok(Err(Value::Obj(p)))
         }
         Ok(crate::cross::Args::Wait(promises)) => {
-            crate::cross::wait_sync(vm, promises, Value::Obj(callee), args, direct).map(Err)
+            crate::cross::wait_sync(vm, promises, Value::Obj(callee), args).map(Err)
         }
         Err(e) if is_async && vm.fatal.is_none() => {
             let p = vm.new_promise();

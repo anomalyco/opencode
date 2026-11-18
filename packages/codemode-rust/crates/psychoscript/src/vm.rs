@@ -2002,7 +2002,7 @@ impl<'rt> Vm<'rt> {
         let args: Vec<Value> = self.stack.drain(fpos + 2..).map(Slot::get).collect();
         self.stack.truncate(fpos);
         self.spend(NATIVE_FUEL);
-        let r = crate::cross::search_call(self, &args, true)?;
+        let r = crate::cross::search_call(self, &args)?;
         if std::mem::take(&mut self.entered) {
             self.host.meter.bytecode = false;
             return Ok(true);

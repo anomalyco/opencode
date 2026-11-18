@@ -1330,25 +1330,9 @@ fn list(vm: &Vm, v: Value) -> Vec<Value> {
 
 /// The wait of a synchronous host function's call (`search`, an extension function): its call waits where it is, as
 /// an `await` there would, parking the frames from the nearest async function up, and they go on with what the call
-/// made again returns. `direct` is whether bytecode made the call; one made from native code, or with a generator or
-/// a native call in between, cannot wait.
-pub fn wait_sync(
-    vm: &mut Vm,
-    promises: Vec<Value>,
-    callee: Value,
-    args: &[Value],
-    direct: bool,
-) -> Res {
-    let Some(c) = (if direct { vm.search_parkable() } else { None }) else {
-        let name = match callee {
-            Value::Obj(id) if id == vm.search_fn => "search".to_owned(),
-            _ => crate::host::function_name(vm, &callee),
-        };
-        let msg = format!(
-            "{name}(...) can't wait for a promise in its arguments here, in a callback or a generator; await it first."
-        );
-        return Err(vm.invalid_data(&msg));
-    };
+/// made again returns. A call native code made, whose frame it drives itself, cannot wait, nor one with a generator or
+/// such a call in between.
+pub fn wait_sync(vm: &mut Vm, promises: Vec<Value>, callee: Value, args: &[Value]) -> Res {
     let promises = vm.new_array(promises);
     let args = vm.new_array(args.to_vec());
     vm.enter_native_with(
@@ -1361,10 +1345,30 @@ pub fn wait_sync(
             callee,
             args,
             Value::Num(0.0),
-            Value::Num(c as f64),
+            Value::Num(0.0),
             Value::Num(0.0),
         ],
     )
+}
+
+/// Where the wait's frames park, from the wait's own frame on top: nowhere when native code drives that frame.
+fn parks_with(vm: &mut Vm) -> Option<u32> {
+    if vm.frames.last().is_none_or(|f| f.is_base) {
+        return None;
+    }
+    vm.search_parkable()
+}
+
+#[cold]
+fn cant_wait(vm: &mut Vm, callee: Value) -> Value {
+    let name = match callee {
+        Value::Obj(id) if id == vm.search_fn => "search".to_owned(),
+        _ => crate::host::function_name(vm, &callee),
+    };
+    let msg = format!(
+        "{name}(...) can't wait for a promise in its arguments here, in a callback or a generator; await it first."
+    );
+    vm.invalid_data(&msg)
 }
 
 // The slots of a synchronous call's wait: the promises, the function and its arguments, the promise it waits for now,
@@ -1396,6 +1400,11 @@ pub(crate) fn wait_step(
                 f.argc &= !1;
                 vm.fuel(NATIVE_FUEL);
             }
+            let Some(c) = parks_with(vm) else {
+                let callee = fr.get(vm, W_CALLEE);
+                return Err(cant_wait(vm, callee));
+            };
+            fr.set_index(vm, W_COROUTINE, c as usize);
             park_for(vm, fr, 0)
         }
         (Input::Threw(e), PARKED) => Err(e),
@@ -1438,14 +1447,14 @@ fn park_for(
 }
 
 /// `search(...)`: its result once its arguments have crossed, or, when they hold promises that haven't fulfilled, its
-/// wait (`wait_sync`). A call from bytecode (`direct`) can wait.
-pub fn search_call(vm: &mut Vm, args: &[Value], direct: bool) -> Res {
+/// wait (`wait_sync`).
+pub fn search_call(vm: &mut Vm, args: &[Value]) -> Res {
     match tool_args(vm, args, Callee::Named("search"))? {
         Args::Ready(Ok(json)) => crate::host::search_value(vm, &json),
         Args::Ready(Err(f)) => Err(crate::host::failed_value(vm, *f)),
         Args::Wait(promises) => {
             let callee = Value::Obj(vm.search_fn);
-            wait_sync(vm, promises, callee, args, direct)
+            wait_sync(vm, promises, callee, args)
         }
     }
 }
