@@ -6,7 +6,7 @@
 //! exception is `mismatch: "replace"` ([`Options::replace`], O-167), which the TUI and `mini` ask for
 //! as TS's do: a service of another version registered in the client's own channel is restarted on
 //! the TypeScript binary the client resolved. When none is found, [`ensure`] starts the TypeScript
-//! service (F.9, `docs/F.9.md`).
+//! service (`docs/architecture.md`).
 
 use opencode_api::error::Error as ApiError;
 use opencode_api::transport::Transport;

@@ -1401,7 +1401,7 @@ impl Scripts {
             return self.settle(message, size);
         }
         // A snapshot goes as a failed read, in its place: the JS host would keep the value before with no error
-        // (P.4.md, reads; bigboi's pipe sign-off).
+        // (`docs/plugin-abi.md`, "Timing", reads).
         if let Down::Snapshot { id, activation, key, .. } = message {
             // Its value was charged as it was pushed: it never reaches the JS host, so its room goes back (bigboi's
             // pipe sign-off, recheck).

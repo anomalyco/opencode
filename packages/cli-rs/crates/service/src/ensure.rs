@@ -1,7 +1,7 @@
 //! Ensure a background service runs (F.9).
 //!
 //! Ports `ensure` (`packages/client/src/effect/service.ts:45-127`) with the policy of
-//! `docs/F.9.md`: reuse a service that answers, whatever its version unless a version is required;
+//! `docs/architecture.md`: reuse a service that answers, whatever its version unless a version is required;
 //! wait for one that is starting; start TypeScript contenders only when none is registered or the
 //! registered process is gone; never stop a running service this call did not start, except one of
 //! another version than [`Options::version`] requires (O-167), which it replaces as TS does.
@@ -194,7 +194,7 @@ impl Run<'_> {
     // A registered service that keeps timing out. TS stops it and starts another; the Rust client
     // does that only for a process it started itself or one that no longer runs (a stale
     // registration: on Windows a killed service's closed port times out rather than refuses), and
-    // otherwise gives up (docs/F.9.md).
+    // otherwise gives up (docs/architecture.md).
     async fn unresponsive(&mut self, info: &Registration) -> Result<(), Error> {
         let count = match &self.timeouts {
             Some((previous, count)) if previous.same(info) => count + 1,

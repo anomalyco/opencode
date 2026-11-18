@@ -1,5 +1,5 @@
 //! Session tabs (E.12, rows W01, W02, W08): the state of `context/session-tabs.tsx`, its commands
-//! (`app.tsx:849-902,1317-1321`), and the strip and rail that draw it. Layout: `docs/E.12.md`.
+//! (`app.tsx:849-902,1317-1321`), and the strip and rail that draw it. Layout: `docs/architecture.md`.
 //!
 //! `app::Tui` holds one [`Tabs`]. `Tui::navigate` calls [`route_changed`], `Tui::sync` calls [`sync`], and
 //! `features::events` passes `session.deleted` to [`session_deleted`] first.

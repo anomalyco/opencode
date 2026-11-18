@@ -1,4 +1,4 @@
-//! In-memory transport that serves recorded responses and events (H.2, `docs/H.2.md`).
+//! In-memory transport that serves recorded responses and events (`docs/testing.md`).
 //!
 //! [`Memory`] answers each request from the first [`Route`] that matches, streams `/api/event` from
 //! [`Memory::emit`], and logs every request. P-APP builds it from a recording; other tests can use it as a

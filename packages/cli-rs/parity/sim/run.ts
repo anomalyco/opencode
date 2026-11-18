@@ -1,4 +1,4 @@
-// P-TUI runner (docs/H.5.md):
+// P-TUI runner (docs/testing.md):
 //
 //   bun run --cwd packages/cli-rs parity:sim [--sides ts,rs] [parity/scenarios/<step>/<name>.sim.ts ...]
 //

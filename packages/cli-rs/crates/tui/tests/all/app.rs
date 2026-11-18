@@ -1,4 +1,4 @@
-//! P-APP, Rust side (H.2, `docs/H.2.md`): replays every recording under `parity/fixtures/*/*.app.json`
+//! P-APP, Rust side (`docs/testing.md`): replays every recording under `parity/fixtures/*/*.app.json`
 //! through the whole Rust TUI in a `TestApp`, over the in-memory transport, and compares each checkpoint's
 //! cells and the requests with what the TS TUI did. `PARITY_SCENARIO=<step>/<name>` selects one scenario.
 

@@ -1,4 +1,4 @@
-// P-TUI scenarios (docs/H.5.md): one file per scenario, `parity/scenarios/<step>/<name>.sim.ts`, with
+// P-TUI scenarios (docs/testing.md): one file per scenario, `parity/scenarios/<step>/<name>.sim.ts`, with
 // `export default defineSim({...})`. parity/sim/run.ts runs each one through both clients against the simulated
 // server.
 import type { Frontend } from "@opencode/protocol/simulation"

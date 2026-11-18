@@ -1,4 +1,4 @@
-//! The LaTeX plugin (P.2, `docs/P.2.md`): `opencode.latex` draws `latex` and `math` Markdown fences as Unicode
+//! The LaTeX plugin: `opencode.latex` draws `latex` and `math` Markdown fences as Unicode
 //! math in terminal cells, as `packages/latex/src/plugin.ts` does, and inline Markdown math on one row, which TS
 //! does not. [`parse`] and [`layout`] port the TypeScript parser and layout with opentui-tex's fixes; [`inline`]
 //! writes math on one row; [`plugin`] renders both (`markdown.ts`), on the one plugin API (O-67).

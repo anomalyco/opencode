@@ -1,4 +1,4 @@
-//! The Mermaid plugin (P.3, `docs/P.3.md`): `opencode.merman`, a port of `packages/merman/src`. It draws
+//! The Mermaid plugin: `opencode.merman`, a port of `packages/merman/src`. It draws
 //! `mermaid` fences in the transcript as terminal text: flowcharts, sequence, state, gantt, gitgraph, and
 //! timeline diagrams.
 // Bounds checks keep TS's inclusive `right = left + width - 1` form, so each condition reads as its source.

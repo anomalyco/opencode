@@ -1,4 +1,4 @@
-// Emits Rust types from Effect schema representations, following docs/F.2.md.
+// Emits Rust types from Effect schema representations.
 import type { SchemaRepresentation } from "effect"
 
 type R = SchemaRepresentation.Representation

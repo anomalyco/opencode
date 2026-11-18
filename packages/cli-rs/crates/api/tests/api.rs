@@ -1,4 +1,4 @@
-//! Decoding rules of docs/F.2.md and the request core, over a scripted transport.
+//! Decoding rules of the generated types and the request core, over a scripted transport.
 
 use std::sync::{Arc, Mutex};
 
