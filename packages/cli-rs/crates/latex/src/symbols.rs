@@ -1,4 +1,5 @@
-//! Command tables, as `packages/latex/src/symbols.ts`.
+//! Command tables, as `packages/latex/src/symbols.ts` with opentui-tex's `math-symbols.ts`: TeX's `\epsilon` (`ϵ`)
+//! and `\varepsilon` (`ε`), `•` for `\bullet`, `\degree`, and `/`, `<` and `>` as delimiters.
 
 use crate::parse::Role;
 
@@ -41,8 +42,8 @@ const ORDINARY: &[(&str, &str)] = &[
     ("beta", "β"),
     ("gamma", "γ"),
     ("delta", "δ"),
-    ("epsilon", "ε"),
-    ("varepsilon", "ϵ"),
+    ("epsilon", "ϵ"),
+    ("varepsilon", "ε"),
     ("zeta", "ζ"),
     ("eta", "η"),
     ("theta", "θ"),
@@ -124,7 +125,7 @@ const BINARY: &[(&str, &str)] = &[
     ("ast", "∗"),
     ("star", "⋆"),
     ("circ", "∘"),
-    ("bullet", "∙"),
+    ("bullet", "•"),
     ("oplus", "⊕"),
     ("ominus", "⊖"),
     ("otimes", "⊗"),
@@ -280,6 +281,9 @@ const DELIMITERS: &[(&str, &str)] = &[
     ("rfloor", "⌋"),
     ("lceil", "⌈"),
     ("rceil", "⌉"),
+    ("/", "/"),
+    ("<", "<"),
+    (">", ">"),
     (".", ""),
 ];
 

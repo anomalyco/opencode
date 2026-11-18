@@ -1,8 +1,10 @@
-//! Terminal-cell layout of a parsed formula, a port of `packages/latex/src/layout.ts`.
+//! Terminal-cell layout of a parsed formula, a port of `packages/latex/src/layout.ts` with opentui-tex's
+//! `math-layout.ts`: a radical `√` with its overbar, matrix rows without blank rows between them, limits in three
+//! ways, and blocks of at most [`BLOCK_CELLS`] cells.
 
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::parse::{Accent, Align, Environment, Node, Role, Variant};
+use crate::parse::{Accent, Align, Environment, Limits, Node, Role, Variant};
 
 /// How a cell is styled. The color is the name or value `\textcolor` gave.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -81,6 +83,9 @@ impl Default for Options {
 /// rectangles: a short ragged matrix pays for its longest row on every row. TS leaves such input to a `RangeError`,
 /// which `layoutLatex` turns into the source fallback.
 pub const MAX_CELLS: usize = 1 << 20;
+
+/// The cells one block may take (opentui-tex's `CELL_LIMIT`): a wider or taller formula is not drawn.
+pub const BLOCK_CELLS: usize = 16384;
 
 thread_local! {
     /// The cells the running [`layout`] may still allocate; `None` once it ran out.
@@ -195,26 +200,21 @@ fn layout_fraction(numerator: &Node, denominator: &Node, bar: bool, align: Optio
     result
 }
 
+/// The radical `√` on the radicand's baseline, under an overbar that starts with `╭`; the index sits above the `√`,
+/// its full height above the overbar.
 fn layout_root(body: &Node, index: Option<&Node>, context: &Context) -> Block {
     let body = layout_node(body, context);
     let index = index.map(|index| layout_node(index, context));
     let index_width = index.as_ref().map_or(0, |index| (index.width - 1).max(0));
-    // The index ends beside the overbar, never inside the hook or radicand.
-    let top = (index.as_ref().map_or(1, |index| index.height) - 1).max(0);
     let body_x = index_width + 2;
-    let width = body_x + body.width;
-    let height = top + body.height + 1;
-    let baseline = top + body.baseline + 1;
-    let mut result = blank(width, height, baseline);
+    let top = index.as_ref().map_or(1, |index| index.height);
+    let mut result = blank(body_x + body.width, top + body.height, top + body.baseline);
     let style = &context.style;
-    set_cell(&mut result, body_x - 1, top, "╭", style);
-    draw_horizontal(&mut result, top, body_x, body.width, "─", style);
-    for y in top + 1..height - 1 {
-        set_cell(&mut result, body_x - 1, y, "│", style);
-    }
-    set_cell(&mut result, body_x - 2, height - 1, "╰", style);
-    set_cell(&mut result, body_x - 1, height - 1, "╯", style);
-    overlay(&mut result, &body, body_x, top + 1);
+    set_cell(&mut result, body_x - 1, top - 1, "╭", style);
+    draw_horizontal(&mut result, top - 1, body_x, body.width, "─", style);
+    let baseline = result.baseline;
+    set_cell(&mut result, body_x - 2, baseline, "√", style);
+    overlay(&mut result, &body, body_x, top);
     if let Some(index) = &index {
         overlay(&mut result, index, 0, 0);
     }
@@ -225,10 +225,12 @@ fn layout_scripts(base: &Node, superscript: Option<&Node>, subscript: Option<&No
     // A script that lays out to nothing, such as `{}` or an empty `\textcolor`, adds no geometry (opentui-tex).
     let present = |node: &Node| layout_node(node, context).width > 0;
     let (superscript, subscript) = (superscript.filter(|n| present(n)), subscript.filter(|n| present(n)));
-    let target = script_target(base);
-    if matches!(target, Node::Brace { .. })
-        || (matches!(target, Node::Operator { limits: true, .. }) && context.display)
-    {
+    let limits = match script_target(base) {
+        Node::Brace { .. } | Node::Operator { limits: Limits::Always, .. } => true,
+        Node::Operator { limits: Limits::Display, .. } => context.display,
+        _ => false,
+    };
+    if limits {
         return layout_over_under(base, superscript, subscript, context);
     }
 
@@ -336,7 +338,7 @@ fn layout_matrix(rows: &[Vec<Node>], environment: Environment, columns: Option<&
         })
         .collect();
     let width = column_widths.iter().sum::<i32>() + gaps.iter().sum::<i32>();
-    let height = (row_heights.iter().sum::<i32>() + (rows.len() as i32 - 1).max(0)).max(1);
+    let height = row_heights.iter().sum::<i32>().max(1);
     let mut result = blank(width, height, height / 2);
 
     let mut y = 0;
@@ -361,7 +363,7 @@ fn layout_matrix(rows: &[Vec<Node>], environment: Environment, columns: Option<&
             }
             x += column_width + gaps[column + 1];
         }
-        y += row_heights[row_index] + 1;
+        y += row_heights[row_index];
     }
 
     let mut boundary_x = 0;
@@ -438,7 +440,8 @@ fn delimiter_box(delimiter: &str, height: i32, baseline: i32, left: bool, style:
     let split = delimiter.chars().next().map_or(0, char::len_utf8);
     let (base, marks) = delimiter.split_at(split);
     let glyphs = delimiter_glyphs(base);
-    let width = glyphs.iter().map(|glyph| cell_width(glyph)).max().unwrap_or(0);
+    // As wide as the widest glyph with the marks, which may make it wide (a keycap).
+    let width = glyphs.iter().map(|glyph| cell_width(&format!("{glyph}{marks}"))).max().unwrap_or(0);
     let mut result = blank(width, height, baseline);
     for y in 0..height {
         let glyph = match y {
@@ -519,7 +522,8 @@ fn text_box(text: &str, style: &Style) -> Block {
 
 fn blank(width: i32, height: i32, baseline: i32) -> Block {
     let (width, height) = (width.max(0), height.max(1));
-    let left = BUDGET.get().and_then(|left| left.checked_sub(width as usize * height as usize));
+    let cells = width as usize * height as usize;
+    let left = BUDGET.get().filter(|_| cells <= BLOCK_CELLS).and_then(|left| left.checked_sub(cells));
     BUDGET.set(left);
     // Out of budget, the rest of the layout is thrown away: allocate nothing more.
     if left.is_none() {
@@ -639,29 +643,10 @@ fn apply_variant(value: &str, variant: Option<Variant>) -> String {
         .collect()
 }
 
-/// The cells a grapheme takes, as TS `cellWidth` computes it.
+/// The cells a grapheme takes, as opentui-tex's `string-width` counts them: East Asian wide and emoji graphemes take
+/// two, combining and default-ignorable ones none.
 pub fn cell_width(value: &str) -> i32 {
-    let mut chars = value.chars();
-    let Some(first) = chars.next() else { return 0 };
-    let single = chars.next().is_none();
-    let zero =
-        matches!(first, '\u{0}'..='\u{1f}' | '\u{7f}'..='\u{9f}' | '\u{300}'..='\u{36f}' | '\u{fe00}'..='\u{fe0f}');
-    if single && zero {
-        return 0;
-    }
-    let code = first as u32;
-    let wide = code >= 0x1100
-        && (code <= 0x115f
-            || code == 0x2329
-            || code == 0x232a
-            || (0x2e80..=0xa4cf).contains(&code)
-            || (0xac00..=0xd7a3).contains(&code)
-            || (0xf900..=0xfaff).contains(&code)
-            || (0xfe10..=0xfe6f).contains(&code)
-            || (0xff00..=0xff60).contains(&code)
-            || (0xffe0..=0xffe6).contains(&code)
-            || (0x1f300..=0x1faff).contains(&code));
-    if wide { 2 } else { 1 }
+    unicode_width::UnicodeWidthStr::width(value) as i32
 }
 
 const SUPERSCRIPTS: &[(char, char)] = &[

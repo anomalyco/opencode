@@ -15,9 +15,8 @@ the plugin fences), the TUI turns on OpenTUI's Markdown math (`MarkdownExtension
 - Dollars that are not math stay text, as OpenTUI decides: `$5 and $10`, `$HOME`, a lone `$`, `\$`. While a
   message streams, a `$` shows as text until it is decided, and math that showed never reverts.
 
-The parser takes opentui-tex's fixes (`steps/latex-inline.md` lists them). One P-ORACLE source draws differently:
-a style directive such as `\displaystyle` is no atom, so `\displaystyle \frac{a}{b}` has no space before the
-fraction. TS draws one (`crates/latex/src/tests.rs`, `DEVIATES`). Inputs TS rejects and Rust now draws:
+The parser and layout take opentui-tex's fixes; `P2-latex-opentui-tex` lists where fences then differ from TS,
+such as `\displaystyle \frac{a}{b}` with no space before the fraction. Inputs TS rejects and Rust now draws:
 `\ `, `\degree`, combining marks after a command or delimiter, comments inside raw groups, and `\limits` after a
 styled operator.
 

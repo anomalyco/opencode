@@ -1,9 +1,10 @@
 //! Rows ported from opentui-tex (`src/math-parser.test.ts`, `math-layout.test.ts`, `unicode-tex-backend.test.ts`),
-//! in strict mode and complete input, the plugin's modes, on this crate's layout: TS's radical and matrix rows,
-//! which the P-ORACLE holds. `steps/latex-inline.md` lists what is not ported. Then the inline rows.
+//! in each mode they name. Where the TS oracle disagrees, `oracle_rust.json` holds Rust's expectation
+//! (`parity/deviations/P2-latex-opentui-tex.md`). `steps/latex-more.md` lists what is not ported. Then the inline
+//! rows.
 
 use crate::layout::{self, Options};
-use crate::parse::{Accent, Environment, Node, Role, Variant, parse};
+use crate::parse::{Accent, Environment, Limits, Mode, Node, PLACEHOLDER, Role, Variant, parse, parse_with};
 
 fn display(source: &str) -> String {
     crate::render(source).unwrap_or_else(|error| panic!("{source:?}: {error}")).to_string()
@@ -111,7 +112,7 @@ fn variants_braces_and_text() {
     let textrm = Node::Variant { variant: Variant::Normal, body: Box::new(Node::Text(" if ".into())) };
     assert_eq!(parse("\\textrm{ if }"), Ok(textrm));
     for command in ["mod", "bmod"] {
-        assert_eq!(parse(&format!("\\{command}")), Ok(Node::Operator { value: "mod".into(), limits: false }));
+        assert_eq!(parse(&format!("\\{command}")), Ok(Node::Operator { value: "mod".into(), limits: Limits::Never }));
     }
 }
 
@@ -142,10 +143,9 @@ fn commands_and_symbols() {
         "arccos", "arcsin", "arctan", "arg", "cosh", "cot", "coth", "csc", "deg", "dim", "hom", "lg", "Pr", "sec",
         "sinh", "tanh", "liminf", "limsup",
     ] {
-        let limits = command.starts_with("lim");
+        let limits = if command.starts_with("lim") { Limits::Display } else { Limits::Never };
         assert_eq!(parse(&format!("\\{command}")), Ok(Node::Operator { value: command.into(), limits }));
     }
-    // opentui-tex swaps `\epsilon` and `\varepsilon`; the fences keep TS's, which the P-ORACLE holds.
     for (command, value) in [
         ("imath", "ı"),
         ("jmath", "ȷ"),
@@ -174,14 +174,14 @@ fn commands_and_symbols() {
         ("longmapsto", "⟼"),
         ("Updownarrow", "⇕"),
         ("nwarrow", "↖"),
-        ("epsilon", "ε"),
-        ("varepsilon", "ϵ"),
+        ("epsilon", "ϵ"),
+        ("varepsilon", "ε"),
         ("degree", "°"),
     ] {
         assert!(matches!(parse(&format!("\\{command}")), Ok(Node::Symbol { value: v, .. }) if v == value), "{command}");
     }
     for (command, value) in [("bigoplus", "⨁"), ("bigotimes", "⨂"), ("bigodot", "⨀")] {
-        assert_eq!(parse(&format!("\\{command}")), Ok(Node::Operator { value: value.into(), limits: true }));
+        assert_eq!(parse(&format!("\\{command}")), Ok(Node::Operator { value: value.into(), limits: Limits::Display }));
     }
     for (source, value) in [
         ("=", "≠"),
@@ -220,13 +220,18 @@ fn directives_make_no_atom_and_limits_reach_operators_through_styles() {
         assert_eq!(parse(&format!("x^\\{directive}2")), parse("x^2"), "{directive}");
         assert_eq!(parse(&format!("\\sum\\{directive}_1^2")), parse("\\sum_1^2"), "{directive}");
     }
-    for (source, expected) in [("\\sum\\limits_1^2", true), ("\\sum^2\\nolimits_1", false), ("\\int\\limits_1^2", true)]
-    {
+    for (source, expected) in [
+        ("\\sum\\limits_1^2", Limits::Always),
+        ("\\sum^2\\nolimits_1", Limits::Never),
+        ("\\int\\limits_1^2", Limits::Always),
+    ] {
         let Ok(Node::Scripts { base, .. }) = parse(source) else { panic!("{source}") };
         assert!(matches!(*base, Node::Operator { limits, .. } if limits == expected), "{source}");
     }
     let Ok(Node::Scripts { base, .. }) = parse("\\mathbf{\\sum}\\limits_1^2") else { panic!() };
-    assert!(matches!(&*base, Node::Variant { body, .. } if matches!(**body, Node::Operator { limits: true, .. })));
+    assert!(
+        matches!(&*base, Node::Variant { body, .. } if matches!(**body, Node::Operator { limits: Limits::Always, .. }))
+    );
     {
         for (source, expected) in [
             ("\\sum\\limits_1^2", "2\n∑\n1"),
@@ -249,7 +254,7 @@ fn directives_make_no_atom_and_limits_reach_operators_through_styles() {
             ("\\mathbf{\\sum_1}\\limits^2", "2\n∑\n1"),
             ("\\mathbf{\\sum^2}\\limits_1", "2\n∑\n1"),
             ("\\textcolor{red}{\\sum_1}\\limits^2", "2\n∑\n1"),
-            // TS draws a space before the fraction for the directive (`parity/deviations/P2-latex-inline.md`).
+            // TS draws a space before the fraction for the directive (`parity/deviations/P2-latex-opentui-tex.md`).
             ("\\displaystyle \\frac{a}{b} \\textstyle c \\scriptstyle d", " a\n─── cd\n b"),
         ] {
             assert_eq!(display(source), expected, "{source:?}");
@@ -422,7 +427,7 @@ fn empty_scripts_add_no_geometry() {
         Node::Matrix { rows: vec![vec![text("a")], vec![text("b")]], environment: Environment::Pmatrix, columns: None },
         Node::Brace { body: Box::new(text("abcd")), over: true },
         Node::Brace { body: Box::new(text("abcd")), over: false },
-        Node::Operator { value: "∑".into(), limits: true },
+        Node::Operator { value: "∑".into(), limits: Limits::Always },
     ];
     let empties = [EMPTY, text(""), Node::Color { color: "red".into(), body: Box::new(text("")) }];
     let options = Options { display: false, ..Options::default() };
@@ -497,4 +502,471 @@ fn accents_on_styled_text() {
     let Node::Accent { accent: Accent::Hat, .. } = &node else { panic!() };
     assert_eq!(inline("\\hat{\\mathbf{x}}"), "x\u{302}");
     assert_eq!(inline("\\tilde{\\mathbb{R}}"), "ℝ\u{303}");
+}
+
+/// `source` laid out inline-style (opentui-tex's `display: false`), as text.
+fn text_mode(source: &str, display: bool, mode: Mode) -> String {
+    let options = Options { display, ..Options::default() };
+    crate::render_mode(source, &options, mode).unwrap_or_else(|error| panic!("{source:?}: {error}")).to_string()
+}
+
+const INCOMPLETE: Mode = Mode { permissive: false, incomplete: true };
+const PERMISSIVE: Mode = Mode { permissive: true, incomplete: false };
+
+#[test]
+fn the_radical_and_its_index() {
+    for (source, expected, width, height, baseline) in [
+        ("\\sqrt{x^2+y^2}", " ╭───────\n√ x² + y²", 9, 2, 1),
+        ("\\sqrt[3]{x}", "3╭─\n√ x", 3, 2, 1),
+        ("\\sqrt[\\frac{1}{2}]{x}", " 1\n───\n 2 ╭─\n  √ x", 5, 4, 3),
+        ("\\sqrt[a_b]{x}", "a\n b╭─\n √ x", 4, 3, 2),
+        ("\\sqrt[界]{x}", "界╭─\n √ x", 4, 2, 1),
+        ("\\sqrt[\\frac{1}{2}]{\\frac{x}{y}}", " 1\n───\n 2 ╭───\n     x\n  √ ───\n     y", 7, 6, 4),
+    ] {
+        let options = Options { display: false, ..Options::default() };
+        let layout = crate::render_with(source, &options).unwrap();
+        assert_eq!(
+            (layout.to_string().as_str(), layout.width, layout.height, layout.baseline),
+            (expected, width, height, baseline),
+            "{source:?}"
+        );
+    }
+}
+
+fn text(value: &str) -> Node {
+    Node::Text(value.into())
+}
+
+fn fraction(denominator: &str, bar: bool, align: Option<crate::parse::Align>) -> Node {
+    Node::Fraction { numerator: Box::new(text("1")), denominator: Box::new(text(denominator)), bar, align }
+}
+
+fn draw(node: &Node) -> crate::Layout {
+    layout::layout(node, &Options { display: false, ..Options::default() }).unwrap()
+}
+
+#[test]
+fn fractions_braces_matrices_and_tall_scripts() {
+    use crate::parse::Align;
+    for (align, expected) in [
+        (Some(Align::Left), " 1\n───────\n 12345"),
+        (Some(Align::Right), "     1\n───────\n 12345"),
+        (None, "   1\n───────\n 12345"),
+    ] {
+        assert_eq!(draw(&fraction("12345", true, align)).to_string(), expected);
+    }
+    assert_eq!(draw(&fraction("2", false, None)).to_string(), " 1\n\n 2");
+    for (over, expected, baseline, small) in
+        [(true, " n\n╭┴─╮\nabcd", 2, "╭┴╮\n x"), (false, "abcd\n╰┬─╯\n n", 0, " x\n╰┬╯")]
+    {
+        let base = Node::Brace { body: Box::new(text("abcd")), over };
+        let script = Some(Box::new(text("n")));
+        let node = Node::Scripts {
+            base: Box::new(base),
+            superscript: if over { script.clone() } else { None },
+            subscript: if over { None } else { script },
+        };
+        assert_eq!((draw(&node).to_string().as_str(), draw(&node).baseline), (expected, baseline));
+        assert_eq!(draw(&Node::Brace { body: Box::new(text("x")), over }).to_string(), small);
+    }
+    let half = fraction("2", true, None);
+    let array = |columns: &str, rows: Vec<Vec<Node>>| Node::Matrix {
+        rows,
+        environment: Environment::Array,
+        columns: Some(columns.into()),
+    };
+    let rules = array("|l||r|", vec![vec![text("a"), text("b")], vec![half.clone(), text("cc")]]);
+    assert_eq!(draw(&rules).to_string(), "│ a   ││  b │\n│  1  ││    │\n│ ─── ││ cc │\n│  2  ││    │");
+    let aligned =
+        array("lcr", vec![vec![text("a"), text("b"), text("c")], vec![text("long"), text("wide"), text("last")]]);
+    assert_eq!(draw(&aligned).to_string(), "a     b      c\nlong wide last");
+    let rows = vec![vec![text("x"), text("p")], vec![text("long"), text("condition")]];
+    let matrix = |environment| Node::Matrix { rows: rows.clone(), environment, columns: None };
+    assert_eq!(draw(&matrix(Environment::Cases)).to_string(), "⎧x     p\n⎩long  condition");
+    assert_eq!(draw(&matrix(Environment::Aligned)).to_string(), "   x  p\nlong  condition");
+    let pmatrix = Node::Matrix {
+        rows: vec![vec![text("a"), text("b")], vec![text("c"), text("d")]],
+        environment: Environment::Pmatrix,
+        columns: None,
+    };
+    let scripts = |base: &Node, superscript: Option<&str>, subscript: Option<&str>| Node::Scripts {
+        base: Box::new(base.clone()),
+        superscript: superscript.map(|value| Box::new(text(value))),
+        subscript: subscript.map(|value| Box::new(text(value))),
+    };
+    assert_eq!(draw(&scripts(&pmatrix, Some("2"), None)).to_string(), "     2\n⎛a b⎞\n⎝c d⎠");
+    assert_eq!(draw(&scripts(&half, Some("2"), Some("1"))).to_string(), "   2\n 1\n───\n 2\n   1");
+    let root = Node::Root { body: Box::new(text("x")), index: Some(Box::new(half)) };
+    assert_eq!(draw(&root).to_string(), " 1\n───\n 2 ╭─\n  √ x");
+    for (source, expected) in [
+        ("\\begin{aligned}x &= 1 \\\\ yy &= 2\\end{aligned}", " x  = 1\nyy  = 2"),
+        ("\\begin{aligned}&=x\\\\&=y\\end{aligned}", "  = x\n  = y"),
+        ("\\cfrac[l]{1}{12345}", " 1\n───────\n 12345"),
+        ("\\cfrac[r]{1}{12345}", "     1\n───────\n 12345"),
+        ("\\displaylines{x=1\\\\y=2}", "x = 1\ny = 2"),
+        ("\\begin{array}{l|r}a&wide\\\\long&b\\end{array}", "a    │ wide\nlong │    b"),
+        ("\\begin{pmatrix}a & b \\\\ cc & d\\end{pmatrix}", "⎛a  b⎞\n⎝cc d⎠"),
+        ("\\begin{cases}x & x \\ge 0 \\\\ -x & x < 0\\end{cases}", "⎧x   x ≥ 0\n⎩-x  x < 0"),
+    ] {
+        assert_eq!(display(source), expected, "{source:?}");
+    }
+    let nested =
+        display("\\begin{aligned}A &= \\begin{pmatrix}a & b \\\\ c & d\\end{pmatrix} \\\\ z &= 1\\end{aligned}");
+    assert!(nested.contains('⎛') && nested.contains('z'), "{nested}");
+}
+
+#[test]
+fn limits_in_three_ways() {
+    let sum = |limits| Node::Scripts {
+        base: Box::new(Node::Operator { value: "∑".into(), limits }),
+        superscript: Some(Box::new(text("2"))),
+        subscript: Some(Box::new(text("1"))),
+    };
+    for display in [false, true] {
+        for limits in [Limits::Always, Limits::Never, Limits::Display] {
+            let options = Options { display, ..Options::default() };
+            let stacked = limits == Limits::Always || (limits == Limits::Display && display);
+            let expected = if stacked { "2\n∑\n1" } else { "∑²₁" };
+            assert_eq!(layout::layout(&sum(limits), &options).unwrap().to_string(), expected, "{limits:?} {display}");
+        }
+        for (source, expected) in [
+            ("\\sum\\limits_1^2", "2\n∑\n1"),
+            ("\\sum\\nolimits_1^2", "∑²₁"),
+            ("\\int\\limits_1^2", "2\n∫\n1"),
+            ("\\sum^2\\nolimits_1", "∑²₁"),
+            ("\\sum\\limits\\nolimits_1^2", "∑²₁"),
+            ("\\sum\\nolimits\\limits_1^2", "2\n∑\n1"),
+            ("\\mathbf{\\sum}\\limits_1^2", "2\n∑\n1"),
+            ("\\textcolor{red}{\\sum}\\nolimits_1^2", "∑²₁"),
+            ("\\mathbf{\\sin}x", "sin x"),
+            ("\\mathbf{\\underbrace{abcd}}_{n}", "abcd\n╰┬─╯\n n"),
+            ("\\mathbf{\\sum_1^2}\\nolimits", "∑²₁"),
+            ("\\textcolor{red}{\\mathbf{\\sum_1^2}}\\limits", "2\n∑\n1"),
+            ("\\mathbf{\\sum_1}\\limits^2", "2\n∑\n1"),
+            ("\\mathbf{\\sum^2}\\limits_1", "2\n∑\n1"),
+            ("\\textcolor{red}{\\sum_1}\\limits^2", "2\n∑\n1"),
+            ("x^\\displaystyle2", "x²"),
+        ] {
+            assert_eq!(text_mode(source, display, Mode::default()), expected, "{source:?} {display}");
+        }
+        let display_only = if display { "2\n∑\n1" } else { "∑²₁" };
+        assert_eq!(text_mode("\\mathbf{\\sum}_1^2", display, Mode::default()), display_only);
+        assert_eq!(text_mode("\\sum_1^2", display, Mode::default()), display_only);
+    }
+    assert_eq!(text_mode("\\int_1^2", true, Mode::default()), "∫²₁");
+    for star in ["", "*"] {
+        let Ok(Node::Scripts { base, .. }) = parse(&format!("\\operatorname{star}{{arg\\,max}}_x")) else { panic!() };
+        let limits = if star == "*" { Limits::Always } else { Limits::Never };
+        assert_eq!(*base, Node::Operator { value: "arg max".into(), limits });
+    }
+}
+
+#[test]
+fn permissive_mode_keeps_unsupported_commands_as_text() {
+    for source in ["\\unknown", "\\constructor", "\\toString"] {
+        for incomplete in [false, true] {
+            let permissive = Mode { permissive: true, incomplete };
+            assert_eq!(parse_with(source, permissive), Ok(text(source)), "{source}");
+            assert!(parse_with(source, Mode { permissive: false, incomplete }).is_err(), "{source}");
+        }
+    }
+    for source in [
+        "\\left\\unknown x\\right)",
+        "\\left(x\\right\\unknown",
+        "\\big\\unknown",
+        "\\left(x\\middle\\unknown y\\right)",
+        "\\left ax\\right)",
+    ] {
+        for incomplete in [false, true] {
+            assert!(parse_with(source, Mode { permissive: true, incomplete }).is_ok(), "{source}");
+            assert!(parse_with(source, Mode { permissive: false, incomplete }).is_err(), "{source}");
+        }
+    }
+    assert_eq!(text_mode("\\unknown{x}", true, PERMISSIVE), "\\unknownx");
+    let Ok(Node::Delimited { left, right, body }) = parse_with("\\left\u{1f431}x\\right\u{1f436}", PERMISSIVE) else {
+        panic!()
+    };
+    assert_eq!((left.as_str(), right.as_str(), *body), ("\u{1f431}", "\u{1f436}", sym("x")));
+}
+
+#[test]
+fn incomplete_mode_draws_a_prefix_with_placeholders() {
+    let placeholder = || Node::Symbol { value: PLACEHOLDER.into(), role: None };
+    let incomplete =
+        |source: &str| parse_with(source, INCOMPLETE).unwrap_or_else(|error| panic!("{source:?}: {error}"));
+    // Each prefix fails whole and recovers incomplete.
+    for source in [
+        "\\frac",
+        "\\frac{1}{",
+        "x^",
+        "x^\\displaystyle",
+        "\\left(x",
+        "\\left(x\\right",
+        "\\left(x\\right\\",
+        "\\sqrt[3",
+        "\\text{abc",
+        "\\operatorname*",
+        "\\overbrace{",
+        "\\mathbb",
+        "\\textcolor{red}{",
+        "\\displaylines{a\\\\b",
+        "\\begin{matrix}1&&",
+        "\\begin{matrix}1& % comment",
+        "\\begin{array}",
+        "\\begin{array}{|",
+        "\\begin{array}{% comment }",
+        "\\begin{array}{lr",
+        "\\cfrac[",
+        "\\cfrac[l",
+        "\\cfrac[r",
+    ] {
+        assert!(parse(source).is_err(), "{source:?} parsed whole");
+        incomplete(source);
+    }
+    assert!(
+        matches!(incomplete("\\frac"), Node::Fraction { numerator, denominator, .. } if *numerator == placeholder() && *denominator == placeholder())
+    );
+    assert!(
+        matches!(incomplete("\\frac{1}{"), Node::Fraction { numerator, denominator, .. } if *numerator == sym("1") && *denominator == placeholder())
+    );
+    assert!(matches!(incomplete("x^"), Node::Scripts { superscript: Some(sup), .. } if *sup == placeholder()));
+    assert!(
+        matches!(incomplete("\\left(x"), Node::Delimited { left, right, body } if left == "(" && right.is_empty() && *body == sym("x"))
+    );
+    assert!(matches!(incomplete("\\left(x\\right\\"), Node::Delimited { right, .. } if right.is_empty()));
+    assert!(
+        matches!(incomplete("\\sqrt[3"), Node::Root { index: Some(index), body } if *index == sym("3") && *body == placeholder())
+    );
+    assert_eq!(incomplete("\\text{abc"), text("abc"));
+    assert_eq!(incomplete("\\operatorname*"), Node::Operator { value: PLACEHOLDER.into(), limits: Limits::Always });
+    assert!(matches!(incomplete("\\overbrace{"), Node::Brace { body, over: true } if *body == placeholder()));
+    assert!(
+        matches!(incomplete("\\mathbb"), Node::Variant { variant: Variant::DoubleStruck, body } if *body == placeholder())
+    );
+    assert!(
+        matches!(incomplete("\\textcolor{red}{"), Node::Color { color, body } if color == "red" && *body == placeholder())
+    );
+    assert_eq!(cells(&incomplete("\\displaylines{a\\\\b")), [vec!["a"], vec!["b"]]);
+    assert_eq!(cells(&incomplete("\\begin{matrix}1&&")), [vec!["1", "", PLACEHOLDER]]);
+    assert_eq!(cells(&incomplete("\\begin{matrix}1& % comment")), [vec!["1", PLACEHOLDER]]);
+    for (source, columns) in [
+        ("\\begin{array}", ""),
+        ("\\begin{array}{|", "|"),
+        ("\\begin{array}{% comment }", ""),
+        ("\\begin{array}{lr", "lr"),
+    ] {
+        let node = incomplete(source);
+        assert!(matches!(&node, Node::Matrix { columns: Some(c), .. } if c == columns), "{source:?} {node:?}");
+        assert_eq!(cells(&node), [vec![PLACEHOLDER]], "{source:?}");
+    }
+    for (source, align) in [
+        ("\\cfrac[", None),
+        ("\\cfrac[l", Some(crate::parse::Align::Left)),
+        ("\\cfrac[r", Some(crate::parse::Align::Right)),
+    ] {
+        assert!(matches!(incomplete(source), Node::Fraction { align: a, .. } if a == align), "{source:?}");
+    }
+    let Node::Scripts { base, superscript, .. } = incomplete("\\bm x\u{305}^") else { panic!() };
+    assert_eq!(
+        (*base, superscript.map(|s| *s)),
+        (Node::Variant { variant: Variant::Bold, body: Box::new(sym("x\u{305}")) }, Some(placeholder()))
+    );
+    for (source, expected) in [
+        ("\\frac", " □\n───\n □"),
+        ("x\u{305}^", " □\nx\u{305}"),
+        ("\\alpha\u{305}^", " □\nα\u{305}"),
+        ("\\left[\u{305}x", "[\u{305}x"),
+        ("\\sqrt[\\frac{1}{2}", " 1\n───\n 2 ╭─\n  √ □"),
+        ("\\sqrt[a_b]{", "a\n b╭─\n √ □"),
+        ("\\sum\\limits_", "∑\n□"),
+        ("x^\\displaystyle", " □\nx"),
+        ("\\begin{matrix}1&&2", "1  2"),
+        ("\\left(x\\right", "(x"),
+        ("\\begin{matrix}   ", "□"),
+        ("\\mathbf{\\sum_1}\\limits^2", "2\n∑\n1"),
+        ("\\mathbf{\\sum^2}\\limits_1", "2\n∑\n1"),
+        ("\\textcolor{red}{\\sum_1}\\limits^2", "2\n∑\n1"),
+        ("a\\not\\mathbf{=}b", "a ≠ b"),
+        ("x\\not\\mathrm{\\in}S", "x ∉ S"),
+        ("\\mathbf{x}\u{305}", "x\u{305}"),
+    ] {
+        assert_eq!(text_mode(source, false, INCOMPLETE), expected, "{source:?}");
+    }
+    for (source, contains) in [
+        ("\\frac{1}{", "□"),
+        ("\\begin{matrix}1&", "1 □"),
+        ("\\begin{matrix}1&   ", "1 □"),
+        ("\\text{abc", "abc"),
+        ("\\sqrt[3", "□"),
+    ] {
+        assert!(text_mode(source, false, INCOMPLETE).contains(contains), "{source:?}");
+    }
+    let both = Mode { permissive: true, incomplete: true };
+    assert!(text_mode("\\left(x\\rightfoo", false, both).contains("\\rightfoo"));
+    assert!(parse("\\left(x\\rightfoo").is_err());
+    // Malformed syntax before the end fails in both modes.
+    for source in [
+        "a}b",
+        "\\frac}",
+        "\\not}",
+        "\\left(x\\right}",
+        "\\end{matrix}",
+        "\\begin{matrix}1\\end{pmatrix}",
+        "\\begin{unknown}x",
+        "\\alpha\u{305}}",
+        "\\begin{array}{p{2cm}}x",
+        "\\cfrac[c]12",
+        "\\cfrac[l{1}{2}",
+        "\\cfrac[l\n",
+        "\\displaylines[l]{x}",
+        "\\begin{matrix}x}",
+    ] {
+        assert!(parse_with(source, INCOMPLETE).is_err(), "{source:?} parsed incomplete");
+    }
+}
+
+#[test]
+fn sources_and_blocks_are_bounded() {
+    assert_eq!(crate::render(&"x".repeat(4096)).unwrap().width, 4096);
+    assert_eq!(crate::render(&"x\u{305}".repeat(1365)).unwrap().width, 1365);
+    for source in [String::new(), "x".repeat(4097), "x\u{305}".repeat(1366), "\u{1f600}".repeat(1025), "   ".into()] {
+        assert!(crate::render(&source).is_err(), "{} bytes", source.len());
+    }
+    let roots = format!("{}x{}", "\\sqrt[".repeat(100), "]{x}".repeat(100));
+    assert!(crate::render(&roots).is_err());
+    let options = Options { display: false, ..Options::default() };
+    assert_eq!(layout::layout(&text(&"x".repeat(16384)), &options).map(|l| l.width), Some(16384));
+    assert!(layout::layout(&text(&"x".repeat(16385)), &options).is_none());
+    let wide = Node::Matrix {
+        rows: vec![vec![text(&"x".repeat(8192)), text("y")], vec![fraction("2", true, None), text("z")]],
+        environment: Environment::Array,
+        columns: Some("|l||r|".into()),
+    };
+    assert!(layout::layout(&wide, &options).is_none());
+    assert!(layout::layout(&Node::Brace { body: Box::new(text(&"x".repeat(8193))), over: true }, &options).is_none());
+    // Widths as `string-width` counts them: a ZWJ sequence, a flag, and a keycap take two cells.
+    assert_eq!(crate::render("\u{1f469}\u{200d}\u{1f52c}^2+\u{1f1e9}\u{1f1f0}").unwrap().width, 8);
+    assert_eq!(
+        // `#` is no delimiter: permissive mode, as opentui-tex's row.
+        text_mode("\\left#\u{fe0f}\u{20e3}\\frac{1}{2}\\right#\u{fe0f}\u{20e3}", false, PERMISSIVE),
+        "#  1 #\n#\u{fe0f}\u{20e3}───#\u{fe0f}\u{20e3}\n#  2 #"
+    );
+    // A zero-width delimiter mark draws or fails, and never panics.
+    for display in [false, true] {
+        for mode in [Mode::default(), INCOMPLETE] {
+            let _ = crate::render_mode(
+                "\\left\u{3164}\u{305}\\frac{1}{2}\\right.",
+                &Options { display, ..Options::default() },
+                mode,
+            );
+        }
+    }
+}
+
+#[test]
+fn alphabets_and_styles() {
+    for (variant, value, expected) in [
+        (Variant::DoubleStruck, "CHNPQRZaz09", "ℂℍℕℙℚℝℤ𝕒𝕫𝟘𝟡"),
+        (Variant::Script, "BEFHILMRegoAz9", "ℬℰℱℋℐℒℳℛℯℊℴ𝒜𝓏9"),
+        (Variant::Fraktur, "CHIRZaz9", "ℭℌℑℜℨ𝔞𝔷9"),
+        (Variant::Sans, "AZaz09", "𝖠𝖹𝖺𝗓𝟢𝟫"),
+        (Variant::Monospace, "AZaz09", "𝙰𝚉𝚊𝚣𝟶𝟿"),
+        (Variant::Normal, "AZaz09", "AZaz09"),
+    ] {
+        let node = Node::Variant { variant, body: Box::new(text(&format!("{value}α+"))) };
+        assert_eq!(draw(&node).to_string(), format!("{expected}α+"), "{variant:?}");
+    }
+    let nested = Node::Variant {
+        variant: Variant::Sans,
+        body: Box::new(Node::Variant { variant: Variant::Normal, body: Box::new(text("x")) }),
+    };
+    assert_eq!(draw(&nested).to_string(), "x");
+    let color = |color: &str, body: Node| Node::Color { color: color.into(), body: Box::new(body) };
+    let variant = |variant, body: Node| Node::Variant { variant, body: Box::new(body) };
+    let node = Node::Row(vec![
+        color(
+            "red",
+            variant(
+                Variant::Bold,
+                Node::Row(vec![text("a"), variant(Variant::Italic, text("b")), color("blue", text("c"))]),
+            ),
+        ),
+        text("d"),
+        color("red", text("e")),
+    ]);
+    let layout = draw(&node);
+    assert_eq!(layout.to_string(), "abcde");
+    let style = |x: usize| {
+        let style = &layout.cells[0][x].as_ref().unwrap().style;
+        (style.color.as_deref(), style.bold, style.italic)
+    };
+    assert_eq!(
+        [style(0), style(1), style(2), style(3), style(4)],
+        [
+            (Some("red"), true, false),
+            (Some("red"), true, true),
+            (Some("blue"), true, false),
+            (None, false, false),
+            (Some("red"), false, false)
+        ]
+    );
+    // Structure takes the style around it: every cell of these is red and bold.
+    let half = fraction("2", true, None);
+    for node in [
+        half.clone(),
+        Node::Root { body: Box::new(half.clone()), index: Some(Box::new(text("3"))) },
+        Node::Delimited { left: "[\u{305}".into(), body: Box::new(half.clone()), right: "]\u{305}".into() },
+        Node::Matrix {
+            rows: vec![vec![text("x"), half.clone()]],
+            environment: Environment::Array,
+            columns: Some("|l||r|".into()),
+        },
+        Node::Matrix { rows: vec![vec![text("x")], vec![text("y")]], environment: Environment::Cases, columns: None },
+        Node::Brace { body: Box::new(text("abcd")), over: true },
+        Node::Accent { accent: Accent::Hat, body: Box::new(text("x")) },
+        Node::Accent { accent: Accent::Underline, body: Box::new(text("x")) },
+        Node::Scripts {
+            base: Box::new(text("x")),
+            superscript: Some(Box::new(text("2"))),
+            subscript: Some(Box::new(text("i"))),
+        },
+        Node::Scripts { base: Box::new(half.clone()), superscript: Some(Box::new(text("q"))), subscript: None },
+        Node::OverUnder {
+            base: Box::new(text("x")),
+            over: Some(Box::new(text("n"))),
+            under: Some(Box::new(text("m"))),
+        },
+    ] {
+        let styled = draw(&color("red", variant(Variant::Bold, node.clone())));
+        for cell in styled.cells.iter().flatten().flatten() {
+            assert_eq!((cell.style.color.as_deref(), cell.style.bold), (Some("red"), true), "{node:?}");
+        }
+        assert_eq!(styled.to_string(), draw(&node).to_string());
+    }
+    let blue = Node::Scripts {
+        base: Box::new(text("x")),
+        superscript: Some(Box::new(color("blue", text("q")))),
+        subscript: None,
+    };
+    let layout = draw(&blue);
+    assert_eq!(layout.to_string(), " q\nx");
+    assert_eq!(layout.cells[0][1].as_ref().unwrap().style.color.as_deref(), Some("blue"));
+    assert_eq!(display("\\left[\u{305}\\frac{1}{2}\\right]\u{305}"), "⎡ 1 ⎤\n⎢\u{305}───⎥\u{305}\n⎣ 2 ⎦");
+    assert_eq!(display("\\epsilon\\varepsilon\\phi\\varphi"), "ϵεϕφ");
+}
+
+/// `\textcolor` keeps its color in the drawn rows, in display and inline math (opentui-tex's spans).
+#[test]
+fn colors_reach_the_rows() {
+    use opencode_plugin_abi::{Color, Rgba};
+    let red = Some(Color::Rgba(Rgba::new(255, 0, 0, 255)));
+    let rows = crate::formula(&crate::render("\\mathbf{x+\\mathit{y}}+\\textcolor{red}{z}").unwrap(), false);
+    let spans = &rows[0];
+    assert!(spans.iter().any(|span| span.text == "y" && span.bold && span.italic), "{spans:?}");
+    assert!(spans.iter().any(|span| span.text == "z" && span.fg == red), "{spans:?}");
+    let inline = crate::inline_line("a + \\textcolor{#f00}{b}").unwrap();
+    assert!(inline.iter().any(|span| span.text == "b" && span.fg == red), "{inline:?}");
+    assert!(inline.iter().filter(|span| span.text != "b").all(|span| span.fg.is_none()), "{inline:?}");
+    let unknown = crate::inline_line("\\textcolor{nocolor}{b}").unwrap();
+    assert_eq!(unknown[0].fg, None);
 }
