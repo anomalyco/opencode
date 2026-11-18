@@ -474,6 +474,75 @@ fn the_tail_mounts_first_and_older_pages_load_near_the_top() {
     assert_eq!(h.older.load(Ordering::SeqCst), 4);
 }
 
+/// Ten turns whose replies wrap at every width, all on the first page, one row per wheel step.
+fn wrapping_session() -> View {
+    let filler = "the quick brown fox jumps over the lazy dog ".repeat(5);
+    let messages: Vec<Value> = (1..=10)
+        .flat_map(|turn| {
+            let created = turn * 10_000;
+            let text = format!("Paragraph {turn} {filler}");
+            [
+                user(&format!("msg_{turn:03}a"), created, &format!("Question {turn}")),
+                assistant(
+                    &format!("msg_{turn:03}b"),
+                    created + 1000,
+                    json!([{ "type": "text", "text": text }]),
+                    Some(created + 3000),
+                ),
+            ]
+        })
+        .collect();
+    let info = Info { scroll: Some(Scroll { speed: Some(Bounded(1.0)), ..Scroll::default() }), ..Info::default() };
+    open(80, 20, "ses_z", messages, info)
+}
+
+/// The line under the session's title, which is the transcript's top row.
+fn top_line(screen: &str) -> String {
+    screen.lines().nth(1).unwrap_or_default().trim().to_owned()
+}
+
+/// A resize narrower and wider rewraps every row, above the reader's too, and keeps the row at the top of the view
+/// there.
+#[test]
+fn a_resize_keeps_the_readers_row_at_the_top() {
+    let h = wrapping_session();
+    h.wait_for("Paragraph 10");
+    for _ in 0..30 {
+        h.scroll_up();
+    }
+    // Up to a reply's first line, so the row's top is the view's top.
+    for _ in 0..20 {
+        if top_line(&h.app.text()).starts_with("Paragraph") {
+            break;
+        }
+        h.scroll_up();
+    }
+    let top = top_line(&h.app.text());
+    assert!(top.starts_with("Paragraph"), "{}", h.app.text());
+    let paragraph: String = top.split_whitespace().take(2).collect::<Vec<_>>().join(" ");
+    // The resize's own frame and the rebuild's after it.
+    for width in [50, 120, 80] {
+        h.app.resize(width, 20);
+        for frame in [h.app.render().text(), h.app.render().text()] {
+            let held = top_line(&frame).starts_with(&format!("{paragraph} "));
+            assert!(held, "{width} columns, {paragraph:?} left the top:\n{frame}");
+        }
+    }
+}
+
+/// A view at the bottom still follows it after a resize.
+#[test]
+fn a_resize_at_the_bottom_keeps_following() {
+    let h = wrapping_session();
+    h.wait_for("Paragraph 10");
+    for width in [50, 120] {
+        h.app.resize(width, 20);
+        h.app.render();
+        let screen = h.app.render().text();
+        assert!(screen.contains("Paragraph 10") && !screen.contains("Jump to latest"), "{width} columns:\n{screen}");
+    }
+}
+
 /// A recorded sequence of multi-step timings spans a turn across the page boundary.
 #[test]
 fn the_footer_spans_a_turn_whose_prompt_is_on_an_older_page() {
