@@ -1,3 +1,4 @@
+import { isBuiltin } from "node:module"
 import type { HostBridge } from "../snapshot/codec.js"
 import { Vm } from "../vm.js"
 import { globals } from "./globals.js"
@@ -88,12 +89,7 @@ export class Interpreter<R> {
     const cached = this.modules.get(name)
     if (cached !== undefined) return cached
     const module = resolveModule(name, (global) => this.globalScope.get(global)?.value, this.moduleGlobals)
-    if (module === undefined)
-      throw new PendingThrow(
-        "Error",
-        `Cannot import "${specifier}": it isn't available here, where packages and files can't be loaded. Use the provided globals.`,
-        site,
-      )
+    if (module === undefined) throw new PendingThrow("Error", cannotImport(specifier), site)
     this.modules.set(name, module)
     return module
   }
@@ -134,4 +130,13 @@ export class Interpreter<R> {
   node(id: NodeId): AstNode | undefined {
     return this.sources.get(id.source)?.node(id)
   }
+}
+
+/** Why `specifier` can't be loaded, split so the error names the kind of import that failed. */
+function cannotImport(specifier: string): string {
+  if (specifier.startsWith(".") || specifier.startsWith("/") || specifier.startsWith("file:"))
+    return `Cannot import "${specifier}": local files can't be imported.`
+  if (isBuiltin(specifier) || specifier === "bun" || specifier.startsWith("bun:"))
+    return `Cannot import "${specifier}": this runtime doesn't provide it.`
+  return `Cannot import "${specifier}": packages can't be installed here.`
 }
