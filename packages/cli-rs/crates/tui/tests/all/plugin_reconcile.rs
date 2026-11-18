@@ -505,7 +505,9 @@ impl Generator<'_> {
                 children: (0..self.rng.below(4)).map(|_| self.node(depth + 1)).collect(),
                 notify_top: None,
                 user_scroll: false,
-                scrollbar: self.chance(20),
+                // A scrollbar shows on overflow and narrows the content, so a tree reached by updates and a fresh mount
+                // may each settle with or without it: the model compares neither.
+                scrollbar: false,
             },
             _ => v2::Node::Markdown {
                 id: self.id(),
