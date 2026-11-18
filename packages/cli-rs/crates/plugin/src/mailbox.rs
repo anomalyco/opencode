@@ -36,6 +36,8 @@ pub struct Stats {
     /// Sends refused as `Full`.
     pub refused: u64,
     pub closed: bool,
+    /// A thread's panic report waits, to be taken after the messages put in before it.
+    pub reported: bool,
 }
 
 /// The longest panic report the host keeps, in bytes.
@@ -282,7 +284,13 @@ impl Mailbox {
 
     pub fn stats(&self) -> Stats {
         let state = self.state();
-        Stats { waiting: state.entries.len(), high: state.high, refused: state.refused, closed: state.closed }
+        Stats {
+            waiting: state.entries.len(),
+            high: state.high,
+            refused: state.refused,
+            closed: state.closed,
+            reported: state.panic.is_some(),
+        }
     }
 }
 
@@ -369,13 +377,13 @@ mod tests {
         }
         mailbox.panicked("é".repeat(REPORT));
         mailbox.panicked("second".to_owned());
-        assert_eq!(mailbox.stats(), Stats { waiting: 3, high: 3, refused: 0, closed: false });
+        assert_eq!(mailbox.stats(), Stats { waiting: 3, high: 3, refused: 0, closed: false, reported: true });
         let (_, panic) = mailbox.take();
         assert!(panic.is_some_and(|panic| panic.len() <= REPORT && panic.starts_with('é')));
         assert!(mailbox.put(Some("k"), Message::Json("1".into())).is_ok());
         mailbox.close();
         mailbox.panicked("late".to_owned());
-        assert_eq!(mailbox.stats(), Stats { waiting: 0, high: 3, refused: 0, closed: true });
+        assert_eq!(mailbox.stats(), Stats { waiting: 0, high: 3, refused: 0, closed: true, reported: false });
         assert!(matches!(mailbox.put(None, Message::Json("9".into())), Err((Refused::Closed, _))));
         let (messages, panic) = mailbox.take();
         assert!(messages.is_empty() && panic.is_none());

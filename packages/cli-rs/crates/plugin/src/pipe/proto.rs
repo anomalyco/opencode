@@ -368,8 +368,14 @@ pub enum Up {
         listener: Listener,
         on: bool,
     },
-    /// Everything before ping `seq` was handled; `waiting` when a tree waits for the host to adopt the last one.
-    Pong { seq: u64, waiting: bool },
+    /// Everything before ping `seq` was handled; `waiting` when a tree waits for the host to adopt the last one, and
+    /// `retiring` when a command a component dropped still lingers, to go a moment later (`UNCOMMAND`).
+    Pong {
+        seq: u64,
+        waiting: bool,
+        #[serde(default)]
+        retiring: bool,
+    },
     Log {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         id: Option<String>,

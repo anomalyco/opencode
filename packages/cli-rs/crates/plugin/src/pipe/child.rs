@@ -1258,7 +1258,7 @@ mod tests {
     // reaches the host.
     #[test]
     fn a_child_that_does_not_say_hello_is_refused() {
-        let mut frames = control(&Up::Pong { seq: 1, waiting: false });
+        let mut frames = control(&Up::Pong { seq: 1, waiting: false, retiring: false });
         frames.extend(hello());
         let (child, _dir) = fake(&frames, Limits::default());
         let events = take_until(&child, |events| gone(events).is_some());
