@@ -67,7 +67,6 @@ impl Sidebar {
     }
 }
 
-// Expected: a click on a failed server opens the MCP dialog on its error, as `mcp.list` with the server's name.
 #[test]
 fn a_failed_mcp_row_opens_its_error() {
     let h = mount(&[], false);
@@ -77,7 +76,6 @@ fn a_failed_mcp_row_opens_its_error() {
     assert!(screen.contains("MCP error -32000: Connection closed"), "{screen}");
 }
 
-// Expected: a folded MCP list stays folded when the session view mounts again, without TUI storage.
 #[test]
 fn a_fold_survives_a_remount() {
     let h = mount(&[], false);
@@ -93,8 +91,6 @@ fn a_fold_survives_a_remount() {
     h.wait_for("sentry");
 }
 
-// Expected: a theme switch restyles the docked sidebar in place, its folded list included: each cell equals the
-// session mounted in the new theme.
 #[test]
 fn a_theme_switch_restyles_the_sidebar_in_place() {
     support::assert_restyles_in_place(
@@ -107,8 +103,6 @@ fn a_theme_switch_restyles_the_sidebar_in_place() {
     );
 }
 
-// Expected: dismissing the getting started card hides it, storage reads the new value back at once, and the value
-// reaches the disk.
 #[test]
 fn dismissing_the_card_stores_the_new_value() {
     let h = mount(&[], true);
@@ -142,8 +136,6 @@ impl Sidebar {
     }
 }
 
-// Expected: folding the MCP list changes only `open` in the stored view, so a field another client stored there stays
-// (bigboi-1).
 #[test]
 fn a_fold_keeps_the_other_fields_of_the_view() {
     let h = mount(&[], true);
@@ -154,8 +146,6 @@ fn a_fold_keeps_the_other_fields_of_the_view() {
     h.on_disk(VIEW, json!({ "open": false, "sibling": 1 }));
 }
 
-// Expected: another client's writes show in the sections, and a fold or a dismissal after them keeps what that client
-// stored.
 #[test]
 fn the_sections_take_in_another_clients_writes() {
     let h = mount(&[], true);
@@ -172,7 +162,6 @@ fn the_sections_take_in_another_clients_writes() {
     h.on_disk(CARD, json!({ "seen": 3, "dismissed": true }));
 }
 
-// Expected: quick writes to one key land on disk in the order they were made.
 #[test]
 fn quick_writes_land_in_order() {
     let h = mount(&[], true);
@@ -184,8 +173,6 @@ fn quick_writes_land_in_order() {
     h.on_disk("plugin.test.count", json!({ "count": 39 }));
 }
 
-// Expected (panic-effects): a write the host puts back after a plugin call panicked reads at once, and lands on disk,
-// as the key was before: its old value, or nothing.
 #[test]
 fn a_restored_key_reads_and_lands_as_before() {
     let h = mount(&[], true);
@@ -201,8 +188,6 @@ fn a_restored_key_reads_and_lands_as_before() {
     h.on_disk(key, Value::Null);
 }
 
-// Expected: a mounted section listens to the settings until it unmounts, so mounting the sidebar's slots many times
-// leaves no listener behind.
 #[test]
 fn the_sections_let_go_of_their_settings_listeners() {
     let h = mount(&[], false);
@@ -247,15 +232,11 @@ fn mcp_frames(loopback: bool) -> Vec<opentui::testing::Capture> {
     frames
 }
 
-// Expected: the MCP section draws the same cells through the C ABI's byte shims as in process, and its clicks run
-// the same commands there: the fold through the plugin's hidden command and storage, the row through `mcp.list`.
 #[test]
 fn the_mcp_section_acts_the_same_through_the_c_abi_loopback() {
     assert_eq!(mcp_frames(true), mcp_frames(false));
 }
 
-// Expected: a hidden sidebar mounts no section, so `local` and resizes render none of them; opening it mounts them,
-// and closing it again lets go of their listeners.
 #[test]
 fn a_hidden_sidebar_mounts_no_section() {
     let h = support::mount(

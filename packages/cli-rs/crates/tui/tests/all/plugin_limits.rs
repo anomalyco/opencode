@@ -522,9 +522,6 @@ fn code(content: v2::Source) -> v2::Node {
     v2::Node::Code { id: None, content, filetype: None, numbers: false, layout: abi::Layout::default() }
 }
 
-// Expected (`limits`, 4.2): a tree at each limit shows as it is; one past it shows the one node that crosses as its
-// placeholder and the rest of the tree, and the sibling surface, as they are. The host builds and parses nothing of
-// what a placeholder stands for, and holds what it shows. On both carriers.
 #[test]
 fn a_tree_at_each_limit_shows_and_one_over_shows_its_placeholder() {
     for carrier in CARRIERS {
@@ -554,8 +551,6 @@ fn a_tree_at_each_limit_shows_and_one_over_shows_its_placeholder() {
     }
 }
 
-// Expected (`limits`, 4.2): a list over the tree's nodes is opened and its items admitted in turn: the one that crosses
-// is a placeholder under its key and stands for the items after it, which are not the list's; on both carriers.
 #[test]
 fn a_list_over_its_nodes_keeps_the_items_that_fit() {
     let item =
@@ -584,9 +579,6 @@ fn a_list_over_its_nodes_keeps_the_items_that_fit() {
     }
 }
 
-// Expected (`limits`, 4.2: "per plugin and in total"): a plugin holds at most its own share of nodes, and all plugins
-// together at most the total: a second plugin cannot spend what the first left. The share it has is the least of its
-// own and what the other plugins left of the total; on both carriers.
 #[test]
 fn a_plugin_spends_its_own_share_of_what_all_plugins_may_hold() {
     let texts = |count: usize| v2::Node::column((0..count).map(|index| text(&format!("t{index}"))).collect());
@@ -711,10 +703,6 @@ fn corner(frame: &opentui::native::Capture) -> Vec<opentui::native::Cell> {
     (0..8).flat_map(|y| (0..16).map(move |x| (x, y))).map(|(x, y)| frame.cell(x, y).unwrap().clone()).collect()
 }
 
-// Expected (`limits`, 4.2): an image is admitted by its header and decodes on a worker, and the host only copies its
-// pixels in: once the worker is done, the frame shows what OpenTUI draws for the same bytes decoded in the frame. One
-// past the pixels of an image, or past the decoded bytes its plugin may hold, shows the placeholder, the rest of the
-// tree as it is, and is never decoded; on both carriers.
 #[test]
 fn images_decode_on_a_worker_within_their_limits() {
     let gradient = |x: u32, y: u32| [(x * 15) as u8, (y * 15) as u8, ((x + y) * 7) as u8, 255];
@@ -808,9 +796,6 @@ fn show_in(harness: &Harness, command: &str, subject: Subject) -> opentui::nativ
     harness.app.render()
 }
 
-// Expected (`limits`, P2's surfaces): a panel's and an overlay's trees are held to the limits a route's is: one past
-// a limit shows the node that crosses as its placeholder and the rest as it is, and the host holds what it shows; on
-// both carriers.
 #[test]
 fn panels_and_overlays_are_held_to_the_limits() {
     let texts = |count: usize| v2::Node::column((0..count).map(|index| text(&format!("t{index}"))).collect());
@@ -869,9 +854,6 @@ fn at_the_limits(extra: usize) -> v2::Node {
     v2::Node::column(children)
 }
 
-// Expected (`limits`, 4.2): a tree at every limit of the client at once (its rows, its nodes and its depth) is
-// adopted whole and its frame renders: no plugin tree reaches OpenTUI's layout limits. One text more shows that text's
-// placeholder, and nothing else changes; on the linked carrier, on a thread with the UI thread's stack.
 #[test]
 fn a_tree_at_the_clients_limits_renders() {
     let run = std::thread::Builder::new().stack_size(8 << 20).spawn(|| {
@@ -927,9 +909,6 @@ fn next_phase(harness: &Harness) {
     settle(harness);
 }
 
-// Expected (`limits`, 4.2): a kept subtree counts the nodes it keeps, so a revision that keeps 31 nodes and adds 16
-// crosses the tree's 40 inside what it adds; and content the plugin releases is given back to its share at once,
-// while the mount lives. On both carriers.
 #[test]
 fn a_keep_counts_what_it_keeps_and_a_release_gives_content_back() {
     let texts = |count: usize| v2::Node::column((0..count).map(|index| text(&format!("t{index}"))).collect());
@@ -985,8 +964,6 @@ fn a_keep_counts_what_it_keeps_and_a_release_gives_content_back() {
     }
 }
 
-// Expected (fixed row; review bigboi 2): measuring a tree reads no text past one node's limit, and each content
-// handle's bytes once a mount, however many nodes name it and however many revisions show them; on both carriers.
 #[test]
 fn a_measure_reads_each_handle_once_and_nothing_past_the_text_limit() {
     let many = |source: v2::Source| v2::Node::column((0..64).map(|_| code(source.clone())).collect());
@@ -1024,10 +1001,6 @@ fn added(lines: usize, valid: bool) -> String {
     patch
 }
 
-// Expected (fixed row; review bigboi 6): a patch is charged as the renderer draws it. An added file of more than 3,000
-// lines is drawn in chunks and fits the default 3,000 rows; one of 2,999 or 3,000 lines, and one whose header names
-// more lines than it adds, are drawn whole and are past them. The twin, with the limits lifted, draws each as the
-// contract says: the chunks, or the placeholder. On both carriers.
 #[test]
 fn a_patch_is_charged_as_the_renderer_draws_it() {
     let patch = |text: String| v2::Node::diff(source(text)).view(v2::DiffView::Unified);
@@ -1055,10 +1028,6 @@ fn a_patch_is_charged_as_the_renderer_draws_it() {
     }
 }
 
-// Expected (fixed row; review bigboi 9): an image's job holds the decoded bytes it reserved until it is done: a mount
-// closed while its worker waits gives nothing back, so a mount opened then has no room for another image; once the
-// worker ends, the plugin holds nothing. A decode that fails gives back what it reserved, so the next image, on
-// another handle, decodes and shows as OpenTUI draws it. On both carriers.
 #[test]
 fn an_image_job_holds_its_bytes_until_it_is_done() {
     let gradient = |x: u32, y: u32| [(x * 15) as u8, (y * 15) as u8, ((x + y) * 7) as u8, 255];
@@ -1103,9 +1072,6 @@ fn an_image_job_holds_its_bytes_until_it_is_done() {
     }
 }
 
-// Expected (fixed row; review bigboi 5): a mount keeps the tree it adopted, not the one it was offered: a text of
-// 1 MiB past a 64-byte limit leaves the host holding what a tree of only its placeholder leaves, within 64 KiB, by
-// the Rust heap the UI thread still holds; on both carriers.
 #[test]
 fn a_mount_keeps_no_text_a_limit_refused() {
     for carrier in CARRIERS {
@@ -1177,11 +1143,6 @@ fn code_lines(id: &str, lines: usize) -> v2::Node {
     code(source(rust_lines(lines))).with_id(id)
 }
 
-// Expected (fixed rows; review carbon 1): a keep is admitted as the subtree it stands for. Keeps of nodes a placeholder
-// stood for, or that were in its run, which still do not fit, show the one placeholder of their run and ask for no
-// whole tree; a keep counts the rows its subtree built; a keep of a node opened to admit its children asks for it again
-// once it fits whole. Each against the twin, with every limit lifted, drawing the tree the contract says; on both
-// carriers.
 #[test]
 fn a_keep_is_admitted_as_the_subtree_it_stands_for() {
     let keyed = |count: usize| (0..count).map(|index| text(&format!("m{index}")).with_id(format!("m{index}")));
@@ -1260,10 +1221,6 @@ fn a_keep_is_admitted_as_the_subtree_it_stands_for() {
     }
 }
 
-// Expected (fixed row; review bigboi 3): the rows trees build in a frame are shared by every plugin. A route and a
-// sibling's surface whose revisions build 23 rows each, both woken before one paint, in a frame of 30 rows: the paint
-// adopts one, and the next paint the other; the screen then equals the twin's, which builds both at once. On both
-// carriers.
 #[test]
 fn two_plugins_share_the_rows_of_a_frame() {
     let both = |phase: u8| [code_lines("r", 10), text(&format!("route {phase}"))];
@@ -1317,9 +1274,6 @@ fn two_plugins_share_the_rows_of_a_frame() {
     }
 }
 
-// Expected (fixed row; review carbon 2.1): a list's items share the rows of the frame: ten items of 61 rows each in a
-// list that lays them out in a row, in a frame of 100 rows, mount two at most in the paint that shows the list; once
-// they are all mounted the screen equals the twin's, which mounts them at once. On both carriers.
 #[test]
 fn a_lists_items_share_the_rows_of_a_frame() {
     let tabs = || {
@@ -1384,9 +1338,6 @@ fn a_lists_anchors_respect_the_limits_of_a_patch() {
     }
 }
 
-// Expected (fixed row; review carbon 2.3): a node's text costs a row a KiB, however its lines break: one line of
-// 100 KiB is past the 100 rows of a tree and shows its placeholder, and one of 90 KiB shows; against the twin. On both
-// carriers.
 #[test]
 fn a_long_line_costs_its_rows() {
     for carrier in CARRIERS {
@@ -1412,8 +1363,6 @@ fn a_long_line_costs_its_rows() {
     }
 }
 
-// Expected (fixed rows; review carbon 2.4): a route of ABI 1.x is charged to its plugin and timed as its host time,
-// and a panel's body past a tree's rows shows its placeholder. On both carriers.
 #[test]
 fn trees_of_abi_1_are_held_to_the_limits() {
     for carrier in CARRIERS {
@@ -1521,9 +1470,6 @@ fn images_are_given_back_and_decode_two_at_a_time() {
     }
 }
 
-// Expected (rows for the reviews' mutants CM6, CM8, CM10, CM11): a plugin that failed holds no decoded image while its
-// failed mount shows; a released handle gives its image back while the mount lives; a list's window and an image's
-// copy in are host time of the plugin's. On both carriers.
 #[test]
 fn what_a_mount_holds_goes_and_its_host_work_is_timed() {
     let gradient = |x: u32, y: u32| [(x * 15) as u8, (y * 15) as u8, ((x + y) * 7) as u8, 255];

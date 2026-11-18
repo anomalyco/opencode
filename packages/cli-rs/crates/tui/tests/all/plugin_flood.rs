@@ -311,11 +311,6 @@ impl Model for Flood {
     }
 }
 
-// Expected (`backlog` under a flood, 4.2): sends never block and what got `Ok` arrives once and in order; each frame
-// hands every plugin with mail at least one update and more only under its own and the total budget, and leaves mail
-// waiting only once a budget is spent; a key is handled before the updates of its turn; and while the total is not
-// reached, a plugin's flood changes nothing another plugin sees. On both carriers, with the total out of reach and
-// at a total two plugins reach.
 #[test]
 fn a_flood_drains_in_turn_under_the_frame_budget() {
     for carrier in CARRIERS {
@@ -324,9 +319,6 @@ fn a_flood_drains_in_turn_under_the_frame_budget() {
     }
 }
 
-// Expected (fixed row; the mutant `idle-forgets-spend`): a plugin that went idle keeps what it spent in the frame. In
-// one frame plugin a's key (0.4 ms) and one update (0.3 ms) run and it goes idle; a second key takes it to 1.1 ms; the
-// message that comes after waits for the next frame, though it is the first since a went idle.
 #[test]
 fn a_plugin_that_went_idle_keeps_its_spend_for_the_frame() {
     let commands = [Command::Send(0, 1), Command::Key, Command::Key, Command::Send(0, 1), Command::Frame];
@@ -336,8 +328,6 @@ fn a_plugin_that_went_idle_keeps_its_spend_for_the_frame() {
     }
 }
 
-// Expected (fixed row; review bigboi 1): a poll that reads a key hands the wake of an accepted send first, as OpenTUI's
-// poll does when both are ready; the key's handler still runs before the update.
 #[test]
 fn a_key_read_with_a_wake_runs_before_the_update() {
     for carrier in CARRIERS {
@@ -346,8 +336,6 @@ fn a_key_read_with_a_wake_runs_before_the_update() {
     }
 }
 
-// Expected (fixed row; review bigboi 7): thirty wakes that reach an app whose budget is spent, each in a poll of its
-// own before the paint, ask for one drain; the paint runs it once and the frame after hands the mail over.
 #[test]
 fn wakes_before_a_paint_ask_for_one_drain() {
     let mut commands = vec![Command::Send(0, 40), Command::Frame];
@@ -365,9 +353,6 @@ fn send(plugin: usize, count: u32) {
     std::thread::spawn(move || (0..count).for_each(|number| drop(sender.send(number)))).join().unwrap();
 }
 
-// Expected (fixed row; review carbon 4.1): a paint does not cut the frame open as it starts: a plugin whose canvas
-// draw (0.8 ms) as one paint lays out and update (0.3 ms) as the next starts take 1.1 ms a frame is slow; on both
-// carriers.
 #[test]
 fn a_paint_does_not_cut_the_frame_open() {
     for carrier in CARRIERS {
@@ -386,9 +371,6 @@ fn a_paint_does_not_cut_the_frame_open() {
     }
 }
 
-// Expected (fixed row; review carbon 4.1): a key handled between paints is in the frame of the paint after it, which a
-// paint does not cut as it starts: a key (0.4 ms), an update (0.3 ms) and a draw (0.4 ms) each paint are 1.1 ms a
-// frame, and slow; on both carriers.
 #[test]
 fn a_key_between_paints_is_in_the_next_paints_frame() {
     for carrier in CARRIERS {
@@ -408,9 +390,6 @@ fn a_key_between_paints_is_in_the_next_paints_frame() {
     }
 }
 
-// Expected (fixed row; review carbon 4.1): a paint's draws are in that paint's frame, not taken from the next paint's
-// updates: with a draw of 0.9 ms each paint, a plugin with mail still gets four updates of 0.3 ms a paint, the last
-// one starting at 0.9 ms of its own; on both carriers.
 #[test]
 fn a_paints_draws_leave_the_next_paints_updates_their_budget() {
     for carrier in CARRIERS {
@@ -430,9 +409,6 @@ fn a_paints_draws_leave_the_next_paints_updates_their_budget() {
     }
 }
 
-// Expected (fixed row; review carbon 4.3): two plugins with mail share a total budget that binds in turn: the one
-// served first in a frame goes last in the next, so over ten frames their updates differ by one at most; on both
-// carriers.
 #[test]
 fn plugins_take_turns_to_go_first() {
     for carrier in CARRIERS {
@@ -451,9 +427,6 @@ fn plugins_take_turns_to_go_first() {
     }
 }
 
-// Expected (fixed row; review carbon 4.2): a wake stays posted until the drain takes it, so 25 sends between two
-// paints, each followed by a poll, wake the UI thread once; after the paint takes it, the next 25 once more. On both
-// carriers.
 #[test]
 fn sends_between_paints_wake_the_ui_thread_once() {
     for carrier in CARRIERS {
@@ -494,9 +467,6 @@ fn the_last_frame_over_the_budget_ends_without_a_call() {
     }
 }
 
-// Expected (Pc's transcripts, on the rebase onto P6a): a wake handler runs as the paint starts, and the effects it asks
-// for run in that paint's deferred work, before its layout: its toast shows in the frame whose paint ran it. On both
-// carriers.
 #[test]
 fn a_wake_handlers_toast_shows_in_the_frame_that_ran_it() {
     for carrier in CARRIERS {

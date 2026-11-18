@@ -81,10 +81,6 @@ fn stream(harness: &Harness, count: u64) {
     assert!(harness.app.text().contains(&format!("w{} ", count - 1)), "{}", harness.app.text());
 }
 
-// Expected (`work`, per streamed update): a delta that changes nothing a built-in shows builds, sets, moves and keeps
-// nothing in their trees: each view answers a keep of its root, which the host takes with no work. The counters are
-// the host's, and only plugin trees count in them. A tree built again equal to the last is no reconcile work, so the
-// host also counts the trees it adopts: none (review carbon-7). On both carriers, one view call a surface on the C ABI.
 #[test]
 fn a_streamed_delta_does_no_work_in_the_built_ins() {
     stream(&session(&[], Vec::new()), 20);
@@ -129,9 +125,6 @@ fn history(turns: u64, abi: bool) -> Harness {
     harness
 }
 
-// Expected (`work`, per streamed update, on the C ABI carrier): a delta costs the built-ins the same calls and bytes
-// across the carrier with no history as with 200 turns before it. A view reads the message that changed, not the
-// session (P6a review, big-boi high 2). The counters are the loader's.
 #[test]
 fn a_streamed_delta_crosses_the_same_bytes_at_any_history() {
     let per_delta = |turns| {
@@ -169,8 +162,6 @@ fn stream_crossed(harness: &Harness, count: u64) -> opencode_plugin::loader::nat
     opencode_plugin::loader::native::crossed().since(before)
 }
 
-// Expected (`work`, a theme switch): a switch to a theme of another name builds and drops no widget of a built-in: they
-// read no palette, so the host restyles their trees in place, and a view that reads the theme's name keeps its tree.
 #[test]
 fn a_theme_switch_builds_nothing_in_the_built_ins() {
     for route in [opencode_tui::Route::Home, support::session_route("ses_a")] {
@@ -219,9 +210,6 @@ fn stats_route(height: u16) -> Harness {
     harness
 }
 
-// Expected (a theme switch on `/stats`): the poster's calendar and logo compute their colors from the theme, so a
-// switch draws every cell as the poster opened in the new theme, compact and tall with its logo (P6a review, big-boi
-// medium 3).
 #[test]
 fn the_stats_poster_takes_a_new_theme() {
     for height in [30, 44] {
@@ -244,8 +232,6 @@ fn a_resized_stats_page_draws_its_first_frame_at_the_new_size() {
     }
 }
 
-// Expected: the poster's big number and calendar are glyphs, not text: a drag over them selects nothing, as TS's
-// `selectable={false}` (review carbon-7, `unselectable`).
 #[test]
 fn the_stats_poster_selects_no_glyphs() {
     use opentui::input::{MouseButton, MouseEventKind};
@@ -259,8 +245,6 @@ fn the_stats_poster_selects_no_glyphs() {
     assert_eq!(harness.app.app().selected_text(), None);
 }
 
-// Expected (`lifecycle`, `/stats`): the stats asked for as the route opened, answered after it closed, reach nothing:
-// Home shows, and the route holds no mount; opened again, it asks again and shows the new answer.
 #[test]
 fn a_stats_reply_after_the_route_closed_reaches_nothing() {
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -304,8 +288,6 @@ fn a_stats_reply_after_the_route_closed_reaches_nothing() {
     assert_eq!(ASKED.load(Ordering::SeqCst), 2);
 }
 
-// Expected (review carbon-7): the built-ins that follow the terminal's size hear a resize: the getting started card
-// goes below 22 rows and comes back above, and the prompt footer's shell hint shortens below 44 columns and grows back.
 #[test]
 fn the_built_ins_follow_a_resize() {
     let harness = session(&[], Vec::new());
@@ -325,9 +307,6 @@ fn the_built_ins_follow_a_resize() {
     }
 }
 
-// Expected: a `todowrite` call that completes in the reply that streams, a message changed in place, shows its list in
-// the sidebar's todo section (P6a review: the section reads a changed message alone, and the session only for one that
-// holds such a call).
 #[test]
 fn a_todo_list_written_in_a_streaming_reply_shows_in_the_sidebar() {
     let harness = session(&[], Vec::new());
@@ -358,9 +337,6 @@ const SESSION: [&str; 7] = [
     "opencode.sidebar.footer",
 ];
 
-// Expected (`ledger`): each built-in disabled while its surfaces show holds no mount after, and the screen equals the
-// session opened with that built-in disabled in the config (the twin); enabled again, it holds what it held. On Home,
-// the same for the home footer.
 #[test]
 fn a_disabled_built_in_holds_nothing_and_draws_as_one_never_enabled() {
     let mut cases: Vec<(&str, Option<opencode_tui::Route>)> = SESSION.iter().map(|id| (*id, None)).collect();
@@ -403,8 +379,6 @@ fn a_disabled_built_in_holds_nothing_and_draws_as_one_never_enabled() {
     }
 }
 
-// Expected (`ledger`, its own rows): the ledger keeps a row for a plugin only while it holds something, so mounting
-// and closing surfaces of ever new plugin IDs leaves as many rows as before (P6a review, big-boi low).
 #[test]
 fn the_ledger_keeps_no_row_for_a_plugin_that_holds_nothing() {
     let before = surface::ledger_rows();
@@ -501,11 +475,6 @@ fn mounts_and_first_views() -> Vec<String> {
         .collect()
 }
 
-// Expected (`lifecycle`): a surface that asks hears each mount begin before its first view, which hears `all`, and end
-// after the next mount began (the prompt mounts its footer again as shell mode turns on and off, and with equal input
-// as the route mounts again); each notice names its mount, so the end names the mount that went, not the new one. What
-// the plugin starts as a mount ends answers after it. Once its plugin is disabled it hears nothing, not even the end of
-// its mount. On both carriers; the reference is the sequence written out, the log the plugin's own.
 #[test]
 fn a_surface_hears_its_mounts_begin_and_end_in_order() {
     for abi in [false, true] {
@@ -571,9 +540,6 @@ fn mounts_in_order(abi: bool) {
     assert_eq!(surface::ledger_of("test.probe"), surface::Ledger::default());
 }
 
-// Expected (`delivery`): each view hears what changed since the one before, once: a streamed delta names its message;
-// the plugin's own command is `woken`, and the storage write it made is `local` in that same view, as its notice, which
-// comes later, calls no view once the view ran.
 #[test]
 fn a_view_hears_what_changed_since_the_last() {
     let probe = abi::Plugin { id: "test.probe", setup: probe }.into();
@@ -617,8 +583,6 @@ fn a_view_hears_what_changed_since_the_last() {
     KEEPING.set(false);
 }
 
-// Expected (review carbon-6): a change of the host's own state is `local` to the next view of each surface once,
-// however many surfaces watch it: a delta after it is heard as the delta alone, by each of two plugins' surfaces.
 #[test]
 fn a_change_of_the_hosts_state_is_local_once() {
     let probes = ["test.probe.a", "test.probe.b"].map(|id| abi::Plugin { id, setup: probe }.into()).into();
@@ -710,10 +674,6 @@ fn keeper_session(abi: bool) -> Harness {
     harness
 }
 
-// Expected (review carbon-2): a view that keeps its root without running its memos keeps their values, also after a
-// theme switch it answered so: a delta it keeps the root for leaves the table whole and costs no work, and the next
-// view that runs the memos builds only the card that changed. Content a view gives as it keeps its root is held, and a
-// later tree shows it. Each view of the slot is told the slot's size, which is the surface's. On both carriers.
 #[test]
 fn a_kept_root_keeps_what_the_mount_holds() {
     for abi in [false, true] {
@@ -739,8 +699,6 @@ fn a_kept_root_keeps_what_the_mount_holds() {
     }
 }
 
-// Expected (review carbon-2, carbon-5): a view that reads the palette and answers a theme switch with a keep of its
-// root is painted in the new theme, its root shown or hidden as a fresh mount's. On both carriers.
 #[test]
 fn a_kept_root_takes_a_new_theme() {
     for (abi, hide) in [(false, false), (true, false), (false, true)] {
@@ -775,9 +733,6 @@ fn mounter(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (review carbon-3): what a plugin opens as it hears a mount begin is the plugin's, and ends with it: the
-// overlay closes as the plugin is disabled, which leaves the overlay layer and the plugin's ledger as before. The
-// route's first view runs once: the wake the notice's handler gives before it calls none. On both carriers.
 #[test]
 fn what_a_mount_notice_opens_ends_with_the_plugin() {
     for abi in [false, true] {

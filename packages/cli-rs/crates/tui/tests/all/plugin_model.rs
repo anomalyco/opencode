@@ -1264,9 +1264,6 @@ const FIXED: &[(&str, &[Command])] = &[
     ("a-replaced-confirm-answers-nothing", &[Command::Dialog(Dialog::Confirm), Command::Dialog(Dialog::Panel)]),
 ];
 
-// Expected (O-124, Pt): every property holds for 40 seeds of 64 commands. 4.14 asks for 256 seeds within about 3 s; a
-// seed costs about 70 ms in a debug build (two TUIs stepped per command), so the seeds went down and the commands
-// stayed. `MODEL_SEEDS` runs more.
 #[test]
 fn the_plugin_life_holds_its_properties() {
     model::check(&PluginModel, 40, 64);
@@ -1297,8 +1294,6 @@ fn manager_toggle(world: &World) -> Vec<String> {
     reports
 }
 
-// Expected (TS `plugins.tsx`): an enable in the plugin manager whose setup fails shows the setup's error and keeps the
-// row as the last load listed it; it does not list the plugin failed.
 #[test]
 fn a_failed_enable_shows_its_error_and_keeps_the_row() {
     LOG.take();
@@ -1311,9 +1306,6 @@ fn a_failed_enable_shows_its_error_and_keeps_the_row() {
     ARMED.set(None);
 }
 
-// Expected: the oracles are not empty. While the probe is active the host differs from the twin, and a host on build
-// 2 differs from a fresh one on build 3; the reference refuses a command that did not run while the probe is active,
-// and one that ran while it is disabled.
 #[test]
 fn the_oracles_can_fail() {
     LOG.take();
@@ -1336,7 +1328,6 @@ fn the_oracles_can_fail() {
     assert!(reference.step(Some(Command::Run), Some(true), true, &[call]).is_err());
 }
 
-// Expected: a property that `MODEL_SKIP` turns off does not fail, and the others still do.
 #[test]
 fn a_skipped_property_is_checked_no_more() {
     assert!(check("lifecycle", "calls", 0, None).is_none());

@@ -68,7 +68,6 @@ fn a_burst_while_the_ui_is_busy_does_not_stop_later_events() {
     assert!(heard.get() > 0, "the burst reached its listener");
 }
 
-// Expected: an event type nobody listens to never reaches the UI thread.
 #[test]
 fn an_event_nobody_listens_to_stays_in_the_store() {
     let memory = Arc::new(Memory::new(routes()));

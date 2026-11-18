@@ -22,9 +22,6 @@ thread_local! {
     static EDITS: RefCell<Vec<(u64, String)>> = const { RefCell::new(Vec::new()) };
 }
 
-// Expected: the user types "ab" into the field. A view made after the first edit, giving it that edit's "a", leaves
-// "ab"; one giving "x", which no edit had, shows "x". The user then backspaces to "" and types "y", and the plugin,
-// which heard both, clears the field to "": it shows "", though an earlier edit had "" too.
 #[test]
 fn a_value_the_field_reported_leaves_what_the_user_typed_since() {
     VALUE.set((String::new(), None));

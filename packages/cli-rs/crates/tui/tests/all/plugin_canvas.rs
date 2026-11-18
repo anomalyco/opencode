@@ -815,8 +815,6 @@ impl Model for Canvases {
     }
 }
 
-// Expected: the properties of P5 over random runs of the pad: a replayed frame equals a drawn one, `work` for a still
-// frame, `ledger` for lists, and `lifecycle` for draws: a draw only for the mount that shows, at the canvas's size.
 #[test]
 fn canvases_hold_their_properties() {
     model::check(&Canvases, 64, 24);
@@ -930,9 +928,6 @@ fn unlike_raster(frame: &Capture, shapes: &[Shape], (width, height): (u16, u16))
     None
 }
 
-// Expected (a replayed frame equals a drawn one, a second oracle): the canvas on screen holds the characters and the
-// backgrounds a plain rasterizer computes for opaque fills, text and cells under nested clips, on the frame the
-// plugin drew and on later frames that replay the list.
 #[test]
 fn a_list_on_screen_has_the_cells_a_rasterizer_computes() {
     let red = abi::Rgba::new(200, 0, 0, 255);
@@ -971,8 +966,6 @@ thread_local! {
     static FIXED: RefCell<Option<Vec<Shape>>> = const { RefCell::new(None) };
 }
 
-// Expected: a canvas without an id is refused as a scroll without one is, since a node with state must have one; a
-// refusal other than an unknown keep breaks the contract and fails the plugin at once (P4), which never drew.
 #[test]
 fn a_canvas_without_an_id_is_refused() {
     PAD.with(|cell| *cell.borrow_mut() = Pad { unkeyed: true, ..Pad::default() });
@@ -1054,10 +1047,6 @@ fn chart_route() -> Route {
     Route::Plugin { id: "test.chart".to_owned(), name: "chart".to_owned() }
 }
 
-// Expected (4.11, the animated chart): the chart is drawn once a painted frame with the frame's time; on a frame
-// with nothing to draw the host replays its list. Away from its route it costs no draw, no frame and no wakeup, and
-// the time away is not counted when it shows again. In its still mode a frame makes no call, and a new data point
-// draws it once.
 #[test]
 fn the_chart_animates_once_a_frame_and_rests_while_hidden() {
     CHART.with(|cell| *cell.borrow_mut() = Chart::default());
@@ -1194,8 +1183,6 @@ fn an_animating_canvas_out_of_view_rests() {
     assert_eq!(host::ledger().driving, 0);
 }
 
-// Expected (`reported-once` for a draw): a draw that panics fails its plugin once, named as the call it was, and
-// what the canvas held goes with the mount; a list the host cannot read fails it too, named by the canvas.
 #[test]
 fn a_draw_that_fails_is_reported_by_its_call() {
     for (next, says) in [
@@ -1237,8 +1224,6 @@ fn slot_setup(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected: a canvas at the root of a slot surface takes its own layout there, as a box at a slot's root does: a
-// growing canvas grows in the slot's row. It is drawn at that size.
 #[test]
 fn a_canvas_at_a_slots_root_takes_its_layout() {
     SLOT.with(|frames| frames.borrow_mut().clear());
@@ -1274,9 +1259,6 @@ fn footer_setup(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (carbon 5): a theme switch restyles a slot's claims in place, adopting each one's last tree again with no
-// view call; a canvas at the root keeps the layout its root took, so it is neither resized nor drawn again, and every
-// frame shows it.
 #[test]
 fn a_slot_root_canvas_keeps_its_layout_through_a_theme_switch() {
     SLOT.with(|frames| frames.borrow_mut().clear());
@@ -1295,8 +1277,6 @@ fn a_slot_root_canvas_keeps_its_layout_through_a_theme_switch() {
     assert_eq!(frames.iter().map(|frame| (frame.width, frame.height)).collect::<Vec<_>>(), [(12, 2)]);
 }
 
-// Expected: a canvas with no width of its own in a row has no room in layout (OpenTUI's `rect()` and resize report
-// one cell; its painter gets none), so neither its first showing nor its versions draw it.
 #[test]
 fn a_canvas_with_no_width_is_not_drawn() {
     PAD.with(|cell| *cell.borrow_mut() = Pad { auto: true, ..Pad::default() });
@@ -1310,10 +1290,6 @@ fn a_canvas_with_no_width_is_not_drawn() {
     assert_eq!(pad(|pad| pad.draws.len()), 0);
 }
 
-// Expected (OpenTUI's answer to P5's finding 3): a canvas given a width of 0 has no room, which its painter sees
-// though OpenTUI's resize reports one cell: it is not drawn, and a version while it has no room draws nothing. Given
-// one cell, which OpenTUI reports as the same size and so resizes nothing, the paint that shows it draws the version
-// it missed. A resize that leaves a dimension of none draws nothing; one to more than a cell draws in its frame.
 #[test]
 fn a_canvas_without_room_is_not_drawn_and_catches_up() {
     PAD.with(|cell| *cell.borrow_mut() = Pad::default());
@@ -1487,9 +1463,6 @@ fn cells_tui(list: List) -> Harness {
     harness
 }
 
-// Expected (bigboi 1): a text the renderer can record is drawn, and one byte more is a list over its limit: the canvas
-// shows the placeholder, the frame and the rest of the screen go on (the mark beside the canvas shows), and the
-// plugin stays active. Without the limit the renderer refuses the recording and the frame fails, ending the TUI.
 #[test]
 fn a_text_the_renderer_cannot_record_is_over_the_limit() {
     assert_eq!(list::MAX_TEXT_BYTES, opentui::sys::OT_BUFFER_TEXT_BYTES_MAX as usize);
@@ -1505,9 +1478,6 @@ fn a_text_the_renderer_cannot_record_is_over_the_limit() {
     }
 }
 
-// Expected (bigboi 7): clips nested past the bound are a resource limit like the others: the canvas shows the
-// placeholder in the same frame, the mark beside it shows, and the plugin stays active; a pop without a clip is a
-// list the host cannot read, which fails it.
 #[test]
 fn clips_past_the_bound_show_the_placeholder() {
     let mut deep = List::new();
@@ -1529,12 +1499,6 @@ fn frame_after_one(harness: &Harness) -> Capture {
     frame(harness, Duration::from_millis(16))
 }
 
-// Expected (bigboi 6): what a list draws, cell by cell, hand-written and computed without OpenTUI's painter, on the
-// frame that draws it and on a frame that replays it. A text takes the columns its characters need (a wide one
-// leaves its next cell to it, a combining cluster is one cell); a cell takes a character one column wide, and one of
-// another width draws U+FFFD; a clip through half of a wide character draws none of it and leaves what is beside it;
-// a later operation overwrites an earlier one; a translucent fill blends over the row's background; a cell without
-// colors keeps the background under it; every style bit reaches the cell.
 #[test]
 fn a_list_draws_the_cells_its_table_says() {
     use opentui::style::{Attributes, Color};
@@ -1598,9 +1562,6 @@ fn a_list_draws_the_cells_its_table_says() {
     assert_eq!(CELLS_DRAWS.get(), 1);
 }
 
-// Expected (bigboi, contract): a list kept for another size is replayed as it is, cut to the canvas: a draw that
-// returns nothing after a resize keeps the list it had, at the new size, until the next draw replaces it. A resize
-// is a chance to draw, not a new list.
 #[test]
 fn a_kept_list_is_replayed_at_a_new_size_until_replaced() {
     PAD.with(|cell| *cell.borrow_mut() = Pad::default());
@@ -1625,7 +1586,6 @@ fn a_kept_list_is_replayed_at_a_new_size_until_replaced() {
     assert_eq!(differs(&replaced, Some(&next), (16, 4)), None);
 }
 
-// Expected (bigboi 4): an animating canvas without a draw asks for no frame and runs no animation.
 #[test]
 fn a_canvas_without_a_draw_does_not_animate() {
     fn setup(setup: &mut abi::Setup) -> Result<(), String> {
@@ -1648,10 +1608,6 @@ fn a_canvas_without_a_draw_does_not_animate() {
     assert!(!harness.app.needs_frame());
 }
 
-// Expected (bigboi 4): an animating canvas covered by what is drawn over it rests: under the command palette (a
-// dialog, whose backdrop takes the pointer from the screen) and under an opaque box over all its rows it is not drawn
-// and asks for no frame, within two frames; with the cover gone it asks for a frame and animates again, its time not
-// counting the rest. Under a box over part of its rows, or its first columns, it animates on.
 #[test]
 fn a_covered_canvas_rests() {
     PAD.with(|cell| *cell.borrow_mut() = Pad { animate: true, ..Pad::default() });
@@ -1700,9 +1656,6 @@ fn a_covered_canvas_rests() {
     animates("uncovered");
 }
 
-// Expected (bigboi 5): the time the terminal is away is no animation's. After a suspend (here the command, whose
-// hand-over the test client does not carry out), five seconds with no frame are not given to the next frame of a
-// canvas that stayed mounted and shown; without the suspend they are.
 #[test]
 fn the_time_the_terminal_is_away_is_not_counted() {
     // Windows has no suspend: the command is never enabled there, as TS's is not, so only the stall half runs.
@@ -1805,9 +1758,6 @@ fn texts_bytes() -> i64 {
     list.as_bytes().len() as i64
 }
 
-// Expected (bigboi 2): what one plugin's canvases hold is bounded: of five lists of 0.9 MiB, four fit its 4 MiB and
-// the fifth canvas shows the placeholder; a new version of the same lists replaces each in place, so the four stay
-// and the fifth does not get in; and what it holds goes when its canvases do. The plugin stays active.
 #[test]
 fn one_plugin_holds_at_most_its_bytes() {
     let bytes = texts_bytes();
@@ -1830,8 +1780,6 @@ fn one_plugin_holds_at_most_its_bytes() {
     assert_eq!((opencode_plugin::canvas::held(owner), host::ledger()), (0, Ledger::default()));
 }
 
-// Expected (bigboi 2): what all canvases hold is bounded too: five plugins of four lists of 0.9 MiB each fit their own
-// bound, and the lists past 16 MiB in all show the placeholder; no plugin holds more than its bound.
 #[test]
 fn all_canvases_hold_at_most_the_total() {
     let bytes = texts_bytes();
@@ -1842,9 +1790,6 @@ fn all_canvases_hold_at_most_the_total() {
     assert!(LOADS.iter().all(|owner| opencode_plugin::canvas::held(owner) <= opencode_plugin::canvas::PLUGIN_BYTES));
 }
 
-// Expected (bigboi 2): what the canvases of one frame ask the renderer to record is bounded, below what OpenTUI
-// records in a frame: nine lists of 32,000 fills (4 MB of recording each) from three plugins draw eight a frame and
-// show the placeholder in the ninth, and the frame goes on. Each list alone is within its own bounds.
 #[test]
 fn a_frame_records_at_most_its_bound() {
     let harness = load_tui(3, 3, Load::Fills(32_000));
@@ -1858,10 +1803,6 @@ fn a_frame_records_at_most_its_bound() {
     }
 }
 
-// Expected (bigboi 2): a list is charged by what it touches at the size it is drawn at: fills that cover the canvas
-// 7,281 times are within the cells one list may touch, and 7,282 times are over it; 32,768 fills are within the
-// recording one list may ask for, and 32,769 are over it; a run of cells and a fill wholly outside the canvas cost
-// nothing and replay nothing.
 #[test]
 fn a_list_is_charged_by_the_cells_it_touches() {
     let per = 12 * 3;
@@ -1901,8 +1842,6 @@ fn a_list_is_charged_by_the_cells_it_touches() {
     assert_eq!((done.replays, done.ops, done.recorded), (1, 0, 0), "{done:?}");
 }
 
-// Expected (bigboi 2): a kept list is charged again at a new size: a run of 30 cells in a canvas of 12 records one
-// record of 12 of them, and the same list kept at 20 one record of 20.
 #[test]
 fn a_kept_list_is_charged_at_its_new_size() {
     let pen = Pen(Some(abi::Rgba::new(255, 255, 255, 255)), None, 0);
@@ -1925,9 +1864,6 @@ fn a_kept_list_is_charged_at_its_new_size() {
     FIXED.with(|cell| *cell.borrow_mut() = None);
 }
 
-// Expected (carbon 2): a cell takes a character one column wide by OpenTUI's own measure; a wide one, a combining
-// mark, a zero-width space, a bidirectional override, an emoji and a control each draw U+FFFD in their one cell, and
-// the cell right of the canvas keeps what it had. A one-column character is drawn whatever was measured before it.
 #[test]
 fn a_cell_draws_one_column() {
     let pen = list::Style::new().fg(abi::Rgba::new(255, 255, 255, 255));
@@ -1947,9 +1883,6 @@ fn a_cell_draws_one_column() {
     }
 }
 
-// Expected (carbon 3): a canvas under an ancestor that hides it gets no paint, and so no draw; an animation frame
-// that was waiting then is not drawn when it shows again: the frame that shows it draws the version it missed with no
-// animation time, or nothing when there is none, paused or still animating.
 #[test]
 fn a_canvas_hidden_by_an_ancestor_draws_no_stale_frame() {
     // Hidden for one frame, the frame its driver left waits; for three, the driver has stopped.
@@ -2025,8 +1958,6 @@ fn a_draw_the_plugin_did_not_make_is_not_counted() {
     assert_eq!((PAIR_CALLS.get(), done.draws, done.refused), (1, 1, 1), "{done:?}");
 }
 
-// Expected (carbon 4): a still canvas's draw leaves the app idle: within two frames of a version's draw nothing asks
-// for a frame. (P4c's budget closes the frame its calls opened with an animation, which costs that one frame.)
 #[test]
 fn a_still_draw_leaves_the_app_idle() {
     PAD.with(|cell| *cell.borrow_mut() = Pad::default());
@@ -2067,10 +1998,6 @@ thread_local! {
     static DEEP: std::cell::Cell<(usize, f32, u64)> = const { std::cell::Cell::new((0, 50.0, 0)) };
 }
 
-// Expected (carbon 6): a canvas counts in the tree's bounds and the reconcile's counts. One layout level: 63 boxes
-// around it fit the bound of 64 and 64 do not. A width in percent that is not a number is refused. Memoized, the canvas
-// takes its key as its id and is kept while its value stays; a new version changes it in place (one widget set), and
-// a new layout builds it again alone (one built, one removed).
 #[test]
 fn a_canvas_counts_in_the_trees_bounds() {
     use opencode_plugin::reconcile;
@@ -2103,10 +2030,6 @@ fn a_canvas_counts_in_the_trees_bounds() {
     assert_eq!((built.created, built.removed), (1, 1), "a layout builds it again: {built:?}");
 }
 
-// Expected (carbon 5, a replayed frame equals a drawn one, the independent oracle): over seeded opaque lists of every
-// operation, every style bit and no foreground, the canvas's cells on the frame that draws the list and on one that
-// replays it are what this test's rasterizer computes, with no code of OpenTUI's painter: characters and backgrounds
-// everywhere, foregrounds and style bits where a glyph is written.
 #[test]
 fn seeded_lists_have_the_cells_a_rasterizer_computes() {
     for seed in 0..model::seeds_or(40) {
@@ -2126,9 +2049,6 @@ fn seeded_lists_have_the_cells_a_rasterizer_computes() {
     FIXED.with(|cell| *cell.borrow_mut() = None);
 }
 
-// Expected (OpenTUI's `Painter::cells`): a run of cells is recorded as one record of cells for each row it shows in,
-// cut to the canvas: a run of 30 in rows of 10 from (5, 1) in a canvas of 12 by 3 shows in two rows, seven cells each,
-// on the drawn and the replayed frame; the cells beside and below are blank. A lone cell is a record of one.
 #[test]
 fn a_run_is_a_record_a_row() {
     let mut list = List::new();
@@ -2169,10 +2089,6 @@ fn huge_setup(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (P5's bounds; review bigboi 7): a draw's list past one list's bytes is over its limit and shows the
-// placeholder, and the plugin stays active; one whose first byte is no list's is malformed and fails the plugin, as
-// the canvas reads either. Through the C ABI the host takes neither in: it reads the list's length and first byte, and
-// copies none of its 2 MiB.
 #[test]
 fn a_draw_past_a_lists_bytes_is_over_and_not_copied() {
     for carrier in crate::plugin_surface::CARRIERS {

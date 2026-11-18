@@ -652,8 +652,6 @@ fn fixed() -> Vec<(&'static str, Vec<Command>, (bool, bool))> {
     ]
 }
 
-// Expected (O-124, P4c): `isolation`, `reported-once` and `record-balanced` hold for 20 seeds of 64 commands. Each
-// command steps two TUIs; `MODEL_SEEDS` runs more.
 #[test]
 fn containment_holds_its_properties() {
     model::check(&ContainModel, 20, 64);
@@ -671,9 +669,6 @@ fn the_fixed_rows_pass_and_the_open_rows_still_fail() {
     }
 }
 
-// Expected: the oracles are not empty. A fault fails the plugin with one report and one count in the footer; the lag
-// makes the plugin slow with one toast; a host that keeps the faulty plugin differs from the twin; and a call the
-// record does not name fails `record-balanced`.
 #[test]
 fn the_oracles_can_fail() {
     LOG.take();
@@ -763,9 +758,6 @@ fn crash_list(world: &World) -> serde_json::Value {
     serde_json::from_slice(&std::fs::read(file).unwrap_or_else(|_| b"[]".to_vec())).unwrap()
 }
 
-// Expected (synthesis 4.5; bigboi 1, carbon 8): a client started after `model.a`'s build crashed in a render never
-// opens it: it is listed failed with the call, the crash list on disk holds the build, and one toast says so. Its
-// Enable again loads it, ends the entry on disk, and the next client loads it too.
 #[test]
 fn a_crash_holds_the_build_until_its_toast_enables_it() {
     LOG.take();
@@ -789,7 +781,6 @@ fn a_crash_holds_the_build_until_its_toast_enables_it() {
     assert_eq!(crash_list(&world), serde_json::json!([]));
 }
 
-// Expected (carbon 8): a crash the record pins on a built-in is told as a bug of opencode-native, and nothing is held.
 #[test]
 fn a_crash_in_a_builtin_is_told_as_a_host_bug() {
     LOG.take();
@@ -803,8 +794,6 @@ fn a_crash_in_a_builtin_is_told_as_a_host_bug() {
     take_calls();
 }
 
-// Expected (bigboi 8, carbon 2): a client started after a crash shows the draft it was handed and holds it in its own
-// snapshot without a keystroke, so a second crash hands it on whole; a clear after that is what a third client gets.
 #[test]
 fn a_restored_draft_survives_a_second_crash() {
     LOG.take();
@@ -821,7 +810,6 @@ fn a_restored_draft_survives_a_second_crash() {
     take_calls();
 }
 
-// Expected: `draft-exact` is not empty: a composer whose text changed without the record is caught.
 #[test]
 fn the_draft_oracle_can_fail() {
     LOG.take();
@@ -834,9 +822,6 @@ fn the_draft_oracle_can_fail() {
     take_calls();
 }
 
-// Expected (bigboi): two clients that share a state directory keep each other's crash entries: each change is read,
-// made and written under the lock, so the second client's crash does not drop the first's, and the first's enable
-// ends only its own.
 #[test]
 fn two_clients_keep_each_others_crash_entries() {
     LOG.take();
@@ -863,8 +848,6 @@ fn two_clients_keep_each_others_crash_entries() {
     take_calls();
 }
 
-// Expected (carbon 1): a client in a test starts no watchdog, though it has a record: nothing can end the test process
-// or write to its terminal. Only the CLI's run on a real terminal asks for one.
 #[cfg(target_os = "linux")]
 #[test]
 fn a_test_client_starts_no_watchdog() {

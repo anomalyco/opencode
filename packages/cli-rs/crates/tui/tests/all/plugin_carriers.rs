@@ -237,8 +237,6 @@ fn flood(run: Run, count: usize) -> (Vec<String>, usize) {
     (cards, opencode_plugin::mailbox::stats(ID).unwrap().high)
 }
 
-// Expected (`backlog` on every carrier): a flood of four times the bound, whose thread waits on `Full`, delivers every
-// message, leaves the same cards on every carrier, and never holds more than the bound, however the UI drains it.
 #[test]
 fn a_flood_ends_the_same_on_every_carrier() {
     let (linked, high) = flood(Run::In(Carrier::Linked), 4 * abi::BOUND);
@@ -251,9 +249,6 @@ fn a_flood_ends_the_same_on_every_carrier() {
     }
 }
 
-// Expected (`carrier-equal`, and a thread's panic in `reported-once`): the board gives the same frames, toasts and
-// status linked, through the byte shims, and as a real library; the flood never holds more than the bound; the
-// thread's panic fails the plugin with one toast, and later frames add none.
 #[test]
 fn one_source_is_equal_on_every_carrier() {
     let linked = script(Run::In(Carrier::Linked));
@@ -281,9 +276,6 @@ fn one_source_is_equal_on_every_carrier() {
     }
 }
 
-// Expected (carbon ce-5): a plugin enabling or disabling its command tells the keymap, whose state listeners hear it
-// (the plugins' reads of `keymap.commands()` and its pending keys follow them), where only the command's condition
-// changed and nothing that follows the keymap knew.
 #[test]
 fn a_commands_state_change_tells_the_keymaps_listeners() {
     let board = open(Run::In(Carrier::Linked));
@@ -299,10 +291,6 @@ fn a_commands_state_change_tells_the_keymaps_listeners() {
     }
 }
 
-// Expected (contract ergonomics 2.5): a command's state and a declined key are alike linked, through the byte shims and
-// as a real library. `board.hotkey`, on `ctrl+p`, starts disabled: the key opens the host's palette, which lists no
-// entry of it. Enabled, it takes the key and is listed; made to decline, it runs and the key goes on to the host's
-// palette; disabled again, it neither runs nor is listed.
 #[test]
 fn a_command_is_disabled_and_declines_alike_on_every_carrier() {
     let script = |run: Run| {
@@ -353,8 +341,6 @@ fn a_command_is_disabled_and_declines_alike_on_every_carrier() {
     }
 }
 
-// Expected (contract gaps 2): the board's listener of every key lets `ctrl+p` go on to the host's palette, and once
-// armed takes it, so no palette opens; the same linked, through the byte shims and as a real library.
 #[test]
 fn a_listener_takes_its_key_alike_on_every_carrier() {
     let script = |run: Run| {
@@ -394,9 +380,6 @@ fn a_listener_takes_its_key_alike_on_every_carrier() {
     }
 }
 
-// Expected (contract gaps 2): the board's select shows its footer actions with their keys; `ctrl+o` runs the row's
-// action with the selected row's value and `ctrl+a` the rowless one with its own input, and the select stays open
-// after each. The frames and toasts are the same linked, through the byte shims and as a real library.
 #[test]
 fn a_selects_actions_are_alike_on_every_carrier() {
     let script = |run: Run| {
@@ -425,8 +408,6 @@ fn a_selects_actions_are_alike_on_every_carrier() {
     }
 }
 
-// Expected (CT-26): a box's bottom border title draws on its last row, aligned right, below its top title; the frames
-// are the same linked, through the byte shims and as a real library.
 #[test]
 fn a_bottom_border_title_is_alike_on_every_carrier() {
     let script = |run: Run| {
@@ -447,9 +428,6 @@ fn a_bottom_border_title_is_alike_on_every_carrier() {
     }
 }
 
-// Expected (`carrier-equal` for a contained panic, P4c): a panic in a command of the board's route is caught where it
-// happens and fails the plugin once, naming the call, with the same frames, toasts and status linked, through the
-// byte shims, and as a real library; later frames add nothing.
 #[test]
 fn a_contained_panic_is_equal_on_every_carrier() {
     let run = |run: Run| {
@@ -480,10 +458,6 @@ fn a_contained_panic_is_equal_on_every_carrier() {
     }
 }
 
-// Expected (`carrier-equal` for a canvas's draw, and a panicking draw contained, P4c): the meter draws at its size,
-// again for a version, and once a frame while it animates, with the animation's time; a draw that panics is caught
-// where it happens and fails the plugin once, naming the draw, with the same frames, toasts and status linked, through
-// the byte shims, and as a real library; later frames add nothing.
 #[test]
 fn a_panicking_draw_is_contained_on_every_carrier() {
     let run = |run: Run| {
@@ -523,10 +497,6 @@ fn a_panicking_draw_is_contained_on_every_carrier() {
     }
 }
 
-// Expected (`carrier-equal` for tasks, await-rust): the board's task awaits a confirm, which enter answers, then a
-// fetch of the session list, and toasts what each gave; another, whose confirm escape declines, ends without a fetch.
-// The frames (the confirm open, the card each answer bumps), toasts and status are the same linked, through the byte
-// shims, and as a real library.
 #[test]
 fn a_task_awaits_a_confirm_then_a_fetch_on_every_carrier() {
     let run = |run: Run| {
@@ -567,8 +537,6 @@ fn a_task_awaits_a_confirm_then_a_fetch_on_every_carrier() {
     }
 }
 
-// Expected (carbon ar-1, on every carrier): while the host's own plugin list is open, the board's task's confirm is
-// refused, and the task goes on with no answer at once instead of waiting for a close that never comes.
 #[test]
 fn a_tasks_dialog_the_host_refuses_answers_it_with_none_on_every_carrier() {
     let run = |run: Run| {
@@ -626,10 +594,6 @@ fn files(run: Run) -> Vec<(&'static str, Seen)> {
     seen
 }
 
-// Expected (`carrier-equal` for P3, synthesis 4.14): the same source's windowed list gives the same frames linked,
-// through the byte shims, and as a real library: a `To` lands its file at the top, steps land on hunks of files that
-// had no widgets and report where, the reads see the steps' last file at the top, `Nearest` and the wheel move the
-// list, and `layout`, told the header's width, paints the header from the top file in the frame of each.
 #[test]
 fn a_windowed_list_is_equal_on_every_carrier() {
     let linked = files(Run::In(Carrier::Linked));
@@ -651,10 +615,6 @@ fn a_windowed_list_is_equal_on_every_carrier() {
     }
 }
 
-// Expected (`carrier-equal` for input, P2): the route's handler takes a key, passes one on to the plugin's own global
-// layer, sets a mode whose layer takes the same key for another card and reads it back, and ends it; then a handler's
-// panic fails the plugin once, naming the call. The frames, toasts and status are the same linked, through the byte
-// shims, and as a real library.
 #[test]
 fn input_is_equal_on_every_carrier() {
     let run = |run: Run| {
@@ -689,12 +649,6 @@ fn input_is_equal_on_every_carrier() {
     }
 }
 
-// Expected (`carrier-equal` for panels, overlays, focus, a hold and the reads, P2): beside a session, the board's panel
-// opens with the focus, focuses its pad and reads it back with its place, holds a key and releases it at once, so the
-// key after it is heard in the same step; its overlay opens under the pad, closes on its own key and, on escape, tells
-// the panel; it gives the focus back; a click puts it in the panel's field, and so does a command of the plugin, away
-// from the composer, after which what the user types is the field's (`focus-input`); it closes; a centered select
-// lists what the plugin's search finds. Frames, toasts and status are the same on every carrier.
 #[test]
 fn panels_overlays_and_reads_are_equal_on_every_carrier() {
     let run = |run: Run| {
@@ -949,9 +903,6 @@ fn claimed(run: Run) -> Vec<(&'static str, Seen)> {
     seen
 }
 
-// Expected (`carrier-equal` for renderer claims, Pr): the board's claims of a tool call and a fence give the same
-// frames, toasts and status linked, through the byte shims, and as a real library: a call streaming, running and
-// finished with its output by reference, a failed call declined to the host's row, a fence, and a theme change.
 #[test]
 fn a_claimed_part_is_equal_on_every_carrier() {
     let linked = claimed(Run::In(Carrier::Linked));

@@ -560,9 +560,6 @@ fn composer(tui: &Tui) -> (String, usize) {
     composer
 }
 
-// Expected (`delivery`, 4.14): along any sequence of keys, bursts, focus moves, panel opens and closes, pastes,
-// presses, double clicks, drags, an overlay and a host dialog, the plugin's own log equals the reference router's, and
-// so do the composer's text and cursor, the composer's focus and the host's selection.
 #[test]
 fn every_event_reaches_the_plugin_once_in_order() {
     model::check(&Delivery, 24, 24);
@@ -877,18 +874,11 @@ fn session(harness: &Harness) {
     }
 }
 
-// Expected (`ledger`, 4.14): whatever the plugin's mounts held (layers, a mode, a capture, a hold with a key behind it
-// and its timer, an overlay), a closed panel or a route left leaves the registries as the plugin left them with no
-// mount, also after the hold's deadline and a fresh key, and a disabled or failed plugin leaves them as a TUI without
-// it, with the focus at the composer.
 #[test]
 fn nothing_an_ended_mount_or_plugin_held_is_left() {
     model::check(&Ledgers, 24, 24);
 }
 
-// Expected: the deep run's seed 553 (2,000 seeds), as fixed rows. A double click on the panel's selectable text makes
-// a selection, which takes the next escape before any layer, also in the composer; on text that selects nothing, or
-// on a node that takes the press (carbon-5), escape is the plugin's.
 #[test]
 fn a_double_click_in_the_panel_selects_only_selectable_text() {
     for (selectable, click) in

@@ -487,8 +487,6 @@ fn cd_completes_directories_moves_the_session_and_keeps_recents() {
     setup.wait_file("latest/tui/directory-recents.json", "\"project\":[]");
 }
 
-// Expected (bigboi-fixes-3): a recent touched before the startup load ran shows alone until its write merges the file
-// back in; the open `/cd` picker then lists the stored recents too, as TS's reactive store redraws it.
 #[test]
 fn an_open_cd_picker_shows_the_recents_a_write_merges_back() {
     use opencode_local::lock;

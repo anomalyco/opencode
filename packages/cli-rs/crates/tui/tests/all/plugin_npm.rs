@@ -72,9 +72,6 @@ fn status(pipe: &Pipe, target: &str) -> Option<Status> {
     entries.into_iter().find(|entry| entry.target.as_deref() == Some(target)).map(|entry| entry.status)
 }
 
-// Expected (TS `Npm.cacheKey`, run with Bun on this checkout): each spec form is keyed in the cache as TS keys it, so
-// the same spec finds the same directory: a bare name, a version, ranges, tags, a scope, git and hosted specs (URLs,
-// SSH, SCP, shortcuts, committishes), an alias, paths, URLs, tarballs, and specs `npm-package-arg` refuses.
 #[test]
 fn a_spec_is_keyed_as_ts_keys_it() {
     let Some(root) = support::ts_root() else { return };
@@ -201,10 +198,6 @@ fn a_spec_is_keyed_as_ts_keys_it() {
     assert!(differ.is_empty(), "{} of {} keys differ:\n{}", differ.len(), specs.len(), differ.join("\n"));
 }
 
-// Expected (TS `Npm.resolve`, `prepare`): a `cli.json` entry that names an installed package loads its TUI entry from
-// the cache on the JS host, with no approval, as TS loads it. One whose key the cache does not hold (another version,
-// or a bare name, which is `latest`) is skipped, and it and the startup notice say how to install it; nothing is
-// installed or fetched.
 #[test]
 fn a_package_named_in_cli_json_loads_from_the_cache() {
     let home = opencode_util::temp::tempdir().unwrap();
@@ -238,11 +231,6 @@ fn a_package_named_in_cli_json_loads_from_the_cache() {
     assert_eq!(keys, ["opencode-sidebar-tokens@0.1.3"], "something was installed");
 }
 
-// Expected (TS `serverTuiPlugins`, `context.tsx:96-103`, `301-305`): the TUI part of an active server plugin with a
-// TUI feature loads from the cache under the target the server reports, and a local one from its path, each named by
-// the user's global opencode config, so with no approval (O-162); a part of a
-// plugin that is not active, or has no TUI feature, is not loaded, and one the cache does not hold is left out, as TS
-// leaves out an optional target it cannot load (`context.tsx:362-363`).
 #[test]
 fn a_server_plugins_tui_part_loads_from_what_the_server_reports() {
     let home = opencode_util::temp::tempdir().unwrap();
@@ -280,9 +268,6 @@ fn a_server_plugins_tui_part_loads_from_what_the_server_reports() {
     assert_eq!(status(&pipe, "not-cached@1.0.0"), None, "a part the cache does not hold was listed");
 }
 
-// Expected (O-146, O-162): a server plugin's TUI part whose files are inside the project, as a local path in the
-// project's `opencode.json` is, is a project plugin: it waits for the user's approval, and runs once approved. A part
-// the server names by package, from the user's npm cache, loads with none when the user's global config names it.
 #[test]
 fn a_project_local_server_part_waits_for_approval_and_a_cached_one_does_not() {
     let home = opencode_util::temp::tempdir().unwrap();
@@ -317,9 +302,6 @@ fn a_project_local_server_part_waits_for_approval_and_a_cached_one_does_not() {
     assert_eq!(opencode_plugin::loader::approval::hashed(), before, "the UI thread read the part's files");
 }
 
-// Expected (O-162, carbon jsnpm-2): a package the server reports that only a project's configuration names waits for
-// the user's approval, keyed by its files and its install's lockfile, while one the user's global config names loads at
-// once. Once approved it runs where it is, in the cache, since its dependencies sit beside it.
 #[test]
 fn a_package_only_the_project_names_waits_for_approval() {
     let home = opencode_util::temp::tempdir().unwrap();
@@ -355,8 +337,6 @@ fn a_package_only_the_project_names_waits_for_approval() {
     pipe.active("sidebar.tokens");
 }
 
-// Expected (O-162): a local path a server on another machine reports names nothing here and is left out, even one the
-// user's configuration names; its packages still load from this machine's cache.
 #[test]
 fn a_remote_servers_local_parts_are_left_out() {
     let home = opencode_util::temp::tempdir().unwrap();
@@ -376,10 +356,6 @@ fn a_remote_servers_local_parts_are_left_out() {
     assert_eq!(pipe.status("sidebar.prompt"), None);
 }
 
-// Expected (carbon recheck-2, TS `context.tsx` reconcile): `cli.json` naming a package at one version and a server's
-// part naming it at another, vouched for by the global config, load `cli.json`'s alone, as TS's later `cli.json` entry
-// replaces the server's for the plugin's ID; nothing fails as "already registered", and the server's part is not
-// listed. Both versions are the pinned tarball, one plugin ID.
 #[test]
 fn a_cli_json_version_wins_over_the_servers_on_the_js_host() {
     let home = opencode_util::temp::tempdir().unwrap();
@@ -403,9 +379,6 @@ fn a_cli_json_version_wins_over_the_servers_on_the_js_host() {
     assert_eq!(status(&pipe, server), None, "the server's part was listed");
 }
 
-// Expected (carbon recheck-1): a removal added to `cli.json` while the TUI runs withdraws the vouch the global config
-// gave a server's part, as TS folds `cli.json`'s entries after it: the part then waits for approval. `-<spec>` selects
-// no plugin by ID, so only the vouch reads it.
 #[test]
 fn a_removal_added_to_cli_json_withdraws_the_vouch_of_a_running_part() {
     let home = opencode_util::temp::tempdir().unwrap();
@@ -426,9 +399,6 @@ fn a_removal_added_to_cli_json_withdraws_the_vouch_of_a_running_part() {
     assert_eq!(pipe.status("sidebar.tokens"), None, "the part still runs");
 }
 
-// Expected (O-166): with the JS host on by default, a client with no TypeScript plugin, no plugin named by npm package
-// and no server TUI part looks for no Bun and starts no process: the server's list (a server plugin with no TUI part)
-// and a reconcile change nothing. A plugin in the global `plugins` directory then makes it look, once, and load.
 #[test]
 fn a_client_with_nothing_to_run_starts_no_bun() {
     let Some(real) = config() else { return };

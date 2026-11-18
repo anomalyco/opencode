@@ -499,10 +499,6 @@ const FIXED: &[(&str, &[Command])] = &[
     ),
 ];
 
-// Expected (O-124, Pa): `pending`, `lifecycle` and `asked` hold for 12 seeds of 64 commands. A seed costs about
-// 280 ms in a debug build (two TUIs, the manager's dialogs, a fresh client on each restart, the twin's widgets and
-// frame whenever the probe does not run), so the seeds went down and the commands stayed, as 4.14 allows.
-// `MODEL_SEEDS` runs more.
 #[test]
 fn a_project_plugin_waits_for_approval() {
     model::check(&ApprovalModel, 12, 64);
@@ -515,8 +511,6 @@ fn the_fixed_approval_rows_pass() {
     }
 }
 
-// Expected: the oracles are not empty. A running probe differs from the twin, and the gate refuses a setup while
-// the probe is pending, a report it does not expect, and a listing it does not have.
 #[test]
 fn the_approval_oracles_can_fail() {
     LOG.take();
@@ -610,8 +604,6 @@ fn the_manager_asks_before_a_project_plugin_runs() {
     assert!(app.text().contains("probe b1 n0"), "{}", app.text());
 }
 
-// Expected (3.9, carbon-6): Enter on the question declines, as Decline is active at first; the row says so and still
-// offers the decision, and the declined build is not asked about again.
 #[test]
 fn a_declined_project_plugin_is_listed_declined() {
     LOG.take();
@@ -631,8 +623,6 @@ fn a_declined_project_plugin_is_listed_declined() {
     assert!(LOG.with_borrow(Vec::is_empty));
 }
 
-// Expected (carbon-6): Escape, Ctrl+C, the header's `esc` and a click on the backdrop close the question without a
-// decision, and the list comes back with the plugin pending.
 #[test]
 fn closing_the_question_decides_nothing() {
     for how in ["escape", "ctrl+c", "header", "backdrop"] {
@@ -665,7 +655,6 @@ fn closing_the_question_decides_nothing() {
     }
 }
 
-// Expected (carbon-6): a dialog that replaces the question stays; the list does not come back over it.
 #[test]
 fn a_dialog_that_replaces_the_question_stays() {
     LOG.take();
@@ -705,8 +694,6 @@ fn intruder(setup: &mut opencode_plugin::abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (review carbon-9): while the host's question is open, another plugin's dialog, route and navigation to its
-// route neither replace nor clear it.
 #[test]
 fn no_plugin_replaces_the_question() {
     LOG.take();
@@ -778,7 +765,6 @@ fn an_answer_on_a_replaced_build_records_nothing_and_says_so() {
     assert!(LOG.with_borrow(Vec::is_empty));
 }
 
-// Expected (bigboi-7): a decision that cannot be saved says so, and the build stays pending.
 #[cfg(unix)]
 #[test]
 fn a_decision_that_cannot_be_saved_says_so() {

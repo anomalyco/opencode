@@ -925,16 +925,11 @@ impl Model for Reconcile {
     }
 }
 
-// Expected: any sequence of trees, keeps, refused trees, wheel steps and theme switches leaves the frame, the hit grid
-// and the clicks a fresh mount of the last accepted tree has, scrolled as the reconciled one is; a refused tree changes
-// nothing; a theme change builds no widget.
 #[test]
 fn reconciled_trees_equal_fresh_mounts() {
     model::check(&Reconcile, 24, 48);
 }
 
-// Expected: the oracles see a difference: a twin of another tree differs, and a keep that the model writes out from
-// the wrong tree is refused by the model's own rule.
 #[test]
 fn the_oracles_can_fail() {
     let a = vec![v2::Node::text(vec![abi::Span::new("one")]).with_id("a")];
@@ -980,8 +975,6 @@ fn mark_reviewed(files: usize, keep: bool) -> Work {
     reconcile::work().since(before)
 }
 
-// Expected (`work`, a revision): marking one card reviewed writes that card's widgets and nothing else, the same at 40
-// and at 410 cards, with or without keeps; with keeps, the other cards are adopted whole and nothing is compared.
 #[test]
 fn a_revision_touches_what_changed_at_any_size() {
     for keep in [false, true] {
@@ -997,10 +990,6 @@ fn a_revision_touches_what_changed_at_any_size() {
     }
 }
 
-// Expected (`work`, a prepend and a reparent; bigboi's 5 and 9): a card put before the others, written out or kept,
-// builds that card and moves no other, at 40 cards and at 410, and one taken out moves none; a box whose own layout
-// changes is built again alone and its cards move into it; a card written out under a new box builds that box and
-// moves the card, the same as when it is kept there.
 #[test]
 fn a_prepend_or_a_reparent_moves_what_it_must() {
     for (files, keep) in [(40, false), (40, true), (410, false), (410, true)] {
@@ -1070,8 +1059,6 @@ fn a_prepend_or_a_reparent_moves_what_it_must() {
     }
 }
 
-// Expected (`work`, `Keep`): a subtree under a keep costs nothing inside it. A card added after the kept ones or before
-// them builds that card and moves nothing.
 #[test]
 fn a_kept_subtree_is_not_touched() {
     for at in [20, 0] {
@@ -1091,8 +1078,6 @@ fn a_kept_subtree_is_not_touched() {
     }
 }
 
-// Expected (`work`, a theme change): a theme switch adopts the same tree with no widget built or removed and no patch
-// parsed; the colors it names by token change in place, and the frame equals a fresh mount in the new theme.
 #[test]
 fn a_theme_change_rebuilds_nothing() {
     let host = host(0);
@@ -1121,8 +1106,6 @@ fn a_theme_change_rebuilds_nothing() {
     assert_eq!(light, fresh(&nodes, 1, &|_| None).capture);
 }
 
-// Expected (`no-effects`, a refused tree): a tree with an id twice, or a keep of an id the host does not hold, is
-// refused whole: no widget is built, written or removed, and the frame stays.
 #[test]
 fn a_refused_tree_changes_nothing() {
     let host = host(0);
@@ -1169,8 +1152,6 @@ fn scrolling(id: &str, rows: usize, changed: Option<usize>) -> Vec<v2::Node> {
     ]
 }
 
-// Expected: a scroll that grows takes the room its parent leaves, not its content's height, and the host scrolls
-// it: the wheel moves it, a revision of its rows keeps its offset, and a scroll under a new id starts at the top.
 #[test]
 fn the_host_scrolls_a_scroll_and_keeps_its_offset_by_id() {
     let host = host(0);
@@ -1192,7 +1173,6 @@ fn the_host_scrolls_a_scroll_and_keeps_its_offset_by_id() {
     assert_eq!(top(&host), "row 0", "a new id starts at the top");
 }
 
-// Expected: a click that changes to another click runs the new one, on a box and on a text, with their widgets kept.
 #[test]
 fn a_changed_click_runs_the_new_action() {
     let host = host(0);
@@ -1223,7 +1203,6 @@ fn a_changed_click_runs_the_new_action() {
     assert_eq!(*ran.borrow(), ["x.first", "x.first", "x.second", "x.second"]);
 }
 
-// Expected: a scroll with no height that does not grow is no taller than its parent, so the wheel scrolls it.
 #[test]
 fn a_scroll_without_a_height_fits_its_parent() {
     let host = host(0);
@@ -1236,8 +1215,6 @@ fn a_scroll_without_a_height_fits_its_parent() {
     assert!(!host.app.render().text().starts_with("row 0"), "the wheel moved nothing");
 }
 
-// Expected: a text under the pointer that is written in place keeps its pointer color, as a kept element stays
-// hovered.
 #[test]
 fn a_hovered_text_written_in_place_stays_hovered() {
     let host = host(0);
@@ -1260,7 +1237,6 @@ fn a_hovered_text_written_in_place_stays_hovered() {
     assert_ne!(over, host.theme().text.muted, "the pointer changed nothing");
 }
 
-// Expected (`no-effects`): a tree that shows content the mount does not hold is refused, and changes nothing.
 #[test]
 fn a_tree_with_unknown_content_is_refused() {
     let host = host(0);
@@ -1290,9 +1266,6 @@ fn nested_scrolls(levels: usize) -> v2::Node {
     })
 }
 
-// Expected (`no-effects`, a tree the layout cannot take): a tree that nests past the bound, in one revision or by
-// keeps that each wrap the last, or a size in percent that is not finite, is refused; nothing changes and the TUI
-// keeps painting. Without the bound OpenTUI refuses the node and the app ends.
 #[test]
 fn a_tree_the_layout_cannot_take_is_refused() {
     let host = host(0);
@@ -1349,10 +1322,6 @@ fn top_row(host: &TestHost) -> String {
     text.lines().find(|line| line.trim_start().starts_with("row ")).unwrap_or_default().trim().to_owned()
 }
 
-// Expected (synthesis 3.4, 4.2): a keyed scroll that was scrolled and has the focus keeps where it is scrolled and the
-// focus whatever the tree does around it, written out or kept: a node before it, a move under another parent, a new
-// height or layout, a parent built again. The next wheel step goes on from there. A node of another kind under its id
-// is a new one.
 #[test]
 fn a_keyed_scroll_keeps_its_offset_and_its_focus() {
     let scroll = || rows_scroll(20, 5, abi::Layout::default());
@@ -1403,8 +1372,6 @@ fn a_keyed_scroll_keeps_its_offset_and_its_focus() {
     assert_eq!(top_row(&host), "row text");
 }
 
-// Expected: a scroll that follows its end shows the rows appended to it, as its own scroll box does; one that does not
-// stays at the top. Each starts out the same way, and the other way, so the change is made in place.
 #[test]
 fn a_following_scroll_shows_appended_rows() {
     for follow in [true, false] {
@@ -1430,9 +1397,6 @@ fn a_following_scroll_shows_appended_rows() {
     }
 }
 
-// Expected (bigboi's 10, P0a's properties): a box that loses its margin, its height and its border, one whose height
-// is a percent of its parent, and a border's color across a theme switch each draw as a fresh mount of the tree
-// through `node::add` does.
 #[test]
 fn p0a_properties_change_as_a_fresh_mount_draws_them() {
     let text = || v2::Node::text(vec![abi::Span::new("inside")]);
@@ -1495,8 +1459,6 @@ fn p0a_properties_change_as_a_fresh_mount_draws_them() {
     assert_eq!(host.app.render(), fresh(&dressed(true), 1, &|_| None).capture);
 }
 
-// Expected (`work`): a patch adopted again as it was touches nothing, as OpenTUI's diff builds its lines again on any
-// setter; one whose view changes is set once and parses nothing.
 #[test]
 fn an_unchanged_patch_is_not_touched() {
     let diff = |view| vec![v2::Node::diff(v2::Source::Text(PATCHES[0].into())).with_id("d").view(view)];
@@ -1516,7 +1478,6 @@ fn an_unchanged_patch_is_not_touched() {
     assert_eq!(host.app.render(), want, "the patch did not switch to split");
 }
 
-// Expected: a box whose fill goes, in place, paints no fill, as a fresh mount of it does.
 #[test]
 fn a_fill_that_goes_paints_nothing() {
     let filled = |bg: Option<&'static str>| {
@@ -1535,9 +1496,6 @@ fn a_fill_that_goes_paints_nothing() {
     assert_eq!(host.app.render(), fresh(&filled(None), 0, &|_| None).capture);
 }
 
-// Expected (bigboi's review of contract 2.x): a tree holds one fence node, counted through what it keeps: a revision
-// that keeps a subtree holding one and adds another is refused as the same revision spelled out is, also when the
-// kept fence is in a list item's data or behind a keep of a keep; a revision that keeps it and adds none is adopted.
 #[test]
 fn a_kept_fence_counts_against_the_one_a_tree_holds() {
     let text = |text: &str| v2::Node::text(vec![abi::Span::new(text)]);
@@ -1567,8 +1525,6 @@ fn a_kept_fence_counts_against_the_one_a_tree_holds() {
     }
 }
 
-// Expected (carbon c2a-3): a fence node on a theme's token, kept by a revision in a new theme, takes the new theme's
-// color, as the same tree adopted afresh in that theme has it.
 #[test]
 fn a_kept_fence_node_restyles() {
     let tree = || {
@@ -1590,9 +1546,6 @@ fn a_kept_fence_node_restyles() {
     assert!(restyled.cells == built.cells, "the kept fence kept its old color:\n{}", restyled.text());
 }
 
-// Expected (bigboi's recheck of contract 2.x): a keep of a parent carries the fence its subtree holds, so after a
-// revision that keeps the whole page, a keep of the card under it or of the fence itself, with a new fence beside it,
-// is refused as before that revision; and so after two such revisions.
 #[test]
 fn a_fence_under_a_kept_parent_still_counts() {
     let fresh = || v2::Node::fence().with_id("fresh");

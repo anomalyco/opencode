@@ -284,9 +284,6 @@ fn the_sidebar_and_footer_skip_other_sessions_and_follow_their_own() {
     assert!(screen.contains("6% used") && screen.contains("12.0K (6%)"), "{screen}");
 }
 
-// Expected: the context section drops the usage when a revert boundary moves before the reply it came from, shows it
-// again when the revert clears, and drops it when a compaction joins the message list, a change that names no
-// message.
 #[test]
 fn the_sidebar_usage_goes_on_a_revert_or_a_list_change() {
     let h = mount_at(170, "ses_a", json!({ "animations": false }));
@@ -324,9 +321,6 @@ fn elsewhere(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected: a catalog read inside the messages visitor, of a catalog nobody loaded, returns `None` without writing to
-// the store under its read (which panics); the host loads the catalog once the render returns, and the claim then
-// shows it.
 #[test]
 fn a_catalog_read_inside_the_messages_visitor_loads_after_the_render() {
     let memory = Memory::new(routes());
@@ -395,14 +389,11 @@ fn sidebar_frames(loopback: bool) -> Vec<opentui::testing::Capture> {
     frames
 }
 
-// Expected: the context and limit sections draw the same cells through the C ABI's byte shims as in process.
 #[test]
 fn the_sidebar_sections_draw_the_same_through_the_c_abi_loopback() {
     assert_eq!(sidebar_frames(true), sidebar_frames(false));
 }
 
-// Expected (review carbon-7): the limit section follows the selected model, the host's own state: a model without a
-// budget hides it, and the budget's model shows it again.
 #[test]
 fn the_sidebar_limit_follows_the_selected_model() {
     use opencode_local::model_pref::Model;
@@ -494,8 +485,6 @@ impl Transport for Flaky {
     }
 }
 
-// Expected: a permission read that failed is read again on the session's next change, as TS's family effect
-// does (`routes/session/index.tsx:331-337`), so a pending request shows without a reconnect.
 #[test]
 fn a_failed_permission_read_is_read_again_on_the_next_session_change() {
     let flaky = Arc::new(Flaky { memory: Memory::new(routes()), failed: AtomicBool::new(false) });
@@ -534,8 +523,6 @@ fn usage_limits_are_kept_per_location() {
     assert_eq!(h.limits().len(), 2);
 }
 
-// Expected: signing in or out reads the limits the prompt footer shows again, through the store's
-// `credential.updated` rule (`packages/client/src/solid/data.ts:1453-1461`).
 #[test]
 fn a_credential_change_reads_the_footer_limits_again() {
     let h = mount("ses_a", json!({ "animations": false }));
@@ -550,8 +537,6 @@ fn a_credential_change_reads_the_footer_limits_again() {
     h.wait("the limits read again", || h.limits().len() == 2);
 }
 
-// Expected: the transcript and its scroll controls listen to the settings while the session view is mounted, so
-// mounting the view again and again leaves no listener behind.
 #[test]
 fn a_session_view_lets_go_of_its_settings_listeners() {
     let h = mount("ses_a", json!({ "animations": false }));

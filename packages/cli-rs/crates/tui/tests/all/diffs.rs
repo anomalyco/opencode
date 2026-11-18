@@ -240,8 +240,6 @@ fn leaving_the_route_ends_its_file_menu() {
     h.assert_menu_closed();
 }
 
-// Expected (R2-1): the viewer's file tree and file menu are freed with every widget they showed once the menu closes
-// and the route goes.
 #[test]
 fn the_file_tree_and_menu_are_freed_with_their_view() {
     let h = mount(Route::Home);
@@ -267,7 +265,6 @@ fn the_file_tree_and_menu_are_freed_with_their_view() {
     assert_eq!(Rc::strong_count(&marker), 1);
 }
 
-// Expected (carbon-dialogs-5): the file tree follows the selected file down and its `help` footer opens the help.
 #[test]
 fn the_file_tree_follows_the_selection_and_its_help_opens() {
     let files: Vec<Value> = (0..35)
@@ -294,8 +291,6 @@ fn the_file_tree_follows_the_selection_and_its_help_opens() {
     h.wait("the help did not open", || h.tui.dialogs.is_open());
 }
 
-// Expected (carbon-1): a plugin toggled in `/plugins` mounts the session again with its docked panel, which must not
-// take the keys from the open manager.
 #[test]
 fn a_docked_panel_does_not_take_the_plugin_manager_search() {
     let h = mount(support::session_route("ses_a"));
@@ -308,8 +303,6 @@ fn a_docked_panel_does_not_take_the_plugin_manager_search() {
     h.wait_for("No results found");
 }
 
-// Expected (r2 review, bigboi-ui-6): TS `diff-viewer.test.tsx` "virtualizes a large added file at %i columns without
-// losing its end": the viewer shows the start of a 7,502-line added file, then its end, also after a resize.
 #[test]
 fn a_large_added_file_shows_its_start_and_end() {
     for width in [80, 160] {
@@ -353,9 +346,6 @@ fn large_added_patch() -> String {
     )
 }
 
-// Expected (P6c): the viewer is the same plugin on both carriers: its panel opens with its cards and fails on neither.
-// More cards than the tree's other keyed nodes: a library's memo table of the cards is checked against a tree whose
-// list items count.
 #[test]
 fn the_viewer_runs_on_both_carriers() {
     let file = |path: &str, patch: &str, status: &str| json!({ "file": path, "patch": patch, "additions": 1, "deletions": 1, "status": status });
@@ -452,8 +442,6 @@ impl Diffs {
 /// The tree's width at 120 columns.
 const TREE: usize = 30;
 
-// Expected (`jumps_start_below_the_sticky_header`, now `Step`'s inset): from the top, the first card's hunk sits under
-// its sticky header, so `]` lands on the second file's, which `m` then marks.
 #[test]
 fn a_hunk_step_starts_below_the_sticky_header() {
     on_both(|| {
@@ -463,9 +451,6 @@ fn a_hunk_step_starts_below_the_sticky_header() {
     });
 }
 
-// Expected (`the_current_file_is_the_last_card_at_the_top`, now `top_anchor` with an inset of 1, and
-// `card_tops_skip_the_gap_of_later_cards`, now `To` on the card past its gap): `n` puts the second card's heading on
-// the pane's first row, not its gap; a row down clears the selection, and `m` marks the card at the top.
 #[test]
 fn the_current_file_is_the_card_at_the_top() {
     on_both(|| {
@@ -478,9 +463,6 @@ fn the_current_file_is_the_card_at_the_top() {
     });
 }
 
-// Expected (4.9 "`]`, `]`, `[` near the bottom", `jumps_continue_from_the_selected_hunk_until_the_view_moves`): at the
-// end the scroll cannot move, and a step goes on from the hunk it last landed on: `]` `]` `[` lands where one `]` did,
-// and `]` `]` on another file.
 #[test]
 fn hunk_steps_near_the_bottom_go_on_from_the_last() {
     on_both(|| {
@@ -500,9 +482,6 @@ fn hunk_steps_near_the_bottom_go_on_from_the_last() {
     });
 }
 
-// Expected (4.9 "mark a file above the viewport reviewed, then wheel across it"): marking the first file from its tree
-// row's menu, while the third is at the top, keeps the third where it is (`Keep`); the wheel then shows the first as its
-// reviewed heading.
 #[test]
 fn a_file_marked_above_the_view_keeps_the_reading_position() {
     on_both(|| {
@@ -529,8 +508,6 @@ fn a_file_marked_above_the_view_keeps_the_reading_position() {
     });
 }
 
-// Expected (4.9 "410 files and more"): the route opens on the first card at 410 and 1,000 files, goes to the last, and
-// counts a mark of all of them.
 #[test]
 fn many_files_open_and_reach_the_last() {
     on_both(|| {
@@ -545,8 +522,6 @@ fn many_files_open_and_reach_the_last() {
     });
 }
 
-// Expected (4.9 "a width change that crosses the split threshold during a jump"): a step and a resize from a split
-// view to a unified one in one frame land where the step lands at the narrower width, in that frame.
 #[test]
 fn a_jump_across_the_split_threshold_lands_as_at_the_new_width() {
     on_both(|| {
@@ -567,8 +542,6 @@ fn a_jump_across_the_split_threshold_lands_as_at_the_new_width() {
     });
 }
 
-// Expected (`settled-first` for a resize; P6c's open item): the first frame after a resize is the settled one, at 1,000
-// files, wide and narrow, after a wheel step and after a hunk step: the viewer's view of the new size, laid out once.
 #[test]
 fn a_resize_shows_the_new_size_in_its_first_frame() {
     on_both(|| {
@@ -587,10 +560,6 @@ fn a_resize_shows_the_new_size_in_its_first_frame() {
     });
 }
 
-// Expected (`work` for a rebuild, O-136; viewer-frames): each rebuild of the viewer at 1,000 files touches the widgets it
-// does at 410 (the cards near the view), and gives again only the list items whose cards or rows show something else:
-// a mark the marked card and its tree row, a view toggle every card and no row, a resize that cuts no heading nothing,
-// a theme every tree row (they take the palette) and no card. On both carriers.
 #[test]
 fn a_rebuild_at_1000_files_builds_what_it_changes() {
     on_both(|| {
@@ -647,7 +616,6 @@ fn a_resize_cuts_a_long_heading_for_the_new_width() {
     });
 }
 
-// Expected (4.9 "a menu on right button down"): the press opens the menu; the release does not close it.
 #[test]
 fn the_file_menu_opens_on_the_right_button_down() {
     on_both(|| {
@@ -660,7 +628,6 @@ fn the_file_menu_opens_on_the_right_button_down() {
     });
 }
 
-// Expected (4.9 "open from Home and go back"): the route remembers where `/diff` came from and `q` goes back there.
 #[test]
 fn the_route_opens_from_home_and_goes_back() {
     on_both(|| {
@@ -671,8 +638,6 @@ fn the_route_opens_from_home_and_goes_back() {
     });
 }
 
-// Expected (4.9 "dock and focus"): the docked panel takes the keys while it has the focus; with the focus on the
-// composer the same key types, the footer dims, and a press on the panel gives it back.
 #[test]
 fn the_docked_panel_takes_the_keys_only_with_the_focus() {
     on_both(|| {
@@ -693,10 +658,6 @@ fn the_docked_panel_takes_the_keys_only_with_the_focus() {
     });
 }
 
-// Expected (TS binds `app.exit` to close the viewer, one level; carbon's review of P6c, 2): the reserved chord, which no
-// plugin sees, closes the viewer's surface that has the input and no more: an open file menu alone, then the route,
-// back to the route it came from; a focused docked panel, keeping the composer's draft. With `app.exit` rebound it
-// does the same, so the route traps nobody. On home with an empty prompt it is `app.exit`'s. On both carriers.
 #[test]
 fn ctrl_c_closes_one_level_of_the_viewer() {
     let stats = Route::Plugin { id: "opencode.stats".into(), name: "stats".into() };
@@ -748,8 +709,6 @@ fn diffs_setting(h: &Diffs) -> serde_json::Value {
     h.tui.settings.info().to_value()["diffs"].clone()
 }
 
-// Expected (P6c, `Read::setting` and `Host::set_setting`): `v` saves the view the viewer shows, and a plugin's write of a
-// value its setting does not take, or of a name the host does not name, saves nothing.
 #[test]
 fn a_setting_saves_only_what_it_takes() {
     let h = route(2, 4, 140, 30);
@@ -772,8 +731,6 @@ fn a_setting_saves_only_what_it_takes() {
     assert_ne!(h.tui.settings.info().to_value()["theme"]["name"], "light");
 }
 
-// Expected (P6c, `PanelInput::forced`): `f` in a panel the room forces full screen changes nothing and saves nothing; with
-// room it goes full screen and saves it.
 #[test]
 fn full_screen_is_saved_only_when_the_panel_toggles() {
     for (width, saved) in [(100, serde_json::Value::Null), (140, json!(true))] {
@@ -823,8 +780,6 @@ impl Diffs {
     }
 }
 
-// Expected (P6c, a select's `query`): the base picker asks the server for the branches of what is typed, once it stayed
-// 150 ms, and shows its empty text when none match.
 #[test]
 fn the_base_picker_searches_the_server_as_the_user_types() {
     let h = base_picker(json!([]));
@@ -837,8 +792,6 @@ fn the_base_picker_searches_the_server_as_the_user_types() {
     h.wait_for("No branches found");
 }
 
-// Expected (P6c, a select's `query`): the picker shows the branches the server found for what is typed, though their
-// names do not hold it; the host does not filter them again.
 #[test]
 fn the_base_picker_shows_what_the_server_found() {
     let h = base_picker(json!(["refs/heads/trunk-x"]));
@@ -850,8 +803,6 @@ fn the_base_picker_shows_what_the_server_found() {
     assert!(h.settle().contains("trunk-x"), "{}", h.app.text());
 }
 
-// Expected (P6c's gate, the wheel step): a wheel step that ends no selection keeps the viewer's tree whole, as today's
-// viewer draws no more than the scroll; one that ends a selection builds it again, and the tree's row loses its mark.
 #[test]
 fn a_wheel_step_builds_the_tree_only_when_it_ends_a_selection() {
     let h = route(40, 4, 120, 30);
@@ -868,7 +819,6 @@ fn a_wheel_step_builds_the_tree_only_when_it_ends_a_selection() {
     assert!(work.kept > 1 && work.touched() > 0, "{work:?}");
 }
 
-// Expected (`onSwitchSource`): the source picked in the viewer is the next viewer's, though the config names another.
 #[test]
 fn the_picked_source_outlives_the_viewer() {
     let h = route(2, 4, 120, 30);
@@ -884,7 +834,6 @@ fn the_picked_source_outlives_the_viewer() {
     assert!(h.settle().contains("Uncommitted"), "{}", h.app.text());
 }
 
-// Expected (`fileMenu` on new files): files loaded again close the file menu that was open.
 #[test]
 fn new_files_close_the_file_menu() {
     let h = mount(support::session_route("ses_a"));
@@ -898,7 +847,6 @@ fn new_files_close_the_file_menu() {
     h.assert_menu_closed();
 }
 
-// Expected: the tree scrolls to its selected row only as far as it must, so a row already in view moves nothing.
 #[test]
 fn the_tree_scrolls_only_as_far_as_its_selection() {
     let h = route(40, 4, 120, 30);
@@ -907,7 +855,6 @@ fn the_tree_scrolls_only_as_far_as_its_selection() {
     assert!(tree.contains("f0000.rs") && tree.contains("f0003.rs"), "{tree}");
 }
 
-// Expected (TS `wrapMode="char"`): a patch line wider than the pane wraps by cell, inside its words.
 #[test]
 fn a_patch_line_wraps_inside_its_words() {
     let line = "abcdefghij ".repeat(12);
@@ -927,8 +874,6 @@ fn a_patch_line_wraps_inside_its_words() {
     assert!(words.len() > 12 && words.iter().any(|word| *word != "abcdefghij"), "{screen}");
 }
 
-// Expected (TS `panel.focused`): the docked panel's footer dims as the focus leaves the panel, and lights again as it
-// comes back.
 #[test]
 fn the_docked_footer_follows_the_panels_focus() {
     let h = mount(support::session_route("ses_a"));
@@ -975,8 +920,6 @@ fn a_turn_too_short_to_see_running_loads_the_diff_again() {
     }
 }
 
-// Expected (big-boi's review of P6c): a mark at 1,000 files keeps the other cards on both carriers, and over the C ABI
-// the host counts what the view's keeps hold in one pass of the ids, not one a keep.
 #[test]
 fn a_mark_at_1000_files_costs_one_pass_on_both_carriers() {
     for abi in [false, true] {
@@ -998,8 +941,6 @@ fn a_mark_at_1000_files_costs_one_pass_on_both_carriers() {
     }
 }
 
-// Expected (big-boi's review of P6c; TS returns when split is not available): the view toggle where split has no
-// room changes nothing, so it costs no view, on both carriers.
 #[test]
 fn the_view_toggle_without_room_for_split_costs_no_view() {
     for abi in [false, true] {
@@ -1013,8 +954,6 @@ fn the_view_toggle_without_room_for_split_costs_no_view() {
     }
 }
 
-// Expected (big-boi's review of P6c): a wheel step keeps the viewer whole and its cards' memo with it, so a mark after
-// it keeps the other 99 cards, on both carriers.
 #[test]
 fn a_mark_after_a_wheel_step_keeps_the_other_cards() {
     for abi in [false, true] {
@@ -1032,8 +971,6 @@ fn a_mark_after_a_wheel_step_keeps_the_other_cards() {
     }
 }
 
-// Expected (big-boi's review of P6c; TS names files by index): a `#` in a file name is part of it. `m` on the card at the
-// top, the file menu of its heading and a hunk step each name `src/f#1.rs`, not `src/f`, on both carriers.
 #[test]
 fn a_hash_in_a_file_name_is_part_of_it() {
     let file = |name: &str, lines: usize| {
@@ -1092,8 +1029,6 @@ fn image_route(bytes: Vec<u8>, abi: bool) -> Diffs {
     h
 }
 
-// Expected (big-boi's review of P6c; TS shows the error on the image's `onError`): bytes whose header names a size but
-// that the host cannot decode show "Could not decode image", with no size and nothing to click, on both carriers.
 #[test]
 fn an_image_the_host_cannot_decode_says_so() {
     let mut header = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR".to_vec();
@@ -1106,8 +1041,6 @@ fn an_image_the_host_cannot_decode_says_so() {
     }
 }
 
-// Expected (deviation F16, big-boi's review of P6c): the viewer's image preview is the plugin's dialog, so it closes as
-// the plugin is turned off; a host dialog that replaced it stays. On both carriers.
 #[test]
 fn the_image_preview_ends_with_the_viewer() {
     let png = opencode_plugin::abi::base64::decode(
@@ -1137,8 +1070,6 @@ fn the_image_preview_ends_with_the_viewer() {
     }
 }
 
-// Expected (`toggleDirectory`): a click on a folder's row closes it, its files leave the tree, and a second click opens
-// it again, on both carriers.
 #[test]
 fn a_folder_closes_and_opens_on_a_click() {
     on_both(|| {
@@ -1152,10 +1083,6 @@ fn a_folder_closes_and_opens_on_a_click() {
     });
 }
 
-// Expected (carbon's review of P6c, 1; TS focuses the panel as its file menu opens): with the composer focused, a right
-// press on a card's heading in the docked panel opens the file menu with the input, so return marks the file and
-// escape closes only the menu; the panel then has the input, its footer lit, and a click on the session gives the
-// composer the input back. On both carriers.
 #[test]
 fn the_docked_file_menu_takes_the_input() {
     on_both(|| {
@@ -1189,8 +1116,6 @@ fn the_docked_file_menu_takes_the_input() {
     });
 }
 
-// Expected (decision 2; carbon's review of P6c, 4): a remount of the viewer's route (a plugin toggled in `/plugins`,
-// a theme change) keeps the viewer: its marks, and the route `q` goes back to, here stats. On both carriers.
 #[test]
 fn a_remount_keeps_the_viewer_and_its_way_back() {
     let stats = Route::Plugin { id: "opencode.stats".into(), name: "stats".into() };
@@ -1211,8 +1136,6 @@ fn a_remount_keeps_the_viewer_and_its_way_back() {
     });
 }
 
-// Expected (TS's close clears the viewer's dialogs; carbon's review of P6c, 4): the source and base dialogs end with
-// the viewer, so none is left on screen once its route goes, on both carriers.
 #[test]
 fn the_viewers_dialogs_end_with_it() {
     on_both(|| {
@@ -1274,9 +1197,6 @@ thread_local! {
     static HEARD: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
-// Expected (the contract's `Bind::command`; carbon's review of P6c, 5): a bind of a name the user set to "none" takes
-// no key, not even its own fallback; a bind may not take the plugin manager's command, so `/plugins` still opens; and
-// a bind with no key and no name is left out, not its whole layer.
 #[test]
 fn a_plugins_binds_take_what_they_may() {
     use opencode_plugin::abi::interact::{Bind, Handled, Layer, LayerScope};
@@ -1311,8 +1231,6 @@ thread_local! {
     static NOTED: Cell<bool> = const { Cell::new(false) };
 }
 
-// Expected (carbon's review of P6c, 5): a keyed select shown again shows its new empty text, then its new note, which it
-// had none of, each the one change; a panel shown again shows its new close label.
 #[test]
 fn a_select_and_a_panel_shown_again_show_their_new_fields() {
     use opencode_plugin::abi::{Action, Dialog, Panel, PanelSize, Select, SelectOption, Span};
@@ -1377,10 +1295,6 @@ impl Diffs {
     }
 }
 
-// Expected (TS reloads Last turn as the session goes idle; carbon's review of P6c, 6 and CM1): a failed or a user's
-// interrupted turn loads the diff again; one interrupted by the server's shutdown, which a restart recovers, does not;
-// a turn whose end the connection may have lost loads it again on the reconnect, or once the UI caught up with
-// signals it skipped. On both carriers.
 #[test]
 fn every_end_of_a_turn_loads_last_turn_again_and_a_shutdown_does_not() {
     on_both(|| {
@@ -1416,8 +1330,6 @@ fn every_end_of_a_turn_loads_last_turn_again_and_a_shutdown_does_not() {
     });
 }
 
-// Expected (TS's `reportedBases()`; carbon's review of P6c, 6): opened in Uncommitted, the base picker marks the base
-// the server reports once it arrives, though it opened before, on both carriers.
 #[test]
 fn the_base_picker_marks_the_base_reported_after_it_opened() {
     on_both(|| {
@@ -1478,9 +1390,6 @@ impl Diffs {
     }
 }
 
-// Expected (`toggleFileReviewed` keeps the reading position; carbon's REPRO_9 against decision 14): with the selected
-// card mid-screen below another, a file above it that opens again (marked incomplete) keeps the selected card in
-// view, on both carriers.
 #[test]
 fn a_file_above_that_opens_again_keeps_the_selected_card_in_view() {
     on_both(|| {
@@ -1497,8 +1406,6 @@ fn a_file_above_that_opens_again_keeps_the_selected_card_in_view() {
     });
 }
 
-// Expected (carbon's CM2): content of an earlier load is released, so what the viewer holds in the host stays flat over
-// reloads of the same files, on both carriers.
 #[test]
 fn reloads_release_the_content_of_the_load_before() {
     on_both(|| {
@@ -1520,10 +1427,6 @@ fn reloads_release_the_content_of_the_load_before() {
     });
 }
 
-// Expected (the lane's run `20261115-080955`): between a reload's start and its reply the viewer holds no content,
-// since the reload releases the load before as it starts. A sample taken there reads 0, which is what the row above
-// read when it sampled before the reply landed; once the reply lands the viewer holds what the first load held. The
-// reply is held here, so the window is the same on every run and carrier.
 #[test]
 fn a_reload_holds_no_content_until_its_reply_lands() {
     on_both(|| {
@@ -1557,9 +1460,6 @@ fn a_reload_holds_no_content_until_its_reply_lands() {
     });
 }
 
-// Expected (carbon's CM3, CM5, CM7, CM8): the compact footer's close leaves a narrow route; the view toggle where split
-// has no room saves nothing; the header's `?` opens the help with the tree hidden; a right press on the file menu's
-// row closes the menu.
 #[test]
 fn the_viewers_small_controls_do_what_they_say() {
     on_both(|| {
@@ -1590,8 +1490,6 @@ fn the_viewers_small_controls_do_what_they_say() {
     });
 }
 
-// Expected (carbon's CM4): picking the base the viewer shows again loads nothing, and a base picked in Uncommitted,
-// which shows no base, loads nothing either, on both carriers.
 #[test]
 fn a_base_pick_that_changes_nothing_loads_nothing() {
     on_both(|| {
@@ -1626,8 +1524,6 @@ fn a_base_pick_that_changes_nothing_loads_nothing() {
     });
 }
 
-// Expected (carbon's CM6): a patch too long to show whole (3,100 lines, in chunks) laid out compact after a resize from
-// the full layout shows as one opened compact, its gutter's padding with it.
 #[test]
 fn a_chunked_patch_takes_the_padding_of_the_layout() {
     let opened = |resize: bool| {

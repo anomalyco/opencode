@@ -582,7 +582,6 @@ fn go_upsell_is_offered_once_a_day_and_remembers_dont_show() {
     assert_no_writes(&h.fixture);
 }
 
-// Expected (R2-1): the closed upsell is freed with every widget it showed.
 #[test]
 fn a_closed_go_upsell_is_freed() {
     let h = mount();

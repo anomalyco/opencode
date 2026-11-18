@@ -269,9 +269,6 @@ impl Model for Backlog {
     }
 }
 
-// Expected (`backlog`): sends return at once while the UI thread stands still; what got `Ok` arrives once, in order,
-// with the last value under a key and nothing older after it; nothing that got `Full` or `Closed` arrives; and the
-// mailbox never holds more than its bound. On both carriers.
 #[test]
 fn a_mailbox_refuses_and_never_blocks() {
     for carrier in CARRIERS {
@@ -279,9 +276,6 @@ fn a_mailbox_refuses_and_never_blocks() {
     }
 }
 
-// Expected (`backlog`, fixed rows with real concurrency): 8 threads send 10,000 messages each at once; every send
-// returns, each thread's `Ok` messages arrive once and in its order, no refused one arrives, and the bound holds.
-// 10,000 replaces under one key from one thread leave one entry, whose last value arrives last.
 #[test]
 fn a_flood_from_many_threads_keeps_its_order_and_bound() {
     for carrier in CARRIERS {
@@ -315,8 +309,6 @@ fn a_flood_from_many_threads_keeps_its_order_and_bound() {
     }
 }
 
-// Expected (`backlog`, `Closed`): once the plugin is disabled every send is `Closed` with its message back, what
-// waited never arrives, and a sender of the next activation works.
 #[test]
 fn a_disabled_plugin_closes_its_mailbox() {
     for carrier in CARRIERS {
@@ -337,8 +329,6 @@ fn a_disabled_plugin_closes_its_mailbox() {
     }
 }
 
-// Expected (`backlog`, `Closed`, and 4.2's stop flag): a thread the spawner started sees its stop flag only once the
-// plugin is disabled, and then ends; after a panic on another thread failed the plugin, every send is `Closed`.
 #[test]
 fn a_stop_flag_ends_a_thread_and_a_failure_closes_the_mailbox() {
     for carrier in CARRIERS {
@@ -448,8 +438,6 @@ fn open_with(carrier: Carrier, id: &'static str, setup: fn(&mut abi::Setup) -> R
     harness
 }
 
-// Expected (review bigboi-1): a send runs the author's serializer before it takes the guard that disposal waits for,
-// so disabling a plugin does not wait for a slow serializer on one of its threads. On both carriers.
 #[test]
 fn disabling_does_not_wait_for_a_serializer() {
     for carrier in CARRIERS {
@@ -484,7 +472,6 @@ fn a_wide_integer_arrives_as_itself_on_both_carriers() {
     }
 }
 
-// Expected (review bigboi-11): an empty key is no key on both carriers: two replaces under it are two messages.
 #[test]
 fn an_empty_key_is_no_key_on_both_carriers() {
     for carrier in CARRIERS {
@@ -503,8 +490,6 @@ fn an_empty_key_is_no_key_on_both_carriers() {
     }
 }
 
-// Expected (`reported-once`, review carbon-1): an update that fails ends its wake's batch: what waited behind it in the
-// same batch never reaches the failed plugin, on every carrier.
 #[test]
 fn an_update_that_fails_ends_its_batch() {
     for carrier in CARRIERS {
@@ -521,10 +506,6 @@ fn an_update_that_fails_ends_its_batch() {
     }
 }
 
-// Expected (fixed row; review bigboi 8): a thread's panic report, and a wake of the waker, wait only for the messages
-// put in before them, though each update puts one more in, as a thread that refills every freed place does: the
-// report fails the plugin, and the wake handler runs, after one message, long before the refills end. On both
-// carriers.
 #[test]
 fn a_refilled_mailbox_holds_back_no_report_and_no_wake() {
     for carrier in CARRIERS {
@@ -581,12 +562,6 @@ fn flood(count: u32) -> usize {
     std::thread::spawn(move || (0..count).filter(|number| sender.send((9, *number)).is_ok()).count()).join().unwrap()
 }
 
-// Expected (the backlog cause of `slow`, synthesis 4.2; reviews bigboi 10, carbon 5.4): a burst the frame drains is not
-// full at its end. A mailbox a thread keeps full is full at the end of every frame: at the end of 12 of the last 120
-// frames its plugin is not slow, at the end of 13 it is, and the refused sends are in its details; 120 frames after its
-// mailbox drained, the backlog is gone from them. Its calls fill each frame's budget too, so it is slow by both causes:
-// the user is told once, a plugin and session, whichever cause comes first (4.14 `reported-once`; final review
-// big-boi 10). On both carriers.
 #[test]
 fn a_mailbox_full_at_the_end_of_13_frames_is_a_backlog() {
     for carrier in CARRIERS {
@@ -644,10 +619,6 @@ fn a_mailbox_full_at_the_end_of_13_frames_is_a_backlog() {
     }
 }
 
-// Expected (the thread leak the orchestrator found): a full UI queue leaves one thread a plugin to deliver its wake.
-// Another thread keeps the queue full; the plugin's drain takes what woke it before that `Woken` arrives, and each
-// update sends one more message. Those sends wait for the `Woken` on its way and start no other thread, however many
-// frames run. Once the queue has room that `Woken` arrives, and a later send wakes the plugin again. On both carriers.
 #[test]
 fn a_full_queue_starts_one_wake_thread_a_plugin() {
     for carrier in CARRIERS {

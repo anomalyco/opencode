@@ -667,32 +667,24 @@ fn check(name: &str, paths: impl IntoIterator<Item = Vec<&'static str>>, rows: &
 
 static CORPUS: std::sync::LazyLock<Value> = std::sync::LazyLock::new(|| serde_json::from_str(MACHINES).unwrap());
 
-// Expected (4.14, the shared fixture): after every legal path to depth 4 the life plugin shows what the file says,
-// and the known rows are exactly the differences.
 #[test]
 fn the_plugin_life_follows_the_shared_fixture() {
     let life = &CORPUS["machines"]["life"];
     check("life", traces(&CORPUS, life, false), &[&life["xfail"]]).check();
 }
 
-// Expected: the same along the file's seeded walks.
 #[test]
 fn the_plugin_life_follows_the_shared_fixture_on_walks() {
     let life = &CORPUS["machines"]["life"];
     check("life", traces(&CORPUS, life, true), &[&life["xfail"]]);
 }
 
-// Expected (rich-plugins 3.9): a plugin in the project's plugins directory, as the user sees it. TS shows it at once;
-// this client lists it pending, and declined once declined, which the file's exact rows say (deviation
-// F16-project-plugin-approval), and once approved it is the plugin TS shows.
 #[test]
 fn a_project_plugin_follows_the_shared_fixture() {
     let project = &CORPUS["machines"]["project"];
     check("project", traces(&CORPUS, project, false), &[&project["xfail"]]).check();
 }
 
-// Expected: the same after one action of two normal cycles is dropped, repeated or swapped. An action a state has no
-// edge for does nothing. The known rows are the machine's and the fault trials' own.
 #[test]
 fn the_plugin_life_recovers_from_a_dropped_repeated_or_swapped_action() {
     check(
@@ -712,16 +704,12 @@ fn cycles(name: &str) -> Vec<Vec<&'static str>> {
         .collect()
 }
 
-// Expected (P2, the shared fixture's rows for the manager's keys): after every legal path to depth 4 the plugin
-// manager shows what the file says, and the known rows are exactly the differences.
 #[test]
 fn the_plugin_manager_keys_follow_the_shared_fixture() {
     let manager = &CORPUS["machines"]["manager"];
     check("manager", traces(&CORPUS, manager, false), &[&manager["xfail"]]).check();
 }
 
-// Expected: the same along the file's seeded walks, and after one action of two normal cycles is dropped, repeated or
-// swapped.
 #[test]
 fn the_plugin_manager_keys_follow_the_shared_fixture_on_walks_and_faults() {
     let manager = &CORPUS["machines"]["manager"];
@@ -729,9 +717,6 @@ fn the_plugin_manager_keys_follow_the_shared_fixture_on_walks_and_faults() {
     check("manager", faulted(&cycles("manager")), &[&manager["xfail"], &CORPUS["faults"]["manager"]["xfail"]]);
 }
 
-// Expected (P6b, the shared fixture's rows for the manager's views): after every legal path to depth 4 the plugin
-// manager shows the list, the list filtered and a failure's details as the file says, and the known rows are exactly
-// the differences.
 #[test]
 fn the_plugin_manager_views_follow_the_shared_fixture() {
     let views = &CORPUS["machines"]["views"];
@@ -741,8 +726,6 @@ fn the_plugin_manager_views_follow_the_shared_fixture() {
     }
 }
 
-// Expected: the same along the file's seeded walks, and after one action of two normal cycles is dropped, repeated or
-// swapped.
 #[test]
 fn the_plugin_manager_views_follow_the_shared_fixture_on_walks_and_faults() {
     let views = &CORPUS["machines"]["views"];
@@ -753,16 +736,12 @@ fn the_plugin_manager_views_follow_the_shared_fixture_on_walks_and_faults() {
     }
 }
 
-// Expected (P6c, the shared fixture's rows for the viewer): after every legal path to depth 4 the diff viewer's route
-// shows what the file says: what is reviewed, which cards show, and that the single view outlives the viewer.
 #[test]
 fn the_diff_viewer_follows_the_shared_fixture() {
     let viewer = &CORPUS["machines"]["viewer"];
     check("viewer", traces(&CORPUS, viewer, false), &[&viewer["xfail"]]).check();
 }
 
-// Expected: the same along the file's seeded walks, and after one action of two normal cycles is dropped, repeated or
-// swapped.
 #[test]
 fn the_diff_viewer_follows_the_shared_fixture_on_walks_and_faults() {
     let viewer = &CORPUS["machines"]["viewer"];

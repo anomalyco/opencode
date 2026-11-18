@@ -150,8 +150,6 @@ fn outlived(open: Open) -> Vec<&'static str> {
     held.iter().filter(|(_, weak)| weak.strong_count() > 0).map(|(name, _)| *name).collect()
 }
 
-// Expected (plugins-pt R3-b): dropping the TUI with any of its dialogs open frees the TUI, its keymap and the
-// plugin's activation, as it does with none open.
 #[test]
 fn a_dialog_open_at_the_drop_frees_the_tui_and_its_plugins() {
     for open in [Open::Nothing, Open::Help, Open::Palette] {
@@ -159,8 +157,6 @@ fn a_dialog_open_at_the_drop_frees_the_tui_and_its_plugins() {
     }
 }
 
-// Expected (plugins-pt R3-b): the same with each kind of plugin dialog open, and with one a plugin asked for that no
-// frame showed yet.
 #[test]
 fn a_plugin_dialog_open_at_the_drop_frees_the_tui_and_its_plugins() {
     for open in [Open::Prompt, Open::Select, Open::Confirm, Open::Alert, Open::Pending] {
@@ -168,9 +164,6 @@ fn a_plugin_dialog_open_at_the_drop_frees_the_tui_and_its_plugins() {
     }
 }
 
-// Expected (plugins-pt R3-b): the same with a plugin's live panel open, with a plugin route shown, and with the diff
-// viewer docked beside a session. A drop in the same turn as the navigation to the route panicked before OpenTUI #2132:
-// teardown dropped the deferred tasks while it held their queue, and one deferred again as it dropped.
 #[test]
 fn a_panel_or_route_open_at_the_drop_frees_the_tui_and_its_plugins() {
     for open in [Open::Panel, Open::Route, Open::Navigating, Open::SidePanel] {

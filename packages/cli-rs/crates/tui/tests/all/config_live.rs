@@ -95,7 +95,6 @@ fn a_keybinds_write_rebinds_and_disables_commands_at_once() {
     assert!(!tui.dialogs.is_open(), "f7 still opened the sessions");
 }
 
-// Expected (carbon-dialogs-7): a closed Settings or Experiments dialog lets go of its config listener.
 #[test]
 fn closed_settings_dialogs_drop_their_config_listeners() {
     let app = TestApp::new(100, 30);

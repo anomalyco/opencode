@@ -558,9 +558,6 @@ fn gone(pid: u32) -> bool {
     !cfg!(target_os = "linux")
 }
 
-// Expected (review carbon new-1): on the pipe carrier too each effect of an answer is an entry of its own: of 100
-// answers of 100 dispatches each, a turn of the run loop, with its one paint, runs at most two frames' bounds (the rest
-// of one frame and the next), and the rest in later turns; the plugin stays active.
 #[test]
 fn many_effects_of_one_answer_wait_for_the_next_paint() {
     let Some(config) = config() else { return };
@@ -580,9 +577,6 @@ fn many_effects_of_one_answer_wait_for_the_next_paint() {
     assert_eq!(pipe.status(PROBE), Some(Status::Active));
 }
 
-// Expected (containment, a plugin that throws; `no-effects` and `reported-once` over the pipe): a handler that throws
-// fails its plugin alone, once, with none of what it asked for before the throw; the other plugin on the same JS host
-// goes on, and the JS host was not started again.
 #[test]
 fn a_plugin_that_throws_fails_alone_with_no_effects() {
     let Some(config) = config() else { return };
@@ -652,9 +646,6 @@ fn ends_the_js_host(command: &str, input: Option<&str>, cause: &str, config: Con
     assert_eq!(shown.iter().filter(|toast| toast.contains("Plugin failed")).count(), 1, "{shown:?}");
 }
 
-// Expected (containment, a plugin that hangs): the event the JS host does not acknowledge within the limit ends it;
-// the plugin whose handler ran fails, named with its call, and the old process is gone; the other plugin is set up
-// again on a new JS host, its surface showing its last whole tree meanwhile.
 #[test]
 fn a_plugin_that_hangs_fails_alone_and_the_js_host_starts_again() {
     let Some(mut config) = config() else { return };
@@ -662,8 +653,6 @@ fn a_plugin_that_hangs_fails_alone_and_the_js_host_starts_again() {
     ends_the_js_host("probe.hang", None, "run-command ended the JS host: the JS host sent nothing for 500 ms", config);
 }
 
-// Expected (containment, a plugin that exits): the JS host's end is noticed; the plugin whose handler ran fails, named
-// with the exit, and the rest is as for a hang.
 #[test]
 fn a_plugin_that_exits_fails_alone_and_the_js_host_starts_again() {
     let Some(config) = config() else { return };
@@ -673,11 +662,6 @@ fn a_plugin_that_exits_fails_alone_and_the_js_host_starts_again() {
     ends_the_js_host("probe.exit", None, &cause, config);
 }
 
-// Expected (containment, a plugin that floods): effects sent outside any call past the host's bound of unread messages
-// end the JS host, and the plugin whose effects filled it fails, though no call of it ran. The other plugin is set up
-// again on a new JS host, which serves it: it answers. Also when the host's queue is smaller than its hello, which a new
-// JS host takes first whatever the bound (pipe-restart: such a hello was lost, and the JS host that replaced the
-// flooded one exited at once, "the stream skipped from 0 to N", as did each after it).
 #[test]
 fn a_plugin_that_floods_fails_alone_and_the_js_host_starts_again() {
     for queued in [None, Some(1 << 10)] {
@@ -712,10 +696,6 @@ fn a_plugin_that_floods_fails_alone_and_the_js_host_starts_again() {
     }
 }
 
-// Expected (review F4, js-stdio): a plugin's prints go to the JS host's standard error and break nothing, and so do the
-// raw bytes it writes to the descriptor of standard output itself, as oc-bg-color-sync writes an OSC sequence: the
-// protocol runs on standard input, so the JS host and every plugin keep running and answer, and the bytes are logged by
-// the plugin whose handler wrote them, escaped. TS sends them to the terminal (deviation F16).
 #[test]
 fn a_raw_write_to_standard_output_is_logged_and_breaks_nothing() {
     let Some(config) = config() else { return };
@@ -745,7 +725,6 @@ fn a_raw_write_to_standard_output_is_logged_and_breaks_nothing() {
     assert_eq!(pipe.scripts().pid(), Some(pid));
 }
 
-// Expected (the JS host's memory budget): a JS host over its budget is ended and started again with its plugins.
 #[test]
 fn a_js_host_over_its_memory_budget_starts_again() {
     let Some(mut config) = config() else { return };
@@ -765,8 +744,6 @@ fn a_js_host_over_its_memory_budget_starts_again() {
     assert!(pipe.scripts().resident().unwrap() < 160 << 20);
 }
 
-// Expected (the restart rule): a JS host that ends three times in a minute is not started again, and every plugin on it
-// fails, once each.
 #[test]
 fn three_ends_in_a_minute_fail_every_plugin() {
     let Some(config) = config() else { return };
@@ -798,8 +775,6 @@ fn three_ends_in_a_minute_fail_every_plugin() {
     assert_eq!(pipe.scripts().pid(), None);
 }
 
-// Expected (`hold`, 3.7, review F3): the keys typed after a holding command wait until its handler returned, then reach
-// the composer in order; past the limit of 50 ms they go on without it.
 #[test]
 fn a_holding_command_holds_the_keys_after_it() {
     let Some(config) = config() else { return };
@@ -831,9 +806,6 @@ fn prompt_row(harness: &Harness) -> Option<usize> {
     harness.app.text().lines().position(|line| line.contains("Ask anything"))
 }
 
-// Expected (rows moved above the viewport: 0, review F1): once the first tree of a claim has arrived, no frame moves the
-// rows around it: a later revision of the same size, and a new mount of the same key, whose placeholder keeps the room
-// its last tree took until its own tree comes.
 #[test]
 fn rows_do_not_move_once_the_first_tree_arrived() {
     let Some(config) = config() else { return };
@@ -868,8 +840,6 @@ fn rows_do_not_move_once_the_first_tree_arrived() {
     assert!(harness.app.text().contains("probe line 2"), "{}", harness.app.text());
 }
 
-// Expected (a JS host that ends in the middle of a revision): every frame shows the last whole revision or the next,
-// never part of one.
 #[test]
 fn a_js_host_that_ends_mid_revision_leaves_the_last_whole_tree() {
     let Some(config) = config() else { return };
@@ -998,8 +968,6 @@ impl Model for Delivery {
     }
 }
 
-// Expected (`delivery` over the pipe): with no fault, the probe's log is the input's events, once each and in order,
-// and their effects applied in that order, whatever the frames between them.
 #[test]
 fn delivery_over_the_pipe() {
     if config().is_none() {
@@ -1008,8 +976,6 @@ fn delivery_over_the_pipe() {
     model::check(&Delivery { faults: false }, 8, 24);
 }
 
-// Expected (`delivery`'s weaker form under the pipe's fault operators: drop, repeat, swap one message): nothing is seen
-// twice or out of order; a repeat changes nothing; a drop or a swap ends the JS host, and delivery goes on after it.
 #[test]
 fn delivery_over_the_pipe_with_faults() {
     if config().is_none() {
@@ -1018,8 +984,6 @@ fn delivery_over_the_pipe_with_faults() {
     model::check(&Delivery { faults: true }, 8, 24);
 }
 
-// Expected (P3's requests over the pipe): a scroll verb a handler asks for moves the mount's scroll; the scroll's state,
-// a read the plugin watches, reaches it before its next call; the user's wheel is a scroll event, which is a call.
 #[test]
 fn scroll_verbs_reads_and_events_cross_the_pipe() {
     let Some(config) = config() else { return };
@@ -1049,9 +1013,6 @@ fn scroll_verbs_reads_and_events_cross_the_pipe() {
     assert!(after < offset, "the wheel's offset did not reach the plugin:\n{text}");
 }
 
-// Expected (`work` in bytes over the pipe): a revision that changes one card crosses that card and keeps the others, so
-// its bytes are a fraction of the whole tree's; one that changes nothing crosses no tree; a theme change crosses the
-// theme alone, which the V2 context's `theme` reads (P8), and no tree: the twin's nodes name tokens.
 #[test]
 fn a_revision_crosses_bytes_that_follow_the_change() {
     let Some(config) = config() else { return };
@@ -1117,8 +1078,6 @@ fn a_stale_revision_is_dropped() {
     assert_eq!(pipe.status(twin::ID), Some(Status::Active));
 }
 
-// Expected (`keep-full` over the pipe): a revision the host refuses for a keep it does not hold changes nothing; the
-// host says so, the JS host sends a whole tree, which is adopted, and the plugin stays active and goes on.
 #[test]
 fn a_refused_revision_is_mended_by_a_whole_one() {
     let Some(config) = config() else { return };
@@ -1173,10 +1132,6 @@ fn a_changed_module_reloads_and_the_running_one_stays_meanwhile() {
     assert!(harness.app.text().contains("card 2: 1"), "{}", harness.app.text());
 }
 
-// Expected (review F4, standard streams as the protocol): what a plugin prints, through every console method and
-// `process.stdout` (a string, a buffer with its callback, an encoding), and what its own module and a dependency from
-// `node_modules` print as they load and when called, goes to the JS host's standard error and breaks nothing: the JS
-// host never ends, every plugin stays active and answers, and a write's callback runs.
 #[test]
 fn prints_of_a_plugin_and_its_dependencies_never_reach_the_protocol() {
     let Some(config) = config() else { return };
@@ -1438,10 +1393,6 @@ impl Model for PendingModel {
     }
 }
 
-// Expected (Pa's `pending` on the pipe, O-125 (1)): a project's TypeScript plugin waits for approval as a native one
-// does. Pending or declined it equals no plugin: nothing of it ran, the JS host did not start for it, nothing is
-// registered or reachable, and the frame is a client's without it; approved, it runs at once; a new build of it is
-// pending again, which stops the running one (its cleanup runs).
 #[test]
 fn a_project_typescript_plugin_waits_for_approval() {
     if config().is_none() {
@@ -1469,9 +1420,6 @@ fn the_fixed_typescript_approval_rows_pass() {
     }
 }
 
-// Expected (review jsnpm-5): of two answers given on one build before its hash ended, the later one is recorded and the
-// earlier one is dropped silently, however their hashes end. Approve then Decline ends declined, with nothing of it
-// run; Approve twice approves once and says nothing about a changed build.
 #[test]
 fn a_later_answer_supersedes_one_still_hashed() {
     use opencode_plugin::loader::approval::Decision;
@@ -1503,8 +1451,6 @@ fn a_later_answer_supersedes_one_still_hashed() {
     }
 }
 
-// Expected (the manager's question for a TypeScript plugin, 3.9): the toast and the question name TypeScript code and
-// the JS host, the directory and the hash of its files, with Decline active; Enter declines, and approving runs it.
 #[test]
 fn the_manager_asks_before_a_project_typescript_plugin_runs() {
     let Some(config) = config() else { return };
@@ -1585,10 +1531,6 @@ fn header(pipe: &Pipe) -> String {
     pipe.harness.app.text().lines().find(|line| line.starts_with("twin ")).unwrap_or("").trim().to_owned()
 }
 
-// Expected (bigboi-2, bigboi-3, a cut of the JS host): the handler it was running when it ended fails its plugin and is
-// not run again; the calls it received and never started are sent again, in order, after the surviving plugin's setup,
-// and so is input routed while it is set up again: each runs exactly once. The survivor's JS state is new (setup
-// again), so its board counts only those.
 #[test]
 fn a_cut_runs_what_never_started_once_and_what_ran_never_again() {
     let Some(config) = config() else { return };
@@ -1635,8 +1577,6 @@ fn probes(count: usize, config: Config) -> Pipe {
     pipe
 }
 
-// Expected (bigboi-3, the production limit of 1 s): five handlers of 270 ms each, sent in one burst, wait in the JS
-// host's queue for over a second; a queue that moves is not a hang, so the JS host stays and every plugin stays active.
 #[test]
 fn a_queue_that_moves_is_not_a_hang() {
     let Some(bun) = bun() else { return };
@@ -1655,9 +1595,6 @@ fn a_queue_that_moves_is_not_a_hang() {
     }
 }
 
-// Expected (FT-1, the production limit of 1 s): twelve plugins each send a tree while the UI thread is busy for longer
-// than the limit; the trees past the bound the host keeps unread hold the JS host's answers back unread too, which is
-// the host's time, not the JS host's: it is not ended, and every plugin stays active and draws.
 #[test]
 fn twelve_plugins_behind_a_busy_ui_thread_are_not_a_hang() {
     let Some(bun) = bun() else { return };
@@ -1679,9 +1616,6 @@ fn twelve_plugins_behind_a_busy_ui_thread_are_not_a_hang() {
     assert!(lines >= 1, "{}", pipe.harness.app.text());
 }
 
-// Expected (bigboi-3): a handler's answer comes once the views it made due were sent, so a view that never returns
-// after its command did is a handler that never answered: the JS host is ended at the limit with nothing else sent
-// (no ping), and that plugin fails.
 #[test]
 fn a_view_that_never_returns_after_its_command_ends_the_js_host() {
     let Some(mut config) = config() else { return };
@@ -1696,10 +1630,6 @@ fn a_view_that_never_returns_after_its_command_ends_the_js_host() {
     assert_eq!(pipe.status(twin::ID), Some(Status::Active));
 }
 
-// Expected (bigboi-4): a full queue is back-pressure, not a fault. A message larger than the whole queue is refused and
-// ends nothing; a busy JS host whose queue fills is not ended: what does not fit waits in the host's overflow and goes,
-// in order, once it reads; past the overflow's bound a message is refused, counted, and nothing ends. A restart's own
-// sends can therefore never end the JS host again (they did, three times, before).
 #[test]
 fn a_full_queue_is_back_pressure_and_ends_nothing() {
     let Some(mut config) = config() else { return };
@@ -1743,8 +1673,6 @@ fn a_full_queue_is_back_pressure_and_ends_nothing() {
     assert_eq!(calls(&log), vec![serde_json::json!({ "hold": 400 }), serde_json::json!({ "hold": 700 })]);
 }
 
-// Expected (bigboi-5): the keys a holding command held reach the composer after the effects of its answer: here the
-// composer set to `set:`, then `ab`.
 #[test]
 fn held_keys_come_after_the_holding_commands_effects() {
     let Some(config) = config() else { return };
@@ -1756,9 +1684,6 @@ fn held_keys_come_after_the_holding_commands_effects() {
     assert_eq!(pipe.harness.text(), "set:ab");
 }
 
-// Expected (bigboi-6): a reload imports the plugin's modules afresh (an edit of a helper alone runs); a replacement whose
-// setup throws leaves the running one answering; and a command sent while a candidate's setup runs is answered by the
-// activation the host routed it to, the running one.
 #[test]
 fn a_reload_is_fresh_and_a_candidate_never_answers_for_the_running_one() {
     let Some(config) = config() else { return };
@@ -1801,8 +1726,6 @@ fn a_reload_is_fresh_and_a_candidate_never_answers_for_the_running_one() {
     assert_eq!(say(), vec!["v3".to_owned()]);
 }
 
-// Expected (bigboi-7, the layout epoch): a revision the JS host built for an input the host has replaced (here, a width
-// before a resize) is refused, never shown; the one for the current input follows.
 #[test]
 fn a_revision_for_a_replaced_size_is_never_shown() {
     let Some(config) = config() else { return };
@@ -1825,8 +1748,6 @@ fn a_revision_for_a_replaced_size_is_never_shown() {
     assert!(pipe::crossed().dropped > refused, "no revision was refused: the row did not reach its case");
 }
 
-// Expected (bigboi-8): the host keeps only what waits for an answer; mounts, inputs and unmounts, acknowledged, leave
-// nothing behind however long the session churns.
 #[test]
 fn what_is_only_acknowledged_leaves_nothing_behind() {
     let Some(config) = config() else { return };
@@ -1892,10 +1813,6 @@ fn plain(text: &str) -> Vec<(char, Modifiers)> {
     text.chars().map(|key| (key, Modifiers::NONE)).collect()
 }
 
-// Expected (P2 on the pipe, review F3): a key's answer comes a round trip late, so a key that changes how the next
-// ones route holds them until its answer applied. `x` sets the composer before the `ab` typed with it; `ctrl+n` enters
-// the mode `normal` before `d` and `w` of the same batch, which its layer takes, and `i` leaves it before `cd`: no key is
-// lost or misrouted. A listener of every key in the base mode hears each key outside the mode, and passes it on.
 #[test]
 fn a_modal_composer_on_the_pipe_loses_no_key_at_a_mode_switch() {
     let Some(config) = config() else { return };
@@ -1913,10 +1830,6 @@ fn a_modal_composer_on_the_pipe_loses_no_key_at_a_mode_switch() {
     );
 }
 
-// Expected (P2 on the pipe): a panel opens, takes the focus and the keys of its layer; a focus effect moves the focus to
-// its node, which the read it watches shows; a press on its pointer node is consumed and captures the release; its
-// handler's overlay opens over it, with the opener's mount, which hears it closed; closing the panel leaves nothing of
-// its input behind.
 #[test]
 fn a_panel_and_its_overlay_take_keys_and_focus_over_the_pipe() {
     let Some(config) = config() else { return };
@@ -1952,8 +1865,6 @@ fn a_panel_and_its_overlay_take_keys_and_focus_over_the_pipe() {
     assert_eq!(opencode_plugin::interact::ledger(&**tui), before);
 }
 
-// Expected (P2 on the pipe, synthesis 3.8): a JS host that ends takes the modes its plugins set with it: their JS state
-// is gone. The plugin is set up again, its layers stay, and the keys route as if no mode were set.
 #[test]
 fn a_mode_ends_with_the_js_host_that_set_it() {
     let Some(config) = config() else { return };
@@ -1999,7 +1910,6 @@ fn toasted(pipe: &Pipe, start: &str) -> String {
     current().unwrap()
 }
 
-// Expected (carbon-8): the setup context says the client's version and channel, and the theme's mode.
 #[test]
 fn the_setup_context_says_the_client_and_its_theme() {
     let Some(mut config) = config() else { return };
@@ -2009,8 +1919,6 @@ fn the_setup_context_says_the_client_and_its_theme() {
     assert_eq!(toasted(&pipe, "9.9.9"), "9.9.9 beta dark");
 }
 
-// Expected (carbon-8, carbon-9 CM5, CM6): a stored key the manifest declares is written, answered and watched; once
-// unwatched, a change of it is not pushed.
 #[test]
 fn a_stored_value_is_answered_watched_and_unwatched() {
     let Some(config) = config() else { return };
@@ -2031,8 +1939,6 @@ fn a_stored_value_is_answered_watched_and_unwatched() {
     assert!(!pipe.harness.app.text().contains(r#"\"y\""#), "{}", pipe.harness.app.text());
 }
 
-// Expected (carbon-8, FT-9): a plugin watches at most 128 reads, its note and 127 of the 140 others; the rest are not
-// answered.
 #[test]
 fn a_plugin_watches_at_most_128_reads() {
     let Some(config) = config() else { return };
@@ -2078,9 +1984,6 @@ fn a_bad_effect_or_view_fails_its_plugin_alone() {
     }
 }
 
-// Expected (carbon-7): a memo within a kept memo stays known: the inner subtree is not built again, though its outer one
-// was kept, then built again. Counted from once the slot's size is settled: a first tree that went out before the slot
-// was laid out is refused, and the next is built whole (review bigboi-7).
 #[test]
 fn a_memo_within_a_kept_memo_stays_known() {
     let Some(config) = config() else { return };
@@ -2098,8 +2001,6 @@ fn a_memo_within_a_kept_memo_stays_known() {
     assert_eq!(toasted(&pipe, "inner"), built);
 }
 
-// Expected (carbon-7, carbon-9 CM2): content a view releases goes, and so does what a JS host that ended gave: the host
-// holds the content of the trees it shows, however many views and restarts.
 #[test]
 fn released_content_and_a_restarted_hosts_content_go() {
     let Some(mut config) = config() else { return };
@@ -2122,9 +2023,6 @@ fn released_content_and_a_restarted_hosts_content_go() {
     assert_eq!(opencode_plugin::surface::ledger().content, held, "an ended JS host's content was kept");
 }
 
-// Expected (carbon-7): a slot that shows no rows takes the height it was laid out at when it mounts again: the prompt
-// does not move while its first tree is on its way. (At this tip a slot's root lays out one row at least, so the
-// screen's stand-in size, which carbon saw recorded, never reaches a mount that showed a tree.)
 #[test]
 fn a_slot_of_no_rows_reserves_none_again() {
     let Some(config) = config() else { return };
@@ -2142,8 +2040,6 @@ fn a_slot_of_no_rows_reserves_none_again() {
     assert_eq!(at(&pipe), before, "the placeholder reserved rows:\n{}", pipe.harness.app.text());
 }
 
-// Expected (carbon-3): a new version whose import ends the JS host fails its plugin once: the running version is not
-// set up again from the files that ended it, so the JS host starts once more, and the others stay.
 #[test]
 fn a_new_version_that_ends_the_js_host_starts_it_once() {
     let Some(config) = config() else { return };
@@ -2162,7 +2058,6 @@ fn a_new_version_that_ends_the_js_host_starts_it_once() {
     assert_eq!(pipe.status(twin::ID), Some(Status::Active));
 }
 
-// Expected (carbon-2): a plugin directory that moves frees its ID on the JS host: the plugin loads from the new one.
 #[test]
 fn a_moved_plugin_loads_from_its_new_directory() {
     let Some(config) = config() else { return };
@@ -2178,7 +2073,6 @@ fn a_moved_plugin_loads_from_its_new_directory() {
     assert_eq!(toasted(&pipe, "v"), "v1");
 }
 
-// Expected (carbon-2): a plugin directory whose path holds `#` and `%` loads: the JS host imports it by URL.
 #[test]
 fn a_plugin_whose_path_holds_url_characters_loads() {
     let Some(config) = config() else { return };
@@ -2188,8 +2082,6 @@ fn a_plugin_whose_path_holds_url_characters_loads() {
     pipe.active("example.reloader");
 }
 
-// Expected (carbon-2): a plugin set up again on a new JS host that registers other commands is loaded again with them,
-// and the new activation answers: the old one's end does not deactivate it.
 #[test]
 fn a_setup_again_that_registers_others_keeps_the_new_activation() {
     let Some(config) = config() else { return };
@@ -2209,8 +2101,6 @@ fn a_setup_again_that_registers_others_keeps_the_new_activation() {
     let _ = std::fs::remove_file(&file);
 }
 
-// Expected (carbon-8): a plugin a directive disables is described and not set up: none of its setup runs until it is
-// enabled, and then it answers.
 #[test]
 fn a_disabled_plugin_is_not_set_up_until_enabled() {
     let Some(config) = config() else { return };
@@ -2248,8 +2138,6 @@ fn a_disabled_plugin_is_not_set_up_until_enabled() {
     let _ = std::fs::remove_file(&log);
 }
 
-// Expected (carbon-1): safe mode holds a TypeScript plugin as it holds a library: nothing of it runs, and no JS host
-// starts for it.
 #[test]
 fn safe_mode_holds_a_typescript_plugin() {
     let Some(config) = config() else { return };
@@ -2278,8 +2166,6 @@ fn safe_mode_holds_a_typescript_plugin() {
     assert_ne!(pipe.status(PROBE), Some(Status::Active));
 }
 
-// Expected (carbon-4, synthesis 3.8): the reserved chord is never held: during a command's hold it reaches the host at
-// once (here it clears the prompt), and the keys the hold kept are dropped.
 #[test]
 fn the_reserved_chord_goes_through_a_hold() {
     let Some(config) = config() else { return };
@@ -2297,8 +2183,6 @@ fn the_reserved_chord_goes_through_a_hold() {
     assert_eq!(pipe.harness.text(), "z", "what the hold kept came after the chord");
 }
 
-// Expected (carbon-6): the JS host exits once the client that started it is gone, though its input stays open: here
-// its parent, a shell, exits at once and something else holds its input.
 #[cfg(target_os = "linux")]
 #[test]
 fn the_js_host_exits_when_its_client_is_gone() {
@@ -2324,8 +2208,6 @@ fn the_js_host_exits_when_its_client_is_gone() {
     assert!(!alive(), "the JS host {pid} outlived its client");
 }
 
-// Expected (carbon-9, CM9): a plugin directory without a TUI module is listed as skipped, and nothing of it runs; its
-// reason says so, with what the resolution said (win11-runs D2).
 #[test]
 fn a_directory_without_a_tui_module_is_skipped() {
     let Some(config) = config() else { return };
@@ -2349,8 +2231,6 @@ fn a_directory_without_a_tui_module_is_skipped() {
     quietly(&pipe, "the directory was skipped", skipped);
 }
 
-// Expected (win11-runs D2): a plugin directory the config names by its verbatim spelling (`\\?\C:\…`) loads as the same
-// directory spelled plainly does, though Bun resolves nothing under a verbatim directory.
 #[cfg(windows)]
 #[test]
 fn a_directory_named_by_its_verbatim_path_loads() {
@@ -2370,8 +2250,6 @@ fn a_directory_named_by_its_verbatim_path_loads() {
     pipe.active(twin::ID);
 }
 
-// Expected (carbon-8): a watch a handler made is gone with the JS host that ended: the setup again makes its own, and the
-// host pushes nothing for the old one, though its read changed.
 #[test]
 fn a_handlers_watch_ends_with_its_js_host() {
     let Some(mut config) = config() else { return };
@@ -2396,7 +2274,6 @@ fn a_handlers_watch_ends_with_its_js_host() {
     assert_eq!(toasted(&pipe, "late"), "late false");
 }
 
-// Expected (carbon-8): a call that asks for more effects than the host runs at once fails its plugin, with none of them.
 #[test]
 fn a_call_over_the_effect_bound_fails_its_plugin() {
     let Some(config) = config() else { return };
@@ -2519,8 +2396,6 @@ fn a_read_past_the_frame_comes_in_parts() {
     assert_eq!(pipe.status(LAB), Some(Status::Active));
 }
 
-// Expected (big-boi's `cg4-7`): a read the plugin watches and at once lets go reads as nothing once its snapshot came:
-// the snapshot, here of 300 KiB in parts, was on its way, and it set the value again, uncharged, after the unwatch.
 #[test]
 fn a_snapshot_after_its_unwatch_sets_nothing() {
     let Some(config) = config() else { return };
@@ -2560,9 +2435,6 @@ export default {{ id: "example.late", setup(api) {{
     assert_eq!(std::fs::read_to_string(&log).unwrap(), "true", "the late snapshot set the read");
 }
 
-// Expected (big-boi's `cg4-2`): a stored value's snapshot carries its JSON, not its text quoted again: a value of 200
-// KiB of backslashes goes in about that many bytes, where quoting its text again doubled them, and a value of the
-// stored bound could pass what the JS host takes.
 #[test]
 fn a_stored_values_snapshot_is_not_escaped_twice() {
     let Some(config) = config() else { return };
@@ -2580,9 +2452,6 @@ fn a_stored_values_snapshot_is_not_escaped_twice() {
     assert!(sent < (slashes.len() as u64) * 5 / 4, "{sent} bytes sent for a value of {}", slashes.len());
 }
 
-// Expected (big-boi's catalog review, last): a plugin disabled while the JS host reads nothing and the overflow is full
-// still has its activation deactivated once the JS host reads again, so a fetch the host took settles once, refused, and
-// the reply that comes after reaches nothing. The full overflow refused the deactivation, and the fetch waited for good.
 #[test]
 fn a_deactivation_past_a_full_overflow_settles_what_it_awaits() {
     let Some(mut config) = config() else { return };
@@ -2678,10 +2547,6 @@ export default {{ id: "example.ending", setup(api) {{
     assert_eq!(std::fs::read_to_string(&log).unwrap(), "settled Err\n", "settled once, refused");
 }
 
-// Expected (bigboi's pipe sign-off, recheck): a watched read whose snapshot fits a frame but not what is left of the
-// overflow goes as a failed read, and charges the plugin's content nothing as it is refused. Once the queue drained it
-// is pushed again, though it did not change (big-boi's `cg4-8`: it stayed failed), and holds the room, so a
-// neighbouring read that needs it fails on the content bound.
 #[test]
 fn a_read_the_overflow_refuses_holds_no_content() {
     use opencode_plugin::limits::{self, Limits};
@@ -2793,8 +2658,6 @@ fn a_load_past_the_frame_fails_and_its_neighbour_runs() {
     assert_eq!(pipe.scripts().waiting(), 0);
 }
 
-// Expected (no orphans): a TUI that ends as usual leaves nothing a plugin started either, also a process outside the JS
-// host's group, which the host's kill of the group misses: the JS host ends it as its input ends.
 #[cfg(target_os = "linux")]
 #[test]
 fn the_tui_ending_leaves_nothing_its_plugins_started() {
@@ -2865,7 +2728,6 @@ fn a_js_plugins_trees_content_and_reads_are_held_to_the_limits() {
     assert_eq!(limits::held(LAB), limits::Held::default(), "held once disabled");
 }
 
-// Expected (Pl on the pipe): a JS plugin that fails gives back what it held, the reads it watched among it.
 #[test]
 fn a_failed_js_plugin_holds_nothing() {
     use opencode_plugin::limits;
@@ -2880,8 +2742,6 @@ fn a_failed_js_plugin_holds_nothing() {
     assert_eq!(limits::held(LAB), limits::Held::default(), "held once failed");
 }
 
-// Expected (bigboi P8-9, FT-2): a plugin directory is read to hash it off the UI thread, and not again for each
-// reconcile the JS host's answers start: once no file changed lately, reconciles that change no file read none.
 #[test]
 fn the_js_hosts_answers_hash_no_plugin_again() {
     let Some(config) = config() else { return };
@@ -2906,9 +2766,6 @@ fn the_js_hosts_answers_hash_no_plugin_again() {
     assert_eq!(opencode_plugin::loader::approval::hashed(), before, "the UI thread hashed a plugin's files");
 }
 
-// Expected (FT-2): the UI thread reads none of a TypeScript plugin's files as the client starts, so its first frame
-// does not wait on them, however many its dependencies hold; the walk off the UI thread reads the plugin's own files
-// and each dependency's `package.json`, not the dependencies' files (2,000 of 8 KiB here); and the plugin loads.
 #[test]
 fn the_first_frame_does_not_wait_on_a_plugins_files() {
     let Some(config) = config() else { return };
@@ -2935,9 +2792,6 @@ fn the_first_frame_does_not_wait_on_a_plugins_files() {
     assert_eq!(opencode_plugin::loader::approval::hashed(), before, "the UI thread read the plugin's files");
 }
 
-// Expected (FT-2, js-followups): the user's Approve on a project's TypeScript plugin with 16 MB of dependencies returns
-// before its tree is hashed again, and the UI thread reads none of its files for it: the answer is recorded once the
-// hash off the UI thread ends, as the build shown, and the plugin then loads.
 #[test]
 fn an_approval_does_not_wait_on_a_plugins_files() {
     let Some(config) = config() else { return };
@@ -3030,9 +2884,6 @@ fn a_stage_that_finds_other_bytes_hashes_off_the_ui_thread() {
     assert_eq!(std::fs::read_to_string(&marker).unwrap(), ran, "what changed ran");
 }
 
-// Expected (carbon-1, the flag on): a project the client works in loads nothing into the JS host as it starts for the
-// user's own plugin: not its `bunfig.toml` (a `preload`), not its `.env`, not the `bun` of a relative `PATH` entry.
-// Bun starts in a directory of the JS host's own, and the project's directory reaches plugins as data.
 #[test]
 fn a_hostile_project_loads_nothing_into_the_js_host() {
     hostile(|_| config());
@@ -3117,8 +2968,6 @@ fn hostile(runtime: impl FnOnce(&Path) -> Option<Config>) {
     assert_eq!(opencode_plugin::pipe::find_in("bun", &path, &project, Some(&project)), None);
 }
 
-// Expected (CT-5): a fetch whose reply is 1 MiB, four times a frame, gets it whole, as TS does: it goes in parts that
-// the JS host joins. It failed past 256 KiB (snippets' `/api/skill`, 450 KB, failed its setup).
 #[test]
 fn a_fetch_reply_of_a_mebibyte_arrives_whole() {
     let Some(config) = config() else { return };
@@ -3149,9 +2998,6 @@ fn a_fetch_reply_of_a_mebibyte_arrives_whole() {
     assert_eq!(pipe.status("example.large"), Some(opencode_plugin::Status::Active));
 }
 
-// Expected (big-boi's catalog review, CT-5): the JS host keeps a reply's parts only while a fetch waits for them: a
-// reply in parts that the repeat fault sends twice settles once, and the second set's parts, which no call takes, are
-// not kept. They stayed for good.
 #[test]
 fn a_repeated_reply_in_parts_leaves_nothing_kept() {
     let Some(config) = config() else { return };
@@ -3192,8 +3038,6 @@ fn a_repeated_reply_in_parts_leaves_nothing_kept() {
     assert_eq!(std::fs::read_to_string(&log).unwrap(), format!("{} 0\n", 1 << 20));
 }
 
-// Expected (carbon-5): a fetch whose reply is more than the JS host takes ends with an error, where the plugin's await
-// never ended.
 #[test]
 fn a_fetch_reply_too_large_for_the_js_host_fails() {
     let Some(config) = config() else { return };
@@ -3219,9 +3063,6 @@ fn a_fetch_reply_too_large_for_the_js_host_fails() {
     assert_eq!(std::fs::read_to_string(&log).unwrap(), "Err\n");
 }
 
-// Expected (CT-1): a fetch whose reply comes after the plugin's registrations changed, which reloads it, settles: the
-// reply reaches the activation that took the JS host's over. It was lost with the one that asked, and the plugin's
-// await never ended (tokscope's history pass, started in setup, once its page's first mount reloaded it).
 #[test]
 fn a_fetch_across_a_reload_of_the_registrations_settles() {
     let Some(config) = config() else { return };
@@ -3260,18 +3101,11 @@ fn a_fetch_across_a_reload_of_the_registrations_settles() {
     assert_eq!(pipe.status("example.gated"), Some(opencode_plugin::Status::Active));
 }
 
-// Expected (big-boi's catalog review, CT-1): the same across a reload whose call also changed a mounted view. The view
-// sends the reload's manifest before the call's `Done`, so the handover came before the call's effects made the reply's
-// way back: the fetch the host took was answered once and the plugin still waited for it. Every fetch the host took
-// settles once, here with its reply.
 #[test]
 fn a_fetch_across_a_reload_with_a_changed_view_settles() {
     fetch_across_a_reload_with_a_changed_view(false);
 }
 
-// Expected (big-boi's catalog review, CT-1): the same when a second view of the call is slow, so the host has taken the
-// reload and replaced the guest before the call's `Done` comes: the guest that runs the JS host's activation now applies
-// the call's effects, where they went with the replaced guest and the fetch never left.
 #[test]
 fn a_fetch_whose_done_comes_after_the_reload_settles() {
     fetch_across_a_reload_with_a_changed_view(true);
@@ -3338,16 +3172,11 @@ fn fetch_across_a_reload_with_a_changed_view(slow: bool) {
     assert_eq!(std::fs::read_to_string(&log).unwrap(), "Ok 0\n");
 }
 
-// Expected (big-boi's catalog recheck): a new build that, right after its setup, registers a command and starts a fetch,
-// all of which the host reads before it registers the build: the command exists and the fetch settles once, with its
-// reply. They went to the build it replaces, as they named only the plugin: the command was refused as that build's,
-// and the fetch took its relay, whose reply reached nobody.
 #[test]
 fn a_new_builds_first_command_and_fetch_reach_it() {
     new_build_registers_and_fetches(true, 0, false);
 }
 
-// Expected (big-boi's catalog recheck, the control): the same once the host registered the new build.
 #[test]
 fn a_new_builds_command_and_fetch_after_its_adoption_reach_it() {
     new_build_registers_and_fetches(false, 0, false);
@@ -3466,9 +3295,6 @@ fn new_build_registers_and_fetches(early: bool, notices: usize, manifest_first: 
     assert_eq!(pipe.status("example.build"), Some(opencode_plugin::Status::Active));
 }
 
-// Expected (big-boi's catalog review, 2): a fetch the host took settles once, refused, when its plugin's activation ends
-// before the reply: disabled while the server holds it, the plugin's await ends, and the reply that comes after reaches
-// nothing. The JS host dropped the activation with the fetch still waiting.
 #[test]
 fn a_fetch_of_an_activation_that_ends_settles_once() {
     let Some(config) = config() else { return };
@@ -3514,17 +3340,11 @@ fn a_fetch_of_an_activation_that_ends_settles_once() {
     assert_eq!(std::fs::read_to_string(&log).unwrap(), "Err\n", "settled once, refused");
 }
 
-// Expected (big-boi's catalog review, final): a snapshot of a read only the running build watches reaches that build
-// alone, also while the host has not registered the new build yet, which the JS host knows by the plugin's ID already:
-// the new build hears nothing of it and reads nothing of it, as when the value changes after its adoption. It reached
-// the new build, whose listener heard it and which read the value.
 #[test]
 fn a_snapshot_of_the_running_build_never_reaches_the_new_one() {
     snapshot_across_a_new_build(true);
 }
 
-// Expected (big-boi's catalog review, final, the control): the same when the value changes after the new build's
-// adoption.
 #[test]
 fn a_snapshot_after_the_new_builds_adoption_never_reaches_it() {
     snapshot_across_a_new_build(false);
@@ -3597,9 +3417,6 @@ fn snapshot_across_a_new_build(held: bool) {
     assert!(!logged.contains("heard"), "{logged}");
 }
 
-// Expected (bigboi's final pass): a TypeScript plugin's fetch that the host does not take, while another plugin's
-// fan-out fills the queue of effects, ends with an error, where its await never ended; once the queue drains, a fetch
-// gets its reply.
 #[test]
 fn a_fetch_the_host_does_not_take_fails_over_the_pipe() {
     let Some(config) = config() else { return };
@@ -3644,10 +3461,6 @@ fn a_fetch_the_host_does_not_take_fails_over_the_pipe() {
     assert_eq!(lines(), "Err\nOk\n");
 }
 
-// Expected (bigboi's last pass): over the pipe as on the native carriers, what a route's command asked for ends with
-// its mount: a reply that arrives after the route closed and opened again reaches the plugin no more. Its fetch
-// rejects with an `AbortError`, and nothing is left pending. What a global command asked for is the activation's, and
-// arrives.
 #[test]
 fn a_late_reply_does_not_reach_a_mount_opened_again_over_the_pipe() {
     let Some(config) = config() else { return };
@@ -3693,9 +3506,6 @@ fn a_late_reply_does_not_reach_a_mount_opened_again_over_the_pipe() {
     assert_eq!(lines(), "route AbortError 0\nglobal Ok 0\n");
 }
 
-// Expected (bigboi's ownership pass): a fetch the host accepts while the JS host reads nothing, whose answer finds the
-// overflow full, settles once the JS host reads again, and leaves nothing waiting in either of its maps: the answer that
-// carries its ID waits in the overflow's reserve, where it was dropped and the fetch never settled.
 #[test]
 fn a_fetch_answered_past_a_full_overflow_settles() {
     let Some(mut config) = config() else { return };
@@ -3775,10 +3585,6 @@ enum Behind {
     Reply,
 }
 
-// Expected (bigboi's pipe pass): a fetch's admission answer too large for the JS host's queue goes reduced in its place,
-// so what queues behind it reaches the JS host after it: its cancellation rejects the fetch with an `AbortError`, and its
-// reply resolves it, once, and nothing stays pending in either of the JS host's maps. Before, the reduced answer went
-// to the tail, behind them: the JS host found no fetch for them, and the fetch the late answer made waited forever.
 #[test]
 fn a_fetch_settles_once_whatever_queues_behind_its_answer() {
     for behind in [Behind::Cancelled, Behind::Reply] {
@@ -3885,8 +3691,6 @@ export default {{ id: "example.queued", setup(api) {{
     assert_eq!(std::fs::read_to_string(&log).unwrap(), expected, "{behind:?}");
 }
 
-// Expected (bigboi P8-6): `data.session.pending` lists the session's inbox items the server has not delivered, as the
-// host holds them, where it listed none.
 #[test]
 fn a_v2_plugin_reads_a_sessions_pending_inbox() {
     let Some(config) = config() else { return };

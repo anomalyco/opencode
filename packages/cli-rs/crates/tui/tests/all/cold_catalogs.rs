@@ -88,7 +88,6 @@ fn mount(server: &Cold) -> support::Harness {
     h
 }
 
-// Expected: the prompt's agent and model line fills in once the catalogs arrive, and agent cycling then moves on.
 #[test]
 fn the_prompt_line_and_agents_fill_in_from_updated_events() {
     let server = Cold::new();
@@ -102,8 +101,6 @@ fn the_prompt_line_and_agents_fill_in_from_updated_events() {
     h.wait_for("Plan");
 }
 
-// Expected: a model picker opened on a cold Location lists the model once it arrives, without reopening. Nothing is
-// connected, so it is the free models list, as in TS.
 #[test]
 fn an_open_model_picker_fills_in() {
     let server = Cold::new();
@@ -114,7 +111,6 @@ fn an_open_model_picker_fills_in() {
     h.wait_for("Model M");
 }
 
-// Expected: `/` lists a server command that arrives while the list is open.
 #[test]
 fn slash_commands_fill_in() {
     let server = Cold::new();

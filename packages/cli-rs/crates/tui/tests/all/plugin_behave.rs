@@ -703,24 +703,16 @@ impl Model for Behaviors {
     }
 }
 
-// Expected (`settled-first`, `scroll-step`, `scroll-keep`; synthesis 4.14): over any sequence of wheel steps, resizes,
-// hunk steps, jumps, folds that keep the reading position, forgets and verbs for a node that left, the first frame
-// after each event is the settled one, a step lands where the step rule puts it (from the anchor it last landed on
-// while the offset stays, also at a clamped end) and reports that anchor, and a fold keeps the card at the top where
-// it was on screen where the clamp allows.
 #[test]
 fn behaviors_settle_in_the_first_frame_and_verbs_land_where_the_rules_say() {
     model::check(&Behaviors { list: false }, 16, 24);
 }
 
-// Expected: the same properties hold when the cards are a windowed list, whose items off screen have no widgets.
 #[test]
 fn a_windowed_list_keeps_the_same_rules() {
     model::check(&Behaviors { list: true }, 16, 24);
 }
 
-// Expected (`work` for a resize; viewer-frames): a resize calls the view once, with the room the solve gave, on a
-// scroll and on a list.
 #[test]
 fn a_resize_calls_the_view_once() {
     for list in [false, true] {
@@ -734,9 +726,6 @@ fn a_resize_calls_the_view_once() {
     }
 }
 
-// Expected (viewer-frames): a wheel step and a resize across 60 columns in one batch, which builds every card again
-// before the solve's behaviors, leave the reader where the same with a frame between does: the move's reading is
-// taken by the sums the move saw.
 #[test]
 fn a_wheel_step_and_a_resize_in_one_batch_keep_the_reader() {
     let shown = |frame_between: bool| {
@@ -806,9 +795,6 @@ fn the_deep_runs_rows_hold() {
 
 // Fixed rows.
 
-// Expected (synthesis 3.5, 4.4): the board's first frame shows the first card, its sticky header, and the edge
-// `layout` painted; a step lands on the next hunk below the header in the frame of the key, and reports where it
-// landed before the next event.
 #[test]
 fn a_step_lands_below_the_sticky_header_in_its_own_frame() {
     let board_view = mount(6, 60, 16, false);
@@ -875,10 +861,6 @@ fn wheel_work(cards: usize, list: bool, quiet: bool) -> Vec<(usize, usize, u64, 
         .collect()
 }
 
-// Expected (`work`, synthesis 4.14): a wheel step calls at most one `layout`, touches no widget of a scroll's tree, and
-// runs the behaviors once; a list mounts the items that come near the view, in one more round. A scroll that asks for the user's scroll events hears one a step,
-// a handler, which one view of keeps follows (P1's rule: a view runs after the plugin's own handlers); one that does
-// not runs no plugin code but `layout`. The counts are equal at 40 and at 410 cards.
 #[test]
 fn a_wheel_step_does_the_same_work_at_any_size() {
     for (list, quiet) in [(false, false), (false, true), (true, false), (true, true)] {
@@ -895,8 +877,6 @@ fn a_wheel_step_does_the_same_work_at_any_size() {
     }
 }
 
-// Expected (synthesis 3.4, P1's gate): a list of a thousand cards builds the few near the view; a jump to a card far
-// below mounts it in the frame of the key, and a step goes on from there.
 #[test]
 fn a_list_of_a_thousand_builds_what_shows() {
     let before = reconcile::work();
@@ -930,8 +910,6 @@ fn a_list_of_a_thousand_builds_what_shows() {
     assert_eq!(offset_shown(&first.text(), &rows, 1), Some(rows.start(900) + 8 - 15), "{}", first.text());
 }
 
-// Expected (`scroll-step`): `Forget` ends a step's memory, as new content asks; a verb for a node that has left the
-// tree moves nothing and is dropped.
 #[test]
 fn forget_ends_the_step_memory() {
     // Three cards of 8 rows under 11: the offset clamps at 13, so card 2's hunks (rows 17 and 20) all land there.
@@ -1055,9 +1033,6 @@ fn dispatch(harness: &support::Harness, name: &str, input: &str) {
     harness.app.advance(Duration::ZERO);
 }
 
-// Expected (synthesis 4.2, 4.13 rank 4): an input's text and cursor are the host's: each edit comes to the surface's
-// handler as a change with the text, enter as a submit; a value the tree changes replaces the text, and a revision
-// that keeps the value keeps what the user typed.
 #[test]
 fn an_input_tells_its_handler_and_keeps_what_the_user_typed() {
     let harness = mount_kinds();
@@ -1078,8 +1053,6 @@ fn an_input_tells_its_handler_and_keeps_what_the_user_typed() {
     assert!(screen.contains("xyz") && !screen.contains("abc"), "{screen}");
 }
 
-// Expected (synthesis 4.13 rank 12, 16): code shows with the host's grammars and line numbers and changes in place; an
-// image decodes from content, and bytes that do not decode leave it empty without failing the plugin.
 #[test]
 fn code_and_images_show_and_change_in_place() {
     let harness = mount_kinds();
@@ -1099,8 +1072,6 @@ fn code_and_images_show_and_change_in_place() {
     assert_eq!(reconcile::work().since(before).created, 0, "an image built again");
 }
 
-// Expected (synthesis 4.2, S1b's open drag): a split's first child is as wide as the user drags the column after it,
-// within the minimum each side keeps, and keeps that width across a revision.
 #[test]
 fn a_split_follows_the_drag_and_keeps_its_width() {
     let harness = mount_kinds();
@@ -1175,9 +1146,6 @@ fn transcript_setup(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (decision 8, review big-boi 6): the transcript takes `By`, `Offset` and `Edge` from a handler of the user's
-// input, a command or a key handler, and reads back what it publishes; a `Step` on it, a verb from a wake and one from
-// a command the plugin dispatched itself are dropped.
 #[test]
 fn the_transcript_takes_three_verbs_from_a_handler_only() {
     let verbs: std::rc::Rc<RefCell<Vec<v2::Scroll>>> = std::rc::Rc::default();
@@ -1275,8 +1243,6 @@ fn adopt(host: &Plain, tree: &mut reconcile::Tree, nodes: &[v2::Node]) -> Result
     tree.apply(&env, &host.app.root(), nodes)
 }
 
-// Expected (synthesis 3.4, P3's list): an item is the unit of reconcile. Every item needs an id; a keep inside an
-// item names a node of that item, and one outside a list names nothing inside it. Each such tree is refused whole.
 #[test]
 fn a_list_refuses_what_crosses_its_items() {
     use reconcile::Refused;
@@ -1322,8 +1288,6 @@ fn big_setup(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (synthesis 3.5, review F7): a patch that adds a file of more than 3,000 lines mounts its chunks near the
-// view after the solve, so a jump to its end or its middle shows those lines in the frame of the key.
 #[test]
 fn a_large_added_file_mounts_its_chunks_near_the_view() {
     let deps = Deps {
@@ -1344,8 +1308,6 @@ fn a_large_added_file_mounts_its_chunks_near_the_view() {
     }
 }
 
-// Expected (synthesis 4.4 step 5): `layout` may ask for a view again; the view runs in the same frame and the frame
-// shows it. Then `layout` is called again only when something it was told about changed.
 #[test]
 fn layout_may_ask_for_a_view_again() {
     board(|board| board.again = true);
@@ -1361,8 +1323,6 @@ fn layout_may_ask_for_a_view_again() {
     assert_eq!(first, board_view.settle());
 }
 
-// Expected (synthesis 4.4 step 5): `layout` gets at most two deliveries a frame. A third waits for the next frame and
-// is not lost: there it is told that frame's geometry, the edge as the last view laid it out.
 #[test]
 fn a_layout_past_the_cap_waits_for_the_next_frame() {
     let board_view = mount(3, 60, 12, false);
@@ -1692,8 +1652,6 @@ fn cards(count: usize, rows: u16) -> Vec<(u16, u16)> {
     vec![(rows, rows); count]
 }
 
-// Expected (review carbon-1): two apps on one thread each resolve their own mounts; a verb from a handler in one
-// moves that app's scroll, not the newest mount of the same surface in the other.
 #[test]
 fn two_apps_on_a_thread_each_resolve_their_own_mounts() {
     let first = mount(6, 60, 16, false);
@@ -1721,8 +1679,6 @@ fn two_apps_on_a_thread_each_resolve_their_own_mounts() {
     assert_eq!(frame, second.settle(), "the second app lost its hook");
 }
 
-// Expected (review big-boi 10): a verb belongs to the mount whose handler asked for it. When that mount closes
-// before the verb applies, it is dropped; the surface opened again does not take it.
 #[test]
 fn a_verb_of_a_closed_mount_is_dropped() {
     let board_view = mount(6, 60, 16, false);
@@ -1735,8 +1691,6 @@ fn a_verb_of_a_closed_mount_is_dropped() {
     assert_eq!(offset_shown(&screen, &Rows::new(&[false; 6]), 1), Some(0), "{screen}");
 }
 
-// Expected (review big-boi 1): `layout` is told the geometry of the frame it runs in; the first frame of a route's
-// surface tells it the node's real width, with no later frame needed.
 #[test]
 fn layout_hears_the_first_frames_geometry() {
     let notify = vec![v2::Notify::Node { id: "txt".into() }];
@@ -1750,9 +1704,6 @@ fn layout_hears_the_first_frames_geometry() {
     assert!(!harness.app.needs_frame());
 }
 
-// Expected (review big-boi 4, carbon-2): `layout` that asks for a view again, each changing what it was told, gets
-// every stage without another event: a delivery past a frame's cap comes in the next frame. No frame solves more
-// than the rounds OpenTUI allows.
 #[test]
 fn a_layout_asking_again_finishes_without_another_event() {
     let notify = vec![v2::Notify::Node { id: "strip".into() }];
@@ -1772,8 +1723,6 @@ fn a_layout_asking_again_finishes_without_another_event() {
     assert!(most <= u64::from(behave::ROUNDS), "a frame ran {most} rounds");
 }
 
-// Expected (review big-boi 5): a step that finds no anchor moves nothing and keeps the memory of the last step that
-// landed, so the next step goes on from there.
 #[test]
 fn a_failed_step_keeps_the_memory_of_the_last() {
     let harness = probe(Shape { cards: cards(24, 1), ..Shape::default() }, 40, 14);
@@ -1785,7 +1734,6 @@ fn a_failed_step_keeps_the_memory_of_the_last() {
     assert_eq!(landed(), ["c12", "c11"]);
 }
 
-// Expected (review carbon-3): a step of zero moves nothing and reports nothing.
 #[test]
 fn a_step_of_zero_moves_nothing() {
     let harness = probe(Shape { cards: cards(24, 1), ..Shape::default() }, 40, 14);
@@ -1797,8 +1745,6 @@ fn a_step_of_zero_moves_nothing() {
     assert_eq!(landed(), Vec::<String>::new());
 }
 
-// Expected (review big-boi 8, carbon-3): `layout` hears where each `To` ended, also one that ends in a round another
-// change extends and one already where it goes.
 #[test]
 fn layout_hears_where_each_to_ended() {
     let mut cards = cards(100, 3);
@@ -1818,7 +1764,6 @@ fn layout_hears_where_each_to_ended() {
     assert_eq!(reached(), [("s".to_owned(), offset), ("s".to_owned(), offset)], "a `To` already there");
 }
 
-// Expected (review big-boi 8): a group's anchors changing their variant in place is a change `layout` hears.
 #[test]
 fn layout_hears_an_anchors_variant() {
     let notify = vec![v2::Notify::Group { scroll: "s".into(), group: "g".into() }];
@@ -1838,8 +1783,6 @@ fn layout_hears_an_anchors_variant() {
     assert!(!variants.is_empty() && variants.iter().all(|variant| variant == "marked"), "{variants:?}");
 }
 
-// Expected (review big-boi 8): what `layout` is told is compared in a stable order: views that change nothing it
-// named call it no more, whatever order the host keeps two scrolls in.
 #[test]
 fn views_that_change_nothing_named_call_no_layout() {
     let harness = probe(Shape { cards: cards(10, 2), twin: true, ..Shape::default() }, 40, 30);
@@ -1853,8 +1796,6 @@ fn views_that_change_nothing_named_call_no_layout() {
     assert_eq!(seen(|seen| seen.geometries.len()), before);
 }
 
-// Expected (review carbon-7): a sticky node's rect is compared at its place in the content, not where its translate
-// pins it: wheel steps over its card leave it where it is, and the steps past it only move it.
 #[test]
 fn a_sticky_nodes_pin_is_a_move_only() {
     let notify = vec![v2::Notify::Node { id: "h0".into() }];
@@ -1869,9 +1810,6 @@ fn a_sticky_nodes_pin_is_a_move_only() {
     assert!(!moved.is_empty() && moved.iter().all(|moved| *moved), "{moved:?}");
 }
 
-// Expected (review big-boi 9, carbon-7): `UserScroll` follows the scroll's current `user_scroll`, comes after the
-// move (a read in the handler sees the new offset), and only for a move: a wheel at the top or a key at the end
-// says nothing. The scroll's keys are the user's moves too.
 #[test]
 fn user_scroll_follows_the_tree_and_the_move() {
     let user =
@@ -1911,8 +1849,6 @@ fn user_scroll_follows_the_tree_and_the_move() {
     assert_eq!(user(), 2, "`user_scroll` turned off");
 }
 
-// Expected (review big-boi 4): when a frame's rounds run out before the behaviors settle, the work goes on in the
-// next frame, with no event: a jump into a list whose items are far taller than their estimates ends at its target.
 #[test]
 fn behaviors_past_the_rounds_finish_in_the_next_frame() {
     let harness = probe(Shape { cards: vec![(30, 1); 300], list: true, ..Shape::default() }, 40, 12);
@@ -1931,10 +1867,6 @@ fn behaviors_past_the_rounds_finish_in_the_next_frame() {
     assert!(most <= u64::from(behave::ROUNDS), "a frame ran {most} rounds");
 }
 
-// Expected (review big-boi 4, carbon-2): a jump into a list whose estimates are far off takes all of a frame's rounds,
-// and with a resize in its batch it needs more; `layout` asks for a view once in the frame it is told of the jump.
-// Every frame keeps the bounds, at most the rounds OpenTUI allows and two deliveries, and with no event the jump ends
-// at its target with the view `layout` asked for.
 #[test]
 fn a_jump_past_the_rounds_while_layout_asks_again_keeps_the_frames_bounds() {
     // The jump alone settles in the last round, which asks for the view; with a resize the rounds run out first.
@@ -1982,8 +1914,6 @@ fn a_jump_past_the_rounds_while_layout_asks_again_keeps_the_frames_bounds() {
     }
 }
 
-// Expected (review big-boi 2): a list holds the reading position by itself. When an item above the top grows and its
-// estimate follows, the card at the top stays there in the first frame.
 #[test]
 fn a_list_keeps_the_card_at_the_top_when_one_above_grows() {
     let harness = probe(Shape { cards: cards(40, 2), list: true, ..Shape::default() }, 44, 12);
@@ -1995,8 +1925,6 @@ fn a_list_keeps_the_card_at_the_top_when_one_above_grows() {
     assert!(top_line(&harness).starts_with("r0006.0"), "{}", harness.app.render().text());
 }
 
-// Expected (review big-boi 2): a narrower list keeps the card the reader looked at at the top, whatever the items
-// above it measure at the new width.
 #[test]
 fn a_narrower_list_keeps_the_card_at_the_top() {
     let cards: Vec<(u16, u16)> = (0..180).map(|card| (1 + (card % 3) as u16, 3)).collect();
@@ -2014,10 +1942,6 @@ fn a_narrower_list_keeps_the_card_at_the_top() {
     assert_eq!(top_line(&harness), first);
 }
 
-// Expected (decision: `Offset`, `By` and `Page` count the host's rows): an offset into an item far shorter than its
-// estimate goes its rows on past the item, in the first frame. Offset 300 names card 39 six rows in, by the twelve
-// two-row cards with widgets and the ten-row estimates after them; card 39 has two rows, so six rows on from its start
-// is card 42's.
 #[test]
 fn an_offset_into_a_short_item_goes_its_rows_on() {
     let harness = probe(Shape { cards: vec![(2, 10); 100], list: true, ..Shape::default() }, 40, 12);
@@ -2028,8 +1952,6 @@ fn an_offset_into_a_short_item_goes_its_rows_on() {
     assert_eq!(first, settled(&harness));
 }
 
-// Expected (review big-boi 2, carbon-4): an estimate of 0 is taken as a row: the list opens at its first card and
-// builds the few near the view.
 #[test]
 fn an_estimate_of_zero_is_a_row() {
     let before = reconcile::work();
@@ -2039,8 +1961,6 @@ fn an_estimate_of_zero_is_a_row() {
     assert!(built < 120, "the open built {built} widgets");
 }
 
-// Expected (review big-boi 3, carbon-4): a list whose layout changes keeps its items, also those the view keeps
-// whole, their widgets, and the reading position.
 #[test]
 fn a_list_whose_layout_changes_keeps_its_items() {
     let harness = probe(Shape { cards: cards(40, 2), list: true, memo: true, ..Shape::default() }, 44, 12);
@@ -2056,7 +1976,6 @@ fn a_list_whose_layout_changes_keeps_its_items() {
     assert!(done.created < 4, "the items were built again: {done:?}");
 }
 
-// Expected (review carbon-4): the verbs and reads of a list in a row move and tell its horizontal offset.
 #[test]
 fn a_list_in_a_row_scrolls_sideways() {
     let harness = probe(Shape { cards: cards(30, 1), list: true, row: true, ..Shape::default() }, 40, 6);
@@ -2082,8 +2001,6 @@ fn a_list_past_two_to_the_twenty_four_rows_is_refused() {
     adopt(&host, &mut tree, &[list(256, u16::MAX)]).unwrap();
 }
 
-// Expected (review big-boi 5): a step reaches the hunks of items without widgets: past a file whose one hunk is
-// taller than the window, to the next file's, and back.
 #[test]
 fn a_step_reaches_hunks_of_items_without_widgets() {
     let cards = vec![(1, 10); 10];
@@ -2104,8 +2021,6 @@ fn a_step_reaches_hunks_of_items_without_widgets() {
     assert!(screen.lines().nth(1).is_some_and(|line| line.contains("h1.0.0")), "{screen}");
 }
 
-// Expected (review big-boi 5): an anchor inside an item, under a box of its own, is an anchor while the item has no
-// widgets.
 #[test]
 fn an_anchor_inside_an_item_stands_for_it_without_widgets() {
     let harness = probe(Shape { cards: cards(1000, 2), list: true, wrapped: true, ..Shape::default() }, 40, 12);
@@ -2116,7 +2031,6 @@ fn an_anchor_inside_an_item_stands_for_it_without_widgets() {
     assert!(anchors.iter().enumerate().all(|(card, id)| *id == format!("c{card}")));
 }
 
-// Expected (review carbon-5): a card in a hidden box is no anchor, in a scroll or a list, and a step passes it.
 #[test]
 fn a_hidden_card_is_no_anchor() {
     for list in [false, true] {
@@ -2137,8 +2051,6 @@ struct Probed {
 
 support::deref_harness!(Probed);
 
-// Expected (review big-boi 11, carbon-5): what `layout` painted is the mount's: a theme change paints it in the new
-// theme, with no `layout` call, as a fresh mount in that theme does.
 #[test]
 fn a_layout_paint_takes_the_new_theme() {
     let notify = vec![v2::Notify::Scroll { id: "s".into() }];
@@ -2158,8 +2070,6 @@ fn a_layout_paint_takes_the_new_theme() {
     support::assert_restyles_in_place(open, |_| {}, |screen| screen.contains("r0000.0"));
 }
 
-// Expected (review big-boi 11, carbon-5): a box built again keeps the paint `layout` gave it; a box whose own
-// background changes takes it, and the paint goes, also from a later theme.
 #[test]
 fn a_boxs_own_background_ends_a_paint() {
     let notify = vec![v2::Notify::Scroll { id: "s".into() }];
@@ -2182,7 +2092,6 @@ fn a_boxs_own_background_ends_a_paint() {
     assert_eq!(bg(&harness), Some(harness.tui.page().background.raised.base), "a new theme brought the paint back");
 }
 
-// Expected (review big-boi 11): what the user typed into an input stays when its item leaves the window and comes back.
 #[test]
 fn a_draft_stays_through_its_items_eviction() {
     let harness = probe(Shape { cards: cards(200, 2), list: true, input: true, ..Shape::default() }, 40, 12);
@@ -2198,9 +2107,6 @@ fn a_draft_stays_through_its_items_eviction() {
     assert!(screen.contains("draft"), "{screen}");
 }
 
-// Expected (review carbon-11): a draft is of the value it was typed over: when the plugin gives the input another value
-// while its item is out of the window, the item comes back with that value, as a mounted input takes it; and when the
-// input goes meanwhile, one that comes back under its id has no draft.
 #[test]
 fn a_draft_goes_once_its_input_changes_or_goes_out_of_the_window() {
     for change in ["value", "input"] {
@@ -2286,9 +2192,6 @@ fn switch_theme(harness: &support::Harness) {
     harness.app.advance(Duration::from_millis(1));
 }
 
-// Expected (review carbon-5, synthesis 4.14 `work`): a theme change restyles a large added file in place: no widget
-// built or dropped, no parse; as it does a file the view keeps whole, which shows as a fresh mount in the new theme
-// does.
 #[test]
 fn a_large_added_file_takes_a_theme_in_place() {
     for kept in [false, true] {
@@ -2301,7 +2204,6 @@ fn a_large_added_file_takes_a_theme_in_place() {
     support::assert_restyles_in_place(|| big(true, false, 14), |_| {}, |screen| screen.contains("line_0"));
 }
 
-// Expected (review carbon-5): outside a scroll a large added file shows every line.
 #[test]
 fn a_large_added_file_outside_a_scroll_shows_every_line() {
     let mounted = big(false, true, 400);
@@ -2348,8 +2250,6 @@ fn split(at: u16, width: u16, listed: bool) -> support::Harness {
     harness
 }
 
-// Expected (review carbon-6): a split's first child takes `at` in the split's first frame: on a route, and in a list
-// item that mounts as the list scrolls to it, with no view after.
 #[test]
 fn a_split_takes_its_width_in_its_first_frame() {
     let harness = split(10, 48, false);
@@ -2366,8 +2266,6 @@ fn a_split_takes_its_width_in_its_first_frame() {
     assert_eq!(support::at(&screen, "RIGHT60").map(|(x, _)| x), Some(10), "{screen}");
 }
 
-// Expected (review big-boi 12, carbon-6): a split wider than its room keeps the second child and the handle inside
-// it, and takes the width it wants back once there is room; a split that is not a row is refused.
 #[test]
 fn a_split_fits_its_room() {
     let harness = split(50, 40, false);
@@ -2408,8 +2306,6 @@ fn input_setup(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (review big-boi 11): an input built again for a new layout or for many lines keeps what the user typed,
-// and the focus, so typing goes on.
 #[test]
 fn an_input_built_again_keeps_the_draft_and_the_focus() {
     INPUT_SHAPE.set((30, false));
@@ -2472,8 +2368,6 @@ fn huge_png() -> Vec<u8> {
     bytes
 }
 
-// Expected (review carbon-8, big-boi limits): nodes that show the same content share one decode, and an image whose
-// header names more than the host decodes is never decoded; the decodes count as `work`.
 #[test]
 fn images_of_one_content_decode_once() {
     IMAGES.set(None);
@@ -2490,8 +2384,6 @@ fn images_of_one_content_decode_once() {
     assert_eq!(reconcile::work().since(before).parses, 1);
 }
 
-// Expected (review big-boi 11, carbon-4): an image of a tool call's output is refused, as its text is no image; a
-// list's items are walked for their sources.
 #[test]
 fn a_tree_refuses_an_image_of_output_and_walks_its_lists_for_sources() {
     let (host, mut tree) = (plain(), reconcile::Tree::default());
@@ -2510,8 +2402,6 @@ fn a_tree_refuses_an_image_of_output_and_walks_its_lists_for_sources() {
     assert_eq!(sources, [v2::Source::Text("# x".into())]);
 }
 
-// Expected (review big-boi 8): a published transcript's count of messages above its rows is part of what `layout` is
-// told: a change of it alone calls it.
 #[test]
 fn layout_hears_the_messages_above_the_transcript() {
     let notify = vec![v2::Notify::Transcript];
@@ -2541,9 +2431,6 @@ fn layout_hears_the_messages_above_the_transcript() {
     assert_eq!(told, Some(9));
 }
 
-// Expected (review big-boi, work; OpenTUI's `ScrollBox::on_scroll`): a key that scrolls nothing arms nothing and runs
-// no behaviors, at any size. A wheel step, which moves the list, costs a list told about its top anchor the same items
-// visited at 410 cards as at 4,000: the top anchor is found from the item at the top, not from the whole group.
 #[test]
 fn a_quiet_key_costs_nothing_and_a_wheel_step_the_same_at_any_size() {
     let work = |count: usize| {
@@ -2572,8 +2459,6 @@ fn a_quiet_key_costs_nothing_and_a_wheel_step_the_same_at_any_size() {
     assert_eq!(small_wheel.visits, large_wheel.visits, "{small_wheel:?} {large_wheel:?}");
 }
 
-// Expected (P4c containment): a `layout` that panics is a contained plugin call. The plugin fails and the frame paints;
-// its mount leaves the behaviors with what they held, so later input runs no behaviors and no `layout` for it.
 #[test]
 fn a_panicking_layout_fails_its_plugin_and_leaves_the_behaviors() {
     let notify = vec![v2::Notify::Scroll { id: "s".into() }];
@@ -2597,10 +2482,6 @@ fn a_panicking_layout_fails_its_plugin_and_leaves_the_behaviors() {
     assert_eq!((after.resolves, seen(|seen| seen.geometries.len())), (0, layouts), "{after:?}");
 }
 
-// Expected (OpenTUI's walk order, opentui #2129; review big-boi 1): the hook is put in its root once and never moved,
-// as a node added or moved in a frame is resized before its siblings; arming flips its width only, and a root child
-// added later goes in before it. Counted from the probe's settled route: the built-ins' 2.0 surfaces on the page it
-// replaced had a hook of their own (P6a).
 #[test]
 fn the_hook_stays_the_roots_last_child() {
     use opentui::prelude::*;
@@ -2623,8 +2504,6 @@ fn the_hook_stays_the_roots_last_child() {
     assert_eq!(counts.placed, 0, "the hook was put in its root again");
 }
 
-// Expected (P3's decision 4 on P2's events): the user's scroll is the user's input, so the handler that hears it may
-// move the transcript; where a step of the plugin's own landed is not, and that verb is dropped.
 #[test]
 fn a_handler_moves_the_transcript_for_the_users_scroll_only() {
     board(|board| board.transcript = true);
@@ -2705,9 +2584,6 @@ fn tops(screen: &str) -> (String, String) {
     (top(0), top(1))
 }
 
-// Expected (P3's events on P2's handler, O-115): two mounts of one surface, each with an input and a scroll. An
-// input's submit moves its own mount's list, and the user's scroll of one reads that mount's offset: what a handler
-// asks for and reads is the mount the event came from, not the plugin's newest mount, on both carriers.
 #[test]
 fn an_event_acts_on_the_mount_it_came_from() {
     use opentui::prelude::*;
@@ -2799,10 +2675,6 @@ fn keyed_setup(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-// Expected (big-boi 4): two mounts of one surface with the same node ids, rects and text hear identical input, and
-// the handler and the layout tell them apart by the mount they name, so the plugin's model keyed by mount changes
-// for the mount typed in alone. A mount closed and opened again is a new mount, with a model of its own, on both
-// carriers.
 #[test]
 fn a_handler_and_a_layout_name_the_mount_they_are_for() {
     use opentui::prelude::*;

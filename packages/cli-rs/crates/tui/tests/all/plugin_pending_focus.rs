@@ -37,9 +37,6 @@ fn carriers() -> Vec<Carrier> {
     ]
 }
 
-// Expected: a route's command focuses `later`, a field its page shows only at 100 columns or more, at 80 columns. The
-// view after the call keeps the page as it is, without the field, so the focus is dropped; the terminal widened to 120
-// columns shows the field, which stays unfocused.
 #[test]
 fn a_focus_of_a_field_the_next_view_lacks_is_dropped() {
     let failed: Vec<Carrier> = carriers()
@@ -57,8 +54,6 @@ fn a_focus_of_a_field_the_next_view_lacks_is_dropped() {
     assert_eq!(failed, [], "a resize applied a focus the next view lacked");
 }
 
-// Expected (session-manager's `/`): a route's command shows the field `now` and focuses it in one call. The view
-// after the call shows it, and the field takes the focus.
 #[test]
 fn a_field_shown_and_focused_in_one_call_takes_the_focus() {
     let failed: Vec<Carrier> = carriers()

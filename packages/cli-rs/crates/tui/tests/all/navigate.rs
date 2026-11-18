@@ -450,8 +450,6 @@ fn a_tab_reopens_where_the_reader_left_it() {
     assert!(found, "{first:#?}\n=====\n{}", h.app.text());
 }
 
-// Expected (R2-1): a view that navigation replaces is freed with every widget it showed, whether the route changes or
-// the same route mounts again.
 #[test]
 fn navigation_frees_the_view_it_replaces() {
     let h = open(turns(3), Info::default());

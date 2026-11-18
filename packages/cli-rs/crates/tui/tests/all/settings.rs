@@ -251,7 +251,6 @@ fn experiments_toggle_and_new_designs_graduated() {
     assert!(!tui.settings.experiment("client-mcp"));
 }
 
-// Expected (carbon-dialogs-8): Debug names the current model, and a plugin's copy drops NUL as `clipboard.write` does.
 #[test]
 fn debug_names_the_model_and_plugin_copies_drop_nul() {
     let fake = support::Fake::new(|seen| support::base(seen, support::DIRECTORY));
@@ -327,7 +326,6 @@ fn the_devtools_bar_follows_the_setting_and_opens_panels() {
     assert!(!app.text().contains("Experiments"), "{}", app.text());
 }
 
-// Expected (carbon-dialogs-7): the bar hides over `/stats` and comes back on leaving it (`app.tsx:1472`).
 #[test]
 fn the_devtools_bar_hides_over_stats() {
     let app = TestApp::new(100, 30);
@@ -340,7 +338,6 @@ fn the_devtools_bar_hides_over_stats() {
     wait_for(&app, "Experiments");
 }
 
-// Expected (R2-1): the devtools bar draws its items and panels again on each change, and frees the ones it replaced.
 #[test]
 fn the_devtools_bar_frees_what_it_draws_again() {
     let app = TestApp::new(100, 30);
@@ -362,7 +359,6 @@ fn the_devtools_bar_frees_what_it_draws_again() {
     assert_eq!(Rc::strong_count(&marker), 1);
 }
 
-// Expected (bigboi-5): config changes that redraw the bar between a press and its release do not lose the click.
 #[test]
 fn a_devtools_click_survives_redraws_between_press_and_release() {
     for (redraws, frames) in [(2, false), (5, false), (2, true), (5, true)] {
@@ -439,8 +435,6 @@ fn settings_writes_match_typescript_and_typescript_reads_them() {
     assert_eq!(footer(&app, "Mouse"), "off");
 }
 
-// Expected: TS keeps `saving` while `useTheme()` restyles the open dialog, so a step while the previous one is being
-// written is ignored after a theme change too. Holding the config lock keeps the first write from landing.
 #[test]
 fn a_settings_step_while_saving_is_ignored_after_a_theme_change() {
     use opentui::prelude::Event;
@@ -475,8 +469,6 @@ fn a_settings_step_while_saving_is_ignored_after_a_theme_change() {
     assert_eq!(footer(&app, "Animations"), "on");
 }
 
-// Expected: `DialogExperiments` ignores a change while the previous one is being written (`saving`), and a theme change
-// that restyles the dialog keeps it. Holding the config lock keeps the first write from landing.
 #[test]
 fn an_experiment_change_while_saving_is_ignored_also_after_a_theme_change() {
     use opentui::prelude::Event;
@@ -516,8 +508,6 @@ fn an_experiment_change_while_saving_is_ignored_also_after_a_theme_change() {
     assert!(app.wait_until(WAIT, || !tui.settings.experiment("client-mcp")), "the guard ends with the write");
 }
 
-// Expected (bigboi-fixes-2): a write that lands while the UI queue is full still ends `saving`, so the dialog takes
-// the next change, as TS resets it when the update settles.
 #[test]
 fn an_experiment_write_that_lands_on_a_full_ui_queue_ends_saving() {
     let home = opencode_util::temp::tempdir().unwrap();
@@ -558,10 +548,6 @@ fn an_experiment_write_that_lands_on_a_full_ui_queue_ends_saving() {
     assert!(app.wait_until(WAIT, || !tui.settings.experiment("client-mcp")), "the guard ends with the write");
 }
 
-// Expected (O-89): a theme change from outside an open dialog restyles it in place, as TS `useTheme()` does. Each kind
-// (a select, a prompt, Settings), open with a filter or typed text and a moved selection or cursor, draws what it
-// draws when opened in the new theme after the same keys, and goes on from there. The change comes from the terminal
-// turning light, and from `cli.json` (the write and the outside reload apply a config the same way).
 #[test]
 fn an_outside_theme_change_restyles_each_kind_of_open_dialog_in_place() {
     use opencode_api::generated::SessionID;
@@ -621,8 +607,6 @@ fn an_outside_theme_change_restyles_each_kind_of_open_dialog_in_place() {
     }
 }
 
-// Expected (r2 review, carbon-ui-3): the open settings dialog takes the theme that changing the color mode chose, as
-// TS `useTheme()` restyles it in place; it keeps the setting selected and the filter typed.
 #[test]
 fn changing_the_color_mode_restyles_the_open_settings_dialog() {
     let app = TestApp::new(80, 30);
