@@ -1855,11 +1855,41 @@ story("an agent's show request gives its page's permission bar no press that was
   await page.mouse.click(target.x + target.width / 2, target.y + target.height / 2)
   await expect(root.getByText("Answers: []", { exact: true })).toBeVisible()
   await expect(bar).toContainText("second.example wants to use your camera.")
-  // The whole tab takes no input while its page is held back, then a new press answers the request on screen, in its tab.
+  // The tab's answers take no input while its page is held back, then a new press answers the request on screen, in its tab.
   await expect(async () => {
     await once.click({ timeout: 1_000 })
     await expect(root.getByText('Answered in: ["Second"]', { exact: true })).toBeVisible({ timeout: 200 })
   }).toPass()
+})
+
+story("an agent's show request leaves the keyboard where the person types, and its tab's bar answers no key or click meanwhile", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
+  await address.click()
+  await page.keyboard.type("exa")
+  await expect(address).toHaveValue(/exa$/)
+
+  // In the page, in one task: the show request, then at once the keys and clicks that would answer its bar. Escape
+  // and the close button answer "not now", which nothing but the reveal's guard holds back.
+  const held = await root.getByRole("button", { name: "Agent shows a page that asks", exact: true }).evaluate((show: HTMLElement) => {
+    show.click()
+    const bar = document.querySelector<HTMLElement>('[data-component="browser-prompt"]')
+    const buttons = Array.from(bar?.querySelectorAll("button") ?? [])
+    buttons[0]?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }))
+    buttons.forEach((button) => button.click())
+
+    return buttons.length
+  })
+  expect(held).toBeGreaterThan(1)
+  const bar = root.getByRole("alertdialog", { name: "Site permission request" })
+  await expect(bar).toContainText("second.example wants to use your camera.")
+  await expect(root.getByText("Answers: []", { exact: true })).toBeVisible()
+
+  // The person was typing an address: the rest of it goes to the address field, not to the window or the composer.
+  await expect(address).toBeFocused()
+  await page.keyboard.type("mple")
+  await expect(address).toHaveValue(/mple$/)
+  await expect(root.getByRole("textbox", { name: "Composer stand-in" })).toHaveValue("")
 })
 
 story("takes the keyboard from the window for a dialog and gives it back where it was", async ({ page }) => {

@@ -325,15 +325,17 @@ export default function SessionBrowserPane(props: {
   // One computation under the pane's owner. Written inline as the embed's prop, the condition compiles to a getter that
   // makes a new one on every read, and the embed reads it from callbacks that have no owner to dispose them.
   const pageVisible = createMemo(() => drawn() && revealGuard() === undefined)
-  // An agent's show request put this tab under the person's pointer. Until the guard ends, the page is hidden and
-  // nothing else of the tab takes a click or a key either: its bars, dialogs, toolbar and error views are all here.
+  // An agent's show request put this tab under the person's pointer. Until the guard ends, the page is hidden and the
+  // tab's bars, notices and dialogs answer no click or key. The keyboard stays where it is: an inert pane would drop
+  // it, and what the person was typing in the address field would go to the composer and from there to the agent.
   const guarded = createMemo(() => revealGuard() !== undefined)
 
   // The guard's delay starts when the person can see this tab: the pane shows it, in a window that is not hidden.
   createKeyed(() => visible() && props.model.windowShown() && revealGuard(), (token) => props.model.revealDrawn(props.session, token))
 
-  // Focus moves to a prompt only when the user was in the pane or its page, never from the composer.
-  const promptFocus = () => !!prompt()?.focus || !!root?.contains(document.activeElement)
+  // Focus moves to a prompt only when the user was in the pane or its page, never from the composer, and never to the
+  // prompt of a tab an agent has just shown: the keyboard stays where the person was typing.
+  const promptFocus = () => !guarded() && (!!prompt()?.focus || !!root?.contains(document.activeElement))
 
   // What a prompt that just mounted under `promptKey` answers: the request it was drawn for, in its session and tab,
   // whichever tab is on screen by the time the press arrives.
@@ -834,7 +836,6 @@ export default function SessionBrowserPane(props: {
     <aside
       ref={root}
       id="browser-panel"
-      inert={guarded()}
       // A click on the pane's own surface, like its loading or error view, keeps focus here, so its shortcuts apply.
       tabIndex={-1}
       class="relative size-full min-w-0 overflow-hidden bg-v2-background-bg-base flex flex-col outline-none"
@@ -1265,7 +1266,7 @@ export default function SessionBrowserPane(props: {
       <Show when={promptKey(false)} keyed>
         {(key) => (
           <Show when={key ? prompt() : undefined}>
-            {(view) => <PromptBar view={view()} answer={answer()} focus={untrack(promptFocus)} />}
+            {(view) => <PromptBar view={view()} answer={answer()} focus={untrack(promptFocus)} held={guarded()} />}
           </Show>
         )}
       </Show>
@@ -1276,6 +1277,7 @@ export default function SessionBrowserPane(props: {
               {(notice) => (
                 <RefusalBar
                   notice={notice()}
+                  held={guarded()}
                   answer={async (dismiss, copy) => {
                     const passkey = notice().passkey
 
@@ -1368,7 +1370,7 @@ export default function SessionBrowserPane(props: {
             {(key) => (
               <Show when={key ? prompt() : undefined}>
                 {(view) => (
-                  <PromptDialog view={view()} answer={answer()} focus={untrack(promptFocus)} leave={focusAddress} />
+                  <PromptDialog view={view()} answer={answer()} focus={untrack(promptFocus)} leave={focusAddress} held={guarded()} />
                 )}
               </Show>
             )}

@@ -742,6 +742,22 @@ story("an agent show request opens the closed pane and leaves the keyboard in th
   await expect(composer).toBeFocused()
 })
 
+story("?W right after an agent shows another page closes that browser tab, not the session", async ({ page }) => {
+  const root = page.getByTestId("browser-region-fixture")
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await root.getByRole("button", { name: "First inventory", exact: true }).click()
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
+  await address.click()
+  // The request arrives with no input from the person: the keyboard stays in the pane, where ?W is the pane's.
+  await root.getByRole("button", { name: "Agent shows another page", exact: true }).dispatchEvent("click")
+  await expect(root.getByRole("tab", { selected: true })).toHaveCount(1)
+  await expect(root.getByTestId("selected")).toHaveText("browser:tab_55555555-5555-5555-5555-555555555555")
+  await expect(address).toBeFocused()
+  await page.keyboard.press("ControlOrMeta+w")
+  await expect(root.getByTestId("browser-closes")).toHaveText('["tab_55555555-5555-5555-5555-555555555555"]')
+  await expect(root.getByTestId("session-state")).toHaveText("open")
+})
+
 story("a browser tab behind a file tab says that its page waits for the person", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   await root.getByRole("button", { name: "Beta", exact: true }).click()

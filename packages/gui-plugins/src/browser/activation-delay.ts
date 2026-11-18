@@ -56,13 +56,30 @@ export function actionGuard(shownAt: number) {
  * Guards the controls inside `root` marked `data-activation-guard`, and the submission of its forms, with the same
  * rule: a click on one, or a submit, that `activationAllowed` refuses for the press that led to it is stopped before any
  * handler sees it. Call `changed` when the prompt shows something new in the same place.
+ *
+ * While `held` says so, as while an agent's show request has just put the prompt's tab in front of the person, nothing
+ * in `root` answers: a click on any of its buttons, a submit and Escape are stopped, and a press made meanwhile counts
+ * for nothing afterwards. Focus, the tab order and typing in its fields are left as they are.
  */
-export function guardActivation(root: HTMLElement) {
+export function guardActivation(root: HTMLElement, held?: () => boolean) {
   let shownAt = performance.now()
   let pressed: { target: Element; at: number } | undefined
 
+  const stop = (event: Event) => {
+    event.preventDefault()
+    event.stopImmediatePropagation()
+  }
+
   // A key held down since before the prompt repeats on it; only a fresh, trusted press on the prompt counts.
   const press = (event: PointerEvent | KeyboardEvent) => {
+    if (held?.()) {
+      pressed = undefined
+
+      if (event instanceof KeyboardEvent && event.key === "Escape") stop(event)
+
+      return
+    }
+
     const repeat = event instanceof KeyboardEvent && event.repeat
 
     pressed =
@@ -72,6 +89,12 @@ export function guardActivation(root: HTMLElement) {
   }
 
   const activated = (event: Event) => {
+    if (held?.()) {
+      if (event.type === "submit" || (event.target instanceof Element && event.target.closest("button"))) stop(event)
+
+      return
+    }
+
     const control =
       event.type === "submit"
         ? event.target instanceof Element
@@ -88,8 +111,7 @@ export function guardActivation(root: HTMLElement) {
     const trusted = event.type === "submit" || event.isTrusted
 
     if (same && trusted && activationAllowed({ shownAt, pressedAt: pressed?.at, at: event.timeStamp })) return
-    event.preventDefault()
-    event.stopImmediatePropagation()
+    stop(event)
   }
 
   root.addEventListener("pointerdown", press, true)

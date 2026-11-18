@@ -11,6 +11,8 @@ import type definition from "./index"
 export function RefusalBar(props: {
   notice: { token: string; origin: string; text: string; target?: string; label?: string; title?: string; opensApp?: boolean }
   answer: (dismiss: boolean, copy?: boolean) => Promise<void>
+  /** While true neither control answers: an agent's show request has just put the notice's tab in front of the person. */
+  held?: boolean
 }) {
   const ctx = usePlugin<typeof definition>()
   const [fits, setFits] = createSignal(false)
@@ -60,9 +62,12 @@ export function RefusalBar(props: {
 
   const guard = createMemo(on([() => props.notice.token, copyInstead], () => actionGuard(performance.now())))
 
-  const press = (event: PointerEvent) => guard().press(event)
+  // A press made while the notice is held counts for nothing afterwards.
+  const press = (event: PointerEvent) => (props.held ? guard().cancel() : guard().press(event))
 
   const key = (event: KeyboardEvent) => {
+    if (props.held) return guard().cancel()
+
     if (event.key === "Enter" || event.key === " ") guard().press(event, event.repeat)
   }
 

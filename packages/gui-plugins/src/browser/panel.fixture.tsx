@@ -1700,6 +1700,15 @@ export function mountBrowserRegion(input: RegionHost) {
 
                   if (binding) listeners.forEach(listener => listener({ binding, event: { type: "activity", tabID, reveal: "pane" } }))
                 }}>Agent show request</button>
+                <button onClick={() => {
+                  const binding = latest()?.binding
+                  const shown = Browser.TabID.make("tab_55555555-5555-5555-5555-555555555555")
+
+                  if (!binding) return
+                  // As main reports a tab the agent opened beside the person's and asked to show.
+                  listeners.forEach(listener => listener({ binding, event: { type: "state", state: { tabs: [tab(tabID), tab(shown)], focusedTabID: tabID } } }))
+                  listeners.forEach(listener => listener({ binding, event: { type: "activity", tabID: shown, reveal: "tab" } }))
+                }}>Agent shows another page</button>
                 <output>Plugin closed: {apiResult()}</output>
               <button
                 onClick={() => {

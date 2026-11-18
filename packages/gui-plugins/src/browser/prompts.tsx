@@ -33,6 +33,8 @@ export function PromptDialog(props: {
   focus: boolean
   /** Moves the keyboard out to the pane's address field, with the dialog left open. */
   leave: () => void
+  /** While true nothing in the dialog answers: an agent's show request has just put its tab in front of the person. */
+  held?: boolean
 }) {
   const ctx = usePlugin<typeof definition>()
   const title = createUniqueId()
@@ -76,7 +78,7 @@ export function PromptDialog(props: {
 
   onMount(() => {
     if (!box) return
-    guard = guardActivation(box)
+    guard = guardActivation(box, () => !!props.held)
     onCleanup(guard.dispose)
     // The command layer and the native menu run no shortcut while the keyboard is here.
     onCleanup(ownKeyboard(box))
@@ -451,7 +453,13 @@ function PageText(props: { id: string; children: string }) {
  * A site's permission request, above its page: the page keeps working while the user reads on. One at a time, with
  * the count of the rest; Escape or the close button answers "not now", which keeps nothing.
  */
-export function PromptBar(props: { view: PromptView; answer: (answer: PromptAnswer) => void; focus: boolean }) {
+export function PromptBar(props: {
+  view: PromptView
+  answer: (answer: PromptAnswer) => void
+  focus: boolean
+  /** While true nothing in the bar answers: an agent's show request has just put its tab in front of the person. */
+  held?: boolean
+}) {
   const ctx = usePlugin<typeof definition>()
   const text = createUniqueId()
   let first: HTMLButtonElement | undefined
@@ -468,7 +476,7 @@ export function PromptBar(props: { view: PromptView; answer: (answer: PromptAnsw
     if (props.focus) first?.focus({ preventScroll: true })
 
     if (!bar) return
-    guard = guardActivation(bar)
+    guard = guardActivation(bar, () => !!props.held)
     onCleanup(guard.dispose)
   })
 
