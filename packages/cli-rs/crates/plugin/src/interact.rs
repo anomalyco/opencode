@@ -74,6 +74,11 @@ pub struct Owner {
     dialog: Cell<bool>,
     /// Brings a widget of the mount's tree into view in the scrolls of the tree that hold it.
     reveal: RefCell<Option<Reveal>>,
+    /// What waits for a node of the mount to take the focus, or for the mount to end: input typed while a dialog
+    /// surface opened goes on then (big-boi ds-3).
+    focus_waiters: RefCell<Vec<Box<dyn FnOnce()>>>,
+    /// When a dialog surface's mount began: input waits for its focus only that soon after ([`OPENING`]).
+    born: Cell<Option<std::time::Instant>>,
     layers: RefCell<Vec<Disposer>>,
     mode: RefCell<Option<Mode>>,
     /// The ids of its tree's nodes, and of its focusable ones.
@@ -112,6 +117,9 @@ struct Listener {
     layer: Layer,
     deliver: Deliver,
 }
+
+/// How long after a plugin's dialog surface opens the input waits for its field to take the focus, at most.
+pub(crate) const OPENING: std::time::Duration = std::time::Duration::from_millis(500);
 
 /// How many events a hold keeps; at the limit it is released, and what it kept goes on in order.
 pub const HOLD_LIMIT: usize = 256;
@@ -283,6 +291,8 @@ impl Owner {
             composer: Cell::new(false),
             dialog: Cell::new(false),
             reveal: RefCell::default(),
+            focus_waiters: RefCell::default(),
+            born: Cell::new(None),
             layers: RefCell::default(),
             mode: RefCell::default(),
             ids: RefCell::default(),
@@ -307,6 +317,7 @@ impl Owner {
     /// A dialog surface's mount, before its layers register: they hold in the host dialogs' mode.
     pub(crate) fn mark_dialog(&self) {
         self.dialog.set(true);
+        self.born.set(Some(std::time::Instant::now()));
     }
 
     /// The scope of the surface is the dialog whose body is `view`, while it is on top.
@@ -334,6 +345,16 @@ impl Owner {
     /// Whether its tree names a node: the pipe's mount shows a placeholder of none until the JS host's first revision.
     pub(crate) fn named(&self) -> bool {
         !self.ids.borrow().is_empty()
+    }
+
+    /// Runs `then` once a node of the mount takes the focus, or once the mount ends.
+    pub(crate) fn when_focused(&self, then: Box<dyn FnOnce()>) {
+        self.focus_waiters.borrow_mut().push(then);
+    }
+
+    fn focused_now(&self) {
+        let waiters = std::mem::take(&mut *self.focus_waiters.borrow_mut());
+        waiters.into_iter().for_each(|then| then());
     }
 
     /// Sets what brings a widget of the mount's tree into view ([`Owner::focus`]).
@@ -686,6 +707,7 @@ impl Owner {
                     reveal(id, &widget);
                 }
                 host.reveal(&widget);
+                self.focused_now();
             }
             // A node the tree does not hold yet waits for the mount's next view, which may show it; one it holds that
             // takes no focus (a text, a node in a hidden box) is refused.
@@ -767,6 +789,7 @@ impl Owner {
     /// composer as it mounts the route again, and an overlay's close does too.
     pub(crate) fn end(self: &Rc<Self>) {
         self.alive.set(false);
+        self.focused_now();
         if self.ended.replace(true) {
             return;
         }
@@ -1116,6 +1139,18 @@ impl Router {
     /// Whether the focus is in a live surface of a plugin: a slot claim's, a panel, an overlay or a route.
     pub fn surface_focused(&self, host: &dyn Host) -> bool {
         self.offered(host)
+    }
+
+    /// The mount of a plugin's dialog surface on top, opened less than [`OPENING`] ago, whose nodes have not taken the
+    /// focus yet: its first tree and focus may still come (the JS host's next revisions).
+    pub(crate) fn opening(&self, host: &dyn Host) -> Option<Rc<Owner>> {
+        let owners: Vec<Rc<Owner>> = self.owners.borrow().iter().filter_map(Weak::upgrade).collect();
+        owners.into_iter().rev().find(|owner| {
+            owner.alive()
+                && owner.born.get().is_some_and(|born| born.elapsed() < OPENING)
+                && owner.on_top(host)
+                && owner.focused().node.is_none()
+        })
     }
 
     /// Whether an overlay has the focus.

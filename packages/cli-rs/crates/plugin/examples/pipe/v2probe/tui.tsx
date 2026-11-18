@@ -174,6 +174,13 @@ export default Plugin.define({
           run: () =>
             context.ui.dialog.show(() => <input id="draft" focused onInput={(value: string) => log({ draft: value })} />),
         },
+        // A key that opens a dialog of its own with a focused field, which the user types into at once (big-boi ds-3).
+        {
+          id: "v2probe.ahead",
+          bind: "f2",
+          run: () =>
+            context.ui.dialog.show(() => <input id="ahead" focused onInput={(value: string) => log({ ahead: value })} />),
+        },
         { id: "v2probe.relayer", run: () => context.keymap.layer(() => ({ commands: [{ id: "v2probe.relayered", run() {} }] })) },
         {
           id: "v2probe.color",
