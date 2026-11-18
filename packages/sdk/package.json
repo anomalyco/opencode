@@ -19,7 +19,8 @@
     ".": "./src/index.ts",
     "./effect": "./src/effect/index.ts",
     "./workerd": "./src/workerd.ts",
-    "./workerd/effect": "./src/effect/workerd.ts"
+    "./workerd/effect": "./src/effect/workerd.ts",
+    "./internal/host": "./src/internal/host.ts"
   },
   "scripts": {
     "build": "bun run script/build.ts",

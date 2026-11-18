@@ -34,6 +34,7 @@
     "@opencode/plugin": "workspace:*",
     "@opencode/pty": "0.6.0",
     "@opencode/schema": "workspace:*",
+    "@opencode/sdk": "workspace:*",
     "@opencode/server": "workspace:*",
     "@opencode/tui": "workspace:*",
     "@opencode/util": "workspace:*",

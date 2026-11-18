@@ -189,6 +189,9 @@ export type TuiInput = {
   server: {
     endpoint: Endpoint
     local?: boolean
+    // Single-process mode: the client fetches straight into this process's
+    // embedded host instead of speaking HTTP to a background service.
+    fetch?: typeof fetch
     service?: {
       reconnect: (signal: AbortSignal) => Promise<Endpoint>
       restart: () => Promise<void>
@@ -220,7 +223,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const options = {
     baseUrl: input.server.endpoint.url,
     headers,
-    fetch: noTimeoutFetch,
+    fetch: input.server.fetch ?? noTimeoutFetch,
   }
   const api = OpenCode.make(options)
   const location = yield* Effect.tryPromise(() => api.file.list({ location: { directory: process.cwd() } })).pipe(
@@ -235,7 +238,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
     ? {
         reconnect: async (signal: AbortSignal) => {
           const endpoint = await managed.reconnect(signal)
-          const next = { baseUrl: endpoint.url, headers: Service.headers(endpoint), fetch: noTimeoutFetch }
+          const next = { baseUrl: endpoint.url, headers: Service.headers(endpoint), fetch: input.server.fetch ?? noTimeoutFetch }
           return { api: OpenCode.make(next), url: endpoint.url, headers: next.headers }
         },
         restart: managed.restart,

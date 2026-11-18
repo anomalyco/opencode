@@ -1,6 +1,9 @@
 import { Service, type Endpoint, type EnsureOptions } from "@opencode/client/effect/service"
 import { ClientError, isUnauthorizedError, OpenCode } from "@opencode/client/promise"
-import { OPENCODE_VERSION } from "../version"
+import { OPENCODE_VERSION, OPENCODE_ARTIFACT, OPENCODE_CHANNEL } from "../version"
+import { Global } from "@opencode/util/global"
+import { EmbeddedHost } from "@opencode/sdk/internal/host"
+import { databasePath } from "../database-path"
 import { Effect, Option, Redacted } from "effect"
 import { Server as ServerFlag, Standalone as StandaloneFlag } from "../commands/commands"
 import { Env } from "../env"
@@ -11,6 +14,8 @@ import { errorMessage } from "../util/error"
 export type Args = {
   readonly server?: string
   readonly standalone?: boolean
+  /** Host the service in this process instead of connecting to (or starting) any other process. */
+  readonly inProcess?: boolean
   readonly mismatch?: "replace" | "ignore" | "error"
   /** Start the background service when none is running. When false, use a standalone server instead. */
   readonly autostart?: boolean
@@ -22,6 +27,8 @@ export type Resolved = {
   readonly service?: ReturnType<typeof managedService>
   /** A private server started for this command alone. */
   readonly standalone?: boolean
+  /** A server hosted in this process; talk to it via this fetch instead of HTTP. */
+  readonly fetch?: typeof fetch
 }
 
 export const resolve = Effect.fn("cli.server-connection.resolve")(function* (args: Args = {}) {
@@ -29,6 +36,22 @@ export const resolve = Effect.fn("cli.server-connection.resolve")(function* (arg
   const standaloneFlag = yield* Effect.serviceOption(StandaloneFlag)
   const server = args.server ?? Option.getOrUndefined(serverFlag)
   const standalone = args.standalone ?? Option.getOrElse(standaloneFlag, () => false)
+  if (args.inProcess) {
+    // Same router the background service hosts, but reachable only through this process's fetch.
+    const global = yield* Global.Service
+    const host = yield* EmbeddedHost.create({
+      app: {
+        name: process.env.OPENCODE_CLIENT ?? OPENCODE_ARTIFACT,
+        version: OPENCODE_VERSION,
+        channel: process.env.OPENCODE_TUI_CHANNEL ?? OPENCODE_CHANNEL,
+      },
+      database: { path: databasePath(global.data) },
+    })
+    yield* Effect.addFinalizer(() => Effect.promise(async () => {
+      try { await host.close() } catch { /* best effort; the process is exiting */ }
+    }))
+    return { endpoint: { url: "http://opencode.local" }, fetch: host.fetch } satisfies Resolved
+  }
   if (server !== undefined && standalone)
     return yield* Effect.fail(new Error("--server and --standalone cannot be combined"))
   if (server !== undefined) {

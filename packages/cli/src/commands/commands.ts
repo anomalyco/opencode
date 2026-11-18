@@ -361,6 +361,28 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         json: Flag.Boolean("json").pipe(Flag.withDescription("Output statistics as JSON"), Flag.withDefault(false)),
       },
     }),
+    Spec.make("singleton", {
+      description: "Start OpenCode in a single process (server and interface in this process)",
+      params: {
+        directory: Argument.String("directory").pipe(
+          Argument.withDescription("Directory to start OpenCode in"),
+          Argument.optional,
+        ),
+        continue: Flag.Boolean("continue").pipe(
+          Flag.withAlias("c"),
+          Flag.withDescription("Continue the last session"),
+          Flag.withDefault(false),
+        ),
+        session: Flag.String("session").pipe(
+          Flag.withAlias("s"),
+          Flag.withDescription("Session ID to continue, or to create if it does not exist"),
+          Flag.optional,
+        ),
+        prompt: Flag.String("prompt").pipe(Flag.withDescription("Prompt to use"), Flag.optional),
+        expose: CliFlag.optionalValue("expose", "PORT"),
+        ...PermissionParams,
+      },
+    }),
     Spec.make("mini", {
       description: "Start the minimal interactive interface",
       globalFlags: ServerFlags,
