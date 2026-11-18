@@ -763,3 +763,62 @@ fn latex_fences_render_as_math() {
     let rule = screen.lines().position(|line| line.contains("─────────────")).unwrap();
     assert!(screen.lines().nth(rule).unwrap().contains("x ="), "{screen}");
 }
+
+/// Simon's table (tex-regression): inline math in table cells draws as math in the assistant's text.
+const VARIABLES: &str = "### Variables\n\n| Symbol | Meaning |\n| --- | --- |\n| $S$ | Raw score, from 1 to 10 |\n\
+| $T$ | Tokens used |\n| $T_0$ | Baseline token count, such as the median across runs |\n\
+| $\\alpha$ | How hard token usage is penalized. 0 means no penalty. 0.2–0.3 is a moderate starting point |\n\
+| $S_{\\text{adj}}$ | Adjusted score, kept within 1 to 10 |\n\n$$\nS_{\\text{adj}} = \\frac{T_0}{T}\n$$";
+
+fn math_screen(text: &str, info: Info) -> String {
+    let messages = vec![
+        user("msg_1", 1000, "Show the math"),
+        assistant("msg_2", 1500, json!([{ "type": "text", "text": text }]), Some(4000)),
+    ];
+    let h = open(100, 40, "ses_l", messages, info);
+    h.wait_for("provider/model")
+}
+
+#[test]
+fn inline_math_draws_in_table_cells() {
+    let screen = math_screen(VARIABLES, Info::default());
+    for shown in ["│ T₀ ", "│ α ", "│ S_adj ", "│ S ", "Variables"] {
+        assert!(screen.contains(shown), "{shown:?}\n{screen}");
+    }
+    assert!(!screen.contains('$') && !screen.contains("###"), "{screen}");
+}
+
+/// Inline math wherever Markdown holds inline text: table cells with text beside the math, headings, list items,
+/// emphasis, block quotes, and links next to math. `$$…$$` inside a cell is no display block, so it stays text.
+#[test]
+fn inline_math_draws_in_every_inline_context() {
+    let text = "| Symbol | Meaning |\n| --- | --- |\n| $T_0$ tokens | beside |\n| $$x^2$$ | a cell |\n\
+| **$\\alpha$** | [link](https://x.y) $\\beta$ |\n\n## Heading $x^2$\n\n- item $\\gamma$\n- *em $\\delta$*\n\n\
+> quote $\\epsilon$\n\n**bold $\\mu$** and [a link](https://x.y) next to $\\nu$.";
+    let screen = math_screen(text, Info::default());
+    for shown in [
+        "│ T₀ tokens ",
+        "│ $$x^2$$ ",
+        "│ α ",
+        "link (https://x.y) β",
+        "Heading x²",
+        "- item γ",
+        "- em δ",
+        "│ quote ϵ",
+        "bold μ and a link (https://x.y) next to ν.",
+    ] {
+        assert!(screen.contains(shown), "{shown:?}\n{screen}");
+    }
+}
+
+/// With `session.markdown` `source`, Markdown shows its markup as typed, inline math too; display math still draws,
+/// as fences do. This was the "regression" Simon saw: his config had switched to `source`.
+#[test]
+fn source_mode_keeps_inline_math_as_typed() {
+    let info =
+        Info { session: Some(Session { markdown: Some(Markdown::Source), ..Session::default() }), ..Info::default() };
+    let screen = math_screen(VARIABLES, info);
+    for shown in ["│ $T_0$ ", "│ $\\alpha$ ", "### Variables", "T₀"] {
+        assert!(screen.contains(shown), "{shown:?}\n{screen}");
+    }
+}
