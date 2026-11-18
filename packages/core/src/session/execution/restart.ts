@@ -148,7 +148,7 @@ export const layer = (options?: Options) =>
         if (recovery.kind === "video") {
           const body =
             background.status === "running"
-              ? `Video request for ${recovery.path} was lost because the server restarted.`
+              ? `Video request for ${recovery.path} couldn't be saved after the server restarted: its project folder no longer exists.`
               : state === "completed"
                 ? (background.output ?? `Video request finished. Saved video: ${recovery.path}.`)
                 : state === "error"
