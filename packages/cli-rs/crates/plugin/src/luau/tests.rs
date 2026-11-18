@@ -770,6 +770,71 @@ fn a_build_for_a_plugin_that_went_is_dropped() {
     assert!(registry.entries().iter().all(|entry| entry.target.as_deref() != Some(&*dir.to_string_lossy())));
 }
 
+// Expected (luau-safety-2 4, carbon ls-4): a VM under a 1 MiB cap runs an idle plugin. The fixed 1 MiB margin of the
+// out-of-memory latch failed every call of a VM with a cap that small.
+#[test]
+fn a_plugin_runs_under_a_small_cap() {
+    let host = host();
+    let init = r#"
+        local plugin = require("@opencode/plugin")
+        return plugin.define(function(setup)
+            setup:command({ name = "hello" }, function(host)
+                host:toast({ variant = "info", message = "hello" })
+            end)
+        end)
+    "#;
+    let registry = running(&host, define_with(&sources(init), None, 1 << 20).unwrap().0);
+    keymap(&host).dispatch("hello", None);
+    host.app.advance(Duration::from_millis(1));
+    assert_eq!(failure(&registry, "test.luau"), None);
+    assert_eq!(host.toasts.borrow().last().map(|toast| toast.message.as_str()), Some("hello"));
+}
+
+// Expected (luau-safety-2 4, carbon ls-4): a plugin that holds most of its cap and never ran out of memory keeps
+// running: with about 0.4 MiB of a 4 MiB cap free, past any margin that is a share of the cap.
+#[test]
+fn a_plugin_holding_most_of_its_cap_runs() {
+    let host = host();
+    let init = r#"
+        local plugin = require("@opencode/plugin")
+        local keep = nil
+        return plugin.define(function(setup)
+            setup:command({ name = "hold" }, function(host)
+                for _ = 1, 2600 do local node = table.create(64); node[1] = keep; keep = node end
+                host:toast({ variant = "info", message = "held" })
+            end)
+        end)
+    "#;
+    let registry = running(&host, define_with(&sources(init), None, 4 << 20).unwrap().0);
+    keymap(&host).dispatch("hold", None);
+    host.app.advance(Duration::from_millis(1));
+    assert_eq!(failure(&registry, "test.luau"), None);
+    assert_eq!(host.toasts.borrow().last().map(|toast| toast.message.as_str()), Some("held"));
+}
+
+// Expected (luau-safety-2 4, carbon ls-4): a plugin's error is kept and logged cut to 4 KiB, with its control
+// characters escaped: a 6 MiB `error(...)` with an escape sequence used to stay whole in `/plugins`.
+#[test]
+fn a_long_error_is_cut_and_escaped() {
+    let host = host();
+    let init = r#"
+        local plugin = require("@opencode/plugin")
+        return plugin.define(function(setup)
+            setup:command({ name = "fail" }, function(host)
+                error("\27]0;title\7" .. string.rep("E", 6 * 1024 * 1024), 0)
+            end)
+        end)
+    "#;
+    let registry = running(&host, define(&sources(init), None).unwrap().0);
+    keymap(&host).dispatch("fail", None);
+    host.app.advance(Duration::from_millis(1));
+    let error = failure(&registry, "test.luau").expect("failed");
+    assert!(error.len() < 4096 + 100, "{} bytes: {:?}", error.len(), error.get(..200));
+    assert!(error.starts_with(r"test.luau: \u{1b}]0;title\u{7}EEE"), "{}", &error[..40]);
+    assert!(!error.contains('\u{1b}'));
+    assert!(error.ends_with(&format!("... ({} bytes)", 6 * 1024 * 1024 + 10)), "{}", &error[error.len() - 60..]);
+}
+
 // Expected (luau-safety 1, safety-audit #5): `print` writes to the client's log, never to the terminal under the TUI:
 // one line naming the plugin, with escape sequences escaped and at most 4 KiB of what it printed.
 #[test]
@@ -797,34 +862,41 @@ fn print_writes_one_escaped_line_to_the_log() {
     assert_eq!(*cut, format!("plugin test.print printed: {}... ({} bytes, cut at 4096)", "x".repeat(4096), 16 << 20));
 }
 
-// Expected (luau-safety 3, safety-audit #11): a plugin that runs out of memory inside `pcall` and keeps its heap at the
-// cap is failed when the call returns, as the budget fails one that catches its error; one that let the garbage go
-// keeps running.
+// Expected (luau-safety 3, luau-safety-2 4, safety-audit #11): a plugin that runs out of memory inside `pcall`,
+// `xpcall` or a coroutine and keeps its heap at the cap is failed when the call returns, as the budget fails one that
+// catches its error; one that let the garbage go keeps running.
 #[test]
 fn a_plugin_that_catches_running_out_of_memory_fails() {
-    let host = host();
-    let init = r#"
-        local plugin = require("@opencode/plugin")
-        local keep = {}
-        local function fill() while true do table.insert(keep, string.rep("x", 1024) .. #keep) end end
-        return plugin.define(function(setup)
-            setup:command({ name = "drop" }, function(host)
-                pcall(fill)
-                keep = {}
+    for catch in
+        ["pcall(fill)", "xpcall(fill, function(fault) return fault end)", "coroutine.resume(coroutine.create(fill))"]
+    {
+        let host = host();
+        let init = format!(
+            r#"
+            local plugin = require("@opencode/plugin")
+            local keep = nil
+            -- Live data up to the cap and no garbage: each node is one allocation that the next one holds.
+            local function fill() while true do local node = table.create(64); node[1] = keep; keep = node end end
+            return plugin.define(function(setup)
+                setup:command({{ name = "drop" }}, function(host)
+                    {catch}
+                    keep = nil
+                end)
+                setup:command({{ name = "keep" }}, function(host)
+                    {catch}
+                end)
             end)
-            setup:command({ name = "keep" }, function(host)
-                pcall(fill)
-            end)
-        end)
-    "#;
-    let registry = running(&host, define_with(&sources(init), None, 4 << 20).unwrap().0);
-    keymap(&host).dispatch("drop", None);
-    host.app.advance(Duration::from_millis(1));
-    assert_eq!(failure(&registry, "test.luau"), None);
-    keymap(&host).dispatch("keep", None);
-    host.app.advance(Duration::from_millis(1));
-    let error = failure(&registry, "test.luau").expect("the plugin at its cap failed");
-    assert!(error.contains("out of memory") && error.contains("of its 4 MiB heap"), "{error}");
+        "#
+        );
+        let registry = running(&host, define_with(&sources(&init), None, 4 << 20).unwrap().0);
+        keymap(&host).dispatch("drop", None);
+        host.app.advance(Duration::from_millis(1));
+        assert_eq!(failure(&registry, "test.luau"), None, "{catch}");
+        keymap(&host).dispatch("keep", None);
+        host.app.advance(Duration::from_millis(1));
+        let error = failure(&registry, "test.luau").unwrap_or_else(|| panic!("{catch}: the plugin at its cap ran on"));
+        assert!(error.contains("out of memory") && error.contains("of its 4 MiB heap"), "{catch}: {error}");
+    }
 }
 
 // Expected (luau-spike 1.4, luau-safety 5): no file system, no process, no `require` outside the plugin, no
