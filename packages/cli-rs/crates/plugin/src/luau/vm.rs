@@ -10,7 +10,6 @@ use std::time::{Duration, Instant};
 
 use mlua::chunk::ChunkMode;
 use mlua::luau::{NavigateError, Require};
-use mlua::state::{GcIncParams, GcMode};
 use mlua::{Function, InterruptHandle, Lua, MultiValue, Table, Value, VmState};
 
 use super::Sources;
@@ -21,11 +20,21 @@ pub const MEMORY: usize = 32 << 20;
 /// The most of one `print` the log keeps, in bytes of the plugin's text.
 pub(crate) const PRINT: usize = 4 << 10;
 
-/// The heap a VM grows to before its collector finishes a cycle, in percent of the live data. Luau never collects
-/// before it fails an allocation, so at its default of 200 a plugin that makes garbage runs out of memory with less than
-/// half the cap live (`luau/steps/safety-audit.md` #10). At 125 the effective cap of [`MEMORY`] is about 23.5 MiB live
-/// for such a plugin, against 12.5 MiB at 200 (`luau::tests::measure_the_effective_heap_cap`).
-pub(crate) const GOAL: i32 = 125;
+/// The collector's pace for a heap of 8 MiB or more (`GOAL_THRESHOLD`, in KB): the heap a VM grows to before a cycle
+/// ends, in percent of the live data, and the step multiplier that reaches it (the fork's `LUA_GCSETGOALLARGE`,
+/// `luau/steps/gc-goal.md`). Luau never collects before it fails an allocation, so at its default of 200 a plugin that
+/// makes garbage runs out of memory with less than half the cap live (`luau/steps/safety-audit.md` #10). Smaller heaps
+/// keep the default goal, so most calls pay nothing. The effective cap of [`MEMORY`] is about 23 MiB live for such a
+/// plugin, against 12.5 MiB at 200 (`luau::tests::measure_the_effective_heap_cap`).
+const GOAL_LARGE: i32 = 115;
+const STEP_MULTIPLIER_LARGE: i32 = 1600;
+const GOAL_THRESHOLD: i32 = 8 * 1024;
+
+/// `lua_gc`'s options for [`GOAL_LARGE`], [`GOAL_THRESHOLD`] and [`STEP_MULTIPLIER_LARGE`] (`lua.h`), which mlua-sys
+/// does not name.
+const LUA_GCSETGOALLARGE: std::ffi::c_int = 11;
+const LUA_GCSETGOALTHRESHOLD: std::ffi::c_int = 12;
+const LUA_GCSETSTEPMULLARGE: std::ffi::c_int = 13;
 
 /// How near its cap a VM's heap may be once a call returned, after a full collection: nearer, the plugin ran out of
 /// memory and caught the error, and every binding would fail at random from then on.
@@ -189,7 +198,7 @@ impl Vm {
     pub(crate) fn new(compiled: &Rc<Compiled>, limit: Duration, memory: usize) -> mlua::Result<Self> {
         let lua = Lua::new();
         lua.set_memory_limit(memory)?;
-        lua.gc_set_mode(GcMode::Incremental(GcIncParams::default().goal(GOAL)));
+        pace(&lua)?;
         let budget = Rc::new(Budget {
             limit,
             armed: Cell::new(None),
@@ -441,6 +450,34 @@ impl Drop for Watch {
     fn drop(&mut self) {
         self.deadlines.lock().calls.retain(|(ticket, _, _)| *ticket != self.ticket);
     }
+}
+
+/// Sets the collector's pace by heap size on `lua` ([`GOAL_LARGE`]). Each option returns the setting it replaced: on a
+/// new VM 200, 200 and 0. A Luau without the fork's patch returns -1 and changes nothing, which is logged once a
+/// process: its plugins run at Luau's default goal, with about half the cap usable under churn.
+#[allow(unsafe_code)]
+fn pace(lua: &Lua) -> mlua::Result<()> {
+    let mut replaced = [0; 3];
+    // SAFETY: `lua_gc` with these options only sets the collector's parameters; it touches no stack slot.
+    unsafe {
+        lua.exec_raw::<()>((), |state| {
+            replaced = [
+                mlua::ffi::lua_gc(state, LUA_GCSETGOALLARGE, GOAL_LARGE),
+                mlua::ffi::lua_gc(state, LUA_GCSETSTEPMULLARGE, STEP_MULTIPLIER_LARGE),
+                mlua::ffi::lua_gc(state, LUA_GCSETGOALTHRESHOLD, GOAL_THRESHOLD),
+            ];
+        })?;
+    }
+    static MISSING: std::sync::Once = std::sync::Once::new();
+    if replaced.contains(&-1) {
+        MISSING.call_once(|| {
+            log::warn!(
+                "this build's Luau has no collector goal by heap size (lua_gc returned {replaced:?}): Luau plugins \
+                 collect at the default goal and hold about half their heap cap under churn"
+            )
+        });
+    }
+    Ok(())
 }
 
 /// The plugin's `print`: its arguments as `tostring` gives them, separated by tabs, as one line of the client's log

@@ -1649,8 +1649,9 @@ fn measure_idle_memory_and_compile() {
 }
 
 /// A VM under the carrier's cap that keeps about `mib` MiB of strings, then makes 2M small tables of garbage in one
-/// call with no budget to speak of: the live bytes after a full collection, and how the garbage call ended. Luau's
-/// collector goal is set to `goal`, or left as [`vm::Vm::new`] sets it.
+/// call with no budget to speak of: the live bytes after a full collection, and how the garbage call ended. The
+/// collector runs at the fixed goal `goal` (Luau's single goal, the goal by heap size unset), or at the pace
+/// [`vm::Vm::new`] sets.
 fn churn(goal: Option<i32>, mib: usize) -> (usize, Result<(), String>) {
     let init = r#"
         local keep = {}
@@ -1663,6 +1664,15 @@ fn churn(goal: Option<i32>, mib: usize) -> (usize, Result<(), String>) {
     let vm = vm::Vm::new(&compiled, Duration::from_secs(600), MEMORY).unwrap();
     if let Some(goal) = goal {
         vm.lua.gc_set_mode(mlua::state::GcMode::Incremental(mlua::state::GcIncParams::default().goal(goal)));
+        // SAFETY: `lua_gc` only sets the collector's parameters: a threshold of 0 unsets the goal by heap size.
+        #[allow(unsafe_code)]
+        unsafe {
+            vm.lua
+                .exec_raw::<()>((), |state| {
+                    mlua::ffi::lua_gc(state, 12, 0);
+                })
+                .unwrap();
+        }
     }
     let mlua::Value::Table(module) = vm.start(&compiled).unwrap() else { panic!("the module returns a table") };
     let (build, garbage): (mlua::Function, mlua::Function) =
@@ -1672,25 +1682,30 @@ fn churn(goal: Option<i32>, mib: usize) -> (usize, Result<(), String>) {
     (vm.memory(), vm.call(|| garbage.call::<()>(())))
 }
 
-// Expected (luau-safety 4, safety-audit #10): with the carrier's collector goal, a plugin with 20 MiB of its 32 MiB
-// live makes garbage without running out of memory; at Luau's default goal it runs out with 14 MiB live.
+// Expected (luau-safety 4, luau-fork-2, safety-audit #10): at the carrier's pace, a plugin with about 23 MiB of its
+// 32 MiB live makes garbage without running out of memory; at Luau's default goal it runs out with 14 MiB live.
 #[test]
 fn a_plugin_with_most_of_its_cap_live_can_make_garbage() {
-    let (live, churned) = churn(None, 19);
-    assert!(live > 20 << 20, "{live} bytes live");
+    let (live, churned) = churn(None, MIB_HELD);
+    assert!(live > 22 << 20, "{live} bytes live");
     assert_eq!(churned, Ok(()));
 }
 
+/// The MiB of strings [`a_plugin_with_most_of_its_cap_live_can_make_garbage`] keeps: about 23 MiB live with the table
+/// that holds them.
+const MIB_HELD: usize = 21;
+
 // The effective heap cap, printed (luau-safety 4, safety-audit #10): the most live data with which a plugin that makes
-// garbage still runs, at Luau's default goal and at the carrier's. Run with `--ignored --nocapture`.
+// garbage still runs, at Luau's default goal, at `luau-safety`'s fixed 125, and at the carrier's pace. Run with
+// `--ignored --nocapture`.
 #[test]
 #[ignore]
 fn measure_the_effective_heap_cap() {
-    for goal in [200, vm::GOAL] {
+    for goal in [Some(200), Some(125), None] {
         for mib in 10..=30 {
             let start = Instant::now();
-            let (live, churned) = churn(Some(goal), mib);
-            println!("goal {goal}: {live} bytes live, {:?}: {churned:?}", start.elapsed());
+            let (live, churned) = churn(goal, mib);
+            println!("goal {goal:?}: {live} bytes live, {:?}: {churned:?}", start.elapsed());
             if churned.is_err() {
                 break;
             }
