@@ -2639,6 +2639,18 @@ fn every_operation_is_one_request_in_luau_rust_and_the_generated_client() {
     assert_eq!((samples.len(), refused.len()), (169, 6), "refused: {refused:?}");
 }
 
+// Expected (luau-lean): the prelude is loaded lazily, and an error in one of its functions, built at its first call,
+// still names `@opencode/plugin` and the line.
+#[test]
+fn an_error_in_the_lazy_prelude_names_it_and_its_line() {
+    let host = host();
+    let registry = tasking(&host, r#"setup:command({ name = "bad" }, function() plugin.text("x", 5) end)"#);
+    run(&host, "bad", None);
+    let error = failure(&registry, "test.luau").expect("the plugin failed");
+    let named = error.split_once("@opencode/plugin:").map(|(_, rest)| rest.split(':').next().unwrap_or_default());
+    assert!(named.is_some_and(|line| line.parse::<u32>().is_ok()), "{error}");
+}
+
 // Expected (await-luau): a waiting call outside a task (a render, setup) fails the call, and says where tasks are.
 #[test]
 fn a_wait_outside_a_task_is_refused() {

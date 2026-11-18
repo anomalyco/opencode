@@ -8,7 +8,7 @@ use std::rc::{Rc, Weak};
 use std::sync::OnceLock;
 use std::time::Duration;
 
-use mlua::chunk::{ChunkMode, Compiler};
+use mlua::chunk::Compiler;
 use mlua::{Function, Lua, MultiValue, Table, Value};
 use opencode_plugin_abi::interact::{self, Handled};
 use opencode_plugin_abi::{self as abi, v2};
@@ -43,6 +43,27 @@ fn prelude() -> Result<&'static [u8], String> {
     compiled.as_deref().map_err(Clone::clone)
 }
 
+/// The prelude's chunk in the VM `lua`, loaded lazily (`luau_loadlazy`): each of its functions is built from the
+/// bytecode at its first call, so a VM holds only the helpers its plugin has run. The bytecode is the process's
+/// ([`prelude`]), so it outlives every VM that loads it, and there is no owner to release.
+fn load_prelude(lua: &Lua) -> Result<Function, String> {
+    let code = prelude()?;
+    // SAFETY: `exec_raw` runs the closure in protected mode with room for three slots; `luau_loadlazy` pushes one value,
+    // the chunk or why it did not load, and raises nothing. `code` is a static, which the lazy functions read later.
+    #[allow(unsafe_code)]
+    let loaded = unsafe {
+        lua.exec_raw::<Value>((), |state| {
+            let name = c"=@opencode/plugin".as_ptr();
+            mlua::ffi::luau_loadlazy(state, name, code.as_ptr().cast(), code.len(), 0, std::ptr::null_mut(), None);
+        })
+    };
+    match loaded.map_err(|error| error.to_string())? {
+        Value::Function(chunk) => Ok(chunk),
+        Value::String(why) => Err(format!("the prelude did not load: {}", why.to_string_lossy())),
+        other => Err(format!("the prelude did not load: {other:?}")),
+    }
+}
+
 /// Runs a Luau plugin's setup on `setup`: a new VM whose entry module returns `plugin.define(fn)`, then `fn(setup)`.
 /// The returned plugin lives as long as its registrations hold it.
 pub(crate) fn setup(
@@ -56,7 +77,7 @@ pub(crate) fn setup(
     let vm = Vm::new(compiled, limit, memory).map_err(error)?;
     let current = Rc::new(Slot::default());
     let (read, host, memo) = objects(&vm.lua, &current).map_err(error)?;
-    let prelude = vm.lua.load(prelude()?).set_name("=@opencode/plugin").set_mode(ChunkMode::Binary);
+    let prelude = load_prelude(&vm.lua)?;
     // What fails a call whose task ran out of memory: the latch the call ends with ([`vm::refuse`]), as raising an error
     // in Luau would need memory the heap no longer has.
     let fail = vm
