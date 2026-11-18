@@ -925,6 +925,13 @@ impl Scripts {
         self.tamper.set(Some(tamper));
     }
 
+    /// Whether a revision is kept or held for [`Scripts::replay`]: a [`Tamper`] holds the next that comes, which may come
+    /// after the call that sent it was answered.
+    #[doc(hidden)]
+    pub fn kept(&self) -> bool {
+        self.kept.borrow().is_some()
+    }
+
     /// Delivers again the revision [`Tamper::Keep`] kept.
     #[doc(hidden)]
     pub fn replay(&self) {
