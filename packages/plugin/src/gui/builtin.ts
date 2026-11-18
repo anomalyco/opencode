@@ -52,9 +52,11 @@ export function onIdle(fn: () => void) {
 export interface BuiltinPromptGate {
   /**
    * Called each time the host is about to send a prompt or a command to a session, once the server has created the
-   * session and before the request goes out. Return at once when there is nothing to prepare. The host waits for every
-   * gate at the same time, for at most two seconds, then sends whatever they did; a gate that throws or rejects is
-   * ignored. The prompt already shows in the conversation while the host waits.
+   * session and before the request goes out. Return at once when there is nothing to prepare, and wait only for work
+   * that is in flight and can still succeed: the composer takes no other send meanwhile. The host waits for every
+   * gate at the same time, for at most one second, then sends whatever they did; a gate that throws or rejects is
+   * ignored. The prompt already shows in the conversation while the host waits, and Stop cancels it. Only a plugin
+   * that ships with the app is asked: the host ignores a gate any other plugin adds.
    *
    * @param input - The session the prompt goes to, mounted or not, and a signal that aborts when the host stops
    *   waiting.
@@ -62,7 +64,7 @@ export interface BuiltinPromptGate {
   ready(input: {
     /** The session the prompt goes to. It may not be routed or mounted yet, as when a draft sends its first prompt. */
     readonly session: SessionRef
-    /** Aborts when the host stops waiting: every gate settled, or the two seconds passed. */
+    /** Aborts when the host stops waiting: every gate settled, or the second passed. */
     readonly signal: AbortSignal
   }): Promise<void> | void
 }

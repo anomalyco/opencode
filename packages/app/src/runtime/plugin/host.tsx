@@ -1006,6 +1006,8 @@ function createHost(input: HostInput) {
     serversReady: createMemo(() => selectServersReady(startup.state())),
     /** The plugins main lists; empty on the web and until main answers. */
     installed: createMemo(() => selectInstalled(startup.state())),
+    /** Whether the plugin ships with the app. What only built-ins may contribute is read through it. */
+    builtin: (id: string) => input.builtins?.has(id) ?? false,
     /** A plugin's main entry cannot answer. Reactive. */
     mainFailed: (id: string) => selectMainFailed(startup.state(), id),
     /** Reports what the startup gate waits for. */

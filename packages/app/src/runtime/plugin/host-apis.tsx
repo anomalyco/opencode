@@ -1240,18 +1240,15 @@ export function createPluginAttachment(apis: HostApis) {
     /** The routed `MountedSession`. */
     current,
     /**
-     * What a send to a session waits for before its request goes out: every plugin's `BuiltinPromptGate`, such as the
-     * desktop browser attaching so the first step already lists its tools. A session no open tab owns has no gate.
+     * What a send to a session waits for before its request goes out: the `BuiltinPromptGate` of every plugin that
+     * ships with the app, which prepares the session for its next step. A session no open tab owns has no gate.
      */
     ready(server: string, sessionID: string) {
       const session = untrack(sessions).find((item) => item.key === `${server}\n${sessionID}`)
 
       if (!session) return Promise.resolve()
 
-      return settlePromptGates(
-        untrack(() => host.items(BuiltinPromptGate)).map((item) => item.value),
-        session,
-      )
+      return settlePromptGates(untrack(() => host.items(BuiltinPromptGate)), host.builtin, session)
     },
     closed,
     /** Opens and selects a side tab by key, as a reopened closed tab comes back. */
