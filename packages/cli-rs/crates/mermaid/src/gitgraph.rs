@@ -7,7 +7,7 @@ use indexmap::IndexMap;
 use regex::Regex;
 
 use crate::core::canvas::{Canvas, SizeError};
-use crate::core::text::{first_meaningful_line, js_trim, meaningful_lines, strip_quotes, width};
+use crate::core::text::{Accessibility, first_meaningful_line, js_trim, meaningful_lines, strip_quotes, width};
 use crate::{Kind, SyntaxError};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -55,9 +55,6 @@ pub struct Diagram {
 
 static HEADER: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)^gitGraph(?:\s+(LR|TB|BT))?\s*:?$").expect("header"));
-static ACCESSIBILITY: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?i)^acc(?:Title|Descr)(?::|\s|$)").expect("accessibility"));
-static ACC_BLOCK: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)^accDescr\s*\{$").expect("accDescr"));
 static TITLE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)^title(?:\s|$)").expect("title"));
 
 pub fn is_gitgraph(content: &str) -> bool {
@@ -81,22 +78,12 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
     let mut ids: HashSet<String> = HashSet::new();
     let mut current = "main".to_string();
     let mut generated = 1;
-    let mut in_description = false;
+    let mut accessibility = Accessibility::default();
     let mut header = false;
     for source in meaningful_lines(content) {
         let line = strip_comment(source.text);
         let n = source.number;
-        if in_description {
-            if line == "}" {
-                in_description = false;
-            }
-            continue;
-        }
-        if ACC_BLOCK.is_match(line) {
-            in_description = true;
-            continue;
-        }
-        if line.is_empty() || ACCESSIBILITY.is_match(line) || TITLE.is_match(line) {
+        if line.is_empty() || accessibility.skip(line) || TITLE.is_match(line) {
             continue;
         }
         if HEADER.is_match(line) {

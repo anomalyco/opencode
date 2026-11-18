@@ -5,7 +5,9 @@ use std::sync::LazyLock;
 use regex::Regex;
 
 use crate::core::canvas::{Canvas, SizeError};
-use crate::core::text::{first_meaningful_line, js_trim, meaningful_lines, split_lines, strip_quotes, width};
+use crate::core::text::{
+    Accessibility, first_meaningful_line, js_trim, meaningful_lines, split_lines, strip_quotes, width,
+};
 use crate::{Kind, SyntaxError};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -41,8 +43,6 @@ fn pattern(source: &str) -> Regex {
 static HEADER: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^timeline(?:\s+(TD|LR))?$"));
 static TITLE: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^title(?:\s+(.+))?$"));
 static SECTION: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^section(?:\s+(.+))?$"));
-static ACCESSIBILITY: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^acc(?:Title|Descr)(?::|\s|$)"));
-static ACC_BLOCK: LazyLock<Regex> = LazyLock::new(|| pattern(r"(?i)^accDescr\s*\{$"));
 
 pub fn is_timeline(content: &str) -> bool {
     HEADER.is_match(first_meaningful_line(content).unwrap_or(""))
@@ -57,21 +57,11 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
     let mut title = None;
     // The index in `entries` of the period continuation lines add to.
     let mut current: Option<usize> = None;
-    let mut in_description = false;
+    let mut accessibility = Accessibility::default();
     for source in meaningful_lines(content) {
         let line = js_trim(source.text.find("%%").map_or(source.text, |index| &source.text[..index]));
         let n = source.number;
-        if in_description {
-            if line == "}" {
-                in_description = false;
-            }
-            continue;
-        }
-        if ACC_BLOCK.is_match(line) {
-            in_description = true;
-            continue;
-        }
-        if line.is_empty() || line.starts_with('#') || ACCESSIBILITY.is_match(line) || HEADER.is_match(line) {
+        if line.is_empty() || line.starts_with('#') || accessibility.skip(line) || HEADER.is_match(line) {
             continue;
         }
         if let Some(captures) = TITLE.captures(line) {
