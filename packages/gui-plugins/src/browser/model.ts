@@ -43,6 +43,7 @@ import {
   sessionFailure,
   sessionPending,
   sessionRegistration,
+  sessionSettled,
   sessionSuspended,
   sessionTab,
   sessionTabs,
@@ -653,9 +654,35 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     if (current) openURL(session, workspaceFileURL(current.root, path, session.server.builtin ? undefined : session.id))
   }
 
+  // A prompt is about to go to the session. Its first step lists the browser tools only if the server already holds
+  // this desktop's attachment, so the session attaches now, routed or not, and the send waits until the desktop took
+  // it or cannot. The host stops waiting through `signal`.
+  const ready = (session: SessionRef, signal: AbortSignal) => {
+    if (!session.server.compatible) return Promise.resolve()
+    attach(session)
+    dispatch({ type: "session.wake", sessionKey: session.key })
+
+    if (sessionSettled(untrack(machine), session.key) || signal.aborted) return Promise.resolve()
+    const settled = Promise.withResolvers<void>()
+
+    const dispose = createRoot((dispose) => {
+      createKeyed(
+        () => sessionSettled(machine(), session.key),
+        () => settled.resolve(),
+      )
+
+      return dispose
+    }, owner)
+
+    signal.addEventListener("abort", () => settled.resolve(), { once: true })
+
+    return settled.promise.finally(dispose)
+  }
+
   return {
     available,
     attached,
+    ready,
     canOpen,
     openFile,
     openURL,

@@ -400,6 +400,24 @@ export function revealGuard(state: State, sessionKey: string, tabID: string) {
   return reveal?.tabID === tabID ? reveal.token : undefined
 }
 
+/**
+ * Whether the session's attachment has its answer for now: the desktop took it, or it cannot attach until something
+ * else happens (the pane does not run, another desktop owns the session, the server has no browser, a retry timer
+ * runs). False while a registration, or the pane's Ipc that is still starting, can attach it without anyone acting.
+ * A prompt waits on this, so its first step lists the browser tools.
+ */
+export function sessionSettled(state: State, sessionKey: string) {
+  const phase = attachmentOf(state, sessionKey)?.phase
+
+  if (!phase || state.status !== "open") return true
+
+  if (phase.status === "idle" || phase.status === "registering") return false
+
+  if (phase.status !== "suspended") return true
+
+  return phase.reason === "unlisted" || (phase.reason === "ipc" && state.ipc.status !== "pending")
+}
+
 export function sessionSuspended(state: State, sessionKey: string) {
   return attachmentOf(state, sessionKey)?.phase.status === "suspended"
 }

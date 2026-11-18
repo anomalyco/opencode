@@ -13,7 +13,7 @@ import {
 } from "solid-js"
 import { Button } from "@opencode/ui/button"
 import { Command, createKeyed, LinkHandler, MenuItem, SettingsPage, Style, type Plugin } from "@opencode/plugin/gui"
-import { BuiltinAppLink, builtinContext, BuiltinCommand, BuiltinPanel, onIdle, type BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
+import { BuiltinAppLink, builtinContext, BuiltinCommand, BuiltinPanel, BuiltinPromptGate, onIdle, type BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
 import { Browser, type ExperimentalBrowserTab } from "@opencode/plugin/gui/browser"
 import type definition from "./index"
 import type { Model } from "./model"
@@ -113,8 +113,8 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
   ctx.add(Style, tabStyles)
   ctx.add(Style, commentStyles)
   ctx.add(Style, barStyles)
-  // Everything here serves a mounted session, so the attachment model and the pane's protocol
-  // schemas load when the first session opens instead of at startup.
+  // Everything here serves a session, so the attachment model and the pane's protocol schemas load once the app
+  // idles after startup, or when the first session opens if that is sooner.
   const owner = getOwner()
   // Each load in flight by attempt, for a caller that needs the model before its chunk arrived.
   const loads = new Map<number, Promise<void>>()
@@ -157,6 +157,21 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
 
   const opened = createMemo((seen: boolean) => seen || !!sessions.current(), false)
   createKeyed(opened, () => dispatchModel({ type: "load.requested" }))
+  // A draft has no session until its first prompt is sent, and that prompt must not wait for a chunk to compile.
+  onCleanup(onIdle(() => dispatchModel({ type: "load.requested" })))
+  // The agent's first step lists the browser tools only when this desktop attached to the session before the prompt
+  // reached the server. A draft's session is created by the send itself, so the send waits here for the attachment.
+  ctx.add(BuiltinPromptGate, {
+    async ready(input) {
+      dispatchModel({ type: "load.requested" })
+      const loading = untrack(modelState)
+
+      if (loading.status === "loading") await loads.get(loading.attempt)
+
+      if (input.signal.aborted || ctx.signal.aborted) return
+      await untrack(model)?.ready(input.session, input.signal)
+    },
+  })
 
   builtinContext(ctx).provideFor(Browser, (_consumer, signal) => {
     const owner = uuid()

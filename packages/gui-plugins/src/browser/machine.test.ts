@@ -9,6 +9,7 @@ import {
   sessionFailure,
   sessionPending,
   sessionRegistration,
+  sessionSettled,
   revealGuard,
   sessionSuspended,
   transition,
@@ -127,6 +128,39 @@ describe("browser pane machine", () => {
     expect(types(next.effects)).toEqual(expected === "open" || expected === "select" ? ["focus-strip-tab"] : [])
     expect(attachment(next.state)?.unseen).toEqual(expected === "mark" || expected === "select" ? [tabA] : [])
     expect(revealGuard(next.state, key, tabA) !== undefined).toBe(expected === "open")
+  })
+
+  // A prompt waits while this is false, so its first step lists the browser tools. It must never wait on a state
+  // that only the person, another desktop or a retry timer can end.
+  test("a prompt waits for a registration or a starting pane, and for nothing that cannot attach by itself", () => {
+    const registering = replay(attach()).state
+    const idle = transition(createInitialState(active), attach()[0]!).state
+    expect(sessionSettled(createInitialState(active), key)).toBe(true)
+    expect(sessionSettled(idle, key)).toBe(false)
+    expect(sessionSettled(registering, key)).toBe(false)
+    expect(sessionSettled(ready(), key)).toBe(true)
+
+    // The pane's main plugin is still starting: it attaches as soon as its Ipc is active. One that does not run never does.
+    const starting = replay(attach(), createInitialState({ status: "pending" })).state
+    expect(phase(starting)).toEqual({ status: "suspended", reason: "ipc" })
+    expect(sessionSettled(starting, key)).toBe(false)
+    expect(sessionSettled(transition(starting, { type: "ipc.changed", ipc: active }).state, key)).toBe(false)
+    expect(sessionSettled(replay(attach(), createInitialState({ status: "inactive" })).state, key)).toBe(true)
+
+    // The server evicted the idle attachment: the prompt's wake registers it again, and the prompt waits for that.
+    const evicted = transition(ready(), paneState(ready(), inventory(tab(tabA)), "browser.pane.suspended")).state
+    expect(phase(evicted)).toEqual({ status: "suspended", reason: "idle" })
+    expect(sessionSettled(evicted, key)).toBe(false)
+    const woken = transition(evicted, { type: "session.wake", sessionKey: key }).state
+    expect(phase(woken)?.status).toBe("registering")
+    expect(sessionSettled(woken, key)).toBe(false)
+
+    for (const error of ["browser.pane.replaced", "browser.pane.unsupported", "browser.pane.missing", "browser.pane.registration.closed"]) {
+      const ended = transition(registering, paneState(registering, null, error)).state
+      expect(`${error}: ${sessionSettled(ended, key)}`).toBe(`${error}: true`)
+    }
+
+    expect(sessionSettled(transition(registering, { type: "disposed" }).state, key)).toBe(true)
   })
 
   test("closing the pane the agent showed its page in wins until reopening it or finishing the run", () => {
