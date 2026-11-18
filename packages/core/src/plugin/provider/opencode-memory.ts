@@ -1,5 +1,6 @@
 export * as OpencodeMemory from "./opencode-memory.js"
 
+import os from "os"
 import path from "path"
 import { fileURLToPath } from "url"
 import { Message, ToolFailure } from "@opencode/ai/effect"
@@ -11,6 +12,7 @@ import { Effect, Exit, Fiber, Option, Schema, Scope } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Git } from "../../git.js"
 import { AbsolutePath } from "../../schema.js"
+import { OpencodeMemoryAccess } from "./opencode-memory-access.js"
 import { OpencodeMemoryPolicy } from "./opencode-memory-policy.js"
 import { OpencodeWatches } from "./opencode-watches.js"
 
@@ -217,6 +219,22 @@ export const make = Effect.fnUntraced(function* (
   }).pipe(Effect.catchCause(() => Effect.succeed({})))
   // Moments and searches only need which repository and branch; reading them once per Location keeps Git off them.
   const repository = yield* Effect.cached(checkout)
+  // Where this machine's paths start, to make what a write says about them shareable.
+  const roots = yield* Effect.cached(
+    git.repo
+      .discover(AbsolutePath.make(ctx.location.directory))
+      .pipe(Effect.map((found) => ({ checkout: found?.worktree ?? ctx.location.directory, home: os.homedir() }))),
+  )
+  // A write's fields with this machine's paths made relative, or a refusal before anything is sent when one holds a
+  // secret, naming the field and the kind but never the value.
+  const shared = (tool: string, fields: Record<string, unknown>) =>
+    Effect.gen(function* () {
+      const result = OpencodeMemoryAccess.share(fields, yield* roots)
+      if ("fields" in result) return result.fields
+      return yield* new ToolFailure({
+        message: `Nothing was sent: ${result.field} holds ${result.kind}, which may not go into the workspace's shared memory. Replace it with a variable reference such as $TOKEN or a placeholder such as <password>, then call ${namespace}.${tool} again.`,
+      })
+    })
 
   const call = <S extends Schema.Top>(
     schema: S,
@@ -236,22 +254,23 @@ export const make = Effect.fnUntraced(function* (
     }).pipe(Effect.scoped)
   // A new revision of an entry, answered with its number and diff; the repository, branch and commit are recorded.
   const write = (
+    tool: "edit" | "append" | "rewrite" | "retire",
     sessionID: string,
     id: string,
     revision: number,
     change: Record<string, unknown>,
-    route: "" | "/retire" = "",
   ) =>
     Effect.gen(function* () {
+      const fields = yield* shared(tool, change)
       const expectedRevision = based(sessionID, id, revision)
       const written = yield* call(
         Written,
-        route === "" ? "PATCH" : "POST",
-        `/api/memory/entries/${encodeURIComponent(id)}${route}`,
+        tool === "retire" ? "POST" : "PATCH",
+        `/api/memory/entries/${encodeURIComponent(id)}${tool === "retire" ? "/retire" : ""}`,
         // Console's retire takes no provenance.
-        route === ""
-          ? { expectedRevision, ...change, source: { ...(yield* checkout), sessionID } }
-          : { expectedRevision, ...change },
+        tool === "retire"
+          ? { expectedRevision, ...fields }
+          : { expectedRevision, ...fields, source: { ...(yield* checkout), sessionID } },
       )
       wrote(sessionID, id, expectedRevision, written)
       return written
@@ -498,8 +517,7 @@ export const make = Effect.fnUntraced(function* (
             // The key is the tool call's own: Console answers a retry of this call with what it saved, while an
             // agent's re-issue is a new call that Console's duplicate check catches as this session's own entry.
             const published = yield* call(Written, "POST", "/api/memory/entries", {
-              ...metadata(input),
-              body: input.body,
+              ...(yield* shared("publish", { ...metadata(input), body: input.body })),
               ...(input.distinctFrom === undefined ? {} : { distinctFrom: input.distinctFrom }),
               source: { ...(yield* checkout), sessionID: context.sessionID },
               idempotencyKey: `${context.sessionID}:${context.id}`.slice(0, 128),
@@ -542,7 +560,7 @@ export const make = Effect.fnUntraced(function* (
                 message: "edit takes oldText and newText, edits, or a new kind, title, tags, paths or errors",
               }),
             )
-          return write(context.sessionID, input.id, input.revision, {
+          return write("edit", context.sessionID, input.id, input.revision, {
             ...(edits.length === 0 ? {} : { edits }),
             ...fields,
           }).pipe(Effect.map((written) => ({ output: written, content: receipt(input.id, written) })))
@@ -560,7 +578,7 @@ export const make = Effect.fnUntraced(function* (
         output: Written,
         options: { namespace, codemode: true, pinned: true },
         execute: (input, context) =>
-          write(context.sessionID, input.id, input.revision, { append: input.text }).pipe(
+          write("append", context.sessionID, input.id, input.revision, { append: input.text }).pipe(
             Effect.map((written) => ({ output: written, content: receipt(input.id, written) })),
           ),
       })
@@ -577,7 +595,7 @@ export const make = Effect.fnUntraced(function* (
         output: Written,
         options: { namespace, codemode: true, pinned: true },
         execute: (input, context) =>
-          write(context.sessionID, input.id, input.revision, { body: input.body, ...metadata(input) }).pipe(
+          write("rewrite", context.sessionID, input.id, input.revision, { body: input.body, ...metadata(input) }).pipe(
             Effect.map((written) => ({ output: written, content: receipt(input.id, written) })),
           ),
       })
@@ -596,13 +614,10 @@ export const make = Effect.fnUntraced(function* (
         output: Written,
         options: { namespace, codemode: true, pinned: true },
         execute: (input, context) =>
-          write(
-            context.sessionID,
-            input.id,
-            input.revision,
-            { reason: input.reason, ...(input.supersededBy === undefined ? {} : { supersededBy: input.supersededBy }) },
-            "/retire",
-          ).pipe(
+          write("retire", context.sessionID, input.id, input.revision, {
+            reason: input.reason,
+            ...(input.supersededBy === undefined ? {} : { supersededBy: input.supersededBy }),
+          }).pipe(
             Effect.map((written) => ({
               output: written,
               content: `${written.id ?? input.id} is retired (r${written.revision}); it's no longer searched or injected.`,

@@ -35,6 +35,28 @@ describe("OpencodeMemoryAccess.secret", () => {
   })
 })
 
+describe("OpencodeMemoryAccess.share", () => {
+  test("localizes every text but oldText, and names the first field with a secret", () => {
+    const roots = { checkout: "/home/ada/src/api", home: "/home/ada" }
+    expect(
+      OpencodeMemoryAccess.share(
+        {
+          kind: "gotcha",
+          paths: ["/home/ada/src/api/db/"],
+          edits: [{ oldText: "/home/ada/src/api/x", newText: "/home/ada/src/api/y" }],
+        },
+        roots,
+      ),
+    ).toEqual({
+      fields: { kind: "gotcha", paths: ["db/"], edits: [{ oldText: "/home/ada/src/api/x", newText: "y" }] },
+    })
+    expect(OpencodeMemoryAccess.share({ title: "ok", errors: ["fine", "mysql -uroot -ps3cret"] }, roots)).toEqual({
+      field: "errors[1]",
+      kind: "a password after mysql -p",
+    })
+  })
+})
+
 describe("OpencodeMemoryAccess.localize", () => {
   test("makes the checkout's paths relative and other home paths start at ~/", () => {
     const roots = { checkout: "/home/ada/src/api", home: "/home/ada" }

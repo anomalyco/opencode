@@ -75,6 +75,35 @@ export function localize(text: string, roots: { readonly checkout?: string; read
   return replace(roots.home, "~/", replace(roots.checkout, "", text))
 }
 
+/**
+ * A write's fields as they may leave the machine: every text localized, except `oldText`, which must match the stored
+ * body as it is. Or the first field holding a secret, by name and kind, when nothing may be sent.
+ */
+export function share(
+  fields: Record<string, unknown>,
+  roots: { readonly checkout?: string; readonly home?: string },
+): { readonly fields: Record<string, unknown> } | { readonly field: string; readonly kind: string } {
+  const found: Array<{ field: string; kind: string }> = []
+  const visit = (value: unknown, field: string): unknown => {
+    if (typeof value === "string") {
+      const kind = secret(value)
+      if (kind !== undefined) found.push({ field, kind })
+      return localize(value, roots)
+    }
+    if (Array.isArray(value)) return value.map((item, index) => visit(item, `${field}[${index}]`))
+    if (typeof value === "object" && value !== null)
+      return Object.fromEntries(
+        Object.entries(value).map(([key, item]) => [
+          key,
+          key === "oldText" ? item : visit(item, field === "" ? key : `${field}.${key}`),
+        ]),
+      )
+    return value
+  }
+  const shared = visit(fields, "")
+  return found[0] ?? { fields: shared as Record<string, unknown> }
+}
+
 function escape(text: string) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }

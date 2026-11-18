@@ -423,6 +423,59 @@ describe("OpencodePlugin memory", () => {
     ),
   )
 
+  it.effect("sends nothing that holds a secret, and this machine's paths relative to the checkout", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        const { host } = yield* start(console)
+        const session = yield* host.session.create({})
+        const directory = (yield* Location.Service).directory
+        const publish = yield* memoryTool("publish")
+
+        const asked = console.state.requests.length
+        const refused = yield* publish
+          .execute(
+            { kind: "procedure", title: "Reach the database", body: "Run `PGPASSWORD=hunter2 psql -h db app`." },
+            context(session.id),
+          )
+          .pipe(Effect.flip)
+        expect(refused.message).toBe(
+          "Nothing was sent: body holds a password in PGPASSWORD=, which may not go into the workspace's shared memory. Replace it with a variable reference such as $TOKEN or a placeholder such as <password>, then call memory.publish again.",
+        )
+        expect(refused.message).not.toContain("hunter2")
+        expect(console.state.requests.length).toBe(asked)
+
+        const edit = yield* memoryTool("edit")
+        const header = yield* edit
+          .execute(
+            {
+              id: "mem_1",
+              revision: 1,
+              edits: [{ oldText: "More", newText: "curl -H 'Authorization: Bearer abc123'" }],
+            },
+            context(session.id),
+          )
+          .pipe(Effect.flip)
+        expect(header.message).toStartWith("Nothing was sent: edits[0].newText holds a bearer token")
+        expect(header.message).toEndWith("then call memory.edit again.")
+        expect(console.state.requests.length).toBe(asked)
+
+        yield* publish.execute(
+          {
+            kind: "procedure",
+            title: "Reach the database",
+            body: `Run \`PGPASSWORD=$PGPASSWORD psql\` from ${directory}; the schema is ${path.join(directory, "db/schema.sql")}.`,
+            paths: [path.join(directory, "db/")],
+          },
+          context(session.id),
+        )
+        expect(console.state.requests.at(-1)?.body).toMatchObject({
+          body: "Run `PGPASSWORD=$PGPASSWORD psql` from .; the schema is db/schema.sql.",
+          paths: ["db/"],
+        })
+      }),
+    ),
+  )
+
   it.effect("edits several places against the revision read, and passes on what Console says to fix a miss", () =>
     withConsole((console) =>
       Effect.gen(function* () {
