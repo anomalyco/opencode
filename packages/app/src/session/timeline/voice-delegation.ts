@@ -14,8 +14,9 @@ const decodeBody = Schema.decodeUnknownOption(
 )
 
 /** The user's spoken request and the voice agent's framing of it, or undefined for any other prompt. */
-export function parseVoiceDelegation(text: string) {
-  if (!text.startsWith("Voice delegation.") && !text.startsWith("Voice delegation (continued).")) return
+export function parseVoiceDelegation(text: string | undefined) {
+  // The same missing prompt text that is not a file comment is not a voice call either.
+  if (!text || (!text.startsWith("Voice delegation.") && !text.startsWith("Voice delegation (continued)."))) return
 
   const newline = text.indexOf("\n")
 

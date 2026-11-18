@@ -61,6 +61,10 @@ describe("parseVoiceDelegation", () => {
     expect(parseVoiceDelegation(text)).toBeUndefined()
   })
 
+  test("a missing prompt is not a voice call", () => {
+    expect(parseVoiceDelegation(undefined)).toBeUndefined()
+  })
+
   test("reads Desktop's first voice calls, whose voice field held the raw transcript, without a framing", () => {
     const text = `Voice delegation.\n${JSON.stringify({ instruction: "Fix the flaky upload test.", voice: "um so the uh upload test" })}`
 

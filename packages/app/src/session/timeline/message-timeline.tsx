@@ -234,15 +234,17 @@ function MessageTimelineView(
       if (Predicate.isTagged(row, "UserMessage")) {
         const message = messageByID().get(row.userMessageID)
 
-        if (message?.type !== "user" || message.text.length > 1024 || message.files?.length || message.agents?.length)
-          return false
+        if (message?.type !== "user") return false
+        const text = message.text ?? ""
+
+        if (text.length > 1024 || message.files?.length || message.agents?.length) return false
         const presentation = readPromptPresentation(message.metadata)
 
         return (
-          (presentation?.displayText ?? message.text).length <= 1024 &&
+          (presentation?.displayText ?? text).length <= 1024 &&
           !presentation?.comments?.length &&
           !presentation?.attachments.length &&
-          !parseCommentNote(message.text)
+          !parseCommentNote(text)
         )
       }
 
@@ -308,8 +310,9 @@ function MessageTimelineView(
     projection,
     presentation: (message: SessionMessageUser) => {
       const value = readPromptPresentation(message.metadata)
-      const parsed = value ? undefined : parseCommentNote(message.text)
-      const voice = parseVoiceDelegation(value?.displayText ?? message.text)
+      const text = message.text ?? ""
+      const parsed = value ? undefined : parseCommentNote(text)
+      const voice = parseVoiceDelegation(value?.displayText ?? text)
 
       return {
         displayText: voice ? (voice.framing ?? voice.instruction) : value?.displayText,

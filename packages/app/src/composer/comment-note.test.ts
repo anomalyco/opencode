@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { commentContextItem, readPromptPresentation } from "./comment-note"
+import { commentContextItem, parseCommentNote, readPromptPresentation } from "./comment-note"
 import { createMemoryComposerState } from "./state"
 
 const durable = {
@@ -78,5 +78,11 @@ describe("plugin notes", () => {
 
   test("return to the composer without their live part", () => {
     expect(commentContextItem(note)).toEqual({ ...durable, commentID: expect.any(String) })
+  })
+})
+
+describe("parseCommentNote", () => {
+  test("a missing prompt is not a file comment", () => {
+    expect(parseCommentNote(undefined)).toBeUndefined()
   })
 })

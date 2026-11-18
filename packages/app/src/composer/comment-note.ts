@@ -105,7 +105,10 @@ export function formatCommentNote(input: { path: string; selection?: FileSelecti
   return `The user made the following comment regarding ${range} of ${input.path}: ${input.comment}`
 }
 
-export function parseCommentNote(text: string) {
+export function parseCommentNote(text: string | undefined) {
+  // A user message can omit text. The session row still asks whether it was a file comment.
+  if (!text) return
+
   const match = text.match(
     /^The user made the following comment regarding (this file|line (\d+)|lines (\d+) through (\d+)) of (.+?): ([\s\S]+)$/,
   )
