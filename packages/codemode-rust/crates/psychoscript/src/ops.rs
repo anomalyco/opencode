@@ -1104,7 +1104,7 @@ impl<'rt> Vm<'rt> {
                 }
             }
         }
-        Err(self.type_error("Cannot convert object to primitive value"))
+        Err(self.type_error("Cannot convert object to primitive value."))
     }
 
     /// An operand of a binary operator that converts its operands: once either is an object, the reference's

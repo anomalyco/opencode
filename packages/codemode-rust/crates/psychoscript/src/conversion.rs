@@ -526,7 +526,7 @@ fn begin(vm: &mut Vm, fr: Frame) -> Result<Step, Value> {
 fn next_method(vm: &mut Vm, fr: Frame) -> Result<Step, Value> {
     let v = fr.get(vm, VALUE);
     let Value::Obj(id) = v else {
-        return Err(vm.type_error("Cannot convert object to primitive value"));
+        return Err(vm.type_error("Cannot convert object to primitive value."));
     };
     let names = match hint_of(fr.index(vm, HINT)) {
         Hint::String => [vm.names.to_string, vm.names.value_of],
@@ -541,7 +541,7 @@ fn next_method(vm: &mut Vm, fr: Frame) -> Result<Step, Value> {
             return fr.call_slots(vm, Slot::pack(f), Slot::pack(v), []);
         }
     }
-    Err(vm.type_error("Cannot convert object to primitive value"))
+    Err(vm.type_error("Cannot convert object to primitive value."))
 }
 
 /// A value converted to `r`: kept with the answers, then the operation or built-in runs again.
