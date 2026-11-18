@@ -7,1520 +7,216 @@ use crate::error::Error;
 use crate::transport::SseResponse;
 use opencode_api_types::client;
 
+macro_rules! endpoint {
+    ($doc:literal, $name:ident, $builder:ident, $send:ident, $output:ty $(, $arg:ident: $input:ty)?) => {
+        #[doc = $doc]
+        pub async fn $name(&self $(, $arg: &$input)?) -> Result<$output, Error> {
+            self.$send(Self::$builder($($arg)?)?).await
+        }
+        pub fn $builder($($arg: &$input)?) -> Result<Call, Error> {
+            client::$name($($arg)?).try_into()
+        }
+    };
+}
+
 impl Client {
-    /// `GET /api/info` (`info`)
-    pub async fn server_info(&self) -> Result<ServerInfoOutput, Error> {
-        self.json(Self::server_info_call()?).await
-    }
-    pub fn server_info_call() -> Result<Call, Error> {
-        client::server_info().try_into()
-    }
-
-    /// `POST /api/pair` (`pair`)
-    pub async fn server_pair(&self) -> Result<ServerPairOutput, Error> {
-        self.json(Self::server_pair_call()?).await
-    }
-    pub fn server_pair_call() -> Result<Call, Error> {
-        client::server_pair().try_into()
-    }
-
-    /// `GET /auth/connect/:code` (`connect`)
-    pub async fn server_connect(&self, input: &ServerConnectInput) -> Result<ServerConnectOutput, Error> {
-        self.json(Self::server_connect_call(input)?).await
-    }
-    pub fn server_connect_call(input: &ServerConnectInput) -> Result<Call, Error> {
-        client::server_connect(input).try_into()
-    }
-
-    /// `GET /api/location` (`get`)
-    pub async fn location_get(&self, input: &LocationGetInput) -> Result<LocationGetOutput, Error> {
-        self.json(Self::location_get_call(input)?).await
-    }
-    pub fn location_get_call(input: &LocationGetInput) -> Result<Call, Error> {
-        client::location_get(input).try_into()
-    }
-
-    /// `POST /api/location/reload` (`reload`)
-    pub async fn location_reload(&self) -> Result<(), Error> {
-        self.empty(Self::location_reload_call()?).await
-    }
-    pub fn location_reload_call() -> Result<Call, Error> {
-        client::location_reload().try_into()
-    }
-
-    /// `GET /api/agent` (`list`)
-    pub async fn agent_list(&self, input: &AgentListInput) -> Result<AgentListOutput, Error> {
-        self.json(Self::agent_list_call(input)?).await
-    }
-    pub fn agent_list_call(input: &AgentListInput) -> Result<Call, Error> {
-        client::agent_list(input).try_into()
-    }
-
-    /// `GET /api/agent/:agentID` (`get`)
-    pub async fn agent_get(&self, input: &AgentGetInput) -> Result<AgentGetOutput, Error> {
-        self.json(Self::agent_get_call(input)?).await
-    }
-    pub fn agent_get_call(input: &AgentGetInput) -> Result<Call, Error> {
-        client::agent_get(input).try_into()
-    }
-
-    /// `GET /api/plugin` (`list`)
-    pub async fn plugin_list(&self, input: &PluginListInput) -> Result<PluginListOutput, Error> {
-        self.json(Self::plugin_list_call(input)?).await
-    }
-    pub fn plugin_list_call(input: &PluginListInput) -> Result<Call, Error> {
-        client::plugin_list(input).try_into()
-    }
-
-    /// `GET /api/plugin/gui` (`gui`)
-    pub async fn plugin_gui(&self, input: &PluginGuiInput) -> Result<PluginGuiOutput, Error> {
-        self.json(Self::plugin_gui_call(input)?).await
-    }
-    pub fn plugin_gui_call(input: &PluginGuiInput) -> Result<Call, Error> {
-        client::plugin_gui(input).try_into()
-    }
-
-    /// `POST /api/plugin/check` (`check`)
-    pub async fn plugin_check(&self, input: &PluginCheckInput) -> Result<PluginCheckOutput, Error> {
-        self.json(Self::plugin_check_call(input)?).await
-    }
-    pub fn plugin_check_call(input: &PluginCheckInput) -> Result<Call, Error> {
-        client::plugin_check(input).try_into()
-    }
-
-    /// `POST /api/plugin/update` (`update`)
-    pub async fn plugin_update(&self, input: &PluginUpdateInput) -> Result<(), Error> {
-        self.empty(Self::plugin_update_call(input)?).await
-    }
-    pub fn plugin_update_call(input: &PluginUpdateInput) -> Result<Call, Error> {
-        client::plugin_update(input).try_into()
-    }
-
-    /// `GET /api/session` (`list`)
-    pub async fn session_list(&self, input: &SessionListInput) -> Result<SessionListOutput, Error> {
-        self.json(Self::session_list_call(input)?).await
-    }
-    pub fn session_list_call(input: &SessionListInput) -> Result<Call, Error> {
-        client::session_list(input).try_into()
-    }
-
-    /// `POST /api/session` (`create`)
-    pub async fn session_create(&self, input: &SessionCreateInput) -> Result<SessionCreateOutput, Error> {
-        self.data(Self::session_create_call(input)?).await
-    }
-    pub fn session_create_call(input: &SessionCreateInput) -> Result<Call, Error> {
-        client::session_create(input).try_into()
-    }
-
-    /// `GET /api/session/active` (`active`)
-    pub async fn session_active(&self) -> Result<SessionActiveOutput, Error> {
-        self.data(Self::session_active_call()?).await
-    }
-    pub fn session_active_call() -> Result<Call, Error> {
-        client::session_active().try_into()
-    }
-
-    /// `GET /api/session/:sessionID` (`get`)
-    pub async fn session_get(&self, input: &SessionGetInput) -> Result<SessionGetOutput, Error> {
-        self.data(Self::session_get_call(input)?).await
-    }
-    pub fn session_get_call(input: &SessionGetInput) -> Result<Call, Error> {
-        client::session_get(input).try_into()
-    }
-
-    /// `DELETE /api/session/:sessionID` (`remove`)
-    pub async fn session_remove(&self, input: &SessionRemoveInput) -> Result<(), Error> {
-        self.empty(Self::session_remove_call(input)?).await
-    }
-    pub fn session_remove_call(input: &SessionRemoveInput) -> Result<Call, Error> {
-        client::session_remove(input).try_into()
-    }
-
-    /// `POST /api/session/:sessionID/fork` (`fork`)
-    pub async fn session_fork(&self, input: &SessionForkInput) -> Result<SessionForkOutput, Error> {
-        self.data(Self::session_fork_call(input)?).await
-    }
-    pub fn session_fork_call(input: &SessionForkInput) -> Result<Call, Error> {
-        client::session_fork(input).try_into()
-    }
-
-    /// `POST /api/session/:sessionID/agent` (`switchAgent`)
-    pub async fn session_switch_agent(&self, input: &SessionSwitchAgentInput) -> Result<(), Error> {
-        self.empty(Self::session_switch_agent_call(input)?).await
-    }
-    pub fn session_switch_agent_call(input: &SessionSwitchAgentInput) -> Result<Call, Error> {
-        client::session_switch_agent(input).try_into()
-    }
-
-    /// `POST /api/session/:sessionID/model` (`switchModel`)
-    pub async fn session_switch_model(&self, input: &SessionSwitchModelInput) -> Result<(), Error> {
-        self.empty(Self::session_switch_model_call(input)?).await
-    }
-    pub fn session_switch_model_call(input: &SessionSwitchModelInput) -> Result<Call, Error> {
-        client::session_switch_model(input).try_into()
-    }
-
-    /// `PATCH /api/session/:sessionID` (`update`)
-    pub async fn session_update(&self, input: &SessionUpdateInput) -> Result<(), Error> {
-        self.empty(Self::session_update_call(input)?).await
-    }
-    pub fn session_update_call(input: &SessionUpdateInput) -> Result<Call, Error> {
-        client::session_update(input).try_into()
-    }
-
-    /// `POST /api/session/:sessionID/move` (`move`)
-    pub async fn session_move(&self, input: &SessionMoveInput) -> Result<(), Error> {
-        self.empty(Self::session_move_call(input)?).await
-    }
-    pub fn session_move_call(input: &SessionMoveInput) -> Result<Call, Error> {
-        client::session_move(input).try_into()
-    }
-
-    /// `POST /api/session/:sessionID/prompt` (`prompt`)
-    pub async fn session_prompt(&self, input: &SessionPromptInput) -> Result<SessionPromptOutput, Error> {
-        self.data(Self::session_prompt_call(input)?).await
-    }
-    pub fn session_prompt_call(input: &SessionPromptInput) -> Result<Call, Error> {
-        client::session_prompt(input).try_into()
-    }
-
-    /// `POST /api/session/:sessionID/command` (`command`)
-    pub async fn session_command(&self, input: &SessionCommandInput) -> Result<(), Error> {
-        self.empty(Self::session_command_call(input)?).await
-    }
-    pub fn session_command_call(input: &SessionCommandInput) -> Result<Call, Error> {
-        client::session_command(input).try_into()
-    }
-
-    /// `POST /api/session/:sessionID/synthetic` (`synthetic`)
-    pub async fn session_synthetic(&self, input: &SessionSyntheticInput) -> Result<SessionSyntheticOutput, Error> {
-        self.data(Self::session_synthetic_call(input)?).await
-    }
-    pub fn session_synthetic_call(input: &SessionSyntheticInput) -> Result<Call, Error> {
-        client::session_synthetic(input).try_into()
-    }
-
-    /// `POST /api/session/:sessionID/shell` (`shell`)
-    pub async fn session_shell(&self, input: &SessionShellInput) -> Result<(), Error> {
-        self.empty(Self::session_shell_call(input)?).await
-    }
-    pub fn session_shell_call(input: &SessionShellInput) -> Result<Call, Error> {
-        client::session_shell(input).try_into()
-    }
-
-    /// `POST /api/session/:sessionID/compact` (`compact`)
-    pub async fn session_compact(&self, input: &SessionCompactInput) -> Result<SessionCompactOutput, Error> {
-        self.data(Self::session_compact_call(input)?).await
-    }
-    pub fn session_compact_call(input: &SessionCompactInput) -> Result<Call, Error> {
-        client::session_compact(input).try_into()
-    }
-
-    /// `POST /api/session/:sessionID/revert/stage` (`revert.stage`)
-    pub async fn session_revert_stage(
-        &self,
-        input: &SessionRevertStageInput,
-    ) -> Result<SessionRevertStageOutput, Error> {
-        self.data(Self::session_revert_stage_call(input)?).await
-    }
-    pub fn session_revert_stage_call(input: &SessionRevertStageInput) -> Result<Call, Error> {
-        client::session_revert_stage(input).try_into()
-    }
-
-    /// `DELETE /api/session/:sessionID/revert` (`revert.clear`)
-    pub async fn session_revert_clear(&self, input: &SessionRevertClearInput) -> Result<(), Error> {
-        self.empty(Self::session_revert_clear_call(input)?).await
-    }
-    pub fn session_revert_clear_call(input: &SessionRevertClearInput) -> Result<Call, Error> {
-        client::session_revert_clear(input).try_into()
-    }
-
-    /// `POST /api/session/:sessionID/revert/commit` (`revert.commit`)
-    pub async fn session_revert_commit(&self, input: &SessionRevertCommitInput) -> Result<(), Error> {
-        self.empty(Self::session_revert_commit_call(input)?).await
-    }
-    pub fn session_revert_commit_call(input: &SessionRevertCommitInput) -> Result<Call, Error> {
-        client::session_revert_commit(input).try_into()
-    }
-
-    /// `GET /api/session/:sessionID/context` (`context`)
-    pub async fn session_context(&self, input: &SessionContextInput) -> Result<SessionContextOutput, Error> {
-        self.data(Self::session_context_call(input)?).await
-    }
-    pub fn session_context_call(input: &SessionContextInput) -> Result<Call, Error> {
-        client::session_context(input).try_into()
-    }
-
-    /// `GET /api/session/:sessionID/diff` (`diff`)
-    pub async fn session_diff(&self, input: &SessionDiffInput) -> Result<SessionDiffOutput, Error> {
-        self.data(Self::session_diff_call(input)?).await
-    }
-    pub fn session_diff_call(input: &SessionDiffInput) -> Result<Call, Error> {
-        client::session_diff(input).try_into()
-    }
-
-    /// `GET /api/session/:sessionID/inbox` (`inbox.list`)
-    pub async fn session_inbox_list(&self, input: &SessionInboxListInput) -> Result<SessionInboxListOutput, Error> {
-        self.data(Self::session_inbox_list_call(input)?).await
-    }
-    pub fn session_inbox_list_call(input: &SessionInboxListInput) -> Result<Call, Error> {
-        client::session_inbox_list(input).try_into()
-    }
-
-    /// `DELETE /api/session/:sessionID/inbox/:inboxID` (`inbox.cancel`)
-    pub async fn session_inbox_cancel(&self, input: &SessionInboxCancelInput) -> Result<(), Error> {
-        self.empty(Self::session_inbox_cancel_call(input)?).await
-    }
-    pub fn session_inbox_cancel_call(input: &SessionInboxCancelInput) -> Result<Call, Error> {
-        client::session_inbox_cancel(input).try_into()
-    }
-
-    /// `PATCH /api/session/:sessionID/inbox/:inboxID` (`inbox.update`)
-    pub async fn session_inbox_update(&self, input: &SessionInboxUpdateInput) -> Result<(), Error> {
-        self.empty(Self::session_inbox_update_call(input)?).await
-    }
-    pub fn session_inbox_update_call(input: &SessionInboxUpdateInput) -> Result<Call, Error> {
-        client::session_inbox_update(input).try_into()
-    }
-
-    /// `POST /api/session/:sessionID/generate` (`generate`)
-    pub async fn session_generate(&self, input: &SessionGenerateInput) -> Result<SessionGenerateOutput, Error> {
-        self.data(Self::session_generate_call(input)?).await
-    }
-    pub fn session_generate_call(input: &SessionGenerateInput) -> Result<Call, Error> {
-        client::session_generate(input).try_into()
-    }
-
-    /// `POST /api/session/:sessionID/interrupt` (`interrupt`)
-    pub async fn session_interrupt(&self, input: &SessionInterruptInput) -> Result<SessionInterruptOutput, Error> {
-        self.json(Self::session_interrupt_call(input)?).await
-    }
-    pub fn session_interrupt_call(input: &SessionInterruptInput) -> Result<Call, Error> {
-        client::session_interrupt(input).try_into()
-    }
-
-    /// `POST /api/session/:sessionID/background` (`background`)
-    pub async fn session_background(&self, input: &SessionBackgroundInput) -> Result<(), Error> {
-        self.empty(Self::session_background_call(input)?).await
-    }
-    pub fn session_background_call(input: &SessionBackgroundInput) -> Result<Call, Error> {
-        client::session_background(input).try_into()
-    }
-
-    /// `GET /api/session/:sessionID/message/:messageID` (`message.get`)
-    pub async fn session_message_get(&self, input: &SessionMessageGetInput) -> Result<SessionMessageGetOutput, Error> {
-        self.data(Self::session_message_get_call(input)?).await
-    }
-    pub fn session_message_get_call(input: &SessionMessageGetInput) -> Result<Call, Error> {
-        client::session_message_get(input).try_into()
-    }
-
-    /// `GET /api/session/:sessionID/form` (`form.list`)
-    pub async fn session_form_list(&self, input: &SessionFormListInput) -> Result<SessionFormListOutput, Error> {
-        self.data(Self::session_form_list_call(input)?).await
-    }
-    pub fn session_form_list_call(input: &SessionFormListInput) -> Result<Call, Error> {
-        client::session_form_list(input).try_into()
-    }
-
-    /// `POST /api/session/:sessionID/form` (`form.create`)
-    pub async fn session_form_create(&self, input: &SessionFormCreateInput) -> Result<SessionFormCreateOutput, Error> {
-        self.data(Self::session_form_create_call(input)?).await
-    }
-    pub fn session_form_create_call(input: &SessionFormCreateInput) -> Result<Call, Error> {
-        client::session_form_create(input).try_into()
-    }
-
-    /// `GET /api/session/:sessionID/form/:formID` (`form.get`)
-    pub async fn session_form_get(&self, input: &SessionFormGetInput) -> Result<SessionFormGetOutput, Error> {
-        self.data(Self::session_form_get_call(input)?).await
-    }
-    pub fn session_form_get_call(input: &SessionFormGetInput) -> Result<Call, Error> {
-        client::session_form_get(input).try_into()
-    }
-
-    /// `POST /api/session/:sessionID/form/:formID/reply` (`form.reply`)
-    pub async fn session_form_reply(&self, input: &SessionFormReplyInput) -> Result<(), Error> {
-        self.empty(Self::session_form_reply_call(input)?).await
-    }
-    pub fn session_form_reply_call(input: &SessionFormReplyInput) -> Result<Call, Error> {
-        client::session_form_reply(input).try_into()
-    }
-
-    /// `DELETE /api/session/:sessionID/form/:formID` (`form.cancel`)
-    pub async fn session_form_cancel(&self, input: &SessionFormCancelInput) -> Result<(), Error> {
-        self.empty(Self::session_form_cancel_call(input)?).await
-    }
-    pub fn session_form_cancel_call(input: &SessionFormCancelInput) -> Result<Call, Error> {
-        client::session_form_cancel(input).try_into()
-    }
-
-    /// `PUT /api/session/:sessionID/environment` (`environment`)
-    pub async fn session_environment(&self, input: &SessionEnvironmentInput) -> Result<(), Error> {
-        self.empty(Self::session_environment_call(input)?).await
-    }
-    pub fn session_environment_call(input: &SessionEnvironmentInput) -> Result<Call, Error> {
-        client::session_environment(input).try_into()
-    }
-
-    /// `POST /api/session/:sessionID/view` (`view`)
-    pub async fn session_view(&self, input: &SessionViewInput) -> Result<(), Error> {
-        self.empty(Self::session_view_call(input)?).await
-    }
-    pub fn session_view_call(input: &SessionViewInput) -> Result<Call, Error> {
-        client::session_view(input).try_into()
-    }
-
-    /// `GET /api/experimental/session/stats` (`stats`)
-    pub async fn experimental_session_stats(
-        &self,
-        input: &ExperimentalSessionStatsInput,
-    ) -> Result<ExperimentalSessionStatsOutput, Error> {
-        self.data(Self::experimental_session_stats_call(input)?).await
-    }
-    pub fn experimental_session_stats_call(input: &ExperimentalSessionStatsInput) -> Result<Call, Error> {
-        client::experimental_session_stats(input).try_into()
-    }
-
-    /// `POST /api/experimental/session/import` (`import`)
-    pub async fn experimental_session_import(
-        &self,
-        input: &ExperimentalSessionImportInput,
-    ) -> Result<ExperimentalSessionImportOutput, Error> {
-        self.data(Self::experimental_session_import_call(input)?).await
-    }
-    pub fn experimental_session_import_call(input: &ExperimentalSessionImportInput) -> Result<Call, Error> {
-        client::experimental_session_import(input).try_into()
-    }
-
-    /// `GET /api/experimental/session/:sessionID/export` (`export`)
-    pub async fn experimental_session_export(
-        &self,
-        input: &ExperimentalSessionExportInput,
-    ) -> Result<ExperimentalSessionExportOutput, Error> {
-        self.data(Self::experimental_session_export_call(input)?).await
-    }
-    pub fn experimental_session_export_call(input: &ExperimentalSessionExportInput) -> Result<Call, Error> {
-        client::experimental_session_export(input).try_into()
-    }
-
-    /// `POST /api/experimental/session/:sessionID/skill` (`skill`)
-    pub async fn experimental_session_skill(&self, input: &ExperimentalSessionSkillInput) -> Result<(), Error> {
-        self.empty(Self::experimental_session_skill_call(input)?).await
-    }
-    pub fn experimental_session_skill_call(input: &ExperimentalSessionSkillInput) -> Result<Call, Error> {
-        client::experimental_session_skill(input).try_into()
-    }
-
-    /// `POST /api/experimental/session/:sessionID/wait` (`wait`)
-    pub async fn experimental_session_wait(&self, input: &ExperimentalSessionWaitInput) -> Result<(), Error> {
-        self.empty(Self::experimental_session_wait_call(input)?).await
-    }
-    pub fn experimental_session_wait_call(input: &ExperimentalSessionWaitInput) -> Result<Call, Error> {
-        client::experimental_session_wait(input).try_into()
-    }
-
-    /// `GET /api/experimental/session/:sessionID/instructions/entries` (`instructions.entry.list`)
-    pub async fn experimental_session_instructions_entry_list(
-        &self,
-        input: &ExperimentalSessionInstructionsEntryListInput,
-    ) -> Result<ExperimentalSessionInstructionsEntryListOutput, Error> {
-        self.data(Self::experimental_session_instructions_entry_list_call(input)?).await
-    }
-    pub fn experimental_session_instructions_entry_list_call(
-        input: &ExperimentalSessionInstructionsEntryListInput,
-    ) -> Result<Call, Error> {
-        client::experimental_session_instructions_entry_list(input).try_into()
-    }
-
-    /// `PUT /api/experimental/session/:sessionID/instructions/entries/:key` (`instructions.entry.put`)
-    pub async fn experimental_session_instructions_entry_put(
-        &self,
-        input: &ExperimentalSessionInstructionsEntryPutInput,
-    ) -> Result<(), Error> {
-        self.empty(Self::experimental_session_instructions_entry_put_call(input)?).await
-    }
-    pub fn experimental_session_instructions_entry_put_call(
-        input: &ExperimentalSessionInstructionsEntryPutInput,
-    ) -> Result<Call, Error> {
-        client::experimental_session_instructions_entry_put(input).try_into()
-    }
-
-    /// `DELETE /api/experimental/session/:sessionID/instructions/entries/:key` (`instructions.entry.remove`)
-    pub async fn experimental_session_instructions_entry_remove(
-        &self,
-        input: &ExperimentalSessionInstructionsEntryRemoveInput,
-    ) -> Result<(), Error> {
-        self.empty(Self::experimental_session_instructions_entry_remove_call(input)?).await
-    }
-    pub fn experimental_session_instructions_entry_remove_call(
-        input: &ExperimentalSessionInstructionsEntryRemoveInput,
-    ) -> Result<Call, Error> {
-        client::experimental_session_instructions_entry_remove(input).try_into()
-    }
-
-    /// `GET /api/experimental/session/:sessionID/log` (`log`)
-    pub async fn experimental_session_log(
-        &self,
-        input: &ExperimentalSessionLogInput,
-    ) -> Result<SseResponse<ExperimentalSessionLogOutput>, Error> {
-        self.sse(Self::experimental_session_log_call(input)?).await
-    }
-    pub fn experimental_session_log_call(input: &ExperimentalSessionLogInput) -> Result<Call, Error> {
-        client::experimental_session_log(input).try_into()
-    }
-
-    /// `GET /api/session/:sessionID/message` (`list`)
-    pub async fn message_list(&self, input: &MessageListInput) -> Result<MessageListOutput, Error> {
-        self.json(Self::message_list_call(input)?).await
-    }
-    pub fn message_list_call(input: &MessageListInput) -> Result<Call, Error> {
-        client::message_list(input).try_into()
-    }
-
-    /// `GET /api/model` (`list`)
-    pub async fn model_list(&self, input: &ModelListInput) -> Result<ModelListOutput, Error> {
-        self.json(Self::model_list_call(input)?).await
-    }
-    pub fn model_list_call(input: &ModelListInput) -> Result<Call, Error> {
-        client::model_list(input).try_into()
-    }
-
-    /// `GET /api/model/default` (`default`)
-    pub async fn model_default(&self, input: &ModelDefaultInput) -> Result<ModelDefaultOutput, Error> {
-        self.json(Self::model_default_call(input)?).await
-    }
-    pub fn model_default_call(input: &ModelDefaultInput) -> Result<Call, Error> {
-        client::model_default(input).try_into()
-    }
-
-    /// `POST /api/experimental/generate/text` (`text`)
-    pub async fn experimental_generate_text(
-        &self,
-        input: &ExperimentalGenerateTextInput,
-    ) -> Result<ExperimentalGenerateTextOutput, Error> {
-        self.data(Self::experimental_generate_text_call(input)?).await
-    }
-    pub fn experimental_generate_text_call(input: &ExperimentalGenerateTextInput) -> Result<Call, Error> {
-        client::experimental_generate_text(input).try_into()
-    }
-
-    /// `POST /api/experimental/generate/image` (`image`)
-    pub async fn experimental_generate_image(
-        &self,
-        input: &ExperimentalGenerateImageInput,
-    ) -> Result<ExperimentalGenerateImageOutput, Error> {
-        self.data(Self::experimental_generate_image_call(input)?).await
-    }
-    pub fn experimental_generate_image_call(input: &ExperimentalGenerateImageInput) -> Result<Call, Error> {
-        client::experimental_generate_image(input).try_into()
-    }
-
-    /// `POST /api/experimental/generate/video` (`video.create`)
-    pub async fn experimental_generate_video_create(
-        &self,
-        input: &ExperimentalGenerateVideoCreateInput,
-    ) -> Result<ExperimentalGenerateVideoCreateOutput, Error> {
-        self.data(Self::experimental_generate_video_create_call(input)?).await
-    }
-    pub fn experimental_generate_video_create_call(
-        input: &ExperimentalGenerateVideoCreateInput,
-    ) -> Result<Call, Error> {
-        client::experimental_generate_video_create(input).try_into()
-    }
-
-    /// `GET /api/experimental/generate/video/:id` (`video.get`)
-    pub async fn experimental_generate_video_get(
-        &self,
-        input: &ExperimentalGenerateVideoGetInput,
-    ) -> Result<ExperimentalGenerateVideoGetOutput, Error> {
-        self.data(Self::experimental_generate_video_get_call(input)?).await
-    }
-    pub fn experimental_generate_video_get_call(input: &ExperimentalGenerateVideoGetInput) -> Result<Call, Error> {
-        client::experimental_generate_video_get(input).try_into()
-    }
-
-    /// `POST /api/experimental/generate/decisions` (`decisions`)
-    pub async fn experimental_generate_decisions(
-        &self,
-        input: &ExperimentalGenerateDecisionsInput,
-    ) -> Result<ExperimentalGenerateDecisionsOutput, Error> {
-        self.data(Self::experimental_generate_decisions_call(input)?).await
-    }
-    pub fn experimental_generate_decisions_call(input: &ExperimentalGenerateDecisionsInput) -> Result<Call, Error> {
-        client::experimental_generate_decisions(input).try_into()
-    }
-
-    /// `GET /api/experimental/voice/models` (`models`)
-    pub async fn experimental_voice_models(&self) -> Result<ExperimentalVoiceModelsOutput, Error> {
-        self.data(Self::experimental_voice_models_call()?).await
-    }
-    pub fn experimental_voice_models_call() -> Result<Call, Error> {
-        client::experimental_voice_models().try_into()
-    }
-
-    /// `POST /api/experimental/voice/session` (`session`)
-    pub async fn experimental_voice_session(
-        &self,
-        input: &ExperimentalVoiceSessionInput,
-    ) -> Result<ExperimentalVoiceSessionOutput, Error> {
-        self.data(Self::experimental_voice_session_call(input)?).await
-    }
-    pub fn experimental_voice_session_call(input: &ExperimentalVoiceSessionInput) -> Result<Call, Error> {
-        client::experimental_voice_session(input).try_into()
-    }
-
-    /// `GET /api/provider` (`list`)
-    pub async fn provider_list(&self, input: &ProviderListInput) -> Result<ProviderListOutput, Error> {
-        self.json(Self::provider_list_call(input)?).await
-    }
-    pub fn provider_list_call(input: &ProviderListInput) -> Result<Call, Error> {
-        client::provider_list(input).try_into()
-    }
-
-    /// `GET /api/provider/:providerID` (`get`)
-    pub async fn provider_get(&self, input: &ProviderGetInput) -> Result<ProviderGetOutput, Error> {
-        self.json(Self::provider_get_call(input)?).await
-    }
-    pub fn provider_get_call(input: &ProviderGetInput) -> Result<Call, Error> {
-        client::provider_get(input).try_into()
-    }
-
-    /// `GET /api/integration` (`list`)
-    pub async fn integration_list(&self, input: &IntegrationListInput) -> Result<IntegrationListOutput, Error> {
-        self.json(Self::integration_list_call(input)?).await
-    }
-    pub fn integration_list_call(input: &IntegrationListInput) -> Result<Call, Error> {
-        client::integration_list(input).try_into()
-    }
-
-    /// `GET /api/integration/:integrationID` (`get`)
-    pub async fn integration_get(&self, input: &IntegrationGetInput) -> Result<IntegrationGetOutput, Error> {
-        self.json(Self::integration_get_call(input)?).await
-    }
-    pub fn integration_get_call(input: &IntegrationGetInput) -> Result<Call, Error> {
-        client::integration_get(input).try_into()
-    }
-
-    /// `POST /api/integration/:integrationID/connect/key` (`connect.key`)
-    pub async fn integration_connect_key(&self, input: &IntegrationConnectKeyInput) -> Result<(), Error> {
-        self.empty(Self::integration_connect_key_call(input)?).await
-    }
-    pub fn integration_connect_key_call(input: &IntegrationConnectKeyInput) -> Result<Call, Error> {
-        client::integration_connect_key(input).try_into()
-    }
-
-    /// `POST /api/integration/:integrationID/connect/external` (`connect.external`)
-    pub async fn integration_connect_external(&self, input: &IntegrationConnectExternalInput) -> Result<(), Error> {
-        self.empty(Self::integration_connect_external_call(input)?).await
-    }
-    pub fn integration_connect_external_call(input: &IntegrationConnectExternalInput) -> Result<Call, Error> {
-        client::integration_connect_external(input).try_into()
-    }
-
-    /// `POST /api/integration/:integrationID/connect/oauth` (`oauth.connect`)
-    pub async fn integration_oauth_connect(
-        &self,
-        input: &IntegrationOauthConnectInput,
-    ) -> Result<IntegrationOauthConnectOutput, Error> {
-        self.json(Self::integration_oauth_connect_call(input)?).await
-    }
-    pub fn integration_oauth_connect_call(input: &IntegrationOauthConnectInput) -> Result<Call, Error> {
-        client::integration_oauth_connect(input).try_into()
-    }
-
-    /// `GET /api/integration/:integrationID/connect/oauth/:attemptID` (`oauth.status`)
-    pub async fn integration_oauth_status(
-        &self,
-        input: &IntegrationOauthStatusInput,
-    ) -> Result<IntegrationOauthStatusOutput, Error> {
-        self.json(Self::integration_oauth_status_call(input)?).await
-    }
-    pub fn integration_oauth_status_call(input: &IntegrationOauthStatusInput) -> Result<Call, Error> {
-        client::integration_oauth_status(input).try_into()
-    }
-
-    /// `POST /api/integration/:integrationID/connect/oauth/:attemptID/complete` (`oauth.complete`)
-    pub async fn integration_oauth_complete(&self, input: &IntegrationOauthCompleteInput) -> Result<(), Error> {
-        self.empty(Self::integration_oauth_complete_call(input)?).await
-    }
-    pub fn integration_oauth_complete_call(input: &IntegrationOauthCompleteInput) -> Result<Call, Error> {
-        client::integration_oauth_complete(input).try_into()
-    }
-
-    /// `DELETE /api/integration/:integrationID/connect/oauth/:attemptID` (`oauth.cancel`)
-    pub async fn integration_oauth_cancel(&self, input: &IntegrationOauthCancelInput) -> Result<(), Error> {
-        self.empty(Self::integration_oauth_cancel_call(input)?).await
-    }
-    pub fn integration_oauth_cancel_call(input: &IntegrationOauthCancelInput) -> Result<Call, Error> {
-        client::integration_oauth_cancel(input).try_into()
-    }
-
-    /// `POST /api/integration/:integrationID/connect/command` (`command.connect`)
-    pub async fn integration_command_connect(
-        &self,
-        input: &IntegrationCommandConnectInput,
-    ) -> Result<IntegrationCommandConnectOutput, Error> {
-        self.json(Self::integration_command_connect_call(input)?).await
-    }
-    pub fn integration_command_connect_call(input: &IntegrationCommandConnectInput) -> Result<Call, Error> {
-        client::integration_command_connect(input).try_into()
-    }
-
-    /// `GET /api/integration/:integrationID/connect/command/:attemptID` (`command.status`)
-    pub async fn integration_command_status(
-        &self,
-        input: &IntegrationCommandStatusInput,
-    ) -> Result<IntegrationCommandStatusOutput, Error> {
-        self.json(Self::integration_command_status_call(input)?).await
-    }
-    pub fn integration_command_status_call(input: &IntegrationCommandStatusInput) -> Result<Call, Error> {
-        client::integration_command_status(input).try_into()
-    }
-
-    /// `DELETE /api/integration/:integrationID/connect/command/:attemptID` (`command.cancel`)
-    pub async fn integration_command_cancel(&self, input: &IntegrationCommandCancelInput) -> Result<(), Error> {
-        self.empty(Self::integration_command_cancel_call(input)?).await
-    }
-    pub fn integration_command_cancel_call(input: &IntegrationCommandCancelInput) -> Result<Call, Error> {
-        client::integration_command_cancel(input).try_into()
-    }
-
-    /// `POST /api/experimental/integration/wellknown` (`wellknown.add`)
-    pub async fn experimental_integration_wellknown_add(
-        &self,
-        input: &ExperimentalIntegrationWellknownAddInput,
-    ) -> Result<(), Error> {
-        self.empty(Self::experimental_integration_wellknown_add_call(input)?).await
-    }
-    pub fn experimental_integration_wellknown_add_call(
-        input: &ExperimentalIntegrationWellknownAddInput,
-    ) -> Result<Call, Error> {
-        client::experimental_integration_wellknown_add(input).try_into()
-    }
-
-    /// `GET /api/mcp` (`list`)
-    pub async fn mcp_list(&self, input: &McpListInput) -> Result<McpListOutput, Error> {
-        self.json(Self::mcp_list_call(input)?).await
-    }
-    pub fn mcp_list_call(input: &McpListInput) -> Result<Call, Error> {
-        client::mcp_list(input).try_into()
-    }
-
-    /// `GET /api/mcp/resource` (`resource.catalog`)
-    pub async fn mcp_resource_catalog(
-        &self,
-        input: &McpResourceCatalogInput,
-    ) -> Result<McpResourceCatalogOutput, Error> {
-        self.json(Self::mcp_resource_catalog_call(input)?).await
-    }
-    pub fn mcp_resource_catalog_call(input: &McpResourceCatalogInput) -> Result<Call, Error> {
-        client::mcp_resource_catalog(input).try_into()
-    }
-
-    /// `PUT /api/experimental/mcp/:server` (`add`)
-    pub async fn experimental_mcp_add(&self, input: &ExperimentalMcpAddInput) -> Result<(), Error> {
-        self.empty(Self::experimental_mcp_add_call(input)?).await
-    }
-    pub fn experimental_mcp_add_call(input: &ExperimentalMcpAddInput) -> Result<Call, Error> {
-        client::experimental_mcp_add(input).try_into()
-    }
-
-    /// `DELETE /api/experimental/mcp/:server` (`remove`)
-    pub async fn experimental_mcp_remove(&self, input: &ExperimentalMcpRemoveInput) -> Result<(), Error> {
-        self.empty(Self::experimental_mcp_remove_call(input)?).await
-    }
-    pub fn experimental_mcp_remove_call(input: &ExperimentalMcpRemoveInput) -> Result<Call, Error> {
-        client::experimental_mcp_remove(input).try_into()
-    }
-
-    /// `POST /api/experimental/mcp/:server/connect` (`connect`)
-    pub async fn experimental_mcp_connect(&self, input: &ExperimentalMcpConnectInput) -> Result<(), Error> {
-        self.empty(Self::experimental_mcp_connect_call(input)?).await
-    }
-    pub fn experimental_mcp_connect_call(input: &ExperimentalMcpConnectInput) -> Result<Call, Error> {
-        client::experimental_mcp_connect(input).try_into()
-    }
-
-    /// `POST /api/experimental/mcp/:server/disconnect` (`disconnect`)
-    pub async fn experimental_mcp_disconnect(&self, input: &ExperimentalMcpDisconnectInput) -> Result<(), Error> {
-        self.empty(Self::experimental_mcp_disconnect_call(input)?).await
-    }
-    pub fn experimental_mcp_disconnect_call(input: &ExperimentalMcpDisconnectInput) -> Result<Call, Error> {
-        client::experimental_mcp_disconnect(input).try_into()
-    }
-
-    /// `POST /api/experimental/client-mcp/token` (`client.token`)
-    pub async fn experimental_mcp_client_token(
-        &self,
-        input: &ExperimentalMcpClientTokenInput,
-    ) -> Result<ExperimentalMcpClientTokenOutput, Error> {
-        self.json(Self::experimental_mcp_client_token_call(input)?).await
-    }
-    pub fn experimental_mcp_client_token_call(input: &ExperimentalMcpClientTokenInput) -> Result<Call, Error> {
-        client::experimental_mcp_client_token(input).try_into()
-    }
-
-    /// `GET /api/credential` (`list`)
-    pub async fn credential_list(&self) -> Result<CredentialListOutput, Error> {
-        self.data(Self::credential_list_call()?).await
-    }
-    pub fn credential_list_call() -> Result<Call, Error> {
-        client::credential_list().try_into()
-    }
-
-    /// `POST /api/credential` (`create`)
-    pub async fn credential_create(&self, input: &CredentialCreateInput) -> Result<CredentialCreateOutput, Error> {
-        self.data(Self::credential_create_call(input)?).await
-    }
-    pub fn credential_create_call(input: &CredentialCreateInput) -> Result<Call, Error> {
-        client::credential_create(input).try_into()
-    }
-
-    /// `PATCH /api/credential/:credentialID` (`update`)
-    pub async fn credential_update(&self, input: &CredentialUpdateInput) -> Result<(), Error> {
-        self.empty(Self::credential_update_call(input)?).await
-    }
-    pub fn credential_update_call(input: &CredentialUpdateInput) -> Result<Call, Error> {
-        client::credential_update(input).try_into()
-    }
-
-    /// `POST /api/credential/:credentialID/activate` (`activate`)
-    pub async fn credential_activate(&self, input: &CredentialActivateInput) -> Result<(), Error> {
-        self.empty(Self::credential_activate_call(input)?).await
-    }
-    pub fn credential_activate_call(input: &CredentialActivateInput) -> Result<Call, Error> {
-        client::credential_activate(input).try_into()
-    }
-
-    /// `DELETE /api/credential/:credentialID` (`remove`)
-    pub async fn credential_remove(&self, input: &CredentialRemoveInput) -> Result<(), Error> {
-        self.empty(Self::credential_remove_call(input)?).await
-    }
-    pub fn credential_remove_call(input: &CredentialRemoveInput) -> Result<Call, Error> {
-        client::credential_remove(input).try_into()
-    }
-
-    /// `GET /api/project` (`list`)
-    pub async fn project_list(&self, input: &ProjectListInput) -> Result<ProjectListOutput, Error> {
-        self.json(Self::project_list_call(input)?).await
-    }
-    pub fn project_list_call(input: &ProjectListInput) -> Result<Call, Error> {
-        client::project_list(input).try_into()
-    }
-
-    /// `PATCH /api/project/:projectID` (`update`)
-    pub async fn project_update(&self, input: &ProjectUpdateInput) -> Result<ProjectUpdateOutput, Error> {
-        self.json(Self::project_update_call(input)?).await
-    }
-    pub fn project_update_call(input: &ProjectUpdateInput) -> Result<Call, Error> {
-        client::project_update(input).try_into()
-    }
-
-    /// `GET /api/form` (`list`)
-    pub async fn form_list(&self, input: &FormListInput) -> Result<FormListOutput, Error> {
-        self.json(Self::form_list_call(input)?).await
-    }
-    pub fn form_list_call(input: &FormListInput) -> Result<Call, Error> {
-        client::form_list(input).try_into()
-    }
-
-    /// `GET /api/permission/request` (`request.list`)
-    pub async fn permission_request_list(
-        &self,
-        input: &PermissionRequestListInput,
-    ) -> Result<PermissionRequestListOutput, Error> {
-        self.json(Self::permission_request_list_call(input)?).await
-    }
-    pub fn permission_request_list_call(input: &PermissionRequestListInput) -> Result<Call, Error> {
-        client::permission_request_list(input).try_into()
-    }
-
-    /// `GET /api/permission/saved` (`saved.list`)
-    pub async fn permission_saved_list(
-        &self,
-        input: &PermissionSavedListInput,
-    ) -> Result<PermissionSavedListOutput, Error> {
-        self.data(Self::permission_saved_list_call(input)?).await
-    }
-    pub fn permission_saved_list_call(input: &PermissionSavedListInput) -> Result<Call, Error> {
-        client::permission_saved_list(input).try_into()
-    }
-
-    /// `PATCH /api/permission/saved/:id` (`saved.update`)
-    pub async fn permission_saved_update(
-        &self,
-        input: &PermissionSavedUpdateInput,
-    ) -> Result<PermissionSavedUpdateOutput, Error> {
-        self.data(Self::permission_saved_update_call(input)?).await
-    }
-    pub fn permission_saved_update_call(input: &PermissionSavedUpdateInput) -> Result<Call, Error> {
-        client::permission_saved_update(input).try_into()
-    }
-
-    /// `DELETE /api/permission/saved/:id` (`saved.remove`)
-    pub async fn permission_saved_remove(&self, input: &PermissionSavedRemoveInput) -> Result<(), Error> {
-        self.empty(Self::permission_saved_remove_call(input)?).await
-    }
-    pub fn permission_saved_remove_call(input: &PermissionSavedRemoveInput) -> Result<Call, Error> {
-        client::permission_saved_remove(input).try_into()
-    }
-
-    /// `POST /api/session/:sessionID/permission` (`create`)
-    pub async fn permission_create(&self, input: &PermissionCreateInput) -> Result<PermissionCreateOutput, Error> {
-        self.data(Self::permission_create_call(input)?).await
-    }
-    pub fn permission_create_call(input: &PermissionCreateInput) -> Result<Call, Error> {
-        client::permission_create(input).try_into()
-    }
-
-    /// `GET /api/session/:sessionID/permission` (`list`)
-    pub async fn permission_list(&self, input: &PermissionListInput) -> Result<PermissionListOutput, Error> {
-        self.data(Self::permission_list_call(input)?).await
-    }
-    pub fn permission_list_call(input: &PermissionListInput) -> Result<Call, Error> {
-        client::permission_list(input).try_into()
-    }
-
-    /// `GET /api/session/:sessionID/permission/:requestID` (`get`)
-    pub async fn permission_get(&self, input: &PermissionGetInput) -> Result<PermissionGetOutput, Error> {
-        self.data(Self::permission_get_call(input)?).await
-    }
-    pub fn permission_get_call(input: &PermissionGetInput) -> Result<Call, Error> {
-        client::permission_get(input).try_into()
-    }
-
-    /// `POST /api/session/:sessionID/permission/:requestID/reply` (`reply`)
-    pub async fn permission_reply(&self, input: &PermissionReplyInput) -> Result<(), Error> {
-        self.empty(Self::permission_reply_call(input)?).await
-    }
-    pub fn permission_reply_call(input: &PermissionReplyInput) -> Result<Call, Error> {
-        client::permission_reply(input).try_into()
-    }
-
-    /// `GET /api/fs/read/*` (`read`)
-    pub async fn file_read(&self, input: &FileReadInput) -> Result<bytes::Bytes, Error> {
-        self.binary(Self::file_read_call(input)?).await
-    }
-    pub fn file_read_call(input: &FileReadInput) -> Result<Call, Error> {
-        client::file_read(input).try_into()
-    }
-
-    /// `GET /api/fs/list` (`list`)
-    pub async fn file_list(&self, input: &FileListInput) -> Result<FileListOutput, Error> {
-        self.json(Self::file_list_call(input)?).await
-    }
-    pub fn file_list_call(input: &FileListInput) -> Result<Call, Error> {
-        client::file_list(input).try_into()
-    }
-
-    /// `GET /api/fs/find` (`find`)
-    pub async fn file_find(&self, input: &FileFindInput) -> Result<FileFindOutput, Error> {
-        self.json(Self::file_find_call(input)?).await
-    }
-    pub fn file_find_call(input: &FileFindInput) -> Result<Call, Error> {
-        client::file_find(input).try_into()
-    }
-
-    /// `POST /api/experimental/fs/write` (`write`)
-    pub async fn experimental_file_write(
-        &self,
-        input: &ExperimentalFileWriteInput,
-    ) -> Result<ExperimentalFileWriteOutput, Error> {
-        self.json(Self::experimental_file_write_call(input)?).await
-    }
-    pub fn experimental_file_write_call(input: &ExperimentalFileWriteInput) -> Result<Call, Error> {
-        client::experimental_file_write(input).try_into()
-    }
-
-    /// `POST /api/experimental/fs/watch` (`watch`)
-    pub async fn experimental_file_watch(&self, input: &ExperimentalFileWatchInput) -> Result<(), Error> {
-        self.empty(Self::experimental_file_watch_call(input)?).await
-    }
-    pub fn experimental_file_watch_call(input: &ExperimentalFileWatchInput) -> Result<Call, Error> {
-        client::experimental_file_watch(input).try_into()
-    }
-
-    /// `DELETE /api/experimental/fs/watch` (`unwatch`)
-    pub async fn experimental_file_unwatch(&self, input: &ExperimentalFileUnwatchInput) -> Result<(), Error> {
-        self.empty(Self::experimental_file_unwatch_call(input)?).await
-    }
-    pub fn experimental_file_unwatch_call(input: &ExperimentalFileUnwatchInput) -> Result<Call, Error> {
-        client::experimental_file_unwatch(input).try_into()
-    }
-
-    /// `GET /api/command` (`list`)
-    pub async fn command_list(&self, input: &CommandListInput) -> Result<CommandListOutput, Error> {
-        self.json(Self::command_list_call(input)?).await
-    }
-    pub fn command_list_call(input: &CommandListInput) -> Result<Call, Error> {
-        client::command_list(input).try_into()
-    }
-
-    /// `GET /api/skill` (`list`)
-    pub async fn skill_list(&self, input: &SkillListInput) -> Result<SkillListOutput, Error> {
-        self.json(Self::skill_list_call(input)?).await
-    }
-    pub fn skill_list_call(input: &SkillListInput) -> Result<Call, Error> {
-        client::skill_list(input).try_into()
-    }
-
-    /// `POST /api/rpc/:rpcID/:method` (`call`)
-    pub async fn rpc_call(&self, input: &RpcCallInput) -> Result<RpcCallOutput, Error> {
-        self.json(Self::rpc_call_call(input)?).await
-    }
-    pub fn rpc_call_call(input: &RpcCallInput) -> Result<Call, Error> {
-        client::rpc_call(input).try_into()
-    }
-
-    /// `GET /api/event` (`subscribe`)
-    pub async fn event_subscribe(
-        &self,
-        input: &EventSubscribeInput,
-    ) -> Result<SseResponse<EventSubscribeOutput>, Error> {
-        self.sse(Self::event_subscribe_call(input)?).await
-    }
-    pub fn event_subscribe_call(input: &EventSubscribeInput) -> Result<Call, Error> {
-        client::event_subscribe(input).try_into()
-    }
-
-    /// `GET /api/pty` (`list`)
-    pub async fn pty_list(&self, input: &PtyListInput) -> Result<PtyListOutput, Error> {
-        self.json(Self::pty_list_call(input)?).await
-    }
-    pub fn pty_list_call(input: &PtyListInput) -> Result<Call, Error> {
-        client::pty_list(input).try_into()
-    }
-
-    /// `POST /api/pty` (`create`)
-    pub async fn pty_create(&self, input: &PtyCreateInput) -> Result<PtyCreateOutput, Error> {
-        self.json(Self::pty_create_call(input)?).await
-    }
-    pub fn pty_create_call(input: &PtyCreateInput) -> Result<Call, Error> {
-        client::pty_create(input).try_into()
-    }
-
-    /// `GET /api/pty/:ptyID` (`get`)
-    pub async fn pty_get(&self, input: &PtyGetInput) -> Result<PtyGetOutput, Error> {
-        self.json(Self::pty_get_call(input)?).await
-    }
-    pub fn pty_get_call(input: &PtyGetInput) -> Result<Call, Error> {
-        client::pty_get(input).try_into()
-    }
-
-    /// `PUT /api/pty/:ptyID` (`update`)
-    pub async fn pty_update(&self, input: &PtyUpdateInput) -> Result<PtyUpdateOutput, Error> {
-        self.json(Self::pty_update_call(input)?).await
-    }
-    pub fn pty_update_call(input: &PtyUpdateInput) -> Result<Call, Error> {
-        client::pty_update(input).try_into()
-    }
-
-    /// `DELETE /api/pty/:ptyID` (`remove`)
-    pub async fn pty_remove(&self, input: &PtyRemoveInput) -> Result<(), Error> {
-        self.empty(Self::pty_remove_call(input)?).await
-    }
-    pub fn pty_remove_call(input: &PtyRemoveInput) -> Result<Call, Error> {
-        client::pty_remove(input).try_into()
-    }
-
-    /// `POST /api/pty/:ptyID/connect-token` (`connect.token`)
-    pub async fn pty_connect_token(&self, input: &PtyConnectTokenInput) -> Result<PtyConnectTokenOutput, Error> {
-        self.json(Self::pty_connect_token_call(input)?).await
-    }
-    pub fn pty_connect_token_call(input: &PtyConnectTokenInput) -> Result<Call, Error> {
-        client::pty_connect_token(input).try_into()
-    }
-
-    /// `GET /api/experimental/session/:sessionID/terminal/read` (`persistentPty.read`)
-    pub async fn experimental_persistent_pty_read(
-        &self,
-        input: &ExperimentalPersistentPtyReadInput,
-    ) -> Result<ExperimentalPersistentPtyReadOutput, Error> {
-        self.data(Self::experimental_persistent_pty_read_call(input)?).await
-    }
-    pub fn experimental_persistent_pty_read_call(input: &ExperimentalPersistentPtyReadInput) -> Result<Call, Error> {
-        client::experimental_persistent_pty_read(input).try_into()
-    }
-
-    /// `GET /api/experimental/session/:sessionID/terminal` (`persistentPty.list`)
-    pub async fn experimental_persistent_pty_list(
-        &self,
-        input: &ExperimentalPersistentPtyListInput,
-    ) -> Result<ExperimentalPersistentPtyListOutput, Error> {
-        self.data(Self::experimental_persistent_pty_list_call(input)?).await
-    }
-    pub fn experimental_persistent_pty_list_call(input: &ExperimentalPersistentPtyListInput) -> Result<Call, Error> {
-        client::experimental_persistent_pty_list(input).try_into()
-    }
-
-    /// `POST /api/experimental/session/:sessionID/terminal` (`persistentPty.create`)
-    pub async fn experimental_persistent_pty_create(
-        &self,
-        input: &ExperimentalPersistentPtyCreateInput,
-    ) -> Result<ExperimentalPersistentPtyCreateOutput, Error> {
-        self.data(Self::experimental_persistent_pty_create_call(input)?).await
-    }
-    pub fn experimental_persistent_pty_create_call(
-        input: &ExperimentalPersistentPtyCreateInput,
-    ) -> Result<Call, Error> {
-        client::experimental_persistent_pty_create(input).try_into()
-    }
-
-    /// `POST /api/experimental/persistent-pty/shutdown` (`persistentPty.shutdown`)
-    pub async fn experimental_persistent_pty_shutdown(&self) -> Result<(), Error> {
-        self.empty(Self::experimental_persistent_pty_shutdown_call()?).await
-    }
-    pub fn experimental_persistent_pty_shutdown_call() -> Result<Call, Error> {
-        client::experimental_persistent_pty_shutdown().try_into()
-    }
-
-    /// `POST /api/experimental/persistent-pty/handoff` (`persistentPty.handoff`)
-    pub async fn experimental_persistent_pty_handoff(&self) -> Result<ExperimentalPersistentPtyHandoffOutput, Error> {
-        self.json(Self::experimental_persistent_pty_handoff_call()?).await
-    }
-    pub fn experimental_persistent_pty_handoff_call() -> Result<Call, Error> {
-        client::experimental_persistent_pty_handoff().try_into()
-    }
-
-    /// `GET /api/experimental/persistent-pty/:ptyID` (`persistentPty.get`)
-    pub async fn experimental_persistent_pty_get(
-        &self,
-        input: &ExperimentalPersistentPtyGetInput,
-    ) -> Result<ExperimentalPersistentPtyGetOutput, Error> {
-        self.data(Self::experimental_persistent_pty_get_call(input)?).await
-    }
-    pub fn experimental_persistent_pty_get_call(input: &ExperimentalPersistentPtyGetInput) -> Result<Call, Error> {
-        client::experimental_persistent_pty_get(input).try_into()
-    }
-
-    /// `PUT /api/experimental/persistent-pty/:ptyID` (`persistentPty.update`)
-    pub async fn experimental_persistent_pty_update(
-        &self,
-        input: &ExperimentalPersistentPtyUpdateInput,
-    ) -> Result<ExperimentalPersistentPtyUpdateOutput, Error> {
-        self.data(Self::experimental_persistent_pty_update_call(input)?).await
-    }
-    pub fn experimental_persistent_pty_update_call(
-        input: &ExperimentalPersistentPtyUpdateInput,
-    ) -> Result<Call, Error> {
-        client::experimental_persistent_pty_update(input).try_into()
-    }
-
-    /// `GET /api/experimental/persistent-pty/:ptyID/snapshot` (`persistentPty.snapshot`)
-    pub async fn experimental_persistent_pty_snapshot(
-        &self,
-        input: &ExperimentalPersistentPtySnapshotInput,
-    ) -> Result<ExperimentalPersistentPtySnapshotOutput, Error> {
-        self.data(Self::experimental_persistent_pty_snapshot_call(input)?).await
-    }
-    pub fn experimental_persistent_pty_snapshot_call(
-        input: &ExperimentalPersistentPtySnapshotInput,
-    ) -> Result<Call, Error> {
-        client::experimental_persistent_pty_snapshot(input).try_into()
-    }
-
-    /// `DELETE /api/experimental/persistent-pty/:ptyID` (`persistentPty.remove`)
-    pub async fn experimental_persistent_pty_remove(
-        &self,
-        input: &ExperimentalPersistentPtyRemoveInput,
-    ) -> Result<(), Error> {
-        self.empty(Self::experimental_persistent_pty_remove_call(input)?).await
-    }
-    pub fn experimental_persistent_pty_remove_call(
-        input: &ExperimentalPersistentPtyRemoveInput,
-    ) -> Result<Call, Error> {
-        client::experimental_persistent_pty_remove(input).try_into()
-    }
-
-    /// `POST /api/experimental/persistent-pty/:ptyID/connect-token` (`persistentPty.connectToken`)
-    pub async fn experimental_persistent_pty_connect_token(
-        &self,
-        input: &ExperimentalPersistentPtyConnectTokenInput,
-    ) -> Result<ExperimentalPersistentPtyConnectTokenOutput, Error> {
-        self.data(Self::experimental_persistent_pty_connect_token_call(input)?).await
-    }
-    pub fn experimental_persistent_pty_connect_token_call(
-        input: &ExperimentalPersistentPtyConnectTokenInput,
-    ) -> Result<Call, Error> {
-        client::experimental_persistent_pty_connect_token(input).try_into()
-    }
-
-    /// `GET /api/experimental/media/:hash` (`media.get`)
-    pub async fn experimental_media_get(&self, input: &ExperimentalMediaGetInput) -> Result<bytes::Bytes, Error> {
-        self.binary(Self::experimental_media_get_call(input)?).await
-    }
-    pub fn experimental_media_get_call(input: &ExperimentalMediaGetInput) -> Result<Call, Error> {
-        client::experimental_media_get(input).try_into()
-    }
-
-    /// `GET /api/experimental/blob/:id` (`blob.get`)
-    pub async fn experimental_blob_get(&self, input: &ExperimentalBlobGetInput) -> Result<bytes::Bytes, Error> {
-        self.binary(Self::experimental_blob_get_call(input)?).await
-    }
-    pub fn experimental_blob_get_call(input: &ExperimentalBlobGetInput) -> Result<Call, Error> {
-        client::experimental_blob_get(input).try_into()
-    }
-
-    /// `POST /api/experimental/automation` (`automation.create`)
-    pub async fn experimental_automation_create(
-        &self,
-        input: &ExperimentalAutomationCreateInput,
-    ) -> Result<ExperimentalAutomationCreateOutput, Error> {
-        self.data(Self::experimental_automation_create_call(input)?).await
-    }
-    pub fn experimental_automation_create_call(input: &ExperimentalAutomationCreateInput) -> Result<Call, Error> {
-        client::experimental_automation_create(input).try_into()
-    }
-
-    /// `GET /api/experimental/automation` (`automation.list`)
-    pub async fn experimental_automation_list(
-        &self,
-        input: &ExperimentalAutomationListInput,
-    ) -> Result<ExperimentalAutomationListOutput, Error> {
-        self.data(Self::experimental_automation_list_call(input)?).await
-    }
-    pub fn experimental_automation_list_call(input: &ExperimentalAutomationListInput) -> Result<Call, Error> {
-        client::experimental_automation_list(input).try_into()
-    }
-
-    /// `GET /api/experimental/automation/:automationID` (`automation.get`)
-    pub async fn experimental_automation_get(
-        &self,
-        input: &ExperimentalAutomationGetInput,
-    ) -> Result<ExperimentalAutomationGetOutput, Error> {
-        self.data(Self::experimental_automation_get_call(input)?).await
-    }
-    pub fn experimental_automation_get_call(input: &ExperimentalAutomationGetInput) -> Result<Call, Error> {
-        client::experimental_automation_get(input).try_into()
-    }
-
-    /// `POST /api/experimental/automation/:automationID/pause` (`automation.pause`)
-    pub async fn experimental_automation_pause(
-        &self,
-        input: &ExperimentalAutomationPauseInput,
-    ) -> Result<ExperimentalAutomationPauseOutput, Error> {
-        self.data(Self::experimental_automation_pause_call(input)?).await
-    }
-    pub fn experimental_automation_pause_call(input: &ExperimentalAutomationPauseInput) -> Result<Call, Error> {
-        client::experimental_automation_pause(input).try_into()
-    }
-
-    /// `POST /api/experimental/automation/:automationID/resume` (`automation.resume`)
-    pub async fn experimental_automation_resume(
-        &self,
-        input: &ExperimentalAutomationResumeInput,
-    ) -> Result<ExperimentalAutomationResumeOutput, Error> {
-        self.data(Self::experimental_automation_resume_call(input)?).await
-    }
-    pub fn experimental_automation_resume_call(input: &ExperimentalAutomationResumeInput) -> Result<Call, Error> {
-        client::experimental_automation_resume(input).try_into()
-    }
-
-    /// `DELETE /api/experimental/automation/:automationID` (`automation.delete`)
-    pub async fn experimental_automation_delete(&self, input: &ExperimentalAutomationDeleteInput) -> Result<(), Error> {
-        self.empty(Self::experimental_automation_delete_call(input)?).await
-    }
-    pub fn experimental_automation_delete_call(input: &ExperimentalAutomationDeleteInput) -> Result<Call, Error> {
-        client::experimental_automation_delete(input).try_into()
-    }
-
-    /// `GET /api/experimental/artifacts/providers` (`artifacts.providers`)
-    pub async fn experimental_artifacts_providers(
-        &self,
-        input: &ExperimentalArtifactsProvidersInput,
-    ) -> Result<ExperimentalArtifactsProvidersOutput, Error> {
-        self.json(Self::experimental_artifacts_providers_call(input)?).await
-    }
-    pub fn experimental_artifacts_providers_call(input: &ExperimentalArtifactsProvidersInput) -> Result<Call, Error> {
-        client::experimental_artifacts_providers(input).try_into()
-    }
-
-    /// `GET /api/experimental/artifacts` (`artifacts.list`)
-    pub async fn experimental_artifacts_list(
-        &self,
-        input: &ExperimentalArtifactsListInput,
-    ) -> Result<ExperimentalArtifactsListOutput, Error> {
-        self.json(Self::experimental_artifacts_list_call(input)?).await
-    }
-    pub fn experimental_artifacts_list_call(input: &ExperimentalArtifactsListInput) -> Result<Call, Error> {
-        client::experimental_artifacts_list(input).try_into()
-    }
-
-    /// `POST /api/experimental/artifacts` (`artifacts.create`)
-    pub async fn experimental_artifacts_create(
-        &self,
-        input: &ExperimentalArtifactsCreateInput,
-    ) -> Result<ExperimentalArtifactsCreateOutput, Error> {
-        self.json(Self::experimental_artifacts_create_call(input)?).await
-    }
-    pub fn experimental_artifacts_create_call(input: &ExperimentalArtifactsCreateInput) -> Result<Call, Error> {
-        client::experimental_artifacts_create(input).try_into()
-    }
-
-    /// `GET /api/experimental/artifacts/:artifactID` (`artifacts.get`)
-    pub async fn experimental_artifacts_get(
-        &self,
-        input: &ExperimentalArtifactsGetInput,
-    ) -> Result<ExperimentalArtifactsGetOutput, Error> {
-        self.json(Self::experimental_artifacts_get_call(input)?).await
-    }
-    pub fn experimental_artifacts_get_call(input: &ExperimentalArtifactsGetInput) -> Result<Call, Error> {
-        client::experimental_artifacts_get(input).try_into()
-    }
-
-    /// `PATCH /api/experimental/artifacts/:artifactID` (`artifacts.update`)
-    pub async fn experimental_artifacts_update(
-        &self,
-        input: &ExperimentalArtifactsUpdateInput,
-    ) -> Result<ExperimentalArtifactsUpdateOutput, Error> {
-        self.json(Self::experimental_artifacts_update_call(input)?).await
-    }
-    pub fn experimental_artifacts_update_call(input: &ExperimentalArtifactsUpdateInput) -> Result<Call, Error> {
-        client::experimental_artifacts_update(input).try_into()
-    }
-
-    /// `DELETE /api/experimental/artifacts/:artifactID` (`artifacts.delete`)
-    pub async fn experimental_artifacts_delete(&self, input: &ExperimentalArtifactsDeleteInput) -> Result<(), Error> {
-        self.empty(Self::experimental_artifacts_delete_call(input)?).await
-    }
-    pub fn experimental_artifacts_delete_call(input: &ExperimentalArtifactsDeleteInput) -> Result<Call, Error> {
-        client::experimental_artifacts_delete(input).try_into()
-    }
-
-    /// `GET /api/experimental/artifacts/:artifactID/view/*` (`artifacts.view`)
-    pub async fn experimental_artifacts_view(
-        &self,
-        input: &ExperimentalArtifactsViewInput,
-    ) -> Result<bytes::Bytes, Error> {
-        self.binary(Self::experimental_artifacts_view_call(input)?).await
-    }
-    pub fn experimental_artifacts_view_call(input: &ExperimentalArtifactsViewInput) -> Result<Call, Error> {
-        client::experimental_artifacts_view(input).try_into()
-    }
-
-    /// `GET /api/experimental/job` (`job.list`)
-    pub async fn experimental_job_list(
-        &self,
-        input: &ExperimentalJobListInput,
-    ) -> Result<ExperimentalJobListOutput, Error> {
-        self.data(Self::experimental_job_list_call(input)?).await
-    }
-    pub fn experimental_job_list_call(input: &ExperimentalJobListInput) -> Result<Call, Error> {
-        client::experimental_job_list(input).try_into()
-    }
-
-    /// `GET /api/shell` (`list`)
-    pub async fn shell_list(&self, input: &ShellListInput) -> Result<ShellListOutput, Error> {
-        self.json(Self::shell_list_call(input)?).await
-    }
-    pub fn shell_list_call(input: &ShellListInput) -> Result<Call, Error> {
-        client::shell_list(input).try_into()
-    }
-
-    /// `POST /api/shell` (`create`)
-    pub async fn shell_create(&self, input: &ShellCreateInput) -> Result<ShellCreateOutput, Error> {
-        self.json(Self::shell_create_call(input)?).await
-    }
-    pub fn shell_create_call(input: &ShellCreateInput) -> Result<Call, Error> {
-        client::shell_create(input).try_into()
-    }
-
-    /// `GET /api/shell/:id` (`get`)
-    pub async fn shell_get(&self, input: &ShellGetInput) -> Result<ShellGetOutput, Error> {
-        self.json(Self::shell_get_call(input)?).await
-    }
-    pub fn shell_get_call(input: &ShellGetInput) -> Result<Call, Error> {
-        client::shell_get(input).try_into()
-    }
-
-    /// `GET /api/shell/:id/output` (`output`)
-    pub async fn shell_output(&self, input: &ShellOutputInput) -> Result<ShellOutputOutput, Error> {
-        self.json(Self::shell_output_call(input)?).await
-    }
-    pub fn shell_output_call(input: &ShellOutputInput) -> Result<Call, Error> {
-        client::shell_output(input).try_into()
-    }
-
-    /// `DELETE /api/shell/:id` (`remove`)
-    pub async fn shell_remove(&self, input: &ShellRemoveInput) -> Result<(), Error> {
-        self.empty(Self::shell_remove_call(input)?).await
-    }
-    pub fn shell_remove_call(input: &ShellRemoveInput) -> Result<Call, Error> {
-        client::shell_remove(input).try_into()
-    }
-
-    /// `GET /api/reference` (`list`)
-    pub async fn reference_list(&self, input: &ReferenceListInput) -> Result<ReferenceListOutput, Error> {
-        self.json(Self::reference_list_call(input)?).await
-    }
-    pub fn reference_list_call(input: &ReferenceListInput) -> Result<Call, Error> {
-        client::reference_list(input).try_into()
-    }
-
-    /// `GET /api/worktree` (`list`)
-    pub async fn worktree_list(&self, input: &WorktreeListInput) -> Result<WorktreeListOutput, Error> {
-        self.json(Self::worktree_list_call(input)?).await
-    }
-    pub fn worktree_list_call(input: &WorktreeListInput) -> Result<Call, Error> {
-        client::worktree_list(input).try_into()
-    }
-
-    /// `POST /api/worktree` (`create`)
-    pub async fn worktree_create(&self, input: &WorktreeCreateInput) -> Result<WorktreeCreateOutput, Error> {
-        self.json(Self::worktree_create_call(input)?).await
-    }
-    pub fn worktree_create_call(input: &WorktreeCreateInput) -> Result<Call, Error> {
-        client::worktree_create(input).try_into()
-    }
-
-    /// `DELETE /api/worktree` (`remove`)
-    pub async fn worktree_remove(&self, input: &WorktreeRemoveInput) -> Result<(), Error> {
-        self.empty(Self::worktree_remove_call(input)?).await
-    }
-    pub fn worktree_remove_call(input: &WorktreeRemoveInput) -> Result<Call, Error> {
-        client::worktree_remove(input).try_into()
-    }
-
-    /// `POST /api/worktree/refresh` (`refresh`)
-    pub async fn worktree_refresh(&self, input: &WorktreeRefreshInput) -> Result<(), Error> {
-        self.empty(Self::worktree_refresh_call(input)?).await
-    }
-    pub fn worktree_refresh_call(input: &WorktreeRefreshInput) -> Result<Call, Error> {
-        client::worktree_refresh(input).try_into()
-    }
-
-    /// `POST /api/vcs/init` (`init`)
-    pub async fn vcs_init(&self, input: &VcsInitInput) -> Result<(), Error> {
-        self.empty(Self::vcs_init_call(input)?).await
-    }
-    pub fn vcs_init_call(input: &VcsInitInput) -> Result<Call, Error> {
-        client::vcs_init(input).try_into()
-    }
-
-    /// `GET /api/vcs` (`get`)
-    pub async fn vcs_get(&self, input: &VcsGetInput) -> Result<VcsGetOutput, Error> {
-        self.json(Self::vcs_get_call(input)?).await
-    }
-    pub fn vcs_get_call(input: &VcsGetInput) -> Result<Call, Error> {
-        client::vcs_get(input).try_into()
-    }
-
-    /// `GET /api/vcs/base` (`base`)
-    pub async fn vcs_base(&self, input: &VcsBaseInput) -> Result<VcsBaseOutput, Error> {
-        self.json(Self::vcs_base_call(input)?).await
-    }
-    pub fn vcs_base_call(input: &VcsBaseInput) -> Result<Call, Error> {
-        client::vcs_base(input).try_into()
-    }
-
-    /// `GET /api/vcs/status` (`status`)
-    pub async fn vcs_status(&self, input: &VcsStatusInput) -> Result<VcsStatusOutput, Error> {
-        self.json(Self::vcs_status_call(input)?).await
-    }
-    pub fn vcs_status_call(input: &VcsStatusInput) -> Result<Call, Error> {
-        client::vcs_status(input).try_into()
-    }
-
-    /// `GET /api/vcs/branch` (`branch.list`)
-    pub async fn vcs_branch_list(&self, input: &VcsBranchListInput) -> Result<VcsBranchListOutput, Error> {
-        self.json(Self::vcs_branch_list_call(input)?).await
-    }
-    pub fn vcs_branch_list_call(input: &VcsBranchListInput) -> Result<Call, Error> {
-        client::vcs_branch_list(input).try_into()
-    }
-
-    /// `GET /api/vcs/diff` (`diff`)
-    pub async fn vcs_diff(&self, input: &VcsDiffInput) -> Result<VcsDiffOutput, Error> {
-        self.json(Self::vcs_diff_call(input)?).await
-    }
-    pub fn vcs_diff_call(input: &VcsDiffInput) -> Result<Call, Error> {
-        client::vcs_diff(input).try_into()
-    }
-
-    /// `POST /api/debug/heap-dump` (`heapDump`)
-    pub async fn debug_heap_dump(&self, input: &DebugHeapDumpInput) -> Result<DebugHeapDumpOutput, Error> {
-        self.json(Self::debug_heap_dump_call(input)?).await
-    }
-    pub fn debug_heap_dump_call(input: &DebugHeapDumpInput) -> Result<Call, Error> {
-        client::debug_heap_dump(input).try_into()
-    }
-
-    /// `GET /api/debug/location` (`location.list`)
-    pub async fn debug_location_list(&self) -> Result<DebugLocationListOutput, Error> {
-        self.json(Self::debug_location_list_call()?).await
-    }
-    pub fn debug_location_list_call() -> Result<Call, Error> {
-        client::debug_location_list().try_into()
-    }
-
-    /// `DELETE /api/debug/location` (`location.evict`)
-    pub async fn debug_location_evict(&self, input: &DebugLocationEvictInput) -> Result<(), Error> {
-        self.empty(Self::debug_location_evict_call(input)?).await
-    }
-    pub fn debug_location_evict_call(input: &DebugLocationEvictInput) -> Result<Call, Error> {
-        client::debug_location_evict(input).try_into()
-    }
-
-    /// `GET /api/experimental/migration/v1` (`v1.status`)
-    pub async fn experimental_migration_v1_status(&self) -> Result<ExperimentalMigrationV1StatusOutput, Error> {
-        self.json(Self::experimental_migration_v1_status_call()?).await
-    }
-    pub fn experimental_migration_v1_status_call() -> Result<Call, Error> {
-        client::experimental_migration_v1_status().try_into()
-    }
-
-    /// `GET /api/websearch/provider` (`providers`)
-    pub async fn websearch_providers(
-        &self,
-        input: &WebsearchProvidersInput,
-    ) -> Result<WebsearchProvidersOutput, Error> {
-        self.json(Self::websearch_providers_call(input)?).await
-    }
-    pub fn websearch_providers_call(input: &WebsearchProvidersInput) -> Result<Call, Error> {
-        client::websearch_providers(input).try_into()
-    }
-
-    /// `POST /api/websearch` (`query`)
-    pub async fn websearch_query(&self, input: &WebsearchQueryInput) -> Result<WebsearchQueryOutput, Error> {
-        self.json(Self::websearch_query_call(input)?).await
-    }
-    pub fn websearch_query_call(input: &WebsearchQueryInput) -> Result<Call, Error> {
-        client::websearch_query(input).try_into()
-    }
-
-    /// `GET /api/experimental/usage/limits` (`limits`)
-    pub async fn experimental_usage_limits(
-        &self,
-        input: &ExperimentalUsageLimitsInput,
-    ) -> Result<ExperimentalUsageLimitsOutput, Error> {
-        self.json(Self::experimental_usage_limits_call(input)?).await
-    }
-    pub fn experimental_usage_limits_call(input: &ExperimentalUsageLimitsInput) -> Result<Call, Error> {
-        client::experimental_usage_limits(input).try_into()
-    }
-
-    /// `GET /api/config` (`get`)
-    pub async fn config_get(&self, input: &ConfigGetInput) -> Result<ConfigGetOutput, Error> {
-        self.json(Self::config_get_call(input)?).await
-    }
-    pub fn config_get_call(input: &ConfigGetInput) -> Result<Call, Error> {
-        client::config_get(input).try_into()
-    }
-
-    /// `GET /api/config/shell` (`shells`)
-    pub async fn config_shells(&self) -> Result<ConfigShellsOutput, Error> {
-        self.json(Self::config_shells_call()?).await
-    }
-    pub fn config_shells_call() -> Result<Call, Error> {
-        client::config_shells().try_into()
-    }
-
-    /// `PATCH /api/experimental/config` (`update`)
-    pub async fn experimental_config_update(&self, input: &ExperimentalConfigUpdateInput) -> Result<(), Error> {
-        self.empty(Self::experimental_config_update_call(input)?).await
-    }
-    pub fn experimental_config_update_call(input: &ExperimentalConfigUpdateInput) -> Result<Call, Error> {
-        client::experimental_config_update(input).try_into()
-    }
+    endpoint!(" `GET /api/info` (`info`)", server_info, server_info_call, json, ServerInfoOutput);
+    endpoint!(" `POST /api/pair` (`pair`)", server_pair, server_pair_call, json, ServerPairOutput);
+    endpoint!(" `GET /auth/connect/:code` (`connect`)", server_connect, server_connect_call, json, ServerConnectOutput, input: ServerConnectInput);
+    endpoint!(" `GET /api/location` (`get`)", location_get, location_get_call, json, LocationGetOutput, input: LocationGetInput);
+    endpoint!(" `POST /api/location/reload` (`reload`)", location_reload, location_reload_call, empty, ());
+    endpoint!(" `GET /api/agent` (`list`)", agent_list, agent_list_call, json, AgentListOutput, input: AgentListInput);
+    endpoint!(" `GET /api/agent/:agentID` (`get`)", agent_get, agent_get_call, json, AgentGetOutput, input: AgentGetInput);
+    endpoint!(" `GET /api/plugin` (`list`)", plugin_list, plugin_list_call, json, PluginListOutput, input: PluginListInput);
+    endpoint!(" `GET /api/plugin/gui` (`gui`)", plugin_gui, plugin_gui_call, json, PluginGuiOutput, input: PluginGuiInput);
+    endpoint!(" `POST /api/plugin/check` (`check`)", plugin_check, plugin_check_call, json, PluginCheckOutput, input: PluginCheckInput);
+    endpoint!(" `POST /api/plugin/update` (`update`)", plugin_update, plugin_update_call, empty, (), input: PluginUpdateInput);
+    endpoint!(" `GET /api/session` (`list`)", session_list, session_list_call, json, SessionListOutput, input: SessionListInput);
+    endpoint!(" `POST /api/session` (`create`)", session_create, session_create_call, data, SessionCreateOutput, input: SessionCreateInput);
+    endpoint!(" `GET /api/session/active` (`active`)", session_active, session_active_call, data, SessionActiveOutput);
+    endpoint!(" `GET /api/session/:sessionID` (`get`)", session_get, session_get_call, data, SessionGetOutput, input: SessionGetInput);
+    endpoint!(" `DELETE /api/session/:sessionID` (`remove`)", session_remove, session_remove_call, empty, (), input: SessionRemoveInput);
+    endpoint!(" `POST /api/session/:sessionID/fork` (`fork`)", session_fork, session_fork_call, data, SessionForkOutput, input: SessionForkInput);
+    endpoint!(" `POST /api/session/:sessionID/agent` (`switchAgent`)", session_switch_agent, session_switch_agent_call, empty, (), input: SessionSwitchAgentInput);
+    endpoint!(" `POST /api/session/:sessionID/model` (`switchModel`)", session_switch_model, session_switch_model_call, empty, (), input: SessionSwitchModelInput);
+    endpoint!(" `PATCH /api/session/:sessionID` (`update`)", session_update, session_update_call, empty, (), input: SessionUpdateInput);
+    endpoint!(" `POST /api/session/:sessionID/move` (`move`)", session_move, session_move_call, empty, (), input: SessionMoveInput);
+    endpoint!(" `POST /api/session/:sessionID/prompt` (`prompt`)", session_prompt, session_prompt_call, data, SessionPromptOutput, input: SessionPromptInput);
+    endpoint!(" `POST /api/session/:sessionID/command` (`command`)", session_command, session_command_call, empty, (), input: SessionCommandInput);
+    endpoint!(" `POST /api/session/:sessionID/synthetic` (`synthetic`)", session_synthetic, session_synthetic_call, data, SessionSyntheticOutput, input: SessionSyntheticInput);
+    endpoint!(" `POST /api/session/:sessionID/shell` (`shell`)", session_shell, session_shell_call, empty, (), input: SessionShellInput);
+    endpoint!(" `POST /api/session/:sessionID/compact` (`compact`)", session_compact, session_compact_call, data, SessionCompactOutput, input: SessionCompactInput);
+    endpoint!(" `POST /api/session/:sessionID/revert/stage` (`revert.stage`)", session_revert_stage, session_revert_stage_call, data, SessionRevertStageOutput, input: SessionRevertStageInput);
+    endpoint!(" `DELETE /api/session/:sessionID/revert` (`revert.clear`)", session_revert_clear, session_revert_clear_call, empty, (), input: SessionRevertClearInput);
+    endpoint!(" `POST /api/session/:sessionID/revert/commit` (`revert.commit`)", session_revert_commit, session_revert_commit_call, empty, (), input: SessionRevertCommitInput);
+    endpoint!(" `GET /api/session/:sessionID/context` (`context`)", session_context, session_context_call, data, SessionContextOutput, input: SessionContextInput);
+    endpoint!(" `GET /api/session/:sessionID/diff` (`diff`)", session_diff, session_diff_call, data, SessionDiffOutput, input: SessionDiffInput);
+    endpoint!(" `GET /api/session/:sessionID/inbox` (`inbox.list`)", session_inbox_list, session_inbox_list_call, data, SessionInboxListOutput, input: SessionInboxListInput);
+    endpoint!(" `DELETE /api/session/:sessionID/inbox/:inboxID` (`inbox.cancel`)", session_inbox_cancel, session_inbox_cancel_call, empty, (), input: SessionInboxCancelInput);
+    endpoint!(" `PATCH /api/session/:sessionID/inbox/:inboxID` (`inbox.update`)", session_inbox_update, session_inbox_update_call, empty, (), input: SessionInboxUpdateInput);
+    endpoint!(" `POST /api/session/:sessionID/generate` (`generate`)", session_generate, session_generate_call, data, SessionGenerateOutput, input: SessionGenerateInput);
+    endpoint!(" `POST /api/session/:sessionID/interrupt` (`interrupt`)", session_interrupt, session_interrupt_call, json, SessionInterruptOutput, input: SessionInterruptInput);
+    endpoint!(" `POST /api/session/:sessionID/background` (`background`)", session_background, session_background_call, empty, (), input: SessionBackgroundInput);
+    endpoint!(" `GET /api/session/:sessionID/message/:messageID` (`message.get`)", session_message_get, session_message_get_call, data, SessionMessageGetOutput, input: SessionMessageGetInput);
+    endpoint!(" `GET /api/session/:sessionID/form` (`form.list`)", session_form_list, session_form_list_call, data, SessionFormListOutput, input: SessionFormListInput);
+    endpoint!(" `POST /api/session/:sessionID/form` (`form.create`)", session_form_create, session_form_create_call, data, SessionFormCreateOutput, input: SessionFormCreateInput);
+    endpoint!(" `GET /api/session/:sessionID/form/:formID` (`form.get`)", session_form_get, session_form_get_call, data, SessionFormGetOutput, input: SessionFormGetInput);
+    endpoint!(" `POST /api/session/:sessionID/form/:formID/reply` (`form.reply`)", session_form_reply, session_form_reply_call, empty, (), input: SessionFormReplyInput);
+    endpoint!(" `DELETE /api/session/:sessionID/form/:formID` (`form.cancel`)", session_form_cancel, session_form_cancel_call, empty, (), input: SessionFormCancelInput);
+    endpoint!(" `PUT /api/session/:sessionID/environment` (`environment`)", session_environment, session_environment_call, empty, (), input: SessionEnvironmentInput);
+    endpoint!(" `POST /api/session/:sessionID/view` (`view`)", session_view, session_view_call, empty, (), input: SessionViewInput);
+    endpoint!(" `GET /api/experimental/session/stats` (`stats`)", experimental_session_stats, experimental_session_stats_call, data, ExperimentalSessionStatsOutput, input: ExperimentalSessionStatsInput);
+    endpoint!(" `POST /api/experimental/session/import` (`import`)", experimental_session_import, experimental_session_import_call, data, ExperimentalSessionImportOutput, input: ExperimentalSessionImportInput);
+    endpoint!(" `GET /api/experimental/session/:sessionID/export` (`export`)", experimental_session_export, experimental_session_export_call, data, ExperimentalSessionExportOutput, input: ExperimentalSessionExportInput);
+    endpoint!(" `POST /api/experimental/session/:sessionID/skill` (`skill`)", experimental_session_skill, experimental_session_skill_call, empty, (), input: ExperimentalSessionSkillInput);
+    endpoint!(" `POST /api/experimental/session/:sessionID/wait` (`wait`)", experimental_session_wait, experimental_session_wait_call, empty, (), input: ExperimentalSessionWaitInput);
+    endpoint!(" `GET /api/experimental/session/:sessionID/instructions/entries` (`instructions.entry.list`)", experimental_session_instructions_entry_list, experimental_session_instructions_entry_list_call, data, ExperimentalSessionInstructionsEntryListOutput, input: ExperimentalSessionInstructionsEntryListInput);
+    endpoint!(" `PUT /api/experimental/session/:sessionID/instructions/entries/:key` (`instructions.entry.put`)", experimental_session_instructions_entry_put, experimental_session_instructions_entry_put_call, empty, (), input: ExperimentalSessionInstructionsEntryPutInput);
+    endpoint!(" `DELETE /api/experimental/session/:sessionID/instructions/entries/:key` (`instructions.entry.remove`)", experimental_session_instructions_entry_remove, experimental_session_instructions_entry_remove_call, empty, (), input: ExperimentalSessionInstructionsEntryRemoveInput);
+    endpoint!(" `GET /api/experimental/session/:sessionID/log` (`log`)", experimental_session_log, experimental_session_log_call, sse, SseResponse<ExperimentalSessionLogOutput>, input: ExperimentalSessionLogInput);
+    endpoint!(" `GET /api/session/:sessionID/message` (`list`)", message_list, message_list_call, json, MessageListOutput, input: MessageListInput);
+    endpoint!(" `GET /api/model` (`list`)", model_list, model_list_call, json, ModelListOutput, input: ModelListInput);
+    endpoint!(" `GET /api/model/default` (`default`)", model_default, model_default_call, json, ModelDefaultOutput, input: ModelDefaultInput);
+    endpoint!(" `POST /api/experimental/generate/text` (`text`)", experimental_generate_text, experimental_generate_text_call, data, ExperimentalGenerateTextOutput, input: ExperimentalGenerateTextInput);
+    endpoint!(" `POST /api/experimental/generate/image` (`image`)", experimental_generate_image, experimental_generate_image_call, data, ExperimentalGenerateImageOutput, input: ExperimentalGenerateImageInput);
+    endpoint!(" `POST /api/experimental/generate/video` (`video.create`)", experimental_generate_video_create, experimental_generate_video_create_call, data, ExperimentalGenerateVideoCreateOutput, input: ExperimentalGenerateVideoCreateInput);
+    endpoint!(" `GET /api/experimental/generate/video/:id` (`video.get`)", experimental_generate_video_get, experimental_generate_video_get_call, data, ExperimentalGenerateVideoGetOutput, input: ExperimentalGenerateVideoGetInput);
+    endpoint!(" `POST /api/experimental/generate/decisions` (`decisions`)", experimental_generate_decisions, experimental_generate_decisions_call, data, ExperimentalGenerateDecisionsOutput, input: ExperimentalGenerateDecisionsInput);
+    endpoint!(
+        " `GET /api/experimental/voice/models` (`models`)",
+        experimental_voice_models,
+        experimental_voice_models_call,
+        data,
+        ExperimentalVoiceModelsOutput
+    );
+    endpoint!(" `POST /api/experimental/voice/session` (`session`)", experimental_voice_session, experimental_voice_session_call, data, ExperimentalVoiceSessionOutput, input: ExperimentalVoiceSessionInput);
+    endpoint!(" `GET /api/provider` (`list`)", provider_list, provider_list_call, json, ProviderListOutput, input: ProviderListInput);
+    endpoint!(" `GET /api/provider/:providerID` (`get`)", provider_get, provider_get_call, json, ProviderGetOutput, input: ProviderGetInput);
+    endpoint!(" `GET /api/integration` (`list`)", integration_list, integration_list_call, json, IntegrationListOutput, input: IntegrationListInput);
+    endpoint!(" `GET /api/integration/:integrationID` (`get`)", integration_get, integration_get_call, json, IntegrationGetOutput, input: IntegrationGetInput);
+    endpoint!(" `POST /api/integration/:integrationID/connect/key` (`connect.key`)", integration_connect_key, integration_connect_key_call, empty, (), input: IntegrationConnectKeyInput);
+    endpoint!(" `POST /api/integration/:integrationID/connect/external` (`connect.external`)", integration_connect_external, integration_connect_external_call, empty, (), input: IntegrationConnectExternalInput);
+    endpoint!(" `POST /api/integration/:integrationID/connect/oauth` (`oauth.connect`)", integration_oauth_connect, integration_oauth_connect_call, json, IntegrationOauthConnectOutput, input: IntegrationOauthConnectInput);
+    endpoint!(" `GET /api/integration/:integrationID/connect/oauth/:attemptID` (`oauth.status`)", integration_oauth_status, integration_oauth_status_call, json, IntegrationOauthStatusOutput, input: IntegrationOauthStatusInput);
+    endpoint!(" `POST /api/integration/:integrationID/connect/oauth/:attemptID/complete` (`oauth.complete`)", integration_oauth_complete, integration_oauth_complete_call, empty, (), input: IntegrationOauthCompleteInput);
+    endpoint!(" `DELETE /api/integration/:integrationID/connect/oauth/:attemptID` (`oauth.cancel`)", integration_oauth_cancel, integration_oauth_cancel_call, empty, (), input: IntegrationOauthCancelInput);
+    endpoint!(" `POST /api/integration/:integrationID/connect/command` (`command.connect`)", integration_command_connect, integration_command_connect_call, json, IntegrationCommandConnectOutput, input: IntegrationCommandConnectInput);
+    endpoint!(" `GET /api/integration/:integrationID/connect/command/:attemptID` (`command.status`)", integration_command_status, integration_command_status_call, json, IntegrationCommandStatusOutput, input: IntegrationCommandStatusInput);
+    endpoint!(" `DELETE /api/integration/:integrationID/connect/command/:attemptID` (`command.cancel`)", integration_command_cancel, integration_command_cancel_call, empty, (), input: IntegrationCommandCancelInput);
+    endpoint!(" `POST /api/experimental/integration/wellknown` (`wellknown.add`)", experimental_integration_wellknown_add, experimental_integration_wellknown_add_call, empty, (), input: ExperimentalIntegrationWellknownAddInput);
+    endpoint!(" `GET /api/mcp` (`list`)", mcp_list, mcp_list_call, json, McpListOutput, input: McpListInput);
+    endpoint!(" `GET /api/mcp/resource` (`resource.catalog`)", mcp_resource_catalog, mcp_resource_catalog_call, json, McpResourceCatalogOutput, input: McpResourceCatalogInput);
+    endpoint!(" `PUT /api/experimental/mcp/:server` (`add`)", experimental_mcp_add, experimental_mcp_add_call, empty, (), input: ExperimentalMcpAddInput);
+    endpoint!(" `DELETE /api/experimental/mcp/:server` (`remove`)", experimental_mcp_remove, experimental_mcp_remove_call, empty, (), input: ExperimentalMcpRemoveInput);
+    endpoint!(" `POST /api/experimental/mcp/:server/connect` (`connect`)", experimental_mcp_connect, experimental_mcp_connect_call, empty, (), input: ExperimentalMcpConnectInput);
+    endpoint!(" `POST /api/experimental/mcp/:server/disconnect` (`disconnect`)", experimental_mcp_disconnect, experimental_mcp_disconnect_call, empty, (), input: ExperimentalMcpDisconnectInput);
+    endpoint!(" `POST /api/experimental/client-mcp/token` (`client.token`)", experimental_mcp_client_token, experimental_mcp_client_token_call, json, ExperimentalMcpClientTokenOutput, input: ExperimentalMcpClientTokenInput);
+    endpoint!(" `GET /api/credential` (`list`)", credential_list, credential_list_call, data, CredentialListOutput);
+    endpoint!(" `POST /api/credential` (`create`)", credential_create, credential_create_call, data, CredentialCreateOutput, input: CredentialCreateInput);
+    endpoint!(" `PATCH /api/credential/:credentialID` (`update`)", credential_update, credential_update_call, empty, (), input: CredentialUpdateInput);
+    endpoint!(" `POST /api/credential/:credentialID/activate` (`activate`)", credential_activate, credential_activate_call, empty, (), input: CredentialActivateInput);
+    endpoint!(" `DELETE /api/credential/:credentialID` (`remove`)", credential_remove, credential_remove_call, empty, (), input: CredentialRemoveInput);
+    endpoint!(" `GET /api/project` (`list`)", project_list, project_list_call, json, ProjectListOutput, input: ProjectListInput);
+    endpoint!(" `PATCH /api/project/:projectID` (`update`)", project_update, project_update_call, json, ProjectUpdateOutput, input: ProjectUpdateInput);
+    endpoint!(" `GET /api/form` (`list`)", form_list, form_list_call, json, FormListOutput, input: FormListInput);
+    endpoint!(" `GET /api/permission/request` (`request.list`)", permission_request_list, permission_request_list_call, json, PermissionRequestListOutput, input: PermissionRequestListInput);
+    endpoint!(" `GET /api/permission/saved` (`saved.list`)", permission_saved_list, permission_saved_list_call, data, PermissionSavedListOutput, input: PermissionSavedListInput);
+    endpoint!(" `PATCH /api/permission/saved/:id` (`saved.update`)", permission_saved_update, permission_saved_update_call, data, PermissionSavedUpdateOutput, input: PermissionSavedUpdateInput);
+    endpoint!(" `DELETE /api/permission/saved/:id` (`saved.remove`)", permission_saved_remove, permission_saved_remove_call, empty, (), input: PermissionSavedRemoveInput);
+    endpoint!(" `POST /api/session/:sessionID/permission` (`create`)", permission_create, permission_create_call, data, PermissionCreateOutput, input: PermissionCreateInput);
+    endpoint!(" `GET /api/session/:sessionID/permission` (`list`)", permission_list, permission_list_call, data, PermissionListOutput, input: PermissionListInput);
+    endpoint!(" `GET /api/session/:sessionID/permission/:requestID` (`get`)", permission_get, permission_get_call, data, PermissionGetOutput, input: PermissionGetInput);
+    endpoint!(" `POST /api/session/:sessionID/permission/:requestID/reply` (`reply`)", permission_reply, permission_reply_call, empty, (), input: PermissionReplyInput);
+    endpoint!(" `GET /api/fs/read/*` (`read`)", file_read, file_read_call, binary, bytes::Bytes, input: FileReadInput);
+    endpoint!(" `GET /api/fs/list` (`list`)", file_list, file_list_call, json, FileListOutput, input: FileListInput);
+    endpoint!(" `GET /api/fs/find` (`find`)", file_find, file_find_call, json, FileFindOutput, input: FileFindInput);
+    endpoint!(" `POST /api/experimental/fs/write` (`write`)", experimental_file_write, experimental_file_write_call, json, ExperimentalFileWriteOutput, input: ExperimentalFileWriteInput);
+    endpoint!(" `POST /api/experimental/fs/watch` (`watch`)", experimental_file_watch, experimental_file_watch_call, empty, (), input: ExperimentalFileWatchInput);
+    endpoint!(" `DELETE /api/experimental/fs/watch` (`unwatch`)", experimental_file_unwatch, experimental_file_unwatch_call, empty, (), input: ExperimentalFileUnwatchInput);
+    endpoint!(" `GET /api/command` (`list`)", command_list, command_list_call, json, CommandListOutput, input: CommandListInput);
+    endpoint!(" `GET /api/skill` (`list`)", skill_list, skill_list_call, json, SkillListOutput, input: SkillListInput);
+    endpoint!(" `POST /api/rpc/:rpcID/:method` (`call`)", rpc_call, rpc_call_call, json, RpcCallOutput, input: RpcCallInput);
+    endpoint!(" `GET /api/event` (`subscribe`)", event_subscribe, event_subscribe_call, sse, SseResponse<EventSubscribeOutput>, input: EventSubscribeInput);
+    endpoint!(" `GET /api/pty` (`list`)", pty_list, pty_list_call, json, PtyListOutput, input: PtyListInput);
+    endpoint!(" `POST /api/pty` (`create`)", pty_create, pty_create_call, json, PtyCreateOutput, input: PtyCreateInput);
+    endpoint!(" `GET /api/pty/:ptyID` (`get`)", pty_get, pty_get_call, json, PtyGetOutput, input: PtyGetInput);
+    endpoint!(" `PUT /api/pty/:ptyID` (`update`)", pty_update, pty_update_call, json, PtyUpdateOutput, input: PtyUpdateInput);
+    endpoint!(" `DELETE /api/pty/:ptyID` (`remove`)", pty_remove, pty_remove_call, empty, (), input: PtyRemoveInput);
+    endpoint!(" `POST /api/pty/:ptyID/connect-token` (`connect.token`)", pty_connect_token, pty_connect_token_call, json, PtyConnectTokenOutput, input: PtyConnectTokenInput);
+    endpoint!(" `GET /api/experimental/session/:sessionID/terminal/read` (`persistentPty.read`)", experimental_persistent_pty_read, experimental_persistent_pty_read_call, data, ExperimentalPersistentPtyReadOutput, input: ExperimentalPersistentPtyReadInput);
+    endpoint!(" `GET /api/experimental/session/:sessionID/terminal` (`persistentPty.list`)", experimental_persistent_pty_list, experimental_persistent_pty_list_call, data, ExperimentalPersistentPtyListOutput, input: ExperimentalPersistentPtyListInput);
+    endpoint!(" `POST /api/experimental/session/:sessionID/terminal` (`persistentPty.create`)", experimental_persistent_pty_create, experimental_persistent_pty_create_call, data, ExperimentalPersistentPtyCreateOutput, input: ExperimentalPersistentPtyCreateInput);
+    endpoint!(
+        " `POST /api/experimental/persistent-pty/shutdown` (`persistentPty.shutdown`)",
+        experimental_persistent_pty_shutdown,
+        experimental_persistent_pty_shutdown_call,
+        empty,
+        ()
+    );
+    endpoint!(
+        " `POST /api/experimental/persistent-pty/handoff` (`persistentPty.handoff`)",
+        experimental_persistent_pty_handoff,
+        experimental_persistent_pty_handoff_call,
+        json,
+        ExperimentalPersistentPtyHandoffOutput
+    );
+    endpoint!(" `GET /api/experimental/persistent-pty/:ptyID` (`persistentPty.get`)", experimental_persistent_pty_get, experimental_persistent_pty_get_call, data, ExperimentalPersistentPtyGetOutput, input: ExperimentalPersistentPtyGetInput);
+    endpoint!(" `PUT /api/experimental/persistent-pty/:ptyID` (`persistentPty.update`)", experimental_persistent_pty_update, experimental_persistent_pty_update_call, data, ExperimentalPersistentPtyUpdateOutput, input: ExperimentalPersistentPtyUpdateInput);
+    endpoint!(" `GET /api/experimental/persistent-pty/:ptyID/snapshot` (`persistentPty.snapshot`)", experimental_persistent_pty_snapshot, experimental_persistent_pty_snapshot_call, data, ExperimentalPersistentPtySnapshotOutput, input: ExperimentalPersistentPtySnapshotInput);
+    endpoint!(" `DELETE /api/experimental/persistent-pty/:ptyID` (`persistentPty.remove`)", experimental_persistent_pty_remove, experimental_persistent_pty_remove_call, empty, (), input: ExperimentalPersistentPtyRemoveInput);
+    endpoint!(" `POST /api/experimental/persistent-pty/:ptyID/connect-token` (`persistentPty.connectToken`)", experimental_persistent_pty_connect_token, experimental_persistent_pty_connect_token_call, data, ExperimentalPersistentPtyConnectTokenOutput, input: ExperimentalPersistentPtyConnectTokenInput);
+    endpoint!(" `GET /api/experimental/media/:hash` (`media.get`)", experimental_media_get, experimental_media_get_call, binary, bytes::Bytes, input: ExperimentalMediaGetInput);
+    endpoint!(" `GET /api/experimental/blob/:id` (`blob.get`)", experimental_blob_get, experimental_blob_get_call, binary, bytes::Bytes, input: ExperimentalBlobGetInput);
+    endpoint!(" `POST /api/experimental/automation` (`automation.create`)", experimental_automation_create, experimental_automation_create_call, data, ExperimentalAutomationCreateOutput, input: ExperimentalAutomationCreateInput);
+    endpoint!(" `GET /api/experimental/automation` (`automation.list`)", experimental_automation_list, experimental_automation_list_call, data, ExperimentalAutomationListOutput, input: ExperimentalAutomationListInput);
+    endpoint!(" `GET /api/experimental/automation/:automationID` (`automation.get`)", experimental_automation_get, experimental_automation_get_call, data, ExperimentalAutomationGetOutput, input: ExperimentalAutomationGetInput);
+    endpoint!(" `POST /api/experimental/automation/:automationID/pause` (`automation.pause`)", experimental_automation_pause, experimental_automation_pause_call, data, ExperimentalAutomationPauseOutput, input: ExperimentalAutomationPauseInput);
+    endpoint!(" `POST /api/experimental/automation/:automationID/resume` (`automation.resume`)", experimental_automation_resume, experimental_automation_resume_call, data, ExperimentalAutomationResumeOutput, input: ExperimentalAutomationResumeInput);
+    endpoint!(" `DELETE /api/experimental/automation/:automationID` (`automation.delete`)", experimental_automation_delete, experimental_automation_delete_call, empty, (), input: ExperimentalAutomationDeleteInput);
+    endpoint!(" `GET /api/experimental/artifacts/providers` (`artifacts.providers`)", experimental_artifacts_providers, experimental_artifacts_providers_call, json, ExperimentalArtifactsProvidersOutput, input: ExperimentalArtifactsProvidersInput);
+    endpoint!(" `GET /api/experimental/artifacts` (`artifacts.list`)", experimental_artifacts_list, experimental_artifacts_list_call, json, ExperimentalArtifactsListOutput, input: ExperimentalArtifactsListInput);
+    endpoint!(" `POST /api/experimental/artifacts` (`artifacts.create`)", experimental_artifacts_create, experimental_artifacts_create_call, json, ExperimentalArtifactsCreateOutput, input: ExperimentalArtifactsCreateInput);
+    endpoint!(" `GET /api/experimental/artifacts/:artifactID` (`artifacts.get`)", experimental_artifacts_get, experimental_artifacts_get_call, json, ExperimentalArtifactsGetOutput, input: ExperimentalArtifactsGetInput);
+    endpoint!(" `PATCH /api/experimental/artifacts/:artifactID` (`artifacts.update`)", experimental_artifacts_update, experimental_artifacts_update_call, json, ExperimentalArtifactsUpdateOutput, input: ExperimentalArtifactsUpdateInput);
+    endpoint!(" `DELETE /api/experimental/artifacts/:artifactID` (`artifacts.delete`)", experimental_artifacts_delete, experimental_artifacts_delete_call, empty, (), input: ExperimentalArtifactsDeleteInput);
+    endpoint!(" `GET /api/experimental/artifacts/:artifactID/view/*` (`artifacts.view`)", experimental_artifacts_view, experimental_artifacts_view_call, binary, bytes::Bytes, input: ExperimentalArtifactsViewInput);
+    endpoint!(" `GET /api/experimental/job` (`job.list`)", experimental_job_list, experimental_job_list_call, data, ExperimentalJobListOutput, input: ExperimentalJobListInput);
+    endpoint!(" `GET /api/shell` (`list`)", shell_list, shell_list_call, json, ShellListOutput, input: ShellListInput);
+    endpoint!(" `POST /api/shell` (`create`)", shell_create, shell_create_call, json, ShellCreateOutput, input: ShellCreateInput);
+    endpoint!(" `GET /api/shell/:id` (`get`)", shell_get, shell_get_call, json, ShellGetOutput, input: ShellGetInput);
+    endpoint!(" `GET /api/shell/:id/output` (`output`)", shell_output, shell_output_call, json, ShellOutputOutput, input: ShellOutputInput);
+    endpoint!(" `DELETE /api/shell/:id` (`remove`)", shell_remove, shell_remove_call, empty, (), input: ShellRemoveInput);
+    endpoint!(" `GET /api/reference` (`list`)", reference_list, reference_list_call, json, ReferenceListOutput, input: ReferenceListInput);
+    endpoint!(" `GET /api/worktree` (`list`)", worktree_list, worktree_list_call, json, WorktreeListOutput, input: WorktreeListInput);
+    endpoint!(" `POST /api/worktree` (`create`)", worktree_create, worktree_create_call, json, WorktreeCreateOutput, input: WorktreeCreateInput);
+    endpoint!(" `DELETE /api/worktree` (`remove`)", worktree_remove, worktree_remove_call, empty, (), input: WorktreeRemoveInput);
+    endpoint!(" `POST /api/worktree/refresh` (`refresh`)", worktree_refresh, worktree_refresh_call, empty, (), input: WorktreeRefreshInput);
+    endpoint!(" `POST /api/vcs/init` (`init`)", vcs_init, vcs_init_call, empty, (), input: VcsInitInput);
+    endpoint!(" `GET /api/vcs` (`get`)", vcs_get, vcs_get_call, json, VcsGetOutput, input: VcsGetInput);
+    endpoint!(" `GET /api/vcs/base` (`base`)", vcs_base, vcs_base_call, json, VcsBaseOutput, input: VcsBaseInput);
+    endpoint!(" `GET /api/vcs/status` (`status`)", vcs_status, vcs_status_call, json, VcsStatusOutput, input: VcsStatusInput);
+    endpoint!(" `GET /api/vcs/branch` (`branch.list`)", vcs_branch_list, vcs_branch_list_call, json, VcsBranchListOutput, input: VcsBranchListInput);
+    endpoint!(" `GET /api/vcs/diff` (`diff`)", vcs_diff, vcs_diff_call, json, VcsDiffOutput, input: VcsDiffInput);
+    endpoint!(" `POST /api/debug/heap-dump` (`heapDump`)", debug_heap_dump, debug_heap_dump_call, json, DebugHeapDumpOutput, input: DebugHeapDumpInput);
+    endpoint!(
+        " `GET /api/debug/location` (`location.list`)",
+        debug_location_list,
+        debug_location_list_call,
+        json,
+        DebugLocationListOutput
+    );
+    endpoint!(" `DELETE /api/debug/location` (`location.evict`)", debug_location_evict, debug_location_evict_call, empty, (), input: DebugLocationEvictInput);
+    endpoint!(
+        " `GET /api/experimental/migration/v1` (`v1.status`)",
+        experimental_migration_v1_status,
+        experimental_migration_v1_status_call,
+        json,
+        ExperimentalMigrationV1StatusOutput
+    );
+    endpoint!(" `GET /api/websearch/provider` (`providers`)", websearch_providers, websearch_providers_call, json, WebsearchProvidersOutput, input: WebsearchProvidersInput);
+    endpoint!(" `POST /api/websearch` (`query`)", websearch_query, websearch_query_call, json, WebsearchQueryOutput, input: WebsearchQueryInput);
+    endpoint!(" `GET /api/experimental/usage/limits` (`limits`)", experimental_usage_limits, experimental_usage_limits_call, json, ExperimentalUsageLimitsOutput, input: ExperimentalUsageLimitsInput);
+    endpoint!(" `GET /api/config` (`get`)", config_get, config_get_call, json, ConfigGetOutput, input: ConfigGetInput);
+    endpoint!(" `GET /api/config/shell` (`shells`)", config_shells, config_shells_call, json, ConfigShellsOutput);
+    endpoint!(" `PATCH /api/experimental/config` (`update`)", experimental_config_update, experimental_config_update_call, empty, (), input: ExperimentalConfigUpdateInput);
 }

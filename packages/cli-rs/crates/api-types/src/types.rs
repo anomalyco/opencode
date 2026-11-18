@@ -66,75 +66,9 @@ pub struct LocationGetInput {
     pub location: Option<LocationQueryInput>,
 }
 
-/// `AbsolutePath`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct AbsolutePath(pub String);
+string_type!(AbsolutePath, "`AbsolutePath`");
 
-impl AbsolutePath {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for AbsolutePath {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for AbsolutePath {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for AbsolutePath {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for AbsolutePath {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
-
-/// `Project.ID`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct ProjectID(pub String);
-
-impl ProjectID {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for ProjectID {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for ProjectID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for ProjectID {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for ProjectID {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
+string_type!(ProjectID, "`Project.ID`");
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct LocationPublicInfoProject {
@@ -163,75 +97,9 @@ pub struct LocationPublicRef {
     pub directory: AbsolutePath,
 }
 
-/// `Agent.ID`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct AgentID(pub String);
+string_type!(AgentID, "`Agent.ID`");
 
-impl AgentID {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for AgentID {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for AgentID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for AgentID {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for AgentID {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
-
-/// `Provider.ID`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct ProviderID(pub String);
-
-impl ProviderID {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for ProviderID {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for ProviderID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for ProviderID {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for ProviderID {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
+string_type!(ProviderID, "`Provider.ID`");
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ModelRef {
@@ -316,40 +184,7 @@ impl ProviderCompaction {
     }
 }
 
-/// `Provider.CacheTTL`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct ProviderCacheTTL(pub String);
-
-impl ProviderCacheTTL {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for ProviderCacheTTL {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for ProviderCacheTTL {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for ProviderCacheTTL {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for ProviderCacheTTL {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
+string_type!(ProviderCacheTTL, "`Provider.CacheTTL`");
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ProviderCacheWarmingObject {
@@ -395,89 +230,21 @@ pub struct ProviderCache {
     pub warming: Option<ProviderCacheWarming>,
 }
 
+literal_enum! {
 /// `Provider.Transport`
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ProviderTransport {
-    Http,
-    Websocket,
-    Unknown(String),
+ProviderTransport {
+    Http => "http",
+    Websocket => "websocket",
+}
 }
 
-impl ProviderTransport {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Http => "http",
-            Self::Websocket => "websocket",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for ProviderTransport {
-    fn from(value: &str) -> Self {
-        match value {
-            "http" => Self::Http,
-            "websocket" => Self::Websocket,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for ProviderTransport {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for ProviderTransport {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
-}
-
+literal_enum! {
 /// `Provider.Encoding`
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ProviderEncoding {
-    Zstd,
-    Gzip,
-    None,
-    Unknown(String),
+ProviderEncoding {
+    Zstd => "zstd",
+    Gzip => "gzip",
+    None => "none",
 }
-
-impl ProviderEncoding {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Zstd => "zstd",
-            Self::Gzip => "gzip",
-            Self::None => "none",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for ProviderEncoding {
-    fn from(value: &str) -> Self {
-        match value {
-            "zstd" => Self::Zstd,
-            "gzip" => Self::Gzip,
-            "none" => Self::None,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for ProviderEncoding {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for ProviderEncoding {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -517,126 +284,23 @@ pub struct ProviderRequest {
     pub body: IndexMap<String, serde_json::Value>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum AgentInfoMode {
-    Subagent,
-    Primary,
-    All,
-    Unknown(String),
+literal_enum! {
+AgentInfoMode {
+    Subagent => "subagent",
+    Primary => "primary",
+    All => "all",
+}
 }
 
-impl AgentInfoMode {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Subagent => "subagent",
-            Self::Primary => "primary",
-            Self::All => "all",
-            Self::Unknown(value) => value,
-        }
-    }
-}
+string_type!(AgentColor, "`Agent.Color`");
 
-impl From<&str> for AgentInfoMode {
-    fn from(value: &str) -> Self {
-        match value {
-            "subagent" => Self::Subagent,
-            "primary" => Self::Primary,
-            "all" => Self::All,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for AgentInfoMode {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for AgentInfoMode {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
-}
-
-/// `Agent.Color`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct AgentColor(pub String);
-
-impl AgentColor {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for AgentColor {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for AgentColor {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for AgentColor {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for AgentColor {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
-
+literal_enum! {
 /// `Permission.Effect`
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum PermissionEffect {
-    Allow,
-    Deny,
-    Ask,
-    Unknown(String),
+PermissionEffect {
+    Allow => "allow",
+    Deny => "deny",
+    Ask => "ask",
 }
-
-impl PermissionEffect {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Allow => "allow",
-            Self::Deny => "deny",
-            Self::Ask => "ask",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for PermissionEffect {
-    fn from(value: &str) -> Self {
-        match value {
-            "allow" => Self::Allow,
-            "deny" => Self::Deny,
-            "ask" => Self::Ask,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for PermissionEffect {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for PermissionEffect {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -694,40 +358,7 @@ pub struct PluginListInput {
     pub location: Option<LocationQueryInput>,
 }
 
-/// `Plugin.ID`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct PluginID(pub String);
-
-impl PluginID {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for PluginID {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for PluginID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for PluginID {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for PluginID {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
+string_type!(PluginID, "`Plugin.ID`");
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PluginSourceBuiltin {
@@ -917,150 +548,18 @@ pub struct PluginUpdateInput {
     pub targets: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum SessionListInputOrder {
-    Asc,
-    Desc,
-    Unknown(String),
+literal_enum! {
+SessionListInputOrder {
+    Asc => "asc",
+    Desc => "desc",
+}
 }
 
-impl SessionListInputOrder {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Asc => "asc",
-            Self::Desc => "desc",
-            Self::Unknown(value) => value,
-        }
-    }
-}
+string_type!(SessionID, "`Session.ID`");
 
-impl From<&str> for SessionListInputOrder {
-    fn from(value: &str) -> Self {
-        match value {
-            "asc" => Self::Asc,
-            "desc" => Self::Desc,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
+string_type!(RelativePath, "`RelativePath`");
 
-impl Serialize for SessionListInputOrder {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for SessionListInputOrder {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
-}
-
-/// `Session.ID`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct SessionID(pub String);
-
-impl SessionID {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for SessionID {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for SessionID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for SessionID {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for SessionID {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
-
-/// `RelativePath`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct RelativePath(pub String);
-
-impl RelativePath {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for RelativePath {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for RelativePath {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for RelativePath {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for RelativePath {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
-
-/// `SessionsCursor`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct SessionsCursor(pub String);
-
-impl SessionsCursor {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for SessionsCursor {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for SessionsCursor {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for SessionsCursor {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for SessionsCursor {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
+string_type!(SessionsCursor, "`SessionsCursor`");
 
 /// Input of `Client::session_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -1076,40 +575,7 @@ pub struct SessionListInput {
     pub cursor: Option<SessionsCursor>,
 }
 
-/// `Session.Message.ID`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct SessionMessageID(pub String);
-
-impl SessionMessageID {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for SessionMessageID {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for SessionMessageID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for SessionMessageID {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for SessionMessageID {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
+string_type!(SessionMessageID, "`Session.Message.ID`");
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionForkBoundaryBefore {
@@ -1200,47 +666,12 @@ pub struct TokenUsageInfo {
     pub cache: TokenUsageInfoCache,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum SessionInfoOutcome {
-    Succeeded,
-    Failed,
-    Interrupted,
-    Unknown(String),
+literal_enum! {
+SessionInfoOutcome {
+    Succeeded => "succeeded",
+    Failed => "failed",
+    Interrupted => "interrupted",
 }
-
-impl SessionInfoOutcome {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Succeeded => "succeeded",
-            Self::Failed => "failed",
-            Self::Interrupted => "interrupted",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for SessionInfoOutcome {
-    fn from(value: &str) -> Self {
-        match value {
-            "succeeded" => Self::Succeeded,
-            "failed" => Self::Failed,
-            "interrupted" => Self::Interrupted,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for SessionInfoOutcome {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for SessionInfoOutcome {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -1262,82 +693,14 @@ pub struct SessionInfoTime {
 /// `Session.Metadata`
 pub type SessionMetadata = IndexMap<String, serde_json::Value>;
 
-/// `Snapshot.ID`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct SnapshotID(pub String);
+string_type!(SnapshotID, "`Snapshot.ID`");
 
-impl SnapshotID {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
+literal_enum! {
+FileDiffInfoStatus {
+    Added => "added",
+    Deleted => "deleted",
+    Modified => "modified",
 }
-
-impl std::borrow::Borrow<str> for SnapshotID {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for SnapshotID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for SnapshotID {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for SnapshotID {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum FileDiffInfoStatus {
-    Added,
-    Deleted,
-    Modified,
-    Unknown(String),
-}
-
-impl FileDiffInfoStatus {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Added => "added",
-            Self::Deleted => "deleted",
-            Self::Modified => "modified",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for FileDiffInfoStatus {
-    fn from(value: &str) -> Self {
-        match value {
-            "added" => Self::Added,
-            "deleted" => Self::Deleted,
-            "modified" => Self::Modified,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for FileDiffInfoStatus {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for FileDiffInfoStatus {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1485,45 +848,12 @@ pub struct SessionUpdateInput {
     pub archived: Option<bool>,
 }
 
+literal_enum! {
 /// `Session.Inbox.Delivery`
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum SessionInboxDelivery {
-    Steer,
-    Queue,
-    Unknown(String),
+SessionInboxDelivery {
+    Steer => "steer",
+    Queue => "queue",
 }
-
-impl SessionInboxDelivery {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Steer => "steer",
-            Self::Queue => "queue",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for SessionInboxDelivery {
-    fn from(value: &str) -> Self {
-        match value {
-            "steer" => Self::Steer,
-            "queue" => Self::Queue,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for SessionInboxDelivery {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for SessionInboxDelivery {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 /// Input of `Client::session_move`.
@@ -1611,40 +941,7 @@ pub struct PromptAgentAttachment {
     pub mention: Option<PromptMention>,
 }
 
-/// `Skill.ID`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct SkillID(pub String);
-
-impl SkillID {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for SkillID {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for SkillID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for SkillID {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for SkillID {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
+string_type!(SkillID, "`Skill.ID`");
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PromptInputSkillAttachment {
@@ -1673,40 +970,7 @@ pub struct SessionInboxUserTime {
     pub created: f64,
 }
 
-/// `Prompt.Base64`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct PromptBase64(pub String);
-
-impl PromptBase64 {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for PromptBase64 {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for PromptBase64 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for PromptBase64 {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for PromptBase64 {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
+string_type!(PromptBase64, "`Prompt.Base64`");
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PromptFileAttachment {
@@ -1721,40 +985,7 @@ pub struct PromptFileAttachment {
     pub mention: Option<PromptMention>,
 }
 
-/// `Skill.Name`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct SkillName(pub String);
-
-impl SkillName {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for SkillName {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for SkillName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for SkillName {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for SkillName {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
+string_type!(SkillName, "`Skill.Name`");
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PromptSkillAttachment {
@@ -2011,85 +1242,15 @@ pub struct SessionMessageShellTime {
     pub completed: Option<f64>,
 }
 
-/// `Shell.ID`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct ShellID(pub String);
+string_type!(ShellID, "`Shell.ID`");
 
-impl ShellID {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
+literal_enum! {
+SessionMessageShellStatus {
+    Running => "running",
+    Exited => "exited",
+    Timeout => "timeout",
+    Killed => "killed",
 }
-
-impl std::borrow::Borrow<str> for ShellID {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for ShellID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for ShellID {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for ShellID {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum SessionMessageShellStatus {
-    Running,
-    Exited,
-    Timeout,
-    Killed,
-    Unknown(String),
-}
-
-impl SessionMessageShellStatus {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Running => "running",
-            Self::Exited => "exited",
-            Self::Timeout => "timeout",
-            Self::Killed => "killed",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for SessionMessageShellStatus {
-    fn from(value: &str) -> Self {
-        match value {
-            "running" => Self::Running,
-            "exited" => Self::Exited,
-            "timeout" => Self::Timeout,
-            "killed" => Self::Killed,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for SessionMessageShellStatus {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for SessionMessageShellStatus {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -2417,56 +1578,15 @@ pub struct SessionMessageAssistantSnapshot {
     pub files: Option<Vec<RelativePath>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum SessionMessageAssistantFinish {
-    Stop,
-    Length,
-    ToolCalls,
-    ContentFilter,
-    Error,
-    Unknown2,
-    Unknown(String),
+literal_enum! {
+SessionMessageAssistantFinish {
+    Stop => "stop",
+    Length => "length",
+    ToolCalls => "tool-calls",
+    ContentFilter => "content-filter",
+    Error => "error",
+    Unknown2 => "unknown",
 }
-
-impl SessionMessageAssistantFinish {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Stop => "stop",
-            Self::Length => "length",
-            Self::ToolCalls => "tool-calls",
-            Self::ContentFilter => "content-filter",
-            Self::Error => "error",
-            Self::Unknown2 => "unknown",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for SessionMessageAssistantFinish {
-    fn from(value: &str) -> Self {
-        match value {
-            "stop" => Self::Stop,
-            "length" => Self::Length,
-            "tool-calls" => Self::ToolCalls,
-            "content-filter" => Self::ContentFilter,
-            "error" => Self::Error,
-            "unknown" => Self::Unknown2,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for SessionMessageAssistantFinish {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for SessionMessageAssistantFinish {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -2505,44 +1625,11 @@ pub struct SessionMessageAssistant {
     pub retry: Option<SessionMessageAssistantRetry>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum SessionMessageCompactionRunningReason {
-    Auto,
-    Manual,
-    Unknown(String),
+literal_enum! {
+SessionMessageCompactionRunningReason {
+    Auto => "auto",
+    Manual => "manual",
 }
-
-impl SessionMessageCompactionRunningReason {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Auto => "auto",
-            Self::Manual => "manual",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for SessionMessageCompactionRunningReason {
-    fn from(value: &str) -> Self {
-        match value {
-            "auto" => Self::Auto,
-            "manual" => Self::Manual,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for SessionMessageCompactionRunningReason {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for SessionMessageCompactionRunningReason {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -3245,82 +2332,16 @@ pub struct SessionFormListInput {
     pub session_id: String,
 }
 
-/// `Form.ID`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct FormID(pub String);
-
-impl FormID {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for FormID {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for FormID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for FormID {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for FormID {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
+string_type!(FormID, "`Form.ID`");
 
 /// `Form.Metadata`
 pub type FormMetadata = IndexMap<String, serde_json::Value>;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum FormWhenOp {
-    Eq,
-    Neq,
-    Unknown(String),
+literal_enum! {
+FormWhenOp {
+    Eq => "eq",
+    Neq => "neq",
 }
-
-impl FormWhenOp {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Eq => "eq",
-            Self::Neq => "neq",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for FormWhenOp {
-    fn from(value: &str) -> Self {
-        match value {
-            "eq" => Self::Eq,
-            "neq" => Self::Neq,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for FormWhenOp {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for FormWhenOp {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -3361,50 +2382,13 @@ pub struct FormWhen {
     pub value: FormWhenValue,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum FormStringFieldFormat {
-    Email,
-    Uri,
-    Date,
-    DateTime,
-    Unknown(String),
+literal_enum! {
+FormStringFieldFormat {
+    Email => "email",
+    Uri => "uri",
+    Date => "date",
+    DateTime => "date-time",
 }
-
-impl FormStringFieldFormat {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Email => "email",
-            Self::Uri => "uri",
-            Self::Date => "date",
-            Self::DateTime => "date-time",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for FormStringFieldFormat {
-    fn from(value: &str) -> Self {
-        match value {
-            "email" => Self::Email,
-            "uri" => Self::Uri,
-            "date" => Self::Date,
-            "date-time" => Self::DateTime,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for FormStringFieldFormat {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for FormStringFieldFormat {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -3875,47 +2859,12 @@ pub struct SessionViewInput {
     pub idle: f64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ExperimentalSessionStatsInputTools {
-    None,
-    Summary,
-    Detail,
-    Unknown(String),
+literal_enum! {
+ExperimentalSessionStatsInputTools {
+    None => "none",
+    Summary => "summary",
+    Detail => "detail",
 }
-
-impl ExperimentalSessionStatsInputTools {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::None => "none",
-            Self::Summary => "summary",
-            Self::Detail => "detail",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for ExperimentalSessionStatsInputTools {
-    fn from(value: &str) -> Self {
-        match value {
-            "none" => Self::None,
-            "summary" => Self::Summary,
-            "detail" => Self::Detail,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for ExperimentalSessionStatsInputTools {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for ExperimentalSessionStatsInputTools {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 /// Input of `Client::experimental_session_stats`.
@@ -4146,40 +3095,7 @@ pub struct ExperimentalSessionInstructionsEntryListInput {
     pub session_id: SessionID,
 }
 
-/// `InstructionEntry.Key`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct InstructionEntryKey(pub String);
-
-impl InstructionEntryKey {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for InstructionEntryKey {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for InstructionEntryKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for InstructionEntryKey {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for InstructionEntryKey {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
+string_type!(InstructionEntryKey, "`InstructionEntry.Key`");
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct InstructionEntryInfo {
@@ -4216,40 +3132,7 @@ pub struct ExperimentalSessionLogInput {
     pub follow: Option<bool>,
 }
 
-/// `Event.ID`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct EventID(pub String);
-
-impl EventID {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for EventID {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for EventID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for EventID {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for EventID {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
+string_type!(EventID, "`Event.ID`");
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SessionCreatedDurable {
@@ -4259,40 +3142,7 @@ pub struct SessionCreatedDurable {
     pub version: i64,
 }
 
-/// `Workspace.ID`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct WorkspaceID(pub String);
-
-impl WorkspaceID {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for WorkspaceID {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for WorkspaceID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for WorkspaceID {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for WorkspaceID {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
+string_type!(WorkspaceID, "`Workspace.ID`");
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct LocationRef {
@@ -4552,40 +3402,7 @@ pub struct SessionDeleted {
     pub data: SessionArchivedData,
 }
 
-/// `Instruction.Hash`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct InstructionHash(pub String);
-
-impl InstructionHash {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for InstructionHash {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for InstructionHash {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for InstructionHash {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for InstructionHash {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
+string_type!(InstructionHash, "`Instruction.Hash`");
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct InstructionEntrySnapshotItem {
@@ -4846,50 +3663,13 @@ pub struct SessionExecutionFailed {
     pub data: SessionExecutionFailedData,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum SessionExecutionInterruptedDataReason {
-    User,
-    Shutdown,
-    Superseded,
-    Inactivity,
-    Unknown(String),
+literal_enum! {
+SessionExecutionInterruptedDataReason {
+    User => "user",
+    Shutdown => "shutdown",
+    Superseded => "superseded",
+    Inactivity => "inactivity",
 }
-
-impl SessionExecutionInterruptedDataReason {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::User => "user",
-            Self::Shutdown => "shutdown",
-            Self::Superseded => "superseded",
-            Self::Inactivity => "inactivity",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for SessionExecutionInterruptedDataReason {
-    fn from(value: &str) -> Self {
-        match value {
-            "user" => Self::User,
-            "shutdown" => Self::Shutdown,
-            "superseded" => Self::Superseded,
-            "inactivity" => Self::Inactivity,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for SessionExecutionInterruptedDataReason {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for SessionExecutionInterruptedDataReason {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -5572,47 +4352,12 @@ pub struct SessionRevertCommitted {
     pub data: SessionRevertCommittedData,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum SessionUsageRecordedDataSource {
-    Title,
-    Compaction,
-    Generate,
-    Unknown(String),
+literal_enum! {
+SessionUsageRecordedDataSource {
+    Title => "title",
+    Compaction => "compaction",
+    Generate => "generate",
 }
-
-impl SessionUsageRecordedDataSource {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Title => "title",
-            Self::Compaction => "compaction",
-            Self::Generate => "generate",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for SessionUsageRecordedDataSource {
-    fn from(value: &str) -> Self {
-        match value {
-            "title" => Self::Title,
-            "compaction" => Self::Compaction,
-            "generate" => Self::Generate,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for SessionUsageRecordedDataSource {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for SessionUsageRecordedDataSource {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -6440,111 +5185,27 @@ impl SessionLogItem {
 /// Output of `Client::experimental_session_log`.
 pub type ExperimentalSessionLogOutput = SessionLogItem;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum MessageListInputOrder {
-    Asc,
-    Desc,
-    Unknown(String),
+literal_enum! {
+MessageListInputOrder {
+    Asc => "asc",
+    Desc => "desc",
+}
 }
 
-impl MessageListInputOrder {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Asc => "asc",
-            Self::Desc => "desc",
-            Self::Unknown(value) => value,
-        }
-    }
+literal_enum! {
+MessageListInputType {
+    AgentSwitched => "agent-switched",
+    ModelSwitched => "model-switched",
+    LocationSwitched => "location-switched",
+    User => "user",
+    Synthetic => "synthetic",
+    System => "system",
+    Skill => "skill",
+    Shell => "shell",
+    Assistant => "assistant",
+    Compaction => "compaction",
+    Idle => "idle",
 }
-
-impl From<&str> for MessageListInputOrder {
-    fn from(value: &str) -> Self {
-        match value {
-            "asc" => Self::Asc,
-            "desc" => Self::Desc,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for MessageListInputOrder {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for MessageListInputOrder {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum MessageListInputType {
-    AgentSwitched,
-    ModelSwitched,
-    LocationSwitched,
-    User,
-    Synthetic,
-    System,
-    Skill,
-    Shell,
-    Assistant,
-    Compaction,
-    Idle,
-    Unknown(String),
-}
-
-impl MessageListInputType {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::AgentSwitched => "agent-switched",
-            Self::ModelSwitched => "model-switched",
-            Self::LocationSwitched => "location-switched",
-            Self::User => "user",
-            Self::Synthetic => "synthetic",
-            Self::System => "system",
-            Self::Skill => "skill",
-            Self::Shell => "shell",
-            Self::Assistant => "assistant",
-            Self::Compaction => "compaction",
-            Self::Idle => "idle",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for MessageListInputType {
-    fn from(value: &str) -> Self {
-        match value {
-            "agent-switched" => Self::AgentSwitched,
-            "model-switched" => Self::ModelSwitched,
-            "location-switched" => Self::LocationSwitched,
-            "user" => Self::User,
-            "synthetic" => Self::Synthetic,
-            "system" => Self::System,
-            "skill" => Self::Skill,
-            "shell" => Self::Shell,
-            "assistant" => Self::Assistant,
-            "compaction" => Self::Compaction,
-            "idle" => Self::Idle,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for MessageListInputType {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for MessageListInputType {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 /// Input of `Client::message_list`.
@@ -6581,130 +5242,29 @@ pub struct ModelListInput {
     pub types: Option<Vec<String>>,
 }
 
+literal_enum! {
 /// `Model.MaxTokensField`
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ModelMaxTokensField {
-    MaxCompletionTokens,
-    MaxTokens,
-    Unknown(String),
+ModelMaxTokensField {
+    MaxCompletionTokens => "max_completion_tokens",
+    MaxTokens => "max_tokens",
+}
 }
 
-impl ModelMaxTokensField {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::MaxCompletionTokens => "max_completion_tokens",
-            Self::MaxTokens => "max_tokens",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for ModelMaxTokensField {
-    fn from(value: &str) -> Self {
-        match value {
-            "max_completion_tokens" => Self::MaxCompletionTokens,
-            "max_tokens" => Self::MaxTokens,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for ModelMaxTokensField {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for ModelMaxTokensField {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
-}
-
+literal_enum! {
 /// `Model.CacheFormat`
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ModelCacheFormat {
-    Anthropic,
-    Alibaba,
-    Unknown(String),
+ModelCacheFormat {
+    Anthropic => "anthropic",
+    Alibaba => "alibaba",
+}
 }
 
-impl ModelCacheFormat {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Anthropic => "anthropic",
-            Self::Alibaba => "alibaba",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for ModelCacheFormat {
-    fn from(value: &str) -> Self {
-        match value {
-            "anthropic" => Self::Anthropic,
-            "alibaba" => Self::Alibaba,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for ModelCacheFormat {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for ModelCacheFormat {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
-}
-
+literal_enum! {
 /// `Model.MediaInput`
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ModelMediaInput {
-    Assets,
-    State,
-    Root,
-    Unknown(String),
+ModelMediaInput {
+    Assets => "assets",
+    State => "state",
+    Root => "root",
 }
-
-impl ModelMediaInput {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Assets => "assets",
-            Self::State => "state",
-            Self::Root => "root",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for ModelMediaInput {
-    fn from(value: &str) -> Self {
-        match value {
-            "assets" => Self::Assets,
-            "state" => Self::State,
-            "root" => Self::Root,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for ModelMediaInput {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for ModelMediaInput {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -6745,48 +5305,13 @@ pub struct ModelSettings {
     pub extra: IndexMap<String, serde_json::Value>,
 }
 
+literal_enum! {
 /// `Tool.FreeformFormat`
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ToolFreeformFormat {
-    Text,
-    Regex,
-    Lark,
-    Unknown(String),
+ToolFreeformFormat {
+    Text => "text",
+    Regex => "regex",
+    Lark => "lark",
 }
-
-impl ToolFreeformFormat {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Text => "text",
-            Self::Regex => "regex",
-            Self::Lark => "lark",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for ToolFreeformFormat {
-    fn from(value: &str) -> Self {
-        match value {
-            "text" => Self::Text,
-            "regex" => Self::Regex,
-            "lark" => Self::Lark,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for ToolFreeformFormat {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for ToolFreeformFormat {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -6855,50 +5380,13 @@ pub struct ModelCost {
     pub cache: ModelCostCache,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ModelInfoStatus {
-    Alpha,
-    Beta,
-    Deprecated,
-    Active,
-    Unknown(String),
+literal_enum! {
+ModelInfoStatus {
+    Alpha => "alpha",
+    Beta => "beta",
+    Deprecated => "deprecated",
+    Active => "active",
 }
-
-impl ModelInfoStatus {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Alpha => "alpha",
-            Self::Beta => "beta",
-            Self::Deprecated => "deprecated",
-            Self::Active => "active",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for ModelInfoStatus {
-    fn from(value: &str) -> Self {
-        match value {
-            "alpha" => Self::Alpha,
-            "beta" => Self::Beta,
-            "deprecated" => Self::Deprecated,
-            "active" => Self::Active,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for ModelInfoStatus {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for ModelInfoStatus {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -6981,40 +5469,7 @@ pub struct GenerateFile {
     pub name: Option<String>,
 }
 
-/// `Generate.ImageAspect`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct GenerateImageAspect(pub String);
-
-impl GenerateImageAspect {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for GenerateImageAspect {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for GenerateImageAspect {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for GenerateImageAspect {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for GenerateImageAspect {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
+string_type!(GenerateImageAspect, "`Generate.ImageAspect`");
 
 /// Input of `Client::experimental_generate_image`.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -7083,40 +5538,7 @@ pub struct ExperimentalGenerateVideoCreateInput {
     pub sound: Option<bool>,
 }
 
-/// `Generate.VideoID`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct GenerateVideoID(pub String);
-
-impl GenerateVideoID {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for GenerateVideoID {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for GenerateVideoID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for GenerateVideoID {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for GenerateVideoID {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
+string_type!(GenerateVideoID, "`Generate.VideoID`");
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct GenerateVideoRunning {
@@ -7133,40 +5555,7 @@ pub struct ExperimentalGenerateVideoGetInput {
     pub id: GenerateVideoID,
 }
 
-/// `Blob.ID`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct BlobID(pub String);
-
-impl BlobID {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for BlobID {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for BlobID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for BlobID {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for BlobID {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
+string_type!(BlobID, "`Blob.ID`");
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct BlobInfo {
@@ -7185,51 +5574,14 @@ pub struct GenerateVideoCompleted {
     pub blobs: Vec<BlobInfo>,
 }
 
+literal_enum! {
 /// `Generate.VideoErrorReason`
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum GenerateVideoErrorReason {
-    Failed,
-    Cancelled,
-    Expired,
-    Unknown2,
-    Unknown(String),
+GenerateVideoErrorReason {
+    Failed => "failed",
+    Cancelled => "cancelled",
+    Expired => "expired",
+    Unknown2 => "unknown",
 }
-
-impl GenerateVideoErrorReason {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Failed => "failed",
-            Self::Cancelled => "cancelled",
-            Self::Expired => "expired",
-            Self::Unknown2 => "unknown",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for GenerateVideoErrorReason {
-    fn from(value: &str) -> Self {
-        match value {
-            "failed" => Self::Failed,
-            "cancelled" => Self::Cancelled,
-            "expired" => Self::Expired,
-            "unknown" => Self::Unknown2,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for GenerateVideoErrorReason {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for GenerateVideoErrorReason {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -7627,45 +5979,12 @@ pub struct GenerateDecisionResult {
 /// Output of `Client::experimental_generate_decisions`.
 pub type ExperimentalGenerateDecisionsOutput = GenerateDecisionResult;
 
+literal_enum! {
 /// `VoiceTransportType`
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum VoiceTransportType {
-    Webrtc,
-    Websocket,
-    Unknown(String),
+VoiceTransportType {
+    Webrtc => "webrtc",
+    Websocket => "websocket",
 }
-
-impl VoiceTransportType {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Webrtc => "webrtc",
-            Self::Websocket => "websocket",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for VoiceTransportType {
-    fn from(value: &str) -> Self {
-        match value {
-            "webrtc" => Self::Webrtc,
-            "websocket" => Self::Websocket,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for VoiceTransportType {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for VoiceTransportType {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -7804,82 +6123,14 @@ pub struct ProviderListInput {
     pub location: Option<LocationQueryInput>,
 }
 
-/// `Integration.ID`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct IntegrationID(pub String);
+string_type!(IntegrationID, "`Integration.ID`");
 
-impl IntegrationID {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
+literal_enum! {
+ProviderInfoActivation {
+    Auto => "auto",
+    Enabled => "enabled",
+    Disabled => "disabled",
 }
-
-impl std::borrow::Borrow<str> for IntegrationID {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for IntegrationID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for IntegrationID {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for IntegrationID {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ProviderInfoActivation {
-    Auto,
-    Enabled,
-    Disabled,
-    Unknown(String),
-}
-
-impl ProviderInfoActivation {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Auto => "auto",
-            Self::Enabled => "enabled",
-            Self::Disabled => "disabled",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for ProviderInfoActivation {
-    fn from(value: &str) -> Self {
-        match value {
-            "auto" => Self::Auto,
-            "enabled" => Self::Enabled,
-            "disabled" => Self::Disabled,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for ProviderInfoActivation {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for ProviderInfoActivation {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -7949,40 +6200,7 @@ pub struct IntegrationListInput {
     pub location: Option<LocationQueryInput>,
 }
 
-/// `Integration.MethodID`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct IntegrationMethodID(pub String);
-
-impl IntegrationMethodID {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for IntegrationMethodID {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for IntegrationMethodID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for IntegrationMethodID {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for IntegrationMethodID {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
+string_type!(IntegrationMethodID, "`Integration.MethodID`");
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct IntegrationOAuthMethod {
@@ -8091,82 +6309,14 @@ impl IntegrationMethod {
     }
 }
 
-/// `Credential.ID`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct CredentialID(pub String);
+string_type!(CredentialID, "`Credential.ID`");
 
-impl CredentialID {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
+literal_enum! {
+ConnectionCredentialInfoMethod {
+    Key => "key",
+    Oauth => "oauth",
+    External => "external",
 }
-
-impl std::borrow::Borrow<str> for CredentialID {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for CredentialID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for CredentialID {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for CredentialID {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ConnectionCredentialInfoMethod {
-    Key,
-    Oauth,
-    External,
-    Unknown(String),
-}
-
-impl ConnectionCredentialInfoMethod {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Key => "key",
-            Self::Oauth => "oauth",
-            Self::External => "external",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for ConnectionCredentialInfoMethod {
-    fn from(value: &str) -> Self {
-        match value {
-            "key" => Self::Key,
-            "oauth" => Self::Oauth,
-            "external" => Self::External,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for ConnectionCredentialInfoMethod {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for ConnectionCredentialInfoMethod {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -8300,79 +6450,13 @@ pub struct IntegrationOauthConnectInput {
     pub label: Option<String>,
 }
 
-/// `Integration.AttemptID`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct IntegrationAttemptID(pub String);
+string_type!(IntegrationAttemptID, "`Integration.AttemptID`");
 
-impl IntegrationAttemptID {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
+literal_enum! {
+IntegrationAttemptMode {
+    Auto => "auto",
+    Code => "code",
 }
-
-impl std::borrow::Borrow<str> for IntegrationAttemptID {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for IntegrationAttemptID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for IntegrationAttemptID {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for IntegrationAttemptID {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum IntegrationAttemptMode {
-    Auto,
-    Code,
-    Unknown(String),
-}
-
-impl IntegrationAttemptMode {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Auto => "auto",
-            Self::Code => "code",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for IntegrationAttemptMode {
-    fn from(value: &str) -> Self {
-        match value {
-            "auto" => Self::Auto,
-            "code" => Self::Code,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for IntegrationAttemptMode {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for IntegrationAttemptMode {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -8851,48 +6935,13 @@ pub struct ExperimentalMcpAddInputConfigLocalTimeout {
     pub execution: Option<i64>,
 }
 
+literal_enum! {
 /// `Mcp.Protocol`
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum McpProtocol {
-    Legacy,
-    Auto,
-    V20260728,
-    Unknown(String),
+McpProtocol {
+    Legacy => "legacy",
+    Auto => "auto",
+    V20260728 => "2026-07-28",
 }
-
-impl McpProtocol {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Legacy => "legacy",
-            Self::Auto => "auto",
-            Self::V20260728 => "2026-07-28",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for McpProtocol {
-    fn from(value: &str) -> Self {
-        match value {
-            "legacy" => Self::Legacy,
-            "auto" => Self::Auto,
-            "2026-07-28" => Self::V20260728,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for McpProtocol {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for McpProtocol {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -9247,40 +7296,7 @@ pub struct ProjectListInput {
     pub archived: Option<bool>,
 }
 
-/// `Project.Vcs`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct ProjectVcs(pub String);
-
-impl ProjectVcs {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for ProjectVcs {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for ProjectVcs {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for ProjectVcs {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for ProjectVcs {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
+string_type!(ProjectVcs, "`Project.Vcs`");
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ProjectIcon {
@@ -9357,40 +7373,7 @@ pub struct PermissionRequestListInput {
     pub location: Option<LocationQueryInput>,
 }
 
-/// `Permission.ID`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct PermissionID(pub String);
-
-impl PermissionID {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for PermissionID {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for PermissionID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for PermissionID {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for PermissionID {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
+string_type!(PermissionID, "`Permission.ID`");
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PermissionSource {
@@ -9429,40 +7412,7 @@ pub struct PermissionSavedListInput {
     pub project_id: Option<ProjectID>,
 }
 
-/// `PermissionSaved.ID`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct PermissionSavedID(pub String);
-
-impl PermissionSavedID {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for PermissionSavedID {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for PermissionSavedID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for PermissionSavedID {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for PermissionSavedID {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
+string_type!(PermissionSavedID, "`PermissionSaved.ID`");
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PermissionSavedInfoTime {
@@ -9540,48 +7490,13 @@ pub struct PermissionGetInput {
 /// Output of `Client::permission_get`.
 pub type PermissionGetOutput = PermissionRequest;
 
+literal_enum! {
 /// `Permission.Reply`
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum PermissionReply {
-    Once,
-    Always,
-    Reject,
-    Unknown(String),
+PermissionReply {
+    Once => "once",
+    Always => "always",
+    Reject => "reject",
 }
-
-impl PermissionReply {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Once => "once",
-            Self::Always => "always",
-            Self::Reject => "reject",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for PermissionReply {
-    fn from(value: &str) -> Self {
-        match value {
-            "once" => Self::Once,
-            "always" => Self::Always,
-            "reject" => Self::Reject,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for PermissionReply {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for PermissionReply {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 /// Input of `Client::permission_reply`.
@@ -9607,44 +7522,11 @@ pub struct FileListInput {
     pub path: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum FileSystemEntryType {
-    File,
-    Directory,
-    Unknown(String),
+literal_enum! {
+FileSystemEntryType {
+    File => "file",
+    Directory => "directory",
 }
-
-impl FileSystemEntryType {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::File => "file",
-            Self::Directory => "directory",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for FileSystemEntryType {
-    fn from(value: &str) -> Self {
-        match value {
-            "file" => Self::File,
-            "directory" => Self::Directory,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for FileSystemEntryType {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for FileSystemEntryType {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -10036,47 +7918,12 @@ pub struct SessionCompactionDelta {
     pub data: SessionCompactionDeltaData,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum FilesystemChangedDataEvent {
-    Add,
-    Change,
-    Unlink,
-    Unknown(String),
+literal_enum! {
+FilesystemChangedDataEvent {
+    Add => "add",
+    Change => "change",
+    Unlink => "unlink",
 }
-
-impl FilesystemChangedDataEvent {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Add => "add",
-            Self::Change => "change",
-            Self::Unlink => "unlink",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for FilesystemChangedDataEvent {
-    fn from(value: &str) -> Self {
-        match value {
-            "add" => Self::Add,
-            "change" => Self::Change,
-            "unlink" => Self::Unlink,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for FilesystemChangedDataEvent {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for FilesystemChangedDataEvent {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -10302,79 +8149,13 @@ pub struct SkillUpdated {
     pub data: SkillUpdatedData,
 }
 
-/// `Pty.ID`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct PtyID(pub String);
+string_type!(PtyID, "`Pty.ID`");
 
-impl PtyID {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
+literal_enum! {
+PtyStatus {
+    Running => "running",
+    Exited => "exited",
 }
-
-impl std::borrow::Borrow<str> for PtyID {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for PtyID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for PtyID {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for PtyID {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum PtyStatus {
-    Running,
-    Exited,
-    Unknown(String),
-}
-
-impl PtyStatus {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Running => "running",
-            Self::Exited => "exited",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for PtyStatus {
-    fn from(value: &str) -> Self {
-        match value {
-            "running" => Self::Running,
-            "exited" => Self::Exited,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for PtyStatus {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for PtyStatus {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -10834,50 +8615,13 @@ pub struct TuiCommandExecute {
     pub data: TuiCommandExecuteData,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum TuiToastShowDataVariant {
-    Info,
-    Success,
-    Warning,
-    Error,
-    Unknown(String),
+literal_enum! {
+TuiToastShowDataVariant {
+    Info => "info",
+    Success => "success",
+    Warning => "warning",
+    Error => "error",
 }
-
-impl TuiToastShowDataVariant {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Info => "info",
-            Self::Success => "success",
-            Self::Warning => "warning",
-            Self::Error => "error",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for TuiToastShowDataVariant {
-    fn from(value: &str) -> Self {
-        match value {
-            "info" => Self::Info,
-            "success" => Self::Success,
-            "warning" => Self::Warning,
-            "error" => Self::Error,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for TuiToastShowDataVariant {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for TuiToastShowDataVariant {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -12242,40 +9986,7 @@ pub struct ExperimentalPersistentPtyConnectTokenInput {
 /// Output of `Client::experimental_persistent_pty_connect_token`.
 pub type ExperimentalPersistentPtyConnectTokenOutput = PtyTicketConnectToken;
 
-/// `MediaHash`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct MediaHash(pub String);
-
-impl MediaHash {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for MediaHash {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for MediaHash {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for MediaHash {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for MediaHash {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
+string_type!(MediaHash, "`MediaHash`");
 
 /// Input of `Client::experimental_media_get`.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -12297,40 +10008,7 @@ pub struct AutomationTriggerAt {
     pub tz: Option<String>,
 }
 
-/// `Automation.Duration`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct AutomationDuration(pub String);
-
-impl AutomationDuration {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for AutomationDuration {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for AutomationDuration {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for AutomationDuration {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for AutomationDuration {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
+string_type!(AutomationDuration, "`Automation.Duration`");
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct AutomationTriggerEvery {
@@ -12512,40 +10190,7 @@ pub struct ExperimentalAutomationCreateInput {
     pub expires: Option<String>,
 }
 
-/// `Automation.ID`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct AutomationID(pub String);
-
-impl AutomationID {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for AutomationID {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for AutomationID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for AutomationID {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for AutomationID {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
+string_type!(AutomationID, "`Automation.ID`");
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AutomationActionPrompt {
@@ -12599,101 +10244,25 @@ impl AutomationAction {
     }
 }
 
+literal_enum! {
 /// `Automation.Status`
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum AutomationStatus {
-    Active,
-    Paused,
-    Done,
-    Unknown(String),
+AutomationStatus {
+    Active => "active",
+    Paused => "paused",
+    Done => "done",
+}
 }
 
-impl AutomationStatus {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Active => "active",
-            Self::Paused => "paused",
-            Self::Done => "done",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for AutomationStatus {
-    fn from(value: &str) -> Self {
-        match value {
-            "active" => Self::Active,
-            "paused" => Self::Paused,
-            "done" => Self::Done,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for AutomationStatus {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for AutomationStatus {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
-}
-
+literal_enum! {
 /// `Automation.Outcome`
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum AutomationOutcome {
-    Fired,
-    Late,
-    Skipped,
-    Disabled,
-    Failed,
-    Expired,
-    Unknown(String),
+AutomationOutcome {
+    Fired => "fired",
+    Late => "late",
+    Skipped => "skipped",
+    Disabled => "disabled",
+    Failed => "failed",
+    Expired => "expired",
 }
-
-impl AutomationOutcome {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Fired => "fired",
-            Self::Late => "late",
-            Self::Skipped => "skipped",
-            Self::Disabled => "disabled",
-            Self::Failed => "failed",
-            Self::Expired => "expired",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for AutomationOutcome {
-    fn from(value: &str) -> Self {
-        match value {
-            "fired" => Self::Fired,
-            "late" => Self::Late,
-            "skipped" => Self::Skipped,
-            "disabled" => Self::Disabled,
-            "failed" => Self::Failed,
-            "expired" => Self::Expired,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for AutomationOutcome {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for AutomationOutcome {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -12788,51 +10357,14 @@ pub struct ExperimentalArtifactsProvidersInput {
     pub location: Option<LocationQueryInput>,
 }
 
+literal_enum! {
 /// `Artifact.Capability`
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ArtifactCapability {
-    Static,
-    ServerCode,
-    Sqlite,
-    DurableObjects,
-    Unknown(String),
+ArtifactCapability {
+    Static => "static",
+    ServerCode => "server-code",
+    Sqlite => "sqlite",
+    DurableObjects => "durable-objects",
 }
-
-impl ArtifactCapability {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Static => "static",
-            Self::ServerCode => "server-code",
-            Self::Sqlite => "sqlite",
-            Self::DurableObjects => "durable-objects",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for ArtifactCapability {
-    fn from(value: &str) -> Self {
-        match value {
-            "static" => Self::Static,
-            "server-code" => Self::ServerCode,
-            "sqlite" => Self::Sqlite,
-            "durable-objects" => Self::DurableObjects,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for ArtifactCapability {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for ArtifactCapability {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -12849,40 +10381,7 @@ pub struct ExperimentalArtifactsProvidersOutput {
     pub data: Vec<ArtifactProvider>,
 }
 
-/// `Artifact.ProviderID`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct ArtifactProviderID(pub String);
-
-impl ArtifactProviderID {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for ArtifactProviderID {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for ArtifactProviderID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for ArtifactProviderID {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for ArtifactProviderID {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
+string_type!(ArtifactProviderID, "`Artifact.ProviderID`");
 
 /// Input of `Client::experimental_artifacts_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -12892,40 +10391,7 @@ pub struct ExperimentalArtifactsListInput {
     pub provider: Option<ArtifactProviderID>,
 }
 
-/// `Artifact.ID`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct ArtifactID(pub String);
-
-impl ArtifactID {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for ArtifactID {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for ArtifactID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for ArtifactID {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for ArtifactID {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
+string_type!(ArtifactID, "`Artifact.ID`");
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ArtifactTime {
@@ -13021,98 +10487,24 @@ pub struct ExperimentalArtifactsViewInput {
     pub path: String,
 }
 
+literal_enum! {
 /// `Job.Kind`
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum JobKind {
-    Shell,
-    Subagent,
-    Image,
-    Codemode,
-    Unknown(String),
+JobKind {
+    Shell => "shell",
+    Subagent => "subagent",
+    Image => "image",
+    Codemode => "codemode",
+}
 }
 
-impl JobKind {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Shell => "shell",
-            Self::Subagent => "subagent",
-            Self::Image => "image",
-            Self::Codemode => "codemode",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for JobKind {
-    fn from(value: &str) -> Self {
-        match value {
-            "shell" => Self::Shell,
-            "subagent" => Self::Subagent,
-            "image" => Self::Image,
-            "codemode" => Self::Codemode,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for JobKind {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for JobKind {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
-}
-
+literal_enum! {
 /// `Job.Status`
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum JobStatus {
-    Running,
-    Completed,
-    Error,
-    Cancelled,
-    Unknown(String),
+JobStatus {
+    Running => "running",
+    Completed => "completed",
+    Error => "error",
+    Cancelled => "cancelled",
 }
-
-impl JobStatus {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Running => "running",
-            Self::Completed => "completed",
-            Self::Error => "error",
-            Self::Cancelled => "cancelled",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for JobStatus {
-    fn from(value: &str) -> Self {
-        match value {
-            "running" => Self::Running,
-            "completed" => Self::Completed,
-            "error" => Self::Error,
-            "cancelled" => Self::Cancelled,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for JobStatus {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for JobStatus {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 /// Input of `Client::experimental_job_list`.
@@ -13542,44 +10934,11 @@ pub struct VcsBaseInput {
     pub location: Option<LocationQueryInput>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum VcsBaseSource {
-    Reflog,
-    Default,
-    Unknown(String),
+literal_enum! {
+VcsBaseSource {
+    Reflog => "reflog",
+    Default => "default",
 }
-
-impl VcsBaseSource {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Reflog => "reflog",
-            Self::Default => "default",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for VcsBaseSource {
-    fn from(value: &str) -> Self {
-        match value {
-            "reflog" => Self::Reflog,
-            "default" => Self::Default,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for VcsBaseSource {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for VcsBaseSource {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -13633,89 +10992,21 @@ pub struct VcsBranchListOutput {
     pub data: VcsBranchList,
 }
 
+literal_enum! {
 /// `Vcs.Mode`
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum VcsMode {
-    Working,
-    Branch,
-    Committed,
-    Unknown(String),
+VcsMode {
+    Working => "working",
+    Branch => "branch",
+    Committed => "committed",
+}
 }
 
-impl VcsMode {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Working => "working",
-            Self::Branch => "branch",
-            Self::Committed => "committed",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for VcsMode {
-    fn from(value: &str) -> Self {
-        match value {
-            "working" => Self::Working,
-            "branch" => Self::Branch,
-            "committed" => Self::Committed,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for VcsMode {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for VcsMode {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
-}
-
+literal_enum! {
 /// `Vcs.Untracked`
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum VcsUntracked {
-    Files,
-    Folders,
-    Unknown(String),
+VcsUntracked {
+    Files => "files",
+    Folders => "folders",
 }
-
-impl VcsUntracked {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Files => "files",
-            Self::Folders => "folders",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for VcsUntracked {
-    fn from(value: &str) -> Self {
-        match value {
-            "files" => Self::Files,
-            "folders" => Self::Folders,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for VcsUntracked {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for VcsUntracked {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 /// Input of `Client::vcs_diff`.
@@ -13770,44 +11061,11 @@ pub struct DebugLocationEvictInput {
     pub location: Option<LocationQueryInput>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ExperimentalMigrationV1StatusOutput2Variant1Status {
-    Required,
-    Completed,
-    Unknown(String),
+literal_enum! {
+ExperimentalMigrationV1StatusOutput2Variant1Status {
+    Required => "required",
+    Completed => "completed",
 }
-
-impl ExperimentalMigrationV1StatusOutput2Variant1Status {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Required => "required",
-            Self::Completed => "completed",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for ExperimentalMigrationV1StatusOutput2Variant1Status {
-    fn from(value: &str) -> Self {
-        match value {
-            "required" => Self::Required,
-            "completed" => Self::Completed,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for ExperimentalMigrationV1StatusOutput2Variant1Status {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for ExperimentalMigrationV1StatusOutput2Variant1Status {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -13884,40 +11142,7 @@ pub struct WebsearchProvidersInput {
     pub location: Option<LocationQueryInput>,
 }
 
-/// `WebSearch.ID`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct WebSearchID(pub String);
-
-impl WebSearchID {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for WebSearchID {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for WebSearchID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for WebSearchID {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for WebSearchID {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
+string_type!(WebSearchID, "`WebSearch.ID`");
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct WebSearchProvider {
@@ -13999,124 +11224,25 @@ pub struct UsageLimitsGo {
     pub monthly: UsageLimitsMeter,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum UsageLimitsBudgetScope {
-    Each,
-    Combined,
-    Unknown(String),
+literal_enum! {
+UsageLimitsBudgetScope {
+    Each => "each",
+    Combined => "combined",
+}
 }
 
-impl UsageLimitsBudgetScope {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Each => "each",
-            Self::Combined => "combined",
-            Self::Unknown(value) => value,
-        }
-    }
+literal_enum! {
+UsageLimitsBudgetPer {
+    Set => "set",
+    Model => "model",
+}
 }
 
-impl From<&str> for UsageLimitsBudgetScope {
-    fn from(value: &str) -> Self {
-        match value {
-            "each" => Self::Each,
-            "combined" => Self::Combined,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
+literal_enum! {
+UsageLimitsBudgetCoverage {
+    All => "all",
+    Models => "models",
 }
-
-impl Serialize for UsageLimitsBudgetScope {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for UsageLimitsBudgetScope {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum UsageLimitsBudgetPer {
-    Set,
-    Model,
-    Unknown(String),
-}
-
-impl UsageLimitsBudgetPer {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Set => "set",
-            Self::Model => "model",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for UsageLimitsBudgetPer {
-    fn from(value: &str) -> Self {
-        match value {
-            "set" => Self::Set,
-            "model" => Self::Model,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for UsageLimitsBudgetPer {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for UsageLimitsBudgetPer {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum UsageLimitsBudgetCoverage {
-    All,
-    Models,
-    Unknown(String),
-}
-
-impl UsageLimitsBudgetCoverage {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::All => "all",
-            Self::Models => "models",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for UsageLimitsBudgetCoverage {
-    fn from(value: &str) -> Self {
-        match value {
-            "all" => Self::All,
-            "models" => Self::Models,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for UsageLimitsBudgetCoverage {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for UsageLimitsBudgetCoverage {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -14212,90 +11338,20 @@ impl ConfigEntryDocumentInfoModel {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ConfigEntryDocumentInfoUpdate {
-    Disable,
-    Notify,
-    Auto,
-    Unknown(String),
+literal_enum! {
+ConfigEntryDocumentInfoUpdate {
+    Disable => "disable",
+    Notify => "notify",
+    Auto => "auto",
+}
 }
 
-impl ConfigEntryDocumentInfoUpdate {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Disable => "disable",
-            Self::Notify => "notify",
-            Self::Auto => "auto",
-            Self::Unknown(value) => value,
-        }
-    }
+literal_enum! {
+ConfigEntryDocumentInfoShare {
+    Manual => "manual",
+    Auto => "auto",
+    Disabled => "disabled",
 }
-
-impl From<&str> for ConfigEntryDocumentInfoUpdate {
-    fn from(value: &str) -> Self {
-        match value {
-            "disable" => Self::Disable,
-            "notify" => Self::Notify,
-            "auto" => Self::Auto,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for ConfigEntryDocumentInfoUpdate {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoUpdate {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ConfigEntryDocumentInfoShare {
-    Manual,
-    Auto,
-    Disabled,
-    Unknown(String),
-}
-
-impl ConfigEntryDocumentInfoShare {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Manual => "manual",
-            Self::Auto => "auto",
-            Self::Disabled => "disabled",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for ConfigEntryDocumentInfoShare {
-    fn from(value: &str) -> Self {
-        match value {
-            "manual" => Self::Manual,
-            "auto" => Self::Auto,
-            "disabled" => Self::Disabled,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for ConfigEntryDocumentInfoShare {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoShare {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -14304,102 +11360,24 @@ pub struct ConfigEntryDocumentInfoEnterprise {
     pub url: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ConfigEntryDocumentInfoPoliciesItemAction {
-    ProviderUse,
-    ToolUse,
-    IntegrationConnect,
-    IntegrationUse,
-    McpUse,
-    SkillUse,
-    PluginUse,
-    WebsearchUse,
-    Unknown(String),
+literal_enum! {
+ConfigEntryDocumentInfoPoliciesItemAction {
+    ProviderUse => "provider.use",
+    ToolUse => "tool.use",
+    IntegrationConnect => "integration.connect",
+    IntegrationUse => "integration.use",
+    McpUse => "mcp.use",
+    SkillUse => "skill.use",
+    PluginUse => "plugin.use",
+    WebsearchUse => "websearch.use",
+}
 }
 
-impl ConfigEntryDocumentInfoPoliciesItemAction {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::ProviderUse => "provider.use",
-            Self::ToolUse => "tool.use",
-            Self::IntegrationConnect => "integration.connect",
-            Self::IntegrationUse => "integration.use",
-            Self::McpUse => "mcp.use",
-            Self::SkillUse => "skill.use",
-            Self::PluginUse => "plugin.use",
-            Self::WebsearchUse => "websearch.use",
-            Self::Unknown(value) => value,
-        }
-    }
+literal_enum! {
+ConfigEntryDocumentInfoPoliciesItemEffect {
+    Allow => "allow",
+    Deny => "deny",
 }
-
-impl From<&str> for ConfigEntryDocumentInfoPoliciesItemAction {
-    fn from(value: &str) -> Self {
-        match value {
-            "provider.use" => Self::ProviderUse,
-            "tool.use" => Self::ToolUse,
-            "integration.connect" => Self::IntegrationConnect,
-            "integration.use" => Self::IntegrationUse,
-            "mcp.use" => Self::McpUse,
-            "skill.use" => Self::SkillUse,
-            "plugin.use" => Self::PluginUse,
-            "websearch.use" => Self::WebsearchUse,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for ConfigEntryDocumentInfoPoliciesItemAction {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoPoliciesItemAction {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ConfigEntryDocumentInfoPoliciesItemEffect {
-    Allow,
-    Deny,
-    Unknown(String),
-}
-
-impl ConfigEntryDocumentInfoPoliciesItemEffect {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Allow => "allow",
-            Self::Deny => "deny",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for ConfigEntryDocumentInfoPoliciesItemEffect {
-    fn from(value: &str) -> Self {
-        match value {
-            "allow" => Self::Allow,
-            "deny" => Self::Deny,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for ConfigEntryDocumentInfoPoliciesItemEffect {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for ConfigEntryDocumentInfoPoliciesItemEffect {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -14600,40 +11578,7 @@ pub struct ConfigEntryDocumentInfoCompactionKeep {
     pub tokens: Option<i64>,
 }
 
-/// `Config.Compaction.Percent`
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct ConfigCompactionPercent(pub String);
-
-impl ConfigCompactionPercent {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::borrow::Borrow<str> for ConfigCompactionPercent {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for ConfigCompactionPercent {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<String> for ConfigCompactionPercent {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for ConfigCompactionPercent {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
+string_type!(ConfigCompactionPercent, "`Config.Compaction.Percent`");
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(untagged)]
@@ -15573,56 +12518,15 @@ impl crate::TaggedError for UnsupportedModelError {
     const TAG: &'static str = "UnsupportedModelError";
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ProviderRequestErrorReason {
-    Authentication,
-    RateLimit,
-    ContentFilter,
-    InvalidRequest,
-    Overloaded,
-    Provider,
-    Unknown(String),
+literal_enum! {
+ProviderRequestErrorReason {
+    Authentication => "authentication",
+    RateLimit => "rate_limit",
+    ContentFilter => "content_filter",
+    InvalidRequest => "invalid_request",
+    Overloaded => "overloaded",
+    Provider => "provider",
 }
-
-impl ProviderRequestErrorReason {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Authentication => "authentication",
-            Self::RateLimit => "rate_limit",
-            Self::ContentFilter => "content_filter",
-            Self::InvalidRequest => "invalid_request",
-            Self::Overloaded => "overloaded",
-            Self::Provider => "provider",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for ProviderRequestErrorReason {
-    fn from(value: &str) -> Self {
-        match value {
-            "authentication" => Self::Authentication,
-            "rate_limit" => Self::RateLimit,
-            "content_filter" => Self::ContentFilter,
-            "invalid_request" => Self::InvalidRequest,
-            "overloaded" => Self::Overloaded,
-            "provider" => Self::Provider,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for ProviderRequestErrorReason {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for ProviderRequestErrorReason {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -15786,44 +12690,11 @@ impl crate::TaggedError for RpcError {
     const TAG: &'static str = "RpcError";
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum RpcInternalErrorType {
-    RpcInternal,
-    RpcInvalidOutput,
-    Unknown(String),
+literal_enum! {
+RpcInternalErrorType {
+    RpcInternal => "rpc.internal",
+    RpcInvalidOutput => "rpc.invalid_output",
 }
-
-impl RpcInternalErrorType {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::RpcInternal => "rpc.internal",
-            Self::RpcInvalidOutput => "rpc.invalid_output",
-            Self::Unknown(value) => value,
-        }
-    }
-}
-
-impl From<&str> for RpcInternalErrorType {
-    fn from(value: &str) -> Self {
-        match value {
-            "rpc.internal" => Self::RpcInternal,
-            "rpc.invalid_output" => Self::RpcInvalidOutput,
-            _ => Self::Unknown(value.to_owned()),
-        }
-    }
-}
-
-impl Serialize for RpcInternalErrorType {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for RpcInternalErrorType {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Ok(Self::from(value.as_str()))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

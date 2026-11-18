@@ -138,7 +138,21 @@ await Bun.write(
 )
 await Bun.write(
   `${directory}/methods.rs`,
-  `${header}#![allow(clippy::all, clippy::pedantic)]\n\nuse super::types::*;\nuse crate::client::{Call, Client};\nuse crate::error::Error;\nuse crate::transport::SseResponse;\nuse opencode_api_types::client;\n\nimpl Client {\n${methods.map((method) => method.method).join("\n\n")}\n}\n`,
+  `${header}#![allow(clippy::all, clippy::pedantic)]\n\nuse super::types::*;\nuse crate::client::{Call, Client};\nuse crate::error::Error;\nuse crate::transport::SseResponse;\nuse opencode_api_types::client;
+
+macro_rules! endpoint {
+    ($doc:literal, $name:ident, $builder:ident, $send:ident, $output:ty $(, $arg:ident: $input:ty)?) => {
+        #[doc = $doc]
+        pub async fn $name(&self $(, $arg: &$input)?) -> Result<$output, Error> {
+            self.$send(Self::$builder($($arg)?)?).await
+        }
+        pub fn $builder($($arg: &$input)?) -> Result<Call, Error> {
+            client::$name($($arg)?).try_into()
+        }
+    };
+}
+
+impl Client {\n${methods.map((method) => method.method).join("\n")}\n}\n`,
 )
 await Bun.write(
   clientFile,

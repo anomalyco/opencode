@@ -110,7 +110,6 @@ export function emitMethod(types: Types, method: Method) {
   const reply = { json: "Json", data: "Data", empty: "Empty", binary: "Binary", sse: "Sse" }[method.success]
   const typed = method.success === "sse" ? `Sse<${output}>` : output
   const parameter = input === undefined ? "" : `input: &${input}`
-  const argument = input === undefined ? "" : "input"
   const builder = `${name.replace(/^r#/, "")}_call`
   const start = `Call::new(${JSON.stringify(method.endpoint.endpoint.method)}, ${path.literal ?? "String::new()"}, Reply::${reply}, ${method.successStatus}, &[${declared.join(", ")}])`
   const lines = [...(path.literal === undefined ? [`call.path = ${path.format};`] : []), ...statements]
@@ -132,13 +131,7 @@ export function emitMethod(types: Types, method: Method) {
       }).cast()))()),`
   return {
     /** The `Client` method and its untyped builder, which delegates to the typed one. */
-    method: `    ${doc}
-    pub async fn ${name}(&self${parameter === "" ? "" : `, ${parameter}`}) -> Result<${returns}, Error> {
-        self.${method.success}(Self::${builder}(${argument})?).await
-    }
-    pub fn ${builder}(${parameter}) -> Result<Call, Error> {
-        client::${name}(${argument}).try_into()
-    }`,
+    method: `    endpoint!(${JSON.stringify(doc.slice(3))}, ${name}, ${builder}, ${method.success}, ${returns}${input === undefined ? "" : `, input: ${input}`});`,
     builder: `${doc}\npub fn ${name}(${parameter}) -> Call<${typed}> {\n${body}\n}`,
     probe,
     name: operation,
