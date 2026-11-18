@@ -29,7 +29,7 @@ const decodeAgent = SchemaParser.decodeUnknownResult(ConfigAgent.Info)
 const decodeLegacyAgent = SchemaParser.decodeUnknownResult(ConfigAgentV1.Info)
 const formatIssue = SchemaIssue.makeFormatterDefault()
 type PathAction = FileAccess.ExternalDirectoryAuthorization["action"] | typeof ReadTool.name | typeof EditTool.name
-const pathActions = ["external_directory", "read", "edit"] as const satisfies readonly PathAction[]
+const pathActions: readonly PathAction[] = Permission.pathActions
 const agentKeys = new Set(["variant", ...Object.keys(ConfigAgent.Info.fields)])
 // Fields only V2 understands. A file that uses any of them is read as V2, whatever else it contains.
 const nativeKeys = ["permissions", "request", "system", "disabled"]
