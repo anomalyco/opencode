@@ -202,7 +202,9 @@ const sender = Effect.fnUntraced(function* (
                       problem?.owner !== undefined
                         ? `${problem.owner} already shared an OpenCode Console artifact named ${slug}; give this one another title`
                         : response.status === 404
-                          ? "Artifacts are off for this OpenCode Console workspace"
+                          ? method === "GET"
+                            ? `OpenCode Console has no artifact named ${slug}`
+                            : "Artifacts are off for this OpenCode Console workspace"
                           : (problem?.message ?? `OpenCode Console answered ${response.status}`),
                     ),
                   ),
