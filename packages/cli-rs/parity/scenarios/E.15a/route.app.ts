@@ -1,6 +1,6 @@
 // The diff viewer as a full-screen route (F15): `/diff` on home opens it with the file tree and unified hunks (the
 // patches are too narrow to split at 120 columns). `]` and `[` step through hunks across files, `s` and `m` review
-// the single file and move on, `ctrl+d`, `shift+g`, and `gg` scroll, and `q` goes back home.
+// the single file and move on, and `q` goes back home.
 import { defineApp } from "../../lib/app"
 import { repoDiff } from "./repo"
 
@@ -68,12 +68,6 @@ export default defineApp({
     { checkpoint: "single-reviewed" },
     { keys: ["s"] },
     { checkpoint: "all" },
-    { keys: ["ctrl+d"] },
-    { checkpoint: "half-page" },
-    { keys: ["shift+g"] },
-    { checkpoint: "last" },
-    { keys: ["g", "g"] },
-    { checkpoint: "first" },
     { keys: ["q"] },
     {
       checkpoint: "home",
