@@ -1169,7 +1169,9 @@ impl<'rt> Vm<'rt> {
         argc: usize,
         is_base: bool,
     ) -> Result<(), Value> {
-        if self.frames.len() >= MAX_DEPTH && self.program_depth() >= MAX_DEPTH {
+        // The reference counts the program's own frame and refuses a call once more than `MAX_DEPTH` are running:
+        // `MAX_DEPTH` frames may run above the program.
+        if self.frames.len() > MAX_DEPTH && self.program_depth() > MAX_DEPTH {
             self.stack.truncate(fpos);
             return Err(self.range_error("Maximum call stack size exceeded"));
         }
