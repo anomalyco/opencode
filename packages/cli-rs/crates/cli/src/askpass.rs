@@ -1,9 +1,5 @@
-//! SSH askpass helper mode (`packages/cli/src/ssh-askpass.ts`).
-//!
-//! The desktop SSH plugin points `SSH_ASKPASS` at this binary and sets `OPENCODE_SSH_ASKPASS_PORT`.
-//! OpenSSH runs it with the prompt as its arguments. The helper sends the prompt to the desktop over
-//! a loopback socket and prints the answer for OpenSSH. It runs before the logger is installed, so
-//! neither the prompt nor the answer reaches a log, and it writes nothing else to stdout or stderr.
+//! OpenSSH invokes the desktop SSH plugin's askpass helper with its prompt on the command line. The port selects the
+//! requesting desktop process.
 
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpStream};

@@ -1,5 +1,4 @@
-//! `autocomplete` (`@clack/prompts` `autocomplete.ts` on `@clack/core`'s `AutocompletePrompt`), single
-//! value only. A custom `render` covers pickers like `packages/cli/src/ui/integration-picker.ts`.
+//! Single-choice autocomplete with an optional custom renderer.
 
 use super::core::{self, Base, Prompt};
 use super::select::{Choice, limit_options};

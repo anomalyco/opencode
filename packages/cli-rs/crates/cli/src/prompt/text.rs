@@ -1,6 +1,3 @@
-//! `text` and `password` (`@clack/prompts` `text.ts`, `password.ts` on `@clack/core`'s
-//! `TextPrompt` and `PasswordPrompt`).
-
 use super::core::{self, Base, Prompt};
 use super::style::{
     S_BAR, S_BAR_END, S_PASSWORD_MASK, cyan, dim, gray, hidden, inverse, strikethrough, symbol, yellow,

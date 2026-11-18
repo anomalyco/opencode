@@ -1,6 +1,3 @@
-//! The root command, which opens the TUI (`handlers/default.ts`): enter the directory, connect, read
-//! `cli.json`, resolve `--session`, and run the TUI with the root flags until it quits.
-
 use std::sync::Arc;
 
 use opencode_api::client::Client;
@@ -41,7 +38,6 @@ pub fn run(context: &Context, args: &RootArgs) -> error::Result<()> {
             standalone: context.server.standalone,
             client_version: crate::help::VERSION.to_owned(),
             standalone_fallback: false,
-            // `mismatch: "replace"` (O-167): a service of another version is restarted, as TS's TUI does.
             replace: true,
             on_start: Some(|reason| match reason {
                 connect::Reason::Missing => {
@@ -130,8 +126,7 @@ pub fn run(context: &Context, args: &RootArgs) -> error::Result<()> {
     Ok(())
 }
 
-/// The server's canonical name for `directory`, or the server's own directory when it cannot list this one,
-/// as a `--server` on another machine (`app.tsx`'s `file.list` probe).
+/// A remote server may not see the client's working directory; fall back to the server's directory.
 async fn server_directory(client: &Client, directory: &str) -> error::Result<String> {
     let location = Some(LocationQueryInput { directory: Some(directory.to_owned()) });
     if let Ok(listed) = client.file_list(&FileListInput { location, path: None }).await {

@@ -1,5 +1,3 @@
-//! `reload`: reload the server configuration (`packages/cli/src/commands/handlers/reload.ts`).
-
 use super::Context;
 use super::client::{block_on, connect};
 use opencode_util::error;

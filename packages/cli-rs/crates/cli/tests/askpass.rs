@@ -1,5 +1,3 @@
-//! The two cases of `packages/cli/src/ssh-askpass.test.ts`, against the built binary.
-
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::process::{Command, Stdio};

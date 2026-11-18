@@ -1,6 +1,4 @@
-//! The command tree of `packages/cli/src/commands/commands.ts` as a static table in the shape of Effect CLI's
-//! commands, flags, and arguments, and the typed arguments each handler takes. `src/tests/tree.rs` proves the
-//! table against a dump of the TypeScript tree; `parse.rs` parses a command line over it.
+//! Command-line grammar and typed handler arguments.
 
 use crate::parse::Values;
 

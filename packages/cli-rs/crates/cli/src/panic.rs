@@ -1,12 +1,6 @@
-//! The panic hook while the TUI runs (rs-ms1-accept problem 2).
-//!
-//! The default hook prints over the TUI's screen, which scrolls it out of step with the renderer.
-//! This one logs every panic, with its backtrace, to the CLI's log file (`telemetry`) instead. A panic
-//! on another thread leaves the TUI running: tokio ends only the panicking task, and the event loop
-//! reconnects. A panic on the UI thread ends the app: opentui's hook, which `App::new` installs around
-//! this one, restores the terminal first, then this hook prints a short note to stderr and exits with
-//! 101, the code of an unhandled Rust panic. A plugin's panic that its catch stops is not one: the TUI
-//! wraps both hooks with `opencode_plugin::contain::filter_panics`, and this hook also lets it unwind.
+//! Worker panics go to the log, leaving the renderer in control of the screen. An uncaught UI-thread panic restores
+//! the terminal and exits with 101. A panic caught by the plugin host must leave both the app and its terminal
+//! running.
 
 use std::backtrace::Backtrace;
 
@@ -38,11 +32,6 @@ mod tests {
     /// Set in the process the row starts: what panics there.
     const PROBE: &str = "OPENCODE_PANIC_PROBE";
 
-    // Expected (P4's finding): a plugin's panic on the UI thread that the plugin host catches leaves the client
-    // running. Neither the terminal's hook (a stand-in here, which prints `restored` and calls this one, as OpenTUI's
-    // does) nor this hook, which exits 101, takes it for the end of the app. A panic outside plugin code still restores
-    // the terminal and exits 101. Each runs in a process of its own (this test binary again): the hooks are the
-    // process's.
     #[test]
     fn a_caught_plugin_panic_leaves_the_client_running() {
         if let Ok(mode) = std::env::var(PROBE) {

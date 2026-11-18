@@ -1,6 +1,3 @@
-//! `run`: send a message and print the reply (`packages/cli/src/commands/handlers/run.ts`,
-//! `packages/cli/src/run/run.ts`). The prompt itself and its output are in `run/prompt.rs`.
-
 use opencode_api::generated::{SessionID, SessionUpdateInput};
 use opencode_store::target::{self, Prepared, TargetInput};
 use opencode_util::error;

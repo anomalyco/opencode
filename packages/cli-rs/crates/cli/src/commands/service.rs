@@ -1,10 +1,4 @@
-//! `service`: the background server (C.8).
-//!
-//! Ports `packages/cli/src/commands/handlers/service/*.ts` and the stop/ensure calls of
-//! `services/service-config.ts`. The commands act on the service this client uses: the one discovery
-//! finds (O-21), else the one registered for the client's channel. They stop it only because the user
-//! asked: `stop`, `restart`, and every `set`/`unset` that TS stops for. `set remote true` runs the TS
-//! command, which creates the OpenTunnel tunnel (D.1).
+//! Service commands operate on the registration for the selected channel.
 
 use std::path::PathBuf;
 use std::sync::Arc;

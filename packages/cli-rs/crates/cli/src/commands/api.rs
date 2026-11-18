@@ -1,5 +1,3 @@
-//! `api`: a request to the running server (`packages/cli/src/commands/handlers/api.ts`).
-
 use opencode_api::client::Auth;
 use opencode_api::transport::{Request, Reqwest, Transport};
 use opencode_util::{bail, error};
@@ -195,7 +193,6 @@ mod tests {
 
     #[test]
     fn operations_fill_path_parameters_and_query() {
-        // The cases of `packages/cli/src/commands/handlers/api.test.ts`, and more.
         let spec = json!({ "paths": {
             "/api/session": { "parameters": [], "get": { "operationId": "session.list" } },
             "/api/session/{sessionID}": { "get": { "operationId": "session.get" } },

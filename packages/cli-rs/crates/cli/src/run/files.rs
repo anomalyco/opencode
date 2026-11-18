@@ -1,5 +1,4 @@
-//! `run -f` attachments (`prepareFile` in `packages/cli/src/run/run.ts` and `noninteractive.ts`): read the
-//! file, type it, and send text inline in the prompt and anything else as a data URL.
+//! `run -f` inlines text in the prompt and attaches other files as data URLs.
 
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};

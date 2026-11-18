@@ -1,11 +1,5 @@
-//! Shutdown deadline and SIGHUP (`packages/cli/src/shutdown-deadline.ts`, `index.ts:102`).
-//!
-//! On SIGTERM or SIGINT the CLI runs its registered teardown steps (`on_shutdown`), newest first, and exits
-//! with 130 after SIGINT and 143 after SIGTERM, as the TS `runMain` teardown does. Teardown gets 10 s; after that, or on a second
-//! signal, it prints what is still pending to stderr and exits with 1. With a terminal on stdin or stdout,
-//! SIGHUP counts as SIGTERM; without one (nohup, the background service) SIGHUP keeps its default, so nohup's
-//! ignore still holds. On Windows, Ctrl+C is SIGINT and closing the console is the SIGHUP. While the TUI runs,
-//! opentui owns these signals and quits the app itself.
+//! SIGINT and SIGTERM run teardown handlers newest first. A second signal or a 10-second timeout reports pending work
+//! and forces exit. SIGHUP is handled only with a terminal attached, preserving nohup behavior.
 
 use std::io::Write;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -281,7 +275,6 @@ impl Shutdown {
     }
 }
 
-/// The stderr report (`shutdown-deadline.ts:63-69`).
 pub fn report(reason: &str, pending: &[(String, Duration)]) -> String {
     let lines = if pending.is_empty() {
         vec!["  nothing tracked; the stuck work is not a registered teardown step".to_owned()]

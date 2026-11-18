@@ -1,5 +1,3 @@
-//! `debug`: debugging and troubleshooting tools (`packages/cli/src/commands/handlers/debug/*.ts`).
-
 use opencode_api::client::Client;
 use opencode_api::error::Error as ApiError;
 use opencode_api::generated::types::{AgentListInput, ConfigGetInput, DebugHeapDumpInput};
@@ -52,8 +50,7 @@ fn config(context: &Context) -> error::Result<()> {
     print(&pretty(&redact(&entries, false))?)
 }
 
-// Redact only the debug output; the resolved configuration must remain usable by providers
-// (`debug/redact.ts`).
+// Redact only the printed config; providers still need the original credentials.
 static SECRET_NAME: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)(?:api.?key|secret|password|token$|authorization$|cookie$|credential|private.?key)")
         .expect("valid pattern")
@@ -242,8 +239,6 @@ fn paths(args: &PathsArgs) -> error::Result<()> {
     print(&format!("{value}\n"))
 }
 
-/// `databasePath` (`packages/cli/src/database-path.ts`), with the channel read at run time
-/// (`OPENCODE_CHANNEL`, else `latest`) instead of the TS build's embedded channel.
 fn database(data: &Path) -> String {
     let filename = std::env::var("OPENCODE_DB").unwrap_or_else(|_| {
         let channel = Channels::from_env().channel;
@@ -273,7 +268,6 @@ mod tests {
 
     #[test]
     fn redact_matches_the_ts_cases() {
-        // Cases of `packages/cli/test/debug-redact.test.ts` where they exist, plus each branch.
         let input = json!({
             "provider": {
                 "openai": {
@@ -321,7 +315,6 @@ mod tests {
         );
     }
 
-    // The two redaction cases of `packages/cli/test/debug-config.test.ts`.
     #[test]
     fn redact_matches_debug_config_test() {
         let providers = json!({

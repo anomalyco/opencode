@@ -1,27 +1,6 @@
-//! The parent that restarts the TUI after a plugin crashed or hung it (synthesis 4.5, decision 5 of O-125).
-//!
-//! A native plugin runs in the client's process: its segfault, abort or stack overflow ends the client, and a hang
-//! holds the UI thread until the watchdog ends the client. When a native build is among the plugin targets, the TUI
-//! runs under a parent: on Unix a fork of this process before `main` does anything else, on Windows the same binary
-//! spawned again. A client with only built-ins starts as before, with no parent; one that should have a parent and has
-//! none opens no external library (`opencode_tui::plugins::contain`).
-//!
-//! Before it starts a client, the parent creates the client's run record: a private mapped file with no name
-//! (`opencode_plugin::contain::Record`). A forked client gets it in memory; a spawned one inherits its handle, named
-//! by `OPENCODE_PLUGIN_RECORD`. When the client dies of a crash (a fatal signal or a kill, the watchdog's exit, a panic
-//! on the UI thread), the parent restores the terminal, reads the record from its own mapping and starts a new client
-//! whose record holds:
-//!
-//! - the crash: the build and call the dead record names, which the new client holds disabled, or nothing;
-//! - safe mode, after a second crash that named no plugin within 10 minutes of this parent: every external plugin
-//!   off, for that client only;
-//! - the dead client's last snapshot, from which the new client restores the draft.
-//!
-//! The new client opens the snapshot's session with `--session`, without `--prompt` and `--continue`, which the first
-//! client acted on; its other arguments are the first client's, rebuilt from the parsed command line.
-//!
-//! At most 2 automatic restarts in 60 s; then the parent exits with a message. Any other end of the client ends the
-//! parent with the same code, and so does any end after the parent was asked to end.
+//! Supervises clients that load native plugins. A private shared mapping survives the child's crash so the parent can
+//! restore its session and draft and disable the failing build. An unattributed repeat crash enters safe mode. On a
+//! normal exit or a signal sent to the parent, propagate the exit status without restarting.
 
 use std::ffi::OsString;
 use std::io;
@@ -101,7 +80,6 @@ fn wanted(raw: &[OsString]) -> Option<Restart> {
     match std::env::var(PARENT).as_deref() {
         Ok("0") => return None,
         Ok("1") => return Some(restart),
-        // `plugin dev` always runs the native build it makes (review carbon-1).
         _ if restart.dev.is_some() => return Some(restart),
         _ => {}
     }

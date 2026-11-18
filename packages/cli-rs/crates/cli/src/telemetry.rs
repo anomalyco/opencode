@@ -1,9 +1,4 @@
-//! Log files, `--print-logs`, `--log-level`, and OpenTelemetry log export (`packages/cli/src/index.ts:144-152`,
-//! `packages/util/src/observability.ts` and `observability/{logging,otlp}.ts`).
-//!
-//! Every record goes to the shared log file `<data>/log/opencode-<channel>.log` (`opencode.log` for a
-//! release channel) in the TypeScript `key=value` format, to stderr with `OPENCODE_PRINT_LOGS=1`, and to
-//! `$OTEL_EXPORTER_OTLP_ENDPOINT/v1/logs` when that is set. Library crates log through the `log` facade.
+//! Writes shared CLI logs and optionally exports them to stderr or OTLP.
 
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
@@ -49,7 +44,6 @@ impl Options {
     pub fn from_env(flag: Option<LogLevel>) -> Self {
         let var = |name: &str| std::env::var(name).ok();
         let run = run_id();
-        // TS embeds its channel at build time (`version.ts`); the Rust client reads it at run time (plan 6.6).
         let channel = opencode_local::channel::Channels::from_env().channel;
         Self {
             level: min_level(flag, var("OPENCODE_LOG_LEVEL").as_deref()),
@@ -102,9 +96,7 @@ pub fn flush() {
     }
 }
 
-/// `--log-level` wins over `OPENCODE_LOG_LEVEL` (`debug`, `info`, `warn`, `error`, any case), which defaults to
-/// info (`observability/logging.ts:159-169`, Effect CLI's `GlobalFlag.LogLevel`). `log` has no fatal level, so
-/// `fatal` logs nothing, as no record here is fatal.
+/// `--log-level` overrides `OPENCODE_LOG_LEVEL`. The default is info.
 pub fn min_level(flag: Option<LogLevel>, env: Option<&str>) -> LevelFilter {
     if let Some(flag) = flag {
         return match flag {
@@ -124,7 +116,7 @@ pub fn min_level(flag: Option<LogLevel>, env: Option<&str>) -> LevelFilter {
     }
 }
 
-/// `opencode-<channel>.log` for a local build, `opencode.log` for a release channel (`logging.ts:57-60`).
+/// Release channels share `opencode.log`; local builds log per channel.
 pub fn file_name(channel: &str) -> String {
     if channel != "local" {
         return "opencode.log".to_owned();
@@ -136,7 +128,7 @@ pub fn file_name(channel: &str) -> String {
     format!("opencode-{safe}.log")
 }
 
-/// The 8-character run ID shared by every record of this process (`observability/shared.ts`).
+/// Run ID shared by every record from this process.
 pub fn run_id() -> &'static str {
     static RUN: OnceLock<String> = OnceLock::new();
     RUN.get_or_init(|| opencode_local::id::v4()[..8].to_owned())
@@ -207,7 +199,6 @@ impl Log for Logger {
     fn flush(&self) {}
 }
 
-/// A record's key-value pairs, plus the `role=cli` annotation every CLI record carries (`index.ts:132`).
 fn fields(record: &Record) -> Vec<(String, Field)> {
     struct Collect(Vec<(String, Field)>);
     impl<'kvs> log::kv::VisitSource<'kvs> for Collect {
@@ -259,8 +250,7 @@ impl Field {
     }
 }
 
-/// One line of the TypeScript file format (`logging.ts:16-30`):
-/// `timestamp=… level=INFO run=… message=… <fields>`, each value bare or as a JSON string.
+/// Fields use bare values or JSON strings in the shared log format.
 pub fn format_line(now: SystemTime, level: Level, run: &str, message: &str, fields: &[(String, Field)]) -> String {
     let timestamp = time::iso(time::millis(now)).unwrap_or_default();
     [
@@ -285,10 +275,8 @@ fn quote(value: &str) -> String {
     Value::from(value).to_string()
 }
 
-/// Compacts `target` in place once it passes `max` bytes, keeping about `keep` bytes from the first line
-/// boundary on (`logging.ts:84-129`). Other processes keep appending through their own `O_APPEND` handles, so
-/// it never renames. A `<target>.trim` directory is the cross-process lock; one older than 5 minutes belongs
-/// to a dead process and is removed, and the trim waits for the next round. A log under `max` skips the lock.
+/// Compact in place: other processes may still be appending through open handles. Start the retained tail on a line
+/// boundary.
 pub fn trim(target: &Path, max: u64, keep: u64) -> io::Result<()> {
     if std::fs::metadata(target)?.len() <= max {
         return Ok(());
@@ -355,8 +343,7 @@ fn line_start(file: &mut File, from: u64) -> io::Result<u64> {
     }
 }
 
-/// `OTEL_EXPORTER_OTLP_HEADERS`: `k=v` pairs split on `,`, the value being everything after the first `=`
-/// (`otlp.ts:16-27`).
+/// Split each OTLP header at its first `=` so values can contain equals signs.
 pub fn parse_headers(value: Option<&str>) -> Vec<(String, String)> {
     value
         .into_iter()
@@ -368,8 +355,7 @@ pub fn parse_headers(value: Option<&str>) -> Vec<(String, String)> {
         .collect()
 }
 
-/// The OTLP resource (`otlp.ts:46-61` with Effect's `OtlpResource.fromConfig`): service name `opencode` (or
-/// `OTEL_SERVICE_NAME`), the version, `OTEL_RESOURCE_ATTRIBUTES`, the channel, client, and run ID.
+/// OTLP resource attributes for this process.
 pub fn resource(client: &str, version: &str, channel: &str, run: &str, var: impl Fn(&str) -> Option<String>) -> Value {
     let env = var("OTEL_RESOURCE_ATTRIBUTES").filter(|value| !value.is_empty());
     let decoded = env.as_deref().and_then(decode_attributes).unwrap_or_default();

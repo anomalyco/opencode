@@ -1,10 +1,5 @@
-//! The prompt of a non-interactive run (`runNonInteractivePrompt`, `packages/cli/src/run/noninteractive.ts`):
-//!
-//!   admitting → running → settling → waiting for this prompt's jobs → done(exit code)
-//!   any state + abort (SIGINT/SIGTERM) → cancelling → done
-//!
-//! Events and messages stay JSON, as the TS client reads them: `--format json` passes their fields through
-//! unchanged, unknown ones included.
+//! A noninteractive prompt settles before waiting for its background jobs. JSON output preserves unknown event and
+//! message fields.
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;

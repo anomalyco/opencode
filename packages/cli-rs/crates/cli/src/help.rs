@@ -1,5 +1,4 @@
-//! The output of the built-in flags and of usage errors, in Effect CLI's layout and colors (`CliOutput.ts`,
-//! `internal/help.ts`, `internal/command.ts`): help, version, completions, and the error section.
+//! Help, version, completions and usage-error output.
 
 use opencode_util::error;
 use std::io::IsTerminal;
@@ -19,7 +18,6 @@ pub const COMMIT: &str = match option_env!("OPENCODE_NATIVE_COMMIT") {
     None => "unknown",
 };
 
-/// The program name in help, version, and completions (plan 6.1).
 pub fn name() -> String {
     std::env::var("OPENCODE_CLI_NAME")
         .ok()
@@ -125,8 +123,7 @@ fn tag(message: &str) -> &'static str {
     .map_or("Error", |(_, tag)| tag)
 }
 
-// Control characters other than tab, newline, and carriage return print as `\xNN`. TS leaves C1 raw
-// (`parity/deviations/O89-terminal-text.md`).
+// Escape C0 and C1 controls except tab, newline and carriage return.
 fn escape_controls(text: &str) -> String {
     text.chars()
         .map(|char| match char {

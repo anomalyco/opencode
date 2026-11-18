@@ -1,5 +1,3 @@
-//! Process environment: NO_PROXY and OPENCODE_CLIENT (`packages/cli/src/index.ts:22-33,148`).
-
 /// The loopback hosts every client request to the local service must reach without a proxy.
 const LOOPBACK: &str = "127.0.0.1,localhost,::1";
 
@@ -33,8 +31,7 @@ pub fn no_proxy(upper: Option<&str>, lower: Option<&str>) -> String {
     entries.join(",")
 }
 
-/// The client name in telemetry and logs: `OPENCODE_CLIENT`, else `opencode-native` (plan 6.1). As with
-/// TS's `??`, an empty value is kept.
+/// `OPENCODE_CLIENT` defaults to `opencode-native`. An explicitly empty value is retained.
 pub fn client() -> String {
     std::env::var("OPENCODE_CLIENT").unwrap_or_else(|_| "opencode-native".to_owned())
 }

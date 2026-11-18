@@ -1,5 +1,3 @@
-//! The Effect CLI parsing behaviors scripts can see, one test each.
-
 use crate::args::{Command, LogLevel, McpCommand, ServerFlags, SessionCommand, Shell};
 use crate::parse::{self, Invocation, Outcome};
 

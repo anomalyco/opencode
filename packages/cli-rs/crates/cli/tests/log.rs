@@ -1,5 +1,3 @@
-//! The log follows the run-time channel the service and database use (plan 6.6): `local` logs to
-//! `opencode-local.log`, and a client of another channel shares `opencode.log` with a released TS client.
 #![cfg(unix)]
 
 use std::process::Command;

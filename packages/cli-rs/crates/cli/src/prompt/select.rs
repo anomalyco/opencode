@@ -1,5 +1,3 @@
-//! `select` and `multiselect` (`@clack/prompts` `select.ts`, `multi-select.ts`, `limit-options.ts`).
-
 use super::core::{self, Base, Prompt};
 use super::style::{
     S_BAR, S_BAR_END, S_CHECKBOX_ACTIVE, S_CHECKBOX_INACTIVE, S_CHECKBOX_SELECTED, S_RADIO_ACTIVE, S_RADIO_INACTIVE,

@@ -1,5 +1,3 @@
-//! One module per top-level command. Each step fills its own module (plan 8.4).
-
 pub mod acp;
 pub mod api;
 pub mod auth;

@@ -20,7 +20,6 @@ fn stdin() -> BorrowedFd<'static> {
     FD.get_or_init(|| std::io::stdin().as_fd().try_clone_to_owned().expect("stdin has a descriptor")).as_fd()
 }
 
-/// Both ends are terminals, as `requireInteractive` in `packages/cli/src/ui/prompt.ts` checks.
 pub fn interactive() -> bool {
     isatty(stdin()) && isatty(std::io::stdout())
 }

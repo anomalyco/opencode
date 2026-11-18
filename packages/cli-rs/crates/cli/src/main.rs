@@ -1,5 +1,3 @@
-//! The opencode-native binary.
-
 mod args;
 mod askpass;
 mod commands;
@@ -115,8 +113,7 @@ fn exit(result: error::Result<()>) -> ExitCode {
     code
 }
 
-// The TypeScript CLI sets OPENCODE_PRINT_LOGS for its logger and for the servers it starts
-// (framework/runtime.ts:98).
+// Child servers inherit the print-logs setting.
 #[allow(unsafe_code)]
 fn set_print_logs() {
     // SAFETY: no other thread runs yet; handlers start their runtimes after this.
