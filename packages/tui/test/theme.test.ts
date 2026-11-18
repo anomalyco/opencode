@@ -96,25 +96,6 @@ test("resolveTheme preserves full theme numeric color and marker semantics", () 
   expect(theme._hasSelectedListItemText).toBe(false)
 })
 
-const ansiPalette = [
-  "#000000",
-  "#cc0000",
-  "#4e9a06",
-  "#c4a000",
-  "#3465a4",
-  "#75507b",
-  "#06989a",
-  "#d3d7cf",
-  "#555753",
-  "#ef2929",
-  "#8ae234",
-  "#fce94f",
-  "#729fcf",
-  "#ad7fa8",
-  "#34e2e2",
-  "#eeeeec",
-]
-
 function terminalColors(defaultBackground: string | null, palette: Array<string | null> = []): TerminalColors {
   return {
     palette,
@@ -139,18 +120,12 @@ test("terminalMode does not derive mode from ANSI slot zero", () => {
   expect(terminalMode(terminalColors(null, ["#000000"]))).toBeUndefined()
 })
 
-test("paletteMatchesMode accepts colors captured in the current terminal mode", () => {
-  expect(paletteMatchesMode(terminalColors("#1a1b26", ansiPalette), "dark")).toBeTrue()
-  expect(paletteMatchesMode(terminalColors("#fbf1c7", ansiPalette), "light")).toBeTrue()
-})
-
-test("paletteMatchesMode rejects colors captured in the other terminal mode", () => {
-  expect(paletteMatchesMode(terminalColors("#1a1b26", ansiPalette), "light")).toBeFalse()
-  expect(paletteMatchesMode(terminalColors("#fbf1c7", ansiPalette), "dark")).toBeFalse()
-})
-
-test("paletteMatchesMode accepts a palette without a background color", () => {
-  expect(paletteMatchesMode(terminalColors(null, ansiPalette), "light")).toBeTrue()
+test("paletteMatchesMode compares the palette background with the mode", () => {
+  expect(paletteMatchesMode(terminalColors("#1a1b26"), "dark")).toBeTrue()
+  expect(paletteMatchesMode(terminalColors("#fbf1c7"), "light")).toBeTrue()
+  expect(paletteMatchesMode(terminalColors("#1a1b26"), "light")).toBeFalse()
+  expect(paletteMatchesMode(terminalColors("#fbf1c7"), "dark")).toBeFalse()
+  expect(paletteMatchesMode(terminalColors(null), "light")).toBeTrue()
 })
 
 test("custom theme precedence follows directory order", async () => {

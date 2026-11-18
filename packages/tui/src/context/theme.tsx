@@ -20,7 +20,16 @@ import {
 import { generateSystem, paletteMatchesMode, terminalMode } from "../theme/system"
 import { discoverThemes } from "../theme/discovery"
 import { createComponentTheme, type ComponentTheme } from "../theme/component"
-import { createEffect, createMemo, createSignal, onCleanup, onMount, type Accessor, type ParentProps } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+  onMount,
+  untrack,
+  type Accessor,
+  type ParentProps,
+} from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useConfig, useNewDesigns } from "../config"
@@ -197,6 +206,7 @@ const themeContext = createSimpleContext({
     let queued = false
     let disposed = false
     function refreshPalette() {
+      if (store.active !== "system") return
       queued = true
       if (!canProbe || probing || disposed) return
 
@@ -210,7 +220,7 @@ const themeContext = createSimpleContext({
         .then((colors) => {
           if (disposed || !usablePalette(colors)) return
           palette = colors
-          const mode = store.lock ?? renderer.themeMode ?? terminalMode(colors) ?? store.mode
+          const mode = store.lock ?? terminalMode(colors) ?? renderer.themeMode ?? store.mode
           if (store.mode !== mode) setStore("mode", mode)
           if (store.active === "system") applyPalette()
           void cache?.[1]((draft) => {
@@ -227,7 +237,7 @@ const themeContext = createSimpleContext({
 
     function afterPaint() {
       canProbe = true
-      if (queued || store.active === "system" || renderer.themeMode === null) refreshPalette()
+      refreshPalette()
     }
 
     function apply(mode: "dark" | "light") {
@@ -235,7 +245,7 @@ const themeContext = createSimpleContext({
         setStore("mode", mode)
         applyPalette()
       }
-      if (store.active === "system") refreshPalette()
+      refreshPalette()
     }
 
     function pin(mode: "dark" | "light" = store.mode, persist = true) {
@@ -265,8 +275,7 @@ const themeContext = createSimpleContext({
       apply(mode)
     }
     renderer.on(CliRenderEvents.THEME_MODE, handleMode)
-    const handleFocus = () => refreshPalette()
-    renderer.on(CliRenderEvents.FOCUS, handleFocus)
+    renderer.on(CliRenderEvents.FOCUS, refreshPalette)
 
     const handleThemeNotification = (sequence: string) => {
       if (sequence !== "\x1b[?997;1n" && sequence !== "\x1b[?997;2n") return false
@@ -290,7 +299,7 @@ const themeContext = createSimpleContext({
     onCleanup(() => {
       disposed = true
       renderer.off(CliRenderEvents.THEME_MODE, handleMode)
-      renderer.off(CliRenderEvents.FOCUS, handleFocus)
+      renderer.off(CliRenderEvents.FOCUS, refreshPalette)
       renderer.removeInputHandler(handleThemeNotification)
       unsubscribeRefresh?.()
       for (const timeout of themeRefreshTimeouts) clearTimeout(timeout)
