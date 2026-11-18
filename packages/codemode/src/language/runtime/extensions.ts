@@ -2,6 +2,7 @@ import { Effect } from "effect"
 import { DurableFn, Fn, Namespace, type Snapshot } from "../host-function.js"
 import type { HostTarget } from "../host.js"
 import { BufferObj } from "../stdlib/buffer.js"
+import { makeTyped } from "../stdlib/bytes.js"
 import { StreamingResponse } from "../streaming-response.js"
 import { errorMessage, errorType } from "./errors.js"
 import type { Interpreter } from "./interpreter.js"
@@ -18,7 +19,9 @@ import {
   hidden,
   keys,
   Arr,
-  Bytes,
+  ArrayBufferObj,
+  DataViewObj,
+  typedArrayKinds,
   DateObj,
   ErrorObj,
   HeadersObj,
@@ -232,13 +235,24 @@ export const hostGlobals = <R>(
       if (value instanceof RegExp) return new RegExpObj(builtins.RegExp, value.source, value.flags)
       if (typeof Buffer !== "undefined" && Buffer.isBuffer(value))
         return new BufferObj(builtins.Buffer, new Uint8Array(value))
-      if (value instanceof Uint8Array) return new Bytes(builtins.Uint8Array, new Uint8Array(value))
+      // Copied through a fresh view, so no `slice`, species, or accessor the value overrides decides what crosses.
+      if (value instanceof DataView) {
+        const copy = copyBytes(new Uint8Array(value.buffer, value.byteOffset, value.byteLength))
+        return new DataViewObj(builtins.DataView, new DataView(copy), new ArrayBufferObj(builtins.ArrayBuffer, copy))
+      }
+      if (ArrayBuffer.isView(value)) {
+        const kind = typedArrayKindNames.find((name) => value instanceof typedArrayKinds[name])
+        // BigInt64Array and BigUint64Array hold BigInts, which programs cannot.
+        if (kind === undefined)
+          throw typeError(`${label} produced ${describeHost(value)}, which the program cannot hold.`)
+        return makeTyped(builtins[kind], new typedArrayKinds[kind](value as never))
+      }
       if (value instanceof ArrayBuffer) {
         const view = new Uint8Array(value)
-        // Only a real buffer has bytes to view; anything else would be read as array-like and lose them silently.
+        // Only a real buffer has bytes to copy; anything else would be read as array-like and lose them silently.
         if (view.buffer !== value)
           throw typeError(`${label} produced ${describeHost(value)}, which the program cannot hold.`)
-        return new Bytes(builtins.Uint8Array, new Uint8Array(view))
+        return new ArrayBufferObj(builtins.ArrayBuffer, copyBytes(view))
       }
       if (value instanceof Error) {
         if (seen.has(value)) throw typeError(`${label} produced a circular value.`)
@@ -503,6 +517,14 @@ const hostErrors = new Map<string, ErrorConstructor>([
   ["EvalError", EvalError],
   ["URIError", URIError],
 ])
+
+const typedArrayKindNames = Object.keys(typedArrayKinds) as Array<keyof typeof typedArrayKinds>
+
+const copyBytes = (bytes: Uint8Array): ArrayBuffer => {
+  const copy = new ArrayBuffer(bytes.byteLength)
+  new Uint8Array(copy).set(bytes)
+  return copy
+}
 
 // The primitives the interpreter operates on; symbols and BigInts are not among them.
 const isPrimitive = (value: unknown): value is string | number | boolean | null | undefined =>

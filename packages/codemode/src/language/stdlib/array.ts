@@ -10,7 +10,8 @@ import {
   get,
   hidden,
   Arr,
-  Bytes,
+  TypedArrayObj,
+  type TypedArrayKind,
   GeneratorObj,
   Obj,
   PromiseObj,
@@ -67,7 +68,7 @@ const arrayFrom = <R>(ctx: Interpreter<R>, args: Array<Value>): Value | Invoke =
 }
 
 /** Where a sort puts its result: back into an array or bytes, or into a new array. */
-export type SortInto = "Array.sort" | "Array.toSorted" | "Uint8Array.sort"
+export type SortInto = "Array.sort" | "Array.toSorted" | `${TypedArrayKind}.sort`
 
 /** The most values the default sort sorts in one native call; more sort in bounded steps (see `sortDefault`). */
 export const SORT_RUN = 4096
@@ -79,12 +80,12 @@ export const SORT_RUN = 4096
  */
 export const sortArray = <R>(
   ctx: Interpreter<R>,
-  target: Arr | Bytes,
+  target: Arr | TypedArrayObj,
   comparator: Value,
   into: SortInto,
 ): Value | Invoke => {
   const builtins = ctx.builtins
-  const items = target instanceof Arr ? [...target.items] : [...target.bytes]
+  const items = target instanceof Arr ? [...target.items] : [...target.array]
   // Counted before any comparator runs; a comparator that changes the array does not change where holes go.
   let holes = 0
   if (target instanceof Arr) for (let index = 0; index < items.length; index++) if (!(index in target.items)) holes++
@@ -121,13 +122,13 @@ export const sortArray = <R>(
 
 export const sorted = (
   builtins: Builtins,
-  target: Arr | Bytes,
+  target: Arr | TypedArrayObj,
   into: SortInto,
   holes: number,
   result: Array<Value>,
 ) => {
-  if (target instanceof Bytes) {
-    target.bytes.set(Uint8Array.from(result, coerceToNumber))
+  if (target instanceof TypedArrayObj) {
+    target.array.set(result.map(coerceToNumber))
     return target
   }
   if (into === "Array.toSorted") return new Arr(builtins.Array, result)

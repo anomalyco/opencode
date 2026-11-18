@@ -14,7 +14,12 @@ import {
   Arguments,
   Arr,
   BoundFn,
+  ArrayBufferObj,
   Bytes,
+  DataViewObj,
+  isTypedArrayKind,
+  TypedArrayObj,
+  typedArrayKinds,
   changed,
   DateObj,
   ErrorObj,
@@ -258,8 +263,20 @@ const builtinSpecs = (): ReadonlyArray<ClassSpec> => [
   },
   { name: "HeadersObj", ctor: HeadersObj, fields: ["headers"], obj: true, constants: { tag: "Headers" } },
   { name: "URLObj", ctor: URLObj, fields: ["searchParams", "url"], obj: true, constants: { tag: "URL" } },
-  { name: "Bytes", ctor: Bytes, fields: ["bytes"], obj: true, constants: { tag: "Uint8Array" } },
-  { name: "BufferObj", ctor: BufferObj, fields: ["bytes"], obj: true, constants: { tag: "Uint8Array" } },
+  { name: "ArrayBufferObj", ctor: ArrayBufferObj, fields: ["buffer"], obj: true, constants: { tag: "ArrayBuffer" } },
+  {
+    name: "TypedArrayObj",
+    ctor: TypedArrayObj,
+    fields: ["array", "buffer"],
+    obj: true,
+    // The tag is the host array's kind.
+    reset: (value: { tag: string; array: TypedArrayObj["array"] }) => {
+      value.tag = value.array[Symbol.toStringTag]
+    },
+  },
+  { name: "Bytes", ctor: Bytes, fields: ["array", "buffer"], obj: true, constants: { tag: "Uint8Array" } },
+  { name: "BufferObj", ctor: BufferObj, fields: ["array", "buffer"], obj: true, constants: { tag: "Uint8Array" } },
+  { name: "DataViewObj", ctor: DataViewObj, fields: ["view", "buffer"], obj: true, constants: { tag: "DataView" } },
   {
     name: "TextDecoderObj",
     ctor: TextDecoderObj,
@@ -531,6 +548,16 @@ class Encoder {
     if (object instanceof Uint8Array) {
       return { t: "Uint8Array", b: this.ref(object.buffer), o: object.byteOffset, l: object.length }
     }
+    if (object instanceof DataView) {
+      return { t: "DataView", b: this.ref(object.buffer), o: object.byteOffset, l: object.byteLength }
+    }
+    if (ArrayBuffer.isView(object)) {
+      const kind = (object as TypedArrayObj["array"])[Symbol.toStringTag]
+      if (isTypedArrayKind(kind)) {
+        const array = object as TypedArrayObj["array"]
+        return { t: "TypedArray", k: kind, b: this.ref(array.buffer), o: array.byteOffset, l: array.length }
+      }
+    }
     if (object instanceof ArrayBuffer) return { t: "ArrayBuffer", d: base64(new Uint8Array(object)) }
     if (object instanceof TextDecoder) return { t: "TextDecoder", f: object.fatal, i: object.ignoreBOM }
     const what = typeof object === "function" ? "a host function" : `a host ${object.constructor?.name ?? "object"}`
@@ -753,6 +780,23 @@ class Decoder {
         if (offset + length > buffer.byteLength) return invalid(`record ${id} reaches past its buffer.`)
         return new Uint8Array(buffer, offset, length)
       }
+      case "TypedArray":
+      case "DataView": {
+        const buffer = this.value(record.b)
+        if (!(buffer instanceof ArrayBuffer)) return invalid(`record ${id} names no buffer.`)
+        const offset = count(record.o, "a byte offset")
+        const length = count(record.l, "a length")
+        if (record.t === "DataView") {
+          if (offset + length > buffer.byteLength) return invalid(`record ${id} reaches past its buffer.`)
+          return new DataView(buffer, offset, length)
+        }
+        const kind = isTypedArrayKind(record.k) ? record.k : invalid(`unknown typed array kind ${String(record.k)}.`)
+        const size = typedArrayKinds[kind].BYTES_PER_ELEMENT
+        if (offset % size !== 0 || offset + length * size > buffer.byteLength) {
+          return invalid(`record ${id} reaches past its buffer.`)
+        }
+        return new typedArrayKinds[kind](buffer, offset, length)
+      }
       case "TextDecoder":
         return new TextDecoder("utf-8", { fatal: record.f === true, ignoreBOM: record.i === true })
     }
@@ -856,6 +900,8 @@ class Decoder {
       case "Headers":
       case "ArrayBuffer":
       case "Uint8Array":
+      case "TypedArray":
+      case "DataView":
       case "TextDecoder":
         return
     }

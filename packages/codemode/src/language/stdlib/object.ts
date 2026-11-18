@@ -12,7 +12,7 @@ import {
   own,
   ownKeys,
   Arr,
-  Bytes,
+  TypedArrayObj,
   Obj,
   PromiseObj,
   set,
@@ -83,7 +83,7 @@ const restrict = (level: "freeze" | "seal" | "preventExtensions", value: Value):
   changed(value)
   value.extensible = false
   if (level === "preventExtensions") return value
-  if (value instanceof Bytes && value.bytes.length > 0) {
+  if (value instanceof TypedArrayObj && value.array.length > 0) {
     throw typeError(`Cannot ${level} array buffer views with elements.`)
   }
   for (const slot of value.props.values()) {

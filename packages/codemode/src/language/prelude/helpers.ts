@@ -1,7 +1,7 @@
 import { isSupportedCallback, requireCallback } from "../runtime/callback.js"
 import type { Builtins } from "../runtime/intrinsics.js"
 import { SORT_RUN, sorted, type SortInto } from "../stdlib/array.js"
-import { finishBytes } from "../stdlib/bytes.js"
+import { finishTyped } from "../stdlib/bytes.js"
 import { weakKey } from "../stdlib/collections.js"
 import { buildPairs } from "../stdlib/url.js"
 import type { Interpreter } from "../runtime/interpreter.js"
@@ -10,7 +10,8 @@ import { invalidData, IteratorSymbol, PendingThrow } from "../runtime/model.js"
 import { native, receiver } from "../runtime/native.js"
 import {
   Arr,
-  Bytes,
+  TypedArrayObj,
+  type TypedArrayKind,
   coerceToString,
   data,
   define,
@@ -40,7 +41,7 @@ import { Invoke } from "../runtime/signals.js"
 
 type Helper = readonly [length: number, call: (args: Array<Value>) => NativeResult]
 
-const classes = { Array: Arr, Uint8Array: Bytes, Map: MapObj, Set: SetObj } as const
+const classes = { Array: Arr, TypedArray: TypedArrayObj, Map: MapObj, Set: SetObj } as const
 
 // Bun exposes ES2026 Math.sumPrecise before TypeScript's standard library types.
 declare global {
@@ -94,15 +95,23 @@ export const helpers = (ctx: Interpreter<unknown>): Array<readonly [string, Valu
       },
     ],
     $SumPrecise: [1, ([numbers]) => Math.sumPrecise((numbers as Arr).items as Array<number>)],
-    /** A Uint8Array of the values (see `collectBytes`). */
-    $Bytes: [
-      3,
-      ([values, into, offset]) => {
+    /** A typed array of the values, like a kind or a typed array, or the values set into one (see `collectTyped`). */
+    $Typed: [
+      4,
+      ([values, like, into, offset]) => {
         const items = (values as Arr).items
         checkArrayLength(items.length)
-        return finishBytes(Uint8Array.from(items, coerceToNumber), into as Obj, offset as number)
+        return finishTyped(
+          builtins,
+          items.map(coerceToNumber),
+          like as TypedArrayKind | TypedArrayObj,
+          into,
+          offset as number,
+        )
       },
     ],
+    /** A typed array's kind, for callback labels (`Int16Array.map`). */
+    $Kind: [1, ([value]) => (value as TypedArrayObj).kind],
     /** Headers or URLSearchParams from the pairs `readPairs` read, or from a record. */
     $Pairs: [
       4,
@@ -131,7 +140,7 @@ export const helpers = (ctx: Interpreter<unknown>): Array<readonly [string, Valu
     $Sorted: [
       5,
       ([target, into, holes, values, undefs]) =>
-        sorted(builtins, target as Arr | Bytes, into as SortInto, holes as number, [
+        sorted(builtins, target as Arr | TypedArrayObj, into as SortInto, holes as number, [
           ...(values as Arr).items,
           ...Array<Value>(undefs as number).fill(undefined),
         ]),

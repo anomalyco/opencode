@@ -33,6 +33,8 @@ export class Prelude {
     this.functions = new Obj(null)
     this.helpers = new Obj(null)
     for (const [name, value] of globals) this.scope.set(name, value)
+    // %TypedArray% is no global, but the typed array callback methods are installed on its prototype.
+    this.scope.set("TypedArray", get(builtins.TypedArray, "constructor"))
     for (const [name, value] of helpers(ctx)) {
       define(this.helpers, name, value, hidden)
       this.scope.set(name, value)

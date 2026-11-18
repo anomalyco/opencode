@@ -1,6 +1,12 @@
-import { Arr, BoundFn, Callable, coerceToInteger, get, Obj, type Value } from "./objects.js"
+import { Arr, BoundFn, Callable, coerceToInteger, get, Obj, typedArrayKinds, type Value } from "./objects.js"
 import { arrayGlobal } from "../stdlib/array.js"
-import { textDecoderGlobal, textEncoderGlobal, uint8ArrayGlobal } from "../stdlib/bytes.js"
+import {
+  arrayBufferGlobal,
+  dataViewGlobal,
+  textDecoderGlobal,
+  textEncoderGlobal,
+  typedArrayGlobal,
+} from "../stdlib/bytes.js"
 import { bufferGlobal } from "../stdlib/buffer.js"
 import { mapGlobal, setGlobal, weakMapGlobal, weakSetGlobal } from "../stdlib/collections.js"
 import { consoleGlobal } from "../stdlib/console.js"
@@ -117,7 +123,14 @@ const table: Record<string, Factory> = {
   URL: (ctx) => urlGlobal(ctx),
   URLSearchParams: (ctx) => urlSearchParamsGlobal(ctx),
   Headers: (ctx) => headersGlobal(ctx),
-  Uint8Array: (ctx) => uint8ArrayGlobal(ctx),
+  ArrayBuffer: (ctx) => arrayBufferGlobal(ctx),
+  DataView: (ctx) => dataViewGlobal(ctx),
+  ...Object.fromEntries(
+    Object.keys(typedArrayKinds).map((kind) => [
+      kind,
+      <R>(ctx: Interpreter<R>) => typedArrayGlobal(ctx, kind as keyof typeof typedArrayKinds),
+    ]),
+  ),
   // Built on the host's Buffer, so only where there is one (Node and Bun, not browsers).
   ...(typeof Buffer === "undefined" ? {} : { Buffer: <R>(ctx: Interpreter<R>) => bufferGlobal(ctx) }),
   TextEncoder: (ctx) => textEncoderGlobal(ctx),

@@ -823,7 +823,7 @@ export const globals = <R>(
 /**
  * A tool argument as JSON, as `JSON.stringify` would give it, with a few departures so a mistake is not a silent `{}`:
  * an Error gives its name, message, and own fields, a Set its items, a URLSearchParams its query string, and a
- * Uint8Array asks to be encoded as text first. A `__proto__` key is dropped.
+ * typed array, ArrayBuffer, or DataView asks to be encoded as text first. A `__proto__` key is dropped.
  */
 const toJson = (value: unknown): Json | undefined => {
   if (value === undefined || typeof value === "function") return undefined
@@ -838,6 +838,13 @@ const toJson = (value: unknown): Json | undefined => {
     throw new HostFailure(
       "InvalidDataValue",
       "A Uint8Array cannot cross to a tool; pass text instead, e.g. `new TextDecoder().decode(bytes)` or `bytes.toBase64()`.",
+    )
+  }
+  if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) {
+    const name = value.constructor.name
+    throw new HostFailure(
+      "InvalidDataValue",
+      `${/^[AEIOU]/.test(name) ? "An" : "A"} ${name} cannot cross to a tool; pass text instead, e.g. \`new TextDecoder().decode(value)\` or \`new Uint8Array(value.buffer).toBase64()\`.`,
     )
   }
   const items = Array.isArray(value) ? value : value instanceof Set ? [...value] : undefined

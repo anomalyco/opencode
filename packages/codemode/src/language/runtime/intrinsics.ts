@@ -31,7 +31,18 @@ const builtins = [
   "URL",
   "URLSearchParams",
   "Headers",
+  "ArrayBuffer",
+  "DataView",
+  "TypedArray",
+  "Int8Array",
   "Uint8Array",
+  "Uint8ClampedArray",
+  "Int16Array",
+  "Uint16Array",
+  "Int32Array",
+  "Uint32Array",
+  "Float32Array",
+  "Float64Array",
   "Buffer",
   "TextEncoder",
   "TextDecoder",
@@ -81,7 +92,9 @@ export const createBuiltins = (): Builtins => {
   }
   const iterator = plain()
   const asyncIterator = plain()
-  const uint8Array = plain()
+  // %TypedArray%.prototype, which every typed array prototype inherits.
+  const typedArray = plain()
+  const uint8Array = new Obj(typedArray)
   return {
     Object: object,
     Function: fn,
@@ -98,7 +111,18 @@ export const createBuiltins = (): Builtins => {
     URL: plain(),
     URLSearchParams: plain(),
     Headers: plain(),
+    ArrayBuffer: plain(),
+    DataView: plain(),
+    TypedArray: typedArray,
+    Int8Array: new Obj(typedArray),
     Uint8Array: uint8Array,
+    Uint8ClampedArray: new Obj(typedArray),
+    Int16Array: new Obj(typedArray),
+    Uint16Array: new Obj(typedArray),
+    Int32Array: new Obj(typedArray),
+    Uint32Array: new Obj(typedArray),
+    Float32Array: new Obj(typedArray),
+    Float64Array: new Obj(typedArray),
     /** Node's Buffer: a Uint8Array whose text conversions default to UTF-8. */
     Buffer: new Obj(uint8Array),
     TextEncoder: plain(),

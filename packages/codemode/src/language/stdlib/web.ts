@@ -1,5 +1,5 @@
 import { fn, methods } from "../runtime/native.js"
-import { typeError } from "../runtime/model.js"
+import { rangeError, typeError } from "../runtime/model.js"
 import {
   define,
   entries,
@@ -9,7 +9,10 @@ import {
   hidden,
   isRuntimeReference,
   Arr,
-  Bytes,
+  ArrayBufferObj,
+  DataViewObj,
+  TypedArrayObj,
+  typedArrayKinds,
   DateObj,
   ErrorObj,
   HostNamespace,
@@ -25,6 +28,7 @@ import {
 import { createErrorValue, isErrorType } from "../runtime/intrinsics.js"
 import { describeValue } from "../runtime/references.js"
 import type { Interpreter } from "../runtime/interpreter.js"
+import { makeTyped } from "./bytes.js"
 
 // WebIDL DOMString conversion: a missing argument is a TypeError, anything else stringifies. Invalid input is a
 // TypeError as well; browsers throw a DOMException named InvalidCharacterError, which CodeMode does not have.
@@ -71,7 +75,21 @@ export const structuredCloneGlobal = <R>(ctx: Interpreter<R>) =>
       if (value instanceof RegExpObj) {
         return remember(new RegExpObj(builtins.RegExp, value.source, value.flags))
       }
-      if (value instanceof Bytes) return remember(new Bytes(builtins.Uint8Array, new Uint8Array(value.bytes)))
+      // A view's clone is over a clone of its whole buffer, so views sharing a buffer share the cloned one.
+      if (value instanceof ArrayBufferObj) {
+        return remember(new ArrayBufferObj(builtins.ArrayBuffer, value.buffer.slice(0)))
+      }
+      if (value instanceof TypedArrayObj) {
+        const buffer = clone(value.bufferObj(builtins.ArrayBuffer)) as ArrayBufferObj
+        const array = value.array
+        const copy = new typedArrayKinds[value.kind](buffer.buffer, array.byteOffset, array.length)
+        return remember(makeTyped(builtins[value.kind], copy, buffer))
+      }
+      if (value instanceof DataViewObj) {
+        const buffer = clone(value.buffer) as ArrayBufferObj
+        const view = new DataView(buffer.buffer, value.view.byteOffset, value.view.byteLength)
+        return remember(new DataViewObj(builtins.DataView, view, buffer))
+      }
       if (value instanceof ErrorObj) {
         const name = get(value, "name")
         const message = get(value, "message")
@@ -106,10 +124,14 @@ export const cryptoGlobal = <R>(ctx: Interpreter<R>) => {
       "getRandomValues",
       1,
       (_, args) => {
-        if (!(args[0] instanceof Bytes)) {
-          throw typeError(`crypto.getRandomValues expects a Uint8Array, received ${describeValue(args[0])}.`)
+        const target = args[0]
+        if (!(target instanceof TypedArrayObj) || target.kind === "Float32Array" || target.kind === "Float64Array") {
+          throw typeError(`crypto.getRandomValues expects an integer typed array, received ${describeValue(target)}.`)
         }
-        crypto.getRandomValues(args[0].bytes)
+        if (target.array.byteLength > 65_536) {
+          throw rangeError(`crypto.getRandomValues: ${target.array.byteLength} bytes is more than the 65536 allowed.`)
+        }
+        crypto.getRandomValues(target.array)
         return args[0]
       },
     ],

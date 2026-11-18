@@ -26,11 +26,12 @@ the ultimate source of truth. Upstream test262 files run verbatim from `test/tes
       be JSON but what the program meant is clear: a promise is awaited (a rejection fails the program), a Set
       crosses as an array, a URLSearchParams as its query string, an Error as `{ name, message, ...own enumerable }`,
       and own `__proto__` keys are dropped so merging results cannot replace a prototype. Tool arguments cross as
-      copies, like extension arguments, and the tool layer turns them into JSON with the same table (a Uint8Array is
-      rejected with a hint to encode as text); a program's own `toJSON` is not called there, and a promise or function
+      copies, like extension arguments, and the tool layer turns them into JSON with the same table (a typed array,
+      ArrayBuffer, or DataView is rejected with a hint to encode as text); a program's own `toJSON` is not called there, and a promise or function
       inside an argument fails the call. In-program `JSON.stringify` keeps JS behavior except for the Error form and a
       promise, which is a `TypeError` with an await hint rather than a silent `{}`.
-- [x] Live Date, RegExp, Map, Set, URL, URLSearchParams, Headers, and Uint8Array values inside CodeMode.
+- [x] Live Date, RegExp, Map, Set, URL, URLSearchParams, Headers, typed array, ArrayBuffer, and DataView values inside
+      CodeMode.
 - [x] Tool calls through the host-provided `tools` tree only.
 - [x] Imports of globals by Node module name: `import x from "m"`, `import { a, b as c } from "m"`,
       `import * as m from "m"`, `import "m"`, `require("m")`, and `await import("m")`, with `node:fs` naming the
@@ -108,7 +109,7 @@ the ultimate source of truth. Upstream test262 files run verbatim from `test/tes
 - [x] `if`/`else` and conditional expressions.
 - [x] `switch`, including default clauses and fallthrough.
 - [x] `for`, `while`, and `do...while`.
-- [x] `for...of` over arrays, strings, Maps, Sets, URLSearchParams, Headers, Uint8Arrays, built-in iterators, custom
+- [x] `for...of` over arrays, strings, Maps, Sets, URLSearchParams, Headers, typed arrays, built-in iterators, custom
       synchronous iterators, and confined synchronous generators. Abrupt completion invokes the iterator's optional `return()`.
 - [x] `for...in` over own keys of plain objects, arrays, strings, and tool references. `null`, `undefined`, and other
       non-objects iterate nothing. An un-awaited promise throws rather than iterating.
@@ -166,7 +167,7 @@ Math.floor)` is `"3"`). A detached method loses its receiver, as in JS: `values.
       array, an array-like object (its `length` clamped and capped like `Array.from`), or `null`/`undefined`. A
       bound function is named `bound f`, has its remaining `length`, and is not constructible.
 - [x] `JSON.parse` revivers and `JSON.stringify` function replacers see the holder object as `this`.
-- [x] The optional `thisArg` of the Array, Uint8Array, and `Array.from` callback methods and of Map, Set,
+- [x] The optional `thisArg` of the Array, typed array, and `Array.from` callback methods and of Map, Set,
       URLSearchParams, and Headers `forEach` is the callback's `this`: `[1, 2].forEach(function () { this.n++ }, c)`
       increments `c.n` twice. Arrows ignore it, as in JS; `reduce`/`reduceRight` take an initial value instead.
 - [ ] User-defined constructor calls.
@@ -259,7 +260,7 @@ Math.floor)` is `"3"`). A detached method loses its receiver, as in JS: `values.
       `"ff"`, `String.prototype.trim.call({ toString() { return " a " } })` is `"a"`). Only consumed positions
       convert; a RegExp pattern is used as is, and `includes`/`startsWith`/`endsWith` reject one before converting.
 - [ ] ToPrimitive elsewhere: `Error.prototype.toString` on an object `message` and numeric arguments of the Array and
-      Uint8Array methods (`at`, `indexOf` start, `slice`) still use the built-in form (`NaN`, `"[object Object]"`) and
+      typed array methods (`at`, `indexOf` start, `slice`) still use the built-in form (`NaN`, `"[object Object]"`) and
       ignore own methods.
 - [x] Property keys follow ToPropertyKey: `x[null]` and `x[true]` become string keys, and a data object key
       converts through its own `toString`/`valueOf` (string hint) exactly once per access, in reads, writes,
@@ -402,7 +403,7 @@ reject }` object.
       form, like `JSON.stringify`.
 - [x] Numeric arguments coerce as in JS (ToIntegerOrInfinity): `indexOf(x, "1")`, `slice("1", "3")`, `at(null)`,
       `flat(1.9)`, `with(1.5, v)`, `Math.max("3", "2")`, `parseInt("11", "2")`, `(1.5).toFixed("2")`,
-      `String.fromCharCode("65")`, and the Uint8Array equivalents. `join(sep)` and `JSON.parse(text)` apply ToString
+      `String.fromCharCode("65")`, and the typed array equivalents. `join(sep)` and `JSON.parse(text)` apply ToString
       (`join(null)` is `"1null2"`, `JSON.parse(123)` is `123`). `Array.from({ length: "2" })` applies ToLength; a
       promise source still throws with an `await` hint rather than JS's silent `[]`. `join`, `Math.*`, `parseInt`,
       and the String and Number methods consult a program object's own `valueOf`/`toString`; the array methods do not
@@ -562,36 +563,61 @@ reject }` object.
 - [x] URL values are their href in `JSON.stringify` and at the host boundary. URLSearchParams are `{}` in
       `JSON.stringify` and their query string at the host boundary.
 
-## Uint8Array
+## Typed arrays and ArrayBuffer
 
-The only binary type. Bytes stay inside the program or cross to extensions as copies; the tool boundary rejects them
-with a hint to encode as text first (`TextDecoder`, `toBase64`, `toHex`).
+Binary data stays inside the program or crosses to extensions as copies; the tool boundary and results reject it with
+a hint to encode as text first (`TextDecoder`, `toBase64`, `toHex`).
 
-- [x] `new Uint8Array(length | array | iterable | Uint8Array)`, `Uint8Array.from`, `Uint8Array.of`, `fromBase64`,
-      and `fromHex`. Lengths are capped like arrays. The `Uint8Array.from` mapper and `thisArg` see the original
-      values, so `Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))` decodes base64.
-- [x] Index reads and writes with JS byte semantics: values wrap modulo 256, out-of-range writes are ignored, indexes
-      cannot be deleted. `length` is a prototype accessor, so `Object.keys` lists only indexes.
-- [x] `at`, `slice`, `subarray` (a view on the same bytes), `set`, `fill`, `reverse`, `indexOf`, `lastIndexOf`,
-      `includes`, `join`, `toString`, `toBase64`, `toHex`, and live `keys`, `values`, `entries`, and `[Symbol.iterator]`
-      iterators. Start indexes coerce as for arrays, search values do not (`bytes.includes("1")` is `false`), and
-      `lastIndexOf(x, undefined)` searches from index 0 while `lastIndexOf(x)` searches from the end, as in JS.
+- [x] `ArrayBuffer`: `new ArrayBuffer(length)`, `byteLength`, `slice`, `ArrayBuffer.isView`, and `resizable`,
+      `maxByteLength`, and `detached` (always fixed-length and attached). Resizable buffers (`maxByteLength`) throw a
+      `TypeError`; `transfer` is not available.
+- [x] The typed arrays `Int8Array`, `Uint8Array`, `Uint8ClampedArray`, `Int16Array`, `Uint16Array`, `Int32Array`,
+      `Uint32Array`, `Float32Array`, and `Float64Array`, inheriting `%TypedArray%` (`Object.getPrototypeOf(Int8Array)`)
+      and its prototype, with `BYTES_PER_ELEMENT`, `buffer`, `byteOffset`, `byteLength`, and `length`. Each converts
+      elements like JS (`Int8Array.of(300)` is `[44]`, `Uint8ClampedArray.of(300)` is `[255]`).
+- [x] `new Kind(length | array | iterable | typedArray)`, `Kind.from`, `Kind.of`, and `new Kind(buffer, byteOffset,
+      length)`, a view sharing the buffer's memory: writes through any view of a buffer, `subarray`, or a DataView over
+      it are visible through the others, and `view.buffer` is the same ArrayBuffer for every view on it. A misaligned
+      offset or a view past the buffer's end is a `RangeError`, as in JS. Sizes are capped in bytes like array lengths.
+      The `from` mapper and `thisArg` see the original values, so `Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))`
+      decodes base64. `Uint8Array.fromBase64` and `fromHex` too.
+- [x] Index reads and writes with JS element semantics: values convert to the element type, out-of-range writes are
+      ignored, indexes cannot be deleted. `length` is a prototype accessor, so `Object.keys` lists only indexes.
+- [x] `at`, `slice` (a copy), `subarray` (a view on the same memory), `set` (converting across kinds, overlapping
+      views included), `fill`, `copyWithin`, `reverse`, `toReversed`, `with`, `indexOf`, `lastIndexOf`, `includes`,
+      `join`, `toString`, live `keys`, `values`, `entries`, and `[Symbol.iterator]` iterators, and on Uint8Array,
+      `toBase64` and `toHex`. Start indexes coerce as for arrays, search values do not (`bytes.includes("1")` is
+      `false`; `includes(NaN)` finds NaN in a float array), and `lastIndexOf(x, undefined)` searches from index 0 while
+      `lastIndexOf(x)` searches from the end, as in JS.
 - [x] Spread, destructuring, `for...of`, `yield*`, `Array.from`, and `new Set(bytes)`. `Array.isArray` is false.
-- [x] String coercion joins with commas; `JSON.stringify` gives `{"0":1,...}`; `console.log` prints
-      `Uint8Array(n) [...]`.
+- [x] String coercion joins with commas; `JSON.stringify` gives `{"0":1,...}` for a typed array and `{}` for an
+      ArrayBuffer or DataView; `console.log` prints `Int16Array(n) [...]`, `ArrayBuffer { byteLength: n }`, and
+      `DataView { byteLength: n, byteOffset: m }`.
 - [x] Callback methods `forEach`, `map`, `filter`, `find`, `findIndex`, `findLast`, `findLastIndex`, `some`, `every`,
-      `reduce`, and `reduceRight`, sharing the Array implementations; the callback receives `(byte, index, bytes)`.
-      `map` and `filter` return new Uint8Arrays with results clamped like index writes (`map((b) => b * 100)` on
-      `[1, 2, 3]` is `[100, 200, 44]`); `reduce` on an empty Uint8Array without an initial value is a `TypeError`.
+      `reduce`, and `reduceRight`, sharing the Array implementations; the callback receives `(item, index, array)`.
+      `map` and `filter` return a new array of the receiver's kind with results converted like index writes
+      (`map((b) => b * 100)` on Uint8Array `[1, 2, 3]` is `[100, 200, 44]`); `reduce` on an empty typed array without
+      an initial value is a `TypeError`.
 - [x] `sort` in place, numeric ascending by default (`[10, 9, 1]` sorts to `[1, 9, 10]`) or by comparator.
-- [ ] `ArrayBuffer`, `DataView`, and other typed arrays.
+- [x] `DataView` over an ArrayBuffer, with `buffer`, `byteOffset`, `byteLength`, and `get`/`set` for `Int8`, `Uint8`,
+      `Int16`, `Uint16`, `Int32`, `Uint32`, `Float32`, and `Float64`, big-endian unless `littleEndian` is true. An
+      access past the view is a `RangeError`.
+- [x] `TextDecoder.decode` accepts any typed array (its own bytes, honoring `byteOffset`), DataView, or ArrayBuffer;
+      `crypto.getRandomValues` fills any integer typed array; `structuredClone` copies a view's whole buffer, so
+      cloned views of one buffer still share it.
+- [x] A host typed array, ArrayBuffer, or DataView crosses into the program as a copy of the same kind, and back out
+      as one; snapshots keep views sharing their buffer.
+- [ ] `BigInt64Array`, `BigUint64Array`, and DataView's `getBigInt64`/`setBigInt64` family, since programs have no
+      BigInt; `Float16Array`; `SharedArrayBuffer`; resizable and transferable ArrayBuffers; `Symbol.species` for typed
+      arrays.
 
 ## Buffer
 
 Node's `Buffer`, where the host has one (Node and Bun; not browsers). It is a `Uint8Array`, so every `Uint8Array`
 method works on it, and its text conversions default to UTF-8.
 
-- [x] `Buffer.from(string, encoding)`, `Buffer.from(bytes | array | array-like | { type: "Buffer", data })`,
+- [x] `Buffer.from(string, encoding)`, `Buffer.from(arrayBuffer, byteOffset, length)` (a view sharing the buffer's
+      memory, as in Node), `Buffer.from(bytes | typedArray | array | array-like | { type: "Buffer", data })`,
       `alloc`, `allocUnsafe`, `concat`, `byteLength`, `compare`, `isBuffer`, and `isEncoding`, with the encodings
       utf8, hex, base64, base64url, latin1/binary, ascii, and utf16le/ucs2. An unknown encoding is a `TypeError` with
       code `ERR_UNKNOWN_ENCODING`.
@@ -606,15 +632,15 @@ method works on it, and its text conversions default to UTF-8.
 
 - [x] `atob` and `btoa` with forgiving-base64 decoding and WebIDL string conversion; invalid input throws a
       `TypeError`, since there is no `DOMException`.
-- [x] `crypto.randomUUID()` and `crypto.getRandomValues(uint8Array)`.
+- [x] `crypto.randomUUID()` and `crypto.getRandomValues(typedArray)`.
 - [x] `structuredClone(value)` deep-copies primitives, plain objects (own enumerable string keys onto a plain object;
       the prototype is not kept), arrays (holes and extra keys kept), Map, Set, Date, RegExp (`lastIndex` reset to 0),
-      Uint8Array, and errors (standard `name`, `message`, `cause`, and `stack`; other names become `Error`, extra
+      typed arrays, ArrayBuffers, DataViews, and errors (standard `name`, `message`, `cause`, and `stack`; other names become `Error`, extra
       fields drop). Shared references stay shared in the copy, and the copy is extensible even when the source was
       frozen. Functions, symbols, promises, iterators, URL, Headers, and tool references cannot be cloned; without a
       `DOMException`, the failure is a `TypeError` whose message starts with `DataCloneError:`.
 - [x] `TextEncoder` and `TextDecoder` for UTF-8 only: any other label is a `RangeError`. `TextDecoder` accepts the
-      `fatal` and `ignoreBOM` options. `decode(chunk, { stream: true })` accepts incremental Uint8Array input;
+      `fatal` and `ignoreBOM` options. `decode(chunk, { stream: true })` accepts incremental binary input;
       `decode()` flushes the stream.
 - [x] `new Headers()` from records, synchronous iterables of pairs, and Headers, wrapping the host's `Headers`: names
       fold to lowercase, values are normalized and combined, and invalid names or values throw a `TypeError`.
@@ -622,7 +648,7 @@ method works on it, and its text conversions default to UTF-8.
       `[Symbol.iterator]`; iteration is live and sorted by name, with `set-cookie` values kept apart.
 - [x] Headers serialize to a `{ name: value }` object in JSON, in results, and in tool arguments.
 - [ ] `Request`, `Response`, and `Blob`.
-- [x] A host-provided streaming fetch response exposes `bodyUsed`, whole-body readers, a default stream reader and `for await` iteration. `arrayBuffer()` crosses as a `Uint8Array`.
+- [x] A host-provided streaming fetch response exposes `bodyUsed`, whole-body readers, a default stream reader and `for await` iteration. `arrayBuffer()` gives an `ArrayBuffer`.
 - [ ] `crypto.subtle` and non-UTF-8 `TextDecoder` encodings.
 
 ## Extensions
@@ -633,8 +659,8 @@ Nothing is exposed unless a host provides it; extension calls are not tool calls
 - [x] Each global is a function, callable but not constructible, run with `this` undefined. A global that shadows
       a built-in or another extension throws at `make`.
 - [x] Every value crossing in either direction is converted, never shared: plain objects and arrays are copied,
-      `Date`, `RegExp`, `URL`, `URLSearchParams`, `Headers`, `Map`, `Set`, and `Uint8Array` become fresh copies with
-      their contents converted (a host `ArrayBuffer` comes in as a `Uint8Array`; other typed arrays cannot come out),
+      `Date`, `RegExp`, `URL`, `URLSearchParams`, `Headers`, `Map`, `Set`, typed arrays, `ArrayBuffer`, and `DataView`
+      become fresh copies with their contents converted (a host `BigInt64Array` or `BigUint64Array` cannot come in),
       errors cross as errors with their name, message, `cause`, and own enumerable data, and a `__proto__` key is
       dropped. Functions, generators,
       un-awaited promises, and symbols cannot be passed in; a class instance, a symbol, or a BigInt cannot come out.

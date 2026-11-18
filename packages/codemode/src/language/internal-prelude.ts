@@ -6,7 +6,10 @@ import { invalidData, rangeError, typeError } from "./runtime/model.js"
 import {
   Arr,
   Builtin,
+  ArrayBufferObj,
   Bytes,
+  DataViewObj,
+  TypedArrayObj,
   Callable,
   coerceToNumber,
   coerceToString,
@@ -330,11 +333,7 @@ export const registerVmIntrinsics = (map: Map<string, unknown>, vm: Vm): void =>
     if (typeof val === "number") return Number.isFinite(val) ? 1 : 2
     if (val === null || typeof val === "string" || typeof val === "boolean") return 1
     if (!(val instanceof Obj)) return 3
-    if (boundary && val instanceof Bytes) {
-      throw invalidData(
-        "A Uint8Array cannot cross to the host; pass text instead, e.g. `new TextDecoder().decode(bytes)` or `bytes.toBase64()`.",
-      )
-    }
+    if (boundary) rejectBinary(val)
     if ((boundary && val instanceof URLSearchParamsObj) || val instanceof HeadersObj) return 3
     if ((ancestors as Arr).items.includes(val)) throw typeError("Converting circular structure to JSON.")
     if (boundary && val instanceof SetObj) return 4
@@ -371,6 +370,20 @@ export const registerVmIntrinsics = (map: Map<string, unknown>, vm: Vm): void =>
   })
 }
 
+// Binary data asks to be encoded as text before it crosses to the host as JSON.
+const rejectBinary = (value: Obj) => {
+  if (value instanceof Bytes) {
+    throw invalidData(
+      "A Uint8Array cannot cross to the host; pass text instead, e.g. `new TextDecoder().decode(bytes)` or `bytes.toBase64()`.",
+    )
+  }
+  if (value instanceof TypedArrayObj || value instanceof ArrayBufferObj || value instanceof DataViewObj) {
+    throw invalidData(
+      `${value.describe.replace(/^a/, "A")} cannot cross to the host; pass text instead, e.g. \`new TextDecoder().decode(value)\` or \`new Uint8Array(value.buffer).toBase64()\`.`,
+    )
+  }
+}
+
 const toPlainJson = (val: Value): Json | undefined => {
   if (val === undefined) return undefined
   if (val === null || typeof val === "string" || typeof val === "number" || typeof val === "boolean") return val
@@ -401,7 +414,7 @@ const toPlainJson = (val: Value): Json | undefined => {
  * Both give the text `JSON.stringify` would: `toJSON` is honored, functions and `undefined` vanish, non-finite numbers
  * become null, and everything else is copied. Two departures from JS so a mistake is not a silent `{}`: an Error
  * serializes as `{ name, message, ...own }`, and a promise throws. At the host boundary a promise is awaited, a Set
- * crosses as an array, a URLSearchParams as its query string, a Uint8Array asks to be encoded as text first, and a
+ * crosses as an array, a URLSearchParams as its query string, binary data (typed arrays, ArrayBuffers, DataViews) asks to be encoded as text first, and a
  * `__proto__` key is dropped so host code can never receive one.
  */
 export const tryFastBoundaryOrJson = (
@@ -482,11 +495,7 @@ export const tryFastBoundaryOrJson = (
       }
       return { ok: false }
     }
-    if (boundary && cur instanceof Bytes) {
-      throw invalidData(
-        "A Uint8Array cannot cross to the host; pass text instead, e.g. `new TextDecoder().decode(bytes)` or `bytes.toBase64()`.",
-      )
-    }
+    if (boundary) rejectBinary(cur)
     if (boundary && cur instanceof URLSearchParamsObj) return { ok: true, json: cur.params.toString() }
     if (cur instanceof HeadersObj) return { ok: true, json: Object.fromEntries(cur.headers) }
     if (ancestors.has(cur)) throw typeError("Converting circular structure to JSON.")

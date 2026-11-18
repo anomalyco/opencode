@@ -116,7 +116,7 @@ global rejects its promise, and a synchronous global throws.
 Tool arguments cross into the host the way extension arguments do, as copies (plain data, `Date`, `Map`, `Set`, `URL`,
 `Headers`, errors), and Code Mode then turns them into JSON next to the tool's schema: a `Date` is its ISO string, a
 `Set` its items, a `URLSearchParams` its query string, an `Error` `{ name, message, ...own fields }`, and `Map` and
-`RegExp` values `{}`. A `Uint8Array` asks to be encoded as text first. A program's own `toJSON` is not called, and a
+`RegExp` values `{}`. A typed array, `ArrayBuffer`, or `DataView` asks to be encoded as text first. A program's own `toJSON` is not called, and a
 promise or function inside an argument fails the call: await it, or pass its data.
 
 ### Suspending and resuming a run
@@ -388,7 +388,8 @@ yield* runtime.resume(bytes).run()
   the run's result. Code Mode keeps `toolCalls` and `maxToolCalls` there.
 
 Every host function gets the same structured translation: arguments and results cross as copies (plain data, `Date`,
-`Map`, `Set`, `Uint8Array`, `URL`, `Headers`, errors), and a function inside a result is callable.
+`Map`, `Set`, typed arrays, `ArrayBuffer`, `DataView`, `URL`, `Headers`, errors), and a function inside a result is
+callable.
 
 ## Results
 

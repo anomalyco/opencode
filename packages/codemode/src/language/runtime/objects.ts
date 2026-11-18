@@ -421,7 +421,7 @@ export type IterationKind = "keys" | "values" | "entries"
 /** What a built-in iterator walks: a collection, a string, or a fixed list of values. */
 export type PositionSource =
   | Arr
-  | Bytes
+  | TypedArrayObj
   | MapObj
   | SetObj
   | HeadersObj
@@ -472,7 +472,7 @@ export class Position implements TableCursor {
       this.index++
       return this.yield(entry[0], entry[1])
     }
-    const items = source instanceof Arr ? source.items : source instanceof Bytes ? source.bytes : source
+    const items = source instanceof Arr ? source.items : source instanceof TypedArrayObj ? source.array : source
     if (this.index >= items.length) return this.finish()
     const at = this.index++
     return this.yield(at, items[at])
@@ -677,27 +677,132 @@ export class URLObj extends Wrapper {
   }
 }
 
-/** A `Uint8Array`: the host array does the byte clamping and ignores out-of-range writes, as JS does. */
-export class Bytes extends Wrapper {
-  override readonly tag = "Uint8Array"
+/** The typed array kinds a program can make, by name. BigInt64Array and BigUint64Array need BigInt, which it lacks. */
+export const typedArrayKinds = {
+  Int8Array,
+  Uint8Array,
+  Uint8ClampedArray,
+  Int16Array,
+  Uint16Array,
+  Int32Array,
+  Uint32Array,
+  Float32Array,
+  Float64Array,
+} as const
+
+export type TypedArrayKind = keyof typeof typedArrayKinds
+export type HostTypedArray =
+  | Int8Array
+  | Uint8Array
+  | Uint8ClampedArray
+  | Int16Array
+  | Uint16Array
+  | Int32Array
+  | Uint32Array
+  | Float32Array
+  | Float64Array
+
+export const isTypedArrayKind = (name: unknown): name is TypedArrayKind =>
+  typeof name === "string" && Object.hasOwn(typedArrayKinds, name)
+
+/** An `ArrayBuffer`: the memory typed arrays and DataViews over it share. One per host buffer a program can reach. */
+export class ArrayBufferObj extends Wrapper {
+  override readonly tag = "ArrayBuffer"
   constructor(
     proto: Obj,
-    readonly bytes: Uint8Array,
+    readonly buffer: ArrayBuffer,
   ) {
     super(proto)
   }
-  override toString() {
-    return this.bytes.join(",")
-  }
   override inspect() {
-    return `Uint8Array(${this.bytes.length}) [${this.bytes.join(",")}]`
+    return `ArrayBuffer { byteLength: ${this.buffer.byteLength} }`
   }
   override toHost() {
-    return new Uint8Array(this.bytes)
+    return this.buffer.slice(0)
+  }
+}
+
+/**
+ * A typed array: the host array does the element conversion and ignores out-of-range writes, as JS does. `buffer` is
+ * the program's object for the host array's buffer, made on first use; a view on part of a buffer always has it, so
+ * every view on one buffer answers `.buffer` with the same object, and no view reaches host memory the program does
+ * not own.
+ */
+export class TypedArrayObj extends Wrapper {
+  override readonly tag: string
+  constructor(
+    proto: Obj,
+    readonly array: HostTypedArray,
+    public buffer: ArrayBufferObj | undefined = undefined,
+  ) {
+    super(proto)
+    this.tag = array[Symbol.toStringTag]
+    if (buffer === undefined && (array.byteOffset !== 0 || array.byteLength !== array.buffer.byteLength)) {
+      throw new Error(`A ${this.tag} over part of a buffer needs that buffer's ArrayBufferObj.`)
+    }
+  }
+  get kind(): TypedArrayKind {
+    return this.tag as TypedArrayKind
+  }
+  /** The program's ArrayBuffer for this array's memory. */
+  bufferObj(proto: Obj): ArrayBufferObj {
+    return (this.buffer ??= new ArrayBufferObj(proto, this.array.buffer as ArrayBuffer))
+  }
+  override toString() {
+    return this.array.join(",")
+  }
+  override inspect() {
+    return `${this.tag}(${this.array.length}) [${this.array.join(",")}]`
+  }
+  override toHost(): unknown {
+    return new typedArrayKinds[this.kind](this.array as never)
   }
   override iterator(builtins: Builtins) {
     return new Position(this, "values", builtins.Array)
   }
+}
+
+/** A `Uint8Array`, the typed array the byte built-ins (TextDecoder, Buffer, base64) work on. */
+export class Bytes extends TypedArrayObj {
+  declare readonly array: Uint8Array
+  constructor(proto: Obj, bytes: Uint8Array, buffer?: ArrayBufferObj) {
+    super(proto, bytes, buffer)
+  }
+  get bytes(): Uint8Array {
+    return this.array
+  }
+  override toHost(): unknown {
+    return new Uint8Array(this.bytes)
+  }
+}
+
+/** A `DataView` over an ArrayBuffer. */
+export class DataViewObj extends Wrapper {
+  override readonly tag = "DataView"
+  constructor(
+    proto: Obj,
+    readonly view: DataView,
+    readonly buffer: ArrayBufferObj,
+  ) {
+    super(proto)
+  }
+  override inspect() {
+    return `DataView { byteLength: ${this.view.byteLength}, byteOffset: ${this.view.byteOffset} }`
+  }
+  override toHost() {
+    return new DataView(this.buffer.buffer.slice(this.view.byteOffset, this.view.byteOffset + this.view.byteLength))
+  }
+}
+
+/** The bytes a typed array, DataView, or ArrayBuffer covers, over the same memory; undefined for anything else. */
+export const viewedBytes = (value: Value): Uint8Array | undefined => {
+  if (value instanceof Bytes) return value.bytes
+  if (value instanceof TypedArrayObj)
+    return new Uint8Array(value.array.buffer, value.array.byteOffset, value.array.byteLength)
+  if (value instanceof DataViewObj)
+    return new Uint8Array(value.view.buffer, value.view.byteOffset, value.view.byteLength)
+  if (value instanceof ArrayBufferObj) return new Uint8Array(value.buffer)
+  return undefined
 }
 
 /**
@@ -747,11 +852,12 @@ export const parseArrayIndex = (key: string | number): number | undefined => {
 const canonical = (key: PropertyKey): string | symbol => (typeof key === "symbol" ? key : String(key))
 
 /** Objects whose integer keys are live elements rather than own property slots. */
-type Indexed = Arr | Bytes
+type Indexed = Arr | TypedArrayObj
 
-const isIndexed = (target: Obj): target is Indexed => target instanceof Arr || target instanceof Bytes
+const isIndexed = (target: Obj): target is Indexed => target instanceof Arr || target instanceof TypedArrayObj
 
-const elements = (target: Indexed): Array<Value> | Uint8Array => (target instanceof Arr ? target.items : target.bytes)
+const elements = (target: Indexed): Array<Value> | HostTypedArray =>
+  target instanceof Arr ? target.items : target.array
 
 const index = (target: Obj, key: string | number | symbol): number | undefined =>
   isIndexed(target) && typeof key !== "symbol" ? parseArrayIndex(key) : undefined
@@ -814,8 +920,8 @@ export const hasPrototype = (value: Value, proto: Obj): boolean => {
 const writeElement = (target: Indexed, name: string | number | symbol, value: Value): boolean | undefined => {
   const at = index(target, name)
   if (at !== undefined) {
-    if (target instanceof Bytes) {
-      target.bytes[at] = typeof value === "number" ? value : Number(value)
+    if (target instanceof TypedArrayObj) {
+      target.array[at] = typeof value === "number" ? value : Number(value)
       return true
     }
     if (!(at in target.items)) rejectAddition(target, at)
@@ -897,7 +1003,7 @@ export const remove = (target: Obj, key: PropertyKey): boolean => {
   if (isIndexed(target)) {
     const at = index(target, name)
     if (at !== undefined) {
-      if (target instanceof Bytes) return !(at in target.bytes)
+      if (target instanceof TypedArrayObj) return !(at in target.array)
       if (at in target.items && !target.elements.configurable) return false
       changed(target)
       return delete target.items[at]

@@ -1304,7 +1304,7 @@ describe("TextEncoder and TextDecoder", () => {
       "not valid utf-8",
     )
     expect((await error(`new TextDecoder().decode("text")`)).message).toContain(
-      "expects a Uint8Array, received a string",
+      "expects an ArrayBuffer, a typed array, or a DataView, received a string",
     )
     expect((await error(`TextDecoder()`)).message).toContain("requires 'new'")
   })
@@ -1315,7 +1315,9 @@ describe("TextEncoder and TextDecoder", () => {
         `const b = new Uint8Array(16); const same = crypto.getRandomValues(b) === b; return [same, b.length, b.some((n) => n !== 0)]`,
       ),
     ).toEqual([true, 16, true])
-    expect((await error(`crypto.getRandomValues([1])`)).message).toContain("expects a Uint8Array, received an array")
+    expect((await error(`crypto.getRandomValues([1])`)).message).toContain(
+      "expects an integer typed array, received an array",
+    )
   })
 })
 

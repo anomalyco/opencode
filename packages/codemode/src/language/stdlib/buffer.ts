@@ -4,7 +4,11 @@ import { Throw, typeError } from "../runtime/model.js"
 import { constructor, type Method, methods, prototypeFrom, receiver } from "../runtime/native.js"
 import {
   Arr,
+  ArrayBufferObj,
   Bytes,
+  coerceToInteger,
+  TypedArrayObj,
+  viewedBytes,
   define,
   get,
   hidden,
@@ -146,6 +150,7 @@ export const bufferGlobal = <R>(ctx: Interpreter<R>) => {
       const length = third === undefined ? undefined : coerceToNumber(third)
       return value.bytes.slice(offset, length === undefined ? undefined : offset + length)
     }
+    if (value instanceof TypedArrayObj) return new Uint8Array(value.array)
     if (value instanceof Arr) return Uint8Array.from(value.items, coerceToNumber)
     if (value instanceof Obj) {
       const data = get(value, "data")
@@ -156,9 +161,23 @@ export const bufferGlobal = <R>(ctx: Interpreter<R>) => {
     }
     throw fail(
       "TypeError",
-      `The first argument must be of type string or an instance of Buffer, Uint8Array, or Array or an Array-like Object. Received ${describeValue(value)}`,
+      `The first argument must be of type string or an instance of Buffer, ArrayBuffer, or Array or an Array-like Object. Received ${describeValue(value)}`,
       "ERR_INVALID_ARG_TYPE",
     )
+  }
+  // Node's Buffer.from(arrayBuffer, byteOffset, length) is a view sharing the buffer's memory.
+  const from = (proto: Obj, value: Value, second: Value, third: Value) => {
+    if (!(value instanceof ArrayBufferObj)) return new BufferObj(proto, bytesFrom(value, second, third))
+    const total = value.buffer.byteLength
+    const offset = second === undefined ? 0 : coerceToInteger(second)
+    if (offset < 0 || offset > total) {
+      throw fail("RangeError", '"offset" is outside of buffer bounds', "ERR_BUFFER_OUT_OF_BOUNDS")
+    }
+    const length = third === undefined ? total - offset : Math.max(0, coerceToInteger(third))
+    if (offset + length > total) {
+      throw fail("RangeError", '"length" is outside of buffer bounds', "ERR_BUFFER_OUT_OF_BOUNDS")
+    }
+    return new BufferObj(proto, new Uint8Array(value.buffer, offset, length), value)
   }
   const size = (value: Value) => {
     const length = coerceToNumber(value)
@@ -171,12 +190,11 @@ export const bufferGlobal = <R>(ctx: Interpreter<R>) => {
   const buffer = constructor(builtins, proto, {
     name: "Buffer",
     length: 2,
-    call: (_, args) => wrap(bytesFrom(args[0], args[1], args[2])),
-    construct: (args, newTarget) =>
-      new BufferObj(prototypeFrom(newTarget, proto), bytesFrom(args[0], args[1], args[2])),
+    call: (_, args) => from(proto, args[0], args[1], args[2]),
+    construct: (args, newTarget) => from(prototypeFrom(newTarget, proto), args[0], args[1], args[2]),
   })
   methods(builtins, buffer, [
-    ["from", 3, (_, args) => wrap(bytesFrom(args[0], args[1], args[2]))],
+    ["from", 3, (_, args) => from(proto, args[0], args[1], args[2])],
     [
       "alloc",
       3,
@@ -194,10 +212,7 @@ export const bufferGlobal = <R>(ctx: Interpreter<R>) => {
     [
       "byteLength",
       2,
-      (_, args) =>
-        args[0] instanceof Bytes
-          ? args[0].bytes.byteLength
-          : Buffer.byteLength(coerceToString(args[0]), encoding(args[1])),
+      (_, args) => viewedBytes(args[0])?.byteLength ?? Buffer.byteLength(coerceToString(args[0]), encoding(args[1])),
     ],
     [
       "concat",
@@ -234,14 +249,19 @@ export const bufferGlobal = <R>(ctx: Interpreter<R>) => {
   define(buffer, "poolSize", 8192, hidden)
 
   const view = (thisValue: Value, name: string, args: Array<Value>) => {
-    const bytes = self(thisValue, name).bytes
+    const target = self(thisValue, name)
+    const bytes = target.bytes
     const length = bytes.length
     const clamp = (value: Value, fallback: number) => {
       if (value === undefined) return fallback
       const index = Math.trunc(coerceToNumber(value)) || 0
       return index < 0 ? Math.max(0, length + index) : Math.min(index, length)
     }
-    return wrap(bytes.subarray(clamp(args[0], 0), clamp(args[1], length)))
+    return new BufferObj(
+      proto,
+      bytes.subarray(clamp(args[0], 0), clamp(args[1], length)),
+      target.bufferObj(builtins.ArrayBuffer),
+    )
   }
   const delegate = (name: string, length: number): Method => [
     name,

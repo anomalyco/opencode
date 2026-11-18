@@ -25,6 +25,24 @@ const programs: Record<string, string> = {
     let total = 0
     for (const byte of buffer) total += byte
     return [Buffer.isBuffer(buffer), buffer.toString(), buffer.toString("base64"), total]`,
+  "typed arrays and a DataView keep sharing one buffer": `
+    const buffer = new ArrayBuffer(8)
+    const bytes = new Uint8Array(buffer)
+    const words = new Uint16Array(buffer, 2, 2)
+    const view = new DataView(buffer, 4)
+    const tail = bytes.subarray(6)
+    let step = 0
+    for (let i = 0; i < 3; i++) step++
+    words[0] = 0x0102
+    view.setUint16(0, 0x0304)
+    tail[0] = 9
+    return [[...bytes], words.buffer === buffer, view.buffer === buffer, tail.buffer === bytes.buffer, view.getUint8(2), step]`,
+  "a typed array of each kind": `
+    const kinds = [Int8Array, Uint8ClampedArray, Int16Array, Int32Array, Uint32Array, Float32Array, Float64Array]
+    const arrays = kinds.map((Kind) => Kind.from([1.5, -2, 300]))
+    let total = 0
+    for (const array of arrays) for (const item of array) total += item
+    return [arrays.map((array) => [...array]), total]`,
   "closures over per-iteration bindings": `
     const fns = []
     for (let i = 0; i < 5; i++) fns.push(() => i * 2)

@@ -241,7 +241,7 @@ describe("values are converted at the boundary, never shared", () => {
     expect((held[0] as Headers).get("x-a")).toBe("2")
   })
 
-  test("bytes cross as copies in both directions; ArrayBuffer comes in as Uint8Array", async () => {
+  test("bytes cross as copies in both directions, each binary kind as itself", async () => {
     const stored = new Uint8Array([1, 2, 3])
     const target = CodeMode.make({
       extensions: [
@@ -261,12 +261,14 @@ describe("values are converted at the boundary, never shared", () => {
     })
     expect(
       await value(
-        `const b = stored(); b[0] = 42; const mine = new Uint8Array([5]); const name = first(mine); return [[...b], [...stored()], [...buffer()], b instanceof Uint8Array, name, mine[0]]`,
+        `const b = stored(); b[0] = 42; const mine = new Uint8Array([5]); const name = first(mine)
+        const raw = buffer(); new Uint8Array(raw)[0] = 7
+        return [[...b], [...stored()], raw instanceof ArrayBuffer, [...new Uint8Array(buffer())], b instanceof Uint8Array,
+          name, mine[0], wide() instanceof Uint16Array]`,
         target,
       ),
-    ).toEqual([[42, 2, 3], [1, 2, 3], [1, 2, 3], true, "Uint8Array", 5])
+    ).toEqual([[42, 2, 3], [1, 2, 3], true, [1, 2, 3], true, "Uint8Array", 5, true])
     expect([...stored]).toEqual([1, 2, 3])
-    expect((await failure(`wide()`, target)).message).toContain("produced a Uint16Array, which the program cannot hold")
   })
 
   test("a __proto__ key never reaches the host object", async () => {
@@ -393,7 +395,9 @@ describe("host values with overridden methods still cross as copies", () => {
     const host = new ArrayBuffer(4)
     new Uint8Array(host).set([5, 6])
     Object.defineProperty(host, "constructor", { value: { [Symbol.species]: () => kept } })
-    expect(await value(`const x = sample(); x[0] = 99; return [x[0], x[1]]`, returning(host))).toEqual([99, 6])
+    expect(await value(`const x = new Uint8Array(sample()); x[0] = 99; return [x[0], x[1]]`, returning(host))).toEqual([
+      99, 6,
+    ])
     expect([...new Uint8Array(kept)]).toEqual([0, 0, 0, 0])
     expect([...new Uint8Array(host)]).toEqual([5, 6, 0, 0])
   })
@@ -412,7 +416,7 @@ describe("host values with overridden methods still cross as copies", () => {
     const host = new ArrayBuffer(2)
     new Uint8Array(host).set([1, 2])
     Object.defineProperty(host, "slice", { value: () => host })
-    expect(await value(`const x = sample(); x[0] = 99; return x[0]`, returning(host))).toBe(99)
+    expect(await value(`const x = new Uint8Array(sample()); x[0] = 99; return x[0]`, returning(host))).toBe(99)
     expect([...new Uint8Array(host)]).toEqual([1, 2])
   })
 
