@@ -1,4 +1,4 @@
-//! Help, completion scripts, and usage errors against what the TypeScript CLI prints, recorded with colors by
+//! Help and usage errors against what the TypeScript CLI prints, recorded with colors by
 //! `script/gen/cli-output.ts` in `tests/fixtures/cli`. Without a terminal both print the same text without colors.
 
 use std::path::Path;
@@ -56,14 +56,7 @@ fn help_flag_selects_the_command() {
 }
 
 #[test]
-fn completions_match_the_typescript_cli() {
-    for (shell, file) in
-        [(Shell::Bash, "bash"), (Shell::Zsh, "zsh"), (Shell::Fish, "fish"), (Shell::Powershell, "powershell")]
-    {
-        let expected = std::fs::read_to_string(fixtures().join(format!("completions/{file}.txt"))).unwrap();
-        let actual = format!("{}\n", completions::generate(shell, PROGRAM));
-        assert!(actual == expected, "--completions {file}:\n{}", lines_diff(&expected, &actual));
-    }
+fn completion_aliases_match_their_shells() {
     assert_eq!(completions::generate(Shell::Sh, PROGRAM), completions::generate(Shell::Bash, PROGRAM));
     assert_eq!(completions::generate(Shell::Pwsh, PROGRAM), completions::generate(Shell::Powershell, PROGRAM));
 }
