@@ -1,8 +1,12 @@
 export default {
-  title: "Goal",
+  active: "Following goal",
   paused: "Goal paused",
-  met: "Goal met",
+  reached: "Goal reached",
+  statusActive: "Active",
+  statusPaused: "Paused",
+  statusFinished: "Finished",
   pause: "Pause",
   resume: "Resume",
   clear: "Clear",
+  dismiss: "Dismiss",
 }

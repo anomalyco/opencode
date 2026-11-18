@@ -269,28 +269,33 @@ Every SDK icon field (`SettingsPage.icon`, `ComposerPillView.icon`, `ComposerNot
 - **Stored names.** A name is a plain string. A composer note or quote keeps it with the draft and the sent message, and a closed tab keeps it in the session's layout. While the plugin that declared the icon is not active, the icon draws nothing and keeps its size.
 - **In the app.** `Icon` from `@opencode/ui/icon` draws a plugin's icon by the same name, so every part of the app that takes an icon name shows it. App code with artwork of its own registers it with `registerIcons` from `@opencode/ui/icons/registry`.
 
-The goal plugin declares the icon of its composer pill:
+The goal plugin declares the glyphs of its composer pill, one for each goal status. The active one moves:
 
 <!-- source: src/goal/index.ts -->
 
 ```ts
 import { Plugin } from "@opencode/plugin/gui"
 import en from "./i18n/en"
-import steer from "./icons/steer.svg?raw"
+import active from "./icons/active.svg?raw"
+import complete from "./icons/complete.svg?raw"
+import paused from "./icons/paused.svg?raw"
 
-export default Plugin.define({ icons: { steer }, i18n: { en } })
+// The pill's glyph of each goal status. Each is framed to its 14px ring, the size of a pill's icon, so it draws at
+// full size there.
+export default Plugin.define({ icons: { active, paused, complete }, i18n: { en } })
 ```
 
-Its pill then names that icon beside the app's own:
+Its pill then names the glyph of the goal's status, and the host colors it by `tone`:
 
 <!-- source: src/goal/renderer.tsx#status -->
 
 ```ts
-// The pill of each status. An active goal shows the plugin's own icon; the others show the app's.
+// The pill and the popover's status line of each goal status. The pill shows the plugin's own glyphs: the host
+// colors a paused and a reached goal by `tone`, and the active glyph carries the accent color itself.
 const status = {
-  active: { label: "title", icon: ctx.icons.steer, tone: undefined },
-  paused: { label: "paused", icon: "circle-exclamation", tone: "warning" },
-  complete: { label: "met", icon: "circle-check", tone: "success" },
+  active: { label: "active", status: "statusActive", icon: ctx.icons.active, tone: undefined },
+  paused: { label: "paused", status: "statusPaused", icon: ctx.icons.paused, tone: "warning" },
+  complete: { label: "reached", status: "statusFinished", icon: ctx.icons.complete, tone: "success" },
 } as const
 ```
 
