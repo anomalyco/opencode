@@ -151,6 +151,10 @@ async fn streams_an_admitted_turn_and_resolves_with_usage_after_its_terminal_eve
             json!(["tool_call_update", "call_fail", "failed"]),
         ]
     );
+    for (index, expected) in [(0, "think-1"), (1, " continued"), (3, "think-2")] {
+        assert_eq!(updates[index]["update"]["content"]["text"], expected);
+    }
+    assert_matches(&updates[4]["update"], &json!({"name": "shell", "kind": "execute"}));
     assert_eq!(
         updates[2]["update"],
         json!({ "sessionUpdate": "agent_message_chunk", "messageId": "msg_assistant", "content": { "type": "text", "text": "hello" } })
