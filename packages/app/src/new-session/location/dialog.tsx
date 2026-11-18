@@ -529,7 +529,7 @@ function NewSessionLocationDialog(props: {
                           </Match>
                         </Switch>
                         <Show when={current(entry)}>
-                          <Icon name="check" size="small" class="ms-auto shrink-0 text-v2-icon-icon-muted" />
+                          <Icon name="check" class="ms-auto shrink-0 text-v2-icon-icon-muted" />
                         </Show>
                       </button>
                     </>
@@ -568,7 +568,7 @@ function ProjectRow(props: {
             <Show when={props.branch}>
               {(branch) => (
                 <span class="new-session-location-branch">
-                  <Icon name="branch" size="small" />
+                  <Icon name="branch" />
                   <span dir="auto">{branch()}</span>
                 </span>
               )}
@@ -606,7 +606,7 @@ function ServerTag(props: { server?: PromptServer }) {
     <Show when={tagged(props.server)}>
       {(server) => (
         <Badge class="new-session-location-tag" variant="subtle" title={server().label}>
-          <Icon name={serverIcon(server())} size="small" />
+          <Icon name={serverIcon(server())} />
           <span>{server().name}</span>
         </Badge>
       )}

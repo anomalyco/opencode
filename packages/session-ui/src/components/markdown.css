@@ -344,11 +344,9 @@
   }
 
   [data-component="markdown-code"][data-mermaid-pending="true"] > pre,
-  [data-component="markdown-code"][data-mermaid-pending="true"] > [data-slot="markdown-copy-button"],
-  [data-component="markdown-code"][data-mermaid-pending="true"] > [data-slot="markdown-code-actions"],
+  [data-component="markdown-code"][data-mermaid-pending="true"] > [data-slot="markdown-code-toolbar"],
   [data-component="markdown-code"][data-mermaid-ready="true"] > pre,
-  [data-component="markdown-code"][data-mermaid-ready="true"] > [data-slot="markdown-copy-button"],
-  [data-component="markdown-code"][data-mermaid-ready="true"] > [data-slot="markdown-code-actions"],
+  [data-component="markdown-code"][data-mermaid-ready="true"] > [data-slot="markdown-code-toolbar"],
   [data-component="markdown-code"][data-code-content] > pre {
     display: none;
   }
@@ -373,36 +371,90 @@
     color: var(--markdown-shell-code-token-color) !important;
   }
 
-  [data-slot="markdown-copy-button"] {
+  [data-component="markdown-code"] {
+    --markdown-code-background: var(--color-background-stronger);
+  }
+
+  /* A completed block's highlighter paints its own background inline, which the shell colours don't override. */
+  [data-component="markdown-code"][data-code-kind="shell"]:has(> pre:not([style*="background"])) {
+    --markdown-code-background: var(--markdown-shell-code-background);
+  }
+
+  /* A block's actions sit in its top end corner, revealed on hover. */
+  [data-slot="markdown-code-toolbar"] {
     position: absolute;
     top: 4px;
     inset-inline-end: 4px;
-    transition: opacity 0.15s ease;
     z-index: 1;
-
-    @media (hover: hover) {
-      opacity: 0;
-    }
-  }
-
-  /* Plugin actions sit before the 24px Copy button, revealed with it. */
-  [data-slot="markdown-code-actions"] {
-    position: absolute;
-    top: 4px;
-    inset-inline-end: 30px;
     display: flex;
+    align-items: center;
     gap: 2px;
     transition: opacity 0.15s ease;
-    z-index: 1;
 
     @media (hover: hover) {
       opacity: 0;
+      pointer-events: none;
+    }
+
+    [data-component="tooltip-v2-trigger"] {
+      display: inline-flex;
+    }
+
+    /* Like the shell output's Copy, the ghost buttons get the block's background behind them, so code under them
+       doesn't show through. It fades out toward the start and the bottom, so a line it reaches softens instead of
+       being cut. It stops a pixel inside the block's 0.5px border and rounded corner: ending flush against the
+       hairline paints over it once the block sits at a fractional position. */
+    &::before {
+      content: "";
+      position: absolute;
+      z-index: -1;
+      inset: -3px -3px -8px -24px;
+      border-start-end-radius: 6px;
+      background: var(--markdown-code-background);
+      mask-image:
+        linear-gradient(to right, transparent, #000 24px), linear-gradient(#000 calc(100% - 8px), transparent);
+      mask-composite: intersect;
+      pointer-events: none;
     }
   }
 
-  [data-component="markdown-code"]:hover :is([data-slot="markdown-copy-button"], [data-slot="markdown-code-actions"]),
-  :is([data-slot="markdown-copy-button"], [data-slot="markdown-code-actions"]):focus-within {
+  /* Plugin content in place of the code has a background of its own. */
+  [data-component="markdown-code"][data-code-content] > [data-slot="markdown-code-toolbar"]::before {
+    display: none;
+  }
+
+  /* A clicked button keeps focus without a ring, so only keyboard focus keeps the actions shown. */
+  [data-component="markdown-code"]:hover > [data-slot="markdown-code-toolbar"],
+  [data-slot="markdown-code-toolbar"]:has(:focus-visible, [data-expanded]) {
     opacity: 1;
+    pointer-events: auto;
+  }
+
+  [data-slot="markdown-code-actions"] {
+    display: flex;
+    gap: 2px;
+  }
+
+  /* Wrap shows only while a line is wider than the block. */
+  [data-slot="markdown-wrap-button"] {
+    display: none;
+  }
+
+  [data-component="markdown-code"][data-code-overflow] [data-slot="markdown-wrap-button"] {
+    display: flex;
+  }
+
+  /* The setting wraps every block on the root; a block's own choice overrides it either way. */
+  &[data-code-wrap] [data-component="markdown-code"]:not([data-wrap="false"]) > pre,
+  [data-component="markdown-code"][data-wrap="true"] > pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  /* Set only for one synchronous measurement of the unwrapped width. */
+  [data-component="markdown-code"][data-code-measure] > pre {
+    white-space: pre !important;
+    overflow-wrap: normal !important;
   }
 
   [data-slot="markdown-copy-button"] [data-check-icon] {

@@ -474,19 +474,6 @@ export function createComposerEditor(input: {
 
     flushFocus()
 
-    if (
-      mode() === "normal" &&
-      (event.metaKey || event.ctrlKey) &&
-      !event.altKey &&
-      !event.shiftKey &&
-      event.key.toLowerCase() === "u"
-    ) {
-      event.preventDefault()
-      attach()
-
-      return true
-    }
-
     const ctrl = event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
     const open = isComposerPopoverOpen(readState())
 
@@ -533,18 +520,6 @@ export function createComposerEditor(input: {
     if (event.key === "Escape" && input.view.submit.queue?.editing()) {
       event.preventDefault()
       input.view.submit.queue.cancelEdit()
-
-      return true
-    }
-
-    const stop =
-      (input.view.submit.working?.() || input.view.submit.held?.()) &&
-      ((event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "g") ||
-        event.key === "Escape")
-
-    if (stop) {
-      event.preventDefault()
-      input.view.submit.onStop()
 
       return true
     }

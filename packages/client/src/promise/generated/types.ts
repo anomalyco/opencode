@@ -738,7 +738,7 @@ export type ModelCost = {
 
 export type GenerateVideoRunning = { id: GenerateVideoID; status: "running" }
 
-export type BlobInfo = { id: BlobID; mime: string; bytes: number; expiresAt: number }
+export type BlobInfo = { id: BlobID; mime: string; bytes: number }
 
 export type GenerateVideoError = {
   id: GenerateVideoID
@@ -994,6 +994,15 @@ export type JobImage = {
   time: JobTime
   path: string
   model: string
+}
+
+export type JobCodeMode = {
+  kind: "codemode"
+  id: string
+  sessionID: SessionID
+  status: JobStatus
+  title?: string
+  time: JobTime
 }
 
 export type VcsInfo = { provider?: string; branch: VcsBranch }
@@ -2294,7 +2303,7 @@ export type AutomationTrigger =
 
 export type ArtifactContent = { info: ArtifactInfo; files: { [x: string]: string } }
 
-export type JobInfo = JobShell | JobSubagent | JobImage
+export type JobInfo = JobShell | JobSubagent | JobImage | JobCodeMode
 
 export type SessionInboxMove = {
   id: SessionMessageID
@@ -4778,7 +4787,7 @@ export type ExperimentalArtifactsViewOutput = globalThis.Uint8Array
 
 export type ExperimentalJobListInput = {
   readonly sessionID?: string | undefined
-  readonly kind?: ("shell" | "subagent" | "image") | undefined
+  readonly kind?: ("shell" | "subagent" | "image" | "codemode") | undefined
   readonly status?: ("running" | "completed" | "error" | "cancelled") | undefined
   readonly descendants?: boolean | undefined
 }

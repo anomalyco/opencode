@@ -1220,11 +1220,6 @@ export const dict = {
   "sidebar.recent.unpin": "Losa",
   "sidebar.recent.moveUp": "Færa upp",
   "sidebar.recent.moveDown": "Færa niður",
-  "settings.experimental.row.newIcons.title": "Ný tákn",
-  "settings.experimental.row.newIcons.description": "Forskoða uppfært táknasafn",
-  "settings.experimental.row.foldUserMessages.title": "Fella saman löng skilaboð",
-  "settings.experimental.row.foldUserMessages.description":
-    "Fella saman skilaboðin þín sem eru lengri en 12 línur á bak við Lesa meira-hnapp",
   "settings.experimental.row.newTimeline.title": "Ný tímalína",
   "settings.experimental.row.newTimeline.description":
     "Endurhönnuð tímalína setu sem flokkar það sem fulltrúinn gerði, með einni stöðulínu fyrir neðan umferðina",
@@ -1354,6 +1349,9 @@ export const dict = {
   "settings.timeline.description.compact":
     "Sýna undirfulltrúa sérstaklega. Flokka aðra virkni með upplýsingar felldar saman.",
   "settings.timeline.description.quiet": "Sýna undirfulltrúa sérstaklega og flokka breytingar. Fela aðra virkni.",
+  "settings.timeline.row.foldUserMessages.title": "Fella saman löng skilaboð",
+  "settings.timeline.row.foldUserMessages.description":
+    "Fella saman skilaboðin þín sem eru lengri en 12 línur á bak við Lesa meira-hnapp",
   "settings.timeline.row.turnDiffs.title": "Breyttar skrár",
   "settings.timeline.row.turnDiffs.description": "Lista skrárnar sem hver umferð breytti þegar henni lýkur",
   "settings.timeline.category.commentary": "Umsögn",

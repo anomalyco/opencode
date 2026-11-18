@@ -223,7 +223,7 @@ const ModelList: Component<{
               </div>
               <div data-slot="settings-row-control" class="size-4">
                 <Show when={controller.current() === modelKey(item)}>
-                  <Icon name="check" size="small" class="shrink-0 text-v2-icon-icon-base" />
+                  <Icon name="check" class="shrink-0 text-v2-icon-icon-base" />
                 </Show>
               </div>
             </button>
@@ -272,7 +272,7 @@ const ModelList: Component<{
           }}
           aria-label={language.t("dialog.model.search.placeholder")}
           showClearButton={!!store.search}
-          clearIcon="circle-xmark"
+          clearIcon="close"
           clearLabel={language.t("common.clear")}
           onClearClick={() => setSearch("")}
         />
@@ -434,7 +434,7 @@ function ModelDrawer(props: {
                 <Button
                   variant="ghost"
                   class="w-full !h-10 !justify-start"
-                  icon="outline-sliders"
+                  icon="sliders"
                   onClick={() => dispatch({ type: "action.selected", action: "manage" })}
                 >
                   {language.t("dialog.model.manage")}
@@ -1004,7 +1004,7 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
       >
         <span data-slot="model-dialog-check">
           <Show when={selected()}>
-            <Icon name="check" size="small" />
+            <Icon name="check" />
           </Show>
         </span>
         <span data-slot="model-dialog-name">
@@ -1031,14 +1031,14 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
             <span data-slot="model-dialog-variant">
               <ModelUsageTag usage={value()} />
               {/* Holds the chevron's space, so the tag ends where the active row's variant label does. */}
-              <Icon name="chevron-right" size="small" class="invisible" />
+              <Icon name="chevron-right" class="invisible" />
             </span>
           )}
         </Show>
         <Show when={active()}>
           <span data-slot="model-dialog-variant">
             <span class="truncate capitalize">{controller.variant(item()) ?? language.t("common.default")}</span>
-            <Icon name="chevron-right" size="small" />
+            <Icon name="chevron-right" />
           </span>
         </Show>
       </button>
@@ -1093,7 +1093,7 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
                 >
                   <IconButton
                     variant="ghost-muted"
-                    icon={<Icon name="plus" size="small" />}
+                    icon={<Icon name="plus" />}
                     aria-label={language.t("command.provider.connect")}
                     onClick={connect}
                   />
@@ -1101,7 +1101,7 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
                 <Tooltip placement="top" gutter={4} value={language.t("dialog.model.manage")} ignoreSafeArea={false}>
                   <IconButton
                     variant="ghost-muted"
-                    icon={<Icon name="outline-sliders" size="small" />}
+                    icon={<Icon name="sliders" />}
                     aria-label={language.t("dialog.model.manage")}
                     onClick={manage}
                   />
@@ -1188,7 +1188,7 @@ export function DialogSelectModel(props: { provider?: string; model?: ModelState
                       data-slot="menu-v2-item-indicator"
                       data-checked={controller.variant(item()) === value ? "" : undefined}
                     >
-                      <Icon name="check" size="small" />
+                      <Icon name="check" />
                     </span>
                   </div>
                 )}

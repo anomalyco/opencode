@@ -13,7 +13,7 @@ export function TimelineSearchBar(props: { controller: TimelineSearchController 
         <div data-component="text-input-v2" data-appearance="base" data-leading-icon class="!h-7 !w-full max-w-full">
           <div data-slot="text-input-v2-value">
             <span data-slot="text-input-v2-leading-icon">
-              <Icon name="magnifying-glass" size="small" />
+              <Icon name="magnifying-glass" />
             </span>
             <input
               ref={c.element.setInput}
@@ -71,7 +71,7 @@ export function TimelineSearchBar(props: { controller: TimelineSearchController 
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => c.query.close()}
           >
-            <Icon name="xmark-small" />
+            <Icon name="close" />
           </button>
         </div>
       </div>

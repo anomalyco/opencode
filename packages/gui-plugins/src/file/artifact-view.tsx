@@ -42,12 +42,11 @@ import { findableHtml } from "./find"
 import {
   createArtifactViewerState,
   createVideoOverlayState,
+  fixedArtifactMode,
   INITIAL_IMAGE_STAGE_GESTURE_STATE,
   selectArtifactInfo,
   selectArtifactMode,
-  selectArtifactPreviewable,
   selectArtifactReason,
-  selectArtifactShowingPreview,
   selectArtifactStageKind,
   selectStageClickSuppressed,
   selectStageCursor,
@@ -74,10 +73,6 @@ type MediaProps = {
   onError: (content: FileContent) => void
 }
 
-/**
- * Renders a loaded non-text file: media, documents, and data get a dedicated viewer with a toolbar;
- * previewable text kinds can switch to `source`, which the host supplies (its code view).
- */
 export default function ArtifactView(props: {
   session: MountedSession
   screen: SessionScreen
@@ -101,7 +96,10 @@ export default function ArtifactView(props: {
 
   // Media the browser could not decode falls back to the binary placeholder.
   const kind = createMemo(() => selectArtifactStageKind(viewerState(), props.path, props.content))
-  const previewable = createMemo(() => selectArtifactPreviewable(props.path, props.content))
+
+  const fixedMode = createMemo(() => fixedArtifactMode(props.path, props.content))
+
+  const mode = () => fixedMode() ?? selectArtifactMode(viewerState(), props.content)
 
   const table = createMemo(() =>
     kind() === "table"
@@ -172,13 +170,13 @@ export default function ArtifactView(props: {
         session={props.session}
         screen={props.screen}
         path={props.path}
-        text={previewable() ? props.content.content : undefined}
-        mode={selectArtifactMode(viewerState(), props.content)}
-        onModeChange={previewable() ? (mode) => dispatchViewer({ type: "mode.changed", mode }) : undefined}
+        text={fixedMode() === "preview" ? undefined : props.content.content}
+        mode={mode()}
+        onModeChange={fixedMode() ? undefined : (mode) => dispatchViewer({ type: "mode.changed", mode })}
         meta={meta()}
         html={kind() === "html"}
       />
-      <Show when={selectArtifactShowingPreview(viewerState(), props.path, props.content)} fallback={props.source}>
+      <Show when={mode() === "preview"} fallback={props.source}>
         <Switch
           fallback={
             <ArtifactBinary
@@ -852,7 +850,7 @@ function ArtifactTable(props: { parsed: ReturnType<typeof parseDelimited> }) {
                     data-slot="artifact-table-copy"
                     variant="ghost-muted"
                     size="small"
-                    icon={<Icon name="outline-copy" size="normal" />}
+                    icon={<Icon name="copy" size="normal" />}
                     aria-label={ctx.t("view.table.copyCell")}
                     title={ctx.t("view.table.copyCell")}
                     onClick={() => copy(cell)}
@@ -874,7 +872,7 @@ function ArtifactTable(props: { parsed: ReturnType<typeof parseDelimited> }) {
                         data-slot="artifact-table-copy"
                         variant="ghost-muted"
                         size="small"
-                        icon={<Icon name="outline-copy" size="normal" />}
+                        icon={<Icon name="copy" size="normal" />}
                         aria-label={ctx.t("view.table.copyCell")}
                         title={ctx.t("view.table.copyCell")}
                         onClick={() => copy(row[column()] ?? "")}

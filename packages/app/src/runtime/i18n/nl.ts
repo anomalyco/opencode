@@ -1241,11 +1241,6 @@ export const dict = {
   "sidebar.recent.unpin": "Losmaken",
   "sidebar.recent.moveUp": "Omhoog verplaatsen",
   "sidebar.recent.moveDown": "Omlaag verplaatsen",
-  "settings.experimental.row.newIcons.title": "Nieuwe pictogrammen",
-  "settings.experimental.row.newIcons.description": "Bekijk de vernieuwde pictogramset",
-  "settings.experimental.row.foldUserMessages.title": "Lange berichten inklappen",
-  "settings.experimental.row.foldUserMessages.description":
-    "Klap je berichten na 12 regels in achter een knop Meer lezen",
   "settings.experimental.row.newTimeline.title": "Nieuwe tijdlijn",
   "settings.experimental.row.newTimeline.description":
     "Een vernieuwde sessietijdlijn die groepeert wat de agent deed, met één statusregel onder de beurt",
@@ -1375,6 +1370,9 @@ export const dict = {
     "Subagents afzonderlijk tonen. Andere activiteit groeperen met ingeklapte details.",
   "settings.timeline.description.quiet":
     "Subagents afzonderlijk tonen en bewerkingen groeperen. Andere activiteit verbergen.",
+  "settings.timeline.row.foldUserMessages.title": "Lange berichten inklappen",
+  "settings.timeline.row.foldUserMessages.description":
+    "Klap je berichten na 12 regels in achter een knop Meer lezen",
   "settings.timeline.row.turnDiffs.title": "Gewijzigde bestanden",
   "settings.timeline.row.turnDiffs.description":
     "De bestanden tonen die elke beurt heeft gewijzigd wanneer die klaar is",

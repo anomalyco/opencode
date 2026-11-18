@@ -1291,11 +1291,6 @@ export const dict = {
   "sidebar.recent.unpin": "Lepas sematan",
   "sidebar.recent.moveUp": "Pindahkan ke atas",
   "sidebar.recent.moveDown": "Pindahkan ke bawah",
-  "settings.experimental.row.newIcons.title": "Ikon baru",
-  "settings.experimental.row.newIcons.description": "Pratinjau set ikon yang diperbarui",
-  "settings.experimental.row.foldUserMessages.title": "Lipat pesan panjang",
-  "settings.experimental.row.foldUserMessages.description":
-    "Lipat pesan Anda yang lebih dari 12 baris di balik tombol Baca selengkapnya",
   "settings.experimental.row.newTimeline.title": "Garis waktu baru",
   "settings.experimental.row.newTimeline.description":
     "Garis waktu sesi yang didesain ulang, mengelompokkan apa yang dilakukan agen, dengan satu baris status di bawah giliran",
@@ -1426,6 +1421,9 @@ export const dict = {
     "Tampilkan subagen secara terpisah. Kelompokkan aktivitas lain dengan detail diciutkan.",
   "settings.timeline.description.quiet":
     "Tampilkan subagen secara terpisah dan kelompokkan suntingan. Sembunyikan aktivitas lain.",
+  "settings.timeline.row.foldUserMessages.title": "Lipat pesan panjang",
+  "settings.timeline.row.foldUserMessages.description":
+    "Lipat pesan Anda yang lebih dari 12 baris di balik tombol Baca selengkapnya",
   "settings.timeline.row.turnDiffs.title": "Berkas yang berubah",
   "settings.timeline.row.turnDiffs.description": "Cantumkan berkas yang diubah setiap giliran saat selesai",
   "settings.timeline.category.commentary": "Komentar",

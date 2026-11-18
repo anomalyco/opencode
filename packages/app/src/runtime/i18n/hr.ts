@@ -1252,11 +1252,6 @@ export const dict = {
   "sidebar.recent.unpin": "Otkvači",
   "sidebar.recent.moveUp": "Pomakni gore",
   "sidebar.recent.moveDown": "Pomakni dolje",
-  "settings.experimental.row.newIcons.title": "Nove ikone",
-  "settings.experimental.row.newIcons.description": "Isprobajte ažurirani skup ikona",
-  "settings.experimental.row.foldUserMessages.title": "Sažmi duge poruke",
-  "settings.experimental.row.foldUserMessages.description":
-    "Sažmi vlastite poruke dulje od 12 redaka iza gumba Pročitaj više",
   "settings.experimental.row.newTimeline.title": "Nova vremenska traka",
   "settings.experimental.row.newTimeline.description":
     "Redizajnirana vremenska traka sesije koja grupira ono što je agent učinio, s jednim retkom statusa ispod koraka",
@@ -1386,6 +1381,9 @@ export const dict = {
   "settings.timeline.description.compact":
     "Prikaži podagente zasebno. Grupiraj ostale aktivnosti sa sažetim pojedinostima.",
   "settings.timeline.description.quiet": "Prikaži podagente zasebno i grupiraj uređivanja. Sakrij ostale aktivnosti.",
+  "settings.timeline.row.foldUserMessages.title": "Sažmi duge poruke",
+  "settings.timeline.row.foldUserMessages.description":
+    "Sažmi vlastite poruke dulje od 12 redaka iza gumba Pročitaj više",
   "settings.timeline.row.turnDiffs.title": "Promijenjene datoteke",
   "settings.timeline.row.turnDiffs.description": "Navedi datoteke koje je svaki korak promijenio kada završi",
   "settings.timeline.category.commentary": "Komentari",

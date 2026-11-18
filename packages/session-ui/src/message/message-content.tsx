@@ -142,7 +142,7 @@ function MessageActionButton(
   return (
     <Tooltip appearance="compact" value={props.label} placement="top" gutter={4} forceOpen={props.copied || undefined}>
       <IconButton
-        icon={<Icon name={props.copied ? "check" : "outline-copy"} size="small" />}
+        icon={<Icon name={props.copied ? "check" : "copy"} />}
         size={props.size ?? "normal"}
         variant="ghost-muted"
         disabled={props.disabled}
@@ -432,7 +432,7 @@ export function CurrentUserMessageDisplay(props: {
           {/* The chevron explains itself, so it carries only an accessible name, no tooltip. */}
           <Menu.Trigger
             as={IconButton}
-            icon={<Icon name="chevron-down" size="small" />}
+            icon={<Icon name="chevron-down" />}
             size="small"
             variant="ghost-muted"
             onMouseDown={(event: MouseEvent) => event.preventDefault()}
@@ -451,26 +451,26 @@ export function CurrentUserMessageDisplay(props: {
               <Menu.Separator />
               <Show when={pending() && props.actions?.pending}>
                 <Menu.Item disabled={actionView().disabled.queue} onSelect={() => request("queue")}>
-                  <Icon name="bullet-list" size="small" />
+                  <Icon name="bullet-list" />
                   {i18n.t("ui.message.moveToQueue")}
                 </Menu.Item>
               </Show>
               <Menu.Item disabled={!copyText()} onSelect={() => void writeClipboard(copyText())}>
-                <Icon name="outline-copy" size="small" />
+                <Icon name="copy" />
 
                 {i18n.t("ui.message.copyMessage")}
               </Menu.Item>
               {/* Like the iOS app, a Voice message also offers the full prompt the session received. */}
               <Show when={props.voice}>
                 <Menu.Item onSelect={() => void writeClipboard(props.message.text)}>
-                  <Icon name="outline-copy" size="small" />
+                  <Icon name="copy" />
                   {i18n.t("ui.message.copyFullMessage")}
                 </Menu.Item>
               </Show>
               {/* A pending steer has no history to fork from yet. */}
               <Show when={!pending()}>
                 <Menu.Item disabled={actionView().disabled.fork} onSelect={() => request("fork")}>
-                  <Icon name="fork" size="small" />
+                  <Icon name="fork" />
                   {i18n.t("ui.message.forkMessage")}
                 </Menu.Item>
               </Show>
@@ -481,7 +481,7 @@ export function CurrentUserMessageDisplay(props: {
                   <Show when={props.actions?.revert}>
                     <Menu.Separator />
                     <Menu.Item disabled={actionView().disabled.revert} onSelect={() => request("revert")}>
-                      <Icon name={props.latest ? "outline-undo" : "reset"} size="small" />
+                      <Icon name="reset" />
                       {props.latest ? i18n.t("ui.message.undoMessage") : i18n.t("ui.message.revertMessage")}
                     </Menu.Item>
                   </Show>
@@ -493,7 +493,7 @@ export function CurrentUserMessageDisplay(props: {
                   disabled={actionView().disabled.remove}
                   onSelect={() => request("remove")}
                 >
-                  <Icon name="outline-trash" size="small" />
+                  <Icon name="trash" />
                   {i18n.t("ui.message.deletePending")}
                 </Menu.Item>
               </Show>
@@ -757,7 +757,8 @@ function UserMessageFold(props: {
   }
 
   onMount(() => {
-    measure()
+    // The bubble gets its wrapping width after the surrounding view mounts.
+    queueMicrotask(measure)
     const observer = new ResizeObserver(measure)
     observer.observe(content!)
     onCleanup(() => observer.disconnect())
@@ -798,7 +799,7 @@ function UserMessageFold(props: {
           onClick={flip}
         >
           <span>{props.expanded ? i18n.t("ui.message.showLess") : i18n.t("ui.message.readMore")}</span>
-          <Icon name="chevron-down" size="small" />
+          <Icon name="chevron-down" />
         </button>
       </Show>
     </>
@@ -1231,11 +1232,7 @@ export function AssistantTextContent(props: {
 
   function copyFooter() {
     return (
-      <div
-        data-slot="text-part-copy-wrapper"
-        data-interrupted={interrupted() ? "" : undefined}
-        data-copy-always-visible={data.copyAlwaysVisible ? "" : undefined}
-      >
+      <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
         <MessageActionButton
           copied={copy.copied()}
           size="small"

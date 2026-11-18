@@ -1249,11 +1249,6 @@ export const dict = {
   "sidebar.recent.unpin": "Откачи",
   "sidebar.recent.moveUp": "Помери горе",
   "sidebar.recent.moveDown": "Помери доле",
-  "settings.experimental.row.newIcons.title": "Нове иконе",
-  "settings.experimental.row.newIcons.description": "Испробајте ажурирани скуп икона",
-  "settings.experimental.row.foldUserMessages.title": "Скупи дуге поруке",
-  "settings.experimental.row.foldUserMessages.description":
-    "Скупи ваше поруке дуже од 12 редова иза дугмета Прочитај више",
   "settings.experimental.row.newTimeline.title": "Нова временска линија",
   "settings.experimental.row.newTimeline.description":
     "Редизајнирана временска линија сесије која групише шта је агент урадио, са једним статусним редом испод корака",
@@ -1383,6 +1378,9 @@ export const dict = {
   "settings.timeline.description.compact":
     "Прикажи подагенте одвојено. Групиши осталу активност са скупљеним детаљима.",
   "settings.timeline.description.quiet": "Прикажи подагенте одвојено и групиши измене. Сакриј осталу активност.",
+  "settings.timeline.row.foldUserMessages.title": "Скупи дуге поруке",
+  "settings.timeline.row.foldUserMessages.description":
+    "Скупи ваше поруке дуже од 12 редова иза дугмета Прочитај више",
   "settings.timeline.row.turnDiffs.title": "Промењене датотеке",
   "settings.timeline.row.turnDiffs.description": "Наведи датотеке које је сваки корак променио када се заврши",
   "settings.timeline.category.commentary": "Коментари",

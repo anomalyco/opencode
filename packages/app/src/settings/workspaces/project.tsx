@@ -155,7 +155,7 @@ export const SettingsProjectGeneral: Component<{
                           class="!size-5 [&_[data-slot=project-avatar-surface]]:!rounded-[6px]"
                         />
                         <Show when={selected()}>
-                          <Icon name="check" size="small" class="project-settings-color-check" />
+                          <Icon name="check" class="project-settings-color-check" />
                         </Show>
                       </button>
                     )

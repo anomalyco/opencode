@@ -1272,11 +1272,6 @@ export const dict = {
   "sidebar.recent.unpin": "Atsegti",
   "sidebar.recent.moveUp": "Perkelti aukštyn",
   "sidebar.recent.moveDown": "Perkelti žemyn",
-  "settings.experimental.row.newIcons.title": "Naujos piktogramos",
-  "settings.experimental.row.newIcons.description": "Išbandykite atnaujintą piktogramų rinkinį",
-  "settings.experimental.row.foldUserMessages.title": "Suskleisti ilgus pranešimus",
-  "settings.experimental.row.foldUserMessages.description":
-    "Ilgesnius nei 12 eilučių pranešimus suskleisti po mygtuku „Skaityti daugiau“",
   "settings.experimental.row.newTimeline.title": "Nauja laiko juosta",
   "settings.experimental.row.newTimeline.description":
     "Pertvarkyta seanso laiko juosta, grupuojanti agento veiksmus, su viena būsenos eilute po etapu",
@@ -1406,6 +1401,9 @@ export const dict = {
   "settings.timeline.description.compact":
     "Rodyti subagentus atskirai. Kitą veiklą grupuoti suskleidžiant informaciją.",
   "settings.timeline.description.quiet": "Rodyti subagentus atskirai ir grupuoti redagavimus. Slėpti kitą veiklą.",
+  "settings.timeline.row.foldUserMessages.title": "Suskleisti ilgus pranešimus",
+  "settings.timeline.row.foldUserMessages.description":
+    "Ilgesnius nei 12 eilučių pranešimus suskleisti po mygtuku „Skaityti daugiau“",
   "settings.timeline.row.turnDiffs.title": "Pakeisti failai",
   "settings.timeline.row.turnDiffs.description": "Pasibaigus etapui, rodyti jo pakeistų failų sąrašą",
   "settings.timeline.category.commentary": "Komentarai",

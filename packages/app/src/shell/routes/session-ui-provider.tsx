@@ -45,8 +45,6 @@ export function SessionUIProvider(
   const language = useLanguage()
   const settings = useSettings()
   const directory = () => props.directory
-  const releaseChannel = import.meta.env.VITE_OPENCODE_CHANNEL ?? "local"
-  const copyAlwaysVisible = releaseChannel === "dev" || releaseChannel === "local"
 
   const readImage = createMemo<ReadMarkdownImage>(() => {
     const dir = directory()
@@ -240,7 +238,6 @@ export function SessionUIProvider(
         directory={directory()}
         sessionID={params.id}
         agents={settings.visibility.customAgents()}
-        copyAlwaysVisible={copyAlwaysVisible}
         shellRunning={(id) => !!data.shell.get(id)}
         shellOutput={(input) => serverSDK.api.shell.output(input)}
         readMedia={(uri, mime, signal) => serverSDK.media.load(uri, mime, signal)}
@@ -254,6 +251,7 @@ export function SessionUIProvider(
           openSession={openReferencedSession}
           sessionTitle={sessionTitle}
           sessionMenu={(target) => setReferenceMenu({ ...target })}
+          codeWrap={settings.general.wrapCodeBlocks()}
         >
           <SessionExportProvider>{props.children}</SessionExportProvider>
           <SessionReferenceMenu

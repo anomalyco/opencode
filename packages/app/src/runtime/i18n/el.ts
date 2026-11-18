@@ -1255,11 +1255,6 @@ export const dict = {
   "sidebar.recent.unpin": "Ξεκαρφίτσωμα",
   "sidebar.recent.moveUp": "Μετακίνηση πάνω",
   "sidebar.recent.moveDown": "Μετακίνηση κάτω",
-  "settings.experimental.row.newIcons.title": "Νέα εικονίδια",
-  "settings.experimental.row.newIcons.description": "Προεπισκόπηση του ανανεωμένου συνόλου εικονιδίων",
-  "settings.experimental.row.foldUserMessages.title": "Σύμπτυξη μεγάλων μηνυμάτων",
-  "settings.experimental.row.foldUserMessages.description":
-    "Σύμπτυξη των μηνυμάτων σας άνω των 12 γραμμών πίσω από ένα κουμπί Διαβάστε περισσότερα",
   "settings.experimental.row.newTimeline.title": "Νέο χρονολόγιο",
   "settings.experimental.row.newTimeline.description":
     "Ανασχεδιασμένο χρονολόγιο συνεδρίας που ομαδοποιεί όσα έκανε ο πράκτορας, με μία γραμμή κατάστασης κάτω από τον γύρο",
@@ -1392,6 +1387,9 @@ export const dict = {
     "Εμφάνιση υποπρακτόρων ξεχωριστά. Ομαδοποίηση της υπόλοιπης δραστηριότητας με συμπτυγμένες λεπτομέρειες.",
   "settings.timeline.description.quiet":
     "Εμφάνιση υποπρακτόρων ξεχωριστά και ομαδοποίηση επεξεργασιών. Απόκρυψη της υπόλοιπης δραστηριότητας.",
+  "settings.timeline.row.foldUserMessages.title": "Σύμπτυξη μεγάλων μηνυμάτων",
+  "settings.timeline.row.foldUserMessages.description":
+    "Σύμπτυξη των μηνυμάτων σας άνω των 12 γραμμών πίσω από ένα κουμπί Διαβάστε περισσότερα",
   "settings.timeline.row.turnDiffs.title": "Αλλαγμένα αρχεία",
   "settings.timeline.row.turnDiffs.description": "Λίστα των αρχείων που άλλαξε κάθε γύρος όταν ολοκληρωθεί",
   "settings.timeline.category.commentary": "Σχολιασμός",

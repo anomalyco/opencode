@@ -20,10 +20,17 @@ const subagent = {
   description: Schema.String,
 }
 
-const OutstandingItem = Schema.Union([Shell, Image, Schema.Struct({ ...subagent, sessionID: SessionSchema.ID })])
+const CodeMode = Schema.Struct({ kind: Schema.Literal("codemode"), sessionID: SessionSchema.ID, jobID: Schema.String })
+const OutstandingItem = Schema.Union([
+  Shell,
+  Image,
+  CodeMode,
+  Schema.Struct({ ...subagent, sessionID: SessionSchema.ID }),
+])
 export type OutstandingItem = typeof OutstandingItem.Type
 
 export const RecoverySchema = Schema.Union([
+  CodeMode,
   Shell,
   Image,
   Schema.Struct({

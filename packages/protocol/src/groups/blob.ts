@@ -13,7 +13,7 @@ export const BlobGetEndpoint = HttpApiEndpoint.get("blob.get", "/api/experimenta
     identifier: "experimental.blob.get",
     summary: "Read a blob",
     description:
-      "Stream a stored blob's bytes, such as a generated video, with single byte Range, ETag and 304 Not Modified support. Blobs are deleted 7 days after they're written. Experimental: may change without compatibility guarantees.",
+      "Stream a stored blob's bytes, such as a generated video, with single byte Range, ETag and 304 Not Modified support. Blobs are kept until removed. Experimental: may change without compatibility guarantees.",
     // The route shares the `server.experimental` group with the persistent PTY prototype; tag it on its own.
     transform: (operation) => ({ ...operation, tags: ["experimental"] }),
   }),

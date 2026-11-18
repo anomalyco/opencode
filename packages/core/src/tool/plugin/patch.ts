@@ -68,7 +68,9 @@ export const Plugin = {
       .transform((editor) =>
         editor.add({
           name,
-          options: { codemode: flags.resolve(loaded.entries).full_codemode.enabled, permission: "edit" },
+          options: flags.resolve(loaded.entries).full_codemode.enabled
+            ? { codemode: true, pinned: true, permission: "edit" }
+            : { codemode: false, permission: "edit" },
           description: DESCRIPTION,
           input: Input,
           freeform: { type: "lark", grammar: GRAMMAR },
