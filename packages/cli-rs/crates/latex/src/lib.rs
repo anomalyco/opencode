@@ -1,7 +1,4 @@
-//! The LaTeX plugin: `opencode.latex` draws `latex` and `math` Markdown fences as Unicode
-//! math in terminal cells, as `packages/latex/src/plugin.ts` does, and inline Markdown math on one row, which TS
-//! does not. [`parse`] and [`layout`] port the TypeScript parser and layout with opentui-tex's fixes; [`inline`]
-//! writes math on one row; [`plugin`] renders both (`markdown.ts`), on the one plugin API (O-67).
+//! Renders fenced LaTeX and inline math as Unicode terminal cells.
 
 pub mod inline;
 pub mod layout;
@@ -21,15 +18,14 @@ use opencode_plugin_abi::{Color, Fence, Fenced, Line, Plugin, Rgba, Setup, Span}
 pub use layout::{Layout, Options};
 pub use parse::{Mode, ParseError};
 
-/// The longest source drawn, in UTF-8 bytes (opentui-tex's `UNICODE_TEX_SOURCE_LENGTH_MAX`).
+/// Maximum input length in UTF-8 bytes.
 pub const MAX_SOURCE_BYTES: usize = 4096;
 
-/// The plugin, on the one plugin API (O-67).
+/// Registers the fenced and inline math renderers.
 pub fn plugin() -> Plugin {
     Plugin { id: "opencode.latex", setup }
 }
 
-/// One renderer for both fence languages, as TS registers, and the inline math renderer.
 fn setup(setup: &mut Setup) -> Result<(), String> {
     register(setup, Rc::default());
     Ok(())
@@ -48,13 +44,12 @@ fn register(setup: &mut Setup, shown: Shown) {
     setup.inline_math(|_, tex| inline_line(tex));
 }
 
-/// Inline math's row in the styles of display math, without colors so it takes the text's, except `\textcolor`'s;
-/// `None` when the TeX does not parse, so the TeX shows as typed.
+/// Renders a single row, inheriting the surrounding color except for `\textcolor`. Returns `None` on invalid TeX.
 pub fn inline_line(tex: &str) -> Option<Line> {
     formula(&inline::render(tex).ok()?, true).into_iter().next()
 }
 
-/// Lays out `source` as display math (TS `renderLatex` in strict mode).
+/// Lays out display math in strict mode.
 pub fn render(source: &str) -> Result<Layout, ParseError> {
     render_with(source, &Options::default())
 }
@@ -63,9 +58,7 @@ pub fn render_with(source: &str, options: &Options) -> Result<Layout, ParseError
     render_mode(source, options, Mode::default())
 }
 
-/// Lays out `source` read in `mode`. As opentui-tex's Unicode backend, a source of no or more than
-/// [`MAX_SOURCE_BYTES`] bytes, a block of more than [`layout::BLOCK_CELLS`] cells, and a formula that draws nothing
-/// are errors.
+/// Lays out a formula in `mode`. Empty, oversized and invisible formulas are errors.
 pub fn render_mode(source: &str, options: &Options, mode: Mode) -> Result<Layout, ParseError> {
     check_source(source)?;
     let layout = layout::layout(&parse::parse_with(source, mode)?, options)
@@ -87,16 +80,12 @@ fn fail(message: String) -> ParseError {
     ParseError { message, position: 0 }
 }
 
-/// The source of each formula shown while streaming, by fence key, so its block can keep it.
 type Shown = Rc<RefCell<HashMap<u64, String>>>;
 
-/// The Markdown code-block renderer (TS `createLatexCodeBlockRenderer`): the formula in a horizontally scrolling
-/// row, or the code view when it does not parse. While the document streams and the fence is open, a block whose
-/// text extends the last formula that rendered keeps showing that formula.
+/// An open fence keeps its last good render while more of the same formula arrives.
 fn renderer(shown: Shown) -> impl Fn(&Fence) -> Fenced {
     move |fence| {
         let streaming = fence.streaming && !fence.closed;
-        // An open fence draws as far as it goes, with `□` for what has not come (opentui-tex's preview).
         let incomplete = Mode { incomplete: true, ..Mode::default() };
         let layout = render(&fence.code)
             .or_else(
@@ -117,9 +106,7 @@ fn renderer(shown: Shown) -> impl Fn(&Fence) -> Fenced {
     }
 }
 
-/// The formula's rows: structure in the muted text color, relations bold. The host draws them in a row that
-/// scrolls sideways instead of wrapping. TS adds a row of top margin; the Rust Markdown already puts a blank row
-/// between blocks. `inline` rows have no colors, so they take the text's.
+/// Inline spans inherit the surrounding text color.
 fn formula(layout: &Layout, inline: bool) -> Vec<Line> {
     layout
         .cells
@@ -137,7 +124,6 @@ fn formula(layout: &Layout, inline: bool) -> Vec<Line> {
                             || ('\u{239b}'..='\u{23ad}').contains(&c)
                             || ('\u{2500}'..='\u{257f}').contains(&c)
                     });
-                // `\textcolor` keeps its color (opentui-tex); TS draws every cell in the theme's.
                 let named = style.and_then(|style| color(style.color.as_deref()?));
                 let theme = (!inline).then(|| if structural { "text.muted" } else { "text.base" }.into());
                 let span = Span {
@@ -157,7 +143,6 @@ fn formula(layout: &Layout, inline: bool) -> Vec<Line> {
         .collect()
 }
 
-/// Appends `text` to the last span when the style matches, so a row is a few spans rather than one per cell.
 fn push(line: &mut Line, text: &str, span: Span) {
     let same =
         |last: &&mut Span| (&last.fg, last.bold, last.italic, last.dim) == (&span.fg, span.bold, span.italic, span.dim);

@@ -9,11 +9,7 @@ use serde_json::Value;
 
 use crate::layout::Options;
 
-/// P-ORACLE: every case of `parity/fixtures/P.2/layouts.json` (`parity/oracle/P.2-latex.ts`, the TypeScript
-/// `renderLatex` over the sources of `packages/latex/src/*.test.ts` and more) lays out to the same text, geometry,
-/// and cell styles, or fails to parse in both, except where opentui-tex draws otherwise: then Rust lays out as
-/// `oracle_rust.json` expects, which must differ from TS (`parity/deviations/P2-latex-opentui-tex.md`).
-/// `OPENCODE_RS_LATEX_ORACLE=write` rewrites `oracle_rust.json` with every case that differs from TS.
+/// `OPENCODE_RS_LATEX_ORACLE=write` records only layouts that differ from the TypeScript renderer.
 #[test]
 fn layouts_match_typescript() {
     let cases: Vec<Value> = serde_json::from_str(include_str!("../../../parity/fixtures/P.2/layouts.json")).unwrap();
@@ -46,7 +42,6 @@ fn layouts_match_typescript() {
     assert!(failures.is_empty(), "{} of {} differ:\n{}", failures.len(), cases.len(), failures.join("\n"));
 }
 
-/// `case` as Rust lays it out, in the oracle's record.
 fn oracle_case(case: &Value) -> Value {
     let source = case["source"].as_str().unwrap();
     let options = Options {
@@ -94,7 +89,7 @@ fn styled(layout: &crate::Layout) -> Vec<String> {
         .collect()
 }
 
-/// A test app in dark `opencode`, with the screen cleared as the TypeScript screen is (`crates/ui/tests/all/content.rs`).
+/// Match the oracle's screen background.
 fn app(width: u16, height: u16) -> (TestApp, Theme) {
     let theme = Catalog::default().load("opencode", ThemeMode::Dark).unwrap().theme;
     let options = AppOptions {
@@ -109,7 +104,6 @@ fn app(width: u16, height: u16) -> (TestApp, Theme) {
     (TestApp::with_options(width, height, options), theme)
 }
 
-/// The host as the plugin reads it: dark.
 struct Dark;
 
 impl opencode_plugin_abi::Read for Dark {
@@ -122,8 +116,6 @@ impl opencode_plugin_abi::Read for Dark {
     }
 }
 
-/// `TextPart`'s Markdown with the plugin's renderers for `latex` and `math` fences, through the host's fence adapter,
-/// and for inline math, as the plugin host registers them.
 fn markdown(app: &TestApp, theme: &Theme, streaming: bool) -> Markdown {
     let mut setup = opencode_plugin_abi::Registered::new("opencode.latex", None);
     (crate::plugin().setup)(&mut setup.setup()).unwrap();
@@ -145,8 +137,7 @@ fn markdown(app: &TestApp, theme: &Theme, streaming: bool) -> Markdown {
     opencode_ui::markdown::view(app, theme, &syntax, &renderers, true, streaming)
 }
 
-/// P-COMP: the fences of `parity/component/P.2-latex.tsx` in the transcript's Markdown, every cell, but the cells
-/// opentui-tex's radical and matrix rows change (`parity/deviations/P2-latex-opentui-tex.md`): exactly that many.
+/// The radical and matrix layouts have known differences; all other fixtures match cell for cell.
 #[test]
 fn transcript_fences_match_typescript() {
     let corpus: Value = serde_json::from_str(include_str!("../../../parity/fixtures/P.2/corpus.json")).unwrap();
@@ -170,7 +161,6 @@ fn transcript_fences_match_typescript() {
 
 const ADAPTER_DIFFERS: usize = 197;
 
-/// The frame of `source` in the transcript's Markdown, `width` columns wide.
 fn frame(source: &str, width: u16) -> String {
     let (app, theme) = app(width, 16);
     let text = markdown(&app, &theme, false).set_markdown(source);
@@ -178,17 +168,13 @@ fn frame(source: &str, width: u16) -> String {
     app.render().text()
 }
 
-/// Beyond TS (`parity/deviations/P2-latex-inline.md`): with the plugin, Markdown parses math (OpenTUI #2072).
-/// `$…$` and `\(…\)` draw on one row in the text; `$$…$$` and `\[…\]` reach the `math` fence renderer.
 #[test]
 fn markdown_math_renders() {
     for (source, shown) in [
         ("Energy is $E=mc^2$ here.", "Energy is E = mc² here."),
         ("Then \\(\\alpha \\le \\frac{1}{2}\\) holds.", "Then α ≤ 1/2 holds."),
         ("A root $\\sqrt{x+1}$, a sum $\\sum_{i=1}^n i$.", "A root √(x + 1), a sum ∑ⁿᵢ₌₁ i."),
-        // TeX that does not parse shows as typed, without its delimiters.
         ("Broken $\\frac{1}{x$ here.", "Broken \\frac{1}{x here."),
-        // opentui-tex's `document.test.ts`, where OpenTUI's parser takes `parseInline`'s place.
         ("cost \\$5 and $x^2$ now", "cost $5 and x² now"),
         ("Text $x \\$ y$ after", "Text x$y after"),
         ("an $open formula", "an $open formula"),
@@ -203,7 +189,6 @@ fn markdown_math_renders() {
     }
 }
 
-/// Dollars that are not math stay text, as OpenTUI decides: currency, shell variables, a lone `$`.
 #[test]
 fn dollars_that_are_not_math_stay_text() {
     for (source, shown) in [
@@ -219,8 +204,6 @@ fn dollars_that_are_not_math_stay_text() {
     }
 }
 
-/// Streaming: a `$` shows as text until OpenTUI decides it is math, then the math shows and stays (its property:
-/// shown math never reverts), so a half-typed `$x^` never draws as broken math.
 #[test]
 fn streaming_inline_math_shows_once_closed() {
     let frames = stream(&["Energy $E=mc", "^", "2", "$ now", " and $x^", "$ too"], false);
@@ -230,11 +213,9 @@ fn streaming_inline_math_shows_once_closed() {
         assert!(frame.contains("Energy E = mc² now"), "{frame}");
     }
     assert!(frames[4].contains("and $x^"), "{}", frames[4]);
-    // `x^` closed does not parse: its TeX shows as typed.
     assert!(frames[5].contains("and x^ too"), "{}", frames[5]);
 }
 
-/// Streams `chunks` into one document, returning the frame text after each.
 fn stream(chunks: &[&str], stop: bool) -> Vec<String> {
     let (app, theme) = app(40, 10);
     let view = markdown(&app, &theme, true);
@@ -253,9 +234,6 @@ fn stream(chunks: &[&str], stop: bool) -> Vec<String> {
     frames
 }
 
-/// opentui-tex's streaming preview (`parseMathIncomplete`): an open fence draws as far as it goes, `□` for what has
-/// not come, where TS shows the source until the formula parses (`markdown.test.ts`: "renders the next valid
-/// formula after an incomplete streaming prefix").
 #[test]
 fn streaming_draws_an_incomplete_formula() {
     let frames = stream(&["```latex\n\\frac{1}{", "2}", "\n```"], true);
@@ -279,13 +257,11 @@ fn ending_the_fence_or_stream_drops_the_preview() {
         assert!(frames[1].contains("x²") && !frames[1].contains('\\'), "{}", frames[1]);
         assert!(frames[2].contains("x^2 + \\frac{1}{"), "{}", frames[2]);
     }
-    // The closing fence arrives with the broken math, so the source shows before the stream ends too.
     let frames = stream(&["```latex\nx^2", " + \\unsupported{x}\n```\n"], true);
     assert!(frames[1].contains("x^2 + \\unsupported{x}"), "{}", frames[1]);
     assert!(frames[2].contains("x^2 + \\unsupported{x}"), "{}", frames[2]);
 }
 
-/// `markdown.test.ts`: "does not reuse another fence's preview or keep a removed fence's preview".
 #[test]
 fn a_preview_belongs_to_its_fence() {
     let (app, theme) = app(40, 12);
@@ -300,7 +276,6 @@ fn a_preview_belongs_to_its_fence() {
     assert!(app.render().text().contains("x^2 + \\fr"));
 }
 
-/// `markdown.test.ts`: "allows wide formulas to scroll horizontally without wrapping".
 #[test]
 fn wide_formulas_scroll_sideways() {
     let (app, theme) = app(24, 6);
@@ -316,8 +291,6 @@ fn wide_formulas_scroll_sideways() {
     assert!(frame.contains("Finish") && !frame.contains("Start"), "{frame}");
 }
 
-// Expected (bigboi notes): the formula a streaming fence keeps goes once the host frees its block, so N streaming
-// fences drawn and removed leave nothing.
 #[test]
 fn removed_streaming_fences_leave_nothing_kept() {
     let (app, theme) = app(40, 10);
@@ -351,15 +324,11 @@ fn removed_streaming_fences_leave_nothing_kept() {
     assert!(shown.borrow().is_empty(), "{:?}", shown.borrow());
 }
 
-// Expected (r2 review, bigboi-ui-2 and carbon-ui-1): a short ragged matrix whose rectangle takes more cells than
-// the layout allows fails like oversized input (TS `layoutLatex` returns nothing on `RangeError`), so the fence shows
-// its source instead of allocating the grid on the UI thread.
 #[test]
 fn an_oversized_matrix_falls_back_to_the_source() {
     let source = format!("\\begin{{matrix}}{}{}\\end{{matrix}}", "&".repeat(1500), "\\\\".repeat(1500));
     assert!(source.len() < 10_000);
     assert!(crate::render(&source).is_err());
-    // opentui-tex's block limit: 16 384 cells.
     let small = format!("\\begin{{matrix}}{}{}\\end{{matrix}}", "x&".repeat(60), "x\\\\".repeat(60));
     assert!(crate::render(&small).is_ok());
 }

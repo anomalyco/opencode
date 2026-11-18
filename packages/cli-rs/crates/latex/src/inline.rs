@@ -42,13 +42,11 @@ pub fn linear(node: Node) -> Node {
             .unwrap_or_else(|| Node::Row(vec![group(linear(*body)), symbol(spacing(accent))])),
         Node::Variant { variant, body } => Node::Variant { variant, body: Box::new(linear(*body)) },
         Node::Color { color, body } => Node::Color { color, body: Box::new(linear(*body)) },
-        // Limits above and below would take rows: they are scripts.
         Node::Operator { value, .. } => Node::Operator { value, limits: Limits::Never },
         node @ (Node::Symbol { .. } | Node::Text(_) | Node::Space(_)) => node,
     }
 }
 
-/// Scripts the layout draws compact, or `^` and `_` with the script beside the base.
 fn scripts(base: Node, superscript: Option<Node>, subscript: Option<Node>) -> Node {
     let compact = |node: &Option<Node>, superscript: bool| {
         node.as_ref().is_none_or(|node| layout::script_text(node, superscript, true).is_some())
@@ -70,7 +68,6 @@ fn scripts(base: Node, superscript: Option<Node>, subscript: Option<Node>) -> No
     Node::Row(row)
 }
 
-/// The radical with its index: `∛` and `∜`, a superscript index, or the index in parentheses before `√`.
 fn radical(index: Option<Node>) -> Node {
     let Some(index) = index else { return symbol("√") };
     match layout::script_text(&index, true, true).as_deref() {
@@ -133,7 +130,6 @@ fn symbol(value: &str) -> Node {
     Node::Symbol { value: value.into(), role: Some(Role::Ordinary) }
 }
 
-/// `node` with `mark` on each grapheme of its text, or `None` when it is more than styled text.
 fn marked(node: &Node, mark: char) -> Option<Node> {
     let marks = |text: &str| text.graphemes(true).map(|grapheme| format!("{grapheme}{mark}")).collect::<String>();
     Some(match node {
@@ -160,7 +156,6 @@ fn mark(accent: Accent, body: &Node) -> char {
     }
 }
 
-/// The spacing form of `accent`, after a body the marks cannot go on.
 fn spacing(accent: Accent) -> &'static str {
     match accent {
         Accent::Hat | Accent::Widehat => "^",

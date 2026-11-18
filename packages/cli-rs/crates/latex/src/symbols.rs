@@ -1,9 +1,8 @@
-//! Command tables, as `packages/latex/src/symbols.ts` with opentui-tex's `math-symbols.ts`: TeX's `\epsilon` (`ϵ`)
-//! and `\varepsilon` (`ε`), `•` for `\bullet`, `\degree`, and `/`, `<` and `>` as delimiters.
+//! TeX command names, glyphs and spacing roles.
 
 use crate::parse::Role;
 
-/// The symbol a command names and its spacing role (`symbolTable`).
+/// Looks up a symbol and its spacing role.
 pub fn symbol(command: &str) -> Option<(&'static str, Role)> {
     let role = |table: &[(&str, &'static str)], role: Role| {
         table.iter().find(|(name, _)| *name == command).map(|(_, value)| (*value, role))
@@ -23,12 +22,12 @@ pub fn is_named_operator(command: &str) -> bool {
     NAMED_OPERATORS.contains(&command)
 }
 
-/// The glyph of a delimiter token or command name (`delimiterTable`).
+/// Looks up a delimiter glyph.
 pub fn delimiter(name: &str) -> Option<&'static str> {
     lookup(DELIMITERS, name)
 }
 
-/// The width in cells of a spacing command (`spacingCommands`).
+/// Width of a spacing command in cells.
 pub fn spacing(command: &str) -> Option<usize> {
     SPACING.iter().find(|(name, _)| *name == command).map(|(_, width)| *width)
 }

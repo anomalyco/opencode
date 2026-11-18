@@ -1,6 +1,6 @@
 [package]
 name = "opencode-latex"
-description = "The LaTeX plugin (P.2)."
+description = "Terminal renderer for fenced and inline LaTeX."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
