@@ -766,7 +766,15 @@ export function context(base: Base, carrier: Carrier) {
       node.focusChanged(true)
     }
     node.typed = event.text
-    if (event.type === "change") return node.props.onInput?.(event.text)
+    if (event.type === "change") {
+      // Heard once its handler ran: a tree made inside it, before the plugin's value follows, answers the edit before.
+      // By the field's id in its mount: a render that reads the value as it makes the field makes a new one each edit,
+      // in the handler, which takes the old one out of the mount.
+      const root = rootOf(node)
+      const answered = node.props.onInput?.(event.text)
+      ;(root.seen ??= new Map()).set(event.node, event.seq)
+      return answered
+    }
     node.props.onChange?.(event.text)
     node.props.onSubmit?.(event.text)
   }

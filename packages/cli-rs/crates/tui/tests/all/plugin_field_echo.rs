@@ -1,7 +1,8 @@
-//! A field's echo (contract ergonomics, step 8). A tree that gives a field a text the field reported as a `change` is
-//! the plugin catching up with the user, and leaves what they typed since; any other value replaces the text. Over the
-//! pipe, a tree made before the user's later keys came took their letters back: `P.8/session-manager`'s search showed
-//! "tee" for "theme".
+//! A field's echo (contract ergonomics, step 8). A tree that gives a field the text of the edit its plugin last heard
+//! (`Node::Input::seen`, every edit when it does not say) is the plugin catching up with the user, and leaves what they
+//! typed since; any other value replaces the text. Over the pipe, a tree made before the user's later keys came took
+//! their letters back: `P.8/session-manager`'s search showed "tee" for "theme". Matched by text alone, a clear to `""`
+//! after the user had backspaced to `""` was taken for an echo and left their next letters (carbon cf-2).
 
 use crate::support::{self, Harness};
 
@@ -15,16 +16,19 @@ use opencode_tui::{Deps, Route};
 const ID: &str = "test.echo";
 
 thread_local! {
-    /// The value the probe's view gives its field.
-    static VALUE: RefCell<String> = const { RefCell::new(String::new()) };
+    /// The value the probe's view gives its field, and the edit it says it heard.
+    static VALUE: RefCell<(String, Option<u64>)> = const { RefCell::new((String::new(), None)) };
+    /// The edits the probe heard, with their `seq`.
+    static EDITS: RefCell<Vec<(u64, String)>> = const { RefCell::new(Vec::new()) };
 }
 
-// Expected: the user types "ab" into the field. A view that gives it "a", which it reported after the first key,
-// leaves "ab"; one that gives it "x", which it never reported, shows "x"; and "ab" again, reported before "x" replaced
-// it, is a new value too and shows "ab".
+// Expected: the user types "ab" into the field. A view made after the first edit, giving it that edit's "a", leaves
+// "ab"; one giving "x", which no edit had, shows "x". The user then backspaces to "" and types "y", and the plugin,
+// which heard both, clears the field to "": it shows "", though an earlier edit had "" too.
 #[test]
 fn a_value_the_field_reported_leaves_what_the_user_typed_since() {
-    VALUE.set(String::new());
+    VALUE.set((String::new(), None));
+    EDITS.set(Vec::new());
     let h = support::mount(80, 24, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
     opencode_tui::plugins::host::add(&h.tui, abi::Plugin { id: ID, setup: probe }.into());
     h.tui.navigate(Route::Plugin { id: ID.into(), name: "fe".into() });
@@ -33,13 +37,25 @@ fn a_value_the_field_reported_leaves_what_the_user_typed_since() {
     turns(&h);
     h.app.type_text("ab");
     turns(&h);
+    let seq = |text: &str| EDITS.with_borrow(|edits| edits.iter().rfind(|(_, said)| said == text).map(|(seq, _)| *seq));
     let mut shown = Vec::new();
-    for value in ["a", "x", "ab"] {
-        _ = h.tui.keymap.dispatch("fe.set", Some(value));
-        turns(&h);
-        shown.push(field(&h));
+    for (value, seen) in [("a", seq("a")), ("x", seq("ab"))] {
+        shown.push(show(&h, value, seen));
     }
-    assert_eq!(shown, ["ab", "x", "ab"]);
+    h.app.press("backspace");
+    h.app.type_text("y");
+    turns(&h);
+    assert_eq!(EDITS.with_borrow(|edits| edits.len()), 4, "{:?}", EDITS.with_borrow(Clone::clone));
+    shown.push(show(&h, "", None));
+    assert_eq!(shown, ["ab", "x", ""]);
+}
+
+/// What the field shows once the probe's view gives it `value`, made after it heard edit `seen`.
+fn show(h: &Harness, value: &str, seen: Option<u64>) -> String {
+    VALUE.set((value.to_owned(), seen));
+    _ = h.tui.keymap.dispatch("fe.set", None);
+    turns(h);
+    field(h)
 }
 
 /// The text of the field, on the line under the page's title.
@@ -56,14 +72,31 @@ fn turns(h: &Harness) {
     }
 }
 
-/// The probe: a route `fe` of a title over the field `field`, whose value `fe.set` sets; `fe.focus` focuses it.
+/// The probe: a route `fe` of a title over the field `field`, whose value and heard edit `fe.set` draws again;
+/// `fe.focus` focuses it. It records the field's edits.
 fn probe(setup: &mut abi::Setup) -> Result<(), String> {
     let command = |name: &str| abi::Command::new(name).scope(abi::Scope::Route("fe".into()));
     setup.command(command("fe.focus"), |host, _| host.focus("field"));
-    setup.command(command("fe.set"), |_, input| VALUE.set(input.unwrap_or_default().to_owned()));
+    // The view reads `VALUE` as the call draws the route again.
+    setup.command(command("fe.set"), |_, _| ());
     let surface = v2::Surface::new("fe", v2::Place::Route("fe".into()), |_| {
         let title = v2::Node::text(vec![abi::Span::new("echo page")]);
-        v2::Node::column(vec![title, v2::Node::input(VALUE.with_borrow(Clone::clone)).with_id("field")])
+        let (value, seen) = VALUE.with_borrow(Clone::clone);
+        let input = v2::Node::Input {
+            id: Some("field".into()),
+            value,
+            placeholder: String::new(),
+            lines: None,
+            layout: abi::Layout::default(),
+            seen,
+        };
+        v2::Node::column(vec![title, input])
+    })
+    .on(|_, event| {
+        if let abi::interact::Event::Change { text, seq, .. } = event {
+            EDITS.with_borrow_mut(|edits| edits.push((*seq, text.clone())));
+        }
+        abi::interact::Handled::Pass
     });
     setup.surface(surface);
     Ok(())

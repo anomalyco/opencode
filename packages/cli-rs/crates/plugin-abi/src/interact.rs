@@ -58,10 +58,15 @@ pub enum Event {
     /// landed. The answer does not matter.
     #[cfg_attr(not(feature = "host"), non_exhaustive)]
     Scroll { event: crate::v2::ScrollEvent },
-    /// P3: the text of the mount's [`crate::v2::Node::Input`] `node` changed, after each edit. The answer does not
-    /// matter.
+    /// P3: the text of the mount's [`crate::v2::Node::Input`] `node` changed, after each edit. `seq` numbers the edit,
+    /// higher for each later one, which a view's [`crate::v2::Node::Input`] `seen` names. The answer does not matter.
     #[cfg_attr(not(feature = "host"), non_exhaustive)]
-    Change { node: String, text: String },
+    Change {
+        node: String,
+        text: String,
+        #[serde(default)]
+        seq: u64,
+    },
     /// P3: the mount's [`crate::v2::Node::Input`] `node` was submitted: enter on one line, the submit key on many. The
     /// answer does not matter.
     #[cfg_attr(not(feature = "host"), non_exhaustive)]

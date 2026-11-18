@@ -702,8 +702,11 @@ test("keys reach keyInput, useKeyboard and a focused field", () => {
   const node = fake.effects.slice(id).find((effect: Json) => effect.type === "focus").node
   // An edit in the host's field gives it the plugin's focus, as the field has the host's then.
   field.ref.blur()
-  route.options.on({ type: "change", node, text: "ab" })
+  route.options.on({ type: "change", node, text: "ab", seq: 7 })
   expect([field.ref.value, field.ref.focused]).toEqual(["ab", true])
+  // The field's next tree names the edit it heard, so the host tells its echo from a value of the plugin's (cf-2).
+  const viewed = route.view({ mount: { surface: "files", key: "a", generation: 1 }, input: { width: 40, height: 10 } })
+  expect(JSON.stringify(viewed)).toContain('"seen":7')
   route.options.on({ type: "submit", node, text: "ab" })
   route.options.on({ type: "change", node: "elsewhere", text: "x" })
   expect(events).toEqual(["key down", "input ab", "submit ab"])
