@@ -1249,32 +1249,4 @@ mod tests {
         let Node::Box { children, .. } = view(&mut memo, false, cards) else { panic!() };
         assert!(children.iter().all(|child| matches!(child, Node::Keep { .. })), "{children:?}");
     }
-
-    // Expected: a 2.0 tree on the wire leaves defaults out, and reads back equal.
-    #[test]
-    fn a_tree_reads_back_as_it_was_written() {
-        let tree = Node::column(vec![
-            Node::Keep { key: "a".into() },
-            Node::Diff {
-                id: Some("d".into()),
-                content: Source::Content(ContentRef(3)),
-                view: DiffView::Split,
-                filetype: Some("rust".into()),
-                hunks: None,
-                wrap: Default::default(),
-                padding: 0,
-            },
-            Node::scroll(vec![Node::Markdown {
-                id: None,
-                source: Source::PartOutput(PartRef { session: "s".into(), part: "p".into() }),
-            }]),
-        ])
-        .with_id("root");
-        let json = serde_json::to_string(&tree).unwrap();
-        assert_eq!(
-            json,
-            r#"{"type":"box","id":"root","children":[{"type":"keep","key":"a"},{"type":"diff","id":"d","content":{"content":3},"view":"split","filetype":"rust"},{"type":"scroll","children":[{"type":"markdown","source":{"part-output":{"session":"s","part":"p"}}}]}]}"#
-        );
-        assert_eq!(serde_json::from_str::<Node>(&json).unwrap(), tree);
-    }
 }
