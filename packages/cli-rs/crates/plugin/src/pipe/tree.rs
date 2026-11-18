@@ -1,6 +1,6 @@
-//! What a TypeScript plugin's directory holds, worked out on a thread of its own (FT-2): the UI thread never walks a
-//! plugin's files, so no frame, the first included, waits on it. A question answers what the last walk found, at once,
-//! and starts another walk when none runs; a walk that finds something new wakes the UI thread, which reconciles.
+//! What a TypeScript plugin's directory holds, worked out on a thread of its own: the UI thread never walks a plugin's
+//! files, so no frame, the first included, waits on it. A question answers what the last walk found, at once, and
+//! starts another walk when none runs; a walk that finds something new wakes the UI thread, which reconciles.
 //!
 //! - A **global** plugin's build is its own files' bytes, and its dependencies by version: each installed package's
 //!   `package.json` and the lockfiles, not every file under `node_modules` (a dozen plugins hold 250,000 there). A
@@ -106,7 +106,7 @@ impl Trees {
         let mut stages = lock(&self.stages);
         match stages.get(&key) {
             Some((_, None)) => return None,
-            // It failed on files a walk since found changed: it is made again (review jsnpm-5).
+            // Retry if the files that caused the failure changed.
             Some((began, Some(Err(_)))) if *began != changes => {}
             Some((_, Some(_))) => return stages.remove(&key).and_then(|(_, staged)| staged),
             None => {}
@@ -265,7 +265,7 @@ fn stamp(dir: &Path) -> Result<(u64, bool), String> {
         Ok(())
     };
     own(dir, &mut hasher, 0, &mut visit)?;
-    // A package of the npm cache is approved with its install's manifest and lockfile (O-162).
+    // A package of the npm cache is approved with its install's manifest and lockfile.
     if let Some(root) = approval::install_root(dir) {
         for file in ["package.json", "package-lock.json"].map(|name| root.join(name)) {
             if let Ok(metadata) = std::fs::metadata(&file) {
@@ -363,9 +363,6 @@ fn meta(metadata: &std::fs::Metadata, hasher: &mut DefaultHasher) {
 mod tests {
     use super::*;
 
-    // Expected (js-followups): a file rewritten with its size and time kept is found by a walk asked to hash again
-    // ([`Trees::rewalk`]), also on the thread that hashed the tree before, whose last hash its metadata cannot tell
-    // apart; a walk not asked to keeps the stamp's answer.
     #[test]
     fn a_stale_walk_reads_every_file_on_the_same_thread() {
         let root = opencode_util::temp::tempdir().unwrap();
@@ -388,9 +385,6 @@ mod tests {
         assert_ne!(walk(true), first);
     }
 
-    // Expected (review jsnpm-5): a copy's failure is the answer for the files it was made of. Taken while the tree is
-    // as it was, it is given, and nothing is copied again until asked; a hash again drops it; and one a walk since
-    // found other files for is made again, so a tree back as it was approved loads.
     #[test]
     fn a_failed_copy_counts_only_for_the_files_it_failed_on() {
         let root = opencode_util::temp::tempdir().unwrap();
@@ -422,9 +416,6 @@ mod tests {
         assert_eq!(trees.staged(&artifact, &staging), Some(Ok(staging.join(&artifact.sha256))));
     }
 
-    // Expected (flakes-10): a walk or a copy that found something new is still walking until its wake is posted. A wait
-    // on walks that saw it end before that took the next turn without the reconcile the wake brings, and the approval
-    // model then saw a declined build where the new one was already on the disk.
     #[test]
     fn a_walk_or_a_copy_runs_until_its_wake_is_posted() {
         let root = opencode_util::temp::tempdir().unwrap();

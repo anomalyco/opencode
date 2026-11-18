@@ -1,9 +1,5 @@
-//! The tables a call's input and what changed reach a plugin in (a slot's input, a route's or a slot's `Changed`, a
-//! view's input): one set an activation, filled in place for each call, and read-only to the plugin. So a
-//! render allocates none of them, and no call sees what another was handed: each field the call does not have is
-//! cleared, and the plugin cannot write a field of its own into them. A table the plugin kept from an earlier call
-//! shows the running call's values. A call handed what the table holds already leaves it as it is, as the plugin cannot
-//! have changed it. A call that comes while the set is lent (none does today) gets a set of its own.
+//! Reuses read-only input tables per activation. A reference retained by a plugin reflects the current call, so
+//! every refill clears stale fields. Nested calls borrow a separate set.
 
 #![allow(unsafe_code)]
 

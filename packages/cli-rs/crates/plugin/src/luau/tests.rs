@@ -87,8 +87,6 @@ fn settle(loader: &Loader, host: &Rc<TestHost>, registry: &Registry) -> bool {
     panic!("the loader never settled")
 }
 
-// Expected (O-178): Luau plugins are on by default, as the JS host is (O-166): `OPENCODE_PLUGIN_LUAU` unset, empty or
-// `1` leaves them on, and `0`, `false` or `off`, in any case, turns them off.
 #[test]
 fn luau_plugins_are_on_unless_turned_off() {
     let off = |value: Option<&str>| crate::turned_off(value.map(std::ffi::OsStr::new));
@@ -101,8 +99,6 @@ fn luau_plugins_are_on_unless_turned_off() {
     assert_eq!(enabled(), !off(std::env::var(FLAG).ok().as_deref()));
 }
 
-// Expected (O-178): with Luau on and no Luau plugin installed, no VM is made and nothing compiles: the plugins
-// directories are walked and that is all. Installing one makes its VM.
 #[test]
 fn no_vm_is_made_without_a_luau_plugin() {
     let temp = opencode_util::temp::tempdir().unwrap();
@@ -130,8 +126,6 @@ fn a_manifest_reads_its_flat_keys() {
     assert!(Manifest::parse("entry = \"../x.luau\"\nid = \"x\"").unwrap_err().contains("not a .luau file"));
 }
 
-// Expected (luau-spike 1.5): the quick start in Luau loads from a `plugins` directory, as a native build does, and its
-// command and its claim run.
 #[test]
 fn the_luau_quick_start_loads_from_a_plugins_directory_and_runs() {
     let temp = opencode_util::temp::tempdir().unwrap();
@@ -169,7 +163,6 @@ fn the_luau_quick_start_loads_from_a_plugins_directory_and_runs() {
     assert!(matches!(entry(&other.entries(), &dir.to_string_lossy()).status, Status::Skipped(_)));
 }
 
-// Expected (luau-spike 1.2): the counter keeps its count in storage, asks before it resets, and its answer acts.
 #[test]
 fn the_counter_keeps_storage_and_asks_before_it_resets() {
     let host = host();
@@ -200,9 +193,6 @@ fn the_counter_keeps_storage_and_asks_before_it_resets() {
     assert_eq!(failure(&registry, "example.luau-counter"), None);
 }
 
-// Expected (luau-spike 1.3, O-159): a call that spins is stopped by the interrupt once it used the overrun limit of
-// CPU time, the plugin fails with why, and nothing it asked for in that call happens. The UI thread is back at once:
-// no 0.5 s notice, no 2 s watchdog.
 #[test]
 fn a_spinning_plugin_is_failed_on_cpu_time_and_the_thread_is_back_at_once() {
     let host = host();
@@ -233,7 +223,6 @@ fn a_spinning_plugin_is_failed_on_cpu_time_and_the_thread_is_back_at_once() {
     }
 }
 
-// Expected (luau-spike 1.3): a render that spins is stopped the same way, and its claim draws nothing.
 #[test]
 fn a_spinning_render_is_stopped_and_draws_nothing() {
     let host = host();
@@ -254,8 +243,6 @@ fn a_spinning_render_is_stopped_and_draws_nothing() {
     assert!(!text.contains("n"), "{text}");
 }
 
-// Expected (luau-calls): one pattern match that runs past the limit, with no loop of the plugin's around it, is stopped
-// inside the match: the interrupt, armed at the deadline, is seen at the matcher's next step.
 #[test]
 fn a_long_pattern_match_is_stopped() {
     let host = host();
@@ -287,9 +274,6 @@ fn cpu<R>(f: impl FnOnce() -> R) -> (Duration, R) {
     (crate::contain::thread_cpu().unwrap().saturating_sub(start), result)
 }
 
-// Expected (luau-calls, the Luau coordinator's reproducers): a loop of expensive built-in calls, each a long stretch with
-// few safepoints, is stopped by about 200 ms of CPU, at most 100 ms past the 100 ms budget (luau L-8), not past the 2 s
-// watchdog. Each stretch is sized to stay well under 100 ms in a debug build of Luau.
 #[test]
 fn a_loop_of_expensive_built_ins_is_stopped_within_the_budget() {
     let loops = [
@@ -325,9 +309,6 @@ fn a_loop_of_expensive_built_ins_is_stopped_within_the_budget() {
     }
 }
 
-// Expected (luau-calls, carbon li-1): a call that was descheduled before its wall-time deadline, so it has CPU time
-// left when the deadline thread first arms its interrupt, is read again when that time could have passed, not after a
-// count of safepoints: a loop of host calls of 2 ms each stops near its 20 ms limit, not at 13 times it.
 #[test]
 fn a_call_with_cpu_time_left_at_its_deadline_is_read_again_in_time() {
     let compiled = Rc::new(vm::Compiled::new(&sources("return 1"), "test.luau", "init.luau").unwrap());
@@ -357,9 +338,6 @@ fn a_call_with_cpu_time_left_at_its_deadline_is_read_again_in_time() {
     assert!(used <= Duration::from_millis(60), "ran {used:?} of CPU on a 20 ms limit");
 }
 
-// Expected (luau-calls, carbon li-2): a call that unwinds with a Rust panic leaves the budget as a call that returned
-// does: the next call is the outermost again, watched, and stopped at its limit. A call that starts with its interrupt
-// armed from before runs no interrupt until its deadline.
 #[test]
 fn a_call_after_a_panic_or_a_stale_arm_has_its_whole_budget() {
     let compiled = Rc::new(vm::Compiled::new(&sources("return 1"), "test.luau", "init.luau").unwrap());
@@ -379,8 +357,6 @@ fn a_call_after_a_panic_or_a_stale_arm_has_its_whole_budget() {
     assert_eq!(vm.interrupts(), before, "the interrupt ran in a call well within its limit");
 }
 
-// Expected (luau-calls): an interrupt armed for one call, as the deadline thread arms it, never stops a later call of
-// the same VM, nor a call of another plugin's VM; nor does a call that was stopped leave its latch to the next one.
 #[test]
 fn an_armed_interrupt_stays_with_its_call_and_its_vm() {
     let compiled = Rc::new(vm::Compiled::new(&sources("return 1"), "test.luau", "init.luau").unwrap());
@@ -417,10 +393,6 @@ fn an_armed_interrupt_stays_with_its_call_and_its_vm() {
     assert_eq!(work(&other), Ok(5_000_050_000.0));
 }
 
-// Expected (luau-spike 1.3): a VM's heap is capped; an allocation past it fails the call and the plugin, and the
-// process's memory is not touched. A task holds what it allocated on its stack or in the plugin's own state: either
-// way the failure names the memory (await-luau), with the cap (luau-oom: mlua's "memory error: not enough memory"
-// told `/plugins` neither).
 #[test]
 fn a_plugin_that_allocates_past_its_cap_fails() {
     let host = host();
@@ -449,9 +421,6 @@ fn a_plugin_that_allocates_past_its_cap_fails() {
 /// child the row starts.
 const CHILD: &str = "OPENCODE_LUAU_TEST_CHILD";
 
-// Expected (luau-safety A, safety-audit #1): Luau's own conformance line, which crashed the process on 740's default
-// flags, is an error that fails the plugin. The plugin runs in a child process, so a crash fails this row and not the
-// whole test binary.
 #[test]
 fn a_table_move_past_the_array_limit_raises_and_does_not_crash() {
     let name = "a_table_move_past_the_array_limit_raises_and_does_not_crash";
@@ -486,8 +455,6 @@ fn a_table_move_past_the_array_limit_raises_and_does_not_crash() {
     assert!(host.toasts.borrow().iter().all(|toast| toast.message != "moved"));
 }
 
-// Expected (luau-safety A, safety-audit #2): a sparse `table.move` over 2^31 indices returns at once, where 740's
-// default flags walked every index for about 20 s of CPU with no safepoint, past the 2 s watchdog.
 #[test]
 fn a_sparse_table_move_returns_at_once() {
     let host = host();
@@ -524,10 +491,6 @@ fn timed(init: &str, name: &str) -> (Duration, Option<String>, Option<String>) {
     (took, failure(&registry, "test.luau"), toast)
 }
 
-// Expected (luau-fork, luau-fork-2, safety-audit #3): a plain search, a pattern with no specials and a literal `gsub`
-// for a 64 KiB periodic needle in 1 MiB return within the budget. Stock Luau's search compares the whole needle at every
-// position, with no safepoint: 0.6 s of CPU in a release build, which the budget fails once the call returns. Its
-// `gsub` matches at each position through the pattern matcher, which the budget stops.
 #[test]
 fn a_long_plain_search_is_linear() {
     let init = r#"
@@ -549,8 +512,6 @@ fn a_long_plain_search_is_linear() {
     assert!(took < Duration::from_millis(1500), "the search held the thread {took:?}");
 }
 
-// Expected (luau-fork, safety-audit #4): `string.split` with a 64 KiB separator over 1 MiB returns within the budget,
-// where stock Luau compares the whole separator at every position: 0.55 s of CPU in a release build.
 #[test]
 fn a_split_on_a_long_separator_is_linear() {
     let init = r#"
@@ -569,9 +530,6 @@ fn a_split_on_a_long_separator_is_linear() {
     assert!(took < Duration::from_millis(1500), "the split held the thread {took:?}");
 }
 
-// Expected (luau-fork-3, Luau class scan): a pattern of one class (a byte, `.`, a %-class or a set, alone or with
-// `*`, `+` or `-`) is matched against a byte table, not through the general matcher; `gsub`, `gmatch` and `find` give
-// what the general matcher gives for the same pattern behind a position capture, over every byte value.
 #[test]
 fn a_one_class_pattern_matches_as_the_general_matcher_does() {
     let init = r#"
@@ -608,9 +566,6 @@ fn a_one_class_pattern_matches_as_the_general_matcher_does() {
     assert_eq!(toast.as_deref(), Some("differ: "));
 }
 
-// Expected (luau-fork-3, Luau UBSan-clean): `string.format`'s `%x`, `%X` and `%o` of a number at or past 2^64 give
-// Luau's defined `0x8000000000000000` (a gcc build gave 0), and `bit32.extract` and `bit32.replace` with a field near
-// `INT_MAX` raise (a gcc build returned garbage).
 #[test]
 fn format_and_bit32_edge_cases_are_defined() {
     let init = r#"
@@ -638,9 +593,6 @@ fn format_and_bit32_edge_cases_are_defined() {
     }
 }
 
-// Expected (luau-fork-2, Luau sort-interrupt carbon 5): `table.move` of 32,768 absent elements into absent keys of a
-// table with 16,383 hash keys returns at once. Stock Luau wrote each nil, and each write rehashed the table to the same
-// size: about 7 s of CPU with no safepoint, past the 2 s watchdog.
 #[test]
 fn a_move_of_absent_elements_does_not_rehash_each_one() {
     let init = r#"
@@ -660,9 +612,6 @@ fn a_move_of_absent_elements_does_not_rehash_each_one() {
     assert!(took < Duration::from_millis(1500), "the move held the thread {took:?}");
 }
 
-// Expected (luau-fork-2, Luau pattern-budget): a `gsub` through the pattern matcher over 40 KB, a function call for each
-// byte, returns within the budget: the matcher charges its work and calls the interrupt every 8192 units, not at each
-// position.
 #[test]
 fn a_gsub_over_40_kb_returns_within_the_budget() {
     let init = r#"
@@ -679,8 +628,6 @@ fn a_gsub_over_40_kb_returns_within_the_budget() {
     assert_eq!(toast.as_deref(), Some("40000 true"));
 }
 
-// Expected (luau-fork-2, Luau pattern-budget): a quadratic pattern, `.-b` over 1 MiB with no `b`, is still stopped by
-// the budget, though the matcher now calls the interrupt only every 8192 units of work.
 #[test]
 fn a_quadratic_pattern_is_stopped_by_the_budget() {
     let init = r#"
@@ -710,8 +657,6 @@ fn big_plugin(dir: &Path, items: usize) {
     fs::write(dir.join("init.luau"), init).unwrap();
 }
 
-// Expected (luau-safety 2, safety-audit #7): a big plugin is read and compiled on a thread of its own: the reconcile
-// that finds it returns with the plugin starting while the compilation runs, and a later one makes it active.
 #[test]
 fn a_big_plugin_compiles_off_the_ui_thread() {
     let temp = opencode_util::temp::tempdir().unwrap();
@@ -739,8 +684,6 @@ fn a_big_plugin_compiles_off_the_ui_thread() {
     assert_eq!((big.id.as_str(), big.status), ("test.big", Status::Active));
 }
 
-// Expected (luau-safety 2, safety-audit #7): a plugin whose sources pass the limit is refused, with why, before
-// anything of it compiles.
 #[test]
 fn a_plugin_past_the_source_limit_is_refused() {
     let temp = opencode_util::temp::tempdir().unwrap();
@@ -755,9 +698,6 @@ fn a_plugin_past_the_source_limit_is_refused() {
     assert!(error.contains("sources larger than 1 MiB"), "{error}");
 }
 
-// Expected (luau-safety-2 1, carbon ls-1): a `.luaurc` that is not a JSON object is refused when the plugin builds, with
-// why. Luau would run a Luau-syntax config on the UI thread, in a state with no memory cap and the process's `print`:
-// one that prints wrote escape sequences to the terminal, and one that returns a cyclic table crashed the client.
 #[test]
 fn a_luaurc_that_is_not_json_is_refused() {
     let configs = [
@@ -778,9 +718,6 @@ fn a_luaurc_that_is_not_json_is_refused() {
     }
 }
 
-// Expected (luau-safety-2 2, carbon ls-2): carbon's pattern, `.` then 4 MiB of `a` then `b` against 4 MiB and 255 `a`,
-// matched over 5.4 s of CPU with no clock read on stock Luau 747, past the 2 s watchdog. The fork's pattern work counter
-// calls the interrupt every 8192 units, and the budget reads the clock by time: the call stops at its limit.
 #[test]
 fn a_long_pattern_match_is_stopped_at_the_budget() {
     let init = r#"
@@ -807,8 +744,6 @@ fn a_long_pattern_match_is_stopped_at_the_budget() {
     assert_ne!(toast.as_deref(), Some("matched"));
 }
 
-// Expected (luau-safety-2 3, carbon ls-3): one thread compiles a target at a time. Saves while it runs are compiled
-// after it, the newest only, and the build is the newest save's.
 #[test]
 fn one_thread_compiles_a_plugin_and_the_newest_save_wins() {
     let temp = opencode_util::temp::tempdir().unwrap();
@@ -828,9 +763,6 @@ fn one_thread_compiles_a_plugin_and_the_newest_save_wins() {
     assert!(builds.built("big", &dir, 8, false).is_some_and(|built| built.is_ok()));
 }
 
-// Expected (luau-safety-2 3, carbon ls-3): a global plugin's build holds the files its key names. A save that breaks
-// it while the thread reads, then one that restores it, used to leave the restored files listed failed with the
-// broken save's error, as the key said they were built.
 #[test]
 fn a_build_holds_the_files_its_key_names() {
     let temp = opencode_util::temp::tempdir().unwrap();
@@ -850,8 +782,6 @@ fn a_build_holds_the_files_its_key_names() {
     assert!(built.is_ok(), "{:?}", built.err());
 }
 
-// Expected (luau-safety-2 3, carbon ls-3): a build made for a plugin that went while it compiled is dropped; it used to
-// stay, and the loader never settled.
 #[test]
 fn a_build_for_a_plugin_that_went_is_dropped() {
     let temp = opencode_util::temp::tempdir().unwrap();
@@ -892,23 +822,16 @@ fn holding(cap: usize, free: usize) -> Result<(), String> {
     vm.call(|| idle.call::<()>(()))
 }
 
-// Expected (luau-safety-2 4, carbon ls-4): a plugin that never ran out of memory keeps running with 200 KiB of a 1 MiB
-// cap left. A margin of a share of the cap (a quarter, 256 KiB here) failed it; the latch asks for 64 KiB of room.
 #[test]
 fn a_plugin_runs_under_a_small_cap() {
     assert_eq!(holding(1 << 20, 200 << 10), Ok(()));
 }
 
-// Expected (luau-safety-2 4, carbon ls-4): a plugin that holds most of its cap and never ran out of memory keeps
-// running: with 400 KiB of a 4 MiB cap left, inside the old fixed margin of 1 MiB.
 #[test]
 fn a_plugin_holding_most_of_its_cap_runs() {
     assert_eq!(holding(4 << 20, 400 << 10), Ok(()));
 }
 
-// Expected (luau-safety-2 4, carbon ls-4): a plugin's error is kept and logged cut to 4 KiB, with its control
-// characters escaped: a 6 MiB `error(...)` with an escape sequence used to stay whole in `/plugins`. It keeps its frames
-// (luau-lean): raised, it lost them, or all of it as "error in error handling", by the heap it took.
 #[test]
 fn a_long_error_is_cut_and_escaped() {
     let host = host();
@@ -933,8 +856,6 @@ fn a_long_error_is_cut_and_escaped() {
     assert_eq!(frames, "\tinit.luau:5: in function <init.luau:4>");
 }
 
-// Expected (luau-safety 1, safety-audit #5): `print` writes to the client's log, never to the terminal under the TUI:
-// one line naming the plugin, with escape sequences escaped and at most 4 KiB of what it printed.
 #[test]
 fn print_writes_one_escaped_line_to_the_log() {
     let logged = crate::loader::tests::logged();
@@ -960,9 +881,6 @@ fn print_writes_one_escaped_line_to_the_log() {
     assert_eq!(*cut, format!("plugin test.print printed: {}... ({} bytes, cut at 4096)", "x".repeat(4096), 16 << 20));
 }
 
-// Expected (luau-safety 3, luau-safety-2 4, safety-audit #11): a plugin that runs out of memory inside `pcall`,
-// `xpcall` or a coroutine and keeps its heap at the cap is failed when the call returns, as the budget fails one that
-// catches its error; one that let the garbage go keeps running.
 #[test]
 fn a_plugin_that_catches_running_out_of_memory_fails() {
     for catch in
@@ -997,8 +915,6 @@ fn a_plugin_that_catches_running_out_of_memory_fails() {
     }
 }
 
-// Expected (luau-spike 1.4, luau-safety 5): no file system, no process, no `require` outside the plugin, no
-// `loadstring`, no `integer` library, frozen globals; one plugin's VM shares nothing with another's.
 #[test]
 fn the_sandbox_holds_a_plugin_to_its_own_files() {
     let host = host();
@@ -1052,7 +968,6 @@ fn the_sandbox_holds_a_plugin_to_its_own_files() {
     assert_eq!(seen["mine"], "own");
 }
 
-// Expected (luau-spike 1.2): a render may read and ask for nothing; an effect from it fails the plugin with why.
 #[test]
 fn a_render_that_asks_for_an_effect_fails() {
     let host = host();
@@ -1086,8 +1001,6 @@ fn a_render_that_asks_for_an_effect_fails() {
     assert!(host.toasts.borrow().iter().all(|toast| toast.message != "from a render"));
 }
 
-// Expected (luau-spike 1.5): a syntax error is the build's, before any setup; a reload that fails keeps the running
-// version; a fixed one replaces it.
 #[test]
 fn a_luau_build_reloads_and_a_broken_one_keeps_the_running_version() {
     let temp = opencode_util::temp::tempdir().unwrap();
@@ -1117,10 +1030,6 @@ fn a_luau_build_reloads_and_a_broken_one_keeps_the_running_version() {
     assert!(text.contains("hi") && !text.contains("hello"), "{text}");
 }
 
-// Expected (luau-spike 1.5, O-146, review luau-2 and luau-3): a project's Luau plugin waits for the user's approval of
-// its directory as a Luau plugin; once approved it runs from the staged copy, and a save after the approval holds it
-// back again. The approval is the Luau carrier's: a TypeScript plugin in the same directory is not approved by it. The
-// UI thread hashes and copies none of its files.
 #[test]
 fn a_project_luau_plugin_waits_for_an_approval_of_its_directory() {
     let temp = opencode_util::temp::tempdir().unwrap();
@@ -1164,7 +1073,6 @@ fn a_project_luau_plugin_waits_for_an_approval_of_its_directory() {
     assert_eq!(status(), Status::Pending);
 }
 
-// Expected (review luau-1): a Luau build the crash list names is held as a library is, and listed failed with why.
 #[test]
 fn a_luau_build_the_crash_list_names_is_held() {
     let temp = opencode_util::temp::tempdir().unwrap();
@@ -1186,10 +1094,6 @@ fn a_luau_build_the_crash_list_names_is_held() {
     assert!(!footer(&host, &registry).contains("hello"));
 }
 
-// Expected (review luau-1, O-174): a table used in two places is read in both. A small DAG of shared tables, which the
-// decoder would expand on the Rust heap with no safepoint of the budget's, is charged for each place it is read, and the
-// work bound (decode-budget) refuses it at once, before the parts bound would, and fails the plugin with why; so is any value past the limits it is charged against,
-// and a refusal the plugin catches still fails the call.
 #[test]
 fn a_value_past_the_conversion_bounds_is_refused_at_once() {
     let host = host();
@@ -1247,8 +1151,6 @@ fn a_value_past_the_conversion_bounds_is_refused_at_once() {
     assert!(host.toasts.borrow().iter().all(|toast| toast.message != "after the refusal"));
 }
 
-// Expected (luau-safety 6, safety-audit #16): a table of one item whose length is 100,000 is refused on its parts,
-// before the walk makes a `null` of each empty slot; a sequence of exactly as many parts as the limit crosses.
 #[test]
 fn a_sparse_table_is_counted_before_its_gaps_are_filled() {
     let host = host();
@@ -1283,9 +1185,6 @@ fn a_sparse_table_is_counted_before_its_gaps_are_filled() {
     assert!(error.contains("more than 16 parts"), "{error}");
 }
 
-// Expected (review luau-4): a cycle of `require` is an error naming it; a module is one however it is reached
-// (`@self/x` from the root, `../x` from `lib`), loaded once; and a link out of the plugin directory is refused, where
-// one inside it is read.
 #[test]
 fn require_loads_each_module_once_and_names_a_cycle() {
     let host = host();
@@ -1331,12 +1230,6 @@ fn a_link_out_of_the_plugin_directory_is_refused() {
     assert!(error.contains("a link out of the plugin directory"), "{error}");
 }
 
-// Expected (better-audit 2): `require` follows Luau's require-by-string as luau-analyze does, over the files read at
-// load: `./x` is beside the requiring module (so outside the plugin from `init.luau`), `@self/x` inside it, a nested
-// module's `./b` is its own directory's, nothing past the plugin's root is reached, a `.luaurc` inside the plugin
-// names aliases for the modules under it, and `@opencode` stays the host's and `@self` the module's whatever that
-// `.luaurc` says. The plugin's
-// directory is gone before it starts, and a module required at call time still loads: nothing reads the disk.
 #[test]
 fn require_resolves_by_luaus_rules_within_the_plugin_and_reads_no_file_after_load() {
     let temp = opencode_util::temp::tempdir().unwrap();
@@ -1439,8 +1332,6 @@ const PROBE: &str = r#"
     end)
 "#;
 
-// Expected (better-audit 2): a runtime error reads `<plugin id>: <file>.luau:<line>: <message>`, with no `runtime
-// error:` prefix, and its traceback keeps the plugin's own frames only: no `[C]`, mlua `require` or host frames.
 #[test]
 fn a_luau_runtime_error_names_the_plugin_the_file_and_the_line() {
     let util = "local util = {}\nfunction util.width(node)\n    return #node.text\nend\nreturn util";
@@ -1453,7 +1344,6 @@ fn a_luau_runtime_error_names_the_plugin_the_file_and_the_line() {
     }
 }
 
-// Expected (better-audit 2): `error("...")` reads the same way, at the line that raised it.
 #[test]
 fn a_luau_error_call_names_the_plugin_the_file_and_the_line() {
     let init = PROBE.replace("util.width(nil)", "error(\"boom\")");
@@ -1461,8 +1351,6 @@ fn a_luau_error_call_names_the_plugin_the_file_and_the_line() {
     assert!(error.starts_with("test.luau: init.luau:6: boom"), "{error}");
 }
 
-// Expected (better-audit 2): a syntax error reads `<plugin id>: <file>.luau:<line>: <message>`, not
-// `init.luau: syntax error: 3: ...`.
 #[test]
 fn a_luau_syntax_error_names_the_plugin_the_file_and_the_line() {
     let error = define(&sources("local plugin = require(\"@opencode/plugin\")\n\nlocal = 1\n"), None).err().unwrap();
@@ -1470,9 +1358,6 @@ fn a_luau_syntax_error_names_the_plugin_the_file_and_the_line() {
     assert!(!error.contains("syntax error"), "{error}");
 }
 
-// Expected (call cost): the tables a render's input and `Changed` come in are reused from call to call, so each call
-// sees its own values and nothing of the one before, also through a table the plugin kept, and the plugin cannot
-// write into them.
 #[test]
 fn a_reused_input_table_shows_each_call_its_own_values() {
     let init = r#"
@@ -1514,9 +1399,6 @@ fn a_reused_input_table_shows_each_call_its_own_values() {
     assert_eq!(shown(&full, &changed), "ses_1 true ses_3 msg_1 nil true ses_1 false");
 }
 
-// Expected (luau-calls): a JSON value reaches Luau as tables built on the VM's stack: an object's `null` field left out,
-// `null` in an array mlua's `null`, numbers, strings and keys as they are; walked back it is the same JSON less the
-// fields left out. A value nested far deeper than the stack's first slots is built too.
 #[test]
 fn a_json_value_crosses_into_luau_and_back() {
     let lua = mlua::Lua::new();
@@ -1562,8 +1444,6 @@ where
     decoded
 }
 
-// Expected (luau-decode): a node tree decodes straight from the VM's stack as serde decoded its JSON: every field the
-// hand decoder reads, the kinds it leaves to serde, and the refusals, with serde's messages.
 #[test]
 fn a_node_tree_decodes_as_serde_reads_it() {
     let renders = r##"
@@ -1614,8 +1494,6 @@ fn a_node_tree_decodes_as_serde_reads_it() {
     assert_eq!(decodes_as_serde::<abi::v2::Node>(surfaces), "++--");
 }
 
-// Expected (luau-decode): each refusal of the decoder names its cause, a bound's as a bound (which fails the call) and
-// a value's as a value, for a node tree read by hand as for any other value.
 #[test]
 fn each_refusal_of_the_decoder_names_its_cause() {
     let lua = mlua::Lua::new();
@@ -1682,9 +1560,6 @@ fn checked(body: &str) -> (Vec<String>, Option<String>) {
     (toasts, failure(&registry, "test.luau"))
 }
 
-// Expected (luau-json): `plugin.json` reads and writes JSON as the host does: escapes and surrogate pairs, `null` both
-// ways (a field left out and an item `plugin.json.null`, or `plugin.json.null` everywhere), the array and object
-// markers on what it builds and what it is given, and the refusals; `plugin.sort` keeps equal items in their order.
 #[test]
 fn plugin_json_reads_and_writes_json_as_the_host_does() {
     let (toasts, failed) = checked(
@@ -1730,9 +1605,6 @@ fn plugin_json_reads_and_writes_json_as_the_host_does() {
     assert_eq!(toasts[2], "ok");
 }
 
-// Expected (luau-json): `plugin.json` holds to the bounds of any value a plugin hands the host. A text past them, or
-// nested or holding past them, decodes to `nil` and why; a value past them is refused when written, and the refusal
-// fails the call though the plugin caught it.
 #[test]
 fn plugin_json_holds_to_the_bounds() {
     let text = crate::limits::Limits { plugin_content: 64, ..crate::limits::Limits::default() };
@@ -1775,8 +1647,6 @@ fn plugin_json_holds_to_the_bounds() {
     assert!(toasts.iter().all(|toast| !toast.ends_with("the refusal")), "{toasts:?}");
 }
 
-// Expected (luau-json, command-hotkeys' option check): an empty table marked an object crosses to the server as `{}`
-// and an unmarked one as `[]`, and what comes back keeps the difference.
 #[test]
 fn an_empty_object_and_an_empty_array_cross_as_themselves() {
     let host = host();
@@ -1859,11 +1729,6 @@ const LATE: &str = r#"
     for _ = 1, 16 do node = { type = "box", children = { node, node }, [late] = true } end
 "#;
 
-// Expected (decode-budget): the decode is host work with no interrupt, so a tree whose tables are walked again and again
-// is refused by the work bound, not run to the end: a DAG of 20 levels (each place a table appears is walked, and the
-// walks cost before the parts do), a sparse table of a million slots shared a thousand times (each walk counts every
-// slot, empty ones too), and a tree whose every box the hand decoder gives up late (serde's walk after it is counted,
-// never undone). The output-heavy render still decodes, far under the work bound.
 #[test]
 fn a_decode_that_walks_its_tables_again_and_again_is_refused() {
     for (name, build) in [("dag", DAG), ("sparse", SPARSE), ("late", LATE)] {
@@ -1896,8 +1761,6 @@ fn a_decode_that_walks_its_tables_again_and_again_is_refused() {
     assert!(decode.walked() * 100 < 5_120_000, "the output-heavy render walked {} slots", decode.walked());
 }
 
-// Expected (decode-budget): the slots of a table are read from its header as `lua_rawiter` scans them: its array part,
-// and its hash part (one empty node where it has none).
 #[test]
 fn a_tables_slots_are_read_from_its_header() {
     let lua = mlua::Lua::new();
@@ -1909,7 +1772,6 @@ fn a_tables_slots_are_read_from_its_header() {
     assert_eq!(slots, [1001, 4, 1, 4, 8]);
 }
 
-// Expected (decode-budget): each color token the decoder keeps as a `'static` name is one the theme has.
 #[test]
 fn each_kept_color_token_is_a_theme_token() {
     let theme =
@@ -1918,9 +1780,6 @@ fn each_kept_color_token_is_a_theme_token() {
     assert!(unknown.is_empty(), "{unknown:?}");
 }
 
-// Expected (luau-calls): a reused list, set in place only where a call's list differs from the last one's, holds the
-// running call's items and no others: also as a table the plugin kept from an earlier call, after the list grew,
-// shrank, was reordered or emptied, or stayed as it was while a flag changed.
 #[test]
 fn a_reused_input_list_holds_only_the_running_calls_items() {
     let init = r#"
@@ -2231,8 +2090,6 @@ fn churn(goal: Option<i32>, mib: usize) -> (usize, Result<(), String>) {
     (vm.memory(), vm.call(|| garbage.call::<()>(())))
 }
 
-// Expected (luau-safety 4, luau-fork-2, safety-audit #10): at the carrier's pace, a plugin with about 23 MiB of its
-// 32 MiB live makes garbage without running out of memory; at Luau's default goal it runs out with 14 MiB live.
 #[test]
 fn a_plugin_with_most_of_its_cap_live_can_make_garbage() {
     let (live, churned) = churn(None, MIB_HELD);
