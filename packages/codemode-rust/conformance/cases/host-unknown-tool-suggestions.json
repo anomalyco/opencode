@@ -1,0 +1,35 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      "Error",
+      "Unknown tool 'ech'."
+    ],
+    [
+      "Error",
+      "Unknown tool 't'."
+    ],
+    [
+      "Error",
+      "Unknown tool 'gi.status'. Did you mean tools.git.status?"
+    ],
+    [
+      "Error",
+      "Unknown tool 'git.stat'. Did you mean tools.git.status?"
+    ],
+    [
+      "Error",
+      "Tool 'git' is not callable, it is a namespace. Did you mean tools.git.status?"
+    ],
+    [
+      "Error",
+      "Unknown tool 'nope.deeper.call'."
+    ],
+    [
+      "Error",
+      "Unknown tool 'e'."
+    ]
+  ],
+  "logs": []
+}
