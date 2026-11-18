@@ -41,8 +41,11 @@
 //!   hidden command it holds alone, `<id>.task.answer.<n>`, until its answer or its close runs.
 //! - A task's requests are owned as any request of the call that sent it ([`Host::try_fetch`]): what it sends before
 //!   its first wait is its starting call's, what it sends after is the activation's, as the call that resumed it is
-//!   a reply's, an answer's, a close's or a wake's. A task goes on only in such a call: a waiting task that becomes
-//!   ready while a handler starts another (a dialog replaced, a waker of the plugin's) goes on in the host's wake.
+//!   a reply's, an answer's, a close's, a timer's or a wake's. A task goes on only in such a call: a waiting task that
+//!   becomes ready while a handler starts another (a dialog replaced, a waker of the plugin's) goes on in the host's
+//!   wake.
+//! - [`Cx::sleep`] waits on the host's clock and [`Tasks::every`] ticks on it, with no thread of the plugin's; a timer
+//!   is a request as a fetch is, so the rules below hold for it too.
 //! - A request a mount owns is cancelled when that mount closes before its reply: its wait goes on once, with the
 //!   error [`CANCELLED`], and no reply comes after, also when the mount opens again.
 //! - The plugin's disposal (it is disabled, fails, is replaced by a new build, or the client exits) drops every task:
@@ -55,6 +58,7 @@
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::future::Future;
+use std::ops::ControlFlow;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::pin::Pin;
 use std::rc::{Rc, Weak};
@@ -62,6 +66,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::task::{Context, Poll, Wake};
 use std::thread::ThreadId;
+use std::time::Duration;
 
 use serde_json::Value;
 
@@ -90,6 +95,25 @@ impl Tasks {
         let Some(shared) = self.shared.upgrade() else { return };
         let cx = Cx { shared: self.shared.clone() };
         shared.start(host, |shared| shared.spawn(Box::pin(task(cx))));
+    }
+
+    /// Starts a task that runs `tick` every `period` ([`Cx::sleep`] between two), until `tick` breaks or a sleep
+    /// fails: its mount closed ([`CANCELLED`]), or the host took no more timers. A tick that runs long delays the next:
+    /// a late period is one tick, not one for each it missed. `tick` runs with `host` lent from its second period on
+    /// as from the timer's call, so its requests are the activation's.
+    pub fn every<F: Future<Output = ControlFlow<()>> + 'static>(
+        &self,
+        host: &dyn Host,
+        period: Duration,
+        tick: impl Fn(Cx) -> F + 'static,
+    ) {
+        self.spawn(host, move |cx| async move {
+            while cx.sleep(period).await.is_ok() {
+                if tick(cx.clone()).await.is_break() {
+                    return;
+                }
+            }
+        });
     }
 }
 
@@ -139,6 +163,13 @@ impl Cx {
     /// take is that error at once; one its mount's close cancelled is [`CANCELLED`].
     pub fn fetch(&self, fetch: Fetch) -> Wait<Result<Value, String>> {
         self.request(|host| host.try_fetch(fetch))
+    }
+
+    /// Waits `delay` on the host's clock ([`Host::try_timer`]), at least [`crate::MIN_TIMER`]: `Ok` once it passed, or
+    /// why the host took no timer ([`crate::MAX_TIMERS`] wait) or cancelled it ([`CANCELLED`]).
+    pub fn sleep(&self, delay: Duration) -> impl Future<Output = Result<(), String>> + 'static {
+        let wait = self.request(|host| host.try_timer(delay));
+        async move { wait.await.map(drop) }
     }
 
     /// Gives the terminal to `program` and waits until it exits ([`Host::try_foreground`]): `{ "code": … }`, or the
@@ -728,6 +759,9 @@ mod tests {
         fetches: Cell<u64>,
         sent: RefCell<Vec<Fetch>>,
         toasts: RefCell<Vec<String>>,
+        /// The delays of the timers asked for, which share the fetches' numbers; none is taken while `full`.
+        timers: RefCell<Vec<Duration>>,
+        full: Cell<bool>,
     }
 
     impl Read for Fake {
@@ -757,6 +791,13 @@ mod tests {
             self.dialogs.borrow_mut().push(dialog);
         }
         fn copy(&self, _: &str, _: Option<Action>) {}
+        fn try_timer(&self, delay: Duration) -> Result<RequestId, String> {
+            if self.full.get() {
+                return Err("more than 32 timers of the plugin wait".to_owned());
+            }
+            self.timers.borrow_mut().push(delay);
+            self.try_fetch(Fetch::new("GET", "/"))
+        }
     }
 
     impl Fake {
@@ -855,6 +896,53 @@ mod tests {
         assert_eq!(counts(), [2, 2]);
         // A wake on the thread that polls is seen by that poll: the host was not woken for one.
         assert_eq!(woken.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn every_ticks_once_a_period_until_it_breaks() {
+        let (registered, tasks, _) = plugin();
+        let host = Fake::default();
+        let ticks = Rc::new(Cell::new(0));
+        let counted = ticks.clone();
+        tasks.every(&host, Duration::from_secs(1), move |cx| {
+            let counted = counted.clone();
+            async move {
+                counted.set(counted.get() + 1);
+                // A tick acts on the host of the timer's call.
+                cx.with(|host| host.toast(Toast::new(Variant::Info, "tick")));
+                if counted.get() == 2 { ControlFlow::Break(()) } else { ControlFlow::Continue(()) }
+            }
+        });
+        assert_eq!((ticks.get(), host.timers.borrow().len()), (0, 1), "it waits a period before the first tick");
+        reply(&registered, &host, 1, Ok(Value::Null));
+        assert_eq!((ticks.get(), host.timers.borrow().len()), (1, 2));
+        reply(&registered, &host, 2, Ok(Value::Null));
+        assert_eq!((ticks.get(), host.timers.borrow().len()), (2, 2), "a tick that breaks asks for no timer");
+        assert_eq!(*host.timers.borrow(), [Duration::from_secs(1); 2]);
+        assert_eq!(*host.toasts.borrow(), ["tick", "tick"]);
+    }
+
+    #[test]
+    fn a_sleep_cancelled_or_refused_ends_every_and_tells_its_task() {
+        let (registered, tasks, _) = plugin();
+        let host = Fake::default();
+        let ticks = Rc::new(Cell::new(0));
+        let counted = ticks.clone();
+        tasks.every(&host, Duration::from_millis(50), move |_| {
+            counted.set(counted.get() + 1);
+            async { ControlFlow::Continue(()) }
+        });
+        registered.cancelled().iter().for_each(|run| run(&host, RequestId(1)));
+        reply(&registered, &host, 1, Ok(Value::Null));
+        assert_eq!((ticks.get(), host.timers.borrow().len()), (0, 1), "the cancelled every ticked or slept again");
+        host.full.set(true);
+        let log = Log::default();
+        let into = log.clone();
+        tasks.spawn(&host, move |cx| async move {
+            let slept = cx.sleep(Duration::from_millis(5)).await;
+            into.borrow_mut().push(format!("{slept:?}"));
+        });
+        assert_eq!(*log.borrow(), ["Err(\"more than 32 timers of the plugin wait\")"]);
     }
 
     #[test]

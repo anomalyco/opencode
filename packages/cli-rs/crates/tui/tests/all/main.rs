@@ -69,6 +69,7 @@ mod plugin_reads;
 mod plugin_reconcile;
 mod plugin_routing;
 mod plugin_surface;
+mod plugin_timers;
 mod plugins;
 // The JS host's rows (TypeScript plugins): in a build with the `ts` feature only (ts-feature).
 #[cfg(feature = "ts")]

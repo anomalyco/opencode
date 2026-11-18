@@ -309,6 +309,7 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
                 Shortcuts { name: string() } { },
                 Selection { } { },
                 ClearSelection { } { },
+                Timer { ms: uint64() } { },
                 Title { title: string() } { },
                 Theme { } { },
                 Themes { } { },

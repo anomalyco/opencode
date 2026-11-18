@@ -11,7 +11,8 @@
 --
 -- A handler that acts is a task: `local ok = host:confirm({ ... })` and `local body, err = host:fetch({ ... })` wait in
 -- a straight line, and the plugin goes on with other calls meanwhile. A fetch its mount asked for, when that mount
--- closes before the reply, returns `nil, "cancelled"` once: the host cancelled the request.
+-- closes before the reply, returns `nil, "cancelled"` once: the host cancelled the request. `plugin.sleep` and
+-- `plugin.every` keep time on the host's clock, with no thread.
 
 -- The contract's definitions ----------------------------------------------------------------------------------------
 
@@ -501,6 +502,9 @@ export type HostRequest = ({
     type: "selection",
 } | {
     type: "clear-selection",
+} | {
+    ms: number,
+    type: "timer",
 } | {
     title: string,
     type: "title",
@@ -6784,6 +6788,11 @@ export type Plugin = {
     json: Json,
     --- Sorts `list` in place by `less` (`a < b` when left out) and returns it; equal items keep their order.
     sort: <T>(list: { T }, less: ((T, T) -> boolean)?) -> { T },
+    --- Waits `ms` milliseconds on the host's clock, at least 20: `true`, or `nil` and why the host took no timer (32
+    --- of the plugin wait) or cancelled it (`"cancelled"`). Only a task waits.
+    sleep: (ms: number) -> (boolean?, string?),
+    --- Runs `f(host)` every `ms` milliseconds in a task of its own, until `f` returns `false` or a sleep fails.
+    every: (ms: number, f: (host: Host) -> boolean?) -> (),
 }
 
 --- `plugin.json`. A table is a JSON array when its keys are `1..n` (an empty table is one), an object otherwise, and a

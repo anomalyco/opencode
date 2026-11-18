@@ -2753,3 +2753,88 @@ fn an_answer_after_eight_replacements_reaches_its_own_dialog() {
     assert_eq!(said(&host), ["1 first", "9 ninth"]);
     assert_eq!(failure(&registry, "test.luau"), None);
 }
+
+// Expected (timers, contract-ergonomics 2.3): `plugin.sleep` parks its task on the host's clock and returns `true` once
+// the time passed, at least 20 ms for a shorter one; `plugin.every` ticks a period apart, from setup, until its function
+// returns `false`, with no thread.
+#[test]
+fn plugin_sleep_waits_on_the_hosts_clock_and_every_ticks_until_false() {
+    let host = host();
+    let registry = tasking(
+        &host,
+        r#"
+        local function say(host, text) host:toast({ variant = "info", message = text }) end
+        setup:command({ name = "nap" }, function(host)
+            say(host, "slept " .. tostring(plugin.sleep(100)))
+            say(host, "short " .. tostring(plugin.sleep(1)))
+        end)
+        local ticks = 0
+        plugin.every(1000, function(host)
+            ticks += 1
+            say(host, "tick " .. ticks)
+            return ticks < 2
+        end)
+        "#,
+    );
+    run(&host, "nap", None);
+    host.app.advance(Duration::from_millis(98));
+    assert!(said(&host).is_empty(), "{:?}", said(&host));
+    host.app.advance(Duration::from_millis(1));
+    assert_eq!(said(&host), ["slept true"]);
+    host.app.advance(Duration::from_millis(19));
+    assert_eq!(said(&host), ["slept true"], "a sleep under 20 ms waited less");
+    host.app.advance(Duration::from_millis(1));
+    assert_eq!(said(&host), ["slept true", "short true"]);
+    host.app.advance(Duration::from_millis(5000));
+    assert_eq!(said(&host)[2..], ["tick 1", "tick 2"], "every ticked past its `false`");
+    assert_eq!(failure(&registry, "test.luau"), None);
+}
+
+// Expected (timers): at most 32 timers of a plugin wait; the 33rd sleep returns `nil` and why, and once the 32 fired the
+// plugin has its places again. A reload or a disable ends the timers that wait: the old activation's sleeps never
+// return.
+#[test]
+fn a_plugin_waits_on_at_most_32_timers_which_end_with_it() {
+    let host = host();
+    let init = r#"local plugin = require("@opencode/plugin")
+return plugin.define(function(setup)
+    setup:command({ name = "many" }, function(host)
+        local slept, refused = 0, nil
+        for _ = 1, 33 do
+            plugin.spawn(function()
+                local ok, err = plugin.sleep(1000)
+                if ok then
+                    slept += 1
+                    if slept == 32 then host:toast({ variant = "info", message = "slept 32" }) end
+                else
+                    host:toast({ variant = "info", message = err })
+                end
+            end)
+        end
+    end)
+end)
+"#;
+    let load = || {
+        let (definition, error) = define(&sources(init), None).unwrap();
+        definition.external("/plugins/test", error)
+    };
+    let registry = Rc::new(Registry::define(Vec::new(), []));
+    registry.load(&dynamic(&host), load());
+    registry.activate(&dynamic(&host));
+    run(&host, "many", None);
+    assert_eq!(said(&host), ["more than 32 timers of the plugin wait"]);
+    host.app.advance(Duration::from_millis(1000));
+    assert_eq!(said(&host)[1..], ["slept 32"]);
+    run(&host, "many", None);
+    assert_eq!(said(&host)[2..], ["more than 32 timers of the plugin wait"], "the fired timers kept their places");
+    // A reload: the new build has its own 32 places, and the old timers wake nothing.
+    registry.load(&dynamic(&host), load());
+    run(&host, "many", None);
+    assert_eq!(said(&host)[3..], ["more than 32 timers of the plugin wait"]);
+    host.app.advance(Duration::from_millis(1000));
+    assert_eq!(said(&host)[4..], ["slept 32"], "the old activation's sleeps returned");
+    run(&host, "many", None);
+    assert!(registry.set_active(&dynamic(&host), "test.luau", false));
+    host.app.advance(Duration::from_millis(1000));
+    assert_eq!(said(&host).len(), 6, "a disabled plugin's sleeps returned: {:?}", said(&host));
+}

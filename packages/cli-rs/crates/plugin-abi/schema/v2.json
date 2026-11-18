@@ -4424,6 +4424,20 @@
         {
           "type": "object",
           "properties": {
+            "ms": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 18446744073709551615
+            },
+            "type": {
+              "const": "timer"
+            }
+          },
+          "required": ["type", "ms"]
+        },
+        {
+          "type": "object",
+          "properties": {
             "title": {
               "type": "string"
             },

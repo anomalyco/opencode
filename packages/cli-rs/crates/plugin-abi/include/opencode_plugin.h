@@ -232,8 +232,10 @@ OPENCODE_EXPORT const opencode_plugin_api *opencode_plugin_v2(void);
  *   types; a node in a hidden box, and any focus while a host dialog is open, is not taken. A node the mount's tree
  *   does not hold yet takes the focus if the mount's next view (the one after the call) shows it, and is dropped if
  *   it does not: a later view, after a resize or a theme, does not apply it.
- * - "fetch" and "foreground" answer the ID their one reply comes back with ("reply"), never 0, which names no
- *   request: an SDK refuses an answer of 0 as malformed. One the host does not take, as
+ * - "fetch", "foreground" and "timer" answer the ID their one reply comes back with ("reply"), never 0, which names
+ *   no request: an SDK refuses an answer of 0 as malformed. A "timer"'s reply is {"Ok": null} once "ms" milliseconds
+ *   passed on the host's clock, at least 20; with 32 timers of the plugin waiting already, it is {"Err": why} at
+ *   once. One the host does not take, as
  *   while the effects that wait fill its queue, answers OPENCODE_ERROR with why, and no reply comes for it: the Rust
  *   SDK's `Host::try_fetch` returns that as an `Err`. A request a
  *   mount's call asks for (a "command" of the route it shows, an "input" to that mount) is the mount's: once it

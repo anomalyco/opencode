@@ -143,6 +143,12 @@ A handler that waits for a dialog's answer or a reply can do it in a straight li
 `task`). A request whose mount closes before its reply is cancelled: its wait gets the error `task::CANCELLED`, once
 (`Setup::on_cancelled` hears it in a plain handler).
 
+A plugin keeps time on the host's clock, with no thread of its own: `cx.sleep(duration)` waits, and
+`tasks.every(host, period, |cx| …)` ticks until its future gives `ControlFlow::Break`. A timer waits at least
+`MIN_TIMER` (20 ms; a shorter one is lengthened to it), at most `MAX_TIMERS` (32) of a plugin wait at once (one more is
+refused through its reply), and it is owned and cancelled as a fetch is. A tick whose plugin changes nothing on screen
+costs a wake and no frame.
+
 ### The source promise of 2.x
 
 A plugin's source that builds on the 2.0 SDK builds on every later 2.x SDK (carbon-4, big-boi 14). So every type of
