@@ -70,9 +70,9 @@ impl Inputs {
     }
 
     /// The slot's input, as the contract's JSON has it: a field left out is `nil`.
-    pub(crate) fn slot(&self, input: &SlotInput) -> mlua::Result<Table> {
+    pub(crate) fn slot(&self, input: &SlotInput) -> mlua::Result<&Table> {
         if self.last_slot.borrow().as_ref() == Some(input) {
-            return Ok(self.slot.clone());
+            return Ok(&self.slot);
         }
         self.last_slot.take();
         refill(&self.slot, |table| {
@@ -94,15 +94,15 @@ impl Inputs {
             Ok(())
         })?;
         *self.last_slot.borrow_mut() = Some(input.clone());
-        Ok(self.slot.clone())
+        Ok(&self.slot)
     }
 
     /// What changed, as the contract's JSON has it: `false` and an empty list are `nil`. Each list table holds the
     /// last call's list while `last_changed` names it, and is changed only where the running call's differs: its
     /// strings stay referenced, and are not made again, from one call to the next.
-    pub(crate) fn changed(&self, lua: &Lua, changed: &Changed) -> mlua::Result<Table> {
+    pub(crate) fn changed(&self, lua: &Lua, changed: &Changed) -> mlua::Result<&Table> {
         if self.last_changed.borrow().as_ref() == Some(changed) {
-            return Ok(self.changed.clone());
+            return Ok(&self.changed);
         }
         // Until the tables are filled, they hold nothing known: a fill that fails leaves the next one to start over.
         let mut last = self.last_changed.take();
@@ -181,11 +181,11 @@ impl Inputs {
             None => changed.clone(),
         };
         *self.last_changed.borrow_mut() = Some(last);
-        Ok(self.changed.clone())
+        Ok(&self.changed)
     }
 
     /// A view's input: its size, its palette, its panel, what changed and its slot's input.
-    pub(crate) fn surface(&self, lua: &Lua, input: &v2::SurfaceInput) -> mlua::Result<Table> {
+    pub(crate) fn surface(&self, lua: &Lua, input: &v2::SurfaceInput) -> mlua::Result<&Table> {
         let palette = {
             let mut cached = self.palette.borrow_mut();
             match &*cached {
@@ -211,7 +211,7 @@ impl Inputs {
             table.raw_set("changed", changed)?;
             table.raw_set("slot", slot)
         })?;
-        Ok(self.surface.clone())
+        Ok(&self.surface)
     }
 }
 

@@ -24,7 +24,7 @@ use std::borrow::Cow;
 use std::fmt;
 use std::os::raw::c_int;
 
-use mlua::{Lua, Value, ffi};
+use mlua::{AppDataRef, Function, LightUserData, Lua, Value, ffi};
 use opencode_plugin_abi::{self as abi, v2};
 use serde::de::{self, DeserializeOwned, DeserializeSeed, Deserializer, IntoDeserializer, Visitor};
 
@@ -92,6 +92,33 @@ impl de::Error for Refused {
     }
 }
 
+/// The C function a VM's decodes run in ([`enter`]), made at its first decode and kept: `exec_raw` makes a new closure
+/// each call, for the collector to free.
+struct Entry(Function);
+
+impl Entry {
+    fn get(lua: &Lua) -> mlua::Result<AppDataRef<'_, Entry>> {
+        if let Some(entry) = lua.app_data_ref::<Entry>() {
+            return Ok(entry);
+        }
+        // SAFETY: `enter` is called as a Luau C function, and only by `Decode::decode`.
+        let function = unsafe { lua.create_c_function(enter) }?;
+        lua.set_app_data(Entry(function));
+        lua.app_data_ref::<Entry>().ok_or_else(|| mlua::Error::runtime("the decode's entry was not kept"))
+    }
+}
+
+/// Runs the reader slot 1 points to on the value in slot 2 ([`Decode::decode`]). A panic aborts, as in `exec_raw`: it
+/// cannot unwind through Luau.
+unsafe extern "C-unwind" fn enter(state: *mut ffi::lua_State) -> c_int {
+    // SAFETY: `Decode::decode` passes a pointer to its reader, which lives until the call returns.
+    let read = unsafe { &mut *ffi::lua_tolightuserdata(state, 1).cast::<&mut dyn FnMut(*mut ffi::lua_State)>() };
+    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| read(state))).is_err() {
+        std::process::abort();
+    }
+    0
+}
+
 /// One decode, bounded as the host's limits are charged: what it makes lives on the Rust heap, outside the VM's cap
 /// and with no safepoint of the budget's.
 pub(crate) struct Decode {
@@ -122,10 +149,12 @@ impl Decode {
     /// handle and allocates nothing in the VM.
     pub(crate) fn decode<T: DeserializeOwned + 'static>(&mut self, lua: &Lua, value: &Value) -> Result<T, Refused> {
         let mut decoded = Err(Refused::Value("the value was not read".to_owned()));
-        // SAFETY: `exec_raw` pushes `value` and runs the closure in protected mode with it at the top and room for three
-        // more slots, which each table checks for again as it goes deeper. The decode reads the stack, pops what it
-        // pushes, and raises no Lua error of its own.
-        let ran = unsafe { lua.exec_raw::<()>(value, |state| decoded = self.top(state, ffi::lua_gettop(state))) };
+        // SAFETY: [`enter`] runs this in protected mode with `value` at slot 2 and room for the slots a C function
+        // has, which each table checks for again as it goes deeper. The decode reads the stack, pops what it pushes,
+        // and raises no Lua error of its own.
+        let mut read = |state| decoded = unsafe { self.top(state, 2) };
+        let mut read: &mut dyn FnMut(*mut ffi::lua_State) = &mut read;
+        let ran = Entry::get(lua).and_then(|entry| entry.0.call::<()>((LightUserData((&raw mut read).cast()), value)));
         ran.map_err(|error| Refused::Value(error.to_string()))?;
         decoded
     }
