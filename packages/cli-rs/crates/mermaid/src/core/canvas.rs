@@ -1,5 +1,3 @@
-//! The character grid diagrams draw into (`core/canvas.ts`).
-
 use super::text;
 
 const MAX_CELLS: i64 = 250_000;

@@ -1,10 +1,4 @@
-// Writes crates/plugin/src/pipe/compat.js: the JS host's V2 compatibility layer (P8, `crates/plugin/src/pipe/compat`)
-// bundled with what it serves plugins (Solid's client build, its store and universal renderer) and the generated
-// client, as one module the client embeds beside `host.ts`. First it writes `compat/opentui.gen.ts`: every name the
-// installed `@opentui/core` and `@opentui/solid` export, with the values of their small plain-data exports (enums,
-// border sets), and the methods of `CliRenderer`, so the layer exports each name and a plugin's import of one links
-// (FT-5, FT-6), and OpenTUI's filetype maps, which `infoStringToFiletype` reads (contract 2.x, step D: good-fences
-// registers a renderer for each filetype they name). Then `compat/events.gen.ts`: the event types the generated client names, which `data.listen` hears.
+// Bundles the JS plugin compatibility layer and the client-side Solid runtime it serves.
 import path from "node:path"
 
 const root = new URL("../..", import.meta.url).pathname
@@ -79,8 +73,7 @@ async function opentui() {
   // The methods its declarations say return a promise, which a stand-in answers with a resolved one.
   const declared = await Bun.file(path.join(path.dirname(Bun.resolveSync("@opentui/core", compat)), "renderer.d.ts")).text()
   const promised = [...declared.matchAll(/^\s+(\w+)\(.*\): Promise</gm)].map((match) => match[1]!)
-  // The methods any of its declarations say return a promise (CT-16: `TreeSitterClient.initialize`), which an inert
-  // call of answers a resolved one.
+  // Inert implementations of async methods must still return a promise.
   const root = path.dirname(Bun.resolveSync("@opentui/core", compat))
   const promises = new Set<string>()
   for await (const file of new Bun.Glob("**/*.d.ts").scan({ cwd: root }))

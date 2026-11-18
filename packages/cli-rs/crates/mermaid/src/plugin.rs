@@ -1,6 +1,4 @@
-//! The `opencode.merman` plugin (`plugin.ts`, `createMermaidCodeBlockRenderer`), on the one plugin API (O-67). The
-//! host draws its rows as TS `StaticDiagramRenderable` does: full width, the diagram's height, no wrap, not
-//! selectable, in a white default foreground, scrolled sideways by a left drag.
+//! Renders to the available width and reports the diagram's measured height.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -13,7 +11,6 @@ use crate::{Diagram, Kind, Palette, Rendered, render};
 
 pub const ID: &str = "opencode.merman";
 
-/// The plugin, on the one plugin API (O-67).
 pub fn plugin() -> Plugin {
     Plugin { id: ID, setup }
 }

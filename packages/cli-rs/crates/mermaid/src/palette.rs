@@ -1,5 +1,3 @@
-//! The diagram palette from the TUI theme (`palette.ts`).
-
 use opencode_plugin_abi::{Read, Rgba, ThemeMode};
 
 use crate::core::color::{blend, with_alpha};

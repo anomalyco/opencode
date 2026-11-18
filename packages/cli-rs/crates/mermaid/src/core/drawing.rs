@@ -1,5 +1,3 @@
-//! Box-drawing helpers (`core/drawing.ts`), with OpenTUI's `BorderChars`.
-
 use super::geometry::{Bounds, Direction, Point, direction_between, walk_orthogonal_segment};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

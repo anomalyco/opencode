@@ -51,9 +51,7 @@ async function load(url: string, filetype: string) {
   return response.text()
 }
 
-// Core's translateLuaMatch (parser.worker.ts), which it applies to every highlight query it loads: a #lua-match? whose
-// Lua pattern uses only literals, anchors, simple sets, %d, ".", "*", and "+" becomes #match?, and any other stays and
-// matches every node. Core writes "." as JavaScript's [^]; Rust's regex crate spells that (?s:.).
+// Convert only Lua patterns with an equivalent regex; keep unsupported predicates intact.
 function translateLuaMatch(query: string) {
   return query.replace(
     /#(not-)?(any-)?lua-match\?(\s+@[\w.-]+\s+)"(\^?(?:(?:[\w/!:#.]|\[\^?(?:[\w*-]|%d)+\])[*+]?)*\$?)"/g,

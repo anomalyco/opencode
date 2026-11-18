@@ -1,8 +1,4 @@
-// Writes crates/mermaid/src/core/entities.rs: the HTML named character references that `entities`'
-// `decodeHTMLStrict` decodes (packages/merman/src/core/mermaid.ts), and decoding cases checked against it. The
-// package (7.x) ships its names only as a packed trie (`htmlDecodeTree`), so this walks the trie's branches, as
-// `EntityDecoder` and `determineBranch` read them, for every name it holds, and keeps each name whose `&name;`
-// `decodeHTMLStrict` decodes, with that value. Sorted by name for a binary search.
+// Generates strict HTML named references from the packed trie in `entities`, checking each name against its decoder.
 import { createRequire } from "node:module"
 
 const require = createRequire(new URL("../../../merman/package.json", import.meta.url).pathname)

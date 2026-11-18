@@ -1,5 +1,3 @@
-//! Sequence diagram drawing (`sequence/drawing.ts`) and styles (`sequence/style.ts`).
-
 use super::placement::{GroupPlacement, HBounds, StepPlacement, plan};
 use super::{Diagram, FragmentKind, Head};
 use crate::core::canvas::{Canvas, SizeError};

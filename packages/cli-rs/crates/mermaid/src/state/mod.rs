@@ -1,5 +1,3 @@
-//! State diagrams (`packages/merman/src/state`), with `note.ts`, `visible-model.ts`, and `search.ts`.
-
 pub mod drawing;
 pub mod layout;
 pub mod parser;
@@ -96,8 +94,6 @@ pub fn end_marker_id(scope: Option<&str>) -> String {
     scope.map_or("__end".to_string(), |scope| format!("{scope}.__end"))
 }
 
-// note.ts
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NoteConnector {
     pub points: Vec<Point>,
@@ -138,8 +134,6 @@ pub fn note_connector(note: &Rect, side: NoteSide, target: &Rect) -> NoteConnect
         points: vec![Point { x: target_x, y: connector_y }, Point { x: note_x, y: connector_y }],
     }
 }
-
-// visible-model.ts
 
 pub fn is_hidden_composite_marker(state: Option<&State>) -> bool {
     state.is_some_and(|state| state.parent_id.is_some() && matches!(state.kind, StateKind::Start | StateKind::End))
@@ -207,8 +201,6 @@ pub fn visible(diagram: &Diagram) -> Diagram {
         ..diagram.clone()
     }
 }
-
-// search.ts
 
 pub const MAX_SEARCH_VISITS: i64 = 250_000;
 

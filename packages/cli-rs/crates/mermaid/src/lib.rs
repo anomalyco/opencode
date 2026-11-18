@@ -1,6 +1,4 @@
-//! The Mermaid plugin: `opencode.merman`, a port of `packages/merman/src`. It draws
-//! `mermaid` fences in the transcript as terminal text: flowcharts, sequence, state, gantt, gitgraph, and
-//! timeline diagrams.
+//! Renders Mermaid fences in the transcript as styled terminal cells.
 // Bounds checks keep TS's inclusive `right = left + width - 1` form, so each condition reads as its source.
 #![allow(clippy::int_plus_one)]
 
@@ -68,7 +66,7 @@ impl std::fmt::Display for SyntaxError {
     }
 }
 
-/// The kind of diagram `content` is, by its first meaningful line (`detect.ts`).
+/// Detects the diagram kind from its first meaningful line.
 pub fn detect(content: &str) -> Option<Kind> {
     if flowchart::parser::is_flowchart(content) {
         return Some(Kind::Flowchart);

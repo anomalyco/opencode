@@ -1,5 +1,3 @@
-//! Sequence diagrams (`packages/merman/src/sequence`).
-
 pub mod drawing;
 pub mod parser;
 pub mod placement;

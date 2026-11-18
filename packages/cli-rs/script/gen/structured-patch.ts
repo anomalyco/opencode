@@ -1,6 +1,4 @@
-// Writes crates/acp/src/permission/structured_patch.json: `[old, new, ranges]` cases with the hunk ranges jsdiff's
-// `structuredPatch` reports (the `diff` package packages/cli/src/acp/permission.ts uses), for the port in
-// crates/acp/src/permission/unified.rs. A table of shapes, then seeded random texts.
+// Records jsdiff's structured patch hunk ranges for the ACP diff tests.
 import { createRequire } from "node:module"
 
 const require = createRequire(new URL("../../../cli/package.json", import.meta.url).pathname)

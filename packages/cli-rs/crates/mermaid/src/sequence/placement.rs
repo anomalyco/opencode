@@ -1,5 +1,3 @@
-//! Sequence diagram placement (`sequence/placement.ts`).
-
 use std::collections::HashMap;
 use std::sync::LazyLock;
 

@@ -1,5 +1,4 @@
-//! Flowchart layout (`flowchart/layout.ts`): ranks, node placement, subgraph frames, and the passes that
-//! separate top-level items before routing.
+//! Places ranks and separates top-level subgraphs before routing edges.
 
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;

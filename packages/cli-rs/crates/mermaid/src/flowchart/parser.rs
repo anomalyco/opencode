@@ -1,5 +1,3 @@
-//! Flowchart parser (`flowchart/parser.ts`).
-
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::sync::LazyLock;

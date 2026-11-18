@@ -111,7 +111,6 @@ function union(types: Array<string>) {
   return unique.length === 1 ? unique[0] : `(${unique.join(" | ")})`
 }
 
-// As `integer` in types.ts, which makes such a number an `i64`.
 function integer(r: SchemaRepresentation.Number) {
   const visit = (checks: ReadonlyArray<SchemaRepresentation.Check>): boolean =>
     checks.some((check) =>

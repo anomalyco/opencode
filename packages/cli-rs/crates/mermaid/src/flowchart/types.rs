@@ -1,5 +1,3 @@
-//! Flowchart model (`flowchart/types.ts`).
-
 use std::rc::Rc;
 
 use crate::core::geometry::{Axis, Bounds, Point};

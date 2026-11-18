@@ -1,4 +1,4 @@
-//! Source to styled lines (`markdown.ts` `prepareDiagram` and the streaming fallback).
+//! Renders source to styled lines, including partial diagrams while streaming.
 
 use opencode_plugin_abi::Rgba;
 
