@@ -61,13 +61,23 @@ describe("work step policy", () => {
 })
 
 describe("whole-turn disclosure", () => {
-  test.each(["live", "error", "interrupted"] as const)("%s turns always stay open", (status) => {
-    const turn = { ...completed, status }
+  test("live turns always stay open", () => {
+    const turn = { ...completed, status: "live" as const }
 
     expect(workTurnOpen(workStepPolicy(defaultWorkSteps), turn)).toBe(true)
     expect(
       workTurnOpen(workStepPolicy(defaultWorkSteps), turn, setWorkTurnOpen(emptyWorkStepDisclosure, turn, false)),
     ).toBe(true)
+  })
+
+  test.each(["error", "interrupted"] as const)("%s turns stay open by default but can be closed", (status) => {
+    const turn = { ...completed, status }
+    const policy = workStepPolicy(defaultWorkSteps)
+    const closed = setWorkTurnOpen(emptyWorkStepDisclosure, turn, false)
+
+    expect(workTurnOpen(policy, turn)).toBe(true)
+    expect(workTurnOpen(policy, turn, closed)).toBe(false)
+    expect(workTurnOpen(policy, turn, setWorkTurnOpen(closed, turn, true))).toBe(true)
   })
 
   test.each(timings)("completed turns with %s timing use their timing default", (collapseTiming) => {

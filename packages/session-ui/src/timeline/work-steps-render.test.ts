@@ -20,7 +20,7 @@ describe("work step rendering facts", () => {
         placement: "grouped",
       }),
     ).toBe("live")
-    expect(workStepTurnStatus({ status: "retrying", attempt: 1, message: "retry", next: 2 })).toBe("error")
+    expect(workStepTurnStatus({ status: "retrying", attempt: 1, message: "retry", next: 2 })).toBe("live")
     expect(workStepTurnStatus({ status: "failed", error: { text: "failed" } })).toBe("error")
     expect(workStepTurnStatus({ status: "interrupted" })).toBe("interrupted")
     expect(workStepTurnStatus({ status: "idle" })).toBe("completed")

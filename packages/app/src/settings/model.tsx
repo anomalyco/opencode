@@ -4,6 +4,13 @@ import { createMediaQuery } from "@solid-primitives/media"
 import { Effect, Option, Predicate, Schema, SchemaGetter } from "effect"
 import { createSimpleContext } from "@opencode/ui/context"
 import { timelinePresets, type TimelineCategory, type TimelineDetail } from "@opencode/session-ui/timeline/detail"
+import {
+  defaultWorkSteps,
+  workStepCollapseTimings,
+  workStepFoldedReplies,
+  workStepViews,
+  type WorkSteps,
+} from "@opencode/session-ui/timeline/work-steps"
 import { persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -21,7 +28,7 @@ export type BackgroundActivity = Settings["general"]["backgroundActivity"]
 
 export type TimelineWidth = Settings["general"]["timelineWidth"]
 
-export type WorkSteps = Settings["general"]["workSteps"]
+export type { WorkSteps }
 
 export type SidebarOrganize = Settings["general"]["sidebarOrganize"]
 
@@ -109,9 +116,9 @@ const activitySchema = Persistence.struct({ placement: placementSchema, details:
 const placementOnlySchema = Persistence.struct({ placement: placementSchema })
 
 const workStepsSchema = Persistence.struct({
-  view: Schema.Literals(["compact", "standard", "detailed", "verbose"]),
-  collapseTiming: Schema.Literals(["completion", "next-input"]),
-  foldedReplies: Schema.Literals(["all", "final"]),
+  view: Schema.Literals(workStepViews),
+  collapseTiming: Schema.Literals(workStepCollapseTimings),
+  foldedReplies: Schema.Literals(workStepFoldedReplies),
 })
 
 const generalSchema = Persistence.struct({
@@ -315,7 +322,7 @@ export const settingsPersistence = Persistence.migrate(
 export const defaultSettings: Settings = {
   general: {
     timelineDetail: { ...timelinePresets[2].value },
-    workSteps: { view: "standard", collapseTiming: "completion", foldedReplies: "all" },
+    workSteps: { ...defaultWorkSteps },
     showCustomAgents: true,
     showTurnDiffs: false,
     backgroundActivity: "left",

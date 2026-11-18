@@ -9,9 +9,9 @@ import { TimelineRow } from "./timeline-row"
 import type { WorkStepPolicy, WorkStepTurnStatus } from "./work-steps"
 
 export function workStepTurnStatus(phase: TurnPhase): WorkStepTurnStatus {
-  if (phase.status === "working" || phase.status === "thinking") return "live"
+  if (phase.status === "working" || phase.status === "thinking" || phase.status === "retrying") return "live"
 
-  if (phase.status === "failed" || phase.status === "retrying") return "error"
+  if (phase.status === "failed") return "error"
 
   if (phase.status === "interrupted") return "interrupted"
 

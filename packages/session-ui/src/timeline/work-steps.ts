@@ -88,18 +88,15 @@ export function workTurnOpen(
   turn: WorkStepTurn,
   disclosure: WorkStepDisclosureMap = emptyWorkStepDisclosure,
 ) {
-  if (turn.status === "live" || turn.status === "error" || turn.status === "interrupted") return true
+  if (turn.status === "live") return true
+
+  const manual = disclosure[workTurnDisclosureKey(turn.sessionID, turn.turnID)]
+
+  if (turn.status === "error" || turn.status === "interrupted") return manual ?? true
 
   if (!policy.foldCompletedTurns) return true
 
-  if (policy.collapseTiming === "completion")
-    return disclosure[workTurnDisclosureKey(turn.sessionID, turn.turnID)] ?? false
-
-  if (!turn.latestCompletedTurn || turn.hasLaterInput) {
-    return disclosure[workTurnDisclosureKey(turn.sessionID, turn.turnID)] ?? false
-  }
-
-  return disclosure[workTurnDisclosureKey(turn.sessionID, turn.turnID)] ?? true
+  return manual ?? (policy.collapseTiming === "next-input" && turn.latestCompletedTurn && !turn.hasLaterInput)
 }
 
 export function workPhaseOpen(
