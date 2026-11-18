@@ -1,5 +1,6 @@
-import { onMount, type ComponentProps, splitProps } from "solid-js"
+import { createEffect, onCleanup, type ComponentProps, splitProps } from "solid-js"
 import { artworkNames, isIconName, getIcon, resolveIconName, type IconName } from "../catalog"
+import { isRegisteredIconName, mountRegisteredIcon, registeredIconSymbol, type RegisteredIconName } from "../registry"
 import "./icon.css"
 
 const spriteID = "opencode-v2-icon-sprite"
@@ -41,17 +42,38 @@ function ensureSprite() {
 }
 
 export interface IconProps extends ComponentProps<"svg"> {
-  name: IconName | (string & {})
+  /**
+   * A catalog name, or the name of registered artwork (`<owner>:<name>`, see `registerIcons`). An unknown catalog name
+   * draws a plus; a name whose artwork is not registered now draws nothing and keeps its box.
+   */
+  name: IconName | RegisteredIconName | (string & {})
   size?: "small" | "normal" | "large"
 }
 
 export function Icon(props: IconProps) {
   const [split, rest] = splitProps(props, ["name", "size"])
 
+  const registered = () => (isRegisteredIconName(split.name) ? split.name : undefined)
   const iconName = () => resolveIconName(isIconName(split.name) ? split.name : "plus")
 
   const pixelSize = () => (split.size === "large" ? 20 : split.size === "small" ? 14 : 16)
-  onMount(ensureSprite)
+
+  const reference = () => {
+    const name = registered()
+
+    return name ? registeredIconSymbol(name) : symbol(iconName())
+  }
+
+  // Registered artwork brings its own frame on its symbol, which fills the icon's box.
+  const viewBox = () => (registered() ? undefined : getIcon(iconName()).viewBox)
+
+  createEffect(() => {
+    ensureSprite()
+
+    const name = registered()
+
+    if (name) onCleanup(mountRegisteredIcon(name))
+  })
 
   return (
     <svg
@@ -67,12 +89,12 @@ export function Icon(props: IconProps) {
       }
       width={pixelSize()}
       height={pixelSize()}
-      viewBox={getIcon(iconName()).viewBox}
+      viewBox={viewBox()}
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden={rest["aria-hidden"] ?? "true"}
     >
-      <use href={`#${symbol(iconName())}`} />
+      <use href={`#${reference()}`} />
     </svg>
   )
 }

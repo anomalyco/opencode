@@ -1,4 +1,4 @@
-import type { IconName } from "@opencode/ui/icons/catalog"
+import type { IconProps } from "@opencode/ui/icon"
 import { createContext, useContext, type ParentProps } from "solid-js"
 import type { SessionReferenceMenu } from "../components/markdown-session-links"
 
@@ -31,8 +31,8 @@ export type MarkdownCodeBlockMatch = {
 
 /** A button beside a code block's Copy button. */
 export type MarkdownCodeAction = {
-  /** The button's icon. */
-  readonly icon: IconName
+  /** The button's icon: a catalog name, or the name of registered artwork. */
+  readonly icon: IconProps["name"]
   /** The accessible name and tooltip. */
   readonly title: string
   /** Runs when the user clicks the button. */

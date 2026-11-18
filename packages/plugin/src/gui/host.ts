@@ -69,6 +69,19 @@ export function runsOn(declarations: Pick<Declarations, "os">, os: OS | undefine
   return !declarations.os || (!!os && declarations.os.includes(os))
 }
 
+/**
+ * The app-wide name of an icon a plugin declared, `<plugin id>:<name>`, which `ctx.icons` gives the plugin as a
+ * `PluginIconName`. Drafts, sent messages and stored layouts keep the name, so the format never changes. No name in
+ * the app's icon catalog holds a colon.
+ *
+ * @param plugin - The plugin's id.
+ * @param name - The icon's name in the plugin's `icons`.
+ * @returns The name the app's icon component draws the artwork under.
+ */
+export function pluginIconName(plugin: string, name: string) {
+  return `${plugin}:${name}` as const
+}
+
 /** One explicit desktop enable-state row. An absent row means there is no setting under that id. */
 export interface EnableState {
   /** The plugin id the user saved a setting under. */
@@ -270,6 +283,7 @@ export function evaluatePluginBundle(code: string, host: PluginBundleHost): Plug
       os: plugin.os,
       // SAFETY: `matchesPlugin` checked each store's scope and schema; `is` keeps the declaration whole.
       stores: plugin.stores as Declarations["stores"],
+      icons: plugin.icons,
       i18n: plugin.i18n && { ...plugin.i18n, en: plugin.i18n.en ?? {} },
     },
     // SAFETY: a bundle is plain JavaScript; a function is all the host can check of a setup.
@@ -297,6 +311,8 @@ const BundleDefinition = Schema.Struct({
       }),
     ),
   ),
+  // Each icon is an SVG document as text. Only a window can parse it, so the window host checks the document itself.
+  icons: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   // A plugin's catalog ships every locale inline; only built-ins load locales lazily.
   i18n: Schema.optional(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.String))),
   setup: Schema.optional(Setup),

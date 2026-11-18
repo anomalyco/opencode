@@ -16,18 +16,19 @@ import {
   type GoalEvent,
 } from "./machine"
 
-const status = {
-  active: { label: "title", icon: "outline-steer", tone: undefined },
-  paused: { label: "paused", icon: "circle-exclamation", tone: "warning" },
-  complete: { label: "met", icon: "circle-check", tone: "success" },
-} as const
-
 /**
  * The session's `/goal` above its composer: the status as a pill, and a popover headed by the objective with the
  * actions that apply. The server's goal plugin owns the goal and serves it over its RPC; a bare `/goal` shows the last
  * reason.
  */
 const setup: Plugin.Setup<typeof GoalDefinition> = (ctx) => {
+  // The pill of each status. An active goal shows the plugin's own icon; the others show the app's.
+  const status = {
+    active: { label: "title", icon: ctx.icons.steer, tone: undefined },
+    paused: { label: "paused", icon: "circle-exclamation", tone: "warning" },
+    complete: { label: "met", icon: "circle-check", tone: "success" },
+  } as const
+
   const [goalState, setGoalState] = createSignal(createGoalState())
   // Ends a subscription, snapshot fetch, retry timer or command by its id.
   const running = new Map<number, () => void>()
