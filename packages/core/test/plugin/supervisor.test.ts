@@ -175,7 +175,7 @@ describe("PluginSupervisor", () => {
     }),
   )
 
-  it.effect("refreshes every 12 hours without adding an immediate reload", () =>
+  it.effect("refreshes every 24 hours without adding an immediate reload", () =>
     Effect.gen(function* () {
       source.activations = 0
       const directory = yield* tmpdirScoped()
@@ -183,14 +183,14 @@ describe("PluginSupervisor", () => {
       yield* Effect.gen(function* () {
         const plugins = yield* Plugin.Service
         yield* plugins.awaitActivation
-        yield* TestClock.adjust("11 hours")
+        yield* TestClock.adjust("23 hours")
         expect(source.activations).toBe(1)
 
         yield* TestClock.adjust("1 hour")
         yield* advance(() => source.activations === 2)
         yield* plugins.awaitActivation
 
-        yield* TestClock.adjust("12 hours")
+        yield* TestClock.adjust("24 hours")
         yield* advance(() => source.activations === 3)
         yield* plugins.awaitActivation
         expect(source.activations).toBe(3)
