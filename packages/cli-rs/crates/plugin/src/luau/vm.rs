@@ -36,9 +36,14 @@ const LUA_GCSETGOALLARGE: std::ffi::c_int = 11;
 const LUA_GCSETGOALTHRESHOLD: std::ffi::c_int = 12;
 const LUA_GCSETSTEPMULLARGE: std::ffi::c_int = 13;
 
-/// How near its cap a VM's heap may be once a call returned, after a full collection: nearer, the plugin ran out of
-/// memory and caught the error, and every binding would fail at random from then on.
-const MARGIN: usize = 1 << 20;
+/// The room a VM's heap must have left under its cap once a call returned, after a full collection: with less, the
+/// plugin is at its cap (it ran out of memory, caught the error, and kept what it held), and every binding would fail
+/// at random from then on. Room, not a share of the cap, so a plugin whose ordinary heap is most of a small cap runs
+/// (carbon `ls-4`; a fresh VM holds about 0.8 MiB). mlua keeps no record that an allocation failed, and wrapping the
+/// sandbox's `pcall` cannot give one: Luau compiles a direct `pcall(...)` or `xpcall(...)` to a fast path that calls
+/// the builtin whatever the global holds (`Compiler.cpp`, `luauPF_pcall`). So a plugin that caught a failed allocation
+/// and kept more room than this is not caught here; its next allocation that fails outside a `pcall` fails it.
+const ROOM: usize = 64 << 10;
 
 /// The shortest wait before the budget reads a call's CPU time again: a call within a millisecond of its limit is read
 /// again a millisecond later, not at once.
@@ -264,14 +269,14 @@ impl Vm {
             f()
         };
         if let Some(stopped) = self.budget.stopped.take() {
-            return Err(format!("{}: {stopped}", self.id));
+            return Err(format!("{}: {}", self.id, plain(&stopped, crate::mailbox::REPORT)));
         }
         let result = result.map_err(|error| report(&self.id, &error.to_string()))?;
-        if self.lua.used_memory() + MARGIN >= self.cap {
-            // Garbage does not count: only what a full collection leaves.
+        if self.lua.used_memory() + ROOM >= self.cap {
+            // Garbage does not count: only what a full collection leaves, and only when the heap is that near the cap.
             let _ = self.lua.gc_collect();
             let used = self.lua.used_memory();
-            if used + MARGIN >= self.cap {
+            if used + ROOM >= self.cap {
                 return Err(format!(
                     "{}: holds {used} bytes of its {} MiB heap after a call: out of memory, stopped by the Luau memory cap",
                     self.id,
@@ -341,15 +346,35 @@ impl Drop for Outer<'_> {
 fn report(id: &str, error: &str) -> String {
     let (message, traceback) = error.split_once("\nstack traceback:\n").unwrap_or((error, ""));
     let message = message.trim_end().strip_prefix("runtime error: ").unwrap_or(message.trim_end());
-    let frames: Vec<&str> = traceback
+    let frames: Vec<String> = traceback
         .lines()
         .map(|line| line.trim_start_matches(['\t', ' ', '>']))
         .filter(|frame| frame.split(':').next().is_some_and(|file| file.ends_with(".luau")))
+        .map(|frame| plain(frame, crate::mailbox::REPORT))
         .collect();
+    let message = plain(message, crate::mailbox::REPORT);
     if frames.is_empty() {
         return format!("{id}: {message}");
     }
     format!("{id}: {message}\nstack traceback:\n\t{}", frames.join("\n\t"))
+}
+
+/// `text` as one line of at most `most` bytes, with control characters escaped (`\u{1b}`, `\n`): a plugin's error is
+/// kept in `/plugins` and written to the log, so it holds no escape sequence and no megabytes (carbon `ls-4`).
+fn plain(text: &str, most: usize) -> String {
+    let end = |text: &str| (0..=most.min(text.len())).rev().find(|end| text.is_char_boundary(*end)).unwrap_or(0);
+    let raw = &text[..end(text)];
+    let escaped: String = raw
+        .chars()
+        .flat_map(|char| match char.is_control() {
+            true => char.escape_default().collect::<Vec<_>>(),
+            false => vec![char],
+        })
+        .collect();
+    if escaped.len() <= most && raw.len() == text.len() {
+        return escaped;
+    }
+    format!("{}... ({} bytes)", &escaped[..end(&escaped)], text.len())
 }
 
 /// Fails the running call of the VM `lua` with `reason`, also when the plugin catches the error a binding raises: the
