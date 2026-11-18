@@ -23,8 +23,6 @@ const MAX_FILES = 20
 /** Entries a session was given that a correction may name, and how much of each is kept to match it. */
 const MAX_GIVEN = 10
 const MAX_GIVEN_TEXT = 2000
-/** Publish intents a session remembers, so a retried publish sends the key its first try sent. */
-const MAX_INTENTS = 20
 
 // Console's answers, read leniently: only what the tools show.
 const Kind = Schema.Literals(["bug", "convention", "procedure", "gotcha", "decision", "failed-approach"])
@@ -112,7 +110,9 @@ const EDIT_ALIASES = [
   ["newString", "newText"],
   ["new_text", "newText"],
 ] as const
-const Tags = Schema.Array(Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9._/-]{0,63}$/)))
+const Tags = Schema.Array(Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9._/-]{0,63}$/))).annotate({
+  description: "Lowercase; general when it holds in any repository, such as a library's pitfall",
+})
 const Paths = Schema.Array(Schema.String).annotate({
   description: "Repository-relative files, directories ending in / or globs it's about",
 })
@@ -129,10 +129,6 @@ type Tracked = {
   readonly injected: { prompt: number; failure: number }
   /** Entries injected or read, oldest first, as this session last saw them. */
   readonly given: Map<string, OpencodeMemoryPolicy.Given>
-  /** The idempotency key of each publish the session asked for, by what it publishes. */
-  readonly intents: Map<string, string>
-  /** Entries this session published, so a duplicate of one is named as its own. */
-  readonly published: Set<string>
   /** Per entry, each revision this session wrote over the one before it, by that one: its own edits aren't news to it. */
   readonly revisions: Map<string, Map<number, number>>
   task?: string
@@ -165,8 +161,6 @@ export const make = Effect.fnUntraced(function* (
       files: [],
       injected: { prompt: 0, failure: 0 },
       given: new Map(),
-      intents: new Map(),
-      published: new Set<string>(),
       revisions: new Map(),
     }
     sessions.delete(sessionID)
@@ -501,45 +495,15 @@ export const make = Effect.fnUntraced(function* (
         options: { namespace, codemode: true, pinned: true },
         execute: (input, context) =>
           Effect.gen(function* () {
-            const state = tracked(context.sessionID)
-            // One key per publish intent: a retry of the same publish in this session sends the key its first try sent,
-            // so Console answers what that saved instead of saving twice; anything else is another intent.
-            const intent = Hash.sha256(
-              JSON.stringify([
-                input.kind,
-                input.title,
-                input.body,
-                input.tags,
-                input.paths,
-                input.errors,
-                input.distinctFrom,
-              ]),
-            )
-            const idempotencyKey = state.intents.get(intent) ?? `pub_${crypto.randomUUID()}`
-            state.intents.delete(intent)
-            state.intents.set(intent, idempotencyKey)
-            if (state.intents.size > MAX_INTENTS) state.intents.delete(state.intents.keys().next().value ?? intent)
+            // The key is the tool call's own: Console answers a retry of this call with what it saved, while an
+            // agent's re-issue is a new call that Console's duplicate check catches as this session's own entry.
             const published = yield* call(Written, "POST", "/api/memory/entries", {
               ...metadata(input),
               body: input.body,
               ...(input.distinctFrom === undefined ? {} : { distinctFrom: input.distinctFrom }),
               source: { ...(yield* checkout), sessionID: context.sessionID },
-              idempotencyKey,
-            }).pipe(
-              Effect.mapError((cause) => {
-                const candidates = cause instanceof ToolFailure ? cause.metadata?.candidates : undefined
-                const own = (Array.isArray(candidates) ? candidates : []).find(
-                  (id): id is string => typeof id === "string" && state.published.has(id),
-                )
-                return own === undefined || !(cause instanceof ToolFailure)
-                  ? cause
-                  : new ToolFailure({
-                      message: `You published ${own} in this session; edit it rather than publishing it again.\n${cause.message}`,
-                      metadata: cause.metadata,
-                    })
-              }),
-            )
-            if (published.id !== undefined) state.published.add(published.id)
+              idempotencyKey: `${context.sessionID}:${context.id}`.slice(0, 128),
+            })
             return {
               output: published,
               content: `Published ${published.id} r${published.revision}${published.replayed ? " (this publish was already saved)" : ""}.`,

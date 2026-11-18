@@ -238,11 +238,11 @@ const memoryTool = (name: string) =>
     )
   })
 
-const context = (sessionID: Session.ID): Tool.Context => ({
+const context = (sessionID: Session.ID, call = "call_1"): Tool.Context => ({
   sessionID,
   agent: Agent.ID.make("build"),
   messageID: SessionMessage.ID.create(),
-  id: Tool.CallID.make("call_1"),
+  id: Tool.CallID.make(call),
   progress: () => Effect.void,
 })
 
@@ -369,7 +369,7 @@ describe("OpencodePlugin memory", () => {
     ),
   )
 
-  it.effect("publishes with one key per intent, which a retry reuses, and passes on Console's duplicate refusal", () =>
+  it.effect("publishes with the tool call's key, which only a retry of that call reuses, and passes on a refusal", () =>
     withConsole((console) =>
       Effect.gen(function* () {
         const { host } = yield* start(console)
@@ -384,31 +384,28 @@ describe("OpencodePlugin memory", () => {
           errors: ["ECONNREFUSED"],
           tags: ["deploy"],
         }
-        const published = yield* publish.execute(input, context(session.id))
+        const published = yield* publish.execute(input, context(session.id, "call_publish"))
         expect(published.content).toBe("Published mem_new0 r1.")
         // The session's directory isn't a Git checkout, so the session is all the source there is.
         const sent = console.state.requests.at(-1)?.body as Record<string, unknown>
         expect(sent).toEqual({
           ...input,
           source: { sessionID: session.id },
-          idempotencyKey: expect.stringMatching(/^pub_[0-9a-f-]{36}$/),
+          idempotencyKey: `${session.id}:call_publish`,
         })
 
-        // The same publish again, as after a lost answer, sends the same key and gets the entry the first one saved.
-        const retried = yield* publish.execute(input, context(session.id))
-        expect((console.state.requests.at(-1)?.body as Record<string, unknown>).idempotencyKey).toBe(
-          sent.idempotencyKey,
-        )
+        // The same call again, as after a lost answer, sends the same key and gets the entry the first one saved.
+        const retried = yield* publish.execute(input, context(session.id, "call_publish"))
         expect(retried.content).toBe("Published mem_new0 r1 (this publish was already saved).")
         expect(console.state.published.size).toBe(1)
 
-        // Another publish is another intent, with its own key.
+        // The agent re-issuing it is another call with its own key: Console's duplicate check answers that.
         console.state.duplicate = hit("mem_close", 0.95, "VPN first")
         const refused = yield* publish
-          .execute({ kind: "gotcha", title: "VPN for deploys", body: "Connect it" }, context(session.id))
+          .execute({ kind: "gotcha", title: "VPN for deploys", body: "Connect it" }, context(session.id, "call_again"))
           .pipe(Effect.flip)
-        expect((console.state.requests.at(-1)?.body as Record<string, unknown>).idempotencyKey).not.toBe(
-          sent.idempotencyKey,
+        expect((console.state.requests.at(-1)?.body as Record<string, unknown>).idempotencyKey).toBe(
+          `${session.id}:call_again`,
         )
         expect(refused.message).toBe(
           [
@@ -419,18 +416,9 @@ describe("OpencodePlugin memory", () => {
         )
         const distinct = yield* publish.execute(
           { kind: "gotcha", title: "VPN for deploys", body: "Connect it", distinctFrom: ["mem_close"] },
-          context(session.id),
+          context(session.id, "call_distinct"),
         )
         expect(distinct.content).toBe("Published mem_new1 r1.")
-
-        // A duplicate of an entry this session published says so first.
-        console.state.duplicate = hit("mem_new0", 0.97, "Connect first")
-        const own = yield* publish
-          .execute({ kind: "gotcha", title: "The VPN, again", body: "Connect the VPN first" }, context(session.id))
-          .pipe(Effect.flip)
-        expect(own.message.split("\n")[0]).toBe(
-          "You published mem_new0 in this session; edit it rather than publishing it again.",
-        )
       }),
     ),
   )
