@@ -422,6 +422,10 @@ impl<'rt> Vm<'rt> {
             Value::Sym(_) => {
                 Err(self.type_error("Cannot access a property on a non-object value."))
             }
+            // A string's length and indexes are its own values, not fields.
+            Value::Str(_) if key == self.names.length || self.atoms.index(key).is_some() => {
+                Err(self.type_error("Only data fields may be assigned."))
+            }
             _ => {
                 let k = self.key_text(key);
                 let t = self.type_of(v);
@@ -430,6 +434,77 @@ impl<'rt> Vm<'rt> {
                 Err(self.type_error(&format!("Cannot create property '{k}' on {t} '{s}'.")))
             }
         }
+    }
+
+    /// Whether a member write through `v` needs [`Vm::check_writable`]: it is not a plain object.
+    #[inline]
+    pub(crate) fn write_checked(&self, v: &Value) -> bool {
+        !matches!(v, Value::Obj(id) if !self.is_namespace(*id) && !self.is_promise(*id))
+    }
+
+    /// The reference's check of the member an assignment or update writes through before it reads or writes it
+    /// (`writableReference`, then `readReference`): only a data field of an object, of a promise one it has.
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn check_writable(&mut self, v: &Value, key: Atom) -> Result<(), Value> {
+        match v {
+            Value::Obj(id) if self.is_namespace(*id) => {
+                if key <= SYM_ASYNC_ITERATOR {
+                    return Err(self.namespace_key_error());
+                }
+                Err(self.type_error("Only data fields may be assigned."))
+            }
+            Value::Obj(id) if self.is_promise(*id) && !self.has_key(*id, key) => {
+                Err(self.unawaited())
+            }
+            Value::Obj(_) => Ok(()),
+            Value::Undef | Value::Null | Value::Uninit => {
+                let k = self.key_text(key);
+                let t = if let Value::Null = v {
+                    "null"
+                } else {
+                    "undefined"
+                };
+                Err(self.nullish_read(t, &k))
+            }
+            // A primitive has no field to write: the write fails as it would.
+            v => self.set(v, key, Value::Undef),
+        }
+    }
+
+    /// A computed member's key as a write target: `[o, k]` -> the key, after the base is checked as read (a nullish
+    /// one fails before the key converts) and then as written, as the reference's `emitWritableKey` checks it.
+    pub(crate) fn write_key(&mut self, o: &Value, k: &Value) -> Res {
+        if o.is_nullish() {
+            let k = self.key_message(k);
+            let t = if let Value::Null = o {
+                "null"
+            } else {
+                "undefined"
+            };
+            return Err(self.nullish_read(t, &k));
+        }
+        // A number stays a number, as the reference's `TO_KEY` keeps it: a namespace path refuses it.
+        let key = match k {
+            Value::Num(_) | Value::Str(_) | Value::Sym(_) => *k,
+            k => {
+                let a = self.key_of(k)?;
+                if a <= SYM_ASYNC_ITERATOR {
+                    Value::Sym(a)
+                } else {
+                    self.atom_val(a)
+                }
+            }
+        };
+        if self.write_checked(o) {
+            if matches!(key, Value::Num(_)) && matches!(o, Value::Obj(id) if self.is_namespace(*id))
+            {
+                return Err(self.namespace_key_error());
+            }
+            let a = self.key_of(&key)?;
+            self.check_writable(o, a)?;
+        }
+        Ok(key)
     }
 
     #[inline(never)]

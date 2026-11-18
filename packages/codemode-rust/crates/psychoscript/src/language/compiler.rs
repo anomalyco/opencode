@@ -2499,6 +2499,7 @@ impl<'a, 's> Compiler<'a, 's> {
             SimpleAssignmentTarget::ComputedMemberExpression(m) => {
                 self.expr(&m.object)?;
                 self.expr(&m.expression)?;
+                self.emit_member(Op::WriteKey, &m.object, Some(&m.expression));
                 self.emit(Op::Rot3Back);
                 self.emit_member(Op::SetElem, &m.object, Some(&m.expression));
                 self.emit(Op::Pop);
@@ -3043,6 +3044,7 @@ impl<'a, 's> Compiler<'a, 's> {
                 AssignmentTarget::ComputedMemberExpression(m) => {
                     self.expr(&m.object)?;
                     self.expr(&m.expression)?;
+                    self.emit_member(Op::WriteKey, &m.object, Some(&m.expression));
                     self.expr(&a.right)?;
                     self.emit_member(Op::SetElem, &m.object, Some(&m.expression));
                     return Ok(());
@@ -3083,7 +3085,7 @@ impl<'a, 's> Compiler<'a, 's> {
                 let at = self.atom(m.property.name.as_str());
                 self.expr(&m.object)?;
                 self.emit(Op::Dup);
-                self.emit_member(Op::GetProp(at), &m.object, None);
+                self.emit_member(Op::GetPropW(at), &m.object, None);
                 if let Some(jop) = logical {
                     let j = self.emit(jop);
                     self.expr(&a.right)?;
@@ -3103,7 +3105,7 @@ impl<'a, 's> Compiler<'a, 's> {
             AssignmentTarget::ComputedMemberExpression(m) => {
                 self.expr(&m.object)?;
                 self.expr(&m.expression)?;
-                self.emit_at(m.expression.without_parentheses().span().start, Op::ToKey);
+                self.emit_member(Op::WriteKey, &m.object, Some(&m.expression));
                 self.emit(Op::Dup2);
                 self.emit_member(Op::GetElem, &m.object, Some(&m.expression));
                 if let Some(jop) = logical {
@@ -3150,7 +3152,7 @@ impl<'a, 's> Compiler<'a, 's> {
                 let at = self.atom(m.property.name.as_str());
                 self.expr(&m.object)?;
                 self.emit(Op::Dup);
-                self.emit_member(Op::GetProp(at), &m.object, None);
+                self.emit_member(Op::GetPropW(at), &m.object, None);
                 if u.prefix {
                     self.emit(step);
                     self.emit_member(Op::SetProp(at), &m.object, None);
@@ -3167,7 +3169,7 @@ impl<'a, 's> Compiler<'a, 's> {
             SimpleAssignmentTarget::ComputedMemberExpression(m) => {
                 self.expr(&m.object)?;
                 self.expr(&m.expression)?;
-                self.emit_at(m.expression.without_parentheses().span().start, Op::ToKey);
+                self.emit_member(Op::WriteKey, &m.object, Some(&m.expression));
                 self.emit(Op::Dup2);
                 self.emit_member(Op::GetElem, &m.object, Some(&m.expression));
                 if u.prefix {

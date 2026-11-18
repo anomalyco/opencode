@@ -59,6 +59,11 @@ pub enum Op {
     DestructProp(Atom),
     /// `obj key` -> `value`: [`Op::DestructProp`] with a key that `ToKey` made.
     DestructElem,
+    /// `obj` -> `value`: the read of a member an assignment or update then writes, which fails first unless the member
+    /// can be written (`Vm::check_writable`).
+    GetPropW(Atom),
+    /// `obj key` -> `obj key`: a computed member's key as a write target (`Vm::write_key`).
+    WriteKey,
     /// `obj` -> `f obj`
     GetMethod(Atom),
     DelProp(Atom),

@@ -2831,6 +2831,33 @@ impl<'rt> Vm<'rt> {
                         let v = tri!(self.get(&o, a));
                         self.push(v);
                     }
+                    Op::GetPropW(a) => {
+                        let o = self.pop();
+                        if self.write_checked(&o) {
+                            tri!(self.check_writable(&o, a));
+                        }
+                        let v = tri!(self.get(&o, a));
+                        self.push(v);
+                    }
+                    Op::WriteKey => {
+                        let n = self.stack.len();
+                        let (o, k) = (self.stack[n - 2].get(), self.stack[n - 1].get());
+                        if self.write_checked(&o)
+                            || !matches!(k, Value::Num(_) | Value::Str(_) | Value::Sym(_))
+                        {
+                            self.frames[fi].pc = pc;
+                            if !o.is_nullish()
+                                && matches!(k, Value::Obj(_))
+                                && self.operand_calls(&k)
+                            {
+                                self.stack.pop();
+                                conv_op!(code::WRITE_KEY, k, o, Value::Undef, 0, 0);
+                            }
+                            let key = tri!(self.write_key(&o, &k));
+                            self.stack.pop();
+                            self.push(key);
+                        }
+                    }
                     Op::DestructProp(a) => {
                         let o = self.pop();
                         let v = tri!(self.get_destructured(&o, a));

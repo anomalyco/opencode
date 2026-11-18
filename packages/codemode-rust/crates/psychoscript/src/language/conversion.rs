@@ -105,6 +105,8 @@ pub(crate) mod code {
     pub const ADD_LOCAL: u8 = 32;
     /// Increments local `extra` (`extra2` 1 to decrement).
     pub const INC_LOCAL: u8 = 33;
+    /// `Vm::write_key` of key `a` on base `b`.
+    pub const WRITE_KEY: u8 = 34;
 }
 
 const ARITHS: [Arith; 11] = [
@@ -438,6 +440,7 @@ impl Vm<'_> {
                 let k = self.key_of(&a)?;
                 Value::Num(k as f64)
             }
+            WRITE_KEY => self.write_key(&b, &a)?,
             TO_KEY => {
                 let k = self.key_of(&a)?;
                 if k <= SYM_ASYNC_ITERATOR {
