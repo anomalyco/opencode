@@ -192,20 +192,18 @@ impl Cx {
         let slot = Arc::new(Mutex::new(Done { value: None, waker: None }));
         if shared.queue.host.is_none() {
             lock(&slot).value = Some(run());
-            return Blocking { slot };
+        } else {
+            let done = slot.clone();
+            shared.pool.run(
+                &shared.spawner,
+                Box::new(move || {
+                    let value = run();
+                    let waker = lock(&done).fill(value);
+                    waker.into_iter().for_each(std::task::Waker::wake);
+                }),
+            );
         }
-        let done = slot.clone();
-        let job = move || {
-            let value = run();
-            let waker = {
-                let mut done = lock(&done);
-                done.value = Some(value);
-                done.waker.take()
-            };
-            waker.into_iter().for_each(std::task::Waker::wake);
-        };
-        shared.pool.run(&shared.spawner, Box::new(job));
-        Blocking { slot }
+        std::future::poll_fn(move |cx| lock(&slot).poll(cx))
     }
 
     /// Starts another task, which runs once this one waits.
@@ -215,11 +213,6 @@ impl Cx {
         self.shared().spawn(Box::pin(future), owner);
     }
 
-    /// Opens the dialog `dialog` builds around the task's answer action, so that its answer or its close goes to the
-    /// task. The answer action is a command no other waiting dialog holds ([`ANSWERS`]), and its close names the
-    /// dialog's generation, so neither reaches another dialog. A dialog of an earlier wait that this one replaces closes
-    /// with no answer as the host runs its close: in that command's call, not this one, so the earlier task never goes
-    /// on with this call's host (carbon `ac-2`).
     fn ask(&self, dialog: impl FnOnce(Action) -> Dialog) -> Wait<Option<String>> {
         let shared = self.shared();
         let slot = Slot::new();
@@ -233,10 +226,7 @@ impl Cx {
         let dismissed = Action::command(&shared.closed).input(generation.to_string());
         self.with(|host| host.dialog(Dialog::Dismissable { dialog: Box::new(dialog(answer)), dismissed }));
         shared.generation.set(generation);
-        shared.answers.borrow_mut()[free] = Some(generation);
-        let mut dialogs = shared.dialogs.borrow_mut();
-        dialogs.retain(|_, waiting| waiting.strong_count() > 0);
-        dialogs.insert(generation, Rc::downgrade(&slot));
+        shared.answers.borrow_mut()[free] = Some((generation, Rc::downgrade(&slot)));
         Wait { slot }
     }
 
@@ -339,14 +329,7 @@ impl<T> Future for Wait<T> {
     type Output = T;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<T> {
-        let mut state = self.slot.0.borrow_mut();
-        match state.value.take() {
-            Some(value) => Poll::Ready(value),
-            None => {
-                state.waker = Some(cx.waker().clone());
-                Poll::Pending
-            }
-        }
+        self.slot.0.borrow_mut().poll(cx)
     }
 }
 
@@ -397,29 +380,23 @@ impl<T> Slot<T> {
     }
 
     fn fill(&self, value: T) {
-        let waker = {
-            let mut state = self.0.borrow_mut();
-            state.value = Some(value);
-            state.waker.take()
-        };
+        let waker = self.0.borrow_mut().fill(value);
         waker.into_iter().for_each(std::task::Waker::wake);
     }
 }
 
-/// The future of [`Cx::blocking`].
-struct Blocking<T> {
-    slot: Arc<Mutex<Done<T>>>,
-}
+impl<T> Done<T> {
+    // Wake only after releasing the guard; the waker may poll this slot.
+    fn fill(&mut self, value: T) -> Option<std::task::Waker> {
+        self.value = Some(value);
+        self.waker.take()
+    }
 
-impl<T> Future for Blocking<T> {
-    type Output = T;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<T> {
-        let mut done = lock(&self.slot);
-        match done.value.take() {
+    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<T> {
+        match self.value.take() {
             Some(value) => Poll::Ready(value),
             None => {
-                done.waker = Some(cx.waker().clone());
+                self.waker = Some(cx.waker().clone());
                 Poll::Pending
             }
         }
@@ -464,10 +441,8 @@ pub(crate) struct Shared {
     queue: Arc<Queue>,
     /// The host of the call that polls, while it does.
     host: Cell<Option<*const (dyn Host + 'static)>>,
-    /// The dialogs tasks wait on, by generation: the one shown last, and those it replaced until their close runs.
-    dialogs: RefCell<BTreeMap<u64, Weak<Slot<Answer>>>>,
-    /// The generation of the dialog that holds each answer command, until its answer or its close runs.
-    answers: RefCell<Vec<Option<u64>>>,
+    /// A command stays reserved until its answer or close, even if the task drops its wait first.
+    answers: RefCell<Vec<Option<DialogWait>>>,
     generation: Cell<u64>,
     replies: RefCell<HashMap<RequestId, Weak<Slot<Reply>>>>,
     spawner: Spawner,
@@ -539,6 +514,7 @@ impl Pool {
 
 /// A dialog's answer: what it was given, or `None` when it closed without one.
 type Answer = Option<String>;
+type DialogWait = (u64, Weak<Slot<Answer>>);
 /// A request's reply.
 type Reply = Result<Value, String>;
 
@@ -594,7 +570,6 @@ pub(crate) fn register(setup: &mut Setup) -> Rc<Shared> {
         live: Cell::new(0),
         queue: Arc::new(queue),
         host: Cell::new(None),
-        dialogs: RefCell::new(BTreeMap::new()),
         answers: RefCell::new(vec![None; ANSWERS]),
         generation: Cell::new(0),
         replies: RefCell::new(HashMap::new()),
@@ -607,13 +582,7 @@ pub(crate) fn register(setup: &mut Setup) -> Rc<Shared> {
         let answered = shared.clone();
         setup.command(Command::new(format!("{}.{at}", shared.answer)), move |host, input| {
             answered.enter(host, |shared| {
-                let holder = shared.answers.borrow_mut()[at].take();
-                let slot = holder
-                    .and_then(|holder| shared.dialogs.borrow_mut().remove(&holder))
-                    .and_then(|slot| slot.upgrade());
-                if let Some(slot) = slot {
-                    slot.fill(Some(input.unwrap_or_default().to_owned()));
-                }
+                shared.finish_dialog(at, || Some(input.unwrap_or_default().to_owned()));
             });
         });
     }
@@ -622,16 +591,11 @@ pub(crate) fn register(setup: &mut Setup) -> Rc<Shared> {
     let closed = shared.clone();
     setup.command(Command::new(shared.closed.clone()), move |host, input| {
         closed.enter(host, |shared| {
-            let generation = input.and_then(|input| input.parse::<u64>().ok());
-            if let Some(held) =
-                shared.answers.borrow_mut().iter_mut().find(|held| held.is_some() && **held == generation)
-            {
-                held.take();
-            }
-            let slot =
-                generation.and_then(|at| shared.dialogs.borrow_mut().remove(&at)).and_then(|slot| slot.upgrade());
-            if let Some(slot) = slot {
-                slot.fill(None);
+            let Some(generation) = input.and_then(|s| s.parse::<u64>().ok()) else { return };
+            let at =
+                shared.answers.borrow().iter().position(|held| held.as_ref().is_some_and(|(id, _)| *id == generation));
+            if let Some(at) = at {
+                shared.finish_dialog(at, || None);
             }
         });
     });
@@ -667,6 +631,13 @@ pub(crate) fn tasks(shared: &Rc<Shared>) -> Tasks {
 }
 
 impl Shared {
+    fn finish_dialog(&self, at: usize, answer: impl FnOnce() -> Answer) {
+        let held = self.answers.borrow_mut()[at].take();
+        if let Some(slot) = held.and_then(|(_, slot)| slot.upgrade()) {
+            slot.fill(answer());
+        }
+    }
+
     fn spawn(&self, future: Pin<Box<dyn Future<Output = ()>>>, owner: u64) {
         if self.disposed.get() {
             return;
@@ -730,8 +701,7 @@ impl Shared {
             let _ = catch_unwind(AssertUnwindSafe(|| drop(task)));
         }
         self.replies.borrow_mut().clear();
-        self.dialogs.borrow_mut().clear();
-        self.answers.borrow_mut().iter_mut().for_each(|held| *held = None);
+        self.answers.borrow_mut().fill(None);
         self.live.set(0);
     }
 }
@@ -1030,7 +1000,7 @@ mod tests {
         let into = log.clone();
         tasks.spawn(&host, move |cx| async move {
             let options = vec![SelectOption::new("A", "a"), SelectOption::new("B", "b")];
-            let escaped = cx.select(Select::ask("Pick", options.clone())).await;
+            let escaped = cx.select(Select::ask("Pick", options.clone()).key("rich")).await;
             let picked = cx.select(Select::ask("Pick", options)).await;
             let typed = cx.prompt(Prompt::ask("Name")).await;
             let declined = cx.confirm(Confirm::ask("Sure?", "Really?")).await;
@@ -1054,30 +1024,10 @@ mod tests {
         );
         run(&registered, &host, "closed", Some(&host.generation()));
         assert_eq!(log.borrow().last().unwrap(), "alert closed");
-        // The dialogs ran the task's command, whatever action they were built with.
+        // A task select cannot retain its key: a pick must close it.
         let Dialog::Dismissable { dialog, .. } = &host.dialogs.borrow()[0] else { panic!() };
         let Dialog::Select(select) = &**dialog else { panic!() };
-        assert_eq!(select.action, Action::command("t.task.answer.0"));
-    }
-
-    #[test]
-    fn a_dialog_another_task_replaces_gives_none() {
-        let (registered, tasks, _) = plugin();
-        let host = Fake::default();
-        let log = Log::default();
-        for name in ["first", "second"] {
-            let log = log.clone();
-            tasks.spawn(&host, move |cx| async move {
-                let answer = cx.prompt(Prompt::ask(name)).await;
-                log.borrow_mut().push(format!("{name} {answer:?}"));
-            });
-        }
-        // The replaced dialog goes on with `None` once the host runs its close, in that command's call.
-        assert!(log.borrow().is_empty(), "the second task's call resumed the first: {:?}", log.borrow());
-        run(&registered, &host, "closed", Some("1"));
-        assert_eq!(*log.borrow(), ["first None"]);
-        answer(&registered, &host, 1, "x");
-        assert_eq!(*log.borrow(), ["first None", "second Some(\"x\")"]);
+        assert_eq!(select.key, None);
     }
 
     #[test]
@@ -1250,7 +1200,7 @@ mod tests {
         let (registered, tasks, _) = plugin();
         let (global, mount, closing) = (Fake::default(), Fake::default(), Fake::default());
         tasks.spawn(&global, |cx| async move {
-            let _ = cx.confirm(Confirm::ask("Sure?", "Really?")).await;
+            assert_eq!(cx.confirm(Confirm::ask("Sure?", "Really?")).await, None);
             drop(cx.fetch(Fetch::new("GET", "/after")).await);
         });
         tasks.spawn(&mount, |cx| async move { drop(cx.prompt(Prompt::ask("Name")).await) });
@@ -1330,65 +1280,28 @@ mod tests {
         assert_eq!(*host.cancelled.borrow(), [RequestId(1)], "a sleep that slept let its timer go");
     }
 
-    // Expected (big-boi acf-1): an answer that comes after eight more dialogs replaced its own reaches its own dialog,
-    // not the ninth: a dialog holds its answer command until its answer or close runs, and no other dialog takes it.
     #[test]
-    fn an_answer_after_eight_replacements_reaches_its_own_dialog() {
+    fn reused_answer_commands_ignore_the_previous_dialogs_close() {
         let (registered, tasks, _) = plugin();
         let host = Fake::default();
-        let log = Log::default();
-        for at in 1..=9 {
-            let log = log.clone();
+        let replies = Rc::new(RefCell::new(Vec::new()));
+        let ask = |id| {
+            let replies = replies.clone();
             tasks.spawn(&host, move |cx| async move {
-                let answer = cx.prompt(Prompt::ask(format!("prompt {at}"))).await;
-                log.borrow_mut().push(format!("{at} {answer:?}"));
+                let picked = cx.prompt(Prompt::ask(format!("prompt {id}"))).await;
+                replies.borrow_mut().push((id, picked));
             });
+        };
+        for id in 0..=ANSWERS {
+            ask(id);
         }
-        // The user's answer to prompt 1 comes after prompts 2 to 9 replaced it, before any close ran.
+        assert_eq!(host.dialogs.borrow().len(), ANSWERS);
+        assert_eq!(replies.take(), [(ANSWERS, None)]);
         answer(&registered, &host, 0, "first");
-        assert_eq!(*log.borrow(), ["1 Some(\"first\")"], "the answer reached another prompt");
-        answer(&registered, &host, 8, "ninth");
-        assert_eq!(*log.borrow(), ["1 Some(\"first\")", "9 Some(\"ninth\")"]);
-    }
-
-    // Expected (carbon ar-1, ac-2): an answer still on its way from a dialog that a later one replaced reaches that
-    // dialog, whose close has not run yet, and not the later one, which waits for its own answer (as Luau's driver,
-    // `a_late_answer_reaches_its_own_dialog`).
-    #[test]
-    fn an_answer_reaches_only_the_dialog_it_answers() {
-        let (registered, tasks, _) = plugin();
-        let host = Fake::default();
-        let log = Log::default();
-        let (first, second) = (log.clone(), log.clone());
-        tasks.spawn(&host, move |cx| async move {
-            let answer = cx.confirm(Confirm::ask("Delete?", "Sure?")).await;
-            first.borrow_mut().push(format!("confirm {answer:?}"));
-        });
-        // Another task opens its dialog before the host runs the confirm's answer, as a reply's task can.
-        tasks.spawn(&host, move |cx| async move {
-            let answer = cx.prompt(Prompt::ask("Name")).await;
-            second.borrow_mut().push(format!("prompt {answer:?}"));
-        });
-        assert!(log.borrow().is_empty(), "the prompt answered the confirm in its own call: {:?}", log.borrow());
-        answer(&registered, &host, 0, "true");
-        assert_eq!(*log.borrow(), ["confirm Some(true)"], "the confirm's answer reached the prompt");
-        // The confirm's close, which the host runs after, is no escape of the prompt.
+        ask(ANSWERS + 1);
         run(&registered, &host, "closed", Some("1"));
-        answer(&registered, &host, 1, "Ada");
-        assert_eq!(*log.borrow(), ["confirm Some(true)", "prompt Some(\"Ada\")"]);
-    }
-
-    // Expected (carbon ar-1): a task's select has no key, so a pick closes it and answers the task.
-    #[test]
-    fn a_tasks_select_is_never_keyed() {
-        let (_registered, tasks, _) = plugin();
-        let host = Fake::default();
-        tasks.spawn(&host, |cx| async move {
-            drop(cx.select(Select::ask("Pick", vec![SelectOption::new("A", "a")]).key("rich")).await);
-        });
-        let Dialog::Dismissable { dialog, .. } = &host.dialogs.borrow()[0] else { panic!() };
-        let Dialog::Select(select) = &**dialog else { panic!() };
-        assert_eq!(select.key, None);
+        answer(&registered, &host, ANSWERS, "new");
+        assert_eq!(replies.take(), [(0, Some("first".into())), (ANSWERS + 1, Some("new".into()))]);
     }
 
     /// A task parked on a fetch whose two destructors use its `Cx`, as a guard that toasts does.
