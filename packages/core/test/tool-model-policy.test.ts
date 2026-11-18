@@ -127,7 +127,6 @@ const makeContextLayer = (overrides: string | undefined) =>
           project: true,
           global: true,
           claude: true,
-          claudeGlobal: true,
           load: emptyInstructions,
         }),
       ),
