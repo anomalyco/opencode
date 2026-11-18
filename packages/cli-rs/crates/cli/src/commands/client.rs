@@ -191,6 +191,44 @@ process.exit(0)
         assert!(transport.0.lock().unwrap().last().unwrap().starts_with("http://127.0.0.1:5000/"));
     }
 
+    /// A cold location: the plugin list is empty for the first two reads, then lists the built-in plugin.
+    #[derive(Default)]
+    struct Cold(std::sync::atomic::AtomicUsize);
+
+    impl Transport for Cold {
+        fn send(
+            &self,
+            request: opencode_api::transport::Request,
+        ) -> opencode_api::transport::BoxFuture<'_, Result<opencode_api::transport::Response, String>> {
+            assert_eq!(request.url.path(), "/api/plugin");
+            let reads = self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+            let data = if reads < 3 {
+                "[]"
+            } else {
+                r#"[{"id":"opencode.core","source":{"type":"builtin"},"features":{"server":true},"state":{"status":"active"}}]"#
+            };
+            let body = format!(r#"{{"location":{{"directory":"/w"}},"data":{data}}}"#);
+            Box::pin(async move {
+                Ok(opencode_api::transport::Response {
+                    status: 200,
+                    headers: vec![("content-type".to_owned(), "application/json".to_owned())],
+                    body: Box::pin(futures_util::stream::iter([Ok(body.into_bytes().into())])),
+                })
+            })
+        }
+    }
+
+    /// The server answers before its plugins load (#63814), so `models` and the other one-shots poll until the
+    /// plugin list fills, then stop.
+    #[tokio::test]
+    async fn one_shots_wait_for_a_cold_location_to_list_plugins() {
+        let transport = Arc::new(Cold::default());
+        let client = Client::with_transport("http://127.0.0.1:4096", transport.clone()).unwrap();
+        let location = LocationQueryInput { directory: Some("/w".to_owned()) };
+        wait_for_plugins(&client, Some(location)).await;
+        assert_eq!(transport.0.load(std::sync::atomic::Ordering::SeqCst), 3);
+    }
+
     #[cfg(unix)]
     #[tokio::test]
     async fn a_standalone_server_lives_as_long_as_the_connection() {
