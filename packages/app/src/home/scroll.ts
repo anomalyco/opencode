@@ -12,8 +12,8 @@ export function createHomeScrollController(groups: Accessor<HomeSessionGroup[]>)
   const [thumbTrack, setThumbTrack] = createSignal<HTMLDivElement>()
   const [hoverTarget, setHoverTarget] = createSignal<HTMLElement>()
 
-  const [state, setState] = createStore({
-    titleOpacity: {} as Partial<Record<HomeSessionGroup["id"], number>>,
+  const [state, setState] = createStore<{ titleOpacity: Partial<Record<HomeSessionGroup["id"], number>> }>({
+    titleOpacity: {},
   })
 
   const headerRefs = new Map<HomeSessionGroup["id"], HTMLDivElement>()
@@ -68,7 +68,7 @@ export function createHomeScrollController(groups: Accessor<HomeSessionGroup[]>)
       .map((group) => headerRefs.get(group.id))
       .find((element) => element !== undefined)
 
-    if (header && typeof getComputedStyle === "function") {
+    if (header) {
       const top = Number.parseFloat(getComputedStyle(header).top)
 
       if (Number.isFinite(top)) stickyTop = top
@@ -77,6 +77,7 @@ export function createHomeScrollController(groups: Accessor<HomeSessionGroup[]>)
     // offsetTop counts from the headers' positioned list, below the sticky search; scrollTop counts from the top of
     // the scroll content. The list never sticks, so measure it once to put both in the scroll content's frame.
     const parent = header?.offsetParent
+
     const listTop =
       parent instanceof HTMLElement
         ? parent.getBoundingClientRect().top - viewport.getBoundingClientRect().top + viewport.scrollTop
