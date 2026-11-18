@@ -100,8 +100,10 @@ struct Inner {
     /// Where the mounted window ends, by row index, when it stops before the newest row
     /// (`visibleRowsEnd`): `session.first` mounts the head only.
     end: Cell<Option<usize>>,
-    /// Set when rows mount above the window, so the reader's rows stay in place.
+    /// Set when rows mount above the window or the terminal resizes, so the reader's rows stay in place.
     pin: RefCell<Option<Pin>>,
+    /// The terminal resize handler, which pins the reader's row before the layout.
+    resize: Cell<Option<HandlerId>>,
     loading: Cell<bool>,
     /// Message count at the last group-boundary page request.
     boundary: Cell<Option<usize>>,
@@ -120,6 +122,9 @@ impl Drop for Inner {
     fn drop(&mut self) {
         if let Some(tui) = self.tui.upgrade() {
             dispose(&tui, self.layer.take());
+            if let Some(id) = self.resize.take() {
+                tui.app.remove_handler(id);
+            }
         }
     }
 }
@@ -145,10 +150,22 @@ impl Paint {
     }
 }
 
-/// The content height before rows mounted above, and the frame it is from.
+/// The content height before rows mounted above, and the frame it is from. A terminal resize away from the bottom
+/// pins the reader's row instead (`ScrollBox.anchor`): through the resize's layout and the rebuild's after it, a row
+/// above it that rewraps scrolls the view by as much. A row taller than the view keeps its top; its own content may
+/// still move as it rewraps.
 struct Pin {
     height: f32,
     frame: u64,
+    /// The mounted rows above the reader's, while a resize holds it.
+    above: Option<HashSet<RowKey>>,
+}
+
+impl Pin {
+    /// Whether the frames that lay out the change are still to come or running.
+    fn live(&self, frame: u64) -> bool {
+        frame <= self.frame + if self.above.is_some() { 2 } else { 1 }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -208,7 +225,11 @@ impl Transcript {
                     let Some(inner) = weak.upgrade() else { return };
                     // At the tail the transcript follows the bottom; away from it, a row above the reader's that
                     // grows or shrinks would move the rows below it on screen (`pinAbove` for a change in place).
-                    if *inner.start.borrow() != Start::Tail && top < inner.scroll.rect().screen_y {
+                    // A resize's pin already holds the reader's row.
+                    if *inner.start.borrow() != Start::Tail
+                        && top < inner.scroll.rect().screen_y
+                        && !inner.pinned(|pin| pin.above.is_some())
+                    {
                         inner.scroll.scroll_by(0.0, f64::from(grown));
                     }
                 })
@@ -228,6 +249,7 @@ impl Transcript {
             start: RefCell::new(Start::Tail),
             end: Cell::new(None),
             pin: RefCell::default(),
+            resize: Cell::new(None),
             loading: Cell::new(false),
             boundary: Cell::new(None),
             layer: RefCell::default(),
@@ -377,31 +399,11 @@ impl Transcript {
     /// row below it for a reply part or a group, else the first mounted row. Footers and token usage do not
     /// anchor.
     pub fn anchor(&self) -> Option<ScrollAnchor> {
-        let (_, top) = self.0.scroll.scroll_position();
-        let mut first = None;
-        let mut anchor: Option<ScrollAnchor> = None;
-        for key in self.0.mounted.borrow().iter() {
-            let inset = match key {
-                RowKey::Message(_) => 0.0,
-                RowKey::Part(..) | RowKey::Group(_) => 1.0,
-                _ => continue,
-            };
-            let Some(y) = self.row_y(key) else { continue };
-            let item = ScrollAnchor { row: key.clone(), screen_y: y - top };
-            if item.screen_y <= inset && anchor.as_ref().is_none_or(|anchor| item.screen_y > anchor.screen_y) {
-                anchor = Some(item.clone());
-            }
-            first.get_or_insert(item);
-        }
-        anchor.or(first)
+        self.0.anchor()
     }
 
     pub fn row_y(&self, key: &RowKey) -> Option<f64> {
-        if !self.0.mounted.borrow().contains(key) {
-            return None;
-        }
-        let rect = self.0.rows.borrow().get(key)?.wrapper.rect();
-        (rect.height > 0.0).then(|| rect.screen_y - self.0.scroll.content_view().rect().screen_y)
+        self.0.row_y(key)
     }
 
     /// Mounts [`BACKFILL_CHUNK`] rows on each side of `key` (`restoreScrollPosition`). Returns whether
@@ -448,6 +450,40 @@ impl Transcript {
 }
 
 impl Inner {
+    fn anchor(&self) -> Option<ScrollAnchor> {
+        let (_, top) = self.scroll.scroll_position();
+        let mut first = None;
+        let mut anchor: Option<ScrollAnchor> = None;
+        for key in self.mounted.borrow().iter() {
+            let inset = match key {
+                RowKey::Message(_) => 0.0,
+                RowKey::Part(..) | RowKey::Group(_) => 1.0,
+                _ => continue,
+            };
+            let Some(y) = self.row_y(key) else { continue };
+            let item = ScrollAnchor { row: key.clone(), screen_y: y - top };
+            if item.screen_y <= inset && anchor.as_ref().is_none_or(|anchor| item.screen_y > anchor.screen_y) {
+                anchor = Some(item.clone());
+            }
+            first.get_or_insert(item);
+        }
+        anchor.or(first)
+    }
+
+    fn row_y(&self, key: &RowKey) -> Option<f64> {
+        if !self.mounted.borrow().contains(key) {
+            return None;
+        }
+        let rect = self.rows.borrow().get(key)?.wrapper.rect();
+        (rect.height > 0.0).then(|| rect.screen_y - self.scroll.content_view().rect().screen_y)
+    }
+
+    /// Whether a live [`Pin`] holds the view and matches `matches`.
+    fn pinned(&self, matches: impl Fn(&Pin) -> bool) -> bool {
+        let Some(tui) = self.tui.upgrade() else { return false };
+        self.pin.borrow().as_ref().is_some_and(|pin| pin.live(tui.app.frame_number()) && matches(pin))
+    }
+
     /// The session's location, once its info is known. The first call reads the location's agents and
     /// models, whose names and colors the footer and user rows show (`local.agent.color`, `ctx.models`).
     fn location(&self, tui: &Tui) -> Option<Location> {
@@ -504,11 +540,33 @@ impl Inner {
                 }
             }));
         }));
+        // Before the layout, while the rows have their old places: away from the bottom, the rows above the reader's
+        // hold it (see `Pin`). A resize while one holds extends it.
+        self.resize.set(Some(tui.app.on_resize(bind!(self.this, |inner, cx, _, _| {
+            let frame = cx.app().frame_number();
+            if let Some(pin) = inner.pin.borrow_mut().as_mut().filter(|pin| pin.above.is_some() && pin.live(frame)) {
+                pin.frame = frame;
+                return;
+            }
+            let (_, top) = inner.scroll.scroll_position();
+            let (content, viewport) = (inner.scroll.content_view().rect().height, inner.scroll.rect().height);
+            if top >= f64::from((content - viewport).max(0.0)).floor() {
+                return;
+            }
+            let Some(anchor) = inner.anchor() else { return };
+            let above = inner.mounted.borrow().iter().take_while(|key| **key != anchor.row).cloned().collect();
+            *inner.pin.borrow_mut() = Some(Pin { height: content, frame, above: Some(above) });
+        }))));
         let weak = self.this.clone();
         self.scroll.content_view().on_resize(bind!(weak, |inner, cx, rect| {
             let Some(pin) = inner.pin.take() else { return };
-            // Only the frame that lays the new rows out moves the view.
-            if cx.app().frame_number() > pin.frame + 1 {
+            // Only the frames that lay the new rows out move the view.
+            if !pin.live(cx.app().frame_number()) {
+                return;
+            }
+            // A resize's rows move the view themselves (`Inner::hold`).
+            if pin.above.is_some() {
+                *inner.pin.borrow_mut() = Some(pin);
                 return;
             }
             let grown = rect.height - pin.height;
@@ -876,13 +934,13 @@ impl Inner {
         mounted.retain(|key| wanted.contains(key));
 
         // Rows mounting above the first mounted one would push the reader's rows down; the next
-        // layout scrolls by what they add (`pinAbove`).
+        // layout scrolls by what they add (`pinAbove`), in place of a resize's pin.
         if let Some(first) = mounted.first()
             && keys.first() != Some(first)
-            && self.pin.borrow().is_none()
+            && self.pin.borrow().as_ref().is_none_or(|pin| pin.above.is_some())
         {
-            *self.pin.borrow_mut() =
-                Some(Pin { height: self.scroll.content_view().rect().height, frame: cx.app.frame_number() });
+            let (height, frame) = (self.scroll.content_view().rect().height, cx.app.frame_number());
+            *self.pin.borrow_mut() = Some(Pin { height, frame, above: None });
         }
 
         let mut refs = self.refs.borrow_mut();
@@ -900,7 +958,11 @@ impl Inner {
                 }
             }
             let fresh = !rows.contains_key(key);
-            let row = rows.entry(key.clone()).or_insert_with(|| Row::new(cx, spec));
+            let row = rows.entry(key.clone()).or_insert_with(|| {
+                let row = Row::new(cx, spec);
+                self.hold(&row.wrapper, key.clone());
+                row
+            });
             if fresh || messages.into_iter().any(&changed) {
                 row.update(cx, spec);
             }
@@ -916,6 +978,18 @@ impl Inner {
             self.scroll.insert(index, &rows[key].wrapper);
             mounted.insert(index, key.clone());
         }
+    }
+
+    /// While a resize's pin holds the reader's row, a row above it that changes height scrolls the view by as much
+    /// (`pinAbove`). Its own geometry is current in its resize, which the content's is not.
+    fn hold(&self, wrapper: &View, key: RowKey) {
+        let laid = Cell::new(None);
+        wrapper.on_resize(bind!(self.this, |inner, _, rect| {
+            let Some(before) = laid.replace(Some(rect.height)).filter(|before| *before != rect.height) else { return };
+            if inner.pinned(|pin| pin.above.as_ref().is_some_and(|above| above.contains(&key))) {
+                inner.scroll.scroll_by(0.0, f64::from(rect.height - before));
+            }
+        }));
     }
 
     fn window_start(&self, specs: &[Spec]) -> usize {
@@ -999,8 +1073,7 @@ impl Inner {
 
     fn follow(&self, tui: &Tui, down: bool) {
         // Newly mounted rows contribute to content size only after layout.
-        let frame = tui.app.frame_number();
-        if self.pin.borrow().as_ref().is_some_and(|pin| frame <= pin.frame + 1) {
+        if self.pinned(|pin| pin.above.is_none()) {
             return;
         }
         let (_, top) = self.scroll.scroll_position();
