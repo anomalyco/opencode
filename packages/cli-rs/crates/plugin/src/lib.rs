@@ -1884,8 +1884,11 @@ pub(crate) fn close_at_paint(host: &Weak<dyn Host>, monitor: &Rc<contain::Monito
 }
 
 /// How long the frame a timer's call opened waits for a paint before it ends as a frame of its own: longer than a
-/// frame's slot, so a paint that was due anyway comes first and the frame ends as at any paint.
-const IDLE_CLOSE: std::time::Duration = std::time::Duration::from_millis(50);
+/// frame's slot at 60 frames a second, so a paint that was due anyway comes first and the frame ends as at any paint;
+/// and shorter than the shortest timer, so each tick of the fastest timer is a frame of its own, judged alone against
+/// the frame budget (carbon tm2-2).
+const IDLE_CLOSE: std::time::Duration = std::time::Duration::from_millis(17);
+const _: () = assert!(IDLE_CLOSE.as_nanos() < abi::MIN_TIMER.as_nanos());
 
 /// Closes the frames a timer's call opened without asking for a paint, unlike [`close_at_paint`]: [`IDLE_CLOSE`]
 /// later, as one frame of their own if no paint came by then. So a timer whose plugin changes nothing on screen costs
@@ -1894,7 +1897,14 @@ fn close_idle(host: &Weak<dyn Host>, monitor: &Rc<contain::Monitor>) {
     let Some(strong) = host.upgrade() else { return };
     let (host, monitor, painted) = (host.clone(), monitor.clone(), monitor.painted());
     strong.app().set_timeout(IDLE_CLOSE, move |_| match monitor.close_idle(painted) {
-        Some(news) => closed(&host, &monitor, news),
+        Some(news) => {
+            closed(&host, &monitor, news);
+            // A paint came, and a timer's call ran after it, in a frame no close waits for: it ends the same way
+            // (carbon tm2-2).
+            if monitor.open_now() && monitor.wants_close() {
+                close_idle(&host, &monitor);
+            }
+        }
         // Other work runs in the frame: a paint ends it, as for that work's own call.
         None => close_at_paint(&host, &monitor),
     });

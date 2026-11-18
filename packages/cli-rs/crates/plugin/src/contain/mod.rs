@@ -418,6 +418,13 @@ impl Monitor {
         Some(self.close())
     }
 
+    /// Whether a plugin's calls run in the frame open now, and no close ended it.
+    pub fn open_now(&self) -> bool {
+        let frame = self.frame();
+        self.all.get().is_some_and(|(open, _)| open == frame)
+            || self.plugins.borrow().iter().any(|stats| stats.window.is_some_and(|(open, _)| open == frame))
+    }
+
     /// Whether a frame open now is over a budget: a close must end it at a later paint, for the slow rule to see
     /// it; a frame under the budget ends with the next call that opens another.
     pub fn open_over(&self) -> bool {
