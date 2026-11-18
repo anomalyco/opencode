@@ -205,7 +205,7 @@ story("a spinner inside a persistent floating surface does not measure the pane 
   const native = page.getByTestId("native-Alpha")
 
   const reads = await page.locator("#browser-panel").evaluate(async (panel) => {
-    const box = panel.querySelector('div.absolute.inset-0[aria-hidden="true"]')!.parentElement!
+    const box = panel.querySelector<HTMLElement>('[data-component="browser-preview"] > :first-child')!
     const rect = box.getBoundingClientRect.bind(box)
     const count = { reads: 0 }
     box.getBoundingClientRect = () => {
@@ -241,7 +241,7 @@ story("stops measuring the pane once a finite animation ends or is cancelled", a
   const x = Number(await native.getAttribute("data-x"))
 
   const reads = await page.locator("#browser-panel").evaluate(async (panel) => {
-    const box = panel.querySelector('div.absolute.inset-0[aria-hidden="true"]')!.parentElement!
+    const box = panel.querySelector<HTMLElement>('[data-component="browser-preview"] > :first-child')!
     const rect = box.getBoundingClientRect.bind(box)
     const count = { reads: 0 }
     box.getBoundingClientRect = () => {
@@ -282,7 +282,7 @@ story("stops measuring the pane once a finite animation ends or is cancelled", a
 
 story("does not measure when the pane's own still enters or leaves its box", async ({ page }) => {
   const reads = await page.locator("#browser-panel").evaluate(async (panel) => {
-    const box = panel.querySelector('div.absolute.inset-0[aria-hidden="true"]')!.parentElement!
+    const box = panel.querySelector<HTMLElement>('[data-component="browser-preview"] > :first-child')!
     const rect = box.getBoundingClientRect.bind(box)
     const count = { reads: 0 }
     box.getBoundingClientRect = () => {
@@ -310,7 +310,7 @@ story("hides the page when a portalled surface grows over it by a text edit alon
   await page.emulateMedia({ reducedMotion: "reduce" })
 
   const text = await page.locator("#browser-panel").evaluateHandle((panel) => {
-    const pane = panel.querySelector('div.absolute.inset-0[aria-hidden="true"]')!.parentElement!.getBoundingClientRect()
+    const pane = panel.querySelector<HTMLElement>('[data-component="browser-preview"] > :first-child')!.getBoundingClientRect()
     // A portal's wrapper keeps its size while the fixed surface inside it grows, as a toast region's does.
     const wrapper = document.createElement("div")
     const surface = document.createElement("div")
@@ -334,7 +334,7 @@ story("covers the page with unmarked portalled surfaces but not tooltips or tran
   const native = page.getByTestId("native-Alpha")
 
   const portal = await page.locator("#browser-panel").evaluateHandle((panel) => {
-    const pane = panel.querySelector('div.absolute.inset-0[aria-hidden="true"]')!.parentElement!.getBoundingClientRect()
+    const pane = panel.querySelector<HTMLElement>('[data-component="browser-preview"] > :first-child')!.getBoundingClientRect()
     const box = `position:fixed; top:${pane.top + 8}px; left:${pane.left + 8}px; width:120px; height:60px`
     const tooltip = document.createElement("div")
     tooltip.innerHTML = `<div style="${box}" role="tooltip">Tip</div>`
