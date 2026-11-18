@@ -94,7 +94,10 @@ story.describe("touch timeline", () => {
     const markdown = await mount("components-markdown--complete-response")
     const code = markdown.locator('[data-component="markdown-code"]').filter({ hasText: "export const value = 42" })
     await expect(code).toHaveCount(1)
-    await expect(code.locator('[data-slot="markdown-copy-button"]')).toHaveCSS("opacity", "1")
+    const footer = code.locator('[data-slot="markdown-code-toolbar"]')
+    await expect(footer.getByRole("button", { name: "Copy", exact: true })).toBeVisible()
+    await expect(footer).toHaveCSS("opacity", "1")
+    await expect(footer).toHaveCSS("pointer-events", "auto")
   })
 })
 

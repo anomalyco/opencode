@@ -94,6 +94,13 @@ function SessionTabSlot(
     fallbackDirectory?: string
     muted?: boolean
     menuItems?: () => JSX.Element
+    customDrag?: boolean
+    dragSource?: boolean
+    offsetY?: number
+    laneShift?: "in" | "out"
+    combineColor?: string
+    combineOrder?: "before" | "after"
+    contextMenuExtra?: () => JSX.Element
     onDelete: () => void
     onNavigate: (element: HTMLDivElement) => void
   },
@@ -105,6 +112,7 @@ function SessionTabSlot(
     get index() {
       return props.index
     },
+    group: "tab-items",
     // Rows only sort among rows of the same group, so a drag never crosses into another section.
     get type() {
       return props.group
@@ -112,17 +120,28 @@ function SessionTabSlot(
     get accept() {
       return props.group
     },
+    get disabled() {
+      return !!props.customDrag
+    },
   })
 
   let ref!: HTMLDivElement
 
   return (
     <div
-      ref={sortable.ref}
+      ref={(el) => {
+        if (!props.customDrag) sortable.ref(el)
+      }}
       data-titlebar-tab-slot
       data-tab-key={props.id}
       data-active={props.active}
+      data-drag-source={props.dragSource ? "true" : undefined}
+      data-lane-shift={props.laneShift}
+      data-combine-target={props.combineColor ? "true" : undefined}
+      data-combine-order={props.combineOrder}
+      data-group-color={props.combineColor}
       data-orientation={props.orientation}
+      style={props.offsetY ? { transform: `translate3d(0, ${props.offsetY}px, 0)` } : undefined}
       class="relative flex"
       classList={{
         "w-56 min-w-7 max-w-56 flex-shrink": props.orientation === "horizontal",
@@ -154,8 +173,9 @@ function SessionTabSlot(
         onCloseOthers={props.onCloseOthers}
         onCloseAfter={props.onCloseAfter}
         active={props.active}
-        dragging={sortable.isDragSource()}
+        dragging={props.customDrag ? !!props.dragSource : sortable.isDragSource()}
         orientation={props.orientation}
+        contextMenuExtra={props.contextMenuExtra}
       />
       {props.footer}
     </div>
@@ -180,6 +200,13 @@ function SessionTabEntry(
     shortcut?: number
     muted?: boolean
     menuItems?: () => JSX.Element
+    customDrag?: boolean
+    dragSource?: boolean
+    offsetY?: number
+    laneShift?: "in" | "out"
+    combineColor?: string
+    combineOrder?: "before" | "after"
+    contextMenuExtra?: () => JSX.Element
     onUnreadChange: (unread: boolean) => void
     onNavigate: (element: HTMLDivElement) => void
   },
@@ -328,6 +355,13 @@ function SessionTabEntry(
         fallbackDirectory={props.view.fallbackDirectory}
         muted={props.muted}
         menuItems={props.menuItems}
+        customDrag={props.customDrag}
+        dragSource={props.dragSource}
+        offsetY={props.offsetY}
+        laneShift={props.laneShift}
+        combineColor={props.combineColor}
+        combineOrder={props.combineOrder}
+        contextMenuExtra={props.contextMenuExtra}
         onDelete={() => dialog.show(() => <DeleteDialog />)}
         onNavigate={props.onNavigate}
         onClose={props.onClose}
@@ -505,6 +539,13 @@ function DraftTabSlot(
     orientation: "horizontal" | "vertical"
     title: string
     shortcut?: number
+    customDrag?: boolean
+    dragSource?: boolean
+    offsetY?: number
+    laneShift?: "in" | "out"
+    combineColor?: string
+    combineOrder?: "before" | "after"
+    contextMenuExtra?: () => JSX.Element
     onNavigate: (element: HTMLDivElement) => void
   },
 ) {
@@ -515,6 +556,7 @@ function DraftTabSlot(
     get index() {
       return props.index
     },
+    group: "tab-items",
     // Rows only sort among rows of the same group, so a drag never crosses into another section.
     get type() {
       return props.group
@@ -522,17 +564,28 @@ function DraftTabSlot(
     get accept() {
       return props.group
     },
+    get disabled() {
+      return !!props.customDrag
+    },
   })
 
   let ref!: HTMLDivElement
 
   return (
     <div
-      ref={sortable.ref}
+      ref={(el) => {
+        if (!props.customDrag) sortable.ref(el)
+      }}
       data-titlebar-tab-slot
       data-tab-key={props.id}
       data-active={props.active}
+      data-drag-source={props.dragSource ? "true" : undefined}
+      data-lane-shift={props.laneShift}
+      data-combine-target={props.combineColor ? "true" : undefined}
+      data-combine-order={props.combineOrder}
+      data-group-color={props.combineColor}
       data-orientation={props.orientation}
+      style={props.offsetY ? { transform: `translate3d(0, ${props.offsetY}px, 0)` } : undefined}
       class="relative flex"
       classList={{
         "w-56 min-w-7 max-w-56 flex-shrink": props.orientation === "horizontal",
@@ -553,8 +606,9 @@ function DraftTabSlot(
         onCloseOthers={props.onCloseOthers}
         onCloseAfter={props.onCloseAfter}
         active={props.active}
-        dragging={sortable.isDragSource()}
+        dragging={props.customDrag ? !!props.dragSource : sortable.isDragSource()}
         orientation={props.orientation}
+        contextMenuExtra={props.contextMenuExtra}
       />
       {props.footer}
     </div>
@@ -569,6 +623,26 @@ export type TabStripSection = {
   footer?: JSX.Element
   /** The header already names the project, so session tabs leave out their project avatar. */
   hideAvatars?: boolean
+  /** Optional browser-style tab group chrome for vertical and horizontal strips. */
+  groupMeta?: {
+    color: string
+    collapsed: boolean
+    ungrouped?: boolean
+  }
+}
+
+export type CustomVerticalDragBinding = {
+  isDraggingStrip: () => boolean
+  isDraggingTab: (key: string) => boolean
+  isDraggingGroup: (groupKey: string) => boolean
+  isDropInsideGroup: (groupKey: string) => boolean
+  tabTransformY: (key: string) => number
+  tabLaneShift: (key: string) => "in" | "out" | undefined
+  groupTransformY: (groupKey: string) => number
+  groupRailAdjustment: (groupKey: string) => { top: number; bottom: number; empty: boolean } | undefined
+  combineOfTab: (key: string) => { color: string; sourceOrder: "before" | "after" } | undefined
+  onPointerDown: (event: PointerEvent, listEl: HTMLDivElement, scrollEl: HTMLDivElement) => void
+  onScroll: (listEl: HTMLDivElement) => void
 }
 
 export type TabStripLeading = {
@@ -583,8 +657,10 @@ export function TitlebarTabStrip(props: {
   orientation?: "horizontal" | "vertical"
   highlightActive?: boolean
   tabs: Tab[]
-  /** Vertical only: groups the rendered tabs under headers. Tabs in no section stay open but are not shown. */
+  /** Groups the rendered tabs under headers. Tabs in no section stay open but are not shown. */
   sections?: TabStripSection[]
+  customVerticalDrag?: CustomVerticalDragBinding
+  tabContextMenu?: (tab: Tab) => JSX.Element | undefined
   /** Vertical only: extra content rendered right after a tab row (e.g. its subagent sessions). */
   tabFooter?: (tab: Tab) => JSX.Element | undefined
   /** Vertical only: a faint trailing label on a tab row (e.g. its server). */
@@ -606,6 +682,7 @@ export function TitlebarTabStrip(props: {
   const appTabs = useTabs()
   const vertical = () => props.orientation === "vertical"
   const sections = () => (vertical() ? props.sections : undefined)
+  const customDrag = () => (vertical() ? props.customVerticalDrag : undefined)
 
   const displayTabs = createMemo(() => sections()?.flatMap((section) => section.tabs) ?? props.tabs)
 
@@ -790,7 +867,8 @@ export function TitlebarTabStrip(props: {
   function renderTab(tab: Tab, section?: TabStripSection) {
     const id = tabKey(tab)
 
-    const group = section?.key
+    const group = section ? `tab:${section.key}` : undefined
+    const menuExtra = props.tabContextMenu ? () => props.tabContextMenu!(tab) : undefined
     let ref!: HTMLDivElement
     const visibleIndex = () => visibleTabs().findIndex((item) => tabKey(item) === id)
 
@@ -837,6 +915,13 @@ export function TitlebarTabStrip(props: {
           shortcut={shortcut(visibleIndex())}
           muted={vertical() ? props.tabMuted?.(tab) : undefined}
           menuItems={vertical() && props.tabMenu ? () => props.tabMenu?.(tab) : undefined}
+          customDrag={!!customDrag()}
+          dragSource={customDrag()?.isDraggingTab(id)}
+          offsetY={customDrag()?.tabTransformY(id)}
+          laneShift={customDrag()?.tabLaneShift(id)}
+          combineColor={customDrag()?.combineOfTab(id)?.color}
+          combineOrder={customDrag()?.combineOfTab(id)?.sourceOrder}
+          contextMenuExtra={menuExtra}
           onUnreadChange={(value) => setUnread(id, value)}
           onNavigate={(element) => {
             ref = element
@@ -861,6 +946,13 @@ export function TitlebarTabStrip(props: {
         orientation={vertical() ? "vertical" : "horizontal"}
         title={language.t("session.tab.session")}
         shortcut={shortcut(visibleIndex())}
+        customDrag={!!customDrag()}
+        dragSource={customDrag()?.isDraggingTab(id)}
+        offsetY={customDrag()?.tabTransformY(id)}
+        laneShift={customDrag()?.tabLaneShift(id)}
+        combineColor={customDrag()?.combineOfTab(id)?.color}
+        combineOrder={customDrag()?.combineOfTab(id)?.sourceOrder}
+        contextMenuExtra={menuExtra}
         onNavigate={(element) => {
           ref = element
           props.onNavigate(tab, element)
@@ -871,6 +963,83 @@ export function TitlebarTabStrip(props: {
       />
     )
   }
+
+  const renderList = () => (
+    <div
+      data-titlebar-tab-list
+      data-orientation={vertical() ? "vertical" : "horizontal"}
+      data-dragging={customDrag()?.isDraggingStrip() ? "true" : undefined}
+      class="relative flex w-full min-w-0"
+      classList={{ "flex-row items-center": !vertical(), "flex-col items-stretch": vertical() }}
+      ref={listRef}
+      onPointerDown={(event) => {
+        customDrag()?.onPointerDown(event, listRef, scrollRef)
+      }}
+    >
+      <Show when={sections()} fallback={<For each={props.tabs}>{(tab) => renderTab(tab)}</For>}>
+        {(list) => (
+          <Key each={list()} by={(section) => section.key}>
+            {(section) => (
+              <Show
+                when={section().groupMeta && !section().groupMeta?.ungrouped ? section().groupMeta : undefined}
+                fallback={
+                  <>
+                    {section().header}
+                    <For each={section().tabs}>{(tab) => renderTab(tab, section())}</For>
+                    {section().footer}
+                  </>
+                }
+              >
+                {(meta) => {
+                  const groupKey = () => section().key
+                  const railAdj = () => customDrag()?.groupRailAdjustment(groupKey())
+
+                  const groupStyle = (): JSX.CSSProperties | undefined => {
+                    const dy = customDrag()?.groupTransformY(groupKey()) ?? 0
+                    const rail = railAdj()
+
+                    if (!dy && !rail) return undefined
+                    const style: JSX.CSSProperties = {}
+
+                    if (dy) style.transform = `translate3d(0, ${dy}px, 0)`
+
+                    if (rail) {
+                      style["--group-rail-top"] = `${rail.top}px`
+                      style["--group-rail-bottom"] = `${rail.bottom}px`
+                    }
+
+                    return style
+                  }
+
+                  return (
+                    <div
+                      data-tab-group
+                      data-group-key={groupKey()}
+                      data-group-color={meta().color}
+                      data-collapsed={meta().collapsed ? "" : undefined}
+                      data-dragging={customDrag()?.isDraggingGroup(groupKey()) ? "true" : undefined}
+                      data-drop-inside={customDrag()?.isDropInsideGroup(groupKey()) ? "true" : undefined}
+                      data-rail-empty={railAdj()?.empty ? "true" : undefined}
+                      data-orientation={vertical() ? "vertical" : "horizontal"}
+                      style={groupStyle()}
+                    >
+                      {section().header}
+                      <Show when={section().tabs.length > 0}>
+                        <div data-tab-group-items data-orientation={vertical() ? "vertical" : "horizontal"}>
+                          <For each={section().tabs}>{(tab) => renderTab(tab, section())}</For>
+                        </div>
+                      </Show>
+                      {section().footer}
+                    </div>
+                  )
+                }}
+              </Show>
+            )}
+          </Key>
+        )}
+      </Show>
+    </div>
+  )
 
   return (
     <div
@@ -894,83 +1063,71 @@ export function TitlebarTabStrip(props: {
             : undefined
         }
         onScroll={() => {
-          if (vertical()) measureFade()
+          if (vertical()) {
+            measureFade()
+            customDrag()?.onScroll(listRef)
+          }
         }}
       >
         {leading()?.content}
-        <DragDropProvider
-          sensors={[
-            PointerSensor.configure({
-              activationConstraints: (event) =>
-                event.pointerType === "touch"
-                  ? [new PointerActivationConstraints.Distance({ value: 8 })]
-                  : [new PointerActivationConstraints.Distance({ value: 4 })],
-              preventActivation: (event) =>
-                event.target instanceof Element &&
-                !!event.target.closest(
-                  '[data-slot="tab-close"], [contenteditable="true"], [contenteditable="plaintext-only"]',
-                ),
-            }),
-          ]}
-          modifiers={[
-            vertical() ? RestrictToVerticalAxis : RestrictToHorizontalAxis,
-            RestrictToElement.configure({ element: () => listRef }),
-          ]}
-          plugins={(defaults) => [
-            ...defaults.filter((plugin) => plugin !== Accessibility),
-            AutoScroller.configure({ acceleration: 8, threshold: vertical() ? { x: 0, y: 0.05 } : { x: 0.05, y: 0 } }),
-            Feedback.configure({ dropAnimation: null }),
-          ]}
-          onDragStart={(event) => {
-            const source = event.operation.source
-
-            if (!source) return
-            const tab = props.tabs.find((item) => tabKey(item) === source.id.toString())
-
-            if (!tab) return
-
-            if (vertical()) return
-            const tabEl = source.element?.querySelector<HTMLDivElement>("[data-titlebar-tab]")
-            props.onNavigate(tab, tabEl ?? undefined)
-          }}
-          onDragEnd={(event) => {
-            const current = visibleTabIds()
-            const source = event.operation.source
-
-            if (event.canceled || !isSortable(source)) return
-
-            const { initialIndex, index } = source
-
-            if (initialIndex === index) return
-            const next = arrayMove(current, initialIndex, index)
-
-            // Sections are contiguous, so a move within one keeps every position's section.
-            if (sections() && next.some((key, i) => sectionOf().get(key) !== sectionOf().get(current[i]))) return
-            props.onReorder(mergeVisibleTabOrder(props.tabs.map(tabKey), current, next))
-          }}
+        <Show
+          when={!customDrag()}
+          fallback={renderList()}
         >
-          <div
-            data-titlebar-tab-list
-            data-orientation={vertical() ? "vertical" : "horizontal"}
-            class="flex w-full min-w-0"
-            classList={{ "flex-row items-center": !vertical(), "flex-col items-stretch": vertical() }}
-            ref={listRef}
+          <DragDropProvider
+            sensors={[
+              PointerSensor.configure({
+                activationConstraints: (event) =>
+                  event.pointerType === "touch"
+                    ? [new PointerActivationConstraints.Distance({ value: 8 })]
+                    : [new PointerActivationConstraints.Distance({ value: 4 })],
+                preventActivation: (event) =>
+                  event.target instanceof Element &&
+                  !!event.target.closest(
+                    '[data-slot="tab-close"], [data-group-menu-trigger], [contenteditable="true"], [contenteditable="plaintext-only"]',
+                  ),
+              }),
+            ]}
+            modifiers={[
+              vertical() ? RestrictToVerticalAxis : RestrictToHorizontalAxis,
+              RestrictToElement.configure({ element: () => listRef }),
+            ]}
+            plugins={(defaults) => [
+              ...defaults.filter((plugin) => plugin !== Accessibility),
+              AutoScroller.configure({ acceleration: 8, threshold: vertical() ? { x: 0, y: 0.05 } : { x: 0.05, y: 0 } }),
+              Feedback.configure({ dropAnimation: null }),
+            ]}
+            onDragStart={(event) => {
+              const source = event.operation.source
+
+              if (!source) return
+              const tab = props.tabs.find((item) => tabKey(item) === source.id.toString())
+
+              if (!tab) return
+
+              if (vertical()) return
+              const tabEl = source.element?.querySelector<HTMLDivElement>("[data-titlebar-tab]")
+              props.onNavigate(tab, tabEl ?? undefined)
+            }}
+            onDragEnd={(event) => {
+              const current = visibleTabIds()
+              const source = event.operation.source
+
+              if (event.canceled || !isSortable(source)) return
+
+              const { initialIndex, index } = source
+
+              if (initialIndex === index) return
+              const next = arrayMove(current, initialIndex, index)
+
+              // Sections are contiguous, so a move within one keeps every position's section.
+              if (sections() && next.some((key, i) => sectionOf().get(key) !== sectionOf().get(current[i]))) return
+              props.onReorder(mergeVisibleTabOrder(props.tabs.map(tabKey), current, next))
+            }}
           >
-            <Show when={sections()} fallback={<For each={props.tabs}>{(tab) => renderTab(tab)}</For>}>
-              {(list) => (
-                <Key each={list()} by={(section) => section.key}>
-                  {(section) => (
-                    <>
-                      {section().header}
-                      <For each={section().tabs}>{(tab) => renderTab(tab, section())}</For>
-                      {section().footer}
-                    </>
-                  )}
-                </Key>
-              )}
-            </Show>
-          </div>
-        </DragDropProvider>
+            {renderList()}
+          </DragDropProvider>
+        </Show>
       </div>
       <Show when={!vertical()}>
         <div

@@ -149,6 +149,10 @@ export function createTimelineCache(
                     get sessionMenu() {
                       return sessionMenu()
                     },
+                    // An app-wide setting, so every view follows it, detached or not.
+                    get codeWrap() {
+                      return markdown?.codeWrap
+                    },
                   },
                   view,
                 ),

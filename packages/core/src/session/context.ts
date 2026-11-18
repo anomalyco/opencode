@@ -6,7 +6,12 @@ import { Context, Effect, Layer } from "effect"
 import { Agent } from "../agent.js"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { CodeModeInstructions } from "../codemode/instructions.js"
+import { CodeModeTool } from "../codemode/tool.js"
 import { Database } from "../database/database.js"
+import { Environment } from "../environment/index.js"
+import { FileAccess } from "../file-access.js"
+import { FileMutation } from "../file-mutation.js"
+import { FileWrite } from "../file-write.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { InstructionDiscovery } from "../instruction-discovery.js"
 import { Instructions } from "../instructions/index.js"
@@ -92,6 +97,7 @@ const layer = Layer.effect(
     const skillInstructions = yield* SkillInstructions.Service
     const store = yield* SessionStore.Service
     const registry = yield* Tool.Service
+    const codeMode = yield* CodeModeTool.services
 
     const resolveModel = (
       session: SessionSchema.Info,
@@ -148,7 +154,7 @@ const layer = Layer.effect(
       const permissions = yield* Permission.rules(hooks, { session, agent })
       const loaded = yield* Effect.all(
         {
-          tools: registry.snapshot(permissions, location),
+          tools: registry.snapshot(permissions, codeMode),
           builtins: builtins.load(),
           discovery: discovery.load(),
           skills: skillInstructions.load(permissions),
@@ -221,6 +227,10 @@ export const node = makeLocationNode({
     Agent.node,
     Model.node,
     Database.node,
+    Environment.node,
+    FileAccess.node,
+    FileMutation.node,
+    FileWrite.node,
     InstructionBuiltIns.node,
     InstructionDiscovery.node,
     InstructionEntry.node,

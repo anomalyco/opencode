@@ -347,6 +347,8 @@ const source = {
   "ui.message.readMore": "Read more",
   "ui.message.showLess": "Show less",
   "ui.message.copy": "Copy",
+  "ui.message.wrapLines": "Wrap lines",
+  "ui.message.unwrapLines": "Don't wrap lines",
   "ui.message.copyMessage": "Copy message",
   "ui.message.copyFullMessage": "Copy full message",
   "ui.message.forkMessage": "Fork from here",

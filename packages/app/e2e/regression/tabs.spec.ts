@@ -2748,3 +2748,149 @@ async function mockGaveUpPermission(page: Page, tabLayout: "horizontal" | "inbox
     attempts: () => attempts.count,
   }
 }
+
+test("tab groups reorder without color drift, collapse and auto-expand on navigation, and combine by dwelling into manual groups", async ({
+  page,
+}) => {
+  const dirA = "C:/OpenCode/TabGroupsA"
+  const dirB = "/srv/tab-groups-b"
+  const localOne = session({ id: "ses_tg_local_1", directory: dirA, title: "Local alpha" })
+  const localTwo = session({ id: "ses_tg_local_2", directory: dirA, title: "Local beta" })
+  const localThree = session({ id: "ses_tg_local_3", directory: dirA, title: "Local delta" })
+  const remoteOne = session({ id: "ses_tg_remote_1", directory: dirB, title: "Remote gamma" })
+
+  await mockServers(page, {
+    [SERVER]: {
+      hostname: "local",
+      directory: dirA,
+      project: project({ id: "proj_tg_a", directory: dirA, name: "opencode" }),
+      provider: NO_PROVIDER,
+      sessions: [localOne, localTwo, localThree],
+      pageMessages: () => ({ items: [] }),
+      strictDirectory: true,
+    },
+    [REMOTE_SERVER]: {
+      hostname: "blade",
+      directory: dirB,
+      project: project({ id: "proj_tg_b", directory: dirB, name: "blade-repo" }),
+      provider: NO_PROVIDER,
+      sessions: [remoteOne],
+      pageMessages: () => ({ items: [] }),
+      strictDirectory: true,
+    },
+  })
+
+  await seed(page, {
+    servers: [{ url: REMOTE_SERVER, name: "blade" }],
+    tabs: [localOne.id, localTwo.id, localThree.id, { session: remoteOne.id, server: REMOTE_SERVER }],
+    settings: {
+      appearance: { tabLayout: "vertical", sidebarOpen: true },
+      general: { tabGroups: true, sidebarOrganize: "list" },
+    },
+  })
+
+  await page.goto(sessionHref(localOne.id))
+  const sidebar = page.locator('[data-slot="vertical-tabs-sidebar"]')
+  const localHeader = sidebar.locator(`[data-tab-group-header][data-group-key="server:${SERVER}"]`)
+  const remoteHeader = sidebar.locator(`[data-tab-group-header][data-group-key="server:${REMOTE_SERVER}"]`)
+  const remoteTab = sidebar.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(remoteOne.id, REMOTE_SERVER)}"])`)
+
+  await expect(sidebar.locator("[data-tab-group]")).toHaveCount(2)
+  await expect(remoteTab).toBeVisible()
+
+  // Inline search filters open tabs in place without showing closed/recent results underneath.
+  // The global Search sessions button stays above the inline open-tab filter.
+  await expect(sidebar.getByRole("button", { name: "Search sessions", exact: true })).toBeVisible()
+  const filterInput = sidebar.getByRole("textbox", { name: "Filter tabs", exact: true })
+  await filterInput.fill("Remote gamma")
+  await expect(remoteTab).toBeVisible()
+  await expect(sidebar.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(localOne.id)}"])`)).toHaveCount(0)
+  await filterInput.press("Escape")
+  await expect(filterInput).toHaveValue("")
+  await expect(sidebar.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(localOne.id)}"])`)).toBeVisible()
+
+  const initialLocalColor = await localHeader.getAttribute("data-group-color")
+  const initialRemoteColor = await remoteHeader.getAttribute("data-group-color")
+
+  // Dragging the 1-tab remote group above the larger local group reorders cleanly without mutating group hues.
+  const [localHdrBox, remoteHdrBox] = await Promise.all([localHeader.boundingBox(), remoteHeader.boundingBox()])
+
+  if (!localHdrBox || !remoteHdrBox) throw new Error("group headers have no bounding box")
+  await page.mouse.move(remoteHdrBox.x + 40, remoteHdrBox.y + 13)
+  await page.mouse.down()
+  await page.mouse.move(localHdrBox.x + 40, localHdrBox.y + 6, { steps: 6 })
+  await page.mouse.up()
+  await expect(sidebar.locator("[data-tab-group]").first()).toHaveAttribute("data-group-key", `server:${REMOTE_SERVER}`)
+  await expect(localHeader).toHaveAttribute("data-group-color", initialLocalColor!)
+  await expect(remoteHeader).toHaveAttribute("data-group-color", initialRemoteColor!)
+
+  // Recoloring blade's swatch changes only blade and never shifts local's hue.
+  await remoteHeader.click({ button: "right" })
+  const nextRemoteHue = initialRemoteColor === "pink" ? "blue" : "pink"
+  const nextHueLabel = nextRemoteHue === "pink" ? "Rose" : "Steel"
+  await page.getByRole("radio", { name: nextHueLabel, exact: true }).click()
+  await page.keyboard.press("Escape")
+  await expect(remoteHeader).toHaveAttribute("data-group-color", nextRemoteHue)
+  await expect(localHeader).toHaveAttribute("data-group-color", initialLocalColor!)
+
+  // Collapsing the remote group hides its tab; navigating into that session auto-expands the group.
+  await remoteHeader.locator("button").first().click()
+  await expect(remoteTab).toHaveCount(0)
+  await expect(remoteHeader).toContainText("1")
+  await page.evaluate((href) => window.history.pushState({}, "", href), sessionHref(remoteOne.id, REMOTE_SERVER))
+  await page.evaluate(() => window.dispatchEvent(new PopStateEvent("popstate")))
+  await expect(remoteTab).toBeVisible()
+
+  // Turning off automatic grouping flattens the strip; dwelling a tab on another combines them into a manual group.
+  await sidebar.locator('[data-action="tab-groups-menu"]').click()
+  await expect(page.getByRole("menuitemradio")).toHaveText(["None", "Server", "Project"])
+  await page.getByRole("menuitemradio", { name: "None", exact: true }).click()
+  await expect(page.getByRole("menu")).toHaveCount(0)
+  await expect(sidebar.locator("[data-tab-group]")).toHaveCount(0)
+
+  const slotOne = sidebar.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(localOne.id)}"])`)
+  const slotTwo = sidebar.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(localTwo.id)}"])`)
+  const slotThree = sidebar.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(localThree.id)}"])`)
+  const [boxOne, boxTwo] = await Promise.all([slotOne.boundingBox(), slotTwo.boundingBox()])
+
+  if (!boxOne || !boxTwo) throw new Error("tab slots have no bounding box")
+  await page.mouse.move(boxTwo.x + 40, boxTwo.y + 14)
+  await page.mouse.down()
+  await page.mouse.move(boxOne.x + 40, boxOne.y + 3, { steps: 6 })
+  await expect(slotOne).not.toHaveAttribute("data-combine-target", "true")
+  await page.mouse.move(boxOne.x + 40, boxOne.y + 14, { steps: 4 })
+  await expect(slotOne).toHaveAttribute("data-combine-target", "true")
+  await page.mouse.up()
+
+  const manualGroup = sidebar.locator("[data-tab-group]")
+  await expect(manualGroup).toHaveCount(1)
+  await expect(manualGroup.locator("[data-titlebar-tab-slot]")).toHaveCount(2)
+
+  // Dragging an ungrouped tab onto the manual group header adds it to the group, and dragging below extracts it back out.
+  const [boxThree, manualHdrBox] = await Promise.all([
+    slotThree.boundingBox(),
+    manualGroup.locator("[data-tab-group-header]").boundingBox(),
+  ])
+
+  if (!boxThree || !manualHdrBox) throw new Error("manual group targets have no bounding box")
+  await page.mouse.move(boxThree.x + 40, boxThree.y + 14)
+  await page.mouse.down()
+  await page.mouse.move(manualHdrBox.x + 50, manualHdrBox.y + 15, { steps: 6 })
+  await expect(manualGroup.locator("[data-tab-group-header]")).toHaveAttribute("data-drop-over", "true")
+  await page.mouse.up()
+  await expect(manualGroup.locator("[data-titlebar-tab-slot]")).toHaveCount(3)
+
+  const [lastGroupedBox, groupFullBox] = await Promise.all([
+    manualGroup.locator("[data-titlebar-tab-slot]").last().boundingBox(),
+    manualGroup.boundingBox(),
+  ])
+
+  if (!lastGroupedBox || !groupFullBox) throw new Error("grouped slot has no bounding box")
+  const lastSlot = manualGroup.locator("[data-titlebar-tab-slot]").last()
+  await page.mouse.move(lastGroupedBox.x + 40, lastGroupedBox.y + 14)
+  await page.mouse.down()
+  await page.mouse.move(lastGroupedBox.x + 40, groupFullBox.y + groupFullBox.height + 28, { steps: 6 })
+  await expect(lastSlot).toHaveAttribute("data-lane-shift", "out")
+  await page.mouse.up()
+  await expect(manualGroup.locator("[data-titlebar-tab-slot]")).toHaveCount(2)
+})

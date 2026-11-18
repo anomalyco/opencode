@@ -130,10 +130,13 @@ const generalSchema = Persistence.struct({
   backgroundActivity: Schema.Literals(["off", "left", "center", "right"]),
   timelineWidth: Schema.Literals(["focused", "comfortable", "wide"]),
   foldUserMessages: Schema.Boolean,
+  wrapCodeBlocks: Schema.Boolean,
   // The redesigned keyboard-first question dock, off until it ships.
   newQuestionUI: Schema.Boolean,
   // The redesigned session timeline, off until it ships.
   newTimeline: Persistence.optional(Schema.Boolean),
+  // Browser-style session tab grouping across vertical and horizontal tabs.
+  tabGroups: Persistence.optional(Schema.Boolean),
   sidebarOrganize: Schema.Literals(["projects", "list", "customize", "recent"]),
   mobileTitlebarPosition: Schema.Literals(["top", "bottom"]),
   // Owned by the review plugin, which copies it out once; kept so settings rewrites cannot drop it first.
@@ -306,6 +309,7 @@ export const defaultSettings: Settings = {
     backgroundActivity: "left",
     timelineWidth: "comfortable",
     foldUserMessages: false,
+    wrapCodeBlocks: false,
     newQuestionUI: false,
     sidebarOrganize: "list",
     mobileTitlebarPosition: "top",
@@ -427,9 +431,20 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setFoldUserMessages(value: boolean) {
           setStore("general", "foldUserMessages", value)
         },
+        wrapCodeBlocks: withFallback(() => store.general?.wrapCodeBlocks, defaultSettings.general.wrapCodeBlocks),
+        setWrapCodeBlocks(value: boolean) {
+          setStore("general", "wrapCodeBlocks", value)
+        },
         newTimeline: withFallback(() => store.general?.newTimeline, false),
         setNewTimeline(value: boolean) {
           setStore("general", "newTimeline", value)
+        },
+        tabGroups: withFallback(
+          () => store.general?.tabGroups,
+          import.meta.env.DEV && import.meta.env.VITE_OPENCODE_TEST_FIXTURES !== "1",
+        ),
+        setTabGroups(value: boolean) {
+          setStore("general", "tabGroups", value)
         },
         newQuestionUI: withFallback(() => store.general?.newQuestionUI, defaultSettings.general.newQuestionUI),
         setNewQuestionUI(value: boolean) {
