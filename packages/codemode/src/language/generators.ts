@@ -282,8 +282,11 @@ export const execAwait = (vm: Vm, frame: Frame, a: number, pc: number, sp: numbe
   const promise = vm.scheduler.promiseResolve(v)
   const site = a === 1 ? undefined : frame.code.siteAt(pc)
   frame.pc = pc + 1
+  // A sync generator can't await, so one below the top is running a blocking `search` that parks until its input
+  // crossed: the park takes it and the frames driving it, up to the nearest async function or the program, so they go
+  // on as if search had answered synchronously.
   let bIdx = vm.frames.length - 1
-  while (bIdx > 0 && vm.frames[bIdx]!.mode === Mode.CALLER) {
+  while (bIdx > 0 && parksThrough(vm.frames[bIdx]!, bIdx === vm.frames.length - 1)) {
     bIdx--
   }
   const cut = vm.frames.splice(bIdx)
@@ -300,6 +303,10 @@ export const execAwait = (vm: Vm, frame: Frame, a: number, pc: number, sp: numbe
   vm.deliverAnswer(root)
   vm.scheduler.park(cut, promise, site, result)
 }
+
+const parksThrough = (frame: Frame, top: boolean) =>
+  frame.mode === Mode.CALLER ||
+  (!top && frame.mode === Mode.GENERATOR && !(frame.target as GeneratorObj).asynchronous)
 
 export const execYstar = (frame: Frame, itSlot: number, bx: number, pc: number, sp: number): number => {
   const kind = frame.regs[sp - 1] as number
