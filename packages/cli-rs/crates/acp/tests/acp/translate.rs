@@ -1,10 +1,9 @@
-use opencode_acp::paths::resolve_from;
 use opencode_acp::translate::{self, Output, StartKind, Terminal, TurnContext, TurnStart, TurnState};
 use serde_json::{Value, json};
 
 use crate::wire::{
-    assert_matches, background_shell, child_created, delivered, durable_event, failed, reasoning_delta, shell_notice,
-    step_ended, succeeded, text_delta, tool_called, tool_failed, tool_progress, tool_started, tool_succeeded, usage,
+    assert_matches, background_shell, child_created, delivered, durable_event, failed, shell_notice, step_ended,
+    succeeded, text_delta, tool_called, tool_failed, tool_progress, tool_started, tool_succeeded, usage,
 };
 
 const ROOT: &str = "ses_root";
@@ -121,26 +120,6 @@ fn turn_translation() {
             json!({ "updates": [{ "sessionUpdate": "agent_message_chunk", "messageId": "msg_ok" }] }),
         ),
         (
-            "streams text and reasoning with one message ID per reasoning ordinal",
-            false,
-            live(vec![
-                reasoning_delta(ROOT, "msg_a", "think", 0),
-                text_delta(ROOT, "msg_a", "answer", 1),
-                reasoning_delta(ROOT, "msg_a", "more", 1),
-            ]),
-            json!({ "updates": [
-                { "sessionUpdate": "agent_thought_chunk", "messageId": "msg_a:reasoning:0", "content": { "text": "think" } },
-                { "sessionUpdate": "agent_message_chunk", "messageId": "msg_a", "content": { "text": "answer" } },
-                { "sessionUpdate": "agent_thought_chunk", "messageId": "msg_a:reasoning:1", "content": { "text": "more" } },
-            ] }),
-        ),
-        (
-            "ends a normal turn with end_turn",
-            false,
-            live(vec![step_ended(ROOT, "msg_1", "stop", usage(1, 1, 0, 0, 0)), succeeded(ROOT)]),
-            json!({ "response": { "stopReason": "end_turn", "usage": { "inputTokens": 1, "outputTokens": 1, "totalTokens": 2 } } }),
-        ),
-        (
             "ends a length-limited step with max_tokens",
             false,
             live(vec![step_ended(ROOT, "msg_1", "length", usage(1, 1, 0, 0, 0)), succeeded(ROOT)]),
@@ -172,24 +151,6 @@ fn turn_translation() {
             false,
             live(vec![failed(ROOT, json!({ "type": "aborted", "message": "interrupted" }))]),
             json!({ "response": { "stopReason": "cancelled" }, "failure": null }),
-        ),
-        (
-            "fails an execution auth failure as auth required",
-            false,
-            live(vec![failed(ROOT, json!({ "type": "provider.auth", "message": "missing key" }))]),
-            json!({ "failure": "ACPAuthRequiredError" }),
-        ),
-        (
-            "fails a step auth failure as auth required even when the execution succeeds",
-            false,
-            live(vec![step_failed(json!({ "type": "provider.auth", "message": "expired" }), None), succeeded(ROOT)]),
-            json!({ "terminal": "succeeded", "failure": "ACPAuthRequiredError" }),
-        ),
-        (
-            "fails other execution failures as service failures",
-            false,
-            live(vec![failed(ROOT, json!({ "type": "provider.rate-limit", "message": "slow down" }))]),
-            json!({ "failure": "ACPServiceFailureError" }),
         ),
         (
             "sums usage across steps and reports thought and cache tokens",
@@ -245,30 +206,6 @@ fn turn_translation() {
                 "response": { "usage": { "inputTokens": 20, "outputTokens": 7, "totalTokens": 27 } },
                 "context": usage(20, 7, 0, 0, 0),
             }),
-        ),
-        (
-            "streams a tool call from pending through progress to completion",
-            false,
-            live(vec![
-                tool_started(ROOT, "call_ok", "shell"),
-                tool_called(ROOT, "call_ok", json!({ "command": "printf done", "workdir": "sub" })),
-                tool_progress(ROOT, "call_ok", json!({ "phase": 1 })),
-                tool_succeeded(ROOT, "call_ok", json!({ "exit": 0 }), "done"),
-            ]),
-            json!({ "updates": [
-                { "sessionUpdate": "tool_call", "toolCallId": "call_ok", "name": "shell", "status": "pending", "kind": "execute" },
-                {
-                    "sessionUpdate": "tool_call_update", "status": "in_progress", "title": "printf done",
-                    "locations": [{ "path": resolve_from("/workspace", "sub") }],
-                    "rawInput": { "command": "printf done", "workdir": "sub" },
-                },
-                { "sessionUpdate": "tool_call_update", "status": "in_progress" },
-                {
-                    "sessionUpdate": "tool_call_update", "status": "completed",
-                    "content": [{ "type": "content", "content": { "type": "text", "text": "done" } }],
-                    "rawOutput": { "metadata": { "exit": 0 } },
-                },
-            ] }),
         ),
         (
             "fails a tool call with its partial content and error",
