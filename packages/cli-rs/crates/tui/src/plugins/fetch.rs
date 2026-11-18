@@ -19,7 +19,6 @@ pub fn fetch_of(call: Call) -> abi::Fetch {
     )
 }
 
-/// The value of an API reply that wraps it in `data`, as the generated methods that return `data` read it.
 pub fn data<T: DeserializeOwned>(reply: Result<Value, String>) -> Result<T, String> {
     #[derive(serde::Deserialize)]
     struct Data<T> {
@@ -28,7 +27,6 @@ pub fn data<T: DeserializeOwned>(reply: Result<Value, String>) -> Result<T, Stri
     serde_json::from_value::<Data<T>>(reply?).map(|value| value.data).map_err(|error| error.to_string())
 }
 
-/// The call of a plugin's `fetch`.
 pub(crate) fn call_of(fetch: abi::Fetch) -> Result<Call, String> {
     let method = ["GET", "POST", "PUT", "PATCH", "DELETE"]
         .into_iter()
@@ -51,7 +49,6 @@ mod tests {
         ExperimentalSessionStatsInput, ExperimentalSessionStatsInputTools, SessionGenerateInput, SessionID,
     };
 
-    // Expected: a generated call turned into a fetch and back prepares the same request, query and body included.
     #[test]
     fn a_call_survives_the_fetch_round_trip() {
         let client = Client::new("http://127.0.0.1:4096/base").unwrap();

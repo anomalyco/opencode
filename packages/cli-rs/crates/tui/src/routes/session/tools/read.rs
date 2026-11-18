@@ -1,5 +1,4 @@
-//! The read tool (E.7a): `Read` (`routes/session/index.tsx:3205-3241`), one line plus the files the
-//! read loaded.
+//! TypeScript: `routes/session/index.tsx:3205-3241`.
 
 use super::dispatch::{Inline, InlineTool, Props, Status, finite, format_path, number, truthy};
 use crate::prelude::*;
@@ -24,7 +23,6 @@ impl Read {
         &self.root
     }
 
-    /// The update that follows lists the loaded files again in the new theme.
     pub fn restyle(&self, _cx: &Context<'_>) {
         self.inline.restyle();
         self.shown.take();

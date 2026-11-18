@@ -26,7 +26,6 @@ impl Question {
         &self.root
     }
 
-    /// The update that follows lists the entries again in the new theme.
     pub fn restyle(&self, _cx: &Context<'_>) {
         self.inline.restyle();
         self.block.restyle();
@@ -85,7 +84,6 @@ impl Question {
     }
 }
 
-/// `parseQuestions`: the text of each question that has one.
 fn questions(value: Option<&Value>) -> Vec<String> {
     value
         .and_then(Value::as_array)
@@ -97,7 +95,6 @@ fn questions(value: Option<&Value>) -> Vec<String> {
         .collect()
 }
 
-/// `parseQuestionAnswers`: the string answers of each question, or `None` when there are none yet.
 fn answers(value: Option<&Value>) -> Option<Vec<Vec<String>>> {
     Some(
         value?

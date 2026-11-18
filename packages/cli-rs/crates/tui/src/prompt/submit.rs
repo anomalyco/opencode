@@ -20,8 +20,6 @@ use super::editor::{Inner, Mode};
 
 use crate::prelude::*;
 
-/// Submits the prompt with `delivery`. Returns whether it was handled (the caller then closes
-/// dialogs).
 pub fn submit(prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
     let Some(tui) = prompt.tui.upgrade() else { return false };
     // A second Enter while one submit runs must not send the cleared prompt.
@@ -53,7 +51,6 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
         };
     }
     let exit = matches!(trimmed, "exit" | "quit" | ":q");
-    // What is sent: compact pastes expanded (`inputText`, E.4).
     let text = super::paste::expanded_text(prompt);
     let slash = argument_slash(tui, &text);
     if queue && (mode == Mode::Shell || exit || slash.is_some()) {
@@ -180,7 +177,6 @@ fn run(tui: &Tui, prompt: &Rc<Inner>, delivery: SessionInboxDelivery) -> bool {
         switch_agent: session.as_ref().is_some_and(|session| session.agent.as_ref() != Some(&agent)).then_some(agent),
         model,
     };
-    // A shell command commits no selection.
     if trimmed.is_empty() || mode != Mode::Shell {
         tui.local.track_commit(&target, &commit.model, &selection.agent.id.0);
     }
@@ -340,7 +336,6 @@ struct Commit {
     interrupted: futures_util::future::BoxFuture<'static, ()>,
     client: Client,
     session: SessionID,
-    /// The terminal's variables for a session this submit created.
     environment: Option<IndexMap<String, String>>,
     switch_agent: Option<AgentID>,
     model: ModelRef,
@@ -363,13 +358,10 @@ impl Commit {
     }
 }
 
-/// Where a failed submit puts its prompt back.
 struct Failure {
     tui: std::rc::Weak<Tui>,
     prompt: std::rc::Weak<Inner>,
-    /// The session this submit created, if any.
     session: Option<SessionID>,
-    /// The `--session` ID that session took; a failed creation gives it back.
     startup_id: Option<SessionID>,
     entry: Value,
 }
@@ -381,7 +373,6 @@ impl Failure {
             fail(&self.tui, &self.prompt, title, &error, &self.entry);
             return;
         };
-        // A failed new session goes back home (`recover`, `prompt/index.tsx:1258-1277`).
         let Some(tui) = self.tui.upgrade() else { return };
         let exists = tui.data.read(|state| state.session(&session).is_some());
         let title = if exists { "Failed to set up session" } else { "Creating a session failed" };
@@ -389,7 +380,6 @@ impl Failure {
             tui.startup.restore_new_session_id(id);
         }
         tui.toasts.show(ToastOptions::new(Variant::Error, error.tui_message()).title(title));
-        // What was typed in the new session since, else its stashed draft, else the sent prompt, becomes home's draft.
         let routed = tui.route() == (Route::Session { id: session.clone() });
         let active =
             tui.prompt.current.borrow().upgrade().filter(|inner| routed && inner.session.as_ref() == Some(&session));
@@ -441,7 +431,6 @@ fn steer_first_queued(tui: &Tui, session: &SessionID) -> bool {
     true
 }
 
-/// A keymap command with slash arguments that `text` names: its id and its input (`argumentSlash`).
 fn argument_slash(tui: &Tui, text: &str) -> Option<(String, String)> {
     let (name, arguments) = slash_head(text)?;
     tui.keymap.commands().into_iter().find_map(|command| {

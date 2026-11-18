@@ -15,7 +15,6 @@ use crate::prelude::*;
 
 pub const COMMAND: &str = "session.move";
 
-/// The staged destination and the creation progress of one prompt, and the footer row that shows them.
 pub struct Move {
     destination: RefCell<Option<Selection>>,
     progress: RefCell<Option<String>>,
@@ -84,7 +83,6 @@ impl Move {
         }
     }
 
-    /// The staged new worktree's name.
     pub fn pending_new(&self) -> Option<String> {
         match &*self.destination.borrow() {
             Some(Selection::New { name }) => Some(name.clone()),
@@ -92,7 +90,6 @@ impl Move {
         }
     }
 
-    /// Shows the progress or the staged worktree in `theme`; returns whether the row shows.
     pub fn render(&self, theme: &Theme) -> bool {
         let accent = theme.accent().step(500);
         let progress = self.progress.borrow().clone();
@@ -132,7 +129,6 @@ impl Move {
         }
     }
 
-    /// `creating` starts and stops the dots, one more each second.
     fn set_creating(&self, prompt: &Rc<Inner>, creating: bool) {
         self.creating.set(creating);
         if let Some(timer) = self.timer.take() {
@@ -174,7 +170,6 @@ impl Drop for Move {
     }
 }
 
-/// The `session.move` command of a prompt (`/worktrees`).
 pub fn command(prompt: Weak<Inner>) -> TuiCommand {
     TuiCommand::new(
         COMMAND,
@@ -204,7 +199,6 @@ pub fn create_staged(
     true
 }
 
-/// `open`: the worktrees dialog for the prompt's project.
 fn open(tui: &Tui, prompt: &Rc<Inner>) {
     let Some(id) = prompt.session.clone() else {
         resolve_home(tui, prompt);
@@ -226,7 +220,6 @@ fn open(tui: &Tui, prompt: &Rc<Inner>) {
     );
 }
 
-/// `resolveProjectID` on home: the stored location's project, else a location read.
 fn resolve_home(tui: &Tui, prompt: &Rc<Inner>) {
     let home = home_location(tui, prompt);
     let stored = tui.data.read(|state| {
@@ -366,7 +359,6 @@ fn create(tui: &Tui, prompt: &Rc<Inner>, name: String, then: impl FnOnce(&Tui, &
     );
 }
 
-/// `homeLocation`: where the home prompt creates its session.
 fn home_location(tui: &Tui, prompt: &Inner) -> Location {
     Location::new(prompt.location(tui).directory)
 }

@@ -38,7 +38,6 @@ const POLL: Duration = Duration::from_millis(500);
 /// What runs after a connect, with the provider whose models to show (`onConnected`).
 pub type OnConnected = Rc<dyn Fn(&Rc<Local>, Option<String>)>;
 
-/// Registers `provider.connect` (`/connect`, `app.tsx:1019-1032`).
 pub fn install(tui: &Rc<Tui>) {
     let local = tui.local.clone();
     let command = TuiCommand::new("provider.connect", bind!(local, |local, _, _| show(&local, Some(show_models()))))
@@ -50,15 +49,10 @@ pub fn install(tui: &Rc<Tui>) {
         .slash("connect");
     tui.keymap.install(
         "integration",
-        [
-            KeymapLayer::global(vec![command]),
-            // `appGlobalBindingCommands`.
-            KeymapLayer::global(Vec::new()).bindings(["provider.connect"]),
-        ],
+        [KeymapLayer::global(vec![command]), KeymapLayer::global(Vec::new()).bindings(["provider.connect"])],
     );
 }
 
-/// The model dialog of the connected provider, as `/connect` and the model dialog open it.
 pub fn show_models() -> OnConnected {
     Rc::new(crate::dialogs::model::show)
 }
@@ -85,7 +79,6 @@ impl Flow {
         self.local.location()
     }
 
-    /// The integration as the catalog has it now.
     fn latest(&self, id: &IntegrationID) -> Option<IntegrationInfo> {
         self.local.integration(&id.0)
     }
@@ -109,7 +102,6 @@ impl Flow {
     }
 }
 
-/// `ConnectMethod`: every method but `env`.
 #[derive(Clone, Debug, PartialEq)]
 enum Method {
     Oauth(IntegrationOAuthMethod),
@@ -169,7 +161,6 @@ fn credentials(integration: &IntegrationInfo) -> Vec<ConnectionCredentialInfo> {
         .collect()
 }
 
-/// `connectionSummary`: a count keeps several long labels from squeezing the integration name off the row.
 fn summary(integration: &IntegrationInfo) -> String {
     let connections = &integration.connections;
     if connections.len() > 1 {
@@ -190,8 +181,6 @@ fn signed_out(connection: &ConnectionInfo) -> bool {
     }
 }
 
-/// The integrations the list shows: one for an auto-connect, else all but the MCP servers', which the MCP dialog
-/// signs in.
 fn listed(local: &Local, only: Option<&IntegrationID>) -> Vec<IntegrationInfo> {
     sorted(local.integrations().unwrap_or_default())
         .into_iter()
@@ -208,10 +197,6 @@ fn listed(local: &Local, only: Option<&IntegrationID>) -> Vec<IntegrationInfo> {
         })
         .collect()
 }
-
-// ---------------------------------------------------------------------------------------------------------------
-// The list
-// ---------------------------------------------------------------------------------------------------------------
 
 fn open_list(flow: Flow, only: Option<IntegrationID>) {
     let local = flow.local.clone();
@@ -317,7 +302,6 @@ fn list_options(
         .collect()
 }
 
-/// A row's `onSelect`: the accounts of a connected integration, else its methods.
 fn pick(flow: &Flow, integration: IntegrationInfo) {
     let methods = connect_methods(&integration);
     if !credentials(&integration).is_empty() {
@@ -326,10 +310,6 @@ fn pick(flow: &Flow, integration: IntegrationInfo) {
     }
     select_method(flow, integration, methods);
 }
-
-// ---------------------------------------------------------------------------------------------------------------
-// Accounts (`manageConnections`)
-// ---------------------------------------------------------------------------------------------------------------
 
 #[derive(Clone, Debug, PartialEq)]
 enum Account {
@@ -343,7 +323,6 @@ struct Manage {
     methods: Vec<Method>,
     deleting: RefCell<Option<CredentialID>>,
     select: RefCell<Option<select::Select<Account>>>,
-    /// The footer and the marker as built; a change opens the dialog again, since both are fixed at build.
     built: (bool, Option<CredentialID>),
     reopened: Cell<bool>,
     theme: opencode_ui::theme::Theme,
@@ -397,7 +376,6 @@ fn build_manage(
     };
     let mut props = SelectProps::dynamic(state.integration.name.clone(), options);
     props.current = active.map(Account::Credential);
-    // `focusCurrent={false}`: the marker shows on the active account, but a reopen keeps the selection.
     props.focus_current = focus.is_some();
     props.focus_target = focus;
     props.preserve_selection = true;
@@ -453,7 +431,6 @@ fn build_manage(
         }
         state.refresh();
     })));
-    // The dialog owns the state through its close handler.
     let owner = state.clone();
     cx.on_close(Disposer::new(move || drop(owner)));
     view
@@ -638,10 +615,6 @@ impl Manage {
     }
 }
 
-// ---------------------------------------------------------------------------------------------------------------
-// Methods
-// ---------------------------------------------------------------------------------------------------------------
-
 /// `selectMethod`: the only method at once, else a picker.
 fn select_method(flow: &Flow, integration: IntegrationInfo, methods: Vec<Method>) {
     if methods.len() == 1 {
@@ -708,10 +681,6 @@ fn with_form(
         }),
     }
 }
-
-// ---------------------------------------------------------------------------------------------------------------
-// API key (`KeyMethod`)
-// ---------------------------------------------------------------------------------------------------------------
 
 fn key_prompt(flow: &Flow, integration: IntegrationInfo, title: String, answer: Option<FormAnswer>) {
     let flow = flow.clone();
@@ -781,10 +750,6 @@ fn error_slot(cx: &Rc<DialogCx>, boxed: bool) -> (View, Rc<dyn Fn(String)>) {
     (slot, set)
 }
 
-// ---------------------------------------------------------------------------------------------------------------
-// External (`ExternalStarting`)
-// ---------------------------------------------------------------------------------------------------------------
-
 fn external_starting(
     flow: &Flow,
     integration: IntegrationInfo,
@@ -811,10 +776,6 @@ fn external_starting(
         Err(error) => flow.fail(error.to_string()),
     });
 }
-
-// ---------------------------------------------------------------------------------------------------------------
-// OAuth (`OAuthStarting`, `OAuthAuto`, `OAuthCode`)
-// ---------------------------------------------------------------------------------------------------------------
 
 fn oauth_starting(
     flow: &Flow,
@@ -1048,7 +1009,6 @@ impl Oauth {
         );
     }
 
-    /// `OAuthCode`: the URL to open and a field for the code it shows.
     fn code(self: &Rc<Self>) {
         let me = self.clone();
         self.flow.local.dialogs.replace(
@@ -1138,7 +1098,6 @@ impl Oauth {
     }
 }
 
-/// `Link`: the URL in the link color, as a terminal hyperlink.
 fn link(cx: &DialogCx, url: &str, open: Option<Rc<dyn Fn()>>) -> Text {
     let text = Text::new(&cx.app, vec![url.fg(cx.theme.markdown.link).link(url.to_owned())]).wrap(WrapMode::Word);
     // `Link`'s `onMouseUp`. The dialog panel stops a release before the app's link handler sees it.
@@ -1156,7 +1115,6 @@ fn link(cx: &DialogCx, url: &str, open: Option<Rc<dyn Fn()>>) -> Text {
     text
 }
 
-/// The copy and open actions of [`oauth_view`].
 type CopyOpen = (Rc<dyn Fn()>, Rc<dyn Fn()>);
 
 /// `OAuthView`: the title, the URL and instructions once there are any, a status line, and the copy and open
@@ -1206,10 +1164,6 @@ pub(super) fn oauth_code(text: &str) -> Option<String> {
         (tail >= 4).then(|| chars[start..start + 5 + tail].iter().collect())
     })
 }
-
-// ---------------------------------------------------------------------------------------------------------------
-// Command (`CommandStarting`, `CommandPending`)
-// ---------------------------------------------------------------------------------------------------------------
 
 fn command_starting(flow: &Flow, integration: IntegrationInfo, method: IntegrationCommandMethod) {
     let closed = Rc::new(Cell::new(false));
@@ -1363,7 +1317,6 @@ impl Command {
     }
 }
 
-/// `CommandView`: the command's output on a raised band, and a status line. Returns the output's text.
 fn command_view(cx: &Rc<DialogCx>, title: &str, message: &str) -> (View, Text) {
     let app = &cx.app;
     let page = cx.theme.page();
@@ -1372,7 +1325,6 @@ fn command_view(cx: &Rc<DialogCx>, title: &str, message: &str) -> (View, Text) {
         HeaderProps { title: title.to_owned(), close_label: Some("esc close".into()), ..HeaderProps::default() },
     );
     let output = Text::new(app, "").fg(page.text.base);
-    // `DialogBleed`: the band reaches the dialog's edges.
     let band = View::new(app).margin_x(-(DIALOG_INSET as i32)).child(
         &View::new(app)
             .bg(page.background.raised.high)
@@ -1385,12 +1337,6 @@ fn command_view(cx: &Rc<DialogCx>, title: &str, message: &str) -> (View, Text) {
     (layout_view(cx, &head, &body, None, DIALOG_INSET, 1), output)
 }
 
-// ---------------------------------------------------------------------------------------------------------------
-// Connected
-// ---------------------------------------------------------------------------------------------------------------
-
-/// `connected`: reads the integrations, models, and providers into the store again, says so, and goes on to
-/// `on_connected`, or closes the dialog.
 fn connected(flow: &Flow, integration: &IntegrationInfo) {
     let local = &flow.local;
     let reload = futures_util::future::try_join3(

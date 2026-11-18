@@ -18,14 +18,10 @@ use opencode_plugin::contain::{Artifact, Crash, Record, Snapshot};
 
 use crate::prelude::*;
 
-/// What the CLI tells the TUI.
 #[derive(Clone, Default)]
 pub struct Contain {
-    /// The run record the parent made: the client runs under a parent.
     pub record: Option<Arc<Record>>,
-    /// Start the watchdog: the client is on a real terminal.
     pub watch: bool,
-    /// No parent guards this client, though one should: why external plugins do not run.
     pub unsupervised: Option<String>,
 }
 
@@ -39,7 +35,6 @@ impl std::fmt::Debug for Contain {
     }
 }
 
-/// The file in the state directory that keeps the builds that crashed the client.
 pub const FILE: &str = "plugin-crashes.json";
 
 /// Applies containment before the plugins activate and before the first route mounts.
@@ -106,7 +101,6 @@ pub fn install(tui: &Rc<Tui>) {
     }
 }
 
-/// The crash entry of an external build a crash named; `None` for a built-in, which is a host bug.
 fn quarantine(artifact: &Artifact, crash: &Crash) -> Option<Crashed> {
     Some(Crashed {
         id: if artifact.id.is_empty() { artifact.target.clone()? } else { artifact.id.clone() },
@@ -138,7 +132,6 @@ fn update(file: &Path, change: impl FnOnce(&mut Vec<Crashed>)) -> Vec<Crashed> {
     })
 }
 
-/// [`update`], or why the change was not kept.
 fn try_update(file: &Path, change: impl FnOnce(&mut Vec<Crashed>)) -> Result<Vec<Crashed>, String> {
     let dir: PathBuf = file.parent().map(Path::to_path_buf).unwrap_or_default();
     let options = opencode_local::lock::Options::default();
@@ -187,7 +180,6 @@ fn notice(tui: &Rc<Tui>, crash: &Crash, safe: bool, dropped: bool) {
     tui.toasts.show(options.keep());
 }
 
-/// Enables the plugin of entry `key` again ([`opencode_plugin::Entry::key`]), as the plugin manager does.
 pub(crate) fn enable(tui: &Rc<Tui>, key: &str) {
     match tui.plugins.toggle_entry(&super::host::host(tui), key, true) {
         Some(Err(error)) => {

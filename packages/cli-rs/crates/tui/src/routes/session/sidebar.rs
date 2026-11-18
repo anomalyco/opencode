@@ -13,7 +13,6 @@ use opencode_plugin::{SlotInput, SlotMount, slot};
 use crate::frame::layout::SESSION_SIDEBAR_WIDTH;
 use crate::prelude::*;
 
-/// The terminal width beside the tab rail above which the sidebar docks (`wide`).
 const WIDE: i64 = 120;
 
 pub struct Sidebar {
@@ -23,7 +22,6 @@ pub struct Sidebar {
 struct Inner {
     app: App,
     session: SessionID,
-    /// The sidebar itself; it moves between `docked` and `overlay`.
     panel: View,
     title: Text,
     docked: View,
@@ -32,9 +30,7 @@ struct Inner {
     footer: View,
     /// The `sidebar.content` and `sidebar.footer` slots, mounted while the sidebar shows (TS `<Show>`).
     slots: RefCell<Vec<SlotMount>>,
-    /// `sidebarOpen`: opened with the toggle, beyond what `session.sidebar` shows by itself.
     open: Cell<bool>,
-    /// Where the panel is now.
     placed: Cell<Place>,
     /// Whether a plugin panel of this session showed at the last layout.
     panel_shown: Cell<bool>,
@@ -50,17 +46,11 @@ enum Place {
     Overlay,
 }
 
-/// Mounts the sidebar into the session frame's row; the session route keeps it and syncs it.
 pub fn mount(tui: &Tui, row: &View, session: &SessionID) -> Sidebar {
     let app = &tui.app;
     let title = Text::new(app, "").bold();
     let content = View::new(app).column().shrink(0.0).gap(1).padding_edge(Edge::Right, 1);
-    let scroll = ScrollBox::new(app)
-        .axes(false, true)
-        // TS draws the bar over the content's right padding; this keeps the content at its width.
-        .scrollbars(false)
-        .grow(1.0)
-        .min_height(0);
+    let scroll = ScrollBox::new(app).axes(false, true).scrollbars(false).grow(1.0).min_height(0);
     scroll.add(&content);
     let footer = View::new(app).column().shrink(0.0).gap(1).padding_edge(Edge::Top, 1);
     let panel = View::new(app)
@@ -148,7 +138,6 @@ impl Sidebar {
         });
     }
 
-    /// Whether the sidebar is the right pane (`sidebarVisible` of the session view).
     pub fn shown(&self) -> bool {
         self.inner.placed.get() != Place::Hidden
     }
@@ -167,7 +156,6 @@ impl Inner {
         self.panel.bg(theme.background.raised.base);
     }
 
-    /// The `sidebar.content` and `sidebar.footer` slots.
     fn mount_slots(&self, tui: &Tui) -> Vec<SlotMount> {
         let input = SlotInput { session_id: Some(self.session.0.clone()), ..SlotInput::default() };
         vec![
@@ -182,15 +170,12 @@ impl Inner {
         tui.app.request_redraw();
     }
 
-    /// `wide`: the terminal beside the tab rail is wider than 120 columns.
     fn wide(tui: &Tui) -> bool {
         i64::from(tui.app.size().0) - i64::from(tui.frame.rail_width(tui)) > WIDE
     }
 
-    /// `rightPane() === "sidebar"`.
     fn wanted(&self, tui: &Tui) -> bool {
         let panel = tui.panels.current().is_some_and(|panel| panel.session == self.session.0);
-        // A panel that opens closes the sidebar it replaces.
         if panel && !self.panel_shown.replace(true) {
             self.open.set(false);
         }
@@ -247,7 +232,6 @@ impl Inner {
         tui.app.request_redraw();
     }
 
-    /// `toggleSidebar`: writes `session.sidebar` and opens or closes the sidebar; opening closes a panel.
     fn toggle(&self, tui: &Tui) {
         let visible = self.placed.get() != Place::Hidden;
         let value = if visible { "hide" } else { "auto" };

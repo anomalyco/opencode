@@ -34,7 +34,6 @@ struct Inner {
     output: Text,
     error: Text,
     props: RefCell<Option<Props>>,
-    /// The header shows a spinner: the command is running.
     spinning: Cell<Option<bool>>,
     spinner: RefCell<Option<Spinner>>,
     expanded: Cell<bool>,
@@ -51,7 +50,6 @@ struct Props {
     running: bool,
     output: Option<String>,
     error: Option<String>,
-    /// The shell is still in the location's running shells.
     background: bool,
     location: Option<String>,
     width: usize,
@@ -158,7 +156,6 @@ impl Shell {
         let output = Text::new(cx.app, "").fg(theme.text.muted).visible(false);
         let body = View::new(cx.app).column().gap(1).child(&header).child(&output);
         let error = Text::new(cx.app, "").fg(theme.text.feedback.error.base).visible(false);
-        // `BlockTool`: a `┃` in the page color on the raised surface.
         let root = View::new(cx.app)
             .column()
             .shrink(0.0)
@@ -215,7 +212,6 @@ impl Shell {
         &self.0.root
     }
 
-    /// Paints in the live theme again; a running spinner keeps its frame.
     pub fn restyle(&self) {
         let inner = &self.0;
         let theme = inner.theme.get();
@@ -388,7 +384,6 @@ pub struct Collapsed {
     pub overflow: bool,
 }
 
-/// `collapseShellOutput`: the command in at most two lines, then the output's tail in what is left.
 pub fn collapse_shell_output(input: &str, output: &str, max_lines: usize, max_chars: usize) -> Collapsed {
     if input.is_empty() {
         let overflow = collapse_tool_output(output, max_lines, max_chars).1;

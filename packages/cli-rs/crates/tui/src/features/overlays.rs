@@ -28,7 +28,6 @@ pub struct Overlays {
     polling: Cell<bool>,
 }
 
-/// Whether the event connection is connected (`client.connection.status() === "connected"`).
 pub fn connected(tui: &Tui) -> bool {
     tui.overlays.connected.get()
 }
@@ -76,7 +75,6 @@ pub fn connection_changed(tui: &Tui, state: &State) {
     )));
 }
 
-/// `Reconnecting`: a dimmed screen with a centered panel.
 fn reconnecting(tui: &Tui) -> View {
     let app = &tui.app;
     let theme = tui.page();
@@ -157,7 +155,6 @@ fn migration_failed(tui: &Tui, message: String) {
     );
 }
 
-/// `label` and ` n` or ` n/m`.
 fn progress(value: &serde_json::Value) -> String {
     let label = value["label"].as_str().unwrap_or_default();
     match (value["numerator"].as_i64(), value["denominator"].as_i64()) {
@@ -167,7 +164,6 @@ fn progress(value: &serde_json::Value) -> String {
     }
 }
 
-/// The migration panel in the top right corner, or none.
 fn set_migration(tui: &Tui, progress: Option<String>) {
     if let Some(view) = tui.overlays.migration.take() {
         view.detach();

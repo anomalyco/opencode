@@ -18,7 +18,6 @@ use opencode_api::generated::{McpServerStatus, SessionArchivedData, SessionDelet
 use crate::prelude::*;
 
 type Subscribers = Rc<RefCell<Vec<(u64, Rc<dyn Fn(&Tui, &V2Event)>)>>>;
-/// Each delta subscriber with its own place in the store's deltas.
 type DeltaSubscribers = Rc<RefCell<Vec<(u64, Rc<opencode_store::DeltaListening>, Rc<dyn Fn(&[V2Event])>)>>>;
 
 /// The last status each MCP server was alerted for, and the signal and delta subscribers.
@@ -32,11 +31,9 @@ pub struct Events {
     next: Cell<u64>,
 }
 
-/// One event the store passed on, posted to the UI thread.
 #[derive(Clone)]
 pub(crate) struct Signal(pub Arc<V2Event>);
 
-/// The pump's signal receiver fell behind and skipped events, posted to the UI thread.
 #[derive(Clone)]
 pub(crate) struct Lagged;
 
@@ -44,7 +41,6 @@ pub(crate) struct Lagged;
 /// store passes on. The handlers match on [`Handled`], so acting on a type means adding it here.
 macro_rules! handled {
     ($($tag:literal => $variant:ident($payload:ident)),* $(,)?) => {
-        /// An event [`handle`] acts on.
         #[allow(dead_code, reason = "a handler may match a variant without reading its payload")]
         pub(crate) enum Handled<'a> {
             $($variant(&'a opencode_api::generated::$payload),)*
@@ -59,7 +55,6 @@ macro_rules! handled {
             }
         }
 
-        /// Each tag of [`Handled`], with its variant.
         const HANDLED: &[(&str, &str)] = &[$(($tag, stringify!($variant))),*];
     };
 }
@@ -80,7 +75,6 @@ handled! {
 }
 
 pub fn install(tui: &Tui) {
-    // For the TUI's lifetime.
     std::mem::forget(tui.data.listen(HANDLED.iter().map(|(tag, _)| *tag)));
     tui.app.on_message(bind!(tui, |tui, _, Signal(event)| {
         // What the plugins asked for while the signal before it was handled runs first (`opencode_plugin::flush`): a
@@ -102,7 +96,6 @@ pub fn install(tui: &Tui) {
 pub mod testing {
     use super::*;
 
-    /// Posts `event` to the UI thread as the store's signal of it, as the event pump does.
     pub fn signal(tui: &Tui, event: V2Event) {
         let _ = tui.app.proxy().send(Signal(Arc::new(event)));
     }
@@ -211,7 +204,6 @@ pub fn sync(tui: &Tui, changes: &Changes) {
 }
 
 fn handle(tui: &Tui, event: &Handled) {
-    // Pins and the worktrees dialog see every event, tabs or not (E.11b).
     crate::features::quick_switch::event(tui, event);
     crate::dialogs::worktrees::event(event);
     crate::dialogs::open::event(event);
@@ -275,7 +267,6 @@ fn handle(tui: &Tui, event: &Handled) {
     }
 }
 
-/// Whether an event's location is the current one (`location.current?.directory ?? default`).
 fn here(tui: &Tui, location: Option<&opencode_api::generated::LocationRef>) -> bool {
     let current = crate::features::location::current(tui)
         .unwrap_or_else(|| tui.data.read(|state| state.default_location().clone()));
@@ -338,7 +329,6 @@ fn mcp_toasts(tui: &Tui) {
 
 #[cfg(test)]
 mod tests {
-    // Expected: each tag the store passes on for `handle` is the tag of the variant `handle` matches on.
     #[test]
     fn each_handled_tag_names_its_variant() {
         for (tag, variant) in super::HANDLED {

@@ -34,7 +34,6 @@ pub fn plugin() -> abi::Plugin {
 
 #[derive(Default)]
 struct State {
-    /// The questions asked and not answered yet, by request.
     pending: RefCell<HashMap<RequestId, String>>,
     /// The session the open prompt asks about, captured as it opened.
     prompted: RefCell<Option<String>>,
@@ -133,7 +132,6 @@ fn ask(host: &dyn Host, state: &State, session: String, question: String) {
     let call = Client::session_generate_call(&input).expect("the generate input encodes");
     match host.try_fetch(fetch_of(call)) {
         Ok(id) => drop(state.pending.borrow_mut().insert(id, question)),
-        // A fetch the host did not take ends as a failed reply does.
         Err(error) => host.toast(Toast::new(Variant::Error, error)),
     }
 }

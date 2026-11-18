@@ -1,5 +1,3 @@
-//! Dialogs opened from the TUI. Each file belongs to the step that names it.
-
 pub mod agent;
 pub mod debug;
 pub mod error_details;

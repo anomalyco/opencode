@@ -13,7 +13,6 @@ use opencode_local::cli_config::{AttentionSoundName, AttentionSounds};
 use opentui::audio::{Audio, Sound};
 use opentui::native::Context;
 
-/// The bundled sounds, from `packages/ui/src/assets/audio`.
 const BUNDLED: [(&str, &[u8]); 5] = [
     ("bip-bop-01.mp3", include_bytes!("../../../../../../ui/src/assets/audio/bip-bop-01.mp3")),
     ("bip-bop-03.mp3", include_bytes!("../../../../../../ui/src/assets/audio/bip-bop-03.mp3")),
@@ -22,7 +21,6 @@ const BUNDLED: [(&str, &[u8]); 5] = [
     ("yup-01.mp3", include_bytes!("../../../../../../ui/src/assets/audio/yup-01.mp3")),
 ];
 
-/// `BUILTIN_SOUNDS`: the bundled file each sound name plays.
 pub fn bundled(name: AttentionSoundName) -> &'static str {
     match name {
         AttentionSoundName::Default | AttentionSoundName::Done => "bip-bop-01.mp3",
@@ -36,13 +34,10 @@ pub fn bundled(name: AttentionSoundName) -> &'static str {
 /// Where a sound's bytes come from.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Source {
-    /// A file from `attention.sounds`.
     File(String),
-    /// A bundled sound, by file name.
     Bundled(&'static str),
 }
 
-/// `soundCandidates`: the override, then the bundled sound.
 pub fn candidates(name: AttentionSoundName, overrides: &AttentionSounds) -> Vec<Source> {
     let file = match name {
         AttentionSoundName::Default => &overrides.default,
@@ -55,7 +50,6 @@ pub fn candidates(name: AttentionSoundName, overrides: &AttentionSounds) -> Vec<
     file.iter().map(|file| Source::File(file.clone())).chain([Source::Bundled(bundled(name))]).collect()
 }
 
-/// `clampVolume`: 0 to 1, and 0 for a value that is not finite.
 pub fn clamp_volume(volume: f64) -> f32 {
     if volume.is_finite() { volume.clamp(0.0, 1.0) as f32 } else { 0.0 }
 }
@@ -69,7 +63,6 @@ pub enum Output {
     Mix,
 }
 
-/// The TUI's audio engine and the sounds it loaded (`audio.ts`).
 #[derive(Default)]
 pub struct Player {
     output: Cell<Output>,
@@ -138,7 +131,6 @@ mod tests {
     use super::*;
     use opentui::native::ContextOptions;
 
-    /// The loudest sample of the next `frames` stereo frames of the mix.
     fn peak(audio: &Audio, frames: usize) -> f32 {
         let mut samples = vec![0.0; frames * 2];
         audio.mix(&mut samples, 2).unwrap();

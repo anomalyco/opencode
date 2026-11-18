@@ -9,24 +9,20 @@
 use crate::dialogs::highlights::{self, Highlight};
 use crate::prelude::*;
 
-/// The current release's highlights and the version they belong to.
 #[derive(Clone, Debug, Default)]
 pub struct Release {
     pub version: String,
     pub items: Vec<Highlight>,
 }
 
-/// The highlights this build embeds; an invalid value reads as none, as in TS.
 pub fn embedded() -> Vec<Highlight> {
     option_env!("OPENCODE_RELEASE_HIGHLIGHTS").and_then(|text| serde_json::from_str(text).ok()).unwrap_or_default()
 }
 
-/// Registers `/highlights` when the build has highlights, and the auto-open. `continue_` is `--continue`.
 pub fn install(tui: &Rc<Tui>, continue_: bool) {
     install_with(tui, Release { version: tui.startup.args.version.clone(), items: embedded() }, continue_);
 }
 
-/// [`install`] with the release given, for tests.
 pub fn install_with(tui: &Rc<Tui>, release: Release, continue_: bool) {
     if !release.items.is_empty() {
         let (weak, shown) = (tui.weak(), release.clone());
@@ -91,7 +87,6 @@ pub fn startup(tui: &Tui, release: &Release, continue_: bool) {
 #[derive(Clone, Debug)]
 pub struct Input {
     pub version: String,
-    /// Highlights embedded in this build.
     pub count: usize,
     /// The user has used the TUI before, so a first run with no state is still an update.
     pub history: bool,
@@ -99,11 +94,8 @@ pub struct Input {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Decision {
-    /// Open the dialog and record the version.
     Show,
-    /// Mark the version seen silently.
     Record,
-    /// Leave the state untouched.
     None,
 }
 
@@ -119,7 +111,6 @@ pub fn decide(input: &Input, seen: Option<&str>) -> Decision {
     if input.count > 0 { Decision::Show } else { Decision::Record }
 }
 
-/// `claim`: the decision inside the locked `highlights` update; whether this TUI shows the dialog.
 pub fn claim(storage: &opencode_local::storage::Storage, input: &Input) -> Result<bool, String> {
     let initial = json!({});
     let seen = |value: &Value| value.get("seen").and_then(Value::as_str).map(str::to_owned);
@@ -163,7 +154,6 @@ mod tests {
         Input { version: version.to_owned(), count, history }
     }
 
-    /// The cases of `packages/tui/test/highlights.test.ts`, and an unstable or broken seen version.
     #[test]
     fn decide_matches_typescript() {
         let base = || input("2.0.27", 5, true);

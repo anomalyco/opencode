@@ -1,7 +1,4 @@
-//! File changes dialog (E.11b, row DLG25): `component/dialog-workspace-file-changes.tsx`.
-//!
-//! Lists a worktree's changed files (status letter, path, `+added -removed`) under a question. With the new
-//! designs the confirm key answers yes and Escape cancels; there is no yes/no toggle.
+//! TypeScript: `component/dialog-workspace-file-changes.tsx`.
 
 use opencode_api::generated::{FileDiffInfoStatus, VcsFileStatus};
 use opencode_ui::dialog::{DIALOG_INSET, FooterAction, FooterProps, layout};
@@ -15,12 +12,10 @@ pub enum Choice {
     Yes,
 }
 
-/// The texts `DialogWorkspaceFileChanges.show` takes.
 #[derive(Clone, Default)]
 pub struct Texts {
     pub title: Option<String>,
     pub message: Option<String>,
-    /// The footer action for yes: its title and key; `confirm` and `enter` by default.
     pub confirm: Option<(String, String)>,
 }
 
@@ -50,7 +45,6 @@ pub fn show(tui: &Tui, files: Vec<VcsFileStatus>, texts: Texts, on_choice: Rc<dy
                     dialogs.clear();
                 }
             };
-            // Escape needs nothing here: the dialog closes on it, which resolves as a cancel.
             let yes = choose(Choice::Yes);
             cx.layer(KeymapLayer::new(vec![
                 TuiCommand::inline(if key == "enter" { "return" } else { key.as_str() }, move |_, _| yes())
@@ -79,7 +73,6 @@ pub fn show(tui: &Tui, files: Vec<VcsFileStatus>, texts: Texts, on_choice: Rc<dy
                     .fg(theme.text.muted)
                     .wrap(WrapMode::Word),
                 )
-                // `DialogBleed`: the list runs to the dialog's edges.
                 .child(
                     &View::new(app)
                         .margin_edge(Edge::Left, -(DIALOG_INSET as i32))
@@ -128,7 +121,6 @@ fn count_text(file: &VcsFileStatus) -> String {
 
 fn file_row(app: &App, page: &opencode_ui::theme::Theme, file: &VcsFileStatus, name_width: i64) -> View {
     let path = crate::dialogs::open::truncate_file_path(&file.file, name_width);
-    // TS leaves the space in the default foreground.
     let mut counts = vec![" ".fg(Color::rgb(255, 255, 255))];
     if file.additions != 0 {
         counts.push(format!("+{}", file.additions).fg(page.diff.text.added));

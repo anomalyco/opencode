@@ -12,9 +12,7 @@ pub struct Write {
     root: View,
     inline: InlineTool,
     block: BlockTool,
-    /// The fingerprint of the content, path, and diagnostics the block shows.
     shown: Cell<Option<u64>>,
-    /// Restyles the block's children in place.
     paints: Paints,
 }
 
@@ -30,7 +28,6 @@ impl Write {
         &self.root
     }
 
-    /// The file keeps its code and highlight.
     pub fn restyle(&self, cx: &Context<'_>) {
         self.inline.restyle();
         self.block.restyle();

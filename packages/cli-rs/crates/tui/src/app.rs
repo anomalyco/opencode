@@ -1,5 +1,4 @@
-//! The app (T.1): the shared context, mounting over any `App`, and the terminal entry point
-//! (`packages/tui/src/app.tsx`). Structure: `docs/T.1.md`.
+//! TypeScript: `packages/tui/src/app.tsx`.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -22,18 +21,13 @@ use crate::features::startup::{Args, Startup};
 use crate::prelude::*;
 use crate::routes::{self, RouteView};
 
-/// What the TUI is built from. Tests pass an in-memory client and no roots.
 pub struct Deps {
     pub client: Client,
-    /// The default location directory (`data.location.default()`).
     pub directory: String,
     pub config: Resolved,
-    /// Real config and state roots, for `cli.json` and TUI storage writes. `None` writes nothing.
     pub roots: Option<Roots>,
     pub route: Route,
-    /// `--continue`: open the newest root session of `directory`.
     pub continue_: bool,
-    /// Open the `/api/event` connection.
     pub events: bool,
     /// The built-ins from other crates, in TS order: Mermaid and LaTeX. `tui` does not depend on them, so an edit
     /// there does not rebuild it.
@@ -45,26 +39,21 @@ pub struct Deps {
 
 pub struct Roots {
     pub paths: Paths,
-    /// The TUI storage channel (`OPENCODE_TUI_CHANNEL`, else the channel).
     pub storage_channel: String,
 }
 
-/// What [`run`] needs besides [`Deps`].
 pub struct Launch {
     pub deps: Deps,
     pub args: Args,
     /// Kept alive while the TUI runs: dropping a standalone connection stops its server.
     pub keep: Box<dyn std::any::Any>,
-    /// External plugins to discover and load (P.4).
     pub plugins: Option<crate::plugins::host::External>,
 }
 
 /// The shared context. Held as `Rc<Tui>`; widget callbacks keep a [`Weak`].
 pub struct Tui {
     pub app: App,
-    /// The plugins' key layers, listeners, modes, captures and overlays (P2).
     pub router: opencode_plugin::interact::Router,
-    /// Where the plugins' overlays show: over the routes, under the dialogs.
     pub plugin_overlays: View,
     pub data: Data,
     pub keymap: Rc<DialogKeymap>,
@@ -75,19 +64,13 @@ pub struct Tui {
     /// The prompt textarea while it has the keymap's edit bindings (E.2 fills it). The keymap's
     /// `textarea_enabled` holds while it is focused.
     pub textarea: Rc<RefCell<Option<Textarea>>>,
-    /// Prompt history, drafts, and catalogs, shared by every prompt (E.2).
     pub prompt: crate::prompt::editor::Shared,
-    /// The live config: settings writes and `cli.json` edits replace it (E.18a).
     pub settings: crate::dialogs::settings::Live,
-    /// The model and agent state (E.16).
     pub local: Rc<crate::local::Local>,
     pub startup: Startup,
-    /// The plugins (P.1).
     pub plugins: crate::plugins::host::Plugins,
-    /// What the plugins' reads asked the host to load (O-67).
     pub(crate) reads: crate::plugins::host::Reads,
     pub epilogue: crate::features::epilogue::Epilogue,
-    /// The update notification and dialog state (E.18b).
     pub updates: crate::features::update_notification::Updates,
     pub(crate) location: crate::features::location::LocationState,
     pub(crate) overlays: crate::features::overlays::Overlays,
@@ -98,22 +81,14 @@ pub struct Tui {
     theme_scans: Cell<u64>,
     /// The selected theme's name as the plugins last heard of it.
     theme_selected: RefCell<String>,
-    /// Markdown documents that link session IDs (#63224).
     pub(crate) session_links: crate::features::session_links::Registry,
     pub(crate) events: crate::features::events::Events,
-    /// Focus and program status (E.19a).
     pub attention: crate::features::attention::notify::Attention,
-    /// Session tabs (E.12).
     pub tabs: crate::tabs::Tabs,
-    /// The tab strip or rail around the route, and the pane sizes (E.12).
     pub frame: crate::frame::Frame,
-    /// Plugin side panels (E.12).
     pub panels: crate::panel::Panels,
-    /// Session terminals (E.13a).
     pub terminals: crate::terminal::Terminals,
-    /// The client MCP socket (E.13b).
     pub client_mcp: crate::client_mcp::ClientMcp,
-    /// What the composer keeps across session views (E.13b).
     pub composer: crate::composer::Memory,
     /// Inbox items with a pending action in flight ([`crate::routes::session::queued::mutate`]).
     pub(crate) pending_actions: RefCell<std::collections::HashSet<String>>,
@@ -129,10 +104,8 @@ pub struct Tui {
     seen: Cell<u64>,
     /// [`Tui::hold_sync`].
     held: Cell<bool>,
-    /// The open dialogs and viewers that follow the store: [`Tui::follow`].
     followers: RefCell<Vec<Follower>>,
     connection: RefCell<Option<Connection>>,
-    /// Keymap hooks that live as long as the TUI.
     pub(crate) layers: RefCell<Vec<Disposer>>,
     this: Weak<Tui>,
 }
@@ -152,7 +125,6 @@ struct Files {
 #[derive(Clone)]
 struct DataChanged;
 
-/// Posted when the event connection changed state.
 #[derive(Clone)]
 struct StatusChanged(events::State);
 
@@ -186,18 +158,14 @@ impl Tui {
         self.settings.config()
     }
 
-    /// TUI storage (`useStorage`), when the TUI has real roots.
     pub fn storage(&self) -> Option<Storage> {
         self.files.as_ref().and_then(|files| files.storage.clone())
     }
 
-    /// The state directory (TS `useTuiPaths().state`), when the TUI has real roots.
     pub fn state_dir(&self) -> Option<std::path::PathBuf> {
         self.files.as_ref().map(|files| files.state.clone())
     }
 
-    /// The global cache directory (TS `Global.Path.cache`, `~/.cache/opencode`), when the TUI has real roots: where TS
-    /// installs the packages plugins are named by.
     pub fn cache_dir(&self) -> Option<std::path::PathBuf> {
         self.files.as_ref().map(|files| files.cache.clone())
     }
@@ -216,15 +184,12 @@ impl Tui {
         self.theme.borrow().theme().page()
     }
 
-    /// Replaces the route view and syncs the new one with everything.
     pub fn navigate(&self, route: Route) {
         // Going home from home to another location is a navigation, not a remount.
         let remount =
             self.view.borrow().is_some() && self.route() == route && !crate::features::location::pending(self);
         // Mounting may move the focus (a docked panel, a pending permission); an open dialog keeps it.
         let dialog = self.dialogs.is_open().then(|| self.app.focused());
-        // A remount (a plugin loaded, a theme change) keeps the composer's open list open in the new composer, as TS's
-        // stays open (js-followups), with its place on the mode stack: a dialog over it keeps its keys (review jsnpm-1).
         let complete = remount
             .then(|| self.prompt.current.borrow().upgrade().and_then(|prompt| prompt.autocomplete.get()?.take_open()))
             .flatten();
@@ -247,7 +212,6 @@ impl Tui {
             Route::Plugin { .. } => {}
             _ => self.before_plugin.borrow_mut().clear(),
         }
-        // A remount (a theme change) keeps the home's location.
         if route == Route::Home && !remount {
             crate::features::location::home(self);
         }
@@ -327,7 +291,6 @@ impl Tui {
         }
         let (revision, changes) = self.data.changes_since(self.seen.get());
         self.seen.set(revision);
-        // Also with no change: a delta of a session whose messages are not loaded changes nothing.
         crate::features::events::deltas(self);
         if changes.is_empty() {
             return;
@@ -390,7 +353,6 @@ impl Tui {
         self.app.request_redraw();
     }
 
-    /// Runs `ThemeState` effects off the UI thread, shows a theme error, and repaints on a change.
     pub fn theme_changed(&self) {
         let (effects, error) = {
             let mut theme = self.theme.borrow_mut();
@@ -434,17 +396,13 @@ impl Tui {
         self.restyle_route();
     }
 
-    /// Restyles the route view for the current theme in place, or mounts a plugin route again, keeping the prompt
-    /// focused if it was.
     fn restyle_route(&self) {
         self.restyle.set(false);
         // Before the first route mounts there is nothing to repaint.
         if self.view.borrow().is_none() {
             return;
         }
-        // The plugins' overlays take the theme in place.
         self.router.restyle(self);
-        // In place, the focus, the scroll positions and every widget's state stay where they are.
         if self.view.borrow().as_ref().is_some_and(|view| view.restyle(self)) {
             // The `app` slot's plugin claims take the theme in place, or mount again when one cannot.
             crate::frame::restyle_app(self);
@@ -480,7 +438,6 @@ pub fn mount(app: &App, deps: Deps) -> Rc<Tui> {
     mount_with(app, deps, Args::default())
 }
 
-/// [`mount`] with the startup arguments.
 pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
     let runtime = app.runtime();
     let _guard = runtime.enter();
@@ -647,7 +604,6 @@ pub fn options() -> AppOptions {
         exit_on_ctrl_c: false,
         // `terminal.suspend` (E.20) owns Ctrl+Z, so `keybinds` can turn it off.
         suspend_on_ctrl_z: false,
-        // `ThemeState` follows the palette when the `system` theme is active.
         palette_size: 16,
         // `--print-logs` records and stray stderr writes would draw over the screen; they go to the console and
         // reach the real stderr once the terminal is restored.
@@ -683,7 +639,6 @@ pub fn run_on(app: App, launch: Launch, started: impl FnOnce(&Rc<Tui>) -> opentu
         crate::plugins::host::external(&tui, external);
     }
     started(&tui)?;
-    // Tests start the editor context with their own source; the real TUI reads the environment.
     crate::prompt::editor_context::start(&tui, crate::prompt::editor_context::Source::from_env());
     let result = app.run();
     // As soon as the terminal is restored, as TS does: the teardown below runs with Ctrl+C sending SIGINT again, so a
@@ -720,12 +675,6 @@ fn route_keys(tui: &Rc<Tui>) {
     });
 }
 
-/// The host's close rule for the reserved chord, which no plugin sees (synthesis 3.8): it closes the plugin's surface
-/// that has the input, one level, as TS's diff viewer binds `app.exit` to close itself: a focused overlay, else a
-/// focused panel, else a focused slot surface, whose focus goes back to the composer, else a route, which goes back
-/// where it came from. Whether it closed one; if not, the chord goes on
-/// to the host's own keys (`app.exit`). The composer's draft stays, and a rebound `app.exit` changes nothing of it
-/// (review carbon-2).
 fn close_plugin_surface(tui: &Tui) -> bool {
     if tui.router.close_focused(tui) {
         return true;
@@ -770,7 +719,6 @@ fn install_keys(tui: &Rc<Tui>) {
             return;
         }
         tui.router.escape(&*tui);
-        // A selection copies on the chord, and a host dialog takes it as its own key.
         if tui.app.selected_text().is_some() || tui.dialogs.is_open() {
             return;
         }
@@ -785,7 +733,6 @@ fn install_keys(tui: &Rc<Tui>) {
     // A focused terminal takes keys before the keymap (E.13a).
     crate::terminal::install_keys(tui);
     route_keys(tui);
-    // The leader sequence expires on a timer (`leader.timeout`).
     tui.layers.borrow_mut().push(opencode_ui::dialog::expire_leader(&tui.app, &tui.keymap));
 
     tui.keymap.set_first_layer(app_commands());
@@ -857,9 +804,7 @@ fn install_keys(tui: &Rc<Tui>) {
         .bindings(["app.exit"]);
     let layers = [
         commands,
-        // Part of `appBindingCommands` (`app.tsx:150-186`); E.20 binds its own commands.
         KeymapLayer::default().bindings([COMMAND_PALETTE_COMMAND, "help.show", "opencode.settings"]),
-        // `appGlobalBindingCommands` (`app.tsx:117`).
         KeymapLayer::global(Vec::new()).bindings(["session.list", "session.new", "open.menu"]),
         exit,
     ];
@@ -984,7 +929,6 @@ pub(crate) fn discover_themes(tui: &Tui, prepare: impl FnOnce(&std::path::Path) 
                 None => tui.theme.borrow_mut().discovery_failed(),
             }
             tui.theme_changed();
-            // The plugins read the theme names.
             crate::plugins::host::local_changed(&tui);
         }),
     );
@@ -998,7 +942,6 @@ struct Wakeups {
     pending: Arc<AtomicBool>,
 }
 
-/// Handles the wakes on the UI thread and subscribes to the store.
 fn install_wakeups(tui: &Rc<Tui>, connect: bool) -> Wakeups {
     let pending = Arc::new(AtomicBool::new(false));
     let clear = pending.clone();
@@ -1083,7 +1026,6 @@ async fn post<M: Clone + Send + 'static>(proxy: &AppProxy, message: M) -> bool {
     }
 }
 
-/// Starts the event connection and returns its state.
 fn connect(tui: &Rc<Tui>) -> tokio::sync::watch::Receiver<events::State> {
     let (connection, _task) = opencode_store::connection::connect(&tui.data, events::Options::default());
     let state = connection.watch();
@@ -1105,7 +1047,6 @@ fn slash(name: &str, aliases: &[&str]) -> Slash {
     Slash::new(name).aliases(aliases.iter().copied())
 }
 
-/// The opentui theme the renderer clears with: the page background and text.
 fn app_theme(theme: &Theme) -> opentui::theme::Theme {
     opentui::theme::Theme {
         background: theme.background.base,

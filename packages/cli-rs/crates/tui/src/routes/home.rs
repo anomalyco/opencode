@@ -1,5 +1,4 @@
-//! The home route (E.1, row T17): the logo, the prompt, and the footer slot (`routes/home.tsx`,
-//! `component/logo.tsx`). The session list is a dialog (E.11a).
+//! TypeScript: `routes/home.tsx`, `component/logo.tsx`.
 
 use opencode_ui::theme::tint;
 
@@ -7,8 +6,6 @@ use super::RouteView;
 
 use crate::prelude::*;
 
-/// `logo.ts`: `_` is a shadow-filled space, `^` a `▀` on the shadow, `~` a shadow-colored `▀`, and `,` a
-/// shadow-colored `▄`.
 pub(crate) const LOGO_LEFT: [&str; 4] =
     ["                   ", "█▀▀█ █▀▀█ █▀▀█ █▀▀▄", "█__█ █__█ █^^^ █__█", "▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀~~▀"];
 pub(crate) const LOGO_RIGHT: [&str; 4] =
@@ -21,7 +18,6 @@ pub struct Home {
     prompt: crate::prompt::editor::Prompt,
     /// The global form overlay (E.9b); while it holds the keys, the prompt must not take the focus.
     forms: crate::features::home_forms::HomeForms,
-    /// The `home.footer` slot's plugin claims (P.1), and the box they mount in.
     slot: Rc<RefCell<Rc<opencode_plugin::SlotMount>>>,
     footer: View,
 }
@@ -62,7 +58,6 @@ impl Home {
         let slot = Rc::new(RefCell::new(Rc::new(footer_slot(tui, &footer))));
         let root = View::new(app).column().grow(1.0).basis(Length::Auto).min_height(0).child(&center).child(&footer);
         let forms = crate::features::home_forms::mount(tui, &root);
-        // The logo, the side padding and the footer follow the terminal size (`useTerminalDimensions`).
         let size = std::cell::Cell::new((width, height));
         let (footer_slot, painted) = (slot.clone(), logo.clone());
         root.on_resize(bind!(tui, |tui, cx, _| {
@@ -80,7 +75,6 @@ impl Home {
     }
 }
 
-/// The `home.footer` slot; the footer itself is the `opencode.home.footer` plugin's claim (E.14).
 fn footer_slot(tui: &Tui, footer: &View) -> opencode_plugin::SlotMount {
     crate::plugins::host::slot(tui, footer, opencode_plugin::slot::HOME_FOOTER, &Default::default(), |_| {})
 }
@@ -131,7 +125,6 @@ fn padding(width: u16) -> u16 {
     if width < 44 { 1 } else { 2 }
 }
 
-/// `Logo`: nothing below 12 rows, the short mark below 22 columns, the two words stacked below 44.
 pub(crate) fn paint_logo(app: &App, logo: &View, theme: &Theme, width: u16, height: u16) {
     logo.clear();
     let muted = theme.text.muted;

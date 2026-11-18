@@ -40,14 +40,12 @@ pub enum Level {
     Reached,
 }
 
-/// `servedByConsole`: OpenCode Console serves the provider; OpenCode Go bills its own allowance.
 pub fn served_by_console(provider: Option<&ProviderInfo>) -> bool {
     provider.is_some_and(|provider| {
         provider.integration_id.as_ref().is_some_and(|id| id.0 == "opencode") && provider.id.0 != "opencode-go"
     })
 }
 
-/// `modelUsage`: the limits on a paid model, or `None` when none applies.
 pub fn model_usage(info: &UsageLimitsInfo, model: &ModelInfo, provider: Option<&ProviderInfo>) -> Option<ModelUsage> {
     if crate::dialogs::model::is_free(model) {
         return None;
@@ -86,7 +84,6 @@ pub fn model_usage(info: &UsageLimitsInfo, model: &ModelInfo, provider: Option<&
     })
 }
 
-/// `usageLevel`: `low` when what's left won't cover three requests that fill the context, `out` when not one.
 pub fn level(usage: &ModelUsage, model: &ModelInfo) -> Level {
     if usage.reached || usage.left <= 0.0 {
         return Level::Reached;
@@ -176,7 +173,6 @@ fn limit_models(budget: &UsageLimitsBudget) -> String {
     }
 }
 
-// `Intl.ListFormat("en-US", { style: "long", type: "conjunction" })`.
 fn list(items: &[String]) -> String {
     match items {
         [] => String::new(),
@@ -193,7 +189,6 @@ impl Local {
     }
 }
 
-/// `DialogUsage`: the models the workspace limits, with what each has left.
 pub fn show(local: &Rc<Local>) {
     local.load_usage(true);
     local.dialogs.replace(
@@ -335,7 +330,6 @@ fn options(local: &Local, active: &Option<String>, error: Color) -> Vec<SelectOp
         .collect()
 }
 
-/// A dialog with a header and one muted line, as the loading and signed-out states of `DialogUsage`.
 pub(crate) fn message(cx: &DialogCx, title: &str, text: &str, wrap: bool) -> View {
     let head = header(cx, HeaderProps::new(title));
     let body = Text::new(&cx.app, text).fg(cx.theme.text.muted);

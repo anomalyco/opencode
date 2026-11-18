@@ -1,5 +1,4 @@
-//! Diff file tree (E.15a): the pure tree of `diff-viewer-file-tree-utils.ts` and the pane of
-//! `diff-viewer-file-tree.tsx`.
+//! TypeScript: `diff-viewer-file-tree-utils.ts`, `diff-viewer-file-tree.tsx`.
 
 use std::collections::BTreeSet;
 
@@ -30,7 +29,6 @@ pub struct Tree {
     pub nodes: Vec<Node>,
 }
 
-/// One visible row: a file, or a directory with its single-child directory chain collapsed into its name.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Row {
     pub id: usize,
@@ -185,7 +183,6 @@ pub(crate) fn width(text: &str) -> i64 {
     unicode_width::UnicodeWidthStr::width(text) as i64
 }
 
-/// One file of the pane: its path and status letter.
 pub struct Item<'a> {
     pub file: &'a str,
     pub status: Status,
@@ -208,12 +205,10 @@ pub struct Pane<'a> {
     pub source: &'a str,
     pub detail: Option<&'a str>,
     pub help: Option<String>,
-    /// The muted text tinted over the pane's surface: the markers' and the rails' colors.
     pub faint: Rgba,
     pub rail: Rgba,
 }
 
-/// The id of a row's node, which a press on it names.
 pub fn row_id(row: &Row) -> String {
     format!("t:{}", row.id)
 }
@@ -233,9 +228,6 @@ struct Line {
     rail: Rgba,
 }
 
-/// The pane (`DiffViewerFileTree`, tree layout): the source header, the rows in their scroll `tree`, and the help
-/// footer. A click on the header switches the source (`diff.source`), one on the help opens it (`diff.help`); a row's
-/// presses reach the surface's handler.
 pub fn pane(input: &Pane<'_>, tree: &Tree, cx: &mut v2::View<'_>) -> v2::Node {
     let surface = "background.raised.base";
     let content_width = (i64::from(input.width) - 6).max(0);
@@ -318,7 +310,6 @@ pub fn pane(input: &Pane<'_>, tree: &Tree, cx: &mut v2::View<'_>) -> v2::Node {
 
     let mut body = vec![header, scroll];
     if let Some(help) = &input.help {
-        // `HelpShortcut`: a left click opens the help.
         body.push(
             v2::Node::column(vec![
                 v2::Node::text([Span::new(help.clone()).fg("text.base"), Span::new(" help").fg("text.muted")])
@@ -347,11 +338,8 @@ pub fn pane(input: &Pane<'_>, tree: &Tree, cx: &mut v2::View<'_>) -> v2::Node {
     )
 }
 
-/// A row: it fills the line, and a press on it is the handler's: the left button picks it, the right opens the file
-/// menu.
 fn row_node(id: String, line: &Line, surface: &'static str) -> v2::Node {
     let name = Span { bold: line.selected, ..Span::new(line.name.clone()) };
-    // Four nodes a row: 1,000 rows and their cards are one tree, within what the host takes of one.
     v2::Node::row(vec![
         v2::Node::text([Span::new(line.indent.clone()).fg(line.rail), Span::new(line.marker).fg(line.faint)])
             .wrap(Wrap::None)

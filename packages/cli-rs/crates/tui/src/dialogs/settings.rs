@@ -17,7 +17,6 @@ use opencode_ui::select::{Choice, Detail, select};
 use opencode_ui::theme::ModeSetting;
 use serde_json::Map;
 
-/// A setting value in the table.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Lit {
     Bool(bool),
@@ -35,7 +34,6 @@ impl Lit {
     }
 }
 
-/// How a numeric setting steps and shows.
 #[derive(Clone, Copy, Debug)]
 pub struct Range {
     pub step: f64,
@@ -44,7 +42,6 @@ pub struct Range {
     pub format: fn(f64) -> String,
 }
 
-/// One row of the TS `settings` table.
 #[derive(Clone, Copy, Debug)]
 pub struct Setting {
     pub title: &'static str,
@@ -53,7 +50,6 @@ pub struct Setting {
     /// Shown below the list while the row is selected.
     pub description: &'static str,
     pub default: Lit,
-    /// The values Left and Right cycle through; empty for the theme (the theme names) and numeric settings.
     pub values: &'static [Lit],
     pub labels: &'static [&'static str],
     pub range: Option<Range>,
@@ -61,7 +57,6 @@ pub struct Setting {
 }
 
 impl Setting {
-    /// `settingID`: the path joined with dots.
     pub fn id(&self) -> String {
         self.path.join(".")
     }
@@ -74,7 +69,6 @@ impl Setting {
 const OFF_ON: &[Lit] = &[Lit::Bool(false), Lit::Bool(true)];
 const OFF_ON_LABELS: &[&str] = &["off", "on"];
 
-// One argument per TS field keeps the table below in the TS shape.
 #[allow(clippy::too_many_arguments)]
 const fn choice(
     title: &'static str,
@@ -456,16 +450,13 @@ pub const SETTINGS: &[Setting] = &[
     ),
 ];
 
-/// A listener of config changes, from [`update`] or an outside `cli.json` edit.
 type Listener = Rc<dyn Fn(&Tui)>;
 
 /// What a write runs when it lands, in the order writes were queued.
 type Done = Box<dyn FnOnce(&Tui)>;
 
-/// The resolved config now, which every reader queries, and the write state. One per TUI.
 pub struct Live {
     resolved: RefCell<Resolved>,
-    /// `--auto`, which wins over `session.permissions` (`context/permission.tsx`).
     auto: bool,
     config: Option<CliConfig>,
     /// Runs writes and reloads one at a time, in order, off the UI thread.
@@ -512,7 +503,6 @@ impl Live {
         self.resolved.borrow().info.clone()
     }
 
-    /// Whether an `experimental` flag is on now.
     pub fn experiment(&self, name: &str) -> bool {
         self.resolved.borrow().info.experiment(name)
     }
@@ -531,13 +521,11 @@ impl Live {
         Disposer::new(bind!(listeners, |listeners| listeners.borrow_mut().retain(|(other, _)| *other != id)))
     }
 
-    /// How many listeners are registered, for the tests that check mounts let go of theirs.
     #[doc(hidden)]
     pub fn listener_count(&self) -> usize {
         self.listeners.borrow().len()
     }
 
-    /// How many writes have not landed yet, for the tests that check a step is not written twice.
     #[doc(hidden)]
     pub fn pending_writes(&self) -> usize {
         self.done.borrow().len()
@@ -586,7 +574,6 @@ fn deliver(proxy: &opentui::app::AppProxy, loaded: Loaded) {
     }
 }
 
-/// Sets `path` to `value`, creating the objects on the way (`dialog-config.tsx:463-468`).
 pub fn set_path(root: &mut Value, path: &[&str], value: Value) {
     let Some((last, parents)) = path.split_last() else { return };
     let parent = parents.iter().fold(root, |node, key| {
@@ -605,8 +592,6 @@ pub fn set_path(root: &mut Value, path: &[&str], value: Value) {
     }
 }
 
-/// Takes `info` as the current config and carries out what TS does reactively: the theme follows `theme.*`,
-/// the frame, tabs, and leader timeout follow the rest, and listeners run.
 fn apply(tui: &Tui, info: Info) {
     let next = tui.settings.resolve(info);
     if *tui.settings.config() == next {
@@ -638,7 +623,6 @@ fn apply(tui: &Tui, info: Info) {
     opencode_ui::motion::set_running(&tui.app, opencode_ui::motion::enabled(info.animations));
     let leader = tui.settings.config().leader_timeout;
     tui.keymap.set_leader_timeout(leader);
-    // Layers take the configured bindings again (`createLayer` reads `config.keybinds` reactively).
     let keybinds = tui.settings.config().keybinds();
     if keybinds != before.keybinds() {
         tui.keymap.set_keybinds(opencode_ui::keymap::Keybinds::resolve(&keybinds, !cfg!(windows)).unwrap_or_else(
@@ -658,7 +642,6 @@ fn apply(tui: &Tui, info: Info) {
     tui.app.request_redraw();
 }
 
-/// The value of `setting` now: the config's, else the default (the active theme for `theme.name`).
 pub fn value(tui: &Tui, setting: &Setting) -> Value {
     let config = tui.settings.info().to_value();
     let current =
@@ -680,7 +663,6 @@ fn values(tui: &Tui, setting: &Setting) -> Option<Vec<Value>> {
     (!setting.values.is_empty()).then(|| setting.values.iter().map(|lit| lit.value()).collect())
 }
 
-/// The footer text of `setting`.
 pub fn display(tui: &Tui, setting: &Setting) -> String {
     let current = value(tui, setting);
     if let Some(range) = setting.range {
@@ -723,7 +705,6 @@ fn change(tui: &Tui, saving: &Rc<Cell<bool>>, index: usize, direction: i32) {
     write(tui, move |draft| set_path(draft, path, next), move |_| saving.set(false));
 }
 
-/// The dialog rows.
 fn options(tui: &Tui) -> Vec<SelectOption<usize>> {
     SETTINGS
         .iter()
@@ -788,7 +769,6 @@ pub fn show(tui: &Tui, current: Option<&str>) {
             props.on_select = Some(Rc::new({
                 let (weak, saving) = (weak.clone(), saving.clone());
                 bind!(weak, |tui, option| {
-                    // `open`: Enter on Theme opens the theme list, which comes back here.
                     if SETTINGS[option.value].is_theme() {
                         let back: Rc<dyn Fn()> = Rc::new(bind!(weak, |tui| show(&tui, Some("theme.name"))));
                         super::theme_list::show(&tui, Some(back));
@@ -802,7 +782,6 @@ pub fn show(tui: &Tui, current: Option<&str>) {
                 TuiCommand::inline("right", step(1)).title("Next value").group("Settings"),
             ];
             let (view, handle) = select(cx, props);
-            // Built again in a new theme, the select keeps the setting it had.
             selected.set(handle.selected().map_or(current, |option| option.value));
             refresh_on_change(&tui, Rc::downgrade(cx), move |tui| handle.set_options(options(tui)));
             view
@@ -819,7 +798,6 @@ pub(crate) fn refresh_on_change(tui: &Tui, cx: Weak<opencode_ui::dialog::DialogC
     }
 }
 
-/// Registers `opencode.settings` (`/settings`) and `opencode.debug` (`/debug`) as `app.tsx:1044-1128` does.
 pub fn install(tui: &Rc<Tui>) {
     let command = |id: &str, title: &str, slash: &str, run: fn(&Tui)| {
         TuiCommand::new(id, bind!(tui, |tui, _, _| run(&tui)))
@@ -864,7 +842,6 @@ fn install_reload(tui: &Rc<Tui>) {
     let proxy = tui.app.proxy();
     let watch = config.clone().watch(move || {
         let (config, proxy) = (config.clone(), proxy.clone());
-        // A failed read keeps the config as it is (`.catch(() => {})`).
         serial.run(move || {
             if let Ok(info) = config.get() {
                 deliver(&proxy, Loaded::Reloaded(info));

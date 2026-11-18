@@ -1,7 +1,3 @@
-//! The plugin host (P.1, `docs/P.1.md`): the built-in plugins on the plugin API, the `cli.json` `plugins`
-//! entries, external plugins with hot reload (P.4, `docs/P.4.md`), and the calls the TUI's slots, plugin
-//! routes, and Markdown make.
-
 use std::cell::OnceCell;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -30,14 +26,11 @@ use crate::features::attention::focus::When;
 use crate::features::attention::notify::{self, Request, Sound};
 use crate::prelude::*;
 
-/// The plugin registry.
 pub struct Plugins {
     registry: Registry,
-    /// The loader of the external plugins, which the plugin manager's approvals reach.
     loader: RefCell<Option<Rc<Loader>>>,
     /// The snapshot last published in the run record.
     pub(crate) published: RefCell<Option<opencode_plugin::contain::Snapshot>>,
-    /// The JS host of the TypeScript plugins, when it runs (P7).
     #[cfg(feature = "ts")]
     pub scripts: RefCell<Option<Rc<opencode_plugin::pipe::Scripts>>>,
     /// The plugins as the plugins that read them last heard of them (P6b), and whether a tell is queued.
@@ -45,7 +38,6 @@ pub struct Plugins {
     telling: Cell<bool>,
     /// The host's own `/plugins` while the plugin manager has failed.
     fallback: RefCell<Option<Disposer>>,
-    /// The TUI parts of the server plugins listed as not loaded (FT-10).
     server_parts: RefCell<Vec<String>>,
     /// The plugins not loaded the user was told of this run, and whether the server's plugins were heard yet: the one
     /// notice waits for them, so it names their TUI parts too.
@@ -54,7 +46,6 @@ pub struct Plugins {
 }
 
 impl Plugins {
-    /// Makes `loader` the one whose project plugins the plugin manager approves or declines.
     pub fn set_loader(&self, loader: Rc<Loader>) {
         self.loader.replace(Some(loader));
     }
@@ -105,7 +96,6 @@ impl Host for Tui {
 
     fn storage_write(&self, key: &str, json: &str) -> Result<(), String> {
         let value: serde_json::Value = serde_json::from_str(json).map_err(|error| error.to_string())?;
-        // A stored value is an object or an array, as TS stores what `typeof value === "object"` takes.
         if !(value.is_object() || value.is_array()) {
             return Err("a stored value is an object or an array".to_owned());
         }
@@ -175,7 +165,6 @@ impl Host for Tui {
         // replaces the one on screen, so the report must come last.
         let title = format!("Plugin failed: {id}");
         self.app.defer(bind!(self, |tui, _| failed_toast(&tui, title.clone(), String::new())));
-        // The home footer counts the failed plugins.
         self.reads.changed(self);
     }
 
@@ -311,7 +300,6 @@ impl Host for Tui {
     }
 
     fn fetch(&self, fetch: abi::Fetch, reply: Box<dyn FnOnce(Result<Value, String>)>) {
-        // The client of the moment, on the transport that follows a restarted service.
         let client = self.data.client().clone();
         let bytes = fetch.bytes;
         let call = super::fetch::call_of(fetch);
@@ -327,7 +315,6 @@ impl Host for Tui {
     }
 
     fn dialog(&self, id: &str, generation: u64, dialog: abi::Dialog) {
-        // A dialog of an activation that ended, or of a setup that was not adopted, shows nowhere.
         if !self.plugins.live(id, generation) {
             return;
         }
@@ -356,7 +343,6 @@ impl Host for Tui {
         match edit {
             abi::ComposerEdit::Set { text } => prompt.set_text(&text),
             abi::ComposerEdit::Insert { text } => drop(prompt.textarea.insert(&text)),
-            // An ordinary dialog over the composer stays open, and nothing answers it.
             abi::ComposerEdit::Submit if prompt.submittable(self) => {
                 crate::prompt::submit::submit(&prompt, SessionInboxDelivery::Steer);
             }
@@ -426,7 +412,6 @@ impl Host for Tui {
     }
 
     fn set_theme(&self, name: &str) {
-        // As the theme dialog picks one (`dialogs/theme_list.rs`).
         if self.theme.borrow().selected() != name {
             self.theme.borrow_mut().config_name(name);
             self.theme_changed();
@@ -509,7 +494,6 @@ impl Host for Tui {
     fn focus_composer(&self) {
         let prompt = self.prompt.current.borrow().upgrade();
         if let Some(prompt) = prompt.filter(|prompt| prompt.shown()) {
-            // The composer is the session pane's: a panel that had the input is told it lost it.
             crate::frame::activate_session(self);
             opencode_plugin::interact::refocus(self, || self.app.focus(&prompt.textarea));
         }
@@ -603,8 +587,6 @@ pub(crate) fn count_local(tui: &Tui) {
     tui.reads.counting.borrow_mut().extend([local, settings]);
 }
 
-/// Calls `sync` with what change batch `changes` changed for the plugins' claims and routes, or with `None` when it
-/// changed nothing.
 pub fn changed(tui: &Tui, changes: &Changes, sync: impl FnOnce(Option<&abi::Changed>)) {
     if changes.is_empty() {
         return sync(None);
@@ -612,7 +594,6 @@ pub fn changed(tui: &Tui, changes: &Changes, sync: impl FnOnce(Option<&abi::Chan
     // Refilled with each change batch, so a batch like the one before costs no allocation.
     let mut changed = tui.reads.batch.take();
     changed.all = changes.all;
-    // A selection is part of the session's info to a plugin.
     let sessions = changes.session.iter().chain(&changes.status).chain(changes.selected.keys());
     refill(&mut changed.sessions, sessions, |into, id| assign(into, &id.0));
     refill(&mut changed.lists, &changes.messages, |into, id| assign(into, &id.0));
@@ -721,9 +702,7 @@ fn reload_cache(tui: &Tui) -> bool {
     changed
 }
 
-/// TS's error toast for a failed plugin, which offers to open the plugin manager.
 fn failed_toast(tui: &Tui, title: String, names: String) {
-    // The host's notice lane: no plugin's toast hides it (PL-2).
     let mut options = ToastOptions::new(Variant::Error, format!("{names}Run /plugins to view details.")).keep();
     options.title = Some(title);
     let options = options.action(
@@ -735,7 +714,6 @@ fn failed_toast(tui: &Tui, title: String, names: String) {
     tui.toasts.show(options);
 }
 
-/// What a mounted claim's [`opencode_plugin::Host::watch`] calls.
 type Push = dyn Fn(&abi::Changed);
 
 /// The catalog loads plugin reads asked for, which start once the current event is handled, a session ID buffer, so a
@@ -758,11 +736,8 @@ pub struct Reads {
     /// The mounted claims' pushes, which a storage write calls with `local` from the effect queue.
     watchers: RefCell<Vec<Weak<Push>>>,
     telling: Cell<bool>,
-    /// The changes of the host's own state the watchers hear of, counted ([`Host::local_revision`]).
     revision: Rc<Cell<u64>>,
-    /// What counts the changes of the local state and the settings in `revision` ([`count_local`]).
     counting: RefCell<Vec<Disposer>>,
-    /// The server plugins of the default location (TS `plugins.server()`), and that location.
     server: RefCell<(Option<Location>, Vec<PluginInfo>)>,
     /// What the last change batch changed, for the plugins.
     batch: RefCell<abi::Changed>,
@@ -771,14 +746,10 @@ pub struct Reads {
     pub(super) owner: RefCell<Option<(String, u64)>>,
     /// The action the next plugin dialog runs as it closes (`abi::Dialog::Dismissable`), until that dialog takes it.
     pub(super) dismissed: RefCell<Option<((String, u64), abi::Action)>>,
-    /// The rich select on screen, which a select of the same key changes in place (P2).
     pub(super) select: RefCell<Option<Rc<super::panel::Picker>>>,
-    /// The filter and the row the next select of this key opens with: what the host's question about a held build
-    /// closed over (review carbon-2).
     pub(super) kept: RefCell<Option<(String, Kept)>>,
 }
 
-/// A select's filter, and the value of its selected row.
 pub(super) type Kept = (String, Option<String>);
 
 impl Reads {
@@ -806,7 +777,6 @@ impl Reads {
         if needs.len() > 1 {
             return;
         }
-        // Outside every plugin callback and store read: a load writes to the store.
         tui.app.defer(bind!(tui, |tui, _| {
             let needs = std::mem::take(&mut *tui.reads.needs.borrow_mut());
             for (catalog, location) in needs {
@@ -816,15 +786,12 @@ impl Reads {
     }
 }
 
-/// The TUI as the one API's renders read it (O-67). Every read is pure; a catalog that is not loaded asks
-/// [`Reads::need`] for the load.
 struct Reader<'a> {
     tui: &'a Tui,
     theme: OnceCell<Theme>,
 }
 
 impl Reader<'_> {
-    /// Runs `f` on the store and session `id`.
     fn session<R>(&self, id: &str, f: impl FnOnce(&State, &SessionID) -> R) -> R {
         let mut key = self.tui.reads.key.take();
         assign(&mut key.0, id);
@@ -833,7 +800,6 @@ impl Reader<'_> {
         result
     }
 
-    /// `catalog` of `location` through `get`; a catalog that is not loaded asks for the load.
     fn catalog<T>(
         &self,
         location: Option<&abi::LocationRef>,
@@ -848,7 +814,6 @@ impl Reader<'_> {
         value
     }
 
-    /// `location`, or where the TUI works.
     fn location(&self, location: Option<&abi::LocationRef>) -> Location {
         match location {
             Some(location) => {
@@ -1091,7 +1056,6 @@ fn setting_path(name: &str) -> Option<Vec<&str>> {
     abi::SETTINGS.contains(&name).then(|| name.split('.').collect())
 }
 
-/// Saves the plugins' setting `name`, when the config takes `value` for it as it is.
 fn set_setting(tui: &Tui, name: &str, value: Value) {
     let Some(path) = setting_path(name) else {
         log::warn!("a plugin sets {name:?}, which is not one of the settings plugins set");
@@ -1147,7 +1111,6 @@ pub fn tell_plugins(tui: &Tui) {
     }
     tui.app.defer(bind!(tui, |tui, _| {
         tui.plugins.telling.set(false);
-        // What a slow plugin costs changes with each frame; that it is slow is the change (review carbon-4).
         let entries: Vec<_> = tui
             .plugins
             .entries()
@@ -1187,7 +1150,6 @@ fn guarded(tui: &Tui, id: &str, what: &str) -> bool {
     guarded
 }
 
-/// Whether the host's own `/plugins` stands in for the plugin manager now.
 pub(super) fn fallback_shown(tui: &Tui) -> bool {
     tui.plugins.fallback.borrow().is_some()
 }
@@ -1250,7 +1212,6 @@ pub fn registry(info: &opencode_local::cli_config::Info, external: Vec<Builtin>,
     }
 }
 
-/// A `plugins` entry's target.
 fn target(plugin: &opencode_local::cli_config::Plugin) -> &str {
     match plugin {
         opencode_local::cli_config::Plugin::Name(name) => name,
@@ -1258,14 +1219,12 @@ fn target(plugin: &opencode_local::cli_config::Plugin) -> &str {
     }
 }
 
-/// The TUI as the plugin registry takes it.
 pub fn host(tui: &Rc<Tui>) -> Rc<dyn Host> {
     tui.clone()
 }
 
 /// Activates the plugins once the TUI is built.
 pub fn install(tui: &Rc<Tui>) {
-    // The budget sums a plugin's calls by painted frame (synthesis 4.4).
     let weak = tui.weak();
     tui.plugins.monitor().set_frames(move || weak.upgrade().map_or(0, |tui| tui.app.frame_number()));
     super::contain::install(tui);
@@ -1292,8 +1251,6 @@ pub fn sync(tui: &Tui) {
     }
 }
 
-/// `syncServerPlugins`: reads the server plugins of the default location, and shows the plugins that newly failed in
-/// one error toast.
 fn sync_server_plugins(tui: &Tui) {
     let location = tui.data.read(|state| state.default_location().clone());
     let input = PluginListInput { location: Some(LocationQueryInput { directory: Some(location.directory.clone()) }) };
@@ -1499,7 +1456,6 @@ fn pending_toast(tui: &Tui, target: &str, message: &str) {
     tui.toasts.show(options.action("Open plugins", open));
 }
 
-/// What [`external`] needs: the global config directory and the working directory.
 pub struct External {
     pub config_dir: PathBuf,
     pub cwd: PathBuf,
@@ -1508,7 +1464,6 @@ pub struct External {
     pub dev: Vec<String>,
 }
 
-/// Posted when a watched plugin directory changed.
 struct PluginsChanged;
 
 /// How the JS host runs ([`external_with`]): `opencode_plugin::pipe::Config` in a build with the `ts` feature; in one
@@ -1530,15 +1485,11 @@ fn js_host(tui: &Tui) -> bool {
     };
 }
 
-/// Loads the external native plugins (P.4): the discovered `plugins` directories and the `cli.json` entries that name no
-/// built-in. Each change in a watched directory reconciles them again (hot reload), debounced by 100 ms as in TS.
 #[cfg(not(feature = "ts"))]
 pub fn external(tui: &Rc<Tui>, external: External) {
     external_with(tui, external, None);
 }
 
-/// Loads the external native plugins (P.4): the discovered `plugins` directories and the `cli.json` entries that name no
-/// built-in. Each change in a watched directory reconciles them again (hot reload), debounced by 100 ms as in TS.
 #[cfg(feature = "ts")]
 pub fn external(tui: &Rc<Tui>, external: External) {
     let args = &tui.startup.args;
@@ -1574,8 +1525,6 @@ pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<JsHost>)
     #[cfg(feature = "luau")]
     let loader = match opencode_plugin::luau::enabled() {
         true => {
-            // A walk of a Luau plugin's files that found something new, or a build compiled off this thread, is taken as
-            // a change of the plugin directories.
             let proxy = tui.app.proxy();
             loader.with_luau(move || {
                 let _ = proxy.send(PluginsChanged);
@@ -1583,7 +1532,6 @@ pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<JsHost>)
         }
         false => loader,
     };
-    // A plugin named by npm package loads from the cache TS installs into, as TS resolves it (js-npm).
     let loader = match tui.cache_dir() {
         Some(cache) => loader.with_npm(cache),
         None => loader,
@@ -1601,7 +1549,6 @@ pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<JsHost>)
             None => loader,
         });
         if let Some(scripts) = &scripts {
-            // An answer of the JS host is taken as a change of the plugin directories is.
             let proxy = tui.app.proxy();
             scripts.on_reconcile(Rc::new(move || {
                 let _ = proxy.send(PluginsChanged);
@@ -1628,7 +1575,6 @@ pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<JsHost>)
             tell_skipped(&tui);
         })
     });
-    // TS reconciles again when `config.data.plugins` changes: new entries, options and directives apply.
     let plugins = RefCell::new(tui.config().info.plugins.clone());
     tui.settings.on_change(bind!(tui, |tui, _| {
         let current = tui.config().info.plugins.clone();
@@ -1640,11 +1586,9 @@ pub fn external_with(tui: &Rc<Tui>, external: External, scripts: Option<JsHost>)
             tui.plugins.set_targets(&host, targets(current.as_deref().unwrap_or_default()).iter().map(String::as_str));
         plugins.replace(current);
         loader.set_configured(configured(&tui, targets));
-        // `cli.json`'s entries vouch for the server's parts they name, and its removals withdraw that (recheck-1).
         loader.set_user(user_plugins(&tui, loader.config_dir()));
         loader.reconcile(&host, &tui.plugins);
         watch(&tui, &loader, &watches);
-        // A new entry the loader does not load is listed skipped, with no remount (review carbon-4).
         tell_plugins(&tui);
         tell_skipped(&tui);
     }));
@@ -1756,7 +1700,6 @@ pub fn decide(
     });
 }
 
-/// The entries that name no plugin, with their `options` as JSON text.
 fn configured(tui: &Tui, targets: Vec<String>) -> Vec<Configured> {
     let options = |target: &str| {
         tui.config().info.plugins.iter().flatten().find_map(|plugin| match plugin {
@@ -1769,11 +1712,8 @@ fn configured(tui: &Tui, targets: Vec<String>) -> Vec<Configured> {
     targets.into_iter().map(|target| Configured { options: options(&target), target }).collect()
 }
 
-/// A watched directory, the identity of the directory it watches, and the watch.
 type Watched<W = opencode_local::watch::Watch> = (PathBuf, Option<u64>, W);
 
-/// Watches the loader's directories: keeps the watches that still see them, and replaces one whose directory
-/// went away or was made again, which the old watch no longer sees.
 fn watch(tui: &Tui, loader: &Loader, watches: &RefCell<Vec<Watched>>) {
     let fresh = unwatched(&mut watches.borrow_mut(), loader.watch_dirs());
     for (dir, id) in fresh {
@@ -1806,7 +1746,6 @@ fn unwatched<W>(watches: &mut Vec<Watched<W>>, dirs: Vec<PathBuf>) -> Vec<(PathB
     dirs.into_iter().filter(|(dir, _)| !watches.iter().any(|(known, _, _)| known == dir)).collect()
 }
 
-/// What tells a directory from one made again at its path.
 #[cfg(unix)]
 fn identity(dir: &std::path::Path) -> Option<u64> {
     use std::os::unix::fs::MetadataExt;
@@ -1826,24 +1765,19 @@ pub fn add(tui: &Rc<Tui>, plugin: Definition) {
     tell_plugins(tui);
 }
 
-/// Mounts slot `path` with the host's `content` into `parent`. The view that owns the slot syncs the result.
 pub fn slot(tui: &Tui, parent: &View, path: &str, input: &SlotInput, content: impl FnOnce(&View)) -> SlotMount {
     tui.plugins.mount(tui, parent, path, input, content)
 }
 
-/// The view of plugin route `id`/`name`, if a plugin registers it.
 pub fn route(tui: &Tui, id: &str, name: &str) -> Option<RouteMount> {
     tui.plugins.route(tui, id, name)
 }
 
-/// The plugins' Markdown code-block renderers, in the page theme when they render.
 pub fn code_blocks(tui: &Tui) -> CodeBlockRenderers {
     let (weak, last) = (tui.weak(), tui.page());
-    // A renderer outliving the TUI keeps the theme it was made in; nothing shows it by then.
     tui.plugins.code_blocks(Rc::new(move || weak.upgrade().map_or_else(|| last.clone(), |tui| tui.page())))
 }
 
-/// The plugins' tool claims, which the transcript takes as it mounts.
 pub fn tool_claims(tui: &Tui) -> opencode_plugin::claim::ToolClaims {
     tui.plugins.tool_claims()
 }
@@ -1854,7 +1788,6 @@ pub fn markdown(tui: &Tui) -> opentui::widget::Markdown {
     markdown_with(tui, &code_blocks(tui))
 }
 
-/// [`markdown`] with `renderers`, which the caller keeps for a later inline hook.
 pub fn markdown_with(tui: &Tui, renderers: &CodeBlockRenderers) -> opentui::widget::Markdown {
     let page = tui.page();
     let conceal = tui.config().info.session.as_ref().and_then(|session| session.markdown)
@@ -1884,8 +1817,6 @@ mod tests {
         }
     }
 
-    // Expected: a watched directory that is removed and made again gets a fresh watch, and a directory that left
-    // the list loses its watch.
     #[test]
     fn a_directory_made_again_is_watched_again() {
         let root = opencode_util::temp::tempdir().unwrap();

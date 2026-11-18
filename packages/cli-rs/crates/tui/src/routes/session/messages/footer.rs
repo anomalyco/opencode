@@ -1,6 +1,4 @@
-//! The assistant footer and per-turn token usage (E.6a): `AssistantFooter` and `TurnTokenUsage`
-//! (`routes/session/index.tsx:1737-1895,2013-2071`), with `SessionTurn`'s measurements
-//! (`packages/util/src/session-turn.ts`).
+//! TypeScript: `routes/session/index.tsx:1737-1895,2013-2071`, `packages/util/src/session-turn.ts`.
 
 use opencode_api::generated::{
     ModelRef, SessionMessageAssistant, SessionMessageAssistantContentItem, SessionMessageAssistantFinish,
@@ -12,7 +10,6 @@ use super::list::Context;
 
 use crate::prelude::*;
 
-/// The line under a finished step: agent, model, turn duration, tokens per second.
 pub struct Footer {
     root: View,
     error: StepError,
@@ -34,7 +31,6 @@ impl Footer {
         &self.root
     }
 
-    /// Takes the theme of `cx`; the next update paints the line again.
     pub fn restyle(&self, cx: &Context<'_>) {
         self.error.restyle(cx);
         self.line.fg(cx.theme.text.base);
@@ -74,7 +70,6 @@ impl Footer {
     }
 }
 
-/// A turn's token usage: one collapsed summary line that a click opens into the per-step table.
 pub struct TurnUsage(Rc<UsageInner>);
 
 struct UsageInner {
@@ -145,7 +140,6 @@ impl TurnUsage {
         &self.0.root
     }
 
-    /// Paints in the live theme again.
     pub fn restyle(&self) {
         self.0.render();
     }
@@ -320,7 +314,6 @@ impl UsageInner {
     }
 }
 
-/// Every token the step used.
 pub fn total(message: &SessionMessageAssistant) -> f64 {
     message
         .tokens
@@ -328,8 +321,6 @@ pub fn total(message: &SessionMessageAssistant) -> f64 {
         .map_or(0.0, |tokens| tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write)
 }
 
-/// `cacheReuseDrop`: how many fewer tokens the cache served than the previous step of the same
-/// model, when that looks like a bust.
 pub fn cache_reuse_drop(previous: Option<&CacheUsage>, current: &CacheUsage) -> Option<f64> {
     let previous = previous?;
     if previous.model != current.model {
@@ -343,7 +334,6 @@ pub fn cache_reuse_drop(previous: Option<&CacheUsage>, current: &CacheUsage) -> 
     (drop > 0.0).then_some(drop)
 }
 
-/// `turnTokenToolSummary`: the call's primary input, then its other scalar inputs.
 fn tool_summary(tool: &opencode_api::generated::SessionMessageAssistantTool) -> String {
     use opencode_api::generated::SessionMessageAssistantToolState as State;
     let input = match &tool.state {
@@ -461,7 +451,6 @@ fn created(message: &SessionMessageInfo) -> f64 {
     opencode_store::MessageExt::created(message)
 }
 
-/// `Number.toLocaleString()` in `en-US` for token counts: digits grouped by commas.
 pub fn locale(value: f64) -> String {
     let rounded = value.round() as i64;
     let digits = rounded.unsigned_abs().to_string();

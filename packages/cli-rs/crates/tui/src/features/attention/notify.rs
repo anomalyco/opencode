@@ -18,7 +18,6 @@ const DEFAULT_TITLE: &str = "OpenCode";
 const TITLE_LIMIT: usize = 80;
 const MESSAGE_LIMIT: usize = 240;
 
-/// The attention state of one TUI: the focus, and the program status records sent.
 #[derive(Default)]
 pub struct Attention {
     pub(super) focus: Cell<Focus>,
@@ -32,27 +31,21 @@ impl Attention {
     }
 }
 
-/// One request (`AttentionNotifyOptions`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Request {
     pub title: Option<String>,
     pub message: String,
-    /// `None` is `notification: false`.
     pub notification: Option<When>,
-    /// `None` is `sound: false`.
     pub sound: Option<Sound>,
 }
 
-/// The sound a request asks for (`AttentionNotifyOptions.sound`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Sound {
     pub name: AttentionSoundName,
     pub when: When,
-    /// Overrides `attention.volume`.
     pub volume: Option<f64>,
 }
 
-/// What a request did (`AttentionNotifyResult`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Outcome {
     pub ok: bool,
@@ -65,7 +58,6 @@ pub fn install(tui: &Tui) {
     focus::install(tui);
 }
 
-/// Sends `request` as a terminal notification and plays its sound under the current config and focus.
 pub fn notify(tui: &Tui, request: &Request) -> Outcome {
     let destroyed = tui.app.is_quitting();
     let info = tui.settings.info();
@@ -135,7 +127,6 @@ fn skipped(reason: Skip) -> Outcome {
 /// `limit` characters, else `fallback`.
 fn normalize_text(input: Option<&str>, fallback: &str, limit: usize) -> String {
     static ANSI: LazyLock<Regex> = LazyLock::new(|| {
-        // `ansi-regex` 6.3, which `strip-ansi` uses.
         Regex::new(concat!(
             r"\x1b\][^\x07\x1b\x{9c}]*(?:\x07|\x1b\\|\x{9c})",
             r"|[\x1b\x{9b}][\[\]()#;?]*(?:\d{1,4}(?:[;:]\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~]",
@@ -177,13 +168,11 @@ mod tests {
         }
     }
 
-    /// The outcome and the notification sent, if any.
     fn run(info: &Info, focus: Focus, request: &Request) -> (Outcome, Option<(String, String)>) {
         let (outcome, sent, _) = run_with_sound(info, focus, request);
         (outcome, sent)
     }
 
-    /// The outcome, the notification sent, and the sound played, if any. The engine takes every sound.
     #[allow(clippy::type_complexity)]
     fn run_with_sound(
         info: &Info,
@@ -221,7 +210,6 @@ mod tests {
             (info(true, false), Focus::Blurred, notified, sent.clone(), None),
             (info(true, false), Focus::Focused, skipped(Skip::Focused), None, None),
             (info(true, false), Focus::Unknown, skipped(Skip::FocusUnknown), None, None),
-            // The sound's rule is `always`: it plays whatever the focus.
             (info(false, true), Focus::Focused, sounded, None, done),
             (info(true, true), Focus::Focused, sounded, None, done),
             (info(true, true), Focus::Blurred, both, sent, done),

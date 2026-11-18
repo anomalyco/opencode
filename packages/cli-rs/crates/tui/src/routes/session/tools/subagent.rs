@@ -1,5 +1,4 @@
-//! The subagent tool (E.7b): `Subagent` (`routes/session/index.tsx:3289-3348`). One line with the
-//! agent, the description, and the model; a click opens the child session.
+//! TypeScript: `routes/session/index.tsx:3289-3348`.
 
 use opencode_api::generated::ModelInfo;
 use opencode_store::SessionStatus;
@@ -11,7 +10,6 @@ use crate::routes::session::messages::list::Context;
 
 pub struct Subagent {
     inline: InlineTool,
-    /// The child session a click opens.
     session: Rc<RefCell<Option<String>>>,
 }
 
@@ -24,7 +22,6 @@ impl Subagent {
         inline.on_click(move || {
             let Some(id) = target.borrow().clone() else { return };
             let Some(tui) = tui.upgrade() else { return };
-            // The click runs inside the transcript the navigation replaces.
             tui.app.defer(bind!(tui, |tui, _| tui.navigate(Route::Session { id: SessionID(id) })));
         });
         Self { inline, session }
@@ -42,7 +39,6 @@ impl Subagent {
         let status = props.status();
         let text = |key: &str| props.metadata.get(key).and_then(Value::as_str);
         let continued = props.input_str("sessionID");
-        // A failed continuation may name an unrelated session, such as the parent itself.
         let session = text("sessionID")
             .or(text("sessionId"))
             .or(continued.filter(|_| status != Status::Error))
@@ -78,7 +74,6 @@ impl Subagent {
     }
 }
 
-/// `subagentModelLabel`: the model's name, or the reference, and the variant.
 pub fn model_label(value: Option<&str>, models: &[ModelInfo]) -> Option<String> {
     let value = value.filter(|value| !value.is_empty())?;
     let (reference, variant) = match value.split_once('#') {

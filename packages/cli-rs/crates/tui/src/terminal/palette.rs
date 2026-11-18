@@ -34,8 +34,6 @@ pub fn osc(theme: &Theme, mode: ThemeMode, background: Color) -> Vec<u8> {
     text.into_bytes()
 }
 
-/// The step-200 color of the hue nearest `target` degrees, among hues with some chroma; the accent's when none is
-/// within 30 degrees.
 fn terminal_hue(theme: &Theme, target: f64) -> &Color {
     let nearest = theme
         .hues()
@@ -68,7 +66,6 @@ fn hue(red: f64, green: f64, blue: f64) -> f64 {
     oklch_of(red, green, blue).1
 }
 
-/// Chroma and hue of an sRGB color, as `rgbToOklch` computes them. `opencode-ui` keeps its copy crate-private.
 fn oklch_of(red: f64, green: f64, blue: f64) -> (f64, f64) {
     let linear = |value: f64| {
         if value <= 0.04045 { value / 12.92 } else { ((value + 0.055) / 1.055).powf(2.4) }

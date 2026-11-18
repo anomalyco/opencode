@@ -14,7 +14,6 @@ pub enum Format {
     Json,
 }
 
-/// Where Export saves the file (#62490): the TUI's working directory or the system's temporary directory.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Location {
     Project,
@@ -27,7 +26,6 @@ pub enum Action {
     Export,
 }
 
-/// What the options dialog confirms.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Choice {
     pub action: Action,
@@ -70,8 +68,6 @@ enum Row {
     Sanitize,
 }
 
-/// `DialogExportOptions.show` (`DialogExportOptionsList`): one row per value. Up and Down move; Left, Right, and
-/// Space change the value; Enter saves to a file and `c` copies.
 pub fn options(tui: &Tui, default_thinking: bool, on_confirm: OnConfirm) {
     let confirm: Rc<dyn Fn(Choice)> = Rc::new(bind!(tui, |tui, choice| on_confirm(&tui, choice)));
     // Outside the build, so a build in a new theme keeps the values.
@@ -87,7 +83,6 @@ pub fn options(tui: &Tui, default_thinking: bool, on_confirm: OnConfirm) {
         move |cx| {
             let (state, selected, confirm) = (state.clone(), selected.clone(), confirm.clone());
 
-            // `DialogSelectChoice`: the selected row shows `‹ value ›`; the others pad the value to the same width.
             let options: Rc<dyn Fn() -> Vec<SelectOption<Row>>> = {
                 let state = state.clone();
                 Rc::new(move || {
@@ -208,8 +203,6 @@ pub fn options(tui: &Tui, default_thinking: bool, on_confirm: OnConfirm) {
     );
 }
 
-/// `DialogExportResult.show`: "Session exported", then "Saved to <path>". Enter closes; `c` copies the path, and
-/// the footer action turns into "✓ copied".
 pub fn result(tui: &Tui, path: String) {
     result_with(tui, path, false);
 }

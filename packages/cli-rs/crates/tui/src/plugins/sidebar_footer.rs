@@ -14,7 +14,6 @@ pub fn plugin() -> abi::Plugin {
     abi::Plugin { id: "opencode.sidebar.footer", setup }
 }
 
-/// The hidden command the card's close button runs.
 const DISMISS: &str = "sidebar.footer.dismiss";
 const KEY: &str = "getting-started";
 const ROOT: &str = "footer";
@@ -25,7 +24,6 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         host.storage_merge(KEY, serde_json::Map::from_iter([("dismissed".to_owned(), json!(true))]));
     });
     setup.surface(Surface::new("footer", Place::Slot(Placement::append(slot::SIDEBAR_FOOTER)), |cx| {
-        // The card follows the terminal height and the stored dismissal, the location the session.
         let session = cx.input.slot.as_ref().and_then(|slot| slot.session_id.as_deref()).unwrap_or_default();
         let changed = &cx.input.changed;
         if !(changed.all || changed.local || changed.size || changed.session(session) || !changed.locations.is_empty())

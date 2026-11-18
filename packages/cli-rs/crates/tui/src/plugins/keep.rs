@@ -9,7 +9,6 @@ pub(crate) fn kept(root: &str) -> Node {
     Node::keep(root)
 }
 
-/// What a built-in's slot surface shows when it shows nothing, as a 1.x render's `Render::Hide`: a hidden root.
 pub(crate) fn hidden(root: &str) -> Node {
     Node::column(Vec::new()).visible(false).with_id(root)
 }

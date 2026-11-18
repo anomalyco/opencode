@@ -23,7 +23,6 @@ use opencode_ui::locale::duration;
 
 use crate::prelude::*;
 
-/// A group's kind (`GroupKind`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Kind {
     Activity,
@@ -43,21 +42,17 @@ impl Kind {
     }
 }
 
-/// A child of a group: a row, or a nested group (`GroupNode`).
 #[derive(Clone, Debug, PartialEq)]
 pub enum Node {
     Entry(Spec),
     Group(Group),
 }
 
-/// A group row (`SessionGroup`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Group {
     pub kind: Kind,
     pub children: Vec<Node>,
-    /// The leaves below, at any depth.
     pub size: usize,
-    /// A later row closed the group, or every thought in it finished.
     pub completed: bool,
     /// The tool rows below that wait on a permission request, which show outside the group ([`partition_pending`]).
     pub pending: Vec<Spec>,
@@ -91,14 +86,12 @@ fn visit<'a>(nodes: &'a [Node], entries: &mut Vec<&'a Spec>) {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct GroupId<'a> {
     message: &'a str,
-    /// `None` for a whole message (part `message`).
     part: Option<&'a Part>,
     kind: Kind,
     level: usize,
 }
 
 impl GroupId<'_> {
-    /// Whether `id` is this ID formatted.
     pub fn matches(&self, id: &str) -> bool {
         struct Rest<'a>(&'a str);
         impl std::fmt::Write for Rest<'_> {
@@ -115,7 +108,6 @@ impl GroupId<'_> {
 impl std::fmt::Display for GroupId<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}\u{1f}", self.message)?;
-        // The TS part ID: `text:<n>`, `reasoning:<n>`, or the tool call's ID.
         match self.part {
             Some(Part::Text(ordinal)) => write!(f, "text:{ordinal}")?,
             Some(Part::Reasoning(ordinal)) => write!(f, "reasoning:{ordinal}")?,
@@ -126,7 +118,6 @@ impl std::fmt::Display for GroupId<'_> {
     }
 }
 
-/// `entryRef`: a part row's message and part, or a whole message (`None`, part `message`).
 fn entry_ref(spec: &Spec) -> Option<(&str, Option<&Part>)> {
     match spec {
         Spec::Part { message, part } => Some((message, Some(part))),
@@ -142,11 +133,8 @@ fn first_ref(nodes: &[Node]) -> Option<(&str, Option<&Part>)> {
     })
 }
 
-/// `defaultVerbosity`: the transcript detail when `session.verbosity` is unset.
 pub const DEFAULT_VERBOSITY: Verbosity = Verbosity::Low;
 
-/// The grouping settings a view reads: `session.grouping`, `session.verbosity`, and which groups the
-/// reader opened (`sessionTabs.groupExpanded`, kept for this view).
 pub struct Settings {
     pub grouping: Cell<bool>,
     pub verbosity: Cell<Verbosity>,
@@ -167,7 +155,6 @@ impl Settings {
         settings
     }
 
-    /// Takes the config's values; returns whether any changed.
     pub fn read(&self, info: &Info) -> bool {
         let session = info.session.as_ref();
         let grouping = session.and_then(|session| session.grouping) != Some(Grouping::None);
@@ -177,7 +164,6 @@ impl Settings {
         grouping || verbosity
     }
 
-    /// `groupExpanded`: the reader's choice, else High opens exploration and instruction groups.
     pub fn expanded(&self, id: &str, kind: Kind) -> bool {
         self.expanded.borrow().get(id).copied().unwrap_or(
             self.verbosity.get() == Verbosity::High && matches!(kind, Kind::Exploration | Kind::Instructions),
@@ -248,7 +234,6 @@ pub fn rows_after(weights: &[usize], start: usize, budget: usize) -> usize {
 
 const EXPLORATION_TOOLS: [&str; 5] = ["read", "glob", "grep", "webfetch", "websearch"];
 
-/// `projectEntries` over `reduce`'s rows: adjacent rows that share a path prefix form groups.
 pub fn project(rows: Vec<Spec>, messages: &[SessionMessageInfo], verbosity: Verbosity) -> Vec<Spec> {
     let index: HashMap<&str, &SessionMessageInfo> = messages.iter().map(|message| (message.id(), message)).collect();
     let mut nodes: Vec<(Node, bool)> = Vec::new();
@@ -297,7 +282,6 @@ pub fn partition_pending(specs: &mut [Spec], pending: &HashSet<&str>) {
     }
 }
 
-/// Appends a row along its path (`appendEntry`). The flag is `closesPrevious`.
 fn append(nodes: &mut Vec<(Node, bool)>, spec: Spec, path: &[Kind], closes: bool) {
     let Some((&kind, rest)) = path.split_first() else {
         nodes.push((Node::Entry(spec), closes));
@@ -399,7 +383,6 @@ fn reasoning_done(spec: &Spec, index: &HashMap<&str, &SessionMessageInfo>) -> bo
     )
 }
 
-/// `instructionPaths`: the files an instruction load names in its metadata.
 pub fn instruction_paths(message: Option<&SessionMessageInfo>) -> Vec<String> {
     let Some(SessionMessageInfo::Synthetic(message)) = message else { return Vec::new() };
     let Some(instruction) =
@@ -414,7 +397,6 @@ pub fn instruction_paths(message: Option<&SessionMessageInfo>) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// The exploration header: `Explored: 2 reads, 1 search` (`group-view.tsx:115-128`).
 pub fn exploration_label(tools: &[&SessionMessageAssistantTool], completed: bool) -> String {
     let mut counts: Vec<(&str, usize)> = Vec::new();
     for tool in tools {
@@ -440,7 +422,6 @@ pub fn exploration_label(tools: &[&SessionMessageAssistantTool], completed: bool
     format!("{}: {}", if completed { "Explored" } else { "Exploring" }, names.join(", "))
 }
 
-/// A thought or tool call an activity summary counts.
 pub enum Activity<'a> {
     Thought(&'a SessionMessageAssistant, &'a SessionMessageAssistantReasoning),
     Tool(&'a SessionMessageAssistantTool),
@@ -518,7 +499,6 @@ pub fn activity_summary(items: &[Activity<'_>], instructions: usize, closed: boo
     (busy, active)
 }
 
-/// `busyLabel`: a running item's status.
 fn busy_label(item: &Activity<'_>) -> String {
     let Activity::Tool(tool) = item else { return "Thinking…".to_owned() };
     let name = canonical_tool_name(&tool.name);
@@ -547,7 +527,6 @@ fn execute_calls(tool: &SessionMessageAssistantTool) -> Vec<String> {
         .collect()
 }
 
-/// How a group shows its children (`Children`'s `mode`).
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Mode {
     Normal,
@@ -589,12 +568,12 @@ struct Header {
 
 #[derive(Clone, Copy, PartialEq)]
 enum HeaderColor {
-    /// `text.muted`, or `text.base` on hover.
     Muted,
-    /// Reasoning that runs: `text.base`.
     Base,
     /// Finished reasoning: warning, dimmed unless hovered or open.
-    Warning { open: bool },
+    Warning {
+        open: bool,
+    },
 }
 
 enum Painted {
@@ -602,7 +581,6 @@ enum Painted {
     Spinner(Spinner),
 }
 
-/// A child's identity: an entry's mode, message, and part (`None` for a whole message), or a nested group's ID.
 enum ChildKey {
     Entry(Mode, String, Option<Part>),
     Group(String),
@@ -660,7 +638,6 @@ impl GroupView {
             latest: RefCell::default(),
         });
         inner.header.mouse_pointer(MousePointer::POINTER).on_click(bind!(inner, |inner, cx, _| {
-            // A click that ends a text selection does not toggle (`useDisclosure`).
             if cx.app().selected_text().is_some_and(|text| !text.is_empty()) {
                 return;
             }
@@ -683,7 +660,6 @@ impl GroupView {
         &self.0.root
     }
 
-    /// Takes the theme of `cx` in place, with every child; the next update paints the rest.
     pub fn restyle(&self, cx: &Context<'_>) {
         let inner = &self.0;
         inner.paint_color();
@@ -697,7 +673,6 @@ impl GroupView {
         }
     }
 
-    /// Renders a root `group`; `completed` is the group's own flag.
     pub fn update(&self, cx: &Context<'_>, group: &Group, completed: bool) {
         self.render(cx, group, completed, &group.pending, true);
     }
@@ -883,7 +858,6 @@ impl GroupView {
         (Some(header), expanded.then_some(Mode::Normal))
     }
 
-    /// The content y of each mounted row inside the group, with its message, for navigation.
     pub fn anchors(&self, out: &mut Vec<(String, f64)>) {
         let (children, outside) = (self.0.children.borrow(), self.0.outside_children.borrow());
         for (key, child) in children.iter().chain(outside.iter()) {
@@ -913,7 +887,6 @@ fn thought<'a>(
     }
 }
 
-/// The distinct files the instruction loads among `entries` name.
 fn instruction_files(cx: &Context<'_>, entries: &[&Spec]) -> usize {
     let mut files: Vec<String> = entries
         .iter()
@@ -947,7 +920,6 @@ impl Inner {
             self.header.add(&View::new(&self.app).row().child(&spinner));
             Painted::Spinner(spinner)
         } else {
-            // `InlineToolRow`: the icon in its own two cells, then the label.
             let icon = Text::new(&self.app, header.icon).width(2).shrink(0.0).fg(fg);
             let label = Text::new(&self.app, header.label.clone()).grow(1.0).fg(fg);
             self.header.add(&View::new(&self.app).row().child(&icon).child(&label));
@@ -963,7 +935,6 @@ impl Inner {
             HeaderColor::Muted => self.theme.get().text.muted,
             HeaderColor::Base => self.theme.get().text.base,
             HeaderColor::Warning { open } if hover || open => self.theme.get().text.feedback.warning.base,
-            // `RGBA.fromValues(…, 0.6)`.
             HeaderColor::Warning { .. } => self.theme.get().text.feedback.warning.base.with_alpha(153),
         }
     }
@@ -1059,7 +1030,6 @@ fn child_root(child: &Child) -> &View {
     }
 }
 
-/// An open thought in a reasoning group (`ThoughtEntry`): its Markdown behind a bar.
 struct Thought {
     root: View,
     bar: View,
@@ -1083,7 +1053,6 @@ impl Thought {
         Self { root, bar, markdown, content: RefCell::default(), streaming: Cell::new(true) }
     }
 
-    /// Takes the theme of `cx` in place: the text and its code views stay.
     fn restyle(&self, cx: &Context<'_>) {
         self.bar.border_color(cx.theme.decrease(&cx.theme.background.raised.base, 1));
         opencode_ui::markdown::restyle(&self.markdown, thought_colors(cx.theme), cx.thinking_syntax);
@@ -1092,7 +1061,6 @@ impl Thought {
     fn update(&self, message: &SessionMessageAssistant, part: &SessionMessageAssistantReasoning, conceal: bool) {
         let content = reasoning::content(part);
         self.root.visible(!content.is_empty());
-        // `session.markdown` changes in place; the code views stay.
         self.markdown.conceal(conceal);
         if *self.content.borrow() != content {
             self.markdown.set_markdown(content.as_str());
@@ -1106,7 +1074,6 @@ impl Thought {
     }
 }
 
-/// A thought's Markdown colors: the text muted.
 fn thought_colors(theme: &Theme) -> opentui::widget::MarkdownColors {
     opentui::widget::MarkdownColors { text: theme.text.muted, ..opencode_ui::markdown::colors(theme) }
 }
@@ -1172,7 +1139,6 @@ mod tests {
         assert_eq!(id.to_string(), "msg_2\u{1f}reasoning:0\u{1f}reasoning\u{1f}0");
         assert!(id.matches(&id.to_string()) && !id.matches("msg_2\u{1f}reasoning:0") && !id.matches(&format!("{id}0")));
 
-        // Low wraps the whole run of thoughts and tools in one activity group, with nested groups.
         let low = project(rows, &list, Verbosity::Low);
         assert_eq!(low.len(), 3);
         let Spec::Group(activity) = &low[1] else { unreachable!() };

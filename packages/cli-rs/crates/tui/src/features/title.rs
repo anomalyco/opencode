@@ -103,12 +103,10 @@ fn session_title(title: Option<&str>) -> String {
     }
 }
 
-/// `isFallbackTitle`: `New session - <ISO>` or `Child session - <ISO>`.
 pub(crate) fn is_fallback(title: &str) -> bool {
     let Some(stamp) = title.strip_prefix("New session - ").or_else(|| title.strip_prefix("Child session - ")) else {
         return false;
     };
-    // `\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z`
     let shape = b"dddd-dd-ddTdd:dd:dd.dddZ";
     stamp.len() == shape.len()
         && stamp.bytes().zip(shape).all(|(byte, expected)| match expected {

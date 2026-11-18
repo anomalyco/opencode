@@ -11,9 +11,7 @@ use super::viewer::{Base, Viewer};
 use super::{Diffs, PICK_BASE, QUERY_BASE};
 use crate::plugins::fetch::fetch_of;
 
-/// The select's key, which shows again in place as branches arrive.
 pub const KEY: &str = "base";
-/// `createDebouncedSignal("", 150)`.
 const SEARCH_DEBOUNCE_MS: u16 = 150;
 const LIMIT: i64 = 100;
 
@@ -25,20 +23,16 @@ enum Branches {
     Ready(Vec<String>),
 }
 
-/// The open picker.
 #[derive(Default)]
 pub struct Picker {
-    /// The viewer's base key it chooses for, and its location.
     key: String,
     location: Option<LocationQueryInput>,
     current: Option<String>,
     branches: Branches,
     search: Option<String>,
-    /// The searches so far: a reply to an earlier one changes nothing.
     request: u64,
 }
 
-/// "Base" in the source dialog (`onChooseBase`): replaces it with the branch picker.
 pub fn open(host: &dyn Host, viewer: &Viewer, diffs: &Diffs) {
     let key = viewer.base_key.clone();
     viewer.ensure_base(host, diffs);
@@ -53,8 +47,6 @@ pub fn open(host: &dyn Host, viewer: &Viewer, diffs: &Diffs) {
     query(host, diffs, String::new());
 }
 
-/// The base the server reported for `key` arrived: an open picker for it with no branch chosen marks it its current
-/// one, as TS's `reportedBases()` does (carbon's review of P6c, 6).
 pub fn reported(host: &dyn Host, diffs: &Diffs, key: &str, base: Option<&Base>) {
     let mut picker = diffs.picker.borrow_mut();
     let chosen = diffs.memory.borrow().bases.contains_key(key);
@@ -103,13 +95,11 @@ pub fn query(host: &dyn Host, diffs: &Diffs, search: String) {
     let call = Client::vcs_branch_list_call(&input).expect("the branch input encodes");
     let request = picker.request;
     drop(picker);
-    // A fetch the host did not take ends as a failed reply does.
     if let Err((_, error)) = diffs.fetch(host, fetch_of(call), Asked::Branches { request }) {
         reply(host, diffs, request, Err(error));
     }
 }
 
-/// The branches of search `request` arrived, or did not.
 pub fn reply(host: &dyn Host, diffs: &Diffs, request: u64, reply: Result<serde_json::Value, String>) {
     let mut picker = diffs.picker.borrow_mut();
     if picker.request != request {
@@ -132,12 +122,10 @@ pub fn reply(host: &dyn Host, diffs: &Diffs, request: u64, reply: Result<serde_j
     }
 }
 
-/// The base key the open picker chooses for.
 pub fn key(diffs: &Diffs) -> String {
     diffs.picker.borrow().key.clone()
 }
 
-/// The branch name of a ref, as the list shows it.
 fn short(reference: &str) -> &str {
     reference.strip_prefix("refs/heads/").or_else(|| reference.strip_prefix("refs/remotes/")).unwrap_or(reference)
 }

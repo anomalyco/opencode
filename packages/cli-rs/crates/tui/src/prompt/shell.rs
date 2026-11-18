@@ -1,6 +1,4 @@
-//! Shell mode (E.2, row P07): `!` at the start of the prompt enters it; Escape, Ctrl+C on an empty
-//! prompt, and Backspace at the start leave it (`component/prompt/index.tsx:964-1020`). Submitting
-//! in shell mode runs the text with `session.shell` (`submit.rs`).
+//! TypeScript: `component/prompt/index.tsx:964-1020`.
 
 use opencode_ui::dialog::FocusId;
 
@@ -8,7 +6,6 @@ use super::editor::{Inner, Mode};
 
 use crate::prelude::*;
 
-/// The shell-mode layers, each targeting the prompt's textarea.
 pub fn layers(inner: &Rc<Inner>, target: FocusId) -> Vec<KeymapLayer<FocusId>> {
     let when = |check: fn(&Inner) -> bool| Condition::when(bind!(inner, |prompt| check(&prompt)));
     let set = |mode: Mode| {

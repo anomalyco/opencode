@@ -7,7 +7,6 @@ use opencode_ui::tool_info::canonical_tool_name;
 
 use crate::prelude::*;
 
-/// `BACKGROUND_TOOL_HINT_DELAY`, in milliseconds.
 const DELAY: f64 = 3_000.0;
 
 pub struct Hint(Rc<Inner>);
@@ -17,7 +16,6 @@ struct Inner {
     theme: RefCell<Theme>,
     root: View,
     text: Text,
-    /// The call the hint is for: `<message>:<call>` and when it started running.
     running: RefCell<Option<(String, f64)>>,
     shortcut: RefCell<Option<String>>,
     shown: Cell<bool>,
@@ -51,7 +49,6 @@ impl Hint {
         &self.0.root
     }
 
-    /// Paints the hint in `theme`.
     pub fn restyle(&self, theme: &Theme) {
         *self.0.theme.borrow_mut() = theme.clone();
         self.0.text.fg(theme.text.muted);
@@ -116,7 +113,6 @@ impl Inner {
     }
 }
 
-/// The running shell call of the newest unfinished step, and when it started running.
 fn running(messages: &[SessionMessageInfo]) -> Option<(String, f64)> {
     let current = messages.iter().rev().find_map(|message| match message {
         SessionMessageInfo::Assistant(assistant) if assistant.time.completed.is_none() => Some(assistant),

@@ -15,7 +15,6 @@ pub fn plugin() -> abi::Plugin {
     abi::Plugin { id: "opencode.sidebar.todo", setup }
 }
 
-/// The hidden command a click on the header runs.
 const FOLD: &str = "sidebar.todo.fold";
 const ROOT: &str = "todo";
 
@@ -49,7 +48,6 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-/// The stored `{ open: true }` (`storage.store("view")`).
 fn open(read: &dyn abi::Read) -> bool {
     read.storage_get("view").and_then(|value| value.get("open")?.as_bool()).unwrap_or(true)
 }
@@ -59,7 +57,6 @@ struct Last {
     session: String,
     boundary: Option<String>,
     input: Option<Value>,
-    /// The message the list came from.
     source: Option<String>,
 }
 
@@ -134,7 +131,6 @@ fn view(list: &[Todo], open: bool) -> Node {
     Node::column(children)
 }
 
-/// `TodoItem`: the marker and the wrapped content, colored by status.
 fn item(todo: &Todo) -> Node {
     let color = match todo.status {
         TodoStatus::InProgress => "text.feedback.warning.base",

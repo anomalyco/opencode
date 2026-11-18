@@ -1,9 +1,4 @@
-//! The DevTools bar (E.18a): `packages/tui/src/component/devtools-bar.tsx`, row T08.
-//!
-//! One row at the bottom: Server, UI, Theme, and Tools open a panel above their item, and Experiments opens the
-//! experiments dialog. It shows when `debug.devtools` is on, or by default on the `local` channel
-//! (`app.tsx:497`). Escape, Ctrl+C, or a click outside closes the panel. The bar is rebuilt on every change: it
-//! is a handful of widgets.
+//! TypeScript: `packages/tui/src/component/devtools-bar.tsx`, `app.tsx:497`.
 
 use opencode_api::events::{State, Status};
 use opencode_api::generated::ExperimentalSessionLogInput;
@@ -96,7 +91,6 @@ pub fn status_icon(status: RuntimeStatus) -> &'static str {
     }
 }
 
-/// `brailleGraph`: two values per cell, each a column of 1 to 4 dots scaled between the minimum and maximum.
 pub fn braille_graph(values: &[f64], width: usize) -> String {
     let min = values.iter().copied().fold(f64::INFINITY, f64::min);
     let range = values.iter().copied().fold(f64::NEG_INFINITY, f64::max) - min;
@@ -119,7 +113,6 @@ pub fn braille_graph(values: &[f64], width: usize) -> String {
         .collect()
 }
 
-/// `debug.devtools`, else on for the `local` channel.
 pub fn enabled(info: &Info) -> bool {
     info.debug
         .as_ref()
@@ -127,17 +120,14 @@ pub fn enabled(info: &Info) -> bool {
         .unwrap_or_else(|| opencode_local::channel::Channels::from_env().channel == "local")
 }
 
-/// Whether the bar shows: enabled, and not over `/stats` (`app.tsx:1472`).
 fn shown(tui: &Tui, info: &Info) -> bool {
     enabled(info) && !matches!(tui.route(), Route::Plugin { id, .. } if id == "opencode.stats")
 }
 
 thread_local! {
-    /// The mounted bars, for [`route_changed`].
     static BARS: RefCell<Vec<Weak<Bar>>> = const { RefCell::new(Vec::new()) };
 }
 
-/// The route changed: the bar of `tui` shows or hides with it.
 pub(crate) fn route_changed(tui: &Tui) {
     let bars: Vec<Rc<Bar>> = BARS.with(|bars| {
         let mut bars = bars.borrow_mut();
@@ -166,8 +156,6 @@ struct Bar {
     _layer: RefCell<Option<Disposer>>,
 }
 
-/// Adds the bar to the bottom of `parent` and keeps it in step with the config, the connection, and the UI
-/// samples.
 pub fn mount(tui: &Rc<Tui>, parent: &View) {
     let root = View::new(&tui.app).row().height(1).shrink(0.0);
     parent.add(&root);
@@ -268,7 +256,6 @@ fn install_samples(tui: &Rc<Tui>, bar: &Rc<Bar>) {
         samples.retain(|sample| sample.time + SAMPLE_RETENTION >= now);
         let after = runtime_status(&samples);
         drop(samples);
-        // The bar's own UI icon follows the status; the open UI panel follows every sample.
         if bar.panel.get() == Some(Panel::Ui) || before != after {
             bar.render(&tui);
         }
@@ -312,7 +299,6 @@ impl Bar {
         );
     }
 
-    /// Rebuilds the bar.
     fn render(self: &Rc<Self>, tui: &Tui) {
         let info = tui.settings.info();
         let app = &tui.app;
@@ -353,7 +339,6 @@ impl Bar {
         let state = self.state.borrow().clone();
         let (indicator, icon) = connection_indicator(state.status, state.attempt);
 
-        // Server
         let server_open = panel == Some(Panel::Server);
         let item = self.item(tui, server_open, Some(Panel::Server));
         item.add(&Text::new(app, icon).fg(match (server_open, indicator) {
@@ -371,7 +356,6 @@ impl Bar {
             item.add(&self.server_panel(tui, &theme, &state));
         }
 
-        // UI
         let ui_open = panel == Some(Panel::Ui);
         let runtime = runtime_status(&self.samples.borrow());
         let color = if ui_open {
@@ -388,7 +372,6 @@ impl Bar {
             item.add(&self.ui_panel(tui, &theme, runtime));
         }
 
-        // Theme
         let theme_open = panel == Some(Panel::Theme);
         let item = self.item(tui, theme_open, Some(Panel::Theme));
         item.add(&Text::new(app, "Theme").fg(if theme_open { focused } else { theme.text.muted }));
@@ -396,7 +379,6 @@ impl Bar {
             item.add(&self.theme_panel(tui, &theme));
         }
 
-        // Tools
         let tools_open = panel == Some(Panel::Tools);
         let item = self.item(tui, tools_open, Some(Panel::Tools));
         item.add(&Text::new(app, "Tools").fg(if tools_open { focused } else { theme.text.muted }));
@@ -404,7 +386,6 @@ impl Bar {
             item.add(&self.tools_panel(tui, &theme, &info));
         }
 
-        // Experiments
         let item = self.item(tui, false, None);
         item.add(&Text::new(app, "Experiments").fg(theme.text.muted));
 
@@ -446,8 +427,6 @@ impl Bar {
         weak
     }
 
-    /// `BarItem`: one cell of padding, the hover and active backgrounds, and a click that does not end a
-    /// selection. `panel` is what it toggles; `None` opens the experiments dialog.
     fn item(self: &Rc<Self>, tui: &Tui, active: bool, panel: Option<Panel>) -> View {
         let theme = tui.page();
         let item = View::new(&tui.app).row().height(1).padding_x(1);
@@ -642,7 +621,6 @@ impl Bar {
         view
     }
 
-    /// Writes `opencode-debug-<uuid>.json` in the temporary directory, as `dump()` does.
     fn write_snapshot(self: &Rc<Self>, tui: &Tui) {
         self.dumping.set(true);
         *self.dump.borrow_mut() = None;
@@ -734,7 +712,6 @@ async fn session_events(client: &opencode_api::client::Client, id: &opencode_api
     events.into_iter().skip(skip).collect()
 }
 
-/// Creates a new 0600 file in the temporary directory (`open(file, "wx", 0o600)`).
 fn write_private(output: &Value) -> Result<String, String> {
     use std::io::Write;
     let path = std::env::temp_dir().join(format!("opencode-debug-{}.json", opencode_local::id::v4()));
@@ -747,7 +724,6 @@ fn write_private(output: &Value) -> Result<String, String> {
     Ok(path.to_string_lossy().into_owned())
 }
 
-/// `PanelBox` with its `PanelTitle`: above the item, 42 cells wide, on the raised background.
 fn panel_box(app: &App, theme: &Theme, title: &str) -> View {
     View::new(app)
         .absolute()
@@ -767,7 +743,6 @@ fn panel_box(app: &App, theme: &Theme, title: &str) -> View {
         .child(&Text::new(app, title).fg(theme.text.base).bold().margin_edge(Edge::Bottom, 1))
 }
 
-/// `Row`: the label on the left, the value on the right.
 fn row(app: &App, theme: &Theme, label: &str, value: &str) -> View {
     View::new(app)
         .row()
@@ -799,7 +774,6 @@ fn mode_name(mode: ThemeMode) -> &'static str {
     }
 }
 
-/// `new URL(url).host`: the host and any port other than the scheme's default.
 fn url_host(url: &str) -> String {
     let (scheme, rest) = url.split_once("://").unwrap_or(("", url));
     let host = rest.split(['/', '?', '#']).next().unwrap_or("");
@@ -812,7 +786,6 @@ fn url_host(url: &str) -> String {
     default.and_then(|port| host.strip_suffix(port)).unwrap_or(host).to_lowercase()
 }
 
-/// CPU time of this process in seconds (`process.cpuUsage()`), user plus kernel.
 #[cfg(windows)]
 fn cpu_time() -> f64 {
     opencode_util::win::process_times().map_or(0.0, |times| times.cpu_seconds)
@@ -830,7 +803,6 @@ fn process_age_ms() -> f64 {
     opencode_util::win::process_times().map_or(0.0, |times| times.age_ms.max(0.0))
 }
 
-/// CPU time of this process in seconds, from `/proc/self/schedstat` on Linux; 0 elsewhere.
 #[cfg(not(windows))]
 fn cpu_time() -> f64 {
     std::fs::read_to_string("/proc/self/schedstat")
@@ -854,7 +826,6 @@ fn memory() -> f64 {
 /// Milliseconds since the process started (`performance.now()` at the first draw), from `/proc` on Linux.
 #[cfg(not(windows))]
 fn process_age_ms() -> f64 {
-    // `starttime` is in clock ticks; Linux fixes the user-visible tick rate (`USER_HZ`) at 100.
     const TICKS: f64 = 100.0;
     let age = || -> Option<f64> {
         let stat = std::fs::read_to_string("/proc/self/stat").ok()?;
@@ -872,7 +843,6 @@ mod tests {
 
     #[test]
     fn braille_graph_matches_typescript() {
-        // Expected strings from `brailleGraph` in `devtools-bar.tsx`.
         assert_eq!(braille_graph(&[], 4), "⠀⠀⠀⠀");
         assert_eq!(braille_graph(&[5.0], 3), "⣀⣀⣀");
         assert_eq!(braille_graph(&[0.0, 1.0, 2.0, 3.0], 2), "⣠⣾");

@@ -17,7 +17,6 @@ pub fn clamp_tabs_width(width: i64, total: i64) -> u16 {
     SESSION_TABS_COMPACT_WIDTH.max(width.min(SESSION_SIDEBAR_MAX_WIDTH).min(total - SESSION_CONTENT_MIN_WIDTH)) as u16
 }
 
-/// `clampSessionPaneWidth`: keeps an even split when both pane minimums do not fit.
 pub fn clamp_pane_width(width: i64, total: i64) -> u16 {
     let half = (total / 2).max(1);
     24.min(half).max(width.min(half.max(total - SESSION_CONTENT_MIN_WIDTH))).max(0) as u16

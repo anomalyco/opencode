@@ -1,5 +1,4 @@
-//! The model dialog (E.16: `component/dialog-model.tsx`, `component/model-options.tsx`) and the app commands
-//! that reach [`Local`] (`app.tsx:903-1018`).
+//! TypeScript: `component/dialog-model.tsx`, `component/model-options.tsx`, `app.tsx:903-1018`.
 
 use opencode_api::generated::{ModelInfo, ModelInfoStatus, ProviderInfo};
 use opencode_api::js::locale_compare;
@@ -47,8 +46,6 @@ fn prioritize<T>(items: &mut [T], value: impl Fn(&T) -> &Model, favorites: &[Str
     items.sort_by_key(|item| !favorites.contains(&value(item).key()));
 }
 
-/// Opens the model dialog (`DialogModel`): the free models picker with nothing connected, else the connected
-/// models, of one provider when `provider` is set.
 pub fn show(local: &Rc<Local>, provider: Option<String>) {
     if !local.connected() && provider.is_none() {
         crate::dialogs::free_models::show(local);
@@ -57,7 +54,6 @@ pub fn show(local: &Rc<Local>, provider: Option<String>) {
     open(local, provider, String::new());
 }
 
-// Opens the connected models with `filter` typed, as a reopen keeps it.
 fn open(local: &Rc<Local>, provider: Option<String>, filter: String) {
     local.dialogs.replace(
         bind!(local, |local, cx| {
@@ -68,7 +64,6 @@ fn open(local: &Rc<Local>, provider: Option<String>, filter: String) {
     );
 }
 
-// The select of `DialogConnectedModels`.
 fn build(cx: &Rc<opencode_ui::dialog::DialogCx>, local: &Rc<Local>, provider: Option<String>, filter: &str) -> View {
     // Favoriting does not reorder the list until the dialog is reopened, which a build in a new theme is not.
     let favorites = Rc::new(local.favorite());
@@ -136,7 +131,6 @@ fn build(cx: &Rc<opencode_ui::dialog::DialogCx>, local: &Rc<Local>, provider: Op
     view
 }
 
-// The rows of `DialogConnectedModels` for `query`.
 fn options(
     local: &Local,
     provider: Option<&str>,
@@ -309,7 +303,6 @@ pub fn detail(model: &ModelInfo, price: bool) -> select::Detail {
     }))
 }
 
-// `String(Number(value.toFixed(2)))`.
 fn dollars(value: f64) -> String {
     format!("{}", (value * 100.0).round() / 100.0)
 }
@@ -348,12 +341,10 @@ pub fn choose(local: &Rc<Local>, model: &Model) {
     local.dialogs.clear();
 }
 
-/// `DialogModel`'s `connect`: the integration dialog, which reopens this dialog on the connected provider.
 pub fn connect(local: &Rc<Local>) {
     crate::dialogs::integration::show(local, Some(crate::dialogs::integration::show_models()));
 }
 
-/// Registers the model, agent, variant, and usage commands and their keys (`app.tsx:903-1018`).
 pub fn install(tui: &Rc<Tui>) {
     let local = tui.local.clone();
     let command = |id: &str, run: fn(&Rc<Local>)| {

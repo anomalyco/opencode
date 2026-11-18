@@ -1,6 +1,4 @@
-//! Go upsell (E.16): `component/dialog-go-upsell.tsx`, offered when the free allowance stops a turn, and its
-//! OpenCode Console connect step; and when to offer it, remembered in storage `go-upsell`
-//! (`routes/session/index.tsx:633-758`, row V24).
+//! TypeScript: `component/dialog-go-upsell.tsx`, `routes/session/index.tsx:633-758`.
 
 use opencode_api::generated::{
     ConnectionInfo, IntegrationAttempt, IntegrationAttemptID, IntegrationAttemptStatus, IntegrationID,
@@ -19,7 +17,6 @@ pub const GO_URL: &str = "https://opencode.ai/go";
 const ACTIONS: [&str; 3] = ["don't show again", "dismiss", "subscribe"];
 const DAY_MS: f64 = 86_400_000.0;
 
-/// The `go-upsell` record, in storage and in memory.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Seen {
     pub last_seen_at: Option<f64>,
@@ -35,18 +32,14 @@ impl Seen {
     }
 }
 
-/// What the stored record decided (`updateGoUpsell`'s draft function).
 #[derive(Debug, PartialEq)]
 enum Claim {
-    /// "Don't show again" was saved by another client.
     DontShow(Option<f64>),
     /// Another client offered it in the last day.
     Recent(Option<f64>),
-    /// This client offers it now; `lastSeenAt` is written.
     Claimed,
 }
 
-// The draft function of `updateGoUpsell`, on the stored record.
 fn claim(draft: &mut Value, now: f64) -> Claim {
     let stored = Seen::from_value(draft);
     if stored.dont_show {
@@ -58,7 +51,6 @@ fn claim(draft: &mut Value, now: f64) -> Claim {
     if !draft.is_object() {
         *draft = json!({});
     }
-    // `Date.now()` is a whole number of milliseconds.
     draft["lastSeenAt"] = json!(now as i64);
     Claim::Claimed
 }
@@ -97,7 +89,6 @@ pub fn offer(local: &Rc<Local>, offer: Offer, now: f64) {
             tokio::task::spawn_blocking(move || {
                 let mut result = Claim::Claimed;
                 let written = storage.update("go-upsell", &json!({}), |draft| result = claim(draft, now));
-                // A failed write still offers it, as TS does.
                 written.map_or(Claim::Claimed, |_| result)
             })
             .await
@@ -329,7 +320,6 @@ fn build(cx: &Rc<DialogCx>, local: &Rc<Local>, offer: Offer) -> View {
         );
     }
     paint();
-    // The buttons' handlers reach the buttons through `paint`; letting go of them ends that cycle.
     cx.on_close(opentui::keymap::Disposer::new(move || buttons.borrow_mut().clear()));
     match art {
         Some(art) => View::new(app).child(&art).child(&root),
@@ -353,10 +343,7 @@ fn dont_show_again(local: &Rc<Local>) {
     });
 }
 
-/// `DialogGoUpsellConnect`: signs in to OpenCode Console with its device OAuth method, then switches to an
-/// OpenCode Go model and resends the prompt.
 fn connect(local: &Rc<Local>, offer: Offer) {
-    // The attempt outlives a build of the dialog in a new theme; the dialog owns it.
     let state = Rc::new_cyclic(|me| Connect {
         local: local.clone(),
         offer,
@@ -375,11 +362,9 @@ fn connect(local: &Rc<Local>, offer: Offer) {
 struct Connect {
     local: Rc<Local>,
     offer: Offer,
-    /// The widgets of the current build.
     ui: RefCell<Option<ConnectUi>>,
     /// The method's label once it started, which replaces the title.
     label: RefCell<Option<String>>,
-    // For the footer actions, which outlive a render.
     me: Weak<Connect>,
     attempt: RefCell<Option<IntegrationAttempt>>,
     started: Cell<bool>,

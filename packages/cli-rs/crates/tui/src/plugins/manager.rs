@@ -26,7 +26,6 @@ use super::fetch::{data, fetch_of};
 use crate::prelude::*;
 
 pub const ID: &str = "opencode.plugins";
-/// The list's key, and the error view's.
 const LIST: &str = "plugins";
 const ERROR: &str = "plugins.error";
 
@@ -34,17 +33,13 @@ pub fn plugin() -> abi::Plugin {
     abi::Plugin { id: ID, setup }
 }
 
-/// The open manager's state; a new open starts it again, as TS mounts a new `PluginsDialog`.
 #[derive(Default)]
 struct State {
-    /// The opens so far: a reply to an earlier one changes nothing of this one.
     opened: Cell<u64>,
-    /// The error view of a row shows, whose Back brings the list back.
     erring: Cell<bool>,
     /// The server-list reads and checks asked for so far: only the reply to the newest one is shown, whatever order
     /// they come back in (TS's resource keeps the newest).
     asked: Cell<u64>,
-    /// `context.location ?? data.location.default()` as it opened.
     directory: RefCell<String>,
     server: RefCell<Option<Vec<PluginInfo>>>,
     checking: Cell<bool>,
@@ -100,7 +95,6 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
             update.fetch(host, Asked::Update(update.opened.get(), row.key()));
         }
     });
-    // Enter on a row that toggles nothing, and the `view error` actions: the row's error, if it has one.
     let detail = state.clone();
     setup.command(hidden("opencode.plugins.error"), move |host, key| {
         let key = key.filter(|_| host.dialog_open(LIST));
@@ -110,7 +104,6 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
             host.dialog(Dialog::ErrorDetails(details(&row)));
         }
     });
-    // Back from the error view: the list on the row.
     let back = state.clone();
     setup.command(hidden("opencode.plugins.back"), move |host, key| {
         if back.erring.replace(false) {
@@ -126,7 +119,6 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
             asked.fetch(host, Asked::List(asked.opened.get(), asked.next()));
         }
     });
-    // TS's subscription lives as long as the dialog, its error view included (`plugins.tsx:39`).
     let updated = state.clone();
     setup.on_event(&["plugin.updated"], move |host, _| {
         if host.dialog_open(LIST) || host.dialog_open(ERROR) {
@@ -152,7 +144,6 @@ fn command(name: &str, input: Option<String>) -> Action {
 }
 
 impl State {
-    /// The place of a new read or check among this open's.
     fn next(&self) -> u64 {
         self.asked.set(self.asked.get() + 1);
         self.asked.get()
@@ -181,7 +172,6 @@ impl State {
         let call = call.expect("the plugin inputs encode");
         match host.try_fetch(fetch_of(call)) {
             Ok(id) => drop(self.requests.borrow_mut().insert(id, asked)),
-            // A fetch the host did not take ends as a failed reply does.
             Err(error) => self.answered(host, asked, Err(error)),
         }
     }
@@ -220,7 +210,6 @@ impl State {
         self.show(host);
     }
 
-    /// Every row: the TUI plugins, then the server plugins, each sorted by label.
     fn rows(&self, read: &dyn Read) -> Vec<Row> {
         // Not the manager that runs, whose activation this is; a held build of its ID is a row (review carbon-3).
         let running = |entry: &PluginEntry| entry.id == ID && entry.active;
@@ -251,12 +240,10 @@ impl State {
     }
 }
 
-/// `PluginsDialog`'s list, selecting `focus` as it opens (back from an error).
 fn list(read: &dyn Read, state: &State, focus: Option<String>) -> Select {
     let rows = state.rows(read);
     let visible: Vec<&Row> =
         rows.iter().filter(|row| state.internal.get() || !row.internal() || row.status() == "failed").collect();
-    // The values of the visible rows an action does not apply to, on which it hides.
     let except = |applies: &dyn Fn(&Row) -> bool| -> Vec<String> {
         visible.iter().filter(|row| !applies(row)).map(|row| row.key()).collect()
     };
@@ -277,7 +264,6 @@ fn list(read: &dyn Read, state: &State, focus: Option<String>) -> Select {
         hidden_all: !rows.iter().any(|row| row.package().is_some()),
     }];
     actions.extend([
-        // A toggle row's error or slow report: enter toggles it.
         SelectAction {
             title: "view error".to_owned(),
             key: Some("space".to_owned()),
@@ -300,7 +286,6 @@ fn list(read: &dyn Read, state: &State, focus: Option<String>) -> Select {
             disabled: false,
             hidden_all: false,
         },
-        // Any other row's error, which enter opens (TS's footer hint).
         SelectAction {
             title: "view error".to_owned(),
             key: Some("enter".to_owned()),
@@ -361,17 +346,14 @@ fn option(row: &Row, state: &State) -> SelectOption {
         .maybe(row.held().then(|| command("opencode.plugins.asked", None)), SelectOption::action)
 }
 
-/// `DialogErrorDetails` for `row`; Back and escape return to the list on it.
 fn details(row: &Row) -> ErrorDetails {
     let runtime = if matches!(row, Row::Tui(_)) { "tui" } else { "server" };
     let source = row.source();
-    // A plugin that runs and is slow: its report, with what each kind of call cost.
     let (title, status, error) = match row.slow().filter(|_| !row.has_error()) {
         Some(report) => ("TUI plugin is slow".to_owned(), "slow", report.to_owned()),
         None => (
             format!("{} plugin error", if runtime == "tui" { "TUI" } else { "Server" }),
             "failed",
-            // A TUI plugin's error is the host's to show: the plugin list does not carry it.
             row.server_error().unwrap_or_else(|| "Unknown plugin error".to_owned()),
         ),
     };
@@ -395,11 +377,7 @@ fn details(row: &Row) -> ErrorDetails {
 
 enum Row {
     Tui(PluginEntry),
-    Server {
-        /// `source(plugin)`, formatted against the location.
-        source: String,
-        plugin: PluginInfo,
-    },
+    Server { source: String, plugin: PluginInfo },
 }
 
 impl Row {
@@ -422,7 +400,6 @@ impl Row {
         matches!(self, Row::Tui(entry) if matches!(entry.status, PluginStatus::Pending | PluginStatus::Declined))
     }
 
-    /// The entry a pick of the row enables, disables or asks about: one with a definition, or a held build.
     fn toggle(&self) -> Option<String> {
         match self {
             Row::Tui(entry) if entry.origin != PluginOrigin::Configured || self.held() => Some(entry.key.clone()),
@@ -438,7 +415,6 @@ impl Row {
                 .as_deref()
                 .and_then(|target| std::path::Path::new(target).file_name())
                 .map_or_else(|| entry.id.clone(), |name| name.to_string_lossy().into_owned()),
-            // A plugin not loaded is named by its package where the loader read one, else by its target (FT-15).
             Row::Tui(entry) => entry.id.clone(),
             Row::Server { plugin, source } => plugin.id.as_ref().map_or_else(|| source.clone(), |id| id.0.clone()),
         }
@@ -489,7 +465,6 @@ impl Row {
         self.package().is_some_and(|package| package.outdated == Some(true))
     }
 
-    /// It failed, or a TUI plugin is skipped: it has an error to show.
     fn has_error(&self) -> bool {
         match self {
             Row::Server { .. } => self.server_error().is_some(),
@@ -497,7 +472,6 @@ impl Row {
         }
     }
 
-    /// A server plugin's error, which the server lists to any client.
     fn server_error(&self) -> Option<String> {
         match self {
             Row::Server { plugin: PluginInfo { state: PluginState::Failed(failed), .. }, .. } => {
@@ -534,7 +508,6 @@ impl Row {
         }
     }
 
-    /// It has an error, or a slow report, to show in its details.
     fn has_details(&self) -> bool {
         self.has_error() || self.slow().is_some()
     }
@@ -555,7 +528,6 @@ fn slow_summary(report: &str) -> String {
     }
 }
 
-/// The package target, the local path relative to the location's directory, else the source type.
 fn source(plugin: &PluginInfo, directory: &str) -> String {
     match &plugin.source {
         PluginSource::Package(package) => package.target.clone(),
@@ -579,7 +551,6 @@ fn display_version(version: &str) -> String {
 mod tests {
     use super::*;
 
-    // Expected: a commit hash shortens to 7 characters, and labels sort as TS's `localeCompare` does.
     #[test]
     fn versions_and_labels_order_as_in_typescript() {
         assert_eq!(display_version(&"a".repeat(40)), "aaaaaaa");
@@ -608,7 +579,6 @@ mod tests {
         assert_eq!((failed.toggle().as_deref(), failed.has_error()), (Some("k"), true));
         assert_eq!(failed.footer().as_deref(), Some("failed, local"));
         assert_eq!(row(PluginOrigin::Builtin, PluginStatus::Inactive).toggle().as_deref(), Some("k"));
-        // A skipped entry's ID is its package's name, or its target when the loader read none (FT-15).
         let skipped = row(PluginOrigin::Configured, PluginStatus::Skipped);
         assert_eq!((skipped.toggle(), skipped.label().as_str(), skipped.has_error()), (None, "sample", true));
         let pending = row(PluginOrigin::Configured, PluginStatus::Pending);

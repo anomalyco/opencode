@@ -10,7 +10,6 @@ use opencode_ui::select::{Select, select};
 use crate::dialogs::settings::{set_path, update};
 use crate::prelude::*;
 
-/// Registers `theme.switch` ("Switch theme", `/themes`) as `app.tsx:1130-1137` does.
 pub fn install(tui: &Rc<Tui>) {
     let command = TuiCommand::new("theme.switch", bind!(tui, |tui, _, _| show(&tui, None)))
         .bind(Bind::Off)
@@ -18,14 +17,8 @@ pub fn install(tui: &Rc<Tui>) {
         .group("System")
         .palette()
         .slash("themes");
-    tui.keymap.install(
-        "theme list",
-        [
-            KeymapLayer::global(vec![command]),
-            // `appBindingCommands`: the configured keybind (`none` by default).
-            KeymapLayer::default().bindings(["theme.switch"]),
-        ],
-    );
+    tui.keymap
+        .install("theme list", [KeymapLayer::global(vec![command]), KeymapLayer::default().bindings(["theme.switch"])]);
 }
 
 /// `DialogThemeList`, in place of any open dialog. `on_close` returns to the caller (Settings) on Escape and
@@ -76,7 +69,6 @@ impl List {
                     let list = Rc::downgrade(&list);
                     bind!(list, |list, query| list.filtered(query))
                 }));
-                // Escape and the close label run it.
                 props.on_cancel = list.on_close.clone();
                 let (view, handle) = select(cx, props);
                 *list.select.borrow_mut() = Some(handle);

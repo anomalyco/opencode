@@ -1,6 +1,3 @@
-//! Loading, as fetches of the host's client: the diff for the source, the reported base, and image previews. Each
-//! reply names the viewer and the load it is for; one of an earlier viewer or load changes nothing.
-
 use opencode_api::client::Client;
 use opencode_api::generated::{
     FileDiffInfo, FileReadInput, SessionDiffInput, SessionID, VcsBaseInput, VcsBaseOutput, VcsDiffInput, VcsDiffOutput,
@@ -16,15 +13,30 @@ const VCS_DIFF_CONTEXT_LINES: i64 = 12;
 /// A request in flight, with the viewer and the load it is for.
 pub enum Asked {
     /// The base of a load's location, before its diff.
-    Base { viewer: u64, load: u64, key: String },
-    /// A load's diff, compared with `base`.
-    Diff { viewer: u64, load: u64, base: Option<Base> },
+    Base {
+        viewer: u64,
+        load: u64,
+        key: String,
+    },
+    Diff {
+        viewer: u64,
+        load: u64,
+        base: Option<Base>,
+    },
     /// The base the base dialog shows, looked up once (`loadBase`).
-    Reported { viewer: u64, key: String },
+    Reported {
+        viewer: u64,
+        key: String,
+    },
     /// An image card's working-tree bytes.
-    Image { viewer: u64, load: u64, file: String },
-    /// The base dialog's branches for its search `request`.
-    Branches { request: u64 },
+    Image {
+        viewer: u64,
+        load: u64,
+        file: String,
+    },
+    Branches {
+        request: u64,
+    },
 }
 
 impl Viewer {
@@ -78,7 +90,6 @@ impl Viewer {
         self.fetch(host, diffs, fetch_of(call), Asked::Diff { viewer: self.id, load: self.loads, base });
     }
 
-    /// Fetches `fetch` for `asked`; a fetch the host did not take ends as a failed reply does.
     fn fetch(&mut self, host: &dyn Host, diffs: &Diffs, fetch: abi::Fetch, asked: Asked) {
         if let Err((asked, error)) = diffs.fetch(host, fetch, asked) {
             self.reply(host, diffs, asked, Err(error));
@@ -121,7 +132,6 @@ impl Viewer {
         }
         let call = Client::vcs_base_call(&VcsBaseInput { location: self.location_query() });
         let asked = Asked::Reported { viewer: self.id, key };
-        // A look-up the host did not take is as a failed one, which reports nothing.
         let _ = diffs.fetch(host, fetch_of(call.expect("the base input encodes")), asked);
     }
 
@@ -176,7 +186,6 @@ impl Viewer {
 }
 
 impl Asked {
-    /// The viewer the request is for; `None` for the base dialog's.
     pub fn viewer(&self) -> Option<u64> {
         match self {
             Asked::Base { viewer, .. }
@@ -189,7 +198,6 @@ impl Asked {
 }
 
 impl Diffs {
-    /// Fetches `fetch` for `asked`; `asked` back, with the host's error, when the host did not take it.
     pub fn fetch(&self, host: &dyn Host, fetch: abi::Fetch, asked: Asked) -> Result<(), (Asked, String)> {
         match host.try_fetch(fetch) {
             Ok(id) => drop(self.requests.borrow_mut().insert(id, asked)),
@@ -198,7 +206,6 @@ impl Diffs {
         Ok(())
     }
 
-    /// Takes the request `id` stood for, if it is still asked for.
     pub fn answered(&self, id: RequestId) -> Option<Asked> {
         self.requests.borrow_mut().remove(&id)
     }

@@ -14,7 +14,6 @@ use super::tree::{self, Expanded, Tree};
 use super::{Diffs, FILES, MENU, PAGE, PANEL, TREE};
 use crate::frame::layout::SESSION_PANEL_SPLIT_MIN_WIDTH;
 
-/// The rows the sticky file header covers above a hunk a step lands on.
 pub const FILE_HEADER_HEIGHT: u16 = 2;
 pub const MIN_SPLIT_WIDTH: i64 = 100;
 const FILE_TREE_MIN_WIDTH: i64 = 30;
@@ -23,7 +22,6 @@ pub const FULL_INSET: u16 = 2;
 /// The full layout keeps its tree and inset cards only while its patches stay as wide as the narrowest docked panel.
 pub const FULL_LAYOUT_MIN_WIDTH: i64 = FILE_TREE_MIN_WIDTH + FULL_INSET as i64 * 2 + SESSION_PANEL_SPLIT_MIN_WIDTH / 2;
 
-/// A diff source (`DiffSource`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Mode {
     Branch,
@@ -55,7 +53,6 @@ impl Mode {
         matches!(self, Mode::Branch | Mode::Committed)
     }
 
-    /// The setting's and the select's word for it.
     pub fn key(self) -> &'static str {
         match self {
             Mode::Branch => "branch",
@@ -79,14 +76,12 @@ impl Mode {
     }
 }
 
-/// A base branch: what the header names and the ref the diff compares with.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Base {
     pub name: String,
     pub reference: String,
 }
 
-/// One file of the diff (`DiffFile`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct File {
     pub file: String,
@@ -168,18 +163,15 @@ pub struct Contents {
     pub headings: ((u64, i64), Headings),
 }
 
-/// Paths cut for a card's heading, by file and whether it is reviewed.
 pub type Headings = HashMap<(usize, bool), std::rc::Rc<str>>;
 
 pub struct Viewer {
-    /// Its number among the plugin's viewers: a reply to an earlier one changes nothing of this one.
     pub id: u64,
     pub place: Showing,
     pub mode: Mode,
     pub location: abi::LocationRef,
     pub base_key: String,
     pub load: Load,
-    /// The loads so far: a reply to an earlier one changes nothing.
     pub loads: u64,
     /// The base each location and branch reported (`reportedBases`), looked up once per viewer.
     pub reported: HashMap<String, Option<Base>>,
@@ -196,7 +188,6 @@ pub struct Viewer {
     pub exhausted: Option<usize>,
     /// Image previews by file, read once per file list.
     pub previews: HashMap<String, Preview>,
-    /// The file whose menu is open (`fileMenu`); new files close it.
     pub menu: Option<usize>,
     /// The tree's selected row and its rows when they last scrolled it: the selection scrolls into view only when
     /// they change, as TS's effect does.
@@ -204,19 +195,15 @@ pub struct Viewer {
     pub contents: Contents,
     /// The last view shows this state: a wake that changed nothing of it keeps the tree.
     pub drawn: bool,
-    /// A turn of its session started, in `turn` mode, whose end it has not heard.
     pub running: bool,
 }
 
-/// A turn event, as the viewer hears it.
 pub enum Turn<'a> {
     Started(&'a str),
     Ended(&'a str),
-    /// The connection came back, or the UI skipped signals: an end may have gone unheard.
     Reconnected,
 }
 
-/// What of a viewer's own state its view shows, beside its input: an event that leaves it as it was keeps the view.
 #[derive(PartialEq)]
 pub struct Shown {
     selected: Option<usize>,
@@ -287,7 +274,6 @@ impl Viewer {
         }
     }
 
-    /// The surface it shows in, which its verbs and reads name.
     pub fn surface(&self) -> &'static str {
         match self.place {
             Showing::Panel { .. } => PANEL,
@@ -315,12 +301,10 @@ impl Viewer {
         matches!(self.place, Showing::Panel { .. })
     }
 
-    /// Whether the panel is docked beside the session.
     pub fn docked(&self) -> bool {
         self.in_panel() && !self.panel.is_some_and(|panel| panel.fullscreen)
     }
 
-    /// Docked panels and narrow full screens share the compact layout: no tree, flush cards, and a footer.
     pub fn compact(&self) -> bool {
         self.docked() || self.width < FULL_LAYOUT_MIN_WIDTH
     }
@@ -409,7 +393,6 @@ impl Viewer {
         }
     }
 
-    /// The chosen base, else the one the location reported (`sourceBase`).
     pub fn source_base(&self, memory: &Memory) -> Option<Base> {
         let chosen = memory.bases.get(&self.base_key).cloned();
         chosen
@@ -421,9 +404,6 @@ impl Viewer {
         Some(opencode_api::generated::LocationQueryInput { directory: Some(self.location.directory.clone()) })
     }
 
-    // Keys.
-
-    /// What a key of the viewer's layer does; a key whose command TS disables passes on.
     pub fn run(&mut self, host: &dyn Host, diffs: &Diffs, action: Action) -> Handled {
         match action {
             Action::Close => match &self.place {
@@ -521,7 +501,6 @@ impl Viewer {
         self.scroll(host, Scroll::Step { group: "hunk".to_owned(), by, inset: FILE_HEADER_HEIGHT });
     }
 
-    /// Where a hunk step landed: its file is selected.
     pub fn landed(&mut self, anchor: &abi::v2::AnchorAt) {
         if let Some(file) = self.file_of(&anchor.owner) {
             self.select_file(file);
@@ -580,7 +559,6 @@ impl Viewer {
         }
     }
 
-    /// `selectPatchFile`: selects `file` and opens the directories above it.
     pub fn select_file(&mut self, file: usize) {
         self.exhausted = None;
         if let Some(parents) = tree::parents_of(&self.tree, file) {
@@ -589,8 +567,6 @@ impl Viewer {
         self.selected = Some(file);
     }
 
-    /// `toggleFileReviewed`: a file reviewed from the current card moves on (the next file in the single view);
-    /// another file's mark keeps the reading position.
     pub fn toggle_reviewed(&mut self, host: &dyn Host, file: Option<usize>) {
         let Some(file) = file else { return };
         let Some(name) = self.files().get(file).map(|file| file.file.clone()) else { return };
@@ -616,7 +592,6 @@ impl Viewer {
         self.scroll_to_card(host, next, ScrollAlign::Start);
     }
 
-    /// A press on a tree row: a file is selected and scrolled to; a directory opens or closes.
     pub fn pick_row(&mut self, host: &dyn Host, row: &tree::Row) {
         match row.file {
             Some(file) => {
@@ -630,7 +605,6 @@ impl Viewer {
         }
     }
 
-    /// `scrollFileTreeRowIntoView`: a new selection or new rows bring the selected row into the tree's view.
     pub fn follow_tree(&mut self, host: &dyn Host) {
         let rows = tree::flatten(&self.tree, Some(&self.expanded));
         let selected = self.tree_selected(host);
@@ -646,18 +620,15 @@ impl Viewer {
         }
     }
 
-    /// The tree's selected file: the selection, or the one file of the single view.
     pub fn tree_selected(&self, read: &dyn Read) -> Option<usize> {
         self.selected.or_else(|| self.single.then(|| self.visible(read).first().copied()).flatten())
     }
 
-    /// Opens the file menu of `file` at the cell `x`, `y` (`openFileMenu`).
     pub fn open_menu(&mut self, host: &dyn Host, file: usize, x: u16, y: u16) {
         self.menu = Some(file);
         super::file_menu::open(host, x, y);
     }
 
-    /// New files: the tree opens fully, and the selection and reviewed marks start over.
     pub fn reset(&mut self, host: &dyn Host) {
         if self.menu.take().is_some() {
             host.close_overlay(MENU);

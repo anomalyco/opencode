@@ -24,10 +24,8 @@ use crate::prelude::*;
 
 /// `limit` of every list read.
 const LIMIT: i64 = 50;
-/// `createDebouncedSignal("", 150)`.
 const SEARCH_DEBOUNCE: Duration = Duration::from_millis(150);
 
-/// Opens the dialog (`session.list`).
 pub fn show(tui: &Tui) {
     let all_projects = load_all_projects(tui);
     let list = Rc::new(List {
@@ -166,7 +164,6 @@ struct List {
 
 struct State {
     filter: String,
-    /// The debounced filter the list read uses.
     search: String,
     /// The session the first delete press marked.
     to_delete: Option<SessionID>,
@@ -214,7 +211,6 @@ impl List {
         tui.data.read(|store| store.location(Some(&location)).and_then(|data| data.info.clone()))
     }
 
-    /// Reads the list for the current search and scope (the `searchResults` resource).
     fn fetch(self: &Rc<Self>) {
         let Some(tui) = self.tui.upgrade() else { return };
         let location = self.location(&tui);
@@ -228,10 +224,7 @@ impl List {
         let client = tui.data.client().clone();
         let input = location.map(|location| list_input(&location, &query, all_projects));
         tui.app.spawn(
-            async move {
-                // TS throws "Location unavailable" here, which degrades like a failed read.
-                read(&client, &input?).await
-            },
+            async move { read(&client, &input?).await },
             bind!(self, |list, _, sessions| {
                 {
                     let mut state = list.state.borrow_mut();
@@ -405,7 +398,6 @@ impl List {
         }
     }
 
-    /// `searchState`: the empty-list message and whether it is an error.
     fn search_state(&self) -> (String, bool) {
         let state = self.state.borrow();
         let query = state.filter.trim();
@@ -499,12 +491,10 @@ impl List {
     }
 }
 
-/// `useTheme().surface("dialog")`.
 pub fn dialog_theme(tui: &Tui) -> Theme {
     tui.page().surface(opencode_ui::theme::Surface::Dialog)
 }
 
-/// `localSessions()`: loaded sessions of the picker location (or all), matched by title.
 fn local_sessions(
     store: &Store,
     state: &State,
@@ -529,7 +519,6 @@ fn local_sessions(
         .collect()
 }
 
-/// The list read's scope (`dialog-session-list.tsx:63-77`).
 fn list_input(location: &LocationPublicInfo, query: &str, all_projects: bool) -> SessionListInput {
     let mut input = SessionListInput {
         search: (!query.is_empty()).then(|| query.to_owned()),
@@ -556,7 +545,6 @@ async fn read(client: &Client, input: &SessionListInput) -> Option<Vec<SessionIn
     client.session_list(input).await.map(|response| response.data).ok()
 }
 
-/// `pickerLocation()`: the open session's location, else the active location, else the default location.
 fn picker_location(tui: &Tui) -> Location {
     let session = match tui.route() {
         Route::Session { id } => {
@@ -567,7 +555,6 @@ fn picker_location(tui: &Tui) -> Location {
     session.unwrap_or_else(|| crate::features::location::active(tui))
 }
 
-/// `prefs.allProjects` from the `session-list` storage key.
 fn load_all_projects(tui: &Tui) -> bool {
     let initial = tui.config().tabs.scope != TabsScope::Cwd;
     tui.storage()
@@ -576,7 +563,6 @@ fn load_all_projects(tui: &Tui) -> bool {
         .unwrap_or(initial)
 }
 
-/// A row's footer: the checkout name when the session's root is outside its project.
 fn footer(session: &SessionInfo, project: Option<&Project>) -> Option<String> {
     let directory = session.location.directory.as_str();
     let root = match &session.subpath {
@@ -592,7 +578,6 @@ fn footer(session: &SessionInfo, project: Option<&Project>) -> Option<String> {
         .then(|| select::truncate(basename(&relative), 25))
 }
 
-/// `withTimestampedFallback`: the title, else `New session - <ISO time>`.
 pub fn title(session: &SessionInfo) -> String {
     if let Some(title) = &session.title {
         return title.clone();
@@ -645,12 +630,10 @@ pub fn status_gutter(
     fallback
 }
 
-/// `new Date(ms).toDateString()` in local time.
 pub fn date_string(ms: f64) -> String {
     Zone::Local.at(ms as i64).or_else(|| Zone::Local.at(0)).unwrap_or_default().date_string()
 }
 
-/// `Date.now()`, on the sim's clock when it sets one.
 pub fn now_ms() -> f64 {
     time::now_ms() as f64
 }
@@ -659,7 +642,6 @@ pub fn basename(path: &str) -> &str {
     Flavor::NATIVE.basename(path)
 }
 
-/// `path.resolve(directory, "..", …)` with `ups` parent steps.
 fn resolve_up(flavor: Flavor, directory: &str, ups: usize) -> String {
     let root = flavor.sep().to_string();
     let paths: Vec<&str> = [root.as_str(), directory].into_iter().chain(std::iter::repeat_n("..", ups)).collect();
@@ -699,7 +681,6 @@ pub mod pins {
         })
     }
 
-    /// `slots()`: pins of loaded root sessions, at most nine.
     pub fn slots(tui: &Tui) -> Vec<SessionID> {
         let pinned = list(tui);
         tui.data.read(|state| {

@@ -20,10 +20,8 @@ use opencode_util::text_boundary;
 use crate::prelude::*;
 
 const PAGE_BYTES: i64 = 64 * 1024;
-/// `Number.MAX_SAFE_INTEGER`: an output cursor past the end, which answers with the size alone.
 const END: i64 = 9_007_199_254_740_991;
 
-/// Opens the dialog for `shell`, read at `location` (where the shell list reported it).
 pub fn show(tui: &Tui, shell: ShellInfo, location: Location) {
     let weak = tui.weak();
     tui.dialogs.replace(
@@ -123,7 +121,6 @@ fn build(tui: &Weak<Tui>, cx: &Rc<DialogCx>, shell: ShellInfo, location: Locatio
         scroll: scroll.clone(),
         foot: View::new(app),
     });
-    // Built again in a new theme, the dialog keeps what it read and goes on reading from there.
     let kept = cx.keep(bind!(poll, |poll| {
         let read = (poll.info.borrow().clone(), poll.output.borrow().clone(), poll.omitted.get());
         Some((read, poll.error.borrow().clone(), poll.cursor.get(), poll.copied.get(), poll.scroll.scroll_position()))

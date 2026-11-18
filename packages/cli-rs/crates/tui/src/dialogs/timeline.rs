@@ -5,10 +5,8 @@ use opencode_util::time::Zone;
 
 use crate::prelude::*;
 
-/// Called with a message ID as the selection moves (`onMove`).
 pub type OnMove = Rc<dyn Fn(&Tui, String)>;
 
-/// `DialogTimeline`, opened with `dialog.replace`.
 pub fn show(tui: &Tui, session: SessionID, on_move: OnMove) {
     let options: Vec<_> = tui
         .data

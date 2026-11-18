@@ -1,5 +1,4 @@
-//! Any other tool (E.7a): `GenericTool` (`routes/session/index.tsx:2734-2789`). One line with the
-//! tool's name and primitive inputs; a click lists every input and the output.
+//! TypeScript: `routes/session/index.tsx:2734-2789`.
 
 use opencode_ui::tool_info::primitive_input_summary;
 
@@ -20,7 +19,6 @@ struct Inner {
     entries: RefCell<Option<Details>>,
 }
 
-/// The inputs (key and printed value) and the output the details list.
 type Details = (Vec<(String, String)>, String);
 
 impl Generic {
@@ -108,7 +106,6 @@ impl Inner {
     }
 }
 
-/// `genericToolSummary`: the name and the primitive inputs on one line.
 pub fn summary(tool: &str, input: &serde_json::Map<String, Value>) -> String {
     let args = primitive_input_summary(input, &[]).split_whitespace().collect::<Vec<_>>().join(" ");
     if args.is_empty() {

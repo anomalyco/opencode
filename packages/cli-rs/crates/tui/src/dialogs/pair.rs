@@ -10,7 +10,6 @@ use opencode_ui::keymap::Slash;
 
 use crate::prelude::*;
 
-/// Registers `server.pair` ("Pair device", `/pair` and `/web`) as `app.tsx:1074-1081` does.
 pub fn install(tui: &Rc<Tui>) {
     let command = TuiCommand::new("server.pair", bind!(tui, |tui, _, _| show(&tui)))
         .bind(Bind::Off)
@@ -18,17 +17,9 @@ pub fn install(tui: &Rc<Tui>) {
         .group("System")
         .palette()
         .slash(Slash::new("pair").aliases(["web"]));
-    tui.keymap.install(
-        "pair",
-        [
-            KeymapLayer::global(vec![command]),
-            // `appBindingCommands`: the configured keybind (`none` by default).
-            KeymapLayer::default().bindings(["server.pair"]),
-        ],
-    );
+    tui.keymap.install("pair", [KeymapLayer::global(vec![command]), KeymapLayer::default().bindings(["server.pair"])]);
 }
 
-/// `DialogPair`, large and centered, in place of any open dialog.
 pub fn show(tui: &Tui) {
     // Read once: a build in a new theme draws the same code again.
     let loaded: Loaded = Rc::default();
@@ -50,10 +41,8 @@ pub fn show(tui: &Tui) {
 
 /// The pairing once read, or why it could not be.
 type Loaded = Rc<RefCell<Option<Result<Pairing, String>>>>;
-/// The body of the dialog's current build.
 type Shown = Rc<RefCell<Option<(Weak<DialogCx>, View)>>>;
 
-/// What the links come from.
 pub struct Pairing {
     pub links: Vec<String>,
     pub localhost: Option<String>,
@@ -61,7 +50,6 @@ pub struct Pairing {
     pub loopback: bool,
 }
 
-/// The links of `pairing.code` on each of the server's URLs.
 pub fn pairing(server: &ServerInfo, pairing: &PairingCode) -> Pairing {
     let link = |base: &url::Url| {
         opencode_api::js::join_url(base, &format!("/auth/connect/{}", pairing.code))
@@ -120,7 +108,6 @@ fn fill(cx: &DialogCx, body: &View, loaded: Option<&Result<Pairing, String>>) {
     }
 }
 
-/// The links and the QR code: side by side from 96 columns, else stacked; in a scroll box below 36 rows.
 fn content(cx: &DialogCx, value: &Pairing) -> View {
     let app = &cx.app;
     let theme = &cx.theme;

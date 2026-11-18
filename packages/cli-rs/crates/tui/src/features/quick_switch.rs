@@ -38,7 +38,6 @@ pub fn quick_switch(tui: &Tui, slot: usize) {
     tui.navigate(Route::Session { id: target });
 }
 
-/// `session.deleted` prunes the session's pin (`prune`).
 pub(crate) fn event(tui: &Tui, event: &Handled) {
     if let Handled::SessionDeleted(event) = event {
         // The file loses the pin even when only another client had it.

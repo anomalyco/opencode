@@ -13,7 +13,6 @@ use crate::prelude::*;
 use crate::routes::session::messages::list::Context;
 use crate::routes::session::messages::shell::{Output, collapse_shell_output};
 
-/// Lines of command and output a collapsed block shows.
 const MAX_LINES: usize = 10;
 
 pub struct Shell(Rc<Inner>);
@@ -30,31 +29,26 @@ struct Inner {
     expanded: Cell<bool>,
     output: RefCell<Output>,
     was_running: Cell<bool>,
-    /// The store lists the shell as running; read where the store is not held.
     listed: Cell<bool>,
     interval: Cell<Option<TimerId>>,
     painted: RefCell<Option<Paint>>,
 }
 
-/// The call's inputs, as `ShellDisplay` gets them.
 #[derive(Clone, PartialEq)]
 struct Call {
     shell: Option<String>,
     command: Option<String>,
     workdir: String,
     status: Status,
-    /// Completed, but the command still runs in the background.
     background: bool,
     /// The output of a call without a shell ID.
     output: Option<String>,
     permission: bool,
     error: Option<String>,
     width: i64,
-    /// Where the shell runs, for the output requests.
     directory: Option<String>,
 }
 
-/// What the block shows, to skip unchanged repaints.
 #[derive(PartialEq)]
 struct Paint {
     command: bool,
@@ -64,7 +58,6 @@ struct Paint {
     input: String,
     output: String,
     background: bool,
-    /// The spinner and command take the warning color.
     permission: bool,
 }
 
@@ -164,12 +157,10 @@ impl Drop for Shell {
 }
 
 impl Inner {
-    /// The store lists the call's shell as running (`backgroundRunning`).
     fn background_running(&self) -> bool {
         self.listed.get()
     }
 
-    /// Reads [`Self::listed`] again, outside a render (timers and clicks).
     fn refresh(&self) {
         let Some(id) = self.call.borrow().as_ref().and_then(|call| call.shell.clone()) else { return };
         let listed = self.tui.upgrade().is_some_and(|tui| tui.data.read(|state| state.shell(&ShellID(id)).is_some()));
@@ -329,7 +320,6 @@ impl Inner {
         *self.painted.borrow_mut() = Some(paint);
     }
 
-    /// The output the block shows (`ShellDisplay`'s `output`).
     fn output_text(&self, call: &Call, expanded: bool) -> String {
         if call.status == Status::Streaming {
             return String::new();

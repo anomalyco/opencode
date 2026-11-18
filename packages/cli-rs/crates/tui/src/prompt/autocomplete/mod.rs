@@ -38,13 +38,11 @@ use self::parts::Kind;
 use crate::prelude::*;
 use crate::prompt::editor::Inner;
 
-/// The most rows the popup shows, and the most fuzzy matches it keeps.
 const ROWS: usize = 10;
 /// The keymap mode the popup pushes while it shows.
 const MODE: &str = "autocomplete";
 const RECENTS_KEY: &str = "directory-recents";
 
-/// What the popup lists (`AutocompleteRef["visible"]`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
     Reference,
@@ -82,7 +80,6 @@ impl Shared {
         }));
         let (frecency, recents, storage) = (self.frecency.clone(), self.recents.clone(), tui.storage());
         let (writes, proxy) = (self.recents_writes.clone(), tui.app.proxy());
-        // `paths.cwd`: the directory the TUI started in.
         let cwd = PathBuf::from(&tui.directory);
         self.writer().run(move || {
             load_frecency(&frecency, &state, &cwd);
@@ -232,7 +229,6 @@ fn recents_initial() -> Value {
     json!({ "projects": {} })
 }
 
-/// What picking an option does.
 #[derive(Clone, Debug)]
 enum Action {
     /// `insertPart`: a mention of `text`, and the path frecency counts, if any.
@@ -297,19 +293,15 @@ struct Results {
     resolved: bool,
 }
 
-/// A mounted prompt's autocomplete. Dropping it removes its layers and its popup.
 pub struct Autocomplete(Rc<State>);
 
-/// The search a file or directory request was for: its mode, its query and the location's directory.
 type Requested = Option<(Mode, String, String)>;
 
-/// An open popup's place ([`Autocomplete::take_open`]).
 pub struct Open {
     mode: Mode,
     index: u32,
     selected: usize,
     offset: usize,
-    /// The anchor's row on the screen.
     placed: f64,
     /// The popup's entry on the keymap's mode stack, handed on rather than pushed again, so the stack stays as it was:
     /// a dialog opened over the list stays above it.
@@ -322,7 +314,6 @@ struct State {
     tui: Weak<Tui>,
     prompt: Weak<Inner>,
     visible: Cell<Option<Mode>>,
-    /// The trigger's offset: the `/` or `@`, or the start of a directory argument.
     index: Cell<u32>,
     selected: Cell<usize>,
     /// The first row shown.
@@ -338,10 +329,7 @@ struct State {
     /// Set while a pick edits the prompt; its input is handled once the pick is done.
     editing: Cell<bool>,
     options: RefCell<Vec<Item>>,
-    /// The prompt's root, which the popup sits on.
     anchor: View,
-    /// Where the anchor of the popup this one reopens was on the screen, for as long as this anchor has no layout
-    /// ([`Autocomplete::reopen`]): the route mounted again in the same place.
     placed: Cell<Option<f64>>,
     popup: View,
     list: View,
@@ -368,7 +356,6 @@ impl Drop for State {
     }
 }
 
-/// Mounts the autocomplete of `prompt`, its popup over `anchor` (the prompt's root).
 pub fn mount(tui: &Tui, prompt: &Rc<Inner>, anchor: &View) -> Autocomplete {
     tui.prompt.complete.load(tui);
     let app = &tui.app;
@@ -416,20 +403,16 @@ impl Autocomplete {
         self.0.visible.get()
     }
 
-    /// A command was enabled or disabled: an open list of commands lists them as they are now (carbon ce-5).
     pub fn commands_changed(&self) {
         if self.0.visible.get() == Some(Mode::Command) {
             self.0.refresh();
         }
     }
 
-    /// The prompt's text changed (`onInput`).
     pub fn on_input(&self, value: &str) {
         self.0.on_input(value);
     }
 
-    /// Where an inserted mention starts: the open `@` query, which it replaces, else the cursor. Hides the
-    /// popup (`insertFileMention`).
     pub fn mention_start(&self, cursor: u32) -> u32 {
         let state = &self.0;
         let start = match state.visible.get() {
@@ -440,7 +423,6 @@ impl Autocomplete {
         start
     }
 
-    /// Draws an open popup in the page theme again, keeping its search and selection.
     pub fn restyle(&self, tui: &Tui) {
         self.0.render(tui);
     }
@@ -474,7 +456,6 @@ impl Autocomplete {
         state.move_to(open.selected.min(count.saturating_sub(1)));
     }
 
-    /// The store changed: catalogs may have arrived.
     pub fn sync(&self) {
         if self.0.visible.get().is_some() {
             self.0.refresh();
@@ -544,7 +525,6 @@ impl State {
         if mode == Mode::Reference
             && let Some(prompt) = self.prompt.upgrade()
         {
-            // The `@` sources TS reads from the location store.
             let location = prompt.location(&tui);
             for catalog in [Catalog::Agent, Catalog::Skill, Catalog::Reference] {
                 let task = tui.data.catalog_sync(catalog, Some(&location));
@@ -559,7 +539,6 @@ impl State {
         self.refresh();
     }
 
-    /// `hide`: with `remove_token`, a slash command's typed text goes too.
     fn hide(&self, remove_token: bool) {
         if remove_token
             && self.visible.get() == Some(Mode::Command)
@@ -608,7 +587,6 @@ impl State {
         }
     }
 
-    /// Recomputes the search, starts a file or directory search if it changed, and redraws.
     fn refresh(&self) {
         let (Some(tui), Some(prompt), Some(mode)) = (self.tui.upgrade(), self.prompt.upgrade(), self.visible.get())
         else {
@@ -640,7 +618,6 @@ impl State {
         self.render(&tui);
     }
 
-    /// The visible reference whose name the search starts with, as `name` or `name/…`.
     fn reference_match(&self, tui: &Tui, location: &Location, mode: Mode) -> Option<String> {
         if mode != Mode::Reference {
             return None;
@@ -735,7 +712,6 @@ impl State {
         });
     }
 
-    /// The options to show (`options` memo).
     fn compute(&self, tui: &Tui, prompt: &Inner, location: &Location, mode: Mode, search: &str) -> Vec<Item> {
         let results = {
             let results = self.results.borrow();
@@ -782,7 +758,6 @@ impl State {
             .collect()
     }
 
-    /// The anchor's width less the borders and padding (`anchor.width - 4`).
     fn content_width(&self, tui: &Tui) -> usize {
         let width = match self.anchor.rect().width as u32 {
             0 => u32::from(tui.app.size().0),
@@ -838,7 +813,6 @@ impl State {
         }
     }
 
-    /// Mouse wheel: scrolls, and keeps the selection in view (`reconcileSelectionWindow`).
     fn scroll(&self, delta: i64) {
         let count = self.options.borrow().len();
         let limit = self.height().min(count);
@@ -856,7 +830,6 @@ impl State {
         }
     }
 
-    /// `select`: hides, then runs the pick.
     fn select(&self) {
         let Some(item) = self.options.borrow().get(self.selected.get()).cloned() else { return };
         let Some(prompt) = self.prompt.upgrade() else { return };
@@ -902,7 +875,6 @@ impl State {
         }
     }
 
-    /// `prompt.autocomplete.complete` (Tab): a directory opens; anything else is picked.
     fn complete(&self) {
         let Some(item) = self.options.borrow().get(self.selected.get()).cloned() else { return };
         if !item.is_directory {
@@ -946,7 +918,6 @@ impl State {
         self.refresh();
     }
 
-    /// Draws the popup: up to ten rows above the prompt, or the empty message.
     fn render(&self, tui: &Tui) {
         let Some(mode) = self.visible.get() else {
             self.popup.visible(false);
@@ -1098,12 +1069,10 @@ fn rank(mode: Mode, search: &str, targets: &[(&str, Option<&str>)], frecency: im
     )
 }
 
-/// `SplitBorder`'s `┃` sides.
 fn split_border() -> [char; 11] {
     [' ', ' ', ' ', ' ', ' ', '┃', ' ', ' ', ' ', ' ', ' ']
 }
 
-/// `AutocompleteRail`: each row draws its own left rail.
 fn rail(app: &App, theme: &opencode_ui::theme::Theme, color: Option<Color>, row: &View) -> View {
     View::new(app)
         .row()
@@ -1111,7 +1080,6 @@ fn rail(app: &App, theme: &opencode_ui::theme::Theme, color: Option<Color>, row:
         .child(row)
 }
 
-/// The autocomplete's key layer (`autocomplete.tsx:684-752`).
 fn install(tui: &Tui, state: &Rc<State>, target: FocusId) {
     let command = |id: &str, title: &str, action: fn(&State)| {
         TuiCommand::new(
@@ -1165,7 +1133,6 @@ fn directory_argument(tui: &Tui, before: &str) -> Option<usize> {
     Some(end + separator)
 }
 
-/// Keymap slash commands, then server commands, sorted and padded (`commands` memo).
 fn command_items(tui: &Tui, location: &Location) -> Vec<Item> {
     let mut items: Vec<Item> = tui
         .keymap
@@ -1203,7 +1170,6 @@ fn command_items(tui: &Tui, location: &Location) -> Vec<Item> {
     items
 }
 
-/// Visible subagents (`agents` memo).
 fn agent_items(tui: &Tui, location: &Location) -> Vec<Item> {
     let agents =
         tui.data.read(|state| state.location(Some(location)).and_then(|data| data.agent.clone()).unwrap_or_default());
@@ -1225,7 +1191,6 @@ fn agent_items(tui: &Tui, location: &Location) -> Vec<Item> {
         .collect()
 }
 
-/// The location's skills (`skillOptions` memo).
 fn skill_items(tui: &Tui, location: &Location) -> Vec<Item> {
     let skills =
         tui.data.read(|state| state.location(Some(location)).and_then(|data| data.skill.clone()).unwrap_or_default());
@@ -1247,7 +1212,6 @@ fn skill_items(tui: &Tui, location: &Location) -> Vec<Item> {
         .collect()
 }
 
-/// Visible references, as file mentions of their directories (`referenceAliases` memo).
 fn reference_items(tui: &Tui, location: &Location) -> Vec<Item> {
     let references = tui
         .data
@@ -1281,7 +1245,6 @@ fn reference_items(tui: &Tui, location: &Location) -> Vec<Item> {
         .collect()
 }
 
-/// A file search result (`createFilePart`), with its line range when it is a file.
 fn file_item(
     root: &str,
     path: &str,
@@ -1321,8 +1284,6 @@ fn file_item(
     }
 }
 
-/// `directoryAutocomplete`: the query itself when it names a directory, then the listed
-/// directories whose names match.
 fn directory_items(
     query: &str,
     search: &DirectorySearch,
@@ -1354,7 +1315,6 @@ fn directory_items(
         .collect()
 }
 
-/// The project's recent directories, for an empty `/cd` argument (`directoryOptions`).
 fn recent_items(tui: &Tui, prompt: &Inner, width: usize) -> Vec<Item> {
     let Some(project) = cd::project(tui, prompt) else { return Vec::new() };
     let home = home();
@@ -1377,7 +1337,6 @@ fn recent_items(tui: &Tui, prompt: &Inner, width: usize) -> Vec<Item> {
         .collect()
 }
 
-/// The user's home directory (`paths.home`).
 fn home() -> String {
     opencode_local::paths::home()
 }

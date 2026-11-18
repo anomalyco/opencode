@@ -15,7 +15,6 @@ use opencode_ui::prompt_input;
 use crate::prelude::*;
 use crate::prompt::editor::Inner;
 
-/// Which part list a mention belongs to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
     File,
@@ -45,7 +44,6 @@ impl Kind {
         }
     }
 
-    /// Where a part keeps its range: a paste's `source`, everything else's `mention`.
     fn range(self) -> &'static str {
         match self {
             Kind::Pasted => "source",
@@ -54,7 +52,6 @@ impl Kind {
     }
 }
 
-/// The prompt's marks and the parts they stand for (`extmarkToPart`).
 #[derive(Default)]
 pub struct Parts {
     marks: RefCell<Vec<(ExtmarkId, Kind, usize)>>,
@@ -75,12 +72,10 @@ impl Parts {
         self.dropped.borrow_mut().clear();
     }
 
-    /// Ties `mark` to entry `index` of `kind`'s list.
     pub fn track(&self, mark: ExtmarkId, kind: Kind, index: usize) {
         self.marks.borrow_mut().push((mark, kind, index));
     }
 
-    /// The part `mark` stands for.
     pub fn get(&self, mark: ExtmarkId) -> Option<(Kind, usize)> {
         self.marks.borrow().iter().find(|(id, _, _)| *id == mark).map(|&(_, kind, index)| (kind, index))
     }
@@ -263,17 +258,14 @@ pub fn sync(prompt: &Inner) {
     *prompt.parts.marks.borrow_mut() = next;
 }
 
-/// Whether the prompt has a `kind` part whose `field` is `value` (`hasSkill`).
 pub fn has(prompt: &Inner, kind: Kind, field: &str, value: &Value) -> bool {
     prompt.prompt.borrow()[kind.key()].as_array().is_some_and(|list| list.iter().any(|part| &part[field] == value))
 }
 
-/// The parts a submit sends, from a `PromptInfo` snapshot; files go through `attach::files_for_server`.
 pub fn agents(entry: &Value) -> Option<Vec<PromptAgentAttachment>> {
     serde_json::from_value(entry.get(Kind::Agent.key())?.clone()).ok()
 }
 
-/// Skills, or `None` when there are none (`skills?.length ? skills : undefined`).
 pub fn skills(entry: &Value) -> Option<Vec<PromptInputSkillAttachment>> {
     serde_json::from_value::<Vec<_>>(entry.get(Kind::Skill.key())?.clone()).ok().filter(|skills| !skills.is_empty())
 }

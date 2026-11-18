@@ -7,7 +7,6 @@ use opencode_ui::select::{FooterHint, Group, Select, SelectAction};
 use crate::prelude::*;
 use crate::routes::session::queued::{self, Action};
 
-/// Opens the dialog for the session view `view`, with `dialog.replace`.
 pub(crate) fn show(tui: &Tui, view: &Rc<queued::Inner>) {
     let list = Rc::new(List { tui: tui.weak(), view: Rc::downgrade(view), select: RefCell::default() });
     let options = list.options();

@@ -1,5 +1,4 @@
-//! Reasoning blocks (E.6a): `ReasoningPart` and `ReasoningHeader` (`message-parts.tsx:43-171`).
-//! With `session.thinking: hide` a block is one header line that a click opens and closes.
+//! TypeScript: `message-parts.tsx:43-171`.
 
 use opencode_api::generated::{SessionMessageAssistant, SessionMessageAssistantReasoning};
 use opencode_ui::motion::Spinner;
@@ -31,7 +30,6 @@ struct State {
     done: bool,
     duration: Option<String>,
     hide: bool,
-    /// The header that is mounted: its open, toggleable, and title inputs.
     header: Option<Header>,
 }
 
@@ -44,7 +42,6 @@ struct Header {
     duration: Option<String>,
 }
 
-/// The header's widgets, recolored on hover.
 enum Painted {
     None,
     Done(Vec<Text>),
@@ -96,7 +93,6 @@ impl Reasoning {
         &self.0.root
     }
 
-    /// Takes the theme of `cx` in place: the text and its code views stay.
     pub fn restyle(&self, cx: &Context<'_>) {
         let inner = &self.0;
         *inner.theme.borrow_mut() = cx.theme.clone();
@@ -114,7 +110,6 @@ impl Reasoning {
         let done = time.and_then(|time| time.completed).is_some() || message.time.completed.is_some();
         let end = time.and_then(|time| time.completed).or(message.time.completed);
         let start = time.map_or(message.time.created, |time| time.created);
-        // `session.markdown` changes in place; the code views stay.
         self.0.markdown.conceal(cx.conceal);
         let mut state = self.0.state.borrow_mut();
         if state.content != content {
@@ -130,7 +125,6 @@ impl Reasoning {
 }
 
 impl Inner {
-    /// Shows the header and body for the current state and the expanded flag.
     fn layout(&self) {
         let mut state = self.state.borrow_mut();
         self.root.visible(!state.content.is_empty());
@@ -149,9 +143,6 @@ impl Inner {
         };
         let theme = self.theme.borrow();
         let warning = theme.text.feedback.warning.base;
-        // `RGBA.fromValues(…, 0.6)`: an open block's header, and in hide mode a collapsed one that is not
-        // hovered. Hide mode takes the reasoning group's colors (`group-view.tsx:166-177`), since TS
-        // groups every reasoning part there.
         let dim = warning.with_alpha(153);
         let fg = match (header.toggleable, header.done) {
             (false, _) => dim,
@@ -174,7 +165,6 @@ impl Inner {
         if header.done {
             let row = View::new(&self.app).row();
             let mut texts = Vec::new();
-            // Hide mode's header is an `InlineToolRow`: the icon in its own two cells.
             if header.toggleable {
                 texts.push(Text::new(&self.app, if header.open { "-" } else { "+" }).width(2).shrink(0.0).fg(fg));
             }
@@ -210,12 +200,10 @@ impl Inner {
     }
 }
 
-/// The bars beside an open block and its header.
 fn border(theme: &Theme) -> Color {
     theme.decrease(&theme.background.base, 1)
 }
 
-/// Reasoning's Markdown colors: the text muted, and the rule in the theme's rule color (no `conceal` scope).
 fn colors(theme: &Theme) -> opentui::widget::MarkdownColors {
     opentui::widget::MarkdownColors { text: theme.text.muted, ..opencode_ui::markdown::colors(theme) }
 }
@@ -225,8 +213,6 @@ pub(crate) fn content(part: &SessionMessageAssistantReasoning) -> String {
     part.text.replacen("[REDACTED]", "", 1).trim().to_owned()
 }
 
-/// The bold title block a reasoning summary starts with (`reasoningSummary`):
-/// `**Title**` followed by a blank line or the end.
 pub(crate) fn summary(content: &str) -> Option<String> {
     let rest = content.trim().strip_prefix("**")?;
     let end = rest.find(['*', '\n'])?;

@@ -28,7 +28,6 @@ struct Inner {
     tui: Weak<Tui>,
     session: SessionID,
     region: View,
-    /// The full-screen host, above the route and below dialogs.
     overlay: View,
     prompt: RefCell<Prompt>,
     /// The family last read (`descendantSessionIDs`).
@@ -46,9 +45,19 @@ enum Prompt {
     #[default]
     Hidden,
     /// `SessionQuestion` for the family's first request.
-    Asking { request: PermissionRequest, selected: usize, expanded: bool, _layer: DeferredDisposer },
-    /// `RejectPrompt`: a subagent's request asks what to do differently.
-    Rejecting { request: PermissionRequest, view: View, field: Textarea, paints: Paints, _layer: DeferredDisposer },
+    Asking {
+        request: PermissionRequest,
+        selected: usize,
+        expanded: bool,
+        _layer: DeferredDisposer,
+    },
+    Rejecting {
+        request: PermissionRequest,
+        view: View,
+        field: Textarea,
+        paints: Paints,
+        _layer: DeferredDisposer,
+    },
 }
 
 impl Prompt {
@@ -109,7 +118,6 @@ impl Permission {
             resize: Cell::new(None),
             settings: RefCell::default(),
         });
-        // Turning `autoaccept` on answers the shown request and hides it; the route syncs the prompt back in.
         let weak = Rc::downgrade(&inner);
         *inner.settings.borrow_mut() = Some(tui.settings.subscribe(move |tui| {
             if tui.config().permissions == Permissions::Autoaccept && weak.upgrade().is_some_and(|inner| inner.shown())
@@ -129,7 +137,6 @@ impl Permission {
         &self.0.region
     }
 
-    /// Paints in the page theme again. The question draws again where it is; the rejection keeps its text field.
     pub fn restyle(&self, tui: &Tui) {
         let inner = &self.0;
         if let Prompt::Rejecting { paints, .. } = &*inner.prompt.borrow() {
@@ -139,7 +146,6 @@ impl Permission {
         inner.render();
     }
 
-    /// Whether a request is prompted; the session prompt and the composer hide meanwhile.
     pub fn active(&self) -> bool {
         self.0.shown()
     }
@@ -152,9 +158,6 @@ impl Permission {
                 family.iter().flat_map(|id| state.permissions(id).unwrap_or_default()).cloned().collect();
             (requests, family)
         });
-        // TS reads the family's requests whenever the family or the connection changes (`routes/session/index.tsx:
-        // 331-348`); the store makes a finished read free, and reads a failed one again. TS ignores failures: a
-        // session still being created reads as not found.
         if changes.all || family.iter().any(|id| changes.session(id)) || *inner.family.borrow() != family {
             for id in &family {
                 super::form::quiet(tui, tui.data.permission_sync(id));
@@ -175,7 +178,6 @@ impl Permission {
             inner.ask(tui, head);
             return;
         }
-        // The presentation reads the tool call's input, which may still be arriving.
         let refreshed = match (head, &mut *inner.prompt.borrow_mut()) {
             (Some(head), Prompt::Asking { request, .. }) if changes.any_message(&head.session_id) => {
                 *request = head;
@@ -215,7 +217,6 @@ pub fn tool_pending(tui: &Tui, state: &State, session: &SessionID, part: &str) -
         .is_some_and(|source| source.r#type == "tool" && source.id == part)
 }
 
-/// The sessions whose requests a session prompts for: a root and its descendants, a child itself.
 fn family(state: &State, session: &SessionID) -> Vec<SessionID> {
     if state.session(session).is_some_and(|info| info.parent_id.is_some()) {
         return vec![session.clone()];
@@ -246,7 +247,6 @@ impl Inner {
         !matches!(*self.prompt.borrow(), Prompt::Hidden)
     }
 
-    /// Asks `request` from the start, as TS remounts the question, or hides the prompt.
     fn ask(self: &Rc<Self>, tui: &Tui, request: Option<PermissionRequest>) {
         let next = match request {
             Some(request) => Prompt::Asking {
@@ -286,7 +286,6 @@ impl Inner {
         }
     }
 
-    /// `SessionQuestion`'s layer.
     fn question_layer(self: &Rc<Self>, request: &PermissionRequest) -> KeymapLayer<u32> {
         let run = |action: fn(&Rc<Inner>)| bind!(self, |inner, _: Option<&str>, _: Option<&KeyEvent>| action(&inner));
         let mut commands = vec![
@@ -329,7 +328,6 @@ impl Inner {
         KeymapLayer::new(commands).bindings(vec!["app.exit".to_owned(), FULLSCREEN.to_owned()])
     }
 
-    /// `RejectPrompt`'s layer.
     fn reject_layer(self: &Rc<Self>) -> KeymapLayer<u32> {
         KeymapLayer::new(vec![
             TuiCommand::new(
@@ -395,7 +393,6 @@ impl Inner {
             Choice::Once => PermissionReply::Once,
             Choice::Always => PermissionReply::Always,
             Choice::Reject => {
-                // A subagent's request asks what to do differently.
                 let child = tui
                     .data
                     .read(|state| state.session(&request.session_id).is_some_and(|info| info.parent_id.is_some()));
@@ -409,7 +406,6 @@ impl Inner {
         reply(&tui, &request, decision, None, Box::new(|| {}));
     }
 
-    /// Back to the question, which starts over as TS remounts it.
     fn cancel_reject(self: &Rc<Self>) {
         let Some(tui) = self.tui.upgrade() else { return };
         let request = self.prompt.borrow().request().cloned();
@@ -643,7 +639,6 @@ fn reply(
     });
 }
 
-/// The footer row both stages share; it stacks below 80 columns.
 fn footer(app: &App, theme: &Theme, narrow: bool) -> View {
     View::new(app)
         .direction(if narrow { FlexDirection::Column } else { FlexDirection::Row })
@@ -710,7 +705,6 @@ fn presentation_body(tui: &Tui, theme: &Theme, request: &PermissionRequest, curr
     view
 }
 
-/// `EditBody`: the diff, else the raw patch, else a note.
 fn edit_body(tui: &Tui, theme: &Theme, current: &Presentation) -> View {
     let app = &tui.app;
     let syntax = opencode_ui::code::syntax_theme(theme);

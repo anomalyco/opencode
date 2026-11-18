@@ -24,17 +24,13 @@ use tokio_tungstenite::tungstenite::http::HeaderValue;
 use crate::prelude::*;
 
 const MCP_PROTOCOL_VERSION: &str = "2025-11-25";
-/// How often a Zed terminal reads the database again (`scheduleZedPoll`).
 const ZED_POLL: Duration = Duration::from_secs(1);
 
-/// Where the editor context comes from. [`Source::from_env`] reads the process environment; tests build one.
 #[derive(Clone, Debug, Default)]
 pub struct Source {
-    /// `CLAUDE_CODE_SSE_PORT`, else `OPENCODE_EDITOR_SSE_PORT`.
     pub port: Option<u16>,
     /// The home directory whose `.claude/ide` lock files name IDE servers.
     pub home: Option<PathBuf>,
-    /// `ZED_TERM=true` or `TERM_PROGRAM=zed`.
     pub zed_terminal: bool,
     /// The Zed database candidates; the first that is a file is read (`resolveZedDbPath`).
     pub zed_db: Vec<PathBuf>,
@@ -68,7 +64,6 @@ fn zed_db_candidates(env: Option<String>, home: Option<&Path>, local_app_data: O
         .collect()
 }
 
-/// A 1-based line and column, as the IDE sends them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
 pub struct Position {
     pub line: i64,
@@ -93,7 +88,6 @@ impl Range {
         self.selection.start != self.selection.end
     }
 
-    /// `#12` or `#12-20`, for a range that selects something (`getEditorRangeLabel`).
     pub fn label(&self) -> Option<String> {
         if !self.selects() {
             return None;
@@ -110,7 +104,6 @@ pub enum SourceKind {
     Zed,
 }
 
-/// The open file and its selections, at least one.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Selection {
     pub file_path: String,
@@ -119,7 +112,6 @@ pub struct Selection {
 }
 
 impl Selection {
-    /// Decodes either wire shape: `{filePath, ranges}` or one `{text, filePath, selection}` (`EditorSelectionSchema`).
     pub fn decode(value: &Value) -> Option<Self> {
         #[derive(Deserialize)]
         #[serde(rename_all = "camelCase")]
@@ -149,7 +141,6 @@ impl Selection {
         })
     }
 
-    /// What tells two selections apart (`editorSelectionKey`).
     pub fn key(&self) -> String {
         let mut parts = vec![self.file_path.clone()];
         for range in &self.ranges {
@@ -214,7 +205,6 @@ impl Selection {
     }
 }
 
-/// An `at_mentioned` notification: the IDE asks to mention a file, with its lines.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Mention {
@@ -248,10 +238,8 @@ struct State {
     status: Status,
     selection: Option<Selection>,
     sent: bool,
-    /// The IDE server's `initialize` result.
     server: Option<Value>,
     last_zed_key: Option<String>,
-    /// Keep the selection over the next reconnect: a new session opens with it.
     preserve: bool,
     directory: String,
     started: Option<Started>,
@@ -288,11 +276,9 @@ enum Event {
     Selection(Selection),
     Mention(Mention),
     Server(Value),
-    /// A Zed read: the selection, or `None` when Zed shows no file selection.
     Zed(Option<Selection>),
 }
 
-/// Starts reading the editor context from `source` for the TUI's directory.
 pub fn start(tui: &Tui, source: Source) {
     let context = &tui.prompt.editor;
     if context.0.borrow().started.is_none() {
@@ -360,19 +346,16 @@ impl Context {
         }
     }
 
-    /// The home prompt sent the selection with a new session: its reconnect keeps it.
     pub fn preserve_from_new_session(&self) {
         self.0.borrow_mut().preserve = true;
     }
 
-    /// Calls `listener` for each `at_mentioned` notification.
     pub fn on_mention(&self, listener: impl Fn(&Mention) + 'static) -> Disposer {
         let id = self.listener_id();
         self.0.borrow_mut().mentions.push((id, Rc::new(listener)));
         Disposer::new(bind!(self.0, |state| state.borrow_mut().mentions.retain(|(other, _)| *other != id)))
     }
 
-    /// Calls `listener` when the selection or its label state changes.
     pub fn subscribe(&self, listener: impl Fn() + 'static) -> Disposer {
         let id = self.listener_id();
         self.0.borrow_mut().watchers.push((id, Rc::new(listener)));
@@ -460,8 +443,6 @@ impl Context {
     }
 }
 
-/// Inserts the IDE's mention as a file part with its lines (`insertFileMention`): over the open `@` query, else
-/// at the cursor. The path is relative to the prompt's location when it is inside it.
 pub fn insert_mention(prompt: &crate::prompt::editor::Inner, tui: &Tui, mention: &Mention) {
     use crate::prompt::autocomplete::{parse, parts};
     let base = prompt.location(tui).directory;
@@ -479,7 +460,6 @@ pub fn insert_mention(prompt: &crate::prompt::editor::Inner, tui: &Tui, mention:
     parts::insert(prompt, start, &name, parts::Kind::File, json!({ "uri": uri, "name": name }));
 }
 
-/// An IDE server to connect to.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Connection {
     pub url: String,
@@ -544,7 +524,6 @@ pub fn discover(root: &Path, directory: &str) -> Option<Connection> {
     found.into_iter().next().map(|(_, _, connection)| connection)
 }
 
-/// `Number.parseInt(value, 10)` limited to a port: leading digits, 1 to 65535.
 fn parse_port(value: &str) -> Option<u16> {
     let value = value.trim_start();
     let value = value.strip_prefix('+').unwrap_or(value);
@@ -552,20 +531,16 @@ fn parse_port(value: &str) -> Option<u16> {
     digits.parse::<u16>().ok().filter(|port| *port > 0)
 }
 
-/// `path.resolve`: absolute against the process's directory, and lexically normalized.
 fn absolute(path: &str) -> PathBuf {
     let base = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/"));
     PathBuf::from(super::autocomplete::parse::resolve(Flavor::NATIVE, &base.to_string_lossy(), path))
 }
 
-/// Whether `child` is `parent` or inside it (`pathContains`); both absolute and normalized.
 fn contains(parent: &Path, child: &Path) -> bool {
     let relative = Flavor::NATIVE.relative(&parent.to_string_lossy(), &child.to_string_lossy());
     relative.is_empty() || !Flavor::NATIVE.outside(&relative)
 }
 
-/// The connection loop: the IDE server when there is one, else Zed's database in a Zed terminal, else nothing,
-/// retried with backoff (`connect` and `scheduleReconnect`).
 async fn worker(source: Arc<Source>, directory: String, generation: u64, proxy: AppProxy) {
     let post = |event: Event| proxy.send(Posted { generation, event }).is_ok();
     let mut attempt: u32 = 0;
@@ -623,7 +598,6 @@ async fn worker(source: Arc<Source>, directory: String, generation: u64, proxy: 
     }
 }
 
-/// One second, doubling per failed attempt, at most ten.
 fn backoff(attempt: u32) -> Duration {
     Duration::from_millis((1000u64 << attempt.saturating_sub(1).min(4)).min(10_000))
 }
@@ -702,8 +676,6 @@ async fn session(mut socket: Socket, request_id: &mut i64, post: &impl Fn(Event)
     true
 }
 
-/// Whether an `initialize` result decodes as `EditorServerInfoSchema`: an object whose fields, when present, have
-/// their types.
 fn server_info(result: &Value) -> bool {
     let Some(result) = result.as_object() else { return false };
     let string_or_absent = |value: Option<&Value>| value.is_none_or(Value::is_string);
@@ -738,7 +710,6 @@ pub mod zed {
         resolve_with(Sqlite::system(), db, cwd)
     }
 
-    /// Runs the statements in `sql` on the database at `db`, creating it. For test fixtures.
     #[doc(hidden)]
     pub fn exec(db: &Path, sql: &str) -> Result<(), String> {
         let sqlite = Sqlite::system().ok_or("the system SQLite library is not available")?;
@@ -772,7 +743,6 @@ pub mod zed {
         Some(Some(Selection { file_path: buffer, source: Some(SourceKind::Zed), ranges }))
     }
 
-    /// `None` when unavailable; `Some(None)` when no workspace contains `cwd` or its active item is no editor.
     fn active_editor(db: &Connection, cwd: &Path) -> Option<Option<Editor>> {
         let raw = db.rows(
             "select
@@ -870,7 +840,6 @@ pub mod zed {
         )
     }
 
-    /// `Some(None)` for a null `contents`, `None` when the row is missing or unreadable.
     fn contents(db: &Connection, editor: i64, workspace: i64) -> Option<Option<String>> {
         let rows =
             db.rows("select contents from editors where item_id = ?1 and workspace_id = ?2", &[editor, workspace], 1)?;

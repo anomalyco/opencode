@@ -46,7 +46,6 @@ fn glow_intensity_at(index: usize, tail: f64) -> f64 {
     smootherstep(clamp(1.0 - (index as f64 - 1.0).max(0.0) / tail))
 }
 
-/// `unreadGlowIntensity`: how strongly a cell of a `width`-wide tab sits in the glow.
 pub fn unread_glow_intensity(index: usize, width: usize) -> f64 {
     let tail = GLOW_TAIL.min(width.saturating_sub(2).max(1));
     glow_intensity_at(index, tail as f64)
@@ -68,7 +67,6 @@ impl Shape {
             Shape::Smoother => smootherstep(progress),
             Shape::FadeOut => fade_out(progress),
             Shape::Ignition => attack_decay(progress, GLOW_IGNITION_ATTACK, GLOW_IGNITION_PEAK, 1.0),
-            // The resting glow drains over the leading fraction of the release, the old 200 ms fade.
             Shape::Drain => fade_out(clamp(progress / (GLOW_FADE_OUT / GLOW_RELEASE_DURATION))),
             Shape::Completion => attack_decay(progress, COMPLETION_ATTACK, 1.0, 0.0),
             Shape::Flash => attack_decay(progress, EDGE_FLASH_ATTACK, 1.0, 0.0),
@@ -76,7 +74,6 @@ impl Shape {
     }
 }
 
-/// A one-shot clock (`Envelope`).
 #[derive(Clone, Copy, Debug)]
 struct Envelope {
     clock: Option<f64>,
@@ -123,7 +120,6 @@ enum Phase {
     Release,
 }
 
-/// A gated stage (`GatedEnvelope`): attack, sustain at 1, release from the note-off level.
 #[derive(Clone, Copy, Debug)]
 struct Gate {
     phase: Phase,
@@ -194,7 +190,6 @@ impl Gate {
     }
 }
 
-/// What a pulse shows, set from the tab's status.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Input {
     pub active: bool,
@@ -203,7 +198,6 @@ pub struct Input {
     pub glow: bool,
 }
 
-/// One voice of the pulse (`PulseState`).
 #[derive(Clone, Debug)]
 pub struct Pulse {
     enabled: bool,
@@ -249,7 +243,6 @@ impl Pulse {
         pulse
     }
 
-    /// Whether the pulse moves and needs ticks.
     pub fn live(&self) -> bool {
         self.enabled
             && (self.input.active
@@ -347,7 +340,6 @@ impl Pulse {
         [start + coast(cycles % 1.0) * (end - start), start + coast(second) * (end - start)]
     }
 
-    /// The sweep's level under the number cell (`onLevel`), quantized to 1/32.
     pub fn level(&self, width: usize) -> f64 {
         let running = self.run.level();
         if running == 0.0 || width == 0 {
@@ -358,7 +350,6 @@ impl Pulse {
         (level * 32.0).round() / 32.0
     }
 
-    /// Whether any stage has something to draw.
     fn visible(&self) -> bool {
         self.glow.level() != 0.0
             || self.glow.release_progress().is_some()
@@ -367,7 +358,6 @@ impl Pulse {
             || self.flash.level() != 0.0
     }
 
-    /// The background of each cell, or `None` when the pulse draws nothing there.
     fn colors(&self, width: usize, colors: &Colors) -> Vec<Color> {
         let running = self.run.level();
         let completion = self.completion.level() * COMPLETION_OPACITY;
@@ -404,7 +394,6 @@ impl Pulse {
     }
 }
 
-/// The colors of one voice.
 #[derive(Clone, Copy, Debug)]
 pub struct Colors {
     pub background: Color,
@@ -427,15 +416,12 @@ fn blend(colors: &Colors, glow: f64, running: f64, flash: f64, completion: f64) 
             continue;
         }
         let target = unit(color);
-        // The glow mixes from the background; the other stages from the running result.
         output.iter_mut().zip(target).for_each(|(value, target)| *value += (target - *value) * amount);
     }
     let byte = |value: f64| (value.clamp(0.0, 1.0) * 255.0).round() as u8;
     Color::rgb(byte(output[0]), byte(output[1]), byte(output[2]))
 }
 
-/// The cells one pulse paints across a `width`-wide row: a background per cell, or, with an outer voice, the
-/// `▄` or `▀` half block that splits the cell between the two. `None` where nothing is drawn.
 pub fn paint(
     inner: &Pulse,
     inner_colors: &Colors,

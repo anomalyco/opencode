@@ -10,7 +10,6 @@ pub const SESSION_TAB_MIN_WIDTH: usize = 8;
 const CLOSED_SESSION_TAB_LIMIT: usize = 25;
 const SESSION_TAB_HISTORY_LIMIT: usize = 100;
 
-/// One persisted tab, as `tabs.json` stores it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Tab {
     #[serde(rename = "sessionID")]
@@ -35,7 +34,6 @@ pub fn complete(unread: Option<Unread>, busy: bool) -> bool {
     unread == Some(Unread::Activity) && !busy
 }
 
-/// `sessionTabOverflowWidth`: the marker, its digits, and one gap cell.
 pub fn overflow_width(count: usize) -> usize {
     count.to_string().len() + 2
 }
@@ -170,7 +168,6 @@ impl History {
         self.index = self.entries.len() as isize - 1;
     }
 
-    /// `moveSessionTabHistory`: the open tab to go to, moving the index when there is one.
     pub fn step(&mut self, tabs: &[Tab], active: Option<&str>, forward: bool) -> Option<String> {
         let open = |session: &str| tabs.iter().any(|tab| tab.session_id == session);
         let Some(active) = active else { return self.at(self.index).filter(|session| open(session)).cloned() };
@@ -188,7 +185,6 @@ impl History {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Layout {
-    /// Indexes of the visible tabs into the full list.
     pub start: usize,
     pub widths: Vec<usize>,
     pub before: usize,
@@ -202,7 +198,6 @@ impl Layout {
     }
 }
 
-/// `adaptiveSessionTabLayout` over the tabs' session IDs.
 pub fn layout(tabs: &[&str], active: Option<&str>, available: i64, previous_start: usize) -> Layout {
     if tabs.is_empty() {
         return Layout::default();

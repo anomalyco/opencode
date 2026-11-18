@@ -96,7 +96,6 @@ pub fn mutate(
     true
 }
 
-/// The dock and the `session.queued_prompts` command of one session view. Dropping it removes the command's layers.
 pub struct Queued(Rc<Inner>);
 
 pub(crate) struct Inner {
@@ -106,7 +105,6 @@ pub(crate) struct Inner {
     label: Text,
     /// The number of queued prompts the dock shows.
     count: Cell<usize>,
-    /// The session's prompt, which the undo appends to and checks for shell mode.
     prompt: Weak<PromptInner>,
     layers: RefCell<Vec<Disposer>>,
     paints: Paints,

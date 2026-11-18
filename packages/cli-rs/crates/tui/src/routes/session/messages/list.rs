@@ -31,15 +31,12 @@ use super::{assistant, background, compaction, errors, footer, reasoning, revert
 use crate::prelude::*;
 use crate::routes::session::grouping;
 
-/// Rows mounted when a session opens (`TRANSCRIPT_TAIL_ROWS`).
 pub const TAIL_ROWS: usize = 40;
-/// Rows mounted per reveal near the top (`TRANSCRIPT_BACKFILL_CHUNK`).
 pub const BACKFILL_CHUNK: usize = 60;
 
 #[derive(Clone)]
 pub struct Transcript(Rc<Inner>);
 
-/// Where the reader left a transcript (`ScrollAnchor`): a row and its distance from the view's top.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ScrollAnchor {
     pub row: RowKey,
@@ -83,7 +80,6 @@ struct Inner {
     limits: errors::LimitWatch,
     tui: Weak<Tui>,
     this: Weak<Inner>,
-    /// The theme the rows show in; a theme switch replaces it and restyles them.
     paint: RefCell<Rc<Paint>>,
     renderers: CodeBlockRenderers,
     claims: ToolClaims,
@@ -91,13 +87,11 @@ struct Inner {
     switched: Rc<dyn Fn(&str)>,
     /// Keeps the reader's rows in place after a claimed row above them changed height.
     reflowed: Rc<dyn Fn(f64, f32)>,
-    /// The `session` and `debug` settings the rows show with, as the config has them now.
     view: Cell<RowSettings>,
     groups: Rc<grouping::Settings>,
     session: RefCell<Option<SessionID>>,
     location: RefCell<Option<Location>>,
     specs: RefCell<Vec<Spec>>,
-    /// Each row's mount cost (`rowWeight`).
     weights: RefCell<Vec<usize>>,
     /// Each visible message's position at the last render (`Context::index`).
     positions: RefCell<HashMap<String, usize>>,
@@ -108,7 +102,6 @@ struct Inner {
     rows: RefCell<HashMap<RowKey, Row>>,
     /// The keys of the scroll box's children, in order.
     mounted: RefCell<Vec<RowKey>>,
-    /// The mounted rows that show each message, by index in `specs`.
     refs: RefCell<HashMap<String, Vec<usize>>>,
     start: RefCell<Start>,
     /// Where the mounted window ends, by row index, when it stops before the newest row
@@ -122,11 +115,9 @@ struct Inner {
     layer: RefCell<Option<Disposer>>,
     /// The settings listener, until the transcript drops.
     settings: RefCell<Option<Disposer>>,
-    /// The transcript's laid-out width, the session pane's less its padding (`sessionWidth - 4`).
     width: Cell<Option<u16>>,
     /// `Viewport::Transcript` (rich plugins P3), published while the transcript lives.
     published: RefCell<Option<opencode_plugin::behave::Publication>>,
-    /// New each time the specs change.
     specs_revision: Cell<u64>,
     /// The messages before the mounted window, for the specs' revision and the window's start it was counted at.
     above: RefCell<Option<(u64, Start, u32)>>,
@@ -148,7 +139,6 @@ fn dispose(tui: &Tui, layer: Option<Disposer>) {
     }
 }
 
-/// A theme and the syntax themes the rows take from it.
 struct Paint {
     theme: Theme,
     syntax: SyntaxTheme,
@@ -168,14 +158,11 @@ struct Pin {
     frame: u64,
 }
 
-/// Where the mounted window starts (`hiddenRows`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Start {
     /// The newest [`TAIL_ROWS`], following appends while the reader stays at the bottom.
     Tail,
-    /// Every row, including pages loaded later.
     Top,
-    /// From this row on (or the tail, if that starts earlier).
     Row(RowKey),
 }
 
@@ -292,14 +279,10 @@ impl Transcript {
         self.0.render(tui, |message| force || changes.message(session, message));
     }
 
-    /// Mounts older rows, or loads an older page when every row is mounted. Returns whether it did
-    /// either. Scrolling up near the top calls it; E.8's navigation can too.
     pub fn reveal_older(&self, tui: &Tui) -> bool {
         self.0.reveal_older(tui)
     }
 
-    /// Publishes the transcript to plugins as `Viewport::Transcript` (synthesis 4.2, decision 8): its rows and offset
-    /// to read, and `scroll`, which takes a plugin's `By`, `Offset` and `Edge` along the wheel's own path.
     pub fn publish(&self, tui: &Tui, scroll: Rc<dyn Fn(&opencode_plugin::abi::v2::Scroll)>) {
         self.0.publish(tui, scroll);
     }
@@ -325,8 +308,6 @@ impl Transcript {
         &self.0.groups
     }
 
-    /// Takes the page theme in place, as TS's rows follow it: every row keeps its widgets and their state, Markdown
-    /// keeps its code views, and the window, the scroll position and the selection stay.
     pub fn restyle(&self, tui: &Tui) {
         self.0.restyle(tui);
     }
@@ -341,7 +322,6 @@ impl Transcript {
         self.0.follow(tui, down);
     }
 
-    /// Mounts every loaded row (`ensureAllRows`).
     pub fn mount_all(&self, tui: &Tui) {
         if *self.0.start.borrow() == Start::Top && self.0.end.get().is_none() {
             return;
@@ -356,14 +336,12 @@ impl Transcript {
     pub fn mount_head(&self, tui: &Tui) {
         *self.0.start.borrow_mut() = Start::Top;
         self.0.end.set(Some(BACKFILL_CHUNK));
-        // The render reads the history the load just stored.
         self.0.render(tui, |_| false);
         if self.0.specs.borrow().len() <= BACKFILL_CHUNK {
             self.0.end.set(None);
         }
     }
 
-    /// Mounts the tail again and follows the bottom (`toBottom`).
     pub fn to_tail(&self, tui: &Tui) {
         *self.0.start.borrow_mut() = Start::Tail;
         self.0.end.set(None);
@@ -372,17 +350,14 @@ impl Transcript {
         self.0.scroll.scroll_to_bottom();
     }
 
-    /// Whether every loaded row is mounted.
     pub fn all_mounted(&self) -> bool {
         self.0.window_start(&self.0.specs.borrow()) == 0 && self.at_end()
     }
 
-    /// Whether the newest row is mounted.
     pub fn at_end(&self) -> bool {
         self.0.at_end()
     }
 
-    /// Mounts newer rows below a head window when the reader nears its end. Returns whether it did.
     pub fn reveal_newer(&self, tui: &Tui) -> bool {
         self.0.reveal_newer(tui)
     }
@@ -429,7 +404,6 @@ impl Transcript {
         anchor.or(first)
     }
 
-    /// The content y of a mounted row that has a height.
     pub fn row_y(&self, key: &RowKey) -> Option<f64> {
         if !self.0.mounted.borrow().contains(key) {
             return None;
@@ -460,7 +434,6 @@ impl Transcript {
         true
     }
 
-    /// Mounts [`BACKFILL_CHUNK`] more rows below the window. Returns whether there were any.
     pub fn mount_newer(&self, tui: &Tui) -> bool {
         let Some(end) = self.0.end.get() else { return false };
         self.0.mount_newer(tui, end);
@@ -503,7 +476,6 @@ impl Inner {
     }
 
     fn install(&self, tui: &Tui) {
-        // A group header click re-renders the rows; a config change of the grouping settings too.
         let weak = self.this.clone();
         *self.groups.refresh.borrow_mut() = Some(Rc::new(bind!(weak, |inner| {
             let Some(tui) = inner.tui.upgrade() else { return };
@@ -525,7 +497,6 @@ impl Inner {
                 inner.render(tui, |_| true);
             }
         })));
-        // The rows lay out in the session pane's width (`setSessionWidth`), and render again when it changes.
         let weak = self.this.clone();
         self.root.on_resize(bind!(weak, |inner, cx, rect| {
             let Some(tui) = inner.tui.upgrade() else { return };
@@ -541,7 +512,6 @@ impl Inner {
                 }
             }));
         }));
-        // Keep the reader's row in place when rows mount above it.
         let weak = self.this.clone();
         self.scroll.content_view().on_resize(bind!(weak, |inner, cx, rect| {
             let Some(pin) = inner.pin.take() else { return };
@@ -590,7 +560,6 @@ impl Inner {
         }
     }
 
-    /// `Viewport::Transcript` now: the offset, the viewport, the content, and every mounted row with its kind.
     fn viewport(&self) -> opencode_plugin::abi::v2::TranscriptView {
         let origin = self.scroll.content_view().rect().screen_y;
         let rows = self.rows.borrow();
@@ -661,7 +630,6 @@ impl Inner {
         }
     }
 
-    /// `session.toggle.thinking` (`index.tsx:1163-1180`): writes `session.thinking`, which the rows follow.
     fn register(&self, tui: &Tui) {
         let title = if self.view.get().hide_thinking { "Expand thinking" } else { "Collapse thinking" };
         let toggle = TuiCommand::new(
@@ -684,8 +652,6 @@ impl Inner {
         }
     }
 
-    /// Rebuilds the row list, mounts the window, and updates the rows `changed` names (by message
-    /// ID) plus every new row.
     fn render(&self, tui: &Tui, changed: impl Fn(&str) -> bool) {
         let Some(session) = self.session.borrow().clone() else { return };
         let keys = Keys::read(tui);
@@ -727,10 +693,7 @@ impl Inner {
         self.complete_group_boundary(tui);
     }
 
-    /// Updates the rows of the messages that changed in place, when no row's shape changed: no `reduce`,
-    /// `project`, weights, or window. Returns false when the rows need a full render.
     fn patch(&self, tui: &Tui, session: &SessionID, changed: &HashSet<SessionMessageID>) -> bool {
-        // A turn's usage row reads every step's tokens.
         if self.view.get().turn_tokens.is_some() {
             return false;
         }
@@ -794,7 +757,6 @@ impl Inner {
         });
     }
 
-    /// Keeps each visible message's position and shape for [`Self::patch`].
     fn remember(&self, messages: &[SessionMessageInfo]) {
         let mut positions = self.positions.borrow_mut();
         for (index, message) in messages.iter().enumerate() {
@@ -874,7 +836,6 @@ impl Inner {
         }
     }
 
-    /// `contentWidth`: the laid-out width, else the terminal's beside the tab rail, less the padding.
     fn content_width(&self, tui: &Tui) -> u16 {
         self.width.get().unwrap_or_else(|| tui.app.size().0.saturating_sub(tui.frame.rail_width(tui)).saturating_sub(4))
     }
@@ -933,7 +894,6 @@ impl Inner {
                 Some(Pin { height: self.scroll.content_view().rect().height, frame: cx.app.frame_number() });
         }
 
-        // The entries stay allocated for the next render.
         let mut refs = self.refs.borrow_mut();
         refs.values_mut().for_each(Vec::clear);
         for (index, (spec, key)) in specs[start..].iter().zip(&keys).enumerate() {
@@ -975,7 +935,6 @@ impl Inner {
         window_start(&self.start.borrow(), specs, &weights)
     }
 
-    /// `revealOlderRows`: near the top, mount [`BACKFILL_CHUNK`] more rows, or load an older page.
     fn reveal_older(&self, tui: &Tui) -> bool {
         let (_, top) = self.scroll.scroll_position();
         if top > f64::from(self.scroll.rect().height) {
@@ -1003,7 +962,6 @@ impl Inner {
         self.end.get().is_none_or(|end| end >= self.specs.borrow().len())
     }
 
-    /// `revealNewerRows`: near the end of a head window, mount [`BACKFILL_CHUNK`] more rows below it.
     fn reveal_newer(&self, tui: &Tui) -> bool {
         let Some(end) = self.end.get() else { return false };
         let rows = self.specs.borrow().len();
@@ -1024,8 +982,6 @@ impl Inner {
         self.render(tui, |_| false);
     }
 
-    /// `prependHistory`: loads the next older page; the store's flush mounts it. A failure shows a toast, where TS
-    /// shows nothing (deviation `O89-transcript-read-toast`).
     fn load_older(&self, tui: &Tui) -> bool {
         let Some(session) = self.session.borrow().clone() else { return false };
         if self.loading.get() || !tui.data.read(|state| state.has_more_messages(&session)) {
@@ -1050,8 +1006,6 @@ impl Inner {
         true
     }
 
-    /// `updateAwayFromBottom`: away from the bottom the window stays put; back at it, the window
-    /// follows the tail again.
     fn follow(&self, tui: &Tui, down: bool) {
         // Rows mounted since the last frame are not in the content's size yet.
         let frame = tui.app.frame_number();
@@ -1118,7 +1072,6 @@ impl Keys {
     }
 }
 
-/// A session's messages as the transcript shows them.
 struct Visible<'a> {
     session: &'a SessionID,
     info: Option<&'a SessionInfo>,
@@ -1154,7 +1107,6 @@ fn shape(message: &SessionMessageInfo) -> u64 {
     }
     match message {
         SessionMessageInfo::Assistant(assistant) => {
-            // The part rows `reduce` makes: an empty text or reasoning makes none but counts in the ordinals.
             let (mut texts, mut reasonings) = (0usize, 0usize);
             for item in &assistant.content {
                 match item {
@@ -1193,7 +1145,6 @@ fn shape(message: &SessionMessageInfo) -> u64 {
     hasher.finish()
 }
 
-/// The step ended its turn, or failed: it gets a footer.
 fn terminal(assistant: &SessionMessageAssistant) -> bool {
     assistant.finish.as_ref().is_some_and(|finish| {
         !matches!(finish, SessionMessageAssistantFinish::ToolCalls | SessionMessageAssistantFinish::Unknown2)
@@ -1217,9 +1168,7 @@ pub struct Context<'a> {
     pub claims: &'a ToolClaims,
     /// Renders a message's rows again: a claim's view at a paint changed which row shows one of its parts.
     pub switched: &'a Rc<dyn Fn(&str)>,
-    /// A claimed row whose top is at a screen row changed height by some rows: the reader's rows below it stay put.
     pub reflowed: &'a Rc<dyn Fn(f64, f32)>,
-    /// `session.markdown` is `rendered`.
     pub conceal: bool,
     /// `session.thinking` is `hide`.
     pub hide_thinking: bool,
@@ -1234,18 +1183,15 @@ pub struct Context<'a> {
     /// The session pane's width less its padding (`contentWidth`).
     pub content: u16,
     pub session_agent: Option<&'a str>,
-    /// The location's agents that are not hidden, and its models.
     pub agents: Vec<&'a AgentInfo>,
     pub models: &'a [ModelInfo],
     /// The visible messages, oldest first, and each one's position.
     pub messages: &'a [SessionMessageInfo],
     pub index: &'a HashMap<String, usize>,
-    /// No idle markers: a turn ends at the next prompt (`SessionTurn.legacy`).
     pub legacy: bool,
 }
 
 impl Context<'_> {
-    /// The session view's content width (`ctx.width`): the session pane less the route's padding.
     pub fn content_width(&self) -> usize {
         usize::from(self.content)
     }
@@ -1264,7 +1210,6 @@ impl Context<'_> {
     /// `local.agent.color`: the agent's own color, else the categorical color at its position among
     /// the visible agents; an agent the location does not list takes the first.
     pub fn agent_color(&self, agent: &str) -> Color {
-        // The new designs palette keeps its vivid accent at 400; 200 there is a muted tint.
         let step = 400;
         let mut colors: Vec<Color> = Vec::new();
         for scale in self.theme.categorical() {
@@ -1277,7 +1222,6 @@ impl Context<'_> {
         self.agents[index].color.as_ref().and_then(|color| hex(color.as_str())).unwrap_or(colors[index % colors.len()])
     }
 
-    /// The model's name, else `provider/model` (`AssistantFooter`'s `model`).
     pub fn model_name(&self, model: &ModelRef) -> String {
         self.models
             .iter()
@@ -1286,7 +1230,6 @@ impl Context<'_> {
     }
 }
 
-/// An assistant part a row shows: `text:<n>`, `reasoning:<n>`, or a tool call ID (`resolvePart`).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Part {
     Text(usize),
@@ -1318,7 +1261,6 @@ impl Part {
     }
 }
 
-/// One row of the transcript (`SessionRow`, ungrouped).
 #[derive(Clone, Debug, PartialEq)]
 pub enum Spec {
     Message(String),
@@ -1501,8 +1443,6 @@ impl Row {
         Self { wrapper, body }
     }
 
-    /// Takes the theme of `cx` in place: the widgets stay, with their state (an open tool, a running spinner), and
-    /// code is not parsed again.
     fn restyle(&self, cx: &Context<'_>, spec: &Spec) {
         self.restyle_body(cx);
         self.update(cx, spec);
@@ -1628,7 +1568,6 @@ impl Body {
     }
 }
 
-/// `RGBA.fromHex` for `#rgb`, `#rrggbb`, and `#rrggbbaa`.
 fn hex(value: &str) -> Option<Color> {
     let digits = value.strip_prefix('#').unwrap_or(value);
     let digits: String = match digits.len() {
@@ -1645,7 +1584,6 @@ fn hex(value: &str) -> Option<Color> {
     })
 }
 
-/// Every style of `syntax` with `foreground` as its color.
 fn thinking_syntax(syntax: &SyntaxTheme, foreground: Color) -> SyntaxTheme {
     let mut thinking = SyntaxTheme::new();
     for name in syntax.names() {
@@ -1703,7 +1641,6 @@ mod tests {
                 Spec::Footer("msg_3".into()),
             ]
         );
-        // With `debug.turn_tokens`, a legacy turn ends with its terminal step.
         let usage = reduce(&list, true);
         assert_eq!(
             usage.last(),
@@ -1728,16 +1665,13 @@ mod tests {
             change(&mut message);
             shape(&messages(json!([message]))[0])
         };
-        // Streamed text, reasoning, tool input and running state reach the rows in place.
         assert_eq!(edit(&|m| m["content"][1]["text"] = json!("a longer answer")), base);
         assert_eq!(edit(&|m| m["content"][0]["text"] = json!("thinking more")), base);
         assert_eq!(
             edit(&|m| m["content"][2]["state"] = json!({ "status": "running", "input": {}, "metadata": {} })),
             base
         );
-        // A text that starts empty makes no row yet.
         assert_eq!(edit(&|m| m["content"].as_array_mut().unwrap().push(json!({ "type": "text", "text": "" }))), base);
-        // What `reduce` and `project` read changes the shape.
         let changes: [&dyn Fn(&mut serde_json::Value); 8] = [
             &|m| m["content"][1]["text"] = json!("  "),
             // An empty text before the answer moves its ordinal.
@@ -1768,7 +1702,6 @@ mod tests {
         let gone = Start::Row(RowKey::Message("msg_x".into()));
         assert_eq!(window_start(&gone, &specs, &weights), 100 - TAIL_ROWS);
         assert_eq!(window_start(&Start::Tail, &specs[..5], &weights[..5]), 0);
-        // An open group costs its children: fewer rows fill the tail.
         let mut heavy = weights.clone();
         heavy[95] = 10;
         assert_eq!(window_start(&Start::Tail, &specs, &heavy), 100 - TAIL_ROWS + 9);

@@ -15,7 +15,6 @@ use super::tree;
 use super::viewer::{File, Load, Mode, Preview, Viewer, is_image};
 use super::{Diffs, EDGE, FILES, HELP, LEAVE, PREVIEW, SOURCE};
 
-/// The root's id: a view that keeps it changes nothing.
 const ROOT: &str = "viewer";
 
 /// The viewer of `cx`'s mount, or nothing while it has none.
@@ -150,7 +149,6 @@ fn header(viewer: &Viewer, docked: bool, compact: bool, help: bool) -> Node {
         .layout(Layout::default().shrink(false).height(Width::Cells(if docked { 2 } else { 1 })))
 }
 
-/// The fixed top edge and the cards.
 fn patches(viewer: &mut Viewer, cx: &mut v2::View<'_>, surface: &'static str) -> Node {
     let inset = viewer.inset();
     let margin = Edges { left: inset as i16, right: inset as i16, ..Edges::default() };
@@ -205,7 +203,6 @@ fn patches(viewer: &mut Viewer, cx: &mut v2::View<'_>, surface: &'static str) ->
     Node::column(vec![edge, list]).layout(Layout::default().grow().min_width(0).min_height(Width::Cells(0)))
 }
 
-/// What a card shows, beside its file: a card whose shape did not change is kept.
 #[derive(Clone, Debug, PartialEq)]
 struct Shape {
     load: u64,
@@ -223,12 +220,10 @@ struct Card {
     shape: Shape,
     gap: bool,
     reviewed: bool,
-    /// The path as the heading shows it, cut to the pane: a resize that cuts it the same keeps the card.
     heading: Rc<str>,
     preview: Option<Preview>,
 }
 
-/// `path` as a card's heading shows it in a pane `pane` cells wide, beside its counts.
 fn heading(entry: &File, reviewed: bool, pane: i64) -> Rc<str> {
     let counts = if is_image(&entry.file) {
         6
@@ -263,12 +258,10 @@ fn build(
         children.push(cx.memo(format!("g:{path}"), gap, |_| card_gap('▄', gap.0, gap.1, gap.2, gap.3)));
     }
     let heading = (card.reviewed, card.heading.clone(), shape.load, shape.compact);
-    // A press of the right button on it opens the file menu (the surface's handler).
     let line = cx.memo(format!("h:{path}"), heading, |_| heading_line(entry, card));
     let margin = Edges { left: shape.inset as i16, right: shape.inset as i16, ..Edges::default() };
     let card_layout = Layout::default().shrink(false).margin(margin);
     if card.reviewed {
-        // The reviewed card is its title; a half-row of the page closes it.
         children.push(Node::column(vec![line]).with_id(format!("c:{path}")).bg(background).layout(card_layout));
         children.push(card_gap('▀', background, shape.surface, shape.inset, shape.gap));
     } else {
@@ -285,7 +278,6 @@ fn build(
         .layout(Layout::default().shrink(false))
 }
 
-/// A card's heading row: the file's path, cut to the pane, and its counts.
 fn heading_line(entry: &File, card: &Card) -> Node {
     let (shape, shown, image) = (&card.shape, &*card.heading, is_image(&entry.file));
     let split = shown.rfind('/').map_or(0, |at| at + 1);
@@ -322,7 +314,6 @@ fn heading_line(entry: &File, card: &Card) -> Node {
         .layout(Layout::default().height(Width::Cells(1)).shrink(false))
 }
 
-/// A card's body: its patch, its image, or a line that says why there is none.
 fn body(cx: &mut v2::View<'_>, contents: &mut super::viewer::Contents, file: usize, entry: &File, card: &Card) -> Node {
     let shape = &card.shape;
     let image = is_image(&entry.file);
@@ -354,7 +345,6 @@ fn body(cx: &mut v2::View<'_>, contents: &mut super::viewer::Contents, file: usi
         .layout(Layout::default().width(Width::Percent(100.0)).shrink(false))
 }
 
-/// `DiffViewerImage`: the working-tree image, its size and "Click to enlarge"; a click opens the image preview.
 fn image_body(cx: &mut v2::View<'_>, contents: &mut super::viewer::Contents, entry: &File, card: &Card) -> Node {
     let height = card.shape.image_height;
     let line = |text: &str, color: &'static str| Node::text([Span::new(text)]).fg(color);
@@ -393,7 +383,6 @@ fn image_body(cx: &mut v2::View<'_>, contents: &mut super::viewer::Contents, ent
     .layout(Layout::default().width(Width::Percent(100.0)).shrink(false))
 }
 
-/// A half-row of page between cards: the card's color over its width, the pane's surface over the insets (`CardGap`).
 fn card_gap(glyph: char, card: &'static str, surface: &'static str, inset: u16, width: u16) -> Node {
     let fixed = |cells: u16| Layout::default().width(Width::Cells(cells)).height(Width::Cells(1)).shrink(false);
     let mut row = Vec::new();
@@ -401,7 +390,6 @@ fn card_gap(glyph: char, card: &'static str, surface: &'static str, inset: u16, 
     if inset > 0 {
         row.push(half(glyph, surface, inset, fixed(inset)));
     }
-    // It shrinks to its room: its run of glyphs may be longer (`Shape::gap`).
     let grows = Layout::default().height(Width::Cells(1)).grow().min_width(0);
     row.push(half(glyph, card, width, grows));
     if inset > 0 {
@@ -410,7 +398,6 @@ fn card_gap(glyph: char, card: &'static str, surface: &'static str, inset: u16, 
     Node::row(row).layout(Layout::default().height(Width::Cells(1)).shrink(false))
 }
 
-/// One row of `cells` of `glyph` in `color` on the page, cut to its box (TS `EmptyBorder`'s one side).
 fn half(glyph: char, color: &'static str, cells: u16, layout: Layout) -> Node {
     let glyphs: String = std::iter::repeat_n(glyph, usize::from(cells)).collect();
     Node::column(vec![Node::text([Span::new(glyphs)]).fg(color).wrap(Wrap::None).unselectable()])
@@ -419,7 +406,6 @@ fn half(glyph: char, color: &'static str, cells: u16, layout: Layout) -> Node {
         .layout(layout)
 }
 
-/// The footer of the compact layout: how to leave, and the shortcuts.
 fn footer(viewer: &Viewer, cx: &v2::View<'_>, docked: bool, help: Option<String>) -> Node {
     let focused = viewer.focused();
     let mut children = Vec::new();
@@ -459,7 +445,6 @@ fn footer(viewer: &Viewer, cx: &v2::View<'_>, docked: bool, help: Option<String>
     Node::column(children).bg("background.base").layout(Layout::default().shrink(false))
 }
 
-/// The tree pane, in the surface's palette.
 fn tree_pane(viewer: &Viewer, cx: &mut v2::View<'_>) -> Node {
     let palette = &cx.input.palette;
     let color = |token: &str| {

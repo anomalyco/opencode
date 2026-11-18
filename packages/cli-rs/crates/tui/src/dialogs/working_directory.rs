@@ -1,10 +1,7 @@
-//! Working directory dialog (E.20, row DLG42): `ui/working-directory-actions.tsx`. Clicking the prompt footer's
-//! location opens "Working directory" with "Copy path", "Open folder", and "Workspaces".
+//! TypeScript: `ui/working-directory-actions.tsx`.
 
 use crate::prelude::*;
 
-/// Registers `workspace.directory`, a hidden command (no palette entry, slash or key) that opens the menu of the
-/// directory its input names, for a plugin's click (the sidebar footer's location).
 pub fn install(tui: &Rc<Tui>) {
     let command = TuiCommand::new(
         "workspace.directory",
@@ -56,7 +53,6 @@ fn options(tui: &Rc<Tui>, directory: &str) -> Vec<SelectOption<String>> {
                 }
             }),
         ),
-        // The prompt always passes `onMove`: its `session.move` command (E.11b).
         SelectOption::new("Workspaces", "session.move".to_owned())
             .description("to another working directory")
             .on_select(action(|tui, _| {

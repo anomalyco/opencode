@@ -25,18 +25,15 @@ pub struct ClientMcp {
 }
 
 impl ClientMcp {
-    /// Replaces how the socket opens; tests serve a fake one. Takes effect at the next reconnect.
     pub fn set_connector(&self, connector: Arc<dyn Connector>) {
         *self.connector.borrow_mut() = Some(connector);
     }
 
-    /// Whether a connection is running.
     pub fn connected(&self) -> bool {
         self.connection.borrow().is_some()
     }
 }
 
-/// A tool call, posted from the socket task to the UI thread.
 struct Call {
     tool: Kind,
     session: Option<String>,
@@ -85,7 +82,6 @@ pub fn install(tui: &Rc<Tui>) {
     sync(tui);
 }
 
-/// `server.connected` (TS `client.event.on("server.connected", sync)`).
 pub(crate) fn event(tui: &Tui, event: &Handled) {
     if matches!(event, Handled::ServerConnected(_)) {
         sync(tui);
@@ -99,7 +95,6 @@ pub fn sync(tui: &Tui) {
     let directory = crate::features::location::current(tui)
         .map(|location| location.directory)
         .unwrap_or_else(|| tui.data.read(|state| state.default_location().directory.clone()));
-    // A managed service that restarted has a new port and password; the transport knows them.
     let (base, auth) = client.transport().endpoint(client.base_url().clone(), client.credentials());
     let (url, headers) = endpoint(&base, auth.as_ref());
     let key = tui.settings.experiment(EXPERIMENT).then(|| json!([url.as_str(), headers, directory]).to_string());
@@ -181,8 +176,6 @@ fn tools(proxy: opentui::prelude::AppProxy) -> Vec<Tool> {
 
 type Done = Box<dyn FnOnce(&Tui, Result<String, ToolResult>)>;
 
-/// The terminal `open_terminal` shows for the calling session (the selected one, else the newest, else a new one),
-/// or a tool failure.
 fn terminal_for(tui: &Tui, called_by: Option<String>, done: impl FnOnce(&Tui, Result<String, ToolResult>) + 'static) {
     let done: Done = Box::new(done);
     let Some(called_by) = called_by.map(SessionID) else { return done(tui, Err(ToolResult::error("Unknown session"))) };

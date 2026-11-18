@@ -14,12 +14,10 @@ use opentui::widget::ImageView;
 use crate::prelude::*;
 use crate::routes::session::messages::images::media_hash;
 
-/// Opens the dialog on `images` (each a URI and its prompt label), at `initial`.
 pub fn show(tui: &Tui, images: Vec<(String, Option<String>)>, initial: usize) {
     show_closing(tui, images, initial, None, None);
 }
 
-/// [`show`] under `key`, running `on_close` as the dialog closes: a plugin's preview, which ends with its activation.
 pub fn show_closing(
     tui: &Tui,
     images: Vec<(String, Option<String>)>,

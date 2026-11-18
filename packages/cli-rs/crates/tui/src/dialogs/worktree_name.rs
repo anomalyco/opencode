@@ -49,7 +49,6 @@ pub fn show(tui: &Tui, on_name: Rc<dyn Fn(Option<String>)>) {
     );
 }
 
-/// `slugify`: lower case, runs of anything but `a-z0-9` become one `-`, no `-` at either end.
 pub fn slugify(input: &str) -> String {
     let mut out = String::new();
     for char in input.trim().to_lowercase().chars() {
@@ -62,7 +61,6 @@ pub fn slugify(input: &str) -> String {
     out.trim_matches('-').to_owned()
 }
 
-/// `Slug.create` (`packages/core/src/util/slug.ts`): an adjective and a noun.
 pub fn slug() -> String {
     const ADJECTIVES: [&str; 29] = [
         "brave", "calm", "clever", "cosmic", "crisp", "curious", "eager", "gentle", "glowing", "happy", "hidden",

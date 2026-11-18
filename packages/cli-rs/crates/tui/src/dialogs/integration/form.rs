@@ -17,7 +17,6 @@ use crate::routes::session::form::{initial_values, label, rows, selected_row, to
 
 type Done = Box<dyn FnOnce(Option<FormAnswer>)>;
 
-/// One field's outcome: an answer (`None` skips it), or a cancel.
 enum Outcome {
     Value(Option<FormValue>),
     Cancel,
@@ -147,7 +146,6 @@ fn when_string(value: &FormWhenValue) -> String {
     }
 }
 
-/// Replaces the dialog; closing it cancels the step.
 fn replace(local: &Local, resolve: &Resolve, build: impl Fn(&Rc<DialogCx>) -> View + 'static) {
     let cancel = resolve.clone();
     local.dialogs.replace(build, Some(Box::new(move || cancel(Outcome::Cancel))), DialogOptions::default());
@@ -234,7 +232,6 @@ fn text(local: &Local, title: String, field: FormField, resolve: Resolve) {
             } else if matches!(field, FormField::String(_)) {
                 Some(FormValue::String(text.to_owned()))
             } else {
-                // `Number(text)`: blank is 0, anything else unparsable is NaN.
                 Some(FormValue::Number(if text.is_empty() { 0.0 } else { text.parse().unwrap_or(f64::NAN) }))
             };
             if let Some(invalid) = validate(&field, value.as_ref()) {
@@ -331,7 +328,6 @@ fn multiselect(
     );
 }
 
-/// `customAnswer`: one typed answer for a multiselect, then back to the list.
 fn custom(local: &Rc<Local>, title: String, field: Rc<FormMultiselectField>, selected: Vec<String>, resolve: Resolve) {
     let done = Rc::new(Cell::new(false));
     let guard = done.clone();
@@ -434,10 +430,6 @@ fn opening(local: &Rc<Local>, title: String, field: FormExternalField, opened: b
         external(&local, title, field, opened || ok, resolve);
     });
 }
-
-// ---------------------------------------------------------------------------------------------------------------
-// `StringChoiceField`
-// ---------------------------------------------------------------------------------------------------------------
 
 struct Choice {
     cx: Rc<DialogCx>,
@@ -628,7 +620,6 @@ impl Choice {
             if selected == index { theme.text.formfield.focused } else { theme.text.formfield.base }
         };
         let content = self.list.content_view();
-        // The textarea moves into the new custom row when it is added again.
         content.clear();
         let mut rows: Vec<View> = Vec::new();
         for (index, row) in self.rows.iter().enumerate() {
@@ -671,8 +662,6 @@ impl Choice {
         app.request_redraw();
     }
 
-    // `scrollChildIntoView`, from the row heights: the rows were just rebuilt and have no layout yet. Each row is
-    // one line plus its description, with one blank line between rows.
     fn scroll_to_selected(&self) {
         let selected = self.selected.get();
         let height = |index: usize| 1 + usize::from(self.rows.get(index).is_some_and(|row| row.description.is_some()));

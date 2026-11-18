@@ -76,7 +76,6 @@ impl Stash {
         }
     }
 
-    /// `pop()`: the newest entry.
     pub fn pop(&self, _app: &App) -> Option<Value> {
         let entry = self.entries.borrow_mut().pop()?;
         let deleted = entry.clone();
@@ -111,7 +110,6 @@ impl Stash {
     }
 }
 
-/// The stash commands, in the palette (`stashCommands`).
 pub fn layer(inner: &Rc<Inner>) -> KeymapLayer<FocusId> {
     let when = |check: fn(&Inner, &Tui) -> bool| {
         Condition::when(bind!(inner, |prompt| prompt.tui.upgrade().is_some_and(|tui| check(&prompt, &tui))))

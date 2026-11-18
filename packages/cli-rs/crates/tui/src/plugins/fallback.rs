@@ -24,7 +24,6 @@ pub fn activate(tui: &Rc<Tui>) -> Disposer {
     })
 }
 
-/// The list, in place of any open dialog, on the row of plugin `focus` if given.
 fn show(tui: &Rc<Tui>, focus: Option<String>) {
     let entries: Vec<Entry> = tui
         .plugins
@@ -35,7 +34,6 @@ fn show(tui: &Rc<Tui>, focus: Option<String>) {
     let weak = tui.weak();
     tui.dialogs.replace(
         move |cx| {
-            // In the dialog's theme, built again with it.
             let theme = cx.theme.page();
             let options: Vec<SelectOption<String>> = entries
                 .iter()
@@ -53,7 +51,6 @@ fn show(tui: &Rc<Tui>, focus: Option<String>) {
             props.focus_target = focus.clone();
             let handle: Rc<RefCell<Option<opencode_ui::select::Select<String>>>> = Rc::default();
             let picked = Rc::downgrade(&handle);
-            // Any row's error on its own key, the manager's too, whose enter starts it again (review carbon-3).
             let errors: Vec<String> =
                 entries.iter().filter(|entry| error(entry).is_some()).map(|e| e.key.clone()).collect();
             let shown = weak.clone();
@@ -75,7 +72,6 @@ fn show(tui: &Rc<Tui>, focus: Option<String>) {
                     .upgrade()
                     .is_some_and(|handle| handle.borrow().as_ref().is_some_and(|handle| handle.by_input()));
                 let key = option.value.clone();
-                // The select is still handling the key.
                 tui.app.defer(bind!(tui, |tui, _| pick(&tui, &key, by_input)));
             })));
             let (view, select) = opencode_ui::select::select(cx, props);
@@ -103,7 +99,6 @@ fn pick(tui: &Rc<Tui>, key: &str, by_input: bool) {
     details(tui, key);
 }
 
-/// The error of the entry `key` names, with Back to its row.
 fn details(tui: &Rc<Tui>, key: &str) {
     let Some(entry) = tui.plugins.entries().into_iter().find(|entry| entry.key == key) else { return };
     let Some(error) = error(&entry) else { return };

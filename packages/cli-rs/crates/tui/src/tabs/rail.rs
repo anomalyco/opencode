@@ -1,6 +1,4 @@
-//! The vertical tab rail (W01, W04, `VerticalSessionTabs` in `component/session-tabs.tsx:542-1273` and
-//! `component/session-tabs-rail.tsx`). Two rows per tab (title, project and branch) with a gap row the edge
-//! pulses draw into; below 12 columns it is compact: one centered indicator per tab and a search control.
+//! TypeScript: `component/session-tabs.tsx:542-1273`, `component/session-tabs-rail.tsx`.
 
 use opencode_store::Location;
 use opencode_ui::theme::tint;
@@ -33,7 +31,6 @@ pub struct Rail {
     rows: RefCell<Vec<(i32, i32, Option<String>)>>,
     pulses: RefCell<HashMap<(String, u8), Pulse>>,
     fades: RefCell<HashMap<String, MarkerFade>>,
-    /// The spinner steps of the painted tabs that run, each from 0 when its spinner shows.
     spins: RefCell<HashMap<String, u64>>,
     /// The rail's ticks while a spinner shows and while a pulse moves.
     spin: RefCell<Option<AnimationTick>>,
@@ -97,12 +94,10 @@ pub fn forget(rail: &Custom<Rail>) {
     });
 }
 
-/// Whether an unread marker on the rail still fades.
 pub fn fading(rail: &Custom<Rail>, now: std::time::Instant) -> bool {
     rail.with(|rail| rail.fades.borrow().values().any(|marker| marker.moving(now)))
 }
 
-/// Feeds each painted tab's status to its unread marker at a store flush.
 pub fn observe(rail: &Custom<Rail>, tui: &Tui) {
     rail.with(|rail| super::strip::observe_markers(&rail.fades, tui));
 }
@@ -348,7 +343,6 @@ impl Component for Rail {
                 painter.fill(0, y, width, 1, pulse_bg);
                 let idle = item.title.trim_start().chars().next().map_or("U".to_owned(), String::from);
                 let (glyph, _) = glyph_text(&idle);
-                // The compact `TabIndicator` takes `selected`, which keeps its marker in the selected color.
                 let color = if item.selected {
                     theme.text.base
                 } else if numbers {
@@ -387,7 +381,6 @@ impl Component for Rail {
             let colors = |color: Color, glow: Color, flash: Color, completion: Color, glow_tail: usize, bg: Color| {
                 pulse::Colors { background: bg, color, glow, flash, completion, glow_tail, flash_tail: Some(8) }
             };
-            // The separator above: this tab's lower half, the previous tab's upper half.
             let previous = index.checked_sub(1).and_then(|before| items.get(before));
             let previous_status = previous.map_or_else(Status::default, |item| item.status);
             let previous_glows = previous.is_some_and(|item| item.glows);
@@ -450,7 +443,6 @@ impl Component for Rail {
                 );
             }
 
-            // The title row.
             painter.fill(0, y, width, 2, pulse_bg);
             let glow_color = tint(pulse_bg, glow_hue, 0.45 * glow_level);
             let title_pulse = voice(4, input(item.glows));
@@ -511,7 +503,6 @@ impl Component for Rail {
                 painter.text(width as i32 - 2, y, "✕", Style::new().fg(color));
             }
 
-            // The detail row: project and branch.
             let detail_glow = tint(pulse_bg, glow_hue, 0.25 * glow_level);
             let detail_pulse = voice(5, input(item.glows));
             let detail_colors = colors(
@@ -568,7 +559,6 @@ impl Component for Rail {
         }
         drop(markers);
 
-        // One slot, two states: a muted "+ New session" that becomes the active new-session tab.
         let y = offset + items.len() as i32 * stride;
         let bg = if new_tab && !compact {
             selected_bg
@@ -696,7 +686,6 @@ impl Component for Rail {
     }
 }
 
-/// Draws a pulse row across the rail.
 fn paint_cells(painter: &mut Painter<'_>, y: i32, cells: Option<Vec<(Option<char>, Color, Color)>>) {
     paint_pulse(painter, 0, y, cells);
 }

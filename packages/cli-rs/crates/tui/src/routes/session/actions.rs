@@ -17,7 +17,6 @@ use crate::dialogs::{export, fork, rename, timeline};
 use crate::prelude::*;
 use crate::prompt::draft::Draft;
 
-/// The session view's action commands. Dropping it removes their layers.
 pub struct Actions(Rc<Inner>);
 
 struct Inner {
@@ -126,7 +125,6 @@ impl Inner {
                     ..SessionUpdateInput::default()
                 };
                 data.client().session_update(&input).await.map_err(|error| error.to_string())?;
-                // The response can beat the renamed event; read the generated title back.
                 if generate {
                     data.session_invalidate(&session);
                     data.session_sync(&session, false).await.map_err(|error| error.to_string())?;
@@ -137,7 +135,6 @@ impl Inner {
         );
     }
 
-    /// `session.timeline`: moving through it jumps the transcript.
     fn timeline(&self, tui: &Tui, _: Option<&str>) {
         let scroll = self.scroll.clone();
         timeline::show(tui, self.session.clone(), Rc::new(bind!(scroll, |scroll, tui, id| scroll.jump(tui, id))));
@@ -157,7 +154,6 @@ impl Inner {
         );
     }
 
-    /// `session.compact` with the prompt's model and variant.
     fn compact(&self, tui: &Tui, _: Option<&str>) {
         let model = tui.local.selection().map(|selection| ModelRef {
             id: selection.model.model_id,
@@ -230,7 +226,6 @@ impl Inner {
         );
     }
 
-    /// `session.redo`: clears the staged revert.
     fn redo(&self, tui: &Tui, _: Option<&str>) {
         let client = tui.data.client().clone();
         let input = SessionRevertClearInput { session_id: self.session.clone() };
@@ -270,7 +265,6 @@ impl Inner {
         tui.dialogs.clear();
     }
 
-    /// `session.copy`: the Markdown transcript with thinking and tools.
     fn copy_transcript(&self, tui: &Tui, _: Option<&str>) {
         if !self.known(tui) {
             return;
@@ -293,8 +287,6 @@ impl Inner {
         );
     }
 
-    /// `session.export`: the options, then the transcript to the clipboard or to a file in the working directory or
-    /// the temporary directory, whose path the result dialog shows.
     fn export(&self, tui: &Tui, _: Option<&str>) {
         if !self.known(tui) {
             return;
@@ -318,7 +310,6 @@ impl Inner {
                             export::Action::Copy => tui.app.copy_to_clipboard(&content).then_some(None).ok_or(()),
                             export::Action::Export => {
                                 let extension = if json { "json" } else { "md" };
-                                // `paths.cwd`, the TUI's working directory (#62253), or `os.tmpdir()` (#62490).
                                 let directory = match choice.location {
                                     export::Location::Project => std::env::current_dir().unwrap_or_default(),
                                     export::Location::Temp => opencode_local::paths::temp(),
@@ -505,7 +496,6 @@ fn transcript(
     }
 }
 
-/// `formatSessionTranscript` over the wire JSON of a transcript (`{info, messages}`).
 fn markdown(transcript: &Value, thinking: bool, tools: bool) -> String {
     let body: Vec<String> = transcript["messages"]
         .as_array()
@@ -557,7 +547,6 @@ fn tool_markdown(item: &Value) -> String {
     let state = &item["state"];
     let input = match &state["input"] {
         Value::String(input) => input.clone(),
-        // `JSON.stringify(undefined)` is `undefined`, which the template prints.
         Value::Null if state.get("input").is_none() => "undefined".to_owned(),
         input => serde_json::to_string_pretty(input).unwrap_or_default(),
     };
@@ -578,7 +567,6 @@ fn tool_markdown(item: &Value) -> String {
     format!("**Tool: {}**\n\n**Input:**\n```json\n{input}\n```\n\n{output}", item["name"].as_str().unwrap_or_default())
 }
 
-/// `new Date(ms).toLocaleString()` in en-US as Bun prints it: `3/3/2026, 12:00:00 PM`.
 fn locale_string(ms: f64) -> String {
     if !ms.is_finite() {
         return "Invalid Date".to_owned();
@@ -623,7 +611,6 @@ mod tests {
         assert_eq!(last_reply(&messages(json!([user, texts]))).as_deref(), Some("One\nTwo"));
         let empty = reply(json!([{ "type": "reasoning", "id": "b", "text": "only thoughts" }]));
         assert_eq!(last_reply(&messages(json!([empty]))).as_deref(), Some(""));
-        // A completed compaction with a summary counts; a blank one is skipped.
         let compaction = |id: &str, summary: &str| {
             json!({
                 "id": id, "type": "compaction", "status": "completed", "reason": "manual", "summary": summary,

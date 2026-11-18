@@ -22,7 +22,6 @@ pub struct Links {
     pressed: Cell<Option<(u16, u16)>>,
 }
 
-/// The TUI's linked Markdown documents, for label changes.
 #[derive(Default)]
 pub struct Registry {
     links: RefCell<Vec<Weak<Links>>>,
@@ -43,7 +42,6 @@ pub fn attach(tui: &Tui, markdown: &Markdown, renderers: &CodeBlockRenderers) ->
         let (Some(tui), Some(links)) = (weak.upgrade(), this.upgrade()) else { return };
         if let Some(id) = links.clicked(&tui, event) {
             cx.stop_propagation();
-            // The click runs inside the view the navigation replaces.
             tui.app.defer(bind!(tui, |tui, _| {
                 if tui.dialogs.is_open() {
                     tui.dialogs.clear();
@@ -58,7 +56,6 @@ pub fn attach(tui: &Tui, markdown: &Markdown, renderers: &CodeBlockRenderers) ->
     links
 }
 
-/// Draws again the blocks that mention a session whose label changed (#63247).
 pub fn sync(tui: &Tui, changes: &Changes) {
     if !changes.all && changes.session.is_empty() {
         return;
@@ -85,7 +82,6 @@ pub fn sync(tui: &Tui, changes: &Changes) {
     }
 }
 
-/// Whether a block's `source` mentions one of `sessions`: the blocks a label change draws again.
 fn mentions_any(source: &str, sessions: &HashSet<SessionID>) -> bool {
     mentions(source).any(|mention| sessions.iter().any(|id| id.0 == mention.id(source)))
 }
@@ -112,7 +108,6 @@ impl Links {
     }
 }
 
-/// `linkChunks`: the spans of one paragraph or heading, with each linkable mention replaced by its link.
 fn link_spans(
     tui: &Tui,
     used: &RefCell<HashMap<SessionID, Option<String>>>,
@@ -165,15 +160,12 @@ fn link_spans(
     out
 }
 
-/// `span` with other text.
 fn piece(span: &InlineSpan, text: &str) -> InlineSpan {
     let mut piece = span.clone();
     piece.span.content = text.to_owned().into();
     piece
 }
 
-/// `labelOf`: the label a link to `id` shows, or `None` to leave it plain: the current session, an archived one, and
-/// one not loaded (which starts loading).
 fn label_of(tui: &Tui, id: &SessionID) -> Option<String> {
     if tui.route() == (Route::Session { id: id.clone() }) {
         return None;
@@ -220,7 +212,6 @@ impl Mention {
 }
 
 const PREFIX: &str = "@session:";
-/// `ses_` and 26 letters or digits.
 const ID_LEN: usize = 30;
 
 /// `sessionMentions` (`@opencode/util/session-mention`): complete generated IDs, optionally after `@session:`, not
@@ -254,7 +245,6 @@ pub fn mentions(text: &str) -> impl Iterator<Item = Mention> + '_ {
     })
 }
 
-/// `parseSessionMention`: the ID when `text` is exactly one mention.
 pub fn parse(text: &str) -> Option<&str> {
     mentions(text)
         .next()

@@ -15,7 +15,6 @@ pub fn plugin() -> abi::Plugin {
     abi::Plugin { id: ID, setup }
 }
 
-/// The events [`Tracker`] follows.
 const EVENTS: [&str; 9] = [
     "form.created",
     "form.replied",
@@ -34,7 +33,6 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         for action in tracker.borrow_mut().event(event, &Reads(host)) {
             match action {
                 Action::Notify(attention) => host.attention(attention),
-                // A session-scoped toast (the plugin API's `toast.show` with `sessionID`).
                 Action::Toast { session, message } => {
                     host.toast(Toast::new(Variant::Error, message).title("Session failed").session(session));
                 }
@@ -44,11 +42,9 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-/// What [`Tracker`] reads about sessions.
 trait Sessions {
     fn title(&self, id: &str) -> Option<String>;
     fn parent(&self, id: &str) -> Option<String>;
-    /// Whether a direct child of `id` runs.
     fn running_child(&self, id: &str) -> bool;
 }
 
@@ -78,7 +74,6 @@ enum Action {
     Toast { session: String, message: String },
 }
 
-/// The plugin's state: failed and ended sessions, and the forms and permissions already announced.
 #[derive(Default)]
 struct Tracker {
     errored: HashSet<String>,
@@ -195,7 +190,6 @@ mod tests {
 
     use super::*;
 
-    /// The sessions of `notifications.test.ts`.
     struct Fake {
         sessions: HashMap<&'static str, (&'static str, Option<&'static str>)>,
         running: HashSet<&'static str>,
@@ -421,7 +415,6 @@ mod tests {
         assert_eq!(run(&fake, &mut tracker, &cycle()), []);
         fake.running.remove("subagent");
         assert_eq!(run(&fake, &mut tracker, &cycle()), []);
-        // The grandchild still running reports to its own parent.
         fake.running.remove("second");
         assert_eq!(run(&fake, &mut tracker, &cycle()), [done()]);
     }

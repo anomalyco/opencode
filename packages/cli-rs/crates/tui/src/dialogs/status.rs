@@ -7,7 +7,6 @@ use opencode_ui::dialog::{DialogCx, layout};
 
 use crate::prelude::*;
 
-/// Registers `opencode.status` ("View status", `/status`) as `app.tsx:1054-1061` does.
 pub fn install(tui: &Rc<Tui>) {
     let command = TuiCommand::new("opencode.status", bind!(tui, |tui, _, _| show(&tui)))
         .bind(Bind::Off)
@@ -15,17 +14,10 @@ pub fn install(tui: &Rc<Tui>) {
         .group("System")
         .palette()
         .slash("status");
-    tui.keymap.install(
-        "status",
-        [
-            KeymapLayer::global(vec![command]),
-            // `appBindingCommands`: `<leader>s` by default.
-            KeymapLayer::default().bindings(["opencode.status"]),
-        ],
-    );
+    tui.keymap
+        .install("status", [KeymapLayer::global(vec![command]), KeymapLayer::default().bindings(["opencode.status"])]);
 }
 
-/// `DialogStatus`, in place of any open dialog.
 pub fn show(tui: &Tui) {
     tui.dialogs.replace(
         bind!(tui, |tui, cx| {
@@ -47,7 +39,6 @@ pub fn show(tui: &Tui) {
     );
 }
 
-/// Reads the list when the store has none (TS loads it with the location at startup).
 fn load(tui: &Tui) {
     let location = tui.data.read(|state| state.default_location().clone());
     let loaded = tui.data.read(|state| state.location(Some(&location)).is_some_and(|data| data.mcp_server.is_some()));

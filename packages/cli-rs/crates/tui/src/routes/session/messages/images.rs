@@ -15,25 +15,20 @@ use super::list::Context;
 
 use crate::prelude::*;
 
-/// The most images shown in a row.
 const VISIBLE: usize = 3;
 
 pub struct Images {
     app: App,
     data: Data,
-    /// A click on an image opens the preview dialog (E.4).
     tui: std::rc::Weak<crate::app::Tui>,
     root: View,
-    /// The URIs on screen and the height they were laid out for.
     rendered: RefCell<Option<(Vec<String>, u16)>>,
     /// Bytes read for `media:` refs, by URI, shared by the row's images.
     media: Rc<RefCell<HashMap<String, Vec<u8>>>>,
-    /// The texts in the app theme's foreground: `+N more` and `No preview`.
     texts: Rc<RefCell<Vec<Text>>>,
 }
 
 impl Images {
-    /// `padding_left` is 2 inside a user message and 3 under a tool.
     pub fn new(cx: &Context<'_>, padding_left: u16) -> Self {
         let root = View::new(cx.app)
             .row()
@@ -59,7 +54,6 @@ impl Images {
         &self.root
     }
 
-    /// Takes the new app theme's foreground in place; the images stay.
     pub fn restyle(&self, theme: &Theme) {
         for text in self.texts.borrow().iter() {
             text.fg(theme.text.base);
@@ -139,7 +133,6 @@ impl Images {
     }
 }
 
-/// `texts` keeps a `No preview` placeholder for [`Images::restyle`].
 fn place(app: &App, cell: &View, bytes: Option<&[u8]>, texts: &RefCell<Vec<Text>>) {
     cell.clear();
     let image = ImageView::new(app).fit(ImageFit::Cover).width(Length::Percent(100.0)).height(Length::Percent(100.0));
@@ -182,7 +175,6 @@ pub fn user_images(files: &[PromptFileAttachment]) -> Vec<String> {
         .collect()
 }
 
-/// `inlineToolImages`: the image files a tool returned inline or by media ref.
 pub fn tool_images(tool: &SessionMessageAssistantTool) -> Vec<String> {
     let content = match &tool.state {
         SessionMessageAssistantToolState::Completed(done) => done.content.as_slice(),
@@ -205,7 +197,6 @@ pub fn tool_images(tool: &SessionMessageAssistantTool) -> Vec<String> {
         .collect()
 }
 
-/// `mediaHashFromUri`: the 64 hex digits of `media:<hash>`.
 pub(crate) fn media_hash(uri: &str) -> Option<&str> {
     let hash = uri.strip_prefix("media:")?;
     (hash.len() == 64 && hash.bytes().all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))).then_some(hash)

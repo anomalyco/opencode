@@ -11,7 +11,6 @@ use opencode_ui::motion::Spinner;
 use crate::features::update_notification::{self as updates, UpdateState};
 use crate::prelude::*;
 
-/// What the dialog shows (`state()` of `DialogUpdate`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Shown {
     Checking,
@@ -21,7 +20,6 @@ enum Shown {
     Update(UpdateState),
 }
 
-/// The dialog's own check (TS `createResource`).
 #[derive(Default)]
 struct Check {
     loading: bool,
@@ -29,7 +27,6 @@ struct Check {
     unavailable: Option<String>,
 }
 
-/// `DialogUpdate`, centered, in place of any open dialog.
 pub fn show(tui: &Tui, checks: bool) {
     let check = Rc::new(RefCell::new(Check { loading: checks, ..Check::default() }));
     let weak = tui.weak();

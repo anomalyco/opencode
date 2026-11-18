@@ -51,8 +51,6 @@ impl History {
         Self { memory, file: Some((state, writer)) }
     }
 
-    /// `move(direction, input)` from `cursor`; `current` is the prompt being edited, kept as the draft when the
-    /// cursor leaves it.
     pub fn step(&self, cursor: &Cursor, direction: i64, input: &str, current: impl FnOnce() -> Value) -> Option<Value> {
         let memory = self.memory.lock().ok()?;
         cursor.step(memory.history.entries(), direction, input, current)
@@ -75,7 +73,6 @@ impl History {
     }
 }
 
-/// One prompt's place in the history, and the draft it left there (`usePromptHistory`).
 #[derive(Default)]
 pub struct Cursor {
     index: Cell<i64>,
@@ -83,20 +80,17 @@ pub struct Cursor {
 }
 
 impl Cursor {
-    /// Back at the live prompt, with no draft kept (`reset`).
     pub fn reset(&self) {
         self.index.set(0);
         self.draft.take();
     }
 
-    /// The entry to show, the draft when back past the newest entry, or `None` when the cursor does not move.
     fn step(&self, entries: &[Value], direction: i64, input: &str, current: impl FnOnce() -> Value) -> Option<Value> {
         let index = self.index.get();
         let next = index + direction;
         if next < -(entries.len() as i64) || next > 0 {
             return None;
         }
-        // An edited entry stays put.
         if index < 0 && !input.is_empty() && at(entries, index).and_then(|entry| entry["text"].as_str()) != Some(input)
         {
             return None;
@@ -123,7 +117,6 @@ fn at(entries: &[Value], index: i64) -> Option<&Value> {
     entries.get(entries.len().checked_sub(index.unsigned_abs() as usize)?)
 }
 
-/// `prompt.history.previous`: moves up a line, then to the start, then to the previous entry.
 pub fn previous(prompt: &Inner, history: &History) -> bool {
     let textarea = &prompt.textarea;
     if textarea.cursor_offset() != 0 {
@@ -140,7 +133,6 @@ pub fn previous(prompt: &Inner, history: &History) -> bool {
     true
 }
 
-/// `prompt.history.next`: moves down a line, then to the end, then to the next entry.
 pub fn next(prompt: &Inner, history: &History) -> bool {
     let textarea = &prompt.textarea;
     let end = prompt.text_end();
@@ -159,7 +151,6 @@ pub fn next(prompt: &Inner, history: &History) -> bool {
     true
 }
 
-/// The cursor's wrapped line in the whole text (`scrollY + visualCursor.visualRow`).
 fn visual_row(textarea: &Textarea) -> u32 {
     let view = textarea.view();
     let scroll = view.viewport().map_or(0, |viewport| viewport.y);
