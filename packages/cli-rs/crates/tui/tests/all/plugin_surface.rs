@@ -1656,7 +1656,7 @@ thread_local! {
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum DialogCarrier {
     Native(Carrier),
-    #[cfg(feature = "luau")]
+    #[cfg(luau)]
     Luau,
 }
 
@@ -1664,7 +1664,7 @@ fn dialog_carriers() -> Vec<DialogCarrier> {
     vec![
         DialogCarrier::Native(Carrier::Linked),
         DialogCarrier::Native(Carrier::Abi),
-        #[cfg(feature = "luau")]
+        #[cfg(luau)]
         DialogCarrier::Luau,
     ]
 }
@@ -1742,7 +1742,7 @@ fn dialog_probe(setup: &mut abi::Setup) -> Result<(), String> {
 }
 
 /// [`dialog_probe`] in Luau, which records in its storage.
-#[cfg(feature = "luau")]
+#[cfg(luau)]
 const DIALOG_LUAU: &str = r#"local plugin = require("@opencode/plugin")
 local function text(text) return { type = "text", spans = { { text = text } } } end
 local function record(host, line)
@@ -1782,7 +1782,7 @@ fn dialog_open(carrier: DialogCarrier) -> Harness {
             let host = opencode_tui::plugins::host::host(&harness.tui);
             opencode_plugin::loader::native::loopback(&host, entries).unwrap().0
         }
-        #[cfg(feature = "luau")]
+        #[cfg(luau)]
         DialogCarrier::Luau => {
             let sources = opencode_plugin::luau::Sources::from_files([
                 ("plugin.toml", "id = \"test.dlg\""),
@@ -1806,11 +1806,11 @@ fn dialog_turns(harness: &Harness) {
 }
 
 /// What the probe's handler recorded.
-#[cfg_attr(not(feature = "luau"), allow(unused_variables))]
+#[cfg_attr(not(luau), allow(unused_variables))]
 fn dialog_seen(harness: &Harness, carrier: DialogCarrier) -> Vec<String> {
     match carrier {
         DialogCarrier::Native(_) => DIALOG_SEEN.with_borrow(Vec::clone),
-        #[cfg(feature = "luau")]
+        #[cfg(luau)]
         DialogCarrier::Luau => {
             let stored = opencode_plugin::Host::storage_read(&*harness.tui, "plugin.test.dlg.seen");
             stored.and_then(|json| serde_json::from_str(&json).ok()).unwrap_or_default()
