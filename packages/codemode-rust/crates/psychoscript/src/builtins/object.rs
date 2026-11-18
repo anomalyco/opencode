@@ -919,7 +919,7 @@ pub(crate) fn revive_step(
     }
 }
 
-fn json_stringify(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
+fn json_stringify(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Res {
     let replacer = arg(args, 1);
     let mut opts = convert::Stringify {
         indent: String::new(),
@@ -950,10 +950,12 @@ fn json_stringify(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
         Value::Str(s) => opts.indent = vm.atoms.sref(s).slice16(0, 10),
         _ => {}
     }
-    Ok(match convert::stringify(vm, &arg(args, 0), &opts)? {
-        Some(s) => vm.string_val(s),
-        None => Value::Undef,
-    })
+    let v = arg(args, 0);
+    match convert::stringify(vm, &v, &opts)? {
+        Some(Some(s)) => Ok(vm.string_val(s)),
+        Some(None) => Ok(Value::Undef),
+        None => convert::enter_stringify(vm, callee, v, opts),
+    }
 }
 
 // ---------- console ----------
@@ -1242,6 +1244,8 @@ pub(crate) const SUB_SUM_PRECISE: u16 = 2;
 /// The pairs of `new URLSearchParams(...)` and `new Headers(...)`, and the parts of one pair (`builtins::web`).
 pub(crate) const SUB_PAIRS: u16 = 3;
 pub(crate) const SUB_PAIR: u16 = 4;
+/// `JSON.stringify`'s internal walk (`convert::stringify_step`).
+pub(crate) const SUB_STRINGIFY: u16 = 5;
 
 /// The steps of this family's native frames (`native::NativeOp::Callbacks`), by sub-op; see `native.rs`.
 pub(crate) fn family_step(
@@ -1257,6 +1261,7 @@ pub(crate) fn family_step(
         SUB_SUM_PRECISE => for_of_step::<super::string::SumPrecise>(vm, fr, input),
         SUB_PAIRS => for_of_step::<super::web::Pairs>(vm, fr, input),
         SUB_PAIR => for_of_step::<super::web::Pair>(vm, fr, input),
+        SUB_STRINGIFY => convert::stringify_step(vm, fr, input),
         _ => Ok(crate::native::Step::Done(Value::Undef)),
     }
 }

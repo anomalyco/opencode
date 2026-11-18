@@ -4,7 +4,7 @@ use std::fmt::Write as _;
 
 use crate::object::*;
 use crate::strings::{external_text, has_mark, host_text};
-use crate::value::{Id, Value, write_num};
+use crate::value::{Id, Slot, Value, write_num};
 use crate::vm::{Res, Vm};
 use crate::{DiagnosticKind, Json};
 
@@ -183,19 +183,15 @@ fn apply_to_json(vm: &mut Vm, v: &Value, key: Key, mode: Option<&Mode>) -> Res {
         let k = vm.names.to_json;
         let f = vm.get_obj(*id, k);
         if vm.is_callable(&f) {
+            // The native walk calls only Date's and URL's own; any other makes it start over as the internal walk.
             if let Some(mode) = mode
-                && !mode.walk
                 && !native_to_json(vm, &f)
             {
                 mode.restart.set(true);
                 return Ok(Value::Undef);
             }
             let kv = key_value(vm, key);
-            return if mode.is_some_and(|m| m.walk) {
-                vm.call_counted(&f, *v, &[kv])
-            } else {
-                vm.call(&f, *v, &[kv])
-            };
+            return vm.call(&f, *v, &[kv]);
         }
     }
     Ok(*v)
@@ -242,10 +238,10 @@ pub struct Stringify {
 
 /// How `JSON.stringify` runs in the reference, for its fuel: a native walk, or its internal bytecode walk
 /// (`$vmJsonWalk`), which a replacer, a property list, a `toJSON` other than Date's and URL's, a promise, or more than
-/// `REVISITS` visits of objects it has seen already need. The native walk stops (`restart`) at the first value that
-/// needs the other, before it calls anything, and the stringify starts over as that walk.
+/// `REVISITS` visits of objects it has seen already need. The native walk (`write_json`, which calls no program code)
+/// stops (`restart`) at the first value that needs the other, before it calls anything, and the stringify starts over
+/// as that walk, which runs in a native frame (`stringify_step`).
 struct Mode {
-    walk: bool,
     restart: std::cell::Cell<bool>,
     /// The stamp of a native walk (see `Vm::start_json_walk`); one nested in another keeps the objects it has seen.
     stamp: u32,
@@ -258,15 +254,10 @@ struct Mode {
 const REVISITS: u32 = 2048;
 
 impl Mode {
-    fn new(vm: &mut Vm, walk: bool) -> Self {
+    fn new(vm: &mut Vm) -> Self {
         Self {
-            walk,
             restart: std::cell::Cell::new(false),
-            stamp: if walk {
-                0
-            } else {
-                vm.start_json_walk().unwrap_or(0)
-            },
+            stamp: vm.start_json_walk().unwrap_or(0),
             seen: Default::default(),
             revisits: std::cell::Cell::new(REVISITS),
         }
@@ -301,27 +292,21 @@ impl Mode {
     }
 }
 
-pub fn stringify(vm: &mut Vm, v: &Value, opts: &Stringify) -> Result<Option<String>, Value> {
-    let walk = opts.replacer_fn.is_some() || opts.allow.is_some();
-    if !walk {
-        let mode = Mode::new(vm, false);
-        let out = stringify_in(vm, v, opts, &mode);
-        mode.end(vm);
-        let out = out?;
-        if !mode.restart.get() {
-            return Ok(out);
-        }
+/// `JSON.stringify` on the reference's native walk: its result (`None` for undefined), or `None` when it needs the
+/// internal walk (`enter_stringify`).
+pub fn stringify(
+    vm: &mut Vm,
+    v: &Value,
+    opts: &Stringify,
+) -> Result<Option<Option<String>>, Value> {
+    if opts.replacer_fn.is_some() || opts.allow.is_some() {
+        return Ok(None);
     }
-    // The internal walk, after `JSON.stringify`'s own call: `$vmJsonVisitor`, the root `visit` generator and its
-    // first `next`; each value then costs what `visit` spends (see `builtins/fuel.rs`).
-    vm.fuel(crate::vm::NATIVE_FUEL);
-    vm.fuel(1);
-    vm.fuel(1);
-    vm.fuel(crate::vm::NATIVE_FUEL);
-    let mode = Mode::new(vm, true);
-    let out = stringify_in(vm, v, opts, &mode)?;
-    vm.bytecode_builtin();
-    Ok(out)
+    let mode = Mode::new(vm);
+    let out = stringify_in(vm, v, opts, &mode);
+    mode.end(vm);
+    let out = out?;
+    Ok(if mode.restart.get() { None } else { Some(out) })
 }
 
 fn stringify_in(
@@ -332,20 +317,11 @@ fn stringify_in(
 ) -> Result<Option<String>, Value> {
     let mut out = String::new();
     let mut stack = Vec::new();
+    // The holder `{ "": v }` the reference makes, though nothing here reads it.
     let holder = vm.new_object();
     let empty = vm.atoms.intern_static("");
     vm.define(holder, empty, *v);
-    let ok = write_json(
-        vm,
-        &mut out,
-        Value::Obj(holder),
-        Key::Empty,
-        *v,
-        opts,
-        mode,
-        &mut stack,
-        "",
-    )?;
+    let ok = write_json(vm, &mut out, Key::Empty, *v, opts, mode, &mut stack, "")?;
     Ok(if ok { Some(out) } else { None })
 }
 
@@ -359,11 +335,11 @@ fn native_to_json(vm: &mut Vm, f: &Value) -> bool {
         .any(|p| matches!((vm.get_obj(p, k), f), (Value::Obj(a), Value::Obj(b)) if a == *b))
 }
 
+/// The native walk: writes `v` (`holder[key]`) and says whether it wrote anything.
 #[allow(clippy::too_many_arguments)]
 fn write_json(
     vm: &mut Vm,
     out: &mut String,
-    holder: Value,
     key: Key,
     v: Value,
     opts: &Stringify,
@@ -374,27 +350,17 @@ fn write_json(
     if mode.restart.get() {
         return Ok(false);
     }
-    // Every value is checked, a primitive too: the native walk stops past depth 32, the internal walk past 100
-    // (`$Throw` in its `visit`, a native that throws and so costs nothing).
-    let depth = stack.len();
-    if mode.walk && depth > 100 {
-        return Err(vm.range_error("Value exceeds the maximum depth of 100."));
-    }
-    if !mode.walk && depth > 32 {
+    // Every value is checked, a primitive too: the native walk stops past depth 32.
+    if stack.len() > 32 {
         return Err(vm.range_error("Value exceeds the maximum depth of 32."));
     }
-    if !mode.walk
-        && let Value::Obj(id) = v
+    if let Value::Obj(id) = v
         && mode.revisited(vm, id)
     {
         mode.restart.set(true);
         return Ok(false);
     }
     let mut v = apply_to_json(vm, &v, key, Some(mode))?;
-    if let Some(f) = &opts.replacer_fn {
-        let kv = key_value(vm, key);
-        v = vm.call_counted(f, holder, &[kv, v])?;
-    }
     if crate::builtins::exotic::may_have_json_forms(vm) {
         let headers =
             matches!(v, Value::Obj(id) if matches!(vm.heap[id as usize].kind, Kind::Headers(_)));
@@ -402,13 +368,8 @@ fn write_json(
         // Headers are JSON of their own in the reference, a record of their entries: neither the replacer nor the
         // walk reaches inside, though a property list still picks among them.
         if headers {
-            let plain = Stringify {
-                indent: opts.indent.clone(),
-                replacer_fn: None,
-                allow: opts.allow.clone(),
-            };
-            let mode = Mode::new(vm, false);
-            let r = write_json(vm, out, holder, key, v, &plain, &mode, stack, gap);
+            let mode = Mode::new(vm);
+            let r = write_json(vm, out, key, v, opts, &mode, stack, gap);
             mode.end(vm);
             return r;
         }
@@ -416,13 +377,7 @@ fn write_json(
     match &v {
         Value::Null => out.push_str("null"),
         Value::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
-        Value::Num(n) => {
-            if n.is_finite() {
-                write_num(out, *n);
-            } else {
-                out.push_str("null");
-            }
-        }
+        Value::Num(n) => write_number(out, *n),
         Value::Str(s) => quote_str(vm, out, *s),
         Value::Undef | Value::Uninit | Value::Sym(_) => return Ok(false),
         Value::Obj(id) => {
@@ -431,11 +386,8 @@ fn write_json(
                 return Ok(false);
             }
             if matches!(vm.heap[id as usize].kind, Kind::Promise(_)) {
-                if !mode.walk {
-                    mode.restart.set(true);
-                    return Ok(false);
-                }
-                return Err(vm.type_error("Cannot serialize a promise; await it first"));
+                mode.restart.set(true);
+                return Ok(false);
             }
             if stack.contains(&id) {
                 return Err(vm.type_error("Converting circular structure to JSON"));
@@ -464,35 +416,9 @@ fn write_json(
                             out.push('\n');
                             out.push_str(&inner);
                         }
-                        let item = match &vm.heap[id as usize].kind {
-                            Kind::Array(items) => match items.get(i) {
-                                Some(Value::Uninit) | None => Value::Undef,
-                                Some(v) => *v,
-                            },
-                            _ => Value::Undef,
-                        };
-                        if mode.walk {
-                            // `String(i)`, the child `visit` generator, `yield*` opening it and its `next`.
-                            vm.fuel(crate::vm::NATIVE_FUEL);
-                            vm.fuel(1);
-                            vm.fuel(crate::vm::NATIVE_FUEL);
-                            vm.fuel(crate::vm::NATIVE_FUEL);
-                        }
-                        if !write_json(
-                            vm,
-                            out,
-                            Value::Obj(id),
-                            Key::Index(i),
-                            item,
-                            opts,
-                            mode,
-                            stack,
-                            &inner,
-                        )? {
+                        let item = array_item(vm, id, i);
+                        if !write_json(vm, out, Key::Index(i), item, opts, mode, stack, &inner)? {
                             out.push_str("null");
-                        }
-                        if mode.walk {
-                            vm.fuel(1);
                         }
                     }
                     if !opts.indent.is_empty() {
@@ -502,29 +428,7 @@ fn write_json(
                     out.push(']');
                 }
             } else {
-                let entries: Vec<(Atom, Value)> = match &vm.heap[id as usize].kind {
-                    Kind::Error(_) => {
-                        let (name, message) = error_parts(vm, id);
-                        let (nk, mk) = (vm.names.name, vm.names.message);
-                        let (name, message) = (vm.string_val(name), vm.string_val(message));
-                        let mut e = vec![(nk, name), (mk, message)];
-                        e.extend(
-                            vm.own_entries(id)
-                                .into_iter()
-                                .filter(|(k, _)| *k != nk && *k != mk),
-                        );
-                        e
-                    }
-                    Kind::Ordinary | Kind::Arguments(_) | Kind::Live(_) => vm.own_entries(id),
-                    _ => Vec::new(),
-                };
-                let entries: Vec<(Atom, Value)> = match &opts.allow {
-                    Some(allow) => allow
-                        .iter()
-                        .filter_map(|k| entries.iter().find(|(e, _)| e == k).cloned())
-                        .collect(),
-                    None => entries,
-                };
+                let entries = json_entries(vm, id, opts.allow.as_deref());
                 out.push('{');
                 let mut first = true;
                 for (k, val) in entries {
@@ -541,32 +445,10 @@ fn write_json(
                     if !opts.indent.is_empty() {
                         out.push(' ');
                     }
-                    if mode.walk {
-                        vm.fuel(1);
-                        vm.fuel(crate::vm::NATIVE_FUEL);
-                        vm.fuel(crate::vm::NATIVE_FUEL);
-                    }
-                    if write_json(
-                        vm,
-                        out,
-                        Value::Obj(id),
-                        Key::Atom(k),
-                        val,
-                        opts,
-                        mode,
-                        stack,
-                        &inner,
-                    )? {
+                    if write_json(vm, out, Key::Atom(k), val, opts, mode, stack, &inner)? {
                         first = false;
-                        if mode.walk {
-                            // `$Define` of the property.
-                            vm.fuel(crate::vm::NATIVE_FUEL);
-                        }
                     } else {
                         out.truncate(mark);
-                    }
-                    if mode.walk {
-                        vm.fuel(1);
                     }
                 }
                 if !first && !opts.indent.is_empty() {
@@ -582,6 +464,578 @@ fn write_json(
         return Err(vm.range_error("Invalid string length"));
     }
     Ok(true)
+}
+
+#[inline(always)]
+fn write_number(out: &mut String, n: f64) {
+    if n.is_finite() {
+        write_num(out, n);
+    } else {
+        out.push_str("null");
+    }
+}
+
+/// The element at `i` of the dense array `id`, a hole as undefined.
+#[inline(always)]
+fn array_item(vm: &Vm, id: Id, i: usize) -> Value {
+    match &vm.heap[id as usize].kind {
+        Kind::Array(items) => match items.get(i) {
+            Some(Value::Uninit) | None => Value::Undef,
+            Some(v) => *v,
+        },
+        _ => Value::Undef,
+    }
+}
+
+/// The properties an object serializes, in order: an error's name and message first, then its own entries; only the
+/// listed ones, in the list's order, when there is a property list.
+fn json_entries(vm: &mut Vm, id: Id, allow: Option<&[Atom]>) -> Vec<(Atom, Value)> {
+    let entries: Vec<(Atom, Value)> = match &vm.heap[id as usize].kind {
+        Kind::Error(_) => {
+            let (name, message) = error_parts(vm, id);
+            let (nk, mk) = (vm.names.name, vm.names.message);
+            let (name, message) = (vm.string_val(name), vm.string_val(message));
+            let mut e = vec![(nk, name), (mk, message)];
+            e.extend(
+                vm.own_entries(id)
+                    .into_iter()
+                    .filter(|(k, _)| *k != nk && *k != mk),
+            );
+            e
+        }
+        Kind::Ordinary | Kind::Arguments(_) | Kind::Live(_) => vm.own_entries(id),
+        _ => Vec::new(),
+    };
+    match allow {
+        Some(allow) => allow
+            .iter()
+            .filter_map(|k| entries.iter().find(|(e, _)| e == k).cloned())
+            .collect(),
+        None => entries,
+    }
+}
+
+// ---------- JSON.stringify's internal walk ----------
+
+/// A key as the walk keeps it in its slots: its atom.
+fn atom_slot(a: Atom) -> Value {
+    Value::Num(a as f64)
+}
+
+/// The reference's `$JsonNames` off the host boundary, as atoms: an error's name and message first, then the own keys.
+fn walk_keys(vm: &mut Vm, id: Id) -> Vec<Value> {
+    let (nk, mk) = (vm.names.name, vm.names.message);
+    match vm.heap[id as usize].kind {
+        Kind::Error(_) => [nk, mk]
+            .into_iter()
+            .chain(vm.own_keys(id).into_iter().filter(|k| *k != nk && *k != mk))
+            .map(atom_slot)
+            .collect(),
+        Kind::Ordinary | Kind::Arguments(_) | Kind::Live(_) => {
+            vm.own_keys(id).into_iter().map(atom_slot).collect()
+        }
+        _ => Vec::new(),
+    }
+}
+
+// The slots of the internal walk's frame: the replacer (or undefined), the property list (an internal array of its
+// keys' atoms, or undefined), the indent (undefined for none), the output written before the last call (an internal
+// byte buffer, or undefined), and how many containers deep the walk is; then the value it visits (`holder[key]`, the
+// key a number for an array's element, the value read once the visit starts), what the call it waits on is for, and
+// the key's atom off an array; then, per container, the container, its keys' atoms (an internal array, undefined for
+// an array), how many children it has, the next one, and whether none was written yet.
+const J_F: usize = 0;
+const J_ALLOW: usize = 1;
+const J_INDENT: usize = 2;
+const J_OUT: usize = 3;
+const J_DEPTH: usize = 4;
+const J_HOLDER: usize = 5;
+const J_KEY: usize = 6;
+const J_VAL: usize = 7;
+const J_PHASE: usize = 8;
+const J_ATOM: usize = 9;
+const J_LEVELS: usize = 10;
+const LEVEL: usize = 5;
+const L_ID: usize = 0;
+const L_KEYS: usize = 1;
+const L_N: usize = 2;
+const L_I: usize = 3;
+const L_FIRST: usize = 4;
+
+/// What the walk's call returns to: the value's `toJSON`, or the replacer.
+const TO_JSON: usize = 0;
+const REPLACED: usize = 1;
+
+/// Where a step of the internal walk is.
+#[derive(Clone, Copy)]
+enum Stage {
+    /// The value's depth check and `toJSON`.
+    Visit,
+    /// The replacer.
+    Replace,
+    /// Writing the value, or entering it.
+    Emit,
+    /// The innermost container goes on to its next child, or ends.
+    Child,
+    /// A value was visited, written or not; its container goes on.
+    After(bool),
+}
+
+/// Pushes the frame of `JSON.stringify`'s internal walk over `v`, after `JSON.stringify`'s own call: `$vmJsonVisitor`,
+/// the root `visit` generator and its first `next`. Each value then costs what `visit` spends (see `builtins/fuel.rs`).
+pub fn enter_stringify(vm: &mut Vm, callee: Id, v: Value, opts: Stringify) -> Res {
+    vm.fuel(crate::vm::NATIVE_FUEL);
+    vm.fuel(1);
+    vm.fuel(1);
+    vm.fuel(crate::vm::NATIVE_FUEL);
+    let holder = vm.new_object();
+    let empty = vm.atoms.intern_static("");
+    vm.define(holder, empty, v);
+    let allow = match opts.allow {
+        Some(allow) => {
+            let keys = allow.into_iter().map(atom_slot).collect();
+            vm.new_array(keys)
+        }
+        None => Value::Undef,
+    };
+    let indent = if opts.indent.is_empty() {
+        Value::Undef
+    } else {
+        vm.string_val(opts.indent)
+    };
+    let key = vm.atom_val(empty);
+    let slots = [
+        opts.replacer_fn.unwrap_or_default(),
+        allow,
+        indent,
+        Value::Undef,
+        Value::Num(0.0),
+        Value::Obj(holder),
+        key,
+        Value::Undef,
+        Value::Num(0.0),
+        atom_slot(empty),
+    ];
+    vm.enter_native_sub(
+        crate::native::NativeOp::Callbacks,
+        crate::builtins::object::SUB_STRINGIFY,
+        callee,
+        Value::Undef,
+        &slots,
+    )
+}
+
+/// The step of the internal walk: it writes what it can, and keeps what it wrote in its slots before each call of a
+/// `toJSON` or the replacer. A key and its separator are written only once the value under it is known to be written,
+/// so nothing written has to be taken back.
+pub(crate) fn stringify_step(
+    vm: &mut Vm,
+    fr: crate::native::Frame,
+    input: crate::native::Input,
+) -> Result<crate::native::Step, Value> {
+    use crate::native::{Input, Step};
+    let indent = match fr.get(vm, J_INDENT) {
+        Value::Str(s) => vm.text(s).to_owned(),
+        _ => String::new(),
+    };
+    let mut out = String::with_capacity(256);
+    let mut stage = match input {
+        Input::Start => Stage::Visit,
+        Input::Returned(r) => {
+            fr.set_slot(vm, J_VAL, r);
+            if fr.index(vm, J_PHASE) == TO_JSON {
+                Stage::Replace
+            } else {
+                Stage::Emit
+            }
+        }
+        Input::Threw(e) => return Err(e),
+        Input::Finished(_) => return Ok(Step::Done(Value::Undef)),
+    };
+    loop {
+        let depth = fr.index(vm, J_DEPTH);
+        stage = match stage {
+            Stage::Visit => {
+                // `$Throw` in `visit`, a native that throws and so costs nothing.
+                if depth > 100 {
+                    return Err(vm.range_error("Value exceeds the maximum depth of 100."));
+                }
+                // `holder[key]`, read as the walk reaches it.
+                let (holder, key) = (fr.get(vm, J_HOLDER), fr.get(vm, J_KEY));
+                let v = match key {
+                    Value::Num(_) => vm.get_elem(&holder, &key)?,
+                    _ => vm.get(&holder, fr.index(vm, J_ATOM) as Atom)?,
+                };
+                if matches!(v, Value::Obj(id) if matches!(vm.heap[id as usize].kind, Kind::Promise(_)))
+                {
+                    return Err(vm.invalid_data(
+                        "JSON.stringify received an un-awaited Promise; await it first - e.g. `const result = await \
+                         tools.ns.tool(...)`.",
+                    ));
+                }
+                fr.set(vm, J_VAL, v);
+                if let Value::Obj(id) = v
+                    && !matches!(
+                        vm.heap[id as usize].kind,
+                        Kind::Closure(_) | Kind::Native { .. } | Kind::Bound(_) | Kind::ToolRef(_)
+                    )
+                {
+                    let k = vm.names.to_json;
+                    let f = vm.get_obj(id, k);
+                    if vm.is_callable(&f) {
+                        let kv = walk_key(vm, fr);
+                        flush(vm, fr, &mut out);
+                        fr.set_index(vm, J_PHASE, TO_JSON);
+                        return fr.call_slots(vm, Slot::pack(f), Slot::pack(v), [Slot::pack(kv)]);
+                    }
+                }
+                Stage::Replace
+            }
+            Stage::Replace => {
+                let f = fr.slot(vm, J_F);
+                if f.obj().is_none() {
+                    Stage::Emit
+                } else {
+                    let kv = walk_key(vm, fr);
+                    flush(vm, fr, &mut out);
+                    fr.set_index(vm, J_PHASE, REPLACED);
+                    let (holder, v) = (fr.slot(vm, J_HOLDER), fr.slot(vm, J_VAL));
+                    return fr.call_slots(vm, f, holder, [Slot::pack(kv), v]);
+                }
+            }
+            Stage::Emit => emit(vm, fr, &mut out, &indent, depth)?,
+            Stage::Child => child(vm, fr, &mut out, &indent, depth)?,
+            Stage::After(written) => {
+                if depth == 0 {
+                    let buf = fr.get(vm, J_OUT).as_obj();
+                    let text = match buf.map(|b| &mut vm.heap[b as usize].kind) {
+                        Some(Kind::Bytes(b)) => {
+                            let mut bytes = std::mem::take(&mut *b.buf.borrow_mut());
+                            b.len = 0;
+                            bytes.extend_from_slice(out.as_bytes());
+                            // Only whole strings were written to it.
+                            String::from_utf8(bytes).unwrap_or_default()
+                        }
+                        _ => out,
+                    };
+                    vm.bytecode_builtin();
+                    return Ok(Step::Done(if written {
+                        vm.string_val(text)
+                    } else {
+                        Value::Undef
+                    }));
+                }
+                let at = J_LEVELS + (depth - 1) * LEVEL;
+                if fr.slot(vm, at + L_KEYS).obj().is_none() {
+                    if !written {
+                        out.push_str("null");
+                    }
+                } else if written {
+                    fr.set_index(vm, at + L_FIRST, 0);
+                    // `$Define` of the property.
+                    vm.fuel(crate::vm::NATIVE_FUEL);
+                }
+                vm.fuel(1);
+                let i = fr.index(vm, at + L_I);
+                fr.set_index(vm, at + L_I, i + 1);
+                Stage::Child
+            }
+        };
+    }
+}
+
+/// The key of the value the walk visits, as a `toJSON` or the replacer receives it.
+fn walk_key(vm: &mut Vm, fr: crate::native::Frame) -> Value {
+    match fr.get(vm, J_KEY) {
+        Value::Num(i) => vm.string_val((i as usize).to_string()),
+        k => k,
+    }
+}
+
+/// Keeps what the step wrote in the frame's slots, before a call: in a byte buffer the frame owns.
+fn flush(vm: &mut Vm, fr: crate::native::Frame, out: &mut String) {
+    if out.is_empty() {
+        return;
+    }
+    let buf = match fr.get(vm, J_OUT).as_obj() {
+        Some(b) => b,
+        None => {
+            let bytes = crate::builtins::bytes::Bytes::new(Vec::new(), false);
+            let b = vm.alloc(Obj::new(None, Kind::Bytes(Box::new(bytes))));
+            fr.set(vm, J_OUT, Value::Obj(b));
+            b
+        }
+    };
+    if let Kind::Bytes(b) = &mut vm.heap[buf as usize].kind {
+        b.buf.borrow_mut().extend_from_slice(out.as_bytes());
+        b.len += out.len();
+    }
+    out.clear();
+}
+
+/// How much the walk wrote before the last call.
+fn flushed(vm: &Vm, fr: crate::native::Frame) -> usize {
+    match fr
+        .get(vm, J_OUT)
+        .as_obj()
+        .map(|b| &vm.heap[b as usize].kind)
+    {
+        Some(Kind::Bytes(b)) => b.len,
+        _ => 0,
+    }
+}
+
+/// The length check after each value written, on all the walk has written.
+fn check_length(vm: &mut Vm, fr: crate::native::Frame, out: &str) -> Result<(), Value> {
+    if flushed(vm, fr) + out.len() > crate::ops::MAX_STRING_LEN {
+        return Err(vm.range_error("Invalid string length"));
+    }
+    Ok(())
+}
+
+/// A new line indented `depth` times.
+fn write_indent(out: &mut String, indent: &str, depth: usize) {
+    out.push('\n');
+    for _ in 0..depth {
+        out.push_str(indent);
+    }
+}
+
+/// Writes what goes before a value in an object: the separator, the indent, the key and the colon.
+fn write_prefix(vm: &Vm, fr: crate::native::Frame, out: &mut String, indent: &str, depth: usize) {
+    if depth == 0 {
+        return;
+    }
+    let at = J_LEVELS + (depth - 1) * LEVEL;
+    if fr.slot(vm, at + L_KEYS).obj().is_none() {
+        return;
+    }
+    if fr.index(vm, at + L_FIRST) == 0 {
+        out.push(',');
+    }
+    if !indent.is_empty() {
+        write_indent(out, indent, depth);
+    }
+    if let Value::Str(k) = fr.get(vm, J_KEY) {
+        quote_str(vm, out, k);
+    }
+    out.push(':');
+    if !indent.is_empty() {
+        out.push(' ');
+    }
+}
+
+/// The value the walk visits, after its `toJSON` and the replacer: written, or entered when it is a container.
+fn emit(
+    vm: &mut Vm,
+    fr: crate::native::Frame,
+    out: &mut String,
+    indent: &str,
+    depth: usize,
+) -> Result<Stage, Value> {
+    let mut v = fr.get(vm, J_VAL);
+    if crate::builtins::exotic::may_have_json_forms(vm) {
+        let headers =
+            matches!(v, Value::Obj(id) if matches!(vm.heap[id as usize].kind, Kind::Headers(_)));
+        v = crate::builtins::exotic::json_value(vm, &v, false)?;
+        // Headers are JSON of their own in the reference, a record of their entries: neither the replacer nor the
+        // walk reaches inside, though a property list still picks among them. They are written on the native walk.
+        if headers {
+            return emit_headers(vm, fr, out, indent, depth, v);
+        }
+    }
+    match v {
+        Value::Null => out_value(vm, fr, out, indent, depth, |_, out| out.push_str("null")),
+        Value::Bool(b) => out_value(vm, fr, out, indent, depth, |_, out| {
+            out.push_str(if b { "true" } else { "false" })
+        }),
+        Value::Num(n) => out_value(vm, fr, out, indent, depth, |_, out| write_number(out, n)),
+        Value::Str(s) => out_value(vm, fr, out, indent, depth, |vm, out| quote_str(vm, out, s)),
+        Value::Undef | Value::Uninit => Ok(Stage::After(false)),
+        // `$JsonSpecial` of a value that is not an object: an empty object.
+        Value::Sym(_) => out_value(vm, fr, out, indent, depth, |_, out| out.push_str("{}")),
+        Value::Obj(id) => {
+            if vm.heap[id as usize].is_callable() {
+                return Ok(Stage::After(false));
+            }
+            if (0..depth).any(|d| fr.slot(vm, J_LEVELS + d * LEVEL + L_ID).obj() == Some(id)) {
+                return Err(vm.type_error("Converting circular structure to JSON."));
+            }
+            write_prefix(vm, fr, out, indent, depth);
+            let (keys, n) = if matches!(vm.heap[id as usize].kind, Kind::Array(_)) {
+                vm.densify(id)?;
+                let len = match &vm.heap[id as usize].kind {
+                    Kind::Array(items) => items.len(),
+                    _ => 0,
+                };
+                if len == 0 {
+                    out.push_str("[]");
+                    check_length(vm, fr, out)?;
+                    return Ok(Stage::After(true));
+                }
+                out.push('[');
+                (Value::Undef, len)
+            } else {
+                let keys = walk_keys(vm, id);
+                // The property list holds atoms, as the keys do.
+                let keys: Vec<Value> = match fr.get(vm, J_ALLOW).as_obj() {
+                    Some(allow) => match &vm.heap[allow as usize].kind {
+                        Kind::Array(listed) => listed
+                            .iter()
+                            .filter(|k| {
+                                keys.iter().any(
+                                    |e| matches!((e, k), (Value::Num(a), Value::Num(b)) if a == b),
+                                )
+                            })
+                            .copied()
+                            .collect(),
+                        _ => Vec::new(),
+                    },
+                    None => keys,
+                };
+                let n = keys.len();
+                out.push('{');
+                (vm.new_array(keys), n)
+            };
+            vm.stack.extend(
+                [
+                    Value::Obj(id),
+                    keys,
+                    Value::Num(n as f64),
+                    Value::Num(0.0),
+                    Value::Num(1.0),
+                ]
+                .map(Slot::pack),
+            );
+            fr.set_index(vm, J_DEPTH, depth + 1);
+            Ok(Stage::Child)
+        }
+    }
+}
+
+/// Writes a primitive the walk visits.
+fn out_value(
+    vm: &mut Vm,
+    fr: crate::native::Frame,
+    out: &mut String,
+    indent: &str,
+    depth: usize,
+    write: impl FnOnce(&Vm, &mut String),
+) -> Result<Stage, Value> {
+    write_prefix(vm, fr, out, indent, depth);
+    write(vm, out);
+    check_length(vm, fr, out)?;
+    Ok(Stage::After(true))
+}
+
+/// The property list's keys.
+fn allow_list(vm: &mut Vm, fr: crate::native::Frame) -> Option<Vec<Atom>> {
+    let id = fr.get(vm, J_ALLOW).as_obj()?;
+    let keys = match &vm.heap[id as usize].kind {
+        Kind::Array(items) => items.clone(),
+        _ => Vec::new(),
+    };
+    Some(
+        keys.iter()
+            .filter_map(|k| match k {
+                Value::Num(a) => Some(*a as Atom),
+                _ => None,
+            })
+            .collect(),
+    )
+}
+
+/// Headers the walk visits, as the record of entries `json_value` made of them, written on the native walk.
+fn emit_headers(
+    vm: &mut Vm,
+    fr: crate::native::Frame,
+    out: &mut String,
+    indent: &str,
+    depth: usize,
+    v: Value,
+) -> Result<Stage, Value> {
+    let mark = out.len();
+    write_prefix(vm, fr, out, indent, depth);
+    let plain = Stringify {
+        indent: indent.to_owned(),
+        replacer_fn: None,
+        allow: allow_list(vm, fr),
+    };
+    let mut stack: Vec<Id> = (0..depth)
+        .map(|d| fr.slot(vm, J_LEVELS + d * LEVEL + L_ID).obj().unwrap_or(0))
+        .collect();
+    let mode = Mode::new(vm);
+    let r = write_json(
+        vm,
+        out,
+        Key::Empty,
+        v,
+        &plain,
+        &mode,
+        &mut stack,
+        &indent.repeat(depth),
+    );
+    mode.end(vm);
+    if !r? {
+        out.truncate(mark);
+        return Ok(Stage::After(false));
+    }
+    check_length(vm, fr, out)?;
+    Ok(Stage::After(true))
+}
+
+/// The innermost container's next child, as its loop in `visit` opens it, or the container's end.
+fn child(
+    vm: &mut Vm,
+    fr: crate::native::Frame,
+    out: &mut String,
+    indent: &str,
+    depth: usize,
+) -> Result<Stage, Value> {
+    let at = J_LEVELS + (depth - 1) * LEVEL;
+    let id = fr.slot(vm, at + L_ID).obj().unwrap_or(0);
+    let (i, n) = (fr.index(vm, at + L_I), fr.index(vm, at + L_N));
+    let keys = fr.slot(vm, at + L_KEYS).obj();
+    if i >= n {
+        if !indent.is_empty() && (keys.is_none() || fr.index(vm, at + L_FIRST) == 0) {
+            write_indent(out, indent, depth - 1);
+        }
+        out.push(if keys.is_none() { ']' } else { '}' });
+        vm.stack.truncate(fr.base() + at);
+        fr.set_index(vm, J_DEPTH, depth - 1);
+        check_length(vm, fr, out)?;
+        return Ok(Stage::After(true));
+    }
+    let key = match keys {
+        None => {
+            if i > 0 {
+                out.push(',');
+            }
+            if !indent.is_empty() {
+                write_indent(out, indent, depth);
+            }
+            // `String(i)`, the child `visit` generator, `yield*` opening it and its `next`.
+            vm.fuel(crate::vm::NATIVE_FUEL);
+            vm.fuel(1);
+            vm.fuel(crate::vm::NATIVE_FUEL);
+            vm.fuel(crate::vm::NATIVE_FUEL);
+            Value::Num(i as f64)
+        }
+        Some(keys) => {
+            vm.fuel(1);
+            vm.fuel(crate::vm::NATIVE_FUEL);
+            vm.fuel(crate::vm::NATIVE_FUEL);
+            let atom = match &vm.heap[keys as usize].kind {
+                Kind::Array(items) => items.get(i).map_or(0, |a| a.as_num() as Atom),
+                _ => 0,
+            };
+            fr.set(vm, J_ATOM, atom_slot(atom));
+            vm.atom_val(atom)
+        }
+    };
+    fr.set(vm, J_HOLDER, Value::Obj(id));
+    fr.set(vm, J_KEY, key);
+    Ok(Stage::Visit)
 }
 
 /// Quotes text as JSON.stringify does, checking it for a carrier first.
