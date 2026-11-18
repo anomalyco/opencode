@@ -1313,37 +1313,61 @@ mod tests {
         assert!(gone.as_deref().is_some_and(|why| why.contains("a message in pieces")), "{gone:?}");
     }
 
-    // Expected (big-boi's `cg4-6`): a message whose pieces come 60 ms apart, longer in all than the limit, is progress,
-    // not a hang: the answer after it comes and nothing was named hung. A piece smaller than a frame breaks the protocol,
-    // so a message is a bounded number of pieces.
+    // Expected (big-boi's `cg4-6`): a message whose pieces come half the limit apart, longer in all than the limit, is
+    // progress, not a hang: the answer after it comes and nothing was named hung. The row sends each frame once the
+    // reader took the one before and half the limit passed, so the gaps are the row's, not a loaded machine's
+    // (trickle-flake: pieces a fixed 60 ms apart against 165 ms were late under the lane's load). A piece smaller than a
+    // frame breaks the protocol, so a message is a bounded number of pieces.
     #[cfg(unix)]
     #[test]
     fn pieces_that_trickle_in_are_progress() {
         let dir = opencode_util::temp::tempdir().unwrap();
-        let file = |name: &str, bytes: Vec<u8>| {
-            let path = dir.path().join(name);
-            std::fs::write(&path, bytes).unwrap();
-            format!("cat '{}' >&0", path.display())
-        };
+        let path = |name: &str| dir.path().join(name);
         let log = Up::Log { id: Some("p".into()), level: Level::Info, message: "m".repeat(5 * wire::CONTROL_CAP) };
         let json = serde_json::to_vec(&log).unwrap();
         let pieces: Vec<&[u8]> = json.chunks(wire::CONTROL_CAP).collect();
-        let mut script = vec![file("hello", hello())];
-        for (index, piece) in pieces.iter().enumerate() {
-            let kind = if index + 1 == pieces.len() { wire::CONTROL } else { wire::PIECE };
-            script.push("sleep 0.06".to_owned());
-            script.push(file(&format!("piece{index}"), wire::encode(kind, piece)));
+        let mut frames: Vec<Vec<u8>> = pieces
+            .iter()
+            .enumerate()
+            .map(|(index, piece)| {
+                wire::encode(if index + 1 == pieces.len() { wire::CONTROL } else { wire::PIECE }, piece)
+            })
+            .collect();
+        frames.push(wire::encode(wire::CONTROL, br#"{"type":"done","seq":1}"#));
+        std::fs::write(path("hello"), hello()).unwrap();
+        let mut script = vec![format!("cat '{}' >&0", path("hello").display())];
+        for (index, frame) in frames.iter().enumerate() {
+            std::fs::write(path(&format!("frame{index}")), frame).unwrap();
+            let gate = path(&format!("gate{index}"));
+            script.push(format!("while [ ! -e '{}' ]; do sleep 0.005; done", gate.display()));
+            script.push(format!("cat '{}' >&0", path(&format!("frame{index}")).display()));
         }
-        script.push(file("done", wire::encode(wire::CONTROL, br#"{"type":"done","seq":1}"#)));
         script.push("cat > /dev/null".to_owned());
         let mut command = Command::new("sh");
         command.arg("-c").arg(script.join("; "));
-        let limits = Limits { ack: Duration::from_millis(165), ..Limits::default() };
-        let child = Child::spawn(command, limits, || {}).unwrap();
+        let limit = Duration::from_secs(1);
+        let child = Child::spawn(command, Limits { ack: limit, ..Limits::default() }, || {}).unwrap();
+        let begun = Instant::now();
         child.send(wire::CONTROL, b"{}", Some(1), Wait::Answer).unwrap();
-        let events = take_until(&child, |events| {
-            events.iter().any(|event| matches!(event, Event::Up(up) if matches!(**up, Up::Done { .. })))
-        });
+        for index in 0..frames.len() {
+            let before = child.shared.read.load(Ordering::Relaxed);
+            std::fs::write(path(&format!("gate{index}")), "").unwrap();
+            while child.shared.read.load(Ordering::Relaxed) == before {
+                assert!(begun.elapsed() < Duration::from_secs(60), "frame {index} was never read");
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            let taken = Instant::now();
+            if index + 1 < frames.len() {
+                std::thread::sleep((limit / 2).saturating_sub(taken.elapsed()));
+            }
+        }
+        assert!(begun.elapsed() > limit, "the message came within the limit, which proves nothing");
+        let mut events = Vec::new();
+        while !events.iter().any(|event| matches!(event, Event::Up(up) if matches!(**up, Up::Done { .. }))) {
+            assert!(begun.elapsed() < Duration::from_secs(60), "the answer never came: {events:?}");
+            events.extend(child.take());
+            std::thread::sleep(Duration::from_millis(1));
+        }
         assert!(events.iter().any(|event| matches!(event, Event::Up(up) if **up == log)), "the message did not come");
         assert!(!events.iter().any(|event| matches!(event, Event::Hung { .. })), "named hung");
         let mut short = hello();
