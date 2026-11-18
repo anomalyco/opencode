@@ -74,7 +74,7 @@ pub fn show(tui: &Tui) {
                 app.defer(bind!(tui, |tui, _| {
                     // Closed first, so the new view takes the focus.
                     tui.dialogs.clear();
-                    tui.navigate(Route::Session { id });
+                    tui.show_session(id);
                 }));
             })));
             let tabs = list.tui.upgrade().is_some_and(|tui| tui.config().tabs.enabled);

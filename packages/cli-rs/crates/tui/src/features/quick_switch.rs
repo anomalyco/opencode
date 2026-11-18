@@ -30,10 +30,7 @@ pub fn install(tui: &Rc<Tui>) {
 /// `quickSwitch`: opens the session in `slot` (1-based), unless it is open already.
 pub fn quick_switch(tui: &Tui, slot: usize) {
     let Some(target) = pins::slots(tui).into_iter().nth(slot - 1) else { return };
-    if tui.route() == (Route::Session { id: target.clone() }) {
-        return;
-    }
-    tui.navigate(Route::Session { id: target });
+    tui.show_session(target);
 }
 
 pub(crate) fn event(tui: &Tui, event: &Handled) {

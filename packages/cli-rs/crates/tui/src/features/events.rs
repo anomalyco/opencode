@@ -233,7 +233,7 @@ fn handle(tui: &Tui, event: &Handled) {
             tui.local.load_usage(true);
         }
         Handled::TuiSessionSelect(event) if here(tui, event.location.as_ref()) => {
-            tui.navigate(Route::Session { id: event.data.session_id.clone() });
+            tui.show_session(event.data.session_id.clone());
         }
         Handled::SessionDeleted(event) => {
             let Route::Session { id } = tui.route() else { return };

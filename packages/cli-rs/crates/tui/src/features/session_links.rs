@@ -41,7 +41,7 @@ pub fn attach(tui: &Tui, markdown: &Markdown, renderers: &CodeBlockRenderers) ->
                 if tui.dialogs.is_open() {
                     tui.dialogs.clear();
                 }
-                tui.navigate(Route::Session { id: SessionID(id) });
+                tui.show_session(SessionID(id));
             }));
         }
     });
