@@ -1433,9 +1433,9 @@ impl Claimed for Rc<Surface> {
     }
 
     fn clear_field(&self, host: &dyn Host) -> bool {
-        let Some(node) = self.state.borrow().tree.clear_focused_field(host.app()) else { return false };
+        let Some((node, seq)) = self.state.borrow().tree.clear_focused_field(host.app()) else { return false };
         if let Some(owner) = self.holder() {
-            owner.hear(&abi::interact::Event::Change { node, text: String::new() });
+            owner.hear(&abi::interact::Event::Change { node, text: String::new(), seq });
         }
         true
     }

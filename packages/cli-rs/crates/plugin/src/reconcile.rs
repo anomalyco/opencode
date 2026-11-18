@@ -653,8 +653,8 @@ impl Tree {
     }
 
     /// Empties the tree's input that has the focus, if it shows text, as an edit of the user's would: the id of the
-    /// input, whose handler is to hear the change.
-    pub(crate) fn clear_focused_field(&self, app: &App) -> Option<String> {
+    /// input and the edit's number, which its handler is to hear.
+    pub(crate) fn clear_focused_field(&self, app: &App) -> Option<(String, u64)> {
         let focused = app.focused()?.id();
         let mut cleared = None;
         each(&self.nodes, &mut |node| {
@@ -663,12 +663,13 @@ impl Tree {
                 && !field.draft().0.is_empty()
             {
                 field.set("");
+                let seq = EDITS.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
                 let mut reported = reported.borrow_mut();
                 if reported.len() == ECHOES {
-                    reported.remove(0);
+                    reported.pop_front();
                 }
-                reported.push(String::new());
-                cleared = Some(id.to_owned());
+                reported.push_back((seq, String::new()));
+                cleared = Some((id.to_owned(), seq));
             }
         });
         cleared
