@@ -117,7 +117,6 @@ impl Inspector {
         self.scroll.scroll_by(0.0, if down { step } else { -step });
     }
 
-    /// `RunFooterSubagentBody`.
     pub fn paint(&mut self, app: &App, body: &Body<'_>) {
         let theme = &body.theme.footer;
         let mono = body.mono;

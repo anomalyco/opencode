@@ -12,7 +12,6 @@ pub struct ModelSelection {
     pub model_id: String,
 }
 
-/// `RunProviderModel`.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Model {
     pub name: String,
@@ -23,7 +22,6 @@ pub struct Model {
     pub variants: Vec<String>,
 }
 
-/// `RunProvider`.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Provider {
     pub id: String,
@@ -84,7 +82,6 @@ pub fn model_info(providers: &[Provider], model: &ModelSelection) -> (String, St
     )
 }
 
-/// `variantsFor`.
 pub fn variants_for(providers: &[Provider], model: &ModelSelection) -> Vec<String> {
     find(providers, model).1.map(|model| model.variants.clone()).unwrap_or_default()
 }
@@ -94,7 +91,6 @@ pub fn context_limit(providers: &[Provider], model: &ModelSelection) -> Option<u
     find(providers, model).1.map(|model| model.context).filter(|context| *context > 0)
 }
 
-/// `cycleVariant`.
 pub fn cycle_variant(current: Option<&str>, variants: &[String]) -> Option<String> {
     let variants: Vec<&str> = variants.iter().map(String::as_str).collect();
     model_pref::cycle_variant(current, &variants)

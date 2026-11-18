@@ -145,7 +145,6 @@ pub(crate) fn mode_name(mode: ThemeMode) -> &'static str {
     }
 }
 
-/// `migrateV1`.
 pub(crate) fn migrate(theme: &Value) -> Result<Value, String> {
     migrate_with(theme, migrate_mode, |definition, _| json!({ "hue": definition["hue"] }))
 }

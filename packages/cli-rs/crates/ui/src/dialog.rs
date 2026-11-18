@@ -20,7 +20,6 @@ pub const DIALOG_INSET: u32 = 3;
 /// List rows reserve a 1-cell gutter for the `▌` bar or `●` marker.
 pub const DIALOG_LIST_INSET: u32 = DIALOG_INSET + 1;
 
-/// `DialogSize`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum DialogSize {
     #[default]
@@ -30,7 +29,6 @@ pub enum DialogSize {
 }
 
 impl DialogSize {
-    /// `dialogWidth`.
     pub fn width(self) -> u32 {
         match self {
             Self::XLarge => 116,
@@ -537,7 +535,6 @@ impl HeaderProps {
     }
 }
 
-/// `DialogHeader`.
 pub fn header(cx: &DialogCx, props: HeaderProps) -> View {
     let theme = &cx.theme;
     let row = View::new(&cx.app).row().justify(Justify::SpaceBetween);
@@ -615,7 +612,6 @@ pub fn layout_view(
     root
 }
 
-/// `DialogFooterAction`.
 #[derive(Clone, Default)]
 pub struct FooterAction {
     pub title: String,
@@ -655,7 +651,6 @@ impl FooterAction {
     }
 }
 
-/// `DialogFooterProps`.
 #[derive(Default)]
 pub struct FooterProps {
     /// Dialog-level actions on the left.
@@ -755,7 +750,6 @@ fn footer_item(cx: &DialogCx, action: FooterAction, primary: bool) -> AnyWidget 
     item.as_any()
 }
 
-/// `DialogButton`.
 #[derive(Clone)]
 pub struct DialogButton {
     pub label: String,

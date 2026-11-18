@@ -4,11 +4,9 @@ use super::menu::{self, Groups, Item, Look};
 use crate::prelude::*;
 use crate::prompt::menu::{COMPACT_WIDTH, Selection, fit};
 
-/// `PANEL_LIST_ROWS`.
 pub const LIST_ROWS: usize = 10;
 /// `SUBAGENT_LIST_ROWS`, which the pending prompts use too.
 pub const SUBAGENT_LIST_ROWS: usize = 12;
-/// `PANEL_FRAME_ROWS`.
 const FRAME_ROWS: usize = 6;
 
 /// `footerPanelLayout`: whether the frame collapses to its title and search rows, the frame's rows, and the list's.

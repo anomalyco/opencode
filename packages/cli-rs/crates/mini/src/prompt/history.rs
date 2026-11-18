@@ -2,10 +2,8 @@
 
 use super::parts::RunPrompt;
 
-/// `HISTORY_LIMIT`.
 const LIMIT: usize = 200;
 
-/// `PromptHistoryState`.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct History {
     pub items: Vec<RunPrompt>,
@@ -34,7 +32,6 @@ impl History {
         Self { items: next.split_off(skip), index: None, draft: String::new() }
     }
 
-    /// `pushPromptHistory`.
     pub fn push(&self, prompt: &RunPrompt) -> Self {
         if !prompt.has_content() {
             return self.clone();

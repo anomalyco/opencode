@@ -140,7 +140,6 @@ pub struct Flags {
     pub trailing_newline: bool,
 }
 
-/// `entryBody`.
 pub fn entry_body(commit: &Commit, options: BodyOptions) -> Body {
     if commit.summary.is_some() {
         return Body::None;
@@ -238,7 +237,6 @@ fn reasoning_body(raw: &str, mono: bool) -> Body {
     code(clean)
 }
 
-/// `entryFlags`.
 pub fn entry_flags(commit: &Commit) -> Flags {
     let flags = |start_on_new_line, trailing_newline| Flags { start_on_new_line, trailing_newline };
     if commit.summary.is_some() {
@@ -257,7 +255,6 @@ pub fn entry_flags(commit: &Commit) -> Flags {
     }
 }
 
-/// `entryDone`.
 pub fn entry_done(commit: &Commit) -> bool {
     match commit.kind {
         EntryKind::Assistant | EntryKind::Reasoning => commit.phase == Phase::Final,
@@ -269,7 +266,6 @@ pub fn entry_done(commit: &Commit) -> bool {
     }
 }
 
-/// `entryCanStream`.
 pub fn entry_can_stream(commit: &Commit, body: &Body) -> bool {
     if commit.phase != Phase::Progress || *body == Body::None {
         return false;
@@ -529,7 +525,6 @@ impl Writer {
         self.wrote = wrote;
     }
 
-    /// `append`.
     pub fn append(&mut self, commit: Commit) -> Result<()> {
         let same = same_group(self.tail.as_ref(), &commit);
         if !same || commit.image.is_some() {

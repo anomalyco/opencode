@@ -57,7 +57,6 @@ pub struct Choice {
     pub open: bool,
 }
 
-/// `DialogSelectOption`.
 #[derive(Clone)]
 pub struct SelectOption<T> {
     pub title: String,
@@ -231,7 +230,6 @@ pub type Search<T> = Rc<dyn Fn(&str) -> Vec<SelectOption<T>>>;
 /// Options as a function of the filter, for lists that change with it, such as the command palette.
 pub type Options<T> = Rc<dyn Fn(&str) -> Vec<SelectOption<T>>>;
 
-/// `DialogSelectProps`.
 pub struct SelectProps<T> {
     pub title: String,
     /// Muted line below the title.
@@ -318,7 +316,6 @@ impl<T: Clone + 'static> SelectProps<T> {
     }
 }
 
-/// `dialogSelectContentWidth`.
 pub fn content_width(dialog_width: u32) -> u32 {
     dialog_width.saturating_sub(DIALOG_LIST_INSET * 2 + 4)
 }
@@ -1592,7 +1589,6 @@ fn option_row<T>(
         .child(&row)
 }
 
-/// `reconcileSelection`.
 pub fn reconcile(selected: usize, count: usize) -> usize {
     selected.min(count.saturating_sub(1))
 }

@@ -10,7 +10,6 @@ use unicode_width::UnicodeWidthStr;
 use super::menu::Item;
 use super::parts::{EXIT_COMMANDS, File, Part};
 
-/// `RunAgent`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Agent {
     pub id: String,
@@ -22,7 +21,6 @@ pub struct Agent {
     pub color: Option<String>,
 }
 
-/// `RunReference`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Reference {
     pub name: String,
@@ -31,7 +29,6 @@ pub struct Reference {
     pub description: String,
 }
 
-/// `RunCommand`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Command {
     pub name: String,
@@ -55,7 +52,6 @@ pub enum Action {
     Settings,
 }
 
-/// `PromptOption`.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Choice {
     Mention { display: String, value: String, description: Option<String>, part: Part, directory: bool },

@@ -37,12 +37,10 @@ pub fn conditions(field: &FormField) -> &[FormWhen] {
     field.when().unwrap_or_default()
 }
 
-/// `isFormAnswerField`.
 pub fn is_answer(field: &FormField) -> bool {
     !matches!(field, FormField::External(_))
 }
 
-/// `formLabel`.
 pub fn label(field: &FormField) -> String {
     match (title(field), field) {
         (Some(title), _) => title.to_owned(),
@@ -108,7 +106,6 @@ pub fn custom(field: Option<&FormField>) -> bool {
     }
 }
 
-/// `formRows`.
 pub fn rows(field: Option<&FormField>) -> Vec<Row> {
     let options: &[FormOption] = match field {
         Some(FormField::Boolean(_)) => {
@@ -264,7 +261,6 @@ pub fn display_value(field: &FormField, value: Option<&FormValue>, empty_multise
     }
 }
 
-/// `formToggleMultiselect`.
 pub fn toggle_multiselect(value: Option<&FormValue>, item: &str) -> Vec<String> {
     let mut values = array(value);
     match values.iter().position(|value| value == item) {

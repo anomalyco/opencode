@@ -2,7 +2,6 @@ use serde_json::{Map, Value};
 
 use crate::tool_info::{canonical_tool_name, finite_number, web_search_provider_label};
 
-/// `PermissionPresentation`.
 #[derive(Debug, Default, PartialEq)]
 pub struct Presentation {
     pub icon: &'static str,
@@ -161,7 +160,6 @@ pub fn presentation(
     }
 }
 
-/// `permissionAlwaysLines`.
 pub fn always_lines(action: &str, save: &[String]) -> Vec<String> {
     if save.len() == 1 && save[0] == "*" {
         return vec![format!("This will always allow {action} for this project.")];

@@ -110,7 +110,6 @@ fn search_in(flavor: Flavor, query: &str, root: &str, prefix: &str) -> Directory
     }
 }
 
-/// `directoryAutocompleteResultValue`.
 pub fn directory_value(directory: &str, search: &DirectorySearch) -> String {
     format!("{}{}", search.prefix, directory.trim_start_matches(['/', '\\']))
 }

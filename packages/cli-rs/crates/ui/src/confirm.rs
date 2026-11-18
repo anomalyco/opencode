@@ -4,7 +4,6 @@ use crate::tool_info::titlecase;
 use opentui::prelude::*;
 use std::rc::Rc;
 
-/// `DialogConfirmProps`.
 #[derive(Clone, Default)]
 pub struct ConfirmProps {
     pub title: String,

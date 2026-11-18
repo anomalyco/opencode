@@ -37,7 +37,6 @@ pub enum Status {
     Cancelled,
 }
 
-/// `FooterSubagentTab`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tab {
     pub session_id: String,
@@ -299,7 +298,6 @@ struct Hydration {
     tools: HashMap<String, SessionMessageAssistantTool>,
 }
 
-/// `createSubagentTracker`.
 pub struct Tracker {
     parent: String,
     thinking: bool,
@@ -392,7 +390,6 @@ impl Tracker {
         self.children.values().flat_map(|child| child.forms.iter().cloned()).collect()
     }
 
-    /// `settleForm`.
     pub fn settle_form(&mut self, session: &str, form: &str) {
         if let Some(child) = self.children.get_mut(session) {
             child.forms.retain(|item| item.id.0 != form);

@@ -27,7 +27,6 @@ pub const GLOBAL: &str = "global";
 pub const DEFAULT_REPLAY_LIMIT: u32 = 200;
 /// `LOCAL_REPLAY_ROW_LIMIT`: rows printed only locally (errors, prompts in flight) that a resize replays.
 pub const LOCAL_ROW_LIMIT: usize = 100;
-/// `RESIZE_DELAY`.
 pub const RESIZE_DELAY: Duration = Duration::from_millis(250);
 /// The events a resize replay holds while it lists. TS holds any number
 /// (`parity/deviations/O92-mini-relist-overflow.md`).
@@ -41,7 +40,6 @@ pub struct Fragment {
 }
 
 impl Fragment {
-    /// `fragmentRef`.
     pub fn new(message_id: &str, kind: &str, ordinal: u64) -> Self {
         Self { message_id: message_id.to_owned(), part_id: format!("{kind}:{ordinal}") }
     }
@@ -67,7 +65,6 @@ pub enum Restore {
     Conflict,
 }
 
-/// `createFragmentReconciler`.
 #[derive(Clone, Debug, Default)]
 pub struct Fragments(HashMap<Fragment, FragmentState>);
 
@@ -631,7 +628,6 @@ impl Transcript {
         self.quiet.retain(|(id, _)| id != message);
     }
 
-    /// `bufferQuietText`.
     fn buffer_quiet(&mut self, message: &str, part: &str, text: &str, replace: bool) {
         if text.is_empty() || self.tool_messages.contains(message) {
             return;
@@ -1505,7 +1501,6 @@ fn compaction_summary(message: &str, text: &str, phase: Phase) -> Commit {
     Commit::new(EntryKind::Assistant, Source::Assistant, phase, text).message(message).part_id("compaction:summary")
 }
 
-/// `SessionMessage.ID.fromEvent`.
 pub(crate) fn message_from_event(id: &str) -> String {
     match id.strip_prefix("evt_") {
         Some(rest) => format!("msg_{rest}"),

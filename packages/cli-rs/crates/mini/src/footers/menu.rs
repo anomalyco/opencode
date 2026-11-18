@@ -3,7 +3,6 @@
 use crate::prelude::*;
 use crate::prompt::menu::{COMPACT_WIDTH, Selection, fit};
 
-/// `footerTone`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tone {
     Selection,
@@ -12,7 +11,6 @@ pub enum Tone {
     Success,
 }
 
-/// `RunFooterMenuItem`.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Item {
     pub display: String,
@@ -23,7 +21,6 @@ pub struct Item {
     pub current: bool,
 }
 
-/// `RunFooterMenuRow`.
 #[derive(Clone, Debug, PartialEq)]
 enum Row {
     Header(String),

@@ -21,7 +21,6 @@ pub struct PromptAction {
     pub run: Rc<dyn Fn(&Prompt)>,
 }
 
-/// `DialogPromptProps`.
 #[derive(Clone, Default)]
 pub struct PromptProps {
     pub title: String,
