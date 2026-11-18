@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import { createDraftStore, draftTextChunk, draftTextThreshold, resolveBlobUrl } from "./drafts"
+import {
+  blobDataUrl,
+  createDraftStore,
+  draftTextChunk,
+  draftTextThreshold,
+  resolveBlobUrl,
+  setMediaBlobLoader,
+} from "./drafts"
 
 function memoryDriver() {
   const documents = new Map<string, string>()
@@ -16,10 +23,12 @@ function memoryDriver() {
       // missing is refused.
       set: async (key: string, value: string, strict: boolean) => {
         const ids = new Set<string>()
+        // oxlint-disable anti-slop/no-runtime-typeof, anti-slop/no-unknown-parameters -- mirrors the stores' scan of opaque serialized documents
         JSON.parse(value, (_key, item) => {
           if (item?.blob && typeof item.blob.id === "string") ids.add(item.blob.id)
 
           if (item?.blob && Array.isArray(item.blob.ids)) item.blob.ids.forEach((id: unknown) => ids.add(String(id)))
+          // oxlint-enable anti-slop/no-runtime-typeof, anti-slop/no-unknown-parameters
 
           return item
         })
@@ -127,6 +136,50 @@ describe("draft store text externalization", () => {
     await store.setDocument("doc", { prompt: [{ type: "image", blob: { id: image.id, url: image.url } }] })
     expect(memory.blobs.has(image.id)).toBe(true)
     expect(new Uint8Array(await memory.blobs.get(image.id)!.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]))
+  })
+
+  test("a pasted file stays readable after its file on disk is deleted", async () => {
+    // Clipboard tools hand over temp files and delete them on the next copy; reads then fail.
+    class DiskFile extends File {
+      gone = false
+
+      private check() {
+        if (this.gone) throw new DOMException("file is gone", "NotReadableError")
+      }
+
+      override arrayBuffer() {
+        this.check()
+
+        return super.arrayBuffer()
+      }
+
+      override text() {
+        this.check()
+
+        return super.text()
+      }
+
+      override stream() {
+        this.check()
+
+        return super.stream()
+      }
+
+      override slice(...args: Parameters<File["slice"]>) {
+        this.check()
+
+        return super.slice(...args)
+      }
+    }
+
+    const memory = memoryDriver()
+    const store = createDraftStore(memory.driver)
+    const file = new DiskFile([new Uint8Array([1, 2, 3])], "1793877187508_d.png", { type: "image/png" })
+    const image = await store.putBlob(file)
+    file.gone = true
+    // happy-dom's FileReader reads a blob's internal buffer, so only a public read can notice the deleted file.
+    expect(new Uint8Array(await memory.blobs.get(image.id)!.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]))
+    expect(await blobDataUrl(image, "image/png")).toBe("data:image/png;base64,AQID")
   })
 
   test("the previous document stays visible until missing blobs are restored", async () => {
@@ -335,5 +388,128 @@ describe("draft store image retention", () => {
   test("a reference to bytes the store no longer holds resolves to nothing", async () => {
     fresh()
     expect(await resolveBlobUrl({ id: "gone" })).toBeUndefined()
+  })
+
+  test("a save that takes longer than the grace keeps the image it writes", async () => {
+    const { memory, store } = fresh(10)
+    const pasted = await store.putBlob(image(7))
+    const gate = Promise.withResolvers<void>()
+    const set = memory.driver.set
+    memory.driver.set = async (key, value, strict) => {
+      await gate.promise
+
+      return set(key, value, strict)
+    }
+
+    const saving = store.setDocument("slow", { prompt: [{ type: "image", blob: pasted }] })
+    await new Promise((resolve) => setTimeout(resolve, 40))
+    gate.resolve()
+    await saving
+    await tick()
+    expect(await released(store, 7, pasted.url)).toBe(false)
+  })
+
+  test("a load that resolves after a save replaced the image does not release the new one", async () => {
+    const { memory, store } = fresh()
+    const old = await memory.driver.putBlob(image(8))
+    memory.documents.set("raced", JSON.stringify({ prompt: [{ type: "image", blob: { id: old } }] }))
+    const gate = Promise.withResolvers<void>()
+    const get = memory.driver.get
+    memory.driver.get = async (key) => {
+      const value = await get(key)
+      await gate.promise
+
+      return value
+    }
+
+    const loading = store.getItem("raced")
+    const pasted = await store.putBlob(image(9))
+    await store.setDocument("raced", { prompt: [{ type: "image", blob: pasted }] })
+    gate.resolve()
+    await loading
+    await tick()
+    expect(await released(store, 9, pasted.url)).toBe(false)
+  })
+
+  test("an image a store's document references resolves through that store after another store is created", async () => {
+    const first = fresh()
+    const id = await first.memory.driver.putBlob(image(10))
+    first.memory.documents.set("loaded", JSON.stringify({ prompt: [{ type: "image", blob: { id } }] }))
+    await first.store.getItem("loaded")
+    fresh()
+    expect((await resolveBlobUrl({ id }))?.startsWith("blob:")).toBe(true)
+    expect(await resolveBlobUrl({ id: "gone" })).toBeUndefined()
+  })
+})
+
+describe("draft store media refs", () => {
+  const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+  const pngDataUrl = `data:image/png;base64,${png}`
+
+  // A server's media blobs, served through the authenticated loader the way the media cache does.
+  const serveMedia = (key: string, blobs: Map<string, string>) => {
+    const loads: string[] = []
+    setMediaBlobLoader(key, async (uri) => {
+      loads.push(uri)
+
+      return blobs.get(uri.slice("media:".length))
+    })
+
+    return { loads, close: () => setMediaBlobLoader(key, undefined) }
+  }
+
+  test("a media:<hash> ref is saved with its bytes, restored, and submitted as bytes after the server sweeps it", async () => {
+    const hash = "a".repeat(64)
+    const ref = `media:${hash}`
+    const server = new Map([[hash, pngDataUrl]])
+    const media = serveMedia("srv-draft-media", server)
+
+    try {
+      const memory = memoryDriver()
+      const store = createDraftStore(memory.driver)
+      // The composer holds the URL-neutral ref a restored message carries; `media:` is never fetched directly.
+      const live = { id: ref, url: ref }
+      await store.setDocument("doc", { prompt: [{ type: "image", mime: "image/png", blob: live }] })
+
+      const stored = JSON.parse(memory.documents.get("doc")!).prompt[0].blob
+      expect(stored.id).not.toContain("media:")
+      expect(Buffer.from(await memory.blobs.get(stored.id)!.arrayBuffer()).toString("base64")).toBe(png)
+      expect(media.loads).toEqual([ref])
+
+      // Later saves reuse the draft's copy instead of loading the blob again.
+      await store.setDocument("doc", { prompt: [{ type: "image", mime: "image/png", blob: live }], cursor: 1 })
+      expect(JSON.parse(memory.documents.get("doc")!).prompt[0].blob.id).toBe(stored.id)
+      expect(media.loads).toEqual([ref])
+
+      // GC: the inbox item or message that referenced the blob is gone and the server swept it.
+      server.delete(hash)
+
+      const restored = JSON.parse((await createDraftStore(memory.driver).getItem("doc"))!).prompt[0].blob
+      expect(restored.id).toBe(stored.id)
+      expect(await blobDataUrl(restored, "image/png")).toBe(pngDataUrl)
+      expect(await blobDataUrl(live, "image/png")).toBe(pngDataUrl)
+      expect(media.loads).toEqual([ref])
+    } finally {
+      media.close()
+    }
+  })
+
+  test("a media ref no server can serve saves without failing and submits as the ref", async () => {
+    const ref = `media:${"b".repeat(64)}`
+    const media = serveMedia("srv-draft-media-gone", new Map())
+    const error = console.error
+    console.error = () => {}
+
+    try {
+      const memory = memoryDriver()
+      const store = createDraftStore(memory.driver)
+      await store.setDocument("doc", { prompt: [{ type: "image", mime: "image/png", blob: { id: ref, url: ref } }] })
+      expect(JSON.parse(memory.documents.get("doc")!).prompt[0].blob).toEqual({ id: ref })
+      expect(await resolveBlobUrl({ id: ref, url: ref })).toBeUndefined()
+      expect(await blobDataUrl({ id: ref, url: ref }, "image/png")).toBe(ref)
+    } finally {
+      console.error = error
+      media.close()
+    }
   })
 })

@@ -23,10 +23,10 @@ const result = await Bun.build({
   external: [
     "#sqlite",
     "#pty",
+    "#claude-agent-sdk",
     "#persistent-pty-binary",
     "#fff",
     "#photon-wasm",
-    "#shell-parser-wasm",
     "#v1-migration",
   ],
   splitting: true,

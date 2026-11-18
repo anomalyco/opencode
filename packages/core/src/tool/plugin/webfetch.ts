@@ -5,6 +5,9 @@ import { ToolFailure } from "@opencode/ai/effect"
 import { Duration, Effect, Schema } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Parser } from "htmlparser2"
+import { Config } from "../../config.js"
+import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
+import { Flag } from "../../flag.js"
 import { Mime } from "../../mime.js"
 import { Permission } from "../../permission.js"
 import { convertHTMLToMarkdown, MAX_MARKDOWN_BYTES } from "../html-markdown.js"
@@ -32,9 +35,7 @@ export const Input = Schema.Struct({
 })
 
 const Output = Schema.Struct({
-  url: Schema.String,
   contentType: Schema.String,
-  format: Input.fields.format,
   output: Schema.String,
 })
 type Format = (typeof Input.Type)["format"]
@@ -70,6 +71,8 @@ const request = (url: string, format: Format, userAgent = openCodeUserAgent) =>
 
 const assertHttpUrl = (url: URL) => {
   if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("URL must use http:// or https://")
+  // Rules match the URL, so `https://user@evil.com` would slip past a rule for `https://evil.com/*`.
+  if (url.username || url.password) throw new Error("URL must not include credentials")
 }
 
 export const MAX_REDIRECTS = 10
@@ -95,6 +98,7 @@ const execute = (
           try: () => {
             const target = new URL(location, url)
             assertHttpUrl(target)
+            target.hash = ""
             return target.href
           },
           catch: (error) => (error instanceof Error ? error : new Error(String(error))),
@@ -127,9 +131,15 @@ export const Plugin = {
   effect: Effect.fn("WebFetchTool.Plugin")(function* (ctx: Context) {
     const http = yield* HttpClient.HttpClient
     const permission = yield* Permission.Service
+    const config = yield* Config.Service
+    // Internal plugins are not re-run on config changes, so reload the tool transform instead.
+    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
+    const flags = yield* Flag.Service
 
     yield* ctx.tool
-      .transform((editor) =>
+      .transform((editor) => {
+        // Code Mode programs have a `fetch` global that checks the same webfetch permission rules.
+        if (flags.resolve(loaded.entries).full_codemode.enabled) return
         editor.add({
           name,
           options: { codemode: false },
@@ -138,35 +148,32 @@ export const Plugin = {
           output: Output,
           execute: (input, context) =>
             Effect.gen(function* () {
+              // Rules match the URL as written. The fragment is never sent, and would keep a rule for the exact
+              // URL from matching.
+              const url = input.url.split("#")[0]
               yield* Effect.try({
-                try: () => assertHttpUrl(new URL(input.url)),
+                try: () => assertHttpUrl(new URL(url)),
                 catch: (error) => error,
               })
 
               yield* permission.assert({
                 action: name,
-                resources: [input.url],
+                resources: [url],
                 save: ["*"],
                 metadata: input,
-                sessionID: context.sessionID,
-                agent: context.agent,
-                source: { type: "tool", messageID: context.messageID, id: context.id },
+                ...Permission.invocation(context),
               })
 
               const { body, contentType } = yield* Effect.gen(function* () {
-                const check = (url: string) =>
+                const check = (next: string) =>
                   permission.assertNotDenied({
                     action: name,
-                    resources: [url],
-                    metadata: { ...input, url },
-                    sessionID: context.sessionID,
-                    agent: context.agent,
-                    source: { type: "tool", messageID: context.messageID, id: context.id },
+                    resources: [next],
+                    metadata: { ...input, url: next },
+                    ...Permission.invocation(context),
                   })
-                const response = yield* execute(http, check, input.url, input.format).pipe(
-                  Effect.catchIf(isCloudflareChallenge, () =>
-                    execute(http, check, input.url, input.format, "opencode"),
-                  ),
+                const response = yield* execute(http, check, url, input.format).pipe(
+                  Effect.catchIf(isCloudflareChallenge, () => execute(http, check, url, input.format, "opencode")),
                 )
                 const contentType = response.headers["content-type"] || ""
                 const mime = mimeFrom(contentType)
@@ -186,16 +193,10 @@ export const Plugin = {
                 try: () => convert(content, contentType, input.format),
                 catch: (error) => error,
               })
-              const result = {
-                url: input.url,
-                contentType,
-                format: input.format,
-                output,
-              }
-              return { output: result, content: result.output, metadata: { contentType: result.contentType } }
+              return { output: { contentType, output }, content: output, metadata: { contentType } }
             }).pipe(Effect.mapError((error) => new ToolFailure({ message: `Unable to fetch ${input.url}`, error }))),
-        }),
-      )
+        })
+      })
       .pipe(Effect.orDie)
   }),
 }

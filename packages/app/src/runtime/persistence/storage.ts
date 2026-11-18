@@ -1,13 +1,21 @@
 import { Platform, usePlatform } from "@/runtime/platform/platform"
 import { messageSync, type AsyncStorage, type SyncStorage } from "@solid-primitives/storage"
 import { checksum } from "@opencode/util/encode"
-import { createResource, onCleanup, type Accessor } from "solid-js"
+import { createSignal, onCleanup, untrack, type Accessor } from "solid-js"
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import { Option, Predicate, Schema } from "effect"
 import { pathKey } from "@/workspaces/path-key"
 import { ScopedKey, ServerScope } from "@/runtime/server/scope"
 import { persistStore } from "./persist"
+import { canWriteBackHydration } from "./persist-machine"
 import { Persistence } from "./schema"
+import {
+  canEvict,
+  INITIAL_LOCAL_STORAGE_STATE,
+  isStorageNoticePending,
+  transitionLocalStorage,
+  type LocalStorageEvent,
+} from "./storage-machine"
 
 type InitType = Promise<string | null> | string | null
 
@@ -46,7 +54,20 @@ const WINDOW_STORAGE = "opencode.window"
 
 const LOCAL_PREFIX = "opencode."
 
-const fallback = new Map<string, boolean>()
+const [localStorageState, setLocalStorageState] = createSignal(INITIAL_LOCAL_STORAGE_STATE)
+
+function dispatchLocalStorage(event: LocalStorageEvent) {
+  setLocalStorageState((state) => transitionLocalStorage(state, event))
+}
+
+/** True once a `localStorage` write failed and the user has not been told yet. */
+export function localStorageNoticePending() {
+  return isStorageNoticePending(localStorageState())
+}
+
+export function acknowledgeLocalStorageNotice() {
+  dispatchLocalStorage({ type: "notice.shown" })
+}
 
 const CACHE_MAX_ENTRIES = 500
 
@@ -104,14 +125,6 @@ function cacheGet(key: string) {
   return entry.value
 }
 
-function fallbackDisabled(scope: string) {
-  return fallback.get(scope) === true
-}
-
-function fallbackSet(scope: string) {
-  fallback.set(scope, true)
-}
-
 // SAFETY: a thrown storage error has no schema; only `name`, `code` and `message` are read, each behind a guard.
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- see SAFETY above
 function quota(error: unknown) {
@@ -143,68 +156,70 @@ function quota(error: unknown) {
   return !!message && /quota/i.test(message)
 }
 
-type Evict = { key: string; size: number }
+/** Writes one `localStorage` value; returns `false` when it could not be stored. */
+function write(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value)
+    cacheSet(key, value)
 
-function evict(storage: Storage, keep: string, value: string) {
-  const total = storage.length
-  const indexes = Array.from({ length: total }, (_, index) => index)
-  const items: Evict[] = []
+    return true
+  } catch (error) {
+    if (!quota(error) || !canEvict(untrack(localStorageState), Date.now())) {
+      dispatchLocalStorage({ type: "write.failed" })
 
-  for (const index of indexes) {
-    const name = storage.key(index)
-
-    if (!name) continue
-
-    if (!name.startsWith(LOCAL_PREFIX)) continue
-
-    if (name === keep) continue
-    const stored = storage.getItem(name)
-    items.push({ key: name, size: stored?.length ?? 0 })
-  }
-
-  items.sort((a, b) => b.size - a.size)
-
-  for (const item of items) {
-    storage.removeItem(item.key)
-    cacheDelete(item.key)
-
-    try {
-      storage.setItem(keep, value)
-      cacheSet(keep, value)
-
-      return true
-    } catch (error) {
-      if (!quota(error)) throw error
+      return false
     }
   }
+
+  if (evict(localStorage, key, value)) {
+    dispatchLocalStorage({ type: "eviction.succeeded" })
+
+    return true
+  }
+
+  dispatchLocalStorage({ type: "eviction.failed", now: Date.now() })
 
   return false
 }
 
-function write(storage: Storage, key: string, value: string) {
-  try {
-    storage.setItem(key, value)
-    cacheSet(key, value)
+/**
+ * Removes the key's own old value, then other opencode values largest first, until `value` fits. When
+ * nothing makes room, every removed value is put back so a failed write loses no saved state.
+ */
+function evict(storage: Storage, keep: string, value: string) {
+  const items = Array.from({ length: storage.length }, (_, index) => storage.key(index))
+    .filter((name): name is string => name !== null && (name === keep || name.startsWith(LOCAL_PREFIX)))
+    .flatMap((name) => {
+      const stored = storage.getItem(name)
 
-    return true
-  } catch (error) {
-    if (!quota(error)) throw error
+      return stored === null ? [] : [{ key: name, value: stored }]
+    })
+    .sort((a, b) => Number(b.key === keep) - Number(a.key === keep) || b.value.length - a.value.length)
+
+  const removed: typeof items = []
+
+  for (const item of items) {
+    storage.removeItem(item.key)
+    removed.push(item)
+
+    try {
+      storage.setItem(keep, value)
+      removed.forEach((entry) => cacheDelete(entry.key))
+      cacheSet(keep, value)
+
+      return true
+    } catch (error) {
+      if (!quota(error)) break
+    }
   }
 
-  try {
-    storage.removeItem(key)
-    cacheDelete(key)
-    storage.setItem(key, value)
-    cacheSet(key, value)
+  removed.forEach((entry) => {
+    try {
+      storage.setItem(entry.key, entry.value)
+    } catch {}
+  })
 
-    return true
-  } catch (error) {
-    if (!quota(error)) throw error
-  }
-
-  const ok = evict(storage, key, value)
-
-  return ok
+  return false
 }
 
 function readCurrent(input: { storage: SyncStorage; key: string; normalize: (raw: string) => string | undefined }) {
@@ -240,7 +255,7 @@ function pickRaw(raw: string | null, pick: PickPart | undefined) {
 }
 
 function relocateStoredValue(input: {
-  current: SyncStorage
+  current: LocalStorageView
   sources: RelocationSource<SyncStorage>[]
   key: string
   normalize: (raw: string) => string | undefined
@@ -258,11 +273,8 @@ function relocateStoredValue(input: {
       continue
     }
 
-    input.current.setItem(input.key, next)
-
-    if (input.current.getItem(input.key) !== next) return null
-
-    if (!source.pick) source.storage.removeItem(key)
+    // When the value cannot be stored here, the source keeps it for the next load.
+    if (input.current.setItem(input.key, next) && !source.pick) source.storage.removeItem(key)
 
     return next
   }
@@ -270,10 +282,12 @@ function relocateStoredValue(input: {
   return null
 }
 
+/** `canCommit` turns false once the store saved an edit, so a late load never writes over it. */
 async function readCurrentAsync(input: {
   storage: AsyncStorage
   key: string
   normalize: (raw: string) => string | undefined
+  canCommit: () => boolean
 }) {
   const raw = await input.storage.getItem(input.key)
 
@@ -281,12 +295,12 @@ async function readCurrentAsync(input: {
   const next = input.normalize(raw)
 
   if (next === undefined) {
-    await input.storage.removeItem(input.key).catch(() => undefined)
+    if (input.canCommit()) await input.storage.removeItem(input.key).catch(() => undefined)
 
     return null
   }
 
-  if (raw !== next) await input.storage.setItem(input.key, next)
+  if (raw !== next && input.canCommit()) await input.storage.setItem(input.key, next)
 
   return next
 }
@@ -310,6 +324,7 @@ async function relocateStoredValueAsync(input: {
   sources: RelocationSource<AsyncStorage>[]
   key: string
   normalize: (raw: string) => string | undefined
+  canCommit: () => boolean
 }) {
   for (const source of input.sources) {
     const key = source.key ?? input.key
@@ -324,7 +339,7 @@ async function relocateStoredValueAsync(input: {
       continue
     }
 
-    await input.current.setItem(input.key, next)
+    if (input.canCommit()) await input.current.setItem(input.key, next)
 
     if (!source.pick) await source.storage.removeItem(key)
 
@@ -381,110 +396,43 @@ function serverWorkspaceTarget(scope: ServerScope, dir: string, key: string): Pe
   return { storage: workspaceStorage(pathKey(dir)), workspaceStorageAliases: workspaceStorageAliases(dir), key }
 }
 
-function localStorageWithPrefix(prefix: string): SyncStorage {
-  const base = `${prefix}:`
-  const scope = `prefix:${prefix}`
-  const item = (key: string) => base + key
+/** A `localStorage` view whose `setItem` reports whether the value was stored. */
+type LocalStorageView = {
+  getItem: (key: string) => string | null
+  setItem: (key: string, value: string) => boolean
+  removeItem: (key: string) => void
+}
+
+// A failed write never stops later reads, writes or removals: each call tries storage again, and the
+// cache only answers a read that storage cannot.
+function localStorageView(prefix?: string): LocalStorageView {
+  const item = (key: string) => (prefix ? `${prefix}:${key}` : key)
 
   return {
     getItem: (key) => {
       const name = item(key)
-      const cached = cacheGet(name)
-
-      if (fallbackDisabled(scope)) return cached ?? null
 
       const stored = (() => {
         try {
           return localStorage.getItem(name)
         } catch {
-          fallbackSet(scope)
-
           return null
         }
       })()
 
-      if (stored === null) return cached ?? null
+      if (stored === null) return cacheGet(name) ?? null
       cacheSet(name, stored)
 
       return stored
     },
-    setItem: (key, value) => {
-      const name = item(key)
-
-      if (fallbackDisabled(scope)) return
-
-      try {
-        if (write(localStorage, name, value)) return
-      } catch {
-        fallbackSet(scope)
-
-        return
-      }
-
-      fallbackSet(scope)
-    },
+    setItem: (key, value) => write(item(key), value),
     removeItem: (key) => {
       const name = item(key)
       cacheDelete(name)
 
-      if (fallbackDisabled(scope)) return
-
       try {
         localStorage.removeItem(name)
-      } catch {
-        fallbackSet(scope)
-      }
-    },
-  }
-}
-
-function localStorageDirect(): SyncStorage {
-  const scope = "direct"
-
-  return {
-    getItem: (key) => {
-      const cached = cacheGet(key)
-
-      if (fallbackDisabled(scope)) return cached ?? null
-
-      const stored = (() => {
-        try {
-          return localStorage.getItem(key)
-        } catch {
-          fallbackSet(scope)
-
-          return null
-        }
-      })()
-
-      if (stored === null) return cached ?? null
-      cacheSet(key, stored)
-
-      return stored
-    },
-    setItem: (key, value) => {
-      if (fallbackDisabled(scope)) return
-
-      try {
-        if (write(localStorage, key, value)) return
-      } catch {
-        fallbackSet(scope)
-
-        return
-      }
-
-      fallbackSet(scope)
-    },
-    removeItem: (key) => {
-      cacheDelete(key)
-
-      if (fallbackDisabled(scope)) return
-
-      try {
-        localStorage.removeItem(key)
-      } catch {
-        fallbackSet(scope)
-      }
+      } catch {}
     },
   }
 }
@@ -567,7 +515,7 @@ export function removePersisted(
   const open = (name: string | undefined): SyncStorage | AsyncStorage | undefined => {
     if (desktop) return desktop(name)
 
-    return name ? localStorageWithPrefix(name) : localStorageDirect()
+    return localStorageView(name)
   }
 
   const copies = target.copyFrom ?? []
@@ -608,8 +556,8 @@ export function persisted<S extends Schema.ConstraintCodec<object, unknown>>(
   const isDesktop = platform.platform === "desktop" && !!platform.storage
   const draft = config.draft ? platform.draftStore : undefined
   const prefix = `${config.storage ?? "default"}:`
-  // The newest serialized draft, replayed into storage if a slow load finishes after an edit.
-  let draftLatest: string | undefined
+  // Only read after the first await of an async load, when `persist` below exists.
+  const canCommit = () => canWriteBackHydration(persist.state())
 
   const currentStorage = (() => {
     if (draft) {
@@ -622,9 +570,7 @@ export function persisted<S extends Schema.ConstraintCodec<object, unknown>>(
 
     if (isDesktop) return platform.storage?.(config.storage)
 
-    if (!config.storage) return localStorageDirect()
-
-    return localStorageWithPrefix(config.storage)
+    return localStorageView(config.storage)
   })()
 
   const workspaceAliases = config.workspaceStorageAliases ?? []
@@ -632,14 +578,14 @@ export function persisted<S extends Schema.ConstraintCodec<object, unknown>>(
   const storage = (() => {
     if (!isDesktop && !draft) {
       // SAFETY: without desktop storage or a draft store, `currentStorage` is one of the synchronous localStorage views.
-      const current = currentStorage as SyncStorage
+      const current = currentStorage as LocalStorageView
 
       const sources: RelocationSource<SyncStorage>[] = [
-        ...workspaceAliases.map((storage) => ({ storage: localStorageWithPrefix(storage) })),
-        ...(config.previousKey ? [{ storage: localStorageDirect(), key: config.previousKey }] : []),
+        ...workspaceAliases.map((storage) => ({ storage: localStorageView(storage) })),
+        ...(config.previousKey ? [{ storage: localStorageView(), key: config.previousKey }] : []),
         ...(config.copyFrom ?? []).flatMap((copy) => [
-          { storage: copy.storage ? localStorageWithPrefix(copy.storage) : current, key: copy.key, pick: copy.pick },
-          ...(config.storage ? [{ storage: localStorageDirect(), key: copy.key, pick: copy.pick }] : []),
+          { storage: copy.storage ? localStorageView(copy.storage) : current, key: copy.key, pick: copy.pick },
+          ...(config.storage ? [{ storage: localStorageView(), key: copy.key, pick: copy.pick }] : []),
         ]),
       ]
 
@@ -656,9 +602,7 @@ export function persisted<S extends Schema.ConstraintCodec<object, unknown>>(
             normalize,
           })
         },
-        setItem: (key, value) => {
-          current.setItem(key, value)
-        },
+        setItem: (key, value) => current.setItem(key, value),
         removeItem: (key) => {
           current.removeItem(key)
         },
@@ -673,17 +617,15 @@ export function persisted<S extends Schema.ConstraintCodec<object, unknown>>(
     const previousDraftStorage = draft
       ? isDesktop
         ? platform.storage?.(config.storage)
-        : config.storage
-          ? localStorageWithPrefix(config.storage)
-          : localStorageDirect()
+        : localStorageView(config.storage)
       : undefined
 
-    const previousStorage = config.previousKey ? (isDesktop ? platform.storage?.() : localStorageDirect()) : undefined
+    const previousStorage = config.previousKey ? (isDesktop ? platform.storage?.() : localStorageView()) : undefined
 
     const relocationSources = [
       previousDraftStorage ? { storage: previousDraftStorage } : undefined,
       ...workspaceAliases.map((name) => ({
-        storage: isDesktop ? platform.storage?.(name) : localStorageWithPrefix(name),
+        storage: isDesktop ? platform.storage?.(name) : localStorageView(name),
       })),
       previousStorage && config.previousKey ? { storage: previousStorage, key: config.previousKey } : undefined,
       ...(config.copyFrom ?? []).flatMap((copy) => [
@@ -691,13 +633,13 @@ export function persisted<S extends Schema.ConstraintCodec<object, unknown>>(
           storage: copy.storage
             ? isDesktop
               ? platform.storage?.(copy.storage)
-              : localStorageWithPrefix(copy.storage)
+              : localStorageView(copy.storage)
             : current,
           key: copy.key,
           pick: copy.pick,
         },
         config.storage
-          ? { storage: isDesktop ? platform.storage?.() : localStorageDirect(), key: copy.key, pick: copy.pick }
+          ? { storage: isDesktop ? platform.storage?.() : localStorageView(), key: copy.key, pick: copy.pick }
           : undefined,
       ]),
     ].flatMap((source): RelocationSource<AsyncStorage>[] =>
@@ -706,7 +648,7 @@ export function persisted<S extends Schema.ConstraintCodec<object, unknown>>(
 
     const api: AsyncStorage = {
       getItem: async (key) => {
-        const value = await readCurrentAsync({ storage: current, key, normalize })
+        const value = await readCurrentAsync({ storage: current, key, normalize, canCommit })
 
         if (value !== undefined) return value
 
@@ -715,20 +657,14 @@ export function persisted<S extends Schema.ConstraintCodec<object, unknown>>(
           sources: relocationSources,
           key,
           normalize,
+          canCommit,
         })
 
-        if (draftLatest === undefined) {
-          if (draft && relocated !== null) return (await current.getItem(key)) ?? relocated
+        if (draft && relocated !== null) return (await current.getItem(key)) ?? relocated
 
-          return relocated
-        }
-
-        await current.setItem(key, draftLatest)
-
-        return draftLatest
+        return relocated
       },
       setItem: async (key, value) => {
-        if (draft) draftLatest = value
         await current.setItem(key, value)
       },
       removeItem: async (key) => {
@@ -757,38 +693,15 @@ export function persisted<S extends Schema.ConstraintCodec<object, unknown>>(
     // Drafts take the encoded document itself so large text is externalized without the store
     // re-parsing the serialized form on every save.
     write: draft
-      ? (value, serialized) => {
-          draftLatest = serialized
-          // A failed chunk upload is retried by the next save; see drafts.ts.
-          void draft
-            .setDocument(prefix + config.key, encode(value))
-            .catch((error) => console.error(`[persistence] draft write failed for ${config.key}`, error))
-        }
+      ? // A failed chunk upload is retried by the next save; see drafts.ts.
+        (value) => draft.setDocument(prefix + config.key, encode(value))
       : undefined,
   })
 
-  const state = store[0]
-  const setState = persist.setStore
-  const init = persist.init
-
-  const isAsync = init instanceof Promise
-
-  const [ready] = createResource(
-    () => init,
-    async (initValue) => {
-      if (initValue instanceof Promise) await initValue
-
-      return true
-    },
-    { initialValue: !isAsync },
-  )
-
   return [
-    state,
-    setState,
-    init,
-    Object.assign(() => (ready.loading ? false : ready.latest === true), {
-      promise: init instanceof Promise ? init : undefined,
-    }),
+    store[0],
+    persist.setStore,
+    persist.init,
+    Object.assign(persist.ready, { promise: persist.init instanceof Promise ? persist.init : undefined }),
   ]
 }

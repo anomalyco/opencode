@@ -1,25 +1,35 @@
 import { expect, sourceURL, story } from "../../stories/playwright/story"
+import type { Locator, Page } from "@playwright/test"
 
 const source = (path: string) => sourceURL(new URL(path, import.meta.url))
 
 const modules = {
   fixture: source("../../gui-plugins/src/browser/panel.fixture.tsx"),
   embeds: source("../src/runtime/plugin/embeds.tsx"),
+  panelMotion: source("../src/shell/panel-motion.ts"),
   language: source("../src/runtime/i18n/language.tsx"),
 }
+
+// Panel motion reads `navigator.platform` on each drag, so a test pins the platform whose behaviour it covers.
+const pinPlatform = (page: Page, platform: string) =>
+  page.evaluate((value) => {
+    Object.defineProperty(navigator, "platform", { value, configurable: true })
+  }, platform)
 
 story.beforeEach(async ({ mount, page }) => {
   // Any story loads the app styles; the fixture mounts the pane beside it on the real host embeds.
   await mount("ui-line-comment--editor")
   await page.evaluate(async (modules) => {
-    const [{ mountBrowserPane }, { createEmbeds }, language] = await Promise.all([
+    const [{ mountBrowserPane }, { createEmbeds }, panelMotion, language] = await Promise.all([
       import(modules.fixture),
       import(modules.embeds),
+      import(modules.panelMotion),
       import(modules.language),
     ])
 
     mountBrowserPane({
       createEmbeds,
+      panelMotion,
       LanguageProvider: language.LanguageProvider,
       UiI18nBridge: language.UiI18nBridge,
       useLanguage: language.useLanguage,
@@ -96,6 +106,93 @@ story("paints a still of the page in place of the native view while a panel move
   await motion.click()
   await expect(native).toHaveAttribute("data-visible", "true")
   await expect(still).toHaveCount(0)
+})
+
+story("paints a still of the page in place of the native view while a resize handle is dragged", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const handle = root.getByTestId("pane-resize-handle")
+  const native = root.getByTestId("native-Alpha")
+  const still = root.locator("#browser-panel img")
+  await pinPlatform(page, "Linux x86_64")
+
+  // On Linux a native view's bounds land on screen frames before the DOM around it, so one left up through a drag jumps
+  // against its pane on every move. A click on the handle moves nothing and must not blink the page out. Read in the
+  // same task as each event, so a view hidden and shown again before the next frame cannot pass.
+  const visible = await handle.evaluate((element) => {
+    const read = () => document.querySelector('[data-testid="native-Alpha"]')?.getAttribute("data-visible")
+    const box = element.getBoundingClientRect()
+    const at = { bubbles: true, pointerId: 1, clientX: box.x + box.width / 2, clientY: box.y + box.height / 2 }
+    element.dispatchEvent(new PointerEvent("pointerdown", { ...at, button: 0 }))
+    document.dispatchEvent(new PointerEvent("pointerup", at))
+    const click = read()
+    element.dispatchEvent(new PointerEvent("pointerdown", { ...at, button: 0 }))
+    const pressed = read()
+    document.dispatchEvent(new PointerEvent("pointermove", { ...at, clientX: at.clientX - 40 }))
+
+    return { click, pressed, dragging: read() }
+  })
+
+  expect(visible).toEqual({ click: "true", pressed: "true", dragging: "false" })
+  await expect(still).toBeVisible()
+  await handle.evaluate((element) => {
+    const box = element.getBoundingClientRect()
+    document.dispatchEvent(
+      new PointerEvent("pointerup", { bubbles: true, pointerId: 1, clientX: box.x, clientY: box.y }),
+    )
+  })
+  await expect(native).toHaveAttribute("data-visible", "true")
+  await expect(still).toHaveCount(0)
+})
+
+story("keeps the native view live while a resize handle is dragged on macOS", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const handle = root.getByTestId("pane-resize-handle")
+  const still = root.locator("#browser-panel img")
+  await pinPlatform(page, "MacIntel")
+
+  // macOS puts a native view's bounds and the DOM around it on the same frame, so the page keeps laying out through the
+  // drag instead of freezing behind a still. Read in the same task as each move, so a blink between frames cannot pass.
+  const visible = await handle.evaluate((element) => {
+    const read = () => document.querySelector('[data-testid="native-Alpha"]')?.getAttribute("data-visible")
+    const box = element.getBoundingClientRect()
+    const at = { bubbles: true, pointerId: 1, clientX: box.x + box.width / 2, clientY: box.y + box.height / 2 }
+    element.dispatchEvent(new PointerEvent("pointerdown", { ...at, button: 0 }))
+    document.dispatchEvent(new PointerEvent("pointermove", { ...at, clientX: at.clientX - 40 }))
+    const dragging = read()
+    document.dispatchEvent(new PointerEvent("pointermove", { ...at, clientX: at.clientX - 80 }))
+    const moved = read()
+    document.dispatchEvent(new PointerEvent("pointerup", at))
+
+    return { dragging, moved }
+  })
+
+  expect(visible).toEqual({ dragging: "true", moved: "true" })
+  await expect(handle).not.toHaveAttribute("data-dragging")
+  await expect(still).toHaveCount(0)
+})
+
+story("shows the native view again when the window loses focus mid-drag", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const handle = root.getByTestId("pane-resize-handle")
+  const native = root.getByTestId("native-Alpha")
+  const still = root.locator("#browser-panel img")
+  await pinPlatform(page, "Linux x86_64")
+
+  // Alt+Tab mid-drag delivers no pointerup; the page must not stay locked behind a still.
+  await handle.evaluate((element) => {
+    const box = element.getBoundingClientRect()
+    const at = { bubbles: true, pointerId: 1, clientX: box.x + box.width / 2, clientY: box.y + box.height / 2 }
+    element.dispatchEvent(new PointerEvent("pointerdown", { ...at, button: 0 }))
+    document.dispatchEvent(new PointerEvent("pointermove", { ...at, clientX: at.clientX - 40 }))
+  })
+  await expect(native).toHaveAttribute("data-visible", "false")
+  await expect(handle).toHaveAttribute("data-dragging", "")
+
+  await handle.evaluate(() => window.dispatchEvent(new FocusEvent("blur")))
+  await expect(native).toHaveAttribute("data-visible", "true")
+  await expect(still).toHaveCount(0)
+  await expect(handle).not.toHaveAttribute("data-dragging")
+  expect(await handle.evaluate(() => document.body.style.userSelect)).toBe("")
 })
 
 story("never flies a still of a page the tab has navigated away from", async ({ page }) => {
@@ -179,6 +276,33 @@ story("keeps a still of the page under floating content that covers it", async (
   await expect(root.getByText("Captures: 1", { exact: true })).toBeVisible()
 })
 
+story(
+  "freezes on the latest capture when floating content closes and reopens before a capture lands",
+  async ({ page }) => {
+    const root = page.getByTestId("browser-pane-fixture")
+    const popover = root.getByRole("button", { name: "Toggle popover", exact: true })
+    const still = root.locator("#browser-panel img")
+    const native = root.getByTestId("native-Alpha")
+    await page.emulateMedia({ reducedMotion: "reduce" })
+    await root.getByRole("button", { name: "Hold capture", exact: true }).click()
+    await popover.click()
+    await expect(root.getByText("Captures: 1", { exact: true })).toBeVisible()
+    await popover.click()
+    await expect(page.locator("[data-popper-positioner]")).toHaveCount(0)
+    // The pane measures the overlap on the next animation frame; nothing on screen changes while the capture is held.
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+    await popover.click()
+    await expect(root.getByText("Captures: 2", { exact: true })).toBeVisible()
+
+    // Both captures land in order; the first one belongs to the cover that already closed.
+    await root.getByRole("button", { name: "Release capture", exact: true }).click()
+    await expect(native).toHaveAttribute("data-visible", "false")
+    await expect(still).toBeVisible()
+    // The fixture draws each capture a pixel wider: the second one is 5 pixels wide.
+    await expect(still).toHaveJSProperty("naturalWidth", 5)
+  },
+)
+
 story("keeps a still of the page under an open dialog instead of blanking the pane", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const still = root.locator("#browser-panel img")
@@ -208,8 +332,29 @@ story("keeps a still of the page under an open dialog instead of blanking the pa
   await expect(root.getByText("Captures: 1", { exact: true })).toBeVisible()
 })
 
+story("hides the native page under a dialog even when its still never arrives", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const native = root.getByTestId("native-Alpha")
+  const toggle = root.getByRole("button", { name: "Toggle dialog", exact: true })
+  await page.clock.install()
+  await root.getByRole("button", { name: "Hold capture", exact: true }).click()
+  await toggle.click()
+  await page.clock.runFor(100)
+  await expect(native).toHaveAttribute("data-visible", "true")
+
+  // The capture never settles: after its timeout the page hides over the box background instead of the dialog.
+  await page.clock.runFor(5_000)
+  await expect(native).toHaveAttribute("data-visible", "false")
+  await expect(root.locator("#browser-panel img")).toHaveCount(0)
+
+  await toggle.click()
+  await page.clock.runFor(100)
+  await expect(native).toHaveAttribute("data-visible", "true")
+})
+
 story("comments on a picked element over a still of the page", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("combobox", { name: "Picked element scenario" }).selectOption("zoomed")
   const picker = root.getByRole("button", { name: "Select an element to comment on", exact: true })
   await picker.click()
   await expect(picker).toHaveAttribute("aria-pressed", "true")
@@ -223,20 +368,25 @@ story("comments on a picked element over a still of the page", async ({ page }) 
   await expect(picker).toHaveAttribute("aria-pressed", "false")
   const editor = root.locator('[data-slot="browser-comment-editor"] textarea')
   await expect(editor).toBeFocused()
+  await expect(editor).toHaveAttribute("placeholder", "Add an optional comment...")
+  await expect(editor).toHaveAccessibleName("Comment on this element")
   await expect(root.getByText("Session getter reads: 0", { exact: true })).toBeVisible()
   await expect(root.locator('[data-slot="browser-comment-editor"]')).toContainText("button.primary")
   // The spotlight frames the picked element in surface pixels.
-  await expect(root.locator('[data-slot="browser-comment-spotlight"]')).toHaveCSS("left", "48px")
+  await expect(root.locator('[data-slot="browser-comment-spotlight"]')).toHaveCSS("left", "38.4px")
+  await expect(root.locator('[data-slot="browser-comment-spotlight"]')).toHaveCSS("width", "128px")
   // The native page hides behind its still so the editor can float over it.
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "false")
   await expect(root.locator("#browser-panel img")).toBeVisible()
 
   await editor.fill("Make this the primary colour")
-  await editor.press("Enter")
+  await root.getByRole("button", { name: "Add element comment", exact: true }).click()
   await expect(root.getByTestId("fixture-comments")).toHaveText("button.primary @e7: Make this the primary colour")
   await expect(root.locator('[data-component="browser-comment"]')).toHaveCount(0)
   await expect(root.getByText("Highlights: clear", { exact: true })).toBeVisible()
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+  await expect(root.getByTestId("fixture-comment-metadata")).toContainText('selector \\"main > button.primary\\"')
+  await expect(root.getByTestId("fixture-comment-metadata")).toContainText("accessible name")
 
   // The pane stays mounted when Beta is routed, and its picker then listens to Beta's page.
   await root.getByRole("button", { name: "Beta", exact: true }).click()
@@ -269,6 +419,31 @@ story("cancels the picker and a comment with Escape", async ({ page }) => {
   await expect(root.locator('[data-component="browser-comment"]')).toHaveCount(0)
   await expect(root.getByTestId("fixture-comments")).toHaveText("")
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+})
+
+story("leaves the picker off and Escape to the app when main never answers", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const picker = root.getByRole("button", { name: "Select an element to comment on", exact: true })
+  await root.getByRole("button", { name: "Drop picker requests", exact: true }).click()
+  await picker.click()
+  await expect(picker).toHaveAttribute("aria-pressed", "false")
+
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
+  await address.click()
+  await expect(address).toBeFocused()
+  await address.press("Escape")
+  await expect(address).not.toBeFocused()
+})
+
+story("replaces an open page note with the comment for an element picked meanwhile", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.locator('[data-component="browser-address"]').hover()
+  await root.getByRole("button", { name: "Add page to session", exact: true }).click()
+  await expect(root.locator('[data-slot="browser-comment-editor"] textarea')).toBeFocused()
+
+  await root.getByRole("button", { name: "Pick element", exact: true }).click()
+  await expect(root.locator('[data-component="browser-comment"]')).toHaveCount(1)
+  await expect(root.locator('[data-slot="browser-comment-editor"]')).toContainText("button.primary")
 })
 
 story("cleans up the originating session's picker and comment after a session switch", async ({ page }) => {
@@ -323,28 +498,146 @@ story("keeps a comment draft but drops its ref when the page navigates", async (
   )
 })
 
-story("keeps the comment editor and its actions inside the page", async ({ page }) => {
+story("grows the compact comment upward without flipping and keeps its actions inside the page", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("combobox", { name: "Picked element scenario" }).selectOption("low")
   await root.getByRole("button", { name: "Select an element to comment on", exact: true }).click()
   await root.getByRole("button", { name: "Pick element", exact: true }).click()
   const editor = root.locator('[data-slot="browser-comment-editor"]')
-  // As if the user dragged the textarea's resize handle far past the page.
-  await editor.locator("textarea").evaluate((element) => {
-    element.style.height = "900px"
-  })
-  // The editor moves once it has measured its new height.
+  const field = editor.locator("textarea")
+  await expect(editor).toHaveCSS("width", "320px")
+  await expect(field).toBeFocused()
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+  const opening = await editor.boundingBox()
+
+  if (!opening) throw new Error("Missing opening annotation")
+  await field.fill("A line of feedback\n".repeat(6))
+  await expect(field).toHaveCSS("height", "140px")
+  // The field lays out before ResizeObserver repositions its parent.
+  await expect
+    .poll(async () => {
+      const grown = await editor.boundingBox()
+
+      return !!grown && grown.y < opening.y && Math.abs(grown.y + grown.height - opening.y - opening.height) < 0.5
+    })
+    .toBe(true)
+  await field.fill("A line of feedback\n".repeat(30))
+  await expect(field).toHaveCSS("height", "160px")
+  expect(await field.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
   await expect
     .poll(async () => {
       const surface = await root.locator('[data-component="browser-comment"]').boundingBox()
       const box = await editor.boundingBox()
 
-      return !!surface && !!box && box.y + box.height <= surface.y + surface.height
+      return !!surface && !!box && box.y >= surface.y && box.y + box.height <= surface.y + surface.height
     })
     .toBe(true)
-  const submit = editor.getByRole("button", { name: "Comment", exact: true })
+  const submit = editor.getByRole("button", { name: "Add element comment", exact: true })
   await submit.scrollIntoViewIfNeeded()
   await expect(submit).toBeInViewport()
+  // Near the surface's top, growth stops at the opening bottom rather than pushing the card down.
+  await field.press("Escape")
+  await root.getByRole("combobox", { name: "Picked element scenario" }).selectOption("default")
+  await root.getByRole("button", { name: "Select an element to comment on", exact: true }).click()
+  await root.getByRole("button", { name: "Pick element", exact: true }).click()
+  await expect(field).toBeFocused()
+  const nearTop = await editor.boundingBox()
+
+  if (!nearTop) throw new Error("Missing near-top annotation")
+  await field.fill("A line of feedback\n".repeat(30))
+  await expect
+    .poll(() => field.evaluate((element) => element.clientHeight < 160 && element.scrollHeight > element.clientHeight))
+    .toBe(true)
+  await expect
+    .poll(async () => {
+      const box = await editor.boundingBox()
+
+      return !!box && Math.abs(box.y + box.height - nearTop.y - nearTop.height) < 0.5
+    })
+    .toBe(true)
+  // A narrow, short pane still keeps the compact editor and action within its surface.
+  await root.locator("#browser-panel").evaluate((element) => {
+    const container = element.parentElement
+
+    if (!container) throw new Error("Missing pane container")
+    container.style.width = "280px"
+    container.style.height = "150px"
+  })
+  await expect(editor).toHaveCSS("width", "262px")
+  await expect
+    .poll(async () => {
+      const surface = await root.locator('[data-component="browser-comment"]').boundingBox()
+      const box = await editor.boundingBox()
+
+      return !!surface && !!box && box.y >= surface.y && box.y + box.height <= surface.y + surface.height
+    })
+    .toBe(true)
+  await expect(submit).toBeInViewport()
 })
+
+story(
+  "wraps the selector, attaches elements without comments, and cancels only empty drafts on clickaway",
+  async ({ page }) => {
+    const root = page.getByTestId("browser-pane-fixture")
+    const scenario = root.getByRole("combobox", { name: "Picked element scenario" })
+    const picker = root.getByRole("button", { name: "Select an element to comment on", exact: true })
+    const editor = root.locator('[data-slot="browser-comment-editor"]')
+    const overlay = root.locator('[data-component="browser-comment"]')
+    await scenario.selectOption("long")
+    await root.evaluate((element) => element.setAttribute("dir", "rtl"))
+    await picker.click()
+    await root.getByRole("button", { name: "Pick element", exact: true }).click()
+    const preview = editor.locator('[data-slot="line-comment-v2-preview"] [dir="ltr"]')
+    const selector = `main > section[data-label="إعدادات"] > ${".nested-selector".repeat(24)} > button.primary`
+    await expect(preview).toHaveText(selector)
+    await expect(preview).toHaveAttribute("dir", "ltr")
+    await expect(preview).toHaveCSS("unicode-bidi", "isolate")
+    await expect(preview).toHaveCSS("-webkit-line-clamp", "2")
+    await expect(preview).toHaveCSS("height", "40px")
+    await preview.hover()
+    await expect(page.getByRole("tooltip")).toHaveText(selector)
+    await editor.locator("textarea").press("Enter")
+    await expect(overlay).toHaveCount(0)
+    const comments = root.getByTestId("fixture-comments").getByRole("listitem")
+    await expect(comments).toHaveText(["button.primary @e7:"])
+
+    await scenario.selectOption("default")
+    await picker.click()
+    await root.getByRole("button", { name: "Pick element", exact: true }).click()
+    await editor.getByRole("button", { name: "Add element", exact: true }).click()
+    await expect(overlay).toHaveCount(0)
+    await expect(comments).toHaveText(["button.primary @e7:", "button.primary @e7:"])
+    expect(JSON.parse(await root.getByTestId("fixture-comment-metadata").innerText())).toEqual(
+      [selector, "main > button.primary"].map((value) =>
+        expect.objectContaining({
+          type: "note",
+          label: "button.primary",
+          title: value,
+          subtitle: "Browser annotation",
+          comment: "",
+          subject: `the "button.primary" element in browser tab tab_11111111-1111-1111-1111-111111111111 at https://alpha.example/ (role button; accessible name "Save changes"; selector ${JSON.stringify(value)})`,
+          live: {
+            href: "tab_11111111-1111-1111-1111-111111111111#e7",
+            subject: `the "button.primary" element in browser tab tab_11111111-1111-1111-1111-111111111111 at https://alpha.example/ (role button; accessible name "Save changes"; selector ${JSON.stringify(value)}; browser ref @e7, usable as ref in any browser tool including browser.evaluate until the page navigates)`,
+          },
+        }),
+      ),
+    )
+
+    await scenario.selectOption("fallback")
+    await picker.click()
+    await root.getByRole("button", { name: "Pick element", exact: true }).click()
+    await expect(preview).toHaveText("button.primary")
+    await editor.locator("textarea").fill("Keep this feedback")
+    await overlay.click({ position: { x: 620, y: 290 } })
+    await expect(editor.locator("textarea")).toHaveValue("Keep this feedback")
+    await editor.locator("textarea").fill("")
+    await overlay.click({ position: { x: 620, y: 290 } })
+    await expect(overlay).toHaveCount(0)
+    await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+    await expect(comments).toHaveText(["button.primary @e7:", "button.primary @e7:"])
+  },
+)
 
 story("shows the empty state over a blank native page and restores navigation", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
@@ -380,6 +673,14 @@ story("keeps the submitted URL visible until the browser reports navigation", as
   const address = root.getByRole("combobox", { name: "Browser address", exact: true })
   await address.fill("https://example.com/")
   await address.press("Enter")
+  await expect(address).not.toBeFocused()
+  await expect(address).toHaveValue("https://example.com/")
+  await expect(root.getByText("Open a page", { exact: true })).toBeHidden()
+
+  // Focusing and leaving the field before the browser reports keeps the submitted address.
+  await address.focus()
+  await expect(address).toHaveValue("https://example.com/")
+  await address.press("Escape")
   await expect(address).not.toBeFocused()
   await expect(address).toHaveValue("https://example.com/")
   await expect(root.getByText("Open a page", { exact: true })).toBeHidden()
@@ -569,7 +870,7 @@ story("suggests visited pages and opens the first one that completes the typed a
   const address = root.getByRole("combobox", { name: "Browser address", exact: true })
   await address.click()
   await address.pressSequentially("localhost")
-  const options = page.getByRole("option")
+  const options = page.getByRole("listbox", { name: "Suggestions" }).getByRole("option")
   await expect(options).toHaveCount(1)
   await expect(options.first()).toHaveAttribute("aria-selected", "true")
   // Arrow keys that pick IME candidates leave the suggestions alone.
@@ -611,13 +912,18 @@ story("lists recent pages on a blank tab and opens one", async ({ page }) => {
   await expect(address).toHaveValue("http://localhost:5173/settings")
 })
 
-story("adds the whole page to the session and keeps the draft when the button is pressed again", async ({ page }) => {
-  const root = page.getByTestId("browser-pane-fixture")
+story("keeps a page note editable beside a tiny viewport and attaches it to the session", async ({ page }) => {
+  const { root, viewport, width, height } = viewportControls(page)
+  await viewport.click()
+  await width.fill("8")
+  await height.fill("8")
+  await expectSize(root.getByTestId("native-Alpha"), 8, 8)
   const field = root.locator('[data-component="browser-address"]')
   const add = root.getByRole("button", { name: "Add page to session", exact: true })
   await field.hover()
   await add.click()
   const editor = root.locator('[data-slot="browser-comment-editor"] textarea')
+  await editor.click()
   await editor.fill("Check the header layout")
   await field.hover()
   await add.click()
@@ -635,12 +941,64 @@ story("shows the page's cookies in the site information and clears them", async 
   await expect(site).toContainText("0 cookies in use")
 })
 
-story("zooms the page from the browser options in view and keeps its zoom in the address field", async ({ page }) => {
+story("says a failed cookie read failed and reads again on retry", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Fail next site read", exact: true }).click()
+  await root.getByRole("button", { name: "Site information", exact: true }).click()
+  const site = page.getByRole("dialog")
+  await expect(site).toContainText("Request failed")
+  const retry = site.getByRole("button", { name: "Try again", exact: true })
+  await expect(retry).toBeEnabled()
+  await retry.click()
+  await expect(site).toContainText("3 cookies in use")
+  await expect(site.getByRole("button", { name: "Clear", exact: true })).toBeEnabled()
+})
+
+function viewportControls(page: Page) {
+  const root = page.getByTestId("browser-pane-fixture")
+
+  const controls = root.getByRole("region", { name: "Viewport", exact: true })
+
+  return {
+    root,
+    controls,
+    viewport: root.getByRole("button", { name: "Toggle browser toolbar", exact: true }),
+    preset: controls.getByRole("button", { name: "Device preset", exact: true }),
+    option: (name: string) => page.getByRole("menuitemradio", { name, exact: true }),
+    moreDevices: page.getByRole("menuitem", { name: "More devices", exact: true }),
+    width: controls.getByLabel("Viewport width in CSS pixels", { exact: true }),
+    height: controls.getByLabel("Viewport height in CSS pixels", { exact: true }),
+    scale: controls.getByRole("button", { name: "Preview scale", exact: true }),
+    rotate: controls.getByRole("button", { name: "Rotate viewport", exact: true }),
+  }
+}
+
+function resizePane(root: Locator, width: number) {
+  return root.locator("#browser-panel").evaluate((pane, width) => {
+    if (!pane.parentElement) throw new Error("Missing pane container")
+    pane.parentElement.style.width = `${width}px`
+  }, width)
+}
+
+async function expectSize(native: Locator, width: number, height: number) {
+  await expect(native).toHaveAttribute("data-width", String(width))
+  await expect(native).toHaveAttribute("data-height", String(height))
+}
+
+story("zooms the page from the browser options in view and keeps its zoom in the address field", async ({ page }) => {
+  const { root, controls, viewport, preset, option, scale } = viewportControls(page)
+  await viewport.click()
+  await preset.click()
+  await option("Samsung Galaxy S26").click()
+  await expect(preset).toHaveText("Samsung Galaxy S26")
   const options = root.getByRole("button", { name: "Browser options", exact: true })
   await options.click()
   await page.getByRole("menuitem", { name: /^Zoom in/ }).click()
   await expect(root.getByText("Zoom: 110", { exact: true })).toBeVisible()
+  await expect(controls.getByRole("status")).toContainText("The page is using the pane size because page zoom changed.")
+  await expect(preset).toBeDisabled()
+  await expect(preset).toHaveText("Responsive")
+  await expect(scale).toBeDisabled()
   // The menu covered the page with a still; it closes so the zoomed page shows at once.
   await expect(page.getByRole("menu")).toBeHidden()
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
@@ -650,4 +1008,218 @@ story("zooms the page from the browser options in view and keeps its zoom in the
   await zoom.click()
   await expect(root.getByText("Zoom: 100", { exact: true })).toBeVisible()
   await expect(zoom).toBeHidden()
+  await expect(preset).toBeEnabled()
+})
+
+story("restores the full pane when the toolbar closes and keeps the selected device on reopen", async ({ page }) => {
+  const { root, controls, viewport, preset, option, moreDevices, width, height } = viewportControls(page)
+
+  const native = root.getByTestId("native-Alpha")
+
+  const fullWidth = await native.getAttribute("data-width")
+
+  const fullHeight = await native.getAttribute("data-height")
+
+  if (!fullWidth || !fullHeight) throw new Error("Missing native page bounds")
+
+  await viewport.click()
+  await preset.press("ArrowDown")
+  const menu = page.getByRole("menu")
+  await expect(option("Responsive")).toBeChecked()
+  await expect(menu.getByRole("menuitemradio")).toHaveText([
+    "Responsive",
+    "Samsung Galaxy S26",
+    "iPhone 18 Pro",
+    "iPad / iPad Air 11″",
+    "Laptop",
+    "Desktop",
+  ])
+  await page.keyboard.press("End")
+  await expect(moreDevices).toBeFocused()
+  await page.keyboard.press("ArrowRight")
+  const mini = option("iPad mini")
+  await mini.click()
+  await expect(preset).toHaveText("iPad mini")
+  await expect(preset).toBeFocused()
+  await expect(native).not.toHaveAttribute("data-width", fullWidth)
+  await viewport.click()
+  await expect(controls).toBeHidden()
+  await expect(native).toHaveAttribute("data-width", fullWidth)
+  await expect(native).toHaveAttribute("data-height", fullHeight)
+  await expect(root.getByRole("separator", { name: "Resize viewport width" })).toBeHidden()
+  await viewport.click()
+  await expect(preset).toHaveText("iPad mini")
+  await expect(width).toHaveValue("756")
+  await expect(height).toHaveValue("1158")
+  // Matching the preset's dimensions by hand still counts as Custom.
+  await width.fill("700")
+  await width.fill("756")
+  await expect(preset).toHaveText("Custom")
+  await preset.click()
+  await expect(option("Custom")).toBeChecked()
+  await moreDevices.hover()
+  await expect(mini).not.toBeChecked()
+})
+
+story("fits an exact viewport while resizing and rejects invalid edits", async ({ page }) => {
+  const { root, viewport, preset, option, scale, width, height } = viewportControls(page)
+
+  const native = root.getByTestId("native-Alpha")
+  await viewport.click()
+  await expect(width).toHaveValue("624")
+  await width.fill("1248")
+  await expect(scale).toHaveText("Fit - 50%")
+  await expect(width).toBeFocused()
+  await height.fill("5")
+  // Chromium needs whole native pixels: round the fitted height up.
+  await expectSize(native, 624, 3)
+  await expect(height).toBeFocused()
+
+  await resizePane(root, 328)
+  await expect(scale).toHaveText("Fit - 25%")
+  await expectSize(native, 312, 2)
+  await expect(width).toHaveValue("1248")
+  await expect(height).toHaveValue("5")
+
+  for (const edit of ["", "4097"]) {
+    await width.fill(edit)
+    await expect(width).toHaveValue(edit)
+    await expect(width).toHaveAttribute("aria-invalid", "true")
+    await expect(width).toHaveAccessibleDescription("Use whole numbers from 1 to 4096 for width and height.")
+    await expectSize(native, 312, 2)
+  }
+
+  await width.blur()
+  await expect(width).toHaveValue("1248")
+  await expect(width).not.toHaveAttribute("aria-invalid", "true")
+  await preset.click()
+  await option("Responsive").click()
+  await expect(preset).toHaveText("Responsive")
+  await expect(width).toHaveValue("312")
+  await expect(scale).toHaveText("Fit - 100%")
+  await resizePane(root, 640)
+  await expect(width).toHaveValue("624")
+  await expect(native).toHaveAttribute("data-width", "624")
+})
+
+story("resizes a device with the RTL side grip by pointer and keyboard", async ({ page }) => {
+  const { root, viewport, preset, option, scale, width, height } = viewportControls(page)
+  await root.evaluate((element) => element.setAttribute("dir", "rtl"))
+  await viewport.click()
+  await preset.click()
+  await option("Samsung Galaxy S26").click()
+  await scale.click()
+  await option("50%").click()
+  await expectSize(root.getByTestId("native-Alpha"), 180, 390)
+  const grip = root.getByRole("separator", { name: "Resize viewport width", exact: true })
+
+  const box = await grip.boundingBox()
+
+  if (!box) throw new Error("Missing viewport resize grip")
+  const x = box.x + box.width / 2
+
+  const y = box.y + box.height / 2
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  await page.mouse.move(x - 12, y)
+  // Both edges move 12 screen pixels, or 24 guest CSS pixels each at 50% scale.
+  await expect(width).toHaveValue("408")
+  await expect(height).toHaveValue("780")
+  await expect(preset).toHaveText("Custom")
+  await expectSize(root.getByTestId("native-Alpha"), 204, 390)
+  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+  await expect(root.locator('img[elementtiming="embed-snapshot"]')).toHaveCount(0)
+  await page.mouse.up()
+  await grip.press("Shift+ArrowRight")
+  await expect(width).toHaveValue("398")
+})
+
+story("pins the responsive dimensions when a manual preview scale is selected", async ({ page }) => {
+  const { root, viewport, preset, option, scale, width, height } = viewportControls(page)
+
+  const native = root.getByTestId("native-Alpha")
+  await viewport.click()
+  await expect(width).toHaveValue("624")
+  const responsiveHeight = await height.inputValue()
+  await expect(scale).toHaveText("Fit - 100%")
+  await scale.click()
+  const menu = page.getByRole("menu")
+  await expect(menu.getByRole("menuitemradio")).toHaveText([
+    "Fit to pane",
+    "50%",
+    "75%",
+    "100%",
+    "125%",
+    "150%",
+    "200%",
+  ])
+  const fit = option("Fit to pane")
+  await expect(fit).toBeChecked()
+  const double = option("200%")
+  await double.click()
+  await resizePane(root, 400)
+  await expect(scale).toHaveText("200%")
+  await expect(preset).toHaveText("Custom")
+  await expect(width).toHaveValue("624")
+  await expect(height).toHaveValue(responsiveHeight)
+
+  await width.fill("120")
+  await height.fill("80")
+  await expectSize(native, 240, 160)
+  await scale.click()
+  await expect(double).toBeChecked()
+  await fit.click()
+  await expect(scale).toHaveText("Fit - 100%")
+  await expectSize(native, 120, 80)
+})
+
+story("keeps the selected device and its rotated viewport with its browser tab", async ({ page }) => {
+  const { root, viewport, preset, moreDevices, option, width, height, scale, rotate } = viewportControls(page)
+
+  const switchTab = root.getByRole("button", { name: "Switch browser tab", exact: true })
+  await viewport.click()
+  await scale.click()
+  await option("50%").click()
+  await preset.click()
+  await moreDevices.hover()
+  const pixel = option("Pixel 10")
+  await pixel.click()
+  await expect(preset).toHaveText("Pixel 10")
+  await rotate.click()
+  await expectSize(root.getByTestId("native-Alpha"), 462, 206)
+
+  await switchTab.click()
+  await expect(root.getByTestId("native-Second")).toHaveAttribute("data-visible", "true")
+  await expect(preset).toHaveText("Responsive")
+  await width.fill("200")
+  await height.fill("180")
+  const second = root.getByTestId("native-Second")
+  await expectSize(second, 200, 180)
+  await expect(scale).toHaveText("Fit - 100%")
+
+  // Wrapping the toolbar moves the centered native view on both axes without changing its size.
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+
+  const embed = root.locator('[data-component="browser-preview"] > div:first-child')
+
+  const wide = await embed.boundingBox()
+  await resizePane(root, 320)
+  const narrow = await embed.boundingBox()
+
+  if (!wide || !narrow) throw new Error("Missing preview bounds")
+  expect(narrow.x).toBeLessThan(wide.x)
+  expect(narrow.y).toBeGreaterThan(wide.y)
+  await expect(second).toHaveAttribute("data-x", String(Math.round(narrow.x)))
+  await expect(second).toHaveAttribute("data-y", String(Math.round(narrow.y)))
+  await expectSize(second, 200, 180)
+
+  await switchTab.click()
+  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+  await expect(width).toHaveValue("924")
+  await expect(height).toHaveValue("412")
+  await expect(preset).toHaveText("Pixel 10")
+  await expect(scale).toHaveText("50%")
+  await preset.click()
+  await moreDevices.hover()
+  await expect(pixel).toBeChecked()
 })

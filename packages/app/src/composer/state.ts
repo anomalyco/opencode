@@ -1,10 +1,13 @@
-import { batch, createSignal, untrack, type Accessor } from "solid-js"
-import { createStore, type SetStoreFunction } from "solid-js/store"
+import { batch, getOwner, onCleanup, untrack, type Accessor } from "solid-js"
+import { createStore, unwrap, type SetStoreFunction } from "solid-js/store"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { ServerScope } from "@/runtime/server/scope"
 import type { Platform } from "@/runtime/platform/platform"
 import { clonePrompt } from "./prompt-parts"
+import { uploads } from "./attachments/uploads"
+import { createQuoteCommentController, type QuoteCommentController } from "./quote-comment-machine"
 import { createComposerQuoteSource } from "./quote-source"
+import type { ComposerRetry } from "./retry"
 import {
   ComposerStore,
   DEFAULT_PROMPT,
@@ -44,14 +47,14 @@ type InitialPrompt = {
 }
 
 export function isCommentItem(item: ContextItem | (ContextItem & { key: string })) {
-  return item.type === "quote" || !!item.comment?.trim()
+  return item.type === "note" || item.type === "quote" || !!item.comment?.trim()
 }
 
 function createComposerActions(setStore: SetStoreFunction<ComposerStore>) {
   return {
     set(prompt: Prompt, cursorPosition?: number) {
       batch(() => {
-        setStore({ prompt: clonePrompt(prompt), retry: undefined })
+        setStore("prompt", clonePrompt(prompt))
 
         // An omitted cursor keeps the current one.
         if (cursorPosition !== undefined) setStore("cursor", cursorPosition)
@@ -102,7 +105,8 @@ export interface ComposerStateValue {
   }
   readonly retry: {
     readonly current: () => ComposerStore["retry"]
-    readonly set: (retry: NonNullable<ComposerStore["retry"]>) => void
+    readonly set: (retry: ComposerRetry) => void
+    readonly clear: () => void
   }
   readonly context: {
     readonly items: () => ComposerStore["context"]["items"]
@@ -113,30 +117,30 @@ export interface ComposerStateValue {
     replace(items: ContextItem[]): void
     replaceComments(items: ContextItem[]): void
   }
-  readonly quoteComment: {
-    readonly key: Accessor<string | undefined>
-    readonly set: (key?: string) => void
-  }
+  readonly quoteComment: QuoteCommentController
   readonly quoteSource: ReturnType<typeof createComposerQuoteSource>
   readonly set: (prompt: Prompt, cursorPosition?: number) => void
   readonly reset: () => void
   readonly capture: () => ComposerStateValue
 }
 
-function createComposerStateValue(
-  store: ComposerStore,
-  setStore: SetStoreFunction<ComposerStore>,
-): ComposerStateValue {
+function createComposerStateValue(store: ComposerStore, setStore: SetStoreFunction<ComposerStore>): ComposerStateValue {
   const actions = createComposerActions(setStore)
   // The quote whose comment editor is open, by key; a request made before the composer shows waits for it.
-  const [quoteComment, setQuoteComment] = createSignal<string>()
-  const quoteSource = createComposerQuoteSource()
+  const quoteComment = createQuoteCommentController()
+
+  const quoteSource = createComposerQuoteSource(
+    {
+      get: () => store.quoteSources,
+      set: (key, source) => setStore("quoteSources", (sources) => ({ ...sources, [key]: source })),
+    },
+    quoteComment,
+  )
+
+  // Uploads outlive the composer view that started them, but not the draft they write into.
+  if (getOwner()) onCleanup(() => uploads.cancelScope(unwrap(store)))
 
   const retainQuoteSources = () => quoteSource.retain(store.context.items.map((item) => item.key))
-
-  const clearRetry = () => {
-    if (untrack(() => store.retry) !== undefined) setStore("retry", undefined)
-  }
 
   const value = {
     store: [() => store, setStore] satisfies [Accessor<ComposerStore>, SetStoreFunction<ComposerStore>],
@@ -144,21 +148,21 @@ function createComposerStateValue(
     cursor: () => store.cursor,
     model: {
       current: () => store.model,
-      set: (model: PromptModel | undefined) => {
-        setStore("model", model)
-        clearRetry()
-      },
+      set: (model: PromptModel | undefined) => setStore("model", model),
     },
     mode: {
       current: () => store.mode ?? "normal",
       set: (mode: "normal" | "shell") => {
-        if (untrack(() => store.mode === mode && store.retry === undefined)) return
-        setStore({ mode, retry: undefined })
+        if (untrack(() => (store.mode ?? "normal") === mode)) return
+        setStore("mode", mode)
       },
     },
     retry: {
       current: () => store.retry,
-      set: (retry: NonNullable<ComposerStore["retry"]>) => setStore("retry", retry),
+      set: (retry: ComposerRetry) => setStore("retry", { id: retry.id, fingerprint: retry.fingerprint }),
+      clear: () => {
+        if (untrack(() => store.retry) !== undefined) setStore("retry", undefined)
+      },
     },
     context: {
       items: () => store.context.items,
@@ -167,34 +171,32 @@ function createComposerStateValue(
 
         if (store.context.items.find((x) => x.key === key)) return
         setStore("context", "items", (items) => [...items, { key, ...item }])
-        clearRetry()
       },
       remove(key: string) {
         setStore("context", "items", (items) => items.filter((x) => x.key !== key))
         retainQuoteSources()
-        clearRetry()
       },
       /** Removes the file comment, note, or quote with this commentID. */
       removeComment(commentID: string) {
         setStore("context", "items", (items) => items.filter((item) => item.commentID !== commentID))
         retainQuoteSources()
-        clearRetry()
       },
       /** Edits the file comment, note, or quote with this commentID; only file comments carry a preview. */
       updateComment(commentID: string, next: { readonly comment?: string; readonly preview?: string }) {
-        setStore("context", "items", (items) =>
-          items.map((item) => {
-            if (item.commentID !== commentID) return item
-
-            if (item.type === "quote") return { ...item, comment: next.comment }
+        setStore(
+          "context",
+          "items",
+          (item) => item.commentID === commentID,
+          (item) => {
+            // Preserve quote identity so an open comment editor does not remount.
+            if (item.type === "quote") return { comment: next.comment }
 
             const value =
               item.type === "file" ? { ...item, ...next } : { ...item, comment: next.comment ?? item.comment }
 
             return { ...value, key: contextItemKey(value) }
-          }),
+          },
         )
-        clearRetry()
       },
       /** Replaces every item, as restoring a sent prompt replaces the whole draft. */
       replace(items: ContextItem[]) {
@@ -207,7 +209,6 @@ function createComposerStateValue(
           })),
         )
         retainQuoteSources()
-        clearRetry()
       },
       replaceComments(items: ContextItem[]) {
         setStore("context", "items", (current) => [
@@ -215,17 +216,9 @@ function createComposerStateValue(
           ...items.map((item) => ({ ...item, key: contextItemKey(item) })),
         ])
         retainQuoteSources()
-        clearRetry()
       },
     },
-    quoteComment: {
-      key: quoteComment,
-      set: (key?: string) => {
-        setQuoteComment(key)
-
-        if (key !== quoteSource.state.pending) quoteSource.settle()
-      },
-    },
+    quoteComment,
     quoteSource,
     set: (prompt: Prompt, cursorPosition?: number) => actions.set(prompt, cursorPosition),
     reset: () => actions.reset(),

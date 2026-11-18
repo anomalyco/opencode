@@ -3,6 +3,8 @@ import { Duration, Effect, Fiber, Layer, Schema } from "effect"
 import * as TestClock from "effect/testing/TestClock"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Config } from "@opencode/core/config"
+import { Flag } from "@opencode/core/flag"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
 import { Permission } from "@opencode/core/permission"
@@ -10,16 +12,14 @@ import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
 import { WebFetchTool } from "@opencode/core/tool/plugin/webfetch"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { Image } from "@opencode/core/image"
 import { testEffect } from "./lib/effect"
-import { imagePassthrough } from "./lib/image"
 import { permissionLayer } from "./lib/permission"
-import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
+import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions, toolNodeReplacements } from "./lib/tool"
 
 const webFetchToolNode = makeLocationNode({
   name: "test/webfetch-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(WebFetchTool.Plugin)),
-  deps: [Tool.node, Permission.node, LayerNodePlatform.httpClient],
+  deps: [Tool.node, Config.node, Flag.node, Permission.node, LayerNodePlatform.httpClient],
 })
 
 const sessionID = Session.ID.make("ses_webfetch_test")
@@ -56,8 +56,7 @@ const permission = permissionLayer({
 })
 const toolLayer = (replacements: LayerNode.Replacements = []) =>
   AppNodeBuilder.build(LayerNode.group([Tool.node, webFetchToolNode]), [
-    Permission.node.replace(permission),
-    Image.node.replace(imagePassthrough),
+    ...toolNodeReplacements(permission),
     ...replacements,
   ])
 const it = testEffect(toolLayer([LayerNodePlatform.httpClient.replace(http)]))
@@ -434,7 +433,7 @@ describe("WebFetchTool registration", () => {
       expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["webfetch", "execute"])
       expect(yield* executeTool(registry, call({ url, format: "text", timeout: 4 }))).toEqual({
         status: "completed",
-        output: { url, contentType: "text/plain", format: "text", output: "hello" },
+        output: { contentType: "text/plain", output: "hello" },
         content: [{ type: "text", text: "hello" }],
         metadata: { contentType: "text/plain" },
       })
@@ -534,6 +533,23 @@ describe("WebFetchTool registration", () => {
       })
       expect(checks.map((check) => check.resources)).toEqual([[target]])
       expect(requests.map((request) => request.url)).toEqual([url])
+    }),
+  )
+
+  it.effect("matches rules against the URL as written without the fragment and rejects credentials", () =>
+    Effect.gen(function* () {
+      reset()
+      const registry = yield* Tool.Service
+
+      yield* executeTool(registry, call({ url: "https://Example.com#top", format: "text" }))
+      expect(assertions.map((assertion) => assertion.resources)).toEqual([["https://Example.com"]])
+
+      reset()
+      expect(yield* executeTool(registry, call({ url: "https://user@example.com/", format: "text" }))).toMatchObject({
+        status: "error",
+        error: { message: "URL must not include credentials" },
+      })
+      expect(requests).toEqual([])
     }),
   )
 

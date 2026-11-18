@@ -83,6 +83,47 @@ it.effect("repairs tool input before validating its original schema", () =>
   }),
 )
 
+it.effect("runs a call to another harness's tool name as the matching tool and says so", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const registry = yield* Tool.Service
+    const executed: unknown[] = []
+    yield* plugins.activate([
+      { ...ToolInputRepairPlugin.Plugin, revision: "1" },
+      {
+        id: "shell-tool",
+        revision: "1",
+        effect: (ctx) =>
+          ctx.tool.transform((draft) =>
+            draft.add({
+              name: "shell",
+              options: { codemode: false },
+              description: "Shell",
+              input: Schema.Struct({ command: Schema.String, timeout: Schema.optionalKey(Schema.Int) }),
+              execute: (input) => Effect.sync(() => executed.push(input)).pipe(Effect.as({ content: "done" })),
+            }),
+          ),
+      },
+    ])
+    const snapshot = yield* registry.snapshot()
+    const result = yield* snapshot.execute({
+      ...identity,
+      call: { type: "tool-call", id: "call-bash", name: "bash", input: { command: "ls", timeout: "5000" } },
+    })
+    expect(executed).toEqual([{ command: "ls", timeout: 5000 }])
+    expect(result.content).toEqual([
+      { type: "text", text: "done" },
+      { type: "text", text: 'There is no "bash" tool, so this ran as "shell". Call "shell" directly.' },
+    ])
+
+    const direct = yield* snapshot.execute({
+      ...identity,
+      call: { type: "tool-call", id: "call-shell", name: "shell", input: { command: "pwd" } },
+    })
+    expect(direct.content).toEqual([{ type: "text", text: "done" }])
+  }),
+)
+
 it.effect("repairs namespaced inner tool input called from Code Mode", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service

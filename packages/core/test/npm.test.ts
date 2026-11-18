@@ -310,6 +310,19 @@ describe("Npm.add", () => {
     expect(result.current).toBeFalse()
   }, 30_000)
 
+  test("reports Git's own error when a Git package cannot be fetched", async () => {
+    await using tmp = await tmpdir()
+    const spec = `git+${pathToFileURL(path.join(tmp.path, "missing")).href}`
+
+    const error = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return yield* npm.add(spec).pipe(Effect.flip)
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(path.join(tmp.path, "cache"))), Effect.runPromise)
+
+    expect(error.message).toContain(`Failed to install ${spec}`)
+    expect(error.message).toContain("does not appear to be a git repository")
+  }, 30_000)
+
   // Symlink creation needs elevated privileges on Windows.
   test.skipIf(win)("records Git revisions when the cache directory is reached through a symlink", async () => {
     await using tmp = await tmpdir()

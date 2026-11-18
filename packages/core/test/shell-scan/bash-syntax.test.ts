@@ -156,7 +156,10 @@ describe("ordinary Bash and Zsh syntax", () => {
   })
 
   test("scans a Zsh brace group closed after a redirect", () => {
-    expect(ShellScan.scan("{ a && >f }")).toMatchObject({ kind: "scanned", commands: [{ words: ["a"] }] })
+    expect(ShellScan.scan("{ a && >f }")).toMatchObject({
+      kind: "scanned",
+      commands: [{ words: ["a"] }, { resource: ">f", words: [">f"] }],
+    })
   })
 
   test("preserves raw lexical spelling of ANSI-C and locale quoted words", () => {
@@ -164,6 +167,45 @@ describe("ordinary Bash and Zsh syntax", () => {
       kind: "scanned",
       commands: [{ words: ["printf", "line\n", "text"], rawWords: ["$'pri\\x6etf'", "$'line\\n'", '$"text"'] }],
     })
+  })
+
+  // Expected values are what Bash 3.2 and 5.2 and Zsh 5.9 print for these words.
+  test.each([
+    ["bash", "$'\\033\\[?1049'", "\x1b\\[?1049"],
+    ["bash", "$'\\q\\8\\-\\xg\\ug\\Ug'", "\\q\\8\\-\\xg\\ug\\Ug"],
+    ["bash", "$'a\\\nb'", "a\\\nb"],
+    ["zsh", "$'\\033\\[?1049'", "\x1b[?1049"],
+    ["zsh", "$'\\q\\8\\-\\c'", "q8-c"],
+    ["zsh", "$'a\\\nb'", "a\nb"],
+  ] as const)("decodes unknown ANSI-C escapes like %s: %s", (dialect, word, value) => {
+    expect(ShellScan.scan(`printf '%s' ${word} | od -c`, dialect)).toMatchObject({
+      kind: "scanned",
+      commands: [{ words: ["printf", "%s", value] }, { words: ["od", "-c"] }],
+    })
+  })
+
+  test("decodes unknown escapes in ANSI-C heredoc delimiters like each dialect", () => {
+    const source = "cat <<$'E\\[F'\nE[F\nE\\[F\nprintf done"
+    expect(ShellScan.scan(source, "bash")).toMatchObject({
+      kind: "scanned",
+      commands: [{ words: ["cat"] }, { words: ["printf", "done"] }],
+    })
+    expect(ShellScan.scan(source, "zsh")).toMatchObject({
+      kind: "scanned",
+      commands: [{ words: ["cat"] }, { words: ["E[F"] }, { words: ["printf", "done"] }],
+    })
+  })
+
+  test.each([
+    ["posix", "$'\\['"],
+    ["bash", "$'\\cA'"],
+    ["bash", "$'a\\0b'"],
+    ["zsh", "$'\\C-a'"],
+    ["zsh", "$'\\M-a'"],
+    ["zsh", "$'\\xg'"],
+    ["zsh", "$'\\u'"],
+  ] as const)("rejects ANSI-C escapes whose value differs between shells in %s: %s", (dialect, word) => {
+    expect(ShellScan.scan(`printf '%s' ${word}`, dialect)).toEqual({ kind: "opaque", reason: "unsupported-escape" })
   })
 
   test.each([
@@ -188,8 +230,8 @@ describe("Bash shared heredoc delimiter grammar", () => {
     '(cat <<"E\\$OF"\nhello\nE$OF\n)',
     '(cat <<-"E\\OF"\n\thello\n\tE\\OF\n)',
   ])("preserves heredoc permission resources and saved prefixes: %s", async (source) => {
-    const legacy = await Effect.runPromise(ShellParse.scan(source, "/bin/bash", "/workspace"))
-    expect(await Effect.runPromise(ShellParse.scanPortable(source, "/bin/bash", "/workspace"))).toEqual(legacy)
+    const parsed = await Effect.runPromise(ShellParse.scan(source, "/bin/bash", "/workspace"))
+    expect(parsed.commands[0]?.save).toBe("cat *")
   })
 
   test.each([
@@ -202,8 +244,8 @@ describe("Bash shared heredoc delimiter grammar", () => {
     expect(result.kind).toBe("scanned")
     if (result.kind !== "scanned") throw new Error(result.reason)
     expect(result.commands.map((command) => command.words[0])).toEqual([...names])
-    const legacy = await Effect.runPromise(ShellParse.scan(source, "/bin/bash", "/workspace"))
-    expect(await Effect.runPromise(ShellParse.scanPortable(source, "/bin/bash", "/workspace"))).toEqual(legacy)
+    const parsed = await Effect.runPromise(ShellParse.scan(source, "/bin/bash", "/workspace"))
+    expect(parsed.commands).toHaveLength(names.length)
   })
 
   test.each([
@@ -291,7 +333,7 @@ describe("Bash dialects", () => {
 
   test("reads a reserved word after a redirect as a Zsh keyword", () => {
     const source = "if true; then >/dev/null fi; next"
-    expect(heads(source, "zsh")).toEqual(["true", "next"])
+    expect(heads(source, "zsh")).toEqual(["true", ">/dev/null", "next"])
     expect(heads(source, "bash")).toBe("opaque")
     expect(heads(source, "posix")).toBe("opaque")
   })
@@ -313,7 +355,7 @@ describe("Bash dialects", () => {
     ["/bin/dash", ["x = 1", "y"]],
     ["/opt/bin/mksh", ["x = 1", "y"]],
   ] as const)("derives the dialect from the shell executable: %s", async (shell, resources) => {
-    const result = await Effect.runPromise(ShellParse.scanPortable("(( x = 1 )); y", shell, "/workspace"))
+    const result = await Effect.runPromise(ShellParse.scan("(( x = 1 )); y", shell, "/workspace"))
     expect(result.commands.map((command) => command.resource)).toEqual([...resources])
   })
 })

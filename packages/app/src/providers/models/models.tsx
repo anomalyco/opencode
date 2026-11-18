@@ -84,6 +84,17 @@ const createModelsController = (directory: Accessor<string | undefined>) => {
 
   const latestSet = createMemo(() => new Set(latest().map((x) => modelKey(x))))
 
+  // OpenCode's free models (Big Pickle) stay on offer long after release, so they are listed regardless of age or a
+  // newer free model in the same family.
+  const freeSet = createMemo(
+    () =>
+      new Set(
+        available()
+          .filter(isFreeModel)
+          .map((x) => modelKey({ providerID: x.provider.id, modelID: x.id })),
+      ),
+  )
+
   const visibility = createMemo(() => {
     const map = new Map<string, Visibility>()
 
@@ -122,7 +133,7 @@ const createModelsController = (directory: Accessor<string | undefined>) => {
 
     if (state === "show") return true
 
-    if (latestSet().has(key)) return true
+    if (latestSet().has(key) || freeSet().has(key)) return true
 
     // Models without a parseable release date stay visible.
     return !Number.isFinite(release().get(key) ?? NaN)

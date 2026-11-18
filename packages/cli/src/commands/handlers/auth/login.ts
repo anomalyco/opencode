@@ -5,6 +5,7 @@ import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { selectIntegration, type IntegrationChoice } from "../../../ui/integration-picker"
 import { handlePromptErrors, openUrl, prompt, requireInteractive } from "../../../ui/prompt"
+import { errorMessage } from "../../../util/error"
 import { answerForm, secret } from "./form"
 import {
   createClient,
@@ -61,7 +62,7 @@ const findIntegration = Effect.fn("cli.auth.login.integration")(function* (clien
     if (protocol === "http:" || protocol === "https:") {
       const progress = spinner()
       progress.start("Discovering authentication provider...")
-      yield* request((signal) => client.integration.wellknown.add({ url: target, location }, { signal })).pipe(
+      yield* request((signal) => client.experimental.integration.wellknown.add({ url: target, location }, { signal })).pipe(
         Effect.tap(() => Effect.sync(() => progress.stop("Authentication provider discovered"))),
         Effect.tapCause(() => Effect.sync(() => progress.stop("Discovery failed", 1))),
       )
@@ -214,7 +215,14 @@ export const oauthLogin = Effect.fn("cli.auth.login.oauth")(function* (
   // Clack's spinner captures Ctrl+C and exits the process directly, which would skip the finalizer that
   // cancels the attempt. Waits that can last minutes use plain log lines so Ctrl+C interrupts normally.
   log.step("Waiting for authorization...")
-  const status = yield* waitForOAuth(client, integration.id, attempt.attemptID)
+  const wait = waitForOAuth(client, integration.id, attempt.attemptID)
+  const status =
+    attempt.paste && process.stdin.isTTY && process.stdout.isTTY
+      ? yield* Effect.raceFirst(
+          wait,
+          pasteRedirect(client, integration.id, attempt.attemptID).pipe(Effect.andThen(Effect.never)),
+        )
+      : yield* wait
   if (status.status === "complete") {
     log.success(`Connected to ${integration.name}`)
     return
@@ -262,6 +270,30 @@ const commandLogin = Effect.fn("cli.auth.login.command")(function* (
   }
   if (status.status === "failed") yield* Effect.fail(new Error(status.message))
   yield* Effect.fail(new Error("Authentication expired"))
+})
+
+// Hands the redirect URL to the attempt, which still settles through its status; a rejected paste asks again.
+const pasteRedirect = Effect.fn("cli.auth.login.oauth.paste")(function* (
+  client: OpenCodeClient,
+  integrationID: string,
+  attemptID: string,
+) {
+  while (true) {
+    const code = yield* prompt<string>((signal) =>
+      text({
+        message: "If the browser can't reach this machine, paste the URL it was redirected to",
+        validate: (value) => (!value ? "Required" : undefined),
+        signal,
+      }),
+    )
+    const pasted = yield* request((signal) =>
+      client.integration.oauth.complete({ integrationID, attemptID, code, location }, { signal }),
+    ).pipe(
+      Effect.as(true),
+      Effect.catch((error) => Effect.sync(() => log.error(errorMessage(error))).pipe(Effect.as(false))),
+    )
+    if (pasted) return
+  }
 })
 
 const waitForOAuth = Effect.fn("cli.auth.login.oauth.wait")(function* (

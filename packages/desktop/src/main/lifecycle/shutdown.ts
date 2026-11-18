@@ -2,9 +2,16 @@ export * as Shutdown from "./shutdown"
 
 import { Context, Effect, Layer } from "effect"
 
+/** Something the app stops before it exits, and starts again when a restart handoff fails. */
+export interface Participant {
+  readonly stop: Effect.Effect<void>
+  readonly resume: Effect.Effect<void>
+}
+
 export interface Interface {
-  readonly add: (effect: Effect.Effect<void>) => Effect.Effect<() => void>
-  readonly run: Effect.Effect<void>
+  readonly add: (participant: Participant) => Effect.Effect<() => void>
+  readonly stop: Effect.Effect<void>
+  readonly resume: Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("opencode/desktop/Shutdown") {}
@@ -12,20 +19,20 @@ export class Service extends Context.Service<Service, Interface>()("opencode/des
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const effects = new Set<Effect.Effect<void>>()
+    const participants = new Set<Participant>()
 
-    const run = yield* Effect.cached(
-      Effect.suspend(() => Effect.forEach(effects, (effect) => effect, { concurrency: "unbounded", discard: true })),
-    )
+    const each = (step: (participant: Participant) => Effect.Effect<void>) =>
+      Effect.suspend(() => Effect.forEach(participants, step, { concurrency: "unbounded", discard: true }))
 
     return Service.of({
-      add: (effect) =>
+      add: (participant) =>
         Effect.sync(() => {
-          effects.add(effect)
+          participants.add(participant)
 
-          return () => effects.delete(effect)
+          return () => participants.delete(participant)
         }),
-      run,
+      stop: each((participant) => participant.stop),
+      resume: each((participant) => participant.resume),
     })
   }),
 )

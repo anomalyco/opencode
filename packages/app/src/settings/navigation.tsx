@@ -38,12 +38,11 @@ export function SettingsNavigation(props: {
   const language = useLanguage()
 
   const back = () => {
-    if (!searchable() && surface.search.back()) return
+    if (surface.search.canReturn()) return surface.search.back()
     props.onBack()
   }
 
-  const backLabel = () =>
-    !searchable() && surface.search.state.selected ? language.t("settings.backToSettings") : props.backLabel
+  const backLabel = () => (surface.search.canReturn() ? language.t("settings.backToSettings") : props.backLabel)
 
   const current = () => props.groups.flatMap((group) => group.items).find((item) => item.value === props.value)
 
@@ -52,15 +51,28 @@ export function SettingsNavigation(props: {
     props.onChange(value)
   }
 
+  let root: HTMLDivElement | undefined
+
+  // In the wide layout every page shares this scroller, so a newly opened page starts at its top. The scroll offset is
+  // DOM state, and a page opens from tabs, search, links between pages and history, so this follows the selected page
+  // instead of one event handler.
+  createEffect(
+    on(
+      () => props.value,
+      () => root?.scrollTo({ top: 0 }),
+      { defer: true },
+    ),
+  )
+
   return (
-    <Tabs orientation="vertical" variant="settings" value={props.value} onChange={change} class="settings">
+    <Tabs ref={root} orientation="vertical" variant="settings" value={props.value} onChange={change} class="settings">
       <div class="settings-mobile-nav">
         <div class="flex min-w-0 items-center">
           {/* Starts after the shell's 8px inset and this row's 16px padding. Its 32px height makes the row 48px tall,
               like the session header, so the back button centers on the collapsed sidebar toggle's line. */}
           <CollapsedSidebarToggleSpace start={24} class="h-8" />
           <button type="button" class="settings-back" onClick={back}>
-            <Icon name="arrow-left" size="small" class="settings-back-icon" />
+            <Icon name="arrow-left" class="settings-back-icon" />
             <span>{backLabel()}</span>
           </button>
         </div>
@@ -69,7 +81,7 @@ export function SettingsNavigation(props: {
           <Menu placement="bottom-end" gutter={8}>
             <Menu.Trigger as={Button} size="normal" variant="outline" class="settings-mobile-menu-trigger">
               <span>{current()?.label}</span>
-              <Icon name="chevron-down" size="small" />
+              <Icon name="chevron-down" />
             </Menu.Trigger>
             <Menu.Portal>
               <Menu.Content class="settings-mobile-menu" onEscapeKeyDown={(event) => event.stopPropagation()}>
@@ -109,14 +121,14 @@ export function SettingsNavigation(props: {
       <aside class="settings-sidebar" data-searchable={searchable()}>
         <div class="settings-nav">
           <button type="button" class="settings-back" onClick={back}>
-            <Icon name="arrow-left" size="small" class="settings-back-icon" />
+            <Icon name="arrow-left" class="settings-back-icon" />
             <span>{backLabel()}</span>
           </button>
           <Show when={searchable()}>
             <SettingsSearch />
           </Show>
-          <Show when={!searchable() || !surface.search.state.query.trim()}>
-            <Tabs.List class="settings-nav-groups">
+          <Show when={!searchable() || !surface.search.active()}>
+            <Tabs.List class="settings-nav-groups" data-scrollable>
               <For each={props.groups}>
                 {(group) => (
                   <div class="settings-nav-group">

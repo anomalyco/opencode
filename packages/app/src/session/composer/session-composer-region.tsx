@@ -3,6 +3,7 @@ import { SessionElicitationDock } from "@/session/requests/session-elicitation-d
 import { SessionPermissionDock } from "@/session/requests/session-permission-dock"
 import { SessionQuestionDock } from "@/session/requests/session-question-dock"
 import { questionMotion } from "@/session/requests/question-motion"
+import { useSettings } from "@/settings/model"
 import { SessionWebSearchDock } from "@/session/requests/session-websearch-dock"
 import type { SessionComposerRegionController } from "./session-composer-region-controller"
 import { ComposerMorph, Grow } from "./spring-height"
@@ -30,6 +31,7 @@ export function SessionComposerRegion(props: {
   subagent: JSX.Element
 }) {
   const controller = props.controller
+  const settings = useSettings()
 
   const face = createMemo(() => {
     const websearch = controller.state.websearch.request()
@@ -56,7 +58,10 @@ export function SessionComposerRegion(props: {
       >
         <div class="relative z-[70] flex flex-col">
           {props.above}
-          <ComposerMorph face={face()} instant={(face) => !!face.question && !questionMotion()}>
+          <ComposerMorph
+            face={face()}
+            instant={(face) => !!face.question && (!settings.general.newQuestionUI() || !questionMotion())}
+          >
             {(current) => (
               <div class="flex flex-col">
                 <Grow when={current().websearch} fade card class={controller.child() ? "mb-2" : undefined}>
@@ -64,7 +69,7 @@ export function SessionComposerRegion(props: {
                 </Grow>
                 <Grow
                   when={current().question}
-                  instant={!questionMotion()}
+                  instant={!settings.general.newQuestionUI() || !questionMotion()}
                   fade
                   card
                   class={controller.child() ? "mb-2" : undefined}

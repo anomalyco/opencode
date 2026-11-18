@@ -2,6 +2,7 @@
 //! its OVERLAPPED/event and is cancelled and reaped before its buffer is released.
 //! No FlushFileBuffers: it can wait indefinitely for an uncooperative client.
 
+use std::ffi::OsStr;
 use std::io::{self, Read, Write};
 use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
@@ -286,7 +287,7 @@ impl Connection {
         Ok(Cancellation(Arc::clone(&self.pipe)))
     }
 
-    /// Protocol 7 has an explicit response/final event, not a pipe half-close.
+    /// The protocol has an explicit response/final event, not a pipe half-close.
     /// Retain the pipe until the client reads that frame and closes its end.
     /// An uncooperative peer is cancelled after a bounded grace period.
     pub(crate) fn finish_response(&mut self) -> io::Result<()> {
@@ -540,9 +541,22 @@ impl Drop for Operation {
     }
 }
 
-fn event() -> io::Result<OwnedHandle> {
+pub(crate) fn event() -> io::Result<OwnedHandle> {
     // SAFETY: create an unnamed, non-inheritable, initially unset manual-reset event.
     owned_handle(unsafe { CreateEventW(null(), 1, 0, null()) })
+}
+
+/// A NUL-terminated UTF-16 copy of `value`, refusing an embedded NUL.
+pub(crate) fn wide(value: &OsStr) -> io::Result<Vec<u16>> {
+    let mut wide = value.encode_wide().collect::<Vec<_>>();
+    if wide.contains(&0) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "path contains a NUL",
+        ));
+    }
+    wide.push(0);
+    Ok(wide)
 }
 
 pub(crate) fn owned_handle(handle: HANDLE) -> io::Result<OwnedHandle> {
@@ -703,7 +717,11 @@ mod tests {
                 &mut server,
                 &Response::Exited {
                     exit_code: Some(0),
+                    signal: None,
                     final_offset: 123,
+                    output_lines: None,
+                    output_error: None,
+                    exited_at: 1,
                 },
             )
             .unwrap();

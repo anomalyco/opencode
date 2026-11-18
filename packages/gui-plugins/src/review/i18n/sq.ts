@@ -13,4 +13,12 @@ export default {
   "settings.wrapLines.title": "Mbështill rreshtat",
   "settings.wrapLines.description":
     "Mbështillni linjat e gjata në diferenca celulare në vend që të lëvizni horizontalisht",
+  "menu.count.one": "{{count}} skedar i ndryshuar",
+  "menu.count.other": "{{count}} skedarë të ndryshuar",
+  "folder.more": "{{count}} · të tjera nuk shfaqen",
+  "folder.failed": "Ndryshimet nuk mund të ngarkoheshin",
+  "command.open": "Hap rishikimin",
+  "load.failed": "Ndryshimet nuk mund të ngarkoheshin",
+  "load.timeout": "Serveri vonoi shumë të përgjigjej",
+  offline: "Ky server nuk arrihet",
 }

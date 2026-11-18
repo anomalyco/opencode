@@ -1,12 +1,27 @@
 import { app, contentTracing, screen, type BrowserWindow } from "electron"
 import { Schema } from "effect"
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises"
+import { appendFile, mkdir, readFile, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { getHeapSpaceStatistics, getHeapStatistics, writeHeapSnapshot } from "node:v8"
 import type { Plugin } from "@opencode/plugin/gui/main"
 import { HeapSnapshots, MemoryDiagnostics } from "./contract"
+import {
+  createHeapCaptureState,
+  transitionHeapCapture,
+  type HeapCaptureEffect,
+  type HeapCaptureEvent,
+  type HeapCaptureResult,
+} from "./heap-machine"
 import { summarize, traceConfig } from "./memory-infra"
-import { startMemoryLog } from "./memory-log"
+import { collectMemorySample, memoryLogFile } from "./memory-log"
+import {
+  createMemoryDiagnosticsState,
+  isMemoryDiagnosticsOn,
+  isRendererProbing,
+  transitionMemoryDiagnostics,
+  type MemoryDiagnosticsEffect,
+  type MemoryDiagnosticsEvent,
+} from "./memory-machine"
 import { debugBuild, memoryLogInterval } from "./options"
 import { captureServer } from "./server-heap"
 import { signalIncludesServer, snapshotDirectory } from "./signal"
@@ -18,8 +33,8 @@ type Snapshot = { readonly process: "main" | "window"; readonly pid: number; rea
   | { readonly error: string }
 )
 
-/** The last capture; the next one starts after it settles. */
-type Queue = { tail: Promise<unknown> }
+/** How long a step that waits on another process may take before the manifest records it as failed. */
+const SNAPSHOT_TIMEOUT_MS = 5 * 60_000
 
 /** What a window's page holds, read from inside it. */
 const PageStats = Schema.Struct({
@@ -53,12 +68,7 @@ const pageStatsScript = `(() => {
   }
 })()`
 
-/** Stops the running memory diagnostics, while they run. */
-type Running = { stop?: () => void }
-
 const setup: Plugin.MainSetup = (ctx) => {
-  const queue: Queue = { tail: Promise.resolve() }
-
   const capture = async (root: string, includeServer: boolean) => {
     const directory = path.join(root, `opencode-heap-${new Date().toISOString().replace(/[:.]/g, "")}`)
 
@@ -83,7 +93,13 @@ const setup: Plugin.MainSetup = (ctx) => {
     // snapshot can double a process's memory, and a leaking app may not have room for every window at once. Main goes
     // last: writing its own heap blocks the loop that receives the others.
     const [serverSnapshot, windowSnapshots] = await Promise.all([
-      includeServer ? captureServer(ctx.serverEndpoints.get("sidecar"), directory, ctx.signal) : undefined,
+      includeServer
+        ? captureServer(
+            ctx.serverEndpoints.get("sidecar"),
+            directory,
+            AbortSignal.any([ctx.signal, AbortSignal.timeout(SNAPSHOT_TIMEOUT_MS)]),
+          )
+        : undefined,
       (async () => {
         const list: Snapshot[] = []
 
@@ -116,7 +132,9 @@ const setup: Plugin.MainSetup = (ctx) => {
       }),
     )
 
-    const gpu = await app.getGPUInfo("basic").catch((error: Error) => ({ error: error.message }))
+    const gpu = await within(app.getGPUInfo("basic"), 15_000, "The GPU process did not answer within 15 seconds.").catch(
+      (error: Error) => ({ error: error.message }),
+    )
 
     // One readable answer to "where is the memory", per process, in MiB.
     await write(directory, "memory.json", {
@@ -161,72 +179,159 @@ const setup: Plugin.MainSetup = (ctx) => {
     return { directory, complete }
   }
 
-  const enqueue = (directory: string, includeServer: boolean) => {
-    const run = queue.tail.then(() => capture(directory, includeServer))
-    queue.tail = run.catch(() => undefined)
+  let heapState = createHeapCaptureState()
 
-    return run
+  const dispatchHeap = (event: HeapCaptureEvent) => {
+    const next = transitionHeapCapture(heapState, event)
+
+    heapState = next.state
+    next.effects.forEach(
+      (effect) =>
+        void Promise.try(() => runHeap(effect)).catch((cause: unknown) =>
+          ctx.log.write("error", "heap snapshot queue effect failed", { error: String(cause) }),
+        ),
+    )
   }
+
+  const runHeap = (effect: HeapCaptureEffect) => {
+    if (effect.type === "replies.settle") {
+      const outcome = effect.outcome
+
+      return effect.replies.forEach((reply) => (outcome.ok ? reply.resolve(outcome.result) : reply.reject(outcome.error)))
+    }
+
+    if (effect.type === "signal.failed") {
+      return ctx.log.write("error", "heap snapshot capture failed", { error: effect.error })
+    }
+
+    void Promise.try(() => capture(effect.root, effect.includeServer)).then(
+      (result) => dispatchHeap({ type: "capture.succeeded", attempt: effect.attempt, result }),
+      (cause: unknown) =>
+        dispatchHeap({
+          type: "capture.failed",
+          attempt: effect.attempt,
+          error: cause instanceof Error ? cause : new Error(String(cause)),
+        }),
+    )
+  }
+
+  ctx.onCleanup(() => dispatchHeap({ type: "disposed" }))
 
   ctx.provide(HeapSnapshots, {
     // A window that closes meanwhile does not cancel the capture.
-    write: () => enqueue(app.getPath("downloads"), true),
+    write: () =>
+      new Promise<HeapCaptureResult>((resolve, reject) =>
+        dispatchHeap({
+          type: "command.requested",
+          root: app.getPath("downloads"),
+          includeServer: true,
+          reply: { resolve, reject },
+        }),
+      ),
   })
 
   if (!debugBuild(ctx.app)) return
 
   // The environment turns diagnostics on for this launch; otherwise the debug bar's stored toggle does.
   const envInterval = memoryLogInterval(process.env.OPENCODE_DESKTOP_MEMORY_LOG)
+  const interval = envInterval ?? 30_000
+  // Without the launch switch, Chromium quantizes renderer heap sizes and refreshes them rarely.
+  const precise = app.commandLine.hasSwitch("enable-precise-memory-info")
   // Whether the debug bar turned memory diagnostics on.
   const stored = ctx.storage.store("memory", { schema: Schema.Boolean, initial: false })
-  const running: Running = {}
   const directory = process.platform === "win32" ? undefined : snapshotDirectory(process.env)
-  let capturing = false
+  let memoryState = createMemoryDiagnosticsState()
+  let memoryTimer: ReturnType<typeof setTimeout> | undefined
+  let memoryFile = ""
+  let unsubscribeSignal: (() => void) | undefined
 
+  // Signals coalesce in the queue; repeated signals must not fill the disk with queued dumps.
   const onSignal = () => {
-    // Signals coalesce while a capture is running; repeated signals must not fill the disk with queued dumps.
-    if (!directory || capturing || ctx.signal.aborted) return
-    capturing = true
-    void enqueue(directory, signalIncludesServer(process.env))
-      .catch((error: Error) => ctx.log.write("error", "heap snapshot capture failed", { error: error.message }))
-      .finally(() => {
-        capturing = false
-      })
+    if (!directory) return
+    dispatchHeap({ type: "signal.received", root: directory, includeServer: signalIncludesServer(process.env) })
   }
 
-  const start = () => {
-    const stopLog = startMemoryLog(envInterval ?? 30_000, ctx.log)
+  const dispatchMemory = (event: MemoryDiagnosticsEvent) => {
+    const next = transitionMemoryDiagnostics(memoryState, event)
 
-    if (!directory) return stopLog
+    memoryState = next.state
+    next.effects.forEach(
+      (effect) =>
+        void Promise.try(() => runMemory(effect)).catch((cause: unknown) =>
+          ctx.log.write("error", "memory diagnostics effect failed", { error: String(cause) }),
+        ),
+    )
+  }
 
-    // Installed the first time diagnostics turn on, and kept: a script's late signal while they are off, or while
-    // the plugin reloads, is logged and ignored instead of killing the app.
-    ProcessSignal.install("SIGUSR2", () => ctx.log.write("warn", "heap snapshot signal ignored: diagnostics are off"))
-    const unsubscribe = ProcessSignal.subscribe("SIGUSR2", onSignal)
-    ctx.log.write("info", "heap snapshot signal enabled", { pid: process.pid, signal: "SIGUSR2", directory })
+  const runMemory = (effect: MemoryDiagnosticsEffect) => {
+    if (effect.type === "log.start") {
+      memoryFile = memoryLogFile()
+      ctx.log.write("info", "memory diagnostics started", { file: memoryFile, intervalMs: interval, precise })
 
-    return () => {
-      unsubscribe()
-      stopLog()
+      if (!directory) return
+
+      // Installed the first time diagnostics turn on, and kept: a script's late signal while they are off, or while
+      // the plugin reloads, is logged and ignored instead of killing the app.
+      ProcessSignal.install("SIGUSR2", () => ctx.log.write("warn", "heap snapshot signal ignored: diagnostics are off"))
+      unsubscribeSignal = ProcessSignal.subscribe("SIGUSR2", onSignal)
+      ctx.log.write("info", "heap snapshot signal enabled", { pid: process.pid, signal: "SIGUSR2", directory })
+
+      return
     }
+
+    if (effect.type === "log.stop") {
+      unsubscribeSignal?.()
+      unsubscribeSignal = undefined
+      ctx.log.write("info", "memory diagnostics stopped", { file: memoryFile })
+
+      return
+    }
+
+    if (effect.type === "timer.schedule") {
+      memoryTimer = setTimeout(() => dispatchMemory({ type: "tick", run: effect.run }), interval)
+
+      return
+    }
+
+    if (effect.type === "timer.cancel") return clearTimeout(memoryTimer)
+
+    if (effect.type === "sample.report") {
+      return ctx.log.write("error", "memory diagnostics sample failed", { error: effect.error })
+    }
+
+    const failed = (cause: unknown) =>
+      dispatchMemory({
+        type: "sample.failed",
+        attempt: effect.attempt,
+        error: cause instanceof Error ? cause.message : String(cause),
+      })
+
+    if (effect.type === "sample.write") {
+      void Promise.try(() => appendFile(memoryFile, effect.line, { mode: 0o600 })).then(
+        () => dispatchMemory({ type: "sample.written", attempt: effect.attempt }),
+        failed,
+      )
+
+      return
+    }
+
+    void Promise.try(() =>
+      collectMemorySample(memoryFile, precise, {
+        pending: (contentsId) => isRendererProbing(memoryState, contentsId),
+        started: (contentsId) => dispatchMemory({ type: "probe.started", contentsId }),
+        settled: (contentsId) => dispatchMemory({ type: "probe.settled", contentsId }),
+      }),
+    ).then((line) => dispatchMemory({ type: "sample.collected", attempt: effect.attempt, line }), failed)
   }
 
-  const sync = () => {
-    const on = envInterval !== undefined || stored.value
-
-    if (on && !running.stop) running.stop = start()
-
-    if (on || !running.stop) return
-    running.stop()
-    running.stop = undefined
-  }
+  const sync = () => dispatchMemory({ type: "synced", enabled: envInterval !== undefined || stored.value })
 
   // Started before the Ipc is provided, so the first state windows receive already says whether diagnostics run.
   sync()
-  ctx.onCleanup(() => running.stop?.())
+  ctx.onCleanup(() => dispatchMemory({ type: "disposed" }))
 
   const provider = ctx.provide(MemoryDiagnostics, {
-    state: () => ({ on: running.stop !== undefined, env: envInterval !== undefined }),
+    state: () => ({ on: isMemoryDiagnosticsOn(memoryState), env: envInterval !== undefined }),
     set: (enabled) => {
       stored.set(enabled)
       sync()
@@ -240,27 +345,27 @@ const setup: Plugin.MainSetup = (ctx) => {
 async function recordNative(directory: string) {
   const file = path.join(directory, "memory-infra.json")
 
-  return (
+  return within(
     contentTracing
       .startRecording(traceConfig)
       // The first detailed dump arrives within a periodic interval of starting.
       .then(() => new Promise((resolve) => setTimeout(resolve, 2_500)))
       .then(() => contentTracing.stopRecording(file))
-      .then(async () => ({ file: path.basename(file), summary: summarize(await readFile(file, "utf8")) }))
-      .catch((error: Error) => ({ error: error.message }))
-  )
+      .then(async () => ({ file: path.basename(file), summary: summarize(await readFile(file, "utf8")) })),
+    15_000,
+    "The memory trace did not finish within 15 seconds.",
+  ).catch((error: Error) => ({ error: error.message }))
 }
 
 async function describeWindow(window: BrowserWindow) {
   const contents = window.webContents
 
   // A hung or busy renderer never answers, and the snapshots wait for this step, so give up after a few seconds.
-  const page = await Promise.race([
+  const page = await within(
     contents.executeJavaScript(pageStatsScript).then(decodePageStats),
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("The window did not answer within 3 seconds.")), 3_000),
-    ),
-  ]).catch((error: Error) => ({ error: error.message }))
+    3_000,
+    "The window did not answer within 3 seconds.",
+  ).catch((error: Error) => ({ error: error.message }))
 
   return {
     window: window.id,
@@ -278,10 +383,27 @@ function captureWindow(window: BrowserWindow, directory: string) {
   const pid = contents.getOSProcessId()
   const file = `window-${window.id}-${pid}.heapsnapshot`
 
-  return contents.takeHeapSnapshot(path.join(directory, file)).then(
+  // A hung renderer is recorded as failed, so the other windows and main are still captured.
+  return within(
+    contents.takeHeapSnapshot(path.join(directory, file)),
+    SNAPSHOT_TIMEOUT_MS,
+    "The window did not write its heap snapshot within 5 minutes.",
+  ).then(
     (): Snapshot => ({ process: "window", pid, window: window.id, file }),
     (error: Error): Snapshot => ({ process: "window", pid, window: window.id, error: error.message }),
   )
+}
+
+/** Rejects with `message` when `promise` takes longer than `ms`. */
+function within<Value>(promise: Promise<Value>, ms: number, message: string) {
+  let deadline: ReturnType<typeof setTimeout> | undefined
+
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      deadline = setTimeout(() => reject(new Error(message)), ms)
+    }),
+  ]).finally(() => clearTimeout(deadline))
 }
 
 function write<Value>(directory: string, file: string, value: Value) {

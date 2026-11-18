@@ -28,7 +28,7 @@ const makeHost = Effect.gen(function* () {
   const agents = yield* Agent.Service
   const plugins = yield* Plugin.Service
   yield* agents.transform((editor) => editor.update(Agent.ID.make("build"), () => {}))
-  return yield* PluginHost.make(plugins)
+  return yield* PluginHost.make(plugins, "test")
 })
 
 const context = (id: string, system = fallback): SessionHooks["context"] => ({

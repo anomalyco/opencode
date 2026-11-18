@@ -19,7 +19,7 @@ export function MigrationOverlay() {
     await Bun.sleep(1_000)
     void (async () => {
       while (true) {
-        const status = await client.api.migration.v1.status({ signal: abort.signal })
+        const status = await client.api.experimental.migration.v1.status({ signal: abort.signal })
         setProgress(status.status === "running" ? status.progress : undefined)
         if (status.status === "completed") return
         if (status.status === "error") throw new Error(status.error)

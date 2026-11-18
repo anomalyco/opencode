@@ -4,6 +4,7 @@ import { Rpc, RpcGroup } from "effect/rpc"
 import { PluginInstalled, PluginMenubarItem, PluginPayload, PluginGuis } from "./plugins"
 
 export class DeepLinksOpened extends Schema.TaggedClass<DeepLinksOpened>()("DeepLinksOpened", {
+  attempt: Schema.Number,
   urls: Schema.Array(Schema.String),
 }) {}
 
@@ -70,8 +71,14 @@ export class PluginMenubarItemsChanged extends Schema.TaggedClass<PluginMenubarI
   { items: Schema.Array(PluginMenubarItem) },
 ) {}
 
+// Main adopted another background service origin; every window moves its sidecar requests to it.
+export class SidecarChanged extends Schema.TaggedClass<SidecarChanged>()("SidecarChanged", {
+  url: Schema.String,
+}) {}
+
 export const DesktopEvent = Schema.Union([
   DeepLinksOpened,
+  SidecarChanged,
   MenuCommandTriggered,
   WindowFullscreenChanged,
   WindowFocusChanged,

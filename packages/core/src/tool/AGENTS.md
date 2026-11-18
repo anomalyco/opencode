@@ -16,14 +16,15 @@ Do not add a second executable entry type, registry-owned executor, authorizatio
 
 Tool schemas use `input` and `output` terminology. Each tool carries its name, options, schemas, and executable behavior in one object.
 
-Location-scoped built-in layers acquire `Permission.Service` and every other required Location service while the layer is constructed. The executor captures those services. Permission sources are always constructed from the canonical invocation context:
+Location-scoped built-in layers acquire `Permission.Service` and every other required Location service while the layer is constructed. The executor captures those services. Permission requests always take their requester fields from the canonical invocation context through `Permission.invocation`:
 
 ```ts
-const source = {
-  type: "tool" as const,
-  messageID: context.messageID,
-  id: context.id,
-}
+yield* permission.assert({
+  action: "read",
+  resources: [target.resource],
+  save: ["*"],
+  ...Permission.invocation(context),
+})
 ```
 
 Leaves own resolution, permission, and side-effect ordering. Translate only expected typed errors into `ToolFailure`; do not use `catchCause`, because interruption and defects must survive. User declines from `Permission.assert` and question dismissals travel as defects beneath leaf `mapError` blankets and resurface as typed failures at `SessionModelRequest.executeTool`; leaves must never catch or convert them. A decline with feedback (`Permission.CorrectedError`) stays typed so the leaf converts it into `ToolFailure` and the model continues.

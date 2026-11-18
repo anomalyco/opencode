@@ -1,0 +1,157 @@
+---
+title: 참조
+description: 로컬 디렉터리와 Git 저장소를 프로젝트 참조로 추가합니다.
+---
+
+참조를 사용하면 OpenCode가 현재 프로젝트 외부의 디렉터리에 접근할 수 있습니다. 작업 중에 문서, 공유 라이브러리, 예제 또는 다른 저장소를 사용할 수 있게 하려면 참조를 활용하세요.
+
+참조는 `opencode.json` 또는 `opencode.jsonc`에서 alias별로 설정합니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Use for product behavior and documentation conventions",
+    },
+    "sdk": {
+      "repository": "anomalyco/opencode-sdk-js",
+      "branch": "main",
+      "description": "Use for JavaScript SDK implementation details",
+    },
+  },
+}
+```
+
+---
+
+## 로컬 디렉터리
+
+로컬 디렉터리를 참조하려면 `path`를 사용하세요.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "docs": {
+      "path": "../docs",
+    },
+  },
+}
+```
+
+경로는 다음 형식을 사용할 수 있습니다.
+
+- 참조를 정의한 config 파일 기준 상대 경로
+- 절대 경로(예: `/home/user/docs`)
+- 홈 디렉터리 기준 상대 경로(예: `~/docs`)
+
+문자열 축약형도 사용할 수 있습니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "docs": "../docs",
+  },
+}
+```
+
+---
+
+## Git 저장소
+
+Git 저장소를 참조하려면 `repository`를 사용하세요. OpenCode는 저장소를 로컬 저장소 캐시에 구성하고, 체크아웃된 소스를 참조 디렉터리로 사용할 수 있게 합니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+  },
+}
+```
+
+`repository`는 Git URL, host/path 참조, GitHub `owner/repo` 축약형을 지원합니다. 선택 사항인 `branch` 필드로 branch 또는 ref를 선택합니다. `branch`가 없으면 OpenCode는 저장소의 기본 branch를 사용합니다.
+
+branch, 설명 또는 기타 옵션이 필요 없으면 문자열 축약형을 사용할 수 있습니다.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "effect": "Effect-TS/effect",
+  },
+}
+```
+
+:::note
+Git 참조는 비동기로 새로 고쳐집니다. 새로 설정한 저장소는 clone이나 업데이트가 끝나기까지 잠시 시간이 걸릴 수 있습니다.
+:::
+
+---
+
+## 사용 목적 설명
+
+에이전트가 언제 참조를 사용해야 하는지 설명하려면 `description`을 추가하세요.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "design-system": {
+      "path": "../design-system",
+      "description": "Use when implementing UI components or design tokens",
+    },
+  },
+}
+```
+
+OpenCode는 설명이 있는 참조를 에이전트 컨텍스트에 포함합니다. 설명은 짧게 작성하되, 내용이 비슷한 참조를 구분할 수 있을 만큼 구체적이어야 합니다. 설명이 없는 참조는 자동완성과 직접 사용으로 계속 사용할 수 있지만 에이전트에게 안내되지는 않습니다.
+
+---
+
+## 자동완성 항목 숨기기
+
+TUI의 `@` 자동완성에서 참조를 제외하려면 `hidden`을 `true`로 설정하세요.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "internal": {
+      "path": "../internal",
+      "description": "Use for internal implementation details",
+      "hidden": true,
+    },
+  },
+}
+```
+
+`hidden`은 자동완성에만 영향을 줍니다. 설명이 있는 숨겨진 참조는 계속 에이전트 컨텍스트에 포함됩니다.
+
+---
+
+## 참조 사용하기
+
+설정한 참조는 TUI의 `@` 자동완성에 표시됩니다. `@alias`를 입력하면 참조 루트를 첨부하고, `@alias/`를 입력하면 그 안의 파일을 검색합니다.
+
+```text
+Compare this implementation with @sdk/src/client.ts
+```
+
+설명이 있는 설정된 참조의 경우 에이전트는 확인된 경로와 설명을 시스템 컨텍스트로도 받습니다. 따라서 직접 첨부하지 않아도 관련이 있을 때 에이전트가 참조를 살펴볼 수 있습니다.
+
+OpenCode는 외부 디렉터리 권한 경계에서 참조 디렉터리를 자동으로 허용합니다. 일반 도구 권한은 그대로 적용됩니다. 예를 들어, 파일을 편집할 수 없는 에이전트는 디렉터리가 참조로 설정되어 있어도 편집 권한을 얻지 못합니다.
+
+---
+
+## 필드 구성
+
+| 필드          | 로컬   | Git    | 설명                                           |
+| ------------- | ------ | ------ | ---------------------------------------------- |
+| `path`        | 예     | 아니요 | 로컬 참조 디렉터리                             |
+| `repository`  | 아니요 | 예     | Git URL, host/path 또는 GitHub `owner/repo` 값 |
+| `branch`      | 아니요 | 예     | 선택 사항인 Git branch 또는 ref                |
+| `description` | 예     | 예     | 참조를 언제 사용할지 설명하는 안내             |
+| `hidden`      | 예     | 예     | TUI `@` 자동완성에서 참조 숨기기               |
+
+참조 alias는 비워 둘 수 없으며 `/`, 공백, 백틱, 쉼표를 포함할 수 없습니다.

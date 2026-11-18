@@ -15,6 +15,23 @@ story("settings menu reconnect retains its prompt handler across server updates"
   await expect(component.getByRole("button", { name: "Authenticate", exact: true })).toHaveCount(0)
 })
 
+story("cancelling a sign-in from Home offers it again at once", async ({ mount, page }) => {
+  const component = await mount("app-dialog-ssh--authentication-required")
+  const projects = component.getByRole("button", { name: "Projects" })
+  const authenticate = page.getByRole("button", { name: "Authenticate", exact: true })
+  const dialog = page.getByRole("dialog", { name: "Connect to linuxbook" })
+  await projects.click()
+  await authenticate.click()
+  await expect(dialog.getByRole("textbox")).toBeVisible()
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click()
+  await expect(dialog).toHaveCount(0)
+  // The sign-in that waited on the dialog ends with it, instead of showing the server as connecting.
+  await projects.click()
+  await expect(authenticate).toBeEnabled()
+  await authenticate.click()
+  await expect(dialog.getByRole("textbox")).toBeVisible()
+})
+
 story("cancelling a version mismatch permits reconnecting again", async ({ mount, page }) => {
   const component = await mount("app-dialog-ssh--incompatible-session")
   await component.getByRole("button", { name: "Reconnect", exact: true }).click()

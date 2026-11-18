@@ -1,7 +1,8 @@
-import { createEffect, createMemo, createResource, type JSX } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, on, onCleanup, untrack, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Option, Schema, SchemaGetter } from "effect"
 import { createSimpleContext } from "@opencode/ui/context"
+import { showToast } from "@opencode/ui/toast"
 import {
   I18nProvider,
   type UiI18n,
@@ -25,6 +26,14 @@ import {
   type DesktopNativeBundle,
   type DesktopNativeLocale,
 } from "@/runtime/i18n/desktop-native"
+import {
+  createLanguageState,
+  selectDictionary,
+  selectLocale,
+  transitionLanguage,
+  type LanguageEffect,
+  type LanguageEvent,
+} from "@/runtime/i18n/machine"
 
 export type Locale = DesktopNativeLocale
 
@@ -242,7 +251,64 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     const initial = props.locale ?? readStoredLocale() ?? detectLocale()
     const [store, setStore, _, ready] = persisted(Persist.global("language"), languageSchema, { locale: initial })
 
-    const locale = createMemo(() => store.locale)
+    const stored = untrack(() => store.locale)
+
+    const boot = createLanguageState({
+      initial: stored,
+      cached: dicts.get(stored),
+      fallbackLocale: "en",
+      fallbackDictionary: base,
+    })
+
+    const [machine, setMachine] = createSignal(boot.state)
+    let timer: ReturnType<typeof setTimeout> | undefined
+
+    const dispatch = (event: LanguageEvent<Dictionary>) =>
+      batch(() => {
+        const prev = untrack(machine)
+        const next = transitionLanguage(prev, event)
+
+        if (next.state !== prev) setMachine(next.state)
+        next.effects.forEach(run)
+      })
+
+    const run = (effect: LanguageEffect) => {
+      if (effect.type === "load")
+        return void Promise.try(() => loadDict(effect.locale)).then(
+          (dictionary) => dispatch({ type: "load.succeeded", attempt: effect.attempt, dictionary }),
+          () => dispatch({ type: "load.failed", attempt: effect.attempt }),
+        )
+
+      if (effect.type === "timer.start") {
+        clearTimeout(timer)
+        timer = setTimeout(() => dispatch({ type: "load.timed-out", attempt: effect.attempt }), effect.timeoutMs)
+
+        return
+      }
+
+      if (effect.type === "timer.stop") {
+        clearTimeout(timer)
+        timer = undefined
+
+        return
+      }
+
+      if (effect.type === "persist") {
+        if (untrack(() => store.locale) !== effect.locale) setStore("locale", effect.locale)
+
+        return
+      }
+
+      showToast({
+        variant: "error",
+        title: t("toast.language.loadFailed.title", { language: label(effect.locale) }),
+      })
+    }
+
+    // The committed pair: every reader switches only once the dictionary for the new locale is in hand, so `t()`
+    // never suspends and the direction never flips ahead of the strings.
+    const locale = createMemo(() => selectLocale(machine()))
+    const dictionary = createMemo(() => selectDictionary(machine()))
     const intl = createMemo(() => INTL[locale()])
     // SAFETY: widens the initial `undefined` so a direction can be stored later.
     const [layout, setLayout] = createStore({ direction: undefined as Direction | undefined })
@@ -255,15 +321,11 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       return layout.direction === "rtl" ? "ar" : "en"
     })
 
-    const [dictionary] = createResource(locale, loadDict, {
-      initialValue: dicts.get(initial) ?? base,
-    })
-
     const t = <Key extends Extract<keyof Dictionary, string>>(
       key: TranslationKey<Key>,
       params?: Record<string, string | number | boolean>,
     ) => {
-      const template: string | undefined = (dictionary() ?? base)[key]
+      const template: string | undefined = dictionary()[key]
 
       // A key outside the dictionary translates to nothing, as it did with the package translator.
       return template === undefined ? template : resolveTemplate(template, params)
@@ -275,7 +337,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       params?: Record<string, string | number | boolean>,
     ) => {
       // SAFETY: every dictionary value is a string (`language.test.ts`).
-      const current = (dictionary.loading ? base : (dictionary() ?? base)) as Record<string, string>
+      const current = dictionary() as Record<string, string>
       const candidate = `${key}.${category}`
       const fallback = `${key}.other`
 
@@ -306,7 +368,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       params: Record<string, JSX.Element>,
     ) => {
       // SAFETY: every dictionary value is a string (`language.test.ts`).
-      const current = (dictionary.loading ? base : (dictionary() ?? base)) as Record<string, string>
+      const current = dictionary() as Record<string, string>
 
       return richTemplateParts(current[key] ?? key, params)
     }
@@ -337,14 +399,25 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     })
 
     createEffect(() => {
-      if (!props.onNativeTranslations || dictionary.loading) return
+      if (!props.onNativeTranslations) return
       const current = dictionary()
 
-      if (!current) return
       props.onNativeTranslations(
         createDesktopNativeBundle(locale(), (key) => current[key] ?? DESKTOP_NATIVE_ENGLISH[key]),
       )
     })
+
+    // Storage hydrating after mount, or another window picking a language.
+    createEffect(
+      on(
+        () => store.locale,
+        (next) => dispatch({ type: "locale.synced", locale: next, cached: dicts.get(next) }),
+        { defer: true },
+      ),
+    )
+
+    onCleanup(() => dispatch({ type: "disposed" }))
+    boot.effects.forEach(run)
 
     return {
       ready,
@@ -363,7 +436,8 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       rich,
       list,
       setLocale(next: Locale) {
-        setStore("locale", normalizeLocale(next))
+        const target = normalizeLocale(next)
+        dispatch({ type: "locale.requested", locale: target, cached: dicts.get(target) })
       },
       setDirection(next: Direction) {
         setLayout("direction", next === localeDirection(locale()) ? undefined : next)

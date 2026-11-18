@@ -1,0 +1,70 @@
+[data-component="menu-scroll"] {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+[data-component="menu-scroll"] > [data-scrollable] {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+[data-slot="menu-scroll-thumb"] {
+  display: none;
+}
+
+/* High-contrast modes keep the native scrollbar, which follows the system colours. */
+@media (hover: hover) and (pointer: fine) and (forced-colors: none) {
+  [data-component="menu-scroll"] > [data-scrollable] {
+    scrollbar-width: none;
+  }
+
+  [data-component="menu-scroll"] > [data-scrollable]::-webkit-scrollbar {
+    display: none;
+  }
+
+  [data-slot="menu-scroll-thumb"] {
+    position: absolute;
+    z-index: 1;
+    inset-inline-end: 0;
+    top: 0;
+    display: block;
+    width: 8px;
+    opacity: 0;
+    pointer-events: none;
+    touch-action: none;
+    user-select: none;
+    transition: opacity 200ms ease;
+
+    &::after {
+      position: absolute;
+      inset: 0 2px;
+      border-radius: 9999px;
+      background: var(--v2-border-border-muted);
+      content: "";
+    }
+
+    &:hover::after {
+      background: var(--v2-border-border-strong);
+    }
+  }
+
+  [data-component="menu-scroll"]:is([data-scrolling], [data-dragging]) > [data-slot="menu-scroll-thumb"],
+  [data-slot="menu-scroll-thumb"]:hover {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  [data-component="menu-scroll"][data-dragging] > [data-slot="menu-scroll-thumb"]::after {
+    background: var(--v2-border-border-strong);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="menu-scroll-thumb"] {
+    transition: none;
+  }
+}

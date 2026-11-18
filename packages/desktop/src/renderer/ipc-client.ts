@@ -3,6 +3,15 @@ import type { RpcMessage } from "effect/rpc"
 import type { DesktopRpcClient } from "../shared/ipc-rpc"
 import type { DesktopEvent } from "../shared/ipc-rpc/events"
 import { IpcTransportPort, omitUndefined } from "../shared/ipc-transport"
+import {
+  createIpcClientState,
+  PORT_HANDSHAKE_TIMEOUT_MS,
+  selectPendingChunk,
+  transitionIpcClient,
+  type IpcClientCommand,
+  type IpcClientEvent,
+  type IpcPending,
+} from "./ipc-client-machine"
 
 // The main process serves Effect's RpcServer over a MessagePort; this side speaks its wire format
 // directly. Messages cross by structured clone (no serialization layer, binary stays binary), every
@@ -21,51 +30,42 @@ type InvokeResult<Tag extends InvokeTag> =
 
 type EventValue<Tag extends EventTag> = Extract<DesktopEvent, { readonly _tag: Tag }>
 
-type Pending = {
-  // SAFETY: the reply is the RPC's success value as the trusted main process encoded it; see the note above.
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- see SAFETY above
-  readonly resolve: (value: unknown) => void
-  readonly reject: (cause: unknown) => void
-  readonly chunk?: (values: ReadonlyArray<unknown>) => void
-}
-
-const pending = new Map<number, Pending>()
-
 const listeners = new Map<EventTag, Set<(value: DesktopEvent) => void>>()
 
 // SAFETY: pagehide only waits for these callbacks to settle and ignores what they resolve to.
 // oxlint-disable-next-line anti-slop/no-unknown-returns -- see SAFETY above
 const beforeDispose = new Set<() => Promise<unknown> | void>()
 
+let state = createIpcClientState<MessagePort>()
+
 let nextId = 0
 
-const port = new Promise<MessagePort>((resolve) => {
-  const onMessage = (event: MessageEvent) => {
-    if (event.source !== window || event.data !== IpcTransportPort) return
-    const value = event.ports[0]
+const onWindowMessage = (event: MessageEvent) => {
+  if (event.source !== window || event.data !== IpcTransportPort) return
+  const value = event.ports[0]
 
-    if (!value) return
-    window.removeEventListener("message", onMessage)
-    // SAFETY: the port comes from the trusted main process, whose RPC server posts only its own messages.
-    value.addEventListener("message", (message) => receive(value, message.data as RpcMessage.FromServerEncoded))
-    value.start()
-    resolve(value)
-  }
+  if (value) dispatch({ type: "port.received", port: value })
+}
 
-  window.addEventListener("message", onMessage)
-})
+window.addEventListener("message", onWindowMessage)
+
+const handshakeTimer = setTimeout(() => dispatch({ type: "handshake.timed-out" }), PORT_HANDSHAKE_TIMEOUT_MS)
 
 // Let queued work (storage flushes) hand its messages to the port before it closes.
 window.addEventListener(
   "pagehide",
-  () => void Promise.allSettled([...beforeDispose].map((callback) => callback())).then(() => port.then((p) => p.close())),
+  () =>
+    void Promise.allSettled([...beforeDispose].map((callback) => callback())).then(() =>
+      dispatch({ type: "disposed" }),
+    ),
   { once: true },
 )
 
-void request("DesktopEvents", null, (values) => {
+// The event stream outlives a handshake timeout; only pagehide rejects it, and nobody is left to tell.
+request("DesktopEvents", null, (values) => {
   // SAFETY: DesktopEvents streams desktop events, whose encoded fields are JSON-native and read as decoded.
   for (const value of values as ReadonlyArray<DesktopEvent>) listeners.get(value._tag)?.forEach((fn) => fn(value))
-})
+}).catch(() => undefined)
 
 // SAFETY: as for `beforeDispose`, the callback's result is only awaited, never read.
 // oxlint-disable-next-line anti-slop/no-unknown-returns -- see SAFETY above
@@ -114,7 +114,7 @@ export function listen<Tag extends EventTag>(tag: Tag, listener: (value: EventVa
 function request(
   tag: InvokeTag | "DesktopEvents",
   payload: InvokeArgs<InvokeTag>[0] | null,
-  chunk?: Pending["chunk"],
+  chunk?: IpcPending["chunk"],
   signal?: AbortSignal,
 ) {
   const id = nextId++
@@ -122,11 +122,7 @@ function request(
   return new Promise<unknown>((resolve, reject) => {
     if (signal?.aborted) return reject(signal.reason)
 
-    const abort = () => {
-      if (!pending.delete(id)) return
-      reject(signal?.reason)
-      void port.then((p) => p.postMessage({ _tag: "Interrupt", requestId: id } satisfies RpcMessage.InterruptEncoded))
-    }
+    const abort = () => dispatch({ type: "request.aborted", id, reason: signal?.reason })
 
     signal?.addEventListener("abort", abort, { once: true })
 
@@ -137,48 +133,79 @@ function request(
         callback(value)
       }
 
-    pending.set(id, { resolve: settle(resolve), reject: settle(reject), chunk })
-
-    const message: RpcMessage.RequestEncoded = {
-      _tag: "Request",
+    dispatch({
+      type: "request.started",
       id,
-      tag,
-      payload: omitUndefined(payload),
-      headers: [],
+      message: { _tag: "Request", id, tag, payload: omitUndefined(payload), headers: [] },
+      entry: { resolve: settle(resolve), reject: settle(reject), chunk },
+    })
+  })
+}
+
+function dispatch(event: IpcClientEvent<MessagePort>) {
+  const next = transitionIpcClient(state, event)
+  state = next.state
+  next.commands.forEach(perform)
+}
+
+function perform(command: IpcClientCommand<MessagePort>) {
+  switch (command.type) {
+    case "cancel-handshake-timer":
+      return clearTimeout(handshakeTimer)
+
+    case "unlisten-window":
+      return window.removeEventListener("message", onWindowMessage)
+
+    case "attach-port": {
+      const port = command.port
+      // SAFETY: the port comes from the trusted main process, whose RPC server posts only its own messages.
+      port.addEventListener("message", (message) => receive(port, message.data as RpcMessage.FromServerEncoded))
+      port.start()
+
+      return
     }
 
-    void port.then((p) => p.postMessage(message))
-  })
+    case "close-port":
+      return command.port.close()
+
+    case "post-request":
+      return command.port.postMessage(command.message)
+
+    case "post-interrupt":
+      return command.port.postMessage({
+        _tag: "Interrupt",
+        requestId: command.requestId,
+      } satisfies RpcMessage.InterruptEncoded)
+
+    case "resolve":
+      return command.entry.resolve(command.value)
+
+    case "reject":
+      return command.entries.forEach((entry) => entry.reject(command.error))
+  }
 }
 
 function receive(p: MessagePort, message: RpcMessage.FromServerEncoded) {
   switch (message._tag) {
     case "Chunk": {
-      pending.get(Number(message.requestId))?.chunk?.(message.values)
+      selectPendingChunk(state, Number(message.requestId))?.(message.values)
       p.postMessage({ _tag: "Ack", requestId: message.requestId } satisfies RpcMessage.AckEncoded)
 
       return
     }
 
     case "Exit": {
-      const id = Number(message.requestId)
-      const entry = pending.get(id)
-      pending.delete(id)
+      const exit = message.exit
 
-      if (!entry) return
-
-      if (message.exit._tag === "Success") return entry.resolve(message.exit.value)
-
-      return entry.reject(failure(message.exit.cause))
+      return dispatch({
+        type: "response.exited",
+        id: Number(message.requestId),
+        exit: exit._tag === "Success" ? { ok: true, value: exit.value } : { ok: false, error: failure(exit.cause) },
+      })
     }
 
-    case "Defect": {
-      const error = new Error("Desktop IPC defect", { cause: message.defect })
-      pending.forEach((entry) => entry.reject(error))
-      pending.clear()
-
-      return
-    }
+    case "Defect":
+      return dispatch({ type: "server.defected", error: new Error("Desktop IPC defect", { cause: message.defect }) })
 
     case "ClientProtocolError": {
       console.error("[desktop-ipc] protocol error", message.error)

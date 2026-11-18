@@ -2,6 +2,7 @@ export * as EventManifest from "./event-manifest.js"
 
 import { Schema } from "effect"
 import { Agent } from "./agent.js"
+import { Artifact } from "./artifact.js"
 import { Command } from "./command.js"
 import { Config } from "./config.js"
 import { Credential } from "./credential.js"
@@ -65,6 +66,7 @@ const featureDefinitions = Event.inventory(
   ...Shell.Event.Definitions,
   ...Form.Event.Definitions,
   ...WebSearch.Event.Definitions,
+  ...Artifact.Event.Definitions,
 )
 
 export const ServerDefinitions = Event.inventory(
@@ -77,6 +79,7 @@ export const ServerDefinitions = Event.inventory(
   ...VcsEvent.Definitions,
   McpEvent.StatusChanged,
   McpEvent.ResourcesChanged,
+  McpEvent.ExperimentalEvent,
 )
 export const Server = Event.latest(ServerDefinitions)
 export type ServerEvent = Schema.Schema.Type<(typeof ServerDefinitions)[number]>

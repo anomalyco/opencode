@@ -60,6 +60,26 @@ describe("PowerShell practical syntax", () => {
     ['@"\n$(Write-Output \'\n"@\'; git status)\n"@', ["Write-Output '\n\"@'", "git status"]],
     ["class C { [int]$x = (git status); [void] M() { git diff } }", ["git status", "git diff"]],
     ["enum Color { Red; Green = 2 }; git status", ["git status"]],
+    ["[IO.File]::Delete('C:\\victim')", ["[IO.File]::Delete('C:\\victim')"]],
+    [
+      '[scriptblock]::Create("Remove-Item victim").Invoke()',
+      ['[scriptblock]::Create("Remove-Item victim")', '[scriptblock]::Create("Remove-Item victim").Invoke()'],
+    ],
+    [
+      '([scriptblock]::Create("Remove-Item victim")).Invoke()',
+      ['[scriptblock]::Create("Remove-Item victim")', '([scriptblock]::Create("Remove-Item victim")).Invoke()'],
+    ],
+    [
+      '$ExecutionContext.InvokeCommand.InvokeScript("Remove-Item victim")',
+      ['$ExecutionContext.InvokeCommand.InvokeScript("Remove-Item victim")'],
+    ],
+    ["Write-Output $proc.Kill()", ["Write-Output $proc.Kill()", "$proc.Kill()"]],
+    ["$proc.'Kill'(); $proc.('Ki' + 'll')(); $proc?.Dispose()", ["$proc.'Kill'()", "$proc.('Ki' + 'll')()", "$proc?.Dispose()"]],
+    [
+      "[IO.File]::De`lete('x'); [IO.File]:: Delete('y'); $proc.\nKill()",
+      ["[IO.File]::De`lete('x')", "[IO.File]:: Delete('y')", "$proc.\nKill()"],
+    ],
+    ['"payload" >> ~/.bashrc; (git status) > out.txt', ['"payload" >> ~/.bashrc', "(git status) > out.txt", "git status"]],
   ] as const)("extracts command resources from %s", (source, resources) => {
     const result = ShellScan.scanPowerShell(source)
     expect(result.kind).toBe("scanned")

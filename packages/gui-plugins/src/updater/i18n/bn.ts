@@ -29,4 +29,13 @@ export default {
   "releaseNotes.action.next": "পরবর্তী",
   "releaseNotes.action.hideFuture": "ভবিষ্যতে এগুলো দেখাবেন না",
   "releaseNotes.media.alt": "রিলিজ পূর্বরূপ",
+  "action.reload": "আপডেট করতে পুনরায় লোড করুন",
+  "action.reloading": "পুনরায় লোড হচ্ছে…",
+  "web.ready.title": "আপডেট প্রস্তুত",
+  "web.ready.message":
+    "OpenCode-এর একটি নতুন সংস্করণ প্রস্তুত। প্রতিটি খোলা উইন্ডোতে এটি ব্যবহার করতে পুনরায় লোড করুন।",
+  "web.reload": "পুনরায় লোড করুন",
+  "web.reset.title": "সার্ভার থেকে পুনরায় লোড করুন",
+  "web.reset.description": "অ্যাপের সংরক্ষিত কপি মুছে সার্ভারের বর্তমান সংস্করণ লোড করুন",
+  "web.reset.action": "সার্ভার থেকে পুনরায় লোড করুন",
 }

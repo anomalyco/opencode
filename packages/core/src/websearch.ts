@@ -76,6 +76,8 @@ type Data = {
 
 export type Editor = {
   add: (provider: ProviderImplementation) => void
+  list: () => readonly ProviderImplementation[]
+  remove: (id: ID) => void
   default: {
     get: () => Selection | undefined
     set: (selection: Selection) => void
@@ -109,6 +111,8 @@ const layer = Layer.effect(
       initial: () => ({ providers: new Map() }),
       editor: (editor) => ({
         add: (provider) => editor.providers.set(provider.id, provider),
+        list: () => Array.from(editor.providers.values()),
+        remove: (id) => editor.providers.delete(id),
         default: {
           get: () => editor.selection,
           set: (selection) => (editor.selection = selection),

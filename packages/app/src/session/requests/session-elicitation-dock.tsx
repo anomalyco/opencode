@@ -1,18 +1,18 @@
-import { For, Match, Show, Switch as Branch, createMemo } from "solid-js"
+import { For, Match, Show, Switch as Branch } from "solid-js"
 import { Option, Schema } from "effect"
-import { createStore } from "solid-js/store"
-import { useMutation } from "@tanstack/solid-query"
-import type { FormAnswer, FormInfo, FormStringField, FormValue, LocationRef } from "@opencode/client/promise"
+import type { FormInfo, FormStringField, LocationRef } from "@opencode/client/promise"
 import { Button } from "@opencode/ui/button"
 import { Checkbox } from "@opencode/ui/checkbox"
 import { Select } from "@opencode/ui/select"
 import { Switch } from "@opencode/ui/switch"
 import { TextInput } from "@opencode/ui/text-input"
 import { DockPrompt } from "@opencode/session-ui/dock-prompt"
-import { showToast } from "@/shell/notifications/toast"
+import { LinkedText } from "@opencode/session-ui/linked-text"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
+import { useServerSDK } from "@/runtime/server/client"
 import { useData } from "@/runtime/server/current"
+import { createElicitationDock } from "./elicitation-controller"
 import "./session-elicitation-dock.css"
 
 type Field = FormInfo["fields"][number]
@@ -30,80 +30,16 @@ export function SessionElicitationDock(props: {
 }) {
   const language = useLanguage()
   const platform = usePlatform()
-  const data = useData()
-  const fields = createMemo(() => props.request.fields.filter((field) => !("hidden" in field && field.hidden)))
 
-  const message = () => Option.getOrUndefined(decodeMessage(props.request.metadata?.message))
-
-  // Number inputs keep their raw text so a half-typed value such as "-" is not discarded.
-  const [values, setValues] = createStore<{
-    text: Record<string, string>
-    number: Record<string, string>
-    flag: Record<string, boolean>
-    list: Record<string, string[]>
-  }>({
-    text: Object.fromEntries(
-      props.request.fields.flatMap((field) => (field.type === "string" ? [[field.key, field.default ?? ""]] : [])),
-    ),
-    number: Object.fromEntries(
-      props.request.fields.flatMap((field) =>
-        (field.type === "number" || field.type === "integer") && field.default !== undefined
-          ? [[field.key, String(field.default)]]
-          : [],
-      ),
-    ),
-    flag: Object.fromEntries(
-      props.request.fields.flatMap((field) => (field.type === "boolean" ? [[field.key, field.default ?? false]] : [])),
-    ),
-    list: Object.fromEntries(
-      props.request.fields.flatMap((field) =>
-        field.type === "multiselect" ? [[field.key, [...(field.default ?? [])]]] : [],
-      ),
-    ),
+  const dock = createElicitationDock({
+    sdk: useServerSDK(),
+    forms: useData().session.form,
+    language,
+    request: () => props.request,
+    onSubmit: props.onSubmit,
   })
 
-  const fail = (error: Error) => showToast({ title: language.t("common.requestFailed"), description: error.message })
-
-  const input = () => ({ sessionID: props.request.sessionID, formID: props.request.id })
-
-  const reply = useMutation(() => ({
-    mutationFn: (answer: FormAnswer) => data.session.form.reply({ ...input(), answer }, props.request.location),
-    onMutate: props.onSubmit,
-    onError: fail,
-  }))
-
-  const cancel = useMutation(() => ({
-    mutationFn: () => data.session.form.cancel(input(), props.request.location),
-    onMutate: props.onSubmit,
-    onError: fail,
-  }))
-
-  const sending = () => reply.isPending || cancel.isPending
-
-  const submit = () => {
-    if (sending()) return
-    reply.mutate(
-      Object.fromEntries(
-        fields().flatMap((field): Array<[string, FormValue]> => {
-          if (field.type === "external") return [[field.key, true]]
-
-          if (field.type === "boolean") return [[field.key, values.flag[field.key] ?? false]]
-
-          if (field.type === "multiselect") {
-            const list = values.list[field.key] ?? []
-
-            return list.length ? [[field.key, list]] : []
-          }
-
-          const text = (field.type === "string" ? values.text[field.key] : values.number[field.key])?.trim()
-
-          if (!text) return []
-
-          return [[field.key, field.type === "string" ? text : Number(text)]]
-        }),
-      ),
-    )
-  }
+  const message = () => Option.getOrUndefined(decodeMessage(props.request.metadata?.message))
 
   return (
     <div data-component="session-elicitation-dock">
@@ -114,15 +50,14 @@ export function SessionElicitationDock(props: {
 
           if (event.key === "Escape") {
             event.preventDefault()
-
-            if (!sending()) cancel.mutate()
+            dock.dismiss()
 
             return
           }
 
           if (event.key === "Enter" && (event.metaKey || event.ctrlKey) && !event.altKey) {
             event.preventDefault()
-            submit()
+            dock.reply()
           }
         }}
         header={
@@ -136,7 +71,9 @@ export function SessionElicitationDock(props: {
               {(text) => (
                 <div data-slot="question-details">
                   <div data-slot="question-text">
-                    <bdi>{text()}</bdi>
+                    <bdi>
+                      <LinkedText text={text()} />
+                    </bdi>
                   </div>
                 </div>
               )}
@@ -145,11 +82,11 @@ export function SessionElicitationDock(props: {
         }
         footer={
           <>
-            <Button variant="ghost" size="large" disabled={sending()} onClick={() => cancel.mutate()}>
+            <Button variant="ghost" size="large" disabled={dock.busy()} onClick={dock.dismiss}>
               {language.t("ui.common.dismiss")}
             </Button>
             <div data-slot="question-footer-actions">
-              <Button variant="submit" size="large" disabled={sending()} onClick={submit}>
+              <Button variant="submit" size="large" disabled={dock.busy()} onClick={dock.reply}>
                 {language.t("ui.common.submit")}
               </Button>
             </div>
@@ -157,7 +94,7 @@ export function SessionElicitationDock(props: {
         }
       >
         <div data-slot="elicitation-fields">
-          <For each={fields()}>
+          <For each={dock.fields()}>
             {(field) => (
               <div data-slot="elicitation-field">
                 <Branch>
@@ -165,9 +102,9 @@ export function SessionElicitationDock(props: {
                     <Label field={field} />
                     <Switch
                       hideLabel
-                      checked={values.flag[field.key] === true}
-                      onChange={(checked) => setValues("flag", field.key, checked)}
-                      disabled={sending()}
+                      checked={dock.draft().flag[field.key] === true}
+                      onChange={(checked) => dock.setFlag(field.key, checked)}
+                      disabled={dock.busy()}
                     >
                       {field.title ?? field.key}
                     </Switch>
@@ -178,10 +115,10 @@ export function SessionElicitationDock(props: {
                       type="number"
                       numeric
                       step={field.type === "integer" ? 1 : "any"}
-                      value={values.number[field.key] ?? ""}
-                      disabled={sending()}
+                      value={dock.draft().number[field.key] ?? ""}
+                      disabled={dock.busy()}
                       aria-label={field.title ?? field.key}
-                      onInput={(event) => setValues("number", field.key, event.currentTarget.value)}
+                      onInput={(event) => dock.setNumber(field.key, event.currentTarget.value)}
                     />
                   </Match>
                   <Match when={field.type === "string" && field.options?.length ? field : undefined}>
@@ -191,12 +128,12 @@ export function SessionElicitationDock(props: {
                         <Select
                           aria-label={select().title ?? select().key}
                           options={select().options ?? []}
-                          current={select().options?.find((option) => option.value === values.text[select().key])}
+                          current={select().options?.find((option) => option.value === dock.draft().text[select().key])}
                           value={(option) => option.value}
                           label={(option) => option.label}
-                          onSelect={(option) => setValues("text", select().key, option?.value ?? "")}
+                          onSelect={(option) => dock.setText(select().key, option?.value ?? "")}
                           placeholder={language.t("session.elicitation.selectPlaceholder")}
-                          disabled={sending()}
+                          disabled={dock.busy()}
                         />
                       </>
                     )}
@@ -207,11 +144,11 @@ export function SessionElicitationDock(props: {
                         <Label field={text()} />
                         <TextInput
                           type={inputType(text().format)}
-                          value={values.text[text().key] ?? ""}
+                          value={dock.draft().text[text().key] ?? ""}
                           placeholder={text().placeholder}
-                          disabled={sending()}
+                          disabled={dock.busy()}
                           aria-label={text().title ?? text().key}
-                          onInput={(event) => setValues("text", text().key, event.currentTarget.value)}
+                          onInput={(event) => dock.setText(text().key, event.currentTarget.value)}
                         />
                       </>
                     )}
@@ -223,15 +160,9 @@ export function SessionElicitationDock(props: {
                         <For each={multi().options}>
                           {(option) => (
                             <Checkbox
-                              checked={(values.list[multi().key] ?? []).includes(option.value)}
-                              disabled={sending()}
-                              onChange={(checked) =>
-                                setValues("list", multi().key, (current = []) =>
-                                  checked
-                                    ? [...current, option.value]
-                                    : current.filter((value) => value !== option.value),
-                                )
-                              }
+                              checked={(dock.draft().list[multi().key] ?? []).includes(option.value)}
+                              disabled={dock.busy()}
+                              onChange={(checked) => dock.toggle(multi().key, option.value, checked)}
                             >
                               {option.label}
                             </Checkbox>
@@ -249,7 +180,7 @@ export function SessionElicitationDock(props: {
                           <Button
                             variant="neutral"
                             size="small"
-                            disabled={sending()}
+                            disabled={dock.busy()}
                             onClick={() => platform.openExternal(external().url)}
                           >
                             {language.t("common.open")}
@@ -276,7 +207,11 @@ function Label(props: { field: Field }) {
           <span data-slot="elicitation-title">{props.field.title}</span>
         </Show>
         <Show when={props.field.description}>
-          <span data-slot="elicitation-description">{props.field.description}</span>
+          {(description) => (
+            <span data-slot="elicitation-description">
+              <LinkedText text={description()} />
+            </span>
+          )}
         </Show>
       </div>
     </Show>

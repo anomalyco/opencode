@@ -21,6 +21,7 @@ import { hostEnvironmentLayer } from "./fixture/environment"
 import { tempLocationLayer } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
+import { permissionLayer } from "./lib/permission"
 import { executeTool, toolIdentity } from "./lib/tool"
 
 // Attached clients are never OAuth integrations.
@@ -48,7 +49,7 @@ const it = testEffect(
       }),
     ),
     Credential.node.replace(Layer.mock(Credential.Service, {})),
-    Permission.node.replace(Layer.mock(Permission.Service, { assert: () => Effect.void })),
+    Permission.node.replace(permissionLayer({ assert: () => Effect.void })),
     Image.node.replace(imagePassthrough),
   ]),
 )

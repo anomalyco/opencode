@@ -1,9 +1,10 @@
-import type { CredentialApi, ExperimentalApi, GenerateApi, PluginApi } from "@opencode/client/effect/api"
+import type { CredentialApi, ExperimentalApi, ExperimentalGenerateApi, PluginApi } from "@opencode/client/effect/api"
 import type { Location } from "@opencode/schema/location"
 import type { Effect, Scope } from "effect"
 import type { PluginOptions } from "../options.js"
 import type { App } from "../app.js"
 import type { AgentDomain } from "./agent.js"
+import type { ExperimentalArtifactDomain } from "./artifact.js"
 import type { AISDKDomain } from "./aisdk.js"
 import type { CommandDomain } from "./command.js"
 import type { EventDomain } from "./event.js"
@@ -34,14 +35,15 @@ export interface Context {
   readonly event: EventDomain
   readonly experimental: {
     readonly terminal: Pick<ExperimentalApi<unknown>["persistentPty"], "read">
-    /** Stateless generation with a model and a prompt: no session, history or tools. */
-    readonly generate: GenerateApi<unknown>
+    /** Stateless generation with a model and a prompt: no session, history or tools. Video jobs are server-only for now. */
+    readonly generate: Omit<ExperimentalGenerateApi<unknown>, "video">
+    readonly artifact: ExperimentalArtifactDomain
   }
   readonly integration: IntegrationDomain
   readonly mcp: MCPDomain
   readonly model: ModelDomain
   /** @deprecated Use `experimental.generate.text`. */
-  readonly generate: Pick<GenerateApi<unknown>, "text">
+  readonly generate: Pick<ExperimentalGenerateApi<unknown>, "text">
   readonly permission: PermissionDomain
   readonly plugin: Pick<PluginApi<unknown>, "list">
   readonly provider: ProviderDomain

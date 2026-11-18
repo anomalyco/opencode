@@ -9,3 +9,5 @@ packages/client/src/effect/generated/** linguist-generated
 packages/client/src/effect/api/** linguist-generated
 packages/core/src/**/*.txt text eol=lf
 packages/httpapi-codegen/test/generated/*.ts text eol=lf
+# The site tests compare source text and humans.txt byte for byte, so Windows checkouts keep LF.
+services/site/** text=auto eol=lf
