@@ -18,11 +18,6 @@ export const content = {
       action: "Installer",
     },
     sdk: { body: "Styr OpenCode fra dine egne skript, CI-jobber og verktøy.", action: "Les docs" },
-    ide: {
-      name: "IDE-utvidelser",
-      body: "Åpne OpenCode i VS Code, Cursor og Windsurf, eller i Zed og JetBrains-IDE-er via ACP.",
-      action: "Installer",
-    },
     mini: {
       body: "Et minimalt terminalgrensesnitt. Svarene skrives inn i scrollbacken din, med én prompt under.",
       action: "Installer",
@@ -186,26 +181,6 @@ export const content = {
         },
       },
     },
-    ide: {
-      title: "OpenCode | Editorintegrasjoner for VS Code, Cursor og Zed",
-      description:
-        "Bruk OpenCode i editoren din, med utvidelsen for VS Code, Cursor, Windsurf og VSCodium, og opencode acp for Zed, JetBrains-IDE-er og andre ACP-editorer.",
-      intro:
-        "Bruk OpenCode i editoren din. I VS Code, Cursor, Windsurf og VSCodium kjører du opencode i den integrerte terminalen, så installerer utvidelsen seg selv. Zed, JetBrains-IDE-er og andre editorer som støtter Agent Client Protocol, kjører OpenCode med opencode acp.",
-      features: {
-        "quick-launch": { title: "Hurtigstart", body: "Cmd+Esc eller Ctrl+Esc åpner OpenCode i en delt terminal." },
-        "new-session": { title: "Ny sesjon", body: "Cmd+Shift+Esc eller Ctrl+Shift+Esc starter en ny sesjon." },
-        context: { title: "Kontekst", body: "Deler gjeldende utvalg eller fane med OpenCode." },
-        "file-references": { title: "Filreferanser", body: "Cmd+Option+K eller Alt+Ctrl+K setter inn @File#L37-42." },
-        "installs-itself": {
-          title: "Installerer seg",
-          body: "Kjør opencode i den integrerte terminalen for å legge den til.",
-        },
-        "acp-editors": { title: "ACP-editorer", body: "Zed, JetBrains-IDE-er, Avante.nvim og CodeCompanion.nvim." },
-        "open-vsx": { title: "Open VSX", body: "Også på Open VSX for Cursor, Windsurf og VSCodium." },
-        "same-agent": { title: "Samme agent", body: "OpenCode du kjører i terminalen, ved siden av koden din." },
-      },
-    },
     mini: {
       title: "OpenCode | Mini, et minimalt terminalgrensesnitt for agenten",
       description:
@@ -240,9 +215,9 @@ export const content = {
       body: "La agenter bruke den ekte nettleseren din.",
       title: "OpenCode | Browse, den ekte nettleseren din for kodeagenter",
       description:
-        "Browse lar OpenCode og andre MCP-klienter bruke den ekte nettleseren din. Agenter styrer faner i bakgrunnen med Playwright og gir innlogging og 2FA tilbake til deg.",
+        "Browse lar OpenCode og andre MCP-klienter bruke den ekte nettleseren din. Agenter leser, klikker, skriver, tar skjermbilder, tar opp faner og gir innlogging og 2FA tilbake til deg.",
       intro:
-        "En MCP-server og en Chromium-utvidelse som lar agentene dine bruke den ekte nettleseren din, med fanene, innloggingene og utvidelsene dine. De åpner og styrer faner med Playwright, tar skjermbilder og tar opp skjermen, i bakgrunnsfaner som er gruppert og ute av veien. Når det er din tur, for en innlogging, en 2FA-forespørsel eller en betaling, gir de fanen tilbake til deg og fortsetter når du klikker på Continue.",
+        "En MCP-server og en Chromium-utvidelse som lar agentene dine bruke den ekte nettleseren din, med fanene, innloggingene og utvidelsene dine. De åpner faner i bakgrunnen, gruppert og ute av veien, og leser sider, klikker, skriver, tar skjermbilder og tar opp faner. Når det er din tur, for en innlogging, en 2FA-forespørsel eller en betaling, gir de fanen tilbake til deg og fortsetter når du klikker på Continue.",
       features: {
         "your-real-browser": {
           title: "Din ekte nettleser",
@@ -256,7 +231,7 @@ export const content = {
         },
         "record-and-capture": {
           title: "Ta opp og lagre",
-          body: "Skjermbilder, skjermopptak og nettverkstrafikk som HAR.",
+          body: "Skjermbilder, opptak av faner og nettverkstrafikk.",
         },
         "any-mcp-client": {
           title: "Alle MCP-klienter",
@@ -266,7 +241,7 @@ export const content = {
           title: "Alle innloggingene dine",
           body: "Agenter bruker nettstedene du allerede er logget inn på. Ingen nøkler, ingen oppsett.",
         },
-        allowlists: { title: "Hvitelister", body: "Begrens fanene til en sesjon til nettstedene du oppgir." },
+        "allowed-sites": { title: "Tillatte nettsteder", body: "Hold fanen til en agent på nettstedene du oppgir." },
       },
       install:
         "Installer [Chrome-utvidelsen] først. Den guider deg gjennom resten av stegene. Vil du installere CLI-en direkte (det skal du ikke trenge), bruk en av disse.",
@@ -349,7 +324,7 @@ export const content = {
     },
     colors: {
       title: "Farger",
-      body: "Logoen og ordmerket bruker én farge i tre opasiteter, med en lysere farge for mørke bakgrunner. Verdiene under er fargen over hvitt eller #0B0B0B, slik standardfilene viser den. Klikk på en verdi for å kopiere den.",
+      body: "Logoen og ordmerket bruker én farge i tre opasiteter, med en lysere farge for mørke bakgrunner. Verdiene under er fargene i standardfilene. Bruk dem bare til logoen og ordmerket, ikke til annen tekst eller bakgrunner. Klikk på en verdi for å kopiere den.",
       palettes: {
         light: {
           name: "Lys",
@@ -696,14 +671,6 @@ export const content = {
   productDownloads: {
     terminal: { commands: { curl: { name: "Skript" } } },
     sdk: { more: { label: "Les SDK-dokumentasjonen" } },
-    ide: {
-      lead: "Kjør opencode i den integrerte terminalen i editoren din, så installerer utvidelsen seg selv. Du kan også installere den selv.",
-      links: {
-        "vs-code-marketplace": { label: "VS Code Marketplace" },
-        "open-vsx-cursor-windsurf-vscodium": { label: "Open VSX (Cursor, Windsurf, VSCodium)" },
-      },
-      more: { label: "Sett opp Zed, JetBrains-IDE-er og andre ACP-editorer" },
-    },
     mini: {
       commands: { curl: { name: "Skript" } },
       lead: "Mini følger med OpenCode CLI. Installer den på en av disse måtene, og kjør så opencode mini.",

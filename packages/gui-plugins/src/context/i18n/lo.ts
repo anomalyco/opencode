@@ -28,4 +28,5 @@ export default {
   "export.success.description": "ບັນທຶກເຊດຊັນໃສ່ {{filename}}",
   "export.failed.title": "ລົ້ມເຫລວໃນການສົ່ງອອກເຊດຊັນ",
   "export.failed.description": "ມີຂໍ້ຜິດພາດເກີດຂຶ້ນໃນຂະນະທີ່ສົ່ງອອກເຊດຊັນ",
+  "usage.toggle": "ສະຫຼັບບໍລິບົດເຊດຊັນ",
 }

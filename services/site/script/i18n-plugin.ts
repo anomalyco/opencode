@@ -1,15 +1,15 @@
-// The translation slices in the client build (script/i18n-slices.ts works out what goes in each):
+// The translation slices in the static pages' script (script/static-client.ts; script/i18n-slices.ts
+// works out what goes in each):
 //
 // - each locale gets a table module (virtual:i18n/<locale>) holding the shell's strings and where each
 //   other slice is, each slice a module of its own (virtual:i18n/<locale>/<slice>), and
 //   src/i18n/tables.ts becomes the 18 tables;
 // - src/i18n/english.ts keeps only the English the browser reads in every language;
-// - every import() of a lazy boundary (a page route, a module only ever loaded with import())
-//   loads the boundary's slice alongside it and resolves once both have arrived, so the boundary's
-//   code never runs before its strings (a top-level await in the boundary would do the same, but
-//   makes Rolldown split the shared chunks differently);
-// - the server reads where the files went (virtual:i18n-preload) to preload a page's own
-//   (src/i18n/preload.ts), so no string costs a round trip before hydration.
+// - every import() of a lazy boundary (a module only ever loaded with import()) loads the boundary's
+//   slice alongside it and resolves once both have arrived, so the boundary's code never runs before
+//   its strings (a top-level await in the boundary would do the same, but makes Rolldown split the
+//   shared chunks differently). The script's first file must not bring the runtime, so that import()
+//   loads the runtime with import() too.
 //
 // The development server and the Worker keep the source files whole.
 import path from "node:path"
@@ -32,8 +32,6 @@ const dynamicImport = /\bimport\(\s*(?:\/\*[\s\S]*?\*\/\s*)*(["'])([^"'`]+)\1\s*
 export function i18nSlices(): Plugin {
   let build = false
   let slices: Slices | undefined
-  // Output file of each virtual module in the client build, by its id.
-  const files = new Map<string, string>()
   const client = (environment: { name: string }) => build && environment.name === "client"
   const analyze = () => {
     if (slices) return slices
@@ -43,9 +41,12 @@ export function i18nSlices(): Plugin {
     return slices
   }
   const boundary = (id: string) => analyze().boundaries[slashes(id).split("?")[0]]
-  const routes = () => Object.keys(analyze().boundaries).filter((file) => file.startsWith(`${root}src/routes/`))
-  // The page routes whose import() in SolidStart's route list loads their slice (checked in generateBundle).
-  const routed = new Set<string>()
+  // A slice with no strings in any language, which the tables leave out.
+  const empty = (slice: string) =>
+    Object.values(analyze().locales).every((locale) => {
+      const payload = locale.slices[analyze().shared[slice]]
+      return !Object.keys(payload.dict).length && !Object.keys(payload.content).length
+    })
 
   return {
     name: "i18n-slices",
@@ -57,9 +58,6 @@ export function i18nSlices(): Plugin {
       if (id.startsWith("virtual:i18n")) return `\0${id}`
     },
     load(id) {
-      // Read by the server only; the browser's copy is empty.
-      if (id === "\0virtual:i18n-preload")
-        return `export default ${JSON.stringify(build && this.environment.name !== "client" ? preloads() : null)}`
       if (!client(this.environment)) return
       const data = analyze()
       if (id === englishFile) return `export const english = ${json(data.english)}`
@@ -88,53 +86,19 @@ export function i18nSlices(): Plugin {
       for (const match of code.matchAll(dynamicImport)) {
         const target = await this.resolve(match[2], id)
         const slice = target && boundary(target.id)
-        if (!target || !slice) continue
+        // A boundary without strings (the funnel's config) has nothing to wait for.
+        if (!target || !slice || empty(slice)) continue
         slices.set(match[0], slice)
-        if (id === "solid-start:routes") routed.add(slashes(target.id).split("?")[0])
       }
       if (!slices.size) return
       return {
         code: [
-          `import { loadSlice as __i18nSlice } from ${JSON.stringify(runtime)};`,
-          "const __i18nWith = (module, slice) => Promise.all([module, __i18nSlice(slice).catch(() => {})]).then((loaded) => loaded[0]);",
+          `const __i18nWith = (module, slice) => Promise.all([module, import(${JSON.stringify(runtime)}).then((i18n) => i18n.loadSlice(slice)).catch(() => {})]).then((loaded) => loaded[0]);`,
           code.replace(dynamicImport, (text) => (slices.has(text) ? `__i18nWith(${text}, ${JSON.stringify(slices.get(text))})` : text)),
         ].join("\n"),
         map: null,
       }
     },
-    generateBundle(_, bundle) {
-      if (!client(this.environment)) return
-      // A page route whose import() wasn't rewritten would run before its strings arrive: fail the
-      // build instead (a change in how SolidStart writes its route list, for example).
-      const missed = routes().filter((file) => !routed.has(file))
-      if (missed.length)
-        throw new Error(`i18n-slices: SolidStart's route list doesn't load the strings of ${missed.join(", ")}`)
-      for (const chunk of Object.values(bundle))
-        if (chunk.type === "chunk" && chunk.facadeModuleId?.startsWith("\0virtual:i18n/"))
-          files.set(chunk.facadeModuleId.slice(1), `/${chunk.fileName}`)
-    },
-  }
-
-  /**
-   * For each locale, the files a page in it loads before hydration: its table (with the shell's
-   * strings) and its route's slice. `boundaries` has the other lazy boundaries' slices, for a page
-   * that knows before hydration it will load one (the Markdown view on a reload in it).
-   */
-  function preloads() {
-    const data = analyze()
-    const src = `${root}src/`
-    const sliceFiles = (locale: string, routes: boolean) =>
-      Object.fromEntries(
-        Object.entries(data.boundaries)
-          .filter(([file]) => file.startsWith(`${src}routes/`) === routes)
-          .map(([file, slice]) => [file.slice(src.length), files.get(`virtual:i18n/${locale}/${data.shared[slice]}`) ?? null]),
-      )
-    return Object.fromEntries(
-      Object.keys(data.locales).map((locale) => [
-        locale,
-        { table: files.get(`virtual:i18n/${locale}`), routes: sliceFiles(locale, true), boundaries: sliceFiles(locale, false) },
-      ]),
-    )
   }
 }
 

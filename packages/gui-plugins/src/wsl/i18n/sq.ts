@@ -52,4 +52,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} skadoi pas {{timeout}}ms",
   "error.failedPort": "Dështoi në marrjen e portit",
   "menu.remove": "Hiq",
+  "error.busy": "{{distro}} është i zënë me një detyrë tjetër. Provoni sërish kur të përfundojë.",
 }

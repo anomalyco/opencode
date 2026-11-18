@@ -1,7 +1,7 @@
 import type { Browser } from "@opencode/plugin-browser/rpc"
 import type { IpcClient } from "@opencode/plugin/gui"
 import { uuid } from "@opencode/util/uuid"
-import type { BrowserPane, PaneEvent } from "./ipc"
+import type { BrowserPane, PaneEvent, Viewport } from "./ipc"
 
 type Client = IpcClient<(typeof BrowserPane)["spec"]>
 
@@ -20,6 +20,7 @@ export type Registration = {
   inspect(tabID: Browser.TabID, enabled: boolean): void
   highlight(tabID: Browser.TabID, ref?: Browser.Ref): void
   zoom(tabID: Browser.TabID, zoom: Zoom): void
+  setViewport(tabID: Browser.TabID, viewport: Viewport): Promise<void>
   site(tabID: Browser.TabID): Promise<{ cookies: number }>
   clearSite(tabID: Browser.TabID): Promise<void>
   close(): void
@@ -75,6 +76,7 @@ export function openBinding(input: {
       if (status.closed) return
       void ready.then(() => client.zoom({ binding, tabID, zoom })).catch(() => undefined)
     },
+    setViewport: (tabID, viewport) => ready.then(() => client.setViewport({ binding, tabID, viewport })),
     site: (tabID) => ready.then(() => client.site({ binding, tabID })),
     clearSite: (tabID) => ready.then(() => client.clearSite({ binding, tabID })),
     close() {

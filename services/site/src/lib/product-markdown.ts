@@ -1,18 +1,16 @@
 import { anomalyApps, anomalyProducts } from "~/component/site/links"
 import { extensionPages, type ExtensionSlug } from "~/component/site/extension-data"
 import {
-  acpDocs,
-  extensions,
   installs,
   mobileStores,
   productAreas,
-  productDetails,
   allProductPages,
   productPages,
   sdkDocs,
   sdkSnippet,
   type PageSlug,
 } from "~/component/site/product-data"
+import { productDetails } from "~/component/site/product-details"
 import { changelogEntryMarkdown } from "~/lib/changelog-markdown"
 import { downloadSectionsMarkdown, productDownloadMarkdown, storeMarkdown } from "~/lib/download-content"
 import { changelogQuery } from "~/lib/changelog-notes"
@@ -126,8 +124,6 @@ export function productActionMarkdown(slug: PageSlug, context: MarkdownContext) 
     ).trimEnd()
   if (slug === "mobile")
     return `Download: ${mobileStores.map((store) => storeMarkdown({ ...store, href: store.href.startsWith("/") ? context.route(store.href) : store.href })).join(", ")}`
-  if (slug === "ide")
-    return `Install: ${link("VS Code Marketplace", extensions.href)}, or run \`opencode\` in your editor's integrated terminal. ACP editors: ${link("ACP docs", context.route(acpDocs))}`
   if (slug === "terminal" || slug === "mini")
     return blocks(
       "Install with any of these:",

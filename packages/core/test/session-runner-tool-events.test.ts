@@ -399,7 +399,7 @@ it.effect("publishes batched deltas before the next block starts", () =>
     const types = () =>
       published
         .map((event) => event.type)
-        .filter((type) => type !== "session.step.started.1" && type !== "session.step.streamed")
+        .filter((type) => type !== "session.step.started.1" && type !== "session.step.first-token.1")
     yield* Effect.forEach(
       [
         LLMEvent.reasoningStart({ id: "reasoning" }),
@@ -418,6 +418,8 @@ it.effect("publishes batched deltas before the next block starts", () =>
       "session.text.delta",
       "session.tool.input.started.1",
     ])
+    // The first generated token is recorded once, before any of the blocks it belongs to.
+    expect(published.filter((event) => event.type === "session.step.first-token.1")).toHaveLength(1)
 
     // Blocks stay open: later chunks still batch, and nothing is published twice.
     yield* publisher.publish(LLMEvent.textDelta({ id: "text", text: " more" }))

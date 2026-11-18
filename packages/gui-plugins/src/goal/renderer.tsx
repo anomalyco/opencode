@@ -227,7 +227,7 @@ const setup: Plugin.Setup<typeof GoalDefinition> = (ctx) => {
               {ctx.t("resume")}
             </Button>
           </Show>
-          <Button size="small" variant="ghost" icon="outline-trash" disabled={busy()} onClick={() => run("clear")}>
+          <Button size="small" variant="ghost" icon="trash" disabled={busy()} onClick={() => run("clear")}>
             {ctx.t("clear")}
           </Button>
         </div>

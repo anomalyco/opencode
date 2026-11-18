@@ -22,7 +22,11 @@ import { useI18n } from "@opencode/ui/context/i18n"
 import { Markdown } from "../components/markdown"
 import { linkSegments } from "../components/link-segments"
 import { LinkedText } from "../components/linked-text"
-import { sessionReferenceText, setupSessionLinks } from "../components/markdown-session-links"
+import {
+  sessionReferenceClipboardText,
+  sessionReferenceText,
+  setupSessionLinks,
+} from "../components/markdown-session-links"
 import { useMarkdown } from "../context/markdown"
 import { useSources } from "../context/sources"
 import { SourcesChip } from "../sources/sources-chip"
@@ -56,7 +60,7 @@ import type {
 import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
 import { agentLabel } from "./agent-label"
 import { isInterruptedError } from "../timeline/turn-phase-machine"
-import { attached, imageAttachmentPlaceholderStyle, typeLabel } from "../components/message-file"
+import { attached, typeLabel } from "../components/message-file"
 import {
   DISPOSED_ATTACHMENT_MEDIA_EVENT,
   INITIAL_ATTACHMENT_MEDIA_STATE,
@@ -130,17 +134,15 @@ function MetaItems(props: { items: MetaItem[]; slot: "user-message" | "text-part
 
 function MessageActionButton(
   props: Pick<ComponentProps<"button">, "disabled" | "onMouseDown" | "onClick" | "aria-label"> & {
-    icon: "check" | "copy"
+    copied: boolean
     label: JSX.Element
     size?: "small" | "normal"
   },
 ) {
-  const icon = () => (props.icon === "copy" ? "outline-copy" : props.icon)
-
   return (
-    <Tooltip appearance="compact" value={props.label} placement="top" gutter={4}>
+    <Tooltip appearance="compact" value={props.label} placement="top" gutter={4} forceOpen={props.copied || undefined}>
       <IconButton
-        icon={<Icon name={icon()} size="small" />}
+        icon={<Icon name={props.copied ? "check" : "copy"} />}
         size={props.size ?? "normal"}
         variant="ghost-muted"
         disabled={props.disabled}
@@ -210,7 +212,7 @@ function createPacedValue(getValue: () => string, live?: () => boolean) {
   return value
 }
 
-function PacedMarkdown(props: { text: string; cacheKey: string; streaming: boolean }) {
+export function PacedMarkdown(props: { text: string; cacheKey: string; streaming: boolean }) {
   const value = createPacedValue(
     () => props.text,
     () => props.streaming,
@@ -430,7 +432,7 @@ export function CurrentUserMessageDisplay(props: {
           {/* The chevron explains itself, so it carries only an accessible name, no tooltip. */}
           <Menu.Trigger
             as={IconButton}
-            icon={<Icon name="chevron-down" size="small" />}
+            icon={<Icon name="chevron-down" />}
             size="small"
             variant="ghost-muted"
             onMouseDown={(event: MouseEvent) => event.preventDefault()}
@@ -449,26 +451,26 @@ export function CurrentUserMessageDisplay(props: {
               <Menu.Separator />
               <Show when={pending() && props.actions?.pending}>
                 <Menu.Item disabled={actionView().disabled.queue} onSelect={() => request("queue")}>
-                  <Icon name="bullet-list" size="small" />
+                  <Icon name="bullet-list" />
                   {i18n.t("ui.message.moveToQueue")}
                 </Menu.Item>
               </Show>
               <Menu.Item disabled={!copyText()} onSelect={() => void writeClipboard(copyText())}>
-                <Icon name="outline-copy" size="small" />
+                <Icon name="copy" />
 
                 {i18n.t("ui.message.copyMessage")}
               </Menu.Item>
               {/* Like the iOS app, a Voice message also offers the full prompt the session received. */}
               <Show when={props.voice}>
                 <Menu.Item onSelect={() => void writeClipboard(props.message.text)}>
-                  <Icon name="outline-copy" size="small" />
+                  <Icon name="copy" />
                   {i18n.t("ui.message.copyFullMessage")}
                 </Menu.Item>
               </Show>
               {/* A pending steer has no history to fork from yet. */}
               <Show when={!pending()}>
                 <Menu.Item disabled={actionView().disabled.fork} onSelect={() => request("fork")}>
-                  <Icon name="fork" size="small" />
+                  <Icon name="fork" />
                   {i18n.t("ui.message.forkMessage")}
                 </Menu.Item>
               </Show>
@@ -479,7 +481,7 @@ export function CurrentUserMessageDisplay(props: {
                   <Show when={props.actions?.revert}>
                     <Menu.Separator />
                     <Menu.Item disabled={actionView().disabled.revert} onSelect={() => request("revert")}>
-                      <Icon name={props.latest ? "outline-undo" : "reset"} size="small" />
+                      <Icon name="reset" />
                       {props.latest ? i18n.t("ui.message.undoMessage") : i18n.t("ui.message.revertMessage")}
                     </Menu.Item>
                   </Show>
@@ -491,7 +493,7 @@ export function CurrentUserMessageDisplay(props: {
                   disabled={actionView().disabled.remove}
                   onSelect={() => request("remove")}
                 >
-                  <Icon name="outline-trash" size="small" />
+                  <Icon name="trash" />
                   {i18n.t("ui.message.deletePending")}
                 </Menu.Item>
               </Show>
@@ -576,13 +578,6 @@ export function CurrentUserMessageDisplay(props: {
               return "height" in current ? current.height : undefined
             }
 
-            const placeholderStyle = () =>
-              imageAttachmentPlaceholderStyle({
-                width: width(),
-                height: height(),
-                loaded: mediaView().status === "ready",
-              })
-
             return (
               <Show
                 when={!image()}
@@ -594,7 +589,6 @@ export function CurrentUserMessageDisplay(props: {
                     data-placeholder={mediaView().placeholder ? "true" : undefined}
                     data-width={width()}
                     data-height={height()}
-                    style={placeholderStyle()}
                     onClick={(event) => {
                       const src = mediaView().src
                       const origin = event.currentTarget
@@ -680,7 +674,12 @@ export function CurrentUserMessageDisplay(props: {
               </Tooltip>
             </div>
           </Show>
-          <div data-slot="user-message-text" dir="auto" data-comments={comments().length > 0 ? "true" : undefined}>
+          <div
+            data-slot="user-message-text"
+            dir="auto"
+            data-comments={comments().length > 0 ? "true" : undefined}
+            onCopy={copySessionReferences}
+          >
             <Show
               when={props.fold}
               fallback={<CurrentHighlightedText text={props.text} files={inlineFiles()} agents={agents()} />}
@@ -758,7 +757,8 @@ function UserMessageFold(props: {
   }
 
   onMount(() => {
-    measure()
+    // The bubble gets its wrapping width after the surrounding view mounts.
+    queueMicrotask(measure)
     const observer = new ResizeObserver(measure)
     observer.observe(content!)
     onCleanup(() => observer.disconnect())
@@ -799,7 +799,7 @@ function UserMessageFold(props: {
           onClick={flip}
         >
           <span>{props.expanded ? i18n.t("ui.message.showLess") : i18n.t("ui.message.readMore")}</span>
-          <Icon name="chevron-down" size="small" />
+          <Icon name="chevron-down" />
         </button>
       </Show>
     </>
@@ -886,11 +886,31 @@ function CurrentHighlightedText(props: { text: string; files: PromptAttachment[]
 
 type HighlightSegment = { text: string; type?: "file" | "agent" | "link" }
 
+function copySessionReferences(event: ClipboardEvent & { currentTarget: HTMLDivElement }) {
+  const selection = window.getSelection()
+
+  if (event.defaultPrevented || !event.clipboardData || !selection || selection.isCollapsed) return
+  const ranges = Array.from({ length: selection.rangeCount }, (_, index) => selection.getRangeAt(index))
+
+  if (!ranges.every((range) => event.currentTarget.contains(range.commonAncestorContainer))) return
+  const text = sessionReferenceClipboardText(event.currentTarget, ranges)
+
+  if (text === undefined) return
+  event.preventDefault()
+  event.clipboardData.setData("text/plain", text)
+}
+
 function SessionReferenceText(props: { text: string }) {
   const markdown = useMarkdown()
   const root = document.createElement("span")
   createEffect(() => root.replaceChildren(sessionReferenceText(props.text, (id) => markdown?.sessionTitle?.(id))))
-  onCleanup(setupSessionLinks(root, () => markdown?.openSession))
+  onCleanup(
+    setupSessionLinks(
+      root,
+      () => markdown?.openSession,
+      () => markdown?.sessionMenu,
+    ),
+  )
 
   return root
 }
@@ -916,7 +936,6 @@ function CompactionDivider(props: { label: string }) {
 
 export function SessionCompactionMessage(props: { message: SessionMessageCompaction; error: string }) {
   const i18n = useI18n()
-  const data = useData()
   const summary = () => (props.message.status === "failed" ? "" : props.message.summary)
 
   const error = () => {
@@ -963,7 +982,7 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
 
   return (
     <Show
-      when={!data.backgroundCompaction || props.message.reason === "manual" || props.message.status === "failed"}
+      when={props.message.reason === "manual" || props.message.status === "failed"}
       fallback={
         <QuietCompaction
           id={props.message.id}
@@ -1215,7 +1234,7 @@ export function AssistantTextContent(props: {
     return (
       <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
         <MessageActionButton
-          icon={copy.copied() ? "check" : "copy"}
+          copied={copy.copied()}
           size="small"
           label={copy.copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
           onMouseDown={(event) => event.preventDefault()}

@@ -67,6 +67,7 @@ We also clear three variables a user might have set in their shell. `CLAUDE_CODE
   - Before the call: gives us Claude's ID for the call. Our tool handler can't see this ID, and opencode needs it to send back the right result. Because we only remember one ID at a time, tools must run one at a time, so we never mark them as safe to run in parallel.
   - After the call: adds PDFs and linked images from opencode's result, which a normal MCP tool result can't carry.
 - Thinking with summaries, so opencode has reasoning text to show
+- Dropping earlier thinking when the system prompt or tools change mid-session (`CLAUDE_CODE_POLISHED_DEWDROP=drop`). Without it the API rejects the next request, because each thinking block is tied to the prompt and tools it was made with.
 - Messages sent exactly as given. opencode already expands `/commands` and adds `@file` contents before sending, so Claude Code does not process them again. It also skips the context Claude Code normally adds at the start of each turn, such as nested CLAUDE.md files, skill lists and reminders. This needs Claude Code 2.1.248 or later.
 - A higher limit on tool output, so opencode's own truncation applies instead
 - Saved Claude sessions for chats, but not for side calls such as titles
@@ -124,7 +125,7 @@ Users can configure the `claude-agent` provider and its models in opencode confi
 - Why not Claude's own cost: it is a running total for the turn, so it cannot be split per response.
 - Claude Code reports usage for one model response several times while it streams, and again as a total for the turn. Adding these up would count the same response several times and make opencode compact too early. We keep the highest count for each response, and use the last response's input as the context size.
 - Each model's context size comes from Claude. Without it, opencode's 200k default applies.
-- The model list is refreshed whenever Claude reports it: on `/connect`, when the login changes, and each time a new Claude process starts. It is saved, with where the login's prices come from, so opencode can show models and costs at startup without running `claude`.
+- The model list is refreshed whenever Claude reports it: on `/connect`, when the login changes, and each time a new Claude process starts. A new process doesn't report context sizes, so a model it lists without a saved size triggers one full check. The list is saved, with where the login's prices come from, so opencode can show models and costs at startup without running `claude`.
 
 ### Titles, Summaries and Compaction
 

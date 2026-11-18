@@ -35,7 +35,7 @@ export const SettingsExperimental: Component = () => {
             >
               <Select
                 data-action="settings-sidebar-organize"
-                options={["list", "projects"] as const}
+                options={settings.general.sidebarOrganizeOptions}
                 current={settings.general.sidebarOrganize()}
                 label={(mode) => language.t(`settings.experimental.sidebarOrganize.${mode}`)}
                 onSelect={(mode) => mode && settings.general.setSidebarOrganize(mode)}
@@ -44,25 +44,17 @@ export const SettingsExperimental: Component = () => {
               />
             </SettingsRow>
             <SettingsRow
-              title={language.t("settings.experimental.row.newIcons.title")}
-              description={language.t("settings.experimental.row.newIcons.description")}
+              title={language.t("settings.experimental.row.newTimeline.title")}
+              description={language.t("settings.experimental.row.newTimeline.description")}
             >
-              <div data-action="settings-new-icons">
+              <div data-action="settings-new-timeline">
                 <Switch
-                  checked={settings.general.newIcons()}
-                  onChange={(checked) => settings.general.setNewIcons(checked)}
-                />
-              </div>
-            </SettingsRow>
-            <SettingsRow
-              title={language.t("settings.experimental.row.foldUserMessages.title")}
-              description={language.t("settings.experimental.row.foldUserMessages.description")}
-            >
-              <div data-action="settings-fold-user-messages">
-                <Switch
-                  checked={settings.general.foldUserMessages()}
-                  onChange={(checked) => settings.general.setFoldUserMessages(checked)}
-                />
+                  checked={settings.general.newTimeline()}
+                  onChange={(checked) => settings.general.setNewTimeline(checked)}
+                  hideLabel
+                >
+                  {language.t("settings.experimental.row.newTimeline.title")}
+                </Switch>
               </div>
             </SettingsRow>
             <SettingsRow

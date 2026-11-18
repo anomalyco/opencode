@@ -176,6 +176,14 @@ export const current = Effect.fn("InstructionState.current")(function* (
   return (yield* find(db, sessionID))?.current_values
 })
 
+/** Where the current baseline starts; updates before it are already folded into the baseline. */
+export const epochStart = Effect.fn("InstructionState.epochStart")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+) {
+  return (yield* find(db, sessionID))?.epoch_start
+})
+
 export const preview = Effect.fn("InstructionState.preview")(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,

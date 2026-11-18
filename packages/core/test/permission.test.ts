@@ -16,6 +16,7 @@ import { Session } from "@opencode/core/session"
 import { SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
 import { ShellParse } from "@opencode/core/shell/parse"
+import { Tool } from "@opencode/core/tool"
 import { eq } from "drizzle-orm"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
@@ -320,6 +321,21 @@ describe("Permission", () => {
     }),
   )
 
+  it.effect("shows a nested call's request on its parent's row until the scope closes", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const service = yield* Permission.Service
+      const source = { type: "tool" as const, messageID: "msg_test", id: "call_child" }
+      const ask = (id: string) => service.ask(assertion({ id: Permission.ID.create(id), source }))
+      yield* service
+        .nested(Tool.CallID.make("call_child"), Tool.CallID.make("call_parent"))
+        .pipe(Effect.andThen(ask("per_nested")), Effect.scoped)
+      yield* ask("per_after")
+      expect((yield* service.get(Permission.ID.create("per_nested")))?.source).toEqual({ ...source, id: "call_parent" })
+      expect((yield* service.get(Permission.ID.create("per_after")))?.source).toEqual(source)
+    }),
+  )
+
   it.effect("drops undefined metadata values so pending requests encode as JSON", () =>
     Effect.gen(function* () {
       yield* setup()
@@ -362,6 +378,25 @@ describe("Permission", () => {
           ),
         ).toBe(true)
       expect(yield* service.list()).toEqual([])
+    }),
+  )
+
+  it.effect("rejects sibling requests in the same step and leaves another step's request pending", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const service = yield* Permission.Service
+      const ask = (call: string, messageID: string) =>
+        service.ask(
+          assertion({
+            id: Permission.ID.create(`per_${call}`),
+            source: { type: "tool", messageID, id: `call_${call}` },
+          }),
+        )
+      const first = yield* ask("first", "msg_one")
+      yield* ask("sibling", "msg_one")
+      const other = yield* ask("other", "msg_two")
+      yield* service.reply({ requestID: first.id, reply: "reject" })
+      expect((yield* service.list()).map((request) => request.id)).toEqual([other.id])
     }),
   )
 

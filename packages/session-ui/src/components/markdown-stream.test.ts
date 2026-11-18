@@ -17,6 +17,20 @@ describe("markdown stream", () => {
     expect(done.blocks.every((block) => block.mode === "full")).toBe(true)
   })
 
+  test("sends a closed math fence to the Markdown parser and keeps a streaming one as code", () => {
+    const open = "Formula:\n\n```latex\nx^2"
+    expect(project(undefined, open, true).blocks.at(-1)).toMatchObject({ mode: "code", language: "latex" })
+
+    const text = open + "\n```\n\nAfter"
+    const closed = project(undefined, text, true)
+    expect(closed.blocks.map((block) => [block.raw, block.mode])).toContainEqual(["```latex\nx^2\n```\n\n", "full"])
+    expect(closed.blocks.find((block) => block.raw.startsWith("```latex"))?.src).toStartWith("```latex\nx^2\n```")
+
+    const done = project(closed, text, false)
+    expect(done.blocks.some((block) => block.mode === "code")).toBe(false)
+    expect(stream("```ts\nconst x = 1\n```\n", true)[0]).toMatchObject({ mode: "code", language: "ts" })
+  })
+
   test("ignores > and /> inside quoted HTML attributes when grouping blocks", () => {
     const closed = project(undefined, '<div data-tip="a > <span>">\n</div>\n\nSettled\n\nTail', true)
     expect(closed.blocks.map((block) => [block.raw, block.mode])).toEqual([

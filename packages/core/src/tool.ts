@@ -9,9 +9,11 @@ import { Context, Effect, Layer, Ref, Result, Schema, SchemaIssue, Types } from 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import type { Agent } from "./agent.js"
 import { CodeModeCatalog } from "./codemode/catalog.js"
+import { CodeModeJob } from "./codemode/job.js"
 import { CodeModeTool } from "./codemode/tool.js"
 import { Flag } from "./flag.js"
 import { Image } from "./image.js"
+import type { Location } from "./location.js"
 import { Permission } from "./permission.js"
 import { PluginHooks } from "./plugin/hooks.js"
 import { SessionMessage } from "./session/message.js"
@@ -44,7 +46,8 @@ type Data = {
 
 export interface Interface extends State.Transformable<Editor> {
   readonly list: () => Effect.Effect<ReadonlyArray<Tool.Info & { readonly id: string }>>
-  readonly snapshot: (permissions?: Permission.Ruleset) => Effect.Effect<Snapshot>
+  /** With `full_codemode`, Code Mode gets the experimental `path` global, resolving against `location`'s directory. */
+  readonly snapshot: (permissions?: Permission.Ruleset, location?: Location.Interface) => Effect.Effect<Snapshot>
   /**
    * Runs a Code Mode program with no model step over only the Code Mode tools named in `tools` (still subject to
    * whole-tool permission filtering and each tool's own executor policy), with no `fetch`.
@@ -75,6 +78,8 @@ export interface Snapshot {
     readonly messageID: SessionMessage.ID
     readonly call: ToolCall
     readonly progress?: (update: Tool.Metadata) => Effect.Effect<void>
+    /** Completes when the user asks the call to stop; see `Tool.Context.cancel`. */
+    readonly cancel?: Effect.Effect<void>
     /** Surviving request definitions, keyed by the names advertised after session context hooks. */
     readonly definitions?: ReadonlyMap<string, ToolDefinition>
   }) => Effect.Effect<NormalizedResult, Tool.Error>
@@ -88,7 +93,7 @@ const layer = Layer.effect(
     const hooks = yield* PluginHooks.Service
     const image = yield* Image.Service
     const permission = yield* Permission.Service
-    const flag = yield* Flag.Service
+    const flags = yield* Flag.Service
 
     type NormalizedItem = Tool.Content | "decode" | "size"
     const normalizeImages = Effect.fnUntraced(function* (content: ReadonlyArray<Tool.Content>) {
@@ -181,13 +186,25 @@ const layer = Layer.effect(
       }
     })
 
-    const run = (tool: Tool.Info, name: string, input: unknown, context: Tool.Context) =>
-      beforeExecute(name, input, context).pipe(Effect.flatMap((event) => executeTool(tool, name, event.input, context)))
+    // A plugin may rename a call in a Code Mode program, as it may a direct call, to another of the program's tools.
+    const run = Effect.fnUntraced(function* (
+      tools: ReadonlyMap<string, Tool.Info>,
+      tool: Tool.Info,
+      name: string,
+      input: unknown,
+      context: Tool.Context,
+    ) {
+      const event = yield* beforeExecute(name, input, context)
+      const selected = event.tool === name ? tool : tools.get(event.tool)
+      if (!selected) return yield* new Tool.Error({ message: `Tool is not available for this request: ${event.tool}` })
+      return yield* executeTool(selected, event.tool, event.input, context)
+    })
 
     let catalog:
       | {
           data: Data
           names: string
+          path: boolean
           inventory: CodeModeTool.Inventory
           value: CodeModeCatalog.Inventory
           definition: ToolDefinition
@@ -251,8 +268,9 @@ const layer = Layer.effect(
       transform: state.transform,
       reload: state.reload,
       list: () => Effect.sync(() => Array.from(state.get().tools.values())),
-      snapshot: Effect.fn("Tool.snapshot")((permissions) =>
-        Effect.sync(() => {
+      snapshot: Effect.fn("Tool.snapshot")((permissions, location) =>
+        Effect.map(flags.enabled("full_codemode"), (enabled) => {
+          const path = enabled && location !== undefined
           const data = state.get()
           const active = new Map<string, Tool.Info>()
           const rules = permissions ?? []
@@ -270,14 +288,15 @@ const layer = Layer.effect(
           // Discovery is immutable for a registry revision and visible tool set. Keep executors
           // fresh, but share the inventory, whose prepared runtime and much larger rendered catalog
           // are cached by identity, and the execute tool's definition across steps.
-          const cached = catalog?.data === data && catalog.names === names ? catalog : undefined
+          const cached =
+            catalog?.data === data && catalog.names === names && catalog.path === path ? catalog : undefined
           const codeModeInventory = cached?.inventory ?? { tools: codeModeTools, namespaces: data.namespaces }
           const codeModeTool = codeModeEnabled
             ? CodeModeTool.create(
                 codeModeInventory,
-                (name, tool, input, context) => run(tool, name, input, context),
+                (name, tool, input, context) => run(codeModeInventory.tools, tool, name, input, context),
                 permission,
-                flag,
+                path ? location : undefined,
               )
             : undefined
           const codeModeCatalog = !codeModeEnabled
@@ -288,6 +307,7 @@ const layer = Layer.effect(
             catalog = {
               data,
               names,
+              path,
               inventory: codeModeInventory,
               value: codeModeCatalog,
               definition: codeModeDefinition,
@@ -307,6 +327,7 @@ const layer = Layer.effect(
                 messageID: input.messageID,
                 id: Tool.CallID.make(input.call.id),
                 progress: input.progress ?? (() => Effect.void),
+                cancel: input.cancel,
               }
               const event = yield* beforeExecute(input.call.name, input.call.input, context)
               const requested = input.definitions?.get(event.tool)
@@ -314,8 +335,11 @@ const layer = Layer.effect(
               if (!requested && input.definitions && (direct.has(event.tool) || codeModeTool?.name === event.tool))
                 return yield* new Tool.Error({ message: `Tool is not available for this request: ${event.tool}` })
               const name = requested?.name ?? event.tool
-              if (name === "execute" && codeModeTool)
-                return yield* executeTool(codeModeTool, name, event.input, context)
+              if (name === "execute" && codeModeTool) {
+                const run = (ctx: Tool.Context) => executeTool(codeModeTool, name, event.input, ctx)
+                const background = yield* CodeModeJob.Current
+                return yield* background ? background(context, run) : run(context)
+              }
               const tool = direct.get(name)
               if (tool) return yield* executeTool(tool, name, event.input, context)
               return yield* new Tool.Error({
@@ -356,9 +380,8 @@ const layer = Layer.effect(
                 ...input.context,
                 id: Tool.CallID.make(`call_${input.context.messageID}_${index}`),
               }
-              return yield* run(tool, name, toolInput, context)
+              return yield* run(tools, tool, name, toolInput, context)
             }),
-          flag,
         )
       }),
     })

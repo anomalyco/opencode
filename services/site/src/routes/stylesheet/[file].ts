@@ -2,9 +2,11 @@ import type { APIEvent } from "@solidjs/start/server"
 import { assets } from "#resource"
 import { edgeCache } from "~/lib/edge-cache"
 
-// A page's stylesheets as one file (lib/one-stylesheet.ts): /stylesheet/<name>~<name>….css joins
-// /_build/assets/<name>.css in the order given. The names carry content hashes, so the result never
-// changes and is cached for a year, by browsers and at the edge.
+// A page's stylesheets as one file, as pages linked them before they linked the shell's and their
+// group's stylesheets (script/stylesheet-groups.ts): /stylesheet/<name>~<name>….css joins
+// /_build/assets/<name>.css in the order given. Kept for one deploy, for pages still open from
+// before it (script/retain-assets.ts keeps their files). The names carry content hashes, so the
+// result never changes and is cached for a year, by browsers and at the edge.
 const name = /^[\w-]+$/
 
 export async function GET(event: APIEvent) {

@@ -23,7 +23,6 @@ import { Agent } from "../agent.js"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
 import { llmClient } from "../effect/app-node-platform.js"
-import { Instructions } from "../instructions/index.js"
 import { Model } from "../model.js"
 import { State } from "../state.js"
 import { Token } from "../util/token.js"
@@ -46,7 +45,7 @@ export type Settings = {
   /** Tokens of recent conversation kept verbatim beside the summary. */
   keep: number
   /** Summarize in the background as the context nears the threshold, so automatic compaction can swap it in. */
-  precompute: boolean
+  background: boolean
 }
 
 export type Editor = {
@@ -112,8 +111,6 @@ type Background = {
 type Precomputed = {
   readonly firstID: SessionMessage.ID | undefined
   readonly keepID: SessionMessage.ID
-  readonly model: SessionContext.Loaded["model"]["ref"]
-  readonly initial: string
   /** The longest tail since `keepID` that compaction still accepts beside this summary. */
   readonly tailLimit: number
   /** Background summaries that failed since the last compaction, this one included once it has. */
@@ -266,7 +263,7 @@ export const layer = Layer.effect(
 
     const state = State.create<Settings, Editor>({
       name: "session-compaction",
-      initial: () => ({ auto: true, keep: 15_000, precompute: false }),
+      initial: () => ({ auto: true, keep: 15_000, background: true }),
       editor: (settings) => ({
         configure: (update) => {
           Object.assign(settings, update)
@@ -284,7 +281,10 @@ export const layer = Layer.effect(
       const model =
         (agent?.model &&
           (yield* models
-            .resolve({ ...context.session, model: agent.model }, catalog.available)
+            .resolve({ ...context.session, model: agent.model }, catalog.available, {
+              kind: "compaction",
+              agent: agent.id,
+            })
             .pipe(Effect.orElseSucceed(() => undefined)))) ??
         context.model
       const ceiling = calculateCeiling(model.limit, buffer)
@@ -321,7 +321,7 @@ export const layer = Layer.effect(
       // opens here, before any wait, so a background summary still being written shows as a running compaction.
       if (trigger.reason !== "manual")
         yield* bus.publish(SessionEvent.Compaction.Started, { sessionID: context.session.id, reason: "auto" })
-      const swapped = held ? yield* usePrecomputed(selected, held, budget, settings) : undefined
+      const swapped = held ? yield* usePrecomputed(selected, held, budget, native) : undefined
       const compaction = swapped
         ? Effect.succeed(swapped)
         : native
@@ -350,13 +350,13 @@ export const layer = Layer.effect(
       given?: Estimate,
     ) {
       const settings = state.get()
-      if (!settings.precompute || !settings.auto) return
+      if (!settings.background || !settings.auto) return
       const context = yield* load
       if (context.model.compaction?.type === "native") return
+      // An unknown window has an infinite ceiling, which this never reaches. Past the ceiling it still starts: at the
+      // end of a turn, the next prompt then swaps it in instead of waiting for a summary.
       const ceiling = calculateCeiling(context.model.limit, settings.buffer)
-      if (!Number.isFinite(ceiling)) return
       const estimate = given ?? estimatePrompt(context)
-      if (due(context, ceiling, estimate)) return
       const first = context.messages.find((message) => hasMeasuredPrompt(message, context.model.ref))
       const cycleStart = first?.type === "assistant" && first.tokens ? promptTokens(first.tokens) : 0
       if (total(estimate) < ceiling - Math.min(PRECOMPUTE_LEAD, (ceiling - cycleStart) / 2)) return
@@ -394,8 +394,6 @@ export const layer = Layer.effect(
       precomputed.set(sessionID, {
         firstID: context.messages[0]?.id,
         keepID: anchor.id,
-        model: context.model.ref,
-        initial: Instructions.join(context.initial),
         tailLimit: tailLimit(model.cap),
         failures,
         usage,
@@ -406,23 +404,18 @@ export const layer = Layer.effect(
     /**
      * The held summary plus everything since it, kept verbatim, when it still describes this conversation and that
      * tail is short. Waits for a summary still being written. Undefined, after stopping the background work, when it
-     * cannot be used; compaction then summarizes as usual.
+     * cannot be used; compaction then summarizes as usual. A summary is plain text, so it serves any model, but a
+     * session that switched to native compaction compacts natively.
      */
     const usePrecomputed = Effect.fnUntraced(function* (
       trigger: Trigger,
       held: Precomputed,
       budget: number,
-      settings: Settings,
+      native: boolean,
     ): Effect.fn.Return<Result | undefined> {
       const context = trigger.context
       const index = heldIndex(held, context)
-      const usable =
-        settings.precompute &&
-        trigger.reason !== "overflow" &&
-        context.model.compaction?.type !== "native" &&
-        index >= 0 &&
-        tailTokens(context, index) <= tailLimit(budget)
-      if (!usable) {
+      if (native || index < 0 || tailTokens(context, index) > tailLimit(budget)) {
         yield* Fiber.interrupt(held.fiber)
         return undefined
       }
@@ -963,12 +956,10 @@ export const node = makeLocationNode({
 
 /**
  * Where the messages kept beside a held summary start, or -1 when the summary no longer describes this
- * conversation: a compaction or revert since replaced its start, or the model or instructions changed.
+ * conversation: a compaction or revert since replaced its start.
  */
 const heldIndex = (held: Precomputed, context: SessionContext.Loaded) => {
-  if (held.firstID !== context.messages[0]?.id || held.initial !== Instructions.join(context.initial)) return -1
-  if (held.model.providerID !== context.model.ref.providerID || held.model.id !== context.model.ref.id) return -1
-  if (held.model.variant !== context.model.ref.variant) return -1
+  if (held.firstID !== context.messages[0]?.id) return -1
   return context.messages.findIndex((message) => message.id === held.keepID)
 }
 
