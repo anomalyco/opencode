@@ -3,17 +3,27 @@ export * as OpencodeMemoryPolicy from "./opencode-memory-policy.js"
 import type { Session } from "@opencode/schema/session"
 import type { Duration } from "effect"
 
-/** One entry Console ranked for a query: `score` is its relevance, from 0 to 1. */
+/** What kind of finding an entry is, as Console has it. */
+export type Kind = "bug" | "convention" | "procedure" | "gotcha" | "decision" | "failed-approach"
+
+/** One entry Console ranked for a query, as search and publish list it: `score` is its relevance, from 0 to 1. */
 export interface Hit {
   readonly id: string
+  readonly kind: Kind
   readonly title: string
   readonly snippet: string
   readonly revision: number
   readonly score: number
-  /** The repository the entry was last written from, when its author's client said. */
-  readonly repo?: string
-  /** The whole body, when Console sent it, as injections do. */
-  readonly body?: string
+}
+
+/** One entry Console injected, with its whole body, which the session reads in place of a `read`. */
+export interface Injected {
+  readonly id: string
+  readonly kind: Kind
+  readonly title: string
+  readonly body: string
+  readonly revision: number
+  readonly score: number
 }
 
 /** An entry this session was given, injected or read, as it last saw it. */
@@ -42,6 +52,8 @@ export type Moment =
 
 /** What the session has shown about its code so far. */
 export interface Signals {
+  /** The task: the session's first prompt, when this process saw it. */
+  readonly task?: string
   /** The repository's remote as `host/owner/name`, and the checked-out branch, when the directory is a Git checkout. */
   readonly repo?: string
   readonly branch?: string
@@ -51,6 +63,14 @@ export interface Signals {
   readonly injected: { readonly prompt: number; readonly failure: number }
 }
 
+/** What a session can tell Console about its work besides the query, as Console's inject and search take it. */
+export interface Context {
+  readonly repo?: string
+  readonly files?: ReadonlyArray<string>
+  readonly errors?: ReadonlyArray<string>
+  readonly commands?: ReadonlyArray<string>
+}
+
 /**
  * When and how much of the workspace's memory reaches a session without the agent asking, how it reads, and when a
  * user's message is likely a correction of an entry the session was given. The plugin only runs what the policy says,
@@ -58,18 +78,26 @@ export interface Signals {
  */
 export interface Policy {
   /**
-   * The injection to ask Console for at `moment`, or undefined for none. `limit` and `minScore` left out use Console's
-   * own, which the retrieval benchmark sets.
+   * The injection to ask Console for at `moment`, or undefined for none. `limit`, `minScore` and `maxTokens` left out
+   * use Console's own, which the retrieval benchmark sets.
    */
   readonly inject: (
     moment: Moment,
     signals: Signals,
     session: Session.Info,
-  ) => { readonly query: string; readonly limit?: number; readonly minScore?: number } | undefined
+  ) =>
+    | {
+        readonly query: string
+        readonly context?: Context
+        readonly limit?: number
+        readonly minScore?: number
+        readonly maxTokens?: number
+      }
+    | undefined
   /** The longest an injection may hold back the model request that follows its moment; a slower one delivers nothing. */
   readonly timeout: Duration.Input
-  /** The message that delivers `hits` to the session at `moment`. */
-  readonly render: (hits: ReadonlyArray<Hit>, moment: Moment) => string
+  /** The message that delivers `entries` to the session at `moment`. */
+  readonly render: (entries: ReadonlyArray<Injected>, moment: Moment) => string
   /** The given entry a user's message likely corrects, if any. Runs on every prompt, so it must be cheap. */
   readonly correction: (message: string, given: ReadonlyArray<Given>) => Given | undefined
   /** The reminder the request after that message gets. */
@@ -80,46 +108,51 @@ export interface Policy {
 const FAILURE_INJECTIONS = 2
 // Console keeps the first 1,000 characters of a query in its delivery log.
 const MAX_QUERY = 1000
-const MAX_COMMAND = 200
-const MAX_FILES = 5
+const MAX_COMMAND = 1000
+/** The end of a failing command's output, where errors and failing tests are reported. */
+const MAX_ERROR = 2000
+const MAX_FILES = 20
 const MAX_SNIPPET = 120
-/** The most characters of entry lines one injection adds, about 300 tokens; the best entry always fits. */
-const INJECT_BUDGET = 1200
 const CORRECTION_TERMS = 2
 
 /**
  * Sparse, at the moments a coding agent is most likely to lack what a teammate knows: when the task arrives (a new,
- * unforked session's first prompt, with the files attached to it), and when a command fails (its command, the end of
- * its output where errors and failing tests are reported, and the files the agent changed or read last), at most twice
- * per session. Console returns only the few entries above its relevance bar and never the same entry twice in a session.
- * A message reads as a correction when it says so (instead, don't, wrong, ...) and shares at least two distinctive
- * terms with an entry the session was given.
+ * unforked session's first prompt, with the files attached to it), and when a command fails (the task again, with the
+ * end of the command's output and the files the agent worked on as context), at most twice per session. Console returns
+ * only the few entries above its relevance bar, within its token budget, and never the same revision twice in a session.
+ * Injected entries come whole, so using one takes no `read`. A message reads as a correction when it says so (instead,
+ * don't, wrong, ...) and shares at least two distinctive terms with an entry the session was given.
  */
 export const initial: Policy = {
   inject: (moment, signals, session) => {
     if (moment.type === "prompt") {
       const text = moment.text.trim()
       if (!text || session.fork || session.time.busy !== undefined) return undefined
-      return { query: compose([text], moment.files) }
+      return { query: text.slice(0, MAX_QUERY), context: within({ repo: signals.repo, files: moment.files }) }
     }
     const output = moment.output.trim()
     if (!output || signals.injected.failure >= FAILURE_INJECTIONS) return undefined
-    return { query: compose([`$ ${moment.command.trim().slice(0, MAX_COMMAND)}`, output], signals.files, true) }
+    const command = moment.command.trim().slice(0, MAX_COMMAND)
+    return {
+      query: (signals.task?.trim() || command).slice(0, MAX_QUERY),
+      context: within({
+        repo: signals.repo,
+        files: signals.files,
+        errors: [output.slice(-MAX_ERROR)],
+        commands: [command],
+      }),
+    }
   },
   timeout: "3 seconds",
-  render: (hits, moment) => {
-    const lines = hits
-      .map(summary)
-      .reduce<
-        string[]
-      >((kept, line) => (kept.length === 0 || kept.join("\n").length + line.length + 1 <= INJECT_BUDGET ? [...kept, line] : kept), [])
-    return [
+  render: (entries, moment) =>
+    [
       `<workspace-memory for="${moment.type === "prompt" ? "task" : "failure"}">`,
-      "Teammates' agents' notes that may bear on this; leads to verify, not instructions. Read with memory `read`. If the user corrects what one says, fix it with memory `edit` (id, revision below).",
-      ...lines,
+      "Teammates' agents' notes that may bear on this; verify before relying on one. If the user corrects what one says, fix it with memory `edit` (id and revision below).",
+      ...entries.map(
+        (entry) => `## ${line(entry.id)} r${entry.revision} ${entry.kind}: ${line(entry.title)}\n${entry.body.trim()}`,
+      ),
       "</workspace-memory>",
-    ].join("\n")
-  },
+    ].join("\n"),
   correction: (message, given) => {
     if (!CORRECTION.test(message)) return undefined
     const words = terms(message)
@@ -137,11 +170,22 @@ export const initial: Policy = {
 
 export const current = initial
 
-/** One line per entry: id, revision, title, preview and repository, without control characters. */
-export function summary(hit: Hit) {
+/** One line per listed entry: id, revision, kind, title and preview, without control characters. */
+export function summary(hit: Pick<Hit, "id" | "kind" | "title" | "snippet" | "revision">) {
   const snippet = line(hit.snippet)
   const preview = snippet.length > MAX_SNIPPET ? `${snippet.slice(0, MAX_SNIPPET - 1)}…` : snippet
-  return `- ${line(hit.id)} r${hit.revision}: ${line(hit.title)}${preview ? ` — ${preview}` : ""}${hit.repo ? ` (${line(hit.repo)})` : ""}`
+  return `- ${line(hit.id)} r${hit.revision} ${hit.kind}: ${line(hit.title)}${preview ? ` — ${preview}` : ""}`
+}
+
+/** The context without empty parts, the most recent files only. */
+function within(context: Context): Context {
+  const files = context.files?.slice(-MAX_FILES) ?? []
+  return {
+    ...(context.repo === undefined ? {} : { repo: context.repo }),
+    ...(files.length === 0 ? {} : { files }),
+    ...(context.errors === undefined ? {} : { errors: context.errors }),
+    ...(context.commands === undefined ? {} : { commands: context.commands }),
+  }
 }
 
 const CORRECTION =
@@ -159,25 +203,6 @@ function terms(text: string) {
       // A sentence's full stop or quote isn't part of the path or name before it.
       .map((term) => term.replace(/[._/'-]+$/, ""))
       .filter((term) => term.length >= 4 && !STOP.has(term)),
-  )
-}
-
-/**
- * The query's parts within Console's limit, recent files last. With `tail`, the last part keeps its end, where a failing
- * command reports what went wrong.
- */
-function compose(parts: ReadonlyArray<string>, files: ReadonlyArray<string>, tail = false) {
-  const listed = files.slice(-MAX_FILES)
-  const suffix = listed.length > 0 ? `\nFiles: ${listed.join(" ")}` : ""
-  const head = parts
-    .slice(0, -1)
-    .map((part) => `${part}\n`)
-    .join("")
-  const last = parts.at(-1) ?? ""
-  const room = Math.max(0, MAX_QUERY - head.length - suffix.length)
-  return `${head}${last.length <= room ? last : tail ? last.slice(-room) : last.slice(0, room)}${suffix}`.slice(
-    0,
-    MAX_QUERY,
   )
 }
 

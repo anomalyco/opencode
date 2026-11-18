@@ -7,7 +7,7 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import type { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Hash } from "@opencode/util/hash"
-import { Effect, Exit, Fiber, Option, Schema, Scope, Struct } from "effect"
+import { Effect, Exit, Fiber, Option, Schema, Scope } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Git } from "../../git.js"
 import { AbsolutePath } from "../../schema.js"
@@ -23,8 +23,27 @@ const MAX_FILES = 20
 /** Entries a session was given that a correction may name, and how much of each is kept to match it. */
 const MAX_GIVEN = 10
 const MAX_GIVEN_TEXT = 2000
+/** Publish intents a session remembers, so a retried publish sends the key its first try sent. */
+const MAX_INTENTS = 20
 
-// Console's entries and search hits, read leniently: only what the tools show.
+// Console's answers, read leniently: only what the tools show.
+const Kind = Schema.Literals(["bug", "convention", "procedure", "gotcha", "decision", "failed-approach"])
+const Hit = Schema.Struct({
+  id: Schema.String,
+  kind: Kind,
+  title: Schema.String,
+  snippet: Schema.String,
+  revision: Schema.Number,
+  score: Schema.Number,
+})
+const Injected = Schema.Struct({
+  id: Schema.String,
+  kind: Kind,
+  title: Schema.String,
+  body: Schema.String,
+  revision: Schema.Number,
+  score: Schema.Number,
+})
 const Source = Schema.Struct({
   repo: Schema.optional(Schema.String),
   branch: Schema.optional(Schema.String),
@@ -32,84 +51,88 @@ const Source = Schema.Struct({
 })
 const Entry = Schema.Struct({
   id: Schema.String,
+  kind: Kind,
   title: Schema.String,
   body: Schema.String,
   revision: Schema.Number,
   tags: Schema.optional(Schema.Array(Schema.String)),
+  paths: Schema.optional(Schema.Array(Schema.String)),
+  errors: Schema.optional(Schema.Array(Schema.String)),
+  repo: Schema.optional(Schema.String),
   source: Schema.optional(Source),
   updatedBy: Schema.optional(Schema.Struct({ label: Schema.String })),
   updatedAt: Schema.optional(Schema.String),
 })
 type Entry = typeof Entry.Type
-const WireHit = Schema.Struct({
-  entry: Schema.Struct({
-    id: Schema.String,
-    title: Schema.String,
-    revision: Schema.Number,
-    snippet: Schema.optional(Schema.String),
-    body: Schema.optional(Schema.String),
-    source: Schema.optional(Source),
-  }),
-  score: Schema.Number,
-})
-const Hit = Schema.Struct({
-  id: Schema.String,
-  title: Schema.String,
-  snippet: Schema.String,
-  revision: Schema.Number,
-  score: Schema.Number,
-  repo: Schema.optional(Schema.String),
-})
 /** What a write answers: the new revision and a short diff of what changed, enough to write again without a read. */
 const Written = Schema.Struct({
-  id: Schema.String,
-  revision: Schema.Number,
-  title: Schema.optional(Schema.String),
+  id: Schema.optional(Schema.String),
+  revision: Schema.optional(Schema.Number),
+  nearest: Schema.optional(Schema.Array(Hit)),
   diff: Schema.optional(Schema.String),
-  warnings: Schema.optional(Schema.Array(Schema.String)),
+  matched: Schema.optional(Schema.Array(Schema.String)),
   rebasedFrom: Schema.optional(Schema.Number),
+  warnings: Schema.optional(Schema.Array(Schema.String)),
+  replayed: Schema.optional(Schema.Boolean),
 })
-const Published = Schema.Struct({ entry: Written, related: Schema.optional(Schema.Array(WireHit)) })
-/** A refused write: nothing was written; Console says why, what the entry holds now and the one call to make next. */
+type Written = typeof Written.Type
+/** A refused write: nothing was written; Console says why, what the entry holds now, and the one call to make next. */
 const Problem = Schema.Struct({
   _tag: Schema.optional(Schema.String),
   message: Schema.optional(Schema.String),
   next: Schema.optional(Schema.String),
   revision: Schema.optional(Schema.Number),
-  currentText: Schema.optional(Schema.String),
-  // Read one by one, so a candidate in another shape never hides the message and the next call.
+  changes: Schema.optional(Schema.String),
+  body: Schema.optional(Schema.String),
+  // Passages of the entry (closest or every match) or close entries; read one by one, so a candidate in another shape
+  // never hides the message and the next call.
   candidates: Schema.optional(Schema.Array(Schema.Unknown)),
 })
-const decodeCandidate = Schema.decodeUnknownOption(
-  Schema.Struct({
-    id: Schema.String,
-    title: Schema.String,
-    revision: Schema.Number,
-    snippet: Schema.optional(Schema.String),
-  }),
-)
+const decodePassage = Schema.decodeUnknownOption(Schema.Struct({ line: Schema.Number, text: Schema.String }))
+const decodeHit = Schema.decodeUnknownOption(Hit)
 // The tool inputs and results that tell which files a session works on and which commands fail.
 const PathInput = Schema.Struct({ path: Schema.String })
 const PatchInput = Schema.Struct({ patchText: Schema.String })
 const ShellInput = Schema.Struct({ command: Schema.String })
 const ShellOutput = Schema.Struct({ exitCode: Schema.NullOr(Schema.Number), output: Schema.String })
-const Tags = Schema.Array(
-  Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9._/-]{0,63}$/)).annotate({
-    description:
-      "Lowercase, such as the entry's kind: fix, convention, build, gotcha, decision or failed-approach; or an area such as auth or ci",
-  }),
-)
+/** Names other editors' tools use for an edit's two texts, which models carry over. */
+const EDIT_ALIASES = [
+  ["old_string", "oldText"],
+  ["old_str", "oldText"],
+  ["oldString", "oldText"],
+  ["old_text", "oldText"],
+  ["new_string", "newText"],
+  ["new_str", "newText"],
+  ["newString", "newText"],
+  ["new_text", "newText"],
+] as const
+const Tags = Schema.Array(Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9._/-]{0,63}$/)))
+const Paths = Schema.Array(Schema.String).annotate({
+  description: "Repository-relative files, directories ending in / or globs it's about",
+})
+const Errors = Schema.Array(Schema.String).annotate({
+  description: "Error messages or signatures it answers, as they appear",
+})
+const KindInput = Kind.annotate({
+  description:
+    "bug: symptom, cause, fix. convention: how this code does it. procedure: build, test, CI, release. gotcha: an API or tool pitfall. decision: what and why, with commits. failed-approach: what didn't work and why",
+})
 
-type Delivery = { readonly hits: ReadonlyArray<OpencodeMemoryPolicy.Hit>; readonly moment: OpencodeMemoryPolicy.Moment }
 type Tracked = {
   readonly files: string[]
   readonly injected: { prompt: number; failure: number }
   /** Entries injected or read, oldest first, as this session last saw them. */
   readonly given: Map<string, OpencodeMemoryPolicy.Given>
+  /** The idempotency key of each publish the session asked for, by what it publishes. */
+  readonly intents: Map<string, string>
+  task?: string
   /** A given entry the user's latest message may correct, for the next request to point out. */
   nudge?: { readonly entry: OpencodeMemoryPolicy.Given; readonly messageID: string }
   /** An injection started at a moment, waiting for the model request that follows it. */
-  pending?: Fiber.Fiber<Delivery | undefined>
+  pending?: Fiber.Fiber<
+    | { readonly entries: ReadonlyArray<OpencodeMemoryPolicy.Injected>; readonly moment: OpencodeMemoryPolicy.Moment }
+    | undefined
+  >
 }
 
 /**
@@ -128,7 +151,12 @@ export const make = Effect.fnUntraced(function* (
   let current: { console: OpencodeWatches.Console; readonly lease: Scope.Closeable } | undefined
   const sessions = new Map<string, Tracked>()
   const tracked = (sessionID: string): Tracked => {
-    const found = sessions.get(sessionID) ?? { files: [], injected: { prompt: 0, failure: 0 }, given: new Map() }
+    const found = sessions.get(sessionID) ?? {
+      files: [],
+      injected: { prompt: 0, failure: 0 },
+      given: new Map(),
+      intents: new Map(),
+    }
     sessions.delete(sessionID)
     sessions.set(sessionID, found)
     if (sessions.size > MAX_SESSIONS) sessions.delete(sessions.keys().next().value ?? sessionID)
@@ -140,10 +168,10 @@ export const make = Effect.fnUntraced(function* (
     if (state.given.size > MAX_GIVEN) state.given.delete(state.given.keys().next().value ?? entry.id)
   }
   // After this session writes an entry it was given, a nudge names the revision it now has.
-  const wrote = (sessionID: string, written: typeof Written.Type) => {
+  const wrote = (sessionID: string, id: string, written: Written) => {
     const state = sessions.get(sessionID)
-    const given = state?.given.get(written.id)
-    if (state && given) give(state, { ...given, title: written.title ?? given.title, revision: written.revision })
+    const given = state?.given.get(id)
+    if (state && given && written.revision !== undefined) give(state, { ...given, revision: written.revision })
   }
 
   // The checkout as it is now: its remote names the repository, without any credentials the URL holds.
@@ -165,7 +193,7 @@ export const make = Effect.fnUntraced(function* (
       ...(commitSha === undefined ? {} : { commitSha }),
     }
   }).pipe(Effect.catchCause(() => Effect.succeed({})))
-  // Moments only need which repository and branch; reading them once per Location keeps Git off every moment.
+  // Moments and searches only need which repository and branch; reading them once per Location keeps Git off them.
   const repository = yield* Effect.cached(checkout)
 
   const call = <S extends Schema.Top>(
@@ -184,16 +212,34 @@ export const make = Effect.fnUntraced(function* (
         .execute(body === undefined ? request : HttpClientRequest.bodyJsonUnsafe(request, body))
         .pipe(Effect.flatMap(expectOk), Effect.flatMap(HttpClientResponse.schemaBodyJson(schema)))
     }).pipe(Effect.scoped)
-  // A revision of an entry, answered with its number and diff; the repository, branch and commit are recorded with it.
-  const write = (sessionID: string, id: string, change: Record<string, unknown>) =>
+  // A new revision of an entry, answered with its number and diff; the repository, branch and commit are recorded.
+  const write = (sessionID: string, id: string, route: string, change: Record<string, unknown>) =>
     Effect.gen(function* () {
-      const written = yield* call(Written, "PATCH", `/api/memory/entries/${encodeURIComponent(id)}`, {
-        ...change,
-        source: { ...(yield* checkout), sessionID },
-      })
-      wrote(sessionID, written)
-      return { output: written, content: receipt(written) }
+      const written = yield* call(
+        Written,
+        route === "" ? "PATCH" : "POST",
+        `/api/memory/entries/${encodeURIComponent(id)}${route}`,
+        {
+          ...change,
+          source: { ...(yield* checkout), sessionID },
+        },
+      )
+      wrote(sessionID, id, written)
+      return { output: written, content: receipt(id, written) }
     }).pipe(Effect.mapError(failure))
+  const metadata = (input: {
+    readonly kind?: OpencodeMemoryPolicy.Kind
+    readonly title?: string
+    readonly tags?: ReadonlyArray<string>
+    readonly paths?: ReadonlyArray<string>
+    readonly errors?: ReadonlyArray<string>
+  }) => ({
+    ...(input.kind === undefined ? {} : { kind: input.kind }),
+    ...(input.title === undefined ? {} : { title: input.title }),
+    ...(input.tags === undefined ? {} : { tags: input.tags }),
+    ...(input.paths === undefined ? {} : { paths: input.paths }),
+    ...(input.errors === undefined ? {} : { errors: input.errors }),
+  })
 
   const start = Effect.fnUntraced(function* () {
     const lease = yield* Scope.Scope
@@ -207,17 +253,23 @@ export const make = Effect.fnUntraced(function* (
         const session = yield* ctx.session.get({ sessionID })
         const inject = policy.inject(
           moment,
-          { ...(yield* repository), files: [...state.files], injected: { ...state.injected } },
+          {
+            ...(yield* repository),
+            ...(state.task === undefined ? {} : { task: state.task }),
+            files: [...state.files],
+            injected: { ...state.injected },
+          },
           session,
         )
         if (!inject) return
         state.injected[moment.type]++
-        state.pending = yield* call(Schema.Struct({ entries: Schema.Array(WireHit) }), "POST", "/api/memory/inject", {
+        state.pending = yield* call(Schema.Struct({ entries: Schema.Array(Injected) }), "POST", "/api/memory/inject", {
           sessionID,
+          moment: moment.type,
           ...inject,
         }).pipe(
           Effect.timeout(policy.timeout),
-          Effect.map((answer): Delivery => ({ hits: answer.entries.map(hit), moment })),
+          Effect.map((answer) => ({ entries: answer.entries, moment })),
           Effect.catch((cause) => Effect.logDebug("memory injection failed", { cause }).pipe(Effect.as(undefined))),
           Effect.forkIn(lease, { startImmediately: true }),
         )
@@ -226,6 +278,7 @@ export const make = Effect.fnUntraced(function* (
     yield* ctx.session.hook("prompt", (event) =>
       Effect.gen(function* () {
         const state = tracked(event.sessionID)
+        state.task ??= event.prompt.text
         const corrected = policy.correction(event.prompt.text, [...state.given.values()])
         if (corrected) state.nudge = { entry: corrected, messageID: event.messageID }
         yield* begin(event.sessionID, {
@@ -237,6 +290,13 @@ export const make = Effect.fnUntraced(function* (
         })
       }),
     )
+    // Models carry other editors' names for an edit's texts; they mean these.
+    yield* ctx.tool.hook("execute.before", (event) => {
+      if (event.tool !== `${namespace}_edit` || typeof event.input !== "object" || event.input === null)
+        return Effect.void
+      event.input = aliased(event.input)
+      return Effect.void
+    })
     yield* ctx.tool.hook("execute.after", (event) => {
       if (event.status !== "completed") return Effect.void
       const files = touched(event.tool, event.input).map((file) => relative(ctx.location.directory, file))
@@ -274,11 +334,12 @@ export const make = Effect.fnUntraced(function* (
         state.pending = undefined
         state.nudge = undefined
         const delivery = pending ? yield* Fiber.join(pending) : undefined
-        // Console never injects an entry twice in a session; one the agent read already isn't injected either.
-        const hits = delivery?.hits.filter((hit) => !state.given.has(hit.id)) ?? []
-        if (delivery && hits.length > 0) {
-          const text = policy.render(hits, delivery.moment)
-          const ids = hits.map((hit) => hit.id)
+        // Console injects a revision once per session; a revision the agent already read isn't injected either.
+        const entries =
+          delivery?.entries.filter((entry) => (state.given.get(entry.id)?.revision ?? 0) < entry.revision) ?? []
+        if (delivery && entries.length > 0) {
+          const text = policy.render(entries, delivery.moment)
+          const ids = entries.map((entry) => `${entry.id}@${entry.revision}`)
           yield* ctx.session.synthetic({
             sessionID: event.sessionID,
             id: messageID(event.sessionID, ids.join(",")),
@@ -288,8 +349,8 @@ export const make = Effect.fnUntraced(function* (
             resume: false,
           })
           event.messages.push(Message.user(text))
-          hits.forEach((hit) =>
-            give(state, { id: hit.id, revision: hit.revision, title: hit.title, text: hit.body ?? hit.snippet }),
+          entries.forEach((entry) =>
+            give(state, { id: entry.id, revision: entry.revision, title: entry.title, text: entry.body }),
           )
         }
         if (!nudge) return
@@ -320,9 +381,10 @@ export const make = Effect.fnUntraced(function* (
       editor.add({
         name: "search",
         description:
-          "Search the workspace's memory before working out what teammates' agents may already know: an unfamiliar error, failing build or test, service, API, convention or deploy step. Query with the exact error, symbol or path, or plain words. Lists id, revision, title and preview, best first.",
+          "Search the workspace's memory before working out what teammates' agents may already know: an unfamiliar error, failing build or test, service, API, convention or deploy step. Query with the exact error, symbol or path, or plain words. Lists id, revision, kind, title and preview, best first; the files you worked on rank related entries higher.",
         input: Schema.Struct({
           query: Schema.String,
+          kinds: Schema.optional(Schema.Array(Kind)),
           tags: Schema.optional(Tags.annotate({ description: "Only entries with all of these tags" })),
           limit: Schema.optional(
             Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 50 })).annotate({ description: "Default 10" }),
@@ -331,19 +393,28 @@ export const make = Effect.fnUntraced(function* (
         output: Schema.Struct({ results: Schema.Array(Hit) }),
         options: { namespace, codemode: true, pinned: true },
         execute: (input, context) =>
-          call(Schema.Struct({ results: Schema.Array(WireHit) }), "POST", "/api/memory/search", {
-            query: input.query,
-            ...(input.tags === undefined ? {} : { tags: input.tags }),
-            ...(input.limit === undefined ? {} : { limit: input.limit }),
-            sessionID: context.sessionID,
-          }).pipe(
-            Effect.map((answer) => answer.results.map(listed)),
-            Effect.map((results) => ({
-              output: { results },
-              content: results.length === 0 ? "No matches." : results.map(OpencodeMemoryPolicy.summary).join("\n"),
-            })),
-            Effect.mapError(failure),
-          ),
+          Effect.gen(function* () {
+            const checkout = yield* repository
+            const files = sessions.get(context.sessionID)?.files ?? []
+            const answer = yield* call(Schema.Struct({ results: Schema.Array(Hit) }), "POST", "/api/memory/search", {
+              query: input.query,
+              context: {
+                ...("repo" in checkout && checkout.repo !== undefined ? { repo: checkout.repo } : {}),
+                ...(files.length === 0 ? {} : { files }),
+              },
+              ...(input.kinds === undefined ? {} : { kinds: input.kinds }),
+              ...(input.tags === undefined ? {} : { tags: input.tags }),
+              ...(input.limit === undefined ? {} : { limit: input.limit }),
+              sessionID: context.sessionID,
+            })
+            return {
+              output: answer,
+              content:
+                answer.results.length === 0
+                  ? "No matches."
+                  : answer.results.map(OpencodeMemoryPolicy.summary).join("\n"),
+            }
+          }).pipe(Effect.mapError(failure)),
       })
       editor.add({
         name: "read",
@@ -375,46 +446,59 @@ export const make = Effect.fnUntraced(function* (
       editor.add({
         name: "publish",
         description:
-          "Publish what a teammate's coding agent would want to know before similar work, once verified: a root cause and fix (with the error as it appears), a repo convention, a build/test/CI/release step, an API gotcha, a decision and why, an approach that failed and why. Not progress notes, what README or AGENTS.md says, or secrets. Specific title; a self-contained body with exact errors, commands, paths and symbols. Repo, branch and commit are recorded. If a close entry exists, nothing is published and the error names it and the call to make instead.",
+          "Publish what a teammate's coding agent would want to know before similar work, once verified. Not progress notes, what README or AGENTS.md says, or secrets. Specific title; a self-contained body with exact errors, commands, paths and symbols; paths and errors make it reach sessions on those files and failures. Repo, branch and commit are recorded. If an entry on this subject exists, nothing is published and the answer says which to edit instead.",
         input: Schema.Struct({
+          kind: KindInput,
           title: Schema.String,
           body: Schema.String.annotate({ description: "Markdown" }),
+          paths: Schema.optional(Paths),
+          errors: Schema.optional(Errors),
           tags: Schema.optional(Tags),
           distinctFrom: Schema.optional(
             Schema.Array(Schema.String).annotate({
-              description: "Ids of close entries you checked that don't cover this; publishes anyway",
+              description: "Ids of existing entries you checked that don't cover this; publishes beside them",
             }),
           ),
         }),
-        output: Schema.Struct({ entry: Written, related: Schema.Array(Hit) }),
+        output: Written,
         options: { namespace, codemode: true, pinned: true },
         execute: (input, context) =>
           Effect.gen(function* () {
-            const published = yield* call(Published, "POST", "/api/memory/entries", {
-              title: input.title,
+            const state = tracked(context.sessionID)
+            // One key per publish intent: a retry of the same publish in this session sends the key its first try sent,
+            // so Console answers what that saved instead of saving twice; anything else is another intent.
+            const intent = Hash.sha256(
+              JSON.stringify([
+                input.kind,
+                input.title,
+                input.body,
+                input.tags,
+                input.paths,
+                input.errors,
+                input.distinctFrom,
+              ]),
+            )
+            const idempotencyKey = state.intents.get(intent) ?? `pub_${crypto.randomUUID()}`
+            state.intents.delete(intent)
+            state.intents.set(intent, idempotencyKey)
+            if (state.intents.size > MAX_INTENTS) state.intents.delete(state.intents.keys().next().value ?? intent)
+            const published = yield* call(Written, "POST", "/api/memory/entries", {
+              ...metadata(input),
               body: input.body,
-              ...(input.tags === undefined ? {} : { tags: input.tags }),
               ...(input.distinctFrom === undefined ? {} : { distinctFrom: input.distinctFrom }),
               source: { ...(yield* checkout), sessionID: context.sessionID },
-              // The same call again, as after a lost answer, replays the first one instead of publishing twice.
-              idempotencyKey: Hash.sha256(
-                JSON.stringify([input.title, input.body, input.tags ?? [], input.distinctFrom ?? []]),
-              ).slice(0, 32),
+              idempotencyKey,
             })
-            const related = (published.related ?? []).map(listed)
             return {
-              output: { entry: published.entry, related },
-              content: [
-                `Published ${published.entry.id} r${published.entry.revision}.`,
-                ...(related.length > 0 ? ["Related:", ...related.map(OpencodeMemoryPolicy.summary)] : []),
-              ].join("\n"),
+              output: published,
+              content: `Published ${published.id} r${published.revision}${published.replayed ? " (this publish was already saved)" : ""}.`,
             }
           }).pipe(Effect.mapError(failure)),
       })
       editor.add({
         name: "edit",
         description:
-          'Change part of an entry: a fix, a correction, an outdated detail. Copy oldText exactly from the entry\'s current body (no line numbers), unique in it, and give newText; for several changes pass edits, applied all together or not at all. Also changes title or tags alone. Pass the revision you read. Fix an entry right away when the user corrects what it says. Example: {"id":"mem_01","revision":3,"oldText":"npm test","newText":"bun test"}',
+          'Change part of an entry: a fix, a correction, an outdated detail. Copy oldText exactly from the entry\'s current body (no line numbers), unique in it; newText "" deletes it. For several changes pass edits: each oldText is matched against the revision you read, not after the others, and all apply or none. Also changes kind, title, tags, paths or errors. Pass the revision you read. Fix an entry right away when the user corrects what it says. Example: {"id":"mem_01","revision":3,"oldText":"npm test","newText":"bun test"}',
         input: Schema.Struct({
           id: Schema.String,
           revision: Schema.Int,
@@ -425,60 +509,83 @@ export const make = Effect.fnUntraced(function* (
               Schema.isMaxLength(20),
             ),
           ),
+          kind: Schema.optional(Kind),
           title: Schema.optional(Schema.String),
           tags: Schema.optional(Tags),
+          paths: Schema.optional(Paths),
+          errors: Schema.optional(Errors),
         }),
         output: Written,
         options: { namespace, codemode: true, pinned: true },
         execute: (input, context) => {
           const pair = input.oldText === undefined ? [] : [{ oldText: input.oldText, newText: input.newText ?? "" }]
           const edits = [...pair, ...(input.edits ?? [])]
-          if (edits.length === 0 && input.title === undefined && input.tags === undefined)
-            return Effect.fail(new ToolFailure({ message: "edit takes oldText and newText, edits, a title or tags" }))
-          return write(context.sessionID, input.id, {
+          const fields = metadata(input)
+          if (edits.length === 0 && Object.keys(fields).length === 0)
+            return Effect.fail(
+              new ToolFailure({
+                message: "edit takes oldText and newText, edits, or a new kind, title, tags, paths or errors",
+              }),
+            )
+          return write(context.sessionID, input.id, "", {
             expectedRevision: input.revision,
             ...(edits.length === 0 ? {} : { edits }),
-            ...(input.title === undefined ? {} : { title: input.title }),
-            ...(input.tags === undefined ? {} : { tags: input.tags }),
+            ...fields,
           })
         },
       })
       editor.add({
         name: "append",
         description:
-          "Add to the end of an entry: a new example, case, caveat or follow-up. Never conflicts with other writers, so the revision is optional.",
+          "Add new material to the end of an entry: another example, case or follow-up. Not for corrections: fix wrong text with `edit`. Pass the revision you read; it still applies if the entry changed since.",
         input: Schema.Struct({
           id: Schema.String,
+          revision: Schema.Int,
           text: Schema.String.annotate({ description: "Markdown" }),
-          revision: Schema.optional(Schema.Int),
         }),
         output: Written,
         options: { namespace, codemode: true, pinned: true },
         execute: (input, context) =>
-          write(context.sessionID, input.id, {
-            append: input.text,
-            ...(input.revision === undefined ? {} : { expectedRevision: input.revision }),
-          }),
+          write(context.sessionID, input.id, "", { expectedRevision: input.revision, append: input.text }),
       })
       editor.add({
         name: "rewrite",
         description:
-          "Replace an entry's whole body, only to restructure it; for a fix use `edit`. Keep everything that should not change exactly as it is. Pass the revision you read; the answer shows what was removed.",
+          "Replace an entry's whole body, only to restructure it; for a fix use `edit`. Keep everything that should not change exactly as it is, with no placeholders for left-out text. Pass the revision you read; the answer shows what changed.",
         input: Schema.Struct({
           id: Schema.String,
           revision: Schema.Int,
           body: Schema.String.annotate({ description: "The whole new body, in Markdown" }),
           title: Schema.optional(Schema.String),
-          tags: Schema.optional(Tags),
         }),
         output: Written,
         options: { namespace, codemode: true, pinned: true },
         execute: (input, context) =>
-          write(context.sessionID, input.id, {
+          write(context.sessionID, input.id, "", {
             expectedRevision: input.revision,
             body: input.body,
-            ...(input.title === undefined ? {} : { title: input.title }),
-            ...(input.tags === undefined ? {} : { tags: input.tags }),
+            ...metadata(input),
+          }),
+      })
+      editor.add({
+        name: "retire",
+        description:
+          "Retire an entry that no longer holds, so it's no longer found or injected: the code changed, the decision was reversed, or another entry replaces it (supersededBy). To fix part of one, use `edit` instead. Pass the revision you read.",
+        input: Schema.Struct({
+          id: Schema.String,
+          revision: Schema.Int,
+          reason: Schema.String.annotate({ description: "Why it no longer holds, in one sentence" }),
+          supersededBy: Schema.optional(
+            Schema.String.annotate({ description: "The id of the entry that replaces it" }),
+          ),
+        }),
+        output: Written,
+        options: { namespace, codemode: true, pinned: true },
+        execute: (input, context) =>
+          write(context.sessionID, input.id, "/retire", {
+            expectedRevision: input.revision,
+            reason: input.reason,
+            ...(input.supersededBy === undefined ? {} : { supersededBy: input.supersededBy }),
           }),
       })
     })
@@ -519,6 +626,18 @@ export function repoName(remote: string) {
   return `${match[1].toLowerCase()}/${match[2]}`
 }
 
+/** An edit's input with other editors' names for its texts renamed to this tool's, in the call and in each edit. */
+function aliased(input: object): object {
+  const rename = (value: unknown) =>
+    typeof value === "object" && value !== null && !Array.isArray(value)
+      ? Object.fromEntries(
+          Object.entries(value).map(([key, item]) => [EDIT_ALIASES.find(([alias]) => alias === key)?.[1] ?? key, item]),
+        )
+      : value
+  const renamed = rename(input) as Record<string, unknown>
+  return Array.isArray(renamed.edits) ? { ...renamed, edits: renamed.edits.map(rename) } : renamed
+}
+
 /** The files a completed tool call read or changed, as its input names them. */
 function touched(tool: string, input: unknown) {
   if (tool === "read" || tool === "edit" || tool === "write")
@@ -544,24 +663,6 @@ function relative(directory: string, file: string) {
   return inside && !inside.startsWith("..") && !path.isAbsolute(inside) ? inside : file
 }
 
-function hit(wire: typeof WireHit.Type): OpencodeMemoryPolicy.Hit {
-  return {
-    id: wire.entry.id,
-    title: wire.entry.title,
-    // Injections carry whole bodies; their first line stands in for a snippet.
-    snippet: wire.entry.snippet ?? wire.entry.body?.split("\n").find((line) => line.trim()) ?? "",
-    revision: wire.entry.revision,
-    score: wire.score,
-    ...(wire.entry.source?.repo === undefined ? {} : { repo: wire.entry.source.repo }),
-    ...(wire.entry.body === undefined ? {} : { body: wire.entry.body }),
-  }
-}
-
-/** A hit as a list shows it: without the body Console may send along. */
-function listed(wire: typeof WireHit.Type) {
-  return Struct.omit(hit(wire), ["body"])
-}
-
 function failure(cause: unknown) {
   return cause instanceof ToolFailure
     ? cause
@@ -569,8 +670,8 @@ function failure(cause: unknown) {
 }
 
 /**
- * The response when Console accepted the request, otherwise a tool failure saying why: Console's message, the close
- * entries or current text it sends, and its one named next call, verbatim.
+ * The response when Console accepted the request, otherwise a tool failure saying why: Console's message, what it sends
+ * to fix the call with (passages, close entries, changes since, the current body), and its named next call, verbatim.
  */
 function expectOk(response: HttpClientResponse.HttpClientResponse) {
   if (response.status >= 200 && response.status < 300) return Effect.succeed(response)
@@ -578,33 +679,38 @@ function expectOk(response: HttpClientResponse.HttpClientResponse) {
     Effect.option,
     Effect.flatMap((problem) => {
       const body = Option.getOrUndefined(problem)
-      const message = [
+      const said =
         body?.message ??
-          (response.status === 404
-            ? "No such memory entry, or memory is off for this OpenCode Console workspace"
-            : `OpenCode Console answered ${response.status}`),
+        (response.status === 404
+          ? "No such memory entry, or memory is off for this OpenCode Console workspace"
+          : `OpenCode Console answered ${response.status}`)
+      // Console's message ends with its next call; it goes last, once, as Console wrote it.
+      const next = body?.next
+      const message = [
+        next !== undefined && said.endsWith(next) ? said.slice(0, -next.length).trim() : said,
         ...(body?.candidates ?? []).flatMap((item) =>
-          Option.match(decodeCandidate(item), {
-            onNone: () => [],
-            onSome: (candidate) => [
-              OpencodeMemoryPolicy.summary({ ...candidate, snippet: candidate.snippet ?? "", score: 0 }),
-            ],
+          Option.match(decodePassage(item), {
+            onSome: (passage) => [`line ${passage.line}: ${passage.text}`],
+            onNone: () =>
+              Option.match(decodeHit(item), { onSome: (hit) => [OpencodeMemoryPolicy.summary(hit)], onNone: () => [] }),
           }),
         ),
-        ...(body?.currentText === undefined
+        ...(body?.changes === undefined ? [] : ["Changes since your revision:", body.changes]),
+        ...(body?.body === undefined
           ? []
-          : [`Current body${body.revision === undefined ? "" : ` (r${body.revision})`}:`, body.currentText]),
-        ...(body?.next === undefined ? [] : [`Next: ${body.next}`]),
+          : [`Current body${body.revision === undefined ? "" : ` (r${body.revision})`}:`, body.body]),
+        ...(next === undefined ? [] : [`Next: ${next}`]),
       ].join("\n")
       return Effect.fail(new ToolFailure({ message, metadata: { status: response.status } }))
     }),
   )
 }
 
-/** A write's answer: the new revision, then what Console changed and warns about. */
-function receipt(written: typeof Written.Type) {
+/** A write's answer: the new revision, how it applied, what Console warns about, then the diff of what changed. */
+function receipt(id: string, written: Written) {
   return [
-    `${written.id} is now r${written.revision}${written.rebasedFrom === undefined ? "" : ` (applied over changes since r${written.rebasedFrom})`}.`,
+    `${written.id ?? id} is now r${written.revision}${written.rebasedFrom === undefined ? "" : ` (applied over changes since r${written.rebasedFrom})`}.`,
+    ...(written.matched?.includes("fuzzy") ? ["An oldText matched only approximately: check the diff."] : []),
     ...(written.warnings ?? []).map((warning) => `Warning: ${warning}`),
     ...(written.diff ? [written.diff] : []),
   ].join("\n")
@@ -615,15 +721,17 @@ function messageID(sessionID: string, key: string) {
   return SessionMessage.ID.make(`msg_memory_${Hash.sha256(`${sessionID}\n${key}`).slice(0, 26)}`)
 }
 
-/** The entry with one compact line of where it came from. */
+/** The entry with one compact line of what it is and where it came from. */
 function show(entry: Entry) {
   const source = entry.source
   const about = [
-    `${entry.id} r${entry.revision}`,
+    `${entry.id} r${entry.revision} ${entry.kind}`,
     entry.tags && entry.tags.length > 0 && entry.tags.join(","),
-    source?.repo &&
-      `${source.repo}${source.branch ? `@${source.branch}` : ""}${source.commitSha ? ` ${source.commitSha.slice(0, 12)}` : ""}`,
+    entry.paths && entry.paths.length > 0 && entry.paths.join(" "),
+    (source?.repo ?? entry.repo) &&
+      `${source?.repo ?? entry.repo}${source?.branch ? `@${source.branch}` : ""}${source?.commitSha ? ` ${source.commitSha.slice(0, 12)}` : ""}`,
     entry.updatedBy && `${entry.updatedBy.label}${entry.updatedAt ? ` ${entry.updatedAt.slice(0, 10)}` : ""}`,
   ]
-  return `${about.filter(Boolean).join(" · ")}\n# ${entry.title}\n\n${entry.body}`
+  const errors = entry.errors && entry.errors.length > 0 ? `\nErrors: ${entry.errors.join(" | ")}` : ""
+  return `${about.filter(Boolean).join(" · ")}${errors}\n# ${entry.title}\n\n${entry.body}`
 }
