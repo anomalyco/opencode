@@ -892,6 +892,21 @@ fn surface(tui: &Tui, owner: Owner, shown: abi::DialogSurface) {
     tui.dialogs.set_centered(centered);
 }
 
+/// A reload of plugin `id`'s registrations ended the mount of its dialog surface on screen: the dialog stays and mounts
+/// again from the registration that replaced it, under the same key, so the JS host adopts what it rendered, as a
+/// panel does (CT-29). Its handler hears no close.
+pub fn remount(tui: &Rc<Tui>, id: &str) {
+    let Some(body) = tui.reads.surface.borrow().clone() else { return };
+    if body.owner.borrow().0 != id || !open(tui, id, &body.named) || !tui.plugins.has_dialog(id, &body.surface) {
+        return;
+    }
+    let old = body.mount.borrow_mut().take();
+    body.body.clear();
+    drop(old);
+    let host = super::host::host(tui);
+    *body.mount.borrow_mut() = tui.plugins.dialog(&*host, id, &body.surface, &body.named, &body.body);
+}
+
 impl Body {
     /// The frame in the build `cx`: the mount the first time, the same mount in the new theme after.
     fn build(self: &Rc<Self>, tui: &Rc<Tui>, cx: &Rc<DialogCx>) -> View {

@@ -702,7 +702,7 @@ export function context(base: Base, carrier: Carrier) {
   // apart from the one it replaced, and the mount renders that show's JSX; a `dialog.set` changes its frame in place.
   const DIALOG = "compat.dialog"
   let shows = 0
-  let shown: { key: string; onClose?: () => void; opened: boolean; sent: boolean } | undefined
+  let shown: { key: string; onClose?: () => void; opened: boolean } | undefined
   // The renders of the shows, by their key, until each closes.
   const dialogs = new Map<string, () => unknown>()
   let presentation = { size: "medium", centered: false }
@@ -722,7 +722,6 @@ export function context(base: Base, carrier: Carrier) {
   }
   const sendShown = () => {
     if (!shown) return
-    shown.sent = true
     void carrier.effect({ type: "dialog", dialog: { type: "surface", surface: DIALOG, key: shown.key, ...presented() } })
   }
   // A dialog of the plugin's own ends with its activation, and a dialog it asked answers nothing (carbon-5).
@@ -1750,20 +1749,16 @@ export function context(base: Base, carrier: Carrier) {
           presentation = { size: "medium", centered: false }
           const key = `compat.dialog.${++shows}`
           dialogs.set(key, render)
-          shown = { key, onClose, opened: false, sent: false }
+          shown = { key, onClose, opened: false }
           untrack(() => read(`dialog-open:${key}`, { type: "dialog-open", key }))
-          // Sent a microtask later, so a `dialog.set` right after sizes the dialog as it opens, as TS's sizes the
-          // dialog shown; a `show` or a `clear` before then sends nothing of this one.
-          queueMicrotask(() => {
-            if (shown?.key === key) sendShown()
-          })
+          // Sent at once, also from a plugin's code after an `await`, which runs in no call of the host's; a `dialog.set`
+          // right after sends it again under its key, which the host changes in place.
+          sendShown()
         },
         set(options: Json) {
           presentation = { size: options?.size ?? "medium", centered: !!options?.centered }
-          // A dialog of the plugin's own shown already changes its frame in place; one not sent yet opens so.
-          if (shown) {
-            if (shown.sent) sendShown()
-          }
+          // A dialog of the plugin's own changes its frame in place.
+          if (shown) sendShown()
           // A select's, an alert's and a confirm's size and centering are the contract's (contract 2.x, addition 4): a
           // `dialog.set` right after them sizes the dialog, which is built a microtask later. One after the host showed
           // it is not carried: the contract's dialogs are whole values, and sent again it would answer nothing.

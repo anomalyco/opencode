@@ -26,5 +26,6 @@
   "@bybrawe__opencode-queue-manager.tgz": "sha512-rrRhrULk2R35EU4hpklzLfXxC0TA6SPPWGVfmDAcftjVF2TIsqpEswgEaW051+Z3X0n+9zzUYWsATbT6Lijj4w==",
   "@prevalentware__opencode-goal-plugin.tgz": "sha512-XjpdkZYOo4RHYgLOC6OW6mod4j5BtO6I0YATgpwDJATx+p9+Dvj/Mam6/DS/X1SjNPYt8Sk5/9lQG/EFCHmFgQ==",
   "opencode-session-time.tgz": "sha512-3dqk6Ok8TkvyMkN1qh8MMsw47v+XsNv20cdbaMtzc1OMZHKi5sMHp5NQuAGRviKU5pULEKz3iqCYXYX5U8bP2w==",
-  "opencode-good-fences.tgz": "sha512-JgzWS0Fsx3WeFvQQC8v7ohjvkgB0T2U35yx96HoihfECEozv79ROjPZdhSWzWC5qaqoplXk5/lI1/kIsLQDvZA=="
+  "opencode-good-fences.tgz": "sha512-JgzWS0Fsx3WeFvQQC8v7ohjvkgB0T2U35yx96HoihfECEozv79ROjPZdhSWzWC5qaqoplXk5/lI1/kIsLQDvZA==",
+  "@max10240__opencode-plugin-sensitive-encrypt.tgz": "sha512-mPYwVvaZ7aBpzjkcr4BZ9KNCcLJr6gkB267UOUqtDZNaPSKtjLQKmC9UGfp9Lvq8/kGebcmolE+xow1SbF8WWA=="
 }

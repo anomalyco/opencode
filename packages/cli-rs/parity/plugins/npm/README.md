@@ -36,6 +36,7 @@ host through the V2 compatibility layer. Before a scenario runs, each side unpac
 | `@prevalentware__opencode-goal-plugin.tgz` | `@prevalentware/opencode-goal-plugin@0.1.98` (ports-trio) | `sha512-XjpdkZYOo4RHYgLOC6OW6mod4j5BtO6I0YATgpwDJATx+p9+Dvj/Mam6/DS/X1SjNPYt8Sk5/9lQG/EFCHmFgQ==` |
 | `opencode-session-time.tgz` | `opencode-session-time@0.4.0` (contract 2.x, addition 4) | `sha512-3dqk6Ok8TkvyMkN1qh8MMsw47v+XsNv20cdbaMtzc1OMZHKi5sMHp5NQuAGRviKU5pULEKz3iqCYXYX5U8bP2w==` |
 | `opencode-good-fences.tgz` | `opencode-good-fences@0.1.0` (contract 2.x, addition 3) | `sha512-JgzWS0Fsx3WeFvQQC8v7ohjvkgB0T2U35yx96HoihfECEozv79ROjPZdhSWzWC5qaqoplXk5/lI1/kIsLQDvZA==` |
+| `@max10240__opencode-plugin-sensitive-encrypt.tgz` | `@max10240/opencode-plugin-sensitive-encrypt@1.0.31` (catalog CT-37) | `sha512-mPYwVvaZ7aBpzjkcr4BZ9KNCcLJr6gkB267UOUqtDZNaPSKtjLQKmC9UGfp9Lvq8/kGebcmolE+xow1SbF8WWA==` |
 
 `integrity.json` pins the same digests; TS's recorder (`parity/app/scenarios.test.tsx`) and the Rust rows
 (`crates/tui/tests/all/{app,plugin_published}.rs`) refuse a tarball whose SHA-512 is not its pin before they unpack it.

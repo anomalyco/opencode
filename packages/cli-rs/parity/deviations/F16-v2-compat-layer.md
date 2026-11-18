@@ -124,15 +124,19 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   `focus-input`), as the request of the mount whose render holds it, whichever call runs: what the user types goes
   into it, as in TS (`P.8/file-browser`'s `typed`). A field the mount's tree does not hold yet takes the focus if the
   mount's next revision shows it, and the focus is dropped if that revision does not (nor does a later one apply it);
-  a mount that closed takes nothing. A field in no mount (in a dialog of the plugin's own, removed from its mount, or
-  never added) has no focus on the host, which is reported once. While the plugin's focused
-  field sits in a route or a panel,
+  a mount that closed takes nothing. A field in a dialog of the plugin's own is in that dialog's mount and takes the
+  focus as in TS (CT-37, `P.8/sensitive-encrypt`'s `typed`); a field in no mount (removed from its mount, or never
+  added) has no focus on the host, which is reported once. While the plugin's focused
+  field sits in a route, a panel or its dialog,
   each key there is its `onKeyDown`, through a listener layer of the surface, which takes it with `preventDefault`
   (contract gaps 2); one it does not take goes on to the host's field and keys once the JS host answered, as below.
   Only an `onKeyDown` that can take a key holds one for the JS host's answer (below); a field without one, or with one
   that only hears keys, holds none, and its typing goes to the host's field at once (cg2-1). A key it declines goes past
-  the plugin's own commands, which TS's keymap ran before the field's `onKeyDown`, in the state before it ran. TS's `<scrollbox>` draws a scrollbar beside its content
-  and a field its placeholder in OpenTUI's color; the contract's scroll and field draw the host's (`P.8/file-browser`).
+  the plugin's own commands, which TS's keymap ran before the field's `onKeyDown`, in the state before it ran. A
+  `<scrollbox>` draws its scrollbar while its content overflows, in OpenTUI's colors, as TS's does
+  (`P.8/sidebar-prompt`), and its `focused` prop gives it the host's focus, so the arrows scroll it. A field draws its
+  placeholder and its colors as the host's (`P.8/file-browser`), and the plugin's text without a color is the host's
+  white-ish text, where TS's is white (`P.8/sensitive-encrypt`'s panel).
   Other field events (`onPaste`, `onKeyUp` and the rest) are reported once.
 - **Keys** (CT-11): `renderer.keyInput` is an emitter whose `keypress` listeners hear each key as an OpenTUI key event,
   through one global listener layer the plugin registers with its first listener (a listener after setup reloads its
@@ -157,9 +161,10 @@ four published packages P8 runs draw cell for cell as TS draws them at the check
   contract's (`P.8/session-manager` `rename`). A select's `actions` are the contract's footer actions, with their
   keys, side and selection, and the select stays open as one runs (`P.8/session-time`'s timeline); past 4 the rest are
   reported. `ui.dialog.show` shows the plugin's JSX
-  in the host's panel dialog, bare (only the dialog's frame, as TS's), in the size and place `ui.dialog.set` gives, and
-  a render that throws closes it. A panel's body is a render tree (`RenderNode`): a `<scrollbox>` in it is a box that does not
-  scroll (the scroll keys say so, once), an `<input>` in it is its text, and its colors take the dialog's surface.
+  as the body of the host's dialog (contract ergonomics 2.7): a mount of the plugin's dialog surface, with only the
+  dialog's frame around it, as TS's, in the size and place `ui.dialog.set` gives, which changes it in place. Its
+  `<scrollbox>` scrolls and its `<input>` is a field (`P.8/sidebar-prompt`, `P.8/sensitive-encrypt`); a reload of the
+  plugin's registrations mounts it again and keeps it open, and a render that throws closes it.
 - **Pointer**: `onMouseDown`, `onMouseUp` and `onClick` on a box or a text run as a click of the node, with an event
   that has its kind and the left button but no position; a node with both a press and a release handler keeps the
   press (reported). `onMouseOver`, `onMouseOut`, `onMouseScroll` and `onMouseDrag` are not mapped.
