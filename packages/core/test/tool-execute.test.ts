@@ -72,6 +72,14 @@ test("execute describes invariant Code Mode behavior", () => {
   )
 })
 
+test("with full_codemode, execute names Bun's file APIs instead of ruling out filesystem access", () => {
+  const description = createCodeMode(new Map(), allowAll, codeModeServices(process.cwd())).description
+  expect(description).toContain(
+    "`fetch` is available for HTTP requests, and Bun's file APIs (`Bun.file`, `Bun.write`, `Bun.Glob`) for files, in place of Node's `fs`. Imports and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
+  )
+  expect(description).not.toContain("direct filesystem access")
+})
+
 test("canonical execution distinguishes declared, model-only, and raw schema outputs", async () => {
   const declared: Info = {
     name: "declared",

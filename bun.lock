@@ -66,6 +66,7 @@
         "@opencode/session-ui": "workspace:*",
         "@opencode/ui": "workspace:*",
         "@opencode/util": "workspace:*",
+        "@opentui/keymap": "catalog:",
         "@pierre/highlights": "catalog:",
         "@pierre/trees": "1.0.0-beta.6",
         "@sentry/solid": "catalog:",
