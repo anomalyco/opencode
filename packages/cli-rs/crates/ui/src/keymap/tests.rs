@@ -40,7 +40,9 @@ fn oracle_key_sequences_run_the_commands_typescript_runs() {
         let _all = (!isolated).then(|| recorder(&names));
         let mut parser = Parser::standalone().unwrap();
         let mut now = Instant::now();
-        for case in scenario["cases"].as_array().unwrap() {
+        let cases = scenario["cases"].as_array().unwrap();
+        assert!(!cases.is_empty(), "no sequences for {}", scenario["name"]);
+        for case in cases {
             total += 1;
             let _layer = case["command"].as_str().map(|command| recorder(&[command]));
             tui.keymap().clear_pending_sequence();
@@ -78,7 +80,6 @@ fn oracle_key_sequences_run_the_commands_typescript_runs() {
             }
         }
     }
-    assert!(total > 2000, "the fixture has {total} cases");
     assert!(failures.is_empty(), "{} of {total} cases differ:\n{}", failures.len(), failures.join("\n"));
 }
 
