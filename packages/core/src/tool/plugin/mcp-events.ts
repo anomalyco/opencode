@@ -4,11 +4,23 @@ import { ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { Effect, Schema } from "effect"
 import { Flag } from "../../flag.js"
-import { McpClient } from "../../mcp/client.js"
 import { Mcp } from "../../mcp/index.js"
 import { Permission } from "../../permission.js"
 
-const EventType = Schema.Struct({ server: Schema.String, ...McpClient.EventType.fields })
+// Shaped like the event trigger it feeds, `{ server, event, args }`, so entries need no explaining.
+const EventType = Schema.Struct({
+  server: Schema.String,
+  event: Schema.String,
+  description: Schema.optional(Schema.String),
+  args: Schema.optional(
+    Schema.Record(Schema.String, Schema.Unknown).annotate({ description: "JSON Schema of the trigger's args" }),
+  ),
+  data: Schema.optional(
+    Schema.Record(Schema.String, Schema.Unknown).annotate({
+      description: "JSON Schema of the data each event carries",
+    }),
+  ),
+})
 
 export const Plugin = {
   id: "opencode.tools.mcp-events",
@@ -22,8 +34,7 @@ export const Plugin = {
         editor.add({
           name: "list_mcp_events",
           options: { namespace: "opencode", codemode: true },
-          description:
-            "Experimental. List the event types MCP servers offer, such as a finished job or a new message, with the arguments each takes (inputSchema) and the data each event carries (payloadSchema). To act on an event, create an automation with an event trigger for a type whose delivery includes push.",
+          description: "List the events MCP servers send. Use one as an automation's event trigger.",
           input: Schema.Struct({
             server: Schema.optionalKey(
               Schema.String.annotate({ description: "MCP server name as configured. Omit to list every server." }),
@@ -52,7 +63,18 @@ export const Plugin = {
                 (server) =>
                   mcp.events(server).pipe(
                     Effect.flatMap((events) => events?.list() ?? Effect.succeed([])),
-                    Effect.map((types) => types.map((type) => ({ server, ...type }))),
+                    // Automations can only use events the server pushes.
+                    Effect.map((types) =>
+                      types
+                        .filter((type) => type.delivery?.includes("push"))
+                        .map((type) => ({
+                          server,
+                          event: type.name,
+                          description: type.description,
+                          args: type.inputSchema,
+                          data: type.payloadSchema,
+                        })),
+                    ),
                     Effect.orElseSucceed(() => []),
                   ),
                 { concurrency: "unbounded" },

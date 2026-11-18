@@ -25,6 +25,7 @@ const setup = Effect.fnUntraced(function* (input: { flag?: string } = {}) {
       inputSchema: {},
       payloadSchema: { type: "object" },
     },
+    { name: "job.polled", delivery: ["poll"] },
   ])
   const connection = yield* McpClient.connect({
     server: "jobs",
@@ -64,11 +65,10 @@ const setup = Effect.fnUntraced(function* (input: { flag?: string } = {}) {
 
 const jobFinished = {
   server: "jobs",
-  name: "job.finished",
+  event: "job.finished",
   description: "A job ended",
-  delivery: ["push"],
-  inputSchema: {},
-  payloadSchema: { type: "object" },
+  args: {},
+  data: { type: "object" },
 }
 
 describe("list_mcp_events", () => {
