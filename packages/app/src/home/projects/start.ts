@@ -21,13 +21,16 @@ export function resolveStartProject(
   forDirectory: (directory: string) => Project | undefined,
   used: readonly Project[],
   last: Project | undefined,
+  selected?: Project,
 ) {
-  const match = preferred ? forDirectory(preferred) : undefined
-  const project = (match && used.find((item) => item.id === match.id)) ?? last ?? used[0]
+  const matched = preferred ? forDirectory(preferred) : undefined
+  const byPath = matched && used.find((item) => item.id === matched.id)
+  const bySelection = selected && used.find((item) => item.id === selected.id)
+  const project = byPath ?? bySelection ?? last ?? used[0]
 
   if (!project) return
 
-  return { directory: match && preferred ? preferred : project.worktree, project }
+  return { directory: preferred && (byPath || bySelection) ? preferred : project.worktree, project }
 }
 
 export function useProjectStart() {
@@ -73,11 +76,16 @@ export function useProjectStart() {
 
     const lastUsed = ctx.projects.last()
 
+    const projectID = last.server === key && "projectID" in last ? last.projectID : undefined
+
+    const selected = projectID ? used.find((project) => project.id === projectID) : undefined
+
     const resolved = resolveStartProject(
       preferred,
       (directory) => ctx.projects.forDirectory(directory),
       used,
       lastUsed && used.find((project) => project.id === lastUsed.id),
+      selected,
     )
 
     if (resolved) return { type: "new", project: resolved.project, directory: resolved.directory, connection }

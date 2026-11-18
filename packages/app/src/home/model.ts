@@ -28,7 +28,11 @@ export function createHomeController() {
   const env = createMemo(
     (): HomeEnvSnapshot => ({
       hydrated: layout.ready() && servers.hydrated() && pluginServers.ready(),
-      stored: { server: layout.home.selection().server, directory: layout.home.selection().directory },
+      stored: {
+        server: layout.home.selection().server,
+        directory: layout.home.selection().directory,
+        projectID: layout.home.selection().projectID,
+      },
       servers: servers.visible.map((conn) => {
         const key = ServerConnection.key(conn)
         const ctx = global.serverCtx(key)
@@ -118,19 +122,28 @@ export function createHomeController() {
 
   const selectedProject = createMemo(() => {
     const directory = selection().directory
+    const projectID = selection().projectID
 
-    return directory ? projects().find((project) => pathKey(project.worktree) === pathKey(directory)) : undefined
+    return (
+      (projectID ? projects().find((project) => project.id === projectID) : undefined) ??
+      (directory ? projects().find((project) => pathKey(project.worktree) === pathKey(directory)) : undefined)
+    )
   })
 
   const newSessionProject = createMemo(() => {
     const ctx = focusedServerCtx()
     const last = ctx?.projects.last()
 
+    const selected = selection().projectID
+      ? projects().find((project) => project.id === selection().projectID)
+      : undefined
+
     const resolved = resolveStartProject(
       selection().directory,
       (directory) => ctx?.projects.forDirectory(directory),
       projects(),
       last && projects().find((project) => project.id === last.id),
+      selected,
     )
 
     return resolved ? { ...resolved.project, worktree: resolved.directory } : last ?? projects()[0]
