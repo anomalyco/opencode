@@ -266,54 +266,83 @@ pub fn define_with(sources: &Sources, options: Option<&str>, memory: usize) -> R
 }
 
 /// Luau plugins read and compiled on threads of their own, so no frame waits on a big plugin
-/// (`luau/steps/safety-audit.md` #7). A question answers at once: the build of a directory once it is ready, taken by
-/// the asker, or `None` while it is made. A build that ends wakes the UI thread, which asks again.
+/// (`luau/steps/safety-audit.md` #7). A question answers at once: the build of a target once it is ready, taken by the
+/// asker, or `None` while it is made. A build that ends wakes the UI thread, which asks again. One thread a target
+/// compiles at a time: a save while it runs is compiled next, once, and what the thread made for an older save is
+/// dropped (carbon `ls-3`).
 pub(crate) struct Builds {
-    state: Arc<Mutex<HashMap<PathBuf, Build>>>,
+    state: Arc<Mutex<HashMap<String, Build>>>,
     wake: Arc<dyn Fn() + Send + Sync>,
-    /// Builds being made, or made and not yet woken for.
+    /// Threads compiling, until their wake is posted.
     running: Arc<AtomicUsize>,
 }
 
-/// The build of a directory asked for last, by its key, and its result once made.
-type Build = (u64, Option<Result<Built, String>>);
+/// What a target's build is made of: where its files are, and the key of those files. A global plugin's key is its
+/// walk's light hash, which the thread checks before and after it reads the files ([`crate::pipe::tree::light`]), so
+/// a build never holds other bytes than its key says; a project plugin's files are a staged copy that never changes.
+#[derive(Clone, PartialEq, Eq)]
+struct Wanted {
+    from: PathBuf,
+    key: u64,
+    check: bool,
+}
+
+/// A target's build: the one asked for last, whether a thread is making a build, and the build made for `wanted`.
+struct Build {
+    wanted: Wanted,
+    running: bool,
+    built: Option<Result<Built, String>>,
+}
+
+/// How many times a thread reads a global plugin whose files change under it before it gives up.
+const READS: u32 = 20;
 
 impl Builds {
     pub(crate) fn new(wake: Arc<dyn Fn() + Send + Sync>) -> Self {
         Self { state: Arc::default(), wake, running: Arc::default() }
     }
 
-    /// The build of the plugin in `dir` whose files are `key`, or `None` until a thread read and compiled them. A
-    /// build of another key made since is dropped.
-    pub(crate) fn built(&self, dir: &Path, key: u64) -> Option<Result<Built, String>> {
+    /// The build of `target`, whose files in `from` are `key`, or `None` until a thread read and compiled them. `check`
+    /// says `key` is `from`'s light hash, which the thread checks.
+    pub(crate) fn built(&self, target: &str, from: &Path, key: u64, check: bool) -> Option<Result<Built, String>> {
+        let wanted = Wanted { from: from.to_owned(), key, check };
         let mut state = lock(&self.state);
-        match state.get(dir) {
-            Some((known, Some(_))) if *known == key => return state.remove(dir).and_then(|(_, built)| built),
-            Some((known, None)) if *known == key => return None,
-            _ => {}
+        if let Some(build) = state.get_mut(target) {
+            if build.wanted == wanted {
+                return build.built.take();
+            }
+            // Another save: what was made for the last is dropped, and the running thread compiles this one next.
+            build.wanted = wanted;
+            build.built = None;
+            if build.running {
+                return None;
+            }
+            build.running = true;
+        } else {
+            state.insert(target.to_owned(), Build { wanted, running: true, built: None });
         }
-        state.insert(dir.to_owned(), (key, None));
         drop(state);
         let (state, wake, running, owned) =
-            (self.state.clone(), self.wake.clone(), self.running.clone(), dir.to_owned());
+            (self.state.clone(), self.wake.clone(), self.running.clone(), target.to_owned());
         running.fetch_add(1, Ordering::SeqCst);
         let spawned = std::thread::Builder::new().name("luau-compile".to_owned()).stack_size(STACK).spawn(move || {
-            let built = Sources::read(&owned).and_then(|sources| Built::new(&sources));
-            if let Some((known, slot)) = lock(&state).get_mut(&owned)
-                && *known == key
-            {
-                *slot = Some(built);
-            }
+            compile(&state, &owned);
             wake();
             running.fetch_sub(1, Ordering::SeqCst);
         });
         // Without a thread (the system has none to give), the build is made here.
         if spawned.is_err() {
             self.running.fetch_sub(1, Ordering::SeqCst);
-            lock(&self.state).remove(dir);
-            return Some(Sources::read(dir).and_then(|sources| Built::new(&sources)));
+            compile(&self.state, target);
+            return lock(&self.state).get_mut(target).and_then(|build| build.built.take());
         }
         None
+    }
+
+    /// Forgets every target but those `keep` keeps: a build made for one that went is dropped, and a thread making it
+    /// stops after its compile.
+    pub(crate) fn retain(&self, mut keep: impl FnMut(&str) -> bool) {
+        lock(&self.state).retain(|target, _| keep(target));
     }
 
     /// Whether a build is being made.
@@ -322,11 +351,55 @@ impl Builds {
         self.running.load(Ordering::SeqCst) > 0
     }
 
+    /// How many threads are compiling.
+    #[cfg(test)]
+    pub(crate) fn threads(&self) -> usize {
+        self.running.load(Ordering::SeqCst)
+    }
+
     /// Whether a build is made and waits for its asker.
     #[cfg(test)]
     pub(crate) fn ready(&self) -> bool {
-        lock(&self.state).values().any(|(_, built)| built.is_some())
+        lock(&self.state).values().any(|build| build.built.is_some())
     }
+}
+
+/// Compiles `target`'s wanted build until the build it made is the one still wanted, then keeps it. Stops when the
+/// target is forgotten.
+fn compile(state: &Mutex<HashMap<String, Build>>, target: &str) {
+    loop {
+        let Some(wanted) = lock(state).get(target).map(|build| build.wanted.clone()) else { return };
+        let current = || lock(state).get(target).is_some_and(|build| build.wanted == wanted);
+        let Some(sources) = read_wanted(&wanted, current) else { continue };
+        let built = sources.and_then(|sources| Built::new(&sources));
+        let mut state = lock(state);
+        let Some(build) = state.get_mut(target) else { return };
+        if build.wanted == wanted {
+            build.built = Some(built);
+            build.running = false;
+            return;
+        }
+    }
+}
+
+/// The sources of `wanted`: for a checked key, read between two light hashes that both equal it, so the bytes are the
+/// ones the key names. `None` once `current` says another build is wanted.
+fn read_wanted(wanted: &Wanted, current: impl Fn() -> bool) -> Option<Result<Sources, String>> {
+    if !wanted.check {
+        return Some(Sources::read(&wanted.from));
+    }
+    for _ in 0..READS {
+        let before = crate::pipe::tree::light(&wanted.from);
+        let sources = Sources::read(&wanted.from);
+        if before == Ok(wanted.key) && crate::pipe::tree::light(&wanted.from) == Ok(wanted.key) {
+            return Some(sources);
+        }
+        if !current() {
+            return None;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+    Some(Err(format!("{}: its files changed while they were read", wanted.from.display())))
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {

@@ -613,6 +613,10 @@ impl Loader {
             changed = true;
         }
         self.listed.replace(targets.iter().map(|target| target.target.clone()).collect());
+        #[cfg(feature = "luau")]
+        if let Some(builds) = &self.luau_builds {
+            builds.retain(|name| targets.iter().any(|known| known.target == name && self.luau_target(known)));
+        }
         self.packages.borrow_mut().retain(|spec, _| targets.iter().any(|known| known.target == *spec));
         for target in &targets {
             changed |= self.reconcile_target(host, registry, target);
@@ -945,7 +949,8 @@ impl Loader {
             }
             return !was_held;
         }
-        let built = match builds.built(&from, build) {
+        // A project's plugin loads from a staged copy named by its hash; a global one's key is its walk's light hash.
+        let built = match builds.built(name, &from, build, !target.project) {
             None => return walking(),
             Some(Ok(built)) => built,
             Some(Err(error)) => return self.fail(&**host, registry, listed, name, digest, error),

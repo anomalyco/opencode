@@ -280,7 +280,7 @@ fn stamp(dir: &Path) -> Result<(u64, bool), String> {
 const RACY: std::time::Duration = std::time::Duration::from_secs(2);
 
 /// The bytes of `dir`'s own files, and its dependencies by their `package.json`.
-fn light(dir: &Path) -> Result<u64, String> {
+pub(crate) fn light(dir: &Path) -> Result<u64, String> {
     let mut hasher = DefaultHasher::new();
     own(dir, &mut hasher, 0, &mut |path, metadata, hasher| {
         if metadata.len() > approval::LIMIT {
