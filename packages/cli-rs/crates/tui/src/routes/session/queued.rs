@@ -8,7 +8,6 @@ use opencode_api::generated::{
     SessionMessageID,
 };
 use opencode_store::State;
-use std::collections::HashSet;
 
 use crate::prelude::*;
 use crate::prompt::editor::{Inner as PromptInner, Mode};
@@ -46,14 +45,9 @@ pub fn delivery(state: &State, session: &SessionID, message: &str) -> Option<Ses
     })
 }
 
-thread_local! {
-    /// Inbox items with an action in flight (`createSingleFlight`); a second action on one of them does nothing.
-    static INFLIGHT: RefCell<HashSet<String>> = RefCell::default();
-}
-
 /// `mutatePending`: steers, queues, or cancels an inbox item, then calls `done` with whether it worked. A failure
 /// shows "Failed to <label> pending prompt". Returns false, without calling `done`, while another action on the
-/// item is in flight.
+/// item is in flight in this TUI (`createSingleFlight`, `Tui::pending_actions`).
 pub fn mutate(
     tui: &Tui,
     session: &SessionID,
@@ -62,7 +56,7 @@ pub fn mutate(
     failure: Option<&'static str>,
     done: impl FnOnce(&Tui, bool) + 'static,
 ) -> bool {
-    if !INFLIGHT.with_borrow_mut(|inflight| inflight.insert(inbox.to_owned())) {
+    if !tui.pending_actions.borrow_mut().insert(inbox.to_owned()) {
         return false;
     }
     let client = tui.data.client().clone();
@@ -83,8 +77,8 @@ pub fn mutate(
             client.session_inbox_update(&input).await
         },
         move |_, result| {
-            INFLIGHT.with_borrow_mut(|inflight| inflight.remove(&key));
             let Some(tui) = weak.upgrade() else { return };
+            tui.pending_actions.borrow_mut().remove(&key);
             if let Err(error) = &result {
                 let label = failure.unwrap_or(match action {
                     Action::Steer => "steer",
