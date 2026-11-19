@@ -223,6 +223,7 @@ export const dict = {
     "You've reached your workspace's limit for using your ChatGPT plan in other apps. Copy a message below to ask your workspace admin for increased usage limits.",
   "provider.connect.chatgptUsageLimit.copyRequest": "Copy request for admin",
   "provider.connect.chatgptUsageLimit.requestCopied": "Request copied. Send it to your workspace admin.",
+  "provider.connect.chatgptUsageLimit.requestCopyFailed": "Couldn't copy. Send this to your workspace admin:",
   "provider.connect.chatgptUsageLimit.request":
     "I've reached the limit for using my ChatGPT plan in OpenCode. Could you increase our workspace's usage limits so I can continue?\n\nGo to admin.openai.com → Workspace → Usage limits. Thank you!",
   "provider.connect.console.refreshFailed":

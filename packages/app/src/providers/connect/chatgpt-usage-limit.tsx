@@ -2,6 +2,7 @@ import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog, DialogTitle } from "@opencode/ui/dialog"
 import { ProviderIcon } from "@opencode/ui/provider-icon"
+import { writeClipboard } from "@opencode/session-ui/copy"
 import { Show, createSignal } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -10,7 +11,8 @@ export function DialogChatGPTUsageLimit(props: { workspace?: boolean }) {
   const dialog = useDialog()
   const language = useLanguage()
   const platform = usePlatform()
-  const [copied, setCopied] = createSignal(false)
+  const [copied, setCopied] = createSignal<boolean>()
+  const request = () => language.t("provider.connect.chatgptUsageLimit.request")
 
   return (
     <Dialog fit containerClass="!rounded-xl">
@@ -37,13 +39,14 @@ export function DialogChatGPTUsageLimit(props: { workspace?: boolean }) {
           autofocus
           onClick={() => {
             if (props.workspace) {
-              const text = language.t("provider.connect.chatgptUsageLimit.request")
-              void Promise.resolve()
-                .then(() =>
-                  platform.writeClipboardText ? platform.writeClipboardText(text) : navigator.clipboard.writeText(text),
-                )
-                .then(() => setCopied(true))
-                .catch(() => setCopied(false))
+              // writeClipboard falls back to a selected textarea where the async clipboard API is missing (plain HTTP).
+              void (
+                platform.writeClipboardText
+                  ? platform.writeClipboardText(request()).then(() => true)
+                  : writeClipboard(request())
+              )
+                .catch(() => false)
+                .then(setCopied)
 
               return
             }
@@ -58,9 +61,17 @@ export function DialogChatGPTUsageLimit(props: { workspace?: boolean }) {
               : "provider.connect.chatgptUsageLimit.manage",
           )}
         </Button>
-        <Show when={copied()}>
+        <Show when={copied() === true}>
           <p role="status" class="mt-3 text-[13px] leading-5 text-v2-text-text-muted">
             <bdi dir="auto">{language.t("provider.connect.chatgptUsageLimit.requestCopied")}</bdi>
+          </p>
+        </Show>
+        <Show when={copied() === false}>
+          <p role="status" class="mt-3 text-[13px] leading-5 text-v2-text-text-muted">
+            <bdi dir="auto">{language.t("provider.connect.chatgptUsageLimit.requestCopyFailed")}</bdi>
+          </p>
+          <p class="mt-2 w-full select-text whitespace-pre-wrap rounded-md bg-v2-overlay-simple-overlay-hover p-3 text-left text-[13px] leading-5 text-v2-text-text-base">
+            <bdi dir="auto">{request()}</bdi>
           </p>
         </Show>
         <Button variant="ghost" size="large" class="mt-2 w-full" onClick={() => dialog.close()}>
