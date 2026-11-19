@@ -204,6 +204,8 @@ export function createSessionInbox(options: { archived?: boolean } = {}) {
 
         return data.session
           .apply(sessions)
+          // Filter live state too: disabling the query alone leaves cached or opened archives visible.
+          .filter((session) => options.archived || session.time.archived === undefined)
           .map((session): InboxEntry => {
             const project = projectSettingsKey(item.ctx.sdk.scope, session.projectID)
             const requests = sessionRequests(item.ctx, session.id, true, settings.permissions.autoApproves(project))

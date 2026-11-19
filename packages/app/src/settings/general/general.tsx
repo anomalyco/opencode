@@ -260,6 +260,21 @@ export const SettingsGeneral: Component = () => {
         <AutoApprovePermissionsSetting />
 
         <SettingsRow
+          title={language.t("settings.general.row.showArchivedSessions.title")}
+          description={language.t("settings.general.row.showArchivedSessions.description")}
+        >
+          <div data-action="settings-show-archived-sessions">
+            <Switch
+              hideLabel
+              checked={settings.general.showArchivedSessions()}
+              onChange={settings.general.setShowArchivedSessions}
+            >
+              {language.t("settings.general.row.showArchivedSessions.title")}
+            </Switch>
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
           title={language.t("settings.general.row.showCustomAgents.title")}
           description={language.t("settings.general.row.showCustomAgents.description")}
         >
