@@ -695,6 +695,13 @@ fn a_components_command_lives_with_its_mount_across_a_reload() {
     let tui = &pipe.harness.tui;
     assert_eq!(line(&pipe, "v2probe route").as_deref(), Some("v2probe route home"));
     tui.keymap.dispatch("v2probe.page", None);
+    // A route's first view waits for the page it replaces to go, and the page's view at its room follows in a later
+    // frame: wait for the page and the command its component registers.
+    pipe.until("the page drew with its command registered", || {
+        let screen = pipe.harness.app.text();
+        let registered = tui.keymap.commands().iter().any(|command| command.id == "v2probe.onpage");
+        registered && screen.contains("╭─Page") && screen.contains("data n=3")
+    });
     // The change the page's command made settles once the command it replaced retired.
     pipe.retired();
     let quiet = opencode_plugin::pipe::crossed();
@@ -703,7 +710,11 @@ fn a_components_command_lives_with_its_mount_across_a_reload() {
         pipe.harness.app.advance(Duration::from_millis(16));
     }
     let after = opencode_plugin::pipe::crossed();
-    assert_eq!((after.received, after.trees), (quiet.received, quiet.trees), "the reload did not settle");
+    assert_eq!(
+        (after.received, after.trees),
+        (quiet.received, quiet.trees),
+        "the page's change did not settle: something crossed after its command registered"
+    );
     assert!(matches!(tui.keymap.dispatch("v2probe.onpage", None), opentui::keymap::RunResult::Ok));
     pipe.settle();
     assert_eq!(calls(&log), [json!({ "onpage": true })]);
