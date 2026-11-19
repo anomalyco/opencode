@@ -1,29 +1,72 @@
 //! Which heap objects a run can still reach, for a snapshot: the reference saves only what is reachable, so a value
-//! the program dropped never stops a resume. Every cell, stack slot and coroutine counts as a root.
+//! the program dropped never stops a resume. Every cell, stack slot and coroutine counts as a root. A collector walks
+//! the same roots with marks of its own (`Marks`).
 
 use crate::object::*;
+use crate::strings::StrId;
 use crate::value::{Id, Slot, Value};
 use crate::vm::{Frame, Job, Reaction, SavedFrame, Vm};
 
-struct Walk<'v> {
-    heap: &'v [Obj],
-    seen: Vec<bool>,
-    todo: Vec<Id>,
+/// What a walk records as it meets things.
+pub(crate) trait Marks {
+    /// Marks an object: whether its fields are still to be walked.
+    fn obj(&mut self, id: Id) -> bool;
+    fn str(&mut self, _s: StrId) {}
+    /// Marks a closure cell: whether its value is still to be walked.
+    fn cell(&mut self, _c: u32) -> bool {
+        false
+    }
 }
 
-impl Walk<'_> {
-    fn id(&mut self, id: Id) {
-        if let Some(seen) = self.seen.get_mut(id as usize)
-            && !*seen
-        {
-            *seen = true;
+struct Seen(Vec<bool>);
+
+impl Marks for Seen {
+    fn obj(&mut self, id: Id) -> bool {
+        match self.0.get_mut(id as usize) {
+            Some(seen) if !*seen => {
+                *seen = true;
+                true
+            }
+            _ => false,
+        }
+    }
+}
+
+pub(crate) struct Walk<'v, M> {
+    pub heap: &'v [Obj],
+    pub cells: &'v [Slot],
+    pub marks: M,
+    pub todo: Vec<Id>,
+}
+
+impl<M: Marks> Walk<'_, M> {
+    pub fn id(&mut self, id: Id) {
+        if self.marks.obj(id) {
             self.todo.push(id);
         }
     }
 
-    fn val(&mut self, v: &Value) {
-        if let Value::Obj(id) = v {
-            self.id(*id);
+    pub fn val(&mut self, v: &Value) {
+        match v {
+            Value::Obj(id) => self.id(*id),
+            Value::Str(s) => self.marks.str(*s),
+            _ => {}
+        }
+    }
+
+    pub fn cell(&mut self, c: u32) {
+        if self.marks.cell(c)
+            && let Some(s) = self.cells.get(c as usize)
+        {
+            self.val(&s.get());
+        }
+    }
+
+    /// Walks the objects met so far and everything they reach.
+    pub fn drain(&mut self) {
+        let heap = self.heap;
+        while let Some(id) = self.todo.pop() {
+            self.object(&heap[id as usize]);
         }
     }
 
@@ -33,14 +76,23 @@ impl Walk<'_> {
         }
     }
 
+    /// A local captured by a closure holds its cell's raw index, which reads as a tiny number: any slot that could be
+    /// one counts as one, which at worst keeps a cell longer.
     fn slots(&mut self, slots: &[Slot]) {
         for s in slots {
+            if s.0 < self.cells.len() as u64 {
+                self.cell(s.0 as u32);
+                continue;
+            }
             self.val(&s.get());
         }
     }
 
     fn frame(&mut self, f: &Frame) {
         self.vals(f.extra.iter());
+        for c in f.upvals.iter() {
+            self.cell(*c);
+        }
         if let crate::vm::FrameKind::Generator(g, _) = f.kind {
             self.id(g);
         }
@@ -124,8 +176,8 @@ impl Walk<'_> {
             | Kind::Bytes(_)
             | Kind::TextDecoder(_)
             | Kind::Headers(_)
-            | Kind::StrIter { .. }
             | Kind::Live(_) => {}
+            Kind::StrIter { s, .. } => self.marks.str(*s),
             Kind::Namespace(ns) => {
                 if !ns.is_root() {
                     self.id(ns.parent);
@@ -133,7 +185,12 @@ impl Walk<'_> {
             }
             Kind::Array(items) | Kind::Arguments(items) => self.vals(items.iter()),
             Kind::ListIter { items, .. } => self.vals(items.iter()),
-            Kind::Closure(c) => self.val(&c.this),
+            Kind::Closure(c) => {
+                self.val(&c.this);
+                for u in c.upvals.iter() {
+                    self.cell(*u);
+                }
+            }
             Kind::Native { data, .. } => self.val(data),
             Kind::Bound(b) => {
                 self.val(&b.0);
@@ -167,6 +224,7 @@ impl Walk<'_> {
                 use crate::builtins::iterator::HelperOp;
                 self.val(&h.iter);
                 self.val(&h.next);
+                self.val(&h.site);
                 match &h.op {
                     HelperOp::Map(f) | HelperOp::Filter(f) => self.val(f),
                     HelperOp::FlatMap(f, inner) => {
@@ -204,13 +262,21 @@ impl Walk<'_> {
 pub fn reachable(vm: &Vm) -> Vec<bool> {
     let mut w = Walk {
         heap: &vm.heap,
-        seen: vec![false; vm.heap.len()],
+        cells: &vm.cells,
+        marks: Seen(vec![false; vm.heap.len()]),
         todo: Vec::new(),
     };
     for id in 0..vm.snapshot_base.heap.min(vm.heap.len()) {
         w.id(id as Id);
     }
     w.slots(&vm.cells);
+    roots(&mut w, vm);
+    w.drain();
+    w.marks.0
+}
+
+/// Meets what the run holds outside its heap, but for its cells and the objects every fresh run makes.
+pub(crate) fn roots<M: Marks>(w: &mut Walk<'_, M>, vm: &Vm) {
     w.slots(&vm.stack);
     for f in &vm.frames {
         w.frame(f);
@@ -271,9 +337,4 @@ pub fn reachable(vm: &Vm) -> Vec<bool> {
     if let Some(o) = &vm.outcome {
         w.outcome(o);
     }
-    while let Some(id) = w.todo.pop() {
-        let o = &w.heap[id as usize];
-        w.object(o);
-    }
-    w.seen
 }

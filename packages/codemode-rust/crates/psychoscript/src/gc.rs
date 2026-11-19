@@ -23,10 +23,14 @@ pub struct HeapStats {
 impl Vm {
     /// Live slots now: objects, cells, strings. A collector that reuses slots subtracts its free ones.
     pub fn heap_counts(&self) -> (u64, u64, u64) {
+        #[cfg(feature = "gc-sticky")]
+        let (objects, cells, strings) = self.free_counts();
+        #[cfg(not(feature = "gc-sticky"))]
+        let (objects, cells, strings) = (0, 0, 0);
         (
-            self.heap.len() as u64,
-            self.cells.len() as u64,
-            self.atoms.bufs.len() as u64,
+            (self.heap.len() - objects) as u64,
+            (self.cells.len() - cells) as u64,
+            (self.atoms.bufs.len() - strings) as u64,
         )
     }
 
@@ -43,7 +47,7 @@ impl Vm {
     }
 
     /// Records one collection step of `ns` nanoseconds.
-    #[allow(dead_code)] // for the collectors under trial
+    #[cfg_attr(not(feature = "gc-sticky"), allow(dead_code))]
     pub fn record_pause(&self, ns: u64) {
         let mut s = self.host.run.stats();
         s.steps += 1;

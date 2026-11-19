@@ -37,15 +37,15 @@ pub struct StrBuf {
     /// Only one local slot holds this string, so `+=` may append in place.
     pub builder: bool,
     /// When not `NO_GROW`, the text is the `len` bytes at `aux` in `Strings::grow[grow]` rather than `s`.
-    grow: u32,
-    len: u32,
+    pub(crate) grow: u32,
+    pub(crate) len: u32,
     /// For a string in a `grow` buffer, its offset there. Otherwise, when not `NO_WTF`, the text is a carrier and
     /// `Strings::wtf[aux]` holds the code units.
-    aux: u32,
+    pub(crate) aux: u32,
 }
 
-const NO_GROW: u32 = u32::MAX;
-const NO_WTF: u32 = u32::MAX;
+pub(crate) const NO_GROW: u32 = u32::MAX;
+pub(crate) const NO_WTF: u32 = u32::MAX;
 
 /// Starts an escape in a carrier text. U+10FFFF is a noncharacter, so real text almost never holds one.
 pub const MARK: char = '\u{10FFFF}';
@@ -160,13 +160,15 @@ const GROW_MIN: usize = 64;
 
 pub struct Strings {
     pub bufs: Vec<StrBuf>,
-    grow: Vec<String>,
+    pub(crate) grow: Vec<String>,
     /// The `grow` buffer short strings are appended to, so making one allocates nothing of its own.
-    arena: u32,
-    wtf: Vec<Box<[u16]>>,
+    pub(crate) arena: u32,
+    pub(crate) wtf: Vec<Box<[u16]>>,
     map: FxHashMap<Cow<'static, str>, Atom>,
-    atom_str: Vec<StrId>,
+    pub(crate) atom_str: Vec<StrId>,
     atom_index: Vec<u32>,
+    #[cfg(feature = "gc-sticky")]
+    pub(crate) gc: crate::gc_sticky::StrGc,
 }
 
 /// A borrowed string with its ASCII flag and, for a carrier, its code units, for code-unit arithmetic.
@@ -187,6 +189,8 @@ impl Strings {
             map: FxHashMap::default(),
             atom_str: Vec::new(),
             atom_index: Vec::new(),
+            #[cfg(feature = "gc-sticky")]
+            gc: Default::default(),
         };
         for name in ["Symbol(Symbol.iterator)", "Symbol(Symbol.asyncIterator)"] {
             let id = s.alloc_static(name);
@@ -239,14 +243,19 @@ impl Strings {
     }
 
     fn push(&mut self, s: Cow<'static, str>, ascii: bool) -> StrId {
-        self.bufs.push(StrBuf {
+        let b = StrBuf {
             s,
             ascii,
             builder: false,
             grow: NO_GROW,
             len: 0,
             aux: NO_WTF,
-        });
+        };
+        #[cfg(feature = "gc-sticky")]
+        if self.gc.active {
+            return self.push_tracked(b);
+        }
+        self.bufs.push(b);
         (self.bufs.len() - 1) as StrId
     }
 
@@ -305,15 +314,31 @@ impl Strings {
     fn push_grown(&mut self, buf: String, g: usize, start: usize, ascii: bool) -> StrId {
         let len = (buf.len() - start) as u32;
         self.grow[g] = buf;
-        self.bufs.push(StrBuf {
+        let b = StrBuf {
             s: Cow::Borrowed(""),
             ascii,
             builder: false,
             grow: g as u32,
             len,
             aux: start as u32,
-        });
+        };
+        #[cfg(feature = "gc-sticky")]
+        if self.gc.active {
+            self.ref_grow(g);
+            return self.push_tracked(b);
+        }
+        self.bufs.push(b);
         (self.bufs.len() - 1) as StrId
+    }
+
+    /// A new `grow` buffer's index.
+    fn new_grow(&mut self, s: String) -> usize {
+        #[cfg(feature = "gc-sticky")]
+        if self.gc.active {
+            return self.new_grow_tracked(s);
+        }
+        self.grow.push(s);
+        self.grow.len() - 1
     }
 
     pub fn concat(&mut self, parts: &[StrId]) -> StrId {
@@ -333,8 +358,7 @@ impl Strings {
             if f.grow != NO_GROW && self.grow[f.grow as usize].len() == (f.aux + f.len) as usize {
                 (f.grow as usize, f.aux as usize, rest)
             } else if total >= GROW_MIN {
-                self.grow.push(String::with_capacity(total * 2));
-                (self.grow.len() - 1, 0, parts)
+                (self.new_grow(String::with_capacity(total * 2)), 0, parts)
             } else {
                 let g = self.arena();
                 (g, self.grow[g].len(), parts)
@@ -368,6 +392,8 @@ impl Strings {
         let ab = &self.bufs[a as usize];
         // A builder made short leaves the short strings' buffer for text of its own, which it extends from now on.
         if ab.grow == self.arena && ab.grow != NO_GROW {
+            #[cfg(feature = "gc-sticky")]
+            self.unref_grow(ab.grow as usize);
             let own = self.get(a).to_owned();
             let entry = &mut self.bufs[a as usize];
             entry.s = Cow::Owned(own);
@@ -388,9 +414,11 @@ impl Strings {
         if self.grow[g].len() != (ab.aux + ab.len) as usize {
             let mut s = String::with_capacity(ab.len as usize * 2);
             s.push_str(self.get(a));
-            self.grow.push(s);
+            let n = self.new_grow(s);
+            #[cfg(feature = "gc-sticky")]
+            self.move_grow_ref(g, n);
             let entry = &mut self.bufs[a as usize];
-            entry.grow = (self.grow.len() - 1) as u32;
+            entry.grow = n as u32;
             entry.aux = 0;
             return self.push_in_place(a, b);
         }
@@ -409,6 +437,9 @@ impl Strings {
         let joined = format!("{}{}", self.get(a), self.get(b));
         let made = self.alloc(joined);
         let builder = self.bufs[a as usize].builder;
+        #[cfg(feature = "gc-sticky")]
+        return self.adopt(a, made, builder);
+        #[cfg(not(feature = "gc-sticky"))]
         if let Some(mut entry) = self.bufs.pop().filter(|_| made as usize == self.bufs.len()) {
             entry.builder = builder;
             self.bufs[a as usize] = entry;

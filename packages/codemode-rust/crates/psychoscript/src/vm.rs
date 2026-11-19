@@ -19,7 +19,7 @@ pub type Res = Result<Value, Value>;
 pub type NativeFn = fn(&mut Vm, Value, &[Value], Id) -> Res;
 
 pub const MAX_DEPTH: usize = 10_000;
-const MAX_OBJECTS: usize = 2_000_000;
+pub(crate) const MAX_OBJECTS: usize = 2_000_000;
 pub(crate) const MAX_STRINGS: usize = 4_000_000;
 const MAX_NATIVE_DEPTH: usize = 400;
 pub(crate) const FUEL: i32 = 20_000;
@@ -222,7 +222,7 @@ pub struct Realm {
 }
 
 pub struct Vm {
-    pub heap: Vec<Obj>,
+    pub heap: Heap,
     pub cells: Vec<Slot>,
     pub atoms: Strings,
     pub stack: Vec<Slot>,
@@ -301,6 +301,11 @@ pub struct Vm {
     /// The answers a rerun takes in order, and what the meter was when it started.
     pub(crate) replay: VecDeque<Value>,
     pub(crate) replay_meter: Option<crate::conversion::Meter>,
+    /// The collector's state, and the heap size at which `alloc` takes its slow path.
+    #[cfg(feature = "gc-sticky")]
+    pub(crate) gc: crate::gc_sticky::Gc,
+    #[cfg(feature = "gc-sticky")]
+    pub(crate) alloc_limit: usize,
 }
 
 impl Vm {
@@ -334,7 +339,7 @@ impl Vm {
             .map(|d| d.as_nanos() as u64)
             .unwrap_or(0x9e3779b97f4a7c15);
         Vm {
-            heap: Vec::with_capacity(1024),
+            heap: Heap::with_capacity(1024),
             cells: Vec::new(),
             atoms,
             stack: Vec::with_capacity(1024),
@@ -386,6 +391,10 @@ impl Vm {
             convert_req: None,
             replay: VecDeque::new(),
             replay_meter: None,
+            #[cfg(feature = "gc-sticky")]
+            gc: crate::gc_sticky::Gc::default(),
+            #[cfg(feature = "gc-sticky")]
+            alloc_limit: crate::gc_sticky::first_limit(),
         }
     }
 
@@ -411,6 +420,11 @@ impl Vm {
 
     #[inline]
     pub fn alloc(&mut self, obj: Obj) -> Id {
+        #[cfg(feature = "gc-sticky")]
+        if self.heap.len() >= self.alloc_limit {
+            return self.alloc_slow(obj);
+        }
+        #[cfg(not(feature = "gc-sticky"))]
         if self.heap.len() >= MAX_OBJECTS {
             self.out_of_memory();
         }
@@ -601,6 +615,8 @@ impl Vm {
                 self.handover();
             }
         }
+        #[cfg(feature = "gc-sticky")]
+        self.gc_poll();
         let mut r = Ok(());
         if check && !replaying && self.host.meter.fuel <= 0 {
             self.host.meter.fuel = FUEL;
@@ -781,7 +797,7 @@ impl Vm {
         }
         if self.json_walks == u32::MAX {
             self.json_walks = 0;
-            for o in &mut self.heap {
+            for o in self.heap.iter_mut() {
                 o.visit = 0;
             }
         }
@@ -898,6 +914,13 @@ impl Vm {
         }
         if self.host.shared.requested() {
             self.suspend_wanted = true;
+        }
+        #[cfg(feature = "gc-sticky")]
+        if self.roundtrip_every > 0
+            || self.host.offload.as_ref().is_some_and(|o| o.due)
+            || self.host.shared.requested()
+        {
+            self.gc.only = false;
         }
     }
 
@@ -2572,6 +2595,22 @@ impl Vm {
         r
     }
 
+    /// Continues the run until it stops: for the host, for a suspend, or at its end.
+    #[cfg_attr(not(feature = "gc-sticky"), allow(clippy::never_loop))]
+    pub fn run_until_stop(&mut self) {
+        loop {
+            let _ = self.continue_frames();
+            if !self.suspended {
+                let _ = self.drive();
+            }
+            #[cfg(feature = "gc-sticky")]
+            if self.gc_stop() {
+                continue;
+            }
+            return;
+        }
+    }
+
     /// Continues frames a suspend left on the job stack, as the entry point that started them would have.
     pub fn continue_frames(&mut self) -> Result<(), Value> {
         if self.frames.is_empty() {
@@ -2801,8 +2840,13 @@ impl Vm {
                         self.stack.push(v);
                     }
                     Op::NewCell(i) => {
-                        self.cells.push(Slot::UNINIT);
-                        let c = self.cells.len() as u64 - 1;
+                        #[cfg(feature = "gc-sticky")]
+                        let c = self.new_cell();
+                        #[cfg(not(feature = "gc-sticky"))]
+                        let c = {
+                            self.cells.push(Slot::UNINIT);
+                            self.cells.len() as u64 - 1
+                        };
                         self.stack[base + i as usize] = Slot(c);
                     }
                     Op::GetCell(i) => {
@@ -2821,6 +2865,8 @@ impl Vm {
                     Op::SetCell(i) => {
                         let v = self.stack.pop().unwrap_or_default();
                         let c = self.stack[base + i as usize].0 as usize;
+                        #[cfg(feature = "gc-sticky")]
+                        self.cell_barrier(c);
                         if let Some(cell) = self.cells.get_mut(c) {
                             *cell = v;
                         }
@@ -2841,6 +2887,8 @@ impl Vm {
                     Op::SetUpval(i) => {
                         let v = self.stack.pop().unwrap_or_default();
                         let c = self.frames[fi].upvals[i as usize];
+                        #[cfg(feature = "gc-sticky")]
+                        self.cell_barrier(c as usize);
                         self.cells[c as usize] = v;
                     }
                     Op::GetGlobal(g) => {

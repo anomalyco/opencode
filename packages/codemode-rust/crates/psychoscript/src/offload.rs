@@ -174,9 +174,6 @@ fn compute(r: &mut Running, home: &Home) {
     r.vm.stack_base = &probe as *const u8 as usize;
     r.vm.stack_budget = RUN_STACK_BUDGET;
     r.vm.host.offload().home = Some(home.clone());
-    let _ = r.vm.continue_frames();
-    if !r.vm.suspended {
-        let _ = r.vm.drive();
-    }
+    r.vm.run_until_stop();
     r.vm.host.offload().home = None;
 }

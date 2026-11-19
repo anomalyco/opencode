@@ -433,6 +433,13 @@ pub struct Obj {
     pub visit: u32,
 }
 
+/// The run's objects by id. In `gc-sticky` builds taking one mutably goes through the collector's write barrier
+/// (`gc_sticky::Heap`).
+#[cfg(not(feature = "gc-sticky"))]
+pub type Heap = Vec<Obj>;
+#[cfg(feature = "gc-sticky")]
+pub use crate::gc_sticky::Heap;
+
 impl Obj {
     pub fn new(proto: Option<Id>, kind: Kind) -> Obj {
         Obj {

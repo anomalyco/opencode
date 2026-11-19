@@ -367,10 +367,7 @@ impl<'a> Program<'a> {
                     worker.compute(r);
                     continue;
                 }
-                let _ = r.vm.continue_frames();
-                if !r.vm.suspended {
-                    let _ = r.vm.drive();
-                }
+                r.vm.run_until_stop();
                 #[cfg(feature = "gc-stats")]
                 r.vm.publish_stats();
                 if let Some(o) = &mut r.vm.host.offload {

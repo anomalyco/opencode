@@ -10,6 +10,8 @@ description = "Embeddable Rust implementation of the PsychoScript language layer
 test262 = []
 # Per-run heap counts and collection pauses through `Run::heap_stats`, for the memory benchmarks in bench/ only.
 gc-stats = []
+# A non-moving generational collector with sticky mark bits, on trial (`src/gc_sticky.rs`).
+gc-sticky = []
 
 [dependencies]
 icu_collator = { version = "2.4", default-features = false, features = ["compiled_data"] }
