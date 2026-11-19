@@ -173,8 +173,14 @@ impl State {
                 // stale, and every view must look again.
                 if self.connected {
                     self.syncs.invalidate_prefix("");
-                    self.log.everything();
+                } else {
+                    // The first stream opens after the route reads, and the server does not replay what it sent
+                    // before the subscription: a catalog read in that window can have missed the update that
+                    // followed it, and a model list is empty until its providers settle. Only the catalogs are
+                    // invalidated, since nothing else can be stale without a disconnect; the views look again.
+                    self.syncs.invalidate_prefix("location.");
                 }
+                self.log.everything();
                 self.connected = true;
                 let token = self.token();
                 self.active_updates = Some((token, Default::default()));

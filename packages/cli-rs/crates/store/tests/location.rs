@@ -403,6 +403,44 @@ async fn revalidates_model_discovery_when_an_update_overtakes_an_in_flight_model
 }
 
 #[tokio::test]
+async fn a_first_connection_reads_the_catalogs_read_before_it_again() {
+    // The route reads start before the event stream, and the server does not replay what it sent before the
+    // subscription: a model list answered before the first connection (empty until its providers settle) would
+    // stay empty. The connection invalidates the catalogs, so the view's next read sees the settled list.
+    let reads = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let count = reads.clone();
+    let data = data(
+        handler(move |req: Req| {
+            let count = count.clone();
+            async move {
+                let location = public("/project");
+                match req.path.as_str() {
+                    "/api/session/active" => ok(json!({})),
+                    "/api/project" => ok(json!([])),
+                    "/api/location" => ok(location),
+                    "/api/vcs" => ok(json!({ "location": location, "data": { "branch": {} } })),
+                    "/api/model" => {
+                        let first = count.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0;
+                        let items = if first { json!([]) } else { json!([model("Settled model")]) };
+                        ok(json!({ "location": location, "data": items }))
+                    }
+                    path => panic!("unexpected request: {path}"),
+                }
+            }
+        }),
+        Options::default(),
+    );
+    let models = || data.read(|state| state.location(None).and_then(|data| data.model.clone()));
+    data.catalog_sync(Catalog::Model, None).await.unwrap();
+    assert_eq!(models(), Some(Vec::new()));
+
+    emit(&data, json!({ "id": "evt_connected", "created": 1, "type": "server.connected", "data": {} }));
+    data.catalog_sync(Catalog::Model, None).await.unwrap();
+    assert_eq!(name(models().as_ref()), Some("Settled model".to_owned()));
+    assert_eq!(reads.load(std::sync::atomic::Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
 async fn refreshes_references_for_the_location_an_update_names() {
     let requests = Requests::default();
     let log = requests.clone();
@@ -551,7 +589,9 @@ async fn preserves_sibling_catalogs_through_location_preload_branch_shell_and_we
             "/api/project",
             "/api/reference",
             "/api/session/active",
-            // The branch update reloads VCS info.
+            // The branch update reloads VCS info, and the first connection invalidates the catalogs read before
+            // it, so its rehydrate reads VCS once more.
+            "/api/vcs",
             "/api/vcs",
             "/api/vcs",
             "/api/websearch/provider",
