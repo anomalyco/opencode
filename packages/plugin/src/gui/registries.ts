@@ -280,6 +280,11 @@ export interface Panel {
    * - `side`: tabs in the side region's strip.
    */
   readonly region: "side"
+  /**
+   * Also lists on an unsent draft. Its `session.draft` is true and no server Session exists yet. Defaults to false,
+   * so a session-only panel keeps its current behavior.
+   */
+  readonly drafts?: boolean
   /** Asks for the wider session minimum while the side region is open. Reactive. */
   readonly wide?: boolean
   /**
@@ -880,11 +885,11 @@ export interface Theme {
 export interface SlotMap {
   /** Full-width strip under the window content, above toasts. */
   readonly "window.bottom": Record<string, never>
-  /** The timeline title row. Cached timelines stay mounted while hidden; `active` is false then. */
+  /** The title row of a timeline, and the header of a new-session draft before the first message. Cached timelines stay mounted while hidden; `active` is false then. */
   readonly "session.header": {
-    /** The timeline's owning session screen; always present, also while the timeline is cached. */
+    /** The timeline's or draft's owning session screen; always present, also while the timeline is cached. */
     readonly screen: SessionScreen
-    /** The timeline's session: its latest object, kept while the timeline is hidden. */
+    /** The timeline's session or the draft: its latest object, kept while the timeline is hidden. */
     readonly session: MountedSession
     /** The timeline is the one on screen. */
     readonly active: boolean

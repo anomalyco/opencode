@@ -132,7 +132,12 @@ export function createRegion(input: {
   let returnFocus: HTMLElement | undefined
   const host = usePluginHost()
   const stored = () => input.tabs().all()
-  const providers = createMemo(() => host.items(BuiltinPanel).filter((item) => item.value.region === input.region))
+
+  const providers = createMemo(() =>
+    host
+      .items(BuiltinPanel)
+      .filter((item) => item.value.region === input.region && (!input.view().draft || item.value.drafts)),
+  )
 
   const entries = createMemo<RegionEntry[]>(
     (previous) => {

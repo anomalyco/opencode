@@ -21,12 +21,12 @@ export type PanelWidths = { get(panel: string): number | undefined; set(panel: s
  * own (stored in widths, else `Panel.width`), that width sizes the side region and a drag stores it there.
  */
 export function createSessionScreenLayout(
-  session: SessionModel,
+  session: { layout: Pick<SessionModel["layout"], "view">; isDesktop: Accessor<boolean> },
   input: { wide: Accessor<boolean>; panel: Accessor<RegionEntry | undefined>; widths: PanelWidths },
 ) {
   const size = createSizing()
   const view = session.layout.view
-  const tabsOpen = createMemo(() => session.isDesktop() && view().side.opened() && !!session.identity.params.id)
+  const tabsOpen = createMemo(() => session.isDesktop() && view().side.opened())
 
   const sized = createMemo(() => {
     const entry = input.panel()

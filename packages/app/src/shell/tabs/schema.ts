@@ -3,6 +3,7 @@ export * as TabStorage from "./schema"
 import { Schema, SchemaGetter } from "effect"
 import { ServerKey } from "@/runtime/server/persistence"
 import { Persistence } from "@/runtime/persistence/schema"
+import { SessionID } from "@opencode/schema/session-id"
 
 export { ServerKey }
 
@@ -17,6 +18,8 @@ export const Session = Persistence.struct({
 export const Draft = Persistence.struct({
   type: Schema.Literal("draft"),
   draftID: Schema.String,
+  /** The session id reserved for the first message; no server Session exists until then. */
+  sessionId: Persistence.optional(SessionID),
   server: ServerKey,
   directory: Schema.String,
   worktree: Persistence.optional(Schema.String),

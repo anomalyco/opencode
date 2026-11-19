@@ -14,6 +14,7 @@ export function useNewSessionCommands(input: {
     enabled: () => boolean
     cycle: () => void
   }
+  toggleReview: () => void
 }) {
   const command = useCommand()
   const dialog = useDialog()
@@ -32,6 +33,13 @@ export function useNewSessionCommands(input: {
     },
   ])
   command.register("new-session", () => [
+    {
+      id: "review.toggle",
+      title: language.t("command.review.toggle"),
+      category: language.t("command.category.view"),
+      keybind: "mod+shift+r",
+      onSelect: input.toggleReview,
+    },
     {
       id: "input.focus",
       title: language.t("command.input.focus"),

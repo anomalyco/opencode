@@ -23,6 +23,7 @@ import { Schema } from "effect"
 import { TabStorage } from "./schema"
 import { ServerConnection } from "@/runtime/server/registry"
 import { Persistence } from "@/runtime/persistence/schema"
+import { Session } from "@opencode/schema/session"
 
 const server = ServerConnection.Key.make("local\nhttp://localhost:4096")
 
@@ -46,6 +47,21 @@ describe("tab migration", () => {
     const restored = decodeTabs([legacy, draft])
     expect(restored).toEqual([legacy, draft])
     expect(decodeTabs(Schema.encodeSync(TabStorage.Tabs)(restored))).toEqual([legacy, draft])
+  })
+
+  test("round trips a draft's reserved session id", () => {
+    const draft: Tab = {
+      type: "draft",
+      draftID: "draft",
+      sessionId: Session.ID.create(),
+      server,
+      directory: "/project",
+    }
+
+    const restored = decodeTabs([draft])
+
+    expect(restored).toEqual([draft])
+    expect(decodeTabs(Schema.encodeSync(TabStorage.Tabs)(restored))).toEqual([draft])
   })
 
   const dropped: { name: string; stored: unknown; expected: Tab[] }[] = [

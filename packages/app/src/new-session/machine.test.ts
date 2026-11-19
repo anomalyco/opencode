@@ -52,7 +52,7 @@ test("a failed session create on an existing checkout rolls back to the draft in
   ])
   expect(result.effects.slice(1)).toEqual([
     { type: "toast", attempt: 1, title: "prompt.toast.sessionCreateFailed.title", message: "Session creation failed" },
-    { type: "tab.rollback", attempt: 1, worktree: undefined },
+    { type: "tab.rollback", attempt: 1, worktree: undefined, resetSession: true },
   ])
 
   // The retry is a new attempt, and only a created Session is promoted.
@@ -172,7 +172,7 @@ test.each<{ name: string; events: NewSessionStartEvent[]; effects: NewSessionSta
     events: [start(main), { type: "timed-out", attempt: 1, phase: "session" }],
     effects: [
       { type: "toast.timed-out", attempt: 1, title: "prompt.toast.sessionCreateFailed.title" },
-      { type: "tab.rollback", attempt: 1, worktree: undefined },
+      { type: "tab.rollback", attempt: 1, worktree: undefined, resetSession: true },
     ],
   },
 ])("a stalled $name times out and rolls back to the draft", (row) => {
@@ -255,7 +255,7 @@ test.each<{ name: string; events: NewSessionStartEvent[]; effects: NewSessionSta
     ],
     effects: [
       { type: "toast", attempt: 1, title: "prompt.toast.sessionCreateFailed.title", message: "Denied" },
-      { type: "tab.rollback", attempt: 1, worktree: { directory: "/wt", mcp: { figma: true } } },
+      { type: "tab.rollback", attempt: 1, worktree: { directory: "/wt", mcp: { figma: true } }, resetSession: true },
     ],
   },
 ])("rolls back to the draft when $name", (row) => {

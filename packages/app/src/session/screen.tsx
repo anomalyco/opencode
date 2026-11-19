@@ -53,7 +53,7 @@ import { createPanelMotion, holdLandingWidth, panelOpacity, setPanelResizing } f
 
 export function SessionScreenView(props: { session: SessionModel }) {
   // Link handling for the rest of the screen; each cached timeline provides its own for its session.
-  const mounted = createMountedSession(props.session)
+  const mounted = createMountedSession({ ...props.session, isChild: props.session.data.isChild })
 
   return (
     <PluginLinks session={mounted.view()}>

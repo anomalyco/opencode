@@ -54,7 +54,7 @@ export function SideRegion(props: {
 }) {
   const layout = useLayout()
   const language = useLanguage()
-  const { view, params } = useSessionLayout()
+  const { view } = useSessionLayout()
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const tabsOpen = createMemo(() => isDesktop() && view().side.opened())
@@ -98,7 +98,7 @@ export function SideRegion(props: {
   })
 
   return (
-    <Show when={isDesktop() && !!params.id}>
+    <Show when={isDesktop()}>
       <aside
         ref={setRoot}
         id="review-panel"
@@ -508,7 +508,8 @@ function AddMenu(props: { items: readonly SessionPanelMenuEntry[]; onChoose: (ke
   const menu = createDeferredMenu<SessionPanelMenuEntry>({
     onChoose: (entry) => {
       props.onChoose(entry.key)
-      entry.item.run()    },
+      entry.item.run()
+    },
   })
 
   return (
