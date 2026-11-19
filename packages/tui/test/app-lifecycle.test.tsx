@@ -1523,7 +1523,7 @@ test.skipIf(process.platform === "win32").each(["manual", "select"] as const)(
 
       setup.mockInput.pressKey("x", { ctrl: true })
       setup.mockInput.pressArrow("up")
-      await setup.waitFor(() => terminal.isDestroyed)
+      await setup.waitForFrame((frame) => terminal.isDestroyed && !frame.includes("alpha beta gamma"))
       expect(setup.renderer.currentFocusedEditor?.plainText).toBe("")
       setup.mockInput.pressKey("x", { ctrl: true })
       setup.mockInput.pressKey("t")
