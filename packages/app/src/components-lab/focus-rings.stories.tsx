@@ -79,6 +79,20 @@ const groups: Group[] = [
         render: () => <IconButton variant={variant} icon={<Icon name="plus" />} aria-label="Add" />,
       })),
       {
+        name: "Timeline jump to latest",
+        source: "app/src/session/timeline/virtualizer.tsx",
+        note: "A Tab stop while it shows, the only quick way back down a long timeline from the keyboard. Its container is inert while it's hidden.",
+        render: () => (
+          <button
+            type="button"
+            aria-label="Jump to latest"
+            class="flex items-center justify-center w-8 h-7 px-2 py-1.5 rounded-lg border-none cursor-pointer text-v2-text-text-base backdrop-blur-[2px] hover:bg-[linear-gradient(var(--v2-overlay-simple-overlay-hover),var(--v2-overlay-simple-overlay-hover))]"
+          >
+            <Icon name="chevron-down" />
+          </button>
+        ),
+      },
+      {
         name: "Button loading",
         source: "ui/src/actions/button/button.css",
         note: "Keeps the ring while it keeps focus. aria-busy and its loading text say it is working.",
@@ -570,21 +584,6 @@ const groups: Group[] = [
     css: "outline: none, and nothing in its place",
     note: "Controls the review agreed take no ring.",
     specimens: [
-      {
-        name: "Timeline scroll to bottom",
-        source: "app/src/session/timeline/virtualizer.tsx",
-        note: "Now out of the tab order (tabindex -1), so it is never an invisible stop. Tabbing through the timeline already scrolls each row into view; screen readers still reach it.",
-        render: () => (
-          <button
-            type="button"
-            tabindex="-1"
-            aria-label="Scroll to bottom"
-            class="pointer-events-auto flex items-center justify-center w-8 h-7 px-2 py-1.5 rounded-lg border-none cursor-pointer text-v2-text-text-base backdrop-blur-[2px] outline-none hover:bg-[linear-gradient(var(--v2-overlay-simple-overlay-hover),var(--v2-overlay-simple-overlay-hover))]"
-          >
-            <Icon name="chevron-down" />
-          </button>
-        ),
-      },
       {
         name: "InlineInput",
         source: "ui/src/forms/inline-input/inline-input.css",
