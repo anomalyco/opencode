@@ -7,6 +7,8 @@ import { WebSearchFirecrawl } from "@opencode/core/plugin/websearch/firecrawl"
 import { WebSearchParallel } from "@opencode/core/plugin/websearch/parallel"
 import { WebSearchTavily } from "@opencode/core/plugin/websearch/tavily"
 import { WebSearchTinyFish } from "@opencode/core/plugin/websearch/tinyfish"
+import { WebSearchYouCom } from "@opencode/core/plugin/websearch/youcom"
+import { withEnv } from "../fixture/env"
 import { host, integrationHost, webSearchHost } from "./host"
 import {
   requests,
@@ -43,6 +45,7 @@ describe("built-in web search providers", () => {
     WebSearchFirecrawl.Plugin,
     WebSearchTavily.Plugin,
     WebSearchTinyFish.Plugin,
+    WebSearchYouCom.Plugin,
   ].forEach((plugin) => {
     it.effect(`releases rate-limited HTTP requests for ${plugin.id} before caching their errors`, () =>
       Effect.gen(function* () {
@@ -368,6 +371,181 @@ describe("built-in web search providers", () => {
         body: { method: "tools/call" },
       })
       expect(requests[3]?.headers["x-tinyfish-access-mode"]).toBeUndefined()
+    }),
+  )
+
+  it.effect("registers You.com with keyless MCP search access", () =>
+    Effect.gen(function* () {
+      resetWebSearchFixture(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          result: {
+            content: [{ type: "text", text: "{}" }],
+            structuredContent: {
+              results: {
+                web: [
+                  {
+                    url: "https://effect.website",
+                    title: "Effect",
+                    description: "Effect description",
+                    page_age: "2026-07-25T00:00:00",
+                    contents: { highlights: ["Effect documentation", "Effect layers"] },
+                  },
+                ],
+              },
+              metadata: { query: "effect typescript" },
+            },
+          },
+        }),
+      )
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      yield* WebSearchYouCom.Plugin.effect(
+        host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
+      )
+
+      expect(yield* integrations.get(Integration.ID.make("youcom"))).toMatchObject({
+        id: "youcom",
+        name: "You.com",
+        methods: [{ type: "key" }, { type: "env", names: ["YDC_API_KEY"] }],
+      })
+      // page_age has no zone designator but is UTC, so a non-UTC zone must not shift it.
+      expect(
+        yield* withEnv({ TZ: "America/Chicago" }, () =>
+          websearch.query({ query: "effect typescript", providerID: WebSearch.ID.make("youcom") }),
+        ),
+      ).toEqual(
+        new WebSearch.Response({
+          providerID: WebSearch.ID.make("youcom"),
+          results: [
+            {
+              url: "https://effect.website",
+              title: "Effect",
+              content: "Effect documentation\n\nEffect layers",
+              time: { published: Date.UTC(2026, 6, 25) },
+            },
+          ],
+        }),
+      )
+      expect(requests[0]).toMatchObject({
+        url: WebSearchYouCom.keylessEndpoint,
+        headers: { "user-agent": expect.stringContaining("opencode/") },
+        body: {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: "you-search", arguments: { query: "effect typescript", count: 8 } },
+        },
+      })
+      expect(requests[0]?.headers.authorization).toBeUndefined()
+    }),
+  )
+
+  it.effect("sends a connected You.com key to the default MCP endpoint", () =>
+    Effect.gen(function* () {
+      resetWebSearchFixture(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          result: {
+            content: [{ type: "text", text: "{}" }],
+            structuredContent: { results: { web: [{ url: "https://effect.website" }] }, metadata: {} },
+          },
+        }),
+      )
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      yield* WebSearchYouCom.Plugin.effect(
+        host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
+      )
+      yield* integrations.connection.key({ integrationID: Integration.ID.make("youcom"), key: "youcom-secret" })
+
+      const output = yield* websearch.query({ query: "effect", providerID: WebSearch.ID.make("youcom") })
+      expect(output.results).toEqual([{ url: "https://effect.website", time: {} }])
+      expect(requests[0]).toMatchObject({
+        url: WebSearchYouCom.endpoint,
+        headers: { authorization: "Bearer youcom-secret" },
+      })
+      expect(JSON.stringify(output)).not.toContain("youcom-secret")
+    }),
+  )
+
+  it.effect("maps You.com results without highlights, titles, or valid dates", () =>
+    Effect.gen(function* () {
+      resetWebSearchFixture(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          result: {
+            content: [{ type: "text", text: "{}" }],
+            structuredContent: {
+              results: {
+                web: [
+                  { url: "https://a.test", description: "A description", contents: { highlights: [] } },
+                  { url: "https://b.test", title: "", page_age: "not a date" },
+                  { url: "https://c.test", page_age: "2026-07-25T02:00:00+02:00" },
+                ],
+              },
+              metadata: {},
+            },
+          },
+        }),
+      )
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      yield* WebSearchYouCom.Plugin.effect(
+        host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
+      )
+
+      expect((yield* websearch.query({ query: "q", providerID: WebSearch.ID.make("youcom") })).results).toEqual([
+        { url: "https://a.test", content: "A description", time: {} },
+        { url: "https://b.test", time: {} },
+        { url: "https://c.test", time: { published: Date.UTC(2026, 6, 25) } },
+      ])
+    }),
+  )
+
+  it.effect("returns no You.com results when the search finds nothing", () =>
+    Effect.gen(function* () {
+      resetWebSearchFixture(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          result: {
+            content: [{ type: "text", text: "No results found." }],
+            structuredContent: { results: {}, metadata: {} },
+          },
+        }),
+      )
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      yield* WebSearchYouCom.Plugin.effect(
+        host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
+      )
+
+      expect((yield* websearch.query({ query: "q", providerID: WebSearch.ID.make("youcom") })).results).toEqual([])
+    }),
+  )
+
+  it.effect("fails You.com searches that return an MCP tool error", () =>
+    Effect.gen(function* () {
+      resetWebSearchFixture(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          result: { content: [{ type: "text", text: "Error: Rate limited" }], isError: true },
+        }),
+      )
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      yield* WebSearchYouCom.Plugin.effect(
+        host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
+      )
+
+      expect(
+        yield* websearch.query({ query: "q", providerID: WebSearch.ID.make("youcom") }).pipe(Effect.flip),
+      ).toBeInstanceOf(WebSearch.RequestError)
     }),
   )
 })
