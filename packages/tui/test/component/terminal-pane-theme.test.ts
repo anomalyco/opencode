@@ -13,8 +13,8 @@ test.each(["light", "dark"] as const)("builds the %s ANSI palette from semantic 
     theme.text.feedback.error.base,
     theme.text.feedback.success.base,
     theme.text.feedback.warning.base,
-    hues.blue[200],
-    mode === "dark" ? hues.purple[200] : theme.hue.accent[200],
+    hues.blue[400],
+    mode === "dark" ? hues.purple[400] : theme.hue.accent[400],
     theme.text.feedback.info.base,
     white,
   ]
@@ -51,8 +51,8 @@ test("falls back to accent when no hue is confidently blue or magenta", () => {
       .matchAll(/\]4;(\d+);(#[0-9a-f]+)/g),
   ]
 
-  expect(palette[4]?.[2]).toBe(hex(theme.hue.accent[200]))
-  expect(palette[5]?.[2]).toBe(hex(theme.hue.accent[200]))
+  expect(palette[4]?.[2]).toBe(hex(theme.hue.accent[400]))
+  expect(palette[5]?.[2]).toBe(hex(theme.hue.accent[400]))
 })
 
 function byte(value: number) {
