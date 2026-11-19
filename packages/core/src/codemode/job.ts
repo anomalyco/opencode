@@ -51,6 +51,7 @@ export const make = Effect.fnUntraced(function* (
     const progress = Semaphore.makeUnsafe(1)
     return yield* Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
+        yield* context.progress({ background: true })
         yield* jobs.start({
           id,
           type: "codemode",
@@ -62,7 +63,8 @@ export const make = Effect.fnUntraced(function* (
               progress: (update) =>
                 progress.withPermit(
                   Deferred.isDone(detached).pipe(
-                    Effect.flatMap((done) => (done ? Effect.void : context.progress(update))),
+                    // The background flag tells clients this script can move to the background.
+                    Effect.flatMap((done) => (done ? Effect.void : context.progress({ ...update, background: true }))),
                   ),
                 ),
             }).pipe(Effect.provideService(Job.BlockingParent, id), Effect.interruptible, Effect.exit)
