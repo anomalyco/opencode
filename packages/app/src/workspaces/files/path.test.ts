@@ -11,6 +11,9 @@ describe("file path helpers", () => {
     ["C:\\repo", "C:/repo/src/app.ts", "src/app.ts"],
     ["C:\\repo", "file://C:/repo/src/app.ts", "src/app.ts"],
     ["C:\\repo", "c:\\repo\\src\\app.ts", "src\\app.ts"],
+    ["C:\\repo", "/static/render/x.mp4", "static/render/x.mp4"],
+    ["C:\\repo", "\\static\\render\\x.mp4", "static\\render\\x.mp4"],
+    ["\\\\server\\share\\proj", "/static/x.mp4", "static/x.mp4"],
   ])("normalizes %p against the workspace root %p", (root, input, expected) => {
     expect(createPathHelpers(() => root).normalize(input)).toBe(expected)
   })
@@ -28,6 +31,17 @@ describe("file path helpers", () => {
     expect(windows.normalize("file:///C:/tmp/font.ttf")).toBe("C:/tmp/font.ttf")
     expect(windows.absolute("C:/tmp/font.ttf")).toBe(true)
     expect(windows.normalize("file:///C:/repo/src/app.ts")).toBe("src/app.ts")
+    // A URL-style path names a workspace file on Windows. To the filesystem it is drive-root-relative, which
+    // reads the server process drive (`C:\static`) instead of the project. Absolute forms stay absolute:
+    expect(windows.normalize("/static/render/x.mp4")).toBe("static/render/x.mp4")
+    expect(windows.absolute("static/render/x.mp4")).toBe(false)
+    expect(windows.normalize("\\static\\render\\x.mp4")).toBe("static\\render\\x.mp4")
+    expect(windows.absolute("\\static\\render\\x.mp4")).toBe(false)
+    expect(windows.normalize("\\other\\share\\font.ttf")).toBe("other\\share\\font.ttf")
+    expect(windows.normalize("\\\\other\\share\\font.ttf")).toBe("\\\\other\\share\\font.ttf")
+    expect(windows.absolute("\\\\other\\share\\font.ttf")).toBe(true)
+    expect(windows.normalize("//server/share/font.ttf")).toBe("//server/share/font.ttf")
+    expect(windows.absolute("//server/share/font.ttf")).toBe(true)
   })
 
   test.each([

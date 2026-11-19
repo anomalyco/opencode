@@ -116,6 +116,11 @@ export function createPathHelpers(scope: () => string) {
       path = path.slice(2)
     }
 
+    // A single leading separator (`/static/x.mp4`) is drive-root-relative on Windows, so the server would read
+    // it from its process drive (`C:\static`) instead of the project. It is a URL-style reference to a
+    // workspace file. Full drive paths and UNC paths (any double separator) stay absolute.
+    if (windows && !/^[A-Za-z]:/.test(path) && !/^[/\\]{2}/.test(path)) path = path.replace(/^[/\\]+/, "")
+
     // An absolute path that is not under the root stays absolute; it is a file outside the workspace.
     return path
   }
