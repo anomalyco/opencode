@@ -413,6 +413,10 @@ export const Plugin = {
                     {
                       command: input.command,
                       cwd: input.workdir,
+                      // Where the command runs is settled before hooks see its variables; `prepare` resolves the
+                      // working directory again after them.
+                      environment: (yield* access.resolve({ path: input.workdir ?? ".", kind: "directory" }))
+                        .environment,
                       timeout,
                       shell: yield* compatibleShell,
                       metadata: { sessionID: context.sessionID },
