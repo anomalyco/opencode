@@ -95,6 +95,8 @@ export class RunScrollbackStream {
   private shellOutput: () => boolean
   private mono: boolean
   private imagePreview: boolean
+  private pendingTurn = false
+  private turnOpen = false
   private destroyed = false
   private pendingThemes: RunTheme[] = []
   private pendingStyles: SyntaxStyle[] = []
@@ -451,6 +453,15 @@ export class RunScrollbackStream {
     }
     if (this.destroyed || this.renderer.isDestroyed) return
 
+    if (this.pendingTurn) {
+      this.pendingTurn = false
+      const body = entryBody(commit, { shellOutput: this.shellOutput(), mono: this.mono })
+      this.writeSpacer(separatorRows(this.rendered, commit, body) || (!this.rendered && this.wrote ? 1 : 0))
+      this.renderer.writeScrollbackSequence("\x1b]133;C\x07")
+      this.turnOpen = true
+      this.rendered = undefined
+    }
+
     if (commit.summary) {
       this.writeSpacer(1)
       this.renderer.writeToScrollback(turnSummaryWriter({ ...commit.summary, theme: this.theme, mono: this.mono }))
@@ -523,6 +534,18 @@ export class RunScrollbackStream {
 
   public async complete(trailingNewline = false): Promise<void> {
     this.markRendered(await this.finishActive(trailingNewline))
+  }
+
+  public beginTurn(): void {
+    this.pendingTurn = true
+  }
+
+  public async endTurn(): Promise<void> {
+    this.pendingTurn = false
+    if (!this.turnOpen) return
+    await this.complete()
+    if (!this.destroyed && !this.renderer.isDestroyed) this.renderer.writeScrollbackSequence("\x1b]133;D\x07")
+    this.turnOpen = false
   }
 
   public async writeTurnSummary(input: { agent: string; model: string; duration: string }): Promise<void> {

@@ -371,6 +371,7 @@ export type FooterEvent =
       selection: NonNullable<RunInput["model"]>
     }
   | { type: "turn.send" }
+  | { type: "turn.end" }
   | { type: "turn.idle" }
   | {
       type: "turn.duration"

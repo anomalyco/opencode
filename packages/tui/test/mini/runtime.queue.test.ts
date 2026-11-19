@@ -234,6 +234,30 @@ describe("run runtime queue", () => {
     expect(ui.events.some((event) => event.type === "turn.duration")).toBe(false)
   })
 
+  test("completes every queued shell operation before sending the next", async () => {
+    const ui = createFooterApiFixture()
+    const event = ui.api.event
+    ui.api.event = (next) => {
+      event(next)
+      if (next.type === "turn.idle") ui.api.close()
+    }
+    const task = runPromptQueue({
+      footer: ui.api,
+      run: async (prompt) => {
+        if (prompt.text === "first") ui.submit("second", "shell")
+      },
+    })
+    ui.submit("first", "shell")
+    await task
+    expect(ui.events.filter((next) => next.type.startsWith("turn.")).map((next) => next.type)).toEqual([
+      "turn.send",
+      "turn.end",
+      "turn.send",
+      "turn.end",
+      "turn.idle",
+    ])
+  })
+
   test("preserves whitespace for initial input", async () => {
     const ui = createFooterApiFixture()
     const seen: string[] = []

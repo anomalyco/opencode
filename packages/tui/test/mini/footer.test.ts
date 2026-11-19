@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { createTestRenderer } from "@opentui/core/testing"
-import { CliRenderEvents, RGBA, TextRenderable } from "@opentui/core"
+import { CliRenderEvents, EmbeddedTerminalRenderable, RGBA, TextRenderable } from "@opentui/core"
 import path from "node:path"
 import { Writable } from "node:stream"
 import { coalesceProgressCommit, resolveRunAgent, RunFooter } from "../../src/mini/footer"
@@ -98,6 +98,7 @@ async function setup(
   input: {
     mono?: boolean
     tools?: MiniSettings["tools"]
+    turnSummary?: MiniSettings["turn_summary"]
     theme?: RunTuiConfig["theme"]
     startup?: { version: string; detail: string }
     cursorRow?: number
@@ -142,7 +143,12 @@ async function setup(
     theme: mono ? RUN_THEME_MONO : RUN_THEME_FALLBACK,
     tuiConfig: createTuiResolvedConfig({ theme: input.theme }),
     miniSettings: {
-      current: { ...resolveMiniSettings(), mono, ...(input.tools ? { tools: input.tools } : {}) },
+      current: {
+        ...resolveMiniSettings(),
+        mono,
+        ...(input.tools ? { tools: input.tools } : {}),
+        ...(input.turnSummary ? { turn_summary: input.turnSummary } : {}),
+      },
       update: input.update,
     },
     onPermissionReply: () => {},
@@ -153,6 +159,97 @@ async function setup(
   })
   return { ...app, footer, output }
 }
+
+test.each([1, 21, 24])("OSC 133 end marker is on the summary row from cursor row %s", async (cursorRow) => {
+  const app = await setup({ cursorRow })
+  const view = await createTestRenderer({ width: 112, height: 24, exitOnCtrlC: false })
+  const terminal = new EmbeddedTerminalRenderable(view.renderer, { cols: 112, rows: 24 })
+  view.renderer.root.add(terminal)
+  try {
+    app.footer.event({ type: "turn.send" })
+    app.footer.append({ kind: "user", text: "hello", phase: "start", source: "system" })
+    app.footer.append({ kind: "assistant", text: "answer", phase: "progress", source: "assistant" })
+    app.footer.event({ type: "turn.duration", duration: "2.2s" })
+    app.footer.event({ type: "turn.idle" })
+    await app.footer.idle()
+    await app.renderer.nativeScene.driver.idle()
+    const output = app.output.join("")
+    const markers = Array.from(output.matchAll(/\x1b\]133;([CD])\x07/g), (match) => match[1])
+    expect(markers).toEqual(["C", "D"])
+    expect(output.indexOf("\x1b]133;C\x07")).toBeLessThan(output.indexOf("hello"))
+    expect(output.indexOf("\x1b]133;D\x07")).toBeGreaterThan(output.indexOf("2.2s"))
+    terminal.write(`\x1b[${cursorRow};1H`)
+    terminal.write(output.slice(0, output.indexOf("\x1b]133;D\x07")))
+    await view.renderOnce()
+    const screen = terminal.screen()
+    expect(screen.lines[screen.cursor.y]).toContain("2.2s")
+    expect(screen.cursor.x).toBe(screen.lines[screen.cursor.y]!.length)
+    expect(screen.text).toContain("answer")
+    expect(output).not.toContain("\x1b7")
+    expect(output).not.toContain("\x1b8")
+  } finally {
+    terminal.destroy()
+    view.renderer.destroy()
+    app.footer.destroy()
+    app.renderer.destroy()
+  }
+})
+
+test("OSC 133 closes each queued shell operation without adding summaries", async () => {
+  const app = await setup({ cursorRow: 1, tools: "show" })
+  try {
+    for (const command of ["first", "second"]) {
+      app.footer.event({ type: "turn.send" })
+      app.footer.append({
+        kind: "tool",
+        source: "tool",
+        phase: "start",
+        text: command,
+        tool: "shell",
+        toolState: "running",
+        shell: { command },
+        messageID: command,
+        partID: command,
+      })
+      app.footer.event({ type: "turn.end" })
+    }
+    app.footer.event({ type: "turn.idle" })
+    await app.footer.idle()
+    await app.renderer.nativeScene.driver.idle()
+    const bytes = app.output.join("")
+    expect(Array.from(bytes.matchAll(/\x1b\]133;([CD])\x07/g), (match) => match[1])).toEqual(["C", "D", "C", "D"])
+    expect(bytes).toContain("first")
+    expect(bytes).toContain("second")
+    expect(app.externalOutput.takeText()).not.toContain("GPT-5")
+  } finally {
+    app.footer.destroy()
+    app.renderer.destroy()
+  }
+})
+
+test("OSC 133 closes turns without a summary and does not mark replayed history", async () => {
+  const app = await setup({ cursorRow: 1, turnSummary: "hide" })
+  try {
+    app.footer.append({ kind: "user", text: "old prompt", phase: "start", source: "system" })
+    await app.footer.idle()
+    await app.renderer.nativeScene.driver.idle()
+    expect(app.output.join("")).not.toContain("\x1b]133;")
+    app.output.length = 0
+    for (let turn = 0; turn < 2; turn++) {
+      app.footer.event({ type: "turn.send" })
+      app.footer.append({ kind: "user", text: "new prompt", phase: "start", source: "system" })
+      app.footer.append({ kind: "error", text: "interrupted", phase: "final", source: "system" })
+      app.footer.event({ type: "turn.idle" })
+      await app.footer.idle()
+    }
+    await app.renderer.nativeScene.driver.idle()
+    const markers = Array.from(app.output.join("").matchAll(/\x1b\]133;([CD])\x07/g), (match) => match[1])
+    expect(markers).toEqual(["C", "D", "C", "D"])
+  } finally {
+    app.footer.destroy()
+    app.renderer.destroy()
+  }
+})
 
 test.each([1, 5, 24])("startup preserves the terminal prompt row from cursor row %s", async (cursorRow) => {
   const app = await setup({ mono: false, startup: { version: "test", detail: "/project" }, cursorRow })
