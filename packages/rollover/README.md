@@ -27,29 +27,29 @@ indefinitely without losing decisions, corrections, or open work.
 ## How it works
 
 ```
- session ──▶ extraction gate ──▶ extraction ──▶ ledger ──▶ swap ──▶ <rollover_context>
-             (12 rules, 0 LLM)   (small model)  (append-only)  (budgeted render)
+ conversation ──▶ deterministic swap ──▶ <rollover_context>      (pure, ~ms, every model)
+        └──▶ idle extraction ──▶ ledger ──▶ render enrichment   (background, optional)
 ```
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/omeryasirkucuk/context-rollover/main/docs/rollover-flow.png" alt="Context grows to the threshold, then rolls over; pipeline: conversation → extraction gate → memory ledger → context swap — same session continues" width="720">
 </p>
 
-- **Extraction gate** — before any model call, the pending turn is classified
-  by 12 deterministic first-match rules (correction, standing instruction,
-  open item, completion, decision, constraint, task, process start, closure,
-  question, example, default). SKIP/DEFER verdicts cost **zero tokens** and
-  never drop content: the cursor stays put, so `buildDelta` accumulates
-  everything skipped into the next run. Measured on a 20-turn replay:
-  **20 → 7 calls (−65%)**, 32/32 meaningful records covered.
-- **Extraction** — a small-model call distills each new conversation delta
-  into ledger records: `objective`, `decision`, `user_correction`,
-  `open_item`, `verification`, `file`.
-- **Swap** — when the context estimate crosses the threshold, history rolls:
-  active records render into a budgeted `<rollover_context>` block, the last
-  *N* prompts stay verbatim, and everything from the cutoff onward stays
-  intact. The rewrite is never persisted — every request gets a fresh
-  projected copy, so UI and session history are untouched.
+- **Deterministic swap** — the whole swap is one pure function with no LLM
+  in it: when the context crosses the threshold, history is replaced by a
+  mechanically frozen record (verbatim user prompts, first lines of replies,
+  touched files) plus the active ledger sections, the last *N* prompts stay
+  verbatim, and everything from the cutoff onward stays intact. Nothing
+  model-dependent can defer or fail a swap. The rewrite is never persisted —
+  every request gets a fresh projected copy, so UI and session history are
+  untouched.
+- **Optional ledger enrichment** — at each idle turn, extraction (the session
+  model, or `extractionModel`) distills the new delta into durable records:
+  `objective`, `decision`, `user_correction`, `open_item`, `verification`
+  (dedupe invariants and records are documented). Completed records enrich
+  the frozen render in place; a failure changes nothing — the next swap
+  simply packs the ledger as it stands. Set `ledger: false` for a swap-only
+  pipeline with zero extra LLM calls.
 
 ## Install
 
@@ -69,11 +69,11 @@ Updates: `opencode plugin update context-rollover`.
 |---|---|---|---|
 | `mode` | `"off" \| "metrics_only" \| "auto"` | `"off"` | Every session starts off and opts in per chat with `/rollover` (or `/rollover on`); a rollover.json / `ROLLOVER_MODE` can still set a project- or global-wide default. `off` disables everything; `metrics_only` records metrics without swapping; `auto` is full behavior |
 | `thresholdTokens` | number | *computed* | Swap threshold; computed from the model's context limit (`thresholdRatio`, capped/floored) when omitted |
-| `tailN` | number | `0` | Prompts kept verbatim after a swap (`0–20`) |
+| `tailN` | number | `2` | Prompts kept verbatim after a swap (`0–20`) |
 | `renderBudgetTokens` | number | `4000` | Token budget for the rendered `<rollover_context>` block (per-session override: `/rollover --render 10k`) |
-| `extractionModel` | `"provider/model"` | *small model* | Model used for extraction; falls back to the session model |
+| `extractionModel` | `"provider/model"` | *session model* | Model used for background extraction; falls back to the session model |
 | `consolidateAfterRecords` | number | `40` | Run consolidation once the ledger holds this many active records |
-| `extractionGate` | boolean | `true` | `false` restores extraction on every idle (pre-gate behavior) |
+| `ledger` | boolean | `true` | `false` disables background extraction/consolidation entirely — swap-only pipeline, zero extra LLM calls |
 
 ## Commands
 
@@ -94,12 +94,10 @@ Append-only JSONL events in `metrics.jsonl`; totals are event counts.
 
 | Event | Meaning |
 |---|---|
-| `gate_classified` | One per classification — `cls`, `decision`, `urgent`, `rule`, `pendingMessages`, `pendingTokens` gauges |
-| `gate_scheduled` | A classification led to an actual scheduled extraction run |
-| `gate_coalesced` | An EXTRACT candidate merged into existing/in-flight work (or in-flight dedupe) |
-| `gate_fallback` | Gate error → pre-gate behavior used (extraction ran anyway) |
-| `llm_call` | One per LLM attempt (extraction + consolidation retries visible) — `purpose`, `model`, `latencyMs`, `ok`; `usage: null` means the generate host exposes no usage, reported unavailable rather than zero |
-| `extraction_started` / `completed` / `failed` | Actual extraction execution; the cursor advances only on success |
+| `swap` / `swap_deferred` | The deterministic swap persisted, or deferred (`open_tools` only — extraction can never defer a swap) |
+| `ledger_enriched` | A background run's records/invalidations were folded into the active frozen render |
+| `llm_call` | One per background LLM attempt (extraction + consolidation retries visible) — `purpose`, `model`, `latencyMs`, `ok`; `usage: null` means the generate host exposes no usage, reported unavailable rather than zero |
+| `extraction_started` / `completed` / `failed` | Actual background extraction execution; the cursor advances only on success |
 
 ## State on disk
 
@@ -120,6 +118,7 @@ Per session, under the project's `.opencode/rollover/<sid>/`:
 | [`docs/phase0-findings.md`](docs/phase0-findings.md) | Empirically verified 2.x API surface (P0-1…P0-13) |
 | [`docs/testing.md`](docs/testing.md) | Test suite, perf gates, benchmark — how to run them |
 | [`docs/known-limitations.md`](docs/known-limitations.md) | Honest list of what remains |
+| [`docs/2026-11-19-deterministic-swap-design.md`](docs/2026-11-19-deterministic-swap-design.md) | v2 design: the deterministic swap, optional enrichment |
 | [`bench/reports/rollover-benchmark.md`](bench/reports/rollover-benchmark.md) | Measured benchmark report (+ `raw-*.json`) |
 
 ## Development
@@ -131,6 +130,32 @@ bun install
 bun test          # 343 tests
 bun run typecheck
 ```
+
+## Changelog
+
+### 0.2.0 — the deterministic swap
+
+**The swap no longer contains, waits for, or depends on an LLM.** v1's
+extraction cursor sat inside the swap's safe-point condition — a failing,
+quota-limited, or slow extraction model deferred swaps indefinitely
+(`extraction_lagging`), and behavior visibly differed per model. v2 replaces
+the whole loop with one deterministic transformation:
+
+- **Swap = pure function.** Decides and freezes from state alone; runs in
+  milliseconds on every model. The extraction cursor and `extractionGate`
+  are gone from the decision; the frozen record covers the discarded region
+  mechanically: verbatim user prompts (capped), first lines of assistant
+  replies, touched files, then the ledger sections.
+- **Ledger became an optional enrichment** (`ledger`, default `true`;
+  `false` = swap-only pipeline, zero extra LLM calls — replaces
+  `extractionGate`). Extraction still runs per idle turn (the session model
+  by default); completed records and invalidations refresh the frozen
+  render in place, and failures stay invisible — the next swap packs the
+  ledger as it stands.
+- **The one-decision-per-prompt gate no longer blocks a user-triggered
+  `/rollover`** (`ignoreDecided` on the immediate path).
+- New metric `ledger_enriched`; `gate_*` metrics withdrawn; the status card
+  shows the context counter's source (`usage` / `estimate`).
 
 ## License
 
