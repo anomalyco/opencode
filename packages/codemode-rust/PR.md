@@ -13,11 +13,11 @@ recorded from the TypeScript layer, never written by hand, and CI fails if a reg
 
 | Recording (generator) | Rust replay | Covers |
 |---|---|---|
-| `cases/*.json` (`generate.ts`) | `bench/tests/conformance.rs`, also round-trip | 385 programs |
-| `host.json` (`host.ts`) | `tests/host_recording.rs` | 64 runs, 14 suspensions |
+| `cases/*.json` (`generate.ts`) | `bench/tests/conformance.rs`, also round-trip | 391 programs |
+| `host.json` (`host.ts`) | `tests/host_recording.rs` | 80 runs, 22 suspensions |
 | `boundary.json` (`boundary.ts`) | `tests/boundary.rs` | 38 programs, 38 configurations, 10 results |
 | `streaming.json` (`streaming.ts`) | `tests/streaming.rs` | 693 programs, 63 suspensions |
-| test262 (`test262/run.sh`) | both ways | 15567 / 15567 files |
+| test262 (`test262/run.sh`) | both ways | 19521 / 19521 files |
 
 ## Threading
 
