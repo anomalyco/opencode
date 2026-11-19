@@ -75,14 +75,20 @@ class Run extends Context.Service<
   }
 >()("@opencode/CodeModeTool/Run") {}
 
-/** The session's Location, file, and OpenCode API services, used by `path`, `Bun`, and `opencode://` fetch. */
-export type Services = Location.Service | CodeModeBun.Services | CodeModeApi.Service
+/** The session's Location and file services, which a run with the experimental `path` and `Bun` globals acts through. */
+export type Services = Location.Service | CodeModeBun.Services
 
 /** Those services alone, so a run they are given to keeps its own scope and the rest of its context. */
 export const services = Effect.map(
   Effect.context<Services>(),
-  Context.pick(Location.Service, FileAccess.Service, FileMutation.Service, FileWrite.Service, CodeModeApi.Service),
+  Context.pick(Location.Service, FileAccess.Service, FileMutation.Service, FileWrite.Service),
 )
+
+/** What `opencode://` fetch acts through: this process's OpenCode API and the session's Location. */
+export type Api = CodeModeApi.Service | Location.Service
+
+/** Those two services alone, picked from the caller's context like `services`. */
+export const api = Effect.map(Effect.context<Api>(), Context.pick(CodeModeApi.Service, Location.Service))
 
 export type Inventory = {
   readonly tools: ReadonlyMap<string, Info>
@@ -110,6 +116,8 @@ export const create = (
   permission: Permission.Interface,
   /** With `full_codemode`, the session's services, which turn on the experimental `path` and `Bun` globals. */
   services?: Context.Context<Services>,
+  /** What `opencode://` fetch sends requests through. Without it, `opencode://` fails as unavailable. */
+  api?: Context.Context<Api>,
 ) => {
   return {
     name: "execute",
@@ -187,6 +195,7 @@ export const create = (
             Effect.provideService(CodeModeExecution.Service, { ...context, signal: yield* Effect.abortSignal }),
             Effect.provideService(Permission.Service, permission),
             (program) => (services ? Effect.provideContext(program, services) : program),
+            (program) => (api ? Effect.provideContext(program, api) : program),
           )
         const toolCalls = yield* Ref.get(calls)
         const collected = (yield* Ref.get(files))

@@ -100,6 +100,7 @@ const layer = Layer.effect(
     const store = yield* SessionStore.Service
     const registry = yield* Tool.Service
     const services = yield* CodeModeTool.services
+    const api = yield* CodeModeApi.Service
     const websearch = yield* WebSearch.Service
 
     const resolveModel = (
@@ -167,7 +168,10 @@ const layer = Layer.effect(
       const fallbackRef = session.model ?? agent.info.model
       const policyModel = selected?.info ?? (fallbackRef && Model.Info.default(fallbackRef.providerID, fallbackRef.id))
       const tools = yield* registry.snapshot(permissions, {
-        services: opencodeApi ? services : Context.add(services, CodeModeApi.Service, CodeModeApi.disabled),
+        services,
+        api: Context.make(CodeModeApi.Service, opencodeApi ? api : CodeModeApi.disabled).pipe(
+          Context.add(Location.Service, location),
+        ),
         // An agent that can't run `execute` (such as explore) keeps every tool direct, so give it the flag-off policy.
         tools: modelTools({
           model: policyModel,

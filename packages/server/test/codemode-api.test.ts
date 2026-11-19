@@ -46,7 +46,7 @@ it.live("dispatches Code Mode opencode:// requests in-process without HTTP auth 
     const locationLayer = locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory) }))
 
     const output = yield* Effect.gen(function* () {
-      const services = yield* CodeModeTool.services
+      const api = yield* CodeModeTool.api
       const permission = yield* Permission.Service
       const session = yield* Effect.promise(() =>
         externalHandler(
@@ -65,7 +65,8 @@ it.live("dispatches Code Mode opencode:// requests in-process without HTTP auth 
         { tools: new Map() },
         () => Effect.die("unused tool execution"),
         permission,
-        services,
+        undefined,
+        api,
       )
       return yield* executeTool.execute(
         {
