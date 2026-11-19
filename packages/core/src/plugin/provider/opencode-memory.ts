@@ -4,7 +4,7 @@ import fs from "fs/promises"
 import os from "os"
 import path from "path"
 import { fileURLToPath } from "url"
-import { Message, ToolFailure } from "@opencode/ai/effect"
+import { Message, SystemPart, ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
@@ -60,6 +60,20 @@ const Injected = Schema.Struct({
   body: Schema.String,
   revision: Schema.Number,
   score: Schema.Number,
+})
+const Standing = Schema.Struct({
+  id: Schema.String,
+  kind: Kind,
+  title: Schema.String,
+  body: Schema.String,
+  revision: Schema.Number,
+  status: Schema.optional(Schema.Literals(["live", "provisional"])),
+  tainted: Schema.optional(Schema.Boolean),
+  retired: Schema.optional(Schema.Unknown),
+  repo: Schema.optional(Schema.String),
+  tags: Schema.optional(Schema.Array(Schema.String)),
+  verifiedAt: Schema.optional(Schema.String),
+  updatedAt: Schema.optional(Schema.String),
 })
 const Source = Schema.Struct({
   repo: Schema.optional(Schema.String),
@@ -171,6 +185,8 @@ type Tracked = {
   compactions: number
   /** A compaction ended since the delivered entries were last given. */
   redeliver?: boolean
+  /** The session's standing block, built at its first request and never again: "" when none applies. */
+  standing?: string
   /** The session's events since its last work boundary, and where they start in its log. */
   readonly segment: Array<OpencodeMemoryCapture.Event>
   from: number
@@ -753,8 +769,52 @@ export const make = Effect.fnUntraced(function* (
     // correcting message points out the entry it may correct; the request after a compaction gets the injected entries
     // once more. Other requests find none. They're persisted so later requests keep them, and land after this step, so
     // this request gets them at the end, which keeps the cached prefix.
+    /**
+     * The session's standing block: its repository's live conventions from Console, chosen and rendered by the policy.
+     * Its entries count as given, so injections don't send them again; Console logs the delivery with the session.
+     */
+    const standing = (sessionID: Session.ID) =>
+      Effect.gen(function* () {
+        const source = yield* repository
+        const name = "repo" in source && source.repo ? repoName(source.repo) : undefined
+        if (name === undefined || !("repo" in source) || !source.repo) return ""
+        const keys = yield* reachable
+        const answer = yield* call(
+          Schema.Struct({ entries: Schema.Array(Standing) }),
+          "GET",
+          `/api/memory/standing?${new URLSearchParams([
+            ["repo", source.repo],
+            ["sessionID", sessionID],
+            ...keys.map((key): [string, string] => ["reachable", key]),
+          ])}`,
+        ).pipe(Effect.timeout(policy.timeout))
+        const block = policy.standing(answer.entries, name)
+        if (block.dropped.length > 0)
+          yield* Effect.logInfo("memory standing block over its cap", {
+            dropped: block.dropped.map((entry) => `${entry.id}@${entry.revision}`),
+          })
+        if (block.text === undefined) return ""
+        const state = tracked(sessionID)
+        block.shown.forEach((entry) =>
+          give(state, { id: entry.id, revision: entry.revision, title: entry.title, text: entry.body }),
+        )
+        yield* Effect.logInfo("memory standing block", {
+          sessionID,
+          moment: "standing",
+          slot: "system",
+          entries: block.shown.map((entry) => `${entry.id}@${entry.revision}`),
+          chars: block.text.length,
+        })
+        return block.text
+      }).pipe(Effect.catch((cause) => Effect.logDebug("no memory standing block", { cause }).pipe(Effect.as(""))))
+
     yield* ctx.session.hook("context", (event) =>
       Effect.gen(function* () {
+        // Built at the session's first request and carried byte-identical by every request after it, as a system part
+        // (never a user message), so the cached prefix stays intact.
+        const own = tracked(event.sessionID)
+        own.standing ??= yield* standing(event.sessionID)
+        if (own.standing) event.system.push(SystemPart.make(own.standing))
         const state = sessions.get(event.sessionID)
         if (!state || (!state.pending && !state.nudge && !state.redeliver)) return
         const pending = state.pending
