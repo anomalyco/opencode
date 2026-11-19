@@ -1,12 +1,12 @@
 import { Plugin } from "@opencode/plugin/tui"
 import { createMemo, createSignal, Match, Show, Switch } from "solid-js"
-import { contextUsage, formatContextUsage, ownedJobs } from "../../util/session"
+import { contextUsage, formatContextUsage } from "../../util/session"
 import { useTerminalDimensions } from "@opentui/solid"
 import { TextAttributes } from "@opentui/core"
 import { useInteractivity } from "../../context/interactivity"
 import { stringWidth } from "../../util/string-width"
 import { createGoal, GoalStatus } from "./goal"
-import { busyTab } from "../../routes/session/composer/tabs"
+import { busyCounts, busyTab } from "../../routes/session/composer/tabs"
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -21,30 +21,14 @@ export function PromptFooter(props: {
 }) {
   const dimensions = useTerminalDimensions()
   const [liveHovered, setLiveHovered] = createSignal(false)
-  const jobs = createMemo(() => (props.sessionID ? props.context.data.job.list(props.sessionID) : []))
-  const scripts = createMemo(() => {
-    const count = jobs().filter((job) => job.kind === "codemode" && job.sessionID === props.sessionID).length
-    return count ? `${count} script${count === 1 ? "" : "s"}` : undefined
-  })
-  const subagents = createMemo(() => {
-    if (!props.sessionID) return undefined
-    const count = props.context.data.session
-      .family(props.sessionID)
-      .filter(
-        (id) =>
-          id !== props.sessionID &&
-          (props.context.data.session.status(id) === "running" ||
-            ownedJobs(jobs(), id, (sessionID) => props.context.data.session.get(sessionID)?.parentID).length > 0),
-      ).length
-    return count ? `${count} subagent${count === 1 ? "" : "s"}` : undefined
-  })
-  const shells = createMemo(() => {
-    if (!props.sessionID) return undefined
-    const count = props.context.data.shell
-      .list(props.context.location)
-      .filter((shell) => shell.metadata.sessionID === props.sessionID).length
-    return count ? `${count} shell${count === 1 ? "" : "s"}` : undefined
-  })
+  const counts = createMemo(() =>
+    props.sessionID
+      ? busyCounts({ data: props.context.data, sessionID: props.sessionID, location: props.context.location })
+      : { scripts: 0, subagents: 0, shells: 0 },
+  )
+  const scripts = createMemo(() => label(counts().scripts, "script"))
+  const subagents = createMemo(() => label(counts().subagents, "subagent"))
+  const shells = createMemo(() => label(counts().shells, "shell"))
   const status = createMemo(() => {
     if (!props.sessionID) return []
     const session = props.context.data.session.get(props.sessionID)
@@ -86,12 +70,7 @@ export function PromptFooter(props: {
                   flexShrink={0}
                   onMouseOver={() => setLiveHovered(true)}
                   onMouseOut={() => setLiveHovered(false)}
-                  onMouseUp={() =>
-                    props.context.keymap.dispatch(
-                      "session.child.first",
-                      busyTab({ scripts: !!scripts(), subagents: !!subagents(), shells: !!shells() }),
-                    )
-                  }
+                  onMouseUp={() => props.context.keymap.dispatch("session.child.first", busyTab(counts()))}
                 >
                   <text
                     fg={liveHovered() ? props.context.theme.text.base : props.context.theme.text.muted}
@@ -177,4 +156,8 @@ function promptFooterLayout(input: { width: number; usage: string[]; shortcuts: 
   if (usage && stringWidth(usage) <= available) return { usage: true, shortcuts: false }
   if (!usage && shortcuts && stringWidth(shortcuts) <= available) return { usage: false, shortcuts: true }
   return { usage: false, shortcuts: false }
+}
+
+function label(count: number, noun: string) {
+  return count ? `${count} ${noun}${count === 1 ? "" : "s"}` : undefined
 }

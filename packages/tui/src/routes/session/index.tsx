@@ -77,8 +77,7 @@ import { DialogGoUpsell } from "../../component/dialog-go-upsell"
 import { UsageLimitNotice, useLimitNotice, useUsageAlerts } from "../../component/usage"
 import { useStorage } from "../../context/storage"
 import { Composer } from "./composer"
-import { busyTab } from "./composer/tabs"
-import { ownedJobs } from "../../util/session"
+import { busyCounts, busyTab } from "./composer/tabs"
 import { filetype } from "../../util/filetype"
 import parsers from "../../parsers-config"
 import { errorMessage } from "../../util/error"
@@ -231,18 +230,7 @@ export function Session(props: {
       item.delivery === "queue" ? [{ id: item.id, text: item.payload.text, payload: item.payload }] : [],
     ),
   )
-  const openingTab = () => {
-    const jobs = data.job.list(route.sessionID)
-    return busyTab({
-      scripts: jobs.some((job) => job.kind === "codemode" && job.sessionID === route.sessionID),
-      subagents: descendantSessionIDs().some(
-        (id) =>
-          data.session.status(id) === "running" ||
-          ownedJobs(jobs, id, (sessionID) => data.session.get(sessionID)?.parentID).length > 0,
-      ),
-      shells: data.shell.list(location()).some((shell) => shell.metadata.sessionID === route.sessionID),
-    })
-  }
+  const openingTab = () => busyTab(busyCounts({ data, sessionID: route.sessionID, location: location() }))
   const [composer, setComposer] = createStore({
     open: false,
     tab: undefined as string | undefined,

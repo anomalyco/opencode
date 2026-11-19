@@ -1,6 +1,8 @@
 import { createEffect, createMemo, on, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
+import type { Plugin } from "@opencode/plugin/tui"
 import type { ComposerTab } from "./context"
+import { ownedJobs } from "../../../util/session"
 
 const order = ["subagents", "shell", "scripts", "terminals"]
 
@@ -9,8 +11,30 @@ const rank = (id: string) => {
   return index < 0 ? order.length : index
 }
 
+// What a session has running, for the picker tabs and the prompt footer.
+export function busyCounts(input: {
+  data: Plugin.Context["data"]
+  sessionID: string
+  location: Parameters<Plugin.Context["data"]["shell"]["list"]>[0]
+}) {
+  const jobs = input.data.job.list(input.sessionID)
+  return {
+    scripts: jobs.filter((job) => job.kind === "codemode" && job.sessionID === input.sessionID).length,
+    subagents: input.data.session
+      .family(input.sessionID)
+      .filter(
+        (id) =>
+          id !== input.sessionID &&
+          (input.data.session.status(id) === "running" ||
+            ownedJobs(jobs, id, (sessionID) => input.data.session.get(sessionID)?.parentID).length > 0),
+      ).length,
+    shells: input.data.shell.list(input.location).filter((shell) => shell.metadata.sessionID === input.sessionID)
+      .length,
+  }
+}
+
 // The tab the picker opens on when nothing asks for one: the first that has something running, else Subagents.
-export function busyTab(input: { scripts: boolean; subagents: boolean; shells: boolean }) {
+export function busyTab(input: { scripts: number; subagents: number; shells: number }) {
   if (input.scripts) return "scripts"
   if (input.subagents) return "subagents"
   if (input.shells) return "shell"
