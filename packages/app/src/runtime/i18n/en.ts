@@ -623,8 +623,7 @@ export const dict = {
   "tips.browse.description": "Let OpenCode work in your browser with your tabs, logins, and extensions.",
   "tips.browse.install": "Install",
   "tips.hex.title": "Use your voice",
-  "tips.hex.description":
-    "Hex lets you hold a key and speak your prompts. It runs on your computer and works in any app.",
+  "tips.hex.description": "Hex lets you hold a key and speak your prompts. It runs on your computer and works in any app.",
   "tips.hex.install": "Install Hex",
   "home.workspaceTip": "Start next session in a new workspace to keep changes isolated",
 
@@ -898,7 +897,8 @@ export const dict = {
   "settings.experimental.row.newQuestionUI.title": "New question UI",
   "settings.experimental.row.newQuestionUI.description": "Preview the keyboard-first question dock",
   "settings.experimental.row.tabGroups.title": "Tab groups",
-  "settings.experimental.row.tabGroups.description": "Group session tabs in side tabs with inline session search",
+  "settings.experimental.row.tabGroups.description":
+    "Group session tabs in side tabs with inline session search",
   "settings.experimental.row.sidebarOrganize.title": "Organize vertical sidebar",
   "settings.experimental.row.sidebarOrganize.description":
     "Choose how to organize sessions in side tabs. On desktop, Customize replaces Home with Settings in the sidebar.",
@@ -907,8 +907,7 @@ export const dict = {
   "settings.experimental.sidebarOrganize.customize": "Customize",
   "settings.experimental.sidebarOrganize.consolidated": "Consolidated",
   "settings.general.row.navigation.title": "Navigation",
-  "settings.general.row.navigation.description":
-    "Keep the sessions you're working on as tabs, or see every session in one list.",
+  "settings.general.row.navigation.description": "Keep the sessions you're working on as tabs, or see every session in one list.",
   "settings.general.row.navigation.tabs": "Tabs",
   "settings.general.row.navigation.list": "List",
   "settings.general.row.tabPosition.title": "Tab position",
