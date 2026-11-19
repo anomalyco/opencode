@@ -49,16 +49,31 @@ test("favorites a prompt and an answer, then jumps from the list", async ({ page
   await scroller.evaluate((element) => element.scrollTo(0, element.scrollHeight))
   await expect(userRow).not.toBeInViewport()
 
-  await page.locator("[data-session-title]").getByRole("button", { name: "More options", exact: true }).click()
-  await page.getByRole("menuitem", { name: "Favorite messages…", exact: true }).click()
+  const openFavorites = async () => {
+    await page.locator("[data-session-title]").getByRole("button", { name: "More options", exact: true }).click()
+    await page.getByRole("menuitem", { name: "Favorite messages…", exact: true }).click()
 
-  const dialog = page.getByRole("dialog", { name: "Favorite messages", exact: true })
-  await expect(dialog).toBeVisible()
+    const dialog = page.getByRole("dialog", { name: "Favorite messages", exact: true })
+    await expect(dialog).toBeVisible()
+
+    return dialog
+  }
+
+  const dialog = await openFavorites()
   await expect(dialog.getByRole("option").filter({ hasText: "The answer worth keeping" })).toBeVisible()
   await expect(dialog.getByRole("option").filter({ hasText: "Build the timeline stability matrix" })).toBeVisible()
   await page.screenshot({ path: test.info().outputPath("favorites-dialog.png"), animations: "disabled" })
 
-  await dialog.getByRole("option").filter({ hasText: "Build the timeline stability matrix" }).click()
+  // The answer has no anchor of its own, so its favorite jumps to the prompt that started the turn.
+  await dialog.getByRole("option").filter({ hasText: "The answer worth keeping" }).click()
   await expect(dialog).toBeHidden()
+  await expect(userRow).toBeInViewport()
+
+  await scroller.evaluate((element) => element.scrollTo(0, element.scrollHeight))
+  await expect(userRow).not.toBeInViewport()
+
+  const promptDialog = await openFavorites()
+  await promptDialog.getByRole("option").filter({ hasText: "Build the timeline stability matrix" }).click()
+  await expect(promptDialog).toBeHidden()
   await expect(userRow).toBeInViewport()
 })
