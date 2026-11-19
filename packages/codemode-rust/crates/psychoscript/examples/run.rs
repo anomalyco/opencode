@@ -8,7 +8,7 @@ fn main() {
     let code = std::fs::read_to_string(&path).expect("readable program");
     let tools = Namespace::new(
         |path| match path {
-            [] => Ok(vec!["echo".to_owned()]),
+            [] => Ok(vec!["echo".into()]),
             _ => Ok(Vec::new()),
         },
         |path| -> Resolved {
@@ -21,7 +21,14 @@ fn main() {
                         .unwrap_or(HostValue::Null))
                 })
                 .into(),
-                _ => Failure::missing(format!("No function at tools.{}.", path.join("."))).into(),
+                _ => Failure::missing(format!(
+                    "No function at tools.{}.",
+                    path.iter()
+                        .map(|k| k.to_string())
+                        .collect::<Vec<_>>()
+                        .join(".")
+                ))
+                .into(),
             }
         },
     );

@@ -22,7 +22,7 @@ pub struct Outcome {
     /// Whether `max_output_bytes` cut the retained result or logs.
     pub truncated: bool,
     /// The run's metadata as its host functions left it (see [`Run::set_metadata`]); `null` when none was set.
-    pub metadata: Json,
+    pub metadata: Data,
 }
 
 impl Outcome {
@@ -48,11 +48,11 @@ impl Outcome {
 #[derive(Clone)]
 pub struct Run {
     pub(crate) id: RunId,
-    metadata: Arc<Mutex<Json>>,
+    metadata: Arc<Mutex<Data>>,
 }
 
 impl Run {
-    pub(crate) fn new(id: Option<String>, metadata: Json) -> Self {
+    pub(crate) fn new(id: Option<String>, metadata: Data) -> Self {
         Self {
             id: Arc::new(id.map(std::sync::OnceLock::from).unwrap_or_default()),
             metadata: Arc::new(Mutex::new(metadata)),
@@ -66,20 +66,20 @@ impl Run {
 
     /// The run's metadata: JSON data its host functions keep, which a saved run keeps in its state and the outcome
     /// reports. `null` until set.
-    pub fn metadata(&self) -> Json {
+    pub fn metadata(&self) -> Data {
         self.lock().clone()
     }
 
-    pub fn set_metadata(&self, metadata: Json) {
-        *self.lock() = metadata;
+    pub fn set_metadata(&self, metadata: impl Into<Data>) {
+        *self.lock() = metadata.into();
     }
 
     /// Changes the metadata in place.
-    pub fn update_metadata<T>(&self, f: impl FnOnce(&mut Json) -> T) -> T {
+    pub fn update_metadata<T>(&self, f: impl FnOnce(&mut Data) -> T) -> T {
         f(&mut self.lock())
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, Json> {
+    fn lock(&self) -> std::sync::MutexGuard<'_, Data> {
         self.metadata.lock().unwrap_or_else(|e| e.into_inner())
     }
 }
@@ -125,7 +125,7 @@ pub enum TranslatePromises {
 /// Options for one program: [`Runtime::program`], [`Runtime::execute_with`], the reference's `ProgramOptions`.
 #[derive(Clone, Debug, Default)]
 pub struct ProgramOptions {
-    pub(crate) bindings: serde_json::Map<String, Json>,
+    pub(crate) bindings: Vec<(HostString, Data)>,
     pub(crate) run_id: Option<String>,
 }
 
@@ -136,8 +136,15 @@ impl ProgramOptions {
 
     /// Read-only JSON values bound in the program's outer scope, shadowable by top-level declarations. A host
     /// global of the same name wins.
-    pub fn bindings(mut self, bindings: serde_json::Map<String, Json>) -> Self {
-        self.bindings = bindings;
+    /// They take a `serde_json::Map`, or names and [`Data`] when a string must keep an unpaired surrogate.
+    pub fn bindings<K: Into<HostString>, V: Into<Data>>(
+        mut self,
+        bindings: impl IntoIterator<Item = (K, V)>,
+    ) -> Self {
+        self.bindings = bindings
+            .into_iter()
+            .map(|(k, v)| (k.into(), v.into()))
+            .collect();
         self
     }
 

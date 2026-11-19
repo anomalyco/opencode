@@ -88,7 +88,7 @@ fn undescribe(j: &Json) -> HostValue {
         "number" => HostValue::Number(number(v)),
         "date" => HostValue::Date(number(v)),
         "regexp" => HostValue::RegExp {
-            source: v[0].as_str().unwrap().to_owned(),
+            source: text_of(&v[0]),
             flags: v[1].as_str().unwrap().to_owned(),
         },
         "url" => HostValue::Url(v.as_str().unwrap().to_owned()),
@@ -437,6 +437,29 @@ fn runtimes_made_with_different_globals_and_module_names_match_the_reference() {
     );
 }
 
+/// A host value as data, for bindings.
+fn data_of(v: &HostValue) -> Data {
+    match v {
+        HostValue::Null | HostValue::Undefined => Data::Null,
+        HostValue::Bool(b) => Data::Bool(*b),
+        HostValue::Number(n) => Data::from(json!(n)),
+        HostValue::String(s) => Data::String(s.clone()),
+        HostValue::Array(items) => Data::Array(
+            items
+                .iter()
+                .map(|i| i.as_ref().map_or(Data::Null, data_of))
+                .collect(),
+        ),
+        HostValue::Object(fields) => Data::Object(
+            fields
+                .iter()
+                .map(|(k, v)| (k.clone(), data_of(v)))
+                .collect(),
+        ),
+        other => panic!("not data: {other:?}"),
+    }
+}
+
 /// A diagnostic as the generator records it: its kind, and its message and suggestions as `describe` writes a string.
 fn described_diagnostic(d: &psychoscript::Diagnostic) -> Json {
     let mut out = json!({ "kind": d.kind.name(), "message": reference::text(&d.message) });
@@ -479,7 +502,11 @@ fn results_and_logs_keep_unpaired_surrogates_as_the_reference_does() {
                 .map(|n| n as usize),
         });
         let code = case["code"].as_str().unwrap();
-        let o = rt.execute(code);
+        let mut options = psychoscript::ProgramOptions::new();
+        if let Some(HostValue::Object(fields)) = case.get("bindings").map(undescribe) {
+            options = options.bindings(fields.into_iter().map(|(k, v)| (k, data_of(&v))));
+        }
+        let o = rt.execute_with(code, &options);
         let mut actual = match &o.result {
             Ok(value) => json!({ "value": described_data(value) }),
             Err(d) => json!({ "error": described_diagnostic(d) }),

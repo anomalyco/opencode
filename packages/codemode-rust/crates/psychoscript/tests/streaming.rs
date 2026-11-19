@@ -230,7 +230,7 @@ fn ended(o: &psychoscript::Outcome) -> Json {
     if !o.logs.is_empty() {
         out["logs"] = json!(o.log_lines());
     }
-    out["metadata"] = o.metadata.clone();
+    out["metadata"] = o.metadata.to_json();
     out
 }
 

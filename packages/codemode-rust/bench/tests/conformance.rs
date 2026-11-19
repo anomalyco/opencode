@@ -88,7 +88,7 @@ fn check(name: &str, code: &str, expected: &Json) -> Result<(), String> {
         )),
     }
     if let Some(metadata) = expected.get("metadata")
-        && !same(&outcome.metadata, metadata)
+        && !same(&outcome.metadata.to_json(), metadata)
     {
         problems.push(format!(
             "metadata\n    expected: {metadata}\n    actual:   {}",

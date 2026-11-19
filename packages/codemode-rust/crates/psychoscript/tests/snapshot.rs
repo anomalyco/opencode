@@ -237,7 +237,7 @@ fn a_suspend_fails_while_a_call_is_running_and_the_run_goes_on() {
         [(
             "tools",
             Namespace::new(
-                |_| Ok(vec!["slow".to_owned()]),
+                |_| Ok(vec!["slow".into()]),
                 move |_| {
                     let g = g.clone();
                     HostFunction::new_async(move |_, _| {
@@ -738,14 +738,14 @@ impl Jobs {
                     if let Some(w) = wait {
                         w.await;
                     }
-                    Ok(json!({ "job": key, "input": input }))
+                    Ok(json!({ "job": key, "input": input }).into())
                 }
             },
             move |data, call| {
                 wait_log.lock().unwrap().push(format!(
                     "wait {} {}",
                     call.key(),
-                    data["job"].as_str().unwrap_or("")
+                    data.to_json()["job"].as_str().unwrap_or("")
                 ));
                 let f = result.wait();
                 async move { Ok(HostValue::from_json(&f.await)) }
@@ -754,7 +754,7 @@ impl Jobs {
                 cancelled
                     .lock()
                     .unwrap()
-                    .push(data["job"].as_str().unwrap_or("").to_owned());
+                    .push(data.to_json()["job"].as_str().unwrap_or("").to_owned());
                 async {}
             },
         )

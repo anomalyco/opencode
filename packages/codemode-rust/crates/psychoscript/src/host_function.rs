@@ -12,9 +12,9 @@ use std::future::Future;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use crate::Json;
 use crate::exec::BoxFuture;
 use crate::host::RunId;
+use crate::{Data, Json};
 
 /// A string crossing the boundary: any string a program can hold, including one with an unpaired surrogate, which
 /// has no UTF-8 form. It keeps such a string's UTF-16 code units, so a host sees and returns exactly what the program
@@ -175,7 +175,7 @@ pub enum HostValue {
     /// Milliseconds since the epoch; `NaN` is an invalid date.
     Date(f64),
     RegExp {
-        source: String,
+        source: HostString,
         flags: String,
     },
     /// A URL by its `href`.
@@ -215,6 +215,14 @@ impl HostValue {
     pub fn as_str(&self) -> Option<&str> {
         match self {
             HostValue::String(s) => s.as_str(),
+            _ => None,
+        }
+    }
+
+    /// The string, when the value is one, unpaired surrogates kept.
+    pub fn as_host_string(&self) -> Option<HostString> {
+        match self {
+            HostValue::String(s) => Some(s.clone()),
             _ => None,
         }
     }
@@ -300,7 +308,10 @@ impl HostValue {
             HostValue::Buffer(data) => serde_json::json!({ "type": "Buffer", "data": data }),
             HostValue::Error(e) => {
                 let mut map = serde_json::Map::new();
-                map.insert("name".into(), Json::String(e.name.clone()));
+                map.insert(
+                    "name".into(),
+                    Json::String(e.name.to_string_lossy().into_owned()),
+                );
                 map.insert(
                     "message".into(),
                     Json::String(e.message.to_string_lossy().into_owned()),
@@ -376,7 +387,7 @@ impl From<Failure> for HostValue {
 /// An error crossing the boundary: its name (`TypeError`, ...), message, cause, and own data such as Node's `code`.
 #[derive(Clone, Debug, Default)]
 pub struct HostError {
-    pub name: String,
+    pub name: HostString,
     pub message: HostString,
     pub cause: Option<Box<HostValue>>,
     pub fields: Vec<(HostString, HostValue)>,
@@ -389,7 +400,7 @@ impl HostError {
     }
 
     /// An error of a built-in type: `TypeError`, `RangeError`, `SyntaxError`, ... Other names become `Error`.
-    pub fn named(name: impl Into<String>, message: impl Into<HostString>) -> Self {
+    pub fn named(name: impl Into<HostString>, message: impl Into<HostString>) -> Self {
         Self {
             name: name.into(),
             message: message.into(),
@@ -412,7 +423,7 @@ impl HostError {
 impl fmt::Display for HostError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.message == "" {
-            f.write_str(&self.name)
+            write!(f, "{}", self.name)
         } else {
             write!(f, "{}: {}", self.name, self.message)
         }
@@ -784,9 +795,9 @@ impl fmt::Debug for SnapshotHooks {
 }
 
 type StartFn =
-    dyn Fn(Vec<HostValue>, Call) -> BoxFuture<'static, Result<Json, HostValue>> + Send + Sync;
-type WaitFn = dyn Fn(Json, DurableCall) -> BoxFuture<'static, HostResult> + Send + Sync;
-type CancelFn = dyn Fn(Json, DurableCall) -> BoxFuture<'static, ()> + Send + Sync;
+    dyn Fn(Vec<HostValue>, Call) -> BoxFuture<'static, Result<Data, HostValue>> + Send + Sync;
+type WaitFn = dyn Fn(Data, DurableCall) -> BoxFuture<'static, HostResult> + Send + Sync;
+type CancelFn = dyn Fn(Data, DurableCall) -> BoxFuture<'static, ()> + Send + Sync;
 
 /// A host function whose work keeps running across a suspend, the reference's `Host.durableFn`. `start` begins it
 /// and gives JSON data, kept in a saved run; `wait(data)` runs right after, and again after a resume, for the result.
@@ -802,11 +813,11 @@ pub struct DurableFunction {
 impl DurableFunction {
     pub fn new<S, W, C>(
         start: impl Fn(Vec<HostValue>, Call) -> S + Send + Sync + 'static,
-        wait: impl Fn(Json, DurableCall) -> W + Send + Sync + 'static,
-        cancel: impl Fn(Json, DurableCall) -> C + Send + Sync + 'static,
+        wait: impl Fn(Data, DurableCall) -> W + Send + Sync + 'static,
+        cancel: impl Fn(Data, DurableCall) -> C + Send + Sync + 'static,
     ) -> Self
     where
-        S: Future<Output = Result<Json, HostValue>> + Send + 'static,
+        S: Future<Output = Result<Data, HostValue>> + Send + 'static,
         W: Future<Output = HostResult> + Send + 'static,
         C: Future<Output = ()> + Send + 'static,
     {
@@ -849,8 +860,8 @@ impl From<Failure> for Resolved {
     }
 }
 
-type KeysFn = dyn Fn(&[String]) -> Result<Vec<String>, HostValue> + Send + Sync;
-type ResolveFn = dyn Fn(&[String]) -> Resolved + Send + Sync;
+type KeysFn = dyn Fn(&[HostString]) -> Result<Vec<HostString>, HostValue> + Send + Sync;
+type ResolveFn = dyn Fn(&[HostString]) -> Resolved + Send + Sync;
 
 /// A lazy object of host functions, for sets of functions too large to build as objects, the reference's `Host.namespace`.
 /// `keys(path)` lists the names under a path, for `Object.keys` and `for...in`, or fails with what `Object.keys` then
@@ -865,8 +876,8 @@ pub struct Namespace {
 
 impl Namespace {
     pub fn new<R: Into<Resolved>>(
-        keys: impl Fn(&[String]) -> Result<Vec<String>, HostValue> + Send + Sync + 'static,
-        resolve: impl Fn(&[String]) -> R + Send + Sync + 'static,
+        keys: impl Fn(&[HostString]) -> Result<Vec<HostString>, HostValue> + Send + Sync + 'static,
+        resolve: impl Fn(&[HostString]) -> R + Send + Sync + 'static,
     ) -> Self {
         Self {
             keys: Arc::new(keys),

@@ -165,3 +165,80 @@ impl std::fmt::Display for Data {
         f.write_str(&self.to_json_string())
     }
 }
+
+impl Data {
+    /// Whether it is `null`.
+    pub fn is_null(&self) -> bool {
+        matches!(self, Data::Null)
+    }
+
+    /// The value at `key`, when the data is an object that has it.
+    pub fn get(&self, key: &str) -> Option<&Data> {
+        match self {
+            Data::Object(fields) => fields.iter().find(|(k, _)| k == key).map(|(_, v)| v),
+            _ => None,
+        }
+    }
+
+    /// The data as a host value, for what saves it.
+    pub(crate) fn to_host(&self) -> crate::HostValue {
+        use crate::HostValue;
+        match self {
+            Data::Null => HostValue::Null,
+            Data::Bool(b) => HostValue::Bool(*b),
+            Data::Number(n) => HostValue::Number(n.as_f64().unwrap_or(f64::NAN)),
+            Data::String(s) => HostValue::String(s.clone()),
+            Data::Array(items) => HostValue::array(items.iter().map(Data::to_host)),
+            Data::Object(fields) => HostValue::Object(
+                fields
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.to_host()))
+                    .collect(),
+            ),
+        }
+    }
+
+    /// The data a host value saved by `to_host` holds.
+    pub(crate) fn from_host(v: &crate::HostValue) -> Self {
+        use crate::HostValue;
+        match v {
+            HostValue::Bool(b) => Data::Bool(*b),
+            HostValue::Number(n) => match crate::HostValue::Number(*n).to_json() {
+                Some(Json::Number(n)) => Data::Number(n),
+                _ => Data::Null,
+            },
+            HostValue::String(s) => Data::String(s.clone()),
+            HostValue::Array(items) => Data::Array(
+                items
+                    .iter()
+                    .map(|i| i.as_ref().map_or(Data::Null, Data::from_host))
+                    .collect(),
+            ),
+            HostValue::Object(fields) => Data::Object(
+                fields
+                    .iter()
+                    .map(|(k, v)| (k.clone(), Data::from_host(v)))
+                    .collect(),
+            ),
+            _ => Data::Null,
+        }
+    }
+}
+
+impl From<&str> for Data {
+    fn from(s: &str) -> Self {
+        Data::String(s.into())
+    }
+}
+
+impl From<String> for Data {
+    fn from(s: String) -> Self {
+        Data::String(s.into())
+    }
+}
+
+impl From<HostString> for Data {
+    fn from(s: HostString) -> Self {
+        Data::String(s)
+    }
+}

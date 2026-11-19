@@ -13,7 +13,7 @@ use crate::runtime::{ProgramOptions, Run};
 use crate::strings::Strings;
 use crate::value::Value;
 use crate::vm::Vm;
-use crate::{Data, Diagnostic, DiagnosticKind, HostString, Json, Outcome, Runtime};
+use crate::{Data, Diagnostic, DiagnosticKind, HostString, Outcome, Runtime};
 
 /// Small programs run on the caller's thread with a modest native-stack budget. Larger ones, whose parse can
 /// recurse deeper, run on their own thread with a large stack; the reservation is virtual, only touched pages are
@@ -81,7 +81,7 @@ fn failed(error: Diagnostic) -> Outcome {
         warnings: Vec::new(),
         logs: Vec::new(),
         truncated: false,
-        metadata: Json::Null,
+        metadata: Data::Null,
     }
 }
 
@@ -106,7 +106,7 @@ pub fn start<'a>(
         }
     };
     let setup = rt.setup();
-    let run = Run::new(options.run_id.clone(), Json::Null);
+    let run = Run::new(options.run_id.clone(), Data::Null);
     let globals = setup.globals_for(&run);
     let host = RunHost::new(globals, &setup.modules, setup.translate, run);
     let mut vm = Vm::new(host, setup.limits, atoms);
@@ -116,11 +116,11 @@ pub fn start<'a>(
     vm.snapshot_base = crate::snapshot::Base::of(&vm);
     for (k, v) in &options.bindings {
         // Host globals of the same name win, as in the reference.
-        if host::has_host_global(&vm, k) {
+        if k.as_str().is_some_and(|k| host::has_host_global(&vm, k)) {
             continue;
         }
-        let val = convert::from_json(&mut vm, v);
-        let a = vm.atoms.intern(k);
+        let val = convert::from_data(&mut vm, v);
+        let a = vm.atoms.intern(&k.to_run_text());
         vm.global_map.insert(a, val);
     }
     vm.load(program);

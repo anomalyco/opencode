@@ -8,8 +8,8 @@ use std::task::{Context, Poll, Waker};
 use std::time::Duration;
 
 use psychoscript::{
-    DurableFunction, Failure, HostFunction, HostValue, Json, Limits, Namespace, Outcome,
-    ProgramOptions, Returned, RunOutcome, Runtime, Translate, TranslateFunctions,
+    DurableFunction, Failure, HostFunction, HostString, HostValue, Json, Limits, Namespace,
+    Outcome, ProgramOptions, Returned, RunOutcome, Runtime, Translate, TranslateFunctions,
     TranslatePromises, to_bytes,
 };
 use serde_json::json;
@@ -349,21 +349,33 @@ fn api_runtime() -> Runtime {
                 HostValue::from(Namespace::new(
                     |path| {
                         Ok(match path.len() {
-                            0 => vec!["issues".to_owned()],
-                            _ => vec!["list".to_owned()],
+                            0 => vec!["issues".into()],
+                            _ => vec!["list".into()],
                         })
                     },
                     |path| -> psychoscript::Resolved {
-                        if path.join(".") == "issues.list" {
+                        if path
+                            .iter()
+                            .map(|k| k.to_string())
+                            .collect::<Vec<_>>()
+                            .join(".")
+                            == "issues.list"
+                        {
                             return HostFunction::new_async(|_, _| async {
                                 Ok(HostValue::array(["#1".into()]))
                             })
                             .into();
                         }
-                        Failure::missing(format!("No api.{}", path.join(".")))
-                            .suggestions(["Try api.issues.list."])
-                            .kind("NotFound")
-                            .into()
+                        Failure::missing(format!(
+                            "No api.{}",
+                            path.iter()
+                                .map(|k| k.to_string())
+                                .collect::<Vec<_>>()
+                                .join(".")
+                        ))
+                        .suggestions(["Try api.issues.list."])
+                        .kind("NotFound")
+                        .into()
                     },
                 )),
             ),
@@ -432,8 +444,10 @@ fn run_metadata_is_the_results_and_a_resumed_run_gets_it_back_with_fresh_globals
                 "count",
                 HostFunction::new(move |_, _| {
                     counting.update_metadata(|m| {
-                        let n = m["count"].as_f64().unwrap_or(0.0) + 1.0;
-                        m["count"] = json!(n as i64);
+                        let mut j = m.to_json();
+                        let n = j["count"].as_f64().unwrap_or(0.0) + 1.0;
+                        j["count"] = json!(n as i64);
+                        *m = j.into();
                         HostValue::Number(n)
                     })
                 }),
@@ -565,14 +579,14 @@ fn a_durable_function_keeps_running_across_a_suspend_and_is_waited_on_again() {
                         .lock()
                         .unwrap()
                         .push((key.clone(), Latch::default()));
-                    async move { Ok(Json::String(key)) }
+                    async move { Ok(key.into()) }
                 },
                 move |key, _| {
                     let latch = waited
                         .lock()
                         .unwrap()
                         .iter()
-                        .find(|(k, _)| Some(k.as_str()) == key.as_str())
+                        .find(|(k, _)| key.as_string().is_some_and(|s| s == k))
                         .map(|(_, l)| l.clone())
                         .unwrap();
                     let reached = w.wait();
@@ -836,4 +850,64 @@ fn promises_await_keeps_waiting_across_a_suspend() {
     );
     assert_eq!(outcome.result.unwrap(), json!(["kept", 7]));
     assert_eq!(json_of(&calls), json!([[{ "n": 7 }]]));
+}
+
+#[test]
+fn metadata_and_durable_data_keep_unpaired_surrogates_across_a_suspend() {
+    let lone = HostString::from_utf16(&[u16::from(b'a'), 0xd800]);
+    let waiting = Latch::default();
+    let (w, kept) = (waiting.clone(), lone.clone());
+    let seen: Arc<Mutex<Vec<psychoscript::Data>>> = Arc::default();
+    let saw = seen.clone();
+    let rt = Runtime::make().globals(move |run| {
+        let (run, w, kept, saw) = (run.clone(), w.clone(), kept.clone(), saw.clone());
+        [
+            (
+                "remember",
+                HostValue::from(HostFunction::new(move |args, _| {
+                    run.set_metadata(psychoscript::Data::String(
+                        args[0].as_host_string().unwrap(),
+                    ));
+                    HostValue::Undefined
+                })),
+            ),
+            (
+                "job",
+                DurableFunction::new(
+                    move |_, _| {
+                        let data = psychoscript::Data::String(kept.clone());
+                        async move { Ok(data) }
+                    },
+                    move |data, _| {
+                        saw.lock().unwrap().push(data.clone());
+                        let wait = w.wait();
+                        async move { Ok(wait.await) }
+                    },
+                    |_, _| async {},
+                )
+                .into(),
+            ),
+        ]
+    });
+    let (answer, ran) = suspend_at(
+        &rt,
+        r#"remember("a\ud800"); return await job()"#,
+        &ProgramOptions::new(),
+        &waiting,
+        || {},
+    );
+    answer.unwrap();
+    let state = suspended(ran).state;
+    waiting.open(HostValue::Number(1.0));
+    let outcome = done(
+        rt.resume_bytes(&to_bytes(&state))
+            .unwrap()
+            .run_resumable()
+            .unwrap(),
+    );
+    assert_eq!(outcome.metadata, psychoscript::Data::String(lone.clone()));
+    assert_eq!(
+        *seen.lock().unwrap(),
+        vec![psychoscript::Data::String(lone.clone()); 2]
+    );
 }

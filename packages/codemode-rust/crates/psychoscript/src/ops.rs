@@ -1139,7 +1139,10 @@ impl<'rt> Vm<'rt> {
             return Ok(Vec::new());
         }
         let names = crate::host::namespace_keys(self, id)?;
-        Ok(names.iter().map(|c| self.atoms.intern(c)).collect())
+        Ok(names
+            .iter()
+            .map(|c| self.atoms.intern(&c.to_run_text()))
+            .collect())
     }
 
     /// The global a namespace path is under, which names it in messages.

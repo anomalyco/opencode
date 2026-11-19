@@ -124,23 +124,29 @@ impl NsPath {
 /// A namespace path spelled out: the global it is under, by its label's atom, and the names below it.
 pub struct NsRef {
     pub root: crate::strings::Atom,
-    pub keys: Vec<String>,
+    pub keys: Vec<crate::HostString>,
 }
 
-/// Appends `.key`, or `["key"]` when the key is not an identifier, to a label, as the reference's `member` writes it.
-pub fn push_member(out: &mut String, key: &str) {
-    let mut chars = key.chars();
-    let ident = chars
-        .next()
-        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_' || c == '$')
-        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$');
-    if ident {
-        out.push('.');
-        out.push_str(key);
-    } else {
-        out.push('[');
-        out.push_str(&serde_json::Value::String(key.to_owned()).to_string());
-        out.push(']');
+/// Appends `.key`, or `["key"]` when the key is not an identifier, to a label, as the reference's `member` writes it
+/// (`JSON.stringify` escapes an unpaired surrogate, so a label is always well formed).
+pub fn push_member(out: &mut String, key: &crate::HostString) {
+    let ident = key.as_str().filter(|k| {
+        let mut chars = k.chars();
+        chars
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_' || c == '$')
+            && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
+    });
+    match ident {
+        Some(k) => {
+            out.push('.');
+            out.push_str(k);
+        }
+        None => {
+            out.push('[');
+            out.push_str(&crate::Data::String(key.clone()).to_json_string());
+            out.push(']');
+        }
     }
 }
 

@@ -36,7 +36,8 @@
 // - `fs`: `fs`, `{ readFile, promises: { readFile } }`: `readFile(path)` sync, giving `"text of <path>"`;
 //   `promises.readFile(path)` async, giving `path`.
 //
-// `results` entries run in `Runtime.make({ limits? })` with no globals: what a program returns and logs when its strings
+// `results` entries run in `Runtime.make({ limits? })` with no globals, and the entry's `bindings` (recorded as
+// `describe` writes them): what a program returns and logs when its strings
 // have unpaired surrogates, which the result and logs keep, and how the output limit measures them.
 //
 // boundary.json: `{ boundary: { samples: { name: described }, programs: [{ code, outcome, kept }] },
@@ -50,6 +51,8 @@
 import { join } from "node:path"
 import { writeRecording } from "./recording.ts"
 import { describe, reference, toolsGlobal } from "./reference.ts"
+
+type Json = null | boolean | number | string | Array<Json> | { [key: string]: Json }
 
 const ref = await reference(process.argv[2] ?? process.env.CODEMODE_REF)
 const Effect = ref.Effect
@@ -116,6 +119,10 @@ boundaryPrograms.push(
   `const e = new Error("bad \\ud800"); e["\\udc00"] = "\\udfff"; const back = keep(e); return [back.message === "bad \\ud800", back["\\udc00"] === "\\udfff", back instanceof Error]`,
   `const l = make("lone"); const o = make("loneKeys"); const e = make("loneError"); return [l === "a\\ud800b", l.length, Object.keys(o)[0] === "\\udc00", o["\\udc00"] === "x\\ud83d", o.pair, o.list[0].charCodeAt(0), e.message === "bad \\ud800", e["\\udfff"] === "\\ud800"]`,
   `const l = make("lone"); return [l.isWellFormed(), l.toWellFormed(), encodeURIComponent(l.toWellFormed()), new TextEncoder().encode(l).length]`,
+  // A namespace path's names reach the host's resolve and keys as the program wrote them; a label escapes them.
+  `const p = tools["\\ud800"]; let m; try { await p() } catch (e) { m = e.message } let k; try { Object.keys(p) } catch (e) { k = e.message } let a; try { await tools["\\udc00"](Symbol.iterator) } catch (e) { a = e.message } return [m === "No function at tools.\\ud800.", k === "No namespace at tools.\\ud800.", a]`,
+  // An error's own name and a RegExp's source cross unchanged.
+  `const e = new Error("m"); e.name = "N\\ud800"; const back = keep(e); return [back.name === "N\\ud800", keep(new RegExp("a\\ud800")).source === new RegExp("a\\ud800").source]`,
 )
 
 // What a host function receives under the runtime's translation: a function is left out (an object's key is skipped,
@@ -292,7 +299,7 @@ for (const item of configurationCases) {
   configuration.push({ ...item, modules: item.modules ?? null, outcome: outcome(result), seen })
 }
 
-const resultCases: Array<{ code: string; limits?: { maxOutputBytes: number } }> = [
+const resultCases: Array<{ code: string; limits?: { maxOutputBytes: number }; bindings?: Record<string, Json> }> = [
   {
     code: `console.log("a\\ud800"); console.log("pair \\ud83d\\ude00", "\\udc00"); console.log({ k: "\\udbff" })
 return { s: "x\\udbff", ["\\udfff"]: ["\\ud800", { k: "\\ud83d" }], pair: "\\ud83d\\ude00", n: 1 }`,
@@ -306,11 +313,16 @@ return { s: "x\\udbff", ["\\udfff"]: ["\\ud800", { k: "\\ud83d" }], pair: "\\ud8
   { code: `throw { a: "\\udbff" }` },
   { code: `Promise.reject(new Error("w\\ud800")); Promise.reject("\\udfff"); return 1` },
   { code: `null["\\ud800"]` },
+  // Bindings carry them into the program, as values and as names of an object's keys.
+  {
+    code: `return [s === "a\\ud800", o["\\udc00"] === "\\udbff", s.length]`,
+    bindings: { s: "a\ud800", o: { "\udc00": "\udbff" } },
+  },
 ]
 const results: Array<unknown> = []
 for (const item of resultCases) {
   const runtime = Runtime.make(item.limits === undefined ? {} : { limits: item.limits })
-  const result = await Effect.runPromise(runtime.execute(item.code))
+  const result = await Effect.runPromise(runtime.execute(item.code, { bindings: item.bindings }))
   const diagnostic = (d: { kind: string; message: string; suggestions?: ReadonlyArray<string> }) => ({
     kind: d.kind,
     message: describe(d.message),
@@ -318,6 +330,7 @@ for (const item of resultCases) {
   })
   results.push({
     ...item,
+    ...(item.bindings === undefined ? {} : { bindings: describe(item.bindings) }),
     ...(result.ok ? { value: describe(result.value) } : { error: diagnostic(result.error) }),
     warnings: (result.ok ? (result.warnings ?? []) : []).map(diagnostic),
     logs: (result.logs ?? []).map(describe),

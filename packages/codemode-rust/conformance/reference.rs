@@ -38,7 +38,7 @@ pub fn tools() -> Namespace {
             [git, status] if git == "git" && status == "status" => Ok(Vec::new()),
             _ => Err(Failure::new(
                 "NotFound",
-                format!("No namespace at tools.{}.", path.join(".")),
+                exact("No namespace at tools.", &joined_exact(path), "."),
             )
             .into()),
         },
@@ -48,7 +48,7 @@ pub fn tools() -> Namespace {
                 [f] if f == "fail" => fail.clone().into(),
                 [git, s] if git == "git" && s == "status" => status.clone().into(),
                 _ => {
-                    let message = format!("No function at tools.{}.", path.join("."));
+                    let message = exact("No function at tools.", &joined_exact(path), ".");
                     HostFunction::new_async(move |_, _| {
                         let message = message.clone();
                         async move { Err(Failure::new("NotFound", message).into()) }
@@ -77,7 +77,7 @@ pub fn describe(v: &HostValue) -> Json {
         HostValue::Durable(_) | HostValue::Namespace(_) => json!({ "function": "" }),
         HostValue::Date(t) if t.is_nan() => json!({ "date": "NaN" }),
         HostValue::Date(t) => json!({ "date": number(*t) }),
-        HostValue::RegExp { source, flags } => json!({ "regexp": [source, flags] }),
+        HostValue::RegExp { source, flags } => json!({ "regexp": [text(source), flags] }),
         HostValue::Url(href) => json!({ "url": href }),
         HostValue::SearchParams(pairs) => json!({ "params": pairs }),
         HostValue::Headers(entries) => json!({ "headers": entries }),
@@ -95,7 +95,7 @@ pub fn describe(v: &HostValue) -> Json {
         }),
         HostValue::Error(e) => {
             let mut error = serde_json::Map::new();
-            error.insert("name".into(), json!(e.name));
+            error.insert("name".into(), text(&e.name));
             error.insert("message".into(), text(&e.message));
             if let Some(cause) = &e.cause {
                 error.insert("cause".into(), describe(cause));
@@ -119,6 +119,36 @@ pub fn describe(v: &HostValue) -> Json {
             "object": fields.iter().map(|(k, x)| json!([text(k), describe(x)])).collect::<Vec<_>>()
         }),
     }
+}
+
+/// A namespace path's names joined with `.`, unpaired surrogates kept, as the reference's `path.join(".")`.
+pub fn joined_exact(path: &[HostString]) -> HostString {
+    let mut units = Vec::new();
+    for (i, k) in path.iter().enumerate() {
+        if i > 0 {
+            units.push(u16::from(b'.'));
+        }
+        units.extend_from_slice(&k.to_utf16());
+    }
+    HostString::from_utf16(&units)
+}
+
+/// `before + text + after`, unpaired surrogates in `text` kept.
+pub fn exact(before: &str, text: &HostString, after: &str) -> HostString {
+    let units: Vec<u16> = before
+        .encode_utf16()
+        .chain(text.to_utf16().iter().copied())
+        .chain(after.encode_utf16())
+        .collect();
+    HostString::from_utf16(&units)
+}
+
+/// A namespace path as text, its names joined with `.` (U+FFFD for an unpaired surrogate), for messages.
+pub fn joined(path: &[HostString]) -> String {
+    path.iter()
+        .map(|k| k.to_string())
+        .collect::<Vec<_>>()
+        .join(".")
 }
 
 /// A string as `describe` writes it: the string itself, or `{ string: [code units] }` when it has an unpaired

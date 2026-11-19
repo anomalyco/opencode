@@ -3,7 +3,7 @@
 use std::fmt::Write as _;
 
 use crate::object::*;
-use crate::strings::{external_text, has_mark};
+
 use crate::value::{Id, Slot, Value, write_num};
 use crate::vm::{Res, Vm};
 use crate::{DiagnosticKind, Json};
@@ -16,27 +16,23 @@ pub(crate) fn host_string(vm: &Vm, s: crate::strings::StrId) -> String {
     vm.text(s).to_owned()
 }
 
-/// Host JSON as a fresh program value.
-pub fn from_json(vm: &mut Vm, j: &Json) -> Value {
-    match j {
-        Json::Null => Value::Null,
-        Json::Bool(b) => Value::Bool(*b),
-        Json::Number(n) => Value::Num(n.as_f64().unwrap_or(f64::NAN)),
-        Json::String(s) if has_mark(s) => vm.string_val(external_text(s.clone())),
-        Json::String(s) => vm.str_val(s),
-        Json::Array(items) => {
-            let vals = items.iter().map(|i| from_json(vm, i)).collect();
+/// Host data as a fresh program value, its strings exactly as the host gave them.
+pub fn from_data(vm: &mut Vm, d: &crate::Data) -> Value {
+    use crate::Data;
+    match d {
+        Data::Null => Value::Null,
+        Data::Bool(b) => Value::Bool(*b),
+        Data::Number(n) => Value::Num(n.as_f64().unwrap_or(f64::NAN)),
+        Data::String(s) => vm.string_val(s.to_run_text()),
+        Data::Array(items) => {
+            let vals = items.iter().map(|i| from_data(vm, i)).collect();
             vm.new_array(vals)
         }
-        Json::Object(map) => {
+        Data::Object(fields) => {
             let id = vm.new_object();
-            for (k, v) in map {
-                let val = from_json(vm, v);
-                let a = if has_mark(k) {
-                    vm.atoms.intern(&external_text(k.clone()))
-                } else {
-                    vm.atoms.intern(k)
-                };
+            for (k, v) in fields {
+                let val = from_data(vm, v);
+                let a = vm.atoms.intern(&k.to_run_text());
                 vm.define(id, a, val);
             }
             Value::Obj(id)

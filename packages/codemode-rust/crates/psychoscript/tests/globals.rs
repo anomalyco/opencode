@@ -231,13 +231,16 @@ fn a_program_error_crosses_with_its_name_message_cause_and_data() {
     let HostValue::Error(e) = &held.lock().unwrap()[0] else {
         panic!("not an error");
     };
-    assert_eq!((e.name.as_str(), e.message.as_str()), ("Error", Some("m")));
+    assert_eq!(
+        (e.name.as_str(), e.message.as_str()),
+        (Some("Error"), Some("m"))
+    );
     let Some(HostValue::Error(cause)) = e.cause.as_deref() else {
         panic!("no cause");
     };
     assert_eq!(
         (cause.name.as_str(), cause.message.as_str()),
-        ("RangeError", Some("root"))
+        (Some("RangeError"), Some("root"))
     );
     let keys: Vec<&str> = e.fields.iter().filter_map(|(k, _)| k.as_str()).collect();
     assert_eq!(keys, ["code", "detail"]);

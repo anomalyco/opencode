@@ -18,7 +18,7 @@ use crate::runtime::{Run, Translate, TranslateFunctions, TranslatePromises};
 use crate::strings::Atom;
 use crate::value::{Id, Value};
 use crate::vm::{NativeFn, Res, Vm};
-use crate::{DiagnosticKind, Json};
+use crate::{Data, DiagnosticKind};
 
 /// The names bound in every program before its host globals, as the reference's `globalNames` lists them.
 pub const GLOBAL_NAMES: &[&str] = &[
@@ -171,7 +171,7 @@ pub struct FnEntry {
     /// How the program names it in errors: `fetch`, `fs.readFile`, `api.issues.list`.
     pub(crate) label: String,
     /// Where it is among the run's host globals, so a resumed run can find it again; none inside a result.
-    pub(crate) path: Option<Vec<String>>,
+    pub(crate) path: Option<Vec<HostString>>,
     /// The global host function whose `snapshot` hooks save the values this function returns, by label.
     pub(crate) owner: Option<String>,
     /// Whether it is among the globals, even where no path leads (inside an array): such a function never crosses
@@ -186,7 +186,7 @@ pub struct InFlight {
     /// How the program names the function: `fetch`, `api.issues.list`.
     pub label: String,
     /// Where the function is among the globals, to find it again on resume.
-    pub path: Option<Vec<String>>,
+    pub path: Option<Vec<HostString>>,
     /// The arguments as they crossed, for a call that starts again on resume.
     pub args: Vec<HostValue>,
     pub owner: Option<String>,
@@ -204,7 +204,7 @@ pub enum CallKind {
     /// Interrupted on suspend and run again on resume.
     Idempotent,
     /// A durable call: its data once `start` returned it (a suspend is refused before that), and what cancels it.
-    Durable(Arc<Mutex<Option<Json>>>, DurableFunction, DurableCall),
+    Durable(Arc<Mutex<Option<Data>>>, DurableFunction, DurableCall),
 }
 
 /// A host result whose functions its owner's `snapshot` hooks can bring back: the value as the host returned it,
@@ -312,7 +312,7 @@ pub struct RunHost<'rt> {
     pub(crate) namespaces: FxHashMap<String, Value>,
     /// The host namespaces among the globals, by the label of the global they are, with where they are.
     /// The host namespaces among the globals, by the atom of the label of the global they are, with where they are.
-    pub(crate) host_namespaces: FxHashMap<Atom, (Namespace, Vec<String>)>,
+    pub(crate) host_namespaces: FxHashMap<Atom, (Namespace, Vec<HostString>)>,
     /// Counts the points where the reference hands queued calls to the host, for streaming responses.
     pub(crate) epoch: crate::streaming::Epoch,
     /// The VM's fuel counters, which it checks only when its step budget runs out.
@@ -324,7 +324,7 @@ pub struct Restart {
     pub promise: Id,
     pub call: u64,
     pub label: String,
-    pub path: Option<Vec<String>>,
+    pub path: Option<Vec<HostString>>,
     pub args: Vec<HostValue>,
     pub owner: Option<String>,
     pub site: Option<u32>,
@@ -414,7 +414,7 @@ impl<'rt> RunHost<'rt> {
             Rc::from([]),
             &[],
             Translate::default(),
-            Run::new(None, Json::Null),
+            Run::new(None, Data::Null),
         )
     }
 
@@ -488,9 +488,9 @@ impl<'rt> RunHost<'rt> {
 
     /// The function at `path` among the globals now, through objects and namespaces, as the reference's
     /// `hosts.resolve` finds it for a resumed call.
-    pub(crate) fn resolve(&self, path: &[String]) -> Option<Callee> {
+    pub(crate) fn resolve(&self, path: &[HostString]) -> Option<Callee> {
         let (first, rest) = path.split_first()?;
-        let mut at = &self.globals.iter().find(|(name, _)| name == first)?.1;
+        let mut at = &self.globals.iter().find(|(name, _)| first == name)?.1;
         for (index, key) in rest.iter().enumerate() {
             match at {
                 HostValue::Namespace(ns) => {
@@ -560,7 +560,7 @@ fn define_host_global(vm: &mut Vm, name: &str) -> bool {
                 return false;
             };
             let place = Place {
-                global: Some(vec![name.to_owned()]),
+                global: Some(vec![name.into()]),
                 installed: true,
                 within: None,
             };
@@ -603,7 +603,7 @@ pub(crate) fn native(vm: &mut Vm, name: &str, length: u8, f: NativeFn, data: Val
 pub enum Start {
     Call,
     Again,
-    Wait(Json),
+    Wait(Data),
 }
 
 /// A promise was rejected with nothing to handle it: a warning, unless something handles it before the run ends.
@@ -756,7 +756,7 @@ pub fn call_namespace(vm: &mut Vm, id: Id, args: &[Value], callee: Value) -> Res
 /// Where a host function is, and how its calls are named and saved: the reference's `HostTarget`.
 struct Target {
     label: String,
-    path: Option<Vec<String>>,
+    path: Option<Vec<HostString>>,
     owner: Option<String>,
 }
 
@@ -958,7 +958,7 @@ fn spawn_call(vm: &mut Vm, p: Id, f: &Callee, mut r: Restart, holds_functions: b
                 args: r.args.clone(),
             };
             let (d2, phase, waiting) = (d.clone(), data.clone(), durable.clone());
-            let started: BoxFuture<'static, Result<Json, HostValue>> = match &r.start {
+            let started: BoxFuture<'static, Result<Data, HostValue>> = match &r.start {
                 Start::Wait(data) => {
                     let data = data.clone();
                     Box::pin(async move { Ok(data) })
@@ -1102,19 +1102,19 @@ pub enum Args {
 /// found again on resume), or inside a value a host function with `snapshot` hooks returned (`within`).
 #[derive(Clone, Default)]
 struct Place {
-    global: Option<Vec<String>>,
+    global: Option<Vec<HostString>>,
     /// Whether it is among the globals at all, even where no path of names leads: inside an array, a Map or a Set.
     installed: bool,
     within: Option<String>,
 }
 
 impl Place {
-    fn child(&self, key: Option<&str>) -> Place {
+    fn child(&self, key: Option<&HostString>) -> Place {
         Place {
             global: match (&self.global, key) {
                 (Some(path), Some(key)) => {
                     let mut path = path.clone();
-                    path.push(key.to_owned());
+                    path.push(key.clone());
                     Some(path)
                 }
                 _ => None,
@@ -1305,7 +1305,7 @@ fn to_host(
     let out = match &vm.heap[id as usize].kind {
         Kind::Date(t) => HostValue::Date(*t),
         Kind::RegExp(r) => HostValue::RegExp {
-            source: r.source.clone(),
+            source: HostString::from_run_text(&r.source),
             flags: r.flags.clone(),
         },
         Kind::Url(_) => HostValue::Url(crate::builtins::web::url_href(vm, id)),
@@ -1357,7 +1357,7 @@ fn to_host(
             let (name, message) = crate::convert::error_parts(vm, id);
             let name = crate::cross::host_error_name(vm, id, name);
             let mut error = HostError::named(
-                crate::strings::host_text(&name).into_owned(),
+                HostString::from_run_text(&name),
                 HostString::from_run_text(&message),
             );
             let cause_key = vm.names.cause;
@@ -1489,13 +1489,7 @@ fn from_host(
             let id = vm.new_object();
             for (k, item) in fields {
                 let shown = k.to_string_lossy();
-                let val = from_host(
-                    vm,
-                    item,
-                    &next(&shown),
-                    &place.child(Some(&shown)),
-                    depth + 1,
-                )?;
+                let val = from_host(vm, item, &next(&shown), &place.child(Some(k)), depth + 1)?;
                 let key = vm.atoms.intern(&k.to_run_text());
                 vm.define(id, key, val);
             }
@@ -1505,7 +1499,7 @@ fn from_host(
             crate::builtins::date::new_date(vm, crate::builtins::date::time_clip(*t))
         }
         HostValue::RegExp { source, flags } => {
-            crate::builtins::regexp::new_regexp(vm, source, flags)?
+            crate::builtins::regexp::new_regexp(vm, &source.to_run_text(), flags)?
         }
         HostValue::Url(href) => match url::Url::parse(href) {
             Ok(u) => crate::builtins::web::new_url(vm, u),
@@ -1555,7 +1549,7 @@ fn from_host(
             Value::Obj(id)
         }
         HostValue::Error(e) => {
-            let proto = match e.name.as_str() {
+            let proto = match e.name.as_str().unwrap_or_default() {
                 "TypeError" => vm.realm.type_error_proto,
                 "RangeError" => vm.realm.range_error_proto,
                 "SyntaxError" => vm.realm.syntax_error_proto,
@@ -2018,7 +2012,7 @@ fn import_native(vm: &mut Vm, _this: Value, args: &[Value], _callee: Id) -> Res 
 
 /// The names directly under a namespace path, as the reference's `namespaceKeys` lists them, or what listing them
 /// threw.
-pub(crate) fn namespace_keys(vm: &mut Vm, id: Id) -> Result<Vec<String>, Value> {
+pub(crate) fn namespace_keys(vm: &mut Vm, id: Id) -> Result<Vec<HostString>, Value> {
     let ns = vm.ns_path(id);
     let Some((namespace, _)) = vm.host.host_namespaces.get(&ns.root).cloned() else {
         let message = format!("The namespace {} is not available.", vm.atoms.text(ns.root));

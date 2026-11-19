@@ -88,7 +88,7 @@ export const describe = (v: unknown): unknown => {
   if (v === null || typeof v === "string" || typeof v === "number" || typeof v === "boolean") return v
   if (typeof v === "function") return { function: v.name }
   if (v instanceof Date) return { date: Number.isNaN(v.getTime()) ? "NaN" : v.getTime() }
-  if (v instanceof RegExp) return { regexp: [v.source, v.flags] }
+  if (v instanceof RegExp) return { regexp: [text(v.source), v.flags] }
   if (v instanceof URL) return { url: v.href }
   if (v instanceof URLSearchParams) return { params: [...v] }
   if (v instanceof Headers) return { headers: [...v] }
@@ -103,7 +103,7 @@ export const describe = (v: unknown): unknown => {
     const fields = v as unknown as Record<string, unknown>
     return {
       error: {
-        name: v.name,
+        name: text(v.name),
         message: text(v.message),
         ...("cause" in v ? { cause: describe(v.cause) } : {}),
         fields: Object.keys(v).map((k) => [text(k), describe(fields[k])]),

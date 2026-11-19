@@ -212,19 +212,19 @@ fn globals(state: &State, run: &psychoscript::Run) -> Vec<(String, HostValue)> {
             Namespace::new(
                 |path| {
                     Ok(match path.len() {
-                        0 => vec!["issues".to_owned()],
-                        _ => vec!["list".to_owned()],
+                        0 => vec!["issues".into()],
+                        _ => vec!["list".into()],
                     })
                 },
                 |path| -> Resolved {
-                    if path.join(".") == "issues.list" {
+                    if reference::joined(path) == "issues.list" {
                         return HostFunction::new_async(|_, _| async {
                             Ok(HostValue::array(["#1".into()]))
                         })
                         .length(1)
                         .into();
                     }
-                    Failure::missing(format!("No api.{}", path.join(".")))
+                    Failure::missing(format!("No api.{}", reference::joined(path)))
                         .suggestions(["Try api.issues.list."])
                         .kind("NotFound")
                         .into()
@@ -236,11 +236,13 @@ fn globals(state: &State, run: &psychoscript::Run) -> Vec<(String, HostValue)> {
             "count".into(),
             one(HostFunction::new(move |_, _| {
                 counting.update_metadata(|m| {
-                    if m.is_null() {
-                        *m = json!({ "count": 0 });
+                    let mut j = m.to_json();
+                    if j.is_null() {
+                        j = json!({ "count": 0 });
                     }
-                    let n = m["count"].as_i64().unwrap_or(0) + 1;
-                    m["count"] = json!(n);
+                    let n = j["count"].as_i64().unwrap_or(0) + 1;
+                    j["count"] = json!(n);
+                    *m = j.into();
                     HostValue::Number(n as f64)
                 })
             })),
@@ -261,14 +263,19 @@ fn globals(state: &State, run: &psychoscript::Run) -> Vec<(String, HostValue)> {
                 move |args, call| {
                     start.push(json!(["job.start", call.key(), described(&args)]));
                     let key = call.key();
-                    async move { Ok(Json::String(key)) }
+                    async move { Ok(key.into()) }
                 },
                 move |data, call| {
-                    waited.push(json!(["job.wait", data, call.key(), described(&call.args)]));
+                    waited.push(json!([
+                        "job.wait",
+                        data.to_json(),
+                        call.key(),
+                        described(&call.args)
+                    ]));
                     waited.pending(41.0)
                 },
                 move |data, call| {
-                    cancel.push(json!(["job.cancel", data, call.key()]));
+                    cancel.push(json!(["job.cancel", data.to_json(), call.key()]));
                     async {}
                 },
             )
@@ -327,7 +334,7 @@ fn result(o: &Outcome) -> Json {
     if o.truncated {
         out["truncated"] = json!(true);
     }
-    out["metadata"] = o.metadata.clone();
+    out["metadata"] = o.metadata.to_json();
     out
 }
 

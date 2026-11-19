@@ -1505,7 +1505,7 @@ impl<'rt> Vm<'rt> {
             match &self.heap[at as usize].kind {
                 Kind::Namespace(ns) if ns.is_root() => break ns.name,
                 Kind::Namespace(ns) => {
-                    keys.push(self.atoms.text(ns.name).to_owned());
+                    keys.push(crate::HostString::from_run_text(self.atoms.text(ns.name)));
                     at = ns.parent;
                 }
                 _ => break 0,
@@ -1519,8 +1519,7 @@ impl<'rt> Vm<'rt> {
     /// `api["x-y"]`.
     pub(crate) fn ns_label(&self, ns: &crate::object::NsRef) -> String {
         let root = self.atoms.text(ns.root);
-        let mut out =
-            String::with_capacity(root.len() + ns.keys.iter().map(|k| k.len() + 1).sum::<usize>());
+        let mut out = String::with_capacity(root.len() + 8 * ns.keys.len());
         out.push_str(root);
         for key in &ns.keys {
             crate::object::push_member(&mut out, key);

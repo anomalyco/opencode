@@ -368,11 +368,13 @@ pub fn capture(vm: &Vm, c: &Capture) -> Result<Snapshot, Refusal> {
     let program = crate::compiler::compile(c.code, &mut crate::strings::Strings::new())
         .map_err(|e| Refusal::Other(e.message))?;
     let limits = vm.limits;
+    let metadata = vm.host.run.metadata();
     let header = json!({
         "build": build_id(),
         "hosts": hosts_id(&vm.host.globals),
         "runId": vm.host.run.id.get().cloned(),
-        "metadata": vm.host.run.metadata(),
+        "metadata": metadata.to_json(),
+        "metadataData": (!well_formed(&metadata)).then(|| host_value(&metadata.to_host())),
         "source": {
             "code": c.code,
             "hash": hex(hash(c.code.as_bytes())),
@@ -474,7 +476,15 @@ impl Enc<'_, '_> {
                     Callee::Fn(hf) => (hf.name(), hf.length, hf.own_name),
                     Callee::Durable(_) => ("", 0, false),
                 };
-                json!([f.label, f.path, f.owner, f.installed, name, length, own])
+                json!([
+                    f.label,
+                    f.path.as_deref().map(texts),
+                    f.owner,
+                    f.installed,
+                    name,
+                    length,
+                    own
+                ])
             })
             .collect();
         let mut suggestions: Vec<(&Id, &Vec<crate::HostString>)> = h.suggestions.iter().collect();
@@ -490,7 +500,7 @@ impl Enc<'_, '_> {
                 CallKind::Idempotent => json!(["again"]),
                 CallKind::Durable(data, ..) => match data.lock().map(|d| d.clone()).unwrap_or(None)
                 {
-                    Some(data) => json!(["wait", data]),
+                    Some(data) => json!(["wait", host_value(&data.to_host())]),
                     None => continue,
                 },
                 CallKind::Blocking => continue,
@@ -507,7 +517,7 @@ impl Enc<'_, '_> {
                 call.promise,
                 call.call,
                 call.label,
-                call.path,
+                call.path.as_deref().map(texts),
                 args,
                 call.owner,
                 call.site
@@ -994,7 +1004,7 @@ fn host_value(v: &HostValue) -> J {
         HostValue::Interrupt => json!(["u"]),
         HostValue::Failure(f) => json!(["fail", f.kind, text(&f.message), texts(&f.suggestions)]),
         HostValue::Date(t) => json!(["date", num(*t)]),
-        HostValue::RegExp { source, flags } => json!(["re", source, flags]),
+        HostValue::RegExp { source, flags } => json!(["re", text(source), flags]),
         HostValue::Url(href) => json!(["url", href]),
         HostValue::SearchParams(pairs) => json!(["sp", pairs]),
         HostValue::Headers(entries) => json!(["hd", entries]),
@@ -1003,7 +1013,7 @@ fn host_value(v: &HostValue) -> J {
         HostValue::Response(_) => json!(["resp"]),
         HostValue::Error(e) => json!([
             "e",
-            e.name,
+            text(&e.name),
             text(&e.message),
             e.cause.as_ref().map_or(J::Null, |c| host_value(c)),
             e.fields
@@ -1034,6 +1044,19 @@ fn lost_path(j: &J, label: &str) -> Option<String> {
             .find_map(|p| lost_path(p.get(0)?, label).or_else(|| lost_path(p.get(1)?, label))),
         "set" => items().find_map(|item| lost_path(item, label)),
         _ => None,
+    }
+}
+
+/// Whether data's strings and keys are all well formed, so plain JSON holds it exactly.
+fn well_formed(d: &crate::Data) -> bool {
+    use crate::Data;
+    match d {
+        Data::String(s) => s.is_well_formed(),
+        Data::Array(items) => items.iter().all(well_formed),
+        Data::Object(fields) => fields
+            .iter()
+            .all(|(k, v)| k.is_well_formed() && well_formed(v)),
+        _ => true,
     }
 }
 
@@ -1117,7 +1140,7 @@ fn host_value_from(j: &J) -> R<HostValue> {
             ),
             Some("date") => HostValue::Date(unnum(a.get(1).unwrap_or(&J::Null))?),
             Some("re") => HostValue::RegExp {
-                source: string(at(j, 1)?)?,
+                source: text_from(at(j, 1)?)?,
                 flags: string(at(j, 2)?)?,
             },
             Some("url") => HostValue::Url(string(at(j, 1)?)?),
@@ -1128,7 +1151,7 @@ fn host_value_from(j: &J) -> R<HostValue> {
             // A live response has no data form; a settlement holding one is restored as `lost_path` says.
             Some("resp") => HostValue::Undefined,
             Some("e") => HostValue::Error(Box::new(HostError {
-                name: string(at(j, 1)?)?,
+                name: text_from(at(j, 1)?)?,
                 message: text_from(at(j, 2)?)?,
                 cause: match at(j, 3)? {
                     J::Null => None,
@@ -1847,7 +1870,7 @@ fn pairs(j: &J) -> R<Vec<(String, String)>> {
 pub struct Restored {
     pub code: String,
     pub run_id: Option<String>,
-    pub metadata: Json,
+    pub metadata: crate::Data,
     /// The shape of the host globals it was saved with (`hosts_id`).
     pub hosts: String,
     pub limits: Limits,
@@ -1880,7 +1903,10 @@ pub fn header(snapshot: &Snapshot) -> R<Restored> {
     Ok(Restored {
         code,
         run_id: field(header, "runId")?.as_str().map(str::to_owned),
-        metadata: header.get("metadata").cloned().unwrap_or(J::Null),
+        metadata: match header.get("metadataData") {
+            Some(saved) if !saved.is_null() => crate::Data::from_host(&host_value_from(saved)?),
+            _ => crate::Data::from_json(header.get("metadata").unwrap_or(&J::Null)),
+        },
         hosts: string(field(header, "hosts")?)?,
         limits: Limits {
             timeout_ms: opt("timeoutMs")?,
@@ -2082,14 +2108,6 @@ fn restore_settlement(vm: &mut Vm, dec: &Dec, j: &J) -> R<(Id, Settlement)> {
     Ok((p, s))
 }
 
-fn strings(j: &J) -> R<Vec<String>> {
-    j.as_array()
-        .ok_or_else(|| invalid("a list of strings is not a list."))?
-        .iter()
-        .map(string)
-        .collect()
-}
-
 fn opt_string(j: &J) -> R<Option<String>> {
     match j {
         J::Null => Ok(None),
@@ -2097,10 +2115,10 @@ fn opt_string(j: &J) -> R<Option<String>> {
     }
 }
 
-fn opt_path(j: &J) -> R<Option<Vec<String>>> {
+fn opt_path(j: &J) -> R<Option<Vec<crate::HostString>>> {
     match j {
         J::Null => Ok(None),
-        other => strings(other).map(Some),
+        other => texts_from(other).map(Some),
     }
 }
 
@@ -2201,7 +2219,7 @@ fn restore_host(vm: &mut Vm, dec: &Dec, j: &J, base: Base) -> R<()> {
                         vm.host.key(call)
                     )));
                 }
-                host::Start::Wait(at(start, 1)?.clone())
+                host::Start::Wait(crate::Data::from_host(&host_value_from(at(start, 1)?)?))
             }
             _ => return Err(invalid("a call in flight is unknown.")),
         };
