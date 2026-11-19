@@ -1,6 +1,6 @@
 import { Plugin } from "@opencode/plugin/tui"
 import { createMemo, createSignal, Match, Show, Switch } from "solid-js"
-import { contextUsage, formatContextUsage } from "../../util/session"
+import { contextUsage, formatContextUsage, ownedJobs } from "../../util/session"
 import { useTerminalDimensions } from "@opentui/solid"
 import { TextAttributes } from "@opentui/core"
 import { useInteractivity } from "../../context/interactivity"
@@ -20,15 +20,25 @@ export function PromptFooter(props: {
 }) {
   const dimensions = useTerminalDimensions()
   const [liveHovered, setLiveHovered] = createSignal(false)
+  const jobs = createMemo(() => (props.sessionID ? props.context.data.job.list(props.sessionID) : []))
+  const scripts = createMemo(() => {
+    const count = jobs().filter((job) => job.kind === "codemode" && job.sessionID === props.sessionID).length
+    return count ? `${count} script${count === 1 ? "" : "s"}` : undefined
+  })
   const subagents = createMemo(() => {
-    if (!props.sessionID) return 0
+    if (!props.sessionID) return undefined
     const count = props.context.data.session
       .family(props.sessionID)
-      .filter((id) => id !== props.sessionID && props.context.data.session.status(id) === "running").length
+      .filter(
+        (id) =>
+          id !== props.sessionID &&
+          (props.context.data.session.status(id) === "running" ||
+            ownedJobs(jobs(), id, (sessionID) => props.context.data.session.get(sessionID)?.parentID).length > 0),
+      ).length
     return count ? `${count} subagent${count === 1 ? "" : "s"}` : undefined
   })
   const shells = createMemo(() => {
-    if (!props.sessionID) return 0
+    if (!props.sessionID) return undefined
     const count = props.context.data.shell
       .list(props.context.location)
       .filter((shell) => shell.metadata.sessionID === props.sessionID).length
@@ -49,7 +59,7 @@ export function PromptFooter(props: {
       cost > 0 ? money.format(cost) : undefined,
     ].filter((item): item is string => Boolean(item))
   })
-  const live = createMemo(() => Boolean(subagents() || shells()))
+  const live = createMemo(() => [scripts(), subagents(), shells()].filter((item): item is string => Boolean(item)))
   const goal = createGoal(props.context, () => props.sessionID)
   // Prompt hints read as disabled while the session does not own input, e.g. while a side panel is focused.
   const interactive = useInteractivity()
@@ -68,15 +78,18 @@ export function PromptFooter(props: {
     <Switch>
       <Match when={props.mode === "normal"}>
         <Switch>
-          <Match when={goal() || live() || status().length > 0}>
+          <Match when={goal() || live().length > 0 || status().length > 0}>
             <box flexDirection="row" flexShrink={props.showDetails && layout().usage ? 0 : 1} minWidth={0}>
-              <Show when={live()}>
+              <Show when={live().length > 0}>
                 <box
                   flexShrink={0}
                   onMouseOver={() => setLiveHovered(true)}
                   onMouseOut={() => setLiveHovered(false)}
                   onMouseUp={() =>
-                    props.context.keymap.dispatch("session.child.first", subagents() ? "subagents" : "shell")
+                    props.context.keymap.dispatch(
+                      "session.child.first",
+                      scripts() ? "scripts" : subagents() ? "subagents" : "shell",
+                    )
                   }
                 >
                   <text
@@ -86,14 +99,12 @@ export function PromptFooter(props: {
                     <Show when={shortcut("session.child.first")}>
                       {(value) => <span style={{ fg: props.context.theme.text.base }}>{value()} </span>}
                     </Show>
-                    <Show when={subagents()}>{(value) => <>{value()}</>}</Show>
-                    <Show when={subagents() && shells()}> · </Show>
-                    <Show when={shells()}>{(value) => <>{value()}</>}</Show>
+                    {live().join(" · ")}
                   </text>
                 </box>
               </Show>
               <Show when={props.sessionID && goal()}>
-                <Show when={live()}>
+                <Show when={live().length > 0}>
                   <text fg={props.context.theme.text.muted} wrapMode="none" flexShrink={0}>
                     {" · "}
                   </text>
@@ -102,7 +113,7 @@ export function PromptFooter(props: {
               </Show>
               <Show when={props.showDetails && layout().usage && status().length > 0}>
                 <text fg={props.context.theme.text.muted} wrapMode="none" flexShrink={0}>
-                  <Show when={live() || goal()}> · </Show>
+                  <Show when={live().length > 0 || goal()}> · </Show>
                   {status().join(" · ")}
                 </text>
               </Show>

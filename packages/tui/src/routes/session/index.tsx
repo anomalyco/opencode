@@ -362,6 +362,7 @@ export function Session(props: {
         return
       }
       editor.reconnect(info.location.directory)
+      void data.job.sync(data.session.root(sessionID)).catch(() => undefined)
       setSynced(true)
     })().catch((error) => {
       if (route.sessionID !== sessionID) return
@@ -1406,7 +1407,7 @@ export function Session(props: {
       id: "session.child.first",
       group: "Session",
       run: (tab?: string) => {
-        if (tab === "shell" || tab === "subagents") setComposer({ open: true, tab })
+        if (tab === "shell" || tab === "subagents" || tab === "scripts") setComposer({ open: true, tab })
         else if (composer.open || session()?.parentID) setComposer("open", false)
         else setComposer({ open: true, tab: "subagents" })
         dialog.clear()
