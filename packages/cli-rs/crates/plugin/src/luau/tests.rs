@@ -1715,18 +1715,27 @@ const SPARSE: &str = r#"
 "#;
 const LATE: &str = r#"
     -- A key the hand decoder does not know, which Luau walks after `children`: it gives up only once the children are
-    -- read, and serde reads them again.
+    -- read, and serde reads them again. Table order is keyed per VM, so the key is found in this VM, and a box is built
+    -- the same way each time, which gives the same order. Put in first, a key whose main position is the last slot keeps
+    -- it, where `children` would otherwise take it and be walked last.
+    local function box(late, children)
+        local t = {}
+        t[late] = true
+        t.type = "box"
+        t.children = children
+        return t
+    end
     local late
-    for _, name in { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s" } do
-        local probe, seen = { type = "box", children = {}, [name] = true }, false
-        for key in probe do
+    for index = 1, 64 do
+        local name, seen = `k{index}`, false
+        for key in box(name, {}) do
             if key == "children" then seen = true elseif key == name and seen then late = name end
         end
         if late then break end
     end
     assert(late, "no key walked after children")
     node = { type = "text", spans = { { text = "leaf" } } }
-    for _ = 1, 16 do node = { type = "box", children = { node, node }, [late] = true } end
+    for _ = 1, 16 do node = box(late, { node, node }) end
 "#;
 
 #[test]
