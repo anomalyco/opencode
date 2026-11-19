@@ -1146,7 +1146,6 @@ export const dict = {
   "session.activity.shells.other": "{{count}} shell",
   "session.activity.scripts.one": "{{count}} սկրիպտ",
   "session.activity.scripts.other": "{{count}} սկրիպտ",
-  "session.activity.background": "Ֆոնային աշխատանք",
   "session.activity.shell.back": "Վերադառնալ ֆոնային աշխատանքին",
   "session.activity.shell.stop": "Կանգնեցնել",
   "session.activity.shell.stopping": "Կանգնեցվում է…",

@@ -1157,7 +1157,6 @@ export const dict = {
   "session.activity.shells.other": "{{count}} школки",
   "session.activity.scripts.one": "{{count}} скрипта",
   "session.activity.scripts.other": "{{count}} скрипти",
-  "session.activity.background": "Работа во позадина",
   "session.activity.shell.back": "Назад кон позадинската работа",
   "session.activity.shell.stop": "Запри",
   "session.activity.shell.stopping": "Се запира…",

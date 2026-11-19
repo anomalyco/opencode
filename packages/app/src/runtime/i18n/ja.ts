@@ -1159,7 +1159,6 @@ export const dict = {
   "session.activity.shells.other": "シェル{{count}}件",
   "session.activity.scripts.one": "スクリプト{{count}}件",
   "session.activity.scripts.other": "スクリプト{{count}}件",
-  "session.activity.background": "バックグラウンド作業",
   "session.activity.shell.back": "バックグラウンド作業に戻る",
   "session.activity.shell.stop": "停止",
   "session.activity.shell.stopping": "停止中…",
