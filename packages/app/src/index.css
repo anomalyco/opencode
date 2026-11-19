@@ -106,11 +106,18 @@
     );
   }
 
-  /* The review panel's visible width, which the header fade below tracks while the panel animates. Its fixed-width
-     content holds nothing else that reads it. */
+  /* The review panel's visible width, which the header fade and fitted headers below track while the panel animates.
+     Its fixed-width content holds nothing else that reads it. */
   #review-panel,
   #bottom-panel {
     container-type: inline-size;
+  }
+
+  /* While the left sidebar moves the panel's edge, its contents hold their landing width, but a header marked
+     `data-panel-header="fit"`, like the browser's toolbar above its page's still, keeps fitting the visible width. The
+     panel's own open and close slide it with the rest of the contents. */
+  [data-slot="session-side-panel-content"]:not([data-flying]) #review-panel [data-panel-header="fit"] {
+    width: 100cqi;
   }
 
   /* Like the composer toolbar, fade only clipped content without reserving layout space.

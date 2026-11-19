@@ -186,8 +186,12 @@ function SessionScreenContent(props: {
     paint: (closed) => {
       paintSideGlyph(closed)
 
-      // Dims the contents as they leave and fades them in as they arrive.
-      if (sideContent) sideContent.style.opacity = panelOpacity(closed)
+      // Dims the contents as they leave and fades them in as they arrive. `data-flying` marks the panel's own flight,
+      // through which its headers slide with the contents rather than fit its visible width.
+      if (sideContent) {
+        sideContent.style.opacity = panelOpacity(closed)
+        sideContent.toggleAttribute("data-flying", closed > 0)
+      }
 
       if (!chat) return
       const open = chatOpenWidth()
