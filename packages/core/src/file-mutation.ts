@@ -8,7 +8,8 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Bom } from "@opencode/util/bom"
 import { Environment } from "./environment/index.js"
 import type { Files } from "./environment/index.js"
-import type { FileAccess } from "./file-access.js"
+import { FileAccess } from "./file-access.js"
+import { AbsolutePath } from "./schema.js"
 
 export type Target = Pick<FileAccess.Target, "absolute" | "resource" | "environment">
 
@@ -34,9 +35,12 @@ export interface TextWriteResult extends WriteResult {
 }
 
 export interface Interface {
-  /** Serialize a complete read/prepare/write mutation transaction by resolved path. */
+  /**
+   * Serialize a complete read/prepare/write mutation transaction by file. A path that is not resolved yet locks
+   * as that path in the session's environment.
+   */
   readonly withLock: (
-    targets: ReadonlyArray<string>,
+    targets: ReadonlyArray<Pick<Target, "absolute" | "environment"> | string>,
   ) => <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
   readonly write: (input: WriteInput) => Effect.Effect<WriteResult, Environment.Failed>
   /** Add bytes to the end of a file, creating it when missing. */
@@ -92,16 +96,25 @@ const transactionLocks = KeyedMutex.makeUnsafe<string>()
  */
 const layer = Layer.effect(
   Service,
-  Effect.sync(() => {
+  Effect.gen(function* () {
+    const session = yield* Environment.Service
     const locks = KeyedMutex.makeUnsafe<string>()
     const withLock: Interface["withLock"] = (targets) => (effect) =>
-      [...new Set(targets.map(FSUtil.resolve))]
+      [
+        ...new Set(
+          targets
+            .map((target) => (typeof target === "string" ? { absolute: target, environment: session } : target))
+            .map((target) =>
+              FileAccess.key({ ...target, absolute: AbsolutePath.make(FSUtil.resolve(target.absolute)) }),
+            ),
+        ),
+      ]
         .sort()
-        .reduceRight((result, target) => transactionLocks.withLock(target)(result), effect)
+        .reduceRight((result, file) => transactionLocks.withLock(file)(result), effect)
     const withTargetLock =
       (target: Target) =>
       <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-        locks.withLock(target.absolute)(Effect.uninterruptible(effect))
+        locks.withLock(FileAccess.key(target))(Effect.uninterruptible(effect))
 
     const writeResult = (target: Target, existed: boolean): WriteResult => ({
       operation: "write",
@@ -153,7 +166,7 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [] })
+export const node = makeLocationNode({ service: Service, layer, deps: [Environment.node] })
 
 /**
  * Deferred until the corresponding integrations exist.
