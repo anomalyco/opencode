@@ -642,6 +642,18 @@ const mcp = Layer.mock(Mcp.Service, {
           isError: false,
           content: [{ type: "text", text: "42" }],
         } satisfies Mcp.ToolResult
+      if (input.args?.resourceText !== undefined && typeof input.args.resourceText === "string")
+        return {
+          isError: false,
+          content: [
+            {
+              type: "text",
+              text: input.args.resourceText,
+              uri: "config://app.json",
+              mimeType: "application/json",
+            },
+          ],
+        } satisfies Mcp.ToolResult
       return {
         isError: false,
         structured: { ok: true },
@@ -687,7 +699,7 @@ test("MCP tool names match V1 sanitization", () => {
   expect(McpTool.name("context 7", "resolve.library/id")).toBe("context_7_resolve_library_id")
 })
 
-test("preserves URI and MIME header for text EmbeddedResource tool results", async () => {
+test("preserves URI and MIME metadata on text EmbeddedResource tool results", async () => {
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
@@ -710,9 +722,9 @@ test("preserves URI and MIME header for text EmbeddedResource tool results", asy
           },
         })
         expect(withMime.content).toEqual([
-          { type: "text", text: "[Resource config://app.yaml (application/yaml)]\nport: 8080" },
+          { type: "text", text: "port: 8080", uri: "config://app.yaml", mimeType: "application/yaml" },
         ])
-        expect(withoutMime.content).toEqual([{ type: "text", text: "[Resource config://plain]\nok" }])
+        expect(withoutMime.content).toEqual([{ type: "text", text: "ok", uri: "config://plain" }])
       }),
     ),
   )
@@ -3052,7 +3064,7 @@ it.effect("fails the call when MCP reports isError", () =>
   }),
 )
 
-it.effect("forwards structuredContent alongside summary text in direct calls without duplicating JSON shims", () =>
+it.effect("forwards structuredContent alongside summary text without duplicating compact or pretty-printed JSON shims", () =>
   Effect.gen(function* () {
     assertion = yield* Deferred.make<Permission.AssertInput>()
     decision = Effect.void
@@ -3079,24 +3091,45 @@ it.effect("forwards structuredContent alongside summary text in direct calls wit
     })
 
     assertion = yield* Deferred.make<Permission.AssertInput>()
-    const deduped = yield* executeTool(registry, {
+    const prettyShim = '{\n  "ok": true\n}'
+    const dedupedPretty = yield* executeTool(registry, {
       sessionID: Session.ID.make("ses_mcp_structured_dedup"),
       ...toolIdentity,
       call: {
         type: "tool-call",
         id: "call_mcp_structured_dedup",
         name: "direct_lookup",
-        input: { summary: '{"ok":true}' },
+        input: { summary: prettyShim },
       },
     })
-    expect(deduped).toMatchObject({
+    expect(dedupedPretty).toMatchObject({
       output: { ok: true },
-      content: [{ type: "text", text: '{"ok":true}' }],
+      content: [{ type: "text", text: prettyShim }],
+    })
+
+    assertion = yield* Deferred.make<Permission.AssertInput>()
+    const jsonResource = yield* executeTool(
+      registry,
+      {
+        sessionID: Session.ID.make("ses_mcp_json_resource"),
+        ...toolIdentity,
+        call: {
+          type: "tool-call",
+          id: "call_mcp_json_resource",
+          name: "search_query",
+          input: { resourceText: '{"port":8080}' },
+        },
+      },
+      { codemode: true },
+    )
+    expect(jsonResource).toMatchObject({
+      output: { port: 8080 },
+      content: [{ type: "text", text: '[Resource config://app.json (application/json)]\n{"port":8080}' }],
     })
   }),
 )
 
-it.effect("includes structuredContent details when MCP reports isError", () =>
+it.effect("includes structuredContent details when MCP reports isError without duplicating pretty-printed JSON", () =>
   Effect.gen(function* () {
     assertion = yield* Deferred.make<Permission.AssertInput>()
     decision = Effect.void
@@ -3115,6 +3148,25 @@ it.effect("includes structuredContent details when MCP reports isError", () =>
       },
     })
     expect(emptyTextError).toMatchObject({
+      status: "error",
+      error: { message: '{"code":"QUOTA_EXCEEDED","retryAfter":30}' },
+    })
+
+    assertion = yield* Deferred.make<Permission.AssertInput>()
+    const prettyError = yield* executeTool(registry, {
+      sessionID: Session.ID.make("ses_mcp_structured_fail_pretty"),
+      ...toolIdentity,
+      call: {
+        type: "tool-call",
+        id: "call_mcp_structured_fail_pretty",
+        name: "direct_fail",
+        input: {
+          summary: '{\n  "code": "QUOTA_EXCEEDED",\n  "retryAfter": 30\n}',
+          structured: { code: "QUOTA_EXCEEDED", retryAfter: 30 },
+        },
+      },
+    })
+    expect(prettyError).toMatchObject({
       status: "error",
       error: { message: '{"code":"QUOTA_EXCEEDED","retryAfter":30}' },
     })
