@@ -228,23 +228,32 @@ const hosting = (gate: Promise<void> | undefined) => {
 // Runs `code` until `slow` is in flight, suspends, and resumes the saved bytes in a fresh runtime; and runs it
 // straight through. Both results, and what `keep` got in each.
 const suspendInFlight = async (code: string) => {
-  const gate = latch()
-  const first = hosting(gate.promise)
-  const program = first.runtime.program(code, { runId: "r" })
-  const fiber = Effect.runFork(program.run())
-  await first.started
-  // Round-trip mode yields at its checkpoints, so let the run go on until it blocks on `slow` before suspending.
-  for (let i = 0; i < 10; i++) await new Promise((done) => setImmediate(done))
-  const suspended = await Effect.runPromise(program.suspend())
-  if (suspended.ok !== "suspended") throw new Error(`expected a suspended run, got ${JSON.stringify(suspended)}`)
-  gate.resolve()
-  await Effect.runPromise(Fiber.join(fiber))
+  const suspended = await suspendParked(code)
   const bytes = toBytes(suspended.state)
   const second = hosting(undefined)
   const resumed = await Effect.runPromise(second.runtime.resume(bytes).run())
   const straight = hosting(undefined)
   const plain = await Effect.runPromise(straight.runtime.execute(code))
   return { resumed, plain, kept: second.kept, keptPlain: straight.kept, state: suspended.state, bytes }
+}
+
+// Round-trip mode yields at its checkpoints, so `slow` starting doesn't mean the run is parked on it yet. Suspend
+// after `slow` starts, and if the saved stack hasn't reached `$vmHostWait`, run again and let it go on longer.
+const suspendParked = async (code: string) => {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const gate = latch()
+    const first = hosting(gate.promise)
+    const program = first.runtime.program(code, { runId: "r" })
+    const fiber = Effect.runFork(program.run())
+    await first.started
+    for (let i = 0; i < attempt; i++) await new Promise((done) => setImmediate(done))
+    const suspended = await Effect.runPromise(program.suspend())
+    gate.resolve()
+    await Effect.runPromise(Fiber.join(fiber))
+    if (suspended.ok !== "suspended") throw new Error(`expected a suspended run, got ${JSON.stringify(suspended)}`)
+    if (frames(suspended.state).includes("$vmHostWait")) return suspended
+  }
+  throw new Error("the run never parked on $vmHostWait while `slow` was in flight")
 }
 
 describe("suspended while a getter waits on a host call", () => {
