@@ -433,6 +433,11 @@ It's on by default. Settings › Servers has the same switch, and either takes
 effect without a restart. Turning it off in OpenCode Console instead applies to
 you everywhere you sign in.
 
+The background service (`opencode service`) resumes renewals as soon as it
+restarts. A plain `opencode serve`, such as one run under systemd or in a
+container, resumes them only once a client request opens the project, so until
+then its sessions' claims lapse after the lease (30 minutes by default).
+
 ### Skills
 
 Add directories or URLs that OpenCode should search for agent skills.
