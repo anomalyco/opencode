@@ -66,6 +66,18 @@ export async function initRepo(directory: string) {
   await $`git commit --allow-empty -m root`.cwd(directory).quiet()
 }
 
+export async function bareRepo(directory: string, worktrees: string[] = []) {
+  const seed = path.join(directory, "seed")
+  const bare = path.join(directory, "bare.git")
+  await initRepo(seed)
+  await $`git clone -q --bare ${seed} ${bare}`.quiet()
+  await fs.rm(seed, { recursive: true, force: true })
+  for (const worktree of worktrees) {
+    await $`git worktree add -q --detach ${worktree}`.cwd(bare).quiet()
+  }
+  return { bare }
+}
+
 export async function commit(source: string, content: string, message: string) {
   await fs.writeFile(path.join(source, "README.md"), content)
   await git(source, "add", "README.md")
