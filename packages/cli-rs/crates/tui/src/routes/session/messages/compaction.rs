@@ -116,6 +116,8 @@ impl Compaction {
         if let Some(usage) = &rendered.usage {
             self.label.add(&Text::new(cx.app, format!("· {usage}")).fg(color));
         }
+        // Streams only while it runs, so a finished summary's last line is final (#63989).
+        self.markdown.streaming(status == Status::Running);
         let previous = self.rendered.borrow().as_ref().map(|r| r.content.clone());
         if previous.as_deref() != Some(rendered.content.as_str()) {
             self.markdown.set_markdown(rendered.content.as_str());
