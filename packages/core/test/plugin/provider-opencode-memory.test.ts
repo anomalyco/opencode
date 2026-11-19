@@ -1243,16 +1243,13 @@ describe("OpencodePlugin memory", () => {
 })
 
 describe("OpencodePlugin memory standing block", () => {
-  const convention = (id: string, overrides: Record<string, unknown> = {}) => ({
+  // As Console answers them: only its live conventions of the repository, so no kind, status or repo.
+  const convention = (id: string) => ({
     id,
-    kind: "convention",
     title: `Rule ${id}`,
     body: `Always do ${id}.`,
     revision: 2,
-    status: "live",
-    repo: "github.com/acme/app",
     updatedAt: "2026-11-01T00:00:00.000Z",
-    ...overrides,
   })
   const inRepo = Effect.gen(function* () {
     const directory = (yield* Location.Service).directory
@@ -1294,9 +1291,10 @@ describe("OpencodePlugin memory standing block", () => {
         // Asked once, with the repository and the session, so Console logs the delivery.
         const asked = console.state.requests.filter((item) => item.path.startsWith("/api/memory/standing"))
         expect(asked).toHaveLength(1)
-        expect(asked[0]?.path).toBe(
-          `/api/memory/standing?repo=${encodeURIComponent("https://github.com/Acme/App")}&sessionID=${session.id}`,
-        )
+        expect(asked[0]).toMatchObject({
+          method: "POST",
+          body: { repo: "https://github.com/Acme/App", sessionID: session.id },
+        })
         // Never a user message, and the injection left out what the block already gives.
         expect(texts(first)).toEqual([
           "Add a feature",

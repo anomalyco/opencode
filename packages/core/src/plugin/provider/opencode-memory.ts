@@ -63,7 +63,7 @@ const Injected = Schema.Struct({
 })
 const Standing = Schema.Struct({
   id: Schema.String,
-  kind: Kind,
+  kind: Schema.optional(Kind),
   title: Schema.String,
   body: Schema.String,
   revision: Schema.Number,
@@ -779,15 +779,11 @@ export const make = Effect.fnUntraced(function* (
         const name = "repo" in source && source.repo ? repoName(source.repo) : undefined
         if (name === undefined || !("repo" in source) || !source.repo) return ""
         const keys = yield* reachable
-        const answer = yield* call(
-          Schema.Struct({ entries: Schema.Array(Standing) }),
-          "GET",
-          `/api/memory/standing?${new URLSearchParams([
-            ["repo", source.repo],
-            ["sessionID", sessionID],
-            ...keys.map((key): [string, string] => ["reachable", key]),
-          ])}`,
-        ).pipe(Effect.timeout(policy.timeout))
+        const answer = yield* call(Schema.Struct({ entries: Schema.Array(Standing) }), "POST", "/api/memory/standing", {
+          repo: source.repo,
+          sessionID,
+          ...(keys.length === 0 ? {} : { reachable: keys }),
+        }).pipe(Effect.timeout(policy.timeout))
         const block = policy.standing(answer.entries, name)
         if (block.dropped.length > 0)
           yield* Effect.logInfo("memory standing block over its cap", {

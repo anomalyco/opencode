@@ -65,10 +65,13 @@ export interface Signals {
   readonly injected: { readonly prompt: number; readonly failure: number }
 }
 
-/** A convention entry Console may put in a session's standing block, whole. */
+/**
+ * A convention entry Console may put in a session's standing block, whole. Console answers only its repository's live
+ * conventions, so a missing kind or status means that; the policy still checks what it's told.
+ */
 export interface Standing {
   readonly id: string
-  readonly kind: Kind
+  readonly kind?: Kind
   readonly title: string
   readonly body: string
   readonly revision: number
@@ -218,8 +221,8 @@ export const initial: Policy = {
   standing: (entries, repo) => {
     const applies = entries.filter(
       (entry) =>
-        entry.kind === "convention" &&
-        entry.status === "live" &&
+        (entry.kind ?? "convention") === "convention" &&
+        (entry.status ?? "live") === "live" &&
         entry.tainted !== true &&
         entry.retired === undefined &&
         (entry.repo === undefined ||
