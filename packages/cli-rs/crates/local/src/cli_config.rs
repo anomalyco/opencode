@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use indexmap::IndexMap;
+use opencode_api_types::js::truthy;
 use serde::{Serialize, Serializer};
 use serde_json::{Map, Value};
 
@@ -439,16 +440,6 @@ fn normalize_legacy_tabs(value: &Value) -> Value {
         tabs.shift_remove("enabled");
     }
     value
-}
-
-pub(crate) fn truthy(value: &Value) -> bool {
-    match value {
-        Value::Null => false,
-        Value::Bool(flag) => *flag,
-        Value::Number(number) => number.as_f64().is_some_and(|n| n != 0.0 && !n.is_nan()),
-        Value::String(text) => !text.is_empty(),
-        _ => true,
-    }
 }
 
 fn merge_records(mut base: Map<String, Value>, overlay: &Map<String, Value>) -> Map<String, Value> {

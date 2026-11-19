@@ -1,3 +1,4 @@
+use opencode_api_types::js::truthy;
 use serde_json::{Map, Value};
 
 use crate::tool_info::{canonical_tool_name, finite_number, web_search_provider_label};
@@ -200,15 +201,4 @@ fn normalize_input(action: &str, value: &Value) -> Map<String, Value> {
 
 fn dict(value: &Value) -> Map<String, Value> {
     value.as_object().cloned().unwrap_or_default()
-}
-
-/// JavaScript truthiness of a JSON value.
-fn truthy(value: &Value) -> bool {
-    match value {
-        Value::Null => false,
-        Value::Bool(value) => *value,
-        Value::Number(number) => number.as_f64().is_some_and(|n| n != 0.0 && !n.is_nan()),
-        Value::String(text) => !text.is_empty(),
-        Value::Array(_) | Value::Object(_) => true,
-    }
 }
