@@ -49,6 +49,7 @@ The API is the Rust form of the reference's `Language` namespace:
 | `run.id`, `run.metadata` | `Run::id`, `Run::metadata`, `set_metadata`, `update_metadata` |
 | `runtime.execute(code, { bindings, runId })` | `execute(code)`, `execute_with(code, &ProgramOptions)`, `execute_async` |
 | `runtime.program(..)`, `program.run()`, `program.suspend()` | `Runtime::program`, `Program::run`/`run_resumable`/`run_async`, `Program::suspender()` → `Suspender::suspend` |
+| `runtime.compile(code)`: `{ ok, compiled }` or `{ ok: false, error }`; `program` and `execute` take a `Compiled` or source | `Runtime::compile(code)`: `Result<Compiled, Diagnostic>`, `Compiled` an `Arc` to clone and share; `program` and the `execute` methods take `&str` or `&Compiled` (`Code`) |
 | `runtime.resume(state \| bytes)` | `Runtime::resume(&Snapshot)`, `resume_bytes` |
 | `toBytes`, `fromBytes`, `SnapshotError`, `SuspendError` | `to_bytes`, `from_bytes`, `SnapshotError`, `SuspendError` |
 | `StreamingResponse` | `StreamingResponse` over an `HttpBody` |

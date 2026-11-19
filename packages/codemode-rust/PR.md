@@ -3,7 +3,8 @@
 Adds `psychoscript`, a pure-Rust crate (no JavaScript engine at build or run time) that runs and embeds PsychoScript
 as a second implementation of the language layer next to `src/language/`: parser (`oxc_parser`), bytecode compiler,
 stack VM, standard library, host functions, and snapshots for suspend and resume. Code Mode stays out of scope. The
-README maps each `Language` export to its Rust form and describes threading in full.
+README maps each `Language` export to its Rust form and describes threading in full. Both implementations gain
+`runtime.compile(code)`, a program compiled once that `program` and `execute` run many times without parsing again.
 
 ## Parity
 
@@ -35,6 +36,6 @@ recorded from the TypeScript layer, never written by hand, and CI fails if a reg
 
 Needs the language/Code Mode split in psychoscript, plus the language-layer TypeScript changes this was recorded
 against: seven JavaScript-correctness fixes (ToPrimitive conversions, evaluation order of `new` and assignment,
-`delete` on primitives, `in` on array holes, built-in details), acorn 8.16, sync-generator parking in
+`delete` on primitives, `in` on array holes, built-in details), acorn 8.16, `runtime.compile`, sync-generator parking in
 `generators.ts` (its test moves with Code Mode or is rewritten), and the test262 skip-list, `interpreter-support.md`
 and `AGENTS.md` updates.
