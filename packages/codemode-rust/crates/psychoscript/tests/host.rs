@@ -288,7 +288,7 @@ fn a_function_inside_a_result_crosses_back_as_itself_only_to_a_function_that_tak
     for code in ["refuses(open().read)", "takes(takes)", "takes(() => 1)"] {
         let e = error(&rt, code);
         assert!(
-            e.message
+            e.message_lossy()
                 .contains("contains a function, which cannot be passed to the host"),
             "{code}: {}",
             e.message
@@ -396,17 +396,21 @@ fn a_missing_function_and_a_host_failure_keep_their_kind_and_suggestions() {
     let rt = api_runtime();
     let e = error(&rt, "return api.issues.nope()");
     assert_eq!(
-        (e.kind.name(), e.message.as_str(), e.suggestions.as_slice()),
+        (e.kind.name(), e.message_lossy(), e.suggestions_lossy()),
         (
             "NotFound",
-            "No api.issues.nope",
-            ["Try api.issues.list.".to_owned()].as_slice()
+            "No api.issues.nope".to_owned(),
+            vec!["Try api.issues.list.".to_owned()]
         )
     );
     let e = error(&rt, "refuse()");
     assert_eq!(
-        (e.kind.name(), e.message.as_str(), e.suggestions.as_slice()),
-        ("Refused", "Not today", ["Ask again.".to_owned()].as_slice())
+        (e.kind.name(), e.message_lossy(), e.suggestions_lossy()),
+        (
+            "Refused",
+            "Not today".to_owned(),
+            vec!["Ask again.".to_owned()]
+        )
     );
 }
 
@@ -675,7 +679,7 @@ fn by_default_a_function_or_a_promise_inside_an_argument_fails_the_call() {
         ),
     ] {
         let e = error(&strict, code);
-        assert!(e.message.contains(message), "{code}: {}", e.message);
+        assert!(e.message_lossy().contains(message), "{code}: {}", e.message);
     }
 }
 
@@ -700,7 +704,11 @@ fn functions_drop_leaves_functions_out_as_json_stringify_does() {
         matches!(&args[3], HostValue::Map(m) if m.len() == 1 && matches!(m[0].1, HostValue::Undefined))
     );
     let e = error(&rt, "keep({ p: Promise.resolve(1) })");
-    assert!(e.message.contains("un-awaited Promise"), "{}", e.message);
+    assert!(
+        e.message_lossy().contains("un-awaited Promise"),
+        "{}",
+        e.message
+    );
 }
 
 #[test]
@@ -729,7 +737,11 @@ fn promises_await_waits_for_every_promise_inside_the_arguments_and_uses_its_valu
         json!([[{ "n": 5, "list": [1, "slow"] }, { "deep": 2 }], ["slow", 3]])
     );
     let e = error(&rt, "keep({ f() {} })");
-    assert!(e.message.contains("contains a function"), "{}", e.message);
+    assert!(
+        e.message_lossy().contains("contains a function"),
+        "{}",
+        e.message
+    );
 }
 
 #[test]

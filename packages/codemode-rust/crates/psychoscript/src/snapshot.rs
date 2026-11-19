@@ -477,7 +477,7 @@ impl Enc<'_, '_> {
                 json!([f.label, f.path, f.owner, f.installed, name, length, own])
             })
             .collect();
-        let mut suggestions: Vec<(&Id, &Vec<String>)> = h.suggestions.iter().collect();
+        let mut suggestions: Vec<(&Id, &Vec<crate::HostString>)> = h.suggestions.iter().collect();
         suggestions.sort_by_key(|(id, _)| **id);
         let mut modules: Vec<(&String, &Value)> = h.modules_loaded.iter().collect();
         modules.sort_by(|a, b| a.0.cmp(b.0));
@@ -517,7 +517,7 @@ impl Enc<'_, '_> {
             "nextCall": h.next_call,
             "functions": functions,
             "results": results,
-            "suggestions": suggestions.iter().map(|(id, s)| json!([id, s])).collect::<Vec<_>>(),
+            "suggestions": suggestions.iter().map(|(id, s)| json!([id, texts(s)])).collect::<Vec<_>>(),
             "promiseLike": opt_id(h.promise_like),
             "unhandled": h.unhandled.iter().map(|(p, v)| json!([p, val(v)])).collect::<Vec<_>>(),
             "modules": modules.iter().map(|(k, v)| json!([k, val(v)])).collect::<Vec<_>>(),
@@ -772,7 +772,7 @@ impl Enc<'_, '_> {
             Settlement::Undefined => json!([p, "undef"]),
             Settlement::Failure(f) => {
                 let (kind, message, suggestions) = f.parts();
-                json!([p, "fail", kind.name(), message, suggestions])
+                json!([p, "fail", kind.name(), text(message), texts(suggestions)])
             }
             Settlement::Lost(message, site) => json!([p, "lost", message, site]),
             Settlement::Host(h) => {
@@ -992,7 +992,7 @@ fn host_value(v: &HostValue) -> J {
         HostValue::Function(f) => json!(["f", f.name(), f.length]),
         HostValue::Durable(_) | HostValue::Namespace(_) => json!(["f", "", 0]),
         HostValue::Interrupt => json!(["u"]),
-        HostValue::Failure(f) => json!(["fail", f.kind, f.message, f.suggestions]),
+        HostValue::Failure(f) => json!(["fail", f.kind, text(&f.message), texts(&f.suggestions)]),
         HostValue::Date(t) => json!(["date", num(*t)]),
         HostValue::RegExp { source, flags } => json!(["re", source, flags]),
         HostValue::Url(href) => json!(["url", href]),
@@ -1043,6 +1043,18 @@ fn text(s: &crate::HostString) -> J {
         Some(s) => J::from(s),
         None => json!(["s16", s.to_utf16()]),
     }
+}
+
+fn texts(list: &[crate::HostString]) -> J {
+    J::Array(list.iter().map(text).collect())
+}
+
+fn texts_from(j: &J) -> R<Vec<crate::HostString>> {
+    j.as_array()
+        .ok_or_else(|| invalid("a list of strings is not a list."))?
+        .iter()
+        .map(text_from)
+        .collect()
 }
 
 fn text_from(j: &J) -> R<crate::HostString> {
@@ -1100,8 +1112,8 @@ fn host_value_from(j: &J) -> R<HostValue> {
                 a.get(1).and_then(J::as_str).unwrap_or(""),
             )),
             Some("fail") => HostValue::Failure(
-                crate::Failure::new(string(at(j, 1)?)?, string(at(j, 2)?)?)
-                    .suggestions(strings(at(j, 3)?)?),
+                crate::Failure::new(string(at(j, 1)?)?, text_from(at(j, 2)?)?)
+                    .suggestions(texts_from(at(j, 3)?)?),
             ),
             Some("date") => HostValue::Date(unnum(a.get(1).unwrap_or(&J::Null))?),
             Some("re") => HostValue::RegExp {
@@ -2038,8 +2050,8 @@ fn restore_settlement(vm: &mut Vm, dec: &Dec, j: &J) -> R<(Id, Settlement)> {
         Some("undef") => Settlement::Undefined,
         Some("fail") => Settlement::Failure(host::Failed::from_parts(
             kind_named(&string(at(j, 2)?)?)?,
-            string(at(j, 3)?)?,
-            strings(at(j, 4)?)?,
+            text_from(at(j, 3)?)?,
+            texts_from(at(j, 4)?)?,
         )),
         Some("host") => {
             let ok = boolean(at(j, 2)?)?;
@@ -2151,7 +2163,7 @@ fn restore_host(vm: &mut Vm, dec: &Dec, j: &J, base: Base) -> R<()> {
     for s in field_list(j, "suggestions")? {
         vm.host
             .suggestions
-            .insert(dec.id(at(s, 0)?)?, strings(at(s, 1)?)?);
+            .insert(dec.id(at(s, 0)?)?, texts_from(at(s, 1)?)?);
     }
     vm.host.promise_like = dec.opt_id(field(j, "promiseLike")?)?;
     vm.host.unhandled = field_list(j, "unhandled")?

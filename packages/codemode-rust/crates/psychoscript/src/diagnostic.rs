@@ -58,14 +58,31 @@ impl fmt::Display for DiagnosticKind {
     }
 }
 
+/// A program's failure or warning. Its message and suggestions keep the program's text exactly, unpaired surrogates
+/// included ([`HostString`](crate::HostString)); [`Diagnostic::message_lossy`] gives a Rust `String`.
 #[derive(Clone, Debug)]
 pub struct Diagnostic {
     pub kind: DiagnosticKind,
-    pub message: String,
+    pub message: crate::HostString,
     /// 1-based line and column in the program source, when known.
     pub location: Option<(u32, u32)>,
     /// What the model could do about it, as a host failure gives them.
-    pub suggestions: Vec<String>,
+    pub suggestions: Vec<crate::HostString>,
+}
+
+impl Diagnostic {
+    /// The message as a Rust `String`, with U+FFFD for each unpaired surrogate.
+    pub fn message_lossy(&self) -> String {
+        self.message.to_string_lossy().into_owned()
+    }
+
+    /// The suggestions as Rust `String`s, with U+FFFD for each unpaired surrogate.
+    pub fn suggestions_lossy(&self) -> Vec<String> {
+        self.suggestions
+            .iter()
+            .map(|s| s.to_string_lossy().into_owned())
+            .collect()
+    }
 }
 
 /// A run that was interrupted, by a host call, instead of ending with an outcome.

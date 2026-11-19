@@ -308,7 +308,12 @@ impl HostValue {
                 Json::Object(map)
             }
             HostValue::Failure(f) => {
-                serde_json::json!({ "kind": f.kind, "message": f.message, "suggestions": f.suggestions })
+                let lossy = |s: &HostString| Json::String(s.to_string_lossy().into_owned());
+                serde_json::json!({
+                    "kind": f.kind,
+                    "message": lossy(&f.message),
+                    "suggestions": f.suggestions.iter().map(lossy).collect::<Vec<_>>(),
+                })
             }
         })
     }
@@ -422,13 +427,13 @@ impl std::error::Error for HostError {}
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Failure {
     pub kind: String,
-    pub message: String,
-    pub suggestions: Vec<String>,
+    pub message: HostString,
+    pub suggestions: Vec<HostString>,
 }
 
 impl Failure {
     /// `Host.fail(kind, message)`.
-    pub fn new(kind: impl Into<String>, message: impl Into<String>) -> Self {
+    pub fn new(kind: impl Into<String>, message: impl Into<HostString>) -> Self {
         Self {
             kind: kind.into(),
             message: message.into(),
@@ -438,7 +443,7 @@ impl Failure {
 
     /// `Host.missing(message)`: what a namespace gives for a path with no function, an `ExecutionFailure` unless
     /// [`Failure::kind`] says otherwise.
-    pub fn missing(message: impl Into<String>) -> Self {
+    pub fn missing(message: impl Into<HostString>) -> Self {
         Self::new("ExecutionFailure", message)
     }
 
@@ -447,7 +452,7 @@ impl Failure {
         self
     }
 
-    pub fn suggestions<S: Into<String>>(
+    pub fn suggestions<S: Into<HostString>>(
         mut self,
         suggestions: impl IntoIterator<Item = S>,
     ) -> Self {
@@ -458,7 +463,7 @@ impl Failure {
 
 impl fmt::Display for Failure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.message)
+        f.write_str(&self.message.to_string_lossy())
     }
 }
 

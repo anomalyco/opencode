@@ -119,19 +119,19 @@ impl Settlement {
 /// A host call's failure. Boxed, so the common successful settlement stays small.
 pub struct Failed {
     kind: DiagnosticKind,
-    message: String,
-    suggestions: Vec<String>,
+    message: HostString,
+    suggestions: Vec<HostString>,
 }
 
 impl Failed {
-    pub fn parts(&self) -> (&DiagnosticKind, &str, &[String]) {
+    pub fn parts(&self) -> (&DiagnosticKind, &HostString, &[HostString]) {
         (&self.kind, &self.message, &self.suggestions)
     }
 
     pub fn from_parts(
         kind: DiagnosticKind,
-        message: String,
-        suggestions: Vec<String>,
+        message: HostString,
+        suggestions: Vec<HostString>,
     ) -> Box<Self> {
         Box::new(Failed {
             kind,
@@ -302,7 +302,7 @@ pub struct RunHost<'rt> {
     /// Set once the run is being suspended: an interruption then detaches a call instead of ending it.
     pub(crate) suspending: Arc<AtomicBool>,
     /// Suggestions attached to failure values, by error object.
-    pub suggestions: FxHashMap<Id, Vec<String>>,
+    pub suggestions: FxHashMap<Id, Vec<HostString>>,
     pub(crate) promise_like: Option<Id>,
     /// Whether a call interrupted the run.
     pub interrupted: bool,
@@ -702,11 +702,11 @@ pub(crate) fn locate_at(vm: &mut Vm, e: &Value, site: Option<u32>) {
 fn failure_value(
     vm: &mut Vm,
     kind: DiagnosticKind,
-    message: String,
-    suggestions: Vec<String>,
+    message: HostString,
+    suggestions: Vec<HostString>,
 ) -> Value {
     let proto = vm.realm.error_proto;
-    let e = vm.failure(proto, &message, kind);
+    let e = vm.failure(proto, &message.to_run_text(), kind);
     if !suggestions.is_empty()
         && let Value::Obj(id) = e
     {
@@ -1008,7 +1008,7 @@ pub fn restart(vm: &mut Vm, r: Restart) {
                 p,
                 Settlement::Failure(Failed::from_parts(
                     DiagnosticKind::ExecutionFailure,
-                    message,
+                    message.into(),
                     Vec::new(),
                 )),
             ));

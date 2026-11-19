@@ -28,7 +28,7 @@ fn fixture() -> Json {
 fn outcome(o: &psychoscript::Outcome) -> Json {
     match &o.result {
         Ok(value) => json!({ "ok": true, "value": value.to_json() }),
-        Err(d) => json!({ "ok": false, "kind": d.kind.name(), "message": d.message }),
+        Err(d) => json!({ "ok": false, "kind": d.kind.name(), "message": d.message_lossy() }),
     }
 }
 
@@ -437,6 +437,15 @@ fn runtimes_made_with_different_globals_and_module_names_match_the_reference() {
     );
 }
 
+/// A diagnostic as the generator records it: its kind, and its message and suggestions as `describe` writes a string.
+fn described_diagnostic(d: &psychoscript::Diagnostic) -> Json {
+    let mut out = json!({ "kind": d.kind.name(), "message": reference::text(&d.message) });
+    if !d.suggestions.is_empty() {
+        out["suggestions"] = Json::Array(d.suggestions.iter().map(reference::text).collect());
+    }
+    out
+}
+
 /// A result's value as `describe` writes it.
 fn described_data(d: &Data) -> Json {
     match d {
@@ -471,16 +480,19 @@ fn results_and_logs_keep_unpaired_surrogates_as_the_reference_does() {
         });
         let code = case["code"].as_str().unwrap();
         let o = rt.execute(code);
-        let actual = match &o.result {
-            Ok(value) => json!({
-                "value": described_data(value),
-                "logs": o.logs.iter().map(reference::text).collect::<Vec<_>>(),
-                "truncated": o.truncated,
-            }),
-            Err(d) => json!({ "error": d.message }),
+        let mut actual = match &o.result {
+            Ok(value) => json!({ "value": described_data(value) }),
+            Err(d) => json!({ "error": described_diagnostic(d) }),
         };
-        let expected =
-            json!({ "value": case["value"], "logs": case["logs"], "truncated": case["truncated"] });
+        actual["warnings"] = Json::Array(o.warnings.iter().map(described_diagnostic).collect());
+        actual["logs"] = Json::Array(o.logs.iter().map(reference::text).collect());
+        actual["truncated"] = json!(o.truncated);
+        let mut expected = json!({});
+        for key in ["value", "error", "warnings", "logs", "truncated"] {
+            if let Some(v) = case.get(key) {
+                expected[key] = v.clone();
+            }
+        }
         if !same(&actual, &expected) {
             failures.push(format!(
                 "{code}\n  expected {expected}\n  actual   {actual}"

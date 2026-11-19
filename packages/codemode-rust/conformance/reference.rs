@@ -112,7 +112,7 @@ pub fn describe(v: &HostValue) -> Json {
             json!({ "error": error })
         }
         HostValue::Failure(f) => json!({
-            "error": { "name": "Error", "message": f.message, "fields": [] }
+            "error": { "name": "Error", "message": text(&f.message), "fields": [] }
         }),
         HostValue::Response(_) => json!({ "object": [] }),
         HostValue::Object(fields) => json!({

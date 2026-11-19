@@ -143,7 +143,7 @@ fn value(rt: &Runtime, code: &str) -> Json {
 fn failure(rt: &Runtime, code: &str) -> String {
     match rt.execute(code).result {
         Ok(v) => panic!("expected failure, got {v}"),
-        Err(d) => d.message,
+        Err(d) => d.message_lossy(),
     }
 }
 
@@ -468,7 +468,7 @@ fn a_promise_in_the_arguments_that_never_settles_waits_until_the_timeout() {
     let d = rt.execute("keep({ n: never() })").result.unwrap_err();
     assert_eq!(
         (d.kind.name(), d.message.as_str()),
-        ("TimeoutExceeded", "Execution timed out after 50ms.")
+        ("TimeoutExceeded", Some("Execution timed out after 50ms."))
     );
     assert!(held.lock().unwrap().is_empty());
 }

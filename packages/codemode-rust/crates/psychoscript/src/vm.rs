@@ -562,7 +562,7 @@ impl<'rt> Vm<'rt> {
         let msg = format!("Syntax '{kind}' is not supported. {help}");
         let e = self.failure(p, &msg, DiagnosticKind::UnsupportedSyntax);
         if let Value::Obj(id) = e {
-            self.host.suggestions.insert(id, vec![help.to_owned()]);
+            self.host.suggestions.insert(id, vec![help.into()]);
         }
         e
     }

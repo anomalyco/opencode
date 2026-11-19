@@ -49,7 +49,7 @@ pub fn run(code: &str, timeout_ms: u64) -> Run {
 fn diagnostic(kind: DiagnosticKind, message: String) -> Diagnostic {
     Diagnostic {
         kind,
-        message,
+        message: crate::HostString::from_run_text(&message),
         location: None,
         suggestions: Vec::new(),
     }

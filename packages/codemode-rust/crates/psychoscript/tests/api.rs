@@ -130,7 +130,7 @@ fn runtime_errors_report_their_location() {
     assert_eq!(d.kind, DiagnosticKind::ExecutionFailure);
     assert_eq!(d.location, Some((2, 8)));
     assert!(
-        d.message
+        d.message_lossy()
             .starts_with("TypeError: Cannot read properties of null (reading 'y')")
     );
 }
@@ -150,7 +150,7 @@ fn deep_input_does_not_overflow() {
         .unwrap_err();
     assert!(
         recursion
-            .message
+            .message_lossy()
             .contains("Maximum call stack size exceeded")
     );
 }
@@ -219,12 +219,12 @@ fn host_text_keeps_the_last_code_point() {
 }
 
 #[test]
-fn uncaught_lone_surrogates_are_replaced_in_diagnostics() {
+fn uncaught_lone_surrogates_are_kept_in_diagnostics() {
     let outcome = run(&Runtime::make(), r#"throw new TypeError("bad \udc00")"#);
-    assert_eq!(
-        outcome.result.unwrap_err().message,
-        "TypeError: bad \u{fffd}"
-    );
+    let d = outcome.result.unwrap_err();
+    let expected: Vec<u16> = "TypeError: bad ".encode_utf16().chain([0xdc00]).collect();
+    assert_eq!(d.message, HostString::from_utf16(&expected));
+    assert_eq!(d.message_lossy(), "TypeError: bad \u{fffd}");
 }
 
 #[test]

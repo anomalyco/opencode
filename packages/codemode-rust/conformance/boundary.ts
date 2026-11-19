@@ -40,10 +40,12 @@
 // have unpaired surrogates, which the result and logs keep, and how the output limit measures them.
 //
 // boundary.json: `{ boundary: { samples: { name: described }, programs: [{ code, outcome, kept }] },
-// configuration: [{ globals, modules, translate?, code, outcome, seen }], results: [{ code, limits?, value, logs,
-// truncated }] }`; `outcome` is `{ ok: true, value }` or `{ ok: false, kind, message }`, `modules` `null` when the
-// entry names none of its own. A `results` entry's `value` is the result's value as `describe` writes it, and `logs`
-// its log lines as `describe` writes a string.
+// configuration: [{ globals, modules, translate?, code, outcome, seen }], results: [{ code, limits?, value | error,
+// warnings, logs, truncated }] }`; `outcome` is `{ ok: true, value }` or `{ ok: false, kind, message }`, `modules`
+// `null` when the
+// entry names none of its own. A `results` entry's `value` is the result's value as `describe` writes it, `logs` its
+// log lines as `describe` writes a string, and `error` (a failed run) and `warnings` its diagnostics: `{ kind, message,
+// suggestions? }`, the message and suggestions as `describe` writes a string.
 
 import { join } from "node:path"
 import { writeRecording } from "./recording.ts"
@@ -298,15 +300,26 @@ return { s: "x\\udbff", ["\\udfff"]: ["\\ud800", { k: "\\ud83d" }], pair: "\\ud8
   { code: `return "\\ud800\\udc00\\udc00"` },
   { code: `return ["\\ud800".repeat(10), 1]`, limits: { maxOutputBytes: 20 } },
   { code: `console.log("\\ud800".repeat(4)); console.log("b"); return 1`, limits: { maxOutputBytes: 14 } },
+  // Diagnostics keep them too: an error's message, an uncaught value, an unhandled rejection's warning.
+  { code: `throw new TypeError("bad \\udc00 \\ud83d\\ude00")` },
+  { code: `throw "y\\ud800"` },
+  { code: `throw { a: "\\udbff" }` },
+  { code: `Promise.reject(new Error("w\\ud800")); Promise.reject("\\udfff"); return 1` },
+  { code: `null["\\ud800"]` },
 ]
 const results: Array<unknown> = []
 for (const item of resultCases) {
   const runtime = Runtime.make(item.limits === undefined ? {} : { limits: item.limits })
   const result = await Effect.runPromise(runtime.execute(item.code))
-  if (!result.ok) throw new Error(`${item.code} failed: ${result.error.message}`)
+  const diagnostic = (d: { kind: string; message: string; suggestions?: ReadonlyArray<string> }) => ({
+    kind: d.kind,
+    message: describe(d.message),
+    ...(d.suggestions === undefined ? {} : { suggestions: d.suggestions.map(describe) }),
+  })
   results.push({
     ...item,
-    value: describe(result.value),
+    ...(result.ok ? { value: describe(result.value) } : { error: diagnostic(result.error) }),
+    warnings: (result.ok ? (result.warnings ?? []) : []).map(diagnostic),
     logs: (result.logs ?? []).map(describe),
     truncated: result.truncated === true,
   })

@@ -302,12 +302,12 @@ fn runtime(entry: &Json, state: &State) -> Runtime {
 }
 
 fn diagnostic(d: &Diagnostic) -> Json {
-    let mut out = json!({ "kind": d.kind.name(), "message": d.message });
+    let mut out = json!({ "kind": d.kind.name(), "message": d.message_lossy() });
     if let Some((line, column)) = d.location {
         out["location"] = json!({ "line": line, "column": column });
     }
     if !d.suggestions.is_empty() {
-        out["suggestions"] = json!(d.suggestions);
+        out["suggestions"] = json!(d.suggestions_lossy());
     }
     out
 }

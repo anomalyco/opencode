@@ -99,7 +99,7 @@ pub fn start<'a>(
             let message = format!("{}{}", e.message, suffix(location));
             return Err(Box::new(failed(Diagnostic {
                 kind: e.kind,
-                message,
+                message: message.into(),
                 location,
                 suggestions: Vec::new(),
             })));
@@ -264,56 +264,67 @@ fn warnings(vm: &mut Vm, code: &str) -> Vec<Diagnostic> {
     unhandled
         .into_iter()
         .map(|(_, reason)| {
-            let mut d = diagnose(vm, &reason, code);
-            d.message = format!(
-                "Unhandled rejection from an un-awaited promise: {}",
-                d.message
-            );
-            d
+            diagnose_with(
+                vm,
+                &reason,
+                code,
+                "Unhandled rejection from an un-awaited promise: ",
+            )
         })
         .collect()
 }
 
-/// The JSON a diagnostic crosses the reference's boundary as, for the output budget.
-fn diagnostic_json(d: &Diagnostic) -> Json {
-    let mut map = serde_json::Map::new();
-    map.insert("kind".into(), d.kind.name().into());
-    map.insert("message".into(), d.message.clone().into());
+/// The JSON text a diagnostic crosses the reference's boundary as, for the output budget.
+fn diagnostic_json(d: &Diagnostic) -> String {
+    let mut fields = vec![
+        (HostString::from("kind"), Data::String(d.kind.name().into())),
+        (HostString::from("message"), Data::String(d.message.clone())),
+    ];
     if let Some((line, column)) = d.location {
-        map.insert(
+        fields.push((
             "location".into(),
-            serde_json::json!({ "line": line, "column": column }),
-        );
+            Data::from(serde_json::json!({ "line": line, "column": column })),
+        ));
     }
     if !d.suggestions.is_empty() {
-        map.insert("suggestions".into(), d.suggestions.clone().into());
+        fields.push((
+            "suggestions".into(),
+            Data::Array(d.suggestions.iter().cloned().map(Data::String).collect()),
+        ));
     }
-    Json::Object(map)
+    Data::Object(fields).to_json_string()
 }
 
+/// A diagnostic whose message is a run's text (see `strings`), which keeps unpaired surrogates.
 fn diagnostic(kind: DiagnosticKind, message: String) -> Diagnostic {
-    let message = match crate::strings::host_text(&message) {
-        std::borrow::Cow::Owned(m) => m,
-        std::borrow::Cow::Borrowed(_) => message,
-    };
     Diagnostic {
         kind,
-        message,
+        message: HostString::from_run_text(&message),
         location: None,
         suggestions: Vec::new(),
     }
 }
 
-/// The diagnostic for an uncaught value, with its text as the host gets it.
+/// The diagnostic for an uncaught value.
 fn diagnose(vm: &mut Vm, e: &Value, code: &str) -> Diagnostic {
-    let mut d = diagnose_text(vm, e, code);
-    if let std::borrow::Cow::Owned(m) = crate::strings::host_text(&d.message) {
-        d.message = m;
-    }
-    d
+    diagnose_with(vm, e, code, "")
 }
 
-fn diagnose_text(vm: &mut Vm, e: &Value, code: &str) -> Diagnostic {
+/// The diagnostic for an uncaught value, its message after `prefix`.
+fn diagnose_with(vm: &mut Vm, e: &Value, code: &str, prefix: &str) -> Diagnostic {
+    let (kind, message, location, suggestions) = diagnose_text(vm, e, code);
+    Diagnostic {
+        kind,
+        message: HostString::from_run_text(&format!("{prefix}{message}")),
+        location,
+        suggestions,
+    }
+}
+
+/// An uncaught value's kind, message as a run's text, location and suggestions.
+type Diagnosed = (DiagnosticKind, String, Option<(u32, u32)>, Vec<HostString>);
+
+fn diagnose_text(vm: &mut Vm, e: &Value, code: &str) -> Diagnosed {
     if let Value::Obj(id) = e
         && let Kind::Error(failure) = &vm.heap[*id as usize].kind
     {
@@ -329,15 +340,11 @@ fn diagnose_text(vm: &mut Vm, e: &Value, code: &str) -> Diagnostic {
                 }
                 _ => f.message.clone(),
             };
-            return Diagnostic {
-                kind: f.kind,
-                message,
-                location,
-                suggestions: vm.host.suggestions.get(&id).cloned().unwrap_or_default(),
-            };
+            let suggestions = vm.host.suggestions.get(&id).cloned().unwrap_or_default();
+            return (f.kind, message, location, suggestions);
         }
         let message = convert::error_to_string(vm, id);
-        return diagnostic(DiagnosticKind::ExecutionFailure, message);
+        return (DiagnosticKind::ExecutionFailure, message, None, Vec::new());
     }
     // As the reference does, a thrown value's internals never show through a failure.
     let text = if convert::holds_runtime_reference(vm, e) {
@@ -345,9 +352,11 @@ fn diagnose_text(vm: &mut Vm, e: &Value, code: &str) -> Diagnostic {
     } else {
         convert::format_value(vm, e)
     };
-    diagnostic(
+    (
         DiagnosticKind::ExecutionFailure,
         format!("Uncaught: {text}"),
+        None,
+        Vec::new(),
     )
 }
 
@@ -393,7 +402,7 @@ fn bound_output(mut outcome: Outcome, max: Option<usize>) -> Outcome {
         .warnings
         .iter()
         .take_while(|w| {
-            used += crate::convert::js_stringify(&diagnostic_json(w)).len() + 1;
+            used += diagnostic_json(w).len() + 1;
             used <= max
         })
         .count();

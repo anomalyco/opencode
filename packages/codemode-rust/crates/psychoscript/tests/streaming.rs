@@ -211,7 +211,7 @@ fn outcome(o: &psychoscript::Outcome) -> Json {
     match &o.result {
         Ok(value) if o.logs.is_empty() => json!({ "ok": true, "value": value.to_json() }),
         Ok(value) => json!({ "ok": true, "value": value.to_json(), "logs": o.log_lines() }),
-        Err(d) => json!({ "ok": false, "kind": d.kind.name(), "message": d.message }),
+        Err(d) => json!({ "ok": false, "kind": d.kind.name(), "message": d.message_lossy() }),
     }
 }
 
@@ -220,9 +220,9 @@ fn ended(o: &psychoscript::Outcome) -> Json {
     let mut out = match &o.result {
         Ok(value) => json!({ "ok": true, "value": value.to_json() }),
         Err(d) => {
-            let mut error = json!({ "kind": d.kind.name(), "message": d.message });
+            let mut error = json!({ "kind": d.kind.name(), "message": d.message_lossy() });
             if !d.suggestions.is_empty() {
-                error["suggestions"] = json!(d.suggestions);
+                error["suggestions"] = json!(d.suggestions_lossy());
             }
             json!({ "ok": false, "error": error })
         }
