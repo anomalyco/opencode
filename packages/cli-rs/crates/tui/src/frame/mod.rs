@@ -53,15 +53,15 @@ impl Frame {
             .child(&column)
             .child(&rail_handle);
         let strip_hover = strip.clone();
-        strip.on_hover(move |_, hovered| {
+        strip.on_hover(move |cx, hovered| {
             if !hovered {
-                strip::leave(&strip_hover);
+                strip::leave(cx.app(), &strip_hover);
             }
         });
         let rail_hover = rail.clone();
-        rail.on_hover(move |_, hovered| {
+        rail.on_hover(move |cx, hovered| {
             if !hovered {
-                rail::leave(&rail_hover);
+                rail::leave(cx.app(), &rail_hover);
             }
         });
         Self {

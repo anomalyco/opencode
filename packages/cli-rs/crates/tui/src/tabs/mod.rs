@@ -1,5 +1,6 @@
 //! Session tab state, persistence, and navigation.
 
+mod marquee;
 pub mod model;
 pub mod pulse;
 pub mod rail;
