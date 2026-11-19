@@ -9,6 +9,7 @@ const FOCUSABLE = [
   "select:not(:disabled)",
   "textarea:not(:disabled)",
   '[contenteditable="true"]',
+  '[contenteditable="plaintext-only"]',
   '[contenteditable=""]',
   '[tabindex]:not([tabindex="-1"])',
   // Roving focus: only one tree item is a Tab stop, but focus may land on any of them.
