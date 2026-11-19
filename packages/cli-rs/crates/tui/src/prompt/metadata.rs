@@ -193,39 +193,12 @@ fn layout(width: usize, terminal_width: u16, display: &Display) -> Display {
     let agent = if narrow { None } else { display.agent.clone() };
     let provider = if narrow { String::new() } else { display.provider.clone() };
     let short = provider.rsplit(" / ").next().unwrap_or(&provider).to_owned();
+    let full = Display { agent: agent.clone(), provider, ..display.clone() };
     let candidates = [
-        Display {
-            agent: agent.clone(),
-            auto: display.auto,
-            model: display.model.clone(),
-            provider: provider.clone(),
-            variant: display.variant.clone(),
-            limit: display.limit.clone(),
-        },
-        Display {
-            agent: agent.clone(),
-            auto: false,
-            model: display.model.clone(),
-            provider: provider.clone(),
-            variant: display.variant.clone(),
-            limit: display.limit.clone(),
-        },
-        Display {
-            agent: agent.clone(),
-            auto: false,
-            model: display.model.clone(),
-            provider: short,
-            variant: display.variant.clone(),
-            limit: display.limit.clone(),
-        },
-        Display {
-            agent: agent.clone(),
-            auto: false,
-            model: display.model.clone(),
-            provider: String::new(),
-            variant: display.variant.clone(),
-            limit: display.limit.clone(),
-        },
+        full.clone(),
+        Display { auto: false, ..full.clone() },
+        Display { auto: false, provider: short, ..full.clone() },
+        Display { auto: false, provider: String::new(), ..full },
     ];
     if let Some(fit) = candidates.into_iter().find(|candidate| flat(candidate).width() <= width) {
         return fit;
