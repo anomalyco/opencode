@@ -632,27 +632,28 @@ const mcp = Layer.mock(Mcp.Service, {
           isError: false,
           content: [{ type: "text", text: "hello" }],
         } satisfies Mcp.ToolResult
-      if (input.name === "issues" || input.name === "typed")
+      if (input.name === "issues" || input.name === "typed") {
+        if (typeof input.args?.resourceText === "string")
+          return {
+            isError: false,
+            content: [
+              {
+                type: "text",
+                text: input.args.resourceText,
+                uri: "config://app.json",
+                mimeType: "application/json",
+              },
+            ],
+          } satisfies Mcp.ToolResult
         return {
           isError: false,
           content: [{ type: "text", text: '{"issues":[{"id":1}]}' }],
         } satisfies Mcp.ToolResult
+      }
       if (input.name === "count")
         return {
           isError: false,
           content: [{ type: "text", text: "42" }],
-        } satisfies Mcp.ToolResult
-      if (input.args?.resourceText !== undefined && typeof input.args.resourceText === "string")
-        return {
-          isError: false,
-          content: [
-            {
-              type: "text",
-              text: input.args.resourceText,
-              uri: "config://app.json",
-              mimeType: "application/json",
-            },
-          ],
         } satisfies Mcp.ToolResult
       return {
         isError: false,
@@ -3108,23 +3109,35 @@ it.effect("forwards structuredContent alongside summary text without duplicating
     })
 
     assertion = yield* Deferred.make<Permission.AssertInput>()
-    const jsonResource = yield* executeTool(
-      registry,
-      {
-        sessionID: Session.ID.make("ses_mcp_json_resource"),
-        ...toolIdentity,
-        call: {
-          type: "tool-call",
-          id: "call_mcp_json_resource",
-          name: "search_query",
-          input: { resourceText: '{"port":8080}' },
-        },
+    const directJsonResource = yield* executeTool(registry, {
+      sessionID: Session.ID.make("ses_mcp_json_resource_direct"),
+      ...toolIdentity,
+      call: {
+        type: "tool-call",
+        id: "call_mcp_json_resource_direct",
+        name: "direct_issues",
+        input: { resourceText: '{"port":8080}' },
       },
-      { codemode: true },
-    )
-    expect(jsonResource).toMatchObject({
+    })
+    expect(directJsonResource).toMatchObject({
       output: { port: 8080 },
       content: [{ type: "text", text: '[Resource config://app.json (application/json)]\n{"port":8080}' }],
+    })
+
+    assertion = yield* Deferred.make<Permission.AssertInput>()
+    const toolSet = yield* registry.snapshot()
+    const codeModeJsonResource = yield* toolSet.execute({
+      sessionID: Session.ID.make("ses_mcp_json_resource_codemode"),
+      ...toolIdentity,
+      call: {
+        type: "tool-call",
+        id: "call_mcp_json_resource_codemode",
+        name: "execute",
+        input: { code: `return (await tools.demo.issues({ resourceText: '{"port":8080}' })).port` },
+      },
+    })
+    expect(codeModeJsonResource).toMatchObject({
+      output: { output: "8080" },
     })
   }),
 )
