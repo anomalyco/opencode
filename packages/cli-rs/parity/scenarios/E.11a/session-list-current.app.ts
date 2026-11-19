@@ -1,14 +1,6 @@
 // The session list opened from a session that is not the newest (DLG16): the selection starts on the first row, not
 // on the current session (`focusCurrent={false}`).
-import { assistant, defineApp, session, user } from "../../lib/app"
-
-const placeholder = {
-  x: 16,
-  y: 16,
-  width: 84,
-  height: 1,
-  reason: "the placeholder example: random in TS and Rust",
-}
+import { assistant, defineApp, HOME_PLACEHOLDER, session, user } from "../../lib/app"
 
 export default defineApp({
   routes: [
@@ -30,7 +22,7 @@ export default defineApp({
     { path: "/api/session/ses_a/inbox", json: { data: [] } },
   ],
   steps: [
-    { checkpoint: "home", until: "Ask anything", masks: [placeholder] },
+    { checkpoint: "home", until: "Ask anything", masks: [HOME_PLACEHOLDER] },
     { keys: ["ctrl+x", "l"] },
     { checkpoint: "list", until: "Write docs" },
     { keys: ["down"] },

@@ -1,17 +1,9 @@
 // The home footer (F01): the connected MCP servers of the default location with `/mcps`, then the version.
-import { defineApp } from "../../lib/app"
+import { defineApp, HOME_PLACEHOLDER } from "../../lib/app"
 
 const location = {
   directory: "/tmp/opencode/packages/tui",
   project: { id: "proj_test", directory: "/tmp/opencode", canonical: "/tmp/opencode" },
-}
-// The home prompt's placeholder is random in TS and not drawn in Rust yet.
-const placeholder = {
-  x: 16,
-  y: 16,
-  width: 84,
-  height: 1,
-  reason: "the placeholder example: random in TS and Rust",
 }
 
 export default defineApp({
@@ -29,5 +21,5 @@ export default defineApp({
       },
     },
   ],
-  steps: [{ checkpoint: "counts", until: "2 MCP", masks: [placeholder] }],
+  steps: [{ checkpoint: "counts", until: "2 MCP", masks: [HOME_PLACEHOLDER] }],
 })

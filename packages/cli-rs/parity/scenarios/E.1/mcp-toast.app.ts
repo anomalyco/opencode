@@ -1,20 +1,12 @@
 // An MCP server of the default location that failed shows a toast once (T12).
-import { defineApp } from "../../lib/app"
+import { defineApp, HOME_PLACEHOLDER } from "../../lib/app"
 
 const location = {
   directory: "/tmp/opencode/packages/tui",
   project: { id: "proj_test", directory: "/tmp/opencode", canonical: "/tmp/opencode" },
 }
 // The home prompt's placeholder row: its example is random.
-const prompt = [
-  {
-    x: 16,
-    y: 16,
-    width: 84,
-    height: 1,
-    reason: "the placeholder example: random in TS and Rust",
-  },
-]
+const prompt = [HOME_PLACEHOLDER]
 
 export default defineApp({
   routes: [

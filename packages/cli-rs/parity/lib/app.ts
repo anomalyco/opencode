@@ -12,6 +12,15 @@ export type Mask = ({ x: number; y: number; width: number; height: number } | { 
   reason: string
 }
 
+// The home prompt's placeholder at the default 100 columns, to the end of the row.
+export const HOME_PLACEHOLDER = {
+  x: 16,
+  y: 16,
+  width: 84,
+  height: 1,
+  reason: "the placeholder example: random in TS and Rust",
+}
+
 // A `parity/deviations/<file>.md` that allows a checkpoint at most `cells` differing cells. With `styleOnly`, only
 // cells whose symbols match: their colors or attributes differ. A checkpoint's deviations add up.
 export type Deviation = { file: string; cells: number; styleOnly?: boolean }

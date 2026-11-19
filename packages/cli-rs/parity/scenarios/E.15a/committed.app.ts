@@ -1,6 +1,6 @@
 // The committed source without base metadata (F15): the server reports no base, so the viewer asks for one instead
 // of requesting a diff, at the full-screen route's size of 100 columns with no file tree to show.
-import { defineApp } from "../../lib/app"
+import { defineApp, HOME_PLACEHOLDER } from "../../lib/app"
 
 const here = {
   directory: "/tmp/opencode/packages/tui",
@@ -15,15 +15,7 @@ export default defineApp({
     {
       checkpoint: "home",
       until: "Ask anything",
-      masks: [
-        {
-          x: 16,
-          y: 16,
-          width: 84,
-          height: 1,
-          reason: "the placeholder example: random in TS and Rust",
-        },
-      ],
+      masks: [HOME_PLACEHOLDER],
     },
     { type: "/diff" },
     { keys: ["enter"] },

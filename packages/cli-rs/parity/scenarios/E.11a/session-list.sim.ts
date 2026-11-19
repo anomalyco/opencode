@@ -1,15 +1,9 @@
 // Two sessions created on the server, then listed over the home
 // (DLG16): opened with <leader>l, the first delete press marks the row, the second deletes the session on the
 // server. The whole screen is compared except the home's placeholder row.
+import { HOME_PLACEHOLDER } from "../../lib/app"
 import { defineSim } from "../../sim/scenario"
 
-const placeholder = {
-  x: 16,
-  y: 16,
-  width: 84,
-  height: 1,
-  reason: "the placeholder example: random in TS and Rust",
-}
 const leader = { press: "x", modifiers: { ctrl: true } } as const
 const remove = { press: "d", modifiers: { ctrl: true } } as const
 
@@ -20,7 +14,7 @@ export default defineSim({
   ],
   model: [],
   steps: [
-    { checkpoint: "home", until: "Simulated Model", masks: [placeholder] },
+    { checkpoint: "home", until: "Simulated Model", masks: [HOME_PLACEHOLDER] },
     leader,
     { press: "l" },
     { checkpoint: "list", until: "Write docs" },

@@ -2,15 +2,8 @@
 // `app.toggle.paste_summary`, and `terminal.title.toggle`, bound to F5 to F9 here (all are `none` by default and
 // not in the palette). Each writes `cli.json`; the settings dialog then shows the new values, one filtered row
 // per checkpoint. P-FILE in `crates/tui/tests/all/system_commands.rs` checks the file bytes against TS.
-import { defineApp } from "../../lib/app"
+import { defineApp, HOME_PLACEHOLDER } from "../../lib/app"
 
-const placeholder = {
-  x: 16,
-  y: 16,
-  width: 84,
-  height: 1,
-  reason: "the placeholder example: random in TS and Rust",
-}
 const clear = (text: string) => ({ keys: Array.from(text, () => "backspace") })
 
 export default defineApp({
@@ -29,7 +22,7 @@ export default defineApp({
     {
       checkpoint: "home",
       until: "Ask anything",
-      masks: [placeholder],
+      masks: [HOME_PLACEHOLDER],
     },
     { keys: ["f5", "f6", "f7", "f8", "f9", "f10"] },
     { checkpoint: "settings", until: "Search settings" },
