@@ -160,6 +160,56 @@ story("keeps the document markup models write", async ({ page }) => {
   await expect(md.getByText("Teal", { exact: true })).toHaveCSS("color", "rgb(0, 128, 128)")
 })
 
+// What chat rendered before its allow-list: text-level, legacy and sectioning tags, and their harmless attributes.
+story("keeps the text-level, legacy and sectioning markup chat rendered before", async ({ page }) => {
+  await page.evaluate(async (url) => {
+    const { mountMarkdown } = await import(url)
+    await mountMarkdown({
+      text: [
+        '<p><u>under</u> <ins datetime="2026-01-01" cite="https://example.invalid/why">inserted</ins> <cite>Work</cite> <q cite="https://example.invalid/q">quoted</q> <var>n</var> <samp>out</samp> <dfn>term</dfn> <time datetime="2026-01-01">New year</time> <data value="7">seven</data> <bdi>isolated</bdi> <bdo dir="rtl">override</bdo> long<wbr>word <ruby>漢<rp>(</rp><rt>kan</rt><rp>)</rp></ruby></p>',
+        '<p><acronym title="Hypertext">HTML</acronym> <big>big</big> <tt>mono</tt> <strike>struck</strike> <nobr>no break</nobr> <font color="teal">font</font></p>',
+        '<section><header>Header</header><article>Article</article><aside>Aside</aside><nav>Nav</nav><main>Main</main><search>Search</search><address>Address</address><footer>Footer</footer></section>',
+      ].join("\n\n"),
+    })
+  }, fixture)
+  const md = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+
+  for (const tag of ["u", "ins[datetime][cite]", "cite", "q[cite]", "var", "samp", "dfn", "time[datetime]", "data[value]", "bdi", 'bdo[dir="rtl"]', "wbr", "ruby", "rt", "rp", "acronym[title]", "big", "tt", "strike", "nobr", "font[color]", "section", "header", "article", "aside", "nav", "main", "search", "address", "footer"])
+    await expect(md.locator(tag).first(), tag).toBeAttached()
+  await expect(md.getByText("font", { exact: true })).toHaveCSS("color", "rgb(0, 128, 128)")
+})
+
+// Media renders as it did before the allow-list, sized and painted inside its message.
+story("keeps video and audio inside their message", async ({ page }) => {
+  await page.route("https://example.invalid/**", (route) => route.fulfill({ status: 404, body: "" }))
+  await page.evaluate(async (url) => {
+    const { mountMarkdown } = await import(url)
+    await mountMarkdown({
+      text: '<video controls width="5000" height="3000" poster="https://example.invalid/poster.png" onplay="alert(1)"><source src="https://example.invalid/clip.mp4" type="video/mp4"><track kind="captions" src="https://example.invalid/clip.vtt" srclang="en" label="English"></video>\n\n<audio controls loop src="https://example.invalid/clip.mp3" style="position:fixed;inset:0"></audio>',
+    })
+  }, fixture)
+  const md = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  const video = md.locator("video[controls]")
+  await expect(video).toHaveAttribute("width", "2048")
+  await expect(video).not.toHaveAttribute("onplay")
+  await expect(md.locator('video > source[type="video/mp4"]')).toHaveAttribute("src", "https://example.invalid/clip.mp4")
+  await expect(md.locator('video > track[kind="captions"]')).toHaveAttribute("srclang", "en")
+  await expect(md.locator("audio[controls][loop]")).not.toHaveAttribute("style")
+  await expect(md).toHaveCSS("contain", "paint")
+
+  const fits = await md.evaluate((root) => {
+    const bounds = root.getBoundingClientRect()
+
+    return Array.from(root.querySelectorAll("video, audio")).map((node) => {
+      const box = node.getBoundingClientRect()
+
+      return box.left >= bounds.left - 1 && box.right <= bounds.right + 1
+    })
+  })
+
+  expect(fits).toEqual([true, true])
+})
+
 story("keeps safe presentation and labels on inline SVG, images and links", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { sanitizeMarkdown } = await import(fixture)

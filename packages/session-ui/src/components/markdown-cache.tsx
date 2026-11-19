@@ -53,10 +53,14 @@ if (typeof window !== "undefined" && purifier.isSupported) {
   const images = new WeakMap<HTMLImageElement, string>()
 
   const prose = new Set(
-    "a abbr b blockquote br caption center code col colgroup dd del details div dl dt em figcaption figure h1 h2 h3 h4 h5 h6 hr i img kbd li mark ol p pre s small span strong sub summary sup table tbody td tfoot th thead tr ul".split(
+    "a abbr b bdi bdo blockquote br caption center cite code col colgroup data dd del details dfn div dl dt em figcaption figure h1 h2 h3 h4 h5 h6 hr i img ins kbd li mark ol p pre q rp rt ruby s samp small span strong sub summary sup table tbody td tfoot th thead time tr u ul var wbr".split(
       " ",
     ),
   )
+
+  // The rest of what the chat rendered before this allow-list: legacy, sectioning and media markup. Outside `prose`,
+  // each is marked for paint containment, so none can lay itself out over the app.
+  const contained = "acronym address article aside audio big blink dir font footer header hgroup main marquee menu nav nobr picture search section source spacer strike track tt video".split(" ")
 
   const paint = [
     "fill",
@@ -101,6 +105,7 @@ if (typeof window !== "undefined" && purifier.isSupported) {
     ADD_ATTR: [...config.ADD_ATTR, "aria-label", "aria-hidden"],
     ALLOWED_TAGS: [
       ...prose,
+      ...contained,
       ..."math mrow mi mn mo ms mtext mspace mfrac msqrt mroot msub msup msubsup munder mover munderover mtable mtr mtd mmultiscripts mprescripts none menclose merror mfenced mpadded mphantom mstyle semantics annotation".split(
         " ",
       ),
@@ -134,6 +139,14 @@ if (typeof window !== "undefined" && purifier.isSupported) {
           name === "rel" ||
           (name === "target" && attr.attrValue === "_blank"))) ||
       (tag === "img" && /^(src|alt|height|width)$/.test(name)) ||
+      (/^(q|blockquote|ins|del)$/.test(tag) && name === "cite") ||
+      (/^(time|ins|del)$/.test(tag) && name === "datetime") ||
+      (tag === "data" && name === "value") ||
+      (tag === "font" && /^(color|face|size)$/.test(name)) ||
+      (/^(video|audio)$/.test(tag) && /^(src|controls|loop|muted|preload|autoplay)$/.test(name)) ||
+      (tag === "video" && /^(poster|playsinline|width|height)$/.test(name)) ||
+      (tag === "source" && /^(src|type|srcset|sizes|media)$/.test(name)) ||
+      (tag === "track" && /^(src|kind|srclang|label|default)$/.test(name)) ||
       (/^(table|col|th|td)$/.test(tag) && /^(width|colspan|rowspan|scope)$/.test(name)) ||
       (tag === "ol" && /^(start|reversed|type)$/.test(name)) ||
       (tag === "li" && name === "value") ||
@@ -148,7 +161,7 @@ if (typeof window !== "undefined" && purifier.isSupported) {
       return
     }
 
-    const sized = /^(?:img|table|th|td|col|svg)$/.test(tag)
+    const sized = /^(?:img|table|th|td|col|svg|video)$/.test(tag)
 
     if ((name === "width" || (tag === "svg" && name === "height")) && sized) {
       const width = contentWidth(attr.attrValue, true)

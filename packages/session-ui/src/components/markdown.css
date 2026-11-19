@@ -603,6 +603,16 @@
     margin: 1.5rem 0;
     display: block;
   }
+
+  /* Media keeps inside its message, whatever size the author gave it. */
+  video,
+  audio {
+    max-width: 100%;
+  }
+
+  video {
+    height: auto;
+  }
 }
 
 @keyframes markdown-word-enter {
