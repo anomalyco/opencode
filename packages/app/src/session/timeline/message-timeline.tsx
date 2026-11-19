@@ -198,6 +198,15 @@ function MessageTimelineView(
   const showHeader = createMemo(() => !props.hideHeader && (props.data.showHeader() || workspaceSession()))
   const messageByID = projection.messageByID
 
+  const laneSpacing = createMemo(() => {
+    if (!props.next) return
+    const active = projection.activeMessageID()
+
+    if (!active) return
+
+    return laneGap(projection.rows(), active, messageByID())
+  })
+
   const virtualized = createTimelineVirtualizer({
     active: () => props.active !== false,
     sessionKey: () => `${server.key}/${props.data.sessionID()}`,
@@ -213,6 +222,8 @@ function MessageTimelineView(
     setScrollRef: props.setScrollRef,
     onContentResize: props.onContentResize,
     bottomInset: () => props.bottomInset ?? 0,
+    // The status line's gap above it (--timeline-gap-* in timeline-next.css) past the old lane's 16px.
+    tailExtra: () => ({ s: 0, m: 4, l: 16 })[laneSpacing() ?? "s"],
     setVisibleRef: props.setVisibleRef,
     onScheduleScrollState: props.onScheduleScrollState,
     onUserScroll: props.onUserScroll,
@@ -478,15 +489,6 @@ function MessageTimelineView(
     const active = projection.activeMessageID()
 
     return projection.rows().some((row) => Predicate.isTagged(row, "Thinking") && row.userMessageID === active)
-  })
-
-  const laneSpacing = createMemo(() => {
-    if (!props.next) return
-    const active = projection.activeMessageID()
-
-    if (!active) return
-
-    return laneGap(projection.rows(), active, messageByID())
   })
 
   const working = () => {
