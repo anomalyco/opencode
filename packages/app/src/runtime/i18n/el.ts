@@ -1177,7 +1177,6 @@ export const dict = {
   "session.activity.shells.other": "{{count}} κελύφη",
   "session.activity.scripts.one": "{{count}} σενάριο",
   "session.activity.scripts.other": "{{count}} σενάρια",
-  "session.activity.background": "Εργασία στο παρασκήνιο",
   "session.activity.shell.back": "Πίσω στην εργασία παρασκηνίου",
   "session.activity.shell.stop": "Διακοπή",
   "session.activity.shell.stopping": "Διακοπή…",

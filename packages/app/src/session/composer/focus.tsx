@@ -9,6 +9,7 @@ import {
   type ParentProps,
 } from "solid-js"
 import { useDialog } from "@opencode/ui/context/dialog"
+import { focusField } from "@opencode/ui/context/field-focus"
 import { setCursorPosition } from "@/composer/editor/dom"
 import {
   createComposerFocusState,
@@ -122,7 +123,7 @@ function createComposerFocus() {
 
     // A control chosen while the session was loading owns focus now.
     if (active && active !== document.body && active !== opener && !isTitlebarTabLink(active)) return "claimed"
-    element.focus({ preventScroll: true })
+    focusField(element, false, { preventScroll: true })
     setCursorPosition(element, effect.cursor)
 
     return "focused"

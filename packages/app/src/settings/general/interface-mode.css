@@ -13,13 +13,12 @@
   --preview-ink-strong: var(--v2-background-bg-layer-04);
   position: relative;
   display: flex;
-  overflow: hidden;
   /* A fixed size keeps the row from resizing when the chosen layout changes the panel width. */
   width: 120px;
   min-width: 0;
   flex-direction: column;
   box-sizing: border-box;
-  border: 1px solid var(--v2-border-border-base);
+  border: 1px solid var(--v2-border-border-muted);
   border-radius: 8px;
   background-color: var(--v2-background-bg-layer-02);
   cursor: pointer;
@@ -29,19 +28,13 @@
     border-color: var(--v2-border-border-strong);
   }
 
+  &:not([data-checked]) [data-slot="interface-mode-sketch"] {
+    opacity: 0.45;
+  }
+
   &[data-checked] {
     --preview-ink-strong: color-mix(in srgb, var(--v2-background-bg-accent) 70%, transparent);
-    border-color: var(--v2-border-border-focus);
-
-    /* An inset shadow on the card paints under the opaque name row, so the inner ring sits on top instead. */
-    &::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      border-radius: 7px;
-      box-shadow: inset 0 0 0 1px var(--v2-border-border-focus);
-      pointer-events: none;
-    }
+    border-color: var(--v2-border-border-strong);
   }
 
   &:has(input:focus-visible) {
@@ -187,6 +180,8 @@
   text-overflow: ellipsis;
   color: var(--v2-text-text-muted);
   background-color: var(--v2-background-bg-base);
+  /* The card doesn't clip, so its check can sit outside the corner. */
+  border-radius: 0 0 7px 7px;
   transition: color 120ms ease;
 
   [data-slot="interface-mode-option"]:hover &,
@@ -211,7 +206,7 @@
   width: 120px;
   flex-direction: column;
   box-sizing: border-box;
-  border: 1px solid var(--v2-border-border-base);
+  border: 1px solid var(--v2-border-border-muted);
   border-radius: 8px;
   background-color: var(--v2-background-bg-base);
   cursor: pointer;
@@ -221,9 +216,12 @@
     border-color: var(--v2-border-border-strong);
   }
 
+  &:not([data-checked]) [data-slot="navigation-mode-sketch"] {
+    opacity: 0.45;
+  }
+
   &[data-checked] {
-    border-color: var(--v2-border-border-focus);
-    box-shadow: inset 0 0 0 1px var(--v2-border-border-focus);
+    border-color: var(--v2-border-border-strong);
   }
 
   &:has(input:focus-visible) {
@@ -344,5 +342,38 @@
   [data-slot="navigation-mode-option"]:hover &,
   [data-checked] & {
     color: var(--v2-text-text-base);
+  }
+}
+
+/* Selection is a 2px neutral border and a check outside the corner, so it never reads as the blue keyboard ring. The
+   second pixel is an overlay, because an inset shadow would sit under the name's background. */
+:is([data-slot="interface-mode-option"], [data-slot="navigation-mode-option"])[data-checked]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 7px;
+  box-shadow: inset 0 0 0 1px var(--v2-border-border-strong);
+  pointer-events: none;
+}
+
+:is([data-slot="interface-mode-option"], [data-slot="navigation-mode-option"]) > [data-slot="mode-option-check"] {
+  position: absolute;
+  z-index: 1;
+  top: -7px;
+  inset-inline-end: -7px;
+  display: flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background-color: var(--v2-icon-icon-muted);
+  color: var(--v2-background-bg-base);
+  box-shadow: 0 0 0 2px var(--v2-background-bg-layer-01);
+}
+
+@media (forced-colors: active) {
+  :is([data-slot="interface-mode-option"], [data-slot="navigation-mode-option"]) > [data-slot="mode-option-check"] {
+    border: 1px solid CanvasText;
   }
 }

@@ -895,7 +895,7 @@ function ViewerShell(props: {
       data-mode={props.mode}
       dir="ltr"
       style={styleVariables}
-      class="relative select-text outline-none"
+      class="relative select-text"
       classList={{
         ...props.classList,
         [props.class ?? ""]: !!props.class,

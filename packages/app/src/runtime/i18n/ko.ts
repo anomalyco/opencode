@@ -1146,7 +1146,6 @@ export const dict = {
   "session.activity.shells.other": "셸 {{count}}개",
   "session.activity.scripts.one": "스크립트 {{count}}개",
   "session.activity.scripts.other": "스크립트 {{count}}개",
-  "session.activity.background": "백그라운드 작업",
   "session.activity.shell.back": "백그라운드 작업으로 돌아가기",
   "session.activity.shell.stop": "중지",
   "session.activity.shell.stopping": "중지 중…",

@@ -361,14 +361,6 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
         "",
       )
 
-    // "Background work · 1 shell": an idle subagent whose tree still runs work.
-    const activityBackground = (counts: { subagents: number; scripts: number; shells: number }) => {
-      const work = activitySummary(counts)
-      const label = t("session.activity.background")
-
-      return work ? t("session.activity.summary", { subagents: label, shells: work }) : label
-    }
-
     const tDynamic = <Key extends Extract<keyof Dictionary, string>>(
       key: TranslationKey<Key>,
       source: string,
@@ -443,7 +435,6 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       pluralForm,
       activitySummary,
       activitySummaryRich,
-      activityBackground,
       rich,
       list,
       setLocale(next: Locale) {

@@ -19,6 +19,7 @@ import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { InlineInput } from "@opencode/ui/inline-input"
 import { LineComment, LineCommentOverflowIcon } from "@opencode/ui/line-comment"
+import { ProjectAvatar } from "@opencode/ui/project-avatar"
 import { RadioGroup, RadioItem } from "@opencode/ui/radio"
 import { SegmentedControl, SegmentedControlItem } from "@opencode/ui/segmented-control"
 import { Select } from "@opencode/ui/select"
@@ -27,7 +28,7 @@ import { Switch } from "@opencode/ui/switch"
 import { Tabs } from "@opencode/ui/tabs"
 import { TextInput } from "@opencode/ui/text-input"
 import { Textarea } from "@opencode/ui/textarea"
-import { createEffect, For, onCleanup, type JSX } from "solid-js"
+import { createEffect, For, onCleanup, Show, type JSX } from "solid-js"
 import { focusTarget, forceFocusStyles } from "./force-focus"
 
 type Specimen = {
@@ -36,9 +37,11 @@ type Specimen = {
   render: () => JSX.Element
   // The element that would hold focus. Defaults to the first focusable element in the specimen.
   target?: string
+  // What changed to bring it in line with the focus decisions (design review, 18 Nov).
+  note?: string
 }
 
-type Group = { name: string; css: string; specimens: Specimen[] }
+type Group = { name: string; css: string; note?: string; specimens: Specimen[] }
 
 const schemes = ["lab", "light", "dark"] as const
 
@@ -61,8 +64,9 @@ const iconButtonVariants = ["neutral", "contrast", "submit", "ghost", "ghost-mut
 
 const groups: Group[] = [
   {
-    name: "Outline 2px, offset 2.5px",
-    css: "outline: 2px solid var(--v2-border-border-focus); outline-offset: 2.5px",
+    name: "Outline 2px, offset 2px (default)",
+    css: "outline: 2px solid var(--v2-border-border-focus); outline-offset: 2px",
+    note: "The default for every control with room around it. Keyboard and screen reader focus only (:focus-visible), never a mouse click. Offsets were 2.5px, 2px and 1px; 2.5px became 2px, which also stays crisp at 1x.",
     specimens: [
       ...buttonVariants.map((variant) => ({
         name: `Button ${variant}`,
@@ -75,6 +79,61 @@ const groups: Group[] = [
         render: () => <IconButton variant={variant} icon={<Icon name="plus" />} aria-label="Add" />,
       })),
       {
+        name: "Timeline jump to latest",
+        source: "app/src/session/timeline/virtualizer.tsx",
+        note: "A Tab stop while it shows, the only quick way back down a long timeline from the keyboard. Its container is inert while it's hidden.",
+        render: () => (
+          <button
+            type="button"
+            aria-label="Jump to latest"
+            class="flex items-center justify-center w-8 h-7 px-2 py-1.5 rounded-lg border-none cursor-pointer text-v2-text-text-base backdrop-blur-[2px] hover:bg-[linear-gradient(var(--v2-overlay-simple-overlay-hover),var(--v2-overlay-simple-overlay-hover))]"
+          >
+            <Icon name="chevron-down" />
+          </button>
+        ),
+      },
+      {
+        name: "Button loading",
+        source: "ui/src/actions/button/button.css",
+        note: "Keeps the ring while it keeps focus. aria-busy and its loading text say it is working.",
+        render: () => <Button variant="loading">Loading</Button>,
+      },
+      {
+        name: "New session project selector",
+        source: "app/src/new-session/view.tsx",
+        render: () => (
+          <button
+            type="button"
+            class="flex h-7 items-center gap-1.5 rounded-[4px] ps-1.5 pe-2 text-13-regular text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover"
+          >
+            Project
+            <Icon name="chevron-down" />
+          </button>
+        ),
+      },
+      {
+        name: "Session header project",
+        source: "app/src/session/session-identity-header.tsx",
+        note: "Was background only. Keyboard focus now uses the default ring; the background still indicates hover and an open menu.",
+        render: () => (
+          <button type="button" class="h-7 rounded-[6px] px-1.5 text-13-regular">
+            opencode
+          </button>
+        ),
+      },
+      {
+        name: "Editable session title",
+        source: "app/src/session/timeline/message-timeline.tsx",
+        note: "Was a clickable heading outside the tab order. The heading now contains a native button with the default ring.",
+        render: () => (
+          <h1 class="text-13-medium">
+            <button type="button" class="h-7 rounded-[6px] px-1">
+              Test message
+            </button>
+          </h1>
+        ),
+      },
+      {
         name: "Composer lane pill",
         source: "app/src/session/composer/composer-lane.css",
         render: () => (
@@ -83,12 +142,115 @@ const groups: Group[] = [
           </button>
         ),
       },
-    ],
-  },
-  {
-    name: "Outline 2px, offset 2px",
-    css: "outline: 2px solid var(--v2-border-border-focus); outline-offset: 2px",
-    specimens: [
+      {
+        name: "Checkbox standard (legacy)",
+        source: "ui/src/forms/checkbox/checkbox.css",
+        note: "Was a box-shadow ring (--shadow-xs-border-focus) with a blue border. Now the default outline.",
+        render: () => <Checkbox defaultChecked>Standard checkbox</Checkbox>,
+      },
+      {
+        name: "Switch standard (legacy)",
+        source: "ui/src/forms/switch/switch.css",
+        note: "Was a box-shadow ring (--shadow-xs-border-focus) with a blue border. Now the default outline.",
+        render: () => (
+          <Switch appearance="standard" defaultChecked>
+            Standard switch
+          </Switch>
+        ),
+      },
+      {
+        name: "Project colour swatch",
+        source: "app/src/settings/workspaces/project.css",
+        note: "Was a blue box-shadow ring shared with selection. Focus is now the default outline and selection a neutral ring.",
+        render: () => (
+          <button
+            type="button"
+            class="project-settings-color"
+            aria-label="Blue"
+            style={{ width: "24px", height: "24px", background: "var(--v2-blue-500)" }}
+          />
+        ),
+      },
+      {
+        name: "Sources chip",
+        source: "session-ui/src/sources/sources.css",
+        note: "Was 1px at a 1px offset.",
+        render: () => (
+          <button type="button" data-component="sources-chip">
+            3 sources
+          </button>
+        ),
+      },
+      {
+        name: "Session compaction toggle",
+        source: "session-ui/src/components/session-compaction.css",
+        note: "Was 1px in --v2-text-text-accent at a 2px offset.",
+        render: () => (
+          <div data-component="session-compaction-message" data-quiet>
+            <button type="button" data-slot="session-compaction-divider">
+              Compacted
+            </button>
+          </div>
+        ),
+      },
+      {
+        name: "Markdown session link",
+        source: "session-ui/src/components/markdown.css",
+        note: "Was 2px currentColor at a 2px offset.",
+        render: () => (
+          <a href="#focus-rings" class="markdown-session-link">
+            Session link
+          </a>
+        ),
+      },
+      {
+        name: "Prompt link",
+        source: "session-ui/src/components/message-part.css",
+        note: "Had no authored rule, so it showed the browser default ring.",
+        render: () => (
+          <div data-component="user-message">
+            <div data-slot="user-message-text">
+              <a data-slot="user-message-link" href="#focus-rings">
+                https://example.com/start
+              </a>
+            </div>
+          </div>
+        ),
+      },
+      {
+        name: "External link, and anything else without its own rule",
+        source: "ui/src/styles/base.css",
+        note: "Showed the browser's ring, in the system accent colour (orange with an orange macOS accent). base.css now makes the shared ring the default for every :focus-visible element, and gives links the 4px radius the other rings have.",
+        render: () => (
+          <a
+            href="#focus-rings"
+            class="inline-flex items-center gap-1.5 text-13-regular text-v2-text-text-muted underline"
+          >
+            Help &amp; feedback
+            <Icon name="arrow-up-right" size="small" />
+          </a>
+        ),
+      },
+      {
+        name: "Collapsible trigger",
+        source: "ui/src/components/collapsible.css",
+        note: "Was background only, like a list row, though it is a standalone disclosure (Settings › Timeline › Advanced). Now the default ring, with a 4px radius. The new timeline's tool rows ring their line of text instead (timeline-next.css).",
+        render: () => (
+          <Collapsible variant="ghost">
+            <Collapsible.Trigger>
+              <span>Advanced</span>
+              <Collapsible.Arrow />
+            </Collapsible.Trigger>
+            <Collapsible.Content>Content</Collapsible.Content>
+          </Collapsible>
+        ),
+      },
+      {
+        name: "Select inline",
+        source: "ui/src/forms/select/select.css",
+        note: "Had no ring: inline appearance removes the outline that focus recolours. Now the default outline.",
+        render: () => <Select options={["English", "Deutsch"]} current="English" onSelect={() => undefined} />,
+      },
       {
         name: "Checkbox compact",
         source: "ui/src/forms/checkbox/checkbox-compact.css",
@@ -141,20 +303,16 @@ const groups: Group[] = [
           </a>
         ),
       },
-    ],
-  },
-  {
-    name: "Outline 2px, offset 1px",
-    css: "outline: 2px solid var(--v2-border-border-focus); outline-offset: 1px",
-    specimens: [
       {
         name: "Switch compact",
         source: "ui/src/forms/switch/switch.css",
+        note: "Was a 1px offset. It has room around it, so it takes the default.",
         render: () => <Switch defaultChecked>Compact switch</Switch>,
       },
       {
         name: "Radio",
         source: "ui/src/forms/radio/radio.css",
+        note: "Was a 1px offset. It has room around it, so it takes the default.",
         render: () => (
           <RadioGroup label="Radio" defaultValue="one" name="focus-ring-radio">
             <RadioItem value="one" label="Selected" />
@@ -163,33 +321,9 @@ const groups: Group[] = [
         ),
       },
       {
-        name: "SegmentedControl item",
-        source: "ui/src/navigation/segmented-control/segmented-control.css",
-        render: () => (
-          <SegmentedControl defaultValue="one" aria-label="Segmented">
-            <SegmentedControlItem value="one">One</SegmentedControlItem>
-            <SegmentedControlItem value="two">Two</SegmentedControlItem>
-          </SegmentedControl>
-        ),
-      },
-      {
-        name: "TextInput clear button",
-        source: "ui/src/forms/text-input/text-input.css",
-        target: '[data-slot="text-input-v2-icon-button"]',
-        render: () => <TextInput value="Clearable" showClearButton clearLabel="Clear" />,
-      },
-      {
-        name: "Question progress segment",
-        source: "session-ui/src/components/question-prompt.css",
-        render: () => (
-          <div data-component="dock-prompt" data-kind="question">
-            <button type="button" data-slot="question-progress-segment" aria-label="Question 1" />
-          </div>
-        ),
-      },
-      {
         name: "Field label info",
         source: "ui/src/forms/field/field.css",
+        note: "Was a 1px offset. It has room around it, so it takes the default.",
         target: '[data-slot="field-v2-label-info"]',
         render: () => (
           <Field>
@@ -203,7 +337,144 @@ const groups: Group[] = [
   {
     name: "Outline 2px, inset (offset -2px)",
     css: "outline: 2px solid var(--v2-border-border-focus); outline-offset: -2px",
+    note: "The same ring drawn inside, for controls that fill a row, strip or list, or sit flush with a container that clips or scrolls.",
     specimens: [
+      {
+        name: "Titlebar ghost-muted IconButton",
+        source: "app/src/shell/titlebar/titlebar.css",
+        note: "Was background only. The titlebar draws the ring inset because its row clips the buttons.",
+        render: () => (
+          <div data-slot="titlebar-v2">
+            <IconButton variant="ghost-muted" icon={<Icon name="plus" />} aria-label="New tab" />
+          </div>
+        ),
+      },
+      {
+        name: "Titlebar session tab",
+        source: "app/src/shell/titlebar/titlebar.css",
+        note: "The rounded tab wrapper rings when its link has keyboard focus.",
+        render: () => (
+          <div data-slot="titlebar-tab-item" class="overflow-hidden rounded-[6px] bg-v2-background-bg-layer-02">
+            <a data-titlebar-tab-link href="#focus-rings" class="block px-2 py-1.5 text-13-medium">
+              Test message
+            </a>
+          </div>
+        ),
+      },
+      {
+        name: "SegmentedControl item",
+        source: "ui/src/navigation/segmented-control/segmented-control.css",
+        note: "Was a 1px offset, which ran into the neighbouring item and the track. Now inset.",
+        render: () => (
+          <SegmentedControl defaultValue="one" aria-label="Segmented">
+            <SegmentedControlItem value="one">One</SegmentedControlItem>
+            <SegmentedControlItem value="two">Two</SegmentedControlItem>
+          </SegmentedControl>
+        ),
+      },
+      {
+        name: "TextInput clear button",
+        source: "ui/src/forms/text-input/text-input.css",
+        target: '[data-slot="text-input-v2-icon-button"]',
+        note: "Was a 1px offset, which ran into the input's edge. Now inset.",
+        render: () => <TextInput value="Clearable" showClearButton clearLabel="Clear" />,
+      },
+      {
+        name: "Question progress segment",
+        source: "session-ui/src/components/question-prompt.css, question-prompt-experimental.css",
+        note: "Was a 1px offset; segments sit 2px apart, so an outset ring overlapped the next one. Now inset.",
+        render: () => (
+          <div data-component="dock-prompt" data-kind="question">
+            <button type="button" data-slot="question-progress-segment" aria-label="Question 1" />
+          </div>
+        ),
+      },
+      {
+        name: "Tabs line (v2)",
+        source: "ui/src/navigation/tabs/tabs-current.css",
+        note: "Had no ring: :focus and :focus-visible both removed it. The ring goes on the whole tab, so it follows the tab's radius. Also covers the Settings navigation tabs.",
+        render: () => (
+          <Tabs variant="line" defaultValue="one">
+            <Tabs.List>
+              <Tabs.Trigger value="one">One</Tabs.Trigger>
+              <Tabs.Trigger value="two">Two</Tabs.Trigger>
+            </Tabs.List>
+          </Tabs>
+        ),
+      },
+      {
+        name: "Tabs pill (v2)",
+        source: "ui/src/navigation/tabs/tabs-current.css",
+        note: "Had no ring, same rule as the line tabs.",
+        render: () => (
+          <Tabs variant="pill" defaultValue="one">
+            <Tabs.List>
+              <Tabs.Trigger value="one">One</Tabs.Trigger>
+              <Tabs.Trigger value="two">Two</Tabs.Trigger>
+            </Tabs.List>
+          </Tabs>
+        ),
+      },
+      {
+        name: "Tabs panel (legacy)",
+        source: "ui/src/navigation/tabs/tabs.css",
+        note: "Had no ring. The ring goes on the whole tab, close button included. Used by the side panel's tab strip.",
+        render: () => (
+          <Tabs variant="panel" defaultValue="one">
+            <Tabs.List>
+              <Tabs.Trigger value="one">One</Tabs.Trigger>
+              <Tabs.Trigger value="two">Two</Tabs.Trigger>
+            </Tabs.List>
+          </Tabs>
+        ),
+      },
+      {
+        name: "Accordion trigger",
+        source: "ui/src/data-display/accordion/accordion.css",
+        note: "Had no ring: outline: none with nothing in its place. Fixes the changed file rows.",
+        render: () => (
+          <div style={{ width: "220px" }}>
+            <Accordion collapsible>
+              <Accordion.Item value="one">
+                <Accordion.Header>
+                  <Accordion.Trigger>Accordion trigger</Accordion.Trigger>
+                </Accordion.Header>
+                <Accordion.Content>Content</Accordion.Content>
+              </Accordion.Item>
+            </Accordion>
+          </div>
+        ),
+      },
+      {
+        name: "Settings project row",
+        source: "app/src/settings/settings.css, settings/workspaces/project-row.tsx",
+        note: "Was a 1px inset box-shadow on the row's inner button, inside the row's highlight. Now the ring is on the whole row, with its radius.",
+        render: () => (
+          <div style={{ width: "260px" }}>
+            <div role="listitem" data-component="settings-project-card" class="settings-project-card">
+              <button
+                type="button"
+                class="flex h-full min-w-0 flex-1 items-center gap-2 rounded-[4px] bg-transparent text-start focus-visible:outline-none"
+              >
+                <ProjectAvatar fallback="O" variant="blue" class="!size-5" />
+                <span class="text-[13px] font-[530]">opencode</span>
+              </button>
+            </div>
+          </div>
+        ),
+      },
+      {
+        name: "Question option",
+        source: "session-ui/src/components/question-prompt.css",
+        note: "Was 1px at a -1px offset.",
+        render: () => (
+          <div data-component="dock-prompt" data-kind="question" style={{ width: "220px" }}>
+            <button type="button" data-slot="question-option">
+              Option
+            </button>
+          </div>
+        ),
+      },
       {
         name: "SplitButton action",
         source: "ui/src/actions/split-button/split-button.css",
@@ -284,92 +555,9 @@ const groups: Group[] = [
     ],
   },
   {
-    name: "Outline 1px, thin",
-    css: "outline: 1px solid var(--v2-border-border-focus | --v2-text-text-accent); outline-offset: 1px | 2px",
-    specimens: [
-      {
-        name: "Sources chip",
-        source: "session-ui/src/sources/sources.css (border-focus, offset 1px)",
-        render: () => (
-          <button type="button" data-component="sources-chip">
-            3 sources
-          </button>
-        ),
-      },
-      {
-        name: "Question option",
-        source: "session-ui/src/components/question-prompt.css (border-focus, offset -1px)",
-        render: () => (
-          <div data-component="dock-prompt" data-kind="question" style={{ width: "220px" }}>
-            <button type="button" data-slot="question-option">
-              Option
-            </button>
-          </div>
-        ),
-      },
-      {
-        name: "Session compaction toggle",
-        source: "session-ui/src/components/session-compaction.css (text-accent, offset 2px)",
-        render: () => (
-          <div data-component="session-compaction-message" data-quiet>
-            <button type="button" data-slot="session-compaction-divider">
-              Compacted
-            </button>
-          </div>
-        ),
-      },
-    ],
-  },
-  {
-    name: "Outline 2px currentColor",
-    css: "outline: 2px solid currentColor; outline-offset: 2px",
-    specimens: [
-      {
-        name: "Markdown session link",
-        source: "session-ui/src/components/markdown.css",
-        render: () => (
-          <a href="#focus-rings" class="markdown-session-link">
-            Session link
-          </a>
-        ),
-      },
-    ],
-  },
-  {
-    name: "Box-shadow ring",
-    css: "box-shadow: var(--shadow-xs-border-focus) | 0 0 0 2px bg, 0 0 0 4px var(--v2-border-border-focus)",
-    specimens: [
-      {
-        name: "Checkbox standard (legacy)",
-        source: "ui/src/forms/checkbox/checkbox.css",
-        render: () => <Checkbox defaultChecked>Standard checkbox</Checkbox>,
-      },
-      {
-        name: "Switch standard (legacy)",
-        source: "ui/src/forms/switch/switch.css",
-        render: () => (
-          <Switch appearance="standard" defaultChecked>
-            Standard switch
-          </Switch>
-        ),
-      },
-      {
-        name: "Project colour swatch",
-        source: "app/src/settings/workspaces/project.css",
-        render: () => (
-          <button
-            type="button"
-            class="project-settings-color"
-            aria-label="Blue"
-            style={{ width: "24px", height: "24px", background: "var(--v2-blue-500)" }}
-          />
-        ),
-      },
-    ],
-  },
-  {
     name: "Background only (no ring)",
     css: "outline: none; background: var(--v2-overlay-simple-overlay-hover) or similar",
+    note: "By decision: rows in a list that moves the highlight with the arrow keys show the highlight, not a ring.",
     specimens: [
       {
         name: "Palette menu row",
@@ -389,116 +577,17 @@ const groups: Group[] = [
           </button>
         ),
       },
-      {
-        name: "Collapsible trigger",
-        source: "ui/src/components/collapsible.css",
-        render: () => (
-          <Collapsible>
-            <Collapsible.Trigger>Collapsible trigger</Collapsible.Trigger>
-            <Collapsible.Content>Content</Collapsible.Content>
-          </Collapsible>
-        ),
-      },
-      {
-        name: "Titlebar ghost-muted IconButton",
-        source: "app/src/shell/titlebar/titlebar.css",
-        render: () => (
-          <div data-slot="titlebar-v2">
-            <IconButton variant="ghost-muted" icon={<Icon name="plus" />} aria-label="New tab" />
-          </div>
-        ),
-      },
-      {
-        name: "Session identity / new session selectors",
-        source: "app/src/session/session-identity-header.tsx (Tailwind)",
-        render: () => (
-          <button
-            type="button"
-            class="relative flex h-7 items-center gap-2 rounded-[6px] px-1.5 text-[13px] text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none"
-          >
-            Session title
-          </button>
-        ),
-      },
     ],
   },
   {
-    name: "No focus ring",
-    css: "outline: none with no replacement, or no :focus-visible rule",
+    name: "No focus ring, by decision",
+    css: "outline: none, and nothing in its place",
+    note: "Controls the review agreed take no ring.",
     specimens: [
-      {
-        name: "Tabs line (v2)",
-        source: "ui/src/navigation/tabs/tabs-current.css",
-        render: () => (
-          <Tabs variant="line" defaultValue="one">
-            <Tabs.List>
-              <Tabs.Trigger value="one">One</Tabs.Trigger>
-              <Tabs.Trigger value="two">Two</Tabs.Trigger>
-            </Tabs.List>
-          </Tabs>
-        ),
-      },
-      {
-        name: "Tabs pill (v2)",
-        source: "ui/src/navigation/tabs/tabs-current.css",
-        render: () => (
-          <Tabs variant="pill" defaultValue="one">
-            <Tabs.List>
-              <Tabs.Trigger value="one">One</Tabs.Trigger>
-              <Tabs.Trigger value="two">Two</Tabs.Trigger>
-            </Tabs.List>
-          </Tabs>
-        ),
-      },
-      {
-        name: "Tabs panel (legacy)",
-        source: "ui/src/navigation/tabs/tabs.css",
-        render: () => (
-          <Tabs variant="panel" defaultValue="one">
-            <Tabs.List>
-              <Tabs.Trigger value="one">One</Tabs.Trigger>
-              <Tabs.Trigger value="two">Two</Tabs.Trigger>
-            </Tabs.List>
-          </Tabs>
-        ),
-      },
-      {
-        name: "Accordion trigger",
-        source: "ui/src/data-display/accordion/accordion.css",
-        render: () => (
-          <div style={{ width: "220px" }}>
-            <Accordion collapsible>
-              <Accordion.Item value="one">
-                <Accordion.Header>
-                  <Accordion.Trigger>Accordion trigger</Accordion.Trigger>
-                </Accordion.Header>
-                <Accordion.Content>Content</Accordion.Content>
-              </Accordion.Item>
-            </Accordion>
-          </div>
-        ),
-      },
-      {
-        name: "Timeline scroll to bottom",
-        source: "app/src/session/timeline/virtualizer.tsx (focus-visible:outline-2 loses to outline-none)",
-        render: () => (
-          <button
-            type="button"
-            aria-label="Scroll to bottom"
-            class="pointer-events-auto flex items-center justify-center w-8 h-7 px-2 py-1.5 rounded-lg border-none cursor-pointer text-v2-text-text-base backdrop-blur-[2px] outline-none hover:bg-[linear-gradient(var(--v2-overlay-simple-overlay-hover),var(--v2-overlay-simple-overlay-hover))] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-border-border-focus"
-          >
-            <Icon name="chevron-down" />
-          </button>
-        ),
-      },
-      {
-        name: "Button loading",
-        source: "ui/src/actions/button/button.css",
-        render: () => <Button variant="loading">Loading</Button>,
-      },
       {
         name: "InlineInput",
         source: "ui/src/forms/inline-input/inline-input.css",
+        note: "Borderless while editing: the caret and the text field show the edit.",
         render: () => <InlineInput value="Inline input" />,
       },
     ],
@@ -546,6 +635,8 @@ function FocusRings(props: FocusArgs) {
         <h1 style={{ ...heading, "font-size": "18px" }}>Focus rings</h1>
         <p style={{ ...label, margin: "0" }}>
           Every focus treatment in the desktop and web UI, grouped by how it looks, each shown with focus forced on.
+          Notes say what changed to follow the design review of 18 November. The default ring is Blue 500 in light mode
+          and Blue 400 in dark mode.
         </p>
       </header>
       <For each={groups}>
@@ -554,6 +645,7 @@ function FocusRings(props: FocusArgs) {
             <div style={{ display: "grid", gap: "4px" }}>
               <h2 style={heading}>{group.name}</h2>
               <code style={{ ...label, "font-family": "var(--font-family-mono)" }}>{group.css}</code>
+              <Show when={group.note}>{(note) => <p style={{ ...label, margin: "0" }}>{note()}</p>}</Show>
             </div>
             <div
               style={{ display: "grid", "grid-template-columns": "repeat(auto-fill, minmax(320px, 1fr))", gap: "12px" }}
@@ -583,6 +675,9 @@ function FocusRings(props: FocusArgs) {
                       <span style={{ ...label, "font-family": "var(--font-family-mono)", "font-size": "11px" }}>
                         {specimen.source}
                       </span>
+                      <Show when={specimen.note}>
+                        {(note) => <span style={{ ...label, color: "var(--v2-state-fg-success)" }}>{note()}</span>}
+                      </Show>
                     </figcaption>
                   </figure>
                 )}
