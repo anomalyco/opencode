@@ -41,7 +41,8 @@ const searchToolsNode = makeLocationNode({
 const sessionID = Session.ID.make("ses_search_target_environment_test")
 
 describe("search tools", () => {
-  it.live("check and search the resolved target's environment, not the session's", () =>
+  // Search runs a ripgrep binary on the server, so a target elsewhere is refused until search can run where the files are.
+  it.live("refuse a target in another environment instead of searching this server's disk", () =>
     withTempDir((tmp) =>
       Effect.gen(function* () {
         yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "notes.txt"), "needle\n"))
@@ -62,14 +63,14 @@ describe("search tools", () => {
 
         yield* Effect.gen(function* () {
           const registry = yield* Tool.Service
-          expect(yield* execute(registry, "grep", { pattern: "needle" })).toMatchObject({
-            status: "completed",
-            output: [{ entry: { path: "notes.txt" }, line: 1 }],
-          })
-          expect(yield* execute(registry, "glob", { pattern: "*.txt" })).toMatchObject({
-            status: "completed",
-            output: [{ path: "notes.txt", type: "file" }],
-          })
+          for (const [name, input] of [
+            ["grep", { pattern: "needle" }],
+            ["glob", { pattern: "*.txt" }],
+          ] as const) {
+            const result = yield* execute(registry, name, input)
+            expect(result.status).toBe("error")
+            expect(result.error?.message).toBe("Search is not available on elsewhere yet.")
+          }
         }).pipe(
           Effect.provide(
             AppNodeBuilder.build(LayerNode.group([Tool.node, searchToolsNode]), [
@@ -90,10 +91,7 @@ describe("search tools", () => {
           ),
         )
 
-        expect(targetSpawns).toMatchObject([
-          { args: expect.arrayContaining(["--json", "needle"]) },
-          { args: expect.arrayContaining(["--files", "--glob=*.txt"]) },
-        ])
+        expect(targetSpawns).toEqual([])
         expect(sessionSpawns).toEqual([])
       }),
     ),

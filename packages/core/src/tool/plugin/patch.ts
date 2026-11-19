@@ -12,7 +12,6 @@ import { toolFailure } from "../runtime.js"
 import { Environment } from "../../environment/index.js"
 import { Formatter } from "../../formatter.js"
 import { FileMutation } from "../../file-mutation.js"
-import { Location } from "../../location.js"
 import { FileAccess } from "../../file-access.js"
 import { Patch } from "@opencode/util/patch"
 import { Permission } from "../../permission.js"
@@ -56,7 +55,6 @@ export const Plugin = {
     const access = yield* FileAccess.Service
     const fileMutation = yield* FileMutation.Service
     const formatter = yield* Formatter.Service
-    const location = yield* Location.Service
     const permission = yield* Permission.Service
     const config = yield* Config.Service
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
@@ -84,13 +82,11 @@ export const Plugin = {
             const completed: string[] = []
             const parsed = Patch.parse(input.patchText)
             // The lock is taken before any path resolves, because resolving asks for approval one hunk at a time.
-            // These are still paths, so the lock places them in the session's environment.
+            // The lock locates each typed path, so one that names a machine locks on that machine.
             const lockTargets = Result.isSuccess(parsed)
               ? parsed.success.flatMap((hunk) => [
-                  FileAccess.resolvePath(location.directory, hunk.path),
-                  ...(hunk.type === "update" && hunk.movePath
-                    ? [FileAccess.resolvePath(location.directory, hunk.movePath)]
-                    : []),
+                  hunk.path,
+                  ...(hunk.type === "update" && hunk.movePath ? [hunk.movePath] : []),
                 ])
               : []
             const fail = (operation: string, error: unknown) => {
