@@ -130,10 +130,12 @@ fn one_loop(program: &str, events: usize) -> Json {
     })
 }
 
-/// `heaps` runs of the six programs in turn; the first `active` get an event each frame.
+/// `heaps` runs of the six small programs in turn; the first `active` get an event each frame.
 fn many(heaps: usize, active: usize, frames: usize) -> Json {
+    // The six small programs: `large` is the one-heap case of a big live set.
+    let mix = &PROGRAMS[..6];
     let mut runs: Vec<LiveRun> = (0..heaps)
-        .map(|k| LiveRun::start(PROGRAMS[k % PROGRAMS.len()]))
+        .map(|k| LiveRun::start(mix[k % mix.len()]))
         .collect();
     let idle_before: Vec<u64> = runs[active..].iter().map(|r| r.stats().steps).collect();
     let live_setup = LIVE.load(Ordering::Relaxed);
