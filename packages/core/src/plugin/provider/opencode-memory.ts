@@ -612,15 +612,28 @@ export const make = Effect.fnUntraced(function* (
           })
           yield* resolved("publish", Schema.decodeUnknownOption(Paths)(fields.paths).pipe(Option.getOrUndefined))
           yield* committed("publish", fields)
-          // A duplicate refusal is fine: Console records this session as having found the same lesson.
+          const set = yield* reader
+          // A duplicate refusal records this session as having found the same lesson. The user's confirmation goes to the
+          // entry that already says it, such as one the agent published itself when the user stated the rule.
           yield* call(Schema.Struct({ id: Schema.optional(Schema.String) }), "POST", "/api/memory/entries", {
             ...fields,
             source: { ...source, sessionID },
             ...(anchor === undefined ? {} : { anchor }),
             ...(tracked(sessionID).tainted ? { tainted: true } : {}),
-            ...(yield* reader),
+            ...set,
             idempotencyKey: `${sessionID}:${boundary}:${events.from}:${index}`.slice(0, 128),
-          })
+          }).pipe(
+            Effect.catch((cause) => {
+              const existing = duplicateOf(cause)
+              const confirmation = evidence.filter((link) => link.kind === "confirmation")
+              if (existing === undefined || confirmation.length === 0) return Effect.fail(cause)
+              return call(Schema.Unknown, "POST", `/api/memory/entries/${encodeURIComponent(existing)}/evidence`, {
+                evidence: confirmation,
+                source: { ...source, sessionID },
+                ...set,
+              }).pipe(Effect.asVoid)
+            }),
+          )
         }).pipe(Effect.catch((cause) => Effect.logDebug("memory candidate not sent", { cause }))),
       )
     }).pipe(Effect.catch((cause) => Effect.logDebug("memory distillation failed", { cause })))
@@ -1244,6 +1257,13 @@ function relative(directory: string, file: string) {
   if (!path.isAbsolute(file)) return file
   const inside = path.relative(directory, file)
   return inside && !inside.startsWith("..") && !path.isAbsolute(inside) ? inside : file
+}
+
+/** The entry Console said already holds what a refused publish said, if that's why it was refused. */
+function duplicateOf(cause: unknown) {
+  if (!(cause instanceof ToolFailure) || cause.metadata?.tag !== "MemoryDuplicate") return undefined
+  const candidates = cause.metadata.candidates
+  return Array.isArray(candidates) && typeof candidates[0] === "string" ? candidates[0] : undefined
 }
 
 function failure(cause: unknown) {

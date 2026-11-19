@@ -179,6 +179,8 @@ function fakeConsole() {
         state.published.set(key, created)
         return Response.json({ ...created, nearest: state.hits })
       }
+      if (/^\/api\/memory\/entries\/[^/]+\/evidence$/.test(url.pathname) && request.method === "POST")
+        return Response.json({})
       const retired = url.pathname.match(/^\/api\/memory\/entries\/([^/]+)\/retire$/)?.[1]
       if (retired && request.method === "POST") {
         const revision = (state.revisions.get(retired) ?? 1) + 1
@@ -1455,6 +1457,21 @@ describe("OpencodePlugin memory capture", () => {
           const sent = console.state.requests.filter((item) => item.path === "/api/memory/entries")
           expect(sent.map((item) => (item.body as { title: string }).title)).toEqual(["Commit messages name the issue"])
           expect(sent[0]?.body).toMatchObject({ evidence: [{ kind: "confirmation", ref: rule }] })
+
+          // The agent published the rule itself first: the user's confirmation goes to that entry.
+          console.state.duplicate = hit("mem_agent", 0.97, "Commit messages name the issue")
+          yield* prompt(session.id, `${rule}, as I said.`)
+          yield* waitUntil(
+            Effect.sync(() =>
+              console.state.requests.some((item) => item.path === "/api/memory/entries/mem_agent/evidence"),
+            ),
+          )
+          expect(
+            console.state.requests.find((item) => item.path === "/api/memory/entries/mem_agent/evidence")?.body,
+          ).toEqual({
+            evidence: [{ kind: "confirmation", ref: rule }],
+            source: { sessionID: session.id },
+          })
         }),
       ),
   )
@@ -1494,6 +1511,10 @@ describe("OpencodeMemoryCapture", () => {
     expect(boundary([], { type: "commit", sha: "abc" })).toBe("commit")
     expect(boundary([edit], ask("Now add a test"))).toBe("task")
     expect(boundary([edit], ask("No, don't change the config", true))).toBe("correction")
+    // A team rule the user states is a boundary of its own, work or not; a task that only says "never" isn't.
+    expect(boundary([], ask("From now on we always name money parameters with a Cents suffix"))).toBe("rule")
+    expect(boundary([edit], ask("Our convention is one test file per module"))).toBe("rule")
+    expect(boundary([], ask("Add refund(); it must never return more than the original"))).toBeUndefined()
     expect(boundary([edit], { type: "subtask" })).toBe("subtask")
     expect(boundary([edit], { type: "compaction" })).toBe("compaction")
     // Without work in between: no task, correction, subtask or compaction boundary.

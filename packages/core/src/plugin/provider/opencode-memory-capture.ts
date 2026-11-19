@@ -25,15 +25,24 @@ export type Event =
   | { readonly type: "compaction" }
 
 /** A work-unit boundary the harness sees, where what happened since the last one may hold a lesson. */
-export type Boundary = "task" | "commit" | "test" | "correction" | "subtask" | "compaction"
+export type Boundary = "task" | "commit" | "test" | "correction" | "rule" | "subtask" | "compaction"
+
+/**
+ * A user's message that states a standing team rule or decision rather than asking for this task's work. Narrow on
+ * purpose: each one is a distillation of its own.
+ */
+const STATED =
+  /\b(?:from now on|going forward|in this repo(?:sitory)?|(?:we|our team|the team) (?:always|never|use|prefer|don'?t|do not)|our (?:convention|rule|policy|style)|team (?:rule|convention|decision|policy))\b/i
 
 /**
  * The boundary `event` closes after `segment`, the events since the last one, or undefined. A new task message, a
  * commit, a test-like run passing after one failed, a user's correction, a subagent finishing, and compaction as a
- * backstop. Only a commit or a passing run closes a segment without work (no command run, no file changed): a message
- * that reads as a correction corrects work.
+ * backstop. A message stating a team rule is a boundary of its own, so a rule the user states in a session's last turn
+ * isn't lost waiting for the next one. Only these, a commit and a passing run close a segment without work (no command
+ * run, no file changed): a message that reads as a correction corrects work.
  */
 export function boundary(segment: ReadonlyArray<Event>, event: Event): Boundary | undefined {
+  if (event.type === "prompt" && STATED.test(event.text)) return "rule"
   const worked = segment.some((item) => item.type === "shell" || item.type === "edit")
   if (event.type === "commit") return "commit"
   if (event.type === "shell" && event.test && !event.failed)
