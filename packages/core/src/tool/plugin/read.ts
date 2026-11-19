@@ -170,6 +170,9 @@ export const Plugin = {
                 // A cwd on a paired machine brings its instructions with it in a later change.
                 if (result.target.environment.id !== environment.id) return
                 const resolved = yield* fs.resolve(result.target.absolute)
+                // The Location itself may be a symlink (`run` takes its directory from $PWD), so the walk is
+                // lexical while the exclusion also checks the resolved root.
+                const resolvedRoot = yield* fs.resolve(location.directory)
                 // Walk the path the reader asked for, not the link target: a symlinked file or directory inside
                 // the working directory must not discover instructions from the tree it points into.
                 const discovered = yield* fs.up({
@@ -183,7 +186,7 @@ export const Plugin = {
                     (file) => !FSUtil.contains(dirname(file), workingDirectory.absolute),
                   ),
                   fs.resolve,
-                )).filter((file) => file !== resolved)
+                )).filter((file) => file !== resolved && !FSUtil.contains(dirname(file), resolvedRoot))
                 if (candidates.length === 0) return
                 yield* sessionInstructions.load({ sessionID: context.sessionID, paths: candidates })
               }).pipe(
