@@ -18,7 +18,7 @@ const ROOT: &str = "mcp";
 fn setup(setup: &mut abi::Setup) -> Result<(), String> {
     setup.storage_key("view");
     setup.command(Command::new(FOLD), |host, _| {
-        host.storage_merge("view", serde_json::Map::from_iter([("open".to_owned(), json!(!open(host)))]));
+        host.storage_merge("view", serde_json::Map::from_iter([("open".to_owned(), json!(!unfolded(host)))]));
     });
     setup.surface(Surface::new("mcp", Place::Slot(Placement::append(slot::SIDEBAR_CONTENT)), |cx| {
         let Some(session) = cx.input.slot.as_ref().and_then(|slot| slot.session_id.as_deref()) else {
@@ -37,23 +37,14 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
         if list.is_empty() {
             return hidden(ROOT);
         }
-        view(&list, open(cx.read)).with_id(ROOT)
+        view(&list, unfolded(cx.read)).with_id(ROOT)
     }));
     Ok(())
-}
-
-fn open(read: &dyn abi::Read) -> bool {
-    read.storage_get("view").and_then(|value| value.get("open")?.as_bool()).unwrap_or(true)
 }
 
 fn view(list: &[McpServer], open: bool) -> Node {
     let on = list.iter().filter(|item| item.status.tag() == "connected").count();
     let bad = list.iter().filter(|item| matches!(item.status.tag(), "failed" | "needs_auth")).count();
-    let foldable = list.len() > 2;
-    let mut header = Vec::new();
-    if foldable {
-        header.push(Node::text([Span::new(if open { "▼" } else { "▶" }).fg("text.base")]));
-    }
     let mut title = vec![Span::new("MCP").fg("text.base").bold()];
     if !open {
         let errors = match bad {
@@ -63,16 +54,7 @@ fn view(list: &[McpServer], open: bool) -> Node {
         };
         title.push(Span::new(format!(" ({on} active{errors})")).fg("text.muted"));
     }
-    header.push(Node::text(title));
-    let mut header = Node::row(header).gap(1);
-    if foldable {
-        header = header.on_click(Click::command(FOLD).on_down());
-    }
-    let mut children = vec![header];
-    if !foldable || open {
-        children.extend(list.iter().map(row));
-    }
-    Node::column(children)
+    section(FOLD, list.len() > 2, open, title, list.iter().map(row))
 }
 
 fn row(item: &McpServer) -> Node {
@@ -105,4 +87,33 @@ fn row(item: &McpServer) -> Node {
     .gap(1)
     .layout(Layout::default().min_width(0))
     .on_click(Click::command("mcp.list").input(item.name.clone()))
+}
+
+/// Whether a foldable sidebar section (MCP, Todo) is open: its `view` storage's `open`, open by default.
+pub(super) fn unfolded(read: &dyn abi::Read) -> bool {
+    read.storage_get("view").and_then(|value| value.get("open")?.as_bool()).unwrap_or(true)
+}
+
+/// A sidebar section: `title`, behind a fold arrow that runs `fold` when `foldable`, then `rows` unless folded.
+pub(super) fn section(
+    fold: &str,
+    foldable: bool,
+    open: bool,
+    title: Vec<Span>,
+    rows: impl Iterator<Item = Node>,
+) -> Node {
+    let mut header = Vec::new();
+    if foldable {
+        header.push(Node::text([Span::new(if open { "▼" } else { "▶" }).fg("text.base")]));
+    }
+    header.push(Node::text(title));
+    let mut header = Node::row(header).gap(1);
+    if foldable {
+        header = header.on_click(Click::command(fold).on_down());
+    }
+    let mut children = vec![header];
+    if !foldable || open {
+        children.extend(rows);
+    }
+    Node::column(children)
 }
