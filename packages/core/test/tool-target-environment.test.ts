@@ -2,6 +2,7 @@ import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
+import { CodeModeTool } from "@opencode/core/codemode/tool"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -68,33 +69,39 @@ const fileToolsNode = makeLocationNode({
 const sessionID = Session.ID.make("ses_target_environment_test")
 const it = testEffect(Layer.succeed(Flag.Overrides, undefined))
 
+// A session on the host at `directory` whose resolved targets all live in another, in-memory environment.
+const elsewhere = (directory: string) => {
+  const driver = Environment.makeMemoryDriver()
+  const environment: Environment.Interface = { files: Environment.makeFiles(driver), spawner: driver.spawner }
+  const assertions: Permission.AssertInput[] = []
+  const replacements = [
+    Environment.node.replace(hostEnvironmentLayer),
+    Permission.node.replace(permissionLayer({ assert: (input) => Effect.sync(() => void assertions.push(input)) })),
+    Location.node.replace(
+      Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
+    ),
+  ]
+  // Resolves and authorizes exactly as the session does, then places each target in the other environment.
+  const access = Layer.effect(
+    FileAccess.Service,
+    Effect.gen(function* () {
+      const session = yield* FileAccess.Service
+      return FileAccess.Service.of({
+        ...session,
+        resolve: (input) => session.resolve(input).pipe(Effect.map((target) => ({ ...target, environment }))),
+        authorizeRead: (input, context, options) =>
+          session.authorizeRead(input, context, options).pipe(Effect.map((target) => ({ ...target, environment }))),
+      })
+    }),
+  ).pipe(Layer.provide(LayerNode.compile(FileAccess.node, { replacements })))
+  return { environment, assertions, replacements: [...replacements, FileAccess.node.replace(access)] }
+}
+
 describe("file tools", () => {
   it.live("read and write the resolved target's environment, not the session's", () =>
     withTempDir((tmp) => {
       const file = path.join(tmp.path, "notes.txt")
-      const driver = Environment.makeMemoryDriver()
-      const environment: Environment.Interface = { files: Environment.makeFiles(driver), spawner: driver.spawner }
-      const assertions: Permission.AssertInput[] = []
-      const replacements = [
-        Environment.node.replace(hostEnvironmentLayer),
-        Permission.node.replace(permissionLayer({ assert: (input) => Effect.sync(() => void assertions.push(input)) })),
-        Location.node.replace(
-          Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(tmp.path) }))),
-        ),
-      ]
-      // Resolves and authorizes exactly as the session does, then places each target in the other environment.
-      const access = Layer.effect(
-        FileAccess.Service,
-        Effect.gen(function* () {
-          const session = yield* FileAccess.Service
-          return FileAccess.Service.of({
-            ...session,
-            resolve: (input) => session.resolve(input).pipe(Effect.map((target) => ({ ...target, environment }))),
-            authorizeRead: (input, context, options) =>
-              session.authorizeRead(input, context, options).pipe(Effect.map((target) => ({ ...target, environment }))),
-          })
-        }),
-      ).pipe(Layer.provide(LayerNode.compile(FileAccess.node, { replacements })))
+      const other = elsewhere(tmp.path)
       const execute = (registry: Tool.Interface, name: string, input: unknown) =>
         executeTool(registry, {
           sessionID,
@@ -110,7 +117,7 @@ describe("file tools", () => {
           status: "completed",
           output: "Created file successfully: notes.txt",
         })
-        expect(assertions).toMatchObject([
+        expect(other.assertions).toMatchObject([
           { action: "edit", metadata: { files: [{ status: "added", patch: expect.stringContaining("+one") }] } },
         ])
         expect(yield* execute(registry, "read", { path: "notes.txt" })).toMatchObject({
@@ -132,18 +139,73 @@ describe("file tools", () => {
           metadata: { files: [{ patch: expect.stringContaining("-two\n+three") }] },
         })
 
-        expect(new TextDecoder().decode((yield* environment.files.read(file)).bytes)).toBe("three\n")
+        expect(new TextDecoder().decode((yield* other.environment.files.read(file)).bytes)).toBe("three\n")
         expect(yield* Effect.promise(() => fs.readdir(tmp.path))).toEqual(["notes.txt"])
         expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe("session\n")
       }).pipe(
         Effect.provide(
           AppNodeBuilder.build(LayerNode.group([Tool.node, fileToolsNode]), [
-            ...replacements,
-            FileAccess.node.replace(access),
+            ...other.replacements,
             Formatter.node.replace(Layer.mock(Formatter.Service, { file: () => Effect.succeed(false) })),
             Config.node.replace(Config.testLayer()),
             Global.node.replace(Global.layerWith({ data: Global.Path.data })),
           ]),
+        ),
+      )
+    }),
+  )
+})
+
+describe("Code Mode Bun", () => {
+  it.live("reads, writes and deletes in the resolved target's environment, not the session's", () =>
+    withTempDir((tmp) => {
+      const file = path.join(tmp.path, "notes.txt")
+      const other = elsewhere(tmp.path)
+
+      return Effect.gen(function* () {
+        yield* Effect.promise(() => fs.writeFile(file, "session\n"))
+        const result = yield* CodeModeTool.create(
+          { tools: new Map() },
+          () => Effect.die("The program calls no tools."),
+          yield* Permission.Service,
+          yield* CodeModeTool.services,
+        ).execute(
+          {
+            code: `const written = await Bun.write("notes.txt", "one\\n")
+              const notes = Bun.file("notes.txt")
+              const stat = await notes.stat()
+              const first = [written, notes.size, await notes.text(), await notes.exists(), stat.size, stat.isFile()]
+              await Bun.write("notes.txt", "two\\n")
+              const second = await notes.text()
+              await notes.delete()
+              return [...first, second, await notes.exists(), new Bun.Glob("notes.txt").scanSync()]`,
+          },
+          { sessionID, ...toolIdentity, id: Tool.CallID.make("call_bun"), progress: () => Effect.void },
+        )
+
+        expect(JSON.parse(result.output.output)).toEqual([4, 4, "one\n", true, 4, true, "two\n", false, []])
+        expect(other.assertions).toMatchObject([
+          { action: "edit", metadata: { files: [{ status: "added", patch: expect.stringContaining("+one") }] } },
+          { action: "read" },
+          {
+            action: "edit",
+            metadata: { files: [{ status: "modified", patch: expect.stringContaining("-one\n+two") }] },
+          },
+          { action: "edit" },
+          { action: "glob" },
+        ])
+        expect(yield* Environment.exists(other.environment.files, file)).toBe(false)
+        expect(yield* Effect.promise(() => fs.readdir(tmp.path))).toEqual(["notes.txt"])
+        expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe("session\n")
+      }).pipe(
+        Effect.provide(
+          AppNodeBuilder.build(
+            LayerNode.group([FileAccess.node, FileMutation.node, FileWrite.node, Location.node, Permission.node]),
+            [
+              ...other.replacements,
+              Formatter.node.replace(Layer.mock(Formatter.Service, { file: () => Effect.succeed(false) })),
+            ],
+          ),
         ),
       )
     }),
