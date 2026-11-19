@@ -592,6 +592,8 @@ export const tryFastBoundaryOrJson = (
       const out: Record<string, Json> = {}
       if (cur instanceof ErrorObj) {
         for (const k of ["name", "message"]) {
+          const slot = lookup(cur, k)
+          if (slot !== undefined && isProgramAccessor(slot)) return { ok: false }
           const r = visit(get(cur, k), depth + 1)
           if (!r.ok) return r
           if (r.json !== undefined) out[k] = r.json

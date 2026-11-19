@@ -144,3 +144,30 @@ describe("getters crossing to the host", () => {
     expect(result).toMatchObject({ ok: false, error: { message: expect.stringContaining("circular") } })
   })
 })
+
+describe("accessor flags on copies", () => {
+  test("an awaited sync-thenable copy keeps its getters", async () => {
+    const runtime = Runtime.make({
+      globals: () => ({ find: Host.fn(() => Effect.succeed({ a: 1 }), { type: "sync-thenable" }) }),
+    })
+    expect(
+      await value(
+        runtime,
+        `const r = find()
+        Object.defineProperty(r, "x", { get() { return 42 }, enumerable: true })
+        const copy = await r
+        console.log(copy)
+        return [JSON.stringify(copy), Object.entries(copy), { ...copy }]`,
+      ),
+    ).toEqual(['{"a":1,"x":42}', [["a", 1], ["x", 42]], { a: 1, x: 42 }])
+  })
+
+  test("an Error.prototype getter is called when an error is converted", async () => {
+    const runtime = Runtime.make({ globals: () => ({}) })
+    const setup = `Object.defineProperty(Error.prototype, "name", { get() { return "Custom" }, configurable: true })`
+    expect(await value(runtime, `${setup}; return JSON.stringify(new Error("hi"))`)).toBe(
+      '{"name":"Custom","message":"hi"}',
+    )
+    expect(await value(runtime, `${setup}; return new Error("hi")`)).toEqual({ name: "Custom", message: "hi" })
+  })
+})
