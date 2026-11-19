@@ -898,4 +898,155 @@ describe("runNonInteractivePrompt", () => {
     closed.reject(new ClientError("Transport", { detail: "ECONNRESET" }))
     expect(await output).toMatchObject({ stdout: "", stderr: "", exitCode: 0 })
   })
+
+  test("streams synthetic background notices and completed compactions in JSON without duplicating on reconcile", async () => {
+    const lists: ExperimentalJobListOutput[] = [[subagentJob], []]
+    const reportText = '<subagent sessionID="ses_child" state="completed">\nAudit ok\n</subagent>'
+    const reportMetadata = { source: "subagent", childID: "ses_child", agent: "explore", state: "completed" }
+    const compactionTokens = { input: 1200, output: 150, reasoning: 0, cache: { read: 0, write: 0 } }
+    const output = await capture({
+      format: "json",
+      jobs: () => lists.shift() ?? [],
+      messages: (messageID) => [
+        idleMessage("succeeded", "msg_after_report"),
+        {
+          id: "msg_compact",
+          type: "compaction",
+          status: "completed",
+          reason: "auto",
+          summary: "Summary of prior context",
+          cost: 0.002,
+          tokens: compactionTokens,
+          time: { created: 3 },
+        },
+        {
+          id: "msg_subagent_report",
+          type: "synthetic",
+          text: reportText,
+          description: "scan repo",
+          metadata: reportMetadata,
+          time: { created: 2 },
+        },
+        { id: messageID, type: "user", text: "hello", time: { created: 1 } },
+      ],
+      turn: (id) => [
+        prompted(id),
+        settled(),
+        {
+          id: "evt_subagent_report",
+          created: 2,
+          type: "session.synthetic",
+          durable: { aggregateID: "ses_1", seq: 2, version: 1 },
+          data: {
+            sessionID: "ses_1",
+            text: reportText,
+            description: "scan repo",
+            metadata: reportMetadata,
+          },
+        },
+        {
+          id: "evt_compact",
+          created: 3,
+          type: "session.compaction.started",
+          durable: { aggregateID: "ses_1", seq: 3, version: 1 },
+          data: { sessionID: "ses_1", reason: "auto" },
+        },
+        {
+          id: "evt_compact_done",
+          created: 4,
+          type: "session.compaction.ended",
+          durable: { aggregateID: "ses_1", seq: 4, version: 1 },
+          data: {
+            sessionID: "ses_1",
+            reason: "auto",
+            text: "Summary of prior context",
+            cost: 0.002,
+            tokens: compactionTokens,
+          },
+        },
+        settled(),
+      ],
+    })
+
+    const events = jsonLines(output.stdout)
+    const synthetics = events.filter((event) => event.type === "synthetic")
+    const compactions = events.filter((event) => event.type === "compaction")
+    expect(synthetics).toHaveLength(1)
+    expect(synthetics[0]).toMatchObject({
+      type: "synthetic",
+      sessionID: "ses_1",
+      part: {
+        sessionID: "ses_1",
+        messageID: "msg_subagent_report",
+        type: "synthetic",
+        text: reportText,
+        description: "scan repo",
+        metadata: reportMetadata,
+      },
+    })
+    expect(compactions).toHaveLength(1)
+    expect(compactions[0]).toMatchObject({
+      type: "compaction",
+      sessionID: "ses_1",
+      part: {
+        sessionID: "ses_1",
+        messageID: "msg_compact",
+        type: "compaction",
+        reason: "auto",
+        summary: "Summary of prior context",
+        cost: 0.002,
+        tokens: compactionTokens,
+      },
+    })
+  })
+
+  test("reconciles missed synthetic and completed compaction messages when live events were not seen", async () => {
+    const compactionTokens = { input: 800, output: 100, reasoning: 0, cache: { read: 0, write: 0 } }
+    const output = await capture({
+      format: "json",
+      messages: (messageID) => [
+        idleMessage("succeeded", "msg_reconcile_idle"),
+        {
+          id: "msg_missed_compact",
+          type: "compaction",
+          status: "completed",
+          reason: "manual",
+          summary: "Compacted history",
+          tokens: compactionTokens,
+          time: { created: 3 },
+        },
+        {
+          id: "msg_missed_shell",
+          type: "synthetic",
+          text: '<shell id="sh_1" state="completed" command="echo ok">\nok\n</shell>',
+          description: "echo ok",
+          metadata: { source: "shell", shellID: "sh_1", state: "completed", exit: 0 },
+          time: { created: 2 },
+        },
+        { id: messageID, type: "user", text: "hello", time: { created: 1 } },
+      ],
+      turn: (id) => [prompted(id), settled()],
+    })
+
+    const events = jsonLines(output.stdout)
+    expect(events.map((event) => event.type)).toEqual(["synthetic", "compaction"])
+    expect(events[0]).toMatchObject({
+      type: "synthetic",
+      part: {
+        messageID: "msg_missed_shell",
+        type: "synthetic",
+        metadata: { source: "shell", shellID: "sh_1", state: "completed", exit: 0 },
+      },
+    })
+    expect(events[1]).toMatchObject({
+      type: "compaction",
+      part: {
+        messageID: "msg_missed_compact",
+        type: "compaction",
+        reason: "manual",
+        summary: "Compacted history",
+        tokens: compactionTokens,
+      },
+    })
+  })
 })
