@@ -17,6 +17,7 @@ import { Tool } from "@opencode/core/tool"
 import { OpenCodeTools } from "@opencode/core/tool/plugin/opencode"
 import { VideoGenerateTool } from "@opencode/core/tool/plugin/video-generate"
 import { Effect, Layer, Schedule, Stream } from "effect"
+import { advance } from "./lib/clock"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 import { executeTool, toolIdentity } from "./lib/tool"
@@ -120,16 +121,16 @@ const setup = (providerID = "test") =>
         Effect.timeout("10 seconds"),
         Effect.map((item) => item?.text),
       )
-    return { session, run, notice, directory: location.directory }
+    return { session, run, notice, notices, directory: location.directory }
   })
 
 const kinds = (assets: ReadonlyArray<Media.Asset> | undefined) => assets?.map((asset) => asset.mediaType)
 
 describe("experimental_video_generate", () => {
-  it.live("starts the job, saves every video it returns and lists them all in the notice", () =>
+  it.effect("starts the job, saves every video it returns and lists them all in the notice", () =>
     Effect.gen(function* () {
       yield* videoModel("test", "director")
-      const { run, notice, directory, session } = yield* setup()
+      const { run, notice, notices, directory, session } = yield* setup()
       fixture.videos = 2
       yield* Effect.promise(() => fs.writeFile(path.join(directory, "first.png"), Buffer.from(PNG, "base64")))
 
@@ -149,6 +150,8 @@ describe("experimental_video_generate", () => {
       const id = result.output.id
       expect(id).toStartWith("video_")
       expect(result.output).toEqual({ id, path: file, model: "test/director" })
+      // The server polls the provider every five seconds; advance the clock instead of waiting for it.
+      yield* advance(() => notices.some((item) => item.metadata?.jobID === result.metadata?.jobID))
       expect(yield* notice(result)).toBe(
         `<video id="${id}" state="completed">\nVideo request finished. Saved 2 videos: ${file}, ${second}.\n</video>`,
       )
