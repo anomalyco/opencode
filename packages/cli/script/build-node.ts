@@ -13,6 +13,7 @@ import { collectNodeAssets, copyNodeAssets, hashNodeAssets, seaAssetMap } from "
 import { appArchiveAsset, mainConfig } from "../vite.node.config"
 import { nodeExecArgv, nodeTarget, type NodeTarget } from "../src/node/target"
 import { buildAppArchive } from "./app-assets"
+import { platformFields } from "./platform-fields"
 import { verifyArtifact } from "./verify-artifact"
 import { NativeArch } from "../../../script/native-arch"
 import { bundledModelsSnapshot } from "../../core/script/models-snapshot"
@@ -150,8 +151,7 @@ for (const target of targets) {
         version: Script.version,
         license: pkg.license,
         repository: { type: "git", url: "git+https://github.com/anomalyco/opencode.git" },
-        os: [target.platform],
-        cpu: [target.arch],
+        ...platformFields({ os: target.platform, arch: target.arch }),
       },
       null,
       2,
