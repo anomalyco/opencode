@@ -5,6 +5,7 @@ import { Document, Info } from "@opencode/schema/config"
 import { Effect, Layer, Stream } from "effect"
 import { SkillPlugin } from "@opencode/core/plugin/skill"
 import { Skill } from "@opencode/core/skill"
+import { renderApiSkillFiles } from "../../script/generate-api-skill"
 import { testEffect } from "../lib/effect"
 import { host } from "./host"
 
@@ -53,6 +54,18 @@ describe("SkillPlugin.Plugin", () => {
       )
       expect(report?.content).toContain("- opencode version: 1.2.3")
       expect(report?.content).toContain("- install/channel: beta")
+
+      const files = yield* skill.files(Skill.ID.make("opencode"))
+      expect(files?.has("api/index.md")).toBe(true)
+      expect(files?.has("api/sessions.md")).toBe(true)
+      expect(files?.get("api/index.md")).toContain("skill://opencode/api/sessions.md")
+    }),
+  )
+
+  it.live("keeps generated opencode API skill reference files in sync with OpenAPI", () =>
+    Effect.gen(function* () {
+      const expected = yield* Effect.promise(() => renderApiSkillFiles())
+      expect(SkillPlugin.OpencodeApiFiles).toEqual(expected)
     }),
   )
 
@@ -72,12 +85,7 @@ describe("SkillPlugin.Plugin", () => {
       expect(report?.content).toContain("- Active plugins: -disabled, local.ts, package-plugin, package-plugin")
     }).pipe(
       Effect.provide(
-        config([
-          "package-plugin",
-          "-disabled",
-          "local.ts",
-          { package: "package-plugin", options: { enabled: true } },
-        ]),
+        config(["package-plugin", "-disabled", "local.ts", { package: "package-plugin", options: { enabled: true } }]),
       ),
     ),
   )

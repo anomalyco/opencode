@@ -21,6 +21,7 @@ import { FileMutation } from "../file-mutation.js"
 import { FileWrite } from "../file-write.js"
 import { Location } from "../location.js"
 import { Permission } from "../permission.js"
+import { CodeModeApi } from "./api.js"
 import { CodeModeBun } from "./bun.js"
 import { CodeModeCatalog } from "./catalog.js"
 import { CodeModeExecution } from "./execution.js"
@@ -83,6 +84,12 @@ export const services = Effect.map(
   Context.pick(Location.Service, FileAccess.Service, FileMutation.Service, FileWrite.Service),
 )
 
+/** What `opencode://` fetch acts through: this process's OpenCode API and the session's Location. */
+export type Api = CodeModeApi.Service | Location.Service
+
+/** Those two services alone, picked from the caller's context like `services`. */
+export const api = Effect.map(Effect.context<Api>(), Context.pick(CodeModeApi.Service, Location.Service))
+
 export type Inventory = {
   readonly tools: ReadonlyMap<string, Info>
   readonly namespaces?: ReadonlyMap<string, ToolNamespace>
@@ -109,6 +116,8 @@ export const create = (
   permission: Permission.Interface,
   /** With `full_codemode`, the session's services, which turn on the experimental `path` and `Bun` globals. */
   services?: Context.Context<Services>,
+  /** What `opencode://` fetch sends requests through. Without it, `opencode://` fails as unavailable. */
+  api?: Context.Context<Api>,
 ) => {
   return {
     name: "execute",
@@ -186,6 +195,7 @@ export const create = (
             Effect.provideService(CodeModeExecution.Service, { ...context, signal: yield* Effect.abortSignal }),
             Effect.provideService(Permission.Service, permission),
             (program) => (services ? Effect.provideContext(program, services) : program),
+            (program) => (api ? Effect.provideContext(program, api) : program),
           )
         const toolCalls = yield* Ref.get(calls)
         const collected = (yield* Ref.get(files))

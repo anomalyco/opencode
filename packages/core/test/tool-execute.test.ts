@@ -1,7 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
+import { CodeModeApi } from "@opencode/core/codemode/api"
 import { CodeModeTool } from "@opencode/core/codemode/tool"
+import { Location } from "@opencode/core/location"
+import { AbsolutePath } from "@opencode/core/schema"
 import { Permission } from "@opencode/core/permission"
 import { Tool } from "@opencode/core/tool"
 import { execute } from "@opencode/core/tool/runtime"
@@ -12,6 +15,7 @@ import type { Info } from "@opencode/schema/tool"
 import { Context, Deferred, Effect, Fiber, Schema } from "effect"
 import { TestClock } from "effect/testing"
 import { codeModeServices } from "./fixture/codemode"
+import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 import { permissionService } from "./lib/permission"
@@ -30,7 +34,15 @@ const createCodeMode = (
   tools: ReadonlyMap<string, Info>,
   permission = allowAll,
   services?: Context.Context<CodeModeTool.Services>,
-) => CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context), permission, services)
+  api?: Context.Context<CodeModeTool.Api>,
+) =>
+  CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context), permission, services, api)
+
+// Only the API and a Location, without the full_codemode file services, so opencode:// is shown not to need them.
+const apiContext = (directory: string, api: CodeModeApi.Interface) =>
+  Context.make(CodeModeApi.Service, api).pipe(
+    Context.add(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
+  )
 
 test("execute takes raw code as freeform text, and Code Mode calls freeform tools with a string", async () => {
   const input = Schema.Struct({ text: Schema.NonEmptyString })
@@ -611,6 +623,80 @@ describe("fetch permissions", () => {
 
     expect(result.output.output).toBe("rejected")
     expect(hits).toEqual([])
+  })
+})
+
+describe("Code Mode opencode:// fetch", () => {
+  test("sends opencode:///api/... to CodeModeApi with the session's directory unless the call names one", async () => {
+    const received: Array<{ method: string; url: string; directory: string | null; body: string }> = []
+    const api = apiContext("/workspace/demo", {
+      fetch: (request) =>
+        Effect.promise(async () => {
+          received.push({
+            method: request.method,
+            url: request.url,
+            directory: request.headers.get("x-opencode-directory"),
+            body: await request.text(),
+          })
+          return Response.json({ ok: true })
+        }),
+    })
+    const result = await Effect.runPromise(
+      createCodeMode(new Map(), allowAll, undefined, api).execute(
+        {
+          code: `const a = await (await fetch("opencode:///api/vcs/status")).json()
+            const b = await (await fetch("opencode:///api/session", {
+              method: "POST",
+              headers: { "content-type": "application/json", "x-opencode-directory": encodeURIComponent("/custom/dir") },
+              body: JSON.stringify({ title: "demo" }),
+            })).json()
+            const c = await (await fetch("opencode:///api/vcs/status?location[directory]=/query/dir")).json()
+            return [a.ok, b.ok, c.ok]`,
+        },
+        context,
+      ),
+    )
+
+    expect(JSON.parse(result.output.output)).toEqual([true, true, true])
+    expect(received).toEqual([
+      {
+        method: "GET",
+        url: "http://opencode.local/api/vcs/status",
+        directory: encodeURIComponent("/workspace/demo"),
+        body: "",
+      },
+      {
+        method: "POST",
+        url: "http://opencode.local/api/session",
+        directory: encodeURIComponent("/custom/dir"),
+        body: JSON.stringify({ title: "demo" }),
+      },
+      {
+        method: "GET",
+        url: "http://opencode.local/api/vcs/status?location[directory]=/query/dir",
+        directory: null,
+        body: "",
+      },
+    ])
+  })
+
+  test("rejects an opencode:// URL with a host, and fails when no API is available", async () => {
+    const api = apiContext("/workspace/demo", { fetch: () => Effect.die("never dispatched") })
+    const host = await Effect.runPromise(
+      createCodeMode(new Map(), allowAll, undefined, api).execute(
+        { code: `try { await fetch("opencode://api/session") } catch (e) { return e.message }` },
+        context,
+      ),
+    )
+    expect(host.output.output).toContain("omit the host")
+
+    const unavailable = await Effect.runPromise(
+      createCodeMode(new Map()).execute(
+        { code: `try { await fetch("opencode:///api/info") } catch (e) { return e.message }` },
+        context,
+      ),
+    )
+    expect(unavailable.output.output).toContain("opencode:// URLs are unavailable")
   })
 })
 

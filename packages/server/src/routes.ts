@@ -1,6 +1,7 @@
 import { Database } from "@opencode/core/database/database"
 import { V1Migration } from "@opencode/core/database/v1-migration"
 import { App } from "@opencode/core/app"
+import { CodeModeApi } from "@opencode/core/codemode/api"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Node } from "@opencode/util/effect/app-node"
 import { fetchLayer, httpClient, httpFetch } from "@opencode/util/effect/app-node-platform"
@@ -40,14 +41,14 @@ import { WellKnown } from "@opencode/core/wellknown"
 import { Workspace } from "@opencode/core/workspace"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { FileWatch } from "@opencode/core/filesystem/file-watch"
-import { HttpRouter } from "effect/http"
+import { HttpEffect, HttpRouter } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { Context, Effect, Layer, Option } from "effect"
 import { Api } from "./api"
 import { ServerAuth } from "./auth"
 import { CorsConfig } from "./cors"
 import { handlers } from "./handlers"
-import { authorizationLayer } from "./middleware/authorization"
+import { authorizationLayer, InternalRequest } from "./middleware/authorization"
 import { schemaErrorLayer } from "./middleware/schema-error"
 import { defectResponseLayer } from "./middleware/defect-response"
 import { ServerPairing } from "./pairing"
@@ -59,6 +60,7 @@ import type { ServerOptions } from "./options"
 
 const applicationServiceNodes = [
   App.node,
+  CodeModeApi.node,
   Global.node,
   FSUtil.node,
   Database.node,
@@ -134,7 +136,24 @@ function makeRoutes<AuthError, AuthServices>(
   overrides: LayerNode.Replacements,
   instances?: InstanceNode,
 ) {
+  let internalHandler: ((request: Request) => Promise<Response>) | undefined
   const standard: LayerNode.Replacements = [
+    CodeModeApi.node.replace(
+      Layer.succeed(
+        CodeModeApi.Service,
+        CodeModeApi.Service.of({
+          fetch: (request) =>
+            Effect.suspend(() => {
+              const handle = internalHandler
+              if (!handle) return Effect.fail(new Error("OpenCode API is not ready yet."))
+              return Effect.tryPromise({
+                try: () => handle(request),
+                catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+              })
+            }),
+        }),
+      ),
+    ),
     Database.node.replace(Database.configured(options.database)),
     PersistentPty.node.replace(PersistentPty.configured(options.pty)),
     Bus.node.replace(Bus.configured({ persist: options.events?.persist })),
@@ -215,6 +234,13 @@ function makeRoutes<AuthError, AuthServices>(
         Layer.merge(defectResponseLayer),
         Layer.provideMerge(services),
         Layer.provideMerge(HttpRouter.layer),
+        Layer.tap((apiContext) =>
+          Effect.sync(() => {
+            internalHandler = Context.get(apiContext, HttpRouter.HttpRouter)
+              .asHttpEffect()
+              .pipe(Effect.provideService(InternalRequest, true), HttpEffect.toWebHandlerWith(apiContext))
+          }),
+        ),
       )
       return Layer.merge(api, V1Migration.layer.pipe(Layer.provide(services)))
     }),
