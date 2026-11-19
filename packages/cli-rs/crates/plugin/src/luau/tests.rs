@@ -1605,6 +1605,49 @@ fn plugin_json_reads_and_writes_json_as_the_host_does() {
     assert_eq!(toasts[2], "ok");
 }
 
+/// Each VM keys its table hashes its own way, so `pairs` walks a table in an order of its own: what `encode` writes and
+/// which field a refusal names are in the byte order of the keys, the same in every VM.
+#[test]
+fn plugin_json_writes_keys_in_byte_order_in_every_vm() {
+    let body = r#"
+        local wide = {}
+        for index = 1, 30 do wide[`k{index}`] = index end
+        say(json.encode({
+            zeta = 1, alpha = { y = 2, x = 1, [3] = "c" }, ["Ä"] = true, B = false, [10] = "ten", [2] = "two",
+            list = { "c", "a", "b" }, sparse = { [10] = "j", [2] = "b", [1] = "a" }, mixed = { "first", k = "v", [10] = "x" },
+            nested = { { b = 1, a = 2 }, json.array({ 3, 2, 1 }) }, empty = json.object({}),
+        }))
+        say(json.encode(wide))
+        local ok, failure = pcall(json.encode, { [1] = "a", ["1"] = "b" })
+        assert(not ok, "two keys that write the same were written")
+        say(tostring(failure))
+    "#;
+    let wide: std::collections::BTreeMap<_, _> = (1..=30).map(|index| (format!("k{index}"), index)).collect();
+    let expected = [
+        concat!(
+            r#"{"10":"ten","2":"two","B":false,"alpha":{"3":"c","x":1,"y":2},"empty":{},"list":["c","a","b"],"#,
+            r#""mixed":{"1":"first","10":"x","k":"v"},"nested":[{"a":2,"b":1},[3,2,1]],"#,
+            r#""sparse":{"1":"a","10":"j","2":"b"},"zeta":1,"Ä":true}"#,
+        )
+        .to_owned(),
+        serde_json::to_string(&wide).unwrap(),
+    ];
+    for _ in 0..8 {
+        let (toasts, failed) = checked(body);
+        assert_eq!(failed, None);
+        assert_eq!(toasts[..2], expected);
+        assert!(toasts[2].contains(r#"two keys write as the JSON key "1""#), "{}", toasts[2]);
+    }
+    // A refusal names the first bad field in key order: `gap` before `wrap`.
+    for _ in 0..8 {
+        let lua = mlua::Lua::new();
+        let value =
+            lua.load("return { type = 'show', node = { type = 'box', wrap = 'y', gap = 'x' } }").call(()).unwrap();
+        let refused = decode::Decode::new().decode::<abi::Render>(&lua, &value).err().unwrap().to_string();
+        assert!(refused.contains(r#""x""#), "{refused}");
+    }
+}
+
 #[test]
 fn plugin_json_holds_to_the_bounds() {
     let text = crate::limits::Limits { plugin_content: 64, ..crate::limits::Limits::default() };

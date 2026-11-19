@@ -609,7 +609,9 @@ function json.decode(text: string, options: { null: boolean? }?): (any, string?)
     return native.decode(text, options ~= nil and options.null == true)
 end
 
--- The JSON text of `value`. A function, a thread, userdata or a number that is not finite cannot be written.
+-- The JSON text of `value`: an object's keys in byte order (a number key as its text, two keys that write the same
+-- refused), an array's items in order, so a table writes the same text in every VM, whatever order `pairs` walks it in
+-- there. A function, a thread, userdata or a number that is not finite cannot be written.
 function json.encode(value: any): string
     return native.encode(value)
 end
