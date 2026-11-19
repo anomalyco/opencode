@@ -72,6 +72,7 @@ import { createMediaSource } from "../../component/media-source"
 import { statusLabel } from "../../component/dialog-workspace-file-changes"
 import { DialogMessage } from "./dialog-message"
 import { DialogFork } from "./dialog-fork"
+import { DialogSearch } from "./dialog-search"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogGoUpsell } from "../../component/dialog-go-upsell"
 import { UsageLimitNotice, useLimitNotice, useUsageAlerts } from "../../component/usage"
@@ -1078,6 +1079,15 @@ export function Session(props: {
       slash: { name: "timeline" },
       run: () => {
         dialog.replace(() => <DialogTimeline sessionID={route.sessionID} onMove={jumpToMessage} />)
+      },
+    },
+    {
+      title: "Search session",
+      id: "session.search",
+      group: "Session",
+      palette: undefined,
+      run: () => {
+        dialog.replace(() => <DialogSearch sessionID={route.sessionID} onMove={jumpToMessage} />)
       },
     },
     {
