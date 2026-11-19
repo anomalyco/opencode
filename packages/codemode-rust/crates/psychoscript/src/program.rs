@@ -370,6 +370,10 @@ impl<'a> Program<'a> {
                 if !r.vm.suspended {
                     let _ = r.vm.drive();
                 }
+                // The stop for the host is a safe point: a step that came due on the way finishes here.
+                if r.vm.gc_pending() && r.vm.fatal.is_none() {
+                    r.vm.gc_point();
+                }
                 #[cfg(feature = "gc-stats")]
                 r.vm.publish_stats();
                 if let Some(o) = &mut r.vm.host.offload {

@@ -1,25 +1,41 @@
 //! Which heap objects a run can still reach, for a snapshot: the reference saves only what is reachable, so a value
 //! the program dropped never stops a resume. Every cell, stack slot and coroutine counts as a root.
 //!
-//! [`roots`] lists every value the VM holds outside its heap, and [`children`] every value one object holds: a walk
-//! over the two (as [`reachable`], and a collector's mark phase) sees everything a run can reach.
+//! [`roots`] lists every reference the VM holds outside its heap, and [`children`] every reference one object holds:
+//! a walk over the two (as [`reachable`], and the collector's marking) sees everything a run can reach.
 
 use crate::object::*;
+use crate::strings::StrId;
 use crate::value::{Id, Slot, Value};
 use crate::vm::{Frame, FrameKind, Job, Reaction, Resume, SavedFrame, Vm};
 
-/// Marks every object reachable from the run's roots; the objects every fresh run makes are roots too.
+/// What a walk finds: an object, a string or a closure cell. A stack slot whose bits could be a cell's raw index (see
+/// `Op::NewCell`) is reported as that cell, which may not exist.
+#[derive(Clone, Copy)]
+pub enum Ref {
+    Obj(Id),
+    Str(StrId),
+    Cell(u32),
+}
+
+/// Marks every object reachable from the run's roots; the objects every fresh run makes, and every cell, are roots
+/// too.
 pub fn reachable(vm: &Vm) -> Vec<bool> {
     let mut m = Marks {
         seen: vec![false; vm.heap.len()],
         todo: Vec::new(),
     };
     for id in 0..vm.snapshot_base.heap.min(vm.heap.len()) {
-        m.mark(Value::Obj(id as Id));
+        m.mark(Ref::Obj(id as Id));
     }
-    roots(vm, &mut |v| m.mark(v));
+    for c in &vm.cells {
+        if let Value::Obj(id) = c.get() {
+            m.mark(Ref::Obj(id));
+        }
+    }
+    roots(vm, &mut |r| m.mark(r));
     while let Some(id) = m.todo.pop() {
-        children(&vm.heap[id as usize], &mut |v| m.mark(v));
+        children(&vm.heap[id as usize], &mut |r| m.mark(r));
     }
     m.seen
 }
@@ -30,8 +46,8 @@ struct Marks {
 }
 
 impl Marks {
-    fn mark(&mut self, v: Value) {
-        if let Value::Obj(id) = v
+    fn mark(&mut self, r: Ref) {
+        if let Ref::Obj(id) = r
             && let Some(seen) = self.seen.get_mut(id as usize)
             && !*seen
         {
@@ -41,11 +57,10 @@ impl Marks {
     }
 }
 
-/// Every value the VM holds outside its heap objects: cells, stacks, frames, globals, constants, jobs, coroutines,
-/// the host's calls (queued, in flight, settled), and the outcome.
-pub fn roots(vm: &Vm, visit: &mut impl FnMut(Value)) {
+/// Every reference the VM holds outside its heap objects and cells: stacks, frames, globals, constants, the realm's
+/// lazily made prototypes, jobs, coroutines, the host's calls (queued, in flight, settled), and the outcome.
+pub fn roots(vm: &Vm, visit: &mut impl FnMut(Ref)) {
     let mut t = Tracer(visit);
-    t.slots(&vm.cells);
     t.slots(&vm.stack);
     for f in &vm.frames {
         t.frame(f);
@@ -53,6 +68,24 @@ pub fn roots(vm: &Vm, visit: &mut impl FnMut(Value)) {
     t.vals(vm.globals.iter());
     t.vals(vm.global_map.values());
     t.vals(vm.consts.iter());
+    let std = &vm.realm.std;
+    for id in [
+        std.regexp,
+        std.date,
+        std.uint8,
+        std.buffer,
+        std.text_encoder,
+        std.text_decoder,
+        std.weak_map,
+        std.weak_set,
+        std.iterator_helper,
+        std.uri_error,
+        std.url,
+        std.params,
+        std.headers,
+    ] {
+        t.id(id);
+    }
     for id in vm.template_objs_ref().iter().flatten() {
         t.id(*id);
     }
@@ -129,21 +162,71 @@ pub fn roots(vm: &Vm, visit: &mut impl FnMut(Value)) {
     }
 }
 
-/// Every value an object holds: its prototype, its properties, and what its kind keeps.
-pub fn children(o: &Obj, visit: &mut impl FnMut(Value)) {
-    Tracer(visit).object(o);
+/// Every reference an object holds: its prototype, its properties, and what its kind keeps.
+pub fn children(o: &Obj, visit: &mut impl FnMut(Ref)) {
+    head(o, visit);
+    bulk(o, 0, usize::MAX, visit);
+}
+
+/// What `o` holds apart from its [`bulk`]: a bounded number of references, unless its kind keeps a list (a bound
+/// function's arguments, a promise's reactions, a generator's saved stack).
+pub fn head(o: &Obj, visit: &mut impl FnMut(Ref)) {
+    Tracer(visit).head(o);
+}
+
+/// The slots of `o` from `from` to `to`, of the [`bulk_len`] there are: its properties' values, then its
+/// elements or entries. These are what may be long, which the collector traces a range at a time.
+pub fn bulk(o: &Obj, from: usize, to: usize, visit: &mut impl FnMut(Ref)) {
+    let mut t = Tracer(visit);
+    let props = &o.props.items;
+    for p in range(props, from, to) {
+        t.val(&p.value);
+    }
+    let (from, to) = (
+        from.saturating_sub(props.len()),
+        to.saturating_sub(props.len()),
+    );
+    match &o.kind {
+        Kind::Array(items) | Kind::Arguments(items) => t.vals(range(items, from, to)),
+        Kind::ListIter { items, .. } => t.vals(range(items, from, to)),
+        Kind::Map(m) | Kind::Set(m) | Kind::WeakMap(m) | Kind::WeakSet(m) => {
+            for (k, v) in range(&m.entries, from, to).iter().flatten() {
+                t.val(k);
+                t.val(v);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// How many slots [`bulk`] has for `o`.
+pub fn bulk_len(o: &Obj) -> usize {
+    o.props.items.len()
+        + match &o.kind {
+            Kind::Array(items) | Kind::Arguments(items) => items.len(),
+            Kind::ListIter { items, .. } => items.len(),
+            Kind::Map(m) | Kind::Set(m) | Kind::WeakMap(m) | Kind::WeakSet(m) => m.entries.len(),
+            _ => 0,
+        }
+}
+
+/// The part of `s` from `from` to `to`, as far as it goes.
+fn range<T>(s: &[T], from: usize, to: usize) -> &[T] {
+    &s[from.min(s.len())..to.min(s.len())]
 }
 
 struct Tracer<'f, F>(&'f mut F);
 
-impl<F: FnMut(Value)> Tracer<'_, F> {
+impl<F: FnMut(Ref)> Tracer<'_, F> {
     fn id(&mut self, id: Id) {
-        (self.0)(Value::Obj(id));
+        (self.0)(Ref::Obj(id));
     }
 
     fn val(&mut self, v: &Value) {
-        if let Value::Obj(_) = v {
-            (self.0)(*v);
+        match v {
+            Value::Obj(id) => (self.0)(Ref::Obj(*id)),
+            Value::Str(s) => (self.0)(Ref::Str(*s)),
+            _ => {}
         }
     }
 
@@ -155,12 +238,18 @@ impl<F: FnMut(Value)> Tracer<'_, F> {
 
     fn slots(&mut self, slots: &[Slot]) {
         for s in slots {
+            if let Ok(c) = u32::try_from(s.0) {
+                (self.0)(Ref::Cell(c));
+            }
             self.val(&s.get());
         }
     }
 
     fn frame(&mut self, f: &Frame) {
         self.vals(f.extra.iter());
+        for c in f.upvals.iter() {
+            (self.0)(Ref::Cell(*c));
+        }
         if let FrameKind::Generator(g, resume) = f.kind {
             self.id(g);
             if let Resume::Collect(a) = resume {
@@ -225,38 +314,38 @@ impl<F: FnMut(Value)> Tracer<'_, F> {
         }
     }
 
-    fn map(&mut self, m: &OrderedMap) {
-        for (k, v) in m.entries.iter().flatten() {
-            self.val(k);
-            self.val(v);
-        }
-    }
-
-    fn object(&mut self, o: &Obj) {
+    fn head(&mut self, o: &Obj) {
         if let Some(p) = o.proto {
             self.id(p);
         }
-        for p in &o.props.items {
-            self.val(&p.value);
-        }
         match &o.kind {
             Kind::Ordinary
+            | Kind::Array(_)
+            | Kind::Arguments(_)
+            | Kind::ListIter { .. }
+            | Kind::Map(_)
+            | Kind::Set(_)
+            | Kind::WeakMap(_)
+            | Kind::WeakSet(_)
             | Kind::Error(_)
             | Kind::RegExp(_)
             | Kind::Date(_)
             | Kind::Bytes(_)
             | Kind::TextDecoder(_)
             | Kind::Headers(_)
-            | Kind::StrIter { .. }
             | Kind::Live(_) => {}
+            Kind::StrIter { s, .. } => self.val(&Value::Str(*s)),
             Kind::Namespace(ns) => {
                 if !ns.is_root() {
                     self.id(ns.parent);
                 }
             }
-            Kind::Array(items) | Kind::Arguments(items) => self.vals(items.iter()),
-            Kind::ListIter { items, .. } => self.vals(items.iter()),
-            Kind::Closure(c) => self.val(&c.this),
+            Kind::Closure(c) => {
+                self.val(&c.this);
+                for cell in c.upvals.iter() {
+                    (self.0)(Ref::Cell(*cell));
+                }
+            }
             Kind::Native { data, .. } => self.val(data),
             Kind::Bound(b) => {
                 self.val(&b.0);
@@ -272,7 +361,6 @@ impl<F: FnMut(Value)> Tracer<'_, F> {
                     self.reaction(r);
                 }
             }
-            Kind::Map(m) | Kind::Set(m) | Kind::WeakMap(m) | Kind::WeakSet(m) => self.map(m),
             Kind::Generator(g) => self.gen_state(g),
             Kind::ArrayIter { target, .. }
             | Kind::MapIter { target, .. }

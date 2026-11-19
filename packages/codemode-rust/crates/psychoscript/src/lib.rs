@@ -10,6 +10,7 @@
 
 mod builtins;
 mod bytecode;
+mod collector;
 mod compiler;
 mod conversion;
 mod convert;

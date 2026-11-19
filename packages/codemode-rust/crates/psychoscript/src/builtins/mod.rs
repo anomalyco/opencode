@@ -195,6 +195,8 @@ impl Vm {
         )))
     }
 
+    // Inlined into the setup of built-ins, which the collector's hooks in `alloc` and `heap[_]` otherwise stop.
+    #[inline]
     pub fn method(&mut self, target: Id, name: &'static str, length: u8, f: NativeFn) -> Value {
         let v = self.native_fn(name, length, f, Value::Undef);
         let key = self.atoms.intern(name);
@@ -208,6 +210,8 @@ impl Vm {
         }
     }
 
+    // As `method`.
+    #[inline]
     fn constant(&mut self, target: Id, name: &'static str, v: Value) {
         let key = self.atoms.intern_static(name);
         self.heap[target as usize].props.insert(key, v, FIXED);

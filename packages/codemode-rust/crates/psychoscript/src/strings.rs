@@ -38,15 +38,41 @@ pub struct StrBuf {
     /// Only one local slot holds this string, so `+=` may append in place.
     pub builder: bool,
     /// When not `NO_GROW`, the text is the `len` bytes at `aux` in `Strings::grow[grow]` rather than `s`.
-    grow: u32,
+    pub(crate) grow: u32,
     len: u32,
     /// For a string in a `grow` buffer, its offset there. Otherwise, when not `NO_WTF`, the text is a carrier and
     /// `Strings::wtf[aux]` holds the code units.
     aux: u32,
 }
 
-const NO_GROW: u32 = u32::MAX;
+pub(crate) const NO_GROW: u32 = u32::MAX;
 const NO_WTF: u32 = u32::MAX;
+
+impl StrBuf {
+    /// The entry of a freed string, or of one whose entry moved to another id.
+    pub(crate) fn empty() -> StrBuf {
+        StrBuf {
+            s: Cow::Borrowed(""),
+            ascii: true,
+            builder: false,
+            grow: NO_GROW,
+            len: 0,
+            aux: NO_WTF,
+        }
+    }
+
+    /// For a carrier, its index in `Strings::wtf`.
+    pub(crate) fn wtf_index(&self) -> Option<usize> {
+        (self.grow == NO_GROW && self.aux != NO_WTF).then_some(self.aux as usize)
+    }
+
+    /// The text is `s` from now on, no longer a range of a shared buffer.
+    pub(crate) fn set_own(&mut self) {
+        self.grow = NO_GROW;
+        self.aux = NO_WTF;
+        self.len = 0;
+    }
+}
 
 /// Starts an escape in a carrier text. U+10FFFF is a noncharacter, so real text almost never holds one.
 pub const MARK: char = '\u{10FFFF}';
@@ -162,13 +188,18 @@ const GROW_MIN: usize = 64;
 #[derive(Clone)]
 pub struct Strings {
     pub bufs: Vec<StrBuf>,
-    grow: Vec<String>,
+    pub(crate) grow: Vec<String>,
     /// The `grow` buffer short strings are appended to, so making one allocates nothing of its own.
-    arena: u32,
-    wtf: Vec<Box<[u16]>>,
+    pub(crate) arena: u32,
+    pub(crate) wtf: Vec<Box<[u16]>>,
     map: FxHashMap<Cow<'static, str>, Atom>,
     atom_str: Vec<StrId>,
     atom_index: Vec<u32>,
+    /// A new string at this many takes the collector's path (`push_slow`); the rest of its state is boxed, as only
+    /// this is read on every allocation, and a larger `Strings` moves the VM's fields after it out of the dispatch
+    /// loop's short addressing.
+    pub(crate) gc_limit: usize,
+    pub(crate) gc: crate::collector::LazyStrGc,
 }
 
 /// A borrowed string with its ASCII flag and, for a carrier, its code units, for code-unit arithmetic.
@@ -189,6 +220,8 @@ impl Strings {
             map: FxHashMap::default(),
             atom_str: Vec::new(),
             atom_index: Vec::new(),
+            gc_limit: crate::collector::first_limit(),
+            gc: Default::default(),
         };
         for name in ["Symbol(Symbol.iterator)", "Symbol(Symbol.asyncIterator)"] {
             let id = s.alloc_static(name);
@@ -237,19 +270,51 @@ impl Strings {
     }
 
     pub fn alloc_static(&mut self, s: &'static str) -> StrId {
-        self.push(Cow::Borrowed(s), s.is_ascii())
-    }
-
-    fn push(&mut self, s: Cow<'static, str>, ascii: bool) -> StrId {
+        // Built-in names, interned once each, skip a collector's path (`push_entry`): a string pushed at the end
+        // with text of its own needs no colour, and setting up a run makes over a thousand.
         self.bufs.push(StrBuf {
-            s,
-            ascii,
+            s: Cow::Borrowed(s),
+            ascii: s.is_ascii(),
             builder: false,
             grow: NO_GROW,
             len: 0,
             aux: NO_WTF,
         });
         (self.bufs.len() - 1) as StrId
+    }
+
+    fn push(&mut self, s: Cow<'static, str>, ascii: bool) -> StrId {
+        self.push_entry(StrBuf {
+            s,
+            ascii,
+            builder: false,
+            grow: NO_GROW,
+            len: 0,
+            aux: NO_WTF,
+        })
+    }
+
+    #[inline]
+    fn push_entry(&mut self, entry: StrBuf) -> StrId {
+        if self.bufs.len() >= self.gc_limit
+            && let Some(id) = self.push_slow(entry.grow)
+        {
+            // A freed slot holds `StrBuf::empty()`, which owns nothing: see `Heap::put`.
+            std::mem::forget(std::mem::replace(&mut self.bufs[id as usize], entry));
+            return id;
+        }
+        self.bufs.push(entry);
+        (self.bufs.len() - 1) as StrId
+    }
+
+    /// A new shared buffer holding `s`; a collector may give it the index of a dropped one.
+    #[inline]
+    fn new_grow(&mut self, s: String) -> usize {
+        if !self.gc.grow_free.is_empty() {
+            return self.reuse_grow(s);
+        }
+        self.grow.push(s);
+        self.grow.len() - 1
     }
 
     #[inline]
@@ -297,8 +362,7 @@ impl Strings {
     /// The index of the short strings' buffer, made on first use.
     fn arena(&mut self) -> usize {
         if self.arena == NO_GROW {
-            self.arena = self.grow.len() as u32;
-            self.grow.push(String::with_capacity(1024));
+            self.arena = self.new_grow(String::with_capacity(1024)) as u32;
         }
         self.arena as usize
     }
@@ -307,15 +371,14 @@ impl Strings {
     fn push_grown(&mut self, buf: String, g: usize, start: usize, ascii: bool) -> StrId {
         let len = (buf.len() - start) as u32;
         self.grow[g] = buf;
-        self.bufs.push(StrBuf {
+        self.push_entry(StrBuf {
             s: Cow::Borrowed(""),
             ascii,
             builder: false,
             grow: g as u32,
             len,
             aux: start as u32,
-        });
-        (self.bufs.len() - 1) as StrId
+        })
     }
 
     pub fn concat(&mut self, parts: &[StrId]) -> StrId {
@@ -335,8 +398,7 @@ impl Strings {
             if f.grow != NO_GROW && self.grow[f.grow as usize].len() == (f.aux + f.len) as usize {
                 (f.grow as usize, f.aux as usize, rest)
             } else if total >= GROW_MIN {
-                self.grow.push(String::with_capacity(total * 2));
-                (self.grow.len() - 1, 0, parts)
+                (self.new_grow(String::with_capacity(total * 2)), 0, parts)
             } else {
                 let g = self.arena();
                 (g, self.grow[g].len(), parts)
@@ -390,9 +452,9 @@ impl Strings {
         if self.grow[g].len() != (ab.aux + ab.len) as usize {
             let mut s = String::with_capacity(ab.len as usize * 2);
             s.push_str(self.get(a));
-            self.grow.push(s);
+            let g = self.new_grow(s);
             let entry = &mut self.bufs[a as usize];
-            entry.grow = (self.grow.len() - 1) as u32;
+            entry.grow = g as u32;
             entry.aux = 0;
             return self.push_in_place(a, b);
         }
@@ -411,10 +473,14 @@ impl Strings {
         let joined = format!("{}{}", self.get(a), self.get(b));
         let made = self.alloc(joined);
         let builder = self.bufs[a as usize].builder;
-        if let Some(mut entry) = self.bufs.pop().filter(|_| made as usize == self.bufs.len()) {
-            entry.builder = builder;
-            self.bufs[a as usize] = entry;
-        }
+        // A collector may have made it in a freed slot rather than at the end.
+        let mut entry = if made as usize + 1 == self.bufs.len() {
+            self.bufs.pop().unwrap_or_else(StrBuf::empty)
+        } else {
+            std::mem::replace(&mut self.bufs[made as usize], StrBuf::empty())
+        };
+        entry.builder = builder;
+        self.bufs[a as usize] = entry;
     }
 
     /// Appends the text of `p` to `buf`, which was taken out of `grow[g]`.

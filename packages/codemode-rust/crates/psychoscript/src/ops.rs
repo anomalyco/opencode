@@ -1229,6 +1229,8 @@ impl Vm {
         }
     }
 
+    // Inlined in the dispatch loop (see `Vm::new_object`).
+    #[inline]
     pub fn type_of(&self, v: &Value) -> &'static str {
         match v {
             Value::Undef | Value::Uninit => "undefined",
