@@ -2571,7 +2571,9 @@ export type ConfigEntry =
         plugins?: Array<string | { package: string; options?: { [x: string]: JsonValue } }>
         worktree?: ConfigWorktree
         warming?: boolean | { prompt?: string; interval?: "auto" | (string & {}); duration?: string }
-        console_memory?: boolean
+        console_memory?:
+          | boolean
+          | { decisions?: false | string | { providerID: string; model: string; variant?: string } }
         providers?: {
           [x: string]: {
             canonical?: ProviderID

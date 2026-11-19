@@ -1136,6 +1136,7 @@ export const dict = {
   "settings.general.row.consoleMemory.title": "OpenCode Console memory",
   "settings.general.row.consoleMemory.description":
     "Use your OpenCode Console workspace's shared memory on this server when the workspace offers it",
+  "settings.general.row.consoleMemory.configured": "This server's config sets console_memory itself; change it there",
   "settings.general.row.colorScheme.title": "Color scheme",
   "settings.general.row.colorScheme.description": "Choose whether OpenCode follows the system, light, or dark theme",
   "settings.general.row.theme.title": "Theme",

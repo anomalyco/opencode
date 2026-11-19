@@ -430,6 +430,23 @@ While it is off, agents get no memory tools, no entries are delivered to
 sessions, and sessions are not captured. The server's settings page has the same
 switch, and a change applies without a restart.
 
+Memory asks a decision model which messages state lasting team rules, which
+entries a message corrects, which lessons last, and which entries apply to a
+task. It uses `opencode/jev-1.13` with your OpenCode sign-in. Name another
+decision model from your providers, or set `false` to decide without one.
+
+```jsonc
+{
+  "console_memory": {
+    "decisions": "opencode/jev-1.13",
+  },
+}
+```
+
+Without a decision model, memory takes the stricter reading. Only explicit team
+rules count as rules, no correction reminder is shown, and entries are
+delivered only above Console's own relevance bar.
+
 ### Skills
 
 Add directories or URLs that OpenCode should search for agent skills.

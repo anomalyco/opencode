@@ -6,6 +6,8 @@ import { Message, SystemPart } from "@opencode/ai/effect"
 import type { Plugin as PluginContext } from "@opencode/plugin/effect"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Document, Event, Info } from "@opencode/schema/config"
+import { ConfigConsoleMemory } from "@opencode/schema/config/console-memory"
+import type { DecisionAnswer, DecisionRequest } from "@opencode/schema/generate"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { Model } from "@opencode/schema/model"
 import { Deferred, Effect, Exit, Fiber, Layer, Queue, Scope, Stream } from "effect"
@@ -34,13 +36,26 @@ import { initGit } from "../fixture/git"
 import { advance, drain } from "../lib/clock"
 import { eventually, waitUntil } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
-import { Generate } from "@opencode/core/generate"
+import { Generate, ModelNotFoundError, ProviderRequestError } from "@opencode/core/generate"
 import { OpencodeMemoryCapture } from "@opencode/core/plugin/provider/opencode-memory-capture"
-import { makePluginTestLayer, PluginTestLayer } from "./fixture"
+import { makePluginTestLayer } from "./fixture"
 
-const withFlags = (overrides: string) =>
-  testEffect(PluginTestLayer.pipe(Layer.provide(Layer.succeed(Flag.Overrides, overrides))))
-const it = withFlags("console_memory")
+/**
+ * How OpenCode's decision generation answers: by question name, a predicate's probability or a choice's probabilities
+ * by value, or the status a provider fails with; unset, no decision model resolves. Reset when a test's Console closes.
+ */
+const judge = {
+  answer: undefined as
+    | ((asked: Asked) => Record<string, number | Record<string, number> | undefined> | number)
+    | undefined,
+  asked: new Array<Asked>(),
+}
+/** A decision request, its evidence as one text and its questions by name. */
+type Asked = {
+  readonly model: string
+  readonly state: string
+  readonly questions: Record<string, DecisionRequest["questions"][number]>
+}
 /** What the stand-in model answers a distillation, the prompts it was given, and the model each named. */
 const distiller = {
   reply: "",
@@ -60,7 +75,39 @@ const generating = Layer.succeed(
         return distiller.reply
       }),
     image: () => Effect.die("unused"),
-    decisions: () => Effect.die("unused"),
+    decisions: (input) =>
+      Effect.suspend((): Effect.Effect<{ answers: DecisionAnswer[] }, ModelNotFoundError | ProviderRequestError> => {
+        const asked: Asked = {
+          model: `${input.model.providerID}/${input.model.id}`,
+          state: input.input.map((part) => (part.type === "text" ? part.text : "")).join(""),
+          questions: Object.fromEntries(input.questions.map((question) => [question.name, question])),
+        }
+        judge.asked.push(asked)
+        if (judge.answer === undefined)
+          return Effect.fail(
+            new ModelNotFoundError({ providerID: input.model.providerID, modelID: input.model.id, message: "unknown" }),
+          )
+        const answers = judge.answer(asked)
+        if (typeof answers === "number")
+          return Effect.fail(
+            new ProviderRequestError({ providerID: "opencode", reason: "provider", message: "no", status: answers }),
+          )
+        return Effect.succeed({
+          answers: input.questions.map((question): DecisionAnswer => {
+            const answer = answers[question.name]
+            if (typeof answer === "number") return { type: "predicate", name: question.name, probability: answer }
+            if (answer === undefined) return { type: "error", name: question.name, reason: "unanswered" }
+            const probabilities = Object.entries(answer).map(([value, probability]) => ({ value, probability }))
+            return {
+              type: "choice",
+              name: question.name,
+              choice: probabilities.toSorted((a, b) => b.probability - a.probability)[0]?.value ?? "none",
+              confidence: 1,
+              probabilities,
+            }
+          }),
+        })
+      }),
     video: {
       start: () => Effect.die("unused"),
       status: () => Effect.die("unused"),
@@ -70,6 +117,8 @@ const generating = Layer.succeed(
 )
 const capturing = (overrides: string) =>
   testEffect(makePluginTestLayer(undefined, generating).pipe(Layer.provide(Layer.succeed(Flag.Overrides, overrides))))
+const withFlags = capturing
+const it = withFlags("console_memory")
 const released = withFlags("-console_memory")
 
 type Synthetic = Parameters<PluginContext.Context["session"]["synthetic"]>[0]
@@ -114,26 +163,12 @@ const injected = (id: string, score: number, revision = 1) => ({
   deliveryID: `mdl_${id}`,
 })
 
-/** A decision request as Console's decision endpoint takes it. */
-type Decision = {
-  readonly model: string
-  readonly state: string
-  readonly questions: Record<string, { type: string; instructions: string; criteria: Record<string, string> }>
-}
-
 /** Console's memory routes and config, in-process, with the request and response shapes and error tags Console uses. */
 function fakeConsole() {
   const state = {
     memory: true,
     /** The OpenCode config Console hands out, such as its MCP servers. */
     config: {} as Record<string, unknown>,
-    /**
-     * How Console's decision endpoint answers a request's questions, or the status it refuses with; unset, it isn't
-     * there (404), as when the member's Console can't answer decisions.
-     */
-    decide: undefined as ((request: Decision) => Record<string, unknown> | number) | undefined,
-    /** The decision requests, apart from the memory requests. */
-    decisions: new Array<Decision & { authorization: string | null }>(),
     hits: new Array<ReturnType<typeof hit>>(),
     injected: new Array<ReturnType<typeof injected>>(),
     /** An entry close enough to refuse a publish without `distinctFrom`. */
@@ -201,14 +236,6 @@ function fakeConsole() {
       // The list the reachable set is checked against, which the plugin keeps fresh on its own: not logged.
       if (url.pathname === "/api/memory/anchors")
         return state.stalled ? new Promise<Response>(() => {}) : Response.json({ anchors: state.anchors })
-      if (url.pathname === "/inference/systemone/v1/systemone") {
-        const asked = (await request.json()) as Decision
-        state.decisions.push({ ...asked, authorization: request.headers.get("authorization") })
-        const answer = state.decide?.(asked) ?? 404
-        return typeof answer === "number"
-          ? Response.json({ error: "no" }, { status: answer })
-          : Response.json({ model: "jev-1.13", answers: answer })
-      }
       if (url.pathname === "/api/v2/config")
         return Response.json(state.config, { headers: state.memory ? { [OpencodeMemory.header]: "1" } : {} })
       const body = (request.method === "GET" ? undefined : await request.json()) as Record<string, unknown> | undefined
@@ -325,7 +352,16 @@ function fakeConsole() {
 }
 
 const withConsole = <A, E, R>(use: (console: ReturnType<typeof fakeConsole>) => Effect.Effect<A, E, R>) =>
-  Effect.acquireUseRelease(Effect.sync(fakeConsole), use, (console) => Effect.promise(() => console.server.stop(true)))
+  Effect.acquireUseRelease(Effect.sync(fakeConsole), use, (console) =>
+    Effect.promise(() => console.server.stop(true)).pipe(
+      Effect.andThen(
+        Effect.sync(() => {
+          judge.answer = undefined
+          judge.asked.length = 0
+        }),
+      ),
+    ),
+  )
 
 /**
  * Signs in to the fake Console and starts the plugin, recording each synthetic message it admits. `servers` are the MCP
@@ -431,14 +467,9 @@ const prompt = (sessionID: Session.ID, text: string, metadata?: Record<string, u
     })
   })
 
-/** A yes-or-no answer, and a choice answer, as Console's decision endpoint gives them. */
-const yes = (probability: number) => ({ type: "noul", noul: probability })
-const picked = (probabilities: Record<string, number>) => ({
-  type: "choice",
-  choice: Object.entries(probabilities).toSorted((a, b) => b[1] - a[1])[0]?.[0],
-  confidence: 1,
-  probabilities,
-})
+/** A predicate's probability, and a choice's probabilities by value, as `judge` answers them. */
+const yes = (probability: number) => probability
+const picked = (probabilities: Record<string, number>) => probabilities
 
 /**
  * Waits until the session's last prompt has been judged and recorded: the session's next event waits for it, as the
@@ -580,6 +611,35 @@ describe("OpencodePlugin memory", () => {
           yield* eventually(memoryTools, (tools) => tools.length === 0)
         }),
       ),
+  )
+
+  it.effect("asks the decision model config names, and none when config turns decisions off", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        const config = yield* Config.Test
+        const set = (decisions: ConfigConsoleMemory.Settings["decisions"]) =>
+          config.setEntries([
+            new Document({
+              type: "document",
+              info: new Info({ console_memory: new ConfigConsoleMemory.Settings({ decisions }) }),
+            }),
+          ])
+        judge.answer = () => ({ lasting: 0.1 })
+        yield* set({ providerID: Provider.ID.make("lmstudio"), model: Model.ID.make("clef") })
+        const { host } = yield* start(console)
+        const session = yield* host.session.create({})
+        yield* prompt(session.id, "Deploy the worker")
+        yield* judged(session.id)
+        expect(judge.asked.map((item) => item.model)).toEqual(["lmstudio/clef"])
+
+        // Off: no decision is asked, and memory reads messages the stricter way.
+        yield* set(false)
+        yield* prompt(session.id, "Deploy it again")
+        yield* judged(session.id)
+        expect(judge.asked).toHaveLength(1)
+        expect(yield* memoryTools).toContain("search")
+      }),
+    ),
   )
 
   it.effect("searches with the files the session worked on and reads as the signed-in member", () =>
@@ -986,7 +1046,7 @@ describe("OpencodePlugin memory", () => {
         const session = yield* host.session.create({})
         console.state.injected = [injected("mem_a", 0.95), injected("mem_b", 0.7)]
         // Both apply to the task.
-        console.state.decide = () => ({ applies: { type: "noul", noul: 0.9 } })
+        judge.answer = () => ({ applies: 0.9 })
 
         yield* prompt(session.id, "  Fix the deploy ")
         const first = request(session.id, "Fix the deploy")
@@ -1384,7 +1444,7 @@ describe("OpencodePlugin memory", () => {
           const instructions = host.session.instructions.entry.list({ sessionID: session.id })
           console.state.injected = [injected("mem_deploy", 0.9)]
           // Which given entry a message corrects is Console's decision: here, any message that says it's wrong.
-          console.state.decide = (asked) =>
+          judge.answer = (asked) =>
             asked.questions.corrects
               ? {
                   corrects: /wrong|should say/.test(asked.state)
@@ -1402,10 +1462,11 @@ describe("OpencodePlugin memory", () => {
           yield* judged(session.id)
           expect(yield* instructions).toEqual([])
           // Asked once, over the entries the session was given.
-          const asked = console.state.decisions.filter((item) => item.questions.corrects)
+          const asked = judge.asked.filter((item) => item.questions.corrects)
           expect(asked).toHaveLength(1)
-          expect(asked[0]).toMatchObject({ model: "jev-1.13", authorization: "Bearer secret" })
-          expect(Object.keys(asked[0]!.questions.corrects!.criteria)).toEqual(["none", "mem_deploy"])
+          expect(asked[0]?.model).toBe("opencode/jev-1.13")
+          const choice = asked[0]?.questions.corrects
+          expect(choice?.type === "choice" && choice.choices.map((item) => item.value)).toEqual(["none", "mem_deploy"])
 
           // The injected entry's body reads "Body of mem_deploy"; the user says otherwise.
           yield* prompt(session.id, "No, that body of mem_deploy is wrong, deploy with wrangler instead")
@@ -1457,7 +1518,7 @@ describe("OpencodePlugin memory", () => {
           injected("mem_e", 0.2),
         ]
         const applies: Record<string, number> = { mem_a: 0.2, mem_b: 0.7, mem_c: 0.9, mem_d: 0.5, mem_e: 0.3 }
-        console.state.decide = (asked) =>
+        judge.answer = (asked) =>
           asked.questions.applies
             ? { applies: yes(applies[/Entry (mem_\w)/.exec(asked.state)?.[1] ?? ""] ?? 0) }
             : { lasting: yes(0.1) }
@@ -1473,10 +1534,10 @@ describe("OpencodePlugin memory", () => {
             files: [],
           }),
         )
-        expect(console.state.decisions.filter((item) => item.questions.applies)).toHaveLength(5)
+        expect(judge.asked.filter((item) => item.questions.applies)).toHaveLength(5)
 
         // However many apply, three at most.
-        console.state.decide = (asked) => (asked.questions.applies ? { applies: yes(0.9) } : { lasting: yes(0.1) })
+        judge.answer = (asked) => (asked.questions.applies ? { applies: yes(0.9) } : { lasting: yes(0.1) })
         const busy = yield* host.session.create({})
         yield* prompt(busy.id, "Fix the deploy")
         const many = request(busy.id, "Fix the deploy")
@@ -1493,7 +1554,7 @@ describe("OpencodePlugin memory", () => {
         )
 
         // Without decisions, Console's own bar on the scores: only mem_a reaches it.
-        console.state.decide = () => 503
+        judge.answer = () => 503
         const other = yield* host.session.create({})
         yield* prompt(other.id, "Fix the deploy")
         const fallback = request(other.id, "Fix the deploy")
@@ -2119,7 +2180,7 @@ describe("OpencodePlugin memory capture", () => {
           const rule = "Money parameters carry a Cents suffix in this codebase"
           // Wording alone wouldn't make it a rule; the decision does.
           expect(OpencodeMemoryCapture.fallback.lasting(rule)).toBe(false)
-          console.state.decide = (asked) =>
+          judge.answer = (asked) =>
             asked.questions.lasting ? { lasting: yes(asked.state.includes("Cents suffix") ? 0.92 : 0.1) } : 503
           distiller.reply = JSON.stringify({
             candidates: [
@@ -2137,7 +2198,7 @@ describe("OpencodePlugin memory capture", () => {
           yield* prompt(session.id, rule)
           yield* waitUntil(Effect.sync(() => publishes(console).length === 1))
           expect(publishes(console)[0]?.body).toMatchObject({ evidence: [{ kind: "confirmation", ref: rule }] })
-          expect(console.state.decisions.filter((item) => item.questions.lasting)).toHaveLength(1)
+          expect(judge.asked.filter((item) => item.questions.lasting)).toHaveLength(1)
         }),
       ),
   )
@@ -2155,7 +2216,7 @@ describe("OpencodePlugin memory capture", () => {
           distiller.reply = JSON.stringify({
             candidates: [lesson("How this fix parses dates"), lesson("Tests need TZ=UTC")],
           })
-          console.state.decide = (asked) =>
+          judge.answer = (asked) =>
             asked.questions.durable
               ? asked.state.includes("Title: How this fix parses dates")
                 ? { durable: yes(0.9), fix_record: yes(0.9) }
@@ -2167,9 +2228,7 @@ describe("OpencodePlugin memory capture", () => {
           yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 1, output: " 1 fail" })
           yield* ran(session.id, "edit", { path: "src/dates.ts" })
           yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 0, output: " 1 pass" })
-          yield* waitUntil(
-            Effect.sync(() => console.state.decisions.filter((item) => item.questions.durable).length === 2),
-          )
+          yield* waitUntil(Effect.sync(() => judge.asked.filter((item) => item.questions.durable).length === 2))
           yield* waitUntil(Effect.sync(() => publishes(console).length === 1))
           yield* drain
           expect(publishes(console).map((item) => (item.body as { title: string }).title)).toEqual([

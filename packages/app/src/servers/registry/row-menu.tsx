@@ -102,7 +102,11 @@ export const ServerRowMenuView: Component<{
             <Show when={props.shell}>{(shell) => <ShellSubmenu shell={shell()} labels={props.labels} />}</Show>
             <Show when={props.memory}>
               {(memory) => (
-                <Menu.CheckboxItem checked={memory().enabled()} onChange={memory().select}>
+                <Menu.CheckboxItem
+                  checked={memory().enabled()}
+                  disabled={memory().configured()}
+                  onChange={memory().select}
+                >
                   {props.labels.memory}
                 </Menu.CheckboxItem>
               )}

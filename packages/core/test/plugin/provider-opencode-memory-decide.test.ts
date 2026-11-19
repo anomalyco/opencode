@@ -1,58 +1,31 @@
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Fiber } from "effect"
-import { FetchHttpClient, HttpClient } from "effect/http"
+import type { DecisionAnswer, DecisionRequest } from "@opencode/schema/generate"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
+import { Deferred, Effect, Fiber, Layer } from "effect"
 import { TestClock } from "effect/testing"
+import { ModelNotFoundError, ProviderRequestError } from "@opencode/core/generate"
 import { OpencodeMemoryDecide } from "@opencode/core/plugin/provider/opencode-memory-decide"
 import { testEffect } from "../lib/effect"
 import { eventually } from "../lib/eventually"
 
-const it = testEffect(FetchHttpClient.layer)
+const it = testEffect(Layer.empty)
 
-type Asked = {
-  model: string
-  state: string
-  questions: Record<string, { type: string; instructions: string; criteria: Record<string, string> }>
+/** OpenCode's decision generation, answering each request with `answer`: answers, or an error to fail with. */
+const generation = (
+  answer: (request: DecisionRequest, index: number) => Effect.Effect<ReadonlyArray<DecisionAnswer>, unknown>,
+) => {
+  const asked = new Array<DecisionRequest>()
+  // Each run is a request, as OpenCode's decision generation makes one per run.
+  const decisions = (request: DecisionRequest) =>
+    Effect.suspend(() => {
+      asked.push(request)
+      return answer(request, asked.length - 1).pipe(Effect.map((answers) => ({ answers: [...answers] })))
+    })
+  return { asked, decisions: decisions as Parameters<typeof OpencodeMemoryDecide.make>[0]["decisions"] }
 }
 
-/** Console's decision endpoint, answering each request with `answer`, a status, or a promise it settles later. */
-const endpoint = (answer: (asked: Asked, index: number) => unknown) =>
-  Effect.acquireRelease(
-    Effect.sync(() => {
-      const asked = new Array<Asked & { path: string; authorization: string | null }>()
-      const server = Bun.serve({
-        port: 0,
-        fetch: async (request) => {
-          const body = (await request.json()) as Asked
-          asked.push({
-            ...body,
-            path: new URL(request.url).pathname,
-            authorization: request.headers.get("authorization"),
-          })
-          const result = await answer(body, asked.length - 1)
-          return typeof result === "number"
-            ? Response.json({ error: "no" }, { status: result })
-            : Response.json({ model: "jev-1.13", answers: result })
-        },
-      })
-      return { server, asked }
-    }),
-    (fake) => Effect.promise(() => fake.server.stop(true)),
-  )
-
-const decider = (origin: string | undefined) =>
-  Effect.gen(function* () {
-    const http = yield* HttpClient.HttpClient
-    return OpencodeMemoryDecide.make({
-      http,
-      console: Effect.succeed(
-        origin === undefined
-          ? undefined
-          : { key: "ws", server: `${origin}/console`, headers: Effect.succeed({ authorization: "Bearer member" }) },
-      ),
-    })
-  })
-
-const noul = (p: number) => ({ type: "noul", noul: p })
+const predicate = (name: string, probability: number): DecisionAnswer => ({ type: "predicate", name, probability })
 const given = [
   { id: "mem_a", revision: 1, title: "Deploys use wrangler", text: "Run wrangler deploy." },
   { id: "mem_b", revision: 2, title: "Tests", text: "Run bun test." },
@@ -65,108 +38,166 @@ const entry = {
   revision: 1,
   score: 0.4,
 }
+const limited = new ProviderRequestError({
+  providerID: "opencode",
+  reason: "rate_limit",
+  message: "slow down",
+  status: 429,
+})
 
 describe("OpencodeMemoryDecide", () => {
-  it.live(
-    "asks Console's decision endpoint with the member's credential, the pinned model and the bench's questions",
-    () =>
-      Effect.gen(function* () {
-        const fake = yield* endpoint((asked) => {
-          if (asked.questions.lasting) return { lasting: noul(0.83) }
-          if (asked.questions.corrects)
-            return {
-              corrects: {
-                type: "choice",
-                choice: "mem_b",
-                confidence: 0.9,
-                probabilities: { none: 0.1, mem_a: 0.2, mem_b: 0.7 },
-              },
-            }
-          if (asked.questions.durable) return { durable: noul(0.8), fix_record: noul(0.25) }
-          return { applies: noul(0.66) }
-        })
-        const decide = yield* decider(fake.server.url.origin)
+  it.live("asks the configured decision model the bench's questions, through OpenCode's decision generation", () =>
+    Effect.gen(function* () {
+      const fake = generation((request) => {
+        const question = request.questions[0]!
+        if (question.name === "lasting") return Effect.succeed([predicate("lasting", 0.83)])
+        if (question.name === "corrects")
+          return Effect.succeed([
+            {
+              type: "choice",
+              name: "corrects",
+              choice: "mem_b",
+              confidence: 0.9,
+              probabilities: [
+                { value: "none", probability: 0.1 },
+                { value: "mem_a", probability: 0.2 },
+                { value: "mem_b", probability: 0.7 },
+              ],
+            },
+          ])
+        if (question.name === "durable")
+          return Effect.succeed([predicate("durable", 0.8), predicate("fix_record", 0.25)])
+        return Effect.succeed([predicate("applies", 0.66)])
+      })
+      const decide = OpencodeMemoryDecide.make({
+        decisions: fake.decisions,
+        model: Effect.succeed(OpencodeMemoryDecide.MODEL),
+      })
 
-        expect(yield* decide.lasting("We squash merges from now on")).toBe(0.83)
-        expect(fake.asked[0]).toMatchObject({
-          path: "/inference/systemone/v1/systemone",
-          authorization: "Bearer member",
-          model: "jev-1.13",
-          state:
-            "Latest message from a user to an AI coding agent working in their repository:\n\nWe squash merges from now on",
-        })
-        expect(fake.asked[0]?.questions.lasting).toEqual({
-          type: "noul",
-          instructions:
-            "Does this message state something that should hold for future work in this repository beyond the current task, such as a team rule, convention or decision, or a correction of a standing practice?",
-          criteria: {
-            true: "The message states a lasting team rule, convention or decision, corrects or reverses a standing practice or an earlier rule, or asserts a durable fact about how the team or repository works. It counts even when the same message also asks for a task.",
-            false:
-              "Everything in the message is about the current task only: a request for this change (even with words like always, never, must or don't describing the requested behaviour), a temporary constraint, a correction of the agent's current work, a preference for this conversation, a question, or a rule someone else stated that the user asks to check.",
+      expect(yield* decide.lasting("We squash merges from now on")).toBe(0.83)
+      expect(fake.asked[0]).toEqual({
+        model: Model.Ref.make({ providerID: Provider.ID.make("opencode"), id: Model.ID.make("jev-1.13") }),
+        input: [
+          {
+            type: "text",
+            text: "Latest message from a user to an AI coding agent working in their repository:\n\nWe squash merges from now on",
           },
-        })
+        ],
+        questions: [
+          {
+            type: "predicate",
+            name: "lasting",
+            instructions:
+              "Does this message state something that should hold for future work in this repository beyond the current task, such as a team rule, convention or decision, or a correction of a standing practice?",
+            criteria: {
+              true: "The message states a lasting team rule, convention or decision, corrects or reverses a standing practice or an earlier rule, or asserts a durable fact about how the team or repository works. It counts even when the same message also asks for a task.",
+              false:
+                "Everything in the message is about the current task only: a request for this change (even with words like always, never, must or don't describing the requested behaviour), a temporary constraint, a correction of the agent's current work, a preference for this conversation, a question, or a rule someone else stated that the user asks to check.",
+            },
+          },
+        ],
+      })
 
-        // The best entry, never "none", with its probability.
-        expect(yield* decide.corrects("The tests run with vitest now", given)).toEqual({ id: "mem_b", p: 0.7 })
-        expect(fake.asked[1]?.state).toBe(
-          "Team notes from shared memory that an AI coding agent was shown:\n\n[mem_a] Deploys use wrangler\nRun wrangler deploy.\n\n[mem_b] Tests\nRun bun test.\n\nThe user's latest message to the agent:\n\nThe tests run with vitest now",
-        )
-        expect(fake.asked[1]?.questions.corrects?.type).toBe("choice")
-        expect(fake.asked[1]?.questions.corrects?.criteria.mem_b).toBe(
-          'The message says or implies that note mem_b ("Tests") is wrong, outdated or has changed.',
-        )
-        expect(Object.keys(fake.asked[1]?.questions.corrects?.criteria ?? {})).toEqual(["none", "mem_a", "mem_b"])
+      // The best entry, never "none", with its probability.
+      expect(yield* decide.corrects("The tests run with vitest now", given)).toEqual({ id: "mem_b", p: 0.7 })
+      expect(fake.asked[1]?.input).toEqual([
+        {
+          type: "text",
+          text: "Team notes from shared memory that an AI coding agent was shown:\n\n[mem_a] Deploys use wrangler\nRun wrangler deploy.\n\n[mem_b] Tests\nRun bun test.\n\nThe user's latest message to the agent:\n\nThe tests run with vitest now",
+        },
+      ])
+      const choice = fake.asked[1]?.questions[0]
+      expect(choice?.type === "choice" && choice.choices.map((item) => item.value)).toEqual(["none", "mem_a", "mem_b"])
+      expect(choice?.type === "choice" && choice.choices[2]?.description).toBe(
+        'The message says or implies that note mem_b ("Tests") is wrong, outdated or has changed.',
+      )
 
-        // Durable, and not mainly a record of one fix.
-        expect(
-          yield* decide.durable({ kind: "gotcha", title: "Dates are UTC", body: "Claim: x" }, "github.com/acme/app"),
-        ).toBeCloseTo(0.6, 10)
-        expect(Object.keys(fake.asked[2]?.questions ?? {})).toEqual(["durable", "fix_record"])
-        expect(fake.asked[2]?.state).toBe(
-          "Candidate lesson for a team's shared memory, written after an AI coding agent's task in the github.com/acme/app repository:\n\nKind: gotcha\nTitle: Dates are UTC\n\nClaim: x",
-        )
+      // Durable, and not mainly a record of one fix.
+      expect(
+        yield* decide.durable({ kind: "gotcha", title: "Dates are UTC", body: "Claim: x" }, "github.com/acme/app"),
+      ).toBeCloseTo(0.6, 10)
+      expect(fake.asked[2]?.questions.map((question) => question.name)).toEqual(["durable", "fix_record"])
 
-        // At a failure, the command and the end of what it printed come with the task.
-        const output = `${"x".repeat(2500)}\nError: wrangler not found`
-        expect(
-          yield* decide.applies(
-            { type: "failure", command: "bun run deploy", output, exitCode: 1 },
-            "Deploy the worker",
-            entry,
-          ),
-        ).toBe(0.66)
-        expect(fake.asked[3]?.state).toBe(
-          `Task given to an AI coding agent:\nDeploy the worker\n\nThe agent ran \`bun run deploy\` and it failed with:\n${output.slice(-2000)}\n\nNote from the team's shared memory (procedure): Deploys use wrangler\nRun wrangler deploy.`,
-        )
-      }),
+      // At a failure, the command and the end of what it printed come with the task.
+      const output = `${"x".repeat(2500)}\nError: wrangler not found`
+      expect(
+        yield* decide.applies(
+          { type: "failure", command: "bun run deploy", output, exitCode: 1 },
+          "Deploy the worker",
+          entry,
+        ),
+      ).toBe(0.66)
+      expect(fake.asked[3]?.input).toEqual([
+        {
+          type: "text",
+          text: `Task given to an AI coding agent:\nDeploy the worker\n\nThe agent ran \`bun run deploy\` and it failed with:\n${output.slice(-2000)}\n\nNote from the team's shared memory (procedure): Deploys use wrangler\nRun wrangler deploy.`,
+        },
+      ])
+    }),
   )
 
-  it.live("waits out Console's rate limit within the deadline", () =>
+  it.live("asks another model when config names one, and none when config turns decisions off", () =>
     Effect.gen(function* () {
-      const fake = yield* endpoint((_, index) => (index < 2 ? 429 : { lasting: noul(0.91) }))
-      const decide = yield* decider(fake.server.url.origin)
+      const fake = generation(() => Effect.succeed([predicate("lasting", 0.5)]))
+      const clef = Model.Ref.make({ providerID: Provider.ID.make("cloudflare-workers-ai"), id: Model.ID.make("clef") })
+      yield* OpencodeMemoryDecide.make({ decisions: fake.decisions, model: Effect.succeed(clef) }).lasting("hi")
+      expect(fake.asked.map((request) => request.model)).toEqual([clef])
+      const off = OpencodeMemoryDecide.make({ decisions: fake.decisions, model: Effect.succeed(undefined) })
+      expect(yield* off.lasting("hi")).toBeUndefined()
+      expect(fake.asked).toHaveLength(1)
+    }),
+  )
+
+  it.live("waits out a rate limit within the deadline", () =>
+    Effect.gen(function* () {
+      const fake = generation((_, index) =>
+        index < 2 ? Effect.fail(limited) : Effect.succeed([predicate("lasting", 0.91)]),
+      )
+      const decide = OpencodeMemoryDecide.make({
+        decisions: fake.decisions,
+        model: Effect.succeed(OpencodeMemoryDecide.MODEL),
+      })
       expect(yield* decide.lasting("We squash merges")).toBe(0.91)
       expect(fake.asked).toHaveLength(3)
     }),
   )
 
-  it.live("answers nothing on a refusal, a malformed answer or without a connection", () =>
+  it.live("answers nothing for a model that doesn't resolve, a refusal or another failure", () =>
     Effect.gen(function* () {
-      const fake = yield* endpoint((asked) => (asked.state.includes("refused") ? 403 : { other: noul(1) }))
-      const decide = yield* decider(fake.server.url.origin)
+      const fake = generation((request) => {
+        const text = request.input[0]?.type === "text" ? request.input[0].text : ""
+        if (text.includes("missing"))
+          return Effect.fail(
+            new ModelNotFoundError({
+              providerID: "opencode",
+              modelID: "jev-1.13",
+              message: "No decision model opencode/jev-1.13",
+            }),
+          )
+        if (text.includes("refused"))
+          return Effect.succeed([{ type: "error", name: "lasting", reason: "refusal" } satisfies DecisionAnswer])
+        return Effect.fail(
+          new ProviderRequestError({ providerID: "opencode", reason: "provider", message: "down", status: 503 }),
+        )
+      })
+      const decide = OpencodeMemoryDecide.make({
+        decisions: fake.decisions,
+        model: Effect.succeed(OpencodeMemoryDecide.MODEL),
+      })
+      expect(yield* decide.lasting("missing")).toBeUndefined()
       expect(yield* decide.lasting("refused")).toBeUndefined()
-      expect(yield* decide.lasting("malformed")).toBeUndefined()
-      expect(yield* decide.corrects("malformed", given)).toBeUndefined()
-      const offline = yield* decider(undefined)
-      expect(yield* offline.lasting("anything")).toBeUndefined()
-      expect(fake.asked).toHaveLength(3)
+      expect(yield* decide.lasting("down")).toBeUndefined()
+      expect(yield* decide.corrects("down", given)).toBeUndefined()
     }),
   )
 
   it.effect("answers nothing once its five seconds are up", () =>
     Effect.gen(function* () {
-      const fake = yield* endpoint(() => new Promise(() => {}))
-      const decide = yield* decider(fake.server.url.origin)
+      const fake = generation(() => Effect.never)
+      const decide = OpencodeMemoryDecide.make({
+        decisions: fake.decisions,
+        model: Effect.succeed(OpencodeMemoryDecide.MODEL),
+      })
       const pending = yield* decide.lasting("slow").pipe(Effect.forkChild({ startImmediately: true }))
       yield* eventually(
         Effect.sync(() => fake.asked.length),
@@ -184,14 +215,19 @@ describe("OpencodeMemoryDecide", () => {
       const release = yield* Deferred.make<void>()
       let open = 0
       let most = 0
-      const fake = yield* endpoint(async () => {
-        open++
-        most = Math.max(most, open)
-        await Effect.runPromise(Deferred.await(release))
-        open--
-        return { lasting: noul(0.5) }
+      const fake = generation(() =>
+        Effect.gen(function* () {
+          open++
+          most = Math.max(most, open)
+          yield* Deferred.await(release)
+          open--
+          return [predicate("lasting", 0.5)]
+        }),
+      )
+      const decide = OpencodeMemoryDecide.make({
+        decisions: fake.decisions,
+        model: Effect.succeed(OpencodeMemoryDecide.MODEL),
       })
-      const decide = yield* decider(fake.server.url.origin)
       const all = yield* Effect.forEach([1, 2, 3, 4, 5, 6], (n) => decide.lasting(`message ${n}`), {
         concurrency: "unbounded",
       }).pipe(Effect.forkChild({ startImmediately: true }))
@@ -199,7 +235,7 @@ describe("OpencodeMemoryDecide", () => {
         Effect.sync(() => fake.asked.length),
         (count) => count === 4,
       )
-      yield* Effect.promise(() => Bun.sleep(100))
+      yield* Effect.promise(() => Bun.sleep(50))
       expect(fake.asked).toHaveLength(4)
       yield* Deferred.succeed(release, undefined)
       expect(yield* Fiber.join(all)).toEqual([0.5, 0.5, 0.5, 0.5, 0.5, 0.5])

@@ -150,7 +150,9 @@ export function createServerShellController(server: Accessor<ServerConnection.An
 
 /**
  * Whether a server's OpenCode uses the OpenCode Console workspace's shared memory, as its global config says: on unless
- * `console_memory` is false. Turning it on removes the setting, so the default applies again.
+ * `console_memory` is false. Turning it on removes the setting, so the default applies again. While the config sets
+ * `console_memory` to an object of its own, `configured` says so and the switch leaves it alone: writing true or false
+ * would replace it.
  */
 export function createServerConsoleMemoryController(server: Accessor<ServerConnection.Any>) {
   const language = useLanguage()
@@ -158,21 +160,20 @@ export function createServerConsoleMemoryController(server: Accessor<ServerConne
   const setting = createOptimisticSetting({
     source: useServerCtx(server),
     initial: true,
-    initialMeta: undefined,
+    initialMeta: false,
     load: async (context) => {
       const entries = await context.sdk.api.config.get().catch(() => [])
       const boundary = entries.findIndex((entry) => entry.type === "directory")
       const global = boundary === -1 ? entries : entries.slice(0, boundary)
 
-      return {
-        meta: undefined,
-        value:
-          global
-            .flatMap((entry) =>
-              entry.type === "document" && entry.info.console_memory !== undefined ? [entry.info.console_memory] : [],
-            )
-            .at(-1) ?? true,
-      }
+      const setting = global
+        .flatMap((entry) =>
+          entry.type === "document" && entry.info.console_memory !== undefined ? [entry.info.console_memory] : [],
+        )
+        .at(-1)
+
+      // Anything but true, false or nothing is the object form.
+      return { meta: setting !== undefined && setting !== true && setting !== false, value: setting !== false }
     },
     write: async (value, context) => {
       await context.sdk.api.experimental.config.update({ console_memory: value ? null : false })
@@ -182,6 +183,7 @@ export function createServerConsoleMemoryController(server: Accessor<ServerConne
 
   return {
     enabled: setting.value,
+    configured: setting.meta,
     select: setting.select,
   }
 }

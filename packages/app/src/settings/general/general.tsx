@@ -116,10 +116,18 @@ export const ConsoleMemorySetting: Component<{ controller: ConsoleMemorySettings
   return (
     <SettingsRow
       title={language.t("settings.general.row.consoleMemory.title")}
-      description={language.t("settings.general.row.consoleMemory.description")}
+      description={language.t(
+        props.controller.configured()
+          ? "settings.general.row.consoleMemory.configured"
+          : "settings.general.row.consoleMemory.description",
+      )}
     >
       <div data-action="settings-console-memory">
-        <Switch checked={props.controller.enabled()} onChange={props.controller.select} />
+        <Switch
+          checked={props.controller.enabled()}
+          disabled={props.controller.configured()}
+          onChange={props.controller.select}
+        />
       </div>
     </SettingsRow>
   )

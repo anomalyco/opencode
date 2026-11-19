@@ -17308,7 +17308,14 @@
             ]
           },
           "console_memory": {
-            "type": "boolean"
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "$ref": "#/components/schemas/ConfigConsoleMemory.SettingsEncoded"
+              }
+            ]
           },
           "providers": {
             "type": "object",
@@ -17769,6 +17776,33 @@
         },
         "additionalProperties": false
       },
+      "Config.ModelSelectionEncoded": {
+        "anyOf": [
+          {
+            "type": "string",
+            "pattern": "^[^/#]+\\/[^#]+(?:#[^#]+)?$"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "providerID": {
+                "type": "string",
+                "pattern": "^[^/#]+$"
+              },
+              "model": {
+                "type": "string",
+                "pattern": "^[^#]+$"
+              },
+              "variant": {
+                "type": "string",
+                "pattern": "^[^#]+$"
+              }
+            },
+            "required": ["providerID", "model"],
+            "additionalProperties": false
+          }
+        ]
+      },
       "Config.Patch": {
         "type": "object",
         "properties": {
@@ -17982,6 +18016,23 @@
           }
         },
         "required": ["directory"],
+        "additionalProperties": false
+      },
+      "ConfigConsoleMemory.SettingsEncoded": {
+        "type": "object",
+        "properties": {
+          "decisions": {
+            "anyOf": [
+              {
+                "type": "boolean",
+                "enum": [false]
+              },
+              {
+                "$ref": "#/components/schemas/Config.ModelSelectionEncoded"
+              }
+            ]
+          }
+        },
         "additionalProperties": false
       },
       "ConfigShell.Option": {

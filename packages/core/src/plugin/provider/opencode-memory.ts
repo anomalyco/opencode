@@ -8,6 +8,8 @@ import { Message, SystemPart, ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { Agent } from "@opencode/schema/agent"
 import type { Document } from "@opencode/schema/config"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Hash } from "@opencode/util/hash"
@@ -296,7 +298,23 @@ export const make = Effect.fnUntraced(function* (
   const environments = yield* SessionEnvironment.Service
   const shells = yield* ShellSelect.Service
   const verify = OpencodeMemoryVerify.make({ git, processes, shell: shells.resolve({ priority: "config" }) })
-  const decide = OpencodeMemoryDecide.make({ http, console: Effect.sync(() => current?.console) })
+  // The decision model config names under console_memory, the bench's by default; none when config turns decisions off.
+  const decide = OpencodeMemoryDecide.make({
+    decisions: ctx.experimental.generate.decisions,
+    model: config.entries().pipe(
+      Effect.map((entries) => {
+        const setting = Config.latest(entries, "console_memory")
+        const chosen = typeof setting === "object" ? setting.decisions : undefined
+        if (chosen === false) return undefined
+        if (chosen === undefined) return OpencodeMemoryDecide.MODEL
+        return Model.Ref.make({
+          providerID: Provider.ID.make(chosen.providerID),
+          id: Model.ID.make(chosen.model),
+          ...(chosen.variant === undefined ? {} : { variant: Model.VariantID.make(chosen.variant) }),
+        })
+      }),
+    ),
+  })
   const github = yield* OpencodeMemoryAccess.make(http, processes, yield* OpencodeMemoryAccess.GitHub)
   let current: { console: OpencodeWatches.Console; readonly lease: Scope.Closeable } | undefined
   const sessions = new Map<string, Tracked>()

@@ -7,6 +7,7 @@ import { AbsolutePath, optional } from "./schema.js"
 import { ConfigAgent } from "./config/agent.js"
 import { ConfigMedia } from "./config/media.js"
 import { ConfigCompaction } from "./config/compaction.js"
+import { ConfigConsoleMemory } from "./config/console-memory.js"
 import { ConfigCommand } from "./config/command.js"
 import { ConfigExperimental } from "./config/experimental.js"
 import { ConfigFormatter } from "./config/formatter.js"
@@ -112,9 +113,9 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   warming: ConfigWarming.Warming.pipe(optional).annotate({
     description: "Keep recently active sessions warm with transient model requests (default: false)",
   }),
-  console_memory: Schema.Boolean.pipe(optional).annotate({
+  console_memory: ConfigConsoleMemory.ConsoleMemory.pipe(optional).annotate({
     description:
-      "Use the OpenCode Console workspace's shared memory when the workspace offers it (default: true). false turns it off for this installation: no memory tools, delivered entries or session capture",
+      "Use the OpenCode Console workspace's shared memory when the workspace offers it (default: true). false turns it off for this installation: no memory tools, delivered entries or session capture. An object keeps it on and sets how it runs, such as its decision model",
   }),
   providers: Schema.Record(Schema.String, ConfigProvider.Info).pipe(optional),
   experimental: ConfigExperimental.Info.pipe(optional),
