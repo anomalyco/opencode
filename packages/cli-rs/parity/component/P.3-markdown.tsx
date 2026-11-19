@@ -37,6 +37,8 @@ function TextPart(props: { text: string }) {
 }
 
 await renderComponent({
+  // Prose in OpenTUI's Rust Markdown takes the `default` scope's color (OT-markdown-default-scope).
+  theme: "opencode-classic",
   fixture: "P.3/markdown",
   width: 80,
   height: 30,

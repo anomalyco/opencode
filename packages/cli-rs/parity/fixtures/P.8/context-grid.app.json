@@ -4,10 +4,10 @@
  "height": 34,
  "directory": "/tmp/opencode/packages/tui",
  "config": {
+  "theme": {"name":"opencode-classic"},
   "experimental": {"new-designs":true},
   "plugins": ["./out/npm/node_modules/@khaosoigai/oc-context-grid"],
-  "animations": false,
-  "theme": {"name":"opencode"}
+  "animations": false
  },
  "args": {
   "sessionID": "ses_g"

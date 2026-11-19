@@ -4,31 +4,31 @@
  "height": 30,
  "directory": "/tmp/opencode/packages/tui",
  "config": {
+  "theme": {"name":"opencode-classic"},
   "experimental": {"new-designs":true},
   "keybinds": {"app.toggle.animations":"f5","app.toggle.diffwrap":"f6","app.toggle.file_context":"f7","app.toggle.paste_summary":"f8","terminal.title.toggle":"f9","opencode.settings":"f10"},
-  "animations": false,
-  "theme": {"name":"opencode"}
+  "animations": false
  },
  "args": {},
  "routes": [],
  "steps": [
   {"checkpoint":"home","until":"Ask anything","masks":[{"x":16,"y":16,"width":84,"height":1,"reason":"the placeholder example: random in TS and Rust"}],"fixture":"E.20/toggles/home"},
   {"keys":["f5","f6","f7","f8","f9","f10"]},
-  {"checkpoint":"settings","until":"Search settings","fixture":"E.20/toggles/settings"},
+  {"checkpoint":"settings","until":"Search settings","masks":[{"x":16,"y":16,"width":84,"height":1,"reason":"the placeholder example: random in TS and Rust"}],"fixture":"E.20/toggles/settings"},
   {"type":"animations"},
-  {"checkpoint":"animations","until":"Animations","fixture":"E.20/toggles/animations"},
+  {"checkpoint":"animations","until":"Animations","masks":[{"x":16,"y":16,"width":84,"height":1,"reason":"the placeholder example: random in TS and Rust"}],"fixture":"E.20/toggles/animations"},
   {"keys":["backspace","backspace","backspace","backspace","backspace","backspace","backspace","backspace","backspace","backspace"]},
   {"type":"diff wrap"},
-  {"checkpoint":"wrapping","until":"Wrapping","fixture":"E.20/toggles/wrapping"},
+  {"checkpoint":"wrapping","until":"Wrapping","masks":[{"x":16,"y":16,"width":84,"height":1,"reason":"the placeholder example: random in TS and Rust"}],"fixture":"E.20/toggles/wrapping"},
   {"keys":["backspace","backspace","backspace","backspace","backspace","backspace","backspace","backspace","backspace"]},
   {"type":"editor context"},
-  {"checkpoint":"editor","until":"Editor context","fixture":"E.20/toggles/editor"},
+  {"checkpoint":"editor","until":"Editor context","masks":[{"x":16,"y":16,"width":84,"height":1,"reason":"the placeholder example: random in TS and Rust"}],"fixture":"E.20/toggles/editor"},
   {"keys":["backspace","backspace","backspace","backspace","backspace","backspace","backspace","backspace","backspace","backspace","backspace","backspace","backspace","backspace"]},
   {"type":"large pastes"},
-  {"checkpoint":"pastes","until":"Large pastes","fixture":"E.20/toggles/pastes"},
+  {"checkpoint":"pastes","until":"Large pastes","masks":[{"x":16,"y":16,"width":84,"height":1,"reason":"the placeholder example: random in TS and Rust"}],"fixture":"E.20/toggles/pastes"},
   {"keys":["backspace","backspace","backspace","backspace","backspace","backspace","backspace","backspace","backspace","backspace","backspace","backspace"]},
   {"type":"window title"},
-  {"checkpoint":"title","until":"Window title","fixture":"E.20/toggles/title"}
+  {"checkpoint":"title","until":"Window title","masks":[{"x":16,"y":16,"width":84,"height":1,"reason":"the placeholder example: random in TS and Rust"}],"fixture":"E.20/toggles/title"}
  ],
  "requests": {
   "writes": [],

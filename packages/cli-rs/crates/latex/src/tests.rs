@@ -89,9 +89,10 @@ fn styled(layout: &crate::Layout) -> Vec<String> {
         .collect()
 }
 
-/// Match the oracle's screen background.
+/// Match the oracle's screen background, in `opencode-classic`: OpenTUI's Rust Markdown gives prose the syntax theme's
+/// `default` color (`parity/deviations/OT-markdown-default-scope.md`), which that theme's `markdown.text` equals.
 fn app(width: u16, height: u16) -> (TestApp, Theme) {
-    let theme = Catalog::default().load("opencode", ThemeMode::Dark).unwrap().theme;
+    let theme = Catalog::default().load("opencode-classic", ThemeMode::Dark).unwrap().theme;
     let options = AppOptions {
         theme: opentui::theme::Theme {
             background: theme.background.base,

@@ -95,7 +95,12 @@ fn assert_parity(capture: &Capture, name: &str) {
 /// A test app in dark `opencode`, with the screen cleared as the TypeScript screen is: the page background and white
 /// text.
 fn app(width: u16, height: u16) -> (TestApp, Theme) {
-    let theme = theme("opencode", ThemeMode::Dark);
+    app_in("opencode", width, height)
+}
+
+/// [`app`] in dark `name`.
+fn app_in(name: &str, width: u16, height: u16) -> (TestApp, Theme) {
+    let theme = theme(name, ThemeMode::Dark);
     let options = AppOptions {
         theme: opentui::theme::Theme {
             background: theme.background.base,
@@ -109,8 +114,11 @@ fn app(width: u16, height: u16) -> (TestApp, Theme) {
 }
 
 /// `TextPart`: the text, trimmed, in a column indented by 3.
+///
+/// In `opencode-classic`, whose `markdown.text` is its `text.base`: OpenTUI's Rust Markdown gives prose the syntax
+/// theme's `default` color where Core gives it `markdown.text` (`parity/deviations/OT-markdown-default-scope.md`).
 fn markdown_app(text: &str, conceal: bool) -> TestApp {
-    let (app, theme) = app(60, 24);
+    let (app, theme) = app_in("opencode-classic", 60, 24);
     let syntax = code::syntax_theme(&theme);
     let renderers = markdown::CodeBlockRenderers::default();
     let text = markdown::view(&app, &theme, &syntax, &renderers, conceal, false).set_markdown(text.trim());
