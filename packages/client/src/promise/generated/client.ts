@@ -111,8 +111,10 @@ import type {
   ModelDefaultOutput,
   ExperimentalGenerateTextInput,
   ExperimentalGenerateTextOutput,
-  ExperimentalGenerateImageInput,
-  ExperimentalGenerateImageOutput,
+  ExperimentalGenerateImageCreateInput,
+  ExperimentalGenerateImageCreateOutput,
+  ExperimentalGenerateImageGetInput,
+  ExperimentalGenerateImageGetOutput,
   ExperimentalGenerateVideoCreateInput,
   ExperimentalGenerateVideoCreateOutput,
   ExperimentalGenerateVideoGetInput,
@@ -1192,25 +1194,38 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ).then((value) => value.data),
-        image: (input: ExperimentalGenerateImageInput, requestOptions?: RequestOptions) =>
-          request<{ readonly data: ExperimentalGenerateImageOutput }>(
-            {
-              method: "POST",
-              path: `/api/experimental/generate/image`,
-              body: {
-                model: input["model"],
-                prompt: input["prompt"],
-                images: input["images"],
-                n: input["n"],
-                aspect: input["aspect"],
-                resolution: input["resolution"],
+        image: {
+          create: (input: ExperimentalGenerateImageCreateInput, requestOptions?: RequestOptions) =>
+            request<{ readonly data: ExperimentalGenerateImageCreateOutput }>(
+              {
+                method: "POST",
+                path: `/api/experimental/generate/image`,
+                body: {
+                  model: input["model"],
+                  prompt: input["prompt"],
+                  images: input["images"],
+                  n: input["n"],
+                  aspect: input["aspect"],
+                  resolution: input["resolution"],
+                },
+                successStatus: 200,
+                declaredStatuses: [400, 401, 404, 422, 502, 503],
+                empty: false,
               },
-              successStatus: 200,
-              declaredStatuses: [400, 401, 404, 422, 502, 503],
-              empty: false,
-            },
-            requestOptions,
-          ).then((value) => value.data),
+              requestOptions,
+            ).then((value) => value.data),
+          get: (input: ExperimentalGenerateImageGetInput, requestOptions?: RequestOptions) =>
+            request<{ readonly data: ExperimentalGenerateImageGetOutput }>(
+              {
+                method: "GET",
+                path: `/api/experimental/generate/image/${encodeURIComponent(input.id)}`,
+                successStatus: 200,
+                declaredStatuses: [400, 401, 404],
+                empty: false,
+              },
+              requestOptions,
+            ).then((value) => value.data),
+        },
         video: {
           create: (input: ExperimentalGenerateVideoCreateInput, requestOptions?: RequestOptions) =>
             request<{ readonly data: ExperimentalGenerateVideoCreateOutput }>(
@@ -2776,8 +2791,6 @@ export function make(options: ClientOptions) {
     generate: {
       /** @deprecated Use `client.experimental.generate.text`. Removed in the next minor. */
       text: client.experimental.generate.text,
-      /** @deprecated Use `client.experimental.generate.image`. Removed in the next minor. */
-      image: client.experimental.generate.image,
       /** @deprecated Use `client.experimental.generate.decisions`. Removed in the next minor. */
       decisions: client.experimental.generate.decisions,
     },

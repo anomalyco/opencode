@@ -15,6 +15,7 @@ import { PtyTicket } from "@opencode/core/pty/ticket"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { Project } from "@opencode/core/project"
 import { BlobStore } from "@opencode/core/blob-store"
+import { ImageGeneration } from "@opencode/core/image-generation"
 import { VideoGeneration } from "@opencode/core/video-generation"
 import { Worktree } from "@opencode/core/worktree"
 import { Session } from "@opencode/core/session"
@@ -93,6 +94,7 @@ const applicationServiceNodes = [
   // Read by the blob route.
   BlobStore.node,
   // Started with the server, so its leader election and polling resume jobs even before anyone calls the video API.
+  ImageGeneration.node,
   VideoGeneration.node,
   Workspace.node,
   FileWatch.node,

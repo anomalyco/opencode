@@ -35,6 +35,7 @@ import { WebSearch } from "../websearch.js"
 import { Worktree } from "../worktree.js"
 import { WorktreeStrategies } from "../worktree/strategies.js"
 import { Generate } from "../generate.js"
+import { ImageGeneration } from "../image-generation.js"
 import { Permission } from "../permission.js"
 import { PluginHooks } from "./hooks.js"
 import type { Interface } from "../plugin.js"
@@ -70,6 +71,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
   const vcs = yield* Vcs.Service
   const websearch = yield* WebSearch.Service
   const generate = yield* Generate.Service
+  const images = yield* ImageGeneration.Service
   const generateText = (input: Generate.TextInput) => generate.text(input).pipe(Effect.map((text) => ({ text })))
   const permission = yield* Permission.Service
   const hooks = yield* PluginHooks.Service
@@ -289,7 +291,13 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
       },
       generate: {
         text: generateText,
-        image: generate.image,
+        image: {
+          create: (input) =>
+            images.start(input, {
+              location: Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID }),
+            }),
+          get: (input) => images.get(input.id),
+        },
         decisions: generate.decisions,
       },
       artifact: {
@@ -652,6 +660,7 @@ export const requirements = LayerNode.group([
   Worktree.node,
   WorktreeStrategies.node,
   Generate.node,
+  ImageGeneration.node,
   Permission.node,
   PluginHooks.node,
   Session.node,

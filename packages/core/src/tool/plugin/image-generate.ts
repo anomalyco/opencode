@@ -4,16 +4,19 @@ import path from "path"
 import { ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { Document, Entry } from "@opencode/schema/config"
+import type { ImageID, ImageRequest } from "@opencode/schema/generate"
 import { Identifier } from "@opencode/schema/identifier"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { Duration, Effect, Schema, Scope, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { toolFailure } from "../runtime.js"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
+import { BlobStore } from "../../blob-store.js"
 import { Environment } from "../../environment/index.js"
 import { FileAccess } from "../../file-access.js"
-import { Generate } from "../../generate.js"
+import { ImageGeneration } from "../../image-generation.js"
 import { ImageNotice } from "../../image/notice.js"
 import { Job } from "../../job.js"
 import { Mime } from "../../mime.js"
@@ -27,7 +30,6 @@ import { collectBoundedResponseBody } from "../http-body.js"
 export const name = "experimental_image_generate"
 export const MAX_INPUT_BYTES = 20 * 1024 * 1024
 const DOWNLOAD_TIMEOUT = Duration.seconds(30)
-const GENERATE_TIMEOUT = Duration.minutes(30)
 const INPUT_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"]
 const EXTENSIONS: Record<string, string> = {
   "image/png": ".png",
@@ -72,12 +74,87 @@ export const Output = Schema.Struct({
   model: Schema.String.annotate({ description: "providerID/modelID" }),
 })
 
+/**
+ * Wait for an image the server is generating, then copy it from the blob store into the workspace as `path` plus the
+ * extension of its real format, as a background Job. A restarted server takes over with the same recovery record.
+ */
+export const track = Effect.fnUntraced(function* (input: {
+  readonly jobs: Job.Interface
+  readonly sessions: Pick<Session.Interface, "synthetic">
+  readonly images: ImageGeneration.Interface
+  readonly blobs: BlobStore.Interface
+  readonly fs: FSUtil.Interface
+  readonly files: Environment.Files
+  readonly scope: Scope.Scope
+  readonly notificationID: SessionMessage.ID
+  readonly sessionID: SessionSchema.ID
+  readonly imageID: ImageID
+  readonly path: string
+  readonly model: string
+  /** Runs before writing the file; a restarted server has nobody to ask, so it writes like the video tool's extra files. */
+  readonly confirm?: (file: string) => Effect.Effect<void, Error>
+  readonly title?: string
+}) {
+  const run = Effect.gen(function* () {
+    const job = yield* input.images.wait(input.imageID)
+    if (job.status === "error") return yield* Effect.fail(new Error(job.error))
+    const blob = job.blobs[0]
+    const file = input.path + (EXTENSIONS[blob.mime] ?? ".png")
+    if (input.confirm) yield* input.confirm(file)
+    yield* input.files.write(file, yield* input.fs.readFile((yield* input.blobs.read(blob.id)).path))
+    return `Image request finished. Saved image: ${file} (${input.model}).\nUse the read tool on this path to view the image.`
+  }).pipe(
+    // The job keeps this text, so a restart can still deliver the outcome.
+    Effect.mapError((error) => new Error(`Image request failed for ${input.path}: ${error.message}`)),
+  )
+  yield* input.jobs.start({
+    id: input.imageID,
+    notificationID: input.notificationID,
+    type: name,
+    title: input.title ?? input.path,
+    metadata: { sessionID: input.sessionID, path: input.path, model: input.model },
+    recovery: {
+      kind: "image",
+      sessionID: input.sessionID,
+      path: input.path,
+      model: input.model,
+      imageID: input.imageID,
+    },
+    background: true,
+    run,
+    cancel: input.images.cancel(input.imageID).pipe(Effect.ignore),
+  })
+  yield* Effect.gen(function* () {
+    const info = (yield* input.jobs.wait({ id: input.imageID })).info
+    if (!info || info.status === "running") return
+    yield* input.sessions.synthetic({
+      id: input.notificationID,
+      sessionID: input.sessionID,
+      description: "Image generation",
+      text: ImageNotice.text({
+        id: input.imageID,
+        state: info.status,
+        body:
+          info.status === "completed"
+            ? (info.output ?? "")
+            : info.status === "error"
+              ? (info.error ?? `Image request failed for ${input.path}.`)
+              : `Image request for ${input.path} was cancelled.`,
+      }),
+      metadata: { source: name, jobID: input.imageID, state: info.status, path: input.path },
+    })
+    yield* input.jobs.completeBackground(input.notificationID)
+  }).pipe(Effect.forkIn(input.scope, { startImmediately: true }))
+})
+
 export const Plugin = {
   id: "opencode.tool.image-generate",
   effect: Effect.fn("ImageGenerateTool.Plugin")(function* (ctx: Context) {
     const access = yield* FileAccess.Service
     const environment = yield* Environment.Service
-    const generate = yield* Generate.Service
+    const imageJobs = yield* ImageGeneration.Service
+    const blobs = yield* BlobStore.Service
+    const fs = yield* FSUtil.Service
     const global = yield* Global.Service
     const http = yield* HttpClient.HttpClient
     const config = yield* Config.Service
@@ -204,31 +281,6 @@ export const Plugin = {
       return { data: Buffer.from(bytes).toString("base64"), mime, name: path.basename(source) }
     })
 
-    const notifyWhenDone = Effect.fn("ImageGenerateTool.notifyWhenDone")(
-      function* (input: { sessionID: SessionSchema.ID; id: string; notificationID: SessionMessage.ID; file: string }) {
-        const info = (yield* jobs.wait({ id: input.id })).info
-        if (!info || info.status === "running") return
-        yield* sessions.synthetic({
-          id: input.notificationID,
-          sessionID: input.sessionID,
-          description: "Image generation",
-          text: ImageNotice.text({
-            id: input.id,
-            state: info.status,
-            body:
-              info.status === "completed"
-                ? (info.output ?? "")
-                : info.status === "error"
-                  ? (info.error ?? `Image request failed for ${input.file}.`)
-                  : `Image request for ${input.file} was cancelled.`,
-          }),
-          metadata: { source: name, jobID: input.id, state: info.status, path: input.file },
-        })
-        yield* jobs.completeBackground(input.notificationID)
-      },
-      Effect.forkIn(scope, { startImmediately: true }),
-    )
-
     // On by default. `experimental.image_generate: false` is still honored for configs from when the tool was opt-in;
     // permissions are the supported way to turn it off. Internal plugins are not re-run on config changes, so reload the
     // tool transform instead.
@@ -293,64 +345,46 @@ export const Plugin = {
                 ? yield* Effect.forEach(input.images, (image) => readImage(image, context))
                 : undefined
 
-              // Everything that needs the user or can fail fast happened above; the paid call runs as a background job.
-              const run = Effect.gen(function* () {
-                const result = yield* generate
-                  .image({
-                    model: Model.Ref.make({
-                      providerID: model.providerID,
-                      id: model.id,
-                      ...(variant ? { variant } : {}),
-                    }),
-                    prompt: input.prompt,
-                    n: 1,
-                    ...(images ? { images } : {}),
-                  })
-                  .pipe(
-                    Effect.timeoutOrElse({
-                      duration: GENERATE_TIMEOUT,
-                      orElse: () => Effect.fail(new Error("Image generation timed out after 30 minutes.")),
-                    }),
-                  )
-                const image = result.images[0]
-                if (!image) return yield* Effect.fail(new Error(`${ref} returned no image.`))
-                const bytes = Buffer.from(image.data, "base64")
-                const mime = Mime.detectMedia(bytes)
-                const file = stem + (EXTENSIONS[mime ?? "image/png"] ?? ".png")
+              // Everything that needs the user or can fail fast happened above; the server makes the paid request.
+              const request: ImageRequest = {
+                model: Model.Ref.make({ providerID: model.providerID, id: model.id, ...(variant ? { variant } : {}) }),
+                prompt: input.prompt,
+                n: 1,
+                ...(images ? { images } : {}),
+              }
+              const id = (yield* imageJobs.start(request, {
+                location: (yield* sessions.get(context.sessionID)).location,
+              })).id
+              yield* track({
+                jobs,
+                sessions,
+                images: imageJobs,
+                blobs,
+                fs,
+                files,
+                scope,
+                notificationID: SessionMessage.ID.create(),
+                sessionID: context.sessionID,
+                imageID: id,
+                path: stem,
+                model: ref,
                 // The edit prompt covered the requested path. Replacing a different existing file needs its own
                 // approval; a new file only has to pass the deny rules.
-                if (target && file !== target.absolute) {
-                  const actual = yield* access.resolve({ path: file, kind: "file" })
-                  const replaces = yield* files.stat(file).pipe(
-                    Effect.as(true),
-                    Effect.catchTag("Environment.NotFound", () => Effect.succeed(false)),
-                  )
-                  const request = {
-                    action: "edit",
-                    resources: [actual.resource],
-                    ...Permission.invocation(context),
-                  }
-                  yield* replaces ? permission.assert({ ...request, save: ["*"] }) : permission.assertNotDenied(request)
-                }
-                yield* files.write(file, bytes)
-                return `Image request finished. Saved image: ${file} (${ref}).\nUse the read tool on this path to view the image.`
-              }).pipe(
-                // The job keeps this text, so a restart can still deliver the outcome.
-                Effect.mapError((error) => new Error(`Image request failed for ${stem}: ${error.message}`)),
-              )
-              const id = `image_${Identifier.create(false)}`
-              const notificationID = SessionMessage.ID.create()
-              yield* jobs.start({
-                id,
-                notificationID,
-                type: name,
+                confirm: (file) =>
+                  Effect.gen(function* () {
+                    if (!target || file === target.absolute) return
+                    const actual = yield* access.resolve({ path: file, kind: "file" })
+                    const replaces = yield* files.stat(file).pipe(
+                      Effect.as(true),
+                      Effect.catchTag("Environment.NotFound", () => Effect.succeed(false)),
+                    )
+                    const request = { action: "edit", resources: [actual.resource], ...Permission.invocation(context) }
+                    yield* replaces
+                      ? permission.assert({ ...request, save: ["*"] })
+                      : permission.assertNotDenied(request)
+                  }),
                 title: input.prompt,
-                metadata: { sessionID: context.sessionID, path: stem, model: ref },
-                recovery: { kind: "image", sessionID: context.sessionID, path: stem, model: ref },
-                background: true,
-                run,
               })
-              yield* notifyWhenDone({ sessionID: context.sessionID, id, notificationID, file: stem })
               return {
                 output: { id, path: stem, model: ref },
                 content: [

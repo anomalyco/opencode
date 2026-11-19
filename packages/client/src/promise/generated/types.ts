@@ -194,13 +194,13 @@ export type MoneyUSDPerMillionTokens = number
 
 export type GenerateTextResponse = { data: { text: string } }
 
-export type GenerateUsage = { input?: number; output?: number }
-
-export type GenerateNative = { [x: string]: JsonValue }
-
-export type GenerateVideoID = string
+export type GenerateImageID = string
 
 export type BlobID = string
+
+export type GenerateImageErrorReason = "failed" | "cancelled" | "unknown"
+
+export type GenerateVideoID = string
 
 export type GenerateVideoErrorReason = "failed" | "cancelled" | "expired" | "unknown"
 
@@ -217,6 +217,10 @@ export type GenerateScoreAnswer = {
 }
 
 export type GenerateErrorAnswer = { type: "error"; name: string; reason: string; message?: string }
+
+export type GenerateUsage = { input?: number; output?: number }
+
+export type GenerateNative = { [x: string]: JsonValue }
 
 export type VoiceTransportType = "webrtc" | "websocket"
 
@@ -472,8 +476,6 @@ export type SessionRevert = {
   snapshot?: SnapshotID
   files?: Array<FileDiffInfo>
 }
-
-export type GenerateImageOutput2 = { type: "image"; data: PromptBase64; mime: string; name?: string }
 
 export type PromptFileAttachment = {
   data: PromptBase64
@@ -736,9 +738,18 @@ export type ModelCost = {
   cache: { read: MoneyUSDPerMillionTokens; write: MoneyUSDPerMillionTokens }
 }
 
-export type GenerateVideoRunning = { id: GenerateVideoID; status: "running" }
+export type GenerateImageRunning = { id: GenerateImageID; status: "running" }
 
 export type BlobInfo = { id: BlobID; mime: string; bytes: number }
+
+export type GenerateImageError = {
+  id: GenerateImageID
+  status: "error"
+  error: string
+  reason: GenerateImageErrorReason
+}
+
+export type GenerateVideoRunning = { id: GenerateVideoID; status: "running" }
 
 export type GenerateVideoError = {
   id: GenerateVideoID
@@ -1145,13 +1156,6 @@ export type UsageLimitsBudget = {
   picked: boolean
   shared: boolean
   resetsAt: number
-}
-
-export type GenerateImageResult = {
-  images: Array<GenerateImageOutput2>
-  cost?: MoneyUSD
-  tokens?: GenerateUsage
-  native?: GenerateNative
 }
 
 export type SessionInboxUserPayload = {
@@ -2227,9 +2231,13 @@ export type SessionMessageToolStateError1 = {
   metadata?: { [x: string]: JsonValue }
 }
 
-export type GenerateVideoCreateResponse = { data: GenerateVideoRunning }
+export type GenerateImageCreateResponse = { data: GenerateImageRunning }
+
+export type GenerateImageCompleted = { id: GenerateImageID; status: "completed"; blobs: [BlobInfo, ...Array<BlobInfo>] }
 
 export type GenerateVideoCompleted = { id: GenerateVideoID; status: "completed"; blobs: Array<BlobInfo> }
+
+export type GenerateVideoCreateResponse = { data: GenerateVideoRunning }
 
 export type GenerateDecisionAnswer =
   | GeneratePredicateAnswer
@@ -2672,8 +2680,6 @@ export type UsageLimitsInfo = {
   budgets: Array<UsageLimitsBudget>
 }
 
-export type GenerateImageResponse = { data: GenerateImageResult }
-
 export type SessionInboxUser = {
   id: SessionMessageID
   sessionID: SessionID
@@ -2718,6 +2724,8 @@ export type SessionMessageAssistantTool1 = {
     | SessionMessageToolStateError1
   time: { created: number; ran?: number; completed?: number }
 }
+
+export type GenerateImageJob = GenerateImageRunning | GenerateImageCompleted | GenerateImageError
 
 export type GenerateVideoJob = GenerateVideoRunning | GenerateVideoCompleted | GenerateVideoError
 
@@ -2828,6 +2836,8 @@ export type SessionMessageAssistantContentEncoded =
   | SessionMessageAssistantText1
   | SessionMessageAssistantReasoning1
   | SessionMessageAssistantTool1
+
+export type GenerateImageGetResponse = { data: GenerateImageJob }
 
 export type GenerateVideoGetResponse = { data: GenerateVideoJob }
 
@@ -3226,6 +3236,14 @@ export type ProviderRequestError = {
 }
 export const isProviderRequestError = (value: unknown): value is ProviderRequestError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ProviderRequestError"
+
+export type ImageNotFoundError = {
+  readonly _tag: "ImageNotFoundError"
+  readonly imageID: string
+  readonly message: string
+}
+export const isImageNotFoundError = (value: unknown): value is ImageNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ImageNotFoundError"
 
 export type ForbiddenError = { readonly _tag: "ForbiddenError"; readonly message: string }
 export const isForbiddenError = (value: unknown): value is ForbiddenError =>
@@ -4049,7 +4067,7 @@ export type ExperimentalGenerateTextInput = {
 
 export type ExperimentalGenerateTextOutput = GenerateTextResponse["data"]
 
-export type ExperimentalGenerateImageInput = {
+export type ExperimentalGenerateImageCreateInput = {
   readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
   readonly prompt: string
   readonly images?: ReadonlyArray<{ readonly data: string; readonly mime: string; readonly name?: string }> | undefined
@@ -4058,7 +4076,11 @@ export type ExperimentalGenerateImageInput = {
   readonly resolution?: ("1K" | "2K" | "4K" | (string & {})) | undefined
 }
 
-export type ExperimentalGenerateImageOutput = GenerateImageResponse["data"]
+export type ExperimentalGenerateImageCreateOutput = GenerateImageCreateResponse["data"]
+
+export type ExperimentalGenerateImageGetInput = { readonly id: string }
+
+export type ExperimentalGenerateImageGetOutput = GenerateImageGetResponse["data"]
 
 export type ExperimentalGenerateVideoCreateInput = {
   readonly model: { readonly id: string; readonly providerID: string; readonly variant?: string }
@@ -5016,12 +5038,6 @@ export type GenerateTextInput = ExperimentalGenerateTextInput
 
 /** @deprecated Use `ExperimentalGenerateTextOutput`. Removed in the next minor. */
 export type GenerateTextOutput = ExperimentalGenerateTextOutput
-
-/** @deprecated Use `ExperimentalGenerateImageInput`. Removed in the next minor. */
-export type GenerateImageInput = ExperimentalGenerateImageInput
-
-/** @deprecated Use `ExperimentalGenerateImageOutput`. Removed in the next minor. */
-export type GenerateImageOutput = ExperimentalGenerateImageOutput
 
 /** @deprecated Use `ExperimentalGenerateDecisionsInput`. Removed in the next minor. */
 export type GenerateDecisionsInput = ExperimentalGenerateDecisionsInput

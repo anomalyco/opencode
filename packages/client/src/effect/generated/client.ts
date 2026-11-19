@@ -117,8 +117,10 @@ import type {
   ModelDefaultOutput,
   ExperimentalGenerateTextInput,
   ExperimentalGenerateTextOutput,
-  ExperimentalGenerateImageInput,
-  ExperimentalGenerateImageOutput,
+  ExperimentalGenerateImageCreateInput,
+  ExperimentalGenerateImageCreateOutput,
+  ExperimentalGenerateImageGetInput,
+  ExperimentalGenerateImageGetOutput,
   ExperimentalGenerateVideoCreateInput,
   ExperimentalGenerateVideoCreateOutput,
   ExperimentalGenerateVideoGetInput,
@@ -936,10 +938,10 @@ const EndpointExperimentalGenerateText =
       ),
     )
 
-const EndpointExperimentalGenerateImage =
-  (raw: RawClient["server.generate"]) => (input: ExperimentalGenerateImageInput) =>
-    preserveEffect<ExperimentalGenerateImageOutput>()(
-      raw["generate.image"]({
+const EndpointExperimentalGenerateImageCreate =
+  (raw: RawClient["server.generate"]) => (input: ExperimentalGenerateImageCreateInput) =>
+    preserveEffect<ExperimentalGenerateImageCreateOutput>()(
+      raw["generate.image.create"]({
         payload: {
           model: input["model"],
           prompt: input["prompt"],
@@ -949,6 +951,15 @@ const EndpointExperimentalGenerateImage =
           resolution: input["resolution"],
         },
       }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalGenerateImageGet =
+  (raw: RawClient["server.generate"]) => (input: ExperimentalGenerateImageGetInput) =>
+    preserveEffect<ExperimentalGenerateImageGetOutput>()(
+      raw["generate.image.get"]({ params: { id: input["id"] } }).pipe(
         Effect.mapError(mapClientError),
         Effect.map((value) => value.data),
       ),
@@ -997,7 +1008,7 @@ const EndpointExperimentalGenerateDecisions =
 
 const adaptGroupExperimentalGenerate = (raw: RawClient["server.generate"]) => ({
   text: EndpointExperimentalGenerateText(raw),
-  image: EndpointExperimentalGenerateImage(raw),
+  image: { create: EndpointExperimentalGenerateImageCreate(raw), get: EndpointExperimentalGenerateImageGet(raw) },
   video: { create: EndpointExperimentalGenerateVideoCreate(raw), get: EndpointExperimentalGenerateVideoGet(raw) },
   decisions: EndpointExperimentalGenerateDecisions(raw),
 })
@@ -2072,8 +2083,6 @@ const adaptClient = (raw: RawClient) => {
     generate: {
       /** @deprecated Use `client.experimental.generate.text`. Removed in the next minor. */
       text: client.experimental.generate.text,
-      /** @deprecated Use `client.experimental.generate.image`. Removed in the next minor. */
-      image: client.experimental.generate.image,
       /** @deprecated Use `client.experimental.generate.decisions`. Removed in the next minor. */
       decisions: client.experimental.generate.decisions,
     },

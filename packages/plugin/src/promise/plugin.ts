@@ -35,7 +35,7 @@ export interface Context {
   readonly event: EventDomain
   readonly experimental: {
     readonly terminal: Pick<OpenCodeClient["experimental"]["persistentPty"], "read">
-    /** Stateless generation with a model and a prompt: no session, history or tools. Video jobs are server-only for now. */
+    /** Generation with a model and a prompt: no session, history or tools. Video jobs are server-only for now. */
     readonly generate: Omit<ExperimentalGenerateApi, "video">
     readonly artifact: ExperimentalArtifactDomain
   }

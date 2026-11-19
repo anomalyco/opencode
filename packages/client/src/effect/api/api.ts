@@ -1507,7 +1507,7 @@ export type ExperimentalGenerateTextOperation<E = never> = (
   input: ExperimentalGenerateTextInput,
 ) => Effect.Effect<ExperimentalGenerateTextOutput, E>
 
-export type ExperimentalGenerateImageInput = {
+export type ExperimentalGenerateImageCreateInput = {
   readonly model: Model.Ref
   readonly prompt: string
   readonly images?: ReadonlyArray<Generate.File> | undefined
@@ -1515,10 +1515,16 @@ export type ExperimentalGenerateImageInput = {
   readonly aspect?: Generate.ImageAspect | undefined
   readonly resolution?: Generate.ImageResolution | undefined
 }
-export type ExperimentalGenerateImageOutput = Generate.ImageResult
-export type ExperimentalGenerateImageOperation<E = never> = (
-  input: ExperimentalGenerateImageInput,
-) => Effect.Effect<ExperimentalGenerateImageOutput, E>
+export type ExperimentalGenerateImageCreateOutput = Generate.ImageRunning
+export type ExperimentalGenerateImageCreateOperation<E = never> = (
+  input: ExperimentalGenerateImageCreateInput,
+) => Effect.Effect<ExperimentalGenerateImageCreateOutput, E>
+
+export type ExperimentalGenerateImageGetInput = { readonly id: Generate.ImageID }
+export type ExperimentalGenerateImageGetOutput = Generate.ImageJob
+export type ExperimentalGenerateImageGetOperation<E = never> = (
+  input: ExperimentalGenerateImageGetInput,
+) => Effect.Effect<ExperimentalGenerateImageGetOutput, E>
 
 export type ExperimentalGenerateVideoCreateInput = {
   readonly model: Model.Ref
@@ -1554,7 +1560,10 @@ export type ExperimentalGenerateDecisionsOperation<E = never> = (
 
 export interface ExperimentalGenerateApi<E = never> {
   readonly text: ExperimentalGenerateTextOperation<E>
-  readonly image: ExperimentalGenerateImageOperation<E>
+  readonly image: {
+    readonly create: ExperimentalGenerateImageCreateOperation<E>
+    readonly get: ExperimentalGenerateImageGetOperation<E>
+  }
   readonly video: {
     readonly create: ExperimentalGenerateVideoCreateOperation<E>
     readonly get: ExperimentalGenerateVideoGetOperation<E>
@@ -2935,15 +2944,6 @@ export type GenerateTextOutput = ExperimentalGenerateTextOutput
 /** @deprecated Use `ExperimentalGenerateTextOperation`. Removed in the next minor. */
 export type GenerateTextOperation<E = never> = ExperimentalGenerateTextOperation<E>
 
-/** @deprecated Use `ExperimentalGenerateImageInput`. Removed in the next minor. */
-export type GenerateImageInput = ExperimentalGenerateImageInput
-
-/** @deprecated Use `ExperimentalGenerateImageOutput`. Removed in the next minor. */
-export type GenerateImageOutput = ExperimentalGenerateImageOutput
-
-/** @deprecated Use `ExperimentalGenerateImageOperation`. Removed in the next minor. */
-export type GenerateImageOperation<E = never> = ExperimentalGenerateImageOperation<E>
-
 /** @deprecated Use `ExperimentalGenerateDecisionsInput`. Removed in the next minor. */
 export type GenerateDecisionsInput = ExperimentalGenerateDecisionsInput
 
@@ -3120,9 +3120,6 @@ export interface AppApi<E = never> {
   readonly generate: {
     /** @deprecated Use `client.experimental.generate.text`. Removed in the next minor. */
     readonly text: ExperimentalGenerateTextOperation<E>
-
-    /** @deprecated Use `client.experimental.generate.image`. Removed in the next minor. */
-    readonly image: ExperimentalGenerateImageOperation<E>
 
     /** @deprecated Use `client.experimental.generate.decisions`. Removed in the next minor. */
     readonly decisions: ExperimentalGenerateDecisionsOperation<E>

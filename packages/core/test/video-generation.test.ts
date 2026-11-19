@@ -51,6 +51,7 @@ const app = (dir: string, state: State) =>
             Generate.Service.of({
               text: () => Effect.die("unused"),
               image: () => Effect.die("unused"),
+              checkImage: () => Effect.void,
               decisions: () => Effect.die("unused"),
               video: {
                 start: () => Effect.sync(() => ({ id: `remote_${++state.submitted}` })),
