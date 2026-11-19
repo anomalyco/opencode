@@ -1,7 +1,7 @@
 import { Keymap } from "../context/keymap"
 import { useNewDesigns } from "../config"
 import { useTheme } from "../context/theme"
-import { DialogButtons, DialogHeader, DialogLayout, type DialogContext } from "./dialog"
+import { DialogHeader, DialogLayout, type DialogContext } from "./dialog"
 import { DialogSelect, DialogSelectChoice } from "./dialog-select"
 import { createStore } from "solid-js/store"
 import { createMemo, createSignal, For, Show } from "solid-js"
@@ -125,13 +125,7 @@ function DialogExportOptionsList(props: DialogExportOptionsProps) {
           onTrigger: () => confirm("copy"),
         },
       ]}
-      buttons={
-        <DialogButtons
-          buttons={[{ label: "Save to file", run: () => confirm("export") }]}
-          active={0}
-          hints={[{ title: "copy", key: "c", onTrigger: () => confirm("copy") }]}
-        />
-      }
+      footerHints={[{ title: "save to file", label: "enter", group: "primary" }]}
       bindings={[
         { bind: "left", title: "Previous value", group: "Dialog", run: () => change(selected()) },
         { bind: "right", title: "Next value", group: "Dialog", run: () => change(selected()) },
