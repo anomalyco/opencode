@@ -1070,6 +1070,14 @@ describe("Uint8Array", () => {
     expect((await error(`Uint8Array.from(/x/)`)).message).toContain("received a RegExp")
   })
 
+  test("BYTES_PER_ELEMENT is a read-only 1 on Uint8Array, Buffer and their instances", async () => {
+    expect(
+      await value(`const d = Object.getOwnPropertyDescriptor(Uint8Array, "BYTES_PER_ELEMENT")
+        return [Uint8Array.BYTES_PER_ELEMENT, new Uint8Array(1).BYTES_PER_ELEMENT, Buffer.BYTES_PER_ELEMENT,
+          Buffer.alloc(1).BYTES_PER_ELEMENT, 4 * Uint8Array.BYTES_PER_ELEMENT, d.writable, d.enumerable, Object.keys(Uint8Array)]`),
+    ).toEqual([1, 1, 1, 1, 4, false, false, []])
+  })
+
   test("index reads and writes clamp to a byte and ignore out-of-range writes, like JS", async () => {
     expect(
       await value(`

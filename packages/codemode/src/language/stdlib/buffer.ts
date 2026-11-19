@@ -7,6 +7,7 @@ import {
   Arr,
   Bytes,
   define,
+  frozen,
   get,
   hidden,
   Obj,
@@ -179,6 +180,8 @@ export const bufferGlobal = <R>(ctx: Interpreter<R>) => {
     construct: (args, newTarget) =>
       withReads(() => new BufferObj(prototypeFrom(newTarget, proto), bytesFrom(args[0], args[1], args[2]))),
   })
+  // Bun inherits this from Uint8Array; Buffer's constructor here does not.
+  define(buffer, "BYTES_PER_ELEMENT", 1, frozen)
   methods(builtins, buffer, [
     ["from", 3, (_, args) => withReads(() => wrap(bytesFrom(args[0], args[1], args[2])))],
     [
