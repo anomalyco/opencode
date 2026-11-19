@@ -3,7 +3,7 @@ name = "psychoscript"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
-description = "Embeddable Rust port of OpenCode's Code Mode language"
+description = "Embeddable Rust implementation of the PsychoScript language layer"
 
 [features]
 # The test262 harness globals, for the parity runner in test262/ only.

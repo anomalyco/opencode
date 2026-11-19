@@ -515,7 +515,7 @@ fn frontmatter(source: &str) -> Frontmatter {
     meta
 }
 
-fn kind_name(kind: DiagnosticKind) -> &'static str {
+fn kind_name(kind: &DiagnosticKind) -> &str {
     kind.name()
 }
 
@@ -539,13 +539,13 @@ fn run_file(path: &Path) -> Result<(), String> {
             Err(d) if d.kind == DiagnosticKind::ParseError => Ok(()),
             Err(d) => Err(format!(
                 "expected {kind} but got {}: {}",
-                kind_name(d.kind),
+                kind_name(&d.kind),
                 d.message
             )),
         };
     }
     if let Err(d) = &run.result {
-        return Err(format!("{}: {}", kind_name(d.kind), d.message));
+        return Err(format!("{}: {}", kind_name(&d.kind), d.message));
     }
     if !is_async {
         return Ok(());

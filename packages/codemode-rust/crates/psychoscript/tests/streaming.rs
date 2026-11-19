@@ -1,5 +1,6 @@
-//! Streaming HTTP responses through an extension, against the reference's behaviour recorded in
-//! `conformance/streaming.json` by `bun conformance/streaming.ts` (the reference has no tests of its own for them).
+//! Streaming HTTP responses through a host function, how host-call arguments cross, and suspending a run that holds a
+//! response or waits in a crossing, against the reference's behaviour recorded in `conformance/streaming.json` by
+//! `bun conformance/streaming.ts` (the reference has no tests of its own for them). The globals are the generator's.
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -9,10 +10,16 @@ use std::thread;
 use std::time::Duration;
 
 use psychoscript::{
-    Extension, HostError, HostFunction, HostValue, HttpBody, Json, Program, RunOutcome, Runtime,
-    Schema, StreamingResponse, Suspender, Tool,
+    Failure, HostError, HostFunction, HostValue, HttpBody, Json, Program, ProgramOptions,
+    RunOutcome, Runtime, StreamingResponse, Suspender, Translate, TranslateFunctions,
+    TranslatePromises,
 };
 use serde_json::json;
+
+#[path = "../../../conformance/reference.rs"]
+mod reference;
+
+use reference::{describe, same};
 
 type Log = Arc<Mutex<Vec<Json>>>;
 
@@ -101,40 +108,82 @@ fn respond(spec: &HostValue, log: &Log) -> HostValue {
     HostValue::Response(response)
 }
 
+/// The generator's runtime: its globals, with functions dropped and promises awaited in host-call arguments.
 /// `fetched`, when given, is told each time `fetch` answered.
-fn web(log: &Log, fetched: Option<Waiting>) -> Extension {
-    let log = log.clone();
-    Extension::new("web")
-        .function(
-            "fetch",
-            HostFunction::new_async("fetch", 1, move |args| {
-                let response = respond(&args[0], &log);
-                if let Some(w) = &fetched {
-                    w.enter();
-                }
-                async move { Ok(response) }
-            }),
-        )
-        .function(
-            "echo",
-            HostFunction::new("echo", 1, |args| {
-                Ok(args.into_iter().next().unwrap_or_default())
-            }),
-        )
+fn runtime(log: &Log, waiting: &Waiting, fetched: Option<Waiting>) -> Runtime {
+    let (log, waiting) = (log.clone(), waiting.clone());
+    Runtime::make()
+        .translate(Translate {
+            functions: TranslateFunctions::Drop,
+            promises: TranslatePromises::Await,
+        })
+        .globals(move |_| {
+            let (fetch_log, send_log, refuse_log) = (log.clone(), log.clone(), log.clone());
+            let fetched = fetched.clone();
+            [
+                ("tools", HostValue::from(reference::tools())),
+                (
+                    "fetch",
+                    HostFunction::new_async(move |args, _| {
+                        let response = respond(&args[0], &fetch_log);
+                        if let Some(w) = &fetched {
+                            w.enter();
+                        }
+                        async move { Ok(response) }
+                    })
+                    .takes_functions()
+                    .length(1)
+                    .into(),
+                ),
+                (
+                    "echo",
+                    HostFunction::new(|args, _| args.into_iter().next().unwrap_or_default())
+                        .takes_functions()
+                        .length(1)
+                        .into(),
+                ),
+                (
+                    "send",
+                    HostFunction::new_async(move |args, _| {
+                        let log = send_log.clone();
+                        async move {
+                            log.lock().unwrap().push(json!(["send", described(&args)]));
+                            Ok(args.into_iter().next().unwrap_or_default())
+                        }
+                    })
+                    .length(1)
+                    .into(),
+                ),
+                (
+                    "refuse",
+                    HostFunction::new_async(move |args, _| {
+                        let log = refuse_log.clone();
+                        async move {
+                            log.lock()
+                                .unwrap()
+                                .push(json!(["refuse", described(&args)]));
+                            Err(Failure::new("HostFailure", "boom").into())
+                        }
+                    })
+                    .length(1)
+                    .into(),
+                ),
+                (
+                    "hold",
+                    HostFunction::new(|args, _| {
+                        HostValue::object([("items", HostValue::array(args))])
+                    })
+                    .thenable()
+                    .length(1)
+                    .into(),
+                ),
+                ("wait", waiting.function().into()),
+            ]
+        })
 }
 
-/// JSON equality where numbers compare by value.
-fn same(a: &Json, b: &Json) -> bool {
-    match (a, b) {
-        (Json::Number(x), Json::Number(y)) => x.as_f64() == y.as_f64(),
-        (Json::Array(x), Json::Array(y)) => {
-            x.len() == y.len() && x.iter().zip(y).all(|(x, y)| same(x, y))
-        }
-        (Json::Object(x), Json::Object(y)) => {
-            x.len() == y.len() && x.iter().all(|(k, v)| y.get(k).is_some_and(|w| same(v, w)))
-        }
-        _ => a == b,
-    }
+fn described(args: &[HostValue]) -> Json {
+    Json::Array(args.iter().map(describe).collect())
 }
 
 fn fixture() -> Json {
@@ -143,42 +192,6 @@ fn fixture() -> Json {
         "/../../conformance/streaming.json"
     );
     serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
-}
-
-/// `t.echo` of `conformance/streaming.ts`: answers its input, logging that it started.
-fn echo(log: &Log) -> Tool {
-    let log = log.clone();
-    Tool::new_async("Echoes its input", move |input: Json, _| {
-        log.lock().unwrap().push(json!(["echo", input.clone()]));
-        async move { Ok(input) }
-    })
-    .output(Schema::validated(json!({})))
-}
-
-/// `t.fail` of `conformance/streaming.ts`: fails as it runs.
-fn fail(log: &Log) -> Tool {
-    let log = log.clone();
-    Tool::new_async("Always fails", move |input: Json, _| {
-        log.lock().unwrap().push(json!(["fail", input]));
-        async move { Err("boom".into()) }
-    })
-    .output(Schema::validated(json!({})))
-}
-
-/// `t.typed` of `conformance/streaming.ts`: takes `{ id: number }`.
-fn typed(log: &Log) -> Tool {
-    let log = log.clone();
-    Tool::new_async("Takes an id", move |input: Json, _| {
-        log.lock().unwrap().push(json!(["typed", input["id"]]));
-        async move { Ok(input["id"].clone()) }
-    })
-    .input(Schema::validated(json!({
-        "type": "object",
-        "properties": { "id": { "type": "number" } },
-        "required": ["id"],
-        "additionalProperties": false
-    })))
-    .output(Schema::validated(json!({ "type": "number" })))
 }
 
 /// The host's side of the log the reference recorded: what the program cancelled with. How often the host runtime
@@ -204,11 +217,6 @@ fn outcome(o: &psychoscript::Outcome) -> Json {
 
 /// A finished run's outcome as the reference's result object writes it.
 fn ended(o: &psychoscript::Outcome) -> Json {
-    let calls: Vec<Json> = o
-        .tool_calls
-        .iter()
-        .map(|c| json!({ "name": c.path }))
-        .collect();
     let mut out = match &o.result {
         Ok(value) => json!({ "ok": true, "value": value }),
         Err(d) => {
@@ -222,7 +230,7 @@ fn ended(o: &psychoscript::Outcome) -> Json {
     if !o.logs.is_empty() {
         out["logs"] = json!(o.logs);
     }
-    out["toolCalls"] = Json::Array(calls);
+    out["metadata"] = o.metadata.clone();
     out
 }
 
@@ -234,13 +242,9 @@ fn streaming_responses_match_the_reference() {
     let mut failures = Vec::new();
     for program in programs {
         let log: Log = Arc::default();
-        let rt = Runtime::new()
-            .with_tool("t.echo", echo(&log))
-            .with_tool("t.fail", fail(&log))
-            .with_tool("t.typed", typed(&log))
-            .extension(web(&log, None));
+        let rt = runtime(&log, &Waiting::default(), None);
         let code = program["code"].as_str().unwrap();
-        let o = rt.execute(code, &serde_json::Map::new());
+        let o = rt.execute(code);
         let actual = json!({ "outcome": outcome(&o), "log": *log.lock().unwrap() });
         let expected = json!({ "outcome": program["outcome"], "log": cancels(&program["log"]) });
         if !same(&actual, &expected) {
@@ -257,14 +261,15 @@ fn streaming_responses_match_the_reference() {
     );
 }
 
-/// Set once the program entered `tools.wait`, which answers only after the run resumed.
+/// Set once the program called `wait`, which answers only after the run resumed.
 #[derive(Clone, Default)]
 struct Waiting(Arc<(Mutex<bool>, Condvar, AtomicBool)>);
 
 impl Waiting {
-    fn tool(&self) -> Tool {
+    /// The generator's `wait`: async and idempotent, settling with `1` only once called after the resume.
+    fn function(&self) -> HostFunction {
         let this = self.clone();
-        Tool::idempotent("Waits until the run resumed", move |_, _| {
+        HostFunction::new_async(move |_, _| {
             let resumed = this.0.2.load(Ordering::SeqCst);
             if !resumed {
                 this.enter();
@@ -273,11 +278,11 @@ impl Waiting {
                 if !resumed {
                     std::future::pending::<()>().await;
                 }
-                Ok(json!(1))
+                Ok(HostValue::Number(1.0))
             }
         })
-        .input(Schema::validated(json!({ "type": "object" })))
-        .output(Schema::validated(json!({ "type": "number" })))
+        .idempotent()
+        .length(1)
     }
 
     fn enter(&self) {
@@ -321,15 +326,10 @@ fn suspending_a_run_that_holds_a_streaming_response_matches_the_reference() {
         let log: Log = Arc::default();
         let waiting = Waiting::default();
         let code = case["code"].as_str().unwrap();
-        // Without `tools.wait`, the suspend comes once the response has arrived, while a busy loop holds the run.
-        let busy = !code.contains("tools.wait");
-        let rt = Runtime::new()
-            .with_tool("wait", waiting.tool())
-            .with_tool("t.echo", echo(&log))
-            .with_tool("t.fail", fail(&log))
-            .with_tool("t.typed", typed(&log))
-            .extension(web(&log, busy.then(|| waiting.clone())));
-        let (run, suspend) = background(rt.program(code, &Default::default(), None), |s| {
+        // Without `wait`, the suspend comes once the response has arrived, while a busy loop holds the run.
+        let busy = !code.contains("wait(");
+        let rt = runtime(&log, &waiting, busy.then(|| waiting.clone()));
+        let (run, suspend) = background(rt.program(code, &ProgramOptions::new()), |s| {
             waiting.entered();
             if busy {
                 thread::sleep(Duration::from_millis(20));
@@ -349,7 +349,8 @@ fn suspending_a_run_that_holds_a_streaming_response_matches_the_reference() {
         };
         if let RunOutcome::Suspended(s) = run {
             waiting.0.2.store(true, Ordering::SeqCst);
-            actual["resume"] = match rt.resume(&s.state) {
+            let bytes = psychoscript::to_bytes(&s.state);
+            actual["resume"] = match rt.resume_bytes(&bytes) {
                 Err(e) => json!({ "ok": false, "message": e.to_string() }),
                 Ok(program) => match program.run_resumable().expect("not interrupted") {
                     RunOutcome::Done(o) => outcome(&o),
@@ -358,10 +359,11 @@ fn suspending_a_run_that_holds_a_streaming_response_matches_the_reference() {
             };
         }
         actual["log"] = Json::Array(log.lock().unwrap().clone());
-        let mut expected = json!({ "suspend": case["suspend"], "log": cancels(&case["log"]) });
+        let mut expected = json!({ "suspend": case["suspend"] });
         if let Some(resume) = case.get("resume") {
             expected["resume"] = resume.clone();
         }
+        expected["log"] = cancels(&case["log"]);
         if !same(&actual, &expected) {
             failures.push(format!(
                 "{code}\n  expected {expected}\n  actual   {actual}"

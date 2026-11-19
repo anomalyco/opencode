@@ -9,8 +9,11 @@
 use std::path::PathBuf;
 use std::time::Instant;
 
-use psychoscript::{Json, Runtime, Schema, Tool};
+use psychoscript::{HostValue, Json, ProgramOptions, Runtime};
 use serde_json::json;
+
+#[path = "../../conformance/reference.rs"]
+mod reference;
 
 /// Case files and reference names, in the reference order.
 const CASES: [(&str, &str); 9] = [
@@ -25,39 +28,10 @@ const CASES: [(&str, &str); 9] = [
     ("map-set-ops", "Map/Set ops"),
 ];
 
-/// Registers the bench tools: this is the switch for schema fairness. The reference decodes `echo`'s input and output
-/// through Effect Schema (`{ id: number }` in, `number` out) and `git.status`'s likewise (`{}` in,
-/// `{ branch: string, dirty: boolean }` out); these Rust tools do not validate yet. Once `Runtime` takes tool schemas,
-/// register both with the equivalent validating schemas here, so each side pays for validation.
-fn tools(runtime: Runtime) -> Runtime {
-    // The reference's Effect Schemas, as the JSON Schema documents they render to.
-    runtime
-        .with_tool(
-            "echo",
-            Tool::new("Echo an id", |input, _| Ok(input["id"].clone()))
-                .input(Schema::validated(json!({
-                    "type": "object",
-                    "properties": { "id": { "type": "number" } },
-                    "required": ["id"],
-                    "additionalProperties": false
-                })))
-                .output(Schema::validated(json!({ "type": "number" }))),
-        )
-        .with_tool(
-            "git.status",
-            Tool::new("Working tree status", |_, _| {
-                Ok(json!({ "branch": "main", "dirty": true }))
-            })
-            .input(Schema::validated(
-                json!({ "type": "object", "properties": {}, "additionalProperties": false }),
-            ))
-            .output(Schema::validated(json!({
-                "type": "object",
-                "properties": { "branch": { "type": "string" }, "dirty": { "type": "boolean" } },
-                "required": ["branch", "dirty"],
-                "additionalProperties": false
-            }))),
-        )
+/// The bench runtime, as the reference drivers make it: one host global, the `tools` namespace of
+/// `conformance/reference.rs` (`tools.echo`, `tools.git.status`, ... all async).
+fn runtime() -> Runtime {
+    Runtime::make().globals(|_| [("tools", HostValue::from(reference::tools()))])
 }
 
 fn main() {
@@ -84,8 +58,7 @@ fn main() {
         }
     }
 
-    let runtime = tools(Runtime::new());
-    let bindings = serde_json::Map::new();
+    let runtime = runtime();
     let mut report = Vec::new();
     for (slug, name) in CASES {
         if !(slug.contains(&filter) || name.contains(&filter)) {
@@ -94,14 +67,14 @@ fn main() {
         let path = dir.join(format!("bench-{slug}.js"));
         let code =
             std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
-        let value = match runtime.execute(&code, &bindings).result {
+        let value = match runtime.execute(&code).result {
             Ok(value) => value,
             Err(d) => panic!("{name} failed: {d:?}"),
         };
         let times: Vec<f64> = (0..iterations)
             .map(|_| {
                 let start = Instant::now();
-                let _ = runtime.execute(&code, &bindings);
+                let _ = runtime.execute(&code);
                 start.elapsed().as_secs_f64() * 1e3
             })
             .collect();
@@ -131,25 +104,25 @@ fn plugin(mut args: impl Iterator<Item = String>) {
             _ => sources.push(arg),
         }
     }
-    let runtime = tools(Runtime::new());
+    let runtime = runtime();
     let bindings =
         json!({ "event": { "type": "command", "name": "git.status" }, "state": { "runs": 2 } });
-    let bindings = bindings.as_object().cloned().unwrap_or_default();
+    let options = ProgramOptions::new().bindings(bindings.as_object().cloned().unwrap_or_default());
     let expected =
         json!({ "state": { "runs": 3 }, "slots": { "statusbar": { "text": "main *" } } });
     for source in sources {
         let code = std::fs::read_to_string(&source).unwrap_or_else(|e| panic!("{source}: {e}"));
-        match runtime.execute(&code, &bindings).result {
+        match runtime.execute_with(&code, &options).result {
             Ok(value) if value == expected => {}
             other => panic!("{source}: unexpected outcome {other:?}"),
         }
         for _ in 1..runs {
-            let _ = runtime.execute(&code, &bindings);
+            let _ = runtime.execute_with(&code, &options);
         }
         let times: Vec<f64> = (0..runs)
             .map(|_| {
                 let start = Instant::now();
-                let _ = runtime.execute(&code, &bindings);
+                let _ = runtime.execute_with(&code, &options);
                 start.elapsed().as_secs_f64() * 1e6
             })
             .collect();

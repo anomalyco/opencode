@@ -1,40 +1,56 @@
-//! PsychoScript: a confined, JavaScript-like language for calling host tools, embeddable in Rust.
+//! PsychoScript: a confined, JavaScript-like language whose programs call the host's functions, embeddable in Rust.
+//!
+//! This crate is the Rust implementation of the reference's language layer (`src/language/` of `@opencode/codemode`):
+//! [`Runtime`] is `Runtime.make`, [`HostFunction`] is `Host.fn`, [`DurableFunction`] is `Host.durableFn`,
+//! [`Namespace`] is `Host.namespace`, [`Failure`] is `Host.fail` and `Host.missing`, and [`Program`] is
+//! `runtime.program`. Host work is a [`Future`](std::future::Future) instead of an Effect; [`Runtime::execute_async`]
+//! runs on any executor, and [`Runtime::execute`] drives it on the calling thread.
 //!
 //! The public API below is shared with the benchmark and conformance harnesses, so change it only together with them.
-//!
-//! The pieces mirror the reference's (`packages/codemode`) in Rust form: [`Tool`] is `Tool.make`, [`Runtime`] is
-//! `CodeMode.make`, [`Extension`] is `Extension.make`, [`Hooks`] are the call hooks, [`Program`] is
-//! `runtime.program`, and [`RunOptions`] are a run's options, such as which of the runtime's extensions it gets.
-//! Host work is a [`Future`](std::future::Future) instead of an Effect; [`Runtime::execute_async`] runs on any
-//! executor, and [`Runtime::execute`] drives it on the calling thread.
 
-mod codemode;
-mod language;
-
-// The language layer's modules by their short names, so its files and Code Mode's name them as `crate::vm`. Code Mode's
-// modules are named only through `crate::codemode`, so the language layer can't reach them unnoticed
-// (`tests/language_boundary.rs`).
-use language::{
-    builtins, bytecode, compiler, conversion, convert, cross, diagnostic, exec, extension, host,
-    iteration, native, object, ops, promise, reach, snapshot, streaming, strings, value, vm,
-};
-
-pub use codemode::openapi;
-pub(crate) use codemode::runtime::Setup;
-pub use codemode::runtime::{Outcome, RunOptions, Runtime, ToolCall, ToolFn, search_signature};
+mod builtins;
+mod bytecode;
+mod compiler;
+mod conversion;
+mod convert;
+mod cross;
+mod diagnostic;
+mod exec;
+mod host;
+mod host_function;
+mod iteration;
+mod native;
+mod object;
+mod ops;
+mod program;
+mod promise;
+mod reach;
+mod run;
+mod runtime;
+mod snapshot;
+mod streaming;
+mod strings;
 #[cfg(feature = "test262")]
 #[doc(hidden)]
-pub use codemode::test262;
-pub use language::diagnostic::{Diagnostic, DiagnosticKind, Limits};
+pub mod test262;
+mod value;
+mod vm;
 
-pub use codemode::hooks::{CallResult, ExtensionInvocation, Hooks, ToolInvocation};
-pub use codemode::program::{Program, RunOutcome, RunningCall, SuspendError, Suspended, Suspender};
-pub use codemode::schema::Schema;
-pub use codemode::tool::{
-    BoxFuture, ConfigError, Execute, Interrupted, Tool, ToolContext, ToolDescription, ToolError,
-    tool_expression,
+pub use diagnostic::{Diagnostic, DiagnosticKind, Interrupted, Limits};
+pub use exec::BoxFuture;
+pub use host_function::{
+    Call, CallType, DurableCall, DurableFunction, Failure, HostError, HostFunction, HostResult,
+    HostValue, Namespace, Resolved, Returned, SnapshotHooks,
 };
-pub use extension::{Extension, HostError, HostFunction, HostValue, SnapshotHooks};
+pub use program::{Program, RunOutcome, RunningCall, SuspendError, Suspended, Suspender};
+pub use runtime::{
+    Outcome, ProgramOptions, Run, Runtime, Translate, TranslateFunctions, TranslatePromises,
+};
 pub use serde_json::Value as Json;
 pub use snapshot::{Snapshot, SnapshotError, from_bytes, to_bytes};
 pub use streaming::{HttpBody, StreamingResponse};
+
+/// The names bound in every program before its host globals, the reference's `globalNames`.
+pub fn global_names() -> &'static [&'static str] {
+    host::GLOBAL_NAMES
+}

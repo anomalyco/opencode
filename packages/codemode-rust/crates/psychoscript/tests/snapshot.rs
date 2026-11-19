@@ -1,5 +1,5 @@
 //! Suspending a run, saving its state, and resuming it in a brand-new runtime, mirroring the reference's
-//! `suspend.test.ts`.
+//! `suspend.test.ts` on the language layer: host functions instead of tools.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -9,19 +9,10 @@ use std::thread;
 use std::time::Duration;
 
 use psychoscript::{
-    Extension, Hooks, HostFunction, HostValue, Json, Limits, Program, RunOptions, RunOutcome,
-    Runtime, Schema, Snapshot, Suspended, Suspender, Tool, ToolError,
+    DurableFunction, HostError, HostFunction, HostValue, Json, Limits, Namespace, Program,
+    ProgramOptions, RunOutcome, Runtime, Snapshot, Suspended, Suspender,
 };
 use serde_json::json;
-
-fn value_schema() -> Schema {
-    Schema::validated(json!({
-        "type": "object",
-        "properties": { "value": { "type": "number" } },
-        "required": ["value"],
-        "additionalProperties": false
-    }))
-}
 
 /// A future the test finishes by hand, and a flag that says it was entered.
 #[derive(Clone, Default)]
@@ -39,11 +30,7 @@ struct GateState {
 
 impl Gate {
     fn wait(&self) -> GateFuture {
-        {
-            let (m, c) = &*self.inner;
-            m.lock().unwrap().entered += 1;
-            c.notify_all();
-        }
+        self.mark();
         GateFuture {
             gate: self.clone(),
             done: false,
@@ -85,6 +72,19 @@ impl Gate {
         s.value = None;
         s.entered = 0;
     }
+
+    /// Blocks the calling thread until the gate opens, as a synchronous host function would.
+    fn block(&self) -> Json {
+        self.mark();
+        let (m, c) = &*self.inner;
+        let mut s = m.lock().unwrap();
+        loop {
+            if let Some(v) = s.value.take() {
+                return v;
+            }
+            s = c.wait_timeout(s, Duration::from_millis(5)).unwrap().0;
+        }
+    }
 }
 
 struct GateFuture {
@@ -114,24 +114,33 @@ impl Drop for GateFuture {
     }
 }
 
-/// A tool that doubles its input at once.
-fn step() -> Tool {
-    Tool::new("Doubles", |input, _| {
-        Ok(json!({ "value": input["value"].as_f64().unwrap_or(0.0) * 2.0 }))
+/// `step(n)`: an async host function that doubles `n` at once, marking `gate` on every call so a test can suspend
+/// right after it.
+fn step(gate: Option<&Gate>) -> HostFunction {
+    let gate = gate.cloned();
+    HostFunction::new_async(move |args, _| {
+        if let Some(g) = &gate {
+            g.mark();
+        }
+        let n = args[0].as_f64().unwrap_or(0.0);
+        async move { Ok(HostValue::Number(n * 2.0)) }
     })
-    .input(value_schema())
-    .output(value_schema())
+    .length(1)
 }
 
-/// The doubling tool, marking `gate` on every call so a test can suspend right after it.
-fn marked(gate: &Gate) -> Tool {
+/// A runtime whose only global is `step`, marking `gate`.
+fn stepping(gate: &Gate) -> Runtime {
     let gate = gate.clone();
-    Tool::new("Doubles", move |input, _| {
-        gate.mark();
-        Ok(json!({ "value": input["value"].as_f64().unwrap_or(0.0) * 2.0 }))
-    })
-    .input(value_schema())
-    .output(value_schema())
+    Runtime::make().globals(move |_| [("step", step(Some(&gate)))])
+}
+
+/// A runtime whose only global is `step`, marking nothing: the same host globals as [`stepping`].
+fn fresh() -> Runtime {
+    Runtime::make().globals(|_| [("step", step(None))])
+}
+
+fn options(run_id: &str) -> ProgramOptions {
+    ProgramOptions::new().run_id(run_id)
 }
 
 /// Runs `program` on this thread while `during` runs on another with its suspender.
@@ -182,26 +191,30 @@ fn header(state: &Snapshot) -> &Json {
 /// Busy-waits in the program after its first host call, so a suspend lands mid-loop.
 const BUSY: &str = "const t = Date.now(); while (Date.now() - t < 300) {}";
 
+/// The message a runtime with other host globals refuses a state with.
+const OTHER_GLOBALS: &str =
+    "This state was saved by a runtime with other host globals; resume it with the same ones.";
+
 #[test]
 fn a_run_suspended_between_calls_resumes_from_state_and_from_bytes() {
     let code = format!(
         r#"const log = ["before"]
-        const a = await tools.step({{ value: 20 }})
+        const a = await step(20)
         {BUSY}
-        const b = await tools.step({{ value: 1 }})
-        log.push("after " + (a.value + b.value))
+        const b = await step(1)
+        log.push("after " + (a + b))
         console.log("resumed")
-        return {{ log, total: a.value + b.value }}"#
+        return {{ log, total: a + b }}"#
     );
     let gate = Gate::default();
-    let rt = Runtime::new().with_tool("step", marked(&gate));
-    let (outcome, from_suspend) = background(rt.program(&code, &Default::default(), None), |s| {
+    let rt = stepping(&gate);
+    let (outcome, from_suspend) = background(rt.program(&code, &ProgramOptions::new()), |s| {
         gate.entered(1);
         suspend_soon(&s, None)
     });
     let state = suspended(outcome).state;
     assert_eq!(suspended(from_suspend.unwrap()).state, state);
-    let fresh = Runtime::new().with_tool("step", step());
+    let fresh = fresh();
     for program in [
         fresh.resume(&state).unwrap(),
         fresh.resume_bytes(&psychoscript::to_bytes(&state)).unwrap(),
@@ -212,31 +225,35 @@ fn a_run_suspended_between_calls_resumes_from_state_and_from_bytes() {
             json!({ "log": ["before", "after 42"], "total": 42 })
         );
         assert_eq!(o.logs, ["resumed"]);
-        assert_eq!(o.tool_calls.len(), 2);
     }
 }
 
 #[test]
-fn a_suspend_fails_while_a_tool_is_running_and_the_run_goes_on() {
+fn a_suspend_fails_while_a_call_is_running_and_the_run_goes_on() {
     let gate = Gate::default();
     let g = gate.clone();
-    let slow = Tool::new_async("Waits", move |_, _| {
-        let f = g.wait();
-        async move { Ok(f.await) }
-    })
-    .input(value_schema())
-    .output(value_schema());
-    let rt = Runtime::new().with_tool("slow", slow);
+    let rt = Runtime::make().globals(move |_| {
+        let g = g.clone();
+        [(
+            "tools",
+            Namespace::new(
+                |_| Ok(vec!["slow".to_owned()]),
+                move |_| {
+                    let g = g.clone();
+                    HostFunction::new_async(move |_, _| {
+                        let f = g.wait();
+                        async move { Ok(HostValue::from_json(&f.await)) }
+                    })
+                },
+            ),
+        )]
+    });
     let (outcome, error) = background(
-        rt.program(
-            "return (await tools.slow({ value: 1 })).value",
-            &Default::default(),
-            Some("b"),
-        ),
+        rt.program("return await tools.slow(1)", &options("b")),
         |s| {
             gate.entered(1);
             let error = s.suspend(None).unwrap_err();
-            gate.open(json!({ "value": 5 }));
+            gate.open(json!(5));
             error
         },
     );
@@ -254,67 +271,52 @@ fn a_suspend_fails_while_a_tool_is_running_and_the_run_goes_on() {
 fn a_suspend_fails_while_a_synchronous_call_runs() {
     let gate = Gate::default();
     let g = gate.clone();
-    let ext = Extension::new("clock").function(
-        "now",
-        HostFunction::new("now", 0, move |_| {
-            let mut f = Box::pin(g.wait());
-            Ok(HostValue::Number(
-                psychoscript_block_on(&mut f).as_f64().unwrap_or(0.0),
-            ))
-        }),
-    );
-    let rt = Runtime::new().extension(ext);
-    let (outcome, error) = background(
-        rt.program("return now() + 1", &Default::default(), Some("s")),
-        |s| {
-            gate.entered(1);
-            let error = s.suspend(None).unwrap_err();
-            gate.open(json!(7));
-            error
-        },
-    );
+    let rt = Runtime::make().globals(move |_| {
+        let g = g.clone();
+        [(
+            "now",
+            HostFunction::new(move |_, _| HostValue::Number(g.block().as_f64().unwrap_or(0.0))),
+        )]
+    });
+    let (outcome, error) = background(rt.program("return now() + 1", &options("s")), |s| {
+        gate.entered(1);
+        let error = s.suspend(None).unwrap_err();
+        gate.open(json!(7));
+        error
+    });
     assert_eq!(error.running[0].path, "now");
+    assert_eq!(
+        error.message,
+        "The run can't be suspended while now is running."
+    );
     assert_eq!(done(outcome).result.unwrap(), json!(8));
 }
 
-/// Blocks on a gate future from inside a synchronous host function.
-fn psychoscript_block_on(f: &mut Pin<Box<GateFuture>>) -> Json {
-    let gate = f.gate.clone();
-    let (m, c) = &*gate.inner;
-    let mut s = m.lock().unwrap();
-    loop {
-        if let Some(v) = s.value.take() {
-            f.done = true;
-            return v;
-        }
-        s = c.wait_timeout(s, Duration::from_millis(5)).unwrap().0;
-    }
-}
-
 #[test]
-fn a_loop_of_synchronous_extension_calls_can_be_suspended_and_resumed() {
+fn a_loop_of_synchronous_calls_can_be_suspended_and_resumed() {
     let gate = Gate::default();
-    let ext = || {
-        let gate = gate.clone();
-        Extension::new("draw").function(
-            "draw",
-            HostFunction::new("draw", 1, move |args| {
-                gate.mark();
-                Ok(args[0].clone())
-            }),
-        )
+    let draw = |gate: Gate| {
+        Runtime::make().globals(move |_| {
+            let gate = gate.clone();
+            [(
+                "draw",
+                HostFunction::new(move |args, _| {
+                    gate.mark();
+                    args[0].clone()
+                }),
+            )]
+        })
     };
-    let rt = Runtime::new().extension(ext());
+    let rt = draw(gate.clone());
     let code = "let n = 0\nwhile (n < 200000) draw(n++)\nreturn n";
-    let (outcome, _) = background(rt.program(code, &Default::default(), None), |s| {
+    let (outcome, _) = background(rt.program(code, &ProgramOptions::new()), |s| {
         gate.entered(500);
         suspend_soon(&s, None)
     });
     let state = suspended(outcome).state;
     assert!(gate.inner.0.lock().unwrap().entered < 200000);
     let o = done(
-        Runtime::new()
-            .extension(ext())
+        draw(Gate::default())
             .resume_bytes(&psychoscript::to_bytes(&state))
             .unwrap()
             .run_resumable()
@@ -325,8 +327,8 @@ fn a_loop_of_synchronous_extension_calls_can_be_suspended_and_resumed() {
 
 #[test]
 fn a_suspend_after_the_run_ended_gives_its_result() {
-    let rt = Runtime::new();
-    let program = rt.program("return 1 + 1", &Default::default(), None);
+    let rt = Runtime::make();
+    let program = rt.program("return 1 + 1", &ProgramOptions::new());
     let suspender = program.suspender();
     let o = done(program.run_resumable().unwrap());
     assert_eq!(o.result.unwrap(), json!(2));
@@ -337,9 +339,9 @@ fn a_suspend_after_the_run_ended_gives_its_result() {
 #[test]
 fn a_suspend_issued_before_the_run_starts_stops_a_busy_loop() {
     let code = "let n = 0; for (let i = 0; i < 2000000; i++) n = (n + i) % 1000003; return n";
-    let rt = Runtime::new();
-    let expected = rt.execute(code, &Default::default()).result.unwrap();
-    let program = rt.program(code, &Default::default(), None);
+    let rt = Runtime::make();
+    let expected = rt.execute(code).result.unwrap();
+    let program = rt.program(code, &ProgramOptions::new());
     let suspender = program.suspender();
     let (outcome, answer) = thread::scope(|s| {
         let h = s.spawn(move || suspender.suspend(None));
@@ -348,9 +350,8 @@ fn a_suspend_issued_before_the_run_starts_stops_a_busy_loop() {
     });
     let state = suspended(outcome).state;
     assert_eq!(suspended(answer.unwrap()).state, state);
-    let fresh = Runtime::new();
     let o = done(
-        fresh
+        Runtime::make()
             .resume_bytes(&psychoscript::to_bytes(&state))
             .unwrap()
             .run_resumable()
@@ -361,12 +362,10 @@ fn a_suspend_issued_before_the_run_starts_stops_a_busy_loop() {
 
 #[test]
 fn a_state_over_the_byte_budget_fails_the_suspend_and_the_run_goes_on() {
-    let code = format!(
-        r#"const big = "x".repeat(1000); await tools.step({{ value: 1 }}); {BUSY} return big.length"#
-    );
+    let code = format!(r#"const big = "x".repeat(1000); await step(1); {BUSY} return big.length"#);
     let gate = Gate::default();
-    let rt = Runtime::new().with_tool("step", marked(&gate));
-    let (outcome, error) = background(rt.program(&code, &Default::default(), None), |s| {
+    let rt = stepping(&gate);
+    let (outcome, error) = background(rt.program(&code, &ProgramOptions::new()), |s| {
         gate.entered(1);
         suspend_soon(&s, Some(100))
     });
@@ -374,16 +373,18 @@ fn a_state_over_the_byte_budget_fails_the_suspend_and_the_run_goes_on() {
     assert!(error.running.is_empty());
     assert!(
         error.message.starts_with("The run's state takes ")
-            && error.message.ends_with("more than the 100-byte limit."),
+            && error
+                .message
+                .ends_with(" bytes, more than the 100-byte limit, so it couldn't be suspended."),
         "{}",
         error.message
     );
     assert_eq!(done(outcome).result.unwrap(), json!(1000));
 }
 
-/// Suspends `code` in the busy loop after its first `tools.step` call; `rt` marks `gate` there.
+/// Suspends `code` in the busy loop after its first `step` call; `rt` marks `gate` there.
 fn suspend_mid_loop(rt: &Runtime, gate: &Gate, code: &str) -> Snapshot {
-    let (outcome, _) = background(rt.program(code, &Default::default(), None), |s| {
+    let (outcome, _) = background(rt.program(code, &ProgramOptions::new()), |s| {
         gate.entered(1);
         suspend_soon(&s, None)
     });
@@ -391,46 +392,47 @@ fn suspend_mid_loop(rt: &Runtime, gate: &Gate, code: &str) -> Snapshot {
 }
 
 #[test]
-fn a_resumed_run_keeps_its_limits_and_counts_time_and_calls_across_resumes() {
-    let code = format!(
-        "await tools.step({{ value: 1 }}); {BUSY} await tools.step({{ value: 2 }}); await tools.step({{ value: 3 }}); return \"done\""
-    );
+fn a_resumed_run_keeps_its_limits_and_counts_time_across_resumes() {
+    let code = format!(r#"await step(1); {BUSY} return "x".repeat(100)"#);
     let gate = Gate::default();
-    let rt = Runtime::new()
-        .with_tool("step", marked(&gate))
+    let g = gate.clone();
+    let rt = Runtime::make()
+        .globals(move |_| [("step", step(Some(&g)))])
         .limits(Limits {
-            max_tool_calls: Some(2),
             max_output_bytes: Some(10),
             timeout_ms: None,
         });
     let state = suspend_mid_loop(&rt, &gate, &code);
     assert_eq!(
         header(&state)["limits"],
-        json!({ "timeoutMs": null, "maxToolCalls": 2, "maxOutputBytes": 10 })
+        json!({ "timeoutMs": null, "maxOutputBytes": 10 })
     );
-    let fresh = Runtime::new().with_tool("step", step());
-    let o = done(fresh.resume(&state).unwrap().run_resumable().unwrap());
+    // A runtime without limits resumes it with the ones it was saved with.
+    let o = done(fresh().resume(&state).unwrap().run_resumable().unwrap());
+    assert!(o.truncated);
     assert_eq!(
-        o.result.unwrap_err().kind,
-        psychoscript::DiagnosticKind::ToolCallLimitExceeded
+        o.result.unwrap(),
+        json!(
+            "\"xxxxxxxxx [result truncated: 102 bytes exceeds the 10-byte output limit; return a smaller value]"
+        )
     );
 
     let gate = Gate::default();
-    let timed = Runtime::new()
-        .with_tool("step", marked(&gate))
+    let g = gate.clone();
+    let timed = Runtime::make()
+        .globals(move |_| [("step", step(Some(&g)))])
         .limits(Limits {
             timeout_ms: Some(400),
             ..Limits::default()
         });
-    let code = "await tools.step({ value: 1 }); const a = Date.now(); while (Date.now() - a < 250) {} const b = Date.now(); while (Date.now() - b < 250) {} return 1";
-    let (outcome, _) = background(timed.program(code, &Default::default(), None), |s| {
+    let code = "await step(1); const a = Date.now(); while (Date.now() - a < 250) {} const b = Date.now(); while (Date.now() - b < 250) {} return 1";
+    let (outcome, _) = background(timed.program(code, &ProgramOptions::new()), |s| {
         gate.entered(1);
         thread::sleep(Duration::from_millis(200));
         suspend_soon(&s, None)
     });
     let state = suspended(outcome).state;
     assert!(header(&state)["budget"]["activeMs"].as_u64().unwrap() >= 150);
-    assert_eq!(header(&state)["budget"]["toolCalls"], json!(1));
     let o = done(timed.resume(&state).unwrap().run_resumable().unwrap());
     assert_eq!(
         o.result.unwrap_err().kind,
@@ -439,34 +441,28 @@ fn a_resumed_run_keeps_its_limits_and_counts_time_and_calls_across_resumes() {
 }
 
 #[test]
-fn a_state_is_refused_by_another_build_other_extensions_or_a_changed_source() {
+fn a_state_is_refused_by_another_build_other_host_globals_or_a_changed_source() {
     let gate = Gate::default();
-    let rt = Runtime::new().with_tool("step", marked(&gate));
-    let state = suspend_mid_loop(
-        &rt,
-        &gate,
-        &format!("await tools.step({{ value: 1 }}); {BUSY} return 1"),
-    );
+    let rt = stepping(&gate);
+    let state = suspend_mid_loop(&rt, &gate, &format!("await step(1); {BUSY} return 1"));
     let mut other = state.clone();
     other.0["header"]["build"] = json!("0.0.0+0");
     let e = rt.resume(&other).err().unwrap();
+    // The reference names itself "Code Mode" where this build names itself "PsychoScript".
     assert!(
-        e.message
-            .contains("saved by another PsychoScript build (0.0.0+0)"),
+        e.message.starts_with("This state was saved by another ")
+            && e.message.contains(" build (0.0.0+0); this runtime is ")
+            && e.message.ends_with(", so it can't resume it."),
         "{}",
         e.message
     );
-    let ext = Runtime::new().extension(Extension::new("x").function(
-        "f",
-        HostFunction::new("f", 0, |_| Ok(HostValue::Number(1.0))),
-    ));
-    assert!(
-        ext.resume(&state)
-            .err()
-            .unwrap()
-            .message
-            .contains("saved by a runtime with other host globals")
-    );
+    let others = Runtime::make().globals(|_| {
+        [
+            ("step", step(None)),
+            ("f", HostFunction::new(|_, _| HostValue::Number(1.0))),
+        ]
+    });
+    assert_eq!(others.resume(&state).err().unwrap().message, OTHER_GLOBALS);
     let mut changed = state.clone();
     let code = changed.0["header"]["source"]["code"]
         .as_str()
@@ -495,87 +491,66 @@ fn a_state_is_refused_by_another_build_other_extensions_or_a_changed_source() {
 }
 
 #[test]
-fn a_run_started_with_some_extensions_resumes_with_the_same_ones_in_any_order() {
-    let global = |name: &'static str, n: f64| {
-        Extension::new(name).function(
-            name,
-            HostFunction::new(name, 0, move |_| Ok(HostValue::Number(n))),
-        )
-    };
+fn a_run_resumes_with_the_globals_made_for_it_in_the_same_order() {
+    let number = |n: f64| HostFunction::new(move |_, _| HostValue::Number(n));
     let gate = Gate::default();
-    let rt = Runtime::new()
-        .with_tool("step", marked(&gate))
-        .extension(global("now", 7.0))
-        .extension(global("later", 8.0))
-        .extension(global("unused", 1.0));
-    let code =
-        format!("await tools.step({{ value: 1 }}); {BUSY} return [now(), later(), typeof unused]");
-    let picked = RunOptions::new().extensions(["later", "now"]);
-    let (outcome, _) = background(
-        rt.program_with(&code, &Default::default(), None, &picked),
-        |s| {
-            gate.entered(1);
-            suspend_soon(&s, None)
-        },
-    );
+    let g = gate.clone();
+    // Each run gets its own choice of globals: `later` only for the run named "both".
+    let rt = Runtime::make().globals(move |run| {
+        let mut globals = vec![("step", step(Some(&g))), ("now", number(7.0))];
+        if run.id() == "both" {
+            globals.push(("later", number(8.0)));
+        }
+        globals
+    });
+    let code = format!("await step(1); {BUSY} return [now(), later(), typeof unused]");
+    let (outcome, _) = background(rt.program(&code, &options("both")), |s| {
+        gate.entered(1);
+        suspend_soon(&s, None)
+    });
     let state = suspended(outcome).state;
-    for refused in [
-        rt.resume(&state).err(),
-        rt.resume_with(&state, &RunOptions::new().extensions(["now"]))
-            .err(),
-    ] {
-        assert!(
-            refused
-                .expect("refused")
-                .message
-                .contains("saved by a runtime with other host globals")
-        );
+    let fewer = Runtime::make().globals(move |_| [("step", step(None)), ("now", number(7.0))]);
+    let reordered = Runtime::make().globals(move |_| {
+        [
+            ("step", step(None)),
+            ("later", number(8.0)),
+            ("now", number(7.0)),
+        ]
+    });
+    for refused in [fewer.resume(&state).err(), reordered.resume(&state).err()] {
+        assert_eq!(refused.expect("refused").message, OTHER_GLOBALS);
     }
-    let again = RunOptions::new().extensions(["now", "later", "now"]);
-    let o = done(
-        rt.resume_with(&state, &again)
-            .unwrap()
-            .run_resumable()
-            .unwrap(),
-    );
+    let o = done(rt.resume(&state).unwrap().run_resumable().unwrap());
     assert_eq!(o.result.unwrap(), json!([7, 8, "undefined"]));
 }
 
 #[test]
-fn picking_an_extension_the_runtime_was_not_made_with_panics() {
-    let rt = Runtime::new().extension(
-        Extension::new("now").function("now", HostFunction::new("now", 0, |_| Ok(1.0.into()))),
-    );
-    let other = RunOptions::new().extensions(["other"]);
-    let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        rt.program_with("1", &Default::default(), None, &other);
-    }))
-    .unwrap_err();
-    assert_eq!(
-        panicked.downcast_ref::<String>().map(String::as_str),
-        Some("Extension \"other\" isn't one this runtime was made with.")
-    );
-}
-
-#[test]
-fn a_function_an_extension_returned_is_lost_on_resume() {
-    let ext = Extension::new("maker").function(
-        "make",
-        HostFunction::new("make", 0, |_| {
-            Ok(HostValue::Function(HostFunction::new("inc", 1, |args| {
-                Ok(HostValue::Number(args[0].as_f64().unwrap_or(0.0) + 1.0))
-            })))
-        }),
-    );
+fn a_function_a_host_function_returned_is_lost_on_resume() {
+    let globals = |gate: Option<Gate>| {
+        move |_: &psychoscript::Run| {
+            [
+                ("step", step(gate.as_ref())),
+                (
+                    "make",
+                    HostFunction::new(|_, _| {
+                        HostValue::Function(
+                            HostFunction::new(|args, _| {
+                                HostValue::Number(args[0].as_f64().unwrap_or(0.0) + 1.0)
+                            })
+                            .named("inc"),
+                        )
+                    }),
+                ),
+            ]
+        }
+    };
     let gate = Gate::default();
-    let rt = Runtime::new()
-        .with_tool("step", marked(&gate))
-        .extension(ext.clone());
+    let rt = Runtime::make().globals(globals(Some(gate.clone())));
     let code = format!(
-        "const inc = make(); const before = inc(1); await tools.step({{ value: 0 }}); {BUSY} try {{ return {{ before, after: inc(1) }} }} catch (error) {{ return {{ before, error: String(error) }} }}"
+        "const inc = make(); const before = inc(1); await step(0); {BUSY} try {{ return {{ before, after: inc(1) }} }} catch (error) {{ return {{ before, error: String(error) }} }}"
     );
     let state = suspend_mid_loop(&rt, &gate, &code);
-    let fresh = Runtime::new().with_tool("step", step()).extension(ext);
+    let fresh = Runtime::make().globals(globals(None));
     let o = done(fresh.resume(&state).unwrap().run_resumable().unwrap());
     assert_eq!(
         o.result.unwrap(),
@@ -608,7 +583,7 @@ fn program_state_of_every_kind_survives_a_suspend() {
       const pending = new Promise((resolve) => (globalResolve = resolve))
       var globalResolve
       Array.prototype.extra = "patched"
-      await tools.step({{ value: 1 }})
+      await step(1)
       {BUSY}
       params.append("y", "2")
       view[0] = 9
@@ -629,11 +604,9 @@ fn program_state_of_every_kind_survives_a_suspend() {
       }}"#
     );
     let gate = Gate::default();
-    let rt = Runtime::new().with_tool("step", marked(&gate));
-    let state = suspend_mid_loop(&rt, &gate, &code);
-    let fresh = Runtime::new().with_tool("step", step());
+    let state = suspend_mid_loop(&stepping(&gate), &gate, &code);
     let o = done(
-        fresh
+        fresh()
             .resume_bytes(&psychoscript::to_bytes(&state))
             .unwrap()
             .run_resumable()
@@ -666,9 +639,9 @@ fn changes_to_built_ins_survive_a_second_suspend() {
       Object.freeze(JSON)
       Object.seal(Number.prototype)
       Object.preventExtensions(Date.prototype)
-      await tools.step({{ value: 1 }})
+      await step(1)
       {BUSY}
-      await tools.step({{ value: 2 }})
+      await step(2)
       const t2 = Date.now()
       while (Date.now() - t2 < 300) {{}}
       return {{
@@ -681,7 +654,7 @@ fn changes_to_built_ins_survive_a_second_suspend() {
       }}"#
     );
     let gate = Gate::default();
-    let rt = Runtime::new().with_tool("step", marked(&gate));
+    let rt = stepping(&gate);
     let first = suspend_mid_loop(&rt, &gate, &code);
     let (outcome, _) = background(rt.resume(&first).unwrap(), |s| {
         gate.entered(2);
@@ -702,110 +675,43 @@ fn changes_to_built_ins_survive_a_second_suspend() {
     );
 }
 
-fn events_hooks(events: &Arc<Mutex<Vec<String>>>) -> Hooks {
-    let (b, a) = (events.clone(), events.clone());
-    Hooks::new()
-        .tool_before(move |call| {
-            b.lock()
-                .unwrap()
-                .push(format!("before {} {}", call.name, call.key));
-            Ok(())
-        })
-        .tool_after(move |call, result| {
-            a.lock().unwrap().push(format!(
-                "after {} {} {}",
-                call.name,
-                call.key,
-                result.status()
-            ));
-        })
-}
-
 #[test]
-fn an_idempotent_tool_in_flight_suspends_and_reruns_on_resume_with_the_same_key() {
+fn an_idempotent_call_in_flight_suspends_and_reruns_on_resume_with_the_same_key() {
     let gate = Gate::default();
     let keys = Arc::new(Mutex::new(Vec::new()));
     let (g, k) = (gate.clone(), keys.clone());
-    let read = Tool::idempotent("Safe to rerun", move |_, ctx| {
-        k.lock().unwrap().push(ctx.key());
-        let f = g.wait();
-        async move { Ok(f.await) }
-    })
-    .input(value_schema())
-    .output(value_schema());
-    let events = Arc::new(Mutex::new(Vec::new()));
-    let rt = Runtime::new()
-        .with_tool("read", read)
-        .hooks(events_hooks(&events));
-    let code = "const a = await tools.read({ value: 20 }); const b = await tools.read({ value: 22 }); return a.value + b.value";
-    let (outcome, _) = background(rt.program(code, &Default::default(), Some("rr")), |s| {
+    let rt = Runtime::make().globals(move |_| {
+        let (g, k) = (g.clone(), k.clone());
+        [(
+            "read",
+            HostFunction::new_async(move |_, call| {
+                k.lock().unwrap().push(call.key());
+                let f = g.wait();
+                async move { Ok(HostValue::from_json(&f.await)) }
+            })
+            .idempotent(),
+        )]
+    });
+    let code = "const a = await read(20); const b = await read(22); return a + b";
+    let (outcome, _) = background(rt.program(code, &options("rr")), |s| {
         gate.entered(1);
         suspend_soon(&s, None)
     });
     let state = suspended(outcome).state;
     assert_eq!(gate.dropped(), 1);
-    assert_eq!(*events.lock().unwrap(), ["before read rr:0"]);
+    assert_eq!(*keys.lock().unwrap(), ["rr:0"]);
     gate.reset();
     let (outcome, _) = background(rt.resume(&state).unwrap(), |_| {
         gate.entered(1);
-        gate.open(json!({ "value": 20 }));
+        gate.open(json!(20));
         gate.entered(2);
-        gate.open(json!({ "value": 22 }));
+        gate.open(json!(22));
     });
-    let o = done(outcome);
-    assert_eq!(o.result.unwrap(), json!(42));
-    assert_eq!(o.tool_calls.len(), 2);
+    assert_eq!(done(outcome).result.unwrap(), json!(42));
     assert_eq!(*keys.lock().unwrap(), ["rr:0", "rr:0", "rr:1"]);
-    assert_eq!(
-        *events.lock().unwrap(),
-        [
-            "before read rr:0",
-            "before read rr:0",
-            "after read rr:0 success",
-            "before read rr:1",
-            "after read rr:1 success"
-        ]
-    );
 }
 
-#[test]
-fn max_tool_calls_is_not_double_counted_when_an_idempotent_call_reruns() {
-    let gate = Gate::default();
-    let g = gate.clone();
-    let read = Tool::idempotent("Safe", move |_, _| {
-        let f = g.wait();
-        async move { Ok(f.await) }
-    })
-    .input(value_schema())
-    .output(value_schema());
-    let rt = Runtime::new().with_tool("read", read).limits(Limits {
-        max_tool_calls: Some(1),
-        ..Limits::default()
-    });
-    let (outcome, _) = background(
-        rt.program(
-            "return (await tools.read({ value: 7 })).value",
-            &Default::default(),
-            Some("lim"),
-        ),
-        |s| {
-            gate.entered(1);
-            suspend_soon(&s, None)
-        },
-    );
-    let state = suspended(outcome).state;
-    assert_eq!(header(&state)["budget"]["toolCalls"], json!(1));
-    gate.reset();
-    let (outcome, _) = background(rt.resume(&state).unwrap(), |_| {
-        gate.entered(1);
-        gate.open(json!({ "value": 7 }));
-    });
-    let o = done(outcome);
-    assert_eq!(o.result.unwrap(), json!(7));
-    assert_eq!(o.tool_calls.len(), 1);
-}
-
-/// A durable tool over a job table that outlives any one run.
+/// A durable function over a job table that outlives any one run.
 #[derive(Clone, Default)]
 struct Jobs {
     log: Arc<Mutex<Vec<String>>>,
@@ -815,36 +721,36 @@ struct Jobs {
 }
 
 impl Jobs {
-    fn tool(&self, gated: bool) -> Tool {
+    fn function(&self, gated: bool) -> DurableFunction {
         let (start_log, wait_log, cancelled) =
             (self.log.clone(), self.log.clone(), self.cancelled.clone());
         let (start_gate, result) = (self.start_gate.clone(), self.result.clone());
-        Tool::durable(
-            "Runs a durable job",
-            move |input, ctx| {
-                start_log
-                    .lock()
-                    .unwrap()
-                    .push(format!("start {}", ctx.key()));
-                let key = ctx.key();
+        DurableFunction::new(
+            move |args, call| {
+                let key = call.key();
+                start_log.lock().unwrap().push(format!("start {key}"));
                 let wait = gated.then(|| start_gate.wait());
+                let input = args
+                    .first()
+                    .and_then(HostValue::to_json)
+                    .unwrap_or_default();
                 async move {
                     if let Some(w) = wait {
                         w.await;
                     }
-                    Ok(json!({ "job": key, "input": input["value"] }))
+                    Ok(json!({ "job": key, "input": input }))
                 }
             },
-            move |data, ctx| {
+            move |data, call| {
                 wait_log.lock().unwrap().push(format!(
                     "wait {} {}",
-                    ctx.key(),
+                    call.key(),
                     data["job"].as_str().unwrap_or("")
                 ));
                 let f = result.wait();
-                async move { Ok(f.await) }
+                async move { Ok(HostValue::from_json(&f.await)) }
             },
-            move |data| {
+            move |data, _| {
                 cancelled
                     .lock()
                     .unwrap()
@@ -852,85 +758,73 @@ impl Jobs {
                 async {}
             },
         )
-        .input(value_schema())
-        .output(value_schema())
+    }
+
+    fn runtime(&self, gated: bool) -> Runtime {
+        let jobs = self.clone();
+        Runtime::make().globals(move |_| [("job", jobs.function(gated))])
     }
 }
 
 #[test]
-fn a_durable_tool_refuses_suspend_during_start_and_waits_on_its_data_on_resume() {
+fn a_durable_function_refuses_suspend_during_start_and_waits_on_its_data_on_resume() {
     let jobs = Jobs::default();
-    let events = Arc::new(Mutex::new(Vec::new()));
-    let rt = Runtime::new()
-        .with_tool("job", jobs.tool(true))
-        .hooks(events_hooks(&events));
-    let code = r#"const a = await tools.job({ value: 41 }); return a.value + 1"#;
-    let (outcome, during_start) =
-        background(rt.program(code, &Default::default(), Some("rec")), |s| {
-            jobs.start_gate.entered(1);
-            let refused = s.suspend(None).unwrap_err();
-            jobs.start_gate.open(Json::Null);
-            jobs.result.entered(1);
-            let _ = s.suspend(None);
-            refused
-        });
+    let rt = jobs.runtime(true);
+    let code = "const a = await job(41); return a + 1";
+    let (outcome, during_start) = background(rt.program(code, &options("rec")), |s| {
+        jobs.start_gate.entered(1);
+        let refused = s.suspend(None).unwrap_err();
+        jobs.start_gate.open(Json::Null);
+        jobs.result.entered(1);
+        let _ = s.suspend(None);
+        refused
+    });
     assert_eq!(during_start.running[0].key, "rec:0");
-    assert_eq!(during_start.running[0].path, "tools.job");
+    assert_eq!(during_start.running[0].path, "job");
     let state = suspended(outcome).state;
     assert!(jobs.cancelled.lock().unwrap().is_empty());
-    assert_eq!(*events.lock().unwrap(), ["before job rec:0"]);
     jobs.result.reset();
     let resumed = rt.resume_bytes(&psychoscript::to_bytes(&state)).unwrap();
     let (outcome, _) = background(resumed, |_| {
         jobs.result.entered(1);
-        jobs.result.open(json!({ "value": 41 }));
+        jobs.result.open(json!(41));
     });
     assert_eq!(
         *jobs.log.lock().unwrap(),
         ["start rec:0", "wait rec:0 rec:0", "wait rec:0 rec:0"]
     );
     assert_eq!(done(outcome).result.unwrap(), json!(42));
-    assert_eq!(
-        *events.lock().unwrap(),
-        ["before job rec:0", "after job rec:0 success"]
-    );
     assert!(jobs.cancelled.lock().unwrap().is_empty());
 }
 
 #[test]
-fn a_durable_tool_is_cancelled_when_the_run_ends_with_it_running_not_on_suspend() {
+fn a_durable_function_is_cancelled_when_the_run_ends_with_it_running_not_on_suspend() {
     let jobs = Jobs::default();
-    let rt = Runtime::new().with_tool("job", jobs.tool(false));
-    let o = rt.execute(
-        r#"tools.job({ value: 1 }); return "left""#,
-        &Default::default(),
-    );
+    let o = jobs
+        .runtime(false)
+        .execute_with(r#"job(1); return "left""#, &options("c"));
     assert_eq!(o.result.unwrap(), json!("left"));
-    assert_eq!(jobs.cancelled.lock().unwrap().len(), 1);
+    assert_eq!(*jobs.cancelled.lock().unwrap(), ["c:0"]);
+}
+
+fn response(url: &str) -> HostValue {
+    let body = format!("body of {url}");
+    HostValue::object([
+        ("url", HostValue::from(url)),
+        (
+            "text",
+            HostFunction::new(move |_, _| HostValue::from(body.clone()))
+                .named("text")
+                .into(),
+        ),
+    ])
 }
 
 #[test]
-fn methods_on_an_extension_returned_value_survive_with_snapshot_hooks() {
-    fn response(url: &str) -> HostValue {
-        let body = format!("body of {url}");
-        HostValue::object([
-            ("url", HostValue::from(url)),
-            (
-                "text",
-                HostValue::Function(HostFunction::new("text", 0, move |_| {
-                    Ok(HostValue::from(body.clone()))
-                })),
-            ),
-        ])
-    }
-    let ext = || {
-        Extension::new("web")
-            .function(
-                "fetch",
-                HostFunction::new("fetch", 1, |args| {
-                    Ok(response(args[0].as_str().unwrap_or("")))
-                }),
-            )
+fn methods_on_a_returned_value_survive_with_snapshot_hooks() {
+    let fetch = || {
+        HostFunction::new(|args, _| response(args[0].as_str().unwrap_or("")))
+            .length(1)
             .snapshot(
                 |v| {
                     Ok(HostValue::from(
@@ -941,75 +835,57 @@ fn methods_on_an_extension_returned_value_survive_with_snapshot_hooks() {
             )
     };
     let gate = Gate::default();
-    let rt = Runtime::new()
-        .with_tool("step", marked(&gate))
-        .extension(ext());
+    let g = gate.clone();
+    let rt = Runtime::make().globals(move |_| [("step", step(Some(&g))), ("fetch", fetch())]);
     let code = format!(
-        r#"const res = fetch("https://a.test/"); await tools.step({{ value: 1 }}); {BUSY} return [res.url, res.text()]"#
+        r#"const res = fetch("https://a.test/"); await step(1); {BUSY} return [res.url, res.text()]"#
     );
     let state = suspend_mid_loop(&rt, &gate, &code);
-    let fresh = Runtime::new().with_tool("step", step()).extension(ext());
+    let fresh = Runtime::make().globals(move |_| [("step", step(None)), ("fetch", fetch())]);
     let o = done(fresh.resume(&state).unwrap().run_resumable().unwrap());
     assert_eq!(
         o.result.unwrap(),
         json!(["https://a.test/", "body of https://a.test/"])
     );
-    // Without the extension's hooks the state is refused.
-    let bare = Runtime::new()
-        .with_tool("step", step())
-        .extension(Extension::new("web").function(
-            "fetch",
-            HostFunction::new("fetch", 1, |_| Ok(HostValue::Null)),
-        ));
-    assert!(bare.resume(&state).is_err());
+    // Without the function's hooks the state is refused.
+    let bare = Runtime::make().globals(|_| {
+        [
+            ("step", step(None)),
+            ("fetch", HostFunction::new(|_, _| HostValue::Null)),
+        ]
+    });
+    assert_eq!(bare.resume(&state).err().unwrap().message, OTHER_GLOBALS);
 }
 
 #[test]
 fn a_suspend_fails_when_an_encode_hook_fails_and_the_run_goes_on() {
-    let ext = Extension::new("web")
-        .function(
-            "make",
-            HostFunction::new("make", 0, |_| {
-                Ok(HostValue::object([(
-                    "f",
-                    HostValue::Function(HostFunction::new("f", 0, |_| Ok(HostValue::Number(1.0)))),
-                )]))
-            }),
-        )
-        .snapshot(
-            |_| {
-                Err(psychoscript::HostError {
-                    name: "Error".into(),
-                    message: "no".into(),
-                    cause: None,
-                    fields: Vec::new(),
-                })
-            },
-            |v| v,
-        );
     let gate = Gate::default();
-    let rt = Runtime::new()
-        .with_tool("step", marked(&gate))
-        .extension(ext);
-    let code = format!("const v = make(); await tools.step({{ value: 1 }}); {BUSY} return v.f()");
-    let (outcome, error) = background(rt.program(&code, &Default::default(), None), |s| {
+    let g = gate.clone();
+    let rt = Runtime::make().globals(move |_| {
+        [
+            ("step", step(Some(&g))),
+            (
+                "make",
+                HostFunction::new(|_, _| {
+                    HostValue::object([(
+                        "f",
+                        HostFunction::new(|_, _| HostValue::Number(1.0)).into(),
+                    )])
+                })
+                .snapshot(|_| Err(HostError::new("no")), |v| v),
+            ),
+        ]
+    });
+    let code = format!("const v = make(); await step(1); {BUSY} return v.f()");
+    let (outcome, error) = background(rt.program(&code, &ProgramOptions::new()), |s| {
         gate.entered(1);
         suspend_soon(&s, None)
     });
-    assert!(error.unwrap_err().message.contains("encode"));
+    let error = error.unwrap_err();
+    assert!(error.running.is_empty());
+    assert_eq!(
+        error.message,
+        "The run's state couldn't be saved: The host function make couldn't save a value it returned: no"
+    );
     assert_eq!(done(outcome).result.unwrap(), json!(1));
-}
-
-#[test]
-fn a_tool_interrupt_still_ends_the_run() {
-    let rt = Runtime::new().with_tool(
-        "stop",
-        Tool::new("Stops", |_, _| Err(ToolError::interrupt())).input(value_schema()),
-    );
-    let program = rt.program(
-        "await tools.stop({ value: 1 }); return 1",
-        &Default::default(),
-        None,
-    );
-    assert!(program.run_resumable().is_err());
 }

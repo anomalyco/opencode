@@ -5,61 +5,22 @@
 use std::panic::{self, AssertUnwindSafe};
 use std::path::Path;
 
-use psychoscript::{Json, Limits, Runtime, Schema, Tool};
-use serde_json::json;
+use psychoscript::{
+    HostValue, Json, Limits, ProgramOptions, Runtime, Translate, TranslateFunctions,
+    TranslatePromises,
+};
 
-/// The reference generator's tools, with the same schemas.
-fn runtime(limits: Limits) -> Runtime {
-    let empty = json!({ "type": "object", "properties": {}, "additionalProperties": false });
-    Runtime::new()
-        .with_tool(
-            "echo",
-            Tool::new("Echo an id", |input, _| Ok(input["id"].clone()))
-                .input(Schema::validated(json!({
-                    "type": "object",
-                    "properties": { "id": { "type": "number" } },
-                    "required": ["id"],
-                    "additionalProperties": false
-                })))
-                .output(Schema::validated(json!({ "type": "number" }))),
-        )
-        .with_tool(
-            "fail",
-            Tool::new("Always fails", |_, _| Err("boom".into()))
-                .input(Schema::validated(empty.clone()))
-                .output(Schema::validated(json!({ "type": "number" }))),
-        )
-        .with_tool(
-            "git.status",
-            Tool::new("Working tree status", |_, _| {
-                Ok(json!({ "branch": "main", "dirty": true }))
-            })
-            .input(Schema::validated(empty))
-            .output(Schema::validated(json!({
-                "type": "object",
-                "properties": { "branch": { "type": "string" }, "dirty": { "type": "boolean" } },
-                "required": ["branch", "dirty"],
-                "additionalProperties": false
-            }))),
-        )
+#[path = "../../conformance/reference.rs"]
+mod reference;
+
+use reference::same;
+
+/// The reference generator's runtime: only the `tools` namespace, with the case's limits and translation.
+fn runtime(limits: Limits, translate: Translate) -> Runtime {
+    Runtime::make()
+        .globals(|_| [("tools", HostValue::from(reference::tools()))])
         .limits(limits)
-}
-
-/// JSON equality where numbers compare by value, so `3` equals `3.0`.
-fn same(a: &Json, b: &Json) -> bool {
-    match (a, b) {
-        (Json::Number(x), Json::Number(y)) => x.as_f64() == y.as_f64(),
-        (Json::Array(x), Json::Array(y)) => {
-            x.len() == y.len() && x.iter().zip(y).all(|(x, y)| same(x, y))
-        }
-        (Json::Object(x), Json::Object(y)) => {
-            x.len() == y.len()
-                && x.iter()
-                    .zip(y)
-                    .all(|((kx, vx), (ky, vy))| kx == ky && same(vx, vy))
-        }
-        _ => a == b,
-    }
+        .translate(translate)
 }
 
 fn check(name: &str, code: &str, expected: &Json) -> Result<(), String> {
@@ -68,21 +29,32 @@ fn check(name: &str, code: &str, expected: &Json) -> Result<(), String> {
         .cloned()
         .unwrap_or_default();
     let limits = Limits {
-        max_tool_calls: expected["limits"]["max_tool_calls"].as_u64(),
         timeout_ms: expected["limits"]["timeout_ms"].as_u64(),
-        max_output_bytes: None,
+        max_output_bytes: expected["limits"]["max_output_bytes"]
+            .as_u64()
+            .map(|n| n as usize),
     };
-    let rt = runtime(limits);
-    let outcome = panic::catch_unwind(AssertUnwindSafe(|| rt.execute(code, &bindings))).map_err(
-        |payload| {
+    let translate = Translate {
+        functions: match expected["translate"]["functions"].as_str() {
+            Some("drop") => TranslateFunctions::Drop,
+            _ => TranslateFunctions::Error,
+        },
+        promises: match expected["translate"]["promises"].as_str() {
+            Some("await") => TranslatePromises::Await,
+            _ => TranslatePromises::Error,
+        },
+    };
+    let rt = runtime(limits, translate);
+    let options = ProgramOptions::new().bindings(bindings);
+    let outcome = panic::catch_unwind(AssertUnwindSafe(|| rt.execute_with(code, &options)))
+        .map_err(|payload| {
             let msg = payload
                 .downcast_ref::<String>()
                 .cloned()
                 .or_else(|| payload.downcast_ref::<&str>().map(|s| (*s).to_owned()))
                 .unwrap_or_default();
             format!("{name}: panicked: {msg}")
-        },
-    )?;
+        })?;
 
     let mut problems = Vec::new();
     match (&outcome.result, expected["ok"].as_bool()) {
@@ -114,6 +86,14 @@ fn check(name: &str, code: &str, expected: &Json) -> Result<(), String> {
             d.kind.name(),
             d.message
         )),
+    }
+    if let Some(metadata) = expected.get("metadata")
+        && !same(&outcome.metadata, metadata)
+    {
+        problems.push(format!(
+            "metadata\n    expected: {metadata}\n    actual:   {}",
+            outcome.metadata
+        ));
     }
     if let Some(logs) = expected.get("logs") {
         let actual = Json::from(outcome.logs.clone());

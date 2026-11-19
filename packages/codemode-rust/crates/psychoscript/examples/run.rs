@@ -1,29 +1,42 @@
-//! Runs a program file and prints its outcome: `cargo run --example run -- program.js`.
+//! Runs a program file and prints its outcome: `cargo run --example run -- program.js`. The program reaches one host
+//! global, a `tools` namespace with an async `echo` that gives its input's `id`.
 
-use psychoscript::{Json, Limits, Runtime};
+use psychoscript::{Failure, HostFunction, HostValue, Limits, Namespace, Resolved, Runtime};
 
 fn main() {
     let path = std::env::args().nth(1).expect("usage: run <program.js>");
     let code = std::fs::read_to_string(&path).expect("readable program");
-    let runtime = Runtime::new()
-        .tool("echo", |input| {
-            Ok(input.get("id").cloned().unwrap_or(Json::Null))
-        })
-        .tool("fail", |_| Err("boom".to_owned()))
-        .tool("git.status", |_| {
-            Ok(serde_json::json!({ "branch": "main", "dirty": true }))
-        })
+    let tools = Namespace::new(
+        |path| match path {
+            [] => Ok(vec!["echo".to_owned()]),
+            _ => Ok(Vec::new()),
+        },
+        |path| -> Resolved {
+            match path {
+                [name] if name == "echo" => HostFunction::new_async(|args, _| async move {
+                    Ok(args
+                        .first()
+                        .and_then(|a| a.get("id"))
+                        .cloned()
+                        .unwrap_or(HostValue::Null))
+                })
+                .into(),
+                _ => Failure::missing(format!("No function at tools.{}.", path.join("."))).into(),
+            }
+        },
+    );
+    let runtime = Runtime::make()
+        .globals(move |_| [("tools", HostValue::from(tools.clone()))])
         .limits(Limits {
             timeout_ms: Some(2000),
-            max_tool_calls: None,
             max_output_bytes: None,
         });
-    let outcome = runtime.execute(&code, &serde_json::Map::new());
+    let outcome = runtime.execute(&code);
     for line in &outcome.logs {
         println!("log: {line}");
     }
     match outcome.result {
         Ok(v) => println!("ok: {v}"),
-        Err(d) => println!("error: {:?}: {} {:?}", d.kind, d.message, d.location),
+        Err(d) => println!("error: {}: {} {:?}", d.kind, d.message, d.location),
     }
 }
