@@ -22,6 +22,8 @@ const ISOLATION_ENV = {
   // OpenCode changes the system prompt and tools mid-session (agent switches, instruction edits). Without this,
   // Claude Code replays thinking bound to the old prompt and the API rejects the request.
   CLAUDE_CODE_POLISHED_DEWDROP: "drop",
+  // The SDK's default `sdk-ts` label uses the 5-hour plan limit about 1.8x faster (anthropics/claude-code#97074)
+  CLAUDE_CODE_ENTRYPOINT: "opencode",
   // Skips OAuth, so the subscription would not be used
   CLAUDE_CODE_SIMPLE: undefined,
   // A shell-level effort override would take precedence over OpenCode's live effort settings.
