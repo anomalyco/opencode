@@ -63,20 +63,33 @@ test("service disabled accepts only booleans without changing configuration on i
   }
 })
 
-test("service set password keeps the password out of the CLI log", async () => {
+test.each([
+  [
+    ["service", "set", "password", "not-in-log"],
+    ["service", "set", "password", "<redacted>"],
+  ],
+  [
+    ["service", "set", "env", "PROVIDER_KEY", "not-in-log"],
+    ["service", "set", "env", "PROVIDER_KEY", "<redacted>"],
+  ],
+  // The command fails to parse, but its arguments are logged first.
+  [
+    ["--server", "http://127.0.0.1:9", "service", "set", "password", "not-in-log"],
+    ["--server", "http://127.0.0.1:9", "service", "set", "password", "<redacted>"],
+  ],
+])("service set keeps the value out of the CLI log: %j", async (args, logged) => {
   await using root = await tmpdir()
-  const child = Bun.spawn(
-    [process.execPath, path.join(import.meta.dir, "../src/index.ts"), "service", "set", "password", "not-in-log"],
-    { env: isolatedEnv(root.path), stdout: "pipe", stderr: "pipe" },
-  )
-  expect(await new Response(child.stderr).text()).toBe("")
-  expect(await child.exited).toBe(0)
-  expect((await Bun.file(path.join(root.path, "config", "service-local.json")).json()).password).toBe("not-in-log")
+  const child = Bun.spawn([process.execPath, path.join(import.meta.dir, "../src/index.ts"), ...args], {
+    env: isolatedEnv(root.path),
+    stdout: "ignore",
+    stderr: "ignore",
+  })
+  await child.exited
   const directory = path.join(root.path, "data", "opencode", "log")
   const log = (
     await Promise.all((await fs.readdir(directory)).map((file) => Bun.file(path.join(directory, file)).text()))
   ).join("")
-  expect(log).toContain(`args="[\\"service\\",\\"set\\",\\"password\\",\\"<redacted>\\"]"`)
+  expect(log).toContain(`args=${JSON.stringify(JSON.stringify(logged))}`)
   expect(log).not.toContain("not-in-log")
 })
 

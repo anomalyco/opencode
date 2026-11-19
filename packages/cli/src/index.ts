@@ -41,16 +41,12 @@ if (process.env.OPENCODE_SSH_ASKPASS_PORT) {
 
 let terminated = false
 
-// `service set password <value>` carries the secret itself; keep it out of the logged arguments.
+// `service set <key> <value>` and `service set env <name> <value>` carry secrets such as the password or a provider
+// key; keep values out of the logged arguments. Flags and their values may come first, so find the pair anywhere.
 const args = process.argv.slice(2)
-const positional = args.flatMap((arg, index) => (arg.startsWith("-") ? [] : [index]))
-const loggedArgs =
-  positional
-    .slice(0, 3)
-    .map((index) => args[index])
-    .join(" ") === "service set password"
-    ? args.map((arg, index) => (index > positional[2] ? "<redacted>" : arg))
-    : args
+const set = args.findIndex((arg, index) => arg === "service" && args[index + 1] === "set")
+const kept = set === -1 ? args.length : set + (args[set + 2] === "env" ? 4 : 3)
+const loggedArgs = args.map((arg, index) => (index < kept ? arg : "<redacted>"))
 
 const Handlers = Runtime.handlers(Commands, {
   $: () => import("./commands/handlers/default"),
