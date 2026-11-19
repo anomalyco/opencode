@@ -687,7 +687,7 @@ fn replay<'a>(
                 if inside(x, y, width.into(), height.into(), size) =>
             {
                 let spec = BoxSpec {
-                    style: border_style(border),
+                    style: crate::node::border_style(border),
                     border_color: rgba(color),
                     background: background.map_or(Color::TRANSPARENT, rgba),
                     fill: background.is_some(),
@@ -733,15 +733,6 @@ fn styled(style: list::Style) -> Style {
         }
     }
     out
-}
-
-fn border_style(border: abi::BorderStyle) -> BorderStyle {
-    match border {
-        abi::BorderStyle::Single => BorderStyle::Single,
-        abi::BorderStyle::Double => BorderStyle::Double,
-        abi::BorderStyle::Rounded => BorderStyle::Rounded,
-        abi::BorderStyle::Heavy => BorderStyle::Heavy,
-    }
 }
 
 #[cfg(test)]

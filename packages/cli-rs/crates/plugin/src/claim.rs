@@ -18,7 +18,7 @@ use opentui::widget::MarkdownColors;
 use crate::Host;
 use crate::activation::{Activation, Drawn};
 use crate::limits;
-use crate::node::{Act, abi_mode};
+use crate::node::Act;
 use crate::reconcile::{Env, Tree};
 use crate::surface::{self, HostTime, ImageKey, Pictures, Shows, Viewing};
 
@@ -181,23 +181,6 @@ impl Registered {
         activation: Rc<Activation>,
     ) -> Rc<Self> {
         Rc::new(Self { entry, owner, plugin, host_time, viewer, input, activation, palette: RefCell::default() })
-    }
-
-    fn palette(&self, host: &dyn Host, theme: &Theme) -> v2::Palette {
-        let mut cached = self.palette.borrow_mut();
-        if let Some((seen, palette)) = &*cached
-            && seen == theme
-        {
-            return palette.clone();
-        }
-        let colors = theme
-            .list()
-            .into_iter()
-            .map(|(token, color)| (token, abi::Rgba::new(color.r, color.g, color.b, color.a)))
-            .collect();
-        let palette = v2::Palette { mode: abi_mode(host.theme_mode()).into(), colors };
-        *cached = Some((theme.clone(), palette.clone()));
-        palette
     }
 
     fn name(&self) -> &str {
@@ -551,7 +534,7 @@ impl Core {
         self.width.set(width);
         // Only a claim that declares the palette gets it, as a surface: it is most of a request's bytes.
         let palette = match self.claim.entry.palette {
-            true => self.claim.palette(host, theme),
+            true => crate::surface::palette(&mut self.claim.palette.borrow_mut(), host, theme),
             false => v2::Palette::default(),
         };
         // A part is as tall as its tree: a claim gets no height, which a resize could leave stale.
@@ -580,14 +563,7 @@ impl Core {
         };
         // Counted once, at the view's first keep.
         let counts = std::cell::OnceCell::new();
-        let kept = |key: &str| {
-            let state = self.state.borrow();
-            if let Some(whole) = state.tree.held_whole(key) {
-                return whole;
-            }
-            let counts = counts.get_or_init(|| state.tree.held_counts());
-            counts.get(key).copied().unwrap_or(0)
-        };
+        let kept = |key: &str| self.state.borrow().tree.held_by(key, &counts);
         let viewing = Viewing {
             mount: &self.id,
             owner: &self.claim.input,

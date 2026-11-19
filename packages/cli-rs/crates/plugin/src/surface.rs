@@ -2,7 +2,7 @@
 //! generation; work from the old one cannot update it.
 
 use std::cell::{Cell, RefCell};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -978,7 +978,10 @@ impl Surface {
     /// What the view returned and asked for; `None` when the call failed.
     fn call_view(&self, host: &dyn Host, theme: &Theme, full: bool, changed: &abi::Changed) -> Option<Called> {
         // Only a surface that says it reads the palette gets it, on either carrier.
-        let palette = if self.palette { self.palette_of(host, theme) } else { v2::Palette::default() };
+        let palette = match self.palette {
+            true => palette(&mut self.state.borrow_mut().palette, host, theme),
+            false => v2::Palette::default(),
+        };
         let rect = self.root.rect();
         // Before its first frame a surface has no size of its own; the terminal's stands in, which is a route's: a
         // plugin route shows no tabs and fills the page.
@@ -1034,14 +1037,7 @@ impl Surface {
         };
         // Counted once, at the view's first keep.
         let counts = std::cell::OnceCell::new();
-        let kept = |key: &str| {
-            let state = self.state.borrow();
-            if let Some(whole) = state.tree.held_whole(key) {
-                return whole;
-            }
-            let counts = counts.get_or_init(|| state.tree.held_counts());
-            counts.get(key).copied().unwrap_or(0)
-        };
+        let kept = |key: &str| self.state.borrow().tree.held_by(key, &counts);
         let viewing = Viewing {
             mount: &self.id,
             owner: &owner,
@@ -1330,24 +1326,23 @@ impl Surface {
     pub(crate) fn theme(&self) -> Option<Theme> {
         self.owner.upgrade().map(|host| host.theme())
     }
+}
 
-    /// The palette of `theme`, kept while the theme stays.
-    fn palette_of(&self, host: &dyn Host, theme: &Theme) -> v2::Palette {
-        let mut state = self.state.borrow_mut();
-        if let Some((cached, palette)) = &state.palette
-            && cached == theme
-        {
-            return palette.clone();
-        }
-        let colors: BTreeMap<String, abi::Rgba> = theme
-            .list()
-            .into_iter()
-            .map(|(token, color)| (token, abi::Rgba::new(color.r, color.g, color.b, color.a)))
-            .collect();
-        let palette = v2::Palette { mode: abi_mode(host.theme_mode()).into(), colors };
-        state.palette = Some((theme.clone(), palette.clone()));
-        palette
+/// The palette of `theme`, which `cache` keeps while the theme stays.
+pub(crate) fn palette(cache: &mut Option<(Theme, v2::Palette)>, host: &dyn Host, theme: &Theme) -> v2::Palette {
+    if let Some((cached, palette)) = cache
+        && cached == theme
+    {
+        return palette.clone();
     }
+    let colors = theme
+        .list()
+        .into_iter()
+        .map(|(token, color)| (token, abi::Rgba::new(color.r, color.g, color.b, color.a)))
+        .collect();
+    let palette = v2::Palette { mode: abi_mode(host.theme_mode()).into(), colors };
+    *cache = Some((theme.clone(), palette.clone()));
+    palette
 }
 
 impl Drop for Surface {
