@@ -226,6 +226,7 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
           \`session_id\` text NOT NULL,
           \`type\` text NOT NULL,
           \`seq\` integer NOT NULL,
+          \`step_started_seq\` integer,
           \`time_created\` integer NOT NULL,
           \`time_updated\` integer NOT NULL,
           \`data\` text NOT NULL,
@@ -245,6 +246,23 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
           CONSTRAINT \`session_part_pk\` PRIMARY KEY(\`message_id\`, \`ordinal\`),
           CONSTRAINT \`fk_session_part_message_id_session_message_id_fk\` FOREIGN KEY (\`message_id\`) REFERENCES \`session_message\`(\`id\`) ON DELETE CASCADE,
           CONSTRAINT \`fk_session_part_session_id_session_v2_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session_v2\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
+      yield* tx.run(`
+        CREATE TABLE \`session_pending_step\` (
+          \`session_id\` text PRIMARY KEY NOT NULL,
+          \`assistant_message_id\` text NOT NULL,
+          \`generation\` integer NOT NULL,
+          CONSTRAINT \`fk_session_pending_step_session_id_assistant_message_id_generation_session_message_session_id_id_step_started_seq_fk\` FOREIGN KEY (\`session_id\`,\`assistant_message_id\`,\`generation\`) REFERENCES \`session_message\`(\`session_id\`,\`id\`,\`step_started_seq\`) ON DELETE CASCADE
+        );
+      `)
+      yield* tx.run(`
+        CREATE TABLE \`session_question\` (
+          \`id\` text PRIMARY KEY,
+          \`session_id\` text NOT NULL,
+          \`assistant_message_id\` text NOT NULL,
+          \`generation\` integer NOT NULL,
+          CONSTRAINT \`fk_session_question_session_id_assistant_message_id_generation_session_message_session_id_id_step_started_seq_fk\` FOREIGN KEY (\`session_id\`,\`assistant_message_id\`,\`generation\`) REFERENCES \`session_message\`(\`session_id\`,\`id\`,\`step_started_seq\`) ON DELETE CASCADE
         );
       `)
       yield* tx.run(`
@@ -330,6 +348,9 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
         `CREATE UNIQUE INDEX \`session_inbox_session_enqueued_seq_idx\` ON \`session_inbox\` (\`session_id\`,\`enqueued_seq\`);`,
       )
       yield* tx.run(
+        `CREATE UNIQUE INDEX \`session_message_step_owner_unique\` ON \`session_message\` (\`session_id\`,\`id\`,\`step_started_seq\`);`,
+      )
+      yield* tx.run(
         `CREATE UNIQUE INDEX \`session_message_session_seq_idx\` ON \`session_message\` (\`session_id\`,\`seq\`);`,
       )
       yield* tx.run(
@@ -341,6 +362,9 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
       yield* tx.run(`CREATE INDEX \`session_message_time_created_idx\` ON \`session_message\` (\`time_created\`);`)
       yield* tx.run(
         `CREATE INDEX \`session_part_session_message_idx\` ON \`session_part\` (\`session_id\`,\`message_id\`,\`ordinal\`);`,
+      )
+      yield* tx.run(
+        `CREATE INDEX \`session_question_step_owner_idx\` ON \`session_question\` (\`session_id\`,\`assistant_message_id\`,\`generation\`);`,
       )
       yield* tx.run(`CREATE INDEX \`session_v2_project_idx\` ON \`session_v2\` (\`project_id\`);`)
       yield* tx.run(`CREATE INDEX \`session_v2_workspace_idx\` ON \`session_v2\` (\`workspace_id\`);`)
