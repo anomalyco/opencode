@@ -1,6 +1,6 @@
 import { ScrollView } from "@opencode/ui/scroll-view"
 import { createMediaQuery } from "@solid-primitives/media"
-import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
+import { createMemo, onMount, Show } from "solid-js"
 import { useLayout } from "@/shell/state/layout"
 import { useSettings } from "@/settings/model"
 import { useProjectNavigation } from "@/shell/project-navigation"
@@ -71,7 +71,6 @@ export function HomeView(props: {
   const mobile = createMediaQuery("(max-width: 767px)")
 
   const scroll = createHomeScrollController(props.search.result.groups)
-  const [tipVisible, setTipVisible] = createSignal(false)
 
   return (
     <div
@@ -86,10 +85,7 @@ export function HomeView(props: {
           <HomeProjects projects={props.projects} scroll={scroll} dropdown />
         </div>
       </Show>
-      <div
-        class="relative flex min-h-0 flex-1 flex-col"
-        style={{ "--home-tip-inset": tipVisible() ? "48px" : undefined }}
-      >
+      <div class="relative flex min-h-0 flex-1 flex-col">
         <ScrollView
           class="isolate min-h-0 flex-1 [container-type:size]"
           thumbContainer={scroll.viewport.thumbTrack()}
@@ -119,13 +115,8 @@ export function HomeView(props: {
             />
           </div>
         </ScrollView>
-        <div
-          aria-hidden="true"
-          data-visible={tipVisible()}
-          class="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-v2-background-bg-base from-40% to-transparent opacity-0 transition-opacity duration-[250ms] ease-[cubic-bezier(0.215,0.61,0.355,1)] data-[visible=true]:opacity-100 motion-reduce:transition-none"
-        />
         <Show when={props.providerTip}>
-          <HomeProviderTip onVisible={setTipVisible} />
+          <HomeProviderTip />
         </Show>
       </div>
       <div class="hidden shrink-0 px-3 py-2 md:block lg:hidden" classList={{ "!hidden": props.projectScope }}>
@@ -141,7 +132,7 @@ export function HomeView(props: {
 }
 
 // Home sits outside any server's context, so the tip reads the current server's default Location.
-function HomeProviderTip(props: { onVisible: (visible: boolean) => void }) {
+function HomeProviderTip() {
   const servers = useServers()
   const server = createMemo(() => servers.list.find(servers.current))
 
@@ -149,18 +140,24 @@ function HomeProviderTip(props: { onVisible: (visible: boolean) => void }) {
     <Show when={server()} keyed>
       {(conn) => (
         <ServerProvider conn={conn}>
-          <HomeProviderTipContent onVisible={props.onVisible} />
+          <HomeProviderTipContent />
         </ServerProvider>
       )}
     </Show>
   )
 }
 
-function HomeProviderTipContent(props: { onVisible: (visible: boolean) => void }) {
+function HomeProviderTipContent() {
   const tip = createProviderTip(() => undefined)
 
-  createEffect(() => props.onVisible(tip.visible()))
-  onCleanup(() => props.onVisible(false))
-
-  return <ProviderTip tip={tip} />
+  return (
+    <>
+      <div
+        aria-hidden="true"
+        data-visible={tip.visible()}
+        class="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-v2-background-bg-base from-40% to-transparent opacity-0 transition-opacity duration-[250ms] ease-[cubic-bezier(0.215,0.61,0.355,1)] data-[visible=true]:opacity-100 motion-reduce:transition-none"
+      />
+      <ProviderTip tip={tip} />
+    </>
+  )
 }
