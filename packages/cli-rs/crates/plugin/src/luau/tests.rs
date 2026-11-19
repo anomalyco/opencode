@@ -1475,10 +1475,17 @@ fn a_node_tree_decodes_as_serde_reads_it() {
             { type = "show", node = { type = "text", spans = { { fg = "x" } } } },
             { type = "show", node = { type = "box", children = { { type = "box", children = { { type = "x" } } } } } },
             { type = "show", node = { type = "box", children = { a = 1 } } },
+            { type = "show", node = "x" },
+            { type = "show", node = { type = "text", spans = { "a" } } },
+            { type = "show", node = { type = "box", children = { 1, true } } },
+            { type = "show", node = { type = "box", justify = 5 } },
+            { type = "show", node = setmetatable({ type = "text", spans = setmetatable({
+                setmetatable({ text = "weak", fg = "text.muted" }, { __mode = "kv" }) }, { __mode = "v" }) },
+                { __mode = "k" }) },
             { type = "show" }, { type = "keep", node = box }, { type = "wat" }, { node = box }, "show", 5,
         }
     "##;
-    assert_eq!(decodes_as_serde::<abi::Render>(renders), "+++++------------------");
+    assert_eq!(decodes_as_serde::<abi::Render>(renders), "+++++----------------+------");
     let surfaces = r##"
         return {
             { type = "box", id = "b", row = true, gap = 1, visible = false, bg = "text.base", children = {
