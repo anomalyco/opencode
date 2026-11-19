@@ -150,15 +150,28 @@ export function DialogLayout(
      * 0 lets a raised `DialogBleed` body meet the footer band.
      */
     footerGap?: number
+    /** Fill the parent's height, keeping the footer at the bottom. */
+    grow?: boolean
   }>,
 ) {
   const inset = () => props.inset ?? DIALOG_INSET
   const newDesigns = useNewDesigns()
   const footerGap = () => (newDesigns() && props.footer && props.buttons === undefined ? (props.footerGap ?? 1) : 1)
   return (
-    <box id={props.id} paddingLeft={inset()} paddingRight={inset()} paddingBottom={1} gap={1}>
+    <box
+      id={props.id}
+      paddingLeft={inset()}
+      paddingRight={inset()}
+      paddingBottom={1}
+      gap={1}
+      flexGrow={props.grow ? 1 : undefined}
+    >
       {props.header}
-      <box paddingBottom={Math.max(0, footerGap() - 1)} marginBottom={Math.min(0, footerGap() - 1)}>
+      <box
+        paddingBottom={Math.max(0, footerGap() - 1)}
+        marginBottom={Math.min(0, footerGap() - 1)}
+        flexGrow={props.grow ? 1 : undefined}
+      >
         {props.children}
       </box>
       <Show when={props.buttons === undefined} fallback={props.buttons}>
