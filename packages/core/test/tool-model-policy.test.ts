@@ -30,6 +30,7 @@ import { testEffect } from "./lib/effect"
 import { readInitial } from "./lib/instructions"
 import { codeModeListings, registerToolPlugin } from "./lib/tool"
 import { PluginTestLayer } from "./plugin/fixture"
+import { disabledWatcher } from "./fixture/watcher"
 
 const makeModel = (
   providerID: string,
@@ -126,6 +127,7 @@ const makeContextLayer = (overrides: string | undefined) =>
       ),
       SkillInstructions.node.replace(Layer.mock(SkillInstructions.Service, { load: emptyInstructions })),
       ReferenceInstructions.node.replace(Layer.mock(ReferenceInstructions.Service, { load: emptyInstructions })),
+      disabledWatcher,
     ]),
   ).pipe(Layer.provide(Layer.succeed(Flag.Overrides, overrides)))
 

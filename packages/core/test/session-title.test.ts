@@ -37,6 +37,7 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Money } from "@opencode/schema/money"
 import { Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { testEffect } from "./lib/effect"
+import { disabledWatcher } from "./fixture/watcher"
 
 let requests: LLMRequest[] = []
 let selectedSmall: Model.Info | undefined
@@ -126,6 +127,7 @@ const it = testEffect(
       SessionRunnerModel.node.replace(models),
       Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
       PluginSupervisor.node.replace(Layer.empty),
+      disabledWatcher,
     ],
   ),
 )

@@ -18,6 +18,7 @@ import { LocationServiceMap } from "@opencode/core/location-services"
 import { testEffect } from "./lib/effect"
 import { globalProjectNode } from "./lib/project"
 import { offlineModels } from "./fixture/models"
+import { disabledWatcher } from "./fixture/watcher"
 import { tmpdirScoped } from "./fixture/tmpdir"
 
 const closed: Session.ID[] = []
@@ -52,6 +53,7 @@ const it = testEffect(
       SessionExecution.node.replace(SessionExecution.noopLayer),
       SessionModelTransport.node.replace(transport),
       offlineModels,
+      disabledWatcher,
     ],
   ),
 )

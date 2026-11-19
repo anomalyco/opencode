@@ -43,6 +43,7 @@ import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { tmpdir, tmpdirScoped } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
+import { disabledWatcher } from "./fixture/watcher"
 import { testEffect } from "./lib/effect"
 import { toolDefinitions } from "./lib/tool"
 import { Database } from "../src/database/database"
@@ -54,6 +55,7 @@ const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, LocationServiceMap.node]), [
     Global.node.replace(tempGlobalLayer),
     offlineModels,
+    disabledWatcher,
   ]),
 )
 const activityLocations = Layer.effect(
@@ -170,6 +172,7 @@ describe("LocationServiceMap", () => {
           const layer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, LocationServiceMap.node]), [
             Global.node.replace(tempGlobalLayer),
             offlineModels,
+            disabledWatcher,
             LocationWatcher.node.replace(
               LocationWatcher.node.mapLayer((layer) =>
                 layer.pipe(
@@ -238,6 +241,7 @@ describe("LocationServiceMap", () => {
       const layer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, LocationServiceMap.node]), [
         Global.node.replace(tempGlobalLayer),
         offlineModels,
+        disabledWatcher,
         LocationWatcher.node.replace(
           LocationWatcher.node.mapLayer((layer) =>
             layer.pipe(

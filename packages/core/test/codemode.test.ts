@@ -9,9 +9,11 @@ import { SessionMessage } from "@opencode/core/session/message"
 import { Effect, Schema } from "effect"
 import type { Info } from "@opencode/schema/tool"
 import { it } from "./lib/effect"
+import { disabledWatcher } from "./fixture/watcher"
 
 const toolNode = AppNodeBuilder.build(Tool.node, [
   Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
+  disabledWatcher,
 ])
 
 describe("CodeMode", () => {
