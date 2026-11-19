@@ -16,14 +16,13 @@ import { fileDiff } from "../tool/plugin/file-diff.js"
 import { CodeModeExecution } from "./execution.js"
 
 /** The session's file services, which the `Bun` global reads and writes through. */
-export type Services = FileAccess.Service | FileWrite.Service | FileMutation.Service | Environment.Service
+export type Services = FileAccess.Service | FileWrite.Service | FileMutation.Service
 
 type Host = {
   readonly context: FileAccess.Invocation
   readonly access: FileAccess.Interface
   readonly fileWrite: FileWrite.Interface
   readonly fileMutation: FileMutation.Interface
-  readonly files: Environment.Files
   readonly permission: Permission.Interface
 }
 type Range = { readonly offset: number; readonly length: number }
@@ -51,7 +50,6 @@ const call = <A, E>(syscall: string, name: string, body: (host: Host) => Effect.
       access: yield* service(FileAccess.Service),
       fileWrite: yield* service(FileWrite.Service),
       fileMutation: yield* service(FileMutation.Service),
-      files: (yield* service(Environment.Service)).files,
       permission: yield* Permission.Service,
     })
   }).pipe(Effect.mapError((error) => nodeError(error, syscall, name)))
@@ -65,7 +63,7 @@ const open = (input: string | URL, options?: { readonly type?: string }) => {
   return call("stat", name, (host) =>
     Effect.gen(function* () {
       const target = yield* host.access.authorizeRead(name, host.context)
-      const info = yield* followed(host, target.absolute).pipe(
+      const info = yield* followed(target.environment.files, target.absolute).pipe(
         Effect.catchTag("Environment.NotFound", () => Effect.undefined),
       )
       return file(
@@ -133,9 +131,9 @@ const file = (handle: Handle, type: string, size: number, lastModified: number) 
 }
 
 const read = (handle: Handle) =>
-  call("open", handle.name, (host) =>
+  call("open", handle.name, () =>
     Effect.map(
-      host.files.read(handle.target.absolute, handle.range),
+      handle.target.environment.files.read(handle.target.absolute, handle.range),
       // A plain Uint8Array over the same memory: a driver may give a Buffer, which Bun's `bytes()` never does.
       (result) => new Uint8Array(result.bytes.buffer, result.bytes.byteOffset, result.bytes.byteLength),
     ),
@@ -143,17 +141,17 @@ const read = (handle: Handle) =>
 
 // As in Bun, only a file exists: a directory doesn't.
 const exists = (handle: Handle) =>
-  call("access", handle.name, (host) =>
-    Environment.typeFollowing(host.files, handle.target.absolute).pipe(
+  call("access", handle.name, () =>
+    Environment.typeFollowing(handle.target.environment.files, handle.target.absolute).pipe(
       Effect.map((type) => type === "file"),
       Effect.catchTag("Environment.NotFound", () => Effect.succeed(false)),
     ),
   )
 
-// The part of Node's Stats that the session's files can tell.
+// The part of Node's Stats that the file's environment can tell.
 const stat = (handle: Handle) =>
-  call("stat", handle.name, (host) =>
-    Effect.map(followed(host, handle.target.absolute), (info) => ({
+  call("stat", handle.name, () =>
+    Effect.map(followed(handle.target.environment.files, handle.target.absolute), (info) => ({
       size: info.size,
       mtimeMs: info.mtimeMs,
       mtime: new Date(info.mtimeMs),
@@ -165,11 +163,11 @@ const stat = (handle: Handle) =>
 
 // What a path leads to, through a symlink: reading zero bytes resolves one. A directory behind a link keeps the
 // link's own size.
-const followed = (host: Host, absolute: string) =>
-  Effect.flatMap(host.files.stat(absolute), (own) =>
+const followed = (files: Environment.Files, absolute: string) =>
+  Effect.flatMap(files.stat(absolute), (own) =>
     own.type !== "symlink"
       ? Effect.succeed(own)
-      : host.files.read(absolute, { offset: 0, length: 0 }).pipe(
+      : files.read(absolute, { offset: 0, length: 0 }).pipe(
           Effect.map((result) => result.info),
           Effect.catchTag("Environment.WrongKind", (error) => Effect.succeed({ ...own, type: error.actual })),
         ),
@@ -180,11 +178,11 @@ const followed = (host: Host, absolute: string) =>
 const remove = (handle: Handle) =>
   call("unlink", handle.name, (host) =>
     Effect.gen(function* () {
-      const info = yield* host.files.stat(handle.target.absolute)
+      const info = yield* handle.target.environment.files.stat(handle.target.absolute)
       if (info.type === "directory")
         return yield* new Environment.WrongKind({ path: handle.target.absolute, actual: info.type })
       yield* host.fileWrite.authorize(handle.target, host.context)
-      yield* host.files.remove(handle.target.absolute)
+      yield* handle.target.environment.files.remove(handle.target.absolute)
     }).pipe(host.fileMutation.withLock([handle.target.absolute])),
   )
 
@@ -218,19 +216,19 @@ const put = (
     Effect.gen(function* () {
       const target = typeof to === "string" ? yield* host.fileWrite.target(to, host.context) : to.target
       return yield* Effect.gen(function* () {
-        const type = yield* typeOf(host, target.absolute)
+        const type = yield* typeOf(target.environment.files, target.absolute)
         if (type === "directory") return yield* new Environment.WrongKind({ path: target.absolute, actual: type })
         if (
           type === undefined &&
           !options.parents &&
-          (yield* typeOf(host, path.dirname(target.absolute))) === undefined
+          (yield* typeOf(target.environment.files, path.dirname(target.absolute))) === undefined
         )
           return yield* new Environment.NotFound({ path: target.absolute })
         const after = options.diff ? text(bytes) : undefined
         const before =
           after === undefined || options.append || type === undefined
             ? ""
-            : text((yield* host.files.read(target.absolute)).bytes)
+            : text((yield* target.environment.files.read(target.absolute)).bytes)
         yield* host.fileWrite.authorize(
           target,
           host.context,
@@ -246,8 +244,8 @@ const put = (
     }),
   )
 
-const typeOf = (host: Host, absolute: string) =>
-  host.files.stat(absolute).pipe(
+const typeOf = (files: Environment.Files, absolute: string) =>
+  files.stat(absolute).pipe(
     Effect.map((info) => info.type),
     Effect.catchTag("Environment.NotFound", () => Effect.undefined),
   )
@@ -379,10 +377,10 @@ const glob = (host: Host, given: string, cwd: string, dot: boolean) =>
     })
     const root = target.absolute
     if (wild < 0) {
-      const type = yield* typeOf(host, root)
+      const type = yield* typeOf(target.environment.files, root)
       return type === undefined ? [] : [{ path: pattern, type }]
     }
-    const entries = yield* walk(host.files, root, {
+    const entries = yield* walk(target.environment.files, root, {
       // Deep enough for every segment after the fixed part; `**` can match any depth.
       depth: pattern.includes("**") ? Infinity : segments.length - wild,
       // Without `dot`, only a segment that names a leading dot itself matches inside a hidden directory.
