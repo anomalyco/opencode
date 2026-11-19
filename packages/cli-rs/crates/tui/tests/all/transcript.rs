@@ -1,4 +1,4 @@
-use crate::support::{self, Harness, WAIT, deref_harness};
+use crate::support::{self, Harness, WAIT, deref_harness, user};
 
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -57,10 +57,6 @@ impl Transport for Fixture {
 
 fn session(id: &str) -> Value {
     support::merge(support::session(id, "Transcript"), json!({ "agent": "build" }))
-}
-
-fn user(id: &str, created: u64, text: &str) -> Value {
-    json!({ "id": id, "type": "user", "text": text, "time": { "created": created } })
 }
 
 fn assistant(id: &str, created: u64, content: Value, done: Option<u64>) -> Value {

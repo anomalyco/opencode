@@ -1,6 +1,6 @@
 //! Session commands through a request-recording server.
 
-use crate::support::{self, Fake, Harness, Log, WAIT, deref_harness};
+use crate::support::{self, Fake, Harness, Log, WAIT, deref_harness, user};
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -79,10 +79,6 @@ fn session(id: &str, extra: Value) -> Value {
         "location": { "directory": LOCATION },
     });
     support::merge(session, extra)
-}
-
-fn user(id: &str, created: u64, text: &str) -> Value {
-    json!({ "id": id, "type": "user", "text": text, "time": { "created": created } })
 }
 
 fn assistant(id: &str, created: u64, content: Value) -> Value {

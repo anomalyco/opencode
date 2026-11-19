@@ -804,11 +804,7 @@ fn claimed(run: Run) -> Vec<(&'static str, Seen)> {
     let emit = |kind: &str, data: serde_json::Value| {
         seq.set(seq.get() + 1);
         let ids = serde_json::json!({ "sessionID": "ses_c", "assistantMessageID": "msg_2" });
-        let event = serde_json::json!({
-            "id": format!("evt_{}", seq.get()), "created": 10_000 + seq.get(), "type": kind,
-            "durable": { "aggregateID": "ses_c", "seq": seq.get(), "version": 1 }, "data": support::merge(ids, data),
-        });
-        tui.data.apply(&[serde_json::from_value(event).unwrap()]);
+        tui.data.apply(&[support::event("ses_c", kind, seq.get(), support::merge(ids, data))]);
         harness.wait("the views took the event", || tui.synced());
         settle(harness);
         harness.app.render();

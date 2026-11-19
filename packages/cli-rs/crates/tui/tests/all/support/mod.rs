@@ -165,6 +165,21 @@ pub fn location(directory: &str) -> Value {
     json!({ "directory": directory, "project": { "id": "project", "directory": directory, "canonical": directory } })
 }
 
+/// The durable event `kind` of `session`, number `seq` in its aggregate.
+pub fn event(session: &str, kind: &str, seq: u64, data: Value) -> opencode_api::generated::V2Event {
+    serde_json::from_value(json!({
+        "id": format!("evt_{seq}"), "created": 10_000 + seq, "type": kind,
+        "durable": { "aggregateID": session, "seq": seq, "version": 1 },
+        "data": data,
+    }))
+    .unwrap()
+}
+
+/// A user message.
+pub fn user(id: &str, created: u64, text: &str) -> Value {
+    json!({ "id": id, "type": "user", "text": text, "time": { "created": created } })
+}
+
 pub fn session(id: &str, title: &str) -> Value {
     json!({
         "id": id, "title": title, "projectID": "project", "cost": 0,
