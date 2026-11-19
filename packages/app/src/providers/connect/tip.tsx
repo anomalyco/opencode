@@ -19,6 +19,7 @@ export const ProviderTipSchema = Persistence.struct({
 // Undefined directory reads the server's default Location.
 export function createProviderTip(directory: Accessor<string | undefined>) {
   const providers = useProviders(directory)
+
   const [state, setState, , ready] = persisted(Persist.global("new-session.provider-tip"), ProviderTipSchema, {
     dismissedAt: 0,
   })
