@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
+import os from "os"
 import path from "path"
 import { DateTime, Effect, Layer } from "effect"
 import { Agent } from "@opencode/core/agent"
@@ -34,7 +35,8 @@ import { Skill } from "@opencode/core/skill"
 import { toLLMMessages } from "@opencode/core/session/runner/to-llm-message"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Tool } from "@opencode/core/tool"
-import { tempLocationLayer } from "./fixture/location"
+import { location, tempLocationLayer } from "./fixture/location"
+import { AbsolutePath } from "@opencode/core/schema"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
@@ -64,35 +66,65 @@ const permission = permissionLayer({ assert: () => Effect.void })
 const config = Config.testLayer()
 const imageLayer = AppNodeBuilder.build(Image.node, [Config.node.replace(config)])
 
-const testLayer = AppNodeBuilder.build(
-  LayerNode.group([
-    Database.node,
-    Bus.node,
-    SessionProjector.node,
-    SessionStore.node,
-    Session.node,
-    Location.node,
-    FSUtil.node,
-    FileAccess.node,
-    readToolNode,
-    Tool.node,
-    PluginHooks.node,
-    SessionInstructions.node,
-    Skill.node,
-    Global.node,
-    Image.node,
-  ]),
-  [
+const group = LayerNode.group([
+  Database.node,
+  Bus.node,
+  SessionProjector.node,
+  SessionStore.node,
+  Session.node,
+  Location.node,
+  FSUtil.node,
+  FileAccess.node,
+  readToolNode,
+  Tool.node,
+  PluginHooks.node,
+  SessionInstructions.node,
+  Skill.node,
+  Global.node,
+  Image.node,
+])
+
+const buildLayer = (locationLayer: Parameters<typeof Location.node.replace>[0]) =>
+  AppNodeBuilder.build(group, [
     Project.node.replace(globalProjectNode),
     SessionExecution.node.replace(SessionExecution.noopLayer),
-    Location.node.replace(tempLocationLayer),
+    Location.node.replace(locationLayer),
     Permission.node.replace(permission),
     Config.node.replace(config),
     Image.node.replace(imageLayer),
-  ],
+  ])
+
+const testLayer = buildLayer(tempLocationLayer)
+
+// A Location whose directory is a symlink to its project directory: `run` takes the directory from $PWD, which
+// does not follow the link.
+const symlinkLocationLayer = Layer.unwrap(
+  Effect.acquireRelease(
+    Effect.promise(async () => {
+      const base = await fs.mkdtemp(path.join(os.tmpdir(), "location-"))
+      const real = path.join(base, "real")
+      const link = path.join(base, "link")
+      await fs.mkdir(real)
+      await fs.symlink(real, link, process.platform === "win32" ? "junction" : "dir")
+      return { base, real, link }
+    }),
+    (created) => Effect.promise(() => fs.rm(created.base, { recursive: true, force: true })),
+  ).pipe(
+    Effect.map((created) =>
+      Layer.succeed(
+        Location.Service,
+        Location.Service.of(
+          location(Location.Ref.make({ directory: AbsolutePath.make(created.link) }), {
+            projectDirectory: AbsolutePath.make(created.real),
+          }),
+        ),
+      ),
+    ),
+  ),
 )
 
 const it = testEffect(testLayer)
+const itSymlink = testEffect(buildLayer(symlinkLocationLayer))
 
 const identity = {
   agent: Agent.ID.make("build"),
@@ -384,6 +416,26 @@ describe("SessionInstructions", () => {
 
       // Walking up the link target would leave the Location and reach the store's AGENTS.md files.
       yield* executeTool(registry, readCall(sessionID, "call-skill", ".agents/skills/s/SKILL.md"))
+
+      expect((yield* synthetics(sessionID)).map((message) => message.text)).toEqual([])
+    }),
+  )
+
+  itSymlink.live("does not re-inject the Location root when the Location is a symlink", () =>
+    Effect.gen(function* () {
+      const location = yield* Location.Service
+      const real = location.project.directory
+      yield* mkdir(path.resolve(real, "sub"))
+      yield* writeAgents(path.resolve(real, "AGENTS.md"), "real-root")
+      yield* Effect.promise(() => fs.writeFile(path.resolve(real, "sub", "f.txt"), "content"))
+
+      const session = yield* Session.Service
+      const registry = yield* Tool.Service
+      const sessionID = (yield* session.create({ location: Location.Ref.make({ directory: location.directory }) })).id
+
+      // The read path is inside the resolved project directory, so a lexical walk from it passes the symlinked
+      // Location without reaching it.
+      yield* executeTool(registry, readCall(sessionID, "call-real", path.resolve(real, "sub", "f.txt")))
 
       expect((yield* synthetics(sessionID)).map((message) => message.text)).toEqual([])
     }),
