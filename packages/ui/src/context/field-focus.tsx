@@ -20,6 +20,22 @@ export function focusField(element: HTMLElement, visible: boolean, options?: Foc
   }
 }
 
+// Focus moved into a field for a control the user acted on keeps that control's ring state: none after a click, a ring
+// after the keyboard. Undefined when the field already has focus, so its own state stays.
+export function handoffRing(element: HTMLElement | undefined) {
+  const active = document.activeElement
+
+  if (active && active === element) return undefined
+
+  return active instanceof HTMLElement && active.matches(":focus-visible")
+}
+
+export function handOffFocus(element: HTMLElement, options?: FocusOptions) {
+  const visible = handoffRing(element)
+
+  if (visible !== undefined) focusField(element, visible, options)
+}
+
 export function createFieldFocus() {
   const [visible, setVisible] = createSignal(false)
 
