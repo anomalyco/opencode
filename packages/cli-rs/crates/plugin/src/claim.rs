@@ -117,11 +117,7 @@ pub fn ledger() -> Ledger {
 }
 
 fn book(f: impl FnOnce(&mut Ledger)) {
-    LEDGER.with(|cell| {
-        let mut ledger = cell.get();
-        f(&mut ledger);
-        cell.set(ledger);
-    });
+    crate::tally(&LEDGER, f);
 }
 
 /// A claimed part as the host holds it now: its mount, where its tree was laid out in the last frame, and whether

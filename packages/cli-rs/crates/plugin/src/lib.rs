@@ -891,6 +891,15 @@ thread_local! {
     static OWNER_IDS: RefCell<OwnerIds> = const { RefCell::new((0, Vec::new())) };
 }
 
+/// Counts into this thread's counters in `key`: `f` changes a copy, which goes back.
+pub(crate) fn tally<T: Copy>(key: &'static std::thread::LocalKey<Cell<T>>, f: impl FnOnce(&mut T)) {
+    key.with(|cell| {
+        let mut counters = cell.get();
+        f(&mut counters);
+        cell.set(counters);
+    });
+}
+
 /// The number of owner `mount` ([`abi::Host::owner`]): `0` for the activation.
 pub(crate) fn owner_id(mount: Option<&Weak<()>>) -> u64 {
     let Some(mount) = mount else { return 0 };

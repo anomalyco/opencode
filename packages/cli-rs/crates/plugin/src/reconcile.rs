@@ -81,11 +81,7 @@ pub fn work() -> Work {
 }
 
 fn count(f: impl FnOnce(&mut Work)) {
-    WORK.with(|cell| {
-        let mut work = cell.get();
-        f(&mut work);
-        cell.set(work);
-    });
+    crate::tally(&WORK, f);
 }
 
 /// The deepest a plugin's tree may nest, in OpenTUI layout levels. OpenTUI refuses a node past 256 levels with an

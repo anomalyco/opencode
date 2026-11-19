@@ -74,11 +74,7 @@ pub fn crossed() -> Crossed {
 }
 
 fn carry(f: impl FnOnce(&mut Crossed)) {
-    CROSSED.with(|cell| {
-        let mut crossed = cell.get();
-        f(&mut crossed);
-        cell.set(crossed);
-    });
+    crate::tally(&CROSSED, f);
 }
 
 /// Loads native plugins.

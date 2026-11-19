@@ -134,19 +134,11 @@ pub fn work() -> Work {
 }
 
 fn book(f: impl FnOnce(&mut Ledger)) {
-    LEDGER.with(|cell| {
-        let mut ledger = cell.get();
-        f(&mut ledger);
-        cell.set(ledger);
-    });
+    crate::tally(&LEDGER, f);
 }
 
 fn count(f: impl FnOnce(&mut Work)) {
-    WORK.with(|cell| {
-        let mut work = cell.get();
-        f(&mut work);
-        cell.set(work);
-    });
+    crate::tally(&WORK, f);
 }
 
 /// A mounted canvas: its widget and the state it keeps under its id.

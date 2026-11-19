@@ -432,11 +432,7 @@ pub fn counts() -> Counts {
 }
 
 fn tally(f: impl FnOnce(&mut Counts)) {
-    COUNTS.with(|cell| {
-        let mut counts = cell.get();
-        f(&mut counts);
-        cell.set(counts);
-    });
+    crate::tally(&COUNTS, f);
 }
 
 /// Counts `items` list items visited.
