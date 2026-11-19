@@ -103,6 +103,9 @@ export async function mentionAutocomplete(
 
   const matches = fuzzysort.go(search.fragment, entries, { key: "name", limit }).map((item) => item.obj)
   fuzzysort.cleanup()
+  // Stable sort keeps fuzzysort's score order within each group while putting
+  // directories first, matching the empty-fragment listing so descent stays predictable.
+  matches.sort((a, b) => Number(b.directory) - Number(a.directory))
   return { search, entries: matches }
 }
 

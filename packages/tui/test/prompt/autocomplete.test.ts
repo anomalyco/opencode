@@ -442,6 +442,26 @@ describe("mentionAutocomplete", () => {
     })
   })
 
+  test("keeps directories first when a fuzzy fragment ranks a file higher", async () => {
+    const location = { directory: "/project/current" }
+    const { file } = mentionList(location, [
+      { absolute: "/project/reports", type: "directory" },
+      { absolute: "/project/rep", type: "file" },
+      { absolute: "/project/repo", type: "file" },
+    ])
+
+    // fuzzysort scores "rep" (exact) above "reports" (prefix) above "repo"; the
+    // directory must still lead so typing through directories stays predictable.
+    expect(await mentionAutocomplete(file, location, "../rep", "/home/user", 20)).toEqual({
+      search: { directory: path.resolve("/project"), prefix: "../", fragment: "rep" },
+      entries: [
+        mentionEntry(location, "/project/reports", "directory"),
+        mentionEntry(location, "/project/rep", "file"),
+        mentionEntry(location, "/project/repo", "file"),
+      ],
+    })
+  })
+
   test("names the location entry from its absolute path", async () => {
     const location = { directory: "/project/current" }
     const { file } = mentionList(location, [{ absolute: location.directory, type: "directory" }])
