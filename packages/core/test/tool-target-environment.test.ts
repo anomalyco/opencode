@@ -27,7 +27,6 @@ import { EditTool } from "@opencode/core/tool/plugin/edit"
 import { PatchTool } from "@opencode/core/tool/plugin/patch"
 import { ReadTool } from "@opencode/core/tool/plugin/read"
 import { WriteTool } from "@opencode/core/tool/plugin/write"
-import { ReadToolFileSystem } from "@opencode/core/tool/read-filesystem"
 import { hostEnvironmentLayer } from "./fixture/environment"
 import { location } from "./fixture/location"
 import { withTempDir } from "./fixture/tmpdir"
@@ -50,7 +49,6 @@ const fileToolsNode = makeLocationNode({
   ),
   deps: [
     Tool.node,
-    ReadToolFileSystem.node,
     FileAccess.node,
     FileMutation.node,
     FileWrite.node,
