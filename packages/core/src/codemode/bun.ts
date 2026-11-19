@@ -183,7 +183,7 @@ const remove = (handle: Handle) =>
         return yield* new Environment.WrongKind({ path: handle.target.absolute, actual: info.type })
       yield* host.fileWrite.authorize(handle.target, host.context)
       yield* handle.target.environment.files.remove(handle.target.absolute)
-    }).pipe(host.fileMutation.withLock([handle.target.absolute])),
+    }).pipe(host.fileMutation.withLock([handle.target])),
   )
 
 // `Bun.write`: the bytes written. The destination is a path or a BunFile; the data is text, bytes, a BunFile to copy,
@@ -240,7 +240,7 @@ const put = (
           ? host.fileMutation.append({ target, content: bytes })
           : host.fileMutation.write({ target, content: bytes })
         return bytes.byteLength
-      }).pipe(host.fileMutation.withLock([target.absolute]))
+      }).pipe(host.fileMutation.withLock([target]))
     }),
   )
 
