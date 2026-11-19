@@ -1,0 +1,21 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "wb-shopping",
+  "share": "disabled",
+  "permission": {
+    "*": "deny"
+  },
+  "agent": {
+    "wb-shopping": {
+      "description": "Помогает сравнивать товары и находить карточки по артикулам WB.",
+      "mode": "primary",
+      "steps": 8,
+      "permission": {
+        "*": "deny",
+        "wb_product_link": "allow",
+        "wb_compare_unit_prices": "allow"
+      },
+      "prompt": "Отвечай на языке пользователя. Для ссылки на карточку Wildberries используй wb_product_link. Для сравнения предложений по цене за одинаковую единицу используй wb_compare_unit_prices. Бери цены и количество из запроса. Если данных не хватает, попроси их уточнить. Не придумывай цены, артикулы, остатки или сроки доставки."
+    }
+  }
+}

@@ -1,0 +1,22 @@
+#!/bin/sh
+set -eu
+
+cd "$(dirname "$0")"
+export OPENCODE_DISABLE_PROJECT_CONFIG=1
+export OPENCODE_CONFIG_DIR="$PWD/.opencode"
+export OPENCODE_DISABLE_AUTOUPDATE=1
+
+case "${1:-}" in
+  serve)
+    : "${OPENCODE_SERVER_PASSWORD:?Set OPENCODE_SERVER_PASSWORD before starting the server}"
+    exec opencode --pure serve --hostname 127.0.0.1 --port "${WB_HARNESS_PORT:-4096}"
+    ;;
+  run)
+    shift
+    exec opencode --pure run --agent wb-shopping "$@"
+    ;;
+  *)
+    printf '%s\n' 'Usage: ./opencode-wb run [OpenCode options] <message> | ./opencode-wb serve' >&2
+    exit 2
+    ;;
+esac
