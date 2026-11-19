@@ -82,7 +82,7 @@ fn main() -> ExitCode {
         Ok(dev) => dev,
         Err(error) => return exit(Err(error)),
     };
-    let logged = serde_json::to_string(&args).unwrap_or_default();
+    let logged = serde_json::to_string(&logged_args(&args)).unwrap_or_default();
     log::info!(
         version = help::VERSION,
         commit = help::COMMIT,
@@ -102,6 +102,15 @@ fn main() -> ExitCode {
         log::error!(cause = format!("{error:#}").as_str(), args = logged.as_str(); "cli process failed");
     }
     exit(result)
+}
+
+/// `service set <key> <value>` and `service set env <name> <value>` carry secrets such as the password or a provider
+/// key; the logged arguments keep the values out. Flags and their values may come first, so the pair is found anywhere.
+fn logged_args(args: &[String]) -> Vec<&str> {
+    let set = args.windows(2).position(|pair| pair[0] == "service" && pair[1] == "set");
+    let kept =
+        set.map_or(args.len(), |set| set + if args.get(set + 2).is_some_and(|arg| arg == "env") { 4 } else { 3 });
+    args.iter().enumerate().map(|(index, arg)| if index < kept { arg.as_str() } else { "<redacted>" }).collect()
 }
 
 fn exit(result: error::Result<()>) -> ExitCode {
