@@ -84,12 +84,12 @@ export const Plugin = {
         editor.namespace({
           name: "automation",
           description:
-            "Schedule recurring or one-off jobs (cron jobs, timers, reminders): a prompt or Code Mode action that runs at a time, every interval, on a cron or when a connected MCP server pushes an event. When you're about to agree to do something later or on a repeat, create one instead of promising it in your reply; nothing else would carry the promise out. Never sleep or poll to wait.",
+            "Schedule recurring or one-off jobs (cron jobs, timers, reminders). Each one runs a prompt or Code Mode action at a time, every interval, on a cron or when a connected MCP server pushes an event. Useful for reminders, following up on something later, recurring checks and reports, and reacting to outside events.",
         })
         editor.add({
           name: "create",
           description:
-            "Schedule a recurring or one-off job: a prompt or Code Mode action that runs once at a time (\"in 20 minutes\", an ISO time), every interval (\"2 hours\"), on a cron or on a connected MCP server's push event. Give a repeating job an `expires`. A code action runs without a model, so use it for quiet checks and send a prompt only when something needs attention. A prompt can target this session, another session in this project or a new subagent child. Code runs without a model and can return one send: { send: { prompt } } steers this session; add to: { subagent } inside send for a permitted quiet child. Omit send to stay quiet.",
+            "Schedule a recurring or one-off job: a prompt or Code Mode action that runs once at a time (\"in 20 minutes\", an ISO time), every interval (\"2 hours\"), on a cron or on a connected MCP server's push event, until it's done or reaches `expires`. A code action runs without a model, which suits cheap checks that send a prompt only when something changes. A prompt can target this session, another session in this project or a new subagent child. Code runs without a model and can return one send: { send: { prompt } } steers this session; add to: { subagent } inside send for a permitted quiet child. Omit send to stay quiet.",
           input: Automation.Request,
           output: View,
           options: { namespace: "automation", codemode: { pinned: true } },
