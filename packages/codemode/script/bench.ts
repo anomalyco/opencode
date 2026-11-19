@@ -72,6 +72,18 @@ for (const v of set) sum += v
 for (let i = 0; i < 5000; i++) { map.delete("k" + i); set.delete(i) }
 return sum + map.size + set.size`,
   ],
+  [
+    "property-heavy (plain data)",
+    `const rows = Array.from({ length: 20000 }, (_, i) => ({ id: i, name: "n" + i, score: i % 97, tags: ["a", "b"] }))
+let sum = 0
+for (const r of rows) {
+  const c = { ...r, extra: 1 }
+  const { id, ...rest } = r
+  Object.assign(c, rest)
+  sum += c.score + Object.keys(c).length + Object.entries(r).length + Object.values(r).length + rest.score
+}
+return sum + JSON.stringify(rows.slice(0, 3000)).length`,
+  ],
 ]
 
 const argument = (flag: string) => {
