@@ -171,6 +171,9 @@ struct Shared {
     stray: Mutex<VecDeque<String>>,
     process: Mutex<Option<std::process::Child>>,
     pid: u32,
+    /// How long a test holds the watch thread back after its next wake, as a machine that stalled does ([`watch`]).
+    #[cfg(test)]
+    hold: AtomicU64,
     /// The job that holds the child and what it starts; closing it ends them all. It goes when the child is killed,
     /// not when the `Child` drops, so a drop's grace period stands.
     #[cfg(windows)]
@@ -233,6 +236,8 @@ impl Child {
             stray: Mutex::default(),
             process: Mutex::new(Some(process)),
             pid,
+            #[cfg(test)]
+            hold: AtomicU64::new(0),
             #[cfg(windows)]
             job: Mutex::new(Some(job)),
         });
@@ -1014,6 +1019,20 @@ fn watch(shared: &Shared) {
             continue;
         }
         owed = shared.watch.wait_timeout(owed, wait).map_or_else(|poisoned| poisoned.into_inner().0, |(owed, _)| owed);
+        #[cfg(test)]
+        let held = shared.hold.swap(0, Ordering::Relaxed);
+        #[cfg(test)]
+        if held > 0 {
+            std::thread::sleep(Duration::from_millis(held));
+        }
+        // The wait it asked for is the one it got only on a machine that runs it: a stalled machine does not, and the
+        // JS host does not either. The overshoot is therefore the machine's, not the host's silence, and does not count
+        // toward the hang (flakes-10: one stall ended every JS host at once, past the 730 ms margin the row runs on).
+        // A host that hangs wakes this thread on time.
+        let woken = Instant::now();
+        if let Some(late) = woken.checked_duration_since(now + wait) {
+            owed.progress += late;
+        }
     }
 }
 
@@ -1239,6 +1258,34 @@ mod tests {
             std::thread::sleep(Duration::from_millis(5));
         }
         assert!(wakes.load(Ordering::SeqCst) > before, "the host was not woken when the queue had room");
+    }
+
+    #[test]
+    fn a_machine_that_held_the_watch_back_is_not_the_hosts_silence() {
+        // It says hello and answers nothing: the message it never acknowledges stays owed.
+        let (child, _dir) = fake(
+            &hello(),
+            Limits { ack: Duration::from_secs(1), poll: Duration::from_millis(20), ..Limits::default() },
+        );
+        assert!(!take_until(&child, |events| !events.is_empty()).is_empty(), "no hello");
+        // The machine stalls the watch thread (and the JS host with it) for twice the limit, and the host is silent
+        // meanwhile. It is not the host's silence: the event must not be named hung when the stall ends.
+        child.shared.hold.store(2_000, Ordering::Relaxed);
+        child.send(wire::CONTROL, b"{}", Some(1), Wait::Ack).unwrap();
+        std::thread::sleep(Duration::from_millis(2_040));
+        let events = child.take();
+        assert!(
+            !events.iter().any(|event| matches!(event, Event::Hung { .. })),
+            "a stall named the host hung: {events:?}"
+        );
+        // The credit buys the limit again, not the end of the rule: a host that stays silent is named, once.
+        let waited = Instant::now();
+        let events = take_until(&child, |events| events.iter().any(|event| matches!(event, Event::Hung { .. })));
+        assert!(
+            events.iter().any(|event| matches!(event, Event::Hung { .. })),
+            "the host was never named hung: {events:?}"
+        );
+        assert!(waited.elapsed() < Duration::from_secs(5), "the hang came late");
     }
 
     #[test]
