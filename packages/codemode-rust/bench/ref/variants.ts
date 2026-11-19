@@ -1,27 +1,16 @@
-// Runs each bench program and its perturbed variant through the reference, with the tools of script/bench.ts.
+// Runs each bench program and its perturbed variant through the reference, with the `tools` host global.
 // Checks the variant returns what the original does, then prints one JSON line per program: median and min ms.
 // Usage: bun bench/ref/variants.ts [--iterations N] <slug>...
 import { resolve } from "node:path"
+import { reference, toolsGlobal } from "../../conformance/reference.ts"
 
-// The reference CodeMode package: CODEMODE_REF, or by default ../codemode relative to this workspace.
-
-const pkg =
-  process.env.CODEMODE_REF === undefined
-    ? resolve(import.meta.dir, "../../../codemode")
-    : resolve(process.env.CODEMODE_REF)
-const { Effect, Schema } = await import(Bun.resolveSync("effect", resolve(pkg, "src")))
-const { CodeMode, Tool } = await import(resolve(pkg, "src/index.ts"))
-
-const runtime = CodeMode.make({
-  tools: {
-    echo: Tool.make({
-      description: "Echo an id",
-      input: Schema.Struct({ id: Schema.Number }),
-      output: Schema.Number,
-      execute: ({ id }: { id: number }) => Effect.succeed(id),
-    }),
-  },
-})
+// The reference's language layer: the CodeMode package from CODEMODE_REF, or by default ../codemode relative to this
+// workspace. The programs reach one host global, `tools`, the namespace of conformance/reference.ts (`tools.echo`,
+// `tools.git.status`, ... all async, as Code Mode tools were).
+const ref = await reference(process.env.CODEMODE_REF)
+const Effect = ref.Effect
+const tools = toolsGlobal(ref)
+const runtime = ref.Language.Runtime.make({ globals: () => ({ tools }) })
 
 const flag = process.argv.indexOf("--iterations")
 const iterations = flag === -1 ? 11 : Number(process.argv[flag + 1])

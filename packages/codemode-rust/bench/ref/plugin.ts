@@ -1,30 +1,15 @@
 // Plugin-event benchmark, reference side: the conformance reducer handling a `git.status` command event.
 // Counterpart of `psychoscript-bench --plugin`. Prints one JSON line per source: median, min and mean µs per execute.
 // Usage: bun bench/ref/plugin.ts [--runs N] <source>...
-import { resolve } from "node:path"
+import { reference, toolsGlobal } from "../../conformance/reference.ts"
 
-// The reference CodeMode package: CODEMODE_REF, or by default ../codemode relative to this workspace.
-
-const pkg =
-  process.env.CODEMODE_REF === undefined
-    ? resolve(import.meta.dir, "../../../codemode")
-    : resolve(process.env.CODEMODE_REF)
-const { Effect, Schema } = await import(Bun.resolveSync("effect", resolve(pkg, "src")))
-const { CodeMode, Tool } = await import(resolve(pkg, "src/index.ts"))
-
-// The tool of conformance/generate.ts.
-const runtime = CodeMode.make({
-  tools: {
-    git: {
-      status: Tool.make({
-        description: "Working tree status",
-        input: Schema.Struct({}),
-        output: Schema.Struct({ branch: Schema.String, dirty: Schema.Boolean }),
-        execute: () => Effect.succeed({ branch: "main", dirty: true }),
-      }),
-    },
-  },
-})
+// The reference's language layer: the CodeMode package from CODEMODE_REF, or by default ../codemode relative to this
+// workspace. The programs reach one host global, `tools`, the namespace of conformance/reference.ts (`tools.echo`,
+// `tools.git.status`, ... all async, as Code Mode tools were).
+const ref = await reference(process.env.CODEMODE_REF)
+const Effect = ref.Effect
+const tools = toolsGlobal(ref)
+const runtime = ref.Language.Runtime.make({ globals: () => ({ tools }) })
 
 const bindings = { event: { type: "command", name: "git.status" }, state: { runs: 2 } }
 const expected = JSON.stringify({ state: { runs: 3 }, slots: { statusbar: { text: "main *" } } })
@@ -34,7 +19,7 @@ const sources = process.argv.slice(2).filter((arg, i, all) => arg !== "--runs" &
 
 for (const source of sources) {
   const code = await Bun.file(source).text()
-  const execute = () => Effect.runPromise(runtime.execute(code, bindings))
+  const execute = () => Effect.runPromise(runtime.execute(code, { bindings }))
   // Warm-up, as many runs as are measured; the first also checks the result.
   const warm = await execute()
   if (warm.ok !== true || JSON.stringify(warm.value) !== expected)
