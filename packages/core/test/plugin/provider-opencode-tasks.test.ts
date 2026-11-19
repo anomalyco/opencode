@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Duration, Effect, Exit, Layer, Random, Scope } from "effect"
+import { Duration, Effect, Exit, Layer, Random, Schema, Scope } from "effect"
 import { HttpClient } from "effect/http"
 import { TestClock } from "effect/testing"
 import { Agent } from "@opencode/core/agent"
@@ -14,6 +14,7 @@ import { OpencodeTasks } from "@opencode/core/plugin/provider/opencode-tasks"
 import { Session } from "@opencode/core/session"
 import { SessionMessage } from "@opencode/core/session/message"
 import { Tool } from "@opencode/core/tool"
+import { McpTool } from "@opencode/core/tool/mcp"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -204,6 +205,42 @@ describe("OpencodePlugin task claims", () => {
       // Shorter than a member may choose: the shortest, 5 minutes, which is also what's assumed before Console answers.
       expect(yield* minutes(1, 0.5)).toBeCloseTo(5 / 3)
     }),
+  )
+
+  it.effect("renews the claims of a session that claimed from Code Mode", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        yield* signIn(console)
+        const host = yield* start(console)
+        const session = yield* host.session.create({})
+        const registry = yield* Tool.Service
+        // Console's claim tool as MCP registers it: `claim_task` in its server's namespace.
+        yield* registry.transform((editor) =>
+          editor.add({
+            name: "claim_task",
+            options: { namespace: McpTool.namespace("opencode_console") },
+            description: "Claim a task",
+            input: Schema.Struct({}),
+            execute: () => Effect.succeed({ content: "Claimed tsk_1." }),
+          }),
+        )
+        const snapshot = yield* registry.snapshot()
+        yield* snapshot.execute({
+          sessionID: session.id,
+          agent: Agent.ID.make("build"),
+          messageID: SessionMessage.ID.create(),
+          call: {
+            type: "tool-call",
+            id: "call_codemode_claim",
+            name: "execute",
+            input: { code: "return await tools.opencode_console.claim_task({})" },
+          },
+        })
+
+        yield* until(console, 1)
+        expect(sent(console, OpencodeTasks.RENEW_PATH)).toEqual([session.id])
+      }),
+    ),
   )
 
   it.effect("renews on the member's lease once Console names it, after assuming the shortest", () =>
