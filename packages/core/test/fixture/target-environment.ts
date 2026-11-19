@@ -20,9 +20,15 @@ const memoryEnvironment = (): Environment.Interface => {
  */
 export const elsewhere = (directory: string, environment = memoryEnvironment()) => {
   const assertions: Permission.AssertInput[] = []
+  const checked: Permission.AssertInput[] = []
   const replacements = [
     Environment.node.replace(hostEnvironmentLayer),
-    Permission.node.replace(permissionLayer({ assert: (input) => Effect.sync(() => void assertions.push(input)) })),
+    Permission.node.replace(
+      permissionLayer({
+        assert: (input) => Effect.sync(() => void assertions.push(input)),
+        assertNotDenied: (input) => Effect.sync(() => void checked.push(input)),
+      }),
+    ),
     Location.node.replace(
       Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
     ),
@@ -40,5 +46,5 @@ export const elsewhere = (directory: string, environment = memoryEnvironment()) 
       })
     }),
   ).pipe(Layer.provide(LayerNode.compile(FileAccess.node, { replacements })))
-  return { environment, assertions, replacements: [...replacements, FileAccess.node.replace(access)] }
+  return { environment, assertions, checked, replacements: [...replacements, FileAccess.node.replace(access)] }
 }

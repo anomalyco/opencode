@@ -14,8 +14,9 @@ import { SessionEvent } from "@opencode/core/session/event"
 import { Tool } from "@opencode/core/tool"
 import { ImageGenerateTool } from "@opencode/core/tool/plugin/image-generate"
 import { VideoGenerateTool } from "@opencode/core/tool/plugin/video-generate"
-import type { ImageRequest, ImageResult } from "@opencode/schema/generate"
+import { type ImageRequest, type ImageResult } from "@opencode/schema/generate"
 import { Effect, Layer, Schedule, Stream } from "effect"
+import { advance } from "./lib/clock"
 import { elsewhere } from "./fixture/target-environment"
 import { withTempDir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
@@ -23,8 +24,6 @@ import { executeTool, toolIdentity } from "./lib/tool"
 import { makePluginTestLayer } from "./plugin/fixture"
 
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
-// A different image, so a read of the session's copy is visible in what the provider receives.
-const GIF = "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
 const MP4 = Uint8Array.from([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d, 0, 0, 0, 0])
 
 const it = testEffect(Layer.succeed(Flag.Overrides, "video_generate"))
@@ -125,7 +124,7 @@ const setup = () =>
         Effect.timeout("10 seconds"),
         Effect.map((item) => item?.text),
       )
-    return { run, notice }
+    return { run, notice, notices, session }
   })
 
 describe("experimental_image_generate", () => {
@@ -139,11 +138,11 @@ describe("experimental_image_generate", () => {
       return Effect.gen(function* () {
         yield* imageModel("test", "painter")
         yield* other.environment.files.write(input, Buffer.from(PNG, "base64"))
-        yield* Effect.promise(() => fs.writeFile(input, Buffer.from(GIF, "base64")))
         yield* Effect.promise(() => fs.writeFile(output, "session\n"))
         const { run, notice } = yield* setup()
 
         const result = yield* run(ImageGenerateTool.name, { prompt: "blue", images: ["in.png"], path: "out.png" })
+        expect(result.status).toBe("completed")
         expect(yield* notice(result)).toContain(`Saved image: ${output}`)
         expect(requests).toEqual([
           {
@@ -155,14 +154,41 @@ describe("experimental_image_generate", () => {
         ])
         expect(Buffer.from((yield* other.environment.files.read(output)).bytes).toString("base64")).toBe(PNG)
         expect(yield* Effect.promise(() => fs.readFile(output, "utf8"))).toBe("session\n")
-        expect((yield* Effect.promise(() => fs.readFile(input))).toString("base64")).toBe(GIF)
+        expect(yield* Effect.promise(() => fs.readdir(tmp.path))).toEqual(["out.png"])
+      }).pipe(Effect.provide(makePluginTestLayer(undefined, imageProvider(requests), other.replacements)))
+    }),
+  )
+
+  it.live("asks only the deny rules before replacing the file its real extension renames", () =>
+    withTempDir((tmp) => {
+      const other = elsewhere(tmp.path)
+      const input = path.join(tmp.path, "in.png")
+      const output = path.join(tmp.path, "out.png")
+      const requests: ImageRequest[] = []
+
+      return Effect.gen(function* () {
+        yield* imageModel("test", "painter")
+        yield* other.environment.files.write(input, Buffer.from(PNG, "base64"))
+        // The same path exists only on the session's disk, so statting it there would ask for its own approval.
+        yield* Effect.promise(() => fs.writeFile(output, "session\n"))
+        const { run, notice } = yield* setup()
+
+        // The provider returns a PNG, so the requested out.jpg is saved as out.png, which replaces no existing file.
+        const result = yield* run(ImageGenerateTool.name, { prompt: "blue", images: ["in.png"], path: "out.jpg" })
+        expect(result.status).toBe("completed")
+        expect(yield* notice(result)).toContain(`Saved image: ${output}`)
+        expect(requests[0]?.images).toEqual([{ data: PNG, mime: "image/png", name: "in.png" }])
+        expect(Buffer.from((yield* other.environment.files.read(output)).bytes).toString("base64")).toBe(PNG)
+        expect(other.checked).toMatchObject([{ action: "edit", resources: ["out.png"] }])
+        expect(yield* Effect.promise(() => fs.readFile(output, "utf8"))).toBe("session\n")
+        expect(yield* Effect.promise(() => fs.readdir(tmp.path))).toEqual(["out.png"])
       }).pipe(Effect.provide(makePluginTestLayer(undefined, imageProvider(requests), other.replacements)))
     }),
   )
 })
 
 describe("experimental_video_generate", () => {
-  it.live("reads its input and saves its output in the resolved target's environment, not the session's", () =>
+  it.effect("reads its input and saves its output in the resolved target's environment, not the session's", () =>
     withTempDir((tmp) => {
       const other = elsewhere(tmp.path)
       const input = path.join(tmp.path, "first.png")
@@ -172,16 +198,18 @@ describe("experimental_video_generate", () => {
       return Effect.gen(function* () {
         yield* videoModel("test", "director")
         yield* other.environment.files.write(input, Buffer.from(PNG, "base64"))
-        yield* Effect.promise(() => fs.writeFile(input, Buffer.from(GIF, "base64")))
         yield* Effect.promise(() => fs.writeFile(output, "session\n"))
-        const { run, notice } = yield* setup()
+        const { run, notice, notices } = yield* setup()
 
         const result = yield* run(VideoGenerateTool.name, { prompt: "x", start: "first.png", path: "kite.mp4" })
-        expect(yield* notice(result)).toContain(`Saved video: ${output}`)
+        expect(result.status).toBe("completed")
         expect(starts[0]?.start?.source).toMatchObject({ type: "bytes", mediaType: "image/png" })
+        // The server polls the provider every five seconds; advance the clock instead of waiting for it.
+        yield* advance(() => notices.some((item) => item.metadata?.jobID === result.metadata?.jobID))
+        expect(yield* notice(result)).toContain(`Saved video: ${output}`)
         expect(new Uint8Array((yield* other.environment.files.read(output)).bytes)).toEqual(Uint8Array.of(...MP4, 0))
         expect(yield* Effect.promise(() => fs.readFile(output, "utf8"))).toBe("session\n")
-        expect((yield* Effect.promise(() => fs.readFile(input))).toString("base64")).toBe(GIF)
+        expect(yield* Effect.promise(() => fs.readdir(tmp.path))).toEqual(["kite.mp4"])
       }).pipe(Effect.provide(makePluginTestLayer(undefined, videoProvider(starts), other.replacements)))
     }),
   )
