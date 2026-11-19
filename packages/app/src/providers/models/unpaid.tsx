@@ -84,7 +84,7 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
     <Dialog
       size="large"
       fit
-      class="[font-family:var(--v2-font-family-sans)] [&_[data-slot=dialog-header]]:!px-5 [&_[data-slot=dialog-header-title]]:!text-[15px] [&_[data-slot=dialog-header-title]]:!tracking-[-0.13px]"
+      class="[font-family:var(--v2-font-family-sans)] [&_[data-slot=dialog-header]]:!px-5 [&_[data-slot=dialog-header]]:!pb-1 [&_[data-slot=dialog-header-title]]:!text-[15px] [&_[data-slot=dialog-header-title]]:!tracking-[-0.13px]"
     >
       <DialogHeader closeLabel={language.t("common.close")}>
         <DialogTitle>{language.t("dialog.model.select.title")}</DialogTitle>
@@ -135,7 +135,13 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
             </div>
 
             <div class="flex w-full flex-col">
-              <div class="flex w-full flex-col items-start rounded-lg border-[0.5px] border-v2-border-border-muted bg-v2-background-bg-layer-02 p-2.5 pt-2">
+              <div
+                class="flex w-full flex-col items-start rounded-lg p-2.5 pt-2 shadow-[inset_0_0_0_0.5px_var(--v2-border-border-muted)]"
+                classList={{
+                  "bg-v2-background-bg-layer-02": theme.mode() !== "dark",
+                  "bg-v2-background-bg-layer-01": theme.mode() === "dark",
+                }}
+              >
                 <div class="flex h-8 w-full select-none items-center px-0.5 pb-2">
                   <div class="flex h-5 items-center text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted [font-family:var(--v2-font-family-sans)] [font-variant-numeric:tabular-nums] [font-variation-settings:'slnt'_0]">
                     {language.t("dialog.model.unpaid.addMore.title")}
@@ -156,7 +162,7 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
                         classList={{
                           "border-[0.5px] border-transparent shadow-[var(--v2-elevation-raised)]":
                             theme.mode() !== "dark",
-                          "border-[0.5px] border-v2-border-border-strong": theme.mode() === "dark",
+                          "shadow-[inset_0_0_0_0.5px_var(--v2-border-border-strong)]": theme.mode() === "dark",
                         }}
                         onClick={() => openProviders(provider.id)}
                       >
@@ -170,7 +176,7 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
                             <span class="truncate font-[440] text-v2-text-text-muted">
                               {language.t(
                                 provider.id === "opencode"
-                                  ? "dialog.provider.opencode.tagline"
+                                  ? "dialog.provider.opencode.note"
                                   : "dialog.provider.opencodeGo.tagline",
                               )}
                             </span>
