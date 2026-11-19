@@ -1,4 +1,5 @@
 import type {
+  JobInfo,
   JsonValue,
   SessionInfo,
   SessionMessageAssistant,
@@ -21,7 +22,18 @@ type Subagent = {
 
 type Task = Subagent | { id: string; type: "shell"; label: string; started: number }
 
+type Script = { id: string; type: "script"; label: string; started: number }
+
 const decodeString = Schema.decodeUnknownOption(Schema.String)
+
+// A script's calls stream through its execute call's metadata.
+const decodeCall = Schema.decodeUnknownOption(
+  Schema.Struct({
+    tool: Schema.String,
+    status: Schema.String,
+    input: Schema.Struct({ command: Schema.String }),
+  }),
+)
 
 // Tool input and metadata are open JSON, so a field of the wrong type reads as absent.
 const text = (value: JsonValue | undefined) => Option.getOrUndefined(decodeString(value))
@@ -32,15 +44,37 @@ export function createSessionBackground(input: {
   sessions: () => SessionInfo[]
   status: (id: string) => "idle" | "running"
   shells: () => ShellInfo[]
+  // The session's running Code Mode jobs, which only list scripts moved to the background.
+  jobs: () => readonly JobInfo[]
 }) {
   const history = createMemo(() => {
     // The latest call for each child names it; calls never decide whether it still runs.
     const calls = new Map<string, { label: string | undefined; agent: string | undefined; started: number }>()
+    // A script moved to the background ends its execute call with the job's id; its first line names it.
+    const scripts = new Map<string, { label: string | undefined; started: number }>()
+    const finished = new Set<string>()
     const id = input.sessionID()
 
     const assistant = (id ? input.messages(id) : []).reduce<SessionMessageAssistant | undefined>((latest, message) => {
+      // A background script reports its result as a synthetic message carrying its job's id.
+      if (message.type === "synthetic") {
+        const jobID = text(message.metadata?.jobID)
+
+        if (jobID) finished.add(jobID)
+      }
+
       if (message.type !== "assistant") return latest
       message.content.forEach((part) => {
+        if (part.type === "tool" && part.name === "execute" && part.state.status === "completed") {
+          const jobID = text(part.state.metadata?.jobID)
+
+          if (jobID)
+            scripts.set(jobID, {
+              label: firstLine(text(part.state.input.code)),
+              started: part.time.ran ?? part.time.created,
+            })
+        }
+
         if (part.type !== "tool" || part.name !== "subagent" || part.state.status === "streaming") return
         const sessionID = text(part.state.metadata?.sessionID)
 
@@ -57,9 +91,27 @@ export function createSessionBackground(input: {
 
     return {
       calls,
+      scripts,
+      finished,
       blocking:
         assistant?.content.flatMap((part) => {
-          if (part.type !== "tool" || part.state.status !== "running" || part.name !== "shell") return []
+          if (part.type !== "tool" || part.state.status !== "running") return []
+
+          // A script in the foreground blocks the turn, and so do the shells it is running.
+          if (part.name === "execute")
+            return [
+              {
+                type: "execute" as const,
+                partID: part.id,
+                id: undefined,
+                label: firstLine(text(part.state.input.code)),
+                agent: undefined,
+                started: part.time.ran ?? part.time.created,
+                commands: executeShellCommands(part.state.metadata.toolCalls),
+              },
+            ]
+
+          if (part.name !== "shell") return []
 
           return [
             {
@@ -129,8 +181,10 @@ export function createSessionBackground(input: {
       if (shell.status !== "running" || shell.metadata.sessionID !== id) return []
 
       if (
-        current.blocking.some(
-          (item) => item.type === "shell" && (item.id === shell.id || (!!item.label && shell.command === item.label)),
+        current.blocking.some((item) =>
+          item.type === "shell"
+            ? item.id === shell.id || (!!item.label && shell.command === item.label)
+            : shell.time.started >= item.started && item.commands.includes(shell.command),
         )
       )
         return []
@@ -141,5 +195,48 @@ export function createSessionBackground(input: {
     return [...subagents(), ...shells]
   })
 
-  return { blocking, tasks }
+  // Scripts moved to the background, while their job runs. A script's result message ends it before the job list
+  // catches up.
+  const scripts = createMemo((): Script[] => {
+    const id = input.sessionID()
+
+    if (!id) return []
+    const current = history()
+
+    return input.jobs().flatMap((job) => {
+      if (job.kind !== "codemode" || job.status !== "running" || job.sessionID !== id || current.finished.has(job.id))
+        return []
+      const call = current.scripts.get(job.id)
+
+      return [{ id: job.id, type: "script" as const, label: call?.label ?? job.id, started: job.time.started }]
+    })
+  })
+
+  // Scripts that ended their call in the background and have not reported back, so the job list is worth asking.
+  const pending = createMemo(() => {
+    const current = history()
+
+    return [...current.scripts.keys()].filter((jobID) => !current.finished.has(jobID))
+  })
+
+  return { blocking, tasks, scripts, pending }
+}
+
+function firstLine(code: string | undefined) {
+  return code
+    ?.split("\n")
+    .map((line) => line.trim())
+    .find((line) => line.length > 0)
+}
+
+// The commands of the shells a running script has started and not finished.
+function executeShellCommands(calls: JsonValue | undefined) {
+  if (!Array.isArray(calls)) return []
+
+  return calls.flatMap((call) =>
+    Option.match(decodeCall(call), {
+      onNone: () => [],
+      onSome: (item) => (item.tool === "shell" && item.status === "running" ? [item.input.command] : []),
+    }),
+  )
 }

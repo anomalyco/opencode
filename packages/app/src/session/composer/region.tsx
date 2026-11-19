@@ -467,6 +467,10 @@ export function ActiveSessionComposerRegion(props: {
       .flatMap((task) => (task.type === "shell" ? [{ ...task, key: task.id, target: task.id }] : [])),
   )
 
+  const scripts = createMemo<SessionActivityItem[]>(() =>
+    props.model.region.state.background.scripts().map((task) => ({ ...task, key: task.id, target: task.id })),
+  )
+
   const alignment = useComposerLaneAlignment()
   const todos = createMemo(() => sessionTodos(props.session.history.messages(), props.session.data.revertMessageID()))
   // Like the old dock: the plan shows while the turn runs and still has work left, so stale todos never linger.
@@ -486,10 +490,12 @@ export function ActiveSessionComposerRegion(props: {
     const request =
       item.type === "subagent"
         ? server.api.session.interrupt({ sessionID: item.sessionID })
-        : server.api.shell.remove({
-            id: item.target,
-            location: { directory: data.shell.get(item.target)?.location.directory ?? location().directory },
-          })
+        : item.type === "script"
+          ? props.model.region.state.background.stopScript(item.target)
+          : server.api.shell.remove({
+              id: item.target,
+              location: { directory: data.shell.get(item.target)?.location.directory ?? location().directory },
+            })
 
     return request.then(
       () => true,
@@ -581,6 +587,7 @@ export function ActiveSessionComposerRegion(props: {
             <SessionActivityChips
               subagents={subagents()}
               shells={shells()}
+              scripts={scripts()}
               shell={shell}
               onOpen={(item) => {
                 const current = props.session.identity.params.id

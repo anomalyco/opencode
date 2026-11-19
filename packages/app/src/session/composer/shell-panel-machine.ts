@@ -53,6 +53,7 @@ export type ShellPanelWork = {
   readonly enabled: boolean
   readonly subagents: readonly SessionActivityItem[]
   readonly shells: readonly SessionActivityItem[]
+  readonly scripts?: readonly SessionActivityItem[]
 }
 
 export type ShellPanelEvent =
@@ -187,14 +188,18 @@ export function selectShellPanelView(state: ShellPanelState, work: ShellPanelWor
   const shell = state.status === "shell" ? state : undefined
   // A shell that ended while its panel is open still counts until the menu closes.
   const held = shell && !running(work, shell.item) ? 1 : 0
-  const counts = { subagents: work.subagents.length, shells: work.shells.length + held }
+  const counts = {
+    subagents: work.subagents.length,
+    scripts: work.scripts?.length ?? 0,
+    shells: work.shells.length + held,
+  }
   const phase = shell?.phase.status
   const stoppingKeys = state.status === "disposed" ? NO_STOPS : state.stopping
   const stopping = !!shell && stoppingKeys[shell.item.key] !== undefined
 
   return {
     counts,
-    active: work.enabled && (counts.subagents > 0 || counts.shells > 0),
+    active: work.enabled && (counts.subagents > 0 || counts.scripts > 0 || counts.shells > 0),
     open: state.status === "list" || state.status === "shell",
     enter: state.status !== "disposed" && state.enter,
     shell: shell?.item,
@@ -313,11 +318,13 @@ function running(work: ShellPanelWork, item: SessionActivityItem) {
 function stoppable(work: ShellPanelWork, item: SessionActivityItem) {
   if (item.type === "shell") return running(work, item)
 
+  if (item.type === "script") return !!work.scripts?.some((script) => script.key === item.key)
+
   return work.subagents.some((subagent) => subagent.key === item.key)
 }
 
 function count(work: ShellPanelWork) {
-  return work.subagents.length + work.shells.length
+  return work.subagents.length + (work.scripts?.length ?? 0) + work.shells.length
 }
 
 function changed(state: ShellPanelState, effects: readonly ShellPanelEffect[] = NO_EFFECTS): ShellPanelTransition {

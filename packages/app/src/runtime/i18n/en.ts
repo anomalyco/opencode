@@ -683,6 +683,7 @@ export const dict = {
   "session.timeline.status.working": "Working",
   "session.running.stop.subagent": "Interrupt subagent",
   "session.running.stop.shell": "Kill shell command",
+  "session.running.stop.script": "Cancel script",
 
   "session.files.selectToOpen": "Select a file to open",
 
@@ -692,6 +693,8 @@ export const dict = {
   "session.activity.subagents.other": "{{count}} subagents",
   "session.activity.shells.one": "{{count}} shell",
   "session.activity.shells.other": "{{count}} shells",
+  "session.activity.scripts.one": "{{count}} script",
+  "session.activity.scripts.other": "{{count}} scripts",
   "session.activity.shell.back": "Back to background work",
   "session.activity.shell.stop": "Stop",
   "session.activity.shell.stopping": "Stopping…",
