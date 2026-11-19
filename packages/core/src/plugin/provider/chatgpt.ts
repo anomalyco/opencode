@@ -16,7 +16,7 @@ import { Provider } from "../../provider.js"
 import { SessionAffinity } from "../../session/affinity.js"
 import type { PluginInternal } from "../internal.js"
 import { configuredSettings } from "./configured.js"
-import { activeCredential } from "./credential-settings.js"
+import { storedCredential } from "./credential-settings.js"
 import { ProviderRefresh } from "./refresh.js"
 
 // First-time sign-in registers a user-owned client; OpenAI returns its issued client ID on the callback.
@@ -49,6 +49,10 @@ const fallbackModels = new Set([
   "gpt-6.1-sol-fast",
   "gpt-6.1-terra",
   "gpt-6.1-terra-fast",
+  "gpt-6.2-astra",
+  "gpt-6.2-astra-fast",
+  "gpt-6.2-sol",
+  "gpt-6.2-sol-fast",
 ])
 const nonRetryableSharingCodes = [
   "subscription_sharing_usage_limit_exceeded",
@@ -227,7 +231,7 @@ export const ChatGPTPlugin = define({
 
     const load = Effect.fn("ChatGPTPlugin.load")(function* () {
       // const previous = IntegrationConnection.key(source)
-      const { connection, credential } = yield* activeCredential(ctx, integrationID)
+      const { connection, credential } = yield* storedCredential(ctx, integrationID)
       chatgpt = credential?.type === "oauth" && credential.methodID === methodID ? credential : undefined
       const previous = source
       source = chatgpt ? connection : undefined

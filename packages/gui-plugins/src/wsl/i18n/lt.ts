@@ -53,4 +53,5 @@ export default {
   "error.commandTimeout": "Baigėsi komandai {{command}} {{args}} skirtas {{timeout}} ms laikas",
   "error.failedPort": "Nepavyko gauti prievado",
   "menu.remove": "Pašalinti",
+  "error.busy": "{{distro}} užimtas kita užduotimi. Bandykite dar kartą, kai ji bus baigta.",
 }

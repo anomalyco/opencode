@@ -28,4 +28,5 @@ export default {
   "export.success.description": "сессийг {{filename}}-д хадгалсан",
   "export.failed.title": "Сешн экспорт хийж чадсангүй",
   "export.failed.description": "Сешн экспортлох явцад алдаа гарлаа",
+  "usage.toggle": "Сессийн контекстийг сэлгэх",
 }

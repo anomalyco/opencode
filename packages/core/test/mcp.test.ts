@@ -77,6 +77,7 @@ import { isRecord } from "@opencode/util/record"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { advance, drain } from "./lib/clock"
 import { testEffect } from "./lib/effect"
+import { permissionLayer } from "./lib/permission"
 import { registerIntegrationPolicy, setOrganizationPolicy } from "./fixture/policy"
 import { location } from "./fixture/location"
 import { host } from "./plugin/host"
@@ -619,7 +620,7 @@ const mcp = Layer.mock(Mcp.Service, {
       } satisfies Mcp.ToolResult
     }),
 })
-const permissions = Layer.mock(Permission.Service, {
+const permissions = permissionLayer({
   assert: (input) =>
     Effect.gen(function* () {
       if (!assertion) return yield* Effect.die("Permission test is not initialized")
@@ -1787,7 +1788,8 @@ it.live("discovers and reads MCP resources through Code Mode", () =>
         metadata: { server: "resources", uri: "docs://readme" },
         sessionID,
         agent: toolIdentity.agent,
-        source: { type: "tool", messageID: toolIdentity.messageID, id: "call_resource" },
+        // The call's own ID. The real service shows the request on the execute call's row.
+        source: { type: "tool", messageID: toolIdentity.messageID, id: expect.not.stringMatching(/^call_resource$/) },
       })
 
       server.state.contents = [{ uri: "docs://readme", text: "line\n".repeat(20_000), mimeType: "text/plain" }]
@@ -2683,7 +2685,7 @@ testEffect(Layer.empty).live("preserves plugin transforms through MCP catalog up
       Effect.provide(
         Layer.fresh(
           AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
-            ...toolNodeReplacements(Layer.mock(Permission.Service, { assert: () => Effect.void })),
+            ...toolNodeReplacements(permissionLayer({ assert: () => Effect.void })),
             Mcp.node.replace(
               Layer.mock(Mcp.Service, {
                 awaitStartup: () => Effect.void,
@@ -2734,7 +2736,7 @@ testEffect(Layer.empty).effect("coalesces queued MCP tool notifications after in
   }).pipe(
     Effect.provide(
       AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
-        ...toolNodeReplacements(Layer.mock(Permission.Service, { assert: () => Effect.void })),
+        ...toolNodeReplacements(permissionLayer({ assert: () => Effect.void })),
         Mcp.node.replace(
           Layer.mock(Mcp.Service, {
             awaitStartup: () => Effect.void,
@@ -3069,7 +3071,7 @@ it.effect("waits for permission before calling an MCP tool", () =>
       source: {
         type: "tool",
         messageID: toolIdentity.messageID,
-        id: "call_mcp_permission",
+        id: expect.not.stringMatching(/^call_mcp_permission$/),
       },
     })
     expect(calls).toBe(0)

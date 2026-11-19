@@ -12,4 +12,12 @@ export default {
   noChanges: "无更改",
   "settings.wrapLines.title": "换行",
   "settings.wrapLines.description": "在移动设备差异中换行，而不是水平滚动",
+  "menu.count.one": "{{count}} 个文件已更改",
+  "menu.count.other": "{{count}} 个文件已更改",
+  "folder.more": "{{count}} · 更多未显示",
+  "folder.failed": "无法加载更改",
+  "command.open": "打开审查",
+  "load.failed": "无法加载更改",
+  "load.timeout": "服务器响应超时",
+  offline: "无法访问此服务器",
 }

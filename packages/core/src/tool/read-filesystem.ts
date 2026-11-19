@@ -2,15 +2,12 @@ export * as ReadToolFileSystem from "./read-filesystem.js"
 
 import path from "path"
 import { pathToFileURL } from "url"
-import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { TextBoundary } from "@opencode/util/text-boundary"
-import { Context, Effect, Layer, Schema } from "effect"
-import { lookup } from "mime-types"
+import { Effect, Schema } from "effect"
 import { Environment } from "../environment/index.js"
 import type { Files } from "../environment/index.js"
-import { FileSystem } from "../filesystem.js"
 import { Mime } from "../mime.js"
-import { AbsolutePath, NonNegativeInt, PositiveInt, RelativePath } from "../schema.js"
+import { AbsolutePath, NonNegativeInt, PositiveInt } from "../schema.js"
 
 export const MAX_READ_LINES = 2_000
 export const MAX_READ_BYTES = 50 * 1024
@@ -74,47 +71,39 @@ export const PageInput = Schema.Struct({
 })
 export type PageInput = typeof PageInput.Type
 
-export const FileContent = Schema.Struct({
-  type: Schema.Literal("file"),
-  ...FileSystem.Content.fields,
-}).annotate({ identifier: "ReadTool.FileContent" })
-export type FileContent = typeof FileContent.Type
-
-export class TextPage extends Schema.Class<TextPage>("ReadTool.TextPage")({
-  type: Schema.Literal("text-page"),
+export const TextContent = Schema.Struct({
+  type: Schema.Literal("text"),
   content: Schema.String,
-  lineCount: NonNegativeInt,
-  mime: Schema.String,
   offset: PositiveInt,
-  truncated: Schema.Boolean,
-  next: Schema.optionalKey(PositiveInt),
-}) {}
+  lineCount: NonNegativeInt,
+  next: Schema.optionalKey(PositiveInt).annotate({
+    description: "The line to continue reading from. Absent when the content reaches the end of the file.",
+  }),
+}).annotate({ identifier: "ReadTool.TextContent" })
+export type TextContent = typeof TextContent.Type
 
-export interface ListEntry extends Schema.Schema.Type<typeof ListEntry> {}
-export const ListEntry = Schema.Struct({
-  path: RelativePath,
-  type: Schema.Literals(["file", "directory", "symlink"]),
-}).annotate({ identifier: "ReadTool.ListEntry" })
+export const DirectoryContent = Schema.Struct({
+  type: Schema.Literal("directory"),
+  entries: Schema.Array(Schema.String),
+  next: Schema.optionalKey(PositiveInt).annotate({
+    description: "The entry to continue reading from. Absent when the listing reaches the last entry.",
+  }),
+}).annotate({ identifier: "ReadTool.DirectoryContent" })
+export type DirectoryContent = typeof DirectoryContent.Type
 
-export class ListPage extends Schema.Class<ListPage>("ReadTool.ListPage")({
-  type: Schema.Literal("list-page"),
-  entries: Schema.Array(ListEntry),
-  truncated: Schema.Boolean,
-  next: Schema.optionalKey(PositiveInt),
-}) {}
+export const MediaContent = Schema.Struct({
+  type: Schema.Literal("media"),
+  uri: Schema.String,
+  mime: Schema.String,
+  name: Schema.optionalKey(Schema.String),
+}).annotate({ identifier: "ReadTool.MediaContent" })
+export type MediaContent = typeof MediaContent.Type
 
-export interface Interface {
-  readonly list: (path: AbsolutePath) => ReturnType<Files["list"]>
-  readonly read: (
-    path: AbsolutePath,
-    resource: string,
-    page?: PageInput,
-  ) => Effect.Effect<FileContent | TextPage | ListPage, ReadError>
-}
+export const Output = Schema.Union([TextContent, DirectoryContent, MediaContent])
+export type Output = typeof Output.Type
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/ReadToolFileSystem") {}
-
-const mimeType = (value: string) => lookup(value) || "application/octet-stream"
+// Media bytes travel beside the reference so the tool can attach them without storing them in its output.
+export type Media = MediaContent & { readonly name: string; readonly bytes: Uint8Array }
 
 export const read = Effect.fn("ReadTool.read")(function* (
   files: Files,
@@ -137,7 +126,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
       }),
     ),
   )
-  if (first instanceof ListPage) return first
+  if ("type" in first) return first
 
   const media = Mime.detectMedia(first.bytes)
   if (media && MEDIA_MIMES.has(media)) {
@@ -145,12 +134,11 @@ export const read = Effect.fn("ReadTool.read")(function* (
       return yield* new MediaIngestLimitError({ resource, maximumBytes: MAX_MEDIA_INGEST_BYTES })
     const whole = yield* readFile(files, input, resource)
     return {
-      type: "file" as const,
+      type: "media" as const,
       uri: virtual ? resource : pathToFileURL(input).href,
-      name: virtual ? path.posix.basename(input) : path.basename(input),
-      content: Buffer.from(whole.bytes).toString("base64"),
-      encoding: "base64" as const,
       mime: media,
+      name: virtual ? path.posix.basename(input) : path.basename(input),
+      bytes: whole.bytes,
     }
   }
 
@@ -163,14 +151,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
     if (count <= MAX_READ_LINES) {
       const content = lines.map(clampLine).join("\n")
       if (Buffer.byteLength(content) <= MAX_READ_BYTES)
-        return {
-          type: "file" as const,
-          uri: virtual ? resource : pathToFileURL(input).href,
-          name: virtual ? path.posix.basename(input) : path.basename(input),
-          content,
-          encoding: "utf8" as const,
-          mime: mimeType(input),
-        }
+        return { type: "text" as const, content, offset: 1, lineCount: count }
     }
   }
 
@@ -331,62 +312,32 @@ const textPage = Effect.fnUntraced(function* (
   }
 
   if (firstNul < consumed) return yield* new BinaryFileError({ resource })
-  return new TextPage({
-    type: "text-page",
+  return {
+    type: "text" as const,
     content: entries.join("\n"),
-    lineCount: entries.length,
-    mime: mimeType(input),
     offset: from,
-    truncated: next !== undefined,
+    lineCount: entries.length,
     ...(next === undefined ? {} : { next }),
-  })
+  }
 })
 
-const list = (items: ReadonlyArray<Environment.DirEntry>, page: PageInput, sep = path.sep) => {
+const list = (items: ReadonlyArray<Environment.DirEntry>, page: PageInput, sep = path.sep): DirectoryContent => {
   const offset = page.offset || 1
   const limit = Math.min(page.limit || MAX_READ_LINES, MAX_READ_LINES)
   const visible = items
     .flatMap((item) =>
       item.type === "other"
         ? []
-        : [
-            ListEntry.make({
-              path: RelativePath.make(item.name + (item.type === "directory" ? sep : "")),
-              type: item.type,
-            }),
-          ],
+        : [{ name: item.name + (item.type === "directory" ? sep : ""), directory: item.type === "directory" }],
     )
-    .sort((a, b) =>
-      a.type === "directory"
-        ? b.type === "directory"
-          ? a.path.localeCompare(b.path)
-          : -1
-        : b.type === "directory"
-          ? 1
-          : a.path.localeCompare(b.path),
-    )
+    .sort((a, b) => Number(b.directory) - Number(a.directory) || a.name.localeCompare(b.name))
   const selected = visible.slice(offset - 1, offset - 1 + limit)
-  const truncated = offset - 1 + selected.length < visible.length
-  return new ListPage({
-    type: "list-page",
-    entries: selected,
-    truncated,
-    ...(truncated ? { next: offset + selected.length } : {}),
-  })
+  return {
+    type: "directory",
+    entries: selected.map((entry) => entry.name),
+    ...(offset - 1 + selected.length < visible.length ? { next: offset + selected.length } : {}),
+  }
 }
 
 const clampLine = (line: string) =>
   line.length <= MAX_LINE_LENGTH ? line : TextBoundary.head(line, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX
-
-const layer = Layer.effect(
-  Service,
-  Effect.gen(function* () {
-    const environment = yield* Environment.Service
-    return Service.of({
-      list: environment.files.list,
-      read: (path, resource, page) => read(environment.files, path, resource, page),
-    })
-  }),
-)
-
-export const node = makeLocationNode({ service: Service, layer, deps: [Environment.node] })

@@ -28,4 +28,5 @@ export default {
   "export.success.description": "Vistað lota í {{filename}}",
   "export.failed.title": "Mistókst að flytja út lotu",
   "export.failed.description": "Villa kom upp við útflutning á lotunni",
+  "usage.toggle": "Víxla samhengi setu",
 }

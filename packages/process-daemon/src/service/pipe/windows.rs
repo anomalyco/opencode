@@ -54,14 +54,14 @@ use windows_sys::Win32::System::Threading::{
     WaitForSingleObject,
 };
 
-use super::{DRAIN_AFTER_EXIT, Exit, OutputSink, Waiter, start_pipe};
+use super::{DRAIN_AFTER_EXIT, Exit, OutputSink, exit_message, start_pipe};
 use crate::service::{CreatePipe, ProcessSignal, TerminalHandle, TerminalId};
 use crate::transport::retained::Retained;
 use crate::transport::windows::{event, owned_handle, security::PrivateSecurity, wide};
 
 /// Cancel is first so a pipe that is always readable cannot starve it.
 const CANCEL_READY: u32 = WAIT_OBJECT_0;
-/// The read event, and the process handle after it.
+/// The read event, and the exit event after it.
 const READ_READY: u32 = WAIT_OBJECT_0 + 1;
 const PROCESS_READY: u32 = WAIT_OBJECT_0 + 2;
 
@@ -81,10 +81,11 @@ impl TerminalHandle {
         // clean up; the reader is the file's only writer.
         let sink = open_output(&request.output_path)?;
         let job = Job::new(id);
-        let cancel = CancelOnDrop::new()?;
+        let cancel = SignalOnDrop::new()?;
+        let exited = SignalOnDrop::new()?;
         let process = Arc::new(spawn(id, &request, job, client)?);
         let reader_cancel = Arc::clone(&cancel.0);
-        let reader_process = Arc::clone(&process);
+        let reader_exited = Arc::clone(&exited.0);
         start_pipe(
             id,
             order,
@@ -96,12 +97,12 @@ impl TerminalHandle {
                     server,
                     OutputSink::new(sink, actor),
                     reader_cancel,
-                    reader_process,
+                    reader_exited,
                 )
             },
-            move || Waiter {
-                exit: wait_exit(process),
-                after: Box::new(()),
+            move |actor| {
+                let _ = actor.send(exit_message(wait_exit(&process)));
+                drop(exited);
             },
         )
     }
@@ -117,7 +118,7 @@ pub(in crate::service) struct Process {
 
 #[derive(Debug)]
 struct State {
-    /// Taken by `reap`, which closes both handles.
+    /// Taken by the waiter at exit, or by `reap` if startup failed.
     handles: Option<Handles>,
     /// The signal recorded by `kill`/`signal` before terminating the tree.
     killed: Option<&'static str>,
@@ -126,7 +127,7 @@ struct State {
 #[derive(Debug)]
 struct Handles {
     process: Arc<OwnedHandle>,
-    job: Option<OwnedHandle>,
+    job: Option<Job>,
 }
 
 impl Process {
@@ -138,7 +139,7 @@ impl Process {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    /// The process object, kept open until `reap` so its PID cannot be reused.
+    /// Borrows the process object for the wait without holding the state lock.
     fn process_handle(&self) -> Option<Arc<OwnedHandle>> {
         self.lock()
             .handles
@@ -156,8 +157,6 @@ impl Process {
     }
 
     /// Hard-kills the process tree and records the signal the client will see.
-    /// Allowed after the exit, to reach what is left of the job; refused after
-    /// `reap`.
     pub(in crate::service) fn signal(&self, signal: ProcessSignal) -> Result<()> {
         let name = match signal {
             ProcessSignal::Term => "SIGTERM",
@@ -166,33 +165,27 @@ impl Process {
         };
         let mut state = self.lock();
         let Some(handles) = record_kill(&mut state, name) else {
-            bail!("process has been reaped");
+            return Ok(());
         };
         terminate(handles).context("failed to signal process")
     }
 
-    /// Call only after the waiter has returned: closes the process and job
-    /// handles. Closing the job alone kills anything still in it.
+    /// Releases a partially started command whose waiter never started.
     pub(super) fn reap(&self) {
         self.lock().handles.take();
     }
-
-    fn take_signal(&self) -> Option<&'static str> {
-        self.lock().killed.take()
-    }
 }
 
-/// Records the signal while the process still runs, so a process that exited on
-/// its own keeps its exit code, and returns the handles, or `None` after
-/// `reap`.
+/// A process that exited on its own keeps its exit code and its waiter's
+/// cleanup policy, even if a signal races the waiter.
 fn record_kill<'a>(state: &'a mut State, name: &'static str) -> Option<&'a Handles> {
     let handles = state.handles.as_ref()?;
     // SAFETY: the state lock keeps the process handle open.
-    if !is_signalled(&handles.process) {
-        // Termination is asynchronous: the first signal that reached the
-        // running process is the one the client should see.
-        state.killed.get_or_insert(name);
+    if is_signalled(&handles.process) {
+        return None;
     }
+    // Termination is asynchronous: report the first signal.
+    state.killed.get_or_insert(name);
     Some(handles)
 }
 
@@ -201,7 +194,7 @@ fn terminate(handles: &Handles) -> io::Result<()> {
     // SAFETY: the handles stay open while they are borrowed here.
     let terminated = unsafe {
         match &handles.job {
-            Some(job) => TerminateJobObject(job.as_raw_handle(), 1),
+            Some(job) => TerminateJobObject(job.handle(), 1),
             None => TerminateProcess(handles.process.as_raw_handle(), 1),
         }
     };
@@ -247,7 +240,7 @@ fn spawn(
         state: Mutex::new(State {
             handles: Some(Handles {
                 process: Arc::new(created.process),
-                job: job.map(|job| job.0),
+                job,
             }),
             killed: None,
         }),
@@ -319,7 +312,7 @@ fn create_process(
 
 /// Waits for the child to exit, then reports the exit code, or the signal the
 /// daemon sent when it terminated the tree.
-fn wait_exit(process: Arc<Process>) -> io::Result<Exit> {
+fn wait_exit(process: &Process) -> io::Result<Exit> {
     let Some(handle) = process.process_handle() else {
         return Err(io::Error::other("process has been reaped"));
     };
@@ -327,27 +320,34 @@ fn wait_exit(process: Arc<Process>) -> io::Result<Exit> {
     if unsafe { WaitForSingleObject(handle.as_raw_handle(), INFINITE) } != WAIT_OBJECT_0 {
         return Err(io::Error::last_os_error());
     }
+    let mut state = process.lock();
+    let handles = state.handles.take();
     let mut code = 0;
     // SAFETY: a signalled process object has a final exit code.
     if unsafe { GetExitCodeProcess(handle.as_raw_handle(), &mut code) } == 0 {
         return Err(io::Error::last_os_error());
     }
-    Ok(match process.take_signal() {
+    if let Some(job) = handles.and_then(|handles| handles.job)
+        && let Err(error) = job.finish(code != 0 && state.killed.is_none())
+    {
+        eprintln!("pipe process {}: job cleanup failed: {error}", process.pid);
+    }
+    Ok(match state.killed.take() {
         Some(name) => Exit::Signal(name.to_string()),
         None => Exit::Code(code),
     })
 }
 
-/// Sets the reader's cancel event when dropped.
-struct CancelOnDrop(Arc<OwnedHandle>);
+/// Wakes the reader on shutdown or once the waiter has published the exit.
+struct SignalOnDrop(Arc<OwnedHandle>);
 
-impl CancelOnDrop {
+impl SignalOnDrop {
     fn new() -> io::Result<Self> {
         event().map(|event| Self(Arc::new(event)))
     }
 }
 
-impl Drop for CancelOnDrop {
+impl Drop for SignalOnDrop {
     fn drop(&mut self) {
         // SAFETY: the shared event stays open through the call.
         unsafe {
@@ -477,12 +477,9 @@ fn read_output(
     pipe: OwnedHandle,
     sink: OutputSink,
     cancel: Arc<OwnedHandle>,
-    process: Arc<Process>,
+    exit_event: Arc<OwnedHandle>,
 ) {
     let mut sink = sink;
-    let Some(process_object) = process.process_handle() else {
-        return;
-    };
     let mut read = match Read::new(pipe) {
         Ok(read) => read,
         Err(error) => {
@@ -491,7 +488,7 @@ fn read_output(
         }
     };
     // The process may have exited before the reader started.
-    let mut exited = is_signalled(&process_object);
+    let mut exited = is_signalled(&exit_event);
     let mut deadline = exited.then(|| Instant::now() + DRAIN_AFTER_EXIT);
     loop {
         // Cancellation and the exit win over output, so a descendant that
@@ -500,7 +497,7 @@ fn read_output(
             // Like Unix, shutdown is not an EOF the actor needs to observe.
             return;
         }
-        if !exited && is_signalled(&process_object) {
+        if !exited && is_signalled(&exit_event) {
             exited = true;
             deadline = Some(Instant::now() + DRAIN_AFTER_EXIT);
         }
@@ -524,7 +521,7 @@ fn read_output(
             let handles = [
                 cancel.as_raw_handle(),
                 read.event(),
-                process_object.as_raw_handle(),
+                exit_event.as_raw_handle(),
             ];
             // Once the exit is seen, stop waiting on its signalled handle.
             let count = if exited { 2 } else { 3 };
@@ -654,21 +651,30 @@ fn output_pipe() -> Result<OutputPipe> {
 
 /// A kill-on-close job: terminating it kills every descendant, and a crashed
 /// daemon closes it and kills them too.
+#[derive(Debug)]
 struct Job(OwnedHandle);
 
 impl Job {
     fn new(id: TerminalId) -> Option<Self> {
         // SAFETY: an unnamed job with default attributes, adopted on success.
         let job = match owned_handle(unsafe { CreateJobObjectW(null(), null()) }) {
-            Ok(job) => job,
+            Ok(job) => Self(job),
             Err(error) => {
                 warn_no_job(id, &error);
                 return None;
             }
         };
+        if let Err(error) = job.set_limits(JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE) {
+            warn_no_job(id, &error);
+            return None;
+        }
+        Some(job)
+    }
+
+    fn set_limits(&self, flags: u32) -> io::Result<()> {
         let limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION {
             BasicLimitInformation: JOBOBJECT_BASIC_LIMIT_INFORMATION {
-                LimitFlags: JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+                LimitFlags: flags,
                 ..Default::default()
             },
             ..Default::default()
@@ -677,21 +683,30 @@ impl Job {
         // the extended-information class.
         if unsafe {
             SetInformationJobObject(
-                job.as_raw_handle(),
+                self.handle(),
                 JobObjectExtendedLimitInformation,
                 (&raw const limits).cast(),
                 size_of_val(&limits) as u32,
             )
         } == 0
         {
-            warn_no_job(id, &io::Error::last_os_error());
-            return None;
+            return Err(io::Error::last_os_error());
         }
-        Some(Self(job))
+        Ok(())
     }
 
     fn handle(&self) -> HANDLE {
         self.0.as_raw_handle()
+    }
+
+    fn finish(self, failed: bool) -> io::Result<()> {
+        // No console and no SIGTERM grace. If termination fails, closing the
+        // still-armed job is the fallback. For a successful command disarm
+        // kill-on-close before releasing the handle.
+        if failed && unsafe { TerminateJobObject(self.handle(), 1) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        self.set_limits(0)
     }
 }
 
@@ -1071,10 +1086,10 @@ mod tests {
         assert!(!is_signalled(&process.process_handle().unwrap()));
         process.signal(ProcessSignal::Kill).unwrap();
         assert!(matches!(
-            wait_exit(Arc::clone(&process)).unwrap(),
+            wait_exit(&process).unwrap(),
             Exit::Signal(name) if name == "SIGKILL"
         ));
-        process.reap();
+        assert!(process.process_handle().is_none());
     }
 
     /// A duplicate of `job` with only query access: joining it needs
@@ -1110,7 +1125,7 @@ mod tests {
         let OutputPipe { client, .. } = output_pipe().unwrap();
         let process = Arc::new(spawn(2, &request, Some(restricted), client).unwrap());
         let mut in_job = 0;
-        // SAFETY: the process handle stays open until `reap` and the job is live.
+        // SAFETY: the process and job handles stay open through this call.
         assert_ne!(
             unsafe {
                 IsProcessInJob(
@@ -1122,10 +1137,7 @@ mod tests {
             0
         );
         assert_eq!(in_job, 0, "the restricted job must have been refused");
-        assert!(matches!(
-            wait_exit(Arc::clone(&process)).unwrap(),
-            Exit::Code(5)
-        ));
-        process.reap();
+        assert!(matches!(wait_exit(&process).unwrap(), Exit::Code(5)));
+        assert!(process.process_handle().is_none());
     }
 }

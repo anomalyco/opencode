@@ -6,7 +6,8 @@ import { EffectFlock } from "@opencode/util/effect-flock"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { KeyedMutex } from "../effect/keyed-mutex.js"
 
-const interval = 24 * 60 * 60 * 1_000
+/** How often package plugins are checked for newer versions. */
+export const interval = 24 * 60 * 60 * 1_000
 
 interface Change {
   readonly target: string

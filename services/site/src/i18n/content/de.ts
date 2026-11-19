@@ -239,9 +239,9 @@ export const content = {
       body: "Lass Agents deinen echten Browser nutzen.",
       title: "OpenCode | Browse, dein echter Browser für Coding-Agents",
       description:
-        "Mit Browse nutzen OpenCode und andere MCP-Clients deinen echten Browser. Agents steuern Tabs im Hintergrund mit Playwright und geben Logins und 2FA an dich zurück.",
+        "Mit Browse nutzen OpenCode und andere MCP-Clients deinen echten Browser. Agents lesen, klicken, tippen, machen Screenshots, nehmen Tabs auf und geben Logins und 2FA an dich zurück.",
       intro:
-        "Ein MCP-Server und eine Chromium-Extension, mit denen deine Agents deinen echten Browser nutzen, mit deinen Tabs, Logins und Extensions. Sie öffnen und steuern Tabs mit Playwright, machen Screenshots und Bildschirmaufnahmen, in Hintergrund-Tabs, die gruppiert und dir aus dem Weg sind. Bist du dran, etwa für einen Login, eine 2FA-Abfrage oder eine Zahlung, geben sie dir den Tab zurück und machen weiter, sobald du auf Continue klickst.",
+        "Ein MCP-Server und eine Chromium-Extension, mit denen deine Agents deinen echten Browser nutzen, mit deinen Tabs, Logins und Extensions. Sie öffnen Tabs im Hintergrund, gruppiert und dir aus dem Weg, und lesen Seiten, klicken, tippen, machen Screenshots und nehmen Tabs auf. Bist du dran, etwa für einen Login, eine 2FA-Abfrage oder eine Zahlung, geben sie dir den Tab zurück und machen weiter, sobald du auf Continue klickst.",
       features: {
         "your-real-browser": {
           title: "Dein echter Browser",
@@ -258,7 +258,7 @@ export const content = {
         },
         "record-and-capture": {
           title: "Aufnehmen",
-          body: "Screenshots, Bildschirmaufnahmen und Netzwerkverkehr als HAR.",
+          body: "Screenshots, Tab-Aufnahmen und Netzwerkverkehr.",
         },
         "any-mcp-client": {
           title: "Jeder MCP-Client",
@@ -268,7 +268,7 @@ export const content = {
           title: "Alle deine Logins",
           body: "Agents nutzen die Websites, bei denen du schon angemeldet bist. Keine Keys, kein Setup.",
         },
-        allowlists: { title: "Allowlists", body: "Beschränke die Tabs einer Session auf die Websites, die du nennst." },
+        "allowed-sites": { title: "Erlaubte Sites", body: "Halte den Tab eines Agents auf den Websites, die du nennst." },
       },
       install:
         "Installiere zuerst die [Chrome-Extension]. Sie führt dich durch die restlichen Schritte. Um die CLI direkt zu installieren (das solltest du nicht brauchen), nimm einen dieser Befehle.",

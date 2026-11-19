@@ -1,6 +1,5 @@
 import { Duration, Effect, Schema } from "effect"
 import type { HttpClientResponse } from "effect/http"
-import type { Status } from "../generation.js"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
@@ -100,20 +99,20 @@ const HailuoFile = Schema.Struct({
 })
 
 const STATUS = {
-  queued: "queued",
+  queued: "running",
   running: "running",
   succeeded: "completed",
   failed: "failed",
   cancelled: "cancelled",
-} as const satisfies Record<string, Status>
+} as const satisfies Record<string, MediaProtocol.State>
 
 const HAILUO_STATUS = {
-  Preparing: "queued",
-  Queueing: "queued",
+  Preparing: "running",
+  Queueing: "running",
   Processing: "running",
   Success: "completed",
   Fail: "failed",
-} as const satisfies Record<string, Status>
+} as const satisfies Record<string, MediaProtocol.State>
 
 // ---------------------------------------------------------------------------
 // 3. Failures
@@ -240,7 +239,7 @@ const hailuoFromRequest = Effect.fn("MiniMaxHailuoVideo.fromRequest")(function* 
 
 const decodeStart = route.decodeStarted(StartResponse, (value) => ({
   token: value.task_id,
-  snapshot: { id: value.task_id, status: "queued" },
+  snapshot: { id: value.task_id, status: "running" },
 }))
 
 const decodeTask = route.decodeJson(TaskResponse)
@@ -251,7 +250,7 @@ const decodeStatus = Effect.fn("MiniMaxVideo.decodeStatus")(function* (
 ) {
   const output = yield* decodeTask(response)
   const task = output.value.task ?? output.value
-  return { id: context.token, status: MediaProtocol.status(STATUS, task.status ?? "") }
+  return { id: context.token, ...MediaProtocol.status(STATUS, task.status ?? "") }
 })
 
 const decodeResult = Effect.fn("MiniMaxVideo.decodeResult")(function* (
@@ -260,8 +259,8 @@ const decodeResult = Effect.fn("MiniMaxVideo.decodeResult")(function* (
 ) {
   const output = yield* decodeTask(response)
   const task = output.value.task ?? output.value
-  const status = MediaProtocol.status(STATUS, task.status ?? "")
-  if (status === "queued" || status === "running") return yield* output.pending(context.token)
+  const status = MediaProtocol.state(STATUS, task.status ?? "")
+  if (status === "running") return yield* output.pending(context.token)
   if (status === "failed")
     return yield* failed(output, route.name, task.error?.code ?? undefined, task.error?.message ?? undefined)
   if (status !== "completed")
@@ -299,7 +298,7 @@ const decodeHailuoStart = Effect.fn("MiniMaxHailuoVideo.decodeStart")(function* 
   if (error) return yield* error
   const taskID = output.value.task_id ?? ""
   if (taskID === "") return yield* output.invalid(`${hailuoRoute.name} returned no task_id`)
-  return { token: taskID, snapshot: { id: taskID, status: "queued" as const } }
+  return { token: taskID, snapshot: { id: taskID, status: "running" as const } }
 })
 
 const decodeHailuoTask = hailuoRoute.decodeJson(HailuoTask)
@@ -311,9 +310,9 @@ const decodeHailuoStatus = Effect.fn("MiniMaxHailuoVideo.decodeStatus")(function
   const output = yield* decodeHailuoTask(response)
   const status = MediaProtocol.status(HAILUO_STATUS, output.value.status ?? "")
   // A failed task also carries its reason in `base_resp`; any other non-zero code is a failed read.
-  const error = status === "failed" ? undefined : baseError(output, output.value.base_resp)
+  const error = status.reason === "failed" ? undefined : baseError(output, output.value.base_resp)
   if (error) return yield* error
-  return { id: context.token, status }
+  return { id: context.token, ...status }
 })
 
 const decodeHailuoFile = hailuoRoute.decodeJson(HailuoFile)
@@ -324,7 +323,7 @@ const decodeHailuoResult = Effect.fn("MiniMaxHailuoVideo.decodeResult")(function
 ) {
   const output = yield* decodeHailuoTask(response)
   const task = output.value
-  const status = MediaProtocol.status(HAILUO_STATUS, task.status ?? "")
+  const status = MediaProtocol.state(HAILUO_STATUS, task.status ?? "")
   const error = baseError(output, task.base_resp)
   if (status === "failed") return yield* error ?? failed(output, hailuoRoute.name, undefined, undefined)
   if (error) return yield* error

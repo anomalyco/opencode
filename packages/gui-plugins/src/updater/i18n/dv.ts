@@ -29,4 +29,13 @@ export default {
   "releaseNotes.action.next": "ދެން",
   "releaseNotes.action.hideFuture": "ކުރިއަށް އޮތްތަނުގައި މިކަންކަން ނުދައްކާށެވެ",
   "releaseNotes.media.alt": "ރިލީޒް ޕްރިވިއު",
+  "action.reload": "އަޕްޑޭޓް ކުރުމަށް ރީލޯޑް ކުރާ",
+  "action.reloading": "ރީލޯޑް ކުރަމުން…",
+  "web.ready.title": "އަޕްޑޭޓް ތައްޔާރު",
+  "web.ready.message":
+    "OpenCode ގެ އާ ވަރޝަނެއް ތައްޔާރެވެ. ހުޅުވާފައިވާ ހުރިހާ ވިންޑޯއެއްގައި އެ ބޭނުންކުރުމަށް ރީލޯޑް ކުރާށެވެ.",
+  "web.reload": "ރީލޯޑް",
+  "web.reset.title": "ސަރވަރުން ރީލޯޑް ކުރާ",
+  "web.reset.description": "އެޕްގެ ސޭވްކޮށްފައިވާ ކޮޕީ ސާފުކޮށް ސަރވަރގެ މިހާރުގެ ވަރޝަން ލޯޑް ކުރާ",
+  "web.reset.action": "ސަރވަރުން ރީލޯޑް ކުރާ",
 }

@@ -1,15 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Schema } from "effect"
 import type { HttpClientResponse } from "effect/http"
-import {
-  ai,
-  ImageClient,
-  ImageModel,
-  ImageResponse,
-  Media,
-  type GenerationStatus,
-  type ImageRequest,
-} from "../src/effect.js"
+import { ai, ImageClient, ImageModel, ImageResponse, Media, type ImageRequest } from "../src/effect.js"
 import { Google } from "../src/providers.js"
 import { Auth, MediaProtocol } from "../src/route.js"
 import { it } from "./lib/effect.js"
@@ -23,7 +15,7 @@ const route = MediaProtocol.identity({ id: "test-queued-image", name: "Queued Im
 
 const STATUS = { pending: "running", done: "completed", failed: "failed" } as const satisfies Record<
   string,
-  GenerationStatus
+  MediaProtocol.State
 >
 
 const decodeJob = route.decodeJson(
@@ -38,7 +30,7 @@ const decodeStatus = (response: HttpClientResponse.HttpClientResponse, context: 
   decodeJob(response).pipe(
     Effect.map((output) => ({
       id: context.token,
-      status: MediaProtocol.status(STATUS, output.value.status),
+      ...MediaProtocol.status(STATUS, output.value.status),
       progress: output.value.progress,
     })),
   )
@@ -48,7 +40,7 @@ const decodeResult = Effect.fn("QueuedImage.decodeResult")(function* (
   context: MediaProtocol.PollContext<string>,
 ) {
   const output = yield* decodeJob(response)
-  const status = MediaProtocol.status(STATUS, output.value.status)
+  const status = MediaProtocol.state(STATUS, output.value.status)
   if (status === "running") return yield* output.pending(context.token)
   if (status === "failed") return yield* output.ended("failed", `${route.name} generation failed`)
   if (output.value.url === undefined) return yield* output.invalid(`${route.name} completed without an image URL`)
@@ -64,7 +56,7 @@ const protocol = (cancel: boolean) =>
       body: { from: (request) => Effect.succeed(MediaProtocol.json({ prompt: request.prompt })) },
       decode: route.decodeStarted(Schema.Struct({ id: Schema.String }), (value) => ({
         token: value.id,
-        snapshot: { id: value.id, status: "queued" },
+        snapshot: { id: value.id, status: "running" },
       })),
     },
     status: { path: jobPath, decode: decodeStatus },

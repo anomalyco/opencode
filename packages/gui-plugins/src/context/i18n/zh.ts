@@ -28,4 +28,5 @@ export default {
   "export.success.description": "已将会话保存到 {{filename}}",
   "export.failed.title": "导出会话失败",
   "export.failed.description": "导出会话时发生错误",
+  "usage.toggle": "切换会话上下文",
 }

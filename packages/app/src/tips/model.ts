@@ -1,3 +1,4 @@
+import { createMediaQuery } from "@solid-primitives/media"
 import { showToast, toaster } from "@opencode/ui/toast"
 import { Schema } from "effect"
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
@@ -24,6 +25,7 @@ export function createTipToasts() {
   const servers = useServers()
   const language = useLanguage()
   const platform = usePlatform()
+  const touch = createMediaQuery("(hover: none)")
 
   const server = createMemo(() => {
     const conn = servers.visible.find(servers.current) ?? servers.visible[0]
@@ -33,7 +35,15 @@ export function createTipToasts() {
 
   const location = () => server()?.data.location
   const [awake, setAwake] = createSignal(false)
-  const startup = setTimeout(() => setAwake(true), STARTUP_DELAY)
+  const [hexInstalled, setHexInstalled] = createSignal<boolean>()
+
+  const startup = setTimeout(() => {
+    setAwake(true)
+
+    if (!platform.checkAppExists) return setHexInstalled(false)
+    void platform.checkAppExists("hex").then(setHexInstalled, () => setHexInstalled(false))
+  }, STARTUP_DELAY)
+
   onCleanup(() => clearTimeout(startup))
   createEffect(() => {
     const ctx = server()
@@ -66,6 +76,7 @@ export function createTipToasts() {
       id: "hex",
       title: "tips.hex.title",
       description: "tips.hex.description",
+      when: () => !touch() && hexInstalled() === false,
       action: {
         label: "tips.hex.install",
         // anoma.ly/hex 404s with a query string; the trailing slash is required.

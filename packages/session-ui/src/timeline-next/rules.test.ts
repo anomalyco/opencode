@@ -72,6 +72,15 @@ describe("starting work that runs on follows its own setting", () => {
     expect(contentGroup(preset("everything"), backgroundShell, new Set())).toBe("events")
   })
 
+  test("prompting an existing child produces an update linked to that session", () => {
+    expect(toolEvent(tool("subagent", { sessionID: "child", agent: "explore" }))).toMatchObject({
+      verb: "updated",
+      agent: "explore",
+      sessionID: "child",
+      title: undefined,
+    })
+  })
+
   test("a launch that failed keeps its own row, whatever the setting", () => {
     const failed = errored(
       "shell",
@@ -82,9 +91,9 @@ describe("starting work that runs on follows its own setting", () => {
     expect(contentGroup(preset("compact"), failed, new Set())).toBe("events")
   })
 
-  test("a subagent follows the subagent setting, not the tools or shell one", () => {
-    expect(contentGroup(preset("compact"), tool("subagent"), new Set())).toBe("events")
-    expect(contentGroup(custom({ subagents: { placement: "grouped" } }), tool("subagent"), new Set())).toBe("context")
+  test.each(["subagent", "task"])("%s has its own row in both visible placements", (name) => {
+    expect(contentGroup(preset("compact"), tool(name), new Set())).toBe("subagent")
+    expect(contentGroup(custom({ subagents: { placement: "grouped" } }), tool(name), new Set())).toBe("subagent")
   })
 
   test("a background shell's report follows the shell setting", () => {
