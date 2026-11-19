@@ -48,11 +48,19 @@ export interface Interface {
    * moment the newer one arrives, and its end changes nothing after that.
    */
   readonly connect: (connection: Connection) => Effect.Effect<void>
+  /**
+   * Ends the machine for good: loses its connection and fails every process still tracked with `error`, so nothing
+   * waits on an instance that will not be used again.
+   */
+  readonly close: (error: Error) => void
+  /** The hello of the connection being served, if there is one. */
+  readonly hello: () => Hello | undefined
 }
 
 type Reply = Extract<FromWorker, { type: "fs" }>
 
 interface Link {
+  readonly hello: Hello
   readonly send: Connection["send"]
   readonly lost: Deferred.Deferred<void>
   /** File calls sent on this connection and not yet answered. */
@@ -102,10 +110,21 @@ export const make = (id: Environment.ID): Interface => {
     Queue.failCauseUnsafe(process.output, Cause.fail(platform("output")(error)))
   }
 
+  // Ends the machine for good: once its instance is dropped, nothing else can settle what it still tracks.
+  const close = (error: Error) => {
+    if (link) lose(link)
+    for (const [processID, process] of processes) gone(processID, process, error)
+  }
+
   const connect = (connection: Connection) =>
     Effect.suspend(() => {
       if (link) lose(link)
-      const current: Link = { send: connection.send, lost: Deferred.makeUnsafe(), calls: new Map() }
+      const current: Link = {
+        hello: connection.hello,
+        send: connection.send,
+        lost: Deferred.makeUnsafe(),
+        calls: new Map(),
+      }
       const restarted = connection.hello.instance !== instance
       instance = connection.hello.instance
       const listed = new Map(connection.hello.processes.map((entry) => [entry.id, entry]))
@@ -314,6 +333,8 @@ export const make = (id: Environment.ID): Interface => {
 
   return {
     connect,
+    close,
+    hello: () => link?.hello,
     environment: Environment.make(id, {
       spawner,
       overrides: {
