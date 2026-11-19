@@ -16,7 +16,7 @@ import {
 import { recordable, remember, withIcon } from "./history"
 import type definition from "./index"
 import { workspaceFileURL } from "./link"
-import { BrowserPane, type PaneEvent, type Viewport } from "./ipc"
+import { BrowserPane, type HandoffEvent, type PaneEvent, type Viewport } from "./ipc"
 import {
   addressFocusTab,
   createInitialState,
@@ -53,6 +53,8 @@ type ModelState = {
   machine: State
   /** Presentation details for the tabs in each desktop binding. */
   pages: Record<string, Record<string, PageEvent | undefined> | undefined>
+  /** The handoff waiting in each tab, or its last answer until the banner clears. */
+  handoffs: Record<string, Record<string, HandoffEvent | undefined> | undefined>
 }
 
 /** A mounted pane. Commands target the newest visible pane. */
@@ -73,6 +75,9 @@ type PaneHandle = {
   /** Marks the pane as holding the user's focus, which the page took outside the window's document. */
   focused: () => void
 }
+
+/** How long a finished handoff's banner stays, so the user reads how the sign-in ended. */
+const HANDOFF_BANNER_MS = 6_000
 
 export type Model = ReturnType<typeof createModel>
 
@@ -102,7 +107,13 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
   const owner = getOwner()
   const history = ctx.stores.history
-  const [state, setState] = createStore<ModelState>({ machine: createInitialState(untrack(ipc)), pages: {} })
+
+  const [state, setState] = createStore<ModelState>({
+    machine: createInitialState(untrack(ipc)),
+    pages: {},
+    handoffs: {},
+  })
+
   const machine = () => state.machine
   const [panes, setPanes] = createSignal<readonly PaneHandle[]>([])
   const visiblePane = () => panes().find((handle) => handle.visible())
@@ -111,6 +122,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const registrations = new Map<string, Binding>()
   const registerTimers = new Map<string, ReturnType<typeof setTimeout>>()
   const retryTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  // A finished handoff's banner clears itself once the user has read its outcome.
+  const handoffTimers = new Map<string, ReturnType<typeof setTimeout>>()
   const servers = new Map<string, () => void>()
   const listeners = new Map<string, (event: PaneEvent) => void>()
   const inspectors = new Map<string, Set<(event: InspectEvent) => void>>()
@@ -153,6 +166,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       if (current?.attempt !== effect.attempt) return
       registrations.delete(effect.sessionKey)
       setState("pages", effect.sessionKey, undefined)
+      clearHandoffs(effect.sessionKey)
       current.registration.close()
 
       return
@@ -281,6 +295,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
     if (event.type === "page") return page(sessionKey, event)
 
+    if (event.type === "handoff") return handoffEvent(sessionKey, event)
+
     // Only the pane on screen holds the page that had focus.
     if (sessions.current()?.key !== sessionKey) return
 
@@ -335,6 +351,11 @@ export function createModel(ctx: SetupContext<typeof definition>) {
         Object.keys(state.pages[effect.sessionKey] ?? {}).forEach((id) => {
           if (!keep.has(id)) setState("pages", effect.sessionKey, id, undefined)
         })
+        Object.keys(state.handoffs[effect.sessionKey] ?? {}).forEach((id) => {
+          if (keep.has(id)) return
+          cancel(handoffTimers, `${effect.sessionKey}\n${id}`)
+          setState("handoffs", effect.sessionKey, id, undefined)
+        })
         layout
           .stored(ref)
           .filter((tabID) => !keep.has(tabID))
@@ -378,6 +399,24 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     if (visits) history.set({ visits })
   }
 
+  // A handoff's answer stays briefly so the banner can say how the sign-in ended, then clears itself.
+  const handoffEvent = (sessionKey: string, event: HandoffEvent) => {
+    const tabKey = `${sessionKey}\n${event.tabID}`
+
+    if (event.state === "pending" || event.state === "opened") cancel(handoffTimers, tabKey)
+    else
+      schedule(handoffTimers, tabKey, HANDOFF_BANNER_MS, () => setState("handoffs", sessionKey, event.tabID, undefined))
+    setState("handoffs", sessionKey, { [event.tabID]: event })
+  }
+
+  // Ends a session's banners; the pane cancels their handoffs when the binding or the session goes away.
+  const clearHandoffs = (sessionKey: string) => {
+    Array.from(handoffTimers.keys())
+      .filter((item) => item.startsWith(`${sessionKey}\n`))
+      .forEach((item) => cancel(handoffTimers, item))
+    setState("handoffs", sessionKey, undefined)
+  }
+
   const detach = (sessionKey: string) => {
     const drive = drives.get(sessionKey)
     drives.delete(sessionKey)
@@ -386,6 +425,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       .filter((item) => item.startsWith(`${sessionKey}\n`))
       .forEach((item) => recorded.delete(item))
     setState("pages", sessionKey, undefined)
+    clearHandoffs(sessionKey)
   }
 
   // A server whose plugin lacked the browser RPC may have it once its plugins finish loading, its event stream
@@ -618,6 +658,18 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     },
     /** The page's presentation details, once reported by its native tab. */
     page: (session: Session, tabID: string) => state.pages[session.key]?.[tabID],
+    /** The handoff waiting in this tab, or its outcome until its banner clears. */
+    handoffFor: (session: Session, tabID: string) => state.handoffs[session.key]?.[tabID],
+    /** The user's Open, Done, or Cancel for the handoff waiting in this tab; one the desktop no longer knows ends here. */
+    handoff(session: Session, tabID: string, id: string, action: "open" | "done" | "cancel") {
+      const answer = registration(session)?.handoff(id, action)
+
+      if (answer)
+        void answer.catch(() => {
+          // The pane finished this handoff while its outcome event never reached the window; the banner cannot answer.
+          if (state.handoffs[session.key]?.[tabID]?.id === id) setState("handoffs", session.key, tabID, undefined)
+        })
+    },
     zoom(session: Session, tabID: Browser.TabID, zoom: Zoom) {
       registration(session)?.zoom(tabID, zoom)
     },

@@ -11,6 +11,8 @@ export const PERMISSION_SYNC_TIMEOUT_MS = 10_000
 
 /** How long a dispatched browser command may run before it times out and is cancelled on the desktop. */
 export const REQUEST_TIMEOUT_MS = 60_000
+/** A handoff waits for a person to finish signing in in the system browser, not for a browser command. */
+export const HANDOFF_TIMEOUT_MS = 12 * 60_000
 
 /** The browser tools and their skill, which an attachment allows together. */
 export const ACCESS = [
@@ -669,6 +671,11 @@ function dispatchFailed(action: Browser.Method, error: unknown) {
 }
 
 function timedOut(action: Browser.Method) {
+  if (action === "handoff")
+    return new Tool.Error({
+      message: `[browser.timeout] browser.handoff waited ${HANDOFF_TIMEOUT_MS / 1000} seconds for the user to open or finish the sign-in in the system browser. The browser may still be open; the pane did not receive its session and no credential material crossed. Do not retry until the user says what happened.`,
+    })
+
   return new Tool.Error({
     message: `[browser.timeout] browser.${action} did not finish within ${REQUEST_TIMEOUT_MS / 1000} seconds; its outcome is unknown. Check the desktop connection, call browser.tabs.list({}), and inspect the tab or browser.files.list({tabID}) for completed work. Do not blindly repeat a mutating action or start another recording.`,
   })

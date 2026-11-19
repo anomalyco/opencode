@@ -47,6 +47,16 @@ export type PaneElement = typeof PaneElement.Type
 export const PaneEvent = Schema.Union([
   Schema.Struct({ type: Schema.Literal("focus"), tabID: Browser.TabID }),
   Schema.Struct({ type: Schema.Literal("preview"), path: text(2_048) }),
+  // The pane asks the user before opening the system browser, then waits for their answer; it never receives that
+  // session. The URL appears only while asking: it names the page the user's browser would open.
+  Schema.Struct({
+    type: Schema.Literal("handoff"),
+    tabID: Browser.TabID,
+    id: text(128),
+    host: detail(2_048),
+    url: Schema.optionalKey(detail(2_048)),
+    state: Schema.Literals(["pending", "opened", "completed", "cancelled", "timedOut", "failed"]),
+  }),
   Schema.Struct({
     type: Schema.Literal("state"),
     state: Schema.NullOr(Browser.State),
@@ -85,6 +95,9 @@ export const PaneEvent = Schema.Union([
 ])
 
 export type PaneEvent = typeof PaneEvent.Type
+
+/** A sign-in handoff's state in a tab, as the pane reports it; the pane never receives the external session. */
+export type HandoffEvent = Extract<PaneEvent, { type: "handoff" }>
 
 /**
  * The `error` of the last `state` event of a binding that main closed. Other errors on a `state` event, such as
@@ -127,6 +140,10 @@ export const BrowserPane = Ipc.define({
     // Creates the page of a restored tab the first time the pane shows it.
     load: { input: Schema.Struct({ binding, tabID: Browser.TabID }) },
     command: { input: Schema.Struct({ binding, command: Browser.Action }) },
+    // The user opened, finished, or abandoned a handoff in this window; only their click opens the system browser.
+    handoff: {
+      input: Schema.Struct({ binding, id: text(128), action: Schema.Literals(["open", "done", "cancel"]) }),
+    },
     // Starts or stops the page's element picker; the page reports picks and exits as inspect events.
     inspect: { input: Schema.Struct({ binding, tabID: Browser.TabID, enabled: Schema.Boolean }) },
     // Highlights a picked element briefly, or clears any highlight when ref is omitted.

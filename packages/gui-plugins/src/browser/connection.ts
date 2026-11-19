@@ -17,6 +17,7 @@ export type Registration = {
   /** Creates a restored tab's page, which then reports its embed. */
   load(tabID: Browser.TabID): void
   command(command: Browser.Action): Promise<void>
+  handoff(id: string, action: "open" | "done" | "cancel"): Promise<void>
   inspect(tabID: Browser.TabID, enabled: boolean): void
   highlight(tabID: Browser.TabID, ref?: Browser.Ref): void
   zoom(tabID: Browser.TabID, zoom: Zoom): void
@@ -62,6 +63,7 @@ export function openBinding(input: {
       void ready.then(() => client.load({ binding, tabID })).catch(() => undefined)
     },
     command: (command) => ready.then(() => client.command({ binding, command })),
+    handoff: (id, action) => ready.then(() => client.handoff({ binding, id, action })),
     inspect(tabID, enabled) {
       if (status.closed) return
       void ready.then(() => client.inspect({ binding, tabID, enabled })).catch(() => undefined)

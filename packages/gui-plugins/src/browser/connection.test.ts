@@ -38,6 +38,7 @@ function fixture(reject?: Error) {
   const registered: Parameters<Client["register"]>[0][] = []
   const closed: string[] = []
   const highlights: Parameters<Client["highlight"]>[0][] = []
+  const handoffs: Parameters<Client["handoff"]>[0][] = []
   const outcomes: string[] = []
   const events: PaneEvent[] = []
 
@@ -49,6 +50,9 @@ function fixture(reject?: Error) {
     },
     load: async () => undefined,
     command: async () => undefined,
+    handoff: async (input) => {
+      handoffs.push(input)
+    },
     inspect: async () => undefined,
     highlight: async (input) => {
       highlights.push(input)
@@ -80,7 +84,7 @@ function fixture(reject?: Error) {
   const binding = registered[0].binding
   const emit = (event: PaneEvent) => listeners.get(binding)?.(event)
 
-  return { registration, binding, emit, listeners, closed, highlights, outcomes, events }
+  return { registration, binding, emit, listeners, closed, highlights, handoffs, outcomes, events }
 }
 
 test("highlights of picked elements reach the page", async () => {
@@ -91,6 +95,19 @@ test("highlights of picked elements reach the page", async () => {
   expect(app.highlights).toEqual([
     { binding: app.binding, tabID, ref: element },
     { binding: app.binding, tabID },
+  ])
+})
+
+test("the user's handoff answers reach main with the id and the choice", async () => {
+  const app = fixture()
+  app.registration.handoff("handoff-1", "open")
+  app.registration.handoff("handoff-1", "done")
+  app.registration.handoff("handoff-1", "cancel")
+  await Bun.sleep(0)
+  expect(app.handoffs).toEqual([
+    { binding: app.binding, id: "handoff-1", action: "open" },
+    { binding: app.binding, id: "handoff-1", action: "done" },
+    { binding: app.binding, id: "handoff-1", action: "cancel" },
   ])
 })
 

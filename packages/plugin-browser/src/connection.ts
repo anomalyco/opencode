@@ -239,7 +239,9 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
           restore(
             Deferred.await(result).pipe(
               Effect.timeoutOrElse({
-                duration: Duration.millis(BrowserMachine.REQUEST_TIMEOUT_MS),
+                duration: Duration.millis(
+                  action.type === "handoff" ? BrowserMachine.HANDOFF_TIMEOUT_MS : BrowserMachine.REQUEST_TIMEOUT_MS,
+                ),
                 orElse: () =>
                   dispatch({ type: "request.timed-out", ...target }).pipe(Effect.andThen(Deferred.await(result))),
               }),

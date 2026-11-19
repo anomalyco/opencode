@@ -48,6 +48,7 @@ import {
 } from "./address-machine"
 import { commentNote, pageNote } from "./comment"
 import { bare, highlight, type Visit } from "./history"
+import type { HandoffEvent } from "./ipc"
 import type { Model } from "./model"
 import {
   capturesEscape,
@@ -106,6 +107,18 @@ export default function SessionBrowserPane(props: {
 
     return tab ? props.model.page(props.session, tab.id) : undefined
   }
+
+  const handoff = () => {
+    const tab = state()
+
+    return tab ? props.model.handoffFor(props.session, tab.id) : undefined
+  }
+
+  const answerHandoff = (current: HandoffEvent, action: "open" | "done" | "cancel") =>
+    props.model.handoff(props.session, current.tabID, current.id, action)
+
+  // Every state names its copy by key: pending and opened interpolate the host, the endings do not.
+  const handoffTitle = (current: HandoffEvent) => plugin.t(`handoff.${current.state}.title`, { host: current.host })
 
   const [addressState, setAddressState] = createSignal(initialAddressState)
   const [available, setAvailable] = createSignal({ width: 0, height: 0 })
@@ -932,6 +945,43 @@ export default function SessionBrowserPane(props: {
         >
           {error()}
         </div>
+      </Show>
+      {/* The pane asks before it opens the user's browser; the session it creates never enters this app. */}
+      <Show when={handoff()} keyed>
+        {(current) => (
+          <div
+            class="shrink-0 flex items-center gap-3 border-b border-v2-border-border-muted px-3 py-2"
+            data-component="browser-handoff"
+            data-state={current.state}
+            role="status"
+          >
+            <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span class="truncate text-12-medium text-v2-text-text-base">{handoffTitle(current)}</span>
+              <Show when={current.state === "pending" || current.state === "opened"}>
+                <span class="text-12-regular text-v2-text-text-muted">
+                  {plugin.t(current.state === "pending" ? "handoff.pending.description" : "handoff.opened.description")}
+                </span>
+              </Show>
+              <Show when={current.state === "pending" && current.url}>
+                <span class="truncate text-12-regular text-v2-text-text-subtle">{current.url}</span>
+              </Show>
+            </div>
+            <Show when={current.state === "pending" || current.state === "opened"}>
+              <div class="flex shrink-0 items-center gap-2">
+                <Button size="small" variant="ghost-muted" onClick={() => answerHandoff(current, "cancel")}>
+                  {plugin.t("handoff.cancel")}
+                </Button>
+                <Button
+                  size="small"
+                  variant="outline"
+                  onClick={() => answerHandoff(current, current.state === "pending" ? "open" : "done")}
+                >
+                  {plugin.t(current.state === "pending" ? "handoff.open" : "handoff.done")}
+                </Button>
+              </div>
+            </Show>
+          </div>
+        )}
       </Show>
       <Show when={toolbarVisible()}>
         <section id={viewportID} data-component="browser-viewport" aria-label={plugin.t("viewport.label")}>

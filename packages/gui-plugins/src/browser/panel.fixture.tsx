@@ -125,6 +125,7 @@ type StoryHost = Pick<PaneHost, "useLanguage"> & {
     reconnect: () => void
     external: string | undefined
     comments: readonly ComposerNote[]
+    handoff: () => void
   }>
 }
 
@@ -415,6 +416,25 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
     const embed = (tab: (typeof tabs)[number]) =>
       emit(tab.owner, { type: "embed", tabID: tab.id, embed: `embed-${tab.title}` })
 
+    // The agent's browser.handoff tool: the banner asks the user before anything opens in the system browser.
+    let handoffs = 0
+
+    // The desktop reports the handoff's next state for each answer the banner offers.
+    const handoffAnswers = { open: "opened", done: "completed", cancel: "cancelled" } as const
+
+    const startHandoff = (key = store.session) => {
+      const tab = current(key)
+
+      emit(key, {
+        type: "handoff",
+        tabID: tab.id,
+        id: `handoff-${++handoffs}`,
+        host: new URL(tab.url).host,
+        url: tab.url,
+        state: "pending",
+      })
+    }
+
     // Address rejection counters and cleanup run through the real model over this main-process Ipc boundary.
     const pane: PaneClient = {
       register: async (value) => {
@@ -471,6 +491,22 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
 
         if (command.type === "stop") setStore("loading", false)
         report()
+      },
+      // The pane answers the banner: the desktop settles the waiting handoff and reports how it ended.
+      handoff: async (value) => {
+        const key = Array.from(bindings).find((item) => item[1] === value.binding)?.[0]
+
+        if (!key) throw new Error("Unknown handoff binding")
+        const tab = current(key)
+
+        emit(key, {
+          type: "handoff",
+          tabID: tab.id,
+          id: value.id,
+          host: new URL(tab.url).host,
+          url: value.action === "open" ? tab.url : undefined,
+          state: handoffAnswers[value.action],
+        })
       },
       // The desktop confirms each picker change, as the page does once inspect mode is armed.
       inspect: async (value) => {
@@ -604,6 +640,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
               reconnect={() => model.command({ key: store.session }, { type: "reload", tabID: current().id })}
               comments={store.comments}
               external={store.external.at(-1)}
+              handoff={startHandoff}
             >
               <SessionBrowserPane tab={current} session={session()} screen={screen} model={model} />
             </input.Frame>
@@ -628,6 +665,12 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
             }}
           >
             Switch browser tab
+          </button>
+          <button
+            style={{ position: "absolute", top: "24px", "inset-inline-end": "180px" }}
+            onClick={() => startHandoff()}
+          >
+            Start handoff
           </button>
           <nav style={{ display: "flex", "flex-wrap": "wrap", gap: "12px", margin: "16px 0" }}>
             <For each={["Alpha", "Beta", "Empty"]}>
@@ -1136,6 +1179,7 @@ export function mountBrowserRegion(input: RegionHost) {
           listener({ binding: value.binding, event: { type: "state", state: { tabs: [], focusedTabID: null } } }),
         )
       },
+      handoff: async () => undefined,
       inspect: async (value) => {
         setStore("inspects", (items) => [...items, { tabID: value.tabID, enabled: value.enabled }])
         listeners.forEach((listener) =>

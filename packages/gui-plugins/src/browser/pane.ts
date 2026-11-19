@@ -9,6 +9,7 @@ import type { BuiltinMainStorage } from "@opencode/plugin/gui/builtin"
 import type { Embeds, Persisted, ServerEndpoints, Windows } from "@opencode/plugin/gui/main"
 import { createBrowserPage, type BrowserPage, type Shared } from "./chromium"
 import { browserFailure } from "./errors"
+import { createHandoffs } from "./handoff"
 import { createBrowserNetwork, type BrowserNetwork } from "./network"
 import { destinationOrigin, fileURLWithin, refusal } from "./policy"
 import { createRefs } from "./refs"
@@ -82,6 +83,8 @@ export function createBrowserPane(input: {
   const disposals = new WeakMap<BrowserPage, Promise<void>>()
   // Keep long-lived RPC requests off Chromium's shared HTTP connection pool.
   const runtime = ManagedRuntime.make(NodeHttpClient.layerNodeHttp)
+  // Handoffs wait for a person, not for Chromium, and outlive any one page attempt.
+  const handoffs = createHandoffs({ openExternal: (url) => electron.shell.openExternal(url) })
 
   return {
     async register(window: number, binding: string, target: Target) {
@@ -355,13 +358,21 @@ export function createBrowserPane(input: {
     },
     async close(window: number, binding: string) {
       owned(window, binding)
+      handoffs.cancelBinding(binding)
       dispatchBinding(binding, { type: "client.closed" })
+    },
+    /** The user opened, finished, or abandoned a handoff shown in this window; only their Open launches the browser. */
+    handoff(window: number, binding: string, id: string, action: "open" | "done" | "cancel") {
+      owned(window, binding)
+
+      if (!handoffs.settle(binding, id, action)) throw new Error("browser.pane.handoff.unknown")
     },
     /**
      * The plugin is going away (reload, disable, or quit). Windows keep each pane's tabs as a
      * suspended attachment, like an idle server eviction, and register again once the pane is back.
      */
     async dispose() {
+      handoffs.cancelAll()
       dispatch({ type: "disposed" })
       await Promise.all(releasing)
       await runtime.dispose()
@@ -419,6 +430,7 @@ export function createBrowserPane(input: {
         if (page) release(page)
       })
     handles.delete(effect.binding)
+    handoffs.cancelBinding(effect.binding)
     clearTimeout(handle.timer)
     handle.registered.reject(new Error("browser.pane.registration.closed"))
     handle.cleanup()
@@ -617,6 +629,7 @@ export function createBrowserPane(input: {
     }
 
     if (action.type === "tabs.close") {
+      handoffs.cancelTab(binding, action.tabID)
       const closing = page(binding, action.tabID)
       dispatchBinding(binding, { type: "tab.closed", tabID: action.tabID })
 
@@ -624,6 +637,18 @@ export function createBrowserPane(input: {
 
       return { value: inventory(binding), files: [] }
     }
+
+    if (action.type === "handoff")
+      return {
+        value: await handoffs.begin({
+          binding,
+          tabID: action.tabID,
+          url: slot.tab.url,
+          signal,
+          emit: (event) => emit(binding, event),
+        }),
+        files: [],
+      }
 
     const target = load(binding, action.tabID)
 

@@ -21,6 +21,7 @@ Screenshots require a focused, visible tab; call `browser.tabs.focus` first.
 - Navigation: `navigate`, `back`, `forward`, `reload`, `stop`, `frames`.
 - Observation: `snapshot`, `find`, `evaluate`, `wait`, `screenshot`.
 - Input: `click`, `hover`, `drag`, `fill`, `fill_form`, `select`, `check`, `press`, `scroll`, `dialog`.
+- Sign-in: `handoff` moves a passkey, security-key, or SSO step to the user's system browser.
 - Files: `files.upload`, `files.drop`, `files.list`, `files.get`.
 - Diagnostics: `console`, `network.list`, `network.get`.
 - Performance: `trace.start`, `trace.stop`, `trace.analyze`, `cpu.start`, `cpu.stop`, `cpu.analyze`.
@@ -31,15 +32,37 @@ The source of truth for inputs, descriptions, and outputs is
 `Browser.Operations` in `@opencode/plugin-browser/rpc`.
 
 The built-in `browser` skill (`skill.ts`) teaches the workflow: explicit tab
-IDs, snapshots and refs, showing results to the user, recipes for debugging,
-performance and memory, and recovery after failures. It lists every operation
-from `Browser.Operations`. Like the tools, it is hidden until a desktop browser
-attaches to the session.
+IDs, snapshots and refs, showing results to the user, sign-in handoffs, recipes
+for debugging, performance and memory, and recovery after failures. It lists
+every operation from `Browser.Operations`. Like the tools, it is hidden until a
+desktop browser attaches to the session.
 
 The plugin entrypoint only composes its two owners: `connection.ts` manages
 desktop attachments and pending RPC requests; `tools.ts` runs the tool workflow.
 Server-local file IO stays in `files.ts`. The public `rpc.ts` entrypoint remains
 pure and does not load any of these runtime modules.
+
+## Sign-in and passkeys
+
+The in-app browser has no platform authenticator, so a login step that needs a
+passkey, security key, WebAuthn device, or an SSO flow that ends in one cannot
+complete inside the Review pane. Password forms the user types into the pane
+work as usual. The full finding is recorded in [docs/passkeys.md](docs/passkeys.md).
+
+`browser.handoff({ tabID })` asks the user to move the tab's current page to
+their default browser. Nothing opens on the agent's word alone: the pane shows a
+banner with the page's URL and an **Open** button, and the desktop launches the
+browser only when the user clicks it. The banner then waits for **Done** or
+**Cancel** (ten minutes; the server's backstop is twelve) and the tool resolves
+`{ state, host }` — a terminal `completed`, `cancelled`, or `timedOut` plus the
+site's host — and nothing else.
+
+The pane does **not** inherit that session. No cookie or credential crosses the
+boundary in either direction, the tab stays signed out, and work that needs the
+sign-in stays with the user in the system browser. The URL is used once to open
+the browser and never returns in results, events, or errors; only HTTP/HTTPS
+pages without embedded credentials can move, under the same address policy the
+pane already enforces (`packages/gui-plugins/src/browser/policy.ts`).
 
 ## Tests
 

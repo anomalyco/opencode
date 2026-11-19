@@ -190,6 +190,15 @@ export const Operations = [
     Schema.Struct({ path: short }),
   ),
   operation(
+    "handoff",
+    "Move this tab's sign-in to the user's system browser when a login needs a passkey, security key, WebAuthn authenticator, or single sign-on (SSO) the in-app browser cannot service. Nothing opens until the user chooses Open in the Review pane; the tool then waits for their Done or Cancel, up to ten minutes. It resolves { state, host } - completed, cancelled, or timedOut - and the pane stays signed out: that session, its cookies, and its credentials never enter OpenCode, and work that needs the sign-in stays with the user in the system browser. Never ask the user to paste, read, or repeat credentials, cookies, or one-time codes.",
+    tab,
+    Schema.Struct({
+      state: Schema.Literals(["completed", "cancelled", "timedOut"]),
+      host: short.annotate({ description: "The site whose sign-in moved to the system browser." }),
+    }),
+  ),
+  operation(
     "navigate",
     "Navigate this tab to HTTP/HTTPS or about:blank; wait for the document load. Element refs expire.",
     { ...tab, url: short },
