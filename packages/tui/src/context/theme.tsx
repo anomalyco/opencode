@@ -9,7 +9,6 @@ import {
 } from "@opencode/theme/tui"
 import {
   allThemes,
-  getOpenCode2Theme,
   hasTheme,
   parseTheme,
   setCustomThemes,
@@ -292,16 +291,16 @@ const themeContext = createSimpleContext({
       themeRefreshTimeouts.length = 0
     })
 
-    const available = createMemo(
-      (): Record<string, ThemeDocumentSource> =>
-        newDesigns() ? { opencode2: getOpenCode2Theme(), ...themeSources() } : themeSources(),
-    )
-    const has = (name: string) => Boolean(name) && available()[name] !== undefined
+    const available = themeSources
+    // "opencode2" was the new theme's name before it became "opencode".
+    const alias = (name: string) => (name === "opencode2" && !available().opencode2 ? "opencode" : name)
+    const has = (name: string) => Boolean(name) && available()[alias(name)] !== undefined
 
     const initStarted = performance.now()
     const selected = createMemo(() => {
       const sources = available()
-      const name = sources[store.active] ? store.active : "opencode"
+      const active = alias(store.active)
+      const name = sources[active] ? active : "opencode"
       try {
         return loadTheme(sources[name], name, store.mode, newDesigns())
       } catch (error) {
@@ -326,7 +325,7 @@ const themeContext = createSimpleContext({
       currentTokens: tokens,
       currentSyntax,
       get selected() {
-        return store.active
+        return alias(store.active)
       },
       all: available,
       has,
@@ -341,8 +340,9 @@ const themeContext = createSimpleContext({
         pin(requested, persist)
         return true
       },
-      set(theme: string) {
-        if (!has(theme)) return false
+      set(requested: string) {
+        if (!has(requested)) return false
+        const theme = alias(requested)
         setStore("active", theme)
         if (theme === "system") refreshPalette()
         void configState

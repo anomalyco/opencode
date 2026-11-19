@@ -30,6 +30,8 @@ export interface DialogSelectProps<T> {
   description?: string
   /** Blank rows above the footer under the "new-designs" experiment. Defaults to 1. */
   footerGap?: number
+  /** Fill the parent's height, keeping the footer at the bottom. */
+  grow?: boolean
   placeholder?: string
   footer?: JSX.Element
   emptyView?: JSX.Element
@@ -678,6 +680,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   return (
     <DialogLayout
       footerGap={props.footerGap}
+      grow={props.grow}
       header={
         // Rows reserve a gutter, so the header and footer line up with the list's inset rather than the layout's.
         <box paddingLeft={DIALOG_LIST_INSET - DIALOG_INSET} paddingRight={DIALOG_LIST_INSET - DIALOG_INSET}>
@@ -701,16 +704,21 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           </Show>
         </box>
       }
-      footer={{
-        inset: DIALOG_LIST_INSET - DIALOG_INSET,
-        actions: {
-          secondary: footerGroup((item) => item.group === "secondary"),
-          primary: footerGroup((item) => item.group === "primary"),
-        },
-        get children() {
-          return props.footer
-        },
-      }}
+      // Without actions or content there is no footer, so the list ends one blank row above the dialog edge.
+      footer={
+        props.footer || visibleActions().length > 0
+          ? {
+              inset: DIALOG_LIST_INSET - DIALOG_INSET,
+              actions: {
+                secondary: footerGroup((item) => item.group === "secondary"),
+                primary: footerGroup((item) => item.group === "primary"),
+              },
+              get children() {
+                return props.footer
+              },
+            }
+          : undefined
+      }
       legacyFooter={
         <Show when={props.footer || visibleActions().length} fallback={<box flexShrink={0} />}>
           <DialogFooter

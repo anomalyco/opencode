@@ -28,6 +28,76 @@ async function openHome(page: Page, input: Parameters<typeof mockStressTimeline>
   await page.goto("/")
 }
 
+test("Home projects, utility rows, search and recent sessions show keyboard focus", async ({ page }) => {
+  const workspace = await mockWorkspace(page, { name: "HomeFocus" })
+
+  await seed(page, { usedProjects: { local: [workspace.projectID] } })
+  await page.goto("/")
+
+  const projects = page.getByRole("complementary", { name: "Projects" })
+
+  const viewport = page.getByRole("main").getByRole("region", { name: "scrollable content", exact: true })
+
+  const projectButton = projects.getByRole("button", { name: /HomeFocus/ })
+
+  const settings = projects.getByRole("button", { name: "Settings", exact: true })
+
+  const help = projects.getByRole("button", { name: "Help", exact: true })
+
+  await expect(projectButton).toBeVisible()
+  await expect(viewport).toHaveAttribute("tabindex", "-1")
+  await projects.getByRole("button", { name: "Add project", exact: true }).press("Tab")
+  await expect(projectButton).toBeFocused()
+  await expect
+    .poll(() =>
+      projectButton.evaluate((button) => {
+        const row = button.closest("[data-home-row]")
+
+        return row && getComputedStyle(row, "::after").outlineStyle
+      }),
+    )
+    .toBe("solid")
+
+  // The two project row actions come before the utility buttons.
+  await page.keyboard.press("Tab")
+  await page.keyboard.press("Tab")
+  await page.keyboard.press("Tab")
+  await expect(settings).toBeFocused()
+  await expect(settings).toHaveCSS("outline-style", "solid")
+  await page.keyboard.press("Tab")
+  await expect(help).toBeFocused()
+  await expect(help).toHaveCSS("outline-style", "solid")
+
+  const search = page.getByRole("textbox", { name: "Search sessions", exact: true })
+
+  const field = page.locator('[data-slot="home-session-search-field"]')
+
+  await page.keyboard.press("Tab")
+  await expect(search).toBeFocused()
+  await expect(field).toHaveCSS("outline-style", "solid")
+  await search.click()
+  await expect(search).toBeFocused()
+  await expect(field).toHaveCSS("outline-style", "none")
+
+  const recent = page.getByRole("region", { name: "Recent sessions" })
+
+  const sessionRow = row(page, "HomeFocus")
+
+  await sessionRow.hover()
+  await expect(sessionRow).toHaveCSS("outline-style", "none")
+  await recent.getByRole("button", { name: "New session", exact: true }).press("Tab")
+  await expect(sessionRow).toBeFocused()
+  await expect(sessionRow).toHaveCSS("outline-style", "solid")
+  await expect(sessionRow).toHaveCSS("outline-offset", "-2px")
+
+  await page.setViewportSize({ width: 1280, height: 200 })
+  await expect(viewport).toHaveAttribute("tabindex", "0")
+  await viewport.press("Shift+Tab")
+  await page.keyboard.press("Tab")
+  await expect(viewport).toBeFocused()
+  await expect(viewport).toHaveCSS("outline-offset", "-2px")
+})
+
 test("Home keeps the session list in every interface mode", async ({ page }) => {
   const earlier = { id: "ses_home_earlier", title: "Finished earlier" }
   await mockWorkspace(page, { name: "Home", sessions: [earlier] })
@@ -229,6 +299,17 @@ test("tabbing out of session search closes its results, and tabbing back reopens
   await page.keyboard.press("Shift+Tab")
   await page.keyboard.press("Shift+Tab")
   await expect(search).toBeFocused()
+  await expect(panel.getByRole("option")).toContainText(earlier.title)
+
+  // The results are active descendants, not independent Tab stops before the search input.
+  await search.press("Shift+Tab")
+  await expect(panel).toHaveCount(0)
+
+  const modifier = await page.evaluate(() => (/Mac/i.test(navigator.platform) ? "Meta" : "Control"))
+
+  await page.keyboard.press(`${modifier}+f`)
+  await expect(search).toBeFocused()
+  await expect(page.locator('[data-slot="home-session-search-field"]')).toHaveCSS("outline-style", "solid")
   await expect(panel.getByRole("option")).toContainText(earlier.title)
 })
 

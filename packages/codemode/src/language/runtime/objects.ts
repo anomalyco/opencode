@@ -152,6 +152,12 @@ export class Obj {
 
   /** How `console.log` shows the value; `item` formats a child with cycle and depth tracking. */
   inspect(item: (value: Value) => string): string {
+    const shown = this.inspectBody(item)
+    const name = instanceClassName(this)
+    return name === undefined ? shown : `${name} ${shown}`
+  }
+
+  private inspectBody(item: (value: Value) => string): string {
     if (!this.hasProgramAccessors) {
       return `{${entries(this)
         .map(([key, value]) => `${JSON.stringify(key)}:${item(value)}`)
@@ -283,9 +289,41 @@ export class Fn extends Callable {
   ) {
     super(proto, name, code.length)
   }
+  /** [[HomeObject]]: the prototype or constructor a class method was defined on. */
+  home: Obj | undefined = undefined
+  /** Set on class constructors only. */
+  klass: ClassInfo | undefined = undefined
   get generator(): boolean {
     return (this.code.flags & CodeFlags.GENERATOR) !== 0
   }
+  override inspect() {
+    if (this.klass === undefined) return super.inspect()
+    const name = ownName(this) || "(anonymous)"
+    const parent = this.klass.derived && this.proto instanceof Callable ? ownName(this.proto) : ""
+    return parent === "" ? `[class ${name}]` : `[class ${name} extends ${parent}]`
+  }
+}
+
+const ownName = (target: Obj): string => {
+  const slot = own(target, "name")
+  return slot !== undefined && "value" in slot && typeof slot.value === "string" ? slot.value : ""
+}
+
+/** The class an instance was made by, read from its prototype's own `constructor` without running program code. */
+const instanceClassName = (target: Obj): string | undefined => {
+  if (target.proto === null) return undefined
+  const slot = own(target.proto, "constructor")
+  if (slot === undefined || !("value" in slot) || !(slot.value instanceof Fn) || slot.value.klass === undefined) return undefined
+  return ownName(slot.value) || undefined
+}
+
+/** What a class constructor knows about its class. */
+export class ClassInfo {
+  constructor(
+    readonly derived: boolean,
+    public fields: Fn | undefined = undefined,
+    readonly errorBase: Callable | undefined = undefined,
+  ) {}
 }
 
 /** The strict `arguments` object: an ordinary object with indexed own properties and a hidden `length`. */
@@ -767,6 +805,10 @@ export class Bytes extends Wrapper {
   }
   override iterator(builtins: Builtins) {
     return new Position(this, "values", builtins.Array)
+  }
+  /** New bytes of this one's kind, as `slice`, `subarray`, `map` and `filter` make them (a Buffer's are a Buffer). */
+  derive(builtins: Builtins, bytes: Uint8Array): Bytes {
+    return new Bytes(builtins.Uint8Array, bytes)
   }
 }
 

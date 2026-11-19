@@ -92,6 +92,14 @@ let sum = 0
 for (let i = 0; i < 100000; i++) { p.v = i; sum += p.v + o.v }
 return sum + JSON.stringify(Array.from({ length: 2000 }, () => o)).length`,
   ],
+  [
+    "classes",
+    `class Shape { kind = "shape"; constructor(size) { this.size = size } area() { return this.size } }
+class Square extends Shape { sides = 4; constructor(size) { super(size) } area() { return super.area() * this.size } }
+let sum = 0
+for (let i = 0; i < 20000; i++) { const s = new Square(i % 10); sum += s.area() + s.sides + s.kind.length }
+return sum`,
+  ],
 ]
 
 const argument = (flag: string) => {

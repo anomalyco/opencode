@@ -64,7 +64,7 @@ const makeWriteFixture = () => {
   })
 
   const formatter = Layer.mock(Formatter.Service, {
-    file: (target) => fixture.formatFile(target),
+    file: (target) => fixture.formatFile(target.absolute),
   })
 
   return Object.assign(fixture, { permission, formatter })

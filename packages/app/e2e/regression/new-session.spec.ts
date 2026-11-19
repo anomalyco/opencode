@@ -33,6 +33,30 @@ const editor = (page: Page) => page.locator('[data-component="composer-editor"]'
 
 const submit = (page: Page) => page.locator('[data-action="composer-submit"]')
 
+test("new-session project picker and provider tip show keyboard focus", async ({ page }) => {
+  await openDraft(page, { name: "DraftFocus", provider: NO_PROVIDER })
+
+  const projectPicker = newSessionLocation(page)
+
+  const tip = page.locator('[data-component="new-session-tip"]')
+
+  const connect = tip.getByRole("button", { name: /Connect to 75\+ providers/ })
+
+  const dismiss = tip.getByRole("button", { name: "Dismiss", exact: true })
+
+  await newSessionWorktree(page).press("Shift+Tab")
+  await expect(projectPicker).toBeFocused()
+  await expect(projectPicker).toHaveCSS("outline-style", "solid")
+
+  await expect(connect).toBeVisible()
+  await dismiss.press("Shift+Tab")
+  await expect(connect).toBeFocused()
+  await expect(connect).toHaveCSS("outline-style", "solid")
+  await page.keyboard.press("Tab")
+  await expect(dismiss).toBeFocused()
+  await expect(dismiss).toHaveCSS("outline-style", "solid")
+})
+
 const tabLink = (page: Page, sessionID: string) =>
   page.locator(`[data-titlebar-tab-link][href="${sessionHref(sessionID)}"]`)
 

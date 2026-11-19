@@ -188,3 +188,26 @@ describe("accessor flags on copies", () => {
     expect(await value(runtime, `${setup}; return new Error("hi")`)).toEqual({ name: "Custom", message: "hi" })
   })
 })
+
+describe("class instances crossing to the host", () => {
+  const classes = `
+    class Base { a = 1; get proto() { return "left" } m() { return 1 } }
+    class Item extends Base { constructor() { super(); this.b = 2; Object.defineProperty(this, "own", { get() { return 3 }, enumerable: true }); Object.defineProperty(this, "w", { set(v) {}, enumerable: true }) } }`
+
+  test("as tool arguments: own enumerable fields and own getters, no prototype methods or getters", async () => {
+    const { runtime, calls } = translating()
+    await value(runtime, `${classes}; keep(new Item(), [new Base()])`)
+    expect(calls).toEqual([[{ a: 1, b: 2, own: 3 }, [{ a: 1 }]]])
+  })
+
+  test("as the result", async () => {
+    const { runtime } = translating()
+    expect(await value(runtime, `${classes}; return { item: new Item() }`)).toEqual({ item: { a: 1, b: 2, own: 3 } })
+  })
+
+  test("a class constructor follows the function rule", async () => {
+    expect(await value(translating({ functions: "drop" }).runtime, `class A {}; return { A, n: 1 }`)).toEqual({ n: 1 })
+    const strict = await run(translating().runtime, `class A {}; keep(A)`)
+    expect(strict.ok).toBe(false)
+  })
+})

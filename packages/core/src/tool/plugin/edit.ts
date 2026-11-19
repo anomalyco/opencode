@@ -301,9 +301,12 @@ export const Plugin = {
 
               const target = yield* fileWrite.target(input.path, context)
 
-              const original = yield* FileMutation.readText(target.environment.files, target.absolute).pipe(
+              const original = yield* FileMutation.readEditableText(target.environment.files, target.absolute).pipe(
                 Effect.catchTag("Environment.NotFound", () =>
                   Effect.fail(new ToolFailure({ message: `File not found: ${input.path}` })),
+                ),
+                Effect.catchTag("FileMutation.InvalidUtf8Error", (error) =>
+                  Effect.fail(new ToolFailure({ message: `Unable to edit ${input.path}: ${error.message}` })),
                 ),
                 Effect.catchTag("Environment.WrongKind", (error) =>
                   error.actual === "directory"

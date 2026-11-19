@@ -61,6 +61,29 @@ const constructBytes = <R>(ctx: Interpreter<R>, args: Array<Value>, proto: Obj) 
   return new Bytes(proto, new Uint8Array(length))
 }
 
+const base64Alphabets = ["base64", "base64url"] as const
+const lastChunkHandlings = ["loose", "strict", "stop-before-partial"] as const
+
+const base64Options = (value: Value, name: string) => {
+  if (value === undefined) return undefined
+  if (value instanceof Obj) return value
+  throw typeError(`${name} requires that options be an object.`)
+}
+
+/** A string option of the base64 methods: one of `allowed`, defaulting to the first. */
+const base64Option = <const T extends string>(
+  options: Obj | undefined,
+  key: string,
+  allowed: ReadonlyArray<T>,
+  name: string,
+): T => {
+  const value = options === undefined ? undefined : get(options, key)
+  if (value === undefined) return allowed[0]
+  const match = allowed.find((option) => option === value)
+  if (match !== undefined) return match
+  throw typeError(`${name} requires that ${key} be ${allowed.map((option) => `"${option}"`).join(" or ")}.`)
+}
+
 export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
   const proto = builtins.Uint8Array
@@ -82,7 +105,24 @@ export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
   methods(builtins, uint8Array, [
     ["from", 1, (_, args) => collectBytes(ctx, args[0], "Uint8Array.from", proto, 0, args[1], args[2])],
     ["of", 0, (_, args) => wrap(Uint8Array.from(args, coerceToNumber))],
-    ["fromBase64", 1, (_, args) => decode("fromBase64", args, (text) => Uint8Array.fromBase64(text))],
+    [
+      "fromBase64",
+      1,
+      (_, args) => {
+        if (typeof args[0] !== "string") throw typeError("Uint8Array.fromBase64 expects a string.")
+        return withReads(() => {
+          const options = base64Options(args[1], "Uint8Array.fromBase64")
+          const alphabet = base64Option(options, "alphabet", base64Alphabets, "Uint8Array.fromBase64")
+          const lastChunkHandling = base64Option(
+            options,
+            "lastChunkHandling",
+            lastChunkHandlings,
+            "Uint8Array.fromBase64",
+          )
+          return decode("fromBase64", args, (text) => Uint8Array.fromBase64(text, { alphabet, lastChunkHandling }))
+        })
+      },
+    ],
     ["fromHex", 1, (_, args) => decode("fromHex", args, (text) => Uint8Array.fromHex(text))],
   ])
   define(uint8Array, "BYTES_PER_ELEMENT", 1, frozen)
@@ -98,13 +138,19 @@ export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
     [
       "slice",
       2,
-      (thisValue, args) => wrap(self(thisValue, "slice").bytes.slice(optNumber(args[0]), optNumber(args[1]))),
+      (thisValue, args) => {
+        const target = self(thisValue, "slice")
+        return target.derive(builtins, target.bytes.slice(optNumber(args[0]), optNumber(args[1])))
+      },
     ],
     // A view on the same bytes, as in JS: writes through one are visible through the other.
     [
       "subarray",
       2,
-      (thisValue, args) => wrap(self(thisValue, "subarray").bytes.subarray(optNumber(args[0]), optNumber(args[1]))),
+      (thisValue, args) => {
+        const target = self(thisValue, "subarray")
+        return target.derive(builtins, target.bytes.subarray(optNumber(args[0]), optNumber(args[1])))
+      },
     ],
     [
       "set",
@@ -171,7 +217,21 @@ export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
       },
     ],
     ["toString", 0, (thisValue) => self(thisValue, "toString").bytes.join(",")],
-    ["toBase64", 0, (thisValue) => self(thisValue, "toBase64").bytes.toBase64()],
+    [
+      "toBase64",
+      0,
+      (thisValue, args) => {
+        const bytes = self(thisValue, "toBase64").bytes
+        return withReads(() => {
+          const options = base64Options(args[0], "Uint8Array.prototype.toBase64")
+          const alphabet = base64Option(options, "alphabet", base64Alphabets, "Uint8Array.prototype.toBase64")
+          return bytes.toBase64({
+            alphabet,
+            omitPadding: options !== undefined && Boolean(get(options, "omitPadding")),
+          })
+        })
+      },
+    ],
     ["toHex", 0, (thisValue) => self(thisValue, "toHex").bytes.toHex()],
     ...iteratorMethods(builtins, self),
     // The callback methods are the prelude's.

@@ -437,7 +437,8 @@ reject }` object.
 - [x] Slicing/access: `slice`, `substring`, Annex B `substr`, `at`, `charAt`, `charCodeAt`, and `codePointAt`.
 - [x] Construction/transformation: `split`, `concat`, `repeat`, `padStart`, `padEnd`, `replace`, and `replaceAll`.
 - [x] Regular-expression integration: `match`, materialized `matchAll`, `replace`, `replaceAll`, `split`, and `search`.
-- [x] `localeCompare`; locale and options arguments are currently ignored.
+- [x] `localeCompare`, with its locales and collator options (`numeric`, `sensitivity`, `caseFirst`,
+      `ignorePunctuation`, and the rest) passed to the host collator; there is still no global `Intl`.
 - [x] `isWellFormed` and `toWellFormed`.
 - [x] `toString`, `length`, numeric indexing, spread, `for...of`, and `[Symbol.iterator]` by Unicode code point.
 - [x] Static `String.fromCharCode` and `String.fromCodePoint`.
@@ -511,8 +512,10 @@ reject }` object.
       writing, so a time set inside an argument's `valueOf` survives.
 - [x] `Date.prototype.toUTCString` and its `toGMTString` alias.
 - [x] `toDateString` and `toTimeString` in the host's local timezone.
-- [x] `toLocaleString`, `toLocaleDateString`, and `toLocaleTimeString` always format as `en-US` in UTC
-      (`"1/1/1970, 12:00:00 AM"`) so output does not depend on the host.
+- [x] `toLocaleString`, `toLocaleDateString`, and `toLocaleTimeString` format through the host's
+      `Intl.DateTimeFormat`, honoring the locale and options (`timeZone`, `dateStyle`, `weekday`, `hour12`, ...). Without
+      a locale they format as `en-US`, Bun's default; without a `timeZone`, in the host's local timezone, like `getHours`
+      and `toDateString`.
 - [x] Native one-argument Date coercion for supported values, including booleans, null, arrays, and plain objects.
 - [x] Date setters, construction, and `Date.UTC` coerce object arguments through their own `valueOf`/`toString` in
       argument order and surface their throws; only the first seven components are converted.
@@ -587,14 +590,15 @@ reject }` object.
 The only binary type. Bytes stay inside the program or cross to extensions as copies; the tool boundary rejects them
 with a hint to encode as text first (`TextDecoder`, `toBase64`, `toHex`).
 
-- [x] `new Uint8Array(length | array | iterable | Uint8Array)`, `Uint8Array.from`, `Uint8Array.of`, `fromBase64`,
-      and `fromHex`. Lengths are capped like arrays. The `Uint8Array.from` mapper and `thisArg` see the original
-      values, so `Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))` decodes base64. `BYTES_PER_ELEMENT` is 1 on
-      the constructor, its instances, and `Buffer`.
+- [x] `new Uint8Array(length | array | iterable | Uint8Array)`, `Uint8Array.from`, `Uint8Array.of`, `fromBase64`
+      (with the `alphabet` and `lastChunkHandling` options), and `fromHex`. Lengths are capped like arrays. The
+      `Uint8Array.from` mapper and `thisArg` see the original values, so
+      `Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))` decodes base64. `BYTES_PER_ELEMENT` is 1 on the
+      constructor, its instances, and `Buffer`.
 - [x] Index reads and writes with JS byte semantics: values wrap modulo 256, out-of-range writes are ignored, indexes
       cannot be deleted. `length` is a prototype accessor, so `Object.keys` lists only indexes.
 - [x] `at`, `slice`, `subarray` (a view on the same bytes), `set`, `fill`, `reverse`, `indexOf`, `lastIndexOf`,
-      `includes`, `join`, `toString`, `toBase64`, `toHex`, and live `keys`, `values`, `entries`, and `[Symbol.iterator]`
+      `includes`, `join`, `toString`, `toBase64` (with `alphabet` and `omitPadding`), `toHex`, and live `keys`, `values`, `entries`, and `[Symbol.iterator]`
       iterators. Start indexes coerce as for arrays, search values do not (`bytes.includes("1")` is `false`), and
       `lastIndexOf(x, undefined)` searches from index 0 while `lastIndexOf(x)` searches from the end, as in JS.
 - [x] Spread, destructuring, `for...of`, `yield*`, `Array.from`, and `new Set(bytes)`. `Array.isArray` is false.
@@ -620,6 +624,8 @@ method works on it, and its text conversions default to UTF-8.
       `{ type: "Buffer", data }`, `slice` and `subarray` as Buffer views on the same bytes, `equals`, `compare`,
       `indexOf`, `lastIndexOf`, `includes`, `write`, `fill`, `copy`, and the `read`/`write` integer and float methods.
       `console.log` prints `<Buffer ..>`.
+- [x] The inherited `Uint8Array` methods that make new bytes (`map`, `filter`, `slice`, `subarray`, also called
+      through `Uint8Array.prototype`) make a Buffer from a Buffer, as JS's species does.
 - [x] A host Buffer crosses into the program as a Buffer, and a program Buffer crosses out as one; snapshots keep it.
 - [ ] The 64-bit `readBigInt64*`/`writeBigInt64*` methods, since programs have no BigInt.
 

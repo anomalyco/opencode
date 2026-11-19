@@ -216,6 +216,7 @@ export function SessionActivityChips(props: {
           <Menu.Portal>
             <Menu.Content
               data-slot="session-activity-panel"
+              data-focus-scope
               data-view={view().shell ? "shell" : "list"}
               aria-label={label()}
               ref={content}

@@ -7,6 +7,7 @@ import { createKeyed, usePlugin, type FileNode, type MountedSession, type Sessio
 import { startFileDrag } from "./drag"
 import { OpenInAppContextMenuV2, useOpenInApp } from "./open-in-app"
 import { resolveOpenInAppPath } from "./path"
+import treeFocusCss from "./tree-focus.css?inline"
 import {
   createPierreTreeState,
   isPierreTreeMounted,
@@ -85,9 +86,7 @@ const TREE_UNSAFE_CSS = `
     --row-overlay: var(--v2-overlay-simple-overlay-pressed);
     color: var(--v2-text-text-base) !important; background-color: var(--row-overlay) !important;
   }
-  button[data-type="item"]:focus-visible, button[data-type="item"][data-item-focused="true"] {
-    outline: none !important; box-shadow: none !important;
-  }
+  ${treeFocusCss}
   button[data-type="item"]::before,
   [data-item-section="decoration"]:empty { display: none !important; }
   /* A folder holding changes keeps its lane, so the row still ends in the sticky end, but shows no dot. */
