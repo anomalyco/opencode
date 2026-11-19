@@ -1332,12 +1332,19 @@ describe("OpencodePlugin memory", () => {
           expect(texts(corrected)).toEqual(["No, ..."])
           expect(synthetic).toHaveLength(1)
 
-          // The agent's edit settles it; a later correction names the new revision.
+          // The agent's edit settles it, with a note that withdraws the reminder and says the entry stands, never one the
+          // agent could read as retracting the entry; a later correction names the new revision.
           yield* (yield* memoryTool("edit")).execute(
             { id: "mem_deploy", revision: 1, oldText: "More", newText: "wrangler deploy" },
             context(session.id),
           )
-          expect(yield* instructions).toEqual([])
+          expect(yield* instructions).toEqual([
+            {
+              key: "memory.correction",
+              value:
+                "<memory-correction>The reminder about memory entry mem_deploy is withdrawn: nothing more is asked about it. This only withdraws the reminder: entry mem_deploy stands as it is. Don't retire or change it because of this notice.</memory-correction>",
+            },
+          ])
           yield* prompt(session.id, "Actually the body of mem_deploy should say wrangler, not npm")
           expect((yield* instructions)[0]?.value).toContain("mem_deploy r2")
         }),

@@ -132,6 +132,11 @@ export interface Policy {
   readonly correction: (message: string, given: ReadonlyArray<Given>) => Given | undefined
   /** The reminder the request after that message gets. */
   readonly nudge: (entry: Given) => string
+  /**
+   * What replaces that reminder once the entry was written or the reminder lapsed: it withdraws the reminder only, and
+   * says so, since a bare "no longer applies" was once read as retracting the entry.
+   */
+  readonly withdrawn: (id: string) => string
   /** Whether a command is a test or build run, the kind that tells whether a fix worked. Runs on every shell command. */
   readonly test: (command: string) => boolean
   /** Whether a user's message reads as correcting the agent. Runs on every prompt, so it must be cheap. */
@@ -257,6 +262,8 @@ export const initial: Policy = {
   },
   nudge: (entry) =>
     `<memory-correction>The user's last message may correct memory entry ${entry.id} r${entry.revision} "${line(entry.title)}". If it does, fix that entry now with memory \`edit\` (only the changed text, revision ${entry.revision}); otherwise ignore this.</memory-correction>`,
+  withdrawn: (id) =>
+    `<memory-correction>The reminder about memory entry ${line(id)} is withdrawn: nothing more is asked about it. This only withdraws the reminder: entry ${line(id)} stands as it is. Don't retire or change it because of this notice.</memory-correction>`,
 }
 
 export const current = initial

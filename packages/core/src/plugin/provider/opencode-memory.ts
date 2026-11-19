@@ -353,13 +353,15 @@ export const make = Effect.fnUntraced(function* (
       return state.tainted === true
     })
   // A correction reminder stays in the session's instructions until the entry it names is written or a compaction
-  // ends: it concerns the user's message, and a compacted conversation is restated without it.
+  // ends: it concerns the user's message, and a compacted conversation is restated without it. A note that withdraws
+  // it, and only it, takes its place: removing it would tell the agent its context "no longer applies".
   const settle = (sessionID: Session.ID, id?: string) =>
     Effect.gen(function* () {
       const state = tracked(sessionID)
-      if (state.correcting === undefined || (id !== undefined && state.correcting !== id)) return
+      const correcting = state.correcting
+      if (correcting === undefined || (id !== undefined && correcting !== id)) return
       state.correcting = undefined
-      yield* ctx.session.instructions.entry.remove({ sessionID, key: CORRECTION })
+      yield* ctx.session.instructions.entry.put({ sessionID, key: CORRECTION, value: policy.withdrawn(correcting) })
     }).pipe(Effect.catchCause((cause) => Effect.logDebug("failed to settle a memory correction", { cause })))
 
   // The checkout as it is now: its remote names the repository, without any credentials the URL holds.
