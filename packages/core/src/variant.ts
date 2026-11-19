@@ -248,6 +248,16 @@ const deepinfraChat: Protocol = (model, support) => {
 
 const openaiCompatible: Protocol = (model, support) => {
   if (model.providerID === "nvidia") return nvidiaChat(model, support)
+  // EVREN's gateway uses a boolean even when the underlying lab uses a thinking object.
+  if (model.providerID === "evren") {
+    if (support.type === "toggle") return toggle({ body: { thinking: false } }, { body: { thinking: true } })
+    if (support.type === "effort")
+      return efforts(support.values ?? EFFORTS, (effort) => ({
+        settings: { reasoningEffort: effort },
+        body: { thinking: effort !== "none" },
+      }))
+    return []
+  }
   return openaiChat(model, support)
 }
 
