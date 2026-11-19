@@ -1,3 +1,4 @@
+import { builtinCatalog } from "@opencode/plugin/gui/builtin"
 import { Schema } from "effect"
 import { Plugin, Store } from "@opencode/plugin/gui"
 import en from "./i18n/en"
@@ -27,5 +28,8 @@ export default Plugin.define({
     // Each open /btw tab's chat (its question and answer), kept until its tab closes.
     chats: Store.session(Chats, { chats: [] }),
   },
-  i18n: { en },
+  i18n: builtinCatalog({
+    en,
+    fr: () => import("./i18n/fr"),
+  }),
 })
