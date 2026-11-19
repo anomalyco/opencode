@@ -1,5 +1,8 @@
 import type { ModelInfo, SessionMessageInfo } from "@opencode/client"
 import { lastAssistantWithUsage } from "@opencode/client/solid"
+import type { TokenUsage } from "@opencode/schema/token-usage"
+import { Model } from "@opencode/schema/model"
+import { Money } from "@opencode/schema/money"
 import { Locale } from "./locale"
 
 type SessionNode = {
@@ -63,4 +66,55 @@ export function contextUsage(
 export function formatContextUsage(tokens: number, percent?: number) {
   const value = Locale.number(tokens)
   return percent === undefined ? value : `${value} (${percent}%)`
+}
+
+/** The session fields pricing needs. Callers without a full `SessionInfo` can supply these. */
+export type CostSession = {
+  readonly id: string
+  readonly model?: { readonly providerID: string; readonly id: string }
+  readonly tokens: TokenUsage.Info
+  readonly cost?: number
+  readonly fork?: unknown
+  readonly time: { readonly created: number }
+}
+
+/** The model fields pricing needs. */
+export type CostModel = {
+  readonly providerID: string
+  readonly id: string
+  readonly cost: ReadonlyArray<ModelInfo["cost"][number]>
+}
+
+/** The message fields pricing needs; every client message carries them. */
+export type CostMessage = {
+  readonly type: string
+  readonly tokens?: TokenUsage.Info
+  readonly time: { readonly created: number }
+}
+
+export function costEstimate(
+  sessions: ReadonlyArray<CostSession>,
+  models: ReadonlyArray<CostModel> | undefined,
+  messages: (sessionID: string) => ReadonlyArray<CostMessage>,
+) {
+  return sessions.reduce<Money.USD | undefined>((total, session) => {
+    if (total === undefined) return
+    const model = models?.find(
+      (candidate) =>
+        session.model && candidate.providerID === session.model.providerID && candidate.id === session.model.id,
+    )
+    if (!model || model.cost.length === 0) return
+    const base = model.cost.filter((cost) => cost.tier === undefined)
+    const estimate = Money.USD.make(total + Model.calculateCost(base, session.tokens))
+    if (!model.cost.some((cost) => cost.tier !== undefined)) return estimate
+    // Only assistant messages retain individual call usage. Title, compaction, and unloaded usage stay at base rates.
+    return messages(session.id).reduce((sum, message) => {
+      if (message.type !== "assistant" || !message.tokens) return sum
+      // Forks copy parent timestamps and messages, but start with zero recorded usage.
+      if (session.fork && message.time.created <= session.time.created) return sum
+      return Money.USD.make(
+        sum + Model.calculateCost(model.cost, message.tokens) - Model.calculateCost(base, message.tokens),
+      )
+    }, estimate)
+  }, Money.USD.zero)
 }

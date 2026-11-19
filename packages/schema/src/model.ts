@@ -6,6 +6,7 @@ import { Provider } from "./provider.js"
 import { Compatibility, MaxTokensField, MediaInput, ReasoningField } from "./model-compatibility.js"
 import { Money } from "./money.js"
 import { FreeformFormat } from "./tool.js"
+import type { TokenUsage } from "./token-usage.js"
 import { ephemeral, inventory } from "./event.js"
 
 export const ID = Schema.String.pipe(Schema.brand("Model.ID"))
@@ -105,6 +106,24 @@ export const Cost = Schema.Struct({
     write: Money.USDPerMillionTokens,
   }),
 }).annotate({ identifier: "Model.Cost" })
+
+export function calculateCost(costs: ReadonlyArray<typeof Cost.Encoded>, usage: TokenUsage.Info) {
+  const context = usage.input + usage.cache.read + usage.cache.write
+  const tier = costs
+    .filter((cost) => cost.tier?.type === "context" && context > cost.tier.size)
+    .toSorted((a, b) => (b.tier?.size ?? 0) - (a.tier?.size ?? 0))[0]
+  const cost = tier ?? costs.find((cost) => cost.tier === undefined)
+  if (!cost) return Money.USD.zero
+  return Money.USD.make(
+    (usage.input * finite(cost.input) +
+      (usage.output + usage.reasoning) * finite(cost.output) +
+      usage.cache.read * finite(cost.cache.read) +
+      usage.cache.write * finite(cost.cache.write)) /
+      1_000_000,
+  )
+}
+
+const finite = (value: number) => (Number.isFinite(value) ? value : 0)
 
 export interface Variant extends Schema.Schema.Type<typeof Variant> {}
 export const Variant = Schema.Struct({

@@ -25,6 +25,11 @@ export const experiments: Experiment[] = [
     title: "TUI tools",
     description: "Let the agent open terminals in this TUI (requires server support)",
   },
+  {
+    id: "cost-estimate",
+    title: "Cost estimate",
+    description: "Estimate session spend from model catalog prices when the provider reports $0",
+  },
 ]
 
 export function DialogExperiments() {

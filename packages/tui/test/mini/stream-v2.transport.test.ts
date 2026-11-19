@@ -638,6 +638,98 @@ describe("V2 mini transport", () => {
     await transport.close()
   })
 
+  test("estimates zero-cost spend from catalog prices when the experiment is on", async () => {
+    const events = feed()
+    events.push(connected())
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: sdk({ streams: [events] }),
+      sessionID: "ses_1",
+      thinking: false,
+      footer: ui.api,
+      contextLimit: (model) => (model.providerID === "test" && model.modelID === "model" ? 160_000 : undefined),
+      spend: {
+        enabled: true,
+        session: {
+          id: "ses_1",
+          model: { providerID: "test", id: "model" },
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          cost: 0,
+          time: { created: 0 },
+        },
+        models: () => [
+          {
+            providerID: "test",
+            id: "model",
+            cost: [{ input: 3, output: 15, cache: { read: 0.3, write: 0 } }],
+          },
+        ],
+        messages: [],
+      },
+    })
+    const tokens = { input: 7_000, output: 500, reasoning: 8, cache: { read: 0, write: 0 } }
+
+    events.push({
+      id: "evt_step_started",
+      created: 1,
+      type: "session.step.started",
+      durable: durable("ses_1", 1),
+      data: {
+        started: 1,
+        sessionID: "ses_1",
+        assistantMessageID: "msg_assistant",
+        agent: "build",
+        model: { providerID: "test", id: "model" },
+      },
+    })
+    events.push({
+      id: "evt_step_ended",
+      created: 2,
+      type: "session.step.ended",
+      durable: durable("ses_1", 2),
+      data: { sessionID: "ses_1", assistantMessageID: "msg_assistant", finish: "stop", cost: 0, tokens },
+    })
+    events.push({
+      id: "evt_usage",
+      created: 3,
+      type: "session.usage.updated",
+      data: { sessionID: "ses_1", cost: 0, tokens },
+    })
+
+    const usages = () =>
+      ui.events.flatMap((event) => (event.type === "stream.patch" ? [event.patch.usage] : [])).at(-1)
+    while (usages()?.estimate === undefined) await Bun.sleep(0)
+
+    expect(usages()?.tokens).toBe(7_508)
+    expect(usages()?.percent).toBe(5)
+    expect(usages()?.cost).toBeUndefined()
+    expect(usages()?.estimate).toBeCloseTo(0.02862)
+
+    events.push({
+      id: "evt_reported_step",
+      created: 4,
+      type: "session.step.ended",
+      durable: durable("ses_1", 4),
+      data: { sessionID: "ses_1", assistantMessageID: "msg_reported", finish: "stop", cost: 0.1234, tokens },
+    })
+    while (usages()?.cost !== 0.1234) await Bun.sleep(0)
+    expect(usages()?.estimate).toBeUndefined()
+
+    const patches = () => ui.events.filter((event) => event.type === "stream.patch").length
+    const before = patches()
+    events.push({
+      id: "evt_usage_reported",
+      created: 5,
+      type: "session.usage.updated",
+      data: { sessionID: "ses_1", cost: 0.5, tokens },
+    })
+    while (patches() === before) await Bun.sleep(0)
+
+    expect(usages()?.cost).toBe(0.1234)
+    expect(usages()?.estimate).toBeUndefined()
+    await transport.close()
+  })
+
   test("hides tool-side assistant narration when tools are disabled", async () => {
     const events = feed()
     events.push(connected())
