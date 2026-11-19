@@ -35,7 +35,7 @@ export type BlockingTask = {
   label?: string
   agent?: undefined
   started: number
-} & ({ type: "shell" } | { type: "execute"; commands: string[] })
+} & ({ type: "shell" } | { type: "execute"; commands: string[]; background: boolean })
 
 const decodeString = Schema.decodeUnknownOption(Schema.String)
 
@@ -108,6 +108,8 @@ export function createSessionBackground(input: {
                 agent: undefined,
                 started: part.time.ran ?? part.time.created,
                 commands: executeShellCommands(part.state.metadata.toolCalls),
+                // Only a script running as a job can move to the background.
+                background: part.state.metadata.background === true,
               },
             ]
 
@@ -127,7 +129,8 @@ export function createSessionBackground(input: {
     }
   })
 
-  const blocking = createMemo(() => history().blocking)
+  // A script that can't move still covers its shells, but isn't offered to move.
+  const blocking = createMemo(() => history().blocking.filter((item) => item.type !== "execute" || item.background))
 
   // Like the TUI, a subagent runs exactly while its session, or any session below it, is running. Subagents always run
   // in the background, so every running descendant is background work, and so is an idle one whose tree still runs a
