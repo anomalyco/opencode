@@ -7,6 +7,7 @@ import { Agent } from "../agent.js"
 import { CodeModeTool } from "../codemode/tool.js"
 import { Permission } from "../permission.js"
 import { Plugin } from "../plugin.js"
+import { PluginHooks } from "../plugin/hooks.js"
 import type { SessionMessage } from "../session/message.js"
 import type { SessionSchema } from "../session/schema.js"
 import { Tool } from "../tool.js"
@@ -95,6 +96,8 @@ export const authorize = Effect.fnUntraced(function* (
   if (invocation && !matchesAuthor(session, agent.info, invocation))
     return yield* Effect.fail("Create the automation with the session's current agent")
   const actions = (yield* resolveTools(paths)).actions
+  // Configured rules only, on purpose: they choose which scoped asks to prompt for. A hook can only deny, and every
+  // check below goes through the service, which applies hook denies.
   const rules = Permission.merge(agent.info?.permissions ?? [], session.permissions ?? [])
   // A rule scoped to some resources (`vault:*: ask`) must prompt too, not only the catch-all `*`.
   const request = (item: string) => ({
@@ -159,7 +162,9 @@ export const run = Effect.fnUntraced(
     if (Result.isFailure(resolved)) return { ok: false as const, error: resolved.failure, invalid: true }
 
     const actions = ["execute", ...resolved.success.actions]
-    const rules = Permission.merge(agent.info.permissions, session.permissions ?? [])
+    // The rules a step of this Session's agent runs under, `experimental.rules` denies included.
+    const hooks = yield* PluginHooks.Service
+    const rules = yield* Permission.rules(hooks, { session, agent })
     // Unattended rules come after the configured ones and the last match wins, so restate every scoped rule after the
     // grant: the approval stands in for the catch-all `*` only, and a scoped `ask` still needs a person.
     const unattended: Permission.Ruleset = actions.flatMap((item) => [

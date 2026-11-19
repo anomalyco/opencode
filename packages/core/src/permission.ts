@@ -118,6 +118,46 @@ export function merge(...rulesets: Permission.Ruleset[]): Permission.Ruleset {
   return rulesets.flat()
 }
 
+const Denies = Schema.Array(Schema.Struct({ action: Schema.String, resource: Schema.String }))
+
+/**
+ * The rules for `agent` in `session`: the agent's, then the Session's, then a deny for each entry `experimental.rules`
+ * hooks add. Requests are evaluated against them and steps and unattended automation runs list tools, skills and MCP
+ * servers by them, so what an agent is offered and what it may call come from one ruleset.
+ */
+export const rules = Effect.fnUntraced(function* (
+  hooks: PluginHooks.Interface,
+  input: { readonly session: SessionSchema.Info; readonly agent: Agent.Selection },
+) {
+  const base = merge(input.agent.info?.permissions ?? missingAgentPermissions, input.session.permissions ?? [])
+  if (!(yield* hooks.has("permission", "experimental.rules"))) return base
+  // Core keeps the added denies and the event and its copies are frozen, so a hook can add a deny but cannot edit a
+  // configured rule, remove another hook's deny, or change what later hooks see.
+  const added: unknown[] = []
+  yield* hooks.trigger(
+    "permission",
+    "experimental.rules",
+    Object.freeze({
+      sessionID: input.session.id,
+      agent: input.agent.id,
+      rules: Object.freeze(base.map((rule) => Object.freeze({ ...rule }))),
+      session: Object.freeze((input.session.permissions ?? []).map((rule) => Object.freeze({ ...rule }))),
+      deny: (rule: unknown) => {
+        added.push(rule)
+      },
+    }),
+  )
+  if (added.length === 0) return base
+  // A hook that cannot say what it denies must not leave the check or step decided without it.
+  const denies = yield* Schema.decodeUnknownEffect(Denies)(added).pipe(
+    Effect.mapError(
+      (error) => new Error(`A permission "experimental.rules" hook added an invalid deny: ${error.message}`),
+    ),
+    Effect.orDie,
+  )
+  return [...base, ...denies.map((rule) => ({ action: rule.action, resource: rule.resource, effect: "deny" as const }))]
+})
+
 export interface Interface {
   readonly close: Effect.Effect<void>
   readonly ask: (input: AssertInput) => Effect.Effect<AskResult, SessionErrors.NotFoundError>
@@ -186,8 +226,8 @@ const layer = Layer.effect(
     const configured = Effect.fnUntraced(function* (sessionID: SessionSchema.ID, agentID?: Agent.ID) {
       const session = yield* sessions.get(sessionID)
       if (!session) return yield* new SessionErrors.NotFoundError({ sessionID })
-      const agent = yield* agents.resolve(agentID ?? session.agent)
-      return merge(agent?.permissions ?? missingAgentPermissions, session.permissions ?? [])
+      const agent = yield* agents.select(agentID ?? session.agent)
+      return yield* rules(hooks, { session, agent })
     })
 
     function denied(input: Pick<Request, "action" | "resources">, rules: Permission.Ruleset) {
