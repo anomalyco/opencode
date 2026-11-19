@@ -27,7 +27,7 @@ export const DEFAULT_CONFIG: RolloverConfig = {
   extractionTimeoutMs: 180_000,
   consolidateAfterRecords: 40,
   consolidationTimeoutMs: 90_000,
-  extractionGate: true,
+  ledger: true,
   dataDir: ".opencode/rollover",
 }
 
@@ -47,7 +47,7 @@ const fileSchema = z.strictObject({
   extractionTimeoutMs: z.number().int().positive().optional(),
   consolidateAfterRecords: z.number().int().positive().optional(),
   consolidationTimeoutMs: z.number().int().positive().optional(),
-  extractionGate: z.boolean().optional(),
+  ledger: z.boolean().optional(),
   dataDir: z.string().optional(),
 })
 

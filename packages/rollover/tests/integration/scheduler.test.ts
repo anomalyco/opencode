@@ -22,6 +22,96 @@ function state(sid: string): SessionState {
 }
 
 describe("scheduler", () => {
+  test("onIdle extracts every turn without the gate (closure turns extract too)", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "sched-"))
+    const store = createStore({ dataDir: dir })
+    const sid = "s1"
+    await store.writeState(sid, state(sid))
+    let llmCalls = 0
+    const sched = createScheduler({
+      store: store as any,
+      getConfig: async () => cfg,
+      getMessages: () => [msg("u1", "user", "thanks"), msg("a1", "assistant", "you're welcome")],
+      getState: async () => store.readState(sid),
+      setState: async (s, v) => store.writeState(s, v),
+      getSmallModel: () => null,
+      getSessionModel: async () => null,
+      createLlm: () => ({
+        async complete() {
+          llmCalls++
+          return { text: '{"records":[]}', usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, model: "m", latencyMs: 1 }
+        },
+      }),
+      metric: async () => {},
+      debounceMs: 60_000,
+    })
+    await sched.onIdle(sid)
+    expect(llmCalls).toBe(1)
+    const st = (await store.readState(sid))!
+    expect(st.extractedUntilMessageId).toBe("a1")
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  test("after a swap, extraction refreshes the frozen render from ledger records (cutoff/epoch untouched)", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "sched-"))
+    const store = createStore({ dataDir: dir })
+    const sid = "s1"
+    const msgs = [msg("u1", "user", "which library?"), msg("a1", "assistant", "chose left-pad"), msg("u2", "user", "next prompt")]
+    const base = state(sid)
+    base.epoch = 1
+    base.rollover = {
+      epochAtSwap: 1,
+      cutoffMessageId: "u2",
+      tailMessageIds: [],
+      renderText: "<rollover_context epoch='1'>\nmechanical only\n</rollover_context>",
+      lastReply: "",
+      appliedAt: 1,
+      tokensBefore: 100,
+      tokensAfter: 10,
+    }
+    await store.writeState(sid, base)
+    const metrics: string[] = []
+    const sched = createScheduler({
+      store: store as any,
+      getConfig: async () => cfg,
+      getMessages: () => msgs,
+      getState: async () => store.readState(sid),
+      setState: async (s, v) => store.writeState(s, v),
+      getSmallModel: () => null,
+      getSessionModel: async () => null,
+      createLlm: () => ({
+        async complete() {
+          return {
+            text: '{"records":[{"type":"decision","text":"Use left-pad.","rationale":"smaller"}]}',
+            usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            model: "m",
+            latencyMs: 1,
+          }
+        },
+      }),
+      metric: async (_sid, ev) => {
+        metrics.push(ev.ev)
+      },
+      debounceMs: 60_000,
+    })
+    await sched.runNow(sid)
+    const st = (await store.readState(sid))!
+    expect(st.rollover!.epochAtSwap).toBe(1)
+    expect(st.rollover!.cutoffMessageId).toBe("u2")
+    expect(st.rollover!.renderText).toContain("## Decisions")
+    expect(st.rollover!.renderText).toContain("Use left-pad.")
+    expect(st.rollover!.renderText).toContain("## User prompts")
+    expect(metrics).toContain("ledger_enriched")
+    const before = st.rollover!.renderText
+    // second run with nothing new → byte-identical render (idempotent refresh)
+    await sched.runNow(sid)
+    const st2 = (await store.readState(sid))!
+    expect(st2.rollover!.renderText).toBe(before)
+    expect(st2.rollover!.cutoffMessageId).toBe("u2")
+    expect(st2.rollover!.epochAtSwap).toBe(1)
+    rmSync(dir, { recursive: true, force: true })
+  })
+
   test("runNow awaited at idle commits without depending on the debounce timer", async () => {
     // The idle hook handler awaits runNow — extraction must commit even when
     // the debounce window outlives the (short-lived) host process.

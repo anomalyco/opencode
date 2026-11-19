@@ -157,10 +157,11 @@ export interface RolloverConfig {
   consolidateAfterRecords: number
   consolidationTimeoutMs: number
   /**
-   * Deterministic extraction gate (zero LLM calls) at the idle hook.
-   * false restores the pre-gate behavior: extraction scheduling on every idle.
+   * Optional ledger enrichment (v2). true (default): extraction runs per idle
+   * turn in the background and completed records enrich frozen renders.
+   * false: swap-only pipeline, zero extraction calls.
    */
-  extractionGate: boolean
+  ledger: boolean
   dataDir: string
 }
 

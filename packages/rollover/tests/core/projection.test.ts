@@ -16,7 +16,7 @@ const cfg: RolloverConfig = {
   extractionTimeoutMs: 180_000,
   consolidateAfterRecords: 40,
   consolidationTimeoutMs: 90_000,
-  extractionGate: true,
+  ledger: true,
   dataDir: ".opencode/rollover",
 }
 

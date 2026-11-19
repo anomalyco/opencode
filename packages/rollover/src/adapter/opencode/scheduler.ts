@@ -5,7 +5,8 @@ import type { MetricEvent } from "../../core/types"
 import type { LlmPort, StorePort } from "../../core/ports"
 import { runExtraction, runConsolidation } from "./extraction"
 import { activeRecords } from "../../core/ledger"
-import { classify, deriveGateInputs, shouldRun } from "../../core/gate"
+import { projectRollover } from "../../core/projection"
+import { estimateTokens } from "../../core/tokens"
 import { metricEvent } from "../../core/metrics"
 
 export interface SchedulerDeps {
@@ -57,6 +58,8 @@ export function createScheduler(deps: SchedulerDeps) {
     try {
       const cfg = await deps.getConfig(sid)
       if (cfg.mode !== "auto") return
+      // ledger: false keeps the pipeline swap-only — no extraction calls at all.
+      if (cfg.ledger === false) return
       const msgs = deps.getMessages(sid)
       if (!msgs || msgs.length === 0) return
       const st = await deps.getState(sid)
@@ -104,6 +107,9 @@ export function createScheduler(deps: SchedulerDeps) {
           }
         }
       }
+
+      // Enrichment: a successful run may improve the active frozen render.
+      await refreshRolloverRender(deps, sid, cfg)
     } catch (e) {
       const s2 = await deps.getState(sid).catch(() => null)
       await deps.metric(sid, { ev: "extraction_failed", ts: Date.now(), sessionId: sid, epoch: s2?.epoch, detail: String(e) }).catch(() => {})
@@ -135,60 +141,12 @@ export function createScheduler(deps: SchedulerDeps) {
   }
 
   /**
-   * The idle-hook entry point. Classifies the pending turn with the
-   * deterministic gate (zero LLM calls) and only schedules the extraction
-   * when the validated policy says to run. Any gate error falls back to the
-   * pre-gate behavior — extraction runs as before; the gate never turns into
-   * a silent skip. With the gate disabled this is exactly the old runNow path.
+   * The idle-hook entry point. v2: no scheduling gate — every completed turn
+   * extracts (the scheduler's inflight coalescing bounds concurrency; the
+   * delta cap bounds size). Extraction is background enrichment: its outcome
+   * can only improve a frozen render, never block a swap.
    */
   async function onIdle(sid: string): Promise<void> {
-    try {
-      const cfg = await deps.getConfig(sid)
-      if (cfg.mode === "auto" && cfg.extractionGate) {
-        const st = await deps.getState(sid)
-        const msgs = deps.getMessages(sid)
-        if (st && msgs && msgs.length > 0) {
-          // A run already in flight or a debounced run pending owns this
-          // session's extraction: the candidate coalesces into it (its delta
-          // or the follow-up run covers the content). A second concurrent
-          // idle must never schedule a duplicate run.
-          const s = getSessionState(sid)
-          if (s.running || s.timer) {
-            await deps.metric(sid, metricEvent("gate_coalesced", sid, st.epoch, { reason: "extraction already in flight or scheduled" }))
-            return
-          }
-          const inputs = deriveGateInputs(msgs, st.extractedUntilMessageId)
-          if (inputs) {
-            const c = classify(inputs.userText)
-            await deps.metric(sid, metricEvent("gate_classified", sid, st.epoch, {
-              cls: c.cls,
-              decision: c.decision,
-              urgent: c.urgent,
-              rule: c.rule,
-              matched: c.matched,
-              pendingMessages: inputs.pendingMessages,
-              pendingTokens: inputs.pendingTokens,
-            }))
-            if (c.decision !== "EXTRACT") {
-              // SKIP/DEFER: not a candidate. The content stays pending — the
-              // cursor does not move, so the next run's delta accumulates it.
-              return
-            }
-            const sched = shouldRun(c.cls, c.decision, c.urgent, inputs.counter, inputs.lastRunWasPreviousTurn)
-            if (!sched.run) {
-              await deps.metric(sid, metricEvent("gate_coalesced", sid, st.epoch, { cls: c.cls, reason: sched.reason }))
-              return
-            }
-            await deps.metric(sid, metricEvent("gate_scheduled", sid, st.epoch, { cls: c.cls, reason: sched.reason }))
-          }
-        }
-      }
-    } catch (error) {
-      const st = await deps.getState(sid).catch(() => null)
-      await deps
-        .metric(sid, metricEvent("gate_fallback", sid, st?.epoch, { detail: String(error) }))
-        .catch(() => {})
-    }
     await runNow(sid)
   }
 
@@ -213,4 +171,53 @@ export function createScheduler(deps: SchedulerDeps) {
     runNow,
     inflight,
   }
+}
+
+/**
+ * Enrichment refresh: re-renders the active frozen record in place with the
+ * current ledger (same cutoff, same epoch — the mechanical parts rerender
+ * byte-identically; only the ledger sections can change). Refuses when the
+ * epoch advanced meanwhile (a newer swap owns the render now).
+ */
+async function refreshRolloverRender(
+  deps: Pick<SchedulerDeps, "store" | "getConfig" | "getMessages" | "getState" | "setState" | "metric">,
+  sid: string,
+  cfg: RolloverConfig,
+): Promise<void> {
+  const st = await deps.getState(sid)
+  if (!st?.rollover) return
+  const rec = st.rollover
+  const msgs = deps.getMessages(sid)
+  if (!msgs || msgs.length === 0) return
+  if (!msgs.some((m) => m.id === rec.cutoffMessageId)) return
+  const lines = await deps.store.readLedger(sid)
+  let tailLastReply: string | null = null
+  for (let i = rec.tailMessageIds.length - 1; i >= 0; i--) {
+    const m = msgs.find((x) => x.id === rec.tailMessageIds[i])
+    if (m && m.role === "assistant") {
+      tailLastReply = m.parts.filter((p) => p.type === "text").map((p) => p.text ?? "").join("\n")
+      break
+    }
+  }
+  const rendered = projectRollover({ msgs, cutoffId: rec.cutoffMessageId, epoch: rec.epochAtSwap, cfg, lines, touchedFiles: st.touchedFiles, tailLastReply })
+  const current = await deps.getState(sid)
+  if (!current?.rollover || current.rollover.epochAtSwap !== rec.epochAtSwap || current.rollover.cutoffMessageId !== rec.cutoffMessageId) return
+  const tailTexts = rec.tailMessageIds
+    .map((id) => msgs.find((m) => m.id === id))
+    .filter((m): m is NMessage => !!m)
+    .map((m) => m.parts.filter((p) => p.type === "text").map((p) => p.text ?? "").join("\n"))
+    .join("\n")
+  const cutoffMsg = msgs.find((m) => m.id === rec.cutoffMessageId)
+  const cutoffText = cutoffMsg ? cutoffMsg.parts.filter((p) => p.type === "text").map((p) => p.text ?? "").join("\n") : ""
+  const tokensAfter = estimateTokens(rendered.renderText) + estimateTokens(tailTexts) + estimateTokens(cutoffText)
+  await deps.setState(sid, {
+    ...current,
+    rollover: {
+      ...rec,
+      renderText: rendered.renderText,
+      tokensAfter,
+    },
+    lastRollover: current.lastRollover ? { ...current.lastRollover, after: tokensAfter } : current.lastRollover,
+  })
+  await deps.metric(sid, metricEvent("ledger_enriched", sid, current.epoch, { truncated: rendered.truncated, records: lines.length }))
 }

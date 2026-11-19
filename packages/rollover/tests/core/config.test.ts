@@ -77,20 +77,20 @@ describe("loadConfig", () => {
     expect(cfg.thresholdTokens).toBeNull()
   })
 
-  test("extraction gate enabled by default", () => {
+  test("ledger enrichment enabled by default", () => {
     const { homeConfigDir, projectDir } = sandbox()
     const cfg = loadConfig({ homeConfigDir, projectDir, env: env() })
-    expect(cfg.extractionGate).toBe(true)
+    expect(cfg.ledger).toBe(true)
   })
 
-  test("extractionGate can be disabled from either config layer", () => {
+  test("ledger can be disabled from either config layer", () => {
     const home = sandbox()
-    writeFileSync(path.join(home.homeConfigDir, "rollover.json"), JSON.stringify({ extractionGate: false }))
-    expect(loadConfig({ homeConfigDir: home.homeConfigDir, projectDir: home.projectDir, env: env() }).extractionGate).toBe(false)
+    writeFileSync(path.join(home.homeConfigDir, "rollover.json"), JSON.stringify({ ledger: false }))
+    expect(loadConfig({ homeConfigDir: home.homeConfigDir, projectDir: home.projectDir, env: env() }).ledger).toBe(false)
 
     const project = sandbox()
-    writeFileSync(path.join(project.projectDir, ".opencode", "rollover.json"), JSON.stringify({ extractionGate: false }))
-    expect(loadConfig({ homeConfigDir: project.homeConfigDir, projectDir: project.projectDir, env: env() }).extractionGate).toBe(false)
+    writeFileSync(path.join(project.projectDir, ".opencode", "rollover.json"), JSON.stringify({ ledger: false }))
+    expect(loadConfig({ homeConfigDir: project.homeConfigDir, projectDir: project.projectDir, env: env() }).ledger).toBe(false)
   })
 
   test("unknown keys rejected (strict)", () => {
