@@ -2,10 +2,11 @@
 //!
 //! The child has no console (`CREATE_NO_WINDOW`), stdin on `NUL`, and stdout
 //! and stderr on one inheritable byte-mode named pipe that the daemon reads
-//! with overlapped I/O. The child is created inside a kill-on-close job, so
-//! `TerminateJobObject` reaches every descendant and a daemon crash takes the
-//! tree with it. No console signals are used: every `signal` is a hard kill of
-//! the tree, and the exit reports the signal the daemon sent.
+//! with overlapped I/O. The child is created suspended and joins a
+//! kill-on-close job before it runs, so `TerminateJobObject` reaches every
+//! descendant and a daemon crash takes the tree with it. No console signals
+//! are used: every `signal` is a hard kill of the tree, and the exit reports
+//! the signal the daemon sent.
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -38,20 +39,20 @@ use windows_sys::Win32::Storage::FileSystem::{
 };
 use windows_sys::Win32::System::IO::{CancelIoEx, GetOverlappedResult, OVERLAPPED};
 use windows_sys::Win32::System::JobObjects::{
-    CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOBOBJECT_BASIC_LIMIT_INFORMATION,
-    JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
-    SetInformationJobObject, TerminateJobObject,
+    AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+    JOBOBJECT_BASIC_LIMIT_INFORMATION, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+    JobObjectExtendedLimitInformation, SetInformationJobObject, TerminateJobObject,
 };
 use windows_sys::Win32::System::Pipes::{
     CreateNamedPipeW, PIPE_READMODE_BYTE, PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_WAIT,
 };
 use windows_sys::Win32::System::Threading::{
-    CREATE_NO_WINDOW, CREATE_UNICODE_ENVIRONMENT, CreateProcessW, DeleteProcThreadAttributeList,
-    EXTENDED_STARTUPINFO_PRESENT, GetCurrentProcess, GetExitCodeProcess, INFINITE,
-    InitializeProcThreadAttributeList, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
-    PROC_THREAD_ATTRIBUTE_JOB_LIST, PROCESS_INFORMATION, ResetEvent, STARTF_USESTDHANDLES,
-    STARTUPINFOEXW, SetEvent, TerminateProcess, UpdateProcThreadAttribute, WaitForMultipleObjects,
-    WaitForSingleObject,
+    CREATE_NO_WINDOW, CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, CreateProcessW,
+    DeleteProcThreadAttributeList, EXTENDED_STARTUPINFO_PRESENT, GetCurrentProcess,
+    GetExitCodeProcess, INFINITE, InitializeProcThreadAttributeList,
+    PROC_THREAD_ATTRIBUTE_HANDLE_LIST, PROCESS_INFORMATION, ResetEvent, ResumeThread,
+    STARTF_USESTDHANDLES, STARTUPINFOEXW, SetEvent, TerminateProcess, UpdateProcThreadAttribute,
+    WaitForMultipleObjects, WaitForSingleObject,
 };
 
 use super::{DRAIN_AFTER_EXIT, Exit, OutputSink, exit_message, start_pipe};
@@ -217,24 +218,37 @@ fn spawn(
     job: Option<Job>,
     client: OwnedHandle,
 ) -> Result<Process> {
-    let (created, job) = match create_process(request, job.as_ref(), &client) {
-        Ok(created) => (created, job),
-        Err(error) if job.is_some() && error.raw_os_error() == Some(ERROR_ACCESS_DENIED as i32) => {
-            // An outer job with UI restrictions refuses new members. Run the
-            // command anyway; only the main process can be killed then.
-            let created = create_process(request, None, &client)
-                .with_context(|| format!("failed to spawn {}", request.program))?;
-            eprintln!(
-                "pipe process {id}: cannot join the job object, killing only the main process: {error}"
-            );
-            drop(job);
-            (created, None)
-        }
-        Err(error) => return Err(error).context(format!("failed to spawn {}", request.program)),
-    };
+    let created = create_process(request, &client)
+        .with_context(|| format!("failed to spawn {}", request.program))?;
     // The daemon's copy of the child's write end: holding it open would keep
     // the pipe from ever breaking.
     drop(client);
+    // Joining after creation, not through PROC_THREAD_ATTRIBUTE_JOB_LIST: a
+    // packaged app such as Store PowerShell also joins its package's
+    // container job during creation, and a job-list job then nests that
+    // container under itself, so a concurrent spawn of the same package is
+    // refused and a jobless one lands in the other command's job. An outer job
+    // with UI restrictions refuses new members; run the command anyway, and
+    // only the main process can be killed then.
+    let job = job.filter(|job| match job.assign(&created.process) {
+        Ok(()) => true,
+        Err(error) => {
+            eprintln!(
+                "pipe process {id}: cannot join the job object, killing only the main process: {error}"
+            );
+            false
+        }
+    });
+    // SAFETY: the thread handle stays open through the call.
+    if unsafe { ResumeThread(created.thread.as_raw_handle()) } == u32::MAX {
+        let error = io::Error::last_os_error();
+        // SAFETY: the process handle is open; the job, if any, also kills it
+        // when dropped.
+        unsafe {
+            TerminateProcess(created.process.as_raw_handle(), 1);
+        }
+        return Err(error).context(format!("failed to start {}", request.program));
+    }
     Ok(Process {
         pid: created.pid,
         state: Mutex::new(State {
@@ -247,17 +261,15 @@ fn spawn(
     })
 }
 
-/// A created process, before it is registered with its job and signal state.
+/// A suspended process, before it joins its job and is registered with its
+/// signal state.
 struct Spawned {
     pid: u32,
     process: OwnedHandle,
+    thread: OwnedHandle,
 }
 
-fn create_process(
-    request: &CreatePipe,
-    job: Option<&Job>,
-    client: &OwnedHandle,
-) -> io::Result<Spawned> {
+fn create_process(request: &CreatePipe, client: &OwnedHandle) -> io::Result<Spawned> {
     let stdin = null_handle()?;
     // A child that closes one of stdout or stderr must still write to the
     // other, so stderr gets its own handle to the same pipe.
@@ -267,8 +279,7 @@ fn create_process(
         client.as_raw_handle(),
         stderr.as_raw_handle(),
     ];
-    let jobs = job.map(|job| [job.handle()]);
-    let attributes = Attributes::new(&handles, jobs.as_ref().map(|jobs| jobs.as_slice()))?;
+    let attributes = Attributes::new(&handles)?;
     let mut command = command_line(&request.program, &request.args)?;
     let environment = environment_block(&request.env)?;
     let directory = wide(request.cwd.as_os_str())?;
@@ -281,8 +292,8 @@ fn create_process(
     startup.lpAttributeList = attributes.list();
     let mut info = PROCESS_INFORMATION::default();
     // SAFETY: every buffer and handle stays live through the call. The child
-    // gets no window and shares the output pipe through the handle list; the
-    // job list puts it in the job atomically, with no breakaway flags.
+    // gets no window, shares the output pipe through the handle list, and
+    // stays suspended until it has joined its job.
     let created = unsafe {
         CreateProcessW(
             null(),
@@ -290,7 +301,10 @@ fn create_process(
             null(),
             null(),
             1,
-            CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT,
+            CREATE_NO_WINDOW
+                | CREATE_SUSPENDED
+                | CREATE_UNICODE_ENVIRONMENT
+                | EXTENDED_STARTUPINFO_PRESENT,
             environment.as_ptr().cast(),
             directory.as_ptr(),
             (&raw const startup).cast(),
@@ -300,13 +314,11 @@ fn create_process(
     if created == 0 {
         return Err(io::Error::last_os_error());
     }
-    // SAFETY: CreateProcessW returned new, uniquely owned handles; the thread
-    // handle is not needed.
-    let process = owned_handle(info.hProcess)?;
-    drop(owned_handle(info.hThread)?);
+    // SAFETY: CreateProcessW returned new, uniquely owned handles.
     Ok(Spawned {
         pid: info.dwProcessId,
-        process,
+        process: owned_handle(info.hProcess)?,
+        thread: owned_handle(info.hThread)?,
     })
 }
 
@@ -699,6 +711,14 @@ impl Job {
         self.0.as_raw_handle()
     }
 
+    fn assign(&self, process: &OwnedHandle) -> io::Result<()> {
+        // SAFETY: both handles stay open through the call.
+        if unsafe { AssignProcessToJobObject(self.handle(), process.as_raw_handle()) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
+    }
+
     fn finish(self, failed: bool) -> io::Result<()> {
         // No console and no SIGTERM grace. If termination fails, closing the
         // still-armed job is the fallback. For a successful command disarm
@@ -898,9 +918,9 @@ fn compare_keys(a: &[u16], b: &[u16]) -> Ordering {
     }
 }
 
-/// An initialized process-attribute list and the buffer it points into, freed
-/// in the right order. The lifetime ties it to the handle and job arrays its
-/// values point into.
+/// An initialized process-attribute list holding the inherited-handle list,
+/// and the buffer it points into, freed in the right order. The lifetime ties
+/// it to the handle array the list points into.
 struct Attributes<'a> {
     // Never read: the list points into this allocation, which must stay put
     // and alive for the list's lifetime.
@@ -910,23 +930,11 @@ struct Attributes<'a> {
 }
 
 impl<'a> Attributes<'a> {
-    fn new(handles: &'a [HANDLE], jobs: Option<&'a [HANDLE]>) -> io::Result<Self> {
-        let mut entries = vec![(
-            PROC_THREAD_ATTRIBUTE_HANDLE_LIST as usize,
-            handles.as_ptr().cast::<c_void>(),
-            size_of_val(handles),
-        )];
-        entries.extend(jobs.map(|jobs| {
-            (
-                PROC_THREAD_ATTRIBUTE_JOB_LIST as usize,
-                jobs.as_ptr().cast::<c_void>(),
-                size_of_val(jobs),
-            )
-        }));
+    fn new(handles: &'a [HANDLE]) -> io::Result<Self> {
         let mut bytes = 0;
         // SAFETY: the first call only reports the required size.
         unsafe {
-            InitializeProcThreadAttributeList(null_mut(), entries.len() as u32, 0, &mut bytes);
+            InitializeProcThreadAttributeList(null_mut(), 1, 0, &mut bytes);
         }
         if bytes == 0 {
             return Err(io::Error::last_os_error());
@@ -935,9 +943,7 @@ impl<'a> Attributes<'a> {
         let list = buffer.as_mut_ptr().cast::<c_void>();
         // SAFETY: the buffer is at least `bytes` long, `usize`-aligned, and
         // outlives the list.
-        if unsafe { InitializeProcThreadAttributeList(list, entries.len() as u32, 0, &mut bytes) }
-            == 0
-        {
+        if unsafe { InitializeProcThreadAttributeList(list, 1, 0, &mut bytes) } == 0 {
             return Err(io::Error::last_os_error());
         }
         let this = Self {
@@ -945,23 +951,21 @@ impl<'a> Attributes<'a> {
             list,
             _attached: PhantomData,
         };
-        for &(attribute, value, length) in &entries {
-            // SAFETY: the list was initialized for exactly `entries.len()`
-            // attributes; every value outlives the list.
-            if unsafe {
-                UpdateProcThreadAttribute(
-                    this.list,
-                    0,
-                    attribute,
-                    value,
-                    length,
-                    null_mut(),
-                    null(),
-                )
-            } == 0
-            {
-                return Err(io::Error::last_os_error());
-            }
+        // SAFETY: the list was initialized for one attribute; the handle array
+        // outlives the list.
+        if unsafe {
+            UpdateProcThreadAttribute(
+                this.list,
+                0,
+                PROC_THREAD_ATTRIBUTE_HANDLE_LIST as usize,
+                handles.as_ptr().cast::<c_void>(),
+                size_of_val(handles),
+                null_mut(),
+                null(),
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
         }
         Ok(this)
     }
