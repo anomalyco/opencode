@@ -434,7 +434,7 @@ impl Stream {
 fn consumed(kind: Consume, buf: Vec<u8>) -> HostResult {
     match kind {
         Consume::Bytes | Consume::ArrayBuffer => Ok(HostValue::Bytes(buf)),
-        Consume::Text => Ok(HostValue::String(decode(&buf))),
+        Consume::Text => Ok(HostValue::String(decode(&buf).into())),
         Consume::Json => parse_json(&decode(&buf)),
     }
 }
@@ -524,7 +524,7 @@ pub(crate) fn surface(response: &StreamingResponse, epoch: &Epoch) -> Surface {
         .map(|(key, kind)| {
             let stream = response.body.clone();
             let epoch = epoch.clone();
-            let mut f = HostFunction::internal_async("", 0, move |_| {
+            let f = HostFunction::internal_async("", 0, move |_| {
                 let call = stream
                     .as_ref()
                     .map(|s| op_call(s, &epoch, Op::Consume(kind)));
@@ -541,7 +541,6 @@ pub(crate) fn surface(response: &StreamingResponse, epoch: &Epoch) -> Surface {
                     }
                 }
             });
-            f.carrier = matches!(kind, Consume::Json);
             (key, f)
         })
         .collect();
@@ -651,7 +650,7 @@ fn reader_object(stream: &Arc<Mutex<Stream>>, epoch: &Epoch, reader: u64) -> Hos
 /// Why the reference's host runtime can't parse `text` as JSON, as its `JSON.parse` says it (`JSON Parse error: ...`).
 pub(crate) fn json_parse_error(text: &str) -> String {
     match parse_json(text) {
-        Err(HostValue::Error(e)) => e.message,
+        Err(HostValue::Error(e)) => e.message.to_string_lossy().into_owned(),
         _ => "JSON Parse error: Unable to parse JSON string".into(),
     }
 }
@@ -834,7 +833,7 @@ impl Json<'_> {
     fn value(&mut self, tok: Tok) -> J<HostValue> {
         match tok {
             Tok::Eof => Err("Unexpected EOF".into()),
-            Tok::Str(s) => Ok(HostValue::String(s)),
+            Tok::Str(s) => Ok(HostValue::String(crate::HostString::from_run_text(&s))),
             Tok::Num(n) => Ok(HostValue::Number(n)),
             Tok::Lit(v) => Ok(v),
             Tok::Ident(name) => Err(format!("Unexpected identifier \"{name}\"")),
@@ -861,10 +860,10 @@ impl Json<'_> {
                 }
             }
             Tok::Punct(b'{') => {
-                let mut fields: Vec<(String, HostValue)> = Vec::new();
+                let mut fields: Vec<(crate::HostString, HostValue)> = Vec::new();
                 let mut key = match self.lex()? {
                     Tok::Punct(b'}') => return Ok(HostValue::Object(fields)),
-                    Tok::Str(s) => s,
+                    Tok::Str(s) => crate::HostString::from_run_text(&s),
                     _ => return Err("Expected '}'".into()),
                 };
                 loop {
@@ -881,7 +880,7 @@ impl Json<'_> {
                     }
                     match self.lex()? {
                         Tok::Punct(b',') => match self.lex()? {
-                            Tok::Str(s) => key = s,
+                            Tok::Str(s) => key = crate::HostString::from_run_text(&s),
                             _ => return Err("Property name must be a string literal".into()),
                         },
                         Tok::Punct(b'}') => return Ok(HostValue::Object(fields)),

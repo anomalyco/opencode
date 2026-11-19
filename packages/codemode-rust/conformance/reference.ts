@@ -77,12 +77,14 @@ export const toolsGlobal = (ref: Reference) => {
  * `{ number: "NaN" | "Infinity" | "-Infinity" }`, JSON primitives as they are, `{ function: name }`,
  * `{ date: ms | "NaN" }`, `{ regexp: [source, flags] }`, `{ url: href }`, `{ params: [[k, v], ...] }`,
  * `{ headers: [[k, v], ...] }`, `{ buffer: [bytes] }`, `{ bytes: [bytes] }`, `{ arrayBuffer: [bytes] }`,
- * `{ map: [[k, v], ...] }`, `{ set: [v, ...] }`, `{ array: [v | { hole: true }, ...] }`,
+ * `{ map: [[k, v], ...] }`, `{ set: [v, ...] }`, `{ array: [v | { hole: true }, ...] }`, and a string, an object key
+ * or an error message with an unpaired surrogate as `{ string: [code units] }`,
  * `{ error: { name, message, cause?, fields: [[k, v], ...] } }`, `{ object: [[k, v], ...] }`.
  */
 export const describe = (v: unknown): unknown => {
   if (v === undefined) return { undefined: true }
   if (typeof v === "number" && !Number.isFinite(v)) return { number: String(v) }
+  if (typeof v === "string") return text(v)
   if (v === null || typeof v === "string" || typeof v === "number" || typeof v === "boolean") return v
   if (typeof v === "function") return { function: v.name }
   if (v instanceof Date) return { date: Number.isNaN(v.getTime()) ? "NaN" : v.getTime() }
@@ -102,11 +104,15 @@ export const describe = (v: unknown): unknown => {
     return {
       error: {
         name: v.name,
-        message: v.message,
+        message: text(v.message),
         ...("cause" in v ? { cause: describe(v.cause) } : {}),
-        fields: Object.keys(v).map((k) => [k, describe(fields[k])]),
+        fields: Object.keys(v).map((k) => [text(k), describe(fields[k])]),
       },
     }
   }
-  return { object: Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, describe(x)]) }
+  return { object: Object.entries(v as Record<string, unknown>).map(([k, x]) => [text(k), describe(x)]) }
 }
+
+/** A string as `describe` writes it: itself, or `{ string: [code units] }` when it has an unpaired surrogate. */
+const text = (s: string): unknown =>
+  s.isWellFormed() ? s : { string: Array.from({ length: s.length }, (_, i) => s.charCodeAt(i)) }

@@ -3,8 +3,8 @@
 use std::sync::{Arc, Mutex};
 
 use psychoscript::{
-    DiagnosticKind, HostFunction, HostValue, Json, Limits, ProgramOptions, Runtime, Translate,
-    TranslateFunctions,
+    DiagnosticKind, HostFunction, HostString, HostValue, Json, Limits, ProgramOptions, Runtime,
+    Translate, TranslateFunctions,
 };
 use serde_json::json;
 
@@ -177,23 +177,24 @@ fn string_building_does_not_alias() {
 /// Rust text can't hold a lone surrogate, so where the reference hands the host and the outcome the surrogate
 /// itself, these get U+FFFD; inside the program it stays a surrogate.
 #[test]
-fn lone_surrogates_reach_the_host_as_replacement_characters() {
+fn lone_surrogates_reach_the_host_unchanged() {
     let (rt, seen) = echo();
     let outcome = run(
         &rt,
         r#"const h = "\ud83d"
-        console.log("log " + h)
         const back = echo({ [h]: h + "x" })
-        return { s: h, pair: h + "\ude00", back, keys: Object.keys(back).length, error: (() => { try { throw new Error(h) } catch (e) { return e.message } })() }"#,
+        return [Object.keys(back)[0] === h, back[h] === h + "x", back[h].length, (h + "\ude00").isWellFormed()]"#,
     );
-    assert_eq!(
-        outcome.result.unwrap(),
-        json!({ "s": "\u{fffd}", "pair": "\u{1f600}", "back": { "\u{fffd}": "\u{fffd}x" }, "keys": 1, "error": "\u{fffd}" })
-    );
-    assert_eq!(outcome.logs, vec!["log \u{fffd}"]);
-    assert_eq!(
-        seen.lock().unwrap()[0].to_json(),
-        Some(json!({ "\u{fffd}": "\u{fffd}x" }))
+    assert_eq!(outcome.result.unwrap(), json!([true, true, 2, true]));
+    let seen = seen.lock().unwrap()[0].clone();
+    let HostValue::Object(fields) = seen else {
+        panic!("not an object");
+    };
+    assert_eq!(fields[0].0, HostString::from_utf16(&[0xd83d]));
+    assert!(!fields[0].0.is_well_formed());
+    assert_eq!(fields[0].0.to_string_lossy(), "\u{fffd}");
+    assert!(
+        matches!(&fields[0].1, HostValue::String(s) if s.to_utf16().as_ref() == [0xd83d, u16::from(b'x')])
     );
 }
 

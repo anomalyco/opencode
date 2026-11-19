@@ -16,6 +16,140 @@ use crate::Json;
 use crate::exec::BoxFuture;
 use crate::host::RunId;
 
+/// A string crossing the boundary: any string a program can hold, including one with an unpaired surrogate, which
+/// has no UTF-8 form. It keeps such a string's UTF-16 code units, so a host sees and returns exactly what the program
+/// had; [`HostString::to_string_lossy`] gives a Rust `String` when one is wanted, with U+FFFD for each unpaired
+/// surrogate.
+#[derive(Clone, Default, PartialEq, Eq, Hash)]
+pub struct HostString(Text);
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+enum Text {
+    Utf8(String),
+    /// Code units holding at least one unpaired surrogate.
+    Utf16(Box<[u16]>),
+}
+
+impl Default for Text {
+    fn default() -> Self {
+        Text::Utf8(String::new())
+    }
+}
+
+impl HostString {
+    /// The string of UTF-16 code units, well formed or not.
+    pub fn from_utf16(units: &[u16]) -> Self {
+        match String::from_utf16(units) {
+            Ok(s) => HostString(Text::Utf8(s)),
+            Err(_) => HostString(Text::Utf16(units.into())),
+        }
+    }
+
+    /// The string as UTF-8, when it has no unpaired surrogate.
+    pub fn as_str(&self) -> Option<&str> {
+        match &self.0 {
+            Text::Utf8(s) => Some(s),
+            Text::Utf16(_) => None,
+        }
+    }
+
+    /// Whether it has no unpaired surrogate, so it has a UTF-8 form.
+    pub fn is_well_formed(&self) -> bool {
+        matches!(self.0, Text::Utf8(_))
+    }
+
+    /// The string as UTF-8, with U+FFFD for each unpaired surrogate.
+    pub fn to_string_lossy(&self) -> std::borrow::Cow<'_, str> {
+        match &self.0 {
+            Text::Utf8(s) => std::borrow::Cow::Borrowed(s),
+            Text::Utf16(units) => std::borrow::Cow::Owned(String::from_utf16_lossy(units)),
+        }
+    }
+
+    /// The string's UTF-16 code units.
+    pub fn to_utf16(&self) -> std::borrow::Cow<'_, [u16]> {
+        match &self.0 {
+            Text::Utf8(s) => std::borrow::Cow::Owned(s.encode_utf16().collect()),
+            Text::Utf16(units) => std::borrow::Cow::Borrowed(units),
+        }
+    }
+
+    /// The string as UTF-8 when it is well formed, or itself.
+    pub fn into_string(self) -> Result<String, Self> {
+        match self.0 {
+            Text::Utf8(s) => Ok(s),
+            text => Err(HostString(text)),
+        }
+    }
+
+    /// The text a run's string has (its carrier form: see `strings`).
+    pub(crate) fn from_run_text(text: &str) -> Self {
+        if !crate::strings::has_mark(text) {
+            return HostString(Text::Utf8(text.to_owned()));
+        }
+        Self::from_utf16(&crate::strings::units_of(text))
+    }
+
+    /// The string as a run's text: its carrier form when it has an unpaired surrogate or a `MARK`.
+    pub(crate) fn to_run_text(&self) -> String {
+        match &self.0 {
+            Text::Utf8(s) => crate::strings::external_text(s.clone()),
+            Text::Utf16(units) => crate::strings::from_units(units),
+        }
+    }
+}
+
+impl From<String> for HostString {
+    fn from(s: String) -> Self {
+        HostString(Text::Utf8(s))
+    }
+}
+
+impl From<&str> for HostString {
+    fn from(s: &str) -> Self {
+        HostString(Text::Utf8(s.to_owned()))
+    }
+}
+
+impl From<&String> for HostString {
+    fn from(s: &String) -> Self {
+        HostString(Text::Utf8(s.clone()))
+    }
+}
+
+impl PartialEq<str> for HostString {
+    fn eq(&self, other: &str) -> bool {
+        self.as_str() == Some(other)
+    }
+}
+
+impl PartialEq<&str> for HostString {
+    fn eq(&self, other: &&str) -> bool {
+        self.as_str() == Some(*other)
+    }
+}
+
+impl PartialEq<String> for HostString {
+    fn eq(&self, other: &String) -> bool {
+        self.as_str() == Some(other.as_str())
+    }
+}
+
+impl fmt::Display for HostString {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.to_string_lossy())
+    }
+}
+
+impl fmt::Debug for HostString {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.0 {
+            Text::Utf8(s) => fmt::Debug::fmt(s, f),
+            Text::Utf16(units) => write!(f, "HostString::from_utf16(&{units:?})"),
+        }
+    }
+}
+
 /// A value on the host's side of the boundary.
 #[derive(Clone, Debug, Default)]
 pub enum HostValue {
@@ -24,10 +158,10 @@ pub enum HostValue {
     Null,
     Bool(bool),
     Number(f64),
-    String(String),
+    String(HostString),
     /// `None` is a hole.
     Array(Vec<Option<HostValue>>),
-    Object(Vec<(String, HostValue)>),
+    Object(Vec<(HostString, HostValue)>),
     Map(Vec<(HostValue, HostValue)>),
     Set(Vec<HostValue>),
     Function(HostFunction),
@@ -62,7 +196,7 @@ pub enum HostValue {
 }
 
 impl HostValue {
-    pub fn object<K: Into<String>>(fields: impl IntoIterator<Item = (K, HostValue)>) -> Self {
+    pub fn object<K: Into<HostString>>(fields: impl IntoIterator<Item = (K, HostValue)>) -> Self {
         HostValue::Object(fields.into_iter().map(|(k, v)| (k.into(), v)).collect())
     }
 
@@ -80,7 +214,7 @@ impl HostValue {
 
     pub fn as_str(&self) -> Option<&str> {
         match self {
-            HostValue::String(s) => Some(s),
+            HostValue::String(s) => s.as_str(),
             _ => None,
         }
     }
@@ -98,11 +232,11 @@ impl HostValue {
             Json::Null => HostValue::Null,
             Json::Bool(b) => HostValue::Bool(*b),
             Json::Number(n) => HostValue::Number(n.as_f64().unwrap_or(f64::NAN)),
-            Json::String(s) => HostValue::String(s.clone()),
+            Json::String(s) => HostValue::String(s.into()),
             Json::Array(items) => HostValue::array(items.iter().map(HostValue::from_json)),
             Json::Object(map) => HostValue::Object(
                 map.iter()
-                    .map(|(k, v)| (k.clone(), HostValue::from_json(v)))
+                    .map(|(k, v)| (k.into(), HostValue::from_json(v)))
                     .collect(),
             ),
         }
@@ -122,7 +256,7 @@ impl HostValue {
             HostValue::Number(n) => {
                 serde_json::Number::from_f64(*n).map_or(Json::Null, Json::Number)
             }
-            HostValue::String(s) => Json::String(s.clone()),
+            HostValue::String(s) => Json::String(s.to_string_lossy().into_owned()),
             HostValue::Array(items) => Json::Array(
                 items
                     .iter()
@@ -142,7 +276,7 @@ impl HostValue {
             HostValue::Object(fields) => Json::Object(
                 fields
                     .iter()
-                    .filter_map(|(k, v)| v.to_json().map(|j| (k.clone(), j)))
+                    .filter_map(|(k, v)| v.to_json().map(|j| (k.to_string_lossy().into_owned(), j)))
                     .collect(),
             ),
             HostValue::Map(_)
@@ -167,7 +301,10 @@ impl HostValue {
             HostValue::Error(e) => {
                 let mut map = serde_json::Map::new();
                 map.insert("name".into(), Json::String(e.name.clone()));
-                map.insert("message".into(), Json::String(e.message.clone()));
+                map.insert(
+                    "message".into(),
+                    Json::String(e.message.to_string_lossy().into_owned()),
+                );
                 Json::Object(map)
             }
             HostValue::Failure(f) => {
@@ -179,13 +316,13 @@ impl HostValue {
 
 impl From<&str> for HostValue {
     fn from(s: &str) -> Self {
-        HostValue::String(s.to_owned())
+        HostValue::String(s.into())
     }
 }
 
 impl From<String> for HostValue {
     fn from(s: String) -> Self {
-        HostValue::String(s)
+        HostValue::String(s.into())
     }
 }
 
@@ -235,19 +372,19 @@ impl From<Failure> for HostValue {
 #[derive(Clone, Debug, Default)]
 pub struct HostError {
     pub name: String,
-    pub message: String,
+    pub message: HostString,
     pub cause: Option<Box<HostValue>>,
-    pub fields: Vec<(String, HostValue)>,
+    pub fields: Vec<(HostString, HostValue)>,
 }
 
 impl HostError {
     /// An `Error`.
-    pub fn new(message: impl Into<String>) -> Self {
+    pub fn new(message: impl Into<HostString>) -> Self {
         Self::named("Error", message)
     }
 
     /// An error of a built-in type: `TypeError`, `RangeError`, `SyntaxError`, ... Other names become `Error`.
-    pub fn named(name: impl Into<String>, message: impl Into<String>) -> Self {
+    pub fn named(name: impl Into<String>, message: impl Into<HostString>) -> Self {
         Self {
             name: name.into(),
             message: message.into(),
@@ -261,7 +398,7 @@ impl HostError {
         self
     }
 
-    pub fn with_field(mut self, key: impl Into<String>, value: impl Into<HostValue>) -> Self {
+    pub fn with_field(mut self, key: impl Into<HostString>, value: impl Into<HostValue>) -> Self {
         self.fields.push((key.into(), value.into()));
         self
     }
@@ -269,7 +406,7 @@ impl HostError {
 
 impl fmt::Display for HostError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.message.is_empty() {
+        if self.message == "" {
             f.write_str(&self.name)
         } else {
             write!(f, "{}: {}", self.name, self.message)
@@ -442,8 +579,6 @@ pub struct HostFunction {
     pub(crate) snapshot: Option<SnapshotHooks>,
     /// Whether its name is its own, even when empty; otherwise an unnamed function is named by where it is.
     pub(crate) own_name: bool,
-    /// Its results' strings are already run text, lone surrogates in carrier form (see `strings::from_units`).
-    pub(crate) carrier: bool,
 }
 
 impl HostFunction {
@@ -506,7 +641,6 @@ impl HostFunction {
             takes_functions: false,
             snapshot: None,
             own_name: false,
-            carrier: false,
         }
     }
 

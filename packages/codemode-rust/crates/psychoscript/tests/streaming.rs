@@ -78,7 +78,7 @@ fn respond(spec: &HostValue, log: &Log) -> HostValue {
                 .into_iter()
                 .flatten()
                 .map(|c| match c {
-                    HostValue::String(s) => s.into_bytes(),
+                    HostValue::String(s) => s.to_string_lossy().into_owned().into_bytes(),
                     HostValue::Array(bytes) => bytes
                         .into_iter()
                         .flatten()
@@ -102,7 +102,7 @@ fn respond(spec: &HostValue, log: &Log) -> HostValue {
     }
     if let HostValue::Object(headers) = get("headers") {
         for (k, v) in headers {
-            response = response.with_header(k, v.as_str().unwrap());
+            response = response.with_header(k.to_string_lossy(), v.as_str().unwrap());
         }
     }
     HostValue::Response(response)

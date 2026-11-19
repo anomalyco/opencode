@@ -231,15 +231,15 @@ fn a_program_error_crosses_with_its_name_message_cause_and_data() {
     let HostValue::Error(e) = &held.lock().unwrap()[0] else {
         panic!("not an error");
     };
-    assert_eq!((e.name.as_str(), e.message.as_str()), ("Error", "m"));
+    assert_eq!((e.name.as_str(), e.message.as_str()), ("Error", Some("m")));
     let Some(HostValue::Error(cause)) = e.cause.as_deref() else {
         panic!("no cause");
     };
     assert_eq!(
         (cause.name.as_str(), cause.message.as_str()),
-        ("RangeError", "root")
+        ("RangeError", Some("root"))
     );
-    let keys: Vec<&str> = e.fields.iter().map(|(k, _)| k.as_str()).collect();
+    let keys: Vec<&str> = e.fields.iter().filter_map(|(k, _)| k.as_str()).collect();
     assert_eq!(keys, ["code", "detail"]);
 }
 
@@ -369,7 +369,7 @@ fn a_host_function_passed_back_arrives_as_itself_wherever_it_sits() {
                     let name = args[0].as_str().unwrap_or_default().to_owned();
                     let text = HostFunction::new(|_, _| HostValue::from("text"))
                         .named(format!("text:{name}"));
-                    HostValue::object([("name", HostValue::String(name)), ("text", text.into())])
+                    HostValue::object([("name", HostValue::from(name)), ("text", text.into())])
                 }),
             ),
             (
@@ -379,7 +379,7 @@ fn a_host_function_passed_back_arrives_as_itself_wherever_it_sits() {
                         Some(HostValue::Function(f)) => f.name().to_owned(),
                         _ => "no function".to_owned(),
                     };
-                    Ok(HostValue::array([args[0].clone(), HostValue::String(name)]))
+                    Ok(HostValue::array([args[0].clone(), HostValue::from(name)]))
                 })
                 .takes_functions(),
             ),

@@ -780,7 +780,6 @@ impl Enc<'_, '_> {
                     result,
                     label,
                     owner,
-                    carrier,
                     site,
                 } = h.as_ref();
                 let (ok, v) = match result {
@@ -794,17 +793,7 @@ impl Enc<'_, '_> {
                     }
                     _ => (false, v.clone()),
                 };
-                json!([
-                    p,
-                    "host",
-                    ok,
-                    label,
-                    owner,
-                    hooked,
-                    host_value(&data),
-                    carrier,
-                    site
-                ])
+                json!([p, "host", ok, label, owner, hooked, host_value(&data), site])
             }
             Settlement::Interrupted => json!([p, "interrupted"]),
         })
@@ -977,7 +966,7 @@ fn host_value(v: &HostValue) -> J {
         HostValue::Null => J::Null,
         HostValue::Bool(b) => J::Bool(*b),
         HostValue::Number(n) => json!(["n", num(*n)]),
-        HostValue::String(s) => J::from(s.as_str()),
+        HostValue::String(s) => text(s),
         HostValue::Array(items) => json!([
             "a",
             items
@@ -989,7 +978,7 @@ fn host_value(v: &HostValue) -> J {
             "o",
             fields
                 .iter()
-                .map(|(k, v)| json!([k, host_value(v)]))
+                .map(|(k, v)| json!([text(k), host_value(v)]))
                 .collect::<Vec<_>>()
         ]),
         HostValue::Map(entries) => json!([
@@ -1015,11 +1004,11 @@ fn host_value(v: &HostValue) -> J {
         HostValue::Error(e) => json!([
             "e",
             e.name,
-            e.message,
+            text(&e.message),
             e.cause.as_ref().map_or(J::Null, |c| host_value(c)),
             e.fields
                 .iter()
-                .map(|(k, v)| json!([k, host_value(v)]))
+                .map(|(k, v)| json!([text(k), host_value(v)]))
                 .collect::<Vec<_>>()
         ]),
     }
@@ -1048,12 +1037,36 @@ fn lost_path(j: &J, label: &str) -> Option<String> {
     }
 }
 
+/// A host string as saved: JSON text when well formed, else its UTF-16 code units.
+fn text(s: &crate::HostString) -> J {
+    match s.as_str() {
+        Some(s) => J::from(s),
+        None => json!(["s16", s.to_utf16()]),
+    }
+}
+
+fn text_from(j: &J) -> R<crate::HostString> {
+    match j {
+        J::String(s) => Ok(s.into()),
+        J::Array(a) if a.first().and_then(J::as_str) == Some("s16") => {
+            let units = list(a.get(1))?
+                .iter()
+                .map(|u| u.as_u64().and_then(|u| u16::try_from(u).ok()))
+                .collect::<Option<Vec<u16>>>()
+                .ok_or_else(|| invalid("a string's code units are malformed."))?;
+            Ok(crate::HostString::from_utf16(&units))
+        }
+        _ => Err(invalid("a string is malformed.")),
+    }
+}
+
 fn host_value_from(j: &J) -> R<HostValue> {
     Ok(match j {
         J::Null => HostValue::Null,
         J::Bool(b) => HostValue::Bool(*b),
-        J::String(s) => HostValue::String(s.clone()),
+        J::String(s) => HostValue::String(s.into()),
         J::Array(a) => match a.first().and_then(J::as_str) {
+            Some("s16") => HostValue::String(text_from(j)?),
             Some("u") => HostValue::Undefined,
             Some("n") => HostValue::Number(unnum(a.get(1).unwrap_or(&J::Null))?),
             Some("a") => HostValue::Array(
@@ -1068,7 +1081,7 @@ fn host_value_from(j: &J) -> R<HostValue> {
             Some("o") => HostValue::Object(
                 list(a.get(1))?
                     .iter()
-                    .map(|p| Ok((string(at(p, 0)?)?, host_value_from(at(p, 1)?)?)))
+                    .map(|p| Ok((text_from(at(p, 0)?)?, host_value_from(at(p, 1)?)?)))
                     .collect::<R<_>>()?,
             ),
             Some("m") => HostValue::Map(
@@ -1104,14 +1117,14 @@ fn host_value_from(j: &J) -> R<HostValue> {
             Some("resp") => HostValue::Undefined,
             Some("e") => HostValue::Error(Box::new(HostError {
                 name: string(at(j, 1)?)?,
-                message: string(at(j, 2)?)?,
+                message: text_from(at(j, 2)?)?,
                 cause: match at(j, 3)? {
                     J::Null => None,
                     c => Some(Box::new(host_value_from(c)?)),
                 },
                 fields: list(a.get(4))?
                     .iter()
-                    .map(|p| Ok((string(at(p, 0)?)?, host_value_from(at(p, 1)?)?)))
+                    .map(|p| Ok((text_from(at(p, 0)?)?, host_value_from(at(p, 1)?)?)))
                     .collect::<R<_>>()?,
             })),
             _ => return Err(invalid("a host value has an unknown tag.")),
@@ -2038,7 +2051,7 @@ fn restore_settlement(vm: &mut Vm, dec: &Dec, j: &J) -> R<(Id, Settlement)> {
             let saved = at(j, 6)?;
             // The reference saves a value with no data form (a live response) as a `Lost`, which can't cross into the
             // program once the run resumes: the call fails there, at the place that names it.
-            let site = j.get(8).and_then(J::as_u64).map(|s| s as u32);
+            let site = j.get(7).and_then(J::as_u64).map(|s| s as u32);
             if ok && let Some(at_label) = lost_path(saved, &label) {
                 let message = format!("{at_label} produced a Lost, which the program cannot hold.");
                 return Ok((p, Settlement::Lost(message, site)));
@@ -2047,8 +2060,7 @@ fn restore_settlement(vm: &mut Vm, dec: &Dec, j: &J) -> R<(Id, Settlement)> {
             if hooked && let Some(owner) = &owner {
                 v = decode(vm, owner, v)?;
             }
-            let carrier = j.get(7).and_then(J::as_bool).unwrap_or(false);
-            Settlement::host(if ok { Ok(v) } else { Err(v) }, label, owner, carrier, site)
+            Settlement::host(if ok { Ok(v) } else { Err(v) }, label, owner, site)
         }
         Some("lost") => Settlement::Lost(
             string(at(j, 2)?)?,

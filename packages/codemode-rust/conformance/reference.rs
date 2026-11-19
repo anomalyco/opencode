@@ -3,7 +3,7 @@
 
 #![allow(dead_code)]
 
-use psychoscript::{Failure, HostFunction, HostValue, Json, Namespace, Resolved};
+use psychoscript::{Failure, HostFunction, HostString, HostValue, Json, Namespace, Resolved};
 use serde_json::json;
 
 /// The `tools` namespace of `conformance/reference.ts`: `tools.echo`, `tools.fail` and `tools.git.status`, all async;
@@ -72,7 +72,7 @@ pub fn describe(v: &HostValue) -> Json {
             json!({ "number": if *n > 0.0 { "Infinity" } else { "-Infinity" } })
         }
         HostValue::Number(n) => number(*n),
-        HostValue::String(s) => json!(s),
+        HostValue::String(s) => text(s),
         HostValue::Function(f) => json!({ "function": f.name() }),
         HostValue::Durable(_) | HostValue::Namespace(_) => json!({ "function": "" }),
         HostValue::Date(t) if t.is_nan() => json!({ "date": "NaN" }),
@@ -96,7 +96,7 @@ pub fn describe(v: &HostValue) -> Json {
         HostValue::Error(e) => {
             let mut error = serde_json::Map::new();
             error.insert("name".into(), json!(e.name));
-            error.insert("message".into(), json!(e.message));
+            error.insert("message".into(), text(&e.message));
             if let Some(cause) = &e.cause {
                 error.insert("cause".into(), describe(cause));
             }
@@ -105,7 +105,7 @@ pub fn describe(v: &HostValue) -> Json {
                 Json::Array(
                     e.fields
                         .iter()
-                        .map(|(k, x)| json!([k, describe(x)]))
+                        .map(|(k, x)| json!([text(k), describe(x)]))
                         .collect(),
                 ),
             );
@@ -116,8 +116,17 @@ pub fn describe(v: &HostValue) -> Json {
         }),
         HostValue::Response(_) => json!({ "object": [] }),
         HostValue::Object(fields) => json!({
-            "object": fields.iter().map(|(k, x)| json!([k, describe(x)])).collect::<Vec<_>>()
+            "object": fields.iter().map(|(k, x)| json!([text(k), describe(x)])).collect::<Vec<_>>()
         }),
+    }
+}
+
+/// A string as `describe` writes it: the string itself, or `{ string: [code units] }` when it has an unpaired
+/// surrogate, which JSON can't hold.
+pub fn text(s: &HostString) -> Json {
+    match s.as_str() {
+        Some(s) => json!(s),
+        None => json!({ "string": s.to_utf16() }),
     }
 }
 

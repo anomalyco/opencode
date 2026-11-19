@@ -5,8 +5,8 @@
 use std::sync::{Arc, Mutex};
 
 use psychoscript::{
-    HostError, HostFunction, HostValue, Json, Returned, Runtime, Translate, TranslateFunctions,
-    TranslatePromises,
+    HostError, HostFunction, HostString, HostValue, Json, Returned, Runtime, Translate,
+    TranslateFunctions, TranslatePromises,
 };
 use serde_json::json;
 
@@ -62,6 +62,21 @@ fn bytes(j: &Json) -> Vec<u8> {
         .collect()
 }
 
+/// A string as `describe` writes it: itself, or `{ string: [code units] }`.
+fn text_of(j: &Json) -> HostString {
+    match j {
+        Json::String(s) => s.into(),
+        j => HostString::from_utf16(
+            &j["string"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|u| u.as_u64().unwrap() as u16)
+                .collect::<Vec<_>>(),
+        ),
+    }
+}
+
 /// A host value from the data `describe` writes: the generator's samples, as the host gives them.
 fn undescribe(j: &Json) -> HostValue {
     let Json::Object(map) = j else {
@@ -77,6 +92,7 @@ fn undescribe(j: &Json) -> HostValue {
             flags: v[1].as_str().unwrap().to_owned(),
         },
         "url" => HostValue::Url(v.as_str().unwrap().to_owned()),
+        "string" => HostValue::String(text_of(j)),
         "params" => HostValue::SearchParams(pairs(v)),
         "headers" => HostValue::Headers(pairs(v)),
         "bytes" | "arrayBuffer" => HostValue::Bytes(bytes(v)),
@@ -97,13 +113,12 @@ fn undescribe(j: &Json) -> HostValue {
                 .collect(),
         ),
         "error" => {
-            let mut e =
-                HostError::named(v["name"].as_str().unwrap(), v["message"].as_str().unwrap());
+            let mut e = HostError::named(v["name"].as_str().unwrap(), text_of(&v["message"]));
             if let Some(cause) = v.get("cause") {
                 e = e.with_cause(undescribe(cause));
             }
             for f in v["fields"].as_array().unwrap() {
-                e = e.with_field(f[0].as_str().unwrap(), undescribe(&f[1]));
+                e = e.with_field(text_of(&f[0]), undescribe(&f[1]));
             }
             e.into()
         }
@@ -111,7 +126,7 @@ fn undescribe(j: &Json) -> HostValue {
             v.as_array()
                 .unwrap()
                 .iter()
-                .map(|f| (f[0].as_str().unwrap().to_owned(), undescribe(&f[1])))
+                .map(|f| (text_of(&f[0]), undescribe(&f[1])))
                 .collect(),
         ),
         other => panic!("unknown sample tag {other}"),

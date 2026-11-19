@@ -10,8 +10,8 @@ use rustc_hash::FxHashMap;
 
 use crate::exec::{BoxFuture, Tasks, block_on};
 use crate::host_function::{
-    Body, DurableCall, DurableFunction, HostError, HostFunction, HostResult, HostValue, Namespace,
-    Resolved, Returned, SnapshotHooks,
+    Body, DurableCall, DurableFunction, HostError, HostFunction, HostResult, HostString, HostValue,
+    Namespace, Resolved, Returned, SnapshotHooks,
 };
 use crate::object::*;
 use crate::runtime::{Run, Translate, TranslateFunctions, TranslatePromises};
@@ -96,8 +96,6 @@ pub struct Settled {
     pub label: String,
     /// The global host function whose `snapshot` hooks save functions in the value, by label.
     pub owner: Option<String>,
-    /// Whether its strings are run text already (`HostFunction::carrier`).
-    pub carrier: bool,
     /// The source offset of the call, where an error converting its value points.
     pub site: Option<u32>,
 }
@@ -107,14 +105,12 @@ impl Settlement {
         result: HostResult,
         label: String,
         owner: Option<String>,
-        carrier: bool,
         site: Option<u32>,
     ) -> Self {
         Settlement::Host(Box::new(Settled {
             result,
             label,
             owner,
-            carrier,
             site,
         }))
     }
@@ -320,8 +316,6 @@ pub struct RunHost<'rt> {
     pub(crate) epoch: crate::streaming::Epoch,
     /// The VM's fuel counters, which it checks only when its step budget runs out.
     pub(crate) meter: Meter,
-    /// Set while a carrier result (`HostFunction::carrier`) crosses in.
-    pub(crate) carrier: bool,
 }
 
 /// A call in flight a resumed run starts again: its promise, id, label, path, arguments, owner, site, and how.
@@ -403,7 +397,6 @@ impl<'rt> RunHost<'rt> {
             namespaces: FxHashMap::default(),
             host_namespaces: FxHashMap::default(),
             epoch: Default::default(),
-            carrier: false,
             meter: Meter {
                 start: crate::vm::HANDOVER_FUEL,
                 handover: crate::vm::HANDOVER_FUEL,
@@ -658,14 +651,11 @@ pub fn settle(vm: &mut Vm, p: Id, s: Settlement) {
                 result,
                 label,
                 owner,
-                carrier,
                 site,
             } = *settled;
             match result {
                 Ok(v) => {
-                    vm.host.carrier = carrier;
                     let v = result_from_host(vm, v, &label, owner.as_deref());
-                    vm.host.carrier = false;
                     match v {
                         Ok(v) => vm.fulfill(p, v),
                         Err(e) => {
@@ -861,9 +851,9 @@ fn call_host(vm: &mut Vm, f: &Callee, args: &[Value], target: Target, callee: Va
         Returned::Pending(work) => {
             let site = vm.call_offset();
             let p = vm.new_promise();
-            let (label, owner, carrier) = (target.label.clone(), target.owner.clone(), f.carrier);
+            let (label, owner) = (target.label.clone(), target.owner.clone());
             let future: BoxFuture<'_, Settlement> =
-                Box::pin(async move { Settlement::host(work.await, label, owner, carrier, site) });
+                Box::pin(async move { Settlement::host(work.await, label, owner, site) });
             let in_flight = InFlight {
                 promise: p,
                 call: call_id,
@@ -951,10 +941,9 @@ fn spawn_call(vm: &mut Vm, p: Id, f: &Callee, mut r: Restart, holds_functions: b
                 false => (CallKind::Blocking, std::mem::take(&mut r.args)),
             };
             let work = body(args, call);
-            let carrier = f.carrier;
             (
                 kind,
-                Box::pin(async move { Settlement::host(work.await, label, owner, carrier, site) }),
+                Box::pin(async move { Settlement::host(work.await, label, owner, site) }),
             )
         }
         Callee::Durable(d) => {
@@ -985,7 +974,7 @@ fn spawn_call(vm: &mut Vm, p: Id, f: &Callee, mut r: Restart, holds_functions: b
                     }
                     Err(e) => Err(e),
                 };
-                Settlement::host(result, label, owner, false, site)
+                Settlement::host(result, label, owner, site)
             });
             (CallKind::Durable(data, d.clone(), durable), future)
         }
@@ -1260,9 +1249,9 @@ fn to_host(
         Value::Bool(b) => return Ok(Some(HostValue::Bool(*b))),
         Value::Num(n) => return Ok(Some(HostValue::Number(*n))),
         Value::Str(s) => {
-            return Ok(Some(HostValue::String(
-                crate::strings::host_text(vm.text(*s)).into_owned(),
-            )));
+            return Ok(Some(HostValue::String(HostString::from_run_text(
+                vm.text(*s),
+            ))));
         }
         Value::Sym(_) => {
             let msg = format!(
@@ -1367,7 +1356,7 @@ fn to_host(
             let name = crate::cross::host_error_name(vm, id, name);
             let mut error = HostError::named(
                 crate::strings::host_text(&name).into_owned(),
-                crate::strings::host_text(&message).into_owned(),
+                HostString::from_run_text(&message),
             );
             let cause_key = vm.names.cause;
             // A field that cannot cross is left behind, so the error itself always arrives.
@@ -1389,8 +1378,8 @@ fn to_host(
                 }
             }
             for (k, val) in vm.own_entries(id) {
-                let key = crate::strings::host_text(vm.atoms.text(k)).into_owned();
-                if crate::cross::uncrossed(&key) || k == cause_key {
+                let key = HostString::from_run_text(vm.atoms.text(k));
+                if key.as_str().is_some_and(crate::cross::uncrossed) || k == cause_key {
                     continue;
                 }
                 if let Some(item) = left_behind(vm, &val, cx)? {
@@ -1402,7 +1391,7 @@ fn to_host(
         _ => {
             let mut out = Vec::new();
             for (k, val) in vm.own_entries(id) {
-                let key = crate::strings::host_text(vm.atoms.text(k)).into_owned();
+                let key = HostString::from_run_text(vm.atoms.text(k));
                 if key == "__proto__" {
                     continue;
                 }
@@ -1438,8 +1427,7 @@ fn from_host(
         HostValue::Null => Value::Null,
         HostValue::Bool(b) => Value::Bool(*b),
         HostValue::Number(n) => Value::Num(*n),
-        HostValue::String(s) if vm.host.carrier => vm.str_val(s),
-        HostValue::String(s) => vm.string_val(crate::strings::external_text(s.clone())),
+        HostValue::String(s) => vm.string_val(s.to_run_text()),
         HostValue::Function(f) => {
             // A global host function with `snapshot` hooks saves what it returns; a function inside such a value
             // saves with the same hooks.
@@ -1495,8 +1483,15 @@ fn from_host(
         HostValue::Object(fields) => {
             let id = vm.new_object();
             for (k, item) in fields {
-                let val = from_host(vm, item, &next(k), &place.child(Some(k)), depth + 1)?;
-                let key = vm.atoms.intern(k);
+                let shown = k.to_string_lossy();
+                let val = from_host(
+                    vm,
+                    item,
+                    &next(&shown),
+                    &place.child(Some(&shown)),
+                    depth + 1,
+                )?;
+                let key = vm.atoms.intern(&k.to_run_text());
                 vm.define(id, key, val);
             }
             Value::Obj(id)
@@ -1574,7 +1569,7 @@ fn from_host(
                 }
                 _ => vm.realm.error_proto,
             };
-            let err = vm.make_error(proto, &e.message);
+            let err = vm.make_error(proto, &e.message.to_run_text());
             if let Value::Obj(id) = err {
                 if let Some(cause) = &e.cause
                     && let Ok(c) =
@@ -1586,7 +1581,7 @@ fn from_host(
                 for (k, item) in &e.fields {
                     if matches!(
                         k.as_str(),
-                        "stack" | "message" | "constructor" | "toString" | "__proto__"
+                        Some("stack" | "message" | "constructor" | "toString" | "__proto__")
                     ) {
                         continue;
                     }
@@ -1596,8 +1591,11 @@ fn from_host(
                     ) {
                         continue;
                     }
-                    if let Ok(val) = from_host(vm, item, &next(k), &Place::default(), depth + 1) {
-                        let key = vm.atoms.intern(k);
+                    let shown = k.to_string_lossy();
+                    if let Ok(val) =
+                        from_host(vm, item, &next(&shown), &Place::default(), depth + 1)
+                    {
+                        let key = vm.atoms.intern(&k.to_run_text());
                         vm.define(id, key, val);
                     }
                 }
@@ -1658,12 +1656,9 @@ fn response_from_host(
         None => Value::Null,
     };
     let fields = [
-        ("url", HostValue::String(response.url.clone())),
+        ("url", HostValue::from(response.url.as_str())),
         ("status", HostValue::Number(response.status as f64)),
-        (
-            "statusText",
-            HostValue::String(response.status_text.clone()),
-        ),
+        ("statusText", HostValue::from(response.status_text.as_str())),
         ("ok", HostValue::Bool(response.ok())),
         ("headers", HostValue::Headers(response.headers.clone())),
     ];

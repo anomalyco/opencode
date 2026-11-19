@@ -76,6 +76,10 @@ const samples: Record<string, unknown> = {
     tags: new Set([new Uint8Array([9])]),
     failure: Object.assign(new RangeError("bad", { cause: new Date(7) }), { at: new URL("https://c.test/") }),
   },
+  // Strings with unpaired surrogates, which have no UTF-8 form: as a value, a key, an error's message and field.
+  lone: "a\ud800b",
+  loneKeys: { "\udc00": "x\ud83d", pair: "\ud83d\ude00", list: ["\udbff"] },
+  loneError: Object.assign(new Error("bad \ud800"), { "\udfff": "\ud800" }),
 }
 const boundaryPrograms = [
   `const o = { n: 1, list: [1], d: new Date(0), u: new URL("https://a.test/") }; keep(o); o.n = 2; o.list.push(2); return o.n`,
@@ -97,6 +101,16 @@ const boundaryPrograms = [
   `try { keep({ p: Promise.resolve(1) }) } catch (e) { return e.message }`,
   `return JSON.stringify([make("date"), make("url"), make("params"), make("headers"), make("bytes"), make("buffer"), make("regexp")])`,
 ]
+// Strings with unpaired surrogates cross both ways unchanged: the host sees, and gives back, the program's code units.
+// The programs return what they compare, as the recording's JSON can't hold such a string.
+boundaryPrograms.push(
+  `const s = "a\\ud800b"; const back = keep(s); return [back === s, back.length, back.charCodeAt(1), keep("\\udc00") === "\\udc00", keep("\\ud83d\\ude00") === "\\ud83d\\ude00", keep("\\ude00\\ud83d").length]`,
+  `const k = "\\udc00"; const back = keep({ [k]: "x\\ud83d", n: ["\\udbff"], m: new Map([["\\ud800", new Set(["\\udfff"])]]) }); return [Object.keys(back)[0] === k, back[k] === "x\\ud83d", back.n[0] === "\\udbff", [...back.m.get("\\ud800")][0] === "\\udfff"]`,
+  `const e = new Error("bad \\ud800"); e["\\udc00"] = "\\udfff"; const back = keep(e); return [back.message === "bad \\ud800", back["\\udc00"] === "\\udfff", back instanceof Error]`,
+  `const l = make("lone"); const o = make("loneKeys"); const e = make("loneError"); return [l === "a\\ud800b", l.length, Object.keys(o)[0] === "\\udc00", o["\\udc00"] === "x\\ud83d", o.pair, o.list[0].charCodeAt(0), e.message === "bad \\ud800", e["\\udfff"] === "\\ud800"]`,
+  `const l = make("lone"); return [l.isWellFormed(), l.toWellFormed(), encodeURIComponent(l.toWellFormed()), new TextEncoder().encode(l).length]`,
+)
+
 // What a host function receives under the runtime's translation: a function is left out (an object's key is skipped,
 // an array's item is null, an argument is undefined, a Map's or Set's entry is undefined), a fulfilled promise is its
 // value, and the call waits for one that hasn't fulfilled, then crosses its arguments again.
