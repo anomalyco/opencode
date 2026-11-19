@@ -402,11 +402,7 @@ fn timed<R>(f: impl FnOnce() -> R) -> R {
 }
 
 fn count(f: impl FnOnce(&mut Crossed)) {
-    CROSSED.with(|cell| {
-        let mut crossed = cell.get();
-        f(&mut crossed);
-        cell.set(crossed);
-    });
+    crate::tally(&CROSSED, f);
 }
 
 /// Where a loader's target stands on the JS host.
