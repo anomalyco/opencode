@@ -3,6 +3,7 @@ import { measureEditText } from "@opentui/core"
 import type { PromptInput } from "@opencode/schema"
 import {
   expandPromptInputPastedText,
+  promptMentionsToCells,
   realignPromptInputMentions,
   realignPromptMentions,
 } from "../../src/prompt/mention"
@@ -96,4 +97,23 @@ test.each(["wcwidth", "unicode"] as const)("shifts mention hints past pasted tex
   }
   expect(expanded.files?.[0]?.mention).toEqual(mention)
   expect(realignPromptInputMentions(expanded.text, expanded, widthMethod).files?.[0]?.mention).toEqual(mention)
+})
+
+// The web composer writes string indexes, the TUI writes cells; in "\t中 @f x" they are 3..5 and 5..7.
+test.each([
+  ["string indexes", "\t中 @f x", "@f", 3, 5, 5, 7],
+  ["cells", "\t中 @f x", "@f", 5, 7, 5, 7],
+  ["ASCII", "see @f x", "@f", 4, 6, 4, 6],
+  // "@@" is at string index 2 and at cell 2.
+  ["either unit, cells first", "\t@@@", "@@", 2, 4, 2, 4],
+  ["neither unit", "\t中 @f x", "@f", 0, 2, 0, 2],
+])("restored mentions in %s come back in cells", (_, text, label, start, end, cellStart, cellEnd) => {
+  const mention = { start, end, text: label }
+  const prompt = { text, files: [{ uri: "file:///f", mention }], agents: [{ name: "f", mention }] }
+  const cells = { start: cellStart, end: cellEnd, text: label }
+  expect(promptMentionsToCells(prompt, "unicode")).toEqual({
+    text,
+    files: [{ uri: "file:///f", mention: cells }],
+    agents: [{ name: "f", mention: cells }],
+  })
 })

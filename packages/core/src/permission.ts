@@ -1,8 +1,9 @@
 export * as Permission from "./permission.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { Context, Deferred, Effect, Layer, Schema } from "effect"
+import { Context, Deferred, Effect, Layer, Schema, Scope } from "effect"
 import { Permission } from "@opencode/schema/permission"
+import type { Tool } from "@opencode/schema/tool"
 import { Bus } from "./bus.js"
 import { Location } from "./location.js"
 import { Agent } from "./agent.js"
@@ -34,6 +35,13 @@ export interface AssertInput extends Omit<Request, "id" | "message"> {
   readonly id?: ID
   readonly agent?: Agent.ID
 }
+
+/** The requester fields of a permission request made by a tool call. */
+export const invocation = (context: Pick<Tool.Context, "sessionID" | "agent" | "messageID" | "id">) => ({
+  sessionID: context.sessionID,
+  agent: context.agent,
+  source: { type: "tool" as const, messageID: context.messageID, id: context.id },
+})
 
 export interface ReplyInput {
   readonly requestID: ID
@@ -83,11 +91,22 @@ export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Permissi
 
 export type Error = BlockedError | CorrectedError
 
+/** Actions whose resources are file paths. */
+export const pathActions = ["external_directory", "read", "edit"] as const
+
+/** macOS volumes ignore case by default, so `.OPENCODE/x` opens `.opencode/x`; rules for file paths must match it too. */
+export function ignoresCase(action: string) {
+  return process.platform === "darwin" && pathActions.some((item) => item === action)
+}
+
 export function evaluate(action: string, resource: string, ...rulesets: Permission.Ruleset[]): Permission.Rule {
+  const ignoreCase = ignoresCase(action)
   return (
     rulesets
       .flat()
-      .findLast((rule) => Wildcard.match(action, rule.action) && Wildcard.match(resource, rule.resource)) ?? {
+      .findLast(
+        (rule) => Wildcard.match(action, rule.action) && Wildcard.match(resource, rule.resource, ignoreCase),
+      ) ?? {
       action,
       resource: "*",
       effect: "ask",
@@ -111,6 +130,11 @@ export interface Interface {
   readonly get: (id: ID) => Effect.Effect<Request | undefined>
   readonly forSession: (sessionID: SessionSchema.ID) => Effect.Effect<ReadonlyArray<Request>>
   readonly list: () => Effect.Effect<ReadonlyArray<Request>>
+  /**
+   * Marks `call` as made by `parent`, such as a call inside a Code Mode program. It has an ID of its own but no row,
+   * so until the scope closes, requests naming it as their source show on `parent`'s row.
+   */
+  readonly nested: (call: Tool.CallID, parent: Tool.CallID) => Effect.Effect<void, never, Scope.Scope>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Permission") {}
@@ -131,6 +155,7 @@ const layer = Layer.effect(
     const saved = yield* PermissionSaved.Service
     const hooks = yield* PluginHooks.Service
     const pending = new Map<ID, Pending>()
+    const parents = new Map<string, Tool.CallID>()
     let closed = false
 
     const close = Effect.gen(function* () {
@@ -173,6 +198,17 @@ const layer = Layer.effect(
       return rules.filter((rule) => Wildcard.match(input.action, rule.action))
     }
 
+    const nested: Interface["nested"] = (call, parent) =>
+      Effect.acquireRelease(
+        Effect.sync(() => void parents.set(call, parent)),
+        () => Effect.sync(() => void parents.delete(call)),
+      )
+
+    function row(source: AssertInput["source"]) {
+      const parent = source && parents.get(source.id)
+      return parent ? { ...source, id: parent } : source
+    }
+
     const evaluateInput = Effect.fnUntraced(function* (input: AssertInput) {
       const rules = yield* configured(input.sessionID, input.agent)
       if (denied(input, rules)) return { effect: "deny" as const, rules }
@@ -185,7 +221,7 @@ const layer = Layer.effect(
         action: input.action,
         resources: input.resources,
         metadata: input.metadata,
-        source: input.source,
+        source: row(input.source),
         effect,
       })
       const unattended = yield* Unattended
@@ -213,7 +249,7 @@ const layer = Layer.effect(
         metadata:
           input.metadata &&
           Object.fromEntries(Object.entries(input.metadata).filter(([, value]) => value !== undefined)),
-        source: input.source,
+        source: row(input.source),
         message,
       }
     }
@@ -314,6 +350,7 @@ const layer = Layer.effect(
             pending.delete(input.requestID)
             for (const [id, item] of pending) {
               if (item.request.sessionID !== existing.request.sessionID) continue
+              if (item.request.source?.messageID !== existing.request.source?.messageID) continue
               yield* bus.publish(Permission.Event.Replied, {
                 sessionID: item.request.sessionID,
                 requestID: item.request.id,
@@ -369,7 +406,7 @@ const layer = Layer.effect(
       return Array.from(pending.values(), (item) => item.request).filter((request) => request.sessionID === sessionID)
     })
 
-    return Service.of({ ask, assert, assertNotDenied, allows, reply, get, forSession, list, close })
+    return Service.of({ ask, assert, assertNotDenied, allows, reply, get, forSession, list, nested, close })
   }),
 )
 

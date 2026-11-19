@@ -156,28 +156,40 @@ for (const direction of ["ltr", "rtl"] as const) {
     await expect(variant).toHaveText("max")
   })
 
-  test(`model dialog arrow keys stage a variant in ${direction}`, async ({ page }) => {
+  test(`model dialog arrow keys choose a variant in the flyout in ${direction}`, async ({ page }) => {
     const { composer, model, variant, dialog } = await openDesktopPicker(page, direction)
     const search = dialog.getByRole("combobox", { name: "Search models", exact: true })
-    const rowA = dialog.locator('[data-option-key="opencode:mobile-a"]')
+    const flyout = dialog.locator('[data-slot="model-dialog-flyout"]')
+    const balanced = flyout.getByRole("menuitemradio", { name: "balanced", exact: true })
+    const high = flyout.getByRole("menuitemradio", { name: "high", exact: true })
     const next = direction === "rtl" ? "ArrowLeft" : "ArrowRight"
     await model.click()
     await expect(search).toBeFocused()
+    // The highlighted row's flyout opens with the dialog, and the forward arrow enters it on the current variant.
+    await expect(balanced).toBeVisible()
     await search.press(next)
-    await expect(rowA).toContainText("high")
+    await expect(balanced).toHaveAttribute("data-highlighted", "")
+    await search.press("ArrowDown")
+    await expect(high).toHaveAttribute("data-highlighted", "")
+    // Escape leaves the menu first, then closes the dialog.
+    await search.press("Escape")
+    await expect(high).not.toHaveAttribute("data-highlighted")
+    await expect(dialog).toBeVisible()
     await search.press("Escape")
     await expect(dialog).toBeHidden()
     await expect(variant).toHaveText("balanced")
 
     await model.click()
     await search.fill("Mobile Model A")
+    // While searching, the forward arrow edits the query until the arrows have moved through the results.
     await search.press(next)
     await expect(search).toHaveValue("Mobile Model A")
-    await expect(rowA).toContainText("balanced")
+    await expect(balanced).not.toHaveAttribute("data-highlighted")
     await search.press("ArrowDown")
     await search.press("ArrowUp")
     await search.press(next)
-    await expect(rowA).toContainText("high")
+    await expect(balanced).toHaveAttribute("data-highlighted", "")
+    await search.press("ArrowDown")
     await search.press("Enter")
     await expect(dialog).toBeHidden()
     await expect(model).toHaveText("Mobile Model A")
@@ -191,9 +203,14 @@ for (const direction of ["ltr", "rtl"] as const) {
     await prompt.fill("keep me")
     await prompt.press("ControlOrMeta+Quote")
     const search = dialog.getByRole("combobox", { name: "Search models", exact: true })
+    const flyout = dialog.locator('[data-slot="model-dialog-flyout"]')
     await expect(search).toBeFocused()
     await search.press(direction === "rtl" ? "ArrowLeft" : "ArrowRight")
-    await expect(dialog.locator('[data-option-key="opencode:mobile-a"]')).toContainText("high")
+    await expect(flyout.getByRole("menuitemradio", { name: "balanced", exact: true })).toHaveAttribute(
+      "data-highlighted",
+      "",
+    )
+    await search.press("ArrowDown")
     await search.press("Enter")
     await expect(dialog).toBeHidden()
     await expect(model).toHaveText("Mobile Model A")
@@ -210,6 +227,51 @@ test("desktop model button shows only the choose-model hint, not the model detai
   await expect(tooltip).toContainText("Choose model")
   await expect(tooltip.getByText("1,000,000", { exact: true })).toHaveCount(0)
   await expect(tooltip.getByText("Input & Output", { exact: true })).toHaveCount(0)
+})
+
+test("model dialog flyout follows the arrow keys, waits while one is held, and cools down after it closes", async ({
+  page,
+}) => {
+  const { model, dialog } = await openDesktopPicker(page, "ltr")
+  const flyout = dialog.locator('[data-slot="model-dialog-flyout"]')
+  const search = dialog.getByRole("combobox", { name: "Search models", exact: true })
+  const rowA = dialog.locator('[data-option-key="opencode:mobile-a"]')
+  const rowB = dialog.locator('[data-option-key="opencode:mobile-b"]')
+  const rowC = dialog.locator('[data-option-key="opencode:mobile-c"]')
+  await model.click()
+  await expect(search).toBeFocused()
+  await expect(flyout.getByRole("menuitemradio", { name: "balanced", exact: true })).toBeVisible()
+  // See "tab preview opens cold" in tabs.spec.ts: pause at a fixed offset from an explicit install time.
+  const start = Date.now()
+  await page.clock.install({ time: start })
+  await page.clock.pauseAt(start + 10_000)
+
+  // A single press moves the flyout at once.
+  await page.keyboard.down("ArrowDown")
+  await expect(rowB).toHaveAttribute("data-active", "")
+  await expect(flyout.getByRole("menuitemradio", { name: "max", exact: true })).toBeVisible()
+
+  // A held key repeats: the flyout hides until the highlight rests.
+  await page.keyboard.down("ArrowDown")
+  await page.keyboard.up("ArrowDown")
+  await expect(rowC).toHaveAttribute("data-active", "")
+  await expect(flyout).toHaveCount(0)
+  await page.clock.runFor(200)
+  await expect(flyout.getByText("OpenCode · 262K context", { exact: true })).toBeVisible()
+
+  // The pointer takes the flyout over at once.
+  await rowB.hover()
+  await expect(flyout.getByRole("menuitemradio", { name: "max", exact: true })).toBeVisible()
+
+  // Once the flyout has been closed for a moment, the next row waits for the open delay again.
+  await page.mouse.move(5, 5)
+  await expect(flyout).toHaveCount(0)
+  await page.clock.runFor(400)
+  await rowA.hover()
+  await expect(rowA).toHaveAttribute("data-active", "")
+  await expect(flyout).toHaveCount(0)
+  await page.clock.runFor(200)
+  await expect(flyout.getByRole("menuitemradio", { name: "balanced", exact: true })).toBeVisible()
 })
 
 test("model dialog shows a summary and only the default variant for models without variants", async ({ page }) => {

@@ -12,6 +12,7 @@ import { OauthCallbackPage } from "../../oauth/page.js"
 import { Provider } from "../../provider.js"
 import { SharedCache } from "../../shared-cache.js"
 import type { PluginInternal } from "../internal.js"
+import { activeCredential } from "./credential-settings.js"
 import { ProviderRefresh } from "./refresh.js"
 
 const providerID = Provider.ID.make("digitalocean")
@@ -125,10 +126,7 @@ export const DigitalOceanPlugin = define({
       active: ctx.integration.connection.active(integrationID),
       reload: ctx.provider.reload(),
       load: Effect.fn("DigitalOceanPlugin.load")(function* (current, options) {
-        const connection = yield* ctx.integration.connection.active(integrationID)
-        const credential = connection
-          ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
-          : undefined
+        const { connection, credential } = yield* activeCredential(ctx, integrationID)
         if (!connection || credential?.type !== "oauth" || credential.methodID !== methodID)
           return { connection, value: { routers: [] } }
         const key = `digitalocean:${IntegrationConnection.key(connection)}`

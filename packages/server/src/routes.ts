@@ -3,7 +3,7 @@ import { V1Migration } from "@opencode/core/database/v1-migration"
 import { App } from "@opencode/core/app"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Node } from "@opencode/util/effect/app-node"
-import { httpClient } from "@opencode/util/effect/app-node-platform"
+import { fetchLayer, httpClient, httpFetch } from "@opencode/util/effect/app-node-platform"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Bus } from "@opencode/core/bus"
 import { EventLogger } from "@opencode/core/event-logger"
@@ -14,12 +14,15 @@ import { PermissionSaved } from "@opencode/core/permission/saved"
 import { PtyTicket } from "@opencode/core/pty/ticket"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { Project } from "@opencode/core/project"
+import { BlobStore } from "@opencode/core/blob-store"
+import { VideoGeneration } from "@opencode/core/video-generation"
 import { Worktree } from "@opencode/core/worktree"
 import { Session } from "@opencode/core/session"
 import { Instance } from "@opencode/core/instance/service"
 import { SessionTransfer } from "@opencode/core/session/transfer"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { ShellSelect } from "@opencode/core/shell/select"
+import { Shell } from "@opencode/core/shell"
 import { Job } from "@opencode/core/job"
 import { KV } from "@opencode/core/kv"
 import { Mcp } from "@opencode/core/mcp/index"
@@ -28,9 +31,10 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { LocationActivity } from "@opencode/core/location-activity"
+import { Machines } from "@opencode/core/machine/machines"
 import { ModelsDev } from "@opencode/core/models-dev"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
-import { Schedule } from "@opencode/core/schedule"
+import { Automation } from "@opencode/core/automation"
 import { PluginUpdate } from "@opencode/core/plugin/update"
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
 import { WellKnown } from "@opencode/core/wellknown"
@@ -46,6 +50,7 @@ import { CorsConfig } from "./cors"
 import { handlers } from "./handlers"
 import { authorizationLayer } from "./middleware/authorization"
 import { schemaErrorLayer } from "./middleware/schema-error"
+import { defectResponseLayer } from "./middleware/defect-response"
 import { ServerPairing } from "./pairing"
 import { layer } from "./location"
 import { formLocationLayer } from "./middleware/form-location"
@@ -54,11 +59,17 @@ import { ServerInfo } from "./server-info"
 import type { ServerOptions } from "./options"
 
 const applicationServiceNodes = [
+  App.node,
   Global.node,
   FSUtil.node,
   Database.node,
   KV.node,
   Bus.node,
+  // Before the jobs and sessions, so they are released after them: a shutdown's interrupted shell calls and jobs
+  // still reach the daemon to stop their commands, and a command being created never falls back to spawning.
+  PersistentPty.node,
+  // Daemon-run shell commands belong to the server, so a Location closing never takes them down.
+  Shell.daemonNode,
   EventLogger.node,
   httpClient,
   Job.node,
@@ -73,15 +84,20 @@ const applicationServiceNodes = [
   PluginUpdate.node,
   PermissionSaved.node,
   PtyTicket.node,
-  PersistentPty.node,
   Credential.node,
   WellKnown.node,
   ServerPairing.node,
   LocationServiceMap.node,
   LocationActivity.node,
   SessionRestart.node,
-  Schedule.node,
+  Automation.node,
+  // Read by the blob route.
+  BlobStore.node,
+  // Started with the server, so its leader election and polling resume jobs even before anyone calls the video API.
+  VideoGeneration.node,
   Workspace.node,
+  // The machine list: where a carrier hands over the workers dialing in from other computers.
+  Machines.node,
   FileWatch.node,
 ] as const
 const applicationServices = LayerNode.group(applicationServiceNodes)
@@ -127,6 +143,7 @@ function makeRoutes<AuthError, AuthServices>(
     Bus.node.replace(Bus.configured({ persist: options.events?.persist })),
     App.node.replace(App.configured(options.app)),
     ModelsDev.node.replace(ModelsDev.configured(options.models)),
+    httpFetch.replace(fetchLayer(options.fetch)),
     Watcher.node.replace(Watcher.configured({ enabled: options.fs?.filewatcher })),
     FileWatch.node.replace(FileWatch.configured({ enabled: options.fs?.filewatcher })),
     FileSystemSearch.node.replace(FileSystemSearch.configured({ fff: options.fs?.fff })),
@@ -139,7 +156,12 @@ function makeRoutes<AuthError, AuthServices>(
         content: options.config?.content,
       }),
     ),
-    InstructionDiscovery.node.replace(InstructionDiscovery.configured({ project: options.config?.project })),
+    InstructionDiscovery.node.replace(
+      InstructionDiscovery.configured({
+        project: options.config?.project,
+        claude: options.instructions?.claude,
+      }),
+    ),
     ShellSelect.node.replace(ShellSelect.configured({ gitbash: options.windows?.gitbash })),
     Mcp.node.replace(
       Mcp.configured({
@@ -193,6 +215,7 @@ function makeRoutes<AuthError, AuthServices>(
         Layer.provide(schemaErrorLayer),
         Layer.provide(auth),
         HttpRouter.provideRequest(requestServices),
+        Layer.merge(defectResponseLayer),
         Layer.provideMerge(services),
         Layer.provideMerge(HttpRouter.layer),
       )

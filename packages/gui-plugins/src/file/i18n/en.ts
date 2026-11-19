@@ -1,6 +1,8 @@
 export default {
   "tree.all": "All files",
   "tab.notFound": "File not found: {{name}}",
+  "load.failed": "Failed to load file",
+  "load.timeout": "Opening {{name}} took too long.",
   "mobile.title": "Files",
   "mobile.openTabs": "Open files",
   "view.preview": "Preview",
@@ -24,6 +26,8 @@ export default {
   "view.table.copyCell": "Copy cell",
   "view.table.copyFailed": "Couldn't copy this cell.",
   "view.fontSample": "Sphinx of black quartz, judge my vow.",
+  "view.properties": "Properties",
+  "view.properties.showAll": "Show all {{count}} properties",
   "open.in": "Open in",
   "open.ariaLabel": "Open in {{app}}",
   "open.menu": "Open options",
@@ -46,4 +50,7 @@ export default {
   "open.fileExplorer": "File Explorer",
   "open.fileManager": "File Manager",
   "command.open": "Open file",
+  "search.failed": "Couldn't search files",
+  "search.timeout": "The server took too long to answer",
+  "search.offline": "Can't reach this server",
 }

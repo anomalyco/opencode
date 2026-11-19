@@ -5,6 +5,7 @@ import { Permission } from "../permission.js"
 import { Integration } from "../integration.js"
 import { AgentNotFoundError, StepFailedError } from "./error.js"
 import { ModelResolver } from "../model-resolver.js"
+import { ModelRetry } from "../model-retry.js"
 import { SessionRunnerModel } from "./runner/model.js"
 
 const tokenSharingMessages = {
@@ -12,6 +13,8 @@ const tokenSharingMessages = {
     "ChatGPT token sharing isn't available for this account. Connect with an API key or choose another provider.",
   subscription_sharing_usage_limit_exceeded:
     "ChatGPT usage limit reached. Check ChatGPT Settings → Usage for details.",
+  subscription_sharing_workplace_individual_usage_limit_exceeded:
+    "You've reached the usage limit your ChatGPT workspace admin set for you. Ask them to raise it in the OpenAI Admin Console.",
   subscription_sharing_usage_unavailable: "ChatGPT usage can't be checked right now. Try again later.",
   subscription_sharing_unsupported_capability:
     "This request uses a feature ChatGPT token sharing doesn't support. Remove the unsupported feature and try again.",
@@ -35,6 +38,8 @@ export function toSessionError(cause: unknown): SessionError.Error {
     // ChatGPT's usage limit arrives in HTTP and stream errors alike, whatever their reason, so its code decides the type.
     if (cause.reason.body?.includes("subscription_sharing_usage_limit_exceeded"))
       return providerError("provider.chatgpt-limit", cause.reason)
+    if (cause.reason.body?.includes("subscription_sharing_workplace_individual_usage_limit_exceeded"))
+      return providerError("provider.chatgpt-workspace-limit", cause.reason)
     switch (cause.reason._tag) {
       case "RateLimit":
         return providerError("provider.rate-limit", cause.reason)
@@ -49,6 +54,7 @@ export function toSessionError(cause: unknown): SessionError.Error {
       case "ContentPolicy":
         return providerError("provider.content-filter", cause.reason)
       case "Transport":
+        if (ModelRetry.isUnreachable(cause)) return unreachable(cause.reason)
         return providerError("provider.transport", cause.reason)
       case "ProviderInternal":
         return providerError("provider.internal", cause.reason)
@@ -117,6 +123,15 @@ function goLimit(reason: AIError["reason"]): SessionError.Error {
   return {
     ...providerError("provider.go-limit", reason),
     message: `OpenCode Go ${name ? `${name} ` : ""}usage limit reached. Switch to a free model, or turn on Extra Usage on the Go page in OpenCode Console to keep going.`,
+  }
+}
+
+// Names the network as the problem, so a DNS outage doesn't read like a broken model or provider.
+function unreachable(reason: AIError["reason"]): SessionError.Error {
+  const host = "url" in reason && reason.url !== undefined ? URL.parse(reason.url)?.hostname : undefined
+  return {
+    ...providerError("provider.transport", reason),
+    message: `Can't reach ${host || "the provider"}. Check the network connection. (${reason.message})`,
   }
 }
 

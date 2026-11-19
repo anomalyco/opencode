@@ -24,13 +24,14 @@ function npmPackage(directory = "") {
     resolve: (name) => Effect.succeed({ directory, name }),
     check: () => Effect.succeed(false),
     update: (name) => Effect.succeed({ directory, name }),
+    reject: () => Effect.succeed(false),
     which: () => Effect.undefined,
   })
 }
 
 const addPlugin = Effect.fn(function* (npm?: Npm.Interface) {
   const plugin = yield* Plugin.Service
-  const host = yield* PluginHost.make(plugin)
+  const host = yield* PluginHost.make(plugin, "test")
   yield* DynamicProviderPlugin.effect(host).pipe(Effect.provideService(Npm.Service, npm ?? (yield* Npm.Service)))
 })
 

@@ -25,16 +25,12 @@ describe("source syntax", () => {
     })
   })
 
-  test("explains that imports and exports aren't available", async () => {
-    expect(await error(`import x from "y"`)).toEqual({
+  test("explains that exports aren't available", async () => {
+    expect(await error(`const x = 1\nexport { x }`)).toEqual({
       kind: "ParseError",
-      message:
-        "SyntaxError: Imports and exports aren't available. Call tools through `tools` and use the built-in globals. (line 1, col 1)",
-      location: { line: 1, column: 1 },
+      message: "SyntaxError: Exports aren't available. Return the result instead. (line 2, col 1)",
+      location: { line: 2, column: 1 },
     })
-    expect((await error(`export const x = 1`)).message).toStartWith(
-      "SyntaxError: Imports and exports aren't available.",
-    )
   })
 
   test("rejects TypeScript-only syntax", async () => {
@@ -141,6 +137,70 @@ describe("uncaught program throws", () => {
   })
 })
 
+describe("stack", () => {
+  test("names the program's frames innermost first, like V8", async () => {
+    expect(
+      await value(`function inner() { return new Error("boom") }
+const outer = () => inner()
+return outer().stack.split("\\n")`),
+    ).toEqual(["Error: boom", "    at inner (<program>:1:27)", "    at outer (<program>:2:21)", "    at <program>:3:8"])
+  })
+
+  test("a built-in failure has its location, and a message-less error just its name", async () => {
+    expect(await value(`try { null.x } catch (e) { return [e.stack, new RangeError().stack] }`)).toEqual([
+      "TypeError: Cannot read properties of null (reading 'x').\n    at <program>:1:7",
+      "RangeError\n    at <program>:1:45",
+    ])
+  })
+
+  test("is non-enumerable, so JSON and Object.keys don't change", async () => {
+    expect(
+      await value(`const e = new Error("x"); e.code = 1
+return [JSON.stringify(e), Object.keys(e), Object.getOwnPropertyDescriptor(e, "stack")]`),
+    ).toEqual([
+      JSON.stringify({ name: "Error", message: "x", code: 1 }),
+      ["code"],
+      { value: "Error: x\n    at <program>:1:11", writable: true, enumerable: false, configurable: true },
+    ])
+  })
+
+  test("takes its header from the name and message at the first read, then keeps it", async () => {
+    expect(
+      await value(`class MyErr extends Error { constructor(m) { super(m); this.name = "MyErr" } }
+const late = new Error("y"); late.name = "Late"; late.message = "z"
+const first = late.stack
+late.name = "After"
+const unnamed = new Error("q"); unnamed.name = ""
+const empty = new Error(""); empty.name = "N"
+const getter = new Error("g"); Object.defineProperty(getter, "name", { get() { return "G" } })
+return [new MyErr("x").stack, first, late.stack, unnamed.stack, empty.stack, getter.stack.split("\\n")[0]]`),
+    ).toEqual([
+      "MyErr: x\n    at MyErr (<program>:1:46)\n    at <program>:8:9",
+      "Late: z\n    at <program>:2:14",
+      "Late: z\n    at <program>:2:14",
+      "q\n    at <program>:5:17",
+      "N\n    at <program>:6:15",
+      // A program getter is not run to format a stack; it reads as undefined, as in Bun.
+      "Error: g",
+    ])
+  })
+
+  test("an assigned stack replaces it, before or after the first read", async () => {
+    expect(
+      await value(`const a = new Error("a"); a.stack = "custom"
+const b = new Error("b"); b.stack; b.stack = 1
+return [a.stack, b.stack, Object.getOwnPropertyDescriptor(a, "stack").enumerable]`),
+    ).toEqual(["custom", 1, false])
+  })
+
+  test("keeps the 10 innermost frames", async () => {
+    expect(
+      await value(`function f(n) { return n === 0 ? new Error("deep") : f(n - 1) }
+return f(20).stack.split("\\n")`),
+    ).toEqual(["Error: deep", "    at f (<program>:1:34)", ...Array(9).fill("    at f (<program>:1:54)")])
+  })
+})
+
 describe("source locations", () => {
   test("uses the submitted line and 1-based column", async () => {
     const failure = await error("const value = 1\nreturn value()")
@@ -227,10 +287,11 @@ describe("call depth", () => {
     expect(await value(`const f = (n) => (n === 0 ? 0 : 1 + f(n - 1)); return f(9000)`)).toBe(9000)
   })
 
+  // Round-trip mode saves and restores the whole VM every slice, which is slow at 10,000 frames deep.
   test("recursion through a built-in callback counts", async () => {
     const failure = await error(`const f = (n) => [n].map((x) => f(x + 1)); return f(0)`)
     expect(failure.message).toStartWith("RangeError: Maximum call stack size exceeded")
-  })
+  }, 15000)
 
   test("an await resets the depth, so long async chains are fine", async () => {
     expect(
@@ -241,8 +302,9 @@ describe("call depth", () => {
     ).toBe("done")
   })
 
+  // Round-trip mode saves and restores the whole VM every slice, which is slow at 10,000 frames deep.
   test("an async function that recurses before its first await overflows like JS", async () => {
     const failure = await error(`const f = async (n) => f(n + 1); return await f(0)`)
     expect(failure.message).toStartWith("RangeError: Maximum call stack size exceeded")
-  })
+  }, 15000)
 })

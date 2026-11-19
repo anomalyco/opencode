@@ -1,10 +1,18 @@
 import { execFile } from "node:child_process"
+import { homedir } from "node:os"
 import util from "node:util"
 import { Effect, FileSystem, Path } from "effect"
+import { detectHex, hexPaths } from "./hex"
 
 const execFilePromise = util.promisify(execFile)
 
+let hex: Promise<boolean> | undefined
+
 export const checkAppExists = Effect.fn("DesktopFiles.checkAppExists")(function* (appName: string) {
+  if (appName === "hex") {
+    return yield* Effect.promise(() => (hex ??= detectHex(hexPaths(process.platform, homedir(), process.env))))
+  }
+
   if (process.platform === "win32") return true
 
   if (process.platform === "linux") return true
@@ -14,6 +22,11 @@ export const checkAppExists = Effect.fn("DesktopFiles.checkAppExists")(function*
 
 export const resolveAppPath = Effect.fn("DesktopFiles.resolveAppPath")(function* (appName: string) {
   if (process.platform !== "win32") return appName
+
+  // Like Windows Terminal, the PowerShell entry opens PowerShell 7 when it is installed and Windows PowerShell otherwise.
+  if (appName === "powershell") {
+    return (yield* resolveWindowsAppPath("pwsh")) ?? (yield* resolveWindowsAppPath(appName))
+  }
 
   return yield* resolveWindowsAppPath(appName)
 })

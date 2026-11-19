@@ -26,7 +26,7 @@ for (const api of ["responses", "messages"] as const) {
           prompt:
             "Use web search to find NASA's page identifying the first person to walk on the Moon. Answer in one sentence with a source citation.",
           tools: [Meta.webSearch()],
-          generation: { maxTokens: 2048 },
+          maxTokens: 2048,
           providerOptions:
             api === "responses"
               ? { reasoningEffort: "low", include: ["reasoning.encrypted_content", "web_search_call.results"] }

@@ -1,8 +1,9 @@
 import { describe, expect } from "bun:test"
-import { DateTime, Effect, Fiber, Option, Schema, Stream } from "effect"
+import { DateTime, Effect, Fiber, Layer, Option, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import { asc, eq, sql } from "drizzle-orm"
+import { and, asc, eq, sql } from "drizzle-orm"
 import { Database } from "@opencode/core/database/database"
+import { sqliteLayer } from "@opencode/core/database/sqlite.workerd"
 import { Agent } from "@opencode/core/agent"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -25,7 +26,7 @@ import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionStore } from "@opencode/core/session/store"
 import { SessionStored } from "@opencode/core/session/stored"
 import { SessionBlob } from "@opencode/core/session/blob"
-import { Config } from "@opencode/core/config"
+import { Flag } from "@opencode/core/flag"
 import { Document, Info } from "@opencode/schema/config"
 import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { SessionHistory } from "@opencode/core/session/history"
@@ -40,6 +41,7 @@ import {
   SessionTable,
 } from "@opencode/core/session/sql"
 import { testEffect } from "./lib/effect"
+import { makeDurableObjectStorage } from "./fixture/durable-object-storage"
 import { Snapshot } from "@opencode/core/snapshot"
 
 const it = testEffect(
@@ -48,18 +50,31 @@ const it = testEffect(
     [Bus.node.replace(Bus.configured({ persist: true }))],
   ),
 )
+// Durable Object SQLite, which rejects statements that bind more than 100 parameters.
+const durableIt = testEffect(
+  AppNodeBuilder.build(
+    LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionInbox.node, SessionStore.node]),
+    [
+      Bus.node.replace(Bus.configured({ persist: true })),
+      Database.node.replace(
+        Database.configuredClient(Layer.suspend(() => sqliteLayer({ storage: makeDurableObjectStorage() }))),
+      ),
+    ],
+  ),
+)
 const sessionsLayer = AppNodeBuilder.build(Session.node, [SessionExecution.node.replace(SessionExecution.noopLayer)])
 const sessionID = Session.ID.make("ses_projector_test")
 const created = DateTime.makeUnsafe(0)
 const model = { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") }
 const previousModel = { ...model, variant: Model.VariantID.make("medium") }
 const encodeMessage = Schema.encodeSync(SessionMessage.Info)
-const mediaBlob = Config.testLayer([
-  new Document({
-    type: "document",
-    info: new Info({ experimental: new ConfigExperimental.Info({ media_blob: true }) }),
-  }),
-])
+const experimental = (flags: ConstructorParameters<typeof ConfigExperimental.Info>[0]) =>
+  Flag.testLayer([
+    new Document({ type: "document", info: new Info({ experimental: new ConfigExperimental.Info(flags) }) }),
+  ])
+const mediaBlob = experimental({ media_blob: true })
+const partRows = experimental({ part_rows: true })
+const mediaBlobPartRows = experimental({ media_blob: true, part_rows: true })
 const png = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
   "base64",
@@ -811,26 +826,38 @@ describe("SessionProjector", () => {
       expect(JSON.parse(replayed?.data ?? "{}")).toMatchObject({ native: { step: "replayed" } })
       expect(JSON.parse(replayed?.data ?? "{}")).not.toHaveProperty("providerState")
 
-      // Projecting onto the legacy row wrote it back in the current shape.
-      const rewritten = JSON.parse(
-        (yield* db.get<{ data: string }>(sql`SELECT data FROM session_message WHERE id = ${assistantID}`))?.data ??
-          "{}",
-      )
+      // An envelope update rewrites the legacy row in the current shape but leaves its inline parts where they are.
+      const messageData = () =>
+        db
+          .get<{ data: string }>(sql`SELECT data FROM session_message WHERE id = ${assistantID}`)
+          .pipe(Effect.map((row) => JSON.parse(row?.data ?? "{}")))
+      const rewritten = yield* messageData()
       expect(rewritten).not.toHaveProperty("providerState")
-      expect(rewritten).toMatchObject({
-        native: { step: "replayed" },
-        content: [
-          { type: "text", native: { signature: "text" } },
-          { type: "reasoning", native: { signature: "reasoning" } },
-          { type: "tool", native: { call: "kept", result: "kept" } },
-        ],
-      })
-      expect(rewritten.content.map((part: Record<string, unknown>) => Object.keys(part).toSorted())).toEqual([
+      expect(rewritten).toMatchObject({ native: { step: "replayed" } })
+      expect(rewritten.content).toHaveLength(3)
+
+      // The first part write splits the legacy parts into session_part in the current shape.
+      yield* bus.publish(SessionEvent.Text.Started, { sessionID, assistantMessageID: assistantID, ordinal: 3 })
+      expect(yield* messageData()).toMatchObject({ native: { step: "replayed" }, content: [] })
+      const partRows = yield* db
+        .select({ data: SessionPartTable.data })
+        .from(SessionPartTable)
+        .where(eq(SessionPartTable.message_id, assistantID))
+        .orderBy(asc(SessionPartTable.ordinal))
+        .all()
+        .pipe(Effect.orDie)
+      const rewrittenParts = partRows.map((row) => row.data).slice(0, 3)
+      expect(rewrittenParts).toMatchObject([
+        { type: "text", native: { signature: "text" } },
+        { type: "reasoning", native: { signature: "reasoning" } },
+        { type: "tool", native: { call: "kept", result: "kept" } },
+      ])
+      expect(rewrittenParts.map((part) => Object.keys(part).toSorted())).toEqual([
         ["native", "text", "type"],
         ["native", "text", "type"],
         ["executed", "id", "name", "native", "state", "time", "type"],
       ])
-    }),
+    }).pipe(Effect.provide(partRows)),
   )
 
   it.effect("merges tool result native data into the call's native data", () =>
@@ -876,13 +903,14 @@ describe("SessionProjector", () => {
         .where(eq(SessionMessageTable.id, assistantMessageID))
         .get()
         .pipe(Effect.orDie)
-      expect(row?.data).toMatchObject({
+      expect(row?.data).toMatchObject({ content: [] })
+      expect(yield* SessionHistory.loadMessageRow(db, row!)).toMatchObject({
         content: [
           { id: "succeeded", native: { call: "succeeded", result: "succeeded" }, state: { status: "completed" } },
           { id: "failed", native: { call: "failed" }, state: { status: "error" } },
         ],
       })
-    }),
+    }).pipe(Effect.provide(partRows)),
   )
 
   it.effect("projects ended and failed step terminal state", () =>
@@ -984,9 +1012,7 @@ describe("SessionProjector", () => {
         .orderBy(asc(SessionMessageTable.id))
         .all()
         .pipe(Effect.orDie)
-      const messages = rows.map((row) =>
-        Schema.decodeUnknownSync(SessionMessage.Info)({ ...row.data, id: row.id, type: row.type }),
-      )
+      const messages = yield* SessionHistory.decodeMessageRows(db, rows).pipe(Effect.orDie)
       expect(messages).toEqual([
         SessionMessage.Assistant.make({
           id: SessionMessage.ID.make("msg_assistant_completed"),
@@ -1055,6 +1081,43 @@ describe("SessionProjector", () => {
     }),
   )
 
+  it.effect("leaves a settled inline assistant message untouched when a new step starts", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const settledID = SessionMessage.ID.make("msg_settled_inline")
+      const seeded = assistantRow(settledID, 0, { created, completed: created })
+      yield* db
+        .insert(SessionMessageTable)
+        .values({ ...seeded, data: { ...seeded.data, content: [{ type: "text", text: "old answer" }] } })
+        .run()
+        .pipe(Effect.orDie)
+      yield* Bus.reserveSequence(db, sessionID, 0)
+      const settledRow = () =>
+        db.select().from(SessionMessageTable).where(eq(SessionMessageTable.id, settledID)).get().pipe(Effect.orDie)
+      const before = yield* settledRow()
+
+      yield* bus.publish(SessionEvent.Step.Started, {
+        sessionID,
+        assistantMessageID: SessionMessage.ID.make("msg_next_step"),
+        agent: build,
+        model,
+        started: 1,
+      })
+      yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID })
+
+      expect(yield* settledRow()).toEqual(before)
+      expect(
+        yield* db
+          .select()
+          .from(SessionPartTable)
+          .where(eq(SessionPartTable.message_id, settledID))
+          .all()
+          .pipe(Effect.orDie),
+      ).toEqual([])
+    }),
+  )
+
   it.effect("hydrates media:<hash> refs on message and inbox reads", () =>
     Effect.gen(function* () {
       const db = yield* seedSession()
@@ -1097,7 +1160,14 @@ describe("SessionProjector", () => {
             time_created: 1,
             data: {
               text: "user attachment",
-              files: [SessionStored.FileRef.make({ uri, mime: "application/pdf", source: { type: "inline" }, name: "spec.pdf" })],
+              files: [
+                SessionStored.FileRef.make({
+                  uri,
+                  mime: "application/pdf",
+                  source: { type: "inline" },
+                  name: "spec.pdf",
+                }),
+              ],
               time: { created: 1 },
             },
           },
@@ -1142,7 +1212,14 @@ describe("SessionProjector", () => {
           type: "user",
           payload: {
             text: "queued attachment",
-            files: [SessionStored.FileRef.make({ uri, mime: "application/pdf", source: { type: "inline" }, name: "queued.pdf" })],
+            files: [
+              SessionStored.FileRef.make({
+                uri,
+                mime: "application/pdf",
+                source: { type: "inline" },
+                name: "queued.pdf",
+              }),
+            ],
           },
           delivery: "queue",
           enqueued_seq: 3,
@@ -1167,7 +1244,12 @@ describe("SessionProjector", () => {
             state: {
               status: "completed",
               content: [
-                { type: "file", uri: `data:application/pdf;base64,${base64}`, mime: "application/pdf", name: "spec.pdf" },
+                {
+                  type: "file",
+                  uri: `data:application/pdf;base64,${base64}`,
+                  mime: "application/pdf",
+                  name: "spec.pdf",
+                },
                 { type: "file", uri: pathUri, mime: "application/pdf", name: "path.pdf" },
               ],
             },
@@ -1312,7 +1394,11 @@ describe("SessionProjector", () => {
       const store = yield* SessionStore.Service
       const userID = SessionMessage.ID.make("msg_kept_user")
       const compactionID = SessionMessage.ID.make("msg_kept_compaction")
-      const { id: _, type: __, ...compaction } = encodeMessage(
+      const {
+        id: _,
+        type: __,
+        ...compaction
+      } = encodeMessage(
         SessionMessage.CompactionCompleted.make({
           id: compactionID,
           type: "compaction",
@@ -1434,12 +1520,12 @@ describe("SessionProjector", () => {
       })
       const tool = yield* db
         .select()
-        .from(SessionMessageTable)
-        .where(eq(SessionMessageTable.id, assistantMessageID))
+        .from(SessionPartTable)
+        .where(and(eq(SessionPartTable.message_id, assistantMessageID), eq(SessionPartTable.call_id, "shot")))
         .get()
         .pipe(Effect.orDie)
       expect(tool?.data).toMatchObject({
-        content: [{ state: { status: "completed", content: [{ type: "file", uri, mime: "image/png" }] } }],
+        state: { status: "completed", content: [{ type: "file", uri, mime: "image/png" }] },
       })
       expect((yield* store.message(assistantMessageID))?.message).toMatchObject({
         content: [
@@ -1473,7 +1559,7 @@ describe("SessionProjector", () => {
         { message: assistantMessageID, hash, seq: 0 },
         { message: id, hash, seq: delivered.durable?.seq },
       ])
-    }).pipe(Effect.provide(mediaBlob)),
+    }).pipe(Effect.provide(mediaBlobPartRows)),
   )
 
   it.effect("deletes a cancelled inbox row's blob refs and blobs", () =>
@@ -1562,6 +1648,52 @@ describe("SessionProjector", () => {
     }).pipe(Effect.provide(mediaBlob)),
   )
 
+  it.effect("keeps a tool part's blob while a fork references it", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const assistantMessageID = SessionMessage.ID.make("msg_media_tool_forked")
+      const childID = Session.ID.make("ses_media_tool_fork")
+      yield* bus.publish(SessionEvent.Step.Started, { sessionID, assistantMessageID, agent: build, model, started: 1 })
+      yield* bus.publish(SessionEvent.Tool.Input.Started, { sessionID, assistantMessageID, id: "shot", name: "shot" })
+      yield* bus.publish(SessionEvent.Tool.Called, {
+        sessionID,
+        assistantMessageID,
+        id: "shot",
+        input: {},
+        executed: true,
+      })
+      yield* bus.publish(SessionEvent.Tool.Success, {
+        sessionID,
+        assistantMessageID,
+        id: "shot",
+        content: [{ type: "file", uri: `data:image/png;base64,${png.toString("base64")}`, mime: "image/png" }],
+        executed: true,
+      })
+      yield* bus.publish(SessionEvent.Step.Ended, {
+        sessionID,
+        assistantMessageID,
+        finish: "stop",
+        cost: Money.USD.make(0),
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      })
+      yield* bus.publish(SessionEvent.Forked, {
+        sessionID: childID,
+        parentID: sessionID,
+        boundary: { type: "through", messageID: assistantMessageID },
+      })
+
+      yield* bus.publish(SessionEvent.Deleted, { sessionID })
+      expect(
+        yield* db.select({ session: BlobRefTable.session_id }).from(BlobRefTable).all().pipe(Effect.orDie),
+      ).toEqual([{ session: childID }])
+      expect(yield* db.select().from(BlobTable).all().pipe(Effect.orDie)).toHaveLength(1)
+
+      yield* bus.publish(SessionEvent.Deleted, { sessionID: childID })
+      expect(yield* db.select().from(BlobTable).all().pipe(Effect.orDie)).toEqual([])
+    }).pipe(Effect.provide(mediaBlob)),
+  )
+
   it.effect("releases a tool's blob when a content update drops its ref", () =>
     Effect.gen(function* () {
       const db = yield* seedSession()
@@ -1590,6 +1722,270 @@ describe("SessionProjector", () => {
       expect(yield* db.select().from(BlobRefTable).all().pipe(Effect.orDie)).toEqual([])
       expect(yield* db.select().from(BlobTable).all().pipe(Effect.orDie)).toEqual([])
     }).pipe(Effect.provide(mediaBlob)),
+  )
+
+  it.effect(
+    "stores interleaved assistant parts in session_part by ordinal across out-of-order tool completions and forks",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* seedSession()
+        const bus = yield* Bus.Service
+        const assistantMessageID = SessionMessage.ID.make("msg_interleaved")
+
+        yield* bus.publish(SessionEvent.Step.Started, {
+          sessionID,
+          assistantMessageID,
+          agent: build,
+          model,
+          started: 1,
+        })
+        yield* bus.publish(SessionEvent.Reasoning.Started, { sessionID, assistantMessageID, ordinal: 0 })
+        yield* bus.publish(SessionEvent.Reasoning.Ended, {
+          sessionID,
+          assistantMessageID,
+          ordinal: 0,
+          text: "plan first",
+        })
+        yield* bus.publish(SessionEvent.Text.Started, { sessionID, assistantMessageID, ordinal: 1 })
+        yield* bus.publish(SessionEvent.Text.Ended, {
+          sessionID,
+          assistantMessageID,
+          ordinal: 1,
+          text: "running two tools",
+        })
+        yield* bus.publish(SessionEvent.Tool.Input.Started, {
+          sessionID,
+          assistantMessageID,
+          id: "call_first",
+          name: "read",
+        })
+        yield* bus.publish(SessionEvent.Tool.Called, {
+          sessionID,
+          assistantMessageID,
+          id: "call_first",
+          input: { file: "a.ts" },
+          executed: true,
+        })
+        yield* bus.publish(SessionEvent.Tool.Input.Started, {
+          sessionID,
+          assistantMessageID,
+          id: "call_second",
+          name: "read",
+        })
+        yield* bus.publish(SessionEvent.Tool.Called, {
+          sessionID,
+          assistantMessageID,
+          id: "call_second",
+          input: { file: "b.ts" },
+          executed: true,
+        })
+        // Complete the second tool before the first tool
+        yield* bus.publish(SessionEvent.Tool.Success, {
+          sessionID,
+          assistantMessageID,
+          id: "call_second",
+          content: [{ type: "text", text: "b contents" }],
+          executed: true,
+        })
+        yield* bus.publish(SessionEvent.Tool.Success, {
+          sessionID,
+          assistantMessageID,
+          id: "call_first",
+          content: [{ type: "text", text: "a contents" }],
+          executed: true,
+        })
+        yield* bus.publish(SessionEvent.Text.Started, { sessionID, assistantMessageID, ordinal: 4 })
+        yield* bus.publish(SessionEvent.Text.Ended, {
+          sessionID,
+          assistantMessageID,
+          ordinal: 4,
+          text: "all done",
+        })
+        yield* bus.publish(SessionEvent.Step.Ended, {
+          sessionID,
+          assistantMessageID,
+          finish: "stop",
+          cost: Money.USD.make(0),
+          tokens: { input: 10, output: 5, reasoning: 2, cache: { read: 0, write: 0 } },
+        })
+
+        const envelope = yield* db
+          .select()
+          .from(SessionMessageTable)
+          .where(eq(SessionMessageTable.id, assistantMessageID))
+          .get()
+          .pipe(Effect.orDie)
+        expect(envelope?.data).toMatchObject({ content: [] })
+
+        const parts = yield* db
+          .select()
+          .from(SessionPartTable)
+          .where(eq(SessionPartTable.message_id, assistantMessageID))
+          .orderBy(asc(SessionPartTable.ordinal))
+          .all()
+          .pipe(Effect.orDie)
+        expect(parts.map((row) => ({ ordinal: row.ordinal, type: row.type, callID: row.call_id }))).toEqual([
+          { ordinal: 0, type: "reasoning", callID: null },
+          { ordinal: 1, type: "text", callID: null },
+          { ordinal: 2, type: "tool", callID: "call_first" },
+          { ordinal: 3, type: "tool", callID: "call_second" },
+          { ordinal: 4, type: "text", callID: null },
+        ])
+
+        const forkedSessionID = Session.ID.make("ses_projected_fork")
+        yield* bus.publish(SessionEvent.Forked, {
+          sessionID: forkedSessionID,
+          parentID: sessionID,
+          boundary: { type: "through", messageID: assistantMessageID },
+        })
+        const forkedMessage = yield* db
+          .select()
+          .from(SessionMessageTable)
+          .where(eq(SessionMessageTable.session_id, forkedSessionID))
+          .get()
+          .pipe(Effect.orDie)
+        const loadedFork = yield* SessionHistory.loadMessageRow(db, forkedMessage!).pipe(Effect.orDie)
+        expect(loadedFork).toMatchObject({
+          type: "assistant",
+          content: [
+            { type: "reasoning", text: "plan first" },
+            { type: "text", text: "running two tools" },
+            { type: "tool", id: "call_first", state: { status: "completed" } },
+            { type: "tool", id: "call_second", state: { status: "completed" } },
+            { type: "text", text: "all done" },
+          ],
+        })
+      }).pipe(Effect.provide(partRows)),
+  )
+
+  it.effect("appends inline content after existing session_part rows when splitting an inline assistant row", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const conflictID = SessionMessage.ID.make("msg_conflict_replace")
+
+      // Simulate a downgrade: part rows (ordinals 0..2) exist, then an older build wrote inline content
+      yield* db
+        .insert(SessionMessageTable)
+        .values({
+          id: conflictID,
+          session_id: sessionID,
+          seq: 1,
+          type: "assistant",
+          time_created: 10,
+          time_updated: 20,
+          data: {
+            agent: build,
+            model,
+            content: [
+              { type: "reasoning", text: "fresh inline reasoning", time: { created: 10, completed: 12 } },
+              { type: "text", text: "fresh inline text" },
+            ],
+            time: { created: 10 },
+          },
+        })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionPartTable)
+        .values([
+          {
+            message_id: conflictID,
+            session_id: sessionID,
+            ordinal: 0,
+            type: "text",
+            call_id: null,
+            time_created: 1,
+            time_updated: 1,
+            data: { type: "text", text: "stale part 0" },
+          },
+          {
+            message_id: conflictID,
+            session_id: sessionID,
+            ordinal: 1,
+            type: "text",
+            call_id: null,
+            time_created: 2,
+            time_updated: 2,
+            data: { type: "text", text: "stale part 1" },
+          },
+          {
+            message_id: conflictID,
+            session_id: sessionID,
+            ordinal: 2,
+            type: "text",
+            call_id: null,
+            time_created: 3,
+            time_updated: 3,
+            data: { type: "text", text: "stale trailing part 2" },
+          },
+        ])
+        .run()
+        .pipe(Effect.orDie)
+
+      yield* bus.publish(SessionEvent.Text.Started, {
+        sessionID,
+        assistantMessageID: conflictID,
+        ordinal: 5,
+      })
+      yield* bus.publish(SessionEvent.Text.Ended, {
+        sessionID,
+        assistantMessageID: conflictID,
+        ordinal: 5,
+        text: "appended after split",
+      })
+
+      const messageRow = yield* db
+        .select()
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.id, conflictID))
+        .get()
+        .pipe(Effect.orDie)
+      expect(messageRow?.data).toMatchObject({ content: [] })
+
+      const partRows = yield* db
+        .select()
+        .from(SessionPartTable)
+        .where(eq(SessionPartTable.message_id, conflictID))
+        .orderBy(asc(SessionPartTable.ordinal))
+        .all()
+        .pipe(Effect.orDie)
+      expect(partRows.map((row) => ({ ordinal: row.ordinal, data: row.data }))).toMatchObject([
+        { ordinal: 0, data: { type: "text", text: "stale part 0" } },
+        { ordinal: 1, data: { type: "text", text: "stale part 1" } },
+        { ordinal: 2, data: { type: "text", text: "stale trailing part 2" } },
+        { ordinal: 3, data: { type: "reasoning", text: "fresh inline reasoning" } },
+        { ordinal: 4, data: { type: "text", text: "fresh inline text" } },
+        { ordinal: 5, data: { type: "text", text: "appended after split" } },
+      ])
+    }),
+  )
+
+  it.effect("splits inline media out of a session_part tool row for offline blob backfills", () =>
+    Effect.sync(() => {
+      const hash = SessionBlob.hashBytes(png)
+      const split = SessionBlob.split({
+        type: "tool",
+        id: "call_shot",
+        name: "shot",
+        state: {
+          status: "completed",
+          input: {},
+          content: [{ type: "file", uri: `data:image/png;base64,${png.toString("base64")}`, mime: "image/png" }],
+          time: { created: 1, completed: 2 },
+        },
+      })
+      expect(split.moved).toBe(true)
+      expect(split.hashes).toEqual(new Set([hash]))
+      expect(split.blobs).toEqual([{ hash, mime: "image/png", bytes: png.byteLength, data: png }])
+      expect(split.data).toMatchObject({
+        type: "tool",
+        state: {
+          status: "completed",
+          content: [{ type: "file", uri: SessionStored.ref(hash), mime: "image/png" }],
+        },
+      })
+    }),
   )
 
   // A newer release wrote this in-progress message's parts as session_part rows, then the user rolled back.
@@ -1649,7 +2045,11 @@ describe("SessionProjector", () => {
       expect((yield* store.message(assistantMessageID))?.message).toMatchObject({
         content: [
           { type: "text", text: "before rollback" },
-          { type: "tool", id: "call_a", state: { status: "completed", content: [{ type: "text", text: "export {}" }] } },
+          {
+            type: "tool",
+            id: "call_a",
+            state: { status: "completed", content: [{ type: "text", text: "export {}" }] },
+          },
           { type: "text", text: "after rollback" },
           { type: "tool", id: "call_b", state: { status: "streaming" } },
         ],
@@ -1720,6 +2120,55 @@ describe("SessionProjector", () => {
     }),
   )
 
+  it.effect("keeps session_part rows when an older build left inline content on the same message", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const messageID = SessionMessage.ID.make("msg_downgraded")
+      const row = assistantRow(messageID, 0)
+      yield* db
+        .insert(SessionMessageTable)
+        .values({
+          ...row,
+          data: { ...row.data, content: [{ type: "text", text: "after downgrade" }] },
+        })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionPartTable)
+        .values(
+          ["first", "second"].map((text, ordinal) => ({
+            message_id: messageID,
+            session_id: sessionID,
+            ordinal,
+            type: "text" as const,
+            call_id: null,
+            time_created: 0,
+            time_updated: 0,
+            data: { type: "text" as const, text },
+          })),
+        )
+        .run()
+        .pipe(Effect.orDie)
+
+      yield* bus.publish(SessionEvent.Text.Started, { sessionID, assistantMessageID: messageID, ordinal: 3 })
+
+      const parts = yield* db
+        .select({ ordinal: SessionPartTable.ordinal, data: SessionPartTable.data })
+        .from(SessionPartTable)
+        .where(eq(SessionPartTable.message_id, messageID))
+        .orderBy(asc(SessionPartTable.ordinal))
+        .all()
+        .pipe(Effect.orDie)
+      expect(parts.map((part) => [part.ordinal, part.data.type === "text" ? part.data.text : undefined])).toEqual([
+        [0, "first"],
+        [1, "second"],
+        [2, "after downgrade"],
+        [3, ""],
+      ])
+    }),
+  )
+
   it.effect("stores a fork's copies of inline parent media as blobs and leaves the parent's rows inline", () =>
     Effect.gen(function* () {
       const db = yield* seedSession()
@@ -1740,13 +2189,21 @@ describe("SessionProjector", () => {
       const hash = SessionBlob.hashBytes(png)
       const uri = SessionStored.ref(hash)
       const childRows = yield* messageRows(db, childID)
-      expect(childRows.map((row) => row.data)).toMatchObject([
+      const childFull = yield* SessionHistory.withParts(db, childRows)
+      expect(childFull.map((row) => row.data)).toMatchObject([
         { files: [{ uri, mime: "image/png", name: "shot.png" }] },
         { content: [{ type: "tool", state: { content: [{ type: "file", uri, mime: "image/png" }] } }] },
       ])
-      expect(JSON.stringify(childRows)).not.toContain(png.toString("base64"))
+      expect(JSON.stringify(childFull)).not.toContain(png.toString("base64"))
       expect(yield* messageRows(db, sessionID)).toEqual(parentRows)
-      expect(yield* db.select().from(SessionPartTable).all().pipe(Effect.orDie)).toEqual(parentParts)
+      expect(
+        yield* db
+          .select()
+          .from(SessionPartTable)
+          .where(eq(SessionPartTable.session_id, sessionID))
+          .all()
+          .pipe(Effect.orDie),
+      ).toEqual(parentParts)
       expect(yield* db.select({ hash: BlobTable.hash }).from(BlobTable).all().pipe(Effect.orDie)).toEqual([{ hash }])
       expect(
         yield* db
@@ -1782,7 +2239,7 @@ describe("SessionProjector", () => {
       })
 
       const childRows = yield* messageRows(db, childID)
-      expect(childRows.map((row) => row.data)).toEqual(
+      expect((yield* SessionHistory.withParts(db, childRows)).map((row) => row.data)).toEqual(
         (yield* SessionHistory.withParts(db, parentRows)).map((row) => row.data),
       )
       expect(yield* db.select().from(BlobTable).all().pipe(Effect.orDie)).toEqual([])
@@ -1793,6 +2250,457 @@ describe("SessionProjector", () => {
       // The caller's own config doesn't decide: Session.fork sets ForkMedia from the parent's location.
     }).pipe(Effect.provide(mediaBlob)),
   )
+
+  it.effect("reads a split message an older build added inline content to as its parts then that content", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const store = yield* SessionStore.Service
+      const messageID = SessionMessage.ID.make("msg_hybrid_read")
+      yield* db
+        .insert(SessionMessageTable)
+        .values(
+          hybridRow(messageID, [
+            { type: "text", text: "inline after" },
+            {
+              type: "tool",
+              id: "call_inline",
+              name: "read",
+              executed: true,
+              state: { status: "running", input: { path: "a.ts" }, metadata: {} },
+              time: { created: 1, ran: 1 },
+            },
+          ]),
+        )
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionPartTable)
+        .values(textPart(messageID, 0, "split first"))
+        .run()
+        .pipe(Effect.orDie)
+
+      const content = [
+        { type: "text", text: "split first" },
+        { type: "text", text: "inline after" },
+        { type: "tool", id: "call_inline", state: { status: "running" } },
+      ]
+      expect((yield* store.message(messageID))?.message).toMatchObject({ content })
+      // The runner settles stale tool calls from context, so an inline one on a split message must show up there.
+      expect(yield* store.context(sessionID)).toMatchObject([{ id: messageID, content }])
+
+      yield* bus.publish(SessionEvent.Tool.Failed, {
+        sessionID,
+        assistantMessageID: messageID,
+        id: "call_inline",
+        error: { type: "aborted", message: "Tool execution interrupted: read" },
+        executed: true,
+      })
+      expect((yield* store.message(messageID))?.message).toMatchObject({
+        content: [content[0], content[1], { type: "tool", id: "call_inline", state: { status: "error" } }],
+      })
+      expect((yield* messageRows(db, sessionID))[0]?.data).toMatchObject({ content: [] })
+    }),
+  )
+
+  it.effect("forks a split message an older build added inline media to", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const store = yield* SessionStore.Service
+      const messageID = SessionMessage.ID.make("msg_hybrid_fork")
+      const childID = Session.ID.make("ses_hybrid_fork")
+      yield* db
+        .insert(SessionMessageTable)
+        .values(hybridRow(messageID, [inlineShot], { created, completed: created }))
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionPartTable)
+        .values(textPart(messageID, 0, "split first"))
+        .run()
+        .pipe(Effect.orDie)
+      const parent = yield* store.messages({ sessionID, order: "asc" })
+      expect(parent).toMatchObject([
+        {
+          content: [
+            { type: "text", text: "split first" },
+            { type: "tool", id: "call_inline_shot" },
+          ],
+        },
+      ])
+
+      yield* bus.publish(SessionEvent.Forked, {
+        sessionID: childID,
+        parentID: sessionID,
+        boundary: { type: "through", messageID },
+      })
+
+      const childRows = yield* messageRows(db, childID)
+      expect(JSON.stringify(yield* SessionHistory.withParts(db, childRows))).not.toContain(png.toString("base64"))
+      expect(
+        yield* db
+          .select({ session: BlobRefTable.session_id, message: BlobRefTable.message_id, hash: BlobRefTable.hash })
+          .from(BlobRefTable)
+          .all()
+          .pipe(Effect.orDie),
+      ).toEqual([{ session: childID, message: childRows[0]!.id, hash: SessionBlob.hashBytes(png) }])
+      yield* bus.publish(SessionEvent.Deleted, { sessionID })
+      expect(withoutIDs(yield* store.messages({ sessionID: childID, order: "asc" }))).toEqual(withoutIDs(parent))
+    }).pipe(Effect.provideService(SessionBlob.ForkMedia, true)),
+  )
+
+  it.effect("deletes a reverted message's session_part rows and the blobs only they referenced", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const assistantMessageID = SessionMessage.ID.make("msg_media_tool_reverted")
+      yield* bus.publish(SessionEvent.Step.Started, { sessionID, assistantMessageID, agent: build, model, started: 1 })
+      yield* bus.publish(SessionEvent.Tool.Input.Started, { sessionID, assistantMessageID, id: "shot", name: "shot" })
+      yield* bus.publish(SessionEvent.Tool.Called, {
+        sessionID,
+        assistantMessageID,
+        id: "shot",
+        input: {},
+        executed: true,
+      })
+      yield* bus.publish(SessionEvent.Tool.Success, {
+        sessionID,
+        assistantMessageID,
+        id: "shot",
+        content: [{ type: "file", uri: `data:image/png;base64,${png.toString("base64")}`, mime: "image/png" }],
+        executed: true,
+      })
+      expect(yield* db.select().from(SessionPartTable).all().pipe(Effect.orDie)).toHaveLength(1)
+      expect(yield* db.select().from(BlobTable).all().pipe(Effect.orDie)).toHaveLength(1)
+
+      yield* bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: assistantMessageID })
+      expect(yield* db.select().from(SessionPartTable).all().pipe(Effect.orDie)).toEqual([])
+      expect(yield* db.select().from(BlobRefTable).all().pipe(Effect.orDie)).toEqual([])
+      expect(yield* db.select().from(BlobTable).all().pipe(Effect.orDie)).toEqual([])
+    }).pipe(Effect.provide(mediaBlobPartRows)),
+  )
+
+  it.effect("moves a legacy inline media message's rewritten content to session_part with its media as a blob", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const store = yield* SessionStore.Service
+      const messageID = SessionMessage.ID.make("msg_legacy_media_rewritten")
+      const hash = SessionBlob.hashBytes(png)
+      yield* db
+        .insert(SessionMessageTable)
+        .values(hybridRow(messageID, [inlineShot], { created, completed: created }))
+        .run()
+        .pipe(Effect.orDie)
+
+      yield* bus.publish(SessionEvent.MessageContentUpdated, {
+        sessionID,
+        messageID,
+        content: [{ type: "text", text: "rewritten" }, inlineShot],
+      })
+
+      expect((yield* messageRows(db, sessionID))[0]?.data).toMatchObject({ content: [] })
+      expect(
+        yield* db
+          .select({ data: SessionPartTable.data })
+          .from(SessionPartTable)
+          .orderBy(asc(SessionPartTable.ordinal))
+          .all()
+          .pipe(Effect.orDie),
+      ).toMatchObject([
+        { data: { type: "text", text: "rewritten" } },
+        { data: { type: "tool", state: { content: [{ type: "file", uri: SessionStored.ref(hash) }] } } },
+      ])
+      expect(yield* db.select({ hash: BlobTable.hash }).from(BlobTable).all().pipe(Effect.orDie)).toEqual([{ hash }])
+      expect(
+        yield* db
+          .select({ message: BlobRefTable.message_id, hash: BlobRefTable.hash })
+          .from(BlobRefTable)
+          .all()
+          .pipe(Effect.orDie),
+      ).toEqual([{ message: messageID, hash }])
+      expect((yield* store.message(messageID))?.message).toMatchObject({
+        content: [
+          { type: "text", text: "rewritten" },
+          {
+            type: "tool",
+            id: "call_inline_shot",
+            state: { content: [{ type: "file", uri: inlineShot.state.content[0].uri }] },
+          },
+        ],
+      })
+    }).pipe(Effect.provide(mediaBlobPartRows)),
+  )
+
+  durableIt.effect("forks and reads a long session in statements under 100 bound parameters", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const store = yield* SessionStore.Service
+      const childID = Session.ID.make("ses_long_fork")
+      const ids = Array.from({ length: 120 }, (_, seq) =>
+        SessionMessage.ID.make(`msg_long_${String(seq).padStart(3, "0")}`),
+      )
+      yield* Effect.forEach(
+        ids,
+        (id, seq) =>
+          db
+            .insert(SessionMessageTable)
+            .values(assistantRow(id, seq, { created, completed: created }))
+            .run()
+            .pipe(Effect.orDie),
+        { discard: true },
+      )
+      const texts = Array.from({ length: 30 }, (_, ordinal) => `part ${ordinal}`)
+      yield* Effect.forEach(
+        texts,
+        (text, ordinal) =>
+          db
+            .insert(SessionPartTable)
+            .values(textPart(ids[0]!, ordinal, text))
+            .run()
+            .pipe(Effect.orDie),
+        { discard: true },
+      )
+      const parent = yield* store.messages({ sessionID, order: "asc" })
+      expect(parent).toHaveLength(ids.length)
+      expect(parent[0]).toMatchObject({ content: texts.map((text) => ({ type: "text", text })) })
+
+      yield* bus.publish(SessionEvent.Forked, {
+        sessionID: childID,
+        parentID: sessionID,
+        boundary: { type: "through", messageID: ids.at(-1)! },
+      })
+      expect(withoutIDs(yield* store.messages({ sessionID: childID, order: "asc" }))).toEqual(withoutIDs(parent))
+      yield* bus.publish(SessionEvent.Deleted, { sessionID })
+      expect(
+        yield* db
+          .select()
+          .from(SessionPartTable)
+          .where(eq(SessionPartTable.session_id, sessionID))
+          .all()
+          .pipe(Effect.orDie),
+      ).toEqual([])
+      expect(withoutIDs(yield* store.messages({ sessionID: childID, order: "asc" }))).toEqual(withoutIDs(parent))
+    }).pipe(Effect.provideService(SessionBlob.ForkMedia, true)),
+  )
+
+  it.effect(
+    "hydrates parts when envelope content is omitted or non-array, and fails to decode non-array content without parts",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* seedSession()
+        const store = yield* SessionStore.Service
+        const omittedID = SessionMessage.ID.make("msg_parts_omitted_content")
+        const nullID = SessionMessage.ID.make("msg_parts_null_content")
+        const corruptID = SessionMessage.ID.make("msg_no_parts_null_content")
+        yield* db
+          .insert(SessionMessageTable)
+          .values([
+            assistantRow(omittedID, 0, { created, completed: created }),
+            assistantRow(nullID, 1, { created, completed: created }),
+            assistantRow(corruptID, 2, { created, completed: created }),
+          ])
+          .run()
+          .pipe(Effect.orDie)
+        yield* db
+          .insert(SessionPartTable)
+          .values([textPart(omittedID, 0, "from part"), textPart(nullID, 0, "from part")])
+          .run()
+          .pipe(Effect.orDie)
+
+        yield* db.run(sql`update session_message set data = json_remove(data, '$.content') where id = ${omittedID}`)
+        expect((yield* store.message(omittedID))?.message).toMatchObject({
+          content: [{ type: "text", text: "from part" }],
+        })
+
+        // With part rows, a non-array `content` counts as no inline parts.
+        yield* db.run(
+          sql`update session_message set data = json_set(data, '$.content', json('null')) where id in (${nullID}, ${corruptID})`,
+        )
+        expect((yield* store.message(nullID))?.message).toMatchObject({
+          agent: build,
+          content: [{ type: "text", text: "from part" }],
+        })
+
+        // Without part rows there is nothing to read instead, so the row fails to decode.
+        expect(yield* store.messages({ sessionID }).pipe(Effect.flip)).toMatchObject({
+          _tag: "Session.MessageDecodeError",
+          sessionID,
+          messageID: corruptID,
+        })
+      }),
+  )
+
+  it.effect("writes whole messages inline with experimental.part_rows off", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const store = yield* SessionStore.Service
+      yield* projectTwoSteps(sessionID, () => false)
+
+      expect(yield* db.select().from(SessionPartTable).all().pipe(Effect.orDie)).toEqual([])
+      const messages = yield* store.messages({ sessionID, order: "asc" })
+      const assistants = messages.filter((message) => message.type === "assistant")
+      expect(assistants.map((message) => message.content.length)).toEqual([3, 1])
+      // Each row holds the whole encoded message, as before part rows existed.
+      const rows = yield* messageRows(db, sessionID)
+      for (const message of assistants) {
+        const { id: _, type: __, ...data } = encodeMessage(message)
+        expect(rows.find((row) => row.id === message.id)?.data).toEqual(data)
+      }
+    }),
+  )
+
+  it.effect("reads the same reply when experimental.part_rows is switched on, off and on again mid-session", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const store = yield* SessionStore.Service
+      const off = Session.ID.make("ses_part_rows_off")
+      const on = Session.ID.make("ses_part_rows_on")
+      yield* db
+        .insert(SessionTable)
+        .values(
+          [off, on].map((id) => ({
+            id,
+            project_id: Project.ID.global,
+            slug: id,
+            directory: "/project",
+            title: "test",
+            version: "test",
+          })),
+        )
+        .run()
+        .pipe(Effect.orDie)
+
+      yield* projectTwoSteps(off, () => false)
+      yield* projectTwoSteps(on, () => true)
+      // On for the first step's start, off for its tool call, on for its end; then off for the second step's text start.
+      yield* projectTwoSteps(sessionID, (index) => ![4, 5, 6, 7, 10].includes(index))
+
+      const read = (session: Session.ID) =>
+        store.messages({ sessionID: session, order: "asc" }).pipe(Effect.map(withoutIDs))
+      const mixed = yield* read(sessionID)
+      expect(mixed).toEqual(yield* read(off))
+      expect(mixed).toEqual(yield* read(on))
+      expect(mixed.flatMap((message) => (message.type === "assistant" ? [message.content.length] : []))).toEqual([3, 1])
+
+      const parts = yield* db
+        .select({ message: SessionPartTable.message_id, ordinal: SessionPartTable.ordinal })
+        .from(SessionPartTable)
+        .where(eq(SessionPartTable.session_id, sessionID))
+        .orderBy(asc(SessionPartTable.message_id), asc(SessionPartTable.ordinal))
+        .all()
+        .pipe(Effect.orDie)
+      expect(
+        Object.values(Object.groupBy(parts, (part) => part.message)).map((rows) => rows?.map((row) => row.ordinal)),
+      ).toEqual([[0, 1, 2], [0]])
+      for (const row of yield* messageRows(db, sessionID))
+        if (row.type === "assistant") expect(row.data).toMatchObject({ content: [] })
+    }),
+  )
+})
+
+/** Two assistant steps, the first with reasoning, text and a tool call. Event `index` is projected with part rows on when `partRowsAt(index)`. */
+const projectTwoSteps = Effect.fnUntraced(function* (session: Session.ID, partRowsAt: (index: number) => boolean) {
+  const bus = yield* Bus.Service
+  const first = SessionMessage.ID.make(`msg_${session}_first`)
+  const second = SessionMessage.ID.make(`msg_${session}_second`)
+  const usage = { cost: Money.USD.make(0), tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } } }
+  const events: ReadonlyArray<Effect.Effect<unknown>> = [
+    bus.publish(SessionEvent.Step.Started, {
+      sessionID: session,
+      assistantMessageID: first,
+      agent: build,
+      model,
+      started: 1,
+    }),
+    bus.publish(SessionEvent.Reasoning.Started, { sessionID: session, assistantMessageID: first, ordinal: 0 }),
+    bus.publish(SessionEvent.Reasoning.Ended, {
+      sessionID: session,
+      assistantMessageID: first,
+      ordinal: 0,
+      text: "plan",
+    }),
+    bus.publish(SessionEvent.Text.Started, { sessionID: session, assistantMessageID: first, ordinal: 1 }),
+    bus.publish(SessionEvent.Text.Ended, {
+      sessionID: session,
+      assistantMessageID: first,
+      ordinal: 1,
+      text: "reading",
+    }),
+    bus.publish(SessionEvent.Tool.Input.Started, {
+      sessionID: session,
+      assistantMessageID: first,
+      id: "call",
+      name: "read",
+    }),
+    bus.publish(SessionEvent.Tool.Called, {
+      sessionID: session,
+      assistantMessageID: first,
+      id: "call",
+      input: { file: "a.ts" },
+      executed: true,
+    }),
+    bus.publish(SessionEvent.Tool.Success, {
+      sessionID: session,
+      assistantMessageID: first,
+      id: "call",
+      content: [{ type: "text", text: "a contents" }],
+      executed: true,
+    }),
+    bus.publish(SessionEvent.Step.Ended, {
+      sessionID: session,
+      assistantMessageID: first,
+      finish: "tool-calls",
+      ...usage,
+    }),
+    bus.publish(SessionEvent.Step.Started, {
+      sessionID: session,
+      assistantMessageID: second,
+      agent: build,
+      model,
+      started: 2,
+    }),
+    bus.publish(SessionEvent.Text.Started, { sessionID: session, assistantMessageID: second, ordinal: 0 }),
+    bus.publish(SessionEvent.Text.Ended, { sessionID: session, assistantMessageID: second, ordinal: 0, text: "done" }),
+    bus.publish(SessionEvent.Step.Ended, { sessionID: session, assistantMessageID: second, finish: "stop", ...usage }),
+  ]
+  for (const [index, event] of events.entries()) yield* partRowsAt(index) ? event.pipe(Effect.provide(partRows)) : event
+})
+
+const inlineShot = {
+  type: "tool",
+  id: "call_inline_shot",
+  name: "screenshot",
+  executed: true,
+  state: {
+    status: "completed",
+    input: {},
+    content: [{ type: "file", uri: `data:image/png;base64,${png.toString("base64")}`, mime: "image/png" }],
+  },
+  time: { created: 2, ran: 2, completed: 2 },
+} as const
+
+/** An assistant row with inline content, the shape an older build writes even when session_part rows exist. */
+const hybridRow = (
+  messageID: SessionMessage.ID,
+  content: ReadonlyArray<typeof SessionMessage.AssistantContent.Encoded>,
+  time?: { created: DateTime.Utc; completed?: DateTime.Utc },
+) => {
+  const row = assistantRow(messageID, 0, time)
+  return { ...row, data: { ...row.data, content } }
+}
+
+const textPart = (messageID: SessionMessage.ID, ordinal: number, text: string) => ({
+  message_id: messageID,
+  session_id: sessionID,
+  ordinal,
+  type: "text" as const,
+  call_id: null,
+  time_created: 0,
+  time_updated: 0,
+  data: { type: "text" as const, text },
 })
 
 const messageRows = (db: Database.Interface["db"], session: Session.ID) =>

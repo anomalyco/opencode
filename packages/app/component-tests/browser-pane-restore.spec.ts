@@ -279,7 +279,7 @@ story("toggles the element picker from the shortcut only inside the browser pane
   )
 })
 
-story("keeps in-page shortcuts like ⌘K in the page while forwarding ⌘⇧R and ⌘W to the pane", async ({ page }) => {
+story("keeps in-page shortcuts in the editor and forwards toolbar, review and close shortcuts", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const mac = await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))
   const mod = mac ? "Meta" : "Control"
@@ -298,6 +298,23 @@ story("keeps in-page shortcuts like ⌘K in the page while forwarding ⌘⇧R an
   await editor.focus()
   await editor.press(`${mod}+k`)
   await expect(editor).toHaveValue("handled:k")
+
+  const toggle = root.getByRole("button", { name: "Toggle browser toolbar", exact: true })
+  await editor.press(`${mod}+Shift+m`)
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect(toggle).toBeFocused()
+  await root.getByRole("button", { name: "Device preset", exact: true }).press("ArrowDown")
+  await page.getByRole("menuitem", { name: "More devices", exact: true }).press("ArrowRight")
+  await expect(page.getByRole("menuitemradio", { name: "iPhone SE", exact: true })).toBeFocused()
+  await page.keyboard.press(`${mod}+Shift+m`)
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+  await expect(toggle).toBeFocused()
+  await expect(toggle).toHaveCSS("outline-style", "solid")
+  await toggle.click()
+  await expect(toggle).toBeFocused()
+  await expect(toggle).toHaveCSS("outline-style", "none")
+  await page.keyboard.press(`${mod}+Shift+m`)
+  await expect(toggle).toHaveCSS("outline-style", "solid")
 
   // Shell shortcuts like ⌘⇧R and pane-scoped ⌘W are claimed before the page sees them.
   await editor.press(`${mod}+Shift+r`)
@@ -547,6 +564,27 @@ story("keeps blank browser tabs when adding tabs and selecting another panel", a
   await expect(root.getByRole("tab", { name: "beta.ts", exact: true })).toHaveAttribute("aria-selected", "true")
   await expect(tabs).toHaveCount(2)
   await expect(root.getByTestId("browser-closes")).toHaveText("[]")
+})
+
+story("a new tab request that opened no blank tab leaves a later blank page's address alone", async ({ page }) => {
+  const root = page.getByTestId("browser-region-fixture")
+  const mac = await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
+  const composer = root.getByRole("textbox", { name: "Composer", exact: true })
+  await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await root.getByRole("button", { name: "First inventory", exact: true }).click()
+  await expect(root.getByRole("tab", { name: "Preview", exact: true })).toHaveAttribute("aria-selected", "true")
+
+  // Main answers this request without a new blank tab.
+  await address.press(`${mac ? "Meta" : "Control"}+t`)
+  await expect(root.getByTestId("browser-opens")).toHaveText("1")
+
+  // The page the agent blanks later must not take focus from the composer; a dispatched click leaves focus in place.
+  await composer.focus()
+  await root.getByRole("button", { name: "Blank page", exact: true }).dispatchEvent("click")
+  await expect(root.getByRole("tab", { name: "New tab", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(composer).toBeFocused()
 })
 
 story("reopens a closed browser tab with ⌘⇧T after the side panel and a session tab elsewhere", async ({ page }) => {

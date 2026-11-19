@@ -36,7 +36,16 @@ export interface Target {
   /** Location-relative for internal paths, absolute for external paths. */
   readonly resource: string
   readonly externalDirectory?: ExternalDirectoryAuthorization
+  /** Where the target lives. Tools act on the target through this, not through a captured Environment. */
+  readonly environment: Environment.Interface
 }
+
+/**
+ * Identifies a target's file: the same path in two environments is two files. The id's length comes first so no
+ * id and path can read as another pair's key, and the keys of one environment sort as its paths do.
+ */
+export const key = (target: Pick<Target, "absolute" | "environment">) =>
+  `${target.environment.id.length}:${target.environment.id}:${target.absolute}`
 
 export type Invocation = Pick<Tool.Context, "sessionID" | "agent" | "messageID" | "id">
 
@@ -78,17 +87,12 @@ export const resolvePath = (directory: string, input: string, home = Global.Path
 }
 
 const slash = (value: string) => value.replaceAll("\\", "/")
-const invocation = (context: Invocation) => ({
-  sessionID: context.sessionID,
-  agent: context.agent,
-  source: { type: "tool" as const, messageID: context.messageID, id: context.id },
-})
 
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const { files } = yield* Environment.Service
-    const exists = (file: string) => Environment.exists(files, file)
+    const environment = yield* Environment.Service
+    const exists = (file: string) => Environment.exists(environment.files, file)
     const location = yield* Location.Service
     const permission = yield* Permission.Service
 
@@ -102,11 +106,12 @@ const layer = Layer.effect(
         return {
           absolute,
           resource: slash(path.relative(location.directory, absolute) || "."),
+          environment,
         } satisfies Target
       }
       const type =
         input.kind ??
-        (yield* Environment.typeFollowing(files, absolute).pipe(
+        (yield* Environment.typeFollowing(environment.files, absolute).pipe(
           Effect.catchTag("Environment.NotFound", () => Effect.undefined),
         ))
       const directory = AbsolutePath.make(type === "directory" ? absolute : path.dirname(absolute))
@@ -119,6 +124,7 @@ const layer = Layer.effect(
           resource: slash(path.join(directory, "*")),
           save: slash(path.join((yield* Project.root({ exists }, directory)) ?? directory, "*")),
         },
+        environment,
       } satisfies Target
     })
 
@@ -137,7 +143,7 @@ const layer = Layer.effect(
         resources: external.map((item) => item.resource),
         save: external.map((item) => item.save),
         ...(metadata === undefined ? {} : { metadata }),
-        ...invocation(context),
+        ...Permission.invocation(context),
       })
     })
 
@@ -155,7 +161,7 @@ const layer = Layer.effect(
         action: "read",
         resources: [target.resource],
         save: ["*"],
-        ...invocation(context),
+        ...Permission.invocation(context),
       })
       return target
     })

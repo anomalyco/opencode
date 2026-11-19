@@ -34,3 +34,9 @@ test("accepts an optional CORS allowlist", () => {
   ])
   expect(Option.isNone(decode({ cors: "http://192.168.1.10:3001" }))).toBe(true)
 })
+
+test("accepts an embedder fetch and rejects other values", () => {
+  const fetch = () => Promise.resolve(new Response())
+  expect(Option.getOrThrow(decode({ fetch })).fetch).toBe(fetch)
+  expect(Option.isNone(decode({ fetch: "https://example.com" }))).toBe(true)
+})

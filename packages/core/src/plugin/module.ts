@@ -2,7 +2,7 @@ export * as PluginModule from "./module.js"
 
 import type { Plugin } from "@opencode/plugin/effect/plugin"
 import { Host } from "@opencode/plugin/host"
-import { GuiBundle } from "@opencode/schema/plugin"
+import { GuiBundle, type Source } from "@opencode/schema/plugin"
 import { createPluginSources } from "@opencode/plugin/source"
 import { Hash } from "@opencode/util/hash"
 import { Npm } from "@opencode/util/npm"
@@ -57,6 +57,12 @@ export const make = Effect.fn("PluginModule.make")(function* () {
     changes: () => Stream.fromPubSub(changes),
   }
 })
+
+// A local plugin's directory (or legacy standalone file), where clients resolve its other parts.
+export function source(target: string, version?: string): Source {
+  if (path.isAbsolute(target)) return { type: "local", path: target }
+  return { type: "package", target, ...(version ? { version } : {}) }
+}
 
 // A missing dependency may have missing parents too. Watch the nearest existing
 // ancestor recursively so creating the rest of the path can trigger recovery.
@@ -154,14 +160,7 @@ const load = Effect.fn("PluginModule.load")(function* (
       ? { file: entrypoints.gui, revision: Hash.sha256(JSON.stringify([revision, bundle])), options: guiOptions }
       : undefined,
     revision,
-    // A local plugin's directory (or legacy standalone file), where clients resolve its other parts.
-    source: local
-      ? { type: "local" as const, path: operation.target }
-      : {
-          type: "package" as const,
-          target: operation.target,
-          ...(installed?.version ? { version: installed.version } : {}),
-        },
+    source: source(operation.target, installed?.version),
     effect: (host) => plugin.effect({ ...host, options: operation.options }),
   } satisfies Generation
 })

@@ -18,18 +18,26 @@ the ultimate source of truth. Upstream test262 files run verbatim from `test/tes
       TypeScript-only syntax is rejected rather than stripped before execution.
 - [x] Top-level `await` and `return` through the program's implicit async-function scope.
 - [x] Explicit `return`, final top-level expression as a REPL-style result, and `null` when no value is produced.
-- [x] The host boundary is `JSON.stringify` plus a short table. The program result and tool arguments cross as
+- [x] The result boundary is `JSON.stringify` plus a short table. The program result crosses as
       what `JSON.stringify` would serialize: `toJSON` is honored, functions and `undefined` properties vanish,
       `undefined` array elements and non-finite numbers become `null`, a cyclic value throws the same `TypeError`,
       and Map, RegExp, and generators serialize as `{}`. A bare `undefined` result is `null`.
       Tool results come back the way `JSON.parse(JSON.stringify(result))` would. The table, where a value cannot
       be JSON but what the program meant is clear: a promise is awaited (a rejection fails the program), a Set
-      crosses as an array, a URLSearchParams as its query string, an Error as `{ name, message, ...own enumerable }`, a
-      Uint8Array is rejected with a hint to encode as text, and own `__proto__` keys are dropped so merging tool
-      inputs or results cannot replace a prototype. In-program `JSON.stringify` keeps JS behavior except for the
-      Error form and a promise, which is a `TypeError` with an await hint rather than a silent `{}`.
+      crosses as an array, a URLSearchParams as its query string, an Error as `{ name, message, ...own enumerable }`,
+      and own `__proto__` keys are dropped so merging results cannot replace a prototype. Tool arguments cross as
+      copies, like extension arguments, and the tool layer turns them into JSON with the same table (a Uint8Array is
+      rejected with a hint to encode as text); a program's own `toJSON` is not called there, and a promise or function
+      inside an argument fails the call. In-program `JSON.stringify` keeps JS behavior except for the Error form and a
+      promise, which is a `TypeError` with an await hint rather than a silent `{}`.
 - [x] Live Date, RegExp, Map, Set, URL, URLSearchParams, Headers, and Uint8Array values inside CodeMode.
 - [x] Tool calls through the host-provided `tools` tree only.
+- [x] Imports of globals by Node module name: `import x from "m"`, `import { a, b as c } from "m"`,
+      `import * as m from "m"`, `import "m"`, `require("m")`, and `await import("m")`, with `node:fs` naming the
+      same module as `fs` and `fs/promises`, `url`, `util`, and `buffer` mapped to their globals. Imports load before
+      the program runs; a default import binds the module itself and the namespace adds it as `default`, the way
+      Node presents a CommonJS module. Anything else throws, and `import()` of it rejects. `export` is a parse error,
+      and an import below the top level throws.
 - [x] The global `search(...)` built-in: synchronous tool discovery that counts as an admitted tool call and is
       shadowable by program declarations like other globals. Its result can also be awaited or chained with
       `then`, `catch`, and `finally`.
@@ -62,7 +70,21 @@ the ultimate source of truth. Upstream test262 files run verbatim from `test/tes
 - [ ] BigInt literals and in-interpreter BigInt arithmetic; BigInt remains invalid at JSON-like host boundaries.
 - [ ] Arbitrary Symbol primitive values and symbol-keyed properties. The confined `Symbol.iterator` and
       `Symbol.asyncIterator` keys are available only for the iterator protocols.
-- [ ] Getter and setter definitions in object literals.
+- [x] Getter and setter definitions in object literals (`get x() {}`, `set x(v) {}`, computed and symbol keys), named
+      `get x` / `set x`. Every read and write honours program accessors: member and computed reads, method calls,
+      destructuring, `=`, compound and logical assignment, `++`/`--`, inherited setters (with a primitive as `this`
+      through a wrapper prototype), and `instanceof`'s `prototype`. Spread, rest, `Object.assign`, `entries` and
+      `values` call getters in key order (and `assign` runs the target's setters); `JSON.stringify`, `structuredClone`
+      and the program's result call getters and leave setter-only properties out; the iterator protocol's `next`,
+      `done`, `value`, `return` and `[Symbol.iterator]` may be getters. `console.log` and `console.table` never call
+      them and show `[Getter]`, `[Setter]` or `[Getter/Setter]`; `Object.keys`, `for...in`, `in` and
+      `hasOwnProperty` never call them either. A suspended run resumes inside a getter or setter.
+- [ ] Getters and setters in classes (classes are unsupported), `__defineGetter__` and friends.
+- [ ] Built-ins that read program getters ahead (`Array.from` on an array-like, `apply`, `structuredClone`,
+      `String.raw`, `Buffer.from`, `TextDecoder` options, `Headers`/`URLSearchParams` records, `new Error`'s
+      `cause`, `defineProperties`, host arguments) call each getter once per receiver and key per call, in rounds:
+      a value reached twice in one call reuses the first read, and the order across rounds can differ from JS's
+      interleaving. `Array.from` on an iterable reads a `[Symbol.iterator]` getter twice.
 
 ## Bindings and destructuring
 
@@ -302,8 +324,8 @@ reject }` object.
       thenable is adopted.
 - [x] Recursive assimilation of objects with an own callable `then` field across `Promise.resolve`, combinators,
       constructors, reactions, `finally`, `await`, and async returns. Thenable methods run deferred, receive
-      first-call-wins resolve/reject functions, and ignore throws after settlement. Inherited/accessor `then` fields
-      remain outside the supported object model.
+      first-call-wins resolve/reject functions, and ignore throws after settlement. Inherited and accessor `then`
+      fields are supported; an accessor `then` is read in a job of its own, one microtask after JS would read it.
 - [x] Dotted tool names are canonicalized into namespace paths; a path can be both callable and a namespace, and the
       last tool supplied for a canonical path wins.
 - [x] Tool path segments may be named `constructor`, `prototype`, or `__proto__` because paths use inert Map keys.
@@ -342,8 +364,14 @@ reject }` object.
 - [x] `Object.create(proto)` with an object or `null` prototype; any other prototype is a `TypeError`
       (`Object prototype may only be an Object or null`). Inherited reads, `in`, `hasOwnProperty`, own-only
       `Object.keys`, and `for...in` follow the chain as in JS. A second `properties`
-      argument other than `undefined` throws a `TypeError`: property descriptors are not supported (there is no
-      `Object.defineProperty` either).
+      argument defines properties from descriptors, as `Object.defineProperties` does.
+- [x] `Object.defineProperty`, `defineProperties`, `getOwnPropertyDescriptor(s)` and `getOwnPropertyNames`, with the
+      spec's validation (non-configurable and non-writable rules, `SameValue`, extensibility) and descriptor objects
+      read through getters and the prototype chain. Built-in accessors (`Map.prototype.size`, `URL.prototype.href`, …)
+      show as callable functions and can be redefined, one half at a time.
+- [ ] Array elements share one set of attributes, so `defineProperty` on an index takes only the array's own
+      attributes (new elements must say `writable`, `enumerable` and `configurable` true), never an accessor, and an
+      array's `length` can't be made read-only on its own (use `Object.freeze`).
 - [x] `Object.freeze`, `Object.seal`, and `Object.preventExtensions`, with `isFrozen`, `isSealed`, and `isExtensible`.
       Each returns its argument and passes primitives through (`Object.freeze(1) === 1`, `Object.isFrozen(1)`).
       Programs run as strict code, so violations throw `TypeError`: `Cannot assign to read only property 'a'`,
@@ -409,7 +437,8 @@ reject }` object.
 - [x] Slicing/access: `slice`, `substring`, Annex B `substr`, `at`, `charAt`, `charCodeAt`, and `codePointAt`.
 - [x] Construction/transformation: `split`, `concat`, `repeat`, `padStart`, `padEnd`, `replace`, and `replaceAll`.
 - [x] Regular-expression integration: `match`, materialized `matchAll`, `replace`, `replaceAll`, `split`, and `search`.
-- [x] `localeCompare`; locale and options arguments are currently ignored.
+- [x] `localeCompare`, with its locales and collator options (`numeric`, `sensitivity`, `caseFirst`,
+      `ignorePunctuation`, and the rest) passed to the host collator; there is still no global `Intl`.
 - [x] `isWellFormed` and `toWellFormed`.
 - [x] `toString`, `length`, numeric indexing, spread, `for...of`, and `[Symbol.iterator]` by Unicode code point.
 - [x] Static `String.fromCharCode` and `String.fromCodePoint`.
@@ -483,8 +512,10 @@ reject }` object.
       writing, so a time set inside an argument's `valueOf` survives.
 - [x] `Date.prototype.toUTCString` and its `toGMTString` alias.
 - [x] `toDateString` and `toTimeString` in the host's local timezone.
-- [x] `toLocaleString`, `toLocaleDateString`, and `toLocaleTimeString` always format as `en-US` in UTC
-      (`"1/1/1970, 12:00:00 AM"`) so output does not depend on the host.
+- [x] `toLocaleString`, `toLocaleDateString`, and `toLocaleTimeString` format through the host's
+      `Intl.DateTimeFormat`, honoring the locale and options (`timeZone`, `dateStyle`, `weekday`, `hour12`, ...). Without
+      a locale they format as `en-US`, Bun's default; without a `timeZone`, in the host's local timezone, like `getHours`
+      and `toDateString`.
 - [x] Native one-argument Date coercion for supported values, including booleans, null, arrays, and plain objects.
 - [x] Date setters, construction, and `Date.UTC` coerce object arguments through their own `valueOf`/`toString` in
       argument order and surface their throws; only the first seven components are converted.
@@ -559,13 +590,15 @@ reject }` object.
 The only binary type. Bytes stay inside the program or cross to extensions as copies; the tool boundary rejects them
 with a hint to encode as text first (`TextDecoder`, `toBase64`, `toHex`).
 
-- [x] `new Uint8Array(length | array | iterable | Uint8Array)`, `Uint8Array.from`, `Uint8Array.of`, `fromBase64`,
-      and `fromHex`. Lengths are capped like arrays. The `Uint8Array.from` mapper and `thisArg` see the original
-      values, so `Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))` decodes base64.
+- [x] `new Uint8Array(length | array | iterable | Uint8Array)`, `Uint8Array.from`, `Uint8Array.of`, `fromBase64`
+      (with the `alphabet` and `lastChunkHandling` options), and `fromHex`. Lengths are capped like arrays. The
+      `Uint8Array.from` mapper and `thisArg` see the original values, so
+      `Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))` decodes base64. `BYTES_PER_ELEMENT` is 1 on the
+      constructor, its instances, and `Buffer`.
 - [x] Index reads and writes with JS byte semantics: values wrap modulo 256, out-of-range writes are ignored, indexes
       cannot be deleted. `length` is a prototype accessor, so `Object.keys` lists only indexes.
 - [x] `at`, `slice`, `subarray` (a view on the same bytes), `set`, `fill`, `reverse`, `indexOf`, `lastIndexOf`,
-      `includes`, `join`, `toString`, `toBase64`, `toHex`, and live `keys`, `values`, `entries`, and `[Symbol.iterator]`
+      `includes`, `join`, `toString`, `toBase64` (with `alphabet` and `omitPadding`), `toHex`, and live `keys`, `values`, `entries`, and `[Symbol.iterator]`
       iterators. Start indexes coerce as for arrays, search values do not (`bytes.includes("1")` is `false`), and
       `lastIndexOf(x, undefined)` searches from index 0 while `lastIndexOf(x)` searches from the end, as in JS.
 - [x] Spread, destructuring, `for...of`, `yield*`, `Array.from`, and `new Set(bytes)`. `Array.isArray` is false.
@@ -577,6 +610,24 @@ with a hint to encode as text first (`TextDecoder`, `toBase64`, `toHex`).
       `[1, 2, 3]` is `[100, 200, 44]`); `reduce` on an empty Uint8Array without an initial value is a `TypeError`.
 - [x] `sort` in place, numeric ascending by default (`[10, 9, 1]` sorts to `[1, 9, 10]`) or by comparator.
 - [ ] `ArrayBuffer`, `DataView`, and other typed arrays.
+
+## Buffer
+
+Node's `Buffer`, where the host has one (Node and Bun; not browsers). It is a `Uint8Array`, so every `Uint8Array`
+method works on it, and its text conversions default to UTF-8.
+
+- [x] `Buffer.from(string, encoding)`, `Buffer.from(bytes | array | array-like | { type: "Buffer", data })`,
+      `alloc`, `allocUnsafe`, `concat`, `byteLength`, `compare`, `isBuffer`, and `isEncoding`, with the encodings
+      utf8, hex, base64, base64url, latin1/binary, ascii, and utf16le/ucs2. An unknown encoding is a `TypeError` with
+      code `ERR_UNKNOWN_ENCODING`.
+- [x] `toString(encoding, start, end)` (so string coercion and templates give UTF-8 text), `toJSON` as
+      `{ type: "Buffer", data }`, `slice` and `subarray` as Buffer views on the same bytes, `equals`, `compare`,
+      `indexOf`, `lastIndexOf`, `includes`, `write`, `fill`, `copy`, and the `read`/`write` integer and float methods.
+      `console.log` prints `<Buffer ..>`.
+- [x] The inherited `Uint8Array` methods that make new bytes (`map`, `filter`, `slice`, `subarray`, also called
+      through `Uint8Array.prototype`) make a Buffer from a Buffer, as JS's species does.
+- [x] A host Buffer crosses into the program as a Buffer, and a program Buffer crosses out as one; snapshots keep it.
+- [ ] The 64-bit `readBigInt64*`/`writeBigInt64*` methods, since programs have no BigInt.
 
 ## Web platform helpers
 
@@ -590,14 +641,16 @@ with a hint to encode as text first (`TextDecoder`, `toBase64`, `toHex`).
       frozen. Functions, symbols, promises, iterators, URL, Headers, and tool references cannot be cloned; without a
       `DOMException`, the failure is a `TypeError` whose message starts with `DataCloneError:`.
 - [x] `TextEncoder` and `TextDecoder` for UTF-8 only: any other label is a `RangeError`. `TextDecoder` accepts the
-      `fatal` and `ignoreBOM` options; `decode` takes a Uint8Array or nothing.
+      `fatal` and `ignoreBOM` options. `decode(chunk, { stream: true })` accepts incremental Uint8Array input;
+      `decode()` flushes the stream.
 - [x] `new Headers()` from records, synchronous iterables of pairs, and Headers, wrapping the host's `Headers`: names
       fold to lowercase, values are normalized and combined, and invalid names or values throw a `TypeError`.
 - [x] Headers `append`, `delete`, `get`, `getSetCookie`, `has`, `set`, `forEach`, `keys`, `values`, `entries`, and
       `[Symbol.iterator]`; iteration is live and sorted by name, with `set-cookie` values kept apart.
 - [x] Headers serialize to a `{ name: value }` object in JSON, in results, and in tool arguments.
 - [ ] `Request`, `Response`, and `Blob`.
-- [ ] `crypto.subtle` and `TextDecoder` streaming or non-UTF-8 encodings.
+- [x] A host-provided streaming fetch response exposes `bodyUsed`, whole-body readers, a default stream reader and `for await` iteration. `arrayBuffer()` crosses as a `Uint8Array`.
+- [ ] `crypto.subtle` and non-UTF-8 `TextDecoder` encodings.
 
 ## Extensions
 
@@ -624,6 +677,9 @@ Nothing is exposed unless a host provides it; extension calls are not tool calls
       `code`, `errno`, `syscall`, and `path` reach the program and `err.code === "ENOENT"` works. `stack` stays on its
       own side, no field may shadow an Error method, and a field that cannot cross (a class instance, a function) is
       left behind rather than replacing the error.
+- [x] A synchronous global that returns an Effect blocks the program until the Effect completes and returns its
+      value or throws its error, as `fs.readFileSync` does. An `async` global (or one marked `Extension.async`) hands
+      the program a promise instead.
 - [ ] Program functions as arguments to extension code (callbacks such as `forEach`).
 - [ ] Host classes. Stateful host objects are expressed as closures; a declared method table would be the next
       step if `new X()` in a program is ever needed.
@@ -637,8 +693,17 @@ Nothing is exposed unless a host provides it; extension calls are not tool calls
 - [x] Error `name`/`message`, error inheritance through `instanceof`, and plain-data serialization. `message` is an own
       non-enumerable property and `name` is inherited, as in JS, so `Object.keys(err)` is `[]` for a plain error. The
       result boundary still emits `{ name, message, ...own enumerable }`, so a field such as `code` crosses. `cause` is
-      non-enumerable: an extension Error carries it, and this JSON form does not. Errors have no `stack`; the diagnostic
-      carries a 1-based line and column in the submitted source instead.
+      non-enumerable: an extension Error carries it, and this JSON form does not. An uncaught error's diagnostic
+      carries a 1-based line and column in the submitted source.
+- [x] Every Error has an own non-enumerable string `stack` in V8's format: `name: message`, then
+      `    at fn (<program>:line:col)` lines. As in V8, the frames are taken when the error is made and the header when
+      `stack` is first read, so a subclass constructor that sets `this.name` shows in it; the value is then fixed until
+      assigned. The header reads `name` and `message` as data: a program getter there is not run and reads as
+      `undefined`, as in Bun (Node runs it). `stack` is a data property, as in Bun (Node's is an accessor).
+      `new Error()` lists up to 10 program frames, innermost first (built-in frames are skipped, and top-level code is
+      a bare `at <program>:line:col`); a built-in or tool failure has at most one line at the expression that raised
+      it or the `await` that observed it. A host Error's own `stack` never crosses, so no host path appears.
+- [ ] `Error.captureStackTrace`, `Error.stackTraceLimit`, and `at async` frames across an `await`.
 - [x] `instanceof` against any constructor with a `prototype`, including every built-in and `Function`.
 - [x] Derived error constructors extend `Error` itself: `Object.getPrototypeOf(TypeError) === Error`, so
       `TypeError.isError` is inherited, and `TypeError.prototype` inherits from `Error.prototype`.

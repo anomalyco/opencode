@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Fiber, Layer, Schedule, Stream } from "effect"
+import { Deferred, Effect, Fiber, Layer, Stream } from "effect"
 import { Agent } from "@opencode/core/agent"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -10,6 +10,7 @@ import { Document, Event } from "@opencode/schema/config"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Skill } from "@opencode/core/skill"
 import { SkillInstructions } from "@opencode/core/skill/instructions"
+import { waitUntil } from "./lib/eventually"
 import { testEffect } from "./lib/effect"
 import { readInitial } from "./lib/instructions"
 import { registerIntegrationPolicy, setOrganizationPolicy } from "./fixture/policy"
@@ -270,12 +271,3 @@ describe("Skill", () => {
       }),
   )
 })
-
-const waitUntil = (condition: Effect.Effect<boolean>) =>
-  condition.pipe(
-    Effect.filterOrFail(
-      (ready) => ready,
-      () => new Error("Skill policy was not applied"),
-    ),
-    Effect.retry({ times: 200, schedule: Schedule.spaced("10 millis") }),
-  )

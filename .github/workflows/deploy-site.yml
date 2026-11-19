@@ -1,0 +1,110 @@
+name: deploy-site
+
+# Deploys the opencode.ai site (services/site) to dev.opencode.ai or opencode.ai.
+#
+# - build runs repository code (bun install, services/site/script/build.ts) with
+#   no environment and no secrets. The workflow's own read-only GITHUB_TOKEN is
+#   available only here, for script/github-snapshot.ts. It uploads the Build
+#   Output with a SHA256SUMS whose digest it reports.
+# - deploy runs in the dev|production environment and mints a short-lived
+#   Cloudflare token from the token issuer. It checks out only .github/release/,
+#   verifies the artifact against that digest, installs the cf CLI pinned in
+#   .github/release/cf, and runs only .github/release/deploy-site.sh, which
+#   refuses an artifact whose config is not the pinned target in
+#   .github/release/targets/site/<stage>/.
+on:
+  push:
+    branches:
+      - dev
+      - production
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-site-${{ github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  site-build:
+    if: github.repository == 'anomalyco/opencode' && (github.ref_name == 'dev' || github.ref_name == 'production')
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    outputs:
+      digest: ${{ steps.upload.outputs.digest }}
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-bun
+
+      # The workflow's own token, at build time only: script/github-snapshot.ts records the repo numbers and
+      # releases the site falls back to. The Worker never gets a GitHub token.
+      - name: Build
+        working-directory: services/site
+        run: bun script/build.ts --mode ${{ github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - id: upload
+        uses: ./.github/release/upload
+        with:
+          name: site-${{ github.ref_name }}
+          path: services/site/.cloudflare/output
+          retention-days: 7
+          include-hidden-files: true
+
+  site-deploy:
+    needs: site-build
+    if: github.repository == 'anomalyco/opencode' && (github.ref_name == 'dev' || github.ref_name == 'production')
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    environment: ${{ github.ref_name }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out the deploy scripts
+        uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: /.github/release/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+
+      - name: Install the pinned cf CLI
+        working-directory: .github/release/cf
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Download
+        uses: ./.github/release/download
+        with:
+          pattern: site-${{ github.ref_name }}
+          require-digests: true
+          digests: site-${{ github.ref_name }}=${{ needs.site-build.outputs.digest }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::604439173067:role/github/opencode-${{ github.ref_name }}
+          role-session-name: opencode-${{ github.run_id }}
+          aws-region: us-east-1
+
+      # A 15-minute token for this stage, minted by the token issuer (anomalyco/secrets) from the role above.
+      # It is a step output, so only the Deploy step gets it.
+      - name: Cloudflare token
+        id: cloudflare-token
+        run: bash .github/release/cloudflare-token.sh "$GITHUB_REF_NAME"
+        env:
+          CLOUDFLARE_TOKEN_URL: ${{ vars.CLOUDFLARE_TOKEN_URL }}
+
+      - name: Deploy
+        env:
+          STAGE: ${{ github.ref_name }}
+          CLOUDFLARE_API_TOKEN: ${{ steps.cloudflare-token.outputs.token }}
+        run: bash .github/release/deploy-site.sh "$STAGE" "$RUNNER_TEMP/in/site-$STAGE"

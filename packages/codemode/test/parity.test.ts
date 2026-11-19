@@ -419,7 +419,7 @@ describe("Error values and instanceof", () => {
       true,
     ])
     expect(await value(`try { tools + 1 } catch (e) { return e.name }`)).toBe("TypeError")
-    expect(await value(`try { class A {} } catch (e) { return [e.name, e instanceof SyntaxError] }`)).toEqual([
+    expect(await value(`try { class A { #x } } catch (e) { return [e.name, e instanceof SyntaxError] }`)).toEqual([
       "SyntaxError",
       true,
     ])
@@ -538,6 +538,38 @@ describe("CodeMode-specific array behavior", () => {
 describe("CodeMode-specific string behavior", () => {
   test("localeCompare orders strings for sorting", async () => {
     expect(await value(`return ["b","a","c"].sort((x, y) => x.localeCompare(y))`)).toEqual(["a", "b", "c"])
+  })
+
+  test("localeCompare honors its locales and options like the host collator", async () => {
+    expect(
+      await value(`
+        const numeric = { get numeric() { return true } }
+        return [
+          ["a10", "a9", "a1"].sort((x, y) => x.localeCompare(y, undefined, numeric)),
+          "a".localeCompare("A", undefined, { sensitivity: "base" }),
+          "a".localeCompare("á", "en", { sensitivity: "base" }),
+          "a".localeCompare("A", ["en"], { sensitivity: { toString() { return "accent" } } }),
+          "a".localeCompare("A", "en", { caseFirst: "upper" }),
+          "a,b".localeCompare("ab", "en", { ignorePunctuation: true }),
+          "ä".localeCompare("z", "sv"),
+          "a".localeCompare("A"),
+        ]
+      `),
+    ).toEqual([["a1", "a9", "a10"], 0, 0, 0, 1, 0, 1, -1])
+  })
+
+  test("localeCompare rejects invalid locales and options with catchable errors", async () => {
+    expect(
+      await value(`
+        const attempt = (f) => { try { return f() } catch (e) { return e.name } }
+        return [
+          attempt(() => "a".localeCompare("b", "xx_bad")),
+          attempt(() => "a".localeCompare("b", undefined, { sensitivity: "nope" })),
+          attempt(() => "a".localeCompare("b", undefined, null)),
+          attempt(() => "a".localeCompare("b", [1])),
+        ]
+      `),
+    ).toEqual(["RangeError", "RangeError", "TypeError", "TypeError"])
   })
 
   test("an invalid normalize form is a clear catchable error", async () => {
@@ -1395,12 +1427,10 @@ describe("Object.getPrototypeOf and Object.create", () => {
     ).toEqual([true, ["name"], false, 1, "hi x", true, null, ["name", "greet", "a"]])
   })
 
-  test("Object.create rejects non-object prototypes and property descriptors", async () => {
+  test("Object.create rejects non-object prototypes and defines properties from descriptors", async () => {
     expect((await error(`Object.create(1)`)).message).toContain("Object prototype may only be an Object or null")
     expect((await error(`Object.create()`)).message).toContain("Object prototype may only be an Object or null")
-    expect((await error(`Object.create(null, { a: { value: 1 } })`)).message).toContain(
-      "Object.create property descriptors are not supported",
-    )
+    expect(await value(`return Object.create(null, { a: { value: 1, enumerable: true } }).a`)).toBe(1)
     expect(await value(`return Object.keys(Object.create({}, undefined))`)).toEqual([])
   })
 })

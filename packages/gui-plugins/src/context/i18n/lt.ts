@@ -28,4 +28,5 @@ export default {
   "export.success.description": "Seansas išsaugotas {{filename}}",
   "export.failed.title": "Nepavyko eksportuoti seanso",
   "export.failed.description": "Eksportuojant seansą įvyko klaida",
+  "usage.toggle": "Perjungti seanso kontekstą",
 }

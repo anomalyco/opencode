@@ -4,7 +4,7 @@ import { app } from "electron"
 import { acquireApplicationLock, configureApplication } from "./lifecycle/configure"
 import { startSidecarProbe } from "./service/sidecar-probe"
 import { registerStorageSnapshotHandler } from "./storage/snapshot"
-import { createEarlyWindow } from "./windows/early"
+import { createEarlyWindow, earlyWindowClosed } from "./windows/early"
 import { rendererAssetsServed } from "./windows/protocol"
 import { registerRendererScheme } from "./windows/scheme"
 
@@ -29,6 +29,9 @@ if (acquireApplicationLock()) {
     // thread, so the bundle waits for that burst to be answered (or a cap) before it evaluates.
     if (!process.env.ELECTRON_RENDERER_URL) await rendererAssetsServed({ quietMs: 40, capMs: 400 })
     marks.served = Date.now()
+
+    // Closing the first window before now quit the app; loading the layers would only start work it interrupts.
+    if (earlyWindowClosed()) return
 
     return import("./desktop")
   })

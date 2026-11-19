@@ -29,4 +29,13 @@ export default {
   "releaseNotes.action.next": "Seuraava",
   "releaseNotes.action.hideFuture": "Älä näytä näitä jatkossa",
   "releaseNotes.media.alt": "Julkaisun esikatselu",
+  "action.reload": "Päivitä lataamalla uudelleen",
+  "action.reloading": "Ladataan uudelleen…",
+  "web.ready.title": "Päivitys valmis",
+  "web.ready.message":
+    "OpenCoden uusi versio on valmis. Lataa uudelleen käyttääksesi sitä kaikissa avoimissa ikkunoissa.",
+  "web.reload": "Lataa uudelleen",
+  "web.reset.title": "Lataa palvelimelta uudelleen",
+  "web.reset.description": "Tyhjennä sovelluksen tallennettu kopio ja lataa palvelimen nykyinen versio",
+  "web.reset.action": "Lataa palvelimelta uudelleen",
 }

@@ -1,8 +1,7 @@
-import type { RouteDefaultsInput } from "../route/client.js"
 import { Auth } from "../route/auth.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import type { ProviderPackage } from "../provider-package.js"
-import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderConfigurationError, ProviderID, type ModelID, type RequestOptions } from "../schema/index.js"
 import { AnthropicMessages } from "../protocols/anthropic-messages.js"
 import { AnthropicCompatible } from "./anthropic-compatible.js"
 
@@ -14,7 +13,7 @@ export const id = ProviderID.make("anthropic")
 
 export const routes = [AnthropicMessages.route]
 
-export type Config = RouteDefaultsInput &
+export type Config = RequestOptions &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: AnthropicMessages.ProviderOptionsInput

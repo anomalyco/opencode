@@ -3,12 +3,21 @@ import { VoiceProvider } from "@/voice/context"
 import { VoiceOverlay } from "@/voice/composer"
 import { DialogProvider } from "@opencode/ui/context/dialog"
 import { FileComponentProvider } from "@opencode/ui/context/file"
+import { installFocusRescue } from "@opencode/ui/context/focus-rescue"
 import { Font } from "@opencode/ui/font"
 import { ThemeProvider } from "@opencode/ui/theme/context"
 import { MetaProvider, Title } from "@solidjs/meta"
 import { type BaseRouterProps, Router } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
-import { type Component, createRenderEffect, ErrorBoundary, type JSX, type ParentProps } from "solid-js"
+import {
+  type Component,
+  createRenderEffect,
+  ErrorBoundary,
+  type JSX,
+  onCleanup,
+  onMount,
+  type ParentProps,
+} from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { CommandProvider } from "@/shell/commands/command"
 import { DesktopCommands } from "@/shell/commands/desktop"
@@ -55,15 +64,13 @@ export function AppBaseProviders(
     onThemeApplied?: (mode: "light" | "dark", scheme: "system" | "light" | "dark") => void
   }>,
 ) {
+  onMount(() => onCleanup(installFocusRescue()))
+
   return (
     <MetaProvider>
       <Title>OpenCode</Title>
       <Font />
-      <ThemeProvider
-        onThemeApplied={(_, mode, scheme) => {
-          props.onThemeApplied?.(mode, scheme)
-        }}
-      >
+      <ThemeProvider onThemeApplied={(mode, scheme) => props.onThemeApplied?.(mode, scheme)}>
         <LanguageProvider locale={props.locale} onNativeTranslations={props.onNativeTranslations}>
           <UiI18nBridge>
             <ErrorBoundary

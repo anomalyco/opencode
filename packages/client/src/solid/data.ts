@@ -11,6 +11,7 @@ import type {
   FormInfo,
   SessionFormReplyInput,
   IntegrationInfo,
+  JobInfo,
   LocationRef,
   LocationGetOutput,
   McpResource,
@@ -84,9 +85,10 @@ export type CreateDataInput = {
   readonly onError?: (error: unknown) => void
   /**
    * Drops the payload of inline `data:` files in tool results before they enter the store. For clients that never
-   * render tool-result files: a session full of screenshots otherwise keeps hundreds of MB of base64 alive.
+   * render tool-result files: a session full of screenshots otherwise keeps hundreds of MB of base64 alive. A function
+   * is read for each message and event, so a client can follow a setting that changes while it runs.
    */
-  readonly omitToolFileData?: boolean
+  readonly omitToolFileData?: boolean | (() => boolean)
 }
 
 const messagePageLimit = 20
@@ -143,6 +145,12 @@ type Store = {
     permission: Record<string, PermissionSavedInfo[]>
   }
   location: Record<string, LocationData>
+  // Running background jobs keyed by job id, for the session trees that synced them. Settled jobs are removed.
+  job: Record<string, JobInfo>
+  // Job ids the server listed for each synced tree root (it filters descendants itself), plus ids that events added
+  // for owners known to be in the tree. Loaded session info only reaches direct children, so walking parents alone
+  // would drop a grandchild's jobs.
+  jobTree: Record<string, Record<string, true>>
 }
 
 export function locationKey(location: LocationRef) {
@@ -182,8 +190,23 @@ function omitFileData(content: [ToolContent, ...ToolContent[]]): [ToolContent, .
   return [omit(content[0]), ...content.slice(1).map(omit)]
 }
 
+const hasFileData = (part: Extract<SessionMessageInfo, { type: "assistant" }>["content"][number]) =>
+  part.type === "tool" &&
+  "content" in part.state &&
+  !!part.state.content?.some((item) => item.type === "file" && item.uri.startsWith("data:"))
+
+// A tool file whose `data:` payload `omitFileData` emptied.
+const isDroppedFile = (item: ToolContent) => item.type === "file" && item.uri === `data:${item.mime};base64,`
+
+const hasDroppedFileData = (message: SessionMessageInfo) =>
+  message.type === "assistant" &&
+  message.content.some(
+    (part) => part.type === "tool" && "content" in part.state && !!part.state.content?.some(isDroppedFile),
+  )
+
+// Returns the same message when there is nothing to drop, so the store keeps its objects.
 function omitMessageFileData(message: SessionMessageInfo): SessionMessageInfo {
-  if (message.type !== "assistant") return message
+  if (message.type !== "assistant" || !message.content.some(hasFileData)) return message
   return {
     ...message,
     content: message.content.map((part) =>
@@ -268,16 +291,35 @@ export function createData(config: CreateDataInput) {
 
   function refresh(load: () => Promise<unknown>) {
     if (disposed || (config.connection && config.connection.status() !== "connected")) return
-    void load().catch((error) => {
-      if (disposed || (config.connection && config.connection.status() !== "connected")) return
-      if (isSessionNotFoundError(error)) {
-        markDeleted(error.sessionID)
-        return
-      }
-      if (isMessageNotFoundError(error)) return
-      if (config.onError) return config.onError(error)
-      console.error("Failed to refresh client data", error)
-    })
+    void load().catch(refreshFailed)
+  }
+
+  // Copies back only the emptied tool files: live events may have moved the message on since the server read it.
+  function restoreMessageFiles(sessionID: string, messageID: string) {
+    return api()
+      .session.message.get({ sessionID, messageID })
+      .then((item) => {
+        if (item.type !== "assistant" || omitFiles()) return
+        message.editAssistant(sessionID, item.id, (assistant) => {
+          assistant.content.forEach((part) => {
+            if (part.type !== "tool" || !("content" in part.state) || !part.state.content?.some(isDroppedFile)) return
+            const fetched = item.content.findLast((other) => other.type === "tool" && other.id === part.id)
+            if (fetched?.type === "tool" && "content" in fetched.state && fetched.state.content)
+              part.state.content = fetched.state.content
+          })
+        })
+      })
+  }
+
+  function refreshFailed(error: unknown) {
+    if (disposed || (config.connection && config.connection.status() !== "connected")) return
+    if (isSessionNotFoundError(error)) {
+      markDeleted(error.sessionID)
+      return
+    }
+    if (isMessageNotFoundError(error)) return
+    if (config.onError) return config.onError(error)
+    console.error("Failed to refresh client data", error)
   }
 
   // Runs `load` once a burst of same-key events goes quiet, so N events cost one refetch.
@@ -312,6 +354,8 @@ export function createData(config: CreateDataInput) {
       permission: {},
     },
     location: {},
+    job: {},
+    jobTree: {},
   })
 
   const [defaultLocation, setDefaultLocation] = createSignal<LocationRef>({ directory: config.directory })
@@ -319,9 +363,14 @@ export function createData(config: CreateDataInput) {
     Object.values(store.session.info).toSorted((a, b) => b.time.updated - a.time.updated),
   )
   const messageIndex = new Map<string, Map<string, number>>()
-  const stored = (message: SessionMessageInfo) => (config.omitToolFileData ? omitMessageFileData(message) : message)
+  const omitFiles = () =>
+    typeof config.omitToolFileData === "function" ? config.omitToolFileData() : config.omitToolFileData === true
+  const stored = (message: SessionMessageInfo) => (omitFiles() ? omitMessageFileData(message) : message)
   const sync = createSync()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
+  // Job events that arrive while a tree's list is in flight, applied over its response: the latest info, or undefined
+  // once settled.
+  const jobUpdates = new Map<string, Map<string, JobInfo | undefined>>()
   const pendingUpdates = new Map<string, Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>>()
 
   function setSessionActive(sessionID: string, status: DataSessionStatus) {
@@ -673,6 +722,7 @@ export function createData(config: CreateDataInput) {
 
   function removeSession(sessionID: string) {
     activeUpdates?.set(sessionID, undefined)
+    removeJobTree(sessionID)
     store.session.pending[sessionID]?.forEach((item) => outbox.delete(item.id))
     messageIndex.delete(sessionID)
     sync.invalidate(`session:${sessionID}`)
@@ -739,6 +789,34 @@ export function createData(config: CreateDataInput) {
         )
         refresh(() => result.location.vcs.sync())
         refresh(() => result.project.sync())
+        Object.keys(store.jobTree).forEach((sessionID) => {
+          result.job.invalidate(sessionID)
+          refresh(() => result.job.sync(sessionID))
+        })
+        return
+      }
+      case "experimental.job.updated": {
+        const info = event.data.info
+        const running = info.status === "running"
+        jobUpdates.forEach((updates) => updates.set(info.id, running ? info : undefined))
+        if (!running) {
+          if (!store.job[info.id]) return
+          setStore(
+            produce((draft) => {
+              delete draft.job[info.id]
+              Object.values(draft.jobTree).forEach((members) => delete members[info.id])
+            }),
+          )
+          return
+        }
+        setStore(
+          produce((draft) => {
+            draft.job[info.id] = info
+            Object.entries(draft.jobTree).forEach(([rootID, members]) => {
+              if (jobWithin(info, rootID)) members[info.id] = true
+            })
+          }),
+        )
         return
       }
       case "project.updated":
@@ -982,6 +1060,7 @@ export function createData(config: CreateDataInput) {
             existing.rawFinish = undefined
             existing.native = undefined
             existing.time.created = event.data.started
+            existing.time.firstToken = undefined
             existing.time.streamed = undefined
             existing.time.completed = undefined
             if (event.data.snapshot) existing.snapshot = { ...existing.snapshot, start: event.data.snapshot }
@@ -1007,6 +1086,11 @@ export function createData(config: CreateDataInput) {
       case "session.step.streamed":
         message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
           assistant.time.streamed = event.created
+        })
+        return
+      case "session.step.first-token":
+        message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
+          assistant.time.firstToken = event.created
         })
         return
       case "session.step.ended": {
@@ -1097,7 +1181,7 @@ export function createData(config: CreateDataInput) {
             status: "completed",
             input: tool.state.input,
             metadata: event.data.metadata,
-            content: config.omitToolFileData ? omitFileData(event.data.content) : [...event.data.content],
+            content: omitFiles() ? omitFileData(event.data.content) : [...event.data.content],
           }
           tool.executed = event.data.executed || tool.executed === true
           if (event.data.native) tool.native = { ...tool.native, ...event.data.native }
@@ -1113,7 +1197,7 @@ export function createData(config: CreateDataInput) {
             input: typeof tool.state.input === "string" ? {} : tool.state.input,
             metadata: event.data.metadata,
             content:
-              config.omitToolFileData && event.data.content ? omitFileData(event.data.content) : event.data.content,
+              omitFiles() && event.data.content ? omitFileData(event.data.content) : event.data.content,
           }
           tool.executed = event.data.executed || tool.executed === true
           if (event.data.native) tool.native = { ...tool.native, ...event.data.native }
@@ -1493,6 +1577,38 @@ export function createData(config: CreateDataInput) {
     }
   })
 
+  // Whether a session is the ancestor or one of its descendants, by the parents in loaded session info.
+  function withinTree(sessionID: string, ancestorID: string) {
+    const seen = new Set<string>()
+    let current: string | undefined = sessionID
+    while (current && !seen.has(current)) {
+      if (current === ancestorID) return true
+      seen.add(current)
+      current = store.session.info[current]?.parentID
+    }
+    return false
+  }
+
+  // A subagent job's session is the parent of the child it runs, so either can place it in a tree.
+  function jobWithin(job: JobInfo, ancestorID: string) {
+    return (
+      withinTree(job.sessionID, ancestorID) || (job.kind === "subagent" && withinTree(job.childSessionID, ancestorID))
+    )
+  }
+
+  function removeJobTree(rootID: string) {
+    jobUpdates.delete(rootID)
+    sync.invalidate(`job:${rootID}`)
+    const members = store.jobTree[rootID]
+    if (!members) return
+    setStore(
+      produce((draft) => {
+        Object.keys(members).forEach((id) => delete draft.job[id])
+        delete draft.jobTree[rootID]
+      }),
+    )
+  }
+
   const result = {
     on: config.event.on,
     listen: config.event.listen,
@@ -1817,6 +1933,23 @@ export function createData(config: CreateDataInput) {
           const position = messageIndex.get(sessionID)?.get(messageID)
           return position === undefined ? undefined : messages?.[position]
         },
+        /** Re-reads every loaded message whose tool file data was dropped, for a client that starts showing tool files. */
+        restoreFiles() {
+          const sessions = Object.entries(store.session.message).flatMap(([sessionID, messages]) => {
+            const ids = (messages ?? []).filter(hasDroppedFileData).map((item) => item.id)
+            return ids.length === 0 ? [] : [{ sessionID, ids }]
+          })
+          // Each session's messages are re-read one at a time, so many screenshots don't fan out at once.
+          return Promise.all(
+            sessions.map((session) =>
+              session.ids.reduce(
+                (previous, messageID) =>
+                  previous.then(() => restoreMessageFiles(session.sessionID, messageID).catch(refreshFailed)),
+                Promise.resolve(),
+              ),
+            ),
+          )
+        },
         sync(sessionID: string) {
           return sync.run(`session.message:${sessionID}`, async () => {
             const started = deletionEpoch
@@ -1841,7 +1974,14 @@ export function createData(config: CreateDataInput) {
               (item) => !ids.has(item.id) && (outbox.has(item.id) || admitted.has(item.id)),
             )
             const messages = local.length === 0 ? fetched : [...fetched, ...local]
+            // The transcript only holds delivered input, so a pending row it contains missed its
+            // inbox.delivered event (and maybe its enqueued echo) while the event stream was down.
+            const delivered = [...admitted].filter((id) => ids.has(id))
             batch(() => {
+              delivered.forEach((id) => {
+                outbox.delete(id)
+                removePending(sessionID, id)
+              })
               messageIndex.set(sessionID, new Map(messages.map((message, index) => [message.id, index])))
               setStore("session", "message", sessionID, reconcile(messages))
               setStore("session", "messageCursor", sessionID, response.cursor.next ?? undefined)
@@ -2051,6 +2191,48 @@ export function createData(config: CreateDataInput) {
       },
       sync: shells.sync,
       invalidate: shells.invalidate,
+    },
+    job: {
+      // Running jobs owned by the session or any session below it: a synced tree's listed members, plus jobs whose
+      // owner loaded session info places below it.
+      list(sessionID: string) {
+        const members = store.jobTree[sessionID]
+        return Object.values(store.job).filter((job) => members?.[job.id] || jobWithin(job, sessionID))
+      },
+      sync(sessionID: string) {
+        return sync.run(`job:${sessionID}`, async () => {
+          const updates = new Map<string, JobInfo | undefined>()
+          jobUpdates.set(sessionID, updates)
+          const list = await api()
+            .experimental.job.list({ sessionID, descendants: true, status: "running" })
+            .catch((error: unknown) => {
+              if (jobUpdates.get(sessionID) === updates) jobUpdates.delete(sessionID)
+              return evictMissing(error)
+            })
+          if (jobUpdates.get(sessionID) !== updates) return
+          jobUpdates.delete(sessionID)
+          const listed = new Map(list.map((job) => [job.id, job]))
+          const next = new Map(listed)
+          updates.forEach((info, id) => {
+            if (!info) return next.delete(id)
+            if (listed.has(id) || jobWithin(info, sessionID)) next.set(id, info)
+          })
+          const previous = store.jobTree[sessionID] ?? {}
+          setStore(
+            produce((draft) => {
+              Object.values(draft.job).forEach((job) => {
+                if (next.has(job.id)) return
+                if (previous[job.id] || jobWithin(job, sessionID)) delete draft.job[job.id]
+              })
+              next.forEach((job, id) => (draft.job[id] = job))
+              draft.jobTree[sessionID] = Object.fromEntries([...next.keys()].map((id) => [id, true as const]))
+            }),
+          )
+        })
+      },
+      invalidate(sessionID: string) {
+        sync.invalidate(`job:${sessionID}`)
+      },
     },
     location: {
       info(ref?: LocationRef) {

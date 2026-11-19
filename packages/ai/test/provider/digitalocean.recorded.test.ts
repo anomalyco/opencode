@@ -38,7 +38,7 @@ for (const item of [
             system: LARGE_CACHEABLE_SYSTEM,
             prompt: "Reply exactly: OK",
             promptCacheKey: `digitalocean-recorded-${item.id}`,
-            generation: { maxTokens: item.maxTokens },
+            maxTokens: item.maxTokens,
           })
           const first = yield* LLMClient.generate(request)
           const second = yield* LLMClient.generate(request)

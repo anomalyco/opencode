@@ -8,7 +8,7 @@
 // its controls, macOS traffic lights included.
 export const SESSION_PANEL_WIDTH_MIN = 400
 
-const SIDE_PANE_WIDTH_MIN = 320
+export const SIDE_PANE_WIDTH_MIN = 320
 
 const SESSION_PANEL_WIDTH_FIT = 450
 
@@ -31,6 +31,11 @@ export function sessionPanelWidthCss(input: { width: number; split: boolean; res
 
   // The outer floor raises a width stored below the minimum, e.g. dragged before it rose.
   return `max(${SESSION_PANEL_WIDTH_MIN}px, min(${input.width}px, max(${minimum}px, 100% - ${pane + 8}px)))`
+}
+
+// A panel with a side width of its own: the chat panel takes the rest of the row, keeping at least its minimum.
+export function sidePanelWidthCss(side: number) {
+  return `max(${SESSION_PANEL_WIDTH_MIN}px, 100% - ${Math.max(SIDE_PANE_WIDTH_MIN, side) + 8}px)`
 }
 
 // `available` is undefined until the layout row is first measured; render the

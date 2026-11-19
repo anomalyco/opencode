@@ -6,6 +6,7 @@ import {
   CloudflareAIGateway,
   CloudflareWorkersAI,
   DigitalOcean,
+  Google,
   OpenAI,
   OpenCode,
   OpenRouter,
@@ -71,6 +72,14 @@ const openai = recordedTests({
   metadata: { model: "gpt-6-luna" },
 })
 
+const google = recordedTests({
+  prefix: "google-decision",
+  provider: "google",
+  protocol: "google-decisions",
+  requires: ["GOOGLE_API_KEY"],
+  metadata: { model: "gemini-decision-1" },
+})
+
 const cloudflareOptions = {
   redact: { url: (url: string) => url.replace(/\/client\/v4\/accounts\/[^/]+\//, "/client/v4/accounts/{account}/") },
 }
@@ -132,6 +141,17 @@ describe("Decision recorded", () => {
       Effect.map((response) => {
         expect(response.providerMetadata?.openai).toMatchObject({ model: "gpt-6-luna", usage: { input_tokens: 430 } })
         expect(response.usage?.outputTokens).toBe(0)
+      }),
+    ),
+  )
+
+  google.effect("decides choice score and predicate questions", () =>
+    assertDecision(
+      Google.configure({ apiKey: process.env.GOOGLE_API_KEY ?? "fixture" }).decision("gemini-decision-1"),
+    ).pipe(
+      Effect.map((response) => {
+        expect(response.usage?.outputTokens).toBe(0)
+        expect(response.providerMetadata?.google?.usage).toMatchObject({ input_tokens_by_modality: expect.any(Array) })
       }),
     ),
   )

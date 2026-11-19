@@ -4,7 +4,8 @@ import { Media } from "./media.js"
 import { tryRequest } from "./media-model.js"
 import {
   AIError,
-  HttpOptions,
+  type BaseRequest,
+  type TransportOptions,
   ModelID,
   ProviderID,
   ProviderMetadata,
@@ -28,8 +29,15 @@ export const DecisionPart = Schema.Union([DecisionTextPart, DecisionJsonPart, De
 )
 export type DecisionPart = Schema.Schema.Type<typeof DecisionPart>
 
+/** A media part as input: `media` may be plain data, with `mediaType` naming its type when the content can't. */
+export type DecisionMediaPartInput = Omit<typeof DecisionMediaPart.Type, "media"> & {
+  readonly media: Media.Input
+  readonly mediaType?: string
+}
+export type DecisionPartInput = Exclude<DecisionPart, { readonly type: "media" }> | DecisionMediaPartInput
+
 /** A plain object is one `json` part. */
-export type DecisionInput = typeof Schema.JsonObject.Type | ReadonlyArray<DecisionPart>
+export type DecisionInput = typeof Schema.JsonObject.Type | ReadonlyArray<DecisionPartInput>
 
 // ---------------------------------------------------------------------------
 // Questions
@@ -43,6 +51,10 @@ export const PredicateQuestion = Schema.Struct({
   name: Schema.String,
   type: Schema.Literal("predicate"),
   instructions: Schema.String,
+  /** What counts as true and as false, for statements the instructions alone leave ambiguous. */
+  criteria: Schema.optional(
+    Schema.Struct({ true: Schema.optional(Schema.String), false: Schema.optional(Schema.String) }),
+  ),
 })
 export type PredicateQuestion = Schema.Schema.Type<typeof PredicateQuestion>
 
@@ -188,7 +200,8 @@ export class DecisionModel<Options extends DecisionOptions = DecisionOptions> {
   readonly id: ModelID
   readonly provider: ProviderID
   readonly route: DecisionModelRoute<Options>
-  readonly http?: HttpOptions
+  /** Deployment headers, timeouts and `http` overlays, below each request's own. */
+  readonly transport?: TransportOptions
   readonly compatibility?: DecisionModelCompatibility
   /** Defaults under each request's `providerOptions`, such as options a provider package reads from its settings. */
   readonly providerOptions?: ProviderOptions
@@ -197,7 +210,7 @@ export class DecisionModel<Options extends DecisionOptions = DecisionOptions> {
     this.id = input.id
     this.provider = input.provider
     this.route = input.route
-    this.http = input.http
+    this.transport = input.transport
     this.compatibility = input.compatibility
     this.providerOptions = input.providerOptions
   }
@@ -216,7 +229,7 @@ export namespace DecisionModel {
     readonly id: ModelID
     readonly provider: ProviderID
     readonly route: DecisionModelRoute<Options>
-    readonly http?: HttpOptions
+    readonly transport?: TransportOptions
     readonly compatibility?: DecisionModelCompatibility
     readonly providerOptions?: ProviderOptions
   }
@@ -243,31 +256,24 @@ const DecisionRequestSchema = Schema.Struct({
   input: Schema.Array(DecisionPart),
   questions: DecisionQuestionList,
   providerOptions: Schema.optional(ProviderOptions),
-  http: Schema.optional(HttpOptions),
 })
 
 /** A normalized decision request, the plain object `ai.decision.request(...)` returns. */
 export interface DecisionRequest<
   Model extends DecisionModel = DecisionModel,
   Questions extends DecisionQuestions = DecisionQuestions,
-> {
-  readonly model: Model
+> extends BaseRequest<Model, DecisionModelOptions<Model>> {
   readonly input: ReadonlyArray<DecisionPart>
   readonly questions: Questions
-  readonly providerOptions?: DecisionModelOptions<Model>
-  readonly http?: HttpOptions
 }
 
 /** Input accepted by `ai.decision.request` and `generate`. A `DecisionRequest` is also a valid input. */
 export interface DecisionRequestInput<
   Model extends DecisionModel = DecisionModel,
   Questions extends DecisionQuestions = DecisionQuestions,
-> {
-  readonly model: Model
+> extends BaseRequest<Model, NoInfer<DecisionModelOptions<Model>>> {
   readonly input: DecisionInput
   readonly questions: Questions
-  readonly providerOptions?: NoInfer<DecisionModelOptions<Model>>
-  readonly http?: HttpOptions.Input
 }
 
 /** What decision hosts report; their raw usage stays in the response's `providerMetadata`. */
@@ -298,11 +304,19 @@ export const request = <const Model extends DecisionModel, const Questions exten
   input: DecisionRequestInput<Model, Questions>,
 ): DecisionRequest<Model, Questions> => ({
   ...input,
-  input: Array.isArray(input.input) ? input.input : [{ type: "json", value: input.input }],
-  http: HttpOptions.make(input.http),
+  input: isParts(input.input) ? input.input.map(decisionPart) : [{ type: "json", value: input.input }],
 })
 
 const validate = Schema.decodeUnknownSync(DecisionRequestSchema)
+
+// `Array.isArray` doesn't narrow a readonly array union, so the object branch would keep the parts type.
+const isParts = (input: DecisionInput): input is ReadonlyArray<DecisionPartInput> => Array.isArray(input)
+
+const decisionPart = (part: DecisionPartInput): DecisionPart => {
+  if (part.type !== "media") return part
+  const { mediaType, ...rest } = part
+  return { ...rest, media: Media.make(part.media, mediaType) }
+}
 
 export function generate<const Model extends DecisionModel, const Questions extends DecisionQuestions>(
   input: DecisionRequestInput<Model, Questions>,

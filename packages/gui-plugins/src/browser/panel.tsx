@@ -1,18 +1,31 @@
 import { Popover } from "@kobalte/core/popover"
 import { Button } from "@opencode/ui/button"
-import { Icon, newIcons } from "@opencode/ui/icon"
+import { Icon } from "@opencode/ui/icon"
 import type { IconName } from "@opencode/ui/icons/catalog"
 import { IconButton } from "@opencode/ui/icon-button"
 import { LineCommentEditor } from "@opencode/ui/line-comment"
 import { Loader } from "@opencode/ui/loader"
 import { Keybind } from "@opencode/ui/keybind"
 import { Menu } from "@opencode/ui/menu"
+import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { showToast } from "@opencode/ui/toast"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { createMemo, For, on, onCleanup, Show, type Accessor, type JSX } from "solid-js"
-import { createStore } from "solid-js/store"
+import { debounce } from "@solid-primitives/scheduled"
+import {
+  createMemo,
+  createSignal,
+  createUniqueId,
+  For,
+  onCleanup,
+  onMount,
+  Show,
+  untrack,
+  type Accessor,
+  type JSX,
+  type ParentProps,
+} from "solid-js"
 import type { Browser } from "@opencode/plugin-browser/rpc"
 import {
   createKeyed,
@@ -22,54 +35,50 @@ import {
   type MountedSession,
   type SessionScreen,
 } from "@opencode/plugin/gui"
-import { addressParts, connection, loopback, resolveAddress, searches } from "./address"
+import { addressParts, connection, loopback } from "./address"
+import {
+  ADDRESS_HINT_MAX_LENGTH,
+  addressSuggestions,
+  addressView,
+  initialAddressState,
+  nextAddressEpoch,
+  transitionAddress,
+  type AddressEpoch,
+  type AddressEvent,
+} from "./address-machine"
 import { commentNote, pageNote } from "./comment"
-import { bare, completes, highlight, suggest, type Visit } from "./history"
+import { bare, highlight, type Visit } from "./history"
 import type { Model } from "./model"
-import type { PaneElement } from "./ipc"
+import {
+  capturesEscape,
+  initialOverlayState,
+  overlayComment,
+  overlayNote,
+  overlayView,
+  transitionOverlay,
+  type OverlayContext,
+  type OverlayEvent,
+} from "./overlay-machine"
 import { PageIcon } from "./page-icon"
-
-type PaneState = {
-  /** The address field's text while the user edits it, and the submitted address it keeps afterwards. */
-  address: string
-  editing: boolean
-  /**
-   * The report counts when an address was submitted; the next URL change, finished load or rejection shows the
-   * page's URL.
-   */
-  kept: { followed: number; rejected: number } | undefined
-  /** The movement count at a submit; the next reported movement ends the submitted navigation. */
-  navigating: number | undefined
-  /** The user typed since focusing the address field; suggestions follow typing, not a focused URL. */
-  typed: boolean
-  /** The suggestion Enter opens; -1 opens the typed text. */
-  active: number
-  /** Escape closed the suggestions; typing opens them again. */
-  dismissed: boolean
-  /** The tab whose element picker is on. */
-  picking: { sessionKey: string; tabID: Browser.TabID } | undefined
-  /** A picked element awaiting its comment. The page stays frozen as a still until it closes. */
-  comment:
-    | {
-        sessionKey: string
-        tabID: Browser.TabID
-        url: string
-        /** The tab's navigation count at the pick; the element's ref dies when it changes. */
-        generation: number
-        element: PaneElement
-        draft: string
-      }
-    | undefined
-  /** A comment on the whole page awaiting its text, frozen like an element comment. */
-  note: { sessionKey: string; tabID: Browser.TabID; url: string; title: string; draft: string } | undefined
-  size: { width: number; height: number }
-  editorHeight: number
-  /** Opening measurement, frozen so typing never chooses a different side of the element. */
-  editorInitialHeight: number
-}
-
-/** Suggestions the address field lists, and pages the new tab page lists. */
-const SUGGESTIONS = 5
+import { ViewportControls } from "./viewport-controls"
+import {
+  initialViewportToolbar,
+  transitionViewportToolbar,
+  viewportToolbarAvailable,
+  viewportToolbarView,
+  type ViewportToolbarEvent,
+} from "./viewport-toolbar-machine"
+import { viewportLayout } from "./viewport-layout"
+import { ViewportHandles } from "./viewport-handles"
+import {
+  initialSiteState,
+  SITE_CLEAR_TIMEOUT_MS,
+  SITE_LOAD_TIMEOUT_MS,
+  siteView,
+  transitionSite,
+  type SiteEffect,
+  type SiteEvent,
+} from "./site-machine"
 
 const RECENT = 5
 
@@ -98,66 +107,42 @@ export default function SessionBrowserPane(props: {
     return tab ? props.model.page(props.session, tab.id) : undefined
   }
 
-  const [store, setStore] = createStore<PaneState>({
-    address: "",
-    editing: false,
-    kept: undefined,
-    navigating: undefined,
-    typed: false,
-    active: -1,
-    dismissed: false,
-    picking: undefined,
-    comment: undefined,
-    note: undefined,
-    size: { width: 0, height: 0 },
-    editorHeight: 0,
-    editorInitialHeight: 0,
-  })
+  const [addressState, setAddressState] = createSignal(initialAddressState)
+  const [available, setAvailable] = createSignal({ width: 0, height: 0 })
+  const [toolbar, setToolbar] = createSignal(initialViewportToolbar)
+  const [pointerFocusedToggle, setPointerFocusedToggle] = createSignal(false)
+  const viewportID = createUniqueId()
+  const [overlay, setOverlay] = createSignal(initialOverlayState)
 
-  // Finished loads, counted. A submitted address that lands on the URL the page already had (say "example.com" on
-  // https://example.com/) changes no URL, only this.
-  const settled = createMemo(
-    on(
-      () => !!state()?.loading,
-      (loading, previous, count: number = 0) => (previous && !loading ? count + 1 : count),
-    ),
+  // The page's reports, counted; a submitted address in the field ends at the next one.
+  const epoch = createMemo((previous: AddressEpoch | undefined) =>
+    nextAddressEpoch(previous, {
+      tabID: state()?.id,
+      url: address(),
+      loading: !!state()?.loading,
+      generation: state()?.generation ?? 0,
+      error: props.model.error(props.session),
+    }),
   )
 
-  // Page reports, counted: a count moves on every report, even one that repeats a value. Tab switches, URL changes and
-  // finished loads:
-  const followed = createMemo(
-    on([() => state()?.id, address, settled], (_input, _previous, count: number = 0) => count + 1),
-  )
+  // Suggestions follow what the user typed; a focused address is not a query.
+  const suggestions = createMemo(() => addressSuggestions(addressState(), props.model.visits()))
+  const addressBar = createMemo(() => addressView(addressState(), epoch(), suggestions()))
 
-  // Rejections: a blocked or rejected request leaves the page where it was.
-  const rejected = createMemo(
-    on(
-      () => props.model.error(props.session),
-      (error, _previous, count: number = 0) => (error ? count + 1 : count),
-    ),
-  )
+  const dispatchAddress = (event: AddressEvent, domEvent?: Event) => {
+    const next = transitionAddress(untrack(addressState), event)
+    setAddressState(next.state)
+    next.effects.forEach((effect) => {
+      if (effect.type === "select-input") return input?.select()
 
-  // Any reported movement, including a rejected or blocked request. A command clearing the last error is not one.
-  const moved = createMemo(
-    on(
-      [() => state()?.id, () => state()?.generation, () => state()?.loading, rejected],
-      (_input, _previous, count: number = 0) => count + 1,
-    ),
-  )
+      if (effect.type === "blur-input") return input?.blur()
 
-  // A submitted navigation the browser has not reported yet; keeps the empty state hidden meanwhile.
-  const navigating = () => store.navigating === moved()
-
-  // The address field: the user's text while editing, and a submitted address until the page reports a URL change or a
-  // rejection; otherwise the page's URL.
-  const field = () => {
-    if (store.editing) return store.address
-    const kept = store.kept
-
-    return kept?.followed === followed() && kept.rejected === rejected() ? store.address : address()
+      if (effect.type === "prevent-default") return domEvent?.preventDefault()
+      command({ type: "navigate", tabID: effect.tabID, url: effect.url })
+    })
   }
 
-  const empty = () => !address() && !state()?.loading && !navigating()
+  const empty = () => !address() && !state()?.loading && !addressBar().navigating
   // The desktop page hides blank and loading documents itself; only hide here
   // while the pane shows its own empty or failed state over the embed.
   const shown = () => visible() && !empty() && !failed()
@@ -169,37 +154,127 @@ export default function SessionBrowserPane(props: {
   }
 
   let root: HTMLElement | undefined
-  let box: HTMLDivElement | undefined
+  let toolbarToggle: HTMLButtonElement | undefined
   let input: HTMLInputElement | undefined
   let anchor: HTMLFormElement | undefined
 
-  const error = () => {
-    const value = props.model.error(props.session)
-
-    if (value === "browser.pane.replaced") return plugin.t("replaced")
-
-    if (value === "browser.pane.unsupported") return plugin.t("unsupported")
-
-    return value
-  }
+  const error = () => props.model.error(props.session)
 
   const inspectable = () => !!address() && !failed() && !suspended()
-  const picking = () => store.picking?.sessionKey === props.session.key && store.picking?.tabID === state()?.id
-  // A comment on a picked element freezes the page so its editor can float above it.
-  const commenting = () => store.comment?.sessionKey === props.session.key && store.comment?.tabID === state()?.id
-  const noting = () => store.note?.sessionKey === props.session.key && store.note?.tabID === state()?.id
+  const windowZoom = () => desktop?.zoom() ?? 1
 
-  // The address field always shows the whole URL; at rest it draws the host emphasized.
-  const parts = () => addressParts(field())
-  const site = () => !!field() && !store.editing
+  const fixedViewport = () => {
+    const viewport = page()?.viewport
 
-  // Suggestions follow what the user typed; a focused address is not a query.
-  const suggestions = createMemo(() =>
-    store.editing && store.typed ? suggest(props.model.visits(), store.address, SUGGESTIONS) : [],
+    return inspectable() && viewport?.mode === "fixed" ? viewport : undefined
+  }
+
+  const fit = createMemo(() => {
+    const viewport = fixedViewport()
+    const area = available()
+
+    if (!viewport || area.width <= 0 || area.height <= 0) return
+
+    return viewportLayout(viewport, area, windowZoom())
+  })
+
+  const size = () => fit() ?? available()
+  const tabID = createMemo(() => state()?.id)
+
+  // A new visit to the same tab must not receive the old visit's failure toast.
+  const toolbarTarget = createMemo(() => {
+    const id = tabID()
+
+    return id ? { sessionKey: props.session.key, tabID: id } : undefined
+  })
+
+  const toolbarContext = () => ({ target: toolbarTarget(), available: visible() && inspectable(), page: page() })
+  const toolbarView = createMemo(() => viewportToolbarView(toolbar(), toolbarContext()))
+  const toolbarVisible = () => toolbarView().visible
+  const notice = () => toolbarView().notice
+
+  const toggleTimeout = debounce(
+    (attempt: number) => dispatchToolbar({ type: "timeout", attempt, context: toolbarContext() }),
+    10_000,
   )
 
-  const listed = () => suggestions().length > 0 && !store.dismissed
-  const chosen = () => (listed() ? suggestions()[store.active] : undefined)
+  const dispatchToolbar = (event: ViewportToolbarEvent) => {
+    const next = transitionViewportToolbar(untrack(toolbar), event)
+    setToolbar(next.state)
+    const effect = next.effect
+
+    if (!effect) return
+
+    if (effect.type === "notify-failed") return showToast({ title: plugin.t("viewport.error") })
+    const { attempt, target, open } = effect
+    toggleTimeout(attempt)
+    void props.model.toggleViewport({ key: target.sessionKey }, target.tabID, open).then(
+      () => dispatchToolbar({ type: "succeeded", attempt }),
+      () => dispatchToolbar({ type: "failed", attempt, context: toolbarContext() }),
+    )
+  }
+
+  const toggleToolbar = () => dispatchToolbar({ type: "toggled", context: toolbarContext() })
+  onCleanup(() => dispatchToolbar({ type: "disposed" }))
+
+  const overlayed = createMemo(() => overlayView(overlay(), props.session.key, state()?.id))
+  const picking = () => overlayed().picking
+  const comment = createMemo(() => overlayComment(overlay(), props.session.key, state()?.id))
+  const note = createMemo(() => overlayNote(overlay(), props.session.key, state()?.id))
+
+  // Where the pane is when an event happens; the overlay machine checks what it owns against it.
+  const context = (): OverlayContext => ({
+    sessionKey: props.session.key,
+    tab: state(),
+    visible: visible(),
+    inspectable: inspectable(),
+  })
+
+  const dispatchOverlay = (event: OverlayEvent) => {
+    const next = transitionOverlay(untrack(overlay), event)
+    setOverlay(next.state)
+    next.effects.forEach((effect) => {
+      if (effect.type === "set-inspect")
+        return props.model.inspect({ key: effect.sessionKey }, effect.tabID, effect.enabled)
+
+      if (effect.type === "clear-highlight") return props.model.highlight({ key: effect.sessionKey }, effect.tabID)
+
+      // The owning screen's composer serves the session the pane shows.
+      if (effect.type === "attach-comment")
+        return props.screen.composer.attach(
+          commentNote({
+            origin: plugin.id,
+            tabID: effect.tabID,
+            url: effect.url,
+            subtitle: plugin.t("comment.annotation"),
+            element: {
+              ref: effect.live ? effect.element.ref : undefined,
+              selector: effect.element.selector,
+              label: effect.element.label,
+              role: effect.element.role,
+              name: effect.element.name,
+              text: effect.element.text,
+            },
+            comment: effect.comment,
+          }),
+        )
+
+      props.screen.composer.attach(
+        pageNote({
+          origin: plugin.id,
+          tabID: effect.tabID,
+          url: effect.url,
+          title: effect.title,
+          label: effect.title || addressParts(effect.url).host || effect.url,
+          comment: effect.comment,
+        }),
+      )
+    })
+  }
+
+  // The address field always shows the whole URL; at rest it draws the host emphasized.
+  const parts = () => addressParts(addressBar().field)
+  const site = () => !!addressBar().field && !addressBar().editing
   const recent = () => props.model.visits().slice(0, RECENT)
 
   // A loopback address opens on the machine that runs the server; the system browser here reaches it only when the
@@ -215,127 +290,38 @@ export default function SessionBrowserPane(props: {
     return /^https?:$/.test(parsed.protocol) && (props.session.server.local || !loopback(parsed.hostname))
   }
 
-  const setPicking = (current: NonNullable<PaneState["picking"]>, enabled: boolean) => {
-    props.model.inspect({ key: current.sessionKey }, current.tabID, enabled)
-    setStore("picking", enabled ? current : undefined)
-  }
-
-  const closeComment = () => {
-    const current = store.comment
-
-    if (!current) return
-    props.model.highlight({ key: current.sessionKey }, current.tabID)
-    setStore("comment", undefined)
-  }
-
-  const closeNote = () => setStore("note", undefined)
-
-  const toggleInspect = () => {
-    const tab = state()
-
-    if (!tab || !inspectable()) return
-
-    if (store.comment) closeComment()
-    closeNote()
-    setPicking({ sessionKey: props.session.key, tabID: tab.id }, !picking())
-  }
+  const closeOverlay = () => dispatchOverlay({ type: "overlay.cancelled" })
+  const toggleInspect = () => dispatchOverlay({ type: "picker.toggled", context: context() })
 
   const focusAddress = () => {
     input?.focus()
     input?.select()
   }
 
-  // Navigates the tab and keeps the submitted address in the field until the page reports where it went; a blank page
-  // keeps the field empty. Ends editing here rather than on blur: a click elsewhere, such as a recent page, may have
-  // blurred the field already.
-  const go = (url: string) => {
-    const tab = state()
+  // Navigates the tab and keeps the address in the field until the page reports where it went. Ends editing here rather
+  // than on blur: a click elsewhere, such as a recent page, may have blurred the field already.
+  const go = (url: string) => dispatchAddress({ type: "navigated", url, epoch: epoch() })
 
-    if (!tab) return
-    setStore({
-      editing: false,
-      typed: false,
-      active: -1,
-      address: url === "about:blank" ? "" : url,
-      navigating: moved(),
-      kept: { followed: followed(), rejected: rejected() },
-    })
-    command({ type: "navigate", tabID: tab.id, url })
-    input?.blur()
-  }
-
-  const step = (by: number) => {
-    const count = suggestions().length
-
-    if (!count) return
-    setStore({
-      dismissed: false,
-      active: store.active + by < -1 ? count - 1 : ((store.active + by + 1) % (count + 1)) - 1,
-    })
-  }
-
-  const submitComment = (value: string) => {
-    const current = store.comment
-
-    if (!current) return
-    const tab = state()
-
-    // The draft outlives a reload or agent navigation, but the ref no longer names anything.
-    const live =
-      props.session.key === current.sessionKey && tab?.id === current.tabID && tab.generation === current.generation
-
-    // The owning screen's composer serves the session the pane shows.
-    props.screen.composer.attach(
-      commentNote({
-        origin: plugin.id,
-        tabID: current.tabID,
-        url: current.url,
-        subtitle: plugin.t("comment.annotation"),
-        element: {
-          ref: live ? current.element.ref : undefined,
-          selector: current.element.selector,
-          label: current.element.label,
-          role: current.element.role,
-          name: current.element.name,
-          text: current.element.text,
-        },
-        comment: value,
-      }),
-    )
-    closeComment()
-  }
-
-  const openNote = () => {
-    const tab = state()
-
-    if (!tab || !address()) return
-
-    // The editor is already open: the button keeps what the user wrote.
-    if (noting()) return
-
-    if (picking() && store.picking) setPicking(store.picking, false)
-    closeComment()
-    setStore("note", { sessionKey: props.session.key, tabID: tab.id, url: tab.url, title: tab.title, draft: "" })
-  }
-
-  const submitNote = (value: string) => {
-    const current = store.note
-
-    if (!current) return
-    props.screen.composer.attach(
-      pageNote({
-        origin: plugin.id,
-        tabID: current.tabID,
-        url: current.url,
-        title: current.title,
-        label: current.title || addressParts(current.url).host || current.url,
-        comment: value,
-      }),
-    )
-    closeNote()
-  }
+  const submitOverlay = (value: string) => dispatchOverlay({ type: "overlay.submitted", value, context: context() })
+  const openNote = () => dispatchOverlay({ type: "note.opened", context: context() })
 
   const zoomed = () => !!address() && (page()?.zoom ?? 1) !== 1
+
+  // Keep the grip gutters in the measured layout while an annotation freezes the page.
+  const resizable = () => toolbarVisible() && !zoomed() && embed()
+
+  const dimensions = () => ({
+    width: Math.round((available().width * windowZoom()) / (page()?.zoom ?? 1)),
+    height: Math.round((available().height * windowZoom()) / (page()?.zoom ?? 1)),
+  })
+
+  const viewportMessage = () => {
+    if (notice() === "failed") return plugin.t("viewport.fitFailed")
+
+    if (notice() === "zoom") return plugin.t("viewport.zoomExit")
+
+    if (zoomed()) return plugin.t("viewport.zoomPrompt")
+  }
 
   const zoomPage = (direction: "in" | "out" | "reset") => {
     const tab = state()
@@ -353,40 +339,79 @@ export default function SessionBrowserPane(props: {
     )
   }
 
-  // The picked element in surface pixels, and the editor anchored below it, above it, or over it.
-  const spotlight = () => {
-    const rect = store.comment?.element.rect
+  // Snapshot the surface in native DIPs at pick time so the spotlight scales with the still.
+  const pickedRect = createMemo(() => comment()?.element.rect)
+
+  const capture = createMemo(() => {
+    const rect = pickedRect()
 
     if (!rect) return
-    const zoom = desktop?.zoom() ?? 1
+    const surface = untrack(size)
+    const zoom = untrack(windowZoom)
 
-    return { x: rect.x / zoom, y: rect.y / zoom, width: rect.width / zoom, height: rect.height / zoom }
+    return { rect, width: surface.width * zoom, height: surface.height * zoom }
+  })
+
+  const spotlight = () => {
+    const original = capture()
+
+    if (!original?.width || !original.height) return
+    const rect = original.rect
+    const x = size().width / original.width
+    const y = size().height / original.height
+
+    return { x: rect.x * x, y: rect.y * y, width: rect.width * x, height: rect.height * y }
+  }
+
+  let preview: HTMLDivElement | undefined
+  let backdrop: HTMLDivElement | undefined
+  const [origin, setOrigin] = createSignal({ x: 0, y: 0 })
+
+  // The spotlight scrolls with the still. Translate its page coordinates to the visible pane for the editor.
+  const trackPage = (surface: HTMLDivElement) => {
+    const port = preview
+
+    if (!port) return
+
+    const measure = () => {
+      if (!backdrop) return
+      const page = surface.getBoundingClientRect()
+      const pane = backdrop.getBoundingClientRect()
+
+      setOrigin({ x: page.left - pane.left, y: page.top - pane.top })
+    }
+
+    onMount(measure)
+    createResizeObserver([surface, port], measure)
+    createEventListener(port, "scroll", measure, { passive: true })
   }
 
   const placement = () => {
     const rect = spotlight()
 
     if (!rect) return
+    const pane = available()
     const gap = 8
-    const width = Math.max(0, Math.min(320, store.size.width - gap * 2))
+    const width = Math.max(0, Math.min(320, pane.width - gap * 2))
     // The editor scrolls rather than growing past the surface, so its actions stay reachable.
-    const surfaceHeight = Math.max(0, store.size.height - gap * 2)
+    const surfaceHeight = Math.max(0, pane.height - gap * 2)
     // Pick the opening side from its first measurement, then grow upward from that bottom edge.
-    const initialHeight = Math.min(store.editorInitialHeight || 80, surfaceHeight)
-    const left = Math.min(Math.max(gap, rect.x), Math.max(gap, store.size.width - width - gap))
-    const below = rect.y + rect.height + gap
-    const above = rect.y - gap - initialHeight
+    const initialHeight = Math.min(comment()?.editorInitialHeight || 80, surfaceHeight)
+    const y = origin().y + rect.y
+    const left = Math.min(Math.max(gap, origin().x + rect.x), Math.max(gap, pane.width - width - gap))
+    const below = Math.max(gap, y + rect.height + gap)
+    const above = y - gap - initialHeight
 
     const openingTop =
-      below + initialHeight <= store.size.height - gap
+      below + initialHeight <= pane.height - gap
         ? below
         : above >= gap
           ? above
-          : Math.max(gap, store.size.height - initialHeight - gap)
+          : Math.max(gap, pane.height - initialHeight - gap)
 
-    const bottom = Math.min(openingTop + initialHeight, store.size.height - gap)
+    const bottom = Math.min(openingTop + initialHeight, pane.height - gap)
     const maxHeight = Math.max(0, bottom - gap)
-    const height = Math.min(store.editorHeight || initialHeight, maxHeight)
+    const height = Math.min(comment()?.editorHeight || initialHeight, maxHeight)
     const top = Math.max(gap, bottom - height)
 
     return { left, top, width, maxHeight }
@@ -408,6 +433,11 @@ export default function SessionBrowserPane(props: {
       },
       inspectable,
       inspect: toggleInspect,
+      toggleToolbar: () => {
+        toggleToolbar()
+        setPointerFocusedToggle(false)
+        toolbarToggle?.focus({ preventScroll: true, focusVisible: true })
+      },
       focusAddress,
       // Dispatched inside the pane, so keybinds scoped to it, such as closing the browser tab, apply.
       press: (event) => {
@@ -436,101 +466,97 @@ export default function SessionBrowserPane(props: {
     () => props.session.key,
     (sessionKey) =>
       onCleanup(
-        props.model.onInspect({ key: sessionKey }, (event) => {
-          if (event.active) {
-            setStore("picking", { sessionKey, tabID: event.tabID })
-
-            return
-          }
-
-          if (store.picking?.sessionKey === sessionKey && store.picking.tabID === event.tabID)
-            setStore("picking", undefined)
-
-          if (!event.element) return
-          const tab = state()
-
-          if (tab?.id !== event.tabID || !visible()) {
-            props.model.highlight({ key: sessionKey }, event.tabID)
-
-            return
-          }
-
-          setStore({
-            editorHeight: 0,
-            editorInitialHeight: 0,
-            comment: {
-              sessionKey,
-              tabID: tab.id,
-              url: tab.url,
-              generation: tab.generation,
-              element: event.element,
-              draft: "",
-            },
-          })
-        }),
+        props.model.onInspect({ key: sessionKey }, (event) =>
+          dispatchOverlay({
+            type: "inspect.reported",
+            sessionKey,
+            tabID: event.tabID,
+            active: event.active,
+            element: event.element,
+            context: context(),
+          }),
+        ),
       ),
   )
 
   // A tab the user just opened starts in its address field, once its blank page is on screen. Syncs DOM focus.
   createKeyed(
     () => (visible() && empty() ? state()?.id : undefined),
-    () => {
-      if (props.model.opened(props.session)) focusAddress()
+    (tabID) => {
+      if (props.model.opened(props.session, tabID)) focusAddress()
     },
   )
 
-  // A picker or comment belongs to the page on screen: the page's picker stops when its tab is switched away or the
-  // pane hides, and a comment closes with its tab.
-  const endPicker = () => {
-    const current = store.picking
-
-    if (current && (current.sessionKey !== props.session.key || current.tabID !== state()?.id || !visible()))
-      setPicking(current, false)
-  }
-
-  onCleanup(() => {
-    if (store.picking) setPicking(store.picking, false)
-    closeComment()
-  })
-
-  createKeyed(visible, endPicker, { otherwise: endPicker })
+  // Syncs main's native picker and highlight with the page on screen: the overlay machine stops a picker whose tab was
+  // switched away, hidden or made uninspectable, and closes a comment or note whose tab was switched away.
   createKeyed(
-    () => {
-      const tab = state()
-
-      return tab ? { session: props.session.key, tabID: tab.id } : undefined
-    },
-    (current) => {
-      endPicker()
-
-      if (store.comment?.sessionKey !== current.session || store.comment.tabID !== current.tabID) closeComment()
-
-      if (store.note?.sessionKey !== current.session || store.note.tabID !== current.tabID) closeNote()
-    },
+    () => ({ sessionKey: props.session.key, tabID: state()?.id, visible: visible(), inspectable: inspectable() }),
+    () => dispatchOverlay({ type: "context.changed", context: context() }),
     {
-      equals: (previous, next) => previous.session === next.session && previous.tabID === next.tabID,
-      otherwise: () => {
-        endPicker()
-        closeComment()
-        closeNote()
-      },
+      equals: (previous, next) =>
+        previous.sessionKey === next.sessionKey &&
+        previous.tabID === next.tabID &&
+        previous.visible === next.visible &&
+        previous.inspectable === next.inspectable,
     },
   )
+  onCleanup(() => dispatchOverlay({ type: "disposed" }))
   // The page does not have focus while the picker waits for a hover, so Escape reaches the app.
   createEventListener(
     window,
     "keydown",
     (event) => {
-      if (event.key !== "Escape" || !store.picking) return
+      if (event.key !== "Escape" || !capturesEscape(untrack(overlay))) return
       event.preventDefault()
       event.stopPropagation()
-      setPicking(store.picking, false)
+      dispatchOverlay({ type: "escape.pressed" })
     },
     { capture: true },
   )
+
   createResizeObserver(
-    () => box,
-    (rect) => setStore("size", { width: rect.width, height: rect.height }),
+    () => preview,
+    (rect) => setAvailable({ width: rect.width, height: rect.height }),
+  )
+
+  // The outer box anchors the editors while the preview grid scrolls underneath.
+  const Preview = (view: ParentProps) => (
+    <div class="relative flex min-h-0 flex-1 flex-col">
+      <div
+        ref={preview}
+        data-component="browser-preview"
+        data-fixed={fixedViewport() ? "" : undefined}
+        data-resizable={resizable() ? "" : undefined}
+        data-manual={fixedViewport()?.scale ? "" : undefined}
+        data-embed-clip={fixedViewport()?.scale ? "" : undefined}
+        style={{
+          "grid-template-columns": fit() ? `${size().width}px` : "minmax(0, 1fr)",
+          "grid-template-rows": fit() ? `${size().height}px` : "minmax(0, 1fr)",
+        }}
+      >
+        {view.children}
+        <Show when={resizable()} keyed>
+          {(id) => (
+            <ViewportHandles
+              disabled={overlayed().frozen}
+              size={fixedViewport() ?? dimensions()}
+              ratio={windowZoom() / (fit()?.scale ?? 1)}
+              centered={{ width: size().width <= available().width, height: size().height <= available().height }}
+              resize={({ width, height }) => {
+                const tab = state()
+
+                if (!tab || embed() !== id) return
+                void props.model
+                  .setViewport(props.session, tab.id, { mode: "fixed", width, height, scale: fixedViewport()?.scale })
+                  .catch(() => {
+                    if (embed() === id && !page()?.viewportNotice) showToast({ title: plugin.t("viewport.error") })
+                  })
+              }}
+            />
+          )}
+        </Show>
+      </div>
+    </div>
   )
 
   // A restored tab has no page until the pane first shows it.
@@ -578,7 +604,7 @@ export default function SessionBrowserPane(props: {
 
                     if (tab) command({ type: direction, tabID: tab.id })
                   }}
-                  icon={<Icon name={direction === "back" ? "outline-arrow-left" : "outline-arrow-right"} />}
+                  icon={<Icon name={direction === "back" ? "arrow-left" : "arrow-right"} />}
                 />
               </Tooltip>
             )}
@@ -610,7 +636,7 @@ export default function SessionBrowserPane(props: {
           </Tooltip>
         </div>
         <Popover
-          open={store.editing && listed()}
+          open={addressBar().listed}
           anchorRef={() => anchor}
           placement="bottom-start"
           gutter={4}
@@ -622,9 +648,9 @@ export default function SessionBrowserPane(props: {
             ref={anchor}
             dir="ltr"
             data-component="browser-address"
-            data-editing={store.editing ? "" : undefined}
+            data-editing={addressBar().editing ? "" : undefined}
             data-site={site() ? "" : undefined}
-            data-address={store.editing && !store.typed && field() ? "" : undefined}
+            data-address={addressBar().editing && !addressBar().typed && addressBar().field ? "" : undefined}
             onPointerDown={(event) => {
               // The whole field focuses the input, as the site button and page actions handle their own clicks.
               if (event.target === event.currentTarget) {
@@ -634,13 +660,7 @@ export default function SessionBrowserPane(props: {
             }}
             onSubmit={(event) => {
               event.preventDefault()
-              const picked = chosen()
-              const text = field().trim()
-
-              if (picked) return go(picked.url)
-
-              if (text || failed()) return go(resolveAddress(text))
-              input?.blur()
+              dispatchAddress({ type: "submitted", epoch: epoch(), visits: props.model.visits(), failed: failed() })
             }}
           >
             {/* Editing shows the icon of the page Enter would open: the page's own, or the chosen suggestion's. */}
@@ -648,7 +668,13 @@ export default function SessionBrowserPane(props: {
               when={site()}
               fallback={
                 <PageIcon
-                  icon={store.editing && field() ? (store.typed ? chosen()?.icon : page()?.icon) : undefined}
+                  icon={
+                    addressBar().editing && addressBar().field
+                      ? addressBar().typed
+                        ? addressBar().chosen?.icon
+                        : page()?.icon
+                      : undefined
+                  }
                   class="text-v2-icon-icon-muted"
                 />
               }
@@ -677,60 +703,44 @@ export default function SessionBrowserPane(props: {
                 data-slot="browser-address-input"
                 role="combobox"
                 aria-autocomplete="list"
-                aria-expanded={store.editing && listed()}
-                aria-controls={listed() ? "browser-suggestions" : undefined}
-                aria-activedescendant={chosen() ? `browser-suggestion-${store.active}` : undefined}
+                aria-expanded={addressBar().listed}
+                aria-controls={addressBar().listed ? "browser-suggestions" : undefined}
+                aria-activedescendant={addressBar().chosen ? `browser-suggestion-${addressBar().active}` : undefined}
                 spellcheck={false}
                 autocomplete="off"
-                value={field()}
+                value={addressBar().field}
                 disabled={!state()}
                 placeholder={plugin.t("address.search")}
                 aria-label={plugin.t("address.label")}
-                onFocus={(event) => {
-                  setStore({ editing: true, address: field(), typed: false, active: -1, dismissed: false })
-                  event.currentTarget.select()
-                }}
+                onFocus={() => dispatchAddress({ type: "focused", epoch: epoch() })}
                 // Leaving the field without submitting cancels the edit; a submit already ended it. Focus that leaves
                 // for the page or another window keeps the field as the document's focus, so the window's return would
                 // focus it again and start an edit under the returning click, such as one on the site button.
                 onBlur={(event) => {
-                  if (store.editing) setStore({ editing: false, typed: false, active: -1, kept: undefined })
+                  dispatchAddress({ type: "blurred", epoch: epoch() })
 
                   if (!document.hasFocus()) event.currentTarget.blur()
                 }}
-                onInput={(event) => {
-                  const value = event.currentTarget.value
-                  const first = suggest(props.model.visits(), value, 1)[0]
-
-                  // Typing completes the first suggestion, as a search would; deleting never does.
-                  const complete =
-                    !!first && !event.inputType.startsWith("delete") && (completes(first, value) || searches(value))
-
-                  setStore({ address: value, typed: true, dismissed: false, active: complete ? 0 : -1 })
-                }}
+                onInput={(event) =>
+                  dispatchAddress({
+                    type: "input.changed",
+                    value: event.currentTarget.value,
+                    deleting: event.inputType.startsWith("delete"),
+                    visits: props.model.visits(),
+                  })
+                }
                 onKeyDown={(event) => {
                   // Keys during IME composition pick and cancel candidates, not suggestions. Safari can report the
                   // composition-confirming keydown with isComposing false but keyCode 229.
                   if (event.isComposing || event.keyCode === 229) return
 
-                  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                    if (!suggestions().length) return
-                    event.preventDefault()
-                    step(event.key === "ArrowDown" ? 1 : -1)
-
-                    return
-                  }
-
-                  if (event.key !== "Escape") return
-                  event.preventDefault()
-
-                  if (listed()) return setStore({ dismissed: true, active: -1 })
-                  event.currentTarget.blur()
+                  if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Escape")
+                    dispatchAddress({ type: "key.pressed", key: event.key, visits: props.model.visits() }, event)
                 }}
               />
               {/* At rest, draw the whole URL over the input's hidden text with its host emphasized. While editing, the
                   input shows its own text so selection and the caret need no mirror. */}
-              <Show when={!store.editing && field()}>
+              <Show when={!addressBar().editing && addressBar().field}>
                 <div aria-hidden="true" data-slot="browser-address-display">
                   <span data-slot="browser-address-url" data-host={parts().host ? "" : undefined}>
                     <span data-slot="browser-address-muted">{parts().scheme}</span>
@@ -741,10 +751,14 @@ export default function SessionBrowserPane(props: {
               </Show>
               {/* The suggestion Enter opens, after the typed text. Long text scrolls the input, which a mirror cannot
                   follow, so only a short query shows it. */}
-              <Show when={store.editing && store.address.length <= 48 && chosen()}>
+              <Show
+                when={
+                  addressBar().editing && addressBar().query.length <= ADDRESS_HINT_MAX_LENGTH && addressBar().chosen
+                }
+              >
                 {(visit) => (
                   <div aria-hidden="true" data-slot="browser-address-hint">
-                    <span class="invisible shrink-0">{store.address}</span>
+                    <span class="invisible shrink-0">{addressBar().query}</span>
                     <span class="ms-1.5 min-w-0 truncate">{`- ${bare(visit().url)}`}</span>
                   </div>
                 )}
@@ -786,7 +800,7 @@ export default function SessionBrowserPane(props: {
                     disabled={!reachable()}
                     onPointerDown={(event) => event.preventDefault()}
                     onClick={() => system.openExternal(address())}
-                    icon={<Icon name={newIcons() ? "outline-square-arrow" : "outline-arrow-up-right"} />}
+                    icon={<Icon name="outline-square-arrow" />}
                   />
                 </Tooltip>
               </div>
@@ -795,6 +809,7 @@ export default function SessionBrowserPane(props: {
           <Popover.Portal>
             <Popover.Content
               data-component="browser-suggestions"
+              data-browser-popup
               onOpenAutoFocus={(event) => event.preventDefault()}
               onCloseAutoFocus={(event) => event.preventDefault()}
             >
@@ -803,8 +818,8 @@ export default function SessionBrowserPane(props: {
                   {(visit, index) => (
                     <PageRow
                       visit={visit}
-                      query={store.address}
-                      option={{ id: `browser-suggestion-${index()}`, selected: index() === store.active }}
+                      query={addressBar().query}
+                      option={{ id: `browser-suggestion-${index()}`, selected: index() === addressBar().active }}
                       onClick={() => go(visit.url)}
                     />
                   )}
@@ -822,13 +837,43 @@ export default function SessionBrowserPane(props: {
               data-action="browser-inspect"
               disabled={!inspectable()}
               state={picking() ? "pressed" : undefined}
-              classList={{ "!text-v2-icon-icon-accent": picking() || commenting() }}
+              classList={{ "!text-v2-icon-icon-accent": overlayed().accent }}
               aria-pressed={picking()}
               aria-label={plugin.t("inspect")}
               onClick={toggleInspect}
-              icon={<Icon name="outline-browser-annotate" />}
+              icon={<Icon name="select-element" />}
             />
           </Tooltip>
+          <Show when={viewportToolbarAvailable(plugin.app.channel)}>
+            <Tooltip
+              placement="top"
+              value={tip(plugin.t("command.toggleToolbar"), keybinds.keybind("browser.toggleToolbar"))}
+            >
+              <IconButton
+                ref={toolbarToggle}
+                variant="ghost-muted"
+                size="large"
+                classList={{ "!outline-none": pointerFocusedToggle() }}
+                onPointerDown={() => setPointerFocusedToggle(true)}
+                onBlur={() => setPointerFocusedToggle(false)}
+                onKeyDown={() => setPointerFocusedToggle(false)}
+                aria-label={plugin.t("command.toggleToolbar")}
+                aria-expanded={toolbarVisible()}
+                aria-controls={toolbarVisible() ? viewportID : undefined}
+                disabled={!inspectable()}
+                state={toolbarVisible() ? "pressed" : undefined}
+                onClick={toggleToolbar}
+                icon={
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path
+                      d="M1 12.5H8M13.5 4V2.5H3.49997V12M14.5 5.5H9.5C9.5 8.0362 9.5 10.9638 9.5 13.5H14.5C14.5 10.9638 14.5 8.0362 14.5 5.5Z"
+                      stroke="currentColor"
+                    />
+                  </svg>
+                }
+              />
+            </Tooltip>
+          </Show>
           <Menu gutter={4} modal={false} placement="bottom-end">
             <Tooltip placement="top" value={plugin.t("options")}>
               <Menu.Trigger
@@ -841,7 +886,7 @@ export default function SessionBrowserPane(props: {
               />
             </Tooltip>
             <Menu.Portal>
-              <Menu.Content class="w-[172px]">
+              <Menu.Content class="w-[172px]" data-browser-popup>
                 {/* Zooming closes the menu: the page stays a still while the menu covers it, so a zoom would show
                     only once it closed. The address field shows any zoom but 100% afterwards. */}
                 <Menu.Group>
@@ -888,104 +933,150 @@ export default function SessionBrowserPane(props: {
           {error()}
         </div>
       </Show>
-      <embeds.View
-        id={embed()}
-        visible={shown()}
-        frozen={commenting() || noting()}
-        // A navigation, in-page or not, or a reload starting is another page.
-        page={JSON.stringify([state()?.id, state()?.generation, state()?.url, !!state()?.loading])}
-        radius={10}
-        class="relative min-h-0 flex-1 bg-v2-background-bg-base flex items-center justify-center"
-      >
-        <div ref={box} aria-hidden="true" class="pointer-events-none absolute inset-0" />
-        <Show when={empty() && !failed() && !suspended()}>
-          <div dir="auto" class="size-full overflow-y-auto">
-            <Show
-              when={recent().length > 0}
-              fallback={
-                <div class="mx-auto flex max-w-[360px] flex-col items-center gap-4 px-6 pt-20 text-center">
-                  <Icon name="outline-globe" size="large" class="text-v2-icon-icon-muted" />
-                  <div class="flex flex-col gap-2">
-                    <div class="text-[13px] font-[530] leading-[var(--line-height-compact)] text-v2-text-text-base">
-                      {plugin.t("home.title")}
-                    </div>
-                    <div class="text-[13px] font-[440] leading-[var(--line-height-compact)] text-v2-text-text-muted">
-                      {plugin.t("home.description")}
+      <Show when={toolbarVisible()}>
+        <section id={viewportID} data-component="browser-viewport" aria-label={plugin.t("viewport.label")}>
+          <Show when={state()?.id} keyed>
+            {(tabID) => (
+              <Show when={props.session.key} keyed>
+                <ViewportControls
+                  viewport={page()?.viewport}
+                  autoWidth={dimensions().width}
+                  autoHeight={dimensions().height}
+                  effectiveScale={fit()?.scale ?? 1}
+                  zoomed={zoomed()}
+                  apply={(viewport) => props.model.setViewport(props.session, tabID, viewport)}
+                />
+              </Show>
+            )}
+          </Show>
+          <Show when={viewportMessage()}>
+            <div data-slot="browser-viewport-message" role="status">
+              {viewportMessage()}
+              <Show when={zoomed()}>
+                <Button size="small" variant="ghost" onClick={() => zoomPage("reset")}>
+                  {plugin.t("zoom.reset")}
+                </Button>
+              </Show>
+              <Show when={notice()}>
+                <Button
+                  size="small"
+                  variant="ghost-muted"
+                  onClick={() => dispatchToolbar({ type: "notice.dismissed", context: toolbarContext() })}
+                >
+                  {plugin.t("common.dismiss")}
+                </Button>
+              </Show>
+            </div>
+          </Show>
+        </section>
+      </Show>
+      <Preview>
+        <embeds.View
+          id={embed()}
+          visible={shown() && (!fixedViewport() || !!fit())}
+          frozen={overlayed().frozen}
+          // A navigation, reload or layout viewport change invalidates stills of the previous page.
+          page={JSON.stringify([
+            state()?.id,
+            state()?.generation,
+            state()?.url,
+            !!state()?.loading,
+            fixedViewport()?.width,
+            fixedViewport()?.height,
+            fixedViewport()?.scale,
+          ])}
+          radius={fixedViewport() ? 0 : 10}
+          class="relative min-h-0 min-w-0 overflow-hidden bg-v2-background-bg-base flex items-center justify-center"
+        >
+          <Show when={empty() && !failed() && !suspended()}>
+            <div dir="auto" class="size-full overflow-y-auto">
+              <Show
+                when={recent().length > 0}
+                fallback={
+                  <div class="mx-auto flex max-w-[360px] flex-col items-center gap-4 px-6 pt-20 text-center">
+                    <Icon name="globe" size="large" class="text-v2-icon-icon-muted" />
+                    <div class="flex flex-col gap-2">
+                      <div class="text-[13px] font-[530] leading-[var(--line-height-compact)] text-v2-text-text-base">
+                        {plugin.t("home.title")}
+                      </div>
+                      <div class="text-[13px] font-[440] leading-[var(--line-height-compact)] text-v2-text-text-muted">
+                        {plugin.t("home.description")}
+                      </div>
                     </div>
                   </div>
+                }
+              >
+                {/* The pages the browser showed last; the side panel's new tab view offers the other tabs. One visit is
+                    enough to list; the list stops at a handful. */}
+                <div class="mx-auto flex w-full max-w-[608px] flex-col gap-4 px-6 pt-12 pb-10">
+                  <div class="text-[13px] font-[440] leading-[var(--line-height-compact)] text-v2-text-text-muted">
+                    {plugin.t("home.recent")}
+                  </div>
+                  <div class="flex flex-col gap-2">
+                    <For each={recent()}>{(visit) => <PageRow visit={visit} onClick={() => go(visit.url)} />}</For>
+                  </div>
                 </div>
-              }
-            >
-              {/* The pages the browser showed last; the side panel's new tab view offers the other tabs. One visit is
-                  enough to list; the list stops at a handful. */}
-              <div class="mx-auto flex w-full max-w-[608px] flex-col gap-4 px-6 pt-12 pb-10">
-                <div class="text-[13px] font-[440] leading-[var(--line-height-compact)] text-v2-text-text-muted">
-                  {plugin.t("home.recent")}
-                </div>
-                <div class="flex flex-col gap-2">
-                  <For each={recent()}>{(visit) => <PageRow visit={visit} onClick={() => go(visit.url)} />}</For>
-                </div>
-              </div>
-            </Show>
-          </div>
-        </Show>
-        <Show when={failed() && !suspended()}>
-          {/* Add the 40px toolbar to the file empty state's 160px bottom padding to align their centers. */}
-          <div
-            dir="auto"
-            class="flex size-full flex-col items-center justify-center gap-2 p-6 pb-[200px] text-center text-text-weak"
-          >
-            <Icon name="globe" size="large" class="mb-2 shrink-0" />
-            <div class="text-[13px] font-medium leading-[var(--line-height-compact)] text-text-strong">
-              {plugin.t("failed.title")}
+              </Show>
             </div>
-            <div class="text-13-regular leading-[var(--line-height-base)]">{plugin.t("failed.description")}</div>
-          </div>
-        </Show>
-        <Show when={suspended()}>
-          <p class="px-6 text-center text-13-regular text-v2-text-text-subtle" role="status">
-            {plugin.t("suspended")}
-          </p>
-        </Show>
-        <Show when={commenting() && store.comment}>
+          </Show>
+          <Show when={failed() && !suspended()}>
+            {/* Add the 40px toolbar to the file empty state's 160px bottom padding to align their centers. */}
+            <div
+              dir="auto"
+              class="flex size-full flex-col items-center justify-center gap-2 p-6 pb-[200px] text-center text-text-weak"
+            >
+              <Icon name="globe" size="large" class="mb-2 shrink-0" />
+              <div class="text-[13px] font-medium leading-[var(--line-height-compact)] text-text-strong">
+                {plugin.t("failed.title")}
+              </div>
+              <div class="text-13-regular leading-[var(--line-height-base)]">{plugin.t("failed.description")}</div>
+            </div>
+          </Show>
+          <Show when={suspended()}>
+            <p class="px-6 text-center text-13-regular text-v2-text-text-subtle" role="status">
+              {plugin.t("suspended")}
+            </p>
+          </Show>
+          <Show when={spotlight()}>
+            {(rect) => (
+              <div ref={trackPage} class="pointer-events-none absolute inset-0 overflow-hidden">
+                <div
+                  data-slot="browser-comment-spotlight"
+                  class="absolute rounded-[2px]"
+                  style={{
+                    left: `${rect().x}px`,
+                    top: `${rect().y}px`,
+                    width: `${rect().width}px`,
+                    height: `${rect().height}px`,
+                  }}
+                />
+              </div>
+            )}
+          </Show>
+        </embeds.View>
+        <Show when={comment()}>
           {(current) => (
             <div
+              ref={backdrop}
               data-component="browser-comment"
-              class="absolute inset-0 z-10"
+              class="absolute start-0 top-0 z-10"
+              style={{ width: `${available().width}px`, height: `${available().height}px` }}
               onPointerDown={(event) => {
                 // A click beside the editor dismisses it unless it would discard a draft.
-                if (event.target === event.currentTarget && !current().draft.trim()) closeComment()
+                if (event.target === event.currentTarget) dispatchOverlay({ type: "backdrop.pressed" })
               }}
             >
-              <Show when={spotlight()}>
-                {(rect) => (
-                  <div
-                    data-slot="browser-comment-spotlight"
-                    class="pointer-events-none absolute rounded-[2px]"
-                    style={{
-                      left: `${rect().x}px`,
-                      top: `${rect().y}px`,
-                      width: `${rect().width}px`,
-                      height: `${rect().height}px`,
-                    }}
-                  />
-                )}
-              </Show>
               <Show when={placement()}>
                 {(position) => (
                   <div
                     ref={(element) =>
                       createResizeObserver(element, (rect) =>
-                        setStore({
-                          editorHeight: Math.ceil(rect.height),
-                          editorInitialHeight: store.editorInitialHeight || Math.ceil(rect.height),
-                        }),
+                        dispatchOverlay({ type: "editor.resized", height: rect.height }),
                       )
                     }
                     data-slot="browser-comment-editor"
                     data-prevent-autofocus
-                    data-scrollable
-                    class="absolute overflow-y-auto rounded-[8px] shadow-[var(--v2-elevation-floating)]"
+                    class="absolute flex flex-col overflow-hidden rounded-[8px] shadow-[var(--v2-elevation-floating)]"
                     style={{
                       left: `${position().left}px`,
                       top: `${position().top}px`,
@@ -993,104 +1084,109 @@ export default function SessionBrowserPane(props: {
                       "max-height": `${position().maxHeight}px`,
                     }}
                   >
-                    <LineCommentEditor
-                      variant="compact"
-                      label={plugin.t("comment.label")}
-                      placeholder={plugin.t("comment.placeholder")}
-                      cancelLabel={plugin.t("comment.cancel")}
-                      submitLabel={plugin.t(current().draft.trim() ? "comment.submit" : "comment.attach")}
-                      allowEmpty
-                      style={{
-                        "--line-comment-preview-lines": 2,
-                        "--line-comment-max-height": `${position().maxHeight}px`,
-                      }}
-                      value={current().draft}
-                      onInput={(value) => setStore("comment", "draft", value)}
-                      onCancel={closeComment}
-                      onSubmit={submitComment}
-                      mention={{
-                        items: (query) => props.screen.file.search(query, { kind: "any" }),
-                      }}
-                      selection={
-                        <span>
-                          <Tooltip
-                            placement="top"
-                            contentStyle={{ "pointer-events": "none" }}
-                            value={
+                    <MenuScroll class="min-h-0">
+                      <LineCommentEditor
+                        variant="compact"
+                        label={plugin.t("comment.label")}
+                        placeholder={plugin.t("comment.placeholder")}
+                        cancelLabel={plugin.t("comment.cancel")}
+                        submitLabel={plugin.t(current().draft.trim() ? "comment.submit" : "comment.attach")}
+                        allowEmpty
+                        style={{
+                          "--line-comment-preview-lines": 2,
+                          "--line-comment-max-height": `${position().maxHeight}px`,
+                        }}
+                        value={current().draft}
+                        onInput={(value) => dispatchOverlay({ type: "draft.changed", value })}
+                        onCancel={closeOverlay}
+                        onSubmit={submitOverlay}
+                        mention={{
+                          items: (query) => props.screen.file.search(query, { kind: "any" }),
+                        }}
+                        selection={
+                          <span>
+                            <Tooltip
+                              placement="top"
+                              contentStyle={{ "pointer-events": "none" }}
+                              value={
+                                <span
+                                  dir="ltr"
+                                  style={{ "font-family": "var(--font-family-mono)", "unicode-bidi": "isolate" }}
+                                >
+                                  {current().element.selector || current().element.label}
+                                </span>
+                              }
+                            >
                               <span
                                 dir="ltr"
-                                style={{ "font-family": "var(--font-family-mono)", "unicode-bidi": "isolate" }}
+                                style={{
+                                  "font-family": "var(--font-family-mono)",
+                                  "unicode-bidi": "isolate",
+                                  display: "-webkit-box",
+                                  "-webkit-box-orient": "vertical",
+                                  "-webkit-line-clamp": "var(--line-comment-preview-lines)",
+                                  overflow: "hidden",
+                                  "overflow-wrap": "anywhere",
+                                }}
                               >
                                 {current().element.selector || current().element.label}
                               </span>
-                            }
-                          >
-                            <span
-                              dir="ltr"
-                              style={{
-                                "font-family": "var(--font-family-mono)",
-                                "unicode-bidi": "isolate",
-                                display: "-webkit-box",
-                                "-webkit-box-orient": "vertical",
-                                "-webkit-line-clamp": "var(--line-comment-preview-lines)",
-                                overflow: "hidden",
-                                "overflow-wrap": "anywhere",
-                              }}
-                            >
-                              {current().element.selector || current().element.label}
-                            </span>
-                          </Tooltip>
-                        </span>
-                      }
-                    />
+                            </Tooltip>
+                          </span>
+                        }
+                      />
+                    </MenuScroll>
                   </div>
                 )}
               </Show>
             </div>
           )}
         </Show>
-        <Show when={noting() && store.note}>
+        <Show when={note()}>
           {(current) => (
             <div
               data-component="browser-comment"
-              class="absolute inset-0 z-10"
+              class="absolute start-0 top-0 z-10"
+              style={{ width: `${available().width}px`, height: `${available().height}px` }}
               onPointerDown={(event) => {
-                if (event.target === event.currentTarget && !current().draft.trim()) closeNote()
+                if (event.target === event.currentTarget) dispatchOverlay({ type: "backdrop.pressed" })
               }}
             >
               {/* Under the page actions at the address field's end, which opened it. */}
               <div
                 data-slot="browser-comment-editor"
                 data-prevent-autofocus
-                class="absolute end-2 top-2 overflow-y-auto rounded-[6px] shadow-[var(--v2-elevation-raised)]"
+                class="absolute end-2 top-2 flex flex-col overflow-hidden rounded-[6px] shadow-[var(--v2-elevation-raised)]"
                 style={{
-                  width: `${Math.max(0, Math.min(400, store.size.width - 16))}px`,
-                  "max-height": `${Math.max(0, store.size.height - 16)}px`,
+                  width: "min(400px, calc(100% - 16px))",
+                  "max-height": "calc(100% - 16px)",
                 }}
               >
-                <LineCommentEditor
-                  value={current().draft}
-                  onInput={(value) => setStore("note", "draft", value)}
-                  onCancel={closeNote}
-                  onSubmit={submitNote}
-                  placeholder={plugin.t("page.placeholder")}
-                  mention={{
-                    items: (query) => props.screen.file.search(query, { kind: "any" }),
-                  }}
-                  selection={
-                    <span class="flex min-w-0 items-center gap-1" dir="ltr">
-                      <Icon name="outline-globe" size="small" class="shrink-0" />
-                      <span class="min-w-0 truncate leading-[var(--line-height-tight)]">
-                        {current().title || addressParts(current().url).host || current().url}
+                <MenuScroll class="min-h-0">
+                  <LineCommentEditor
+                    value={current().draft}
+                    onInput={(value) => dispatchOverlay({ type: "draft.changed", value })}
+                    onCancel={closeOverlay}
+                    onSubmit={submitOverlay}
+                    placeholder={plugin.t("page.placeholder")}
+                    mention={{
+                      items: (query) => props.screen.file.search(query, { kind: "any" }),
+                    }}
+                    selection={
+                      <span class="flex min-w-0 items-center gap-1" dir="ltr">
+                        <Icon name="globe" class="shrink-0" />
+                        <span class="min-w-0 truncate leading-[var(--line-height-tight)]">
+                          {current().title || addressParts(current().url).host || current().url}
+                        </span>
                       </span>
-                    </span>
-                  }
-                />
+                    }
+                  />
+                </MenuScroll>
               </div>
             </div>
           )}
         </Show>
-      </embeds.View>
+      </Preview>
       <p class="sr-only" role="status" aria-live="polite">
         {picking() ? plugin.t("inspect.active") : ""}
       </p>
@@ -1181,22 +1277,54 @@ function SiteInformation(props: {
   clear: () => Promise<void> | undefined
 }) {
   const plugin = usePlugin()
-
-  // `load` counts openings and clears, so a count for an earlier one never replaces a later one.
-  const [state, setState] = createStore<{
-    open: boolean
-    pointer: boolean
-    cookies?: number
-    clearing: boolean
-    load: number
-  }>({
-    open: false,
-    pointer: false,
-    clearing: false,
-    load: 0,
-  })
-
+  const [siteState, setSiteState] = createSignal(initialSiteState)
+  // Whether a pointer opened the popover, so closing it returns focus without a focus ring.
+  const [pointer, setPointer] = createSignal(false)
+  const view = createMemo(() => siteView(siteState()))
+  let timer: ReturnType<typeof setTimeout> | undefined
   let trigger: HTMLButtonElement | undefined
+
+  const dispatch = (event: SiteEvent) => {
+    const next = transitionSite(siteState(), event)
+    setSiteState(next.state)
+    next.effects.forEach(run)
+  }
+
+  const run = (effect: SiteEffect) => {
+    if (effect.type === "notify-clear-failed") return showToast({ title: plugin.t("common.requestFailed") })
+    const attempt = effect.attempt
+    const phase = effect.type === "load" ? "loading" : "clearing"
+    clearTimeout(timer)
+    timer = setTimeout(
+      () => dispatch({ type: "timeout", phase, attempt }),
+      effect.type === "load" ? SITE_LOAD_TIMEOUT_MS : SITE_CLEAR_TIMEOUT_MS,
+    )
+
+    if (effect.type === "load") {
+      const pending = props.site()
+
+      if (!pending) return dispatch({ type: "load.failed", attempt })
+      void pending.then(
+        (value) => dispatch({ type: "load.succeeded", attempt, cookies: value.cookies }),
+        () => dispatch({ type: "load.failed", attempt }),
+      )
+
+      return
+    }
+
+    const pending = props.clear()
+
+    if (!pending) return dispatch({ type: "clear.failed", attempt })
+    void pending.then(
+      () => dispatch({ type: "clear.succeeded", attempt }),
+      () => dispatch({ type: "clear.failed", attempt }),
+    )
+  }
+
+  onCleanup(() => {
+    clearTimeout(timer)
+    dispatch({ type: "disposed" })
+  })
 
   const kind = () => {
     const value = connection(props.url)
@@ -1211,56 +1339,40 @@ function SiteInformation(props: {
     return !!value && value !== "file"
   }
 
-  const load = () => {
-    const run = state.load + 1
-    setState({ load: run, cookies: undefined })
-    void props.site()?.then(
-      (value) => {
-        if (state.load === run) setState("cookies", value.cookies)
-      },
-      () => undefined,
-    )
-  }
+  const cookieDetail = () => {
+    const current = view()
 
-  const clear = () => {
-    setState("clearing", true)
-    void (props.clear() ?? Promise.reject(new Error("browser.pane.unavailable")))
-      .catch(() => showToast({ title: plugin.t("common.requestFailed") }))
-      .finally(() => {
-        setState("clearing", false)
-        load()
-      })
+    if (current.failed) return plugin.t("common.requestFailed")
+
+    return current.cookies === undefined ? undefined : plugin.plural("site.cookies.count", current.cookies)
   }
 
   return (
     <Popover
-      open={state.open}
+      open={view().open}
       placement="bottom-start"
       gutter={8}
       shift={-10}
       modal={false}
-      onOpenChange={(open) => {
-        setState("open", open)
-
-        if (open) load()
-      }}
+      onOpenChange={(open) => dispatch({ type: "open.changed", open })}
     >
       <Tooltip placement="top" value={plugin.t("site.info")}>
         <Popover.Trigger
           ref={trigger}
           as={IconButton}
           type="button"
-          onPointerDown={() => setState("pointer", true)}
-          onKeyDown={() => setState("pointer", false)}
+          onPointerDown={() => setPointer(true)}
+          onKeyDown={() => setPointer(false)}
           variant="ghost-muted"
           size="small"
           aria-label={plugin.t("site.info")}
-          icon={<Icon name="outline-sliders" />}
+          icon={<Icon name="sliders" />}
         />
       </Tooltip>
       <Popover.Portal>
         <Popover.Content
           data-component="browser-site"
+          data-browser-popup
           // The panel takes focus itself rather than its close button, so a pointer opening shows no focus ring there.
           onOpenAutoFocus={(event: Event) => {
             event.preventDefault()
@@ -1269,7 +1381,7 @@ function SiteInformation(props: {
           }}
           // Focus returns to the trigger on close, which Chromium rings after Escape; a pointer opening keeps it unringed.
           onCloseAutoFocus={(event: Event) => {
-            if (!state.pointer) return
+            if (!pointer()) return
             event.preventDefault()
             const active = document.activeElement
 
@@ -1280,7 +1392,7 @@ function SiteInformation(props: {
         >
           <div data-slot="browser-site-row">
             <span data-slot="browser-site-icon">
-              <Icon name="outline-globe" />
+              <Icon name="globe" />
             </span>
             <Popover.Title data-slot="browser-site-host" dir="ltr">
               {addressParts(props.url).host || props.url}
@@ -1297,18 +1409,14 @@ function SiteInformation(props: {
             )}
           </Show>
           <Show when={web()}>
-            <SiteRow
-              icon="outline-cookie"
-              title={plugin.t("site.cookies")}
-              detail={state.cookies === undefined ? undefined : plugin.plural("site.cookies.count", state.cookies)}
-            >
+            <SiteRow icon="outline-cookie" title={plugin.t("site.cookies")} detail={cookieDetail()}>
               <Button
                 size="small"
                 variant="neutral"
-                disabled={state.clearing || state.cookies === undefined}
-                onClick={clear}
+                disabled={view().actionDisabled}
+                onClick={() => dispatch(view().failed ? { type: "retry" } : { type: "clear.clicked" })}
               >
-                {plugin.t("site.cookies.clear")}
+                {plugin.t(view().failed ? "common.retry" : "site.cookies.clear")}
               </Button>
             </SiteRow>
             <SiteRow

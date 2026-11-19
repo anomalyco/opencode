@@ -28,4 +28,5 @@ export default {
   "export.success.description": "Istunto tallennettu tiedostoon {{filename}}",
   "export.failed.title": "Istunnon vieminen epäonnistui",
   "export.failed.description": "Istuntoa vietäessä tapahtui virhe",
+  "usage.toggle": "Näytä tai piilota istunnon konteksti",
 }

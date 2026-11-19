@@ -25,6 +25,7 @@ describe("acp session lifecycle over the wire", () => {
         _meta: { "opencode/child-session-updates": true },
       },
       agentInfo: { name: "OpenCode" },
+      _meta: { steering: { supported: true } },
     })
     expect(plain.authMethods).toEqual([
       { id: "opencode-login", name: "Login with opencode", description: "Run `opencode auth login` in the terminal" },
@@ -217,6 +218,27 @@ describe("acp session lifecycle over the wire", () => {
     })
     expect(new Set(acp.server.sessions.keys())).toEqual(existing)
     expect(acp.server.requests.filter((request) => request.path.includes("ses_saved"))).toEqual([])
+    expect(acp.logs).toEqual([])
+  })
+
+  test("close removes a new session that was never prompted and keeps every other session", async () => {
+    await using acp = await startWire()
+    acp.server.sessions.set("ses_saved", makeSession("ses_saved"))
+    await acp.initialize()
+    const unused = await acp.newSession()
+    const prompted = await acp.newSession()
+    const elsewhere = await acp.newSession()
+    await acp.prompt(prompted.sessionId, "hello")
+    acp.server.messages.set(elsewhere.sessionId, [{ id: "msg_1", type: "user", text: "hi", time: { created: 1 } }])
+    await acp.request("session/load", { cwd: "/workspace", sessionId: "ses_saved", mcpServers: [] })
+
+    for (const sessionId of [unused.sessionId, prompted.sessionId, elsewhere.sessionId, "ses_saved"])
+      expect(await acp.request("session/close", { sessionId })).toEqual({})
+
+    expect(acp.server.sessions.has(unused.sessionId)).toBe(false)
+    expect(acp.server.sessions.has(prompted.sessionId)).toBe(true)
+    expect(acp.server.sessions.has(elsewhere.sessionId)).toBe(true)
+    expect(acp.server.sessions.has("ses_saved")).toBe(true)
     expect(acp.logs).toEqual([])
   })
 })

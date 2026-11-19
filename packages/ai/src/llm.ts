@@ -12,16 +12,17 @@ import {
   type TriggerCompactOptions,
 } from "./route/client.js"
 import {
-  GenerationOptions,
-  HttpOptions,
   InvalidProviderOutputError,
   InvalidRequestError,
+  mergeGeneration,
   AIError,
   LLMEvent,
   LLMResponse,
+  ResponseFold,
   Message,
   LanguageModel,
   SystemPart,
+  type BaseRequest,
   type CachePolicy,
   type CompactionCheckpointResponse,
   type CompactionResponse,
@@ -29,8 +30,8 @@ import {
   ToolChoice,
   ToolEntry,
   Usage,
-  type ContentPart,
   type LanguageModelProviderOptions,
+  type GenerationOptionsFields,
   type LLMRequest,
   type ToolEntryInput,
   withPartial,
@@ -38,29 +39,30 @@ import {
 import { tool, type ExecutableTool, type Tool, type ToolSchema } from "./tool.js"
 import { runTools } from "./tool-runtime.js"
 import { addUsage, nextRequest, pendingCalls } from "./loop.js"
+import { foldTools } from "./tool-updates.js"
 
 /** Input accepted by `ai.request`, `ai.generate`, `ai.stream` and `ai.compact`. An `LLMRequest` is also a valid input. */
 export type LLMRequestInput<Model extends LanguageModel = LanguageModel> = TextRequestFields<Model> & PromptOrMessages
 
 /** Exactly one of `prompt`, a single user message, or `messages`, the full conversation. */
 export type PromptOrMessages =
-  | { readonly prompt: string | ContentPart | ReadonlyArray<ContentPart>; readonly messages?: never }
+  | { readonly prompt: Message.UserContentInput; readonly messages?: never }
   | { readonly messages: ReadonlyArray<Message | Message.Input>; readonly prompt?: never }
 
-interface TextRequestFields<Model extends LanguageModel> {
+interface TextRequestFields<Model extends LanguageModel>
+  extends BaseRequest<Model, NoInfer<LanguageModelProviderOptions<Model>>>,
+    GenerationOptionsFields {
   readonly id?: string
-  readonly model: Model
   readonly system?: string | SystemPart | ReadonlyArray<SystemPart>
-  /** Sent in array order. Pass `tool(...)` values or wire entries such as hosted provider tools. */
+  /**
+   * Sent in array order. Pass `tool(...)` values or wire entries such as hosted provider tools. The same as a
+   * `Message.tools({ add: tools })` leading the history.
+   */
   readonly tools?: ReadonlyArray<Tool | ToolEntryInput>
   readonly toolChoice?: ToolChoice.Input
-  readonly generation?: GenerationOptions.Input
-  readonly providerOptions?: NoInfer<LanguageModelProviderOptions<Model>>
-  readonly http?: HttpOptions.Input
   readonly cache?: CachePolicy
   /** Stable cache affinity for protocols that support provider-managed prompt caching. */
   readonly promptCacheKey?: string
-  readonly metadata?: Record<string, unknown>
   /** Emit a `raw` event with each provider frame before the events parsed from it. */
   readonly includeRaw?: boolean
 }
@@ -151,10 +153,34 @@ export function loop(input: LLMLoopInput & { readonly schema?: OutputSchema }, o
   const { tools, until, ...rest } = input
   return Stream.unwrap(
     prepare({ ...rest, tools }).pipe(
-      Effect.map(({ request, output }) => driveLoop({ tools, until, output, options }, request, [], undefined)),
+      // Untyped callers may omit `tools`.
+      Effect.map(({ request, output }) =>
+        driveLoop(
+          { tools: runnableTools(tools ?? [], input.messages ?? []), until, output, options },
+          request,
+          [],
+          undefined,
+        ),
+      ),
     ),
   )
 }
+
+// Tools that `Message.tools(...)` adds run like top-level ones; a later change with the same name replaces or removes them.
+const runnableTools = (tools: ReadonlyArray<Tool>, messages: ReadonlyArray<Message | Message.Input>) =>
+  messages
+    .reduce<ReadonlyArray<Tool | ToolEntryInput>>(
+      (current, message) =>
+        message.role === "system" && message.tools !== undefined
+          ? foldTools(
+              current,
+              message.tools.add ?? [],
+              (message.tools.remove ?? []).map((item) => (typeof item === "string" ? item : item.name)),
+            )
+          : current,
+      tools,
+    )
+    .filter((item): item is Tool => "_definition" in item)
 
 export { collect, type Collected, type CollectResult } from "./loop.js"
 
@@ -174,7 +200,7 @@ const stepStream = (
   after: (step: Step) => Stream.Stream<LLMEvent, AIError, Service>,
 ): Stream.Stream<LLMEvent, AIError, Service> =>
   Stream.suspend(() => {
-    let state = LLMResponse.empty()
+    let state = ResponseFold.empty()
     let finish: Finish | undefined
     return LLMClient.stream(request, options).pipe(
       Stream.map((event) =>
@@ -184,15 +210,15 @@ const stepStream = (
       ),
       Stream.tap((event) =>
         Effect.sync(() => {
-          state = LLMResponse.reduce(state, event)
+          state = ResponseFold.reduce(state, event)
           if (event.type === "finish") finish = event
         }),
       ),
       Stream.filter((event) => event.type !== "finish"),
-      Stream.mapError((error) => withPartial(error, LLMResponse.partial(state))),
+      Stream.mapError((error) => withPartial(error, ResponseFold.partial(state))),
       Stream.concat(
         Stream.suspend(() => {
-          const response = LLMResponse.complete(state)
+          const response = ResponseFold.complete(state)
           return response && finish ? after({ response, finish }) : Stream.empty
         }),
       ),
@@ -211,7 +237,7 @@ const finishStep = (
 }
 
 interface LoopContext {
-  readonly tools: ReadonlyArray<ExecutableTool>
+  readonly tools: ReadonlyArray<Tool>
   readonly until: LLMLoopInput["until"]
   readonly output: Tool | undefined
   readonly options: StreamOptions | undefined
@@ -303,12 +329,14 @@ export const request = <const Model extends LanguageModel>(input: LLMRequestInpu
     messages: input.prompt === undefined ? (input.messages ?? []).map(Message.make) : [Message.user(input.prompt)],
     tools: input.tools?.map((item) => ("_definition" in item ? item._definition : ToolEntry.make(item))) ?? [],
     toolChoice: input.toolChoice ? ToolChoice.make(input.toolChoice) : undefined,
-    generation: input.generation === undefined ? undefined : GenerationOptions.make(input.generation),
+    ...mergeGeneration(input),
     providerOptions: input.providerOptions,
-    http: HttpOptions.make(input.http),
+    headers: input.headers,
+    fetch: input.fetch,
+    timeout: input.timeout,
+    http: input.http,
     cache: input.cache,
     promptCacheKey: input.promptCacheKey,
-    metadata: input.metadata,
     includeRaw: input.includeRaw,
   }
 }

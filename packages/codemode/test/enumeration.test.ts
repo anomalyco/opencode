@@ -67,11 +67,11 @@ describe("Object.keys over tool references", () => {
       const failure = await error(`return Object.${method}(tools)`)
       expect(failure.kind).toBe("InvalidDataValue")
       expect(failure.message).toContain(
-        `Object.${method}(...) cannot read tool references: they are not plain data. Use Object.keys(tools) for names, or search({ query }) for signatures.`,
+        `Object.${method}(...) cannot read tools: it is a namespace of host functions, not plain data. Use Object.keys(tools) for its names.`,
       )
     }
     const nested = await error(`return Object.entries(tools.github)`)
-    expect(nested.message).toContain("Use Object.keys(tools) for names")
+    expect(nested.message).toContain("Use Object.keys(tools) for its names")
   })
 })
 

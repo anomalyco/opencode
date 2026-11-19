@@ -1,10 +1,15 @@
-import { spawnSync } from "node:child_process"
+import { spawn } from "node:child_process"
 import { userInfo } from "node:os"
 import { Effect, Path } from "effect"
 
 const TIMEOUT = 5_000
 
 type Probe = { type: "Loaded"; value: Record<string, string> } | { type: "Timeout" } | { type: "Unavailable" }
+
+type Run =
+  | { type: "Exited"; status: number | null; stdout: Buffer }
+  | { type: "Error"; error: Error }
+  | { type: "Timeout" }
 
 export function resolveUserShell(envShell: string | undefined, loginShell: string | null | undefined) {
   const resolvedLoginShell = loginShell && loginShell !== "unknown" ? loginShell : undefined
@@ -34,18 +39,32 @@ export function parseShellEnv(out: Buffer) {
   return env
 }
 
+// Async so the main thread keeps painting the window and serving renderer assets while a slow rc file runs.
+const run = (shell: string, mode: "-il" | "-l") =>
+  Effect.callback<Run>((resume) => {
+    const child = spawn(shell, [mode, "-c", "env -0"], {
+      stdio: ["ignore", "pipe", "ignore"],
+      windowsHide: true,
+    })
+
+    const chunks: Buffer[] = []
+
+    child.stdout.on("data", (chunk: Buffer) => chunks.push(chunk))
+    child.on("error", (error) => resume(Effect.succeed({ type: "Error", error })))
+    child.on("close", (status) => resume(Effect.succeed({ type: "Exited", status, stdout: Buffer.concat(chunks) })))
+
+    return Effect.sync(() => {
+      if (child.exitCode === null && child.signalCode === null) child.kill()
+    })
+  }).pipe(Effect.timeoutOrElse({ duration: TIMEOUT, orElse: () => Effect.succeed<Run>({ type: "Timeout" }) }))
+
 const probe = Effect.fn("ShellEnv.probe")(function* (shell: string, mode: "-il" | "-l") {
-  const out = spawnSync(shell, [mode, "-c", "env -0"], {
-    stdio: ["ignore", "pipe", "ignore"],
-    timeout: TIMEOUT,
-    windowsHide: true,
-  })
+  const out = yield* run(shell, mode)
 
-  const err = out.error as NodeJS.ErrnoException | undefined
+  if (out.type === "Timeout") return { type: "Timeout" } satisfies Probe
 
-  if (err) {
-    if (err.code === "ETIMEDOUT") return { type: "Timeout" } satisfies Probe
-    yield* Effect.logWarning(`[server] Shell env probe failed for ${shell} ${mode}: ${err.message}`)
+  if (out.type === "Error") {
+    yield* Effect.logWarning(`[server] Shell env probe failed for ${shell} ${mode}: ${out.error.message}`)
 
     return { type: "Unavailable" } satisfies Probe
   }

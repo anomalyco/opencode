@@ -17,7 +17,7 @@ import {
   type TextareaRenderable,
 } from "@opentui/core"
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
-import { normalizePromptContent } from "../prompt/content"
+import { deleteCells, normalizePromptContent } from "../prompt/content"
 import { deduplicatePromptImages, promptAttachmentLabel } from "../prompt/attachment"
 import { resolvePastedAttachments } from "../component/prompt/local-attachment"
 import { createTuiClipboard, type OwnedClipboardService } from "../clipboard"
@@ -361,6 +361,7 @@ export function createPromptState(input: PromptInput): PromptState {
     history = createPromptHistory(input.history?.())
   })
   let draft: RunPrompt = { text: "", parts: [] }
+  let draftCursor = 0
   let stash: RunPrompt = { text: "", parts: [] }
   let area: TextareaRenderable | undefined
   const measure = (text: string) => measureEditText(text, { widthMethod: renderer.widthMethod })
@@ -618,11 +619,8 @@ export function createPromptState(input: PromptInput): PromptState {
     let tracked = 0
     for (const item of area.extmarks.getAllForTypeId(type)) {
       const idx = marks.get(item.id)
-      if (idx === undefined) {
-        continue
-      }
-
-      const part = parts[idx]
+      // Undo restores a deleted chip's mark, with its part as data, after the part left `parts`.
+      const part: Mention | undefined = idx === undefined ? item.data : parts[idx]
       if (!part) {
         continue
       }
@@ -652,6 +650,10 @@ export function createPromptState(input: PromptInput): PromptState {
         copy.source.text.value = text
       }
 
+      if (idx === undefined) {
+        next.push(copy)
+        continue
+      }
       tracked += 1
       next[idx] = copy
     }
@@ -696,6 +698,7 @@ export function createPromptState(input: PromptInput): PromptState {
         end,
         virtual: true,
         typeId: type,
+        data: item,
       })
       marks.set(id, idx)
     })
@@ -704,6 +707,7 @@ export function createPromptState(input: PromptInput): PromptState {
   const restore = (value: RunPrompt, cursor = Infinity) => {
     revision += 1
     draft = promptCopy(value)
+    draftCursor = cursor
     setShell(value.mode === "shell")
     if (!area || area.isDestroyed) {
       return
@@ -726,6 +730,7 @@ export function createPromptState(input: PromptInput): PromptState {
     clearParts()
     hide()
     draft = emptyPrompt(shell())
+    draftCursor = 0
     if (!area || area.isDestroyed) {
       return
     }
@@ -792,6 +797,7 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     if (area && !area.isDestroyed) {
+      draftCursor = area.cursorOffset
       area.off("line-info-change", scheduleRows)
     }
 
@@ -809,7 +815,7 @@ export function createPromptState(input: PromptInput): PromptState {
         return
       }
 
-      restore(draft)
+      restore(draft, draftCursor)
       refresh()
     })
   }
@@ -842,15 +848,16 @@ export function createPromptState(input: PromptInput): PromptState {
     area.insertText(value + " ")
     const end = area.cursorOffset - 1
     const start = end - measure(value)
-    const id = area.extmarks.create({ start, end, virtual: true, typeId: type })
-    marks.set(id, parts.length)
-    parts.push({
+    const part: Mention = {
       type: "file",
       url: file.uri,
       filename: file.filename,
       mime: file.uri.slice(5, file.uri.indexOf(";")),
       source: { type: "file", text: { start, end, value } },
-    })
+    }
+    const id = area.extmarks.create({ start, end, virtual: true, typeId: type, data: part })
+    marks.set(id, parts.length)
+    parts.push(part)
     syncDraft()
   }
 
@@ -986,14 +993,7 @@ export function createPromptState(input: PromptInput): PromptState {
       return
     }
 
-    const cursor = area.cursorOffset
-    const startOffset = at()
-    area.cursorOffset = startOffset
-    const start = area.logicalCursor
-    area.cursorOffset = cursor
-    const end = area.logicalCursor
-    area.deleteRange(start.row, start.col, end.row, end.col)
-    area.cursorOffset = startOffset
+    deleteCells(area, at(), area.cursorOffset)
     hide()
     syncDraft()
     scheduleRows()
@@ -1053,13 +1053,11 @@ export function createPromptState(input: PromptInput): PromptState {
       const separator = !shell() && !local && head && /\s/.test(area.plainText[head.end] ?? "") ? "" : " "
       const text = `/${next.name}${separator}`
 
-      area.cursorOffset = 0
-      const start = area.logicalCursor
-      area.cursorOffset =
-        shell() || !head ? cursor : measure(local ? area.plainText : area.plainText.slice(0, head.end))
-      const end = area.logicalCursor
-
-      area.deleteRange(start.row, start.col, end.row, end.col)
+      deleteCells(
+        area,
+        0,
+        shell() || !head ? cursor : measure(local ? area.plainText : area.plainText.slice(0, head.end)),
+      )
       area.insertText(text)
       area.cursorOffset = measure(text)
       hide()
@@ -1076,11 +1074,7 @@ export function createPromptState(input: PromptInput): PromptState {
 
     const cursor = area.cursorOffset
     const append = "@" + next.value + (area.getTextRange(cursor, cursor + 1) === " " ? "" : " ")
-    area.cursorOffset = at()
-    const start = area.logicalCursor
-    area.cursorOffset = cursor
-    const end = area.logicalCursor
-    area.deleteRange(start.row, start.col, end.row, end.col)
+    deleteCells(area, at(), cursor)
     area.insertText(append)
 
     const text = "@" + next.value
@@ -1121,6 +1115,7 @@ export function createPromptState(input: PromptInput): PromptState {
       end: endOffset,
       virtual: true,
       typeId: type,
+      data: part,
     })
     marks.set(id, parts.length)
     parts.push(part)
@@ -1136,12 +1131,7 @@ export function createPromptState(input: PromptInput): PromptState {
       return
     }
 
-    const cursor = area.cursorOffset
-    area.cursorOffset = at()
-    const start = area.logicalCursor
-    area.cursorOffset = cursor
-    const end = area.logicalCursor
-    area.deleteRange(start.row, start.col, end.row, end.col)
+    deleteCells(area, at(), area.cursorOffset)
     area.insertText("@" + next.value)
     syncDraft()
     refresh()
@@ -1353,6 +1343,7 @@ export function createPromptState(input: PromptInput): PromptState {
   const submitPrompt = (next: RunPrompt, delivery: RunDelivery = "steer") => {
     if (!area || area.isDestroyed) {
       draft = promptCopy(next)
+      draftCursor = Infinity
     }
 
     if (visible()) {
@@ -1506,13 +1497,6 @@ export function createPromptState(input: PromptInput): PromptState {
 
     hide()
     prev = kind
-    if (kind !== "prompt") {
-      return
-    }
-
-    queueMicrotask(() => {
-      restore(draft)
-    })
   })
 
   return {

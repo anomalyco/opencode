@@ -89,7 +89,7 @@ export function ArtifactToolbar(props: {
                 size="large"
                 aria-label={modeLabel()}
                 onClick={toggleMode}
-                icon={<Icon name={props.mode === "preview" ? "outline-code-brackets" : "outline-eye"} size="normal" />}
+                icon={<Icon name={props.mode === "preview" ? "outline-code-brackets" : "eye"} size="normal" />}
               />
             </Tooltip>
           </Show>
@@ -100,7 +100,7 @@ export function ArtifactToolbar(props: {
                 size="large"
                 aria-label={ctx.t("view.copyContent")}
                 onClick={() => copy(props.text ?? "")}
-                icon={<Icon name="outline-copy" size="normal" />}
+                icon={<Icon name="copy" size="normal" />}
               />
             </Tooltip>
           </Show>

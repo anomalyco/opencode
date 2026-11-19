@@ -5,7 +5,7 @@ import { Menu } from "@opencode/ui/menu"
 import { Loader } from "@opencode/ui/loader"
 import { Show } from "solid-js"
 import { usePlugin, type ServerRow } from "@opencode/plugin/gui"
-import { isSshConnecting, sshName } from "./name"
+import { sshName } from "./name"
 import type { SshController } from "./state"
 
 export default function SshRow(props: { row: ServerRow; id: string; ssh: SshController }) {
@@ -30,7 +30,7 @@ export default function SshRow(props: { row: ServerRow; id: string; ssh: SshCont
             <div class="settings-servers-lead">
               <props.row.Indicator
                 health={indicator()}
-                connecting={isSshConnecting(item().stage)}
+                connecting={item().stage === "connecting"}
                 auth={item().stage === "authentication"}
               />
               <div class="settings-servers-copy">

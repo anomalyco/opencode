@@ -2,8 +2,6 @@ export { Route, LLMClient } from "./client.js"
 export type {
   RouteLanguageModelInput,
   RouteRoutedLanguageModelInput,
-  RouteDefaults,
-  RouteDefaultsInput,
   AnyRoute,
   LLMClientService,
   StreamOptions,
@@ -26,7 +24,7 @@ export { HttpTransport, WebSocketTransport } from "./transport/index.js"
 export * as Transport from "./transport/index.js"
 export { ProviderShared } from "../protocols/shared.js"
 export { classifyProviderFailure } from "../provider-error.js"
-export { mergeHttpOptions } from "../schema/index.js"
+export { mergeTransport } from "../schema/index.js"
 export type { AuthInput, Credential, CredentialError } from "./auth.js"
 export type { ApiKeyMode, AuthOverride, ProviderAuthOption } from "./auth-options.js"
 export type { EndpointInput } from "./endpoint.js"

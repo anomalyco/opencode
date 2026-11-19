@@ -11,6 +11,7 @@ import { SessionEvent } from "@opencode/schema/session-event"
 import { ToolMode } from "@opencode/schema/session-stats"
 import { TokenUsage } from "@opencode/schema/token-usage"
 import { Database } from "../database/database.js"
+import { DatabaseBatch } from "../database/batch.js"
 import { EventTable } from "../event/sql.js"
 import { SessionMessageTable, SessionPartTable, SessionTable } from "./sql.js"
 
@@ -212,7 +213,7 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
                 AND message.time_created >= ${range.from}
                 AND message.time_created < ${range.to}
                 AND (session.fork_session_id IS NULL OR message.time_created >= session.time_created)
-                AND NOT EXISTS (SELECT 1 FROM ${SessionPartTable} AS part WHERE part.message_id = message.id)
+                AND json_array_length(message.data, '$.content') > 0
                 AND json_extract(content.value, '$.type') = 'tool'
                 ${project}
             )
@@ -273,7 +274,7 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
             AND message.time_created >= ${range.from}
             AND message.time_created < ${range.to}
             AND (session.fork_session_id IS NULL OR message.time_created >= session.time_created)
-            AND NOT EXISTS (SELECT 1 FROM ${SessionPartTable} AS part WHERE part.message_id = message.id)
+            AND json_array_length(message.data, '$.content') > 0
             AND json_extract(content.value, '$.type') = 'tool'
             ${project}
         `,
@@ -312,7 +313,11 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
     .all()
     .pipe(Effect.orDie)
   const events = (yield* Effect.forEach(
-    batches(ids.map((row) => row.id)),
+    DatabaseBatch.batches(
+      ids.map((row) => row.id),
+      1,
+      3,
+    ),
     (batch) =>
       db
         .select({ data: EventTable.data })
@@ -382,10 +387,6 @@ function windows(from: number, to: number) {
     from: from + index * Window,
     to: Math.min(to, from + (index + 1) * Window),
   }))
-}
-
-function batches(ids: string[]) {
-  return Array.from({ length: Math.ceil(ids.length / 500) }, (_, index) => ids.slice(index * 500, (index + 1) * 500))
 }
 
 function rowTokens(row: MessageRow): Tokens {

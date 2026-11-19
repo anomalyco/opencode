@@ -51,4 +51,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} aegus {{timeout}} ms pärast",
   "error.failedPort": "Pordi hankimine ebaõnnestus",
   "menu.remove": "Eemalda",
+  "error.busy": "{{distro}} on hõivatud teise ülesandega. Proovi uuesti, kui see lõpeb.",
 }

@@ -4,7 +4,7 @@ import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
-import { useGlobal } from "@/runtime/server/runtime"
+import { useServer } from "@/runtime/server/current"
 import { ServerConnection } from "@/runtime/server/registry"
 import type { LocalProject } from "@/shell/state/layout"
 import { fileManagerApp } from "@/home/projects/file-manager"
@@ -23,28 +23,24 @@ export const ProjectOptions: Component<{
   size?: "small" | "normal" | "large"
 }> = (props) => {
   const language = useLanguage()
-  const global = useGlobal()
   const platform = usePlatform()
   const revealProject = useRevealProject()
-  const context = () => global.ensureServerCtx(props.server)
+  const context = useServer().ctx
 
   const directories = () => [props.project.worktree, ...(props.project.sandboxes ?? [])]
 
   const added = () =>
-    context()
-      .projects.used()
-      .some((project) => pathKey(project.worktree) === pathKey(props.project.worktree))
+    context.projects.used().some((project) => pathKey(project.worktree) === pathKey(props.project.worktree))
 
-  const hasUnread = () => directories().some((directory) => context().notification.project.hasUnread(directory))
+  const hasUnread = () => directories().some((directory) => context.notification.project.hasUnread(directory))
 
   const clearNotifications = () => {
-    const notification = context().notification
-    directories().forEach((directory) => notification.project.markViewed(directory))
+    directories().forEach((directory) => context.notification.project.markViewed(directory))
   }
 
   const addProject = () => {
     props.onAdd?.()
-    context().projects.touch(props.project.worktree)
+    context.projects.touch(props.project.worktree)
   }
 
   return (

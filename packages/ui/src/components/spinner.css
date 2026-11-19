@@ -1,21 +1,34 @@
-[data-component="spinner"] {
-  color: inherit;
-  flex-shrink: 0;
-  width: 18px;
+/* `width` and `height` props arrive as variables, so classes and other CSS still size the spinner over them, as they
+   did over an SVG's attributes. */
+[data-slot="spinner-dots"] {
+  position: relative;
+  display: block;
+  width: var(--spinner-width, 18px);
+  height: var(--spinner-height, auto);
   aspect-ratio: 1;
 }
 
+[data-component="spinner"] {
+  color: inherit;
+  flex-shrink: 0;
+}
+
 /* Each dot rests at its frozen pose, so reduced motion only has to stop the animation. */
-[data-slot="spinner-dots"] rect {
+[data-slot="spinner-dots"] > svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
   opacity: var(--still);
 }
 
 /* syncSpinPhase marks spinners out of view; `!important` beats the inline animation each dot carries. */
-[data-slot="spinner-dots"][data-offscreen] rect {
+[data-slot="spinner-dots"][data-offscreen] > svg {
   animation-play-state: paused !important;
 }
 
-:root[data-motion="reduce"] [data-slot="spinner-dots"] rect {
+:root[data-motion="reduce"] [data-slot="spinner-dots"] > svg {
   /* Beats the inline animation each dot carries. */
   animation: none !important;
 }

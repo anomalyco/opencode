@@ -28,4 +28,5 @@ export default {
   "export.success.description": "የተቀመጠው ክፍለ ጊዜ ወደ {{filename}}",
   "export.failed.title": "ክፍለ-ጊዜን ወደ ውጭ መላክ አልተሳካም",
   "export.failed.description": "ክፍለ-ጊዜውን ወደ ውጭ በመላክ ላይ ስህተት ተፈጥሯል",
+  "usage.toggle": "የክፍለ ጊዜ አውድን ቀይር",
 }
