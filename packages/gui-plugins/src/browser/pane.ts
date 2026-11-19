@@ -1069,7 +1069,7 @@ export function createBrowserPane(input: {
         return { value: { path: action.path, tabID, url: tab.state().url, tab: tab.state() }, files: [] }
       }
 
-      // The window owns file tabs; an off-screen session processes this request when its file panel mounts.
+      // The window owns file tabs. A session that is not on screen does not open the file, now or later.
       const win = handles.get(binding)?.win
 
       if (win && !win.isDestroyed() && win.isVisible() && !win.isMinimized()) emit(binding, { type: "preview", path: action.path })

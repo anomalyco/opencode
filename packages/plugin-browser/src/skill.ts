@@ -37,7 +37,7 @@ export const info = Skill.Info.make({
     "",
     "## Show the user",
     "",
-    "- `tools.browser.tabs.open({ path })` shows a workspace file to the user. An HTML file opens in a browser tab, even off screen: pass the returned `id` straight to `snapshot`. Opening the same file again reloads its tab, and `navigate({ tabID, path })` moves a tab you already have to another HTML file. Other files open in the file panel, queued until the user returns to this session, and return `{ path, shown: \"file\" }` with no tab.",
+    "- `tools.browser.tabs.open({ path })` shows a workspace file to the user. An HTML file opens in a browser tab, even off screen: pass the returned `id` straight to `snapshot`. Opening the same file again reloads its tab, and `navigate({ tabID, path })` moves a tab you already have to another HTML file. Other files open in the file panel only while this session is on screen, and return `{ path, shown: \"file\" }` with no tab.",
     "- Put HTML assets in the document's folder or below it; parent folders, hidden paths and secret filenames are not available to the page.",
     "- `tabs.open` and `navigate` take a web address in `url` or a workspace file in `path`, never both. The `file:` or `workspace:` address that `tabs.list` shows for a file's tab names that file too. The page's isolated `oc-preview:` origin opens nothing. You can also click a relative link in the page.",
     "- A web page you open with `tabs.open({ url })` does not show itself. Pass `focus: true` only when the user asked to see or be shown the page: it opens the browser if it is closed, and never switches the tab the user is on.",
