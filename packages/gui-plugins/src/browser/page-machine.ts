@@ -203,22 +203,6 @@ export function retryOnly(state: DocumentState) {
   return state.status !== "closed" && state.status !== "loaded" && !!state.retry
 }
 
-/**
- * Whether a command approved for `site` would now act on another site. A load stopped before it was issued, such as
- * a restore held by the startup gate, committed nothing: the kept address is still the tab's and the inert blank
- * document has no history to traverse, so Back, Forward and Stop there answer with the tab as it is instead of
- * reporting a site change that did not happen, and Reload, which loads the kept address, is judged by that address.
- */
-export function leftApprovedSite(state: DocumentState, method: Browser.Method, site: string | undefined, actual: string) {
-  if (!site) return false
-
-  const kept = state.status === "restoring" || state.status === "blank" ? state.retry : undefined
-
-  if (kept && (method === "back" || method === "forward" || method === "stop")) return false
-
-  return destinationOrigin(kept && method === "reload" ? kept : actual) !== site
-}
-
 export function documentIcon(state: DocumentState) {
   return state.status === "closed" ? undefined : state.icon
 }

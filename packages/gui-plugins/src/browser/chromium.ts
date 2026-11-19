@@ -32,7 +32,6 @@ import {
   frameStillCurrent,
   isDocumentClosed,
   isNavigationPending,
-  leftApprovedSite,
   retryOnly,
   transitionDocument,
   type DocumentEvent,
@@ -1510,9 +1509,6 @@ export function createBrowserPage(
 
   async function attempt(command: Browser.Command, signal: AbortSignal, origin: "agent" | "user", saved?: string): Promise<Browser.Result> {
     abortError(signal)
-
-    if (leftApprovedSite(documentState, command.action.type, command.expectedSite, contents.mainFrame.url))
-      throw new Error("The tab is no longer at the approved site; request the action again.")
 
     if (isPickerActive(pickerState) && pointerOperations.includes(command.action.type))
       await dispatchPicker({ type: "pointer.command" })

@@ -23,7 +23,6 @@ export const info = Skill.Info.make({
     "- Clipboard and context-menu chords are refused. Use fill for text entry and evaluate to read page text; scripts run without a synthetic user gesture.",
     "- Agent pointer actions do not open the app's native context menu. Middle click is refused on Linux because it can paste the system selection.",
     "- Key commands go to the page, never to the app's shortcuts or menu.",
-    "- A browser approval names its site and action. An approval for one script or destination does not cover another; file calls cannot keep browser approval.",
     "- Pointer and keyboard input must target a verifiable web or preview document, not extension UI over the page or a focused extension frame.",
     "- Every page operation takes an explicit `tabID` from `tools.browser.tabs.open` or `tools.browser.tabs.list`. Focus only chooses what the user sees; it never picks a target for you.",
     "- Pages load through the connected server's network. `localhost:3000` is the dev server on the machine that runs OpenCode, which may not be the user's computer.",

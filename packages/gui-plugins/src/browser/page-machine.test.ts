@@ -8,7 +8,6 @@ import {
   frameStillCurrent,
   isDocumentLoading,
   isNavigationPending,
-  leftApprovedSite,
   retryOnly,
   transitionDocument,
   type DocumentEvent,
@@ -30,45 +29,6 @@ const replay = (events: readonly DocumentEvent[], state: DocumentState = createD
   )
 
 const types = (effects: DocumentTransition["effects"]) => effects.map((effect) => effect.type)
-
-test("Back, Forward and Stop on a restore stopped before it was issued are not a site change", () => {
-  const site = "https://ledger.test"
-
-  // The startup gate held the saved address and Stop (or the agent's Back) ended the wait: nothing committed, the
-  // renderer shows its inert blank document, and the saved address stays.
-  const held = replay(
-    [
-      { type: "navigation.started", url: `${site}/article`, isMainFrame: true, isSameDocument: false },
-      { type: "loading.started" },
-      { type: "navigation.held-stopped", address: `${site}/article` },
-    ],
-    createDocumentState({ generation: 3, title: "Ledger", url: `${site}/article` }),
-  ).state
-
-  // The inert blank document then stops loading, which ends the restore without a commit.
-  const settled = transitionDocument(held, { type: "loading.stopped", title: "Ledger" }).state
-
-  for (const state of [held, settled]) {
-    expect(documentTab(state, history)).toEqual({ ...history, url: `${site}/article`, title: "Ledger", loading: false, generation: 3 })
-
-    for (const method of ["back", "forward", "stop"] as const) expect(leftApprovedSite(state, method, site, "about:blank")).toBe(false)
-
-    // Reload loads the kept address, so it is that address's site which must be the approved one.
-    expect(leftApprovedSite(state, "reload", site, "about:blank")).toBe(false)
-    expect(leftApprovedSite(state, "reload", "https://other.test", "about:blank")).toBe(true)
-
-    // Anything that would act on the blank document is still refused.
-    for (const method of ["click", "evaluate", "snapshot"] as const) expect(leftApprovedSite(state, method, site, "about:blank")).toBe(true)
-  }
-
-  // So is history on a committed page of another site, or on a failed page that keeps an unissued address.
-  const elsewhere = replay(visit("https://other.test/")).state
-  expect(leftApprovedSite(elsewhere, "back", site, "https://other.test/")).toBe(true)
-  expect(leftApprovedSite(replay(visit(`${site}/article`)).state, "back", site, `${site}/article`)).toBe(false)
-  expect(leftApprovedSite(elsewhere, "back", undefined, "https://other.test/")).toBe(false)
-  const failed = replay([{ type: "navigation.failed", url: "https://other.test/", isMainFrame: true, code: -105, description: "ERR_NAME_NOT_RESOLVED" }, { type: "navigation.held-stopped", address: `${site}/article` }], elsewhere).state
-  expect(leftApprovedSite(failed, "back", site, "https://other.test/")).toBe(true)
-})
 
 test("a redraw after the capture request must still belong to its document and route", () => {
   const page = replay(visit("https://site.test/a")).state

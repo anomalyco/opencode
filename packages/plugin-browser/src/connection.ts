@@ -1,7 +1,6 @@
 export * as BrowserConnection from "./connection.js"
 
 import { hostname } from "node:os"
-import { createHash } from "node:crypto"
 import { rm } from "node:fs/promises"
 import { BrowserFiles } from "./files.js"
 import type { Context } from "@opencode/plugin/effect/plugin"
@@ -21,15 +20,6 @@ type Attachment = {
 }
 
 export type Connection = Effect.Success<ReturnType<typeof make>>
-
-type Approval = { connectionID: string; site?: string; tabID?: string }
-
-/** Never persist grants for opaque documents or file paths. Host, scheme and port are all significant. */
-function site(url: string | undefined) {
-  if (!url || !URL.canParse(url)) return
-  const parsed = new URL(url)
-  return /^https?:$/.test(parsed.protocol) ? parsed.origin : undefined
-}
 
 /** The server process that wrote a session's grant, stored as `grant:<sessionID>` until its revoke succeeds. */
 const GrantOwner = Schema.Struct({ host: Schema.String, pid: Schema.Number, location: Location.Ref })
@@ -352,7 +342,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
     action: Browser.Action,
     tab: Browser.Tab | undefined,
     files: readonly Browser.File[],
-    inspection: Pick<Browser.Command, "inspect" | "target" | "expectedSite">,
+    inspection: Pick<Browser.Command, "inspect" | "target">,
   ) {
     const requestID = crypto.randomUUID()
     const target = { sessionID, connectionID, requestID }
@@ -405,23 +395,9 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
      * The permission check for one call, with the operation as its resource. Its `permission.evaluate` hooks decide it:
      * this plugin's (configured denies win over the grant) and others such as `tool.use` policies.
      */
-    /**
-     * `shown` is the workspace file a path form shows, as the server resolved it: the prompt names it (`path`), with
-     * the link it was reached through if any, and "always" remembers it by its real absolute path (`file`), so no
-     * other spelling of the same file asks again and none stands for another file, in this folder or in another
-     * folder or worktree of the project. A name that is no file on disk is not remembered.
-     */
-    authorize: Effect.fn("BrowserConnection.authorize")(function* (tool: Tool.Context, action: Browser.Action | Extract<Browser.Input, {type: "wait"}>, paths?: readonly string[], operations?: readonly string[], shown?: { readonly path: string; readonly file?: string; readonly link?: string }) {
+    authorize: Effect.fn("BrowserConnection.authorize")(function* (tool: Tool.Context, action: Browser.Action | Extract<Browser.Input, {type: "wait"}>, operations?: readonly string[]) {
       const connection = BrowserMachine.selectConnection(machine.state, tool.sessionID)
       if (!connection.ok) return { connected: false as const, message: connection.error.message }
-      const tab = "tabID" in action ? connection.tabs.find((tab) => tab.id === action.tabID) : undefined
-      const origin = site(tab?.url)
-      const destination = action.type === "tabs.open" ? action.url ?? "about:blank" : action.type === "navigate" ? action.url : undefined
-      const script = action.type === "evaluate" ? action.script : undefined
-      const scope = action.type === "tabs.open" ? site(destination) : origin
-      const detail = script ?? destination
-      const save = action.type === "tabs.list" ? [action.type] : shown ? (!shown.file || /[*?]/.test(shown.file) ? [] : [`${action.type} ${shown.file}`]) : scope && !paths && !/[*?]/.test(scope)
-        ? [`${action.type} ${scope}${detail ? ` ${createHash("sha256").update(detail).digest("hex")}` : ""}`] : []
       yield* ctx.permission.assert({
         sessionID: tool.sessionID,
         agent: tool.agent,
@@ -429,22 +405,13 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
         // Keep exact operation resources for existing permission rules and tool.use policies. A call that stands for
         // more than one operation names each, and a deny of any of them refuses it.
         resources: operations ?? [action.type],
-        save,
-        metadata: { input: {
-          ...(action.type === "tabs.list" && { scope: "Tab inventories for attached sessions in this project" }),
-          ...(tab && { site: origin ?? tab.url }), ...(destination && { destination }), ...(paths && { paths }),
-          ...(shown && { paths: [shown.path], ...(shown.link && { link: shown.link }) }),
-          ...(script && { script: script.length > 320 ? `${script.slice(0, 320)}…` : script }),
-        } },
         source: { type: "tool", messageID: tool.messageID, id: tool.id },
       })
-      return { connectionID: connection.connectionID, site: origin, tabID: tab?.id } satisfies Approval
+      return { connected: true as const }
     }),
-    target: Effect.fn("BrowserConnection.target")(function* (sessionID: Session.ID, action: Browser.Action, approved?: Approval) {
+    target: Effect.fn("BrowserConnection.target")(function* (sessionID: Session.ID, action: Browser.Action) {
       const selected = BrowserMachine.selectTarget(machine.state, sessionID, action)
       if (!selected.ok) return yield* selected.error
-      if (approved && (approved.connectionID !== selected.connectionID || approved.tabID !== selected.tab?.id || approved.site !== site(selected.tab?.url)))
-        return yield* new Tool.Error({ message: "Browser target changed while approval was pending. Request the action again for the current site." })
       // Requests go to the attachment selected here. One that closes first, even while file IO waits, runs nothing.
       return {
         tab: selected.tab,
@@ -463,7 +430,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
             ),
           ),
         request: (files: readonly Browser.File[], target?: Browser.Target) =>
-          request(sessionID, selected.connectionID, action, selected.tab, files, { target, expectedSite: approved?.site }),
+          request(sessionID, selected.connectionID, action, selected.tab, files, { target }),
       }
     }),
   }

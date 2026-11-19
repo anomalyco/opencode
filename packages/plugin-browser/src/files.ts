@@ -8,7 +8,7 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { workspaceTarget } from "./workspace.js"
 import { previewPath } from "./preview-path.js"
-import { lstat, open, realpath, stat } from "node:fs/promises"
+import { open, realpath, stat } from "node:fs/promises"
 import { basename, dirname, extname, join, parse, relative, resolve } from "node:path"
 import { createHash } from "node:crypto"
 import { fileURLToPath } from "node:url"
@@ -102,26 +102,6 @@ function localPath(value: string) {
     return undefined
   }
 }
-
-/**
- * The file on disk that the workspace entry `absolute` is, named under the workspace (`entry`) and by its real
- * absolute path (`file`), and whether a link was followed to reach it. For what an approval names and remembers, so
- * one file has one name however it was asked for. It reports nothing by failing: undefined for a missing file, and for
- * one whose target is outside the workspace.
- */
-export const onDisk = (absolute: string, directory: string) =>
-  Effect.tryPromise(async () => {
-    const [root, target] = await Promise.all([realpath(directory), realpath(absolute)])
-    if (!FSUtil.contains(root, target)) return undefined
-    // Each name on the way from the workspace to the entry, as asked.
-    const names = relative(directory, absolute).split(/[\\/]/).filter(Boolean)
-    const steps = await Promise.all(names.map((_, index) => lstat(join(directory, ...names.slice(0, index + 1)))))
-    return {
-      entry: relative(root, target).replaceAll("\\", "/"),
-      file: target.replaceAll("\\", "/"),
-      linked: steps.some((step) => step.isSymbolicLink()),
-    }
-  }).pipe(Effect.orElseSucceed(() => undefined))
 
 /** Resolve and authorize the exact entry. A missing agent path must not trigger a search of unapproved directories. */
 export const locate = Effect.fn("BrowserFiles.locate")(function* (path: string, directory: string, approve: (absolute: string) => Effect.Effect<void, Tool.Error>) {
