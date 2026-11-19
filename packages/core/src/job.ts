@@ -10,12 +10,15 @@ import {
   Effect,
   Exit,
   Layer,
+  Option,
   Ref,
   Schema,
   Scope,
   SynchronizedRef,
 } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { Job as JobSchema } from "@opencode/schema/job"
+import { Bus } from "./bus.js"
 import { Database } from "./database/database.js"
 import { JobList } from "./job/list.js"
 import { type Recovery, RecoverySchema } from "./job/recovery.js"
@@ -104,11 +107,13 @@ type FinishResult = {
   cancel?: Effect.Effect<void>
   scope?: Scope.Closeable
   generation?: Scope.Closeable
+  recovery?: Recovery
 }
 
 type BackgroundResult = {
   info?: Info
   backgrounded?: Deferred.Deferred<Info>
+  recovery?: Recovery
 }
 
 type StartResult = { info: Info } | { info: Info; job: Active }
@@ -248,6 +253,13 @@ export const make = Effect.gen(function* () {
     generations: yield* Ref.make(0),
     scope: yield* Scope.Scope,
   }
+  const bus = Option.getOrUndefined(yield* Effect.serviceOption(Bus.Service))
+
+  // Clients follow listed jobs through this instead of polling the list.
+  const updated = (info: Info | undefined, recovery: Recovery | undefined) =>
+    bus && info && recovery
+      ? bus.publish(JobSchema.Event.Updated, { info: JobList.item(info, recovery) }).pipe(Effect.asVoid)
+      : Effect.void
 
   const consume = (id: string, generation: Scope.Closeable) =>
     SynchronizedRef.update(state.jobs, (jobs) => {
@@ -344,6 +356,7 @@ export const make = Effect.gen(function* () {
       }),
     )
     if (result.info && result.done) yield* Deferred.succeed(result.done, result.info)
+    if (result.done) yield* updated(result.info, active.recovery)
     if (result.scope) {
       yield* Scope.close(result.scope, Exit.void).pipe(Effect.forkIn(state.scope, { startImmediately: true }))
     }
@@ -404,6 +417,7 @@ export const make = Effect.gen(function* () {
             return [{ info: snapshot(job), job }, new Map(jobs).set(input.id, job)]
           }),
         )
+        if ("job" in result && result.job.isBackgrounded) yield* updated(result.info, result.job.recovery)
         if ("job" in result)
           yield* restore(input.run).pipe(
             Effect.exit,
@@ -501,10 +515,16 @@ export const make = Effect.gen(function* () {
         if (!job || (job.info.status !== "running" && !job.recovery)) return [{}, jobs]
         if (job.isBackgrounded) return [{ info: snapshot(job) }, jobs]
         const next = yield* markBackground(job)
-        return [{ info: snapshot(next), backgrounded: job.backgrounded }, new Map(jobs).set(id, next)]
+        return [
+          { info: snapshot(next), backgrounded: job.backgrounded, recovery: job.recovery },
+          new Map(jobs).set(id, next),
+        ]
       }),
     )
-    if (result.info && result.backgrounded) yield* Deferred.succeed(result.backgrounded, result.info)
+    if (result.info && result.backgrounded) {
+      yield* Deferred.succeed(result.backgrounded, result.info)
+      yield* updated(result.info, result.recovery)
+    }
     return result.info
   })
 
@@ -512,9 +532,12 @@ export const make = Effect.gen(function* () {
     const result = yield* SynchronizedRef.modifyEffect(
       state.jobs,
       Effect.fnUntraced(function* (jobs): Effect.fn.Return<
-        readonly [Required<BackgroundResult>[], Map<string, Active>]
+        readonly [
+          (Required<Omit<BackgroundResult, "recovery">> & Pick<BackgroundResult, "recovery">)[],
+          Map<string, Active>,
+        ]
       > {
-        const results: Required<BackgroundResult>[] = []
+        const results: (Required<Omit<BackgroundResult, "recovery">> & Pick<BackgroundResult, "recovery">)[] = []
         const next = new Map(jobs)
         for (const [id, job] of jobs) {
           if (job.info.status !== "running") continue
@@ -522,13 +545,17 @@ export const make = Effect.gen(function* () {
           if (input.type !== undefined && job.info.type !== input.type) continue
           if (!job.blockingSessions.has(input.sessionID)) continue
           const updated = yield* markBackground(job)
-          results.push({ info: snapshot(updated), backgrounded: job.backgrounded })
+          results.push({ info: snapshot(updated), backgrounded: job.backgrounded, recovery: job.recovery })
           next.set(id, updated)
         }
         return [results, next]
       }),
     )
-    yield* Effect.forEach(result, (item) => Deferred.succeed(item.backgrounded, item.info), { discard: true })
+    yield* Effect.forEach(
+      result,
+      (item) => Deferred.succeed(item.backgrounded, item.info).pipe(Effect.andThen(updated(item.info, item.recovery))),
+      { discard: true },
+    )
     return result.map((item) => item.info)
   })
 
@@ -553,13 +580,21 @@ export const make = Effect.gen(function* () {
         // Settling work owns its outbox row: the settlement commit writes or deletes it.
         if (persist && !job.settling) yield* persistBackground(next)
         return [
-          { info: snapshot(next), done: job.done, scope: job.scope, generation: job.scope, cancel: job.cancel },
+          {
+            info: snapshot(next),
+            done: job.done,
+            scope: job.scope,
+            generation: job.scope,
+            cancel: job.cancel,
+            recovery: job.recovery,
+          },
           new Map(jobs).set(id, next),
         ]
       }),
     )
     if (result.cancel) yield* result.cancel
     if (result.info && result.done) yield* Deferred.succeed(result.done, result.info)
+    if (result.done) yield* updated(result.info, result.recovery)
     if (result.scope) yield* Scope.close(result.scope, Exit.void)
     if (result.generation) yield* consume(id, result.generation)
     return result.info
@@ -737,4 +772,4 @@ export const make = Effect.gen(function* () {
 
 const layer = Layer.effect(Service, make)
 
-export const node = makeGlobalNode({ service: Service, layer, deps: [Database.node] })
+export const node = makeGlobalNode({ service: Service, layer, deps: [Database.node, Bus.node] })

@@ -18,7 +18,7 @@ export function createShellPanel(input: {
   enabled: () => boolean
   subagents: () => readonly SessionActivityItem[]
   shells: () => readonly SessionActivityItem[]
-  scripts: () => readonly SessionActivityItem[]
+  scripts?: () => readonly SessionActivityItem[]
   stop: (item: SessionActivityItem) => Promise<boolean>
   // How a shell that left the running list ended; undefined once the server no longer knows it.
   ended: (id: string) => Promise<ShellEndInfo | undefined>
@@ -34,7 +34,7 @@ export function createShellPanel(input: {
     enabled: input.enabled(),
     subagents: input.subagents(),
     shells: input.shells(),
-    scripts: input.scripts(),
+    scripts: input.scripts?.() ?? [],
   })
   const initial = untrack(work)
 

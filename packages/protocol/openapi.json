@@ -10355,6 +10355,7 @@
                     "shell.created",
                     "shell.exited",
                     "shell.deleted",
+                    "experimental.job.updated",
                     "form.created",
                     "form.replied",
                     "form.cancelled",
@@ -10466,6 +10467,7 @@
                           "shell.created",
                           "shell.exited",
                           "shell.deleted",
+                          "experimental.job.updated",
                           "form.created",
                           "form.replied",
                           "form.cancelled",
@@ -26148,6 +26150,9 @@
             "$ref": "#/components/schemas/shell.deleted"
           },
           {
+            "$ref": "#/components/schemas/experimental.job.updated"
+          },
+          {
             "$ref": "#/components/schemas/form.created"
           },
           {
@@ -26921,6 +26926,39 @@
               }
             },
             "required": ["integrationID", "credentialID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "data"],
+        "additionalProperties": false
+      },
+      "experimental.job.updated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["experimental.job.updated"]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "info": {
+                "$ref": "#/components/schemas/Job.Info"
+              }
+            },
+            "required": ["info"],
             "additionalProperties": false
           }
         },

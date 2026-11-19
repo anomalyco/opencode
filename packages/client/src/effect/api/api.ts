@@ -2175,6 +2175,7 @@ export type EventSubscribeInput = {
         | "shell.created"
         | "shell.exited"
         | "shell.deleted"
+        | "experimental.job.updated"
         | "form.created"
         | "form.replied"
         | "form.cancelled"

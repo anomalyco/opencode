@@ -487,11 +487,18 @@ export function ActiveSessionComposerRegion(props: {
       .at(-1)?.todo === true
 
   const stop = (item: SessionActivityItem) => {
+    const background = props.model.region.state.background
+    // A subagent stops with everything its tree still runs.
     const request =
       item.type === "subagent"
-        ? server.api.session.interrupt({ sessionID: item.sessionID })
+        ? Promise.all([
+            ...(data.session.status(item.sessionID) === "running"
+              ? [server.api.session.interrupt({ sessionID: item.sessionID })]
+              : []),
+            ...(item.jobs ?? []).map(background.cancelJob),
+          ])
         : item.type === "script"
-          ? props.model.region.state.background.stopScript(item.target)
+          ? background.cancelJob(item.target)
           : server.api.shell.remove({
               id: item.target,
               location: { directory: data.shell.get(item.target)?.location.directory ?? location().directory },

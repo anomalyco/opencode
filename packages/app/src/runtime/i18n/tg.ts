@@ -1164,6 +1164,7 @@ export const dict = {
   "session.activity.shells.other": "{{count}} shell",
   "session.activity.scripts.one": "{{count}} скрипт",
   "session.activity.scripts.other": "{{count}} скрипт",
+  "session.activity.background": "Кори пасзамина",
   "session.activity.shell.back": "Бозгашт ба корҳои заминавӣ",
   "session.activity.shell.stop": "Қатъ кардан",
   "session.activity.shell.stopping": "Қатъ карда мешавад…",

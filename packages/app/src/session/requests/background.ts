@@ -18,11 +18,24 @@ type Subagent = {
   label: string
   agent?: string
   started: number
+  // Set while the subagent is idle and only work it started still runs, counted by kind.
+  idle?: { subagents: number; scripts: number; shells: number }
+  // Running jobs in its tree, which its Stop cancels.
+  jobs?: string[]
 }
 
 type Task = Subagent | { id: string; type: "shell"; label: string; started: number }
 
 type Script = { id: string; type: "script"; label: string; started: number }
+
+// The turn's foreground work. A script blocks along with the shells it is running.
+export type BlockingTask = {
+  partID: string
+  id?: string
+  label?: string
+  agent?: undefined
+  started: number
+} & ({ type: "shell" } | { type: "execute"; commands: string[] })
 
 const decodeString = Schema.decodeUnknownOption(Schema.String)
 
@@ -44,35 +57,23 @@ export function createSessionBackground(input: {
   sessions: () => SessionInfo[]
   status: (id: string) => "idle" | "running"
   shells: () => ShellInfo[]
-  // The session's running Code Mode jobs, which only list scripts moved to the background.
-  jobs: () => readonly JobInfo[]
+  // Running background jobs in the session's tree.
+  jobs?: () => readonly JobInfo[]
 }) {
   const history = createMemo(() => {
     // The latest call for each child names it; calls never decide whether it still runs.
     const calls = new Map<string, { label: string | undefined; agent: string | undefined; started: number }>()
     // A script moved to the background ends its execute call with the job's id; its first line names it.
-    const scripts = new Map<string, { label: string | undefined; started: number }>()
-    const finished = new Set<string>()
+    const scripts = new Map<string, string | undefined>()
     const id = input.sessionID()
 
     const assistant = (id ? input.messages(id) : []).reduce<SessionMessageAssistant | undefined>((latest, message) => {
-      // A background script reports its result as a synthetic message carrying its job's id.
-      if (message.type === "synthetic") {
-        const jobID = text(message.metadata?.jobID)
-
-        if (jobID) finished.add(jobID)
-      }
-
       if (message.type !== "assistant") return latest
       message.content.forEach((part) => {
         if (part.type === "tool" && part.name === "execute" && part.state.status === "completed") {
           const jobID = text(part.state.metadata?.jobID)
 
-          if (jobID)
-            scripts.set(jobID, {
-              label: firstLine(text(part.state.input.code)),
-              started: part.time.ran ?? part.time.created,
-            })
+          if (jobID) scripts.set(jobID, firstLine(text(part.state.input.code)))
         }
 
         if (part.type !== "tool" || part.name !== "subagent" || part.state.status === "streaming") return
@@ -92,16 +93,15 @@ export function createSessionBackground(input: {
     return {
       calls,
       scripts,
-      finished,
       blocking:
-        assistant?.content.flatMap((part) => {
+        assistant?.content.flatMap((part): BlockingTask[] => {
           if (part.type !== "tool" || part.state.status !== "running") return []
 
           // A script in the foreground blocks the turn, and so do the shells it is running.
           if (part.name === "execute")
             return [
               {
-                type: "execute" as const,
+                type: "execute",
                 partID: part.id,
                 id: undefined,
                 label: firstLine(text(part.state.input.code)),
@@ -115,7 +115,7 @@ export function createSessionBackground(input: {
 
           return [
             {
-              type: "shell" as const,
+              type: "shell",
               partID: part.id,
               id: text(part.state.metadata.shellID),
               label: text(part.state.input.command),
@@ -130,7 +130,8 @@ export function createSessionBackground(input: {
   const blocking = createMemo(() => history().blocking)
 
   // Like the TUI, a subagent runs exactly while its session, or any session below it, is running. Subagents always run
-  // in the background, so every running descendant is background work.
+  // in the background, so every running descendant is background work, and so is an idle one whose tree still runs a
+  // job. A subagent job belongs to the child it runs.
   const subagents = createMemo(() => {
     const id = input.sessionID()
 
@@ -139,12 +140,12 @@ export function createSessionBackground(input: {
     const sessions = input.sessions()
     const parents = new Map(sessions.map((info) => [info.id, info.parentID]))
 
-    const descends = (sessionID: string) => {
+    const descends = (sessionID: string, ancestor: string) => {
       const seen = new Set<string>()
       let parentID = parents.get(sessionID)
 
       while (parentID && !seen.has(parentID)) {
-        if (parentID === id) return true
+        if (parentID === ancestor) return true
         seen.add(parentID)
         parentID = parents.get(parentID)
       }
@@ -152,10 +153,22 @@ export function createSessionBackground(input: {
       return false
     }
 
-    // The latest call for a child names it; its own session decides whether it still runs.
+    const jobs = (input.jobs?.() ?? []).filter((job) => job.status === "running")
+
+    // The latest call for a child names it; its own session or its tree's jobs decide whether it still runs.
     return sessions.flatMap((info): Subagent[] => {
-      if (input.status(info.id) !== "running" || !descends(info.id)) return []
+      if (!descends(info.id, id)) return []
+      const owned = jobs.filter((job) => {
+        const owner = job.kind === "subagent" ? job.childSessionID : job.sessionID
+
+        return owner === info.id || descends(owner, info.id)
+      })
+      const running = input.status(info.id) === "running"
+
+      if (!running && owned.length === 0) return []
       const latest = current.calls.get(info.id)
+      const count = (kind: JobInfo["kind"]) =>
+        owned.filter((job) => job.kind === kind && !(job.kind === "subagent" && job.childSessionID === info.id)).length
 
       return [
         {
@@ -165,6 +178,10 @@ export function createSessionBackground(input: {
           label: latest?.label ?? info.title ?? info.id,
           agent: latest?.agent,
           started: latest?.started ?? info.time.created,
+          ...(running
+            ? {}
+            : { idle: { subagents: count("subagent"), scripts: count("codemode"), shells: count("shell") } }),
+          ...(owned.length > 0 ? { jobs: owned.map((job) => job.id) } : {}),
         },
       ]
     })
@@ -195,31 +212,28 @@ export function createSessionBackground(input: {
     return [...subagents(), ...shells]
   })
 
-  // Scripts moved to the background, while their job runs. A script's result message ends it before the job list
-  // catches up.
+  // The session's own scripts moved to the background, while their job runs.
   const scripts = createMemo((): Script[] => {
     const id = input.sessionID()
 
     if (!id) return []
     const current = history()
 
-    return input.jobs().flatMap((job) => {
-      if (job.kind !== "codemode" || job.status !== "running" || job.sessionID !== id || current.finished.has(job.id))
-        return []
-      const call = current.scripts.get(job.id)
+    return (input.jobs?.() ?? []).flatMap((job) => {
+      if (job.kind !== "codemode" || job.status !== "running" || job.sessionID !== id) return []
 
-      return [{ id: job.id, type: "script" as const, label: call?.label ?? job.id, started: job.time.started }]
+      return [
+        {
+          id: job.id,
+          type: "script" as const,
+          label: current.scripts.get(job.id) ?? job.id,
+          started: job.time.started,
+        },
+      ]
     })
   })
 
-  // Scripts that ended their call in the background and have not reported back, so the job list is worth asking.
-  const pending = createMemo(() => {
-    const current = history()
-
-    return [...current.scripts.keys()].filter((jobID) => !current.finished.has(jobID))
-  })
-
-  return { blocking, tasks, scripts, pending }
+  return { blocking, tasks, scripts }
 }
 
 function firstLine(code: string | undefined) {

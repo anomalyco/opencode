@@ -163,10 +163,36 @@ export function createSessionRequestModel() {
     return !!id && !data.session.get(id)?.parentID
   }
 
-  // Jobs have no events, so the running scripts are polled while one ended its call in the background and has neither
-  // reported back nor left the job list (a cancelled script reports nothing).
-  const [jobs, setJobs] = createSignal<readonly JobInfo[]>([])
-  const [settled, setSettled] = createSignal<ReadonlySet<string>>(new Set())
+  // Running jobs in the session's tree: listed once when the session opens or the connection returns, then kept by
+  // job.updated events.
+  const [jobs, setJobs] = createSignal<ReadonlyMap<string, JobInfo>>(new Map())
+  const runningJobs = createMemo(() => [...jobs().values()])
+
+  const stopJobs = serverSDK.event.on("experimental.job.updated", (event) => {
+    const info = event.data.info
+
+    setJobs((previous) => {
+      if (info.status === "running") return new Map(previous).set(info.id, info)
+
+      if (!previous.has(info.id)) return previous
+      const next = new Map(previous)
+      next.delete(info.id)
+      return next
+    })
+  })
+  onCleanup(stopJobs)
+
+  createEffect(() => {
+    const sessionID = params.id
+
+    if (!sessionID || serverSDK.connection.status() !== "connected") return
+    void serverSDK.api.experimental.job
+      .list({ sessionID, descendants: true, status: "running" })
+      .then((list) => {
+        if (params.id === sessionID) setJobs(new Map(list.map((job) => [job.id, job])))
+      })
+      .catch(() => undefined)
+  })
 
   const running = createSessionBackground({
     sessionID: () => params.id,
@@ -174,31 +200,7 @@ export function createSessionRequestModel() {
     sessions: data.session.list,
     status: data.session.status,
     shells: () => data.shell.list({ directory: sdk().directory }),
-    jobs,
-  })
-
-  const refreshScripts = (sessionID: string) =>
-    serverSDK.api.experimental.job
-      .list({ sessionID, kind: "codemode", status: "running" })
-      .then((list) => {
-        if (params.id !== sessionID) return
-        const live = new Set(list.map((job) => job.id))
-        const ended = running.pending().filter((id) => !live.has(id) && !settled().has(id))
-        setJobs(list)
-
-        if (ended.length > 0) setSettled((previous) => new Set([...previous, ...ended]))
-      })
-      .catch(() => undefined)
-
-  const polling = createMemo(() => running.pending().some((id) => !settled().has(id)))
-
-  createEffect(() => {
-    const sessionID = params.id
-
-    if (!sessionID || serverSDK.connection.status() !== "connected" || !polling()) return
-    void refreshScripts(sessionID)
-    const timer = setInterval(() => void refreshScripts(sessionID), SCRIPT_POLL_MS)
-    onCleanup(() => clearInterval(timer))
+    jobs: runningJobs,
   })
 
   // Moving to the background and the plugins' background list stay with the primary session's own work.
@@ -206,12 +208,7 @@ export function createSessionRequestModel() {
   const tasks = createMemo(() => (primary() ? running.tasks() : []))
   const scripts = createMemo(() => (primary() ? running.scripts() : []))
 
-  const stopScript = async (id: string) => {
-    await serverSDK.api.experimental.job.cancel({ id })
-    const sessionID = params.id
-
-    if (sessionID) await refreshScripts(sessionID)
-  }
+  const cancelJob = (id: string) => serverSDK.api.experimental.job.cancel({ id })
 
   const moveToBackground = async () => {
     if (!primary()) return
@@ -312,15 +309,13 @@ export function createSessionRequestModel() {
       blocking,
       tasks,
       scripts,
-      stopScript,
+      cancelJob,
       move: moveToBackground,
       steer,
     },
     decide,
   }
 }
-
-const SCRIPT_POLL_MS = 3000
 
 export type SessionRequestModel = ReturnType<typeof createSessionRequestModel>
 
