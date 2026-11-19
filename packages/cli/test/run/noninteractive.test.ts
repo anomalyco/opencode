@@ -899,7 +899,7 @@ describe("runNonInteractivePrompt", () => {
     expect(await output).toMatchObject({ stdout: "", stderr: "", exitCode: 0 })
   })
 
-  test("streams synthetic background notices and completed compactions in JSON without duplicating on reconcile", async () => {
+  test("streams inbox-delivered synthetic reports in place before the woken reply without duplicating on reconcile", async () => {
     const lists: ExperimentalJobListOutput[] = [[subagentJob], []]
     const reportText = '<subagent sessionID="ses_child" state="completed">\nAudit ok\n</subagent>'
     const reportMetadata = { source: "subagent", childID: "ses_child", agent: "explore", state: "completed" }
@@ -909,6 +909,15 @@ describe("runNonInteractivePrompt", () => {
       jobs: () => lists.shift() ?? [],
       messages: (messageID) => [
         idleMessage("succeeded", "msg_after_report"),
+        {
+          id: "msg_woken_reply",
+          type: "assistant",
+          agent: "build",
+          model: { providerID: "test", id: "test-model" },
+          content: [{ type: "text", text: "Handled audit report." }],
+          finish: "stop",
+          time: { created: 5, completed: 6 },
+        },
         {
           id: "msg_compact",
           type: "compaction",
@@ -933,29 +942,46 @@ describe("runNonInteractivePrompt", () => {
         prompted(id),
         settled(),
         {
-          id: "evt_subagent_report",
+          id: "evt_report_enqueued",
           created: 2,
-          type: "session.synthetic",
+          type: "session.inbox.enqueued",
           durable: { aggregateID: "ses_1", seq: 2, version: 1 },
           data: {
             sessionID: "ses_1",
-            text: reportText,
-            description: "scan repo",
-            metadata: reportMetadata,
+            inboxID: "msg_subagent_report",
+            item: {
+              type: "synthetic",
+              delivery: "queue",
+              payload: {
+                text: reportText,
+                description: "scan repo",
+                metadata: reportMetadata,
+              },
+            },
+          },
+        },
+        {
+          id: "evt_report_delivered",
+          created: 2,
+          type: "session.inbox.delivered",
+          durable: { aggregateID: "ses_1", seq: 3, version: 1 },
+          data: {
+            sessionID: "ses_1",
+            inboxID: "msg_subagent_report",
           },
         },
         {
           id: "evt_compact",
           created: 3,
           type: "session.compaction.started",
-          durable: { aggregateID: "ses_1", seq: 3, version: 1 },
+          durable: { aggregateID: "ses_1", seq: 4, version: 1 },
           data: { sessionID: "ses_1", reason: "auto" },
         },
         {
           id: "evt_compact_done",
           created: 4,
           type: "session.compaction.ended",
-          durable: { aggregateID: "ses_1", seq: 4, version: 1 },
+          durable: { aggregateID: "ses_1", seq: 5, version: 1 },
           data: {
             sessionID: "ses_1",
             reason: "auto",
@@ -964,18 +990,42 @@ describe("runNonInteractivePrompt", () => {
             tokens: compactionTokens,
           },
         },
+        {
+          id: "evt_woken_step",
+          created: 5,
+          type: "session.step.started",
+          durable: { aggregateID: "ses_1", seq: 6, version: 1 },
+          data: {
+            started: 5,
+            sessionID: "ses_1",
+            assistantMessageID: "msg_woken_reply",
+            agent: "build",
+            model: { providerID: "test", id: "test-model" },
+          },
+        },
+        {
+          id: "evt_woken_text",
+          created: 5,
+          type: "session.text.ended",
+          durable: { aggregateID: "ses_1", seq: 7, version: 1 },
+          data: {
+            sessionID: "ses_1",
+            assistantMessageID: "msg_woken_reply",
+            ordinal: 0,
+            text: "Handled audit report.",
+          },
+        },
         settled(),
       ],
     })
 
-    const events = jsonLines(output.stdout)
-    const synthetics = events.filter((event) => event.type === "synthetic")
-    const compactions = events.filter((event) => event.type === "compaction")
-    expect(synthetics).toHaveLength(1)
-    expect(synthetics[0]).toMatchObject({
+    const events = jsonLines(output.stdout).filter((event) => event.type !== "background_wait")
+    expect(events.map((event) => event.type)).toEqual(["synthetic", "compaction", "step_start", "text"])
+    expect(events[0]).toMatchObject({
       type: "synthetic",
       sessionID: "ses_1",
       part: {
+        id: "prt_report_delivered",
         sessionID: "ses_1",
         messageID: "msg_subagent_report",
         type: "synthetic",
@@ -984,11 +1034,11 @@ describe("runNonInteractivePrompt", () => {
         metadata: reportMetadata,
       },
     })
-    expect(compactions).toHaveLength(1)
-    expect(compactions[0]).toMatchObject({
+    expect(events[1]).toMatchObject({
       type: "compaction",
       sessionID: "ses_1",
       part: {
+        id: "prt_compact_done",
         sessionID: "ses_1",
         messageID: "msg_compact",
         type: "compaction",

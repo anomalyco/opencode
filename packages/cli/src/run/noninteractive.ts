@@ -170,6 +170,7 @@ export async function runNonInteractivePrompt(input: Input) {
         }
       }
       if (sessionID !== input.sessionID) continue
+      if (event.type === "session.inbox.enqueued" || event.type === "session.inbox.cancelled") render.inbox(event)
       if (event.type === "session.inbox.delivered" && event.data.inboxID === messageID) state.promoted = true
       // A busy period that ends before this prompt is delivered leaves the prompt queued for good.
       if (terminal && !state.promoted && terminal.error) state.failure ??= terminal.error
@@ -362,6 +363,7 @@ function renderer(input: Input) {
   const starts = new Map<string, { id: string; timestamp: number }>()
   const tools = new Map<string, Tool>()
   const steps = new Map<string, "started" | "ended">()
+  const synthetics = new Map<string, { text: string; description?: string; metadata?: Record<string, unknown> }>()
   let compactionID: string | undefined
   // The session can go idle before the last live events arrive; reconcile prints what they missed.
   const printed = new Map<string, string>()
@@ -535,8 +537,29 @@ function renderer(input: Input) {
       )
     },
 
+    inbox: (event: Extract<Event, { type: "session.inbox.enqueued" | "session.inbox.cancelled" }>) => {
+      if (event.type === "session.inbox.cancelled") {
+        synthetics.delete(event.data.inboxID)
+        return
+      }
+      if (event.data.item.type === "synthetic") {
+        synthetics.set(event.data.inboxID, {
+          text: event.data.item.payload.text,
+          description: event.data.item.payload.description,
+          metadata: event.data.item.payload.metadata,
+        })
+      }
+    },
+
     event: async (event: Event) => {
       const time = "created" in event ? event.created : Date.now()
+      if (event.type === "session.inbox.delivered") {
+        const queued = synthetics.get(event.data.inboxID)
+        if (!queued) return
+        synthetics.delete(event.data.inboxID)
+        synthetic(partID(event.id), event.data.inboxID, queued, time)
+        return
+      }
       if (event.type === "session.synthetic") {
         synthetic(
           partID(event.id),
