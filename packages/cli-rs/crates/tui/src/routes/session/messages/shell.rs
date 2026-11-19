@@ -7,8 +7,8 @@ use opencode_api::generated::{
 };
 use opencode_store::Data;
 use opencode_ui::motion::Spinner;
-use opentui::input::strip_ansi_sequences;
 use opencode_util::text_boundary;
+use opentui::input::strip_ansi_sequences;
 use unicode_width::UnicodeWidthChar;
 
 use super::list::Context;

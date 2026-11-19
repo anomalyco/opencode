@@ -2,11 +2,11 @@
 //! shared with `run`.
 
 use opencode_api::generated::{SessionMessageAssistantToolState as State, ToolContent};
-use opentui::input::strip_ansi_sequences;
 use opencode_ui::tool_info::{
     Todo, TodoStatus, canonical_tool_name, normalize_input, normalize_metadata, parse_todos, primitive_input_summary,
     todo_marker, tool_display_content, tool_display_metadata, tool_output_text, tool_path, web_search_provider_label,
 };
+use opentui::input::strip_ansi_sequences;
 use opentui::widget::{Code, DiffColors, DiffView, LineNumbers};
 use serde_json::Map;
 

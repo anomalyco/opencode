@@ -10,8 +10,8 @@ use opencode_store::Location;
 use opencode_ui::dialog::{DIALOG_INSET, DialogCx, FooterAction, FooterProps, footer, layout_view};
 use opentui::widget::ScrollEdge;
 
-use opentui::input::strip_ansi_sequences;
 use opencode_util::text_boundary;
+use opentui::input::strip_ansi_sequences;
 
 use crate::prelude::*;
 

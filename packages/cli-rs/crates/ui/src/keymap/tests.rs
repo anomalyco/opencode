@@ -208,6 +208,7 @@ fn a_binding_parses_as_its_layer_registers_it() {
             Err(_) => Vec::new(),
         };
         let mut ours: Vec<Vec<String>> = tui
+            .keymap()
             .parse_binding(key)
             .unwrap_or_default()
             .iter()
@@ -220,7 +221,8 @@ fn a_binding_parses_as_its_layer_registers_it() {
         drop(layer);
     }
     let escape = tui.keymap().parse_key("escape").unwrap().stroke;
-    let takes_escape = |key: &str| tui.parse_binding(key).unwrap().iter().flatten().any(|part| part.stroke == escape);
+    let takes_escape =
+        |key: &str| tui.keymap().parse_binding(key).unwrap().iter().flatten().any(|part| part.stroke == escape);
     for key in ["esc", "esc<", "esc<leader>", "<leader>esc", "g esc", "x, esc"] {
         assert!(takes_escape(key), "{key:?}");
     }

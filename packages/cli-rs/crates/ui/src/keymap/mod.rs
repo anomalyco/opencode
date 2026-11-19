@@ -36,31 +36,6 @@ const CONDITIONS_KEY: &str = "conditions";
 /// Key aliases expanded during layer registration.
 const ALIASES: &[(&str, &str)] = &[("enter", "return"), ("esc", "escape"), ("pgdown", "pagedown"), ("pgup", "pageup")];
 
-/// `alias` in `input` replaced by `value` where `addons::key_aliases` replaces it: `@opentui/keymap`'s pattern,
-/// `(^|[+,\s>])alias(?=$|[+,\s<])`, ignoring ASCII case.
-fn replace_alias(input: &str, alias: &str, value: &str) -> String {
-    let mut output = String::with_capacity(input.len());
-    let mut index = 0;
-    while index < input.len() {
-        let rest = &input[index..];
-        let starts = index == 0
-            || input[..index].ends_with(|character: char| "+,>".contains(character) || character.is_whitespace());
-        let matches =
-            rest.len() >= alias.len() && rest.as_bytes()[..alias.len()].eq_ignore_ascii_case(alias.as_bytes());
-        let ends = matches
-            && rest[alias.len()..].chars().next().is_none_or(|next| "+,<".contains(next) || next.is_whitespace());
-        if starts && ends {
-            output.push_str(value);
-            index += alias.len();
-            continue;
-        }
-        let character = rest.chars().next().expect("index is inside the input");
-        output.push(character);
-        index += character.len_utf8();
-    }
-    output
-}
-
 /// What [`TuiKeymap::new`] needs from the app.
 pub struct Options {
     /// `leader.timeout` from `cli.json`; 2,000 ms by default.
@@ -428,26 +403,6 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
     /// The engine, for focus (`set_focus`), intercepts, and queries this type does not wrap.
     pub fn keymap(&self) -> &Keymap<T> {
         &self.keymap
-    }
-
-    /// Expands comma-separated bindings and key aliases at token boundaries before parsing the sequences, just as
-    /// layer registration does.
-    pub fn parse_binding(&self, key: &str) -> Result<Vec<Vec<opentui::keymap::KeySequencePart>>, String> {
-        let bindings: Vec<&str> = match key.contains(',') {
-            true => key.split(',').map(str::trim).collect(),
-            false => vec![key],
-        };
-        if bindings.iter().any(|binding| binding.is_empty()) {
-            return Err(format!("Invalid key sequence \"{key}\": empty entries"));
-        }
-        bindings
-            .into_iter()
-            .map(|binding| {
-                let spelled =
-                    ALIASES.iter().fold(binding.to_owned(), |key, (alias, value)| replace_alias(&key, alias, value));
-                self.keymap.parse_key_sequence(spelled.as_str())
-            })
-            .collect()
     }
 
     pub fn keybinds(&self) -> Rc<Keybinds<T>> {
