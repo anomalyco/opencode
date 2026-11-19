@@ -192,7 +192,16 @@ function overlayProvider(
         integrationID: provider.integrationID,
       })
     if (integrationID) provider.integrationID = integrationID
-    provider.activation = "enabled"
+    // A provider first declared here (including a `canonical` copy) or by an integration needs no connection.
+    // Overriding an existing provider's settings does not authenticate it unless the settings carry a credential.
+    if (
+      integrationID ||
+      !current ||
+      [item.settings?.apiKey, item.settings?.authToken, item.settings?.accessToken].some(
+        (value) => typeof value === "string" && value !== "",
+      )
+    )
+      provider.activation = "enabled"
     if (item.canonical !== undefined) provider.canonical = item.canonical
     if (item.name) provider.name = item.name
     if (item.package !== undefined) provider.package = item.package
