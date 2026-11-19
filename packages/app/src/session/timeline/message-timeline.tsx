@@ -222,8 +222,7 @@ function MessageTimelineView(
     setScrollRef: props.setScrollRef,
     onContentResize: props.onContentResize,
     bottomInset: () => props.bottomInset ?? 0,
-    // The status line sits a row's gap below the turn, past the old lane's 16px above its text, so the tail grows by
-    // the difference (--timeline-gap-* in timeline-next.css) and the line keeps the old lane's gap to the pill.
+    // The status line's gap above it (--timeline-gap-* in timeline-next.css) past the old lane's 16px.
     tailExtra: () => ({ s: 0, m: 4, l: 16 })[laneSpacing() ?? "s"],
     setVisibleRef: props.setVisibleRef,
     onScheduleScrollState: props.onScheduleScrollState,

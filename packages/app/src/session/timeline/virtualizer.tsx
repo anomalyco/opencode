@@ -117,7 +117,7 @@ type Input = {
   onContentResize: () => void
   /** Height of the composer region floating over the timeline's bottom edge, where the timeline fades out. */
   bottomInset?: Accessor<number>
-  /** Room the live status line needs above the old 36px lane, so it keeps its gap to the activity pill below. */
+  /** Room the status line needs past the 36px lane, so it keeps its gap to the activity pill. */
   tailExtra?: Accessor<number>
   setVisibleRef?: (element: HTMLDivElement | undefined) => void
   onScheduleScrollState: (element: HTMLDivElement) => void
