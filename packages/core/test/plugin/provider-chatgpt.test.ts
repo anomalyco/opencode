@@ -508,7 +508,11 @@ describe("ChatGPTPlugin", () => {
       const ids = () =>
         integrations
           .get(Integration.ID.make("openai"))
-          .pipe(Effect.map((item) => item?.methods.map((method) => method.type === "oauth" && method.id)))
+          .pipe(
+            Effect.map((item) =>
+              item?.methods.map((method) => (method.type === "oauth" ? String(method.id) : undefined)),
+            ),
+          )
       expect(yield* ids()).toEqual(["chatgpt-token-sharing"])
       const credentials = yield* Credential.Service
       yield* credentials.create({
