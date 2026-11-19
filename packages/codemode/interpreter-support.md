@@ -437,7 +437,8 @@ reject }` object.
 - [x] Slicing/access: `slice`, `substring`, Annex B `substr`, `at`, `charAt`, `charCodeAt`, and `codePointAt`.
 - [x] Construction/transformation: `split`, `concat`, `repeat`, `padStart`, `padEnd`, `replace`, and `replaceAll`.
 - [x] Regular-expression integration: `match`, materialized `matchAll`, `replace`, `replaceAll`, `split`, and `search`.
-- [x] `localeCompare`; locale and options arguments are currently ignored.
+- [x] `localeCompare`, with its locales and collator options (`numeric`, `sensitivity`, `caseFirst`,
+      `ignorePunctuation`, and the rest) passed to the host collator; there is still no global `Intl`.
 - [x] `isWellFormed` and `toWellFormed`.
 - [x] `toString`, `length`, numeric indexing, spread, `for...of`, and `[Symbol.iterator]` by Unicode code point.
 - [x] Static `String.fromCharCode` and `String.fromCodePoint`.
