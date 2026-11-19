@@ -1,6 +1,6 @@
 import { constructor, type Method, methods, prototypeFrom, receiver } from "../runtime/native.js"
 import { rangeError, typeError } from "../runtime/model.js"
-import { Arr, DateObj, Obj, coerceToNumber, get, coerceToString, type Value } from "../runtime/objects.js"
+import { Arr, DateObj, Obj, coerceToNumber, get, has, coerceToString, type Value } from "../runtime/objects.js"
 import { withPrimitives, withReads } from "../runtime/callback.js"
 import type { Interpreter } from "../runtime/interpreter.js"
 
@@ -46,6 +46,15 @@ const dateTimeOptions = [
   "dateStyle",
   "timeStyle",
 ]
+
+const arrayLikeTags = (locales: Obj) => {
+  const length = get(locales, "length")
+  const count = length instanceof Obj ? 0 : Math.max(0, Math.floor(coerceToNumber(length)) || 0)
+  if (count > 1000) throw rangeError("Too many locales.")
+  return Array.from({ length: count }, (_, index) => index)
+    .filter((index) => has(locales, String(index)))
+    .map((index) => get(locales, String(index)))
+}
 
 type Getter = keyof {
   [K in keyof Date as Date[K] extends () => number ? K : never]: never
@@ -142,11 +151,18 @@ export const dateGlobal = <R>(ctx: Interpreter<R>) => {
         (thisValue, args) => {
           const time = self(thisValue, name).time
           const [locales, options] = args
-          if (options === null) throw typeError("Cannot convert undefined or null to object.")
-          // Bun's default locale is en-US whatever the environment says; pinning it keeps output off the host's.
-          const tags =
-            locales === undefined ? ["en-US"] : locales instanceof Arr ? locales.items.filter(() => true) : [locales]
+          if (locales === null || options === null) throw typeError("Cannot convert undefined or null to object.")
           return withReads(() => {
+            // Bun's default locale is en-US whatever the environment says; pinning it keeps output off the host's.
+            // A non-array object is array-like to Intl, so its elements are the tags.
+            const tags =
+              locales === undefined
+                ? ["en-US"]
+                : locales instanceof Arr
+                  ? locales.items.filter(() => true)
+                  : locales instanceof Obj
+                    ? arrayLikeTags(locales)
+                    : [locales]
             const entries =
               options instanceof Obj
                 ? dateTimeOptions.flatMap((key) => {
@@ -166,7 +182,7 @@ export const dateGlobal = <R>(ctx: Interpreter<R>) => {
               [...tags, ...entries.map((entry) => entry[1])],
               (primitives) =>
                 new Date(time)[name](
-                  (locales instanceof Arr ? primitives.slice(0, tags.length) : primitives[0]) as Intl.LocalesArgument,
+                  (locales instanceof Obj ? primitives.slice(0, tags.length) : primitives[0]) as Intl.LocalesArgument,
                   options instanceof Obj
                     ? Object.fromEntries(entries.map((entry, at) => [entry[0], primitives[tags.length + at]]))
                     : (options as Intl.DateTimeFormatOptions | undefined),

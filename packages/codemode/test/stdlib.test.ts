@@ -1647,6 +1647,8 @@ describe("toLocaleString", () => {
         d.toLocaleTimeString("en-US", { timeZone: "America/New_York", timeZoneName: "short", hour: "2-digit", minute: "2-digit" }),
         d.toLocaleString("en-US", { timeZone: "UTC", hour12: false }),
         new Date(NaN).toLocaleString("en-US", { timeZone: "UTC" }),
+        d.toLocaleDateString({ length: 1, 0: "de-DE" }, { timeZone: "UTC" }),
+        d.toLocaleDateString({}, { timeZone: "UTC" }),
       ]
     `),
     ).toEqual([
@@ -1659,6 +1661,8 @@ describe("toLocaleString", () => {
       "08:05 AM EST",
       "1/15/2024, 13:05:09",
       "Invalid Date",
+      "15.1.2024",
+      "1/15/2024",
     ])
   })
 
@@ -1689,10 +1693,11 @@ describe("toLocaleString", () => {
         () => d.toLocaleString("en-US", { timeZone: "Nope" }),
         () => d.toLocaleTimeString("en-US", { dateStyle: "short" }),
         () => d.toLocaleString("en-US", null),
+        () => d.toLocaleString(null),
         () => d.toLocaleString("!!"),
       ].map((f) => { try { return f() } catch (e) { return e.name } })
     `),
-    ).toEqual(["RangeError", "TypeError", "TypeError", "RangeError"])
+    ).toEqual(["RangeError", "TypeError", "TypeError", "TypeError", "RangeError"])
   })
 
   test("toLocaleLowerCase and toLocaleUpperCase ignore the locale argument", async () => {
