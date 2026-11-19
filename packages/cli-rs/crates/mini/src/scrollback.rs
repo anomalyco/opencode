@@ -840,7 +840,9 @@ fn static_body(commit: &Commit, body: Body, spaced: u32) -> Body {
 /// up to the start of the first block held back. Marked makes each run of blank lines outside a fence a `space` token,
 /// except after a heading, a table, indented code, a link definition or an HTML block, which take the run into their
 /// own token, and inside a loose list, which stays one token. The prefix ends after a blank line, which closes its
-/// blocks, so the engine renders them final instead of holding the last line.
+/// blocks, so the engine renders them final instead of holding the last line. OpenTUI's
+/// `Markdown::committed_block_count` is a later Core's count, which commits a heading or a table before 0.8.4 does and a
+/// loose list after, and it gives no block rows.
 pub fn stable_prefix(content: &str) -> &str {
     // Each token's start and kind, as marked would split the text so far.
     let mut tokens: Vec<(usize, Token)> = Vec::new();
