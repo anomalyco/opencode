@@ -261,6 +261,19 @@ describe("provider error classification", () => {
     ).toBe("ContentPolicy")
   })
 
+  test("classifies Gemini terms-of-use refusals as policy rejections, not authentication failures", () => {
+    const message = "Request rejected in accordance with our terms of use and policies."
+    const gemini = { error: { code: 403, message, status: "PERMISSION_DENIED" } }
+    const zen = { error: { type: "server_error", message: `Upstream request failed: [403] ${message}` } }
+
+    expect(
+      [gemini, zen].map(
+        (body) =>
+          classifyProviderFailure({ message: body.error.message, status: 403, rawBody: JSON.stringify(body) })._tag,
+      ),
+    ).toEqual(["ContentPolicy", "ContentPolicy"])
+  })
+
   test("keeps invalid_prompt schema validation failures as invalid requests", () => {
     // Bedrock Mantle reports request validation failures under `invalid_prompt`
     // with a pydantic dump that lists every input union member's fields.
