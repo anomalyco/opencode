@@ -36,6 +36,8 @@ export class ForkEmptyError extends Schema.TaggedError<ForkEmptyError>()("Sessio
 export class MessageDecodeError extends Schema.TaggedError<MessageDecodeError>()("Session.MessageDecodeError", {
   sessionID: SessionSchema.ID,
   messageID: SessionMessage.ID,
+  // The schema failure, for server logs only. Clients get `message`, which leaves it out.
+  detail: Schema.String,
 }) {
   override get message() {
     return `Failed to decode message ${this.messageID} in session ${this.sessionID}`

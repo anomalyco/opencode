@@ -21,7 +21,7 @@ export function missingMessage(error: Session.MessageNotFoundError) {
 export function failedMessageDecode(error: Session.MessageDecodeError) {
   const ref = `err_${crypto.randomUUID().slice(0, 8)}`
   return Effect.logError("failed to decode session message").pipe(
-    Effect.annotateLogs({ ref, sessionID: error.sessionID, messageID: error.messageID }),
+    Effect.annotateLogs({ ref, sessionID: error.sessionID, messageID: error.messageID, detail: error.detail }),
     Effect.andThen(
       Effect.fail(new UnknownError({ message: "Unexpected server error. Check server logs for details.", ref })),
     ),

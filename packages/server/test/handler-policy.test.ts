@@ -28,7 +28,7 @@ test("message decode policy preserves its reference and log annotations", async 
     annotations.push({ ...options.fiber.getRef(References.CurrentLogAnnotations) })
   })
   const error = await Effect.runPromise(
-    Effect.fail(new Session.MessageDecodeError({ sessionID, messageID })).pipe(
+    Effect.fail(new Session.MessageDecodeError({ sessionID, messageID, detail: 'Missing key\n  at ["text"]' })).pipe(
       Effect.catchTag("Session.MessageDecodeError", failedMessageDecode),
       Effect.flip,
       Effect.provide(Logger.layer([logger], { mergeWithExisting: false })),
@@ -39,5 +39,6 @@ test("message decode policy preserves its reference and log annotations", async 
   expect(error.message).toBe("Unexpected server error. Check server logs for details.")
   expect(error.ref).toMatch(/^err_[0-9a-f]{8}$/)
   expect(messages).toEqual([["failed to decode session message"]])
-  expect(annotations).toEqual([{ ref: error.ref, sessionID, messageID }])
+  expect(annotations).toEqual([{ ref: error.ref, sessionID, messageID, detail: 'Missing key\n  at ["text"]' }])
+  expect(error).not.toHaveProperty("detail")
 })
