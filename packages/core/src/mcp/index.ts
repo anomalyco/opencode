@@ -515,10 +515,39 @@ export const layer = (options?: Options) =>
                 )
             }
             const params = input.params
-            const [field, ...fields] = Object.entries(params.requestedSchema.properties).map(([key, property]) =>
+            const entries = Object.entries(params.requestedSchema.properties)
+            if (entries.length === 0) {
+              // Empty schema = plain confirmation. Show a form with a single boolean field so the user
+              // can accept, decline, or cancel. This matches the MCP spec where an empty form is a
+              // confirmation dialog, not an auto-accept.
+              const confirmField: Form.Field = {
+                key: "confirm",
+                type: "boolean",
+                title: "Confirm",
+                description: params.message,
+                required: true,
+              }
+              return yield* forms
+                .ask({
+                  sessionID: GLOBAL_ELICITATION_SESSION_ID,
+                  title: `${input.server} is requesting input`,
+                  metadata: { kind: "mcp-elicitation", server: input.server, message: params.message },
+                  fields: [confirmField],
+                })
+                .pipe(
+                  Effect.raceFirst(waitForAbort(input.signal)),
+                  Effect.map((state): McpClient.ElicitationResult => {
+                    if (state.status !== "answered") return { action: "cancel" }
+                    return {
+                      action: state.answer.confirm === true ? "accept" : "decline",
+                      content: {},
+                    }
+                  }),
+                )
+            }
+            const [field, ...fields] = entries.map(([key, property]) =>
               toElicitationField(key, property, params.requestedSchema.required?.includes(key) === true),
             )
-            if (!field) return { action: "accept" as const, content: {} }
             return yield* forms
               .ask({
                 sessionID: GLOBAL_ELICITATION_SESSION_ID,

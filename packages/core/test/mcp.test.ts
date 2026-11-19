@@ -1538,18 +1538,28 @@ const recordForm = (created: Deferred.Deferred<CreatedForm>, form: Form.Info) =>
     Effect.asVoid,
   )
 
-test("accepts empty MCP elicitations without creating forms", async () => {
+test("shows a confirmation form for empty MCP elicitations", async () => {
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
         const server = yield* resourceServer({ resources: false, emptyElicitation: true })
+        const created = yield* Deferred.make<CreatedForm>()
         const result = yield* Effect.gen(function* () {
           const service = yield* Mcp.Service
           const forms = yield* Form.Service
-          const result = yield* service.callTool({ server: "resources", name: "empty-elicitation" })
-          expect(yield* forms.list()).toEqual([])
+          const call = yield* service.callTool({ server: "resources", name: "empty-elicitation" }).pipe(Effect.forkScoped)
+
+          const { form } = yield* Deferred.await(created)
+          expect(form.fields).toHaveLength(1)
+          expect(form.fields[0].key).toBe("confirm")
+          expect(form.fields[0].type).toBe("boolean")
+
+          // Answer the form with accept
+          yield* forms.reply({ id: form.id, answer: { confirm: true } })
+          const result = yield* Fiber.join(call)
+          expect(yield* forms.state(form.id)).toEqual({ status: "answered", answer: { confirm: true } })
           return result
-        }).pipe(Effect.provide(resourceMcpLayer(server.url)))
+        }).pipe(Effect.provide(resourceMcpLayer(server.url, (form) => recordForm(created, form))))
 
         expect(result.structured).toEqual({ action: "accept", content: {} })
       }),
