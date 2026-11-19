@@ -1,11 +1,11 @@
 {
   "id": "B6",
-  "expectsRollover": false,
-  "expectsDeferred": true,
+  "expectsRollover": true,
+  "expectsDeferred": false,
   "facts": [
     { "kind": "objective", "text": "migrate the queue worker to cron" }
   ],
   "mustNotAppear": [],
   "requiresRuntimeEvidence": false,
-  "notes": "Extraction fails deterministically (invalid JSON): swaps defer with extraction_lagging; the objective stays in intact history."
+  "notes": "v2: extraction fails deterministically (invalid JSON) yet the deterministic swap still fires — the mechanical projection must carry the discarded turns; the objective stays retrievable from the render, never from an LLM."
 }

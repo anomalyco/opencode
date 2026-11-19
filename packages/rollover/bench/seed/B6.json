@@ -20,5 +20,5 @@
     }
   ],
   "extractionRecords": [],
-  "notes": "Extraction model returns invalid JSON every time; swaps must defer (extraction_lagging) and the conversation must stay intact. Rollover count 0, deferred > 0."
+  "notes": "Extraction model returns invalid JSON every time; v2 contract: the deterministic swap no longer waits for extraction, so swaps must still happen and the render must cover the discarded turns mechanically. Rollover count >= 1, extraction_failed > 0."
 }
