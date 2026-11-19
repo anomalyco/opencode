@@ -1099,6 +1099,8 @@ function mockHandlers(
             location: location(config, requestDirectory(config, ctx.request)),
             data: resolve(config.shellCommands ?? []),
           })),
+        // No scenario runs background jobs (Code Mode scripts, subagents' work) yet.
+        jobList: () => Effect.succeed({ data: [] }),
         shellOutput: (ctx) =>
           Effect.suspend(() => {
             const directory = requestDirectory(config, ctx.request)

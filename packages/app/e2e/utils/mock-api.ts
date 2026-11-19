@@ -291,6 +291,7 @@ const Group = HttpApiGroup.make("mock")
   .add(HttpApiEndpoint.post("fsWatch", "/api/experimental/fs/watch", { success: NoContent }))
   .add(HttpApiEndpoint.delete("fsUnwatch", "/api/experimental/fs/watch", { success: NoContent }))
   .add(HttpApiEndpoint.get("shell", "/api/shell", { success: Json }))
+  .add(HttpApiEndpoint.get("jobList", "/api/experimental/job", { success: Json }))
   .add(
     HttpApiEndpoint.get("shellOutput", "/api/shell/:id/output", {
       params: { id: Schema.String },
