@@ -51,9 +51,11 @@ const builtins = [
  */
 export type Builtins = Readonly<Record<(typeof builtins)[number] | ErrorType, Obj>>
 
-export const createErrorValue = (prototype: Obj, message: string | undefined): ErrorObj => {
+/** A new error; its `stack` is `name: message` followed by `trace`, the `    at` lines where it was made. */
+export const createErrorValue = (prototype: Obj, message: string | undefined, trace = ""): ErrorObj => {
   const value = new ErrorObj(prototype)
   if (message !== undefined) define(value, "message", message, hidden)
+  define(value, "stack", value.toString() + trace, hidden)
   return value
 }
 

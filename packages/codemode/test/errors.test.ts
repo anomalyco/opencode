@@ -137,6 +137,41 @@ describe("uncaught program throws", () => {
   })
 })
 
+describe("stack", () => {
+  test("names the program's frames innermost first, like V8", async () => {
+    expect(
+      await value(`function inner() { return new Error("boom") }
+const outer = () => inner()
+return outer().stack.split("\\n")`),
+    ).toEqual(["Error: boom", "    at inner (<program>:1:27)", "    at outer (<program>:2:21)", "    at <program>:3:8"])
+  })
+
+  test("a built-in failure has its location, and a message-less error just its name", async () => {
+    expect(await value(`try { null.x } catch (e) { return [e.stack, new RangeError().stack] }`)).toEqual([
+      "TypeError: Cannot read properties of null (reading 'x').\n    at <program>:1:7",
+      "RangeError\n    at <program>:1:45",
+    ])
+  })
+
+  test("is non-enumerable, so JSON and Object.keys don't change", async () => {
+    expect(
+      await value(`const e = new Error("x"); e.code = 1
+return [JSON.stringify(e), Object.keys(e), Object.getOwnPropertyDescriptor(e, "stack")]`),
+    ).toEqual([
+      JSON.stringify({ name: "Error", message: "x", code: 1 }),
+      ["code"],
+      { value: "Error: x\n    at <program>:1:11", writable: true, enumerable: false, configurable: true },
+    ])
+  })
+
+  test("keeps the 10 innermost frames", async () => {
+    expect(
+      await value(`function f(n) { return n === 0 ? new Error("deep") : f(n - 1) }
+return f(20).stack.split("\\n")`),
+    ).toEqual(["Error: deep", "    at f (<program>:1:34)", ...Array(9).fill("    at f (<program>:1:54)")])
+  })
+})
+
 describe("source locations", () => {
   test("uses the submitted line and 1-based column", async () => {
     const failure = await error("const value = 1\nreturn value()")

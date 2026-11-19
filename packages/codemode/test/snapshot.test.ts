@@ -93,6 +93,13 @@ const programs: Record<string, string> = {
     Object.freeze(Math)
     for (let i = 0; i < 3; i++) console.log("line", i)
     return [[1, 2, 3].extra(), Object.isFrozen(Math)]`,
+  "an error's stack, made before a slice and read after": `
+    function make() { return new TypeError("bad") }
+    const made = make()
+    let caught
+    try { null.x } catch (error) { caught = error }
+    for (let i = 0; i < 5; i++) await null
+    return [made.stack, caught.stack]`,
   "the program's result is copied out after a slice in the boundary walk": `
     const rows = []
     for (let i = 0; i < 5; i++) rows.push({ i, toJSON() { return { row: this.i } } })
