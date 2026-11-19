@@ -33,8 +33,12 @@ const MAX_GIVEN = 10
 const MAX_GIVEN_TEXT = 2000
 /** Events kept in memory since a session's last boundary; the log keeps them all. */
 const MAX_SEGMENT = 200
-/** Distillations per session: one per boundary, at most this many. */
-const MAX_DISTILLATIONS = 20
+/**
+ * Distillations a user turn allows for the boundaries inside it (a test that starts passing, a commit, a finished
+ * subtask), refilled by each user message. The boundaries that close a turn (a new task, a correction, a stated rule)
+ * and compactions always distil, so a long session never runs out.
+ */
+const DISTILLATIONS_PER_TURN = 2
 /** The end of a command's output an event keeps. */
 const MAX_TAIL = 1500
 /** How long the workspace's list of restricted repositories is reused before Console is asked again. */
@@ -52,6 +56,8 @@ const Hit = Schema.Struct({
   revision: Schema.Number,
   score: Schema.Number,
   status: Schema.optional(Schema.Literals(["live", "provisional"])),
+  /** With `explain`: whether the entry's recorded errors occurred in the session's. */
+  signals: Schema.optional(Schema.Struct({ error: Schema.optional(Schema.Struct({ errors: Schema.Number })) })),
 })
 const Injected = Schema.Struct({
   id: Schema.String,
@@ -192,7 +198,8 @@ type Tracked = {
   from: number
   /** The next position in the session's event log, read from storage on its first event in this process. */
   next?: number
-  distillations: number
+  /** What the current user turn still allows for boundaries inside it. */
+  allowance: number
   /** What the session's distillations cost: calls, estimated tokens, and USD at list price for those with one. */
   readonly writer: { calls: number; inputTokens: number; outputTokens: number; costUSD: number; unpriced: number }
   /** The session took in outside input, so what it publishes is marked tainted and never promoted. */
@@ -224,6 +231,8 @@ export const make = Effect.fnUntraced(function* (
   const git = yield* Git.Service
   const processes = yield* AppProcess.Service
   const flags = yield* Flag.Service
+  const known = (state: Tracked) =>
+    [...state.given.values()].map((entry) => ({ id: entry.id, title: entry.title, text: entry.text }))
   const github = OpencodeMemoryAccess.make(http, processes, yield* OpencodeMemoryAccess.GitHub)
   let current: { console: OpencodeWatches.Console; readonly lease: Scope.Closeable } | undefined
   const sessions = new Map<string, Tracked>()
@@ -238,7 +247,7 @@ export const make = Effect.fnUntraced(function* (
       compactions: 0,
       segment: [],
       from: 0,
-      distillations: 0,
+      allowance: DISTILLATIONS_PER_TURN,
       writer: { calls: 0, inputTokens: 0, outputTokens: 0, costUSD: 0, unpriced: 0 },
       about: new Map(),
     }
@@ -583,7 +592,8 @@ export const make = Effect.fnUntraced(function* (
   ) =>
     Effect.gen(function* () {
       const models = yield* distillers
-      const prompt = OpencodeMemoryCapture.prompt({ segment, boundary })
+      const state = tracked(sessionID)
+      const prompt = OpencodeMemoryCapture.prompt({ segment, boundary, known: known(state) })
       const order = [...(answering === undefined ? [] : [answering]), ...models.keys()].filter(
         (index, at, all) => all.indexOf(index) === at,
       )
@@ -621,6 +631,19 @@ export const make = Effect.fnUntraced(function* (
               ? [{ kind: "confirmation" as const, ref: (candidate.quote ?? "").trim().slice(0, 500) }]
               : []),
           ]
+          // A correction the user confirmed retires what it reverses in the same write; only entries the session knows,
+          // of this repository.
+          const here = "repo" in source && source.repo ? repoName(source.repo)?.toLowerCase() : undefined
+          const supersedes =
+            backing === "confirmed"
+              ? (candidate.supersedes ?? []).filter(
+                  (id) =>
+                    state.given.has(id) &&
+                    (here === undefined ||
+                      state.about.get(id) === undefined ||
+                      state.about.get(id)?.toLowerCase() === here),
+                )
+              : []
           const fields = yield* shared("publish", {
             ...metadata(candidate),
             body: candidate.body,
@@ -631,8 +654,9 @@ export const make = Effect.fnUntraced(function* (
           const set = yield* reader
           // A duplicate refusal records this session as having found the same lesson. The user's confirmation goes to the
           // entry that already says it, such as one the agent published itself when the user stated the rule.
-          yield* call(Schema.Struct({ id: Schema.optional(Schema.String) }), "POST", "/api/memory/entries", {
+          const published = yield* call(Written, "POST", "/api/memory/entries", {
             ...fields,
+            ...(supersedes.length === 0 ? {} : { supersedes }),
             source: { ...source, sessionID },
             ...(anchor === undefined ? {} : { anchor }),
             ...(tracked(sessionID).tainted ? { tainted: true } : {}),
@@ -647,9 +671,18 @@ export const make = Effect.fnUntraced(function* (
                 evidence: confirmation,
                 source: { ...source, sessionID },
                 ...set,
-              }).pipe(Effect.asVoid)
+              }).pipe(Effect.as(undefined))
             }),
           )
+          // The session knows what it published: a later correction can reverse it.
+          if (published?.id !== undefined)
+            give(state, {
+              id: published.id,
+              revision: published.revision ?? 1,
+              title: candidate.title,
+              text: candidate.body,
+            })
+          supersedes.forEach((id) => state.given.delete(id))
         }).pipe(Effect.catch((cause) => Effect.logDebug("memory candidate not sent", { cause }))),
       )
     }).pipe(Effect.catch((cause) => Effect.logDebug("memory distillation failed", { cause })))
@@ -657,6 +690,42 @@ export const make = Effect.fnUntraced(function* (
   const start = Effect.fnUntraced(function* () {
     const lease = yield* Scope.Scope
     const capturing = yield* flags.enabled("memory_capture")
+    const unverifiedAtFailure = yield* flags.enabled("memory_provisional_failure")
+    /**
+     * Experiment (memory_provisional_failure, off by default): the provisional gotcha whose recorded error occurred in
+     * a failing command's output, whole, at most one per failure. Provisional entries aren't injected otherwise; this
+     * one goes labelled unverified, so the benchmark can measure whether it helps.
+     */
+    const unverified = (sessionID: Session.ID, moment: OpencodeMemoryPolicy.Moment) =>
+      Effect.gen(function* () {
+        if (!unverifiedAtFailure || moment.type !== "failure") return []
+        const state = tracked(sessionID)
+        const source = yield* repository
+        const found = yield* call(Schema.Struct({ results: Schema.Array(Hit) }), "POST", "/api/memory/search", {
+          query: (state.task ?? moment.command).slice(0, 1000),
+          context: {
+            ...("repo" in source && source.repo ? { repo: source.repo } : {}),
+            errors: [moment.output.slice(-2000)],
+            commands: [moment.command.slice(0, 1000)],
+          },
+          kinds: ["gotcha"],
+          limit: 5,
+          sessionID,
+          explain: true,
+          ...(yield* reader),
+        }).pipe(Effect.timeout(policy.timeout))
+        const hit = found.results.find(
+          (item) =>
+            item.status === "provisional" && (item.signals?.error?.errors ?? 0) > 0 && !state.given.has(item.id),
+        )
+        if (hit === undefined) return []
+        const entry = yield* call(
+          Entry,
+          "GET",
+          `/api/memory/entries/${encodeURIComponent(hit.id)}?${new URLSearchParams({ sessionID })}`,
+        )
+        return [entry]
+      }).pipe(Effect.orElseSucceed(() => []))
     /**
      * Appends `event` to the session's event log, which only this plugin writes and nothing ever rewrites, and, when it
      * closes a work boundary, distils what happened since the last one in the background.
@@ -671,7 +740,13 @@ export const make = Effect.fnUntraced(function* (
         state.next = at + 1
         yield* ctx.storage.set(`memory-log:${sessionID}:${String(at).padStart(10, "0")}`, event)
         yield* ctx.storage.set(head, at + 1)
-        const boundary = OpencodeMemoryCapture.boundary(state.segment, event)
+        const found = OpencodeMemoryCapture.boundary(state.segment, event)
+        // A user message closes the turn before it and opens a new one, with a full allowance. A boundary inside the
+        // turn past its allowance isn't one: its events stay in the segment for the turn's closing distillation.
+        const closing = event.type === "prompt" || found === "compaction"
+        if (event.type === "prompt") state.allowance = DISTILLATIONS_PER_TURN
+        const boundary = found !== undefined && !closing && state.allowance <= 0 ? undefined : found
+        if (boundary !== undefined && !closing) state.allowance--
         // A new task message starts the next segment; every other boundary event ends the one it closes.
         const closes = event.type === "prompt" && boundary === "task" ? [] : [event]
         if (boundary === undefined) {
@@ -684,8 +759,6 @@ export const make = Effect.fnUntraced(function* (
         const events = { from: state.from, to: closes.length === 0 ? at - 1 : at }
         state.segment.splice(0, state.segment.length, ...(closes.length === 0 ? [event] : []))
         state.from = closes.length === 0 ? at : at + 1
-        if (state.distillations >= MAX_DISTILLATIONS) return
-        state.distillations++
         yield* distill(sessionID, segment, boundary, events).pipe(Effect.forkIn(lease, { startImmediately: true }))
       }).pipe(Effect.catch((cause) => Effect.logDebug("failed to record a session event", { cause })))
     // Read now, so the first moment doesn't wait on Git or GitHub.
@@ -820,18 +893,53 @@ export const make = Effect.fnUntraced(function* (
       // without a message of its own. The command's result waits for Console at most the policy's timeout.
       return Effect.gen(function* () {
         yield* ran
-        const entries = yield* ask(event.sessionID, moment)
-        if (entries === undefined || entries.length === 0) return
+        const asked = yield* ask(event.sessionID, moment)
+        if (asked === undefined) return
+        const entries = asked
+        const extra = yield* unverified(event.sessionID, moment)
+        if (entries.length === 0 && extra.length === 0) return
         const ids = entries.map((entry) => `${entry.id}@${entry.revision}`)
         event.result = {
           ...event.result,
           content: [
             ...normalizeContent(event.result.content, event.result.output),
-            { type: "text", text: `\n${policy.render(entries, moment)}` },
+            ...(entries.length === 0 ? [] : [{ type: "text" as const, text: `\n${policy.render(entries, moment)}` }]),
+            ...(extra.length === 0
+              ? []
+              : [
+                  {
+                    type: "text" as const,
+                    text: `\n${[
+                      '<workspace-memory-unverified for="failure">',
+                      "Unverified: a teammate's agent recorded this at a failure like yours, and nothing has confirmed it yet. Check it before relying on it.",
+                      ...extra.map(
+                        (entry) =>
+                          `## ${entry.id} r${entry.revision} ${entry.kind}: ${entry.title}\n${entry.body.trim()}`,
+                      ),
+                      "</workspace-memory-unverified>",
+                    ].join("\n")}`,
+                  },
+                ]),
           ],
-          metadata: { ...event.result.metadata, memory: { source: "console.memory", moment: "failure", entries: ids } },
+          metadata: {
+            ...event.result.metadata,
+            memory: {
+              source: "console.memory",
+              moment: "failure",
+              entries: ids,
+              ...(extra.length === 0 ? {} : { unverified: extra.map((entry) => `${entry.id}@${entry.revision}`) }),
+            },
+          },
         }
         deliver(tracked(event.sessionID), entries)
+        extra.forEach((entry) =>
+          give(tracked(event.sessionID), {
+            id: entry.id,
+            revision: entry.revision,
+            title: entry.title,
+            text: entry.body,
+          }),
+        )
       })
     })
     // A compaction drops what was injected from the conversation, and the agent's view of entries with it.
@@ -1093,6 +1201,13 @@ export const make = Effect.fnUntraced(function* (
               ...(yield* reader),
               idempotencyKey: `${context.sessionID}:${context.id}`.slice(0, 128),
             })
+            if (published.id !== undefined)
+              give(tracked(context.sessionID), {
+                id: published.id,
+                revision: published.revision ?? 1,
+                title: input.title,
+                text: input.body,
+              })
             return {
               output: published,
               content: `Published ${published.id} r${published.revision}${published.replayed ? " (this publish was already saved)" : ""}. It's provisional until a teammate backs it: found by search, not handed to sessions.`,

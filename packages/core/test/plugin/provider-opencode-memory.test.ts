@@ -1361,6 +1361,54 @@ describe("OpencodePlugin memory standing block", () => {
   )
 })
 
+describe("OpencodePlugin memory unverified gotchas at failure (experiment)", () => {
+  const gotcha = {
+    ...hit("mem_gotcha", 0.6),
+    kind: "gotcha",
+    status: "provisional",
+    signals: { error: { rank: 1, errors: 1 }, fused: 0.6 },
+  } as unknown as ReturnType<typeof hit>
+  for (const [flags, delivered] of [
+    ["console_memory,memory_provisional_failure", true],
+    ["console_memory", false],
+  ] as const)
+    capturing(flags).effect(
+      `${delivered ? "delivers" : "doesn't deliver"} a provisional gotcha matching the failure with ${flags}`,
+      () =>
+        withConsole((console) =>
+          Effect.gen(function* () {
+            console.state.hits = [
+              { ...hit("mem_unmatched", 0.9), status: "provisional" } as ReturnType<typeof hit>,
+              gotcha,
+            ]
+            const { host } = yield* start(console)
+            const session = yield* host.session.create({})
+            yield* prompt(session.id, "Fix the tests")
+            const failed = yield* ran(
+              session.id,
+              "shell",
+              { command: "bun test" },
+              { exitCode: 1, output: "Error: DB is not defined" },
+            )
+            if (!delivered) {
+              expect(resultText(failed)).not.toContain("workspace-memory-unverified")
+              return
+            }
+            expect(resultText(failed)).toContain(
+              '<workspace-memory-unverified for="failure">\nUnverified: a teammate\'s agent recorded this at a failure like yours, and nothing has confirmed it yet. Check it before relying on it.\n## mem_gotcha r1 bug: Entry mem_gotcha',
+            )
+            expect(resultText(failed)).not.toContain("mem_unmatched")
+            expect(failed.metadata).toMatchObject({ memory: { unverified: ["mem_gotcha@1"] } })
+            expect(console.state.requests.find((item) => item.path === "/api/memory/search")?.body).toMatchObject({
+              kinds: ["gotcha"],
+              explain: true,
+              context: { errors: ["Error: DB is not defined"] },
+            })
+          }),
+        ),
+    )
+})
+
 describe("OpencodePlugin memory capture", () => {
   capturing("console_memory,memory_capture").effect(
     "logs every turn, distils at a boundary out of band, and publishes what it finds with the segment's evidence",
@@ -1497,6 +1545,73 @@ describe("OpencodePlugin memory capture", () => {
           ).toEqual({
             evidence: [{ kind: "confirmation", ref: rule }],
             source: { sessionID: session.id },
+          })
+        }),
+      ),
+  )
+
+  capturing("console_memory,memory_capture").effect(
+    "allows two in-turn distillations per user turn, and always distils at a turn's end",
+    () =>
+      withConsole((console) =>
+        Effect.gen(function* () {
+          distiller.prompts.length = 0
+          distiller.reply = ""
+          const { host } = yield* start(console)
+          const session = yield* host.session.create({})
+          const fixed = Effect.gen(function* () {
+            yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 1, output: " 1 fail" })
+            yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 0, output: " 1 pass" })
+          })
+          yield* prompt(session.id, "Fix the tests")
+          yield* fixed
+          yield* fixed
+          const settled = Effect.promise(() => Bun.sleep(300))
+          const boundaries = () => distiller.prompts.map((item) => item.match(/The boundary: (\w+)/)?.[1])
+          yield* settled
+          expect(boundaries()).toEqual(["test", "test"])
+          // A third in the same turn is over the turn's allowance.
+          yield* fixed
+          // The next message closes the turn (always distilled) and refills the allowance.
+          yield* prompt(session.id, "Now the docs")
+          yield* fixed
+          yield* settled
+          expect(boundaries()).toEqual(["test", "test", "task", "test"])
+        }),
+      ),
+  )
+
+  capturing("console_memory,memory_capture").effect(
+    "retires the entry a user-confirmed correction reverses, in the same publish",
+    () =>
+      withConsole((console) =>
+        Effect.gen(function* () {
+          const correction = "From now on we never add a trailing period to log messages"
+          distiller.reply = JSON.stringify({
+            candidates: [
+              {
+                kind: "convention",
+                title: "Log messages end without a period",
+                body: "Claim: x\nApplies when: x\nAction: x\nAvoid: x\nAnchors: x\nEvidence: the user said so",
+                basis: "user",
+                quote: correction,
+                supersedes: ["mem_1", "mem_unknown"],
+              },
+            ],
+          })
+          const { host } = yield* start(console)
+          const session = yield* host.session.create({})
+          yield* (yield* memoryTool("read")).execute({ id: "mem_1" }, context(session.id))
+          yield* prompt(session.id, correction)
+          yield* waitUntil(
+            Effect.sync(() => console.state.requests.some((item) => item.path === "/api/memory/entries")),
+          )
+          expect(distiller.prompts.at(-1)).toContain("- mem_1: Entry mem_1 — Body of mem_1")
+          // Only what the session knows is retired.
+          expect(console.state.requests.find((item) => item.path === "/api/memory/entries")?.body).toMatchObject({
+            title: "Log messages end without a period",
+            supersedes: ["mem_1"],
+            evidence: [{ kind: "confirmation", ref: correction }],
           })
         }),
       ),

@@ -76,13 +76,32 @@ export function render(segment: ReadonlyArray<Event>) {
   return kept.join("\n")
 }
 
+/** An entry the session knows (in its standing block, injected, read or published by it), which a correction may reverse. */
+export interface Known {
+  readonly id: string
+  readonly title: string
+  readonly text: string
+}
+
 /** The distiller's instructions: at most a few typed candidates, usually none. */
-export function prompt(input: { readonly segment: ReadonlyArray<Event>; readonly boundary: Boundary }) {
+export function prompt(input: {
+  readonly segment: ReadonlyArray<Event>
+  readonly boundary: Boundary
+  readonly known?: ReadonlyArray<Known>
+}) {
   return [
     "You read the record of a coding agent's work since its last work boundary and propose lessons for the team's shared memory. Most records yield nothing: then answer {\"candidates\": []}.",
     "Propose only a verified, non-obvious finding that an agent on a DIFFERENT task in this repository would need, as it holds for the repository as committed: a cause found behind a failure, a dead end and why, a command or setting the repository needs, a team rule, decision or correction the user stated. Use only what the record shows; never guess. Never: task status or a summary of the change, what the code or docs already say, facts about this machine, files the agent added and didn't commit, secrets.",
     'The user\'s task requests are not lessons: what they asked for in this task (add this, fix that, make the tests pass, commit your change) and what this task required hold for this task only; never record them. basis "user" is only for a durable team rule, decision or correction the user stated, one that holds for future work in this repository, with their exact words in quote. Everything else is basis "observed".',
     'Answer only JSON: {"candidates": [{"kind": "bug|convention|procedure|gotcha|decision|failed-approach", "title": "...", "body": "...", "paths": ["repository-relative paths"], "errors": ["exact error messages"], "basis": "user|observed", "quote": "the user\'s exact words, for basis user"}]}, at most 2. Each body has these lines: Claim: / Applies when: / Action: / Verify: (or Avoid:) / Anchors: / Evidence:.',
+    ...((input.known ?? []).length === 0
+      ? []
+      : [
+          'Entries already in the shared memory that this session knows. When the user\'s correction reverses or replaces one of them, name it in "supersedes": ["<id>"] on the new candidate; never propose a candidate that repeats one.',
+          (input.known ?? [])
+            .map((entry) => `- ${entry.id}: ${entry.title} — ${entry.text.split("\n")[0]?.slice(0, 200) ?? ""}`)
+            .join("\n"),
+        ]),
     `The boundary: ${input.boundary}.`,
     "The record:",
     render(input.segment),
@@ -97,6 +116,7 @@ const Candidate = Schema.Struct({
   errors: Schema.optional(Schema.Array(Schema.String)),
   basis: Schema.optional(Schema.Literals(["user", "observed"])),
   quote: Schema.optional(Schema.String),
+  supersedes: Schema.optional(Schema.Array(Schema.String)),
 })
 export type Candidate = typeof Candidate.Type
 const Distilled = Schema.Struct({ candidates: Schema.Array(Schema.Unknown) })
