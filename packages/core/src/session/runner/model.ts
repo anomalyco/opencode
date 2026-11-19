@@ -7,6 +7,7 @@ import { Provider } from "@opencode/schema/provider"
 import { Context, Effect, Layer, Schema } from "effect"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { Agent } from "../../agent.js"
+import { Flag } from "../../flag.js"
 import { ModelResolver } from "../../model-resolver.js"
 import { PluginHooks } from "../../plugin/hooks.js"
 import { SessionSchema } from "../schema.js"
@@ -84,6 +85,7 @@ const layer = Layer.effect(
     const resolver = yield* ModelResolver.Service
     const agents = yield* Agent.Service
     const hooks = yield* PluginHooks.Service
+    const flags = yield* Flag.Service
     // Location plugins populate and filter the catalog asynchronously during layer startup.
     const select = Effect.fn("SessionRunnerModel.select")(function* (
       session: SessionSchema.Info,
@@ -105,34 +107,57 @@ const layer = Layer.effect(
       if (info) return { info, variant: undefined }
       return yield* new ModelNotSelectedError({ sessionID: session.id })
     })
+    const resolve = Effect.fn("SessionRunnerModel.resolve")(function* (
+      session: SessionSchema.Info,
+      available: () => Effect.Effect<ReadonlyArray<Model.Info>>,
+      request: { readonly kind: SessionRequestKind; readonly agent: Agent.ID },
+    ) {
+      const selected = yield* select(session, available)
+      const ref = Model.Ref.make({
+        providerID: selected.info.providerID,
+        id: selected.info.id,
+        ...(selected.variant === undefined ? {} : { variant: selected.variant }),
+      })
+      const model = (yield* hooks.trigger("session", "experimental.model.resolve", {
+        sessionID: session.id,
+        agent: request.agent,
+        kind: request.kind,
+        model: ref,
+      })).model
+      if (model.providerID === ref.providerID && model.id === ref.id && model.variant === ref.variant)
+        return yield* resolver.resolveModel(selected.info, selected.variant)
+      // Same provider only: the model may be hidden from the picker, and its credentials and hooks stay the selection's.
+      const resolved = model.providerID === ref.providerID ? yield* resolver.resolve(model) : undefined
+      if (resolved) return resolved
+      return yield* new ModelUnavailableError({ providerID: model.providerID, modelID: model.id })
+    })
     return Service.of({
       select,
-      resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session, available, request) {
-        const selected = yield* select(session, available)
-        const ref = Model.Ref.make({
-          providerID: selected.info.providerID,
-          id: selected.info.id,
-          ...(selected.variant === undefined ? {} : { variant: selected.variant }),
-        })
-        const model = (yield* hooks.trigger("session", "experimental.model.resolve", {
-          sessionID: session.id,
-          agent: request.agent,
-          kind: request.kind,
-          model: ref,
-        })).model
-        if (model.providerID === ref.providerID && model.id === ref.id && model.variant === ref.variant)
-          return yield* resolver.resolveModel(selected.info, selected.variant)
-        // Same provider only: the model may be hidden from the picker, and its credentials and hooks stay the selection's.
-        const resolved = model.providerID === ref.providerID ? yield* resolver.resolve(model) : undefined
-        if (resolved) return resolved
-        return yield* new ModelUnavailableError({ providerID: model.providerID, modelID: model.id })
-      }),
+      resolve: (session, available, request) =>
+        Effect.all([resolve(session, available, request), flags.enabled("tool_updates")]).pipe(
+          Effect.map(([resolved, toolUpdates]) => (toolUpdates ? resolved : withoutToolUpdates(resolved))),
+        ),
     })
   }),
 )
 
+// Without the `tool_updates` flag, every step sends the current tools at the top level, as before tool changes were
+// sent in place: nothing is recorded and the AI package folds.
+const withoutToolUpdates = (resolved: Resolved): Resolved =>
+  resolved.model.capabilities?.tools?.updates === undefined
+    ? resolved
+    : {
+        ...resolved,
+        model: LanguageModel.update(resolved.model, {
+          capabilities: {
+            ...resolved.model.capabilities,
+            tools: { ...resolved.model.capabilities.tools, updates: [] },
+          },
+        }),
+      }
+
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [ModelResolver.node, Agent.node, PluginHooks.node],
+  deps: [ModelResolver.node, Agent.node, PluginHooks.node, Flag.node],
 })

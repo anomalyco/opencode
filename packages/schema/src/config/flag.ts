@@ -20,6 +20,8 @@ export const registry = {
   mcp_events:
     "Enable experimental MCP Events, a draft MCP extension: declare support to MCP servers and read the events of servers that offer them.",
   full_codemode: "Enable the full Code Mode work in progress.",
+  tool_updates:
+    "Send mid-session tool changes in place on models that support it, so the prompt cache survives tools being added, removed or redefined.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry
 
