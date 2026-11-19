@@ -115,6 +115,18 @@ describe("getters crossing to the host", () => {
     expect(calls).toEqual([[{ p: { q: 3 } }]])
   })
 
+  test("with promises: await, a sync call inside a generator or the result's getters waits there", async () => {
+    const { runtime, calls } = translating({ promises: "await" })
+    expect(
+      await value(
+        runtime,
+        `function* g() { yield keep(later(1)) }
+        return [[...g()], { get x() { return keep(later(2)) } }]`,
+      ),
+    ).toEqual([[1], { x: 1 }])
+    expect(calls).toEqual([[1], [2]])
+  })
+
   test("functions: drop applies to a getter's value", async () => {
     const { runtime, calls } = translating({ functions: "drop" })
     await value(runtime, `keep({ get f() { return () => 1 }, a: 1 })`)

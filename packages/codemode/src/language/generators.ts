@@ -275,6 +275,11 @@ export const execResume = (frame: Frame, bx: number, pc: number, sp: number): nu
   return pc + 1
 }
 
+const synchronous = (frame: Frame): boolean =>
+  frame.mode === Mode.CALLER ||
+  frame.mode === Mode.REDO ||
+  (frame.mode === Mode.GENERATOR && !(frame.target as GeneratorObj).asynchronous)
+
 export const execAwait = (vm: Vm, frame: Frame, a: number, pc: number, sp: number): void => {
   const v = frame.regs[--sp] as Value
   frame.pc = pc
@@ -283,10 +288,9 @@ export const execAwait = (vm: Vm, frame: Frame, a: number, pc: number, sp: numbe
   const site = a === 1 ? undefined : frame.code.siteAt(pc)
   frame.pc = pc + 1
   let bIdx = vm.frames.length - 1
-  // A getter an iterator op runs (`Mode.REDO`) is synchronous code inside the op's frame, so the await takes both.
-  while (bIdx > 0 && (vm.frames[bIdx]!.mode === Mode.CALLER || vm.frames[bIdx]!.mode === Mode.REDO)) {
-    bIdx--
-  }
+  // Only `$vmHostWait` awaits under synchronous code (a host call waiting on its arguments): a getter an iterator op
+  // runs (`Mode.REDO`) and a synchronous generator's body run inside their caller's job, so the await parks it all.
+  while (bIdx > 0 && synchronous(vm.frames[bIdx]!)) bIdx--
   const cut = vm.frames.splice(bIdx)
   for (const f of cut) {
     if (f.counted) vm.depth--
