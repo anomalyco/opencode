@@ -112,7 +112,7 @@ describe("CommandPlugin.Plugin", () => {
       })
       expect(prompts).toEqual([
         {
-          text: PROMPT_INITIALIZE.replace("${path}", project).replaceAll("$ARGUMENTS", "extra context"),
+          text: PROMPT_INITIALIZE.replace("${path}", directory).replaceAll("$ARGUMENTS", "extra context"),
           files: [{ uri: "file:///tmp/context.md" }],
           delivery: "queue",
         },
@@ -122,7 +122,7 @@ describe("CommandPlugin.Plugin", () => {
           delivery: "steer",
         },
         {
-          text: PROMPT_INITIALIZE.replace("${path}", project).replaceAll("$ARGUMENTS", ""),
+          text: PROMPT_INITIALIZE.replace("${path}", directory).replaceAll("$ARGUMENTS", ""),
           files: undefined,
           delivery: "steer",
         },
