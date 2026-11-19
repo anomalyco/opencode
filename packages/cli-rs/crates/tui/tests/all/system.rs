@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use opencode_local::cli_config::Info;
-use opencode_parity::{Fixture, compare, fixtures_dir};
+use opencode_parity::{Fixture, fixtures_dir};
 use opencode_plugin::abi;
 use opencode_tui::dialogs::highlights::Highlight;
 use opencode_tui::dialogs::{pair, settings, status, theme_list};
@@ -78,36 +78,13 @@ fn assert_dialog(app: &TestApp, name: &str, title: &str) {
 
 fn dialog_diff(app: &TestApp, name: &str, title: &str) -> Result<(), String> {
     let expected = Fixture::load(fixtures_dir().join(format!("{name}.json"))).unwrap();
-    let mut actual = Fixture::from_capture(&app.render());
     let titled = (0..expected.height).any(|y| {
         let row: String = (0..expected.width).map(|x| expected.cell(x, y).unwrap().symbol.clone()).collect();
         row.contains(title)
     });
     assert!(titled, "{title:?} is not in {name}");
     let backdrop = expected.cell(0, 0).unwrap().bg;
-    let inside: Vec<(u32, u32)> = (0..expected.height)
-        .flat_map(|y| (0..expected.width).map(move |x| (x, y)))
-        .filter(|&(x, y)| expected.cell(x, y).unwrap().bg != backdrop)
-        .collect();
-    let (left, right) = (inside.iter().map(|p| p.0).min().unwrap(), inside.iter().map(|p| p.0).max().unwrap());
-    let (top, bottom) = (inside.iter().map(|p| p.1).min().unwrap(), inside.iter().map(|p| p.1).max().unwrap());
-    for y in 0..expected.height {
-        for x in 0..expected.width {
-            if !(left..=right).contains(&x) || !(top..=bottom).contains(&y) {
-                *actual.cell_mut(x, y).unwrap() = expected.cell(x, y).unwrap().clone();
-            }
-        }
-    }
-    let comparison = compare(&expected, &actual);
-    if !comparison.is_equal() {
-        let path = std::env::temp_dir().join("opencode-parity").join(format!("{name}.json"));
-        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        std::fs::write(&path, actual.to_json()).unwrap();
-    }
-    if comparison.is_equal() {
-        return Ok(());
-    }
-    Err(format!("P-COMP {name} (panel {left}..={right} x {top}..={bottom}): {comparison}"))
+    support::panel_diff(app, name, &expected, |cell| cell.bg != backdrop)
 }
 
 fn theme(tui: &Tui) -> String {
