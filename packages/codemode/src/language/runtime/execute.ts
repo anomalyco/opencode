@@ -483,7 +483,12 @@ const decodeAcornError = Schema.decodeUnknownOption(AcornError)
 const parseDiagnostic = (error: typeof AcornError.Type): Diagnostic => {
   const location = { line: error.loc.line, column: error.loc.column + 1 }
   const reason = error.message.replace(/ \(\d+:\d+\)$/, "")
-  const text = `${reason.endsWith(".") ? reason : `${reason}.`} Code must be plain JavaScript written as a program body.`
+  const feature = reason === "Unexpected character '@'"
+    ? "Decorators are not supported."
+    : /^Private field '#/.test(reason)
+      ? "Private class members (#name) are not supported. Use a regular property instead."
+      : undefined
+  const text = feature ?? `${reason.endsWith(".") ? reason : `${reason}.`} Code must be plain JavaScript written as a program body.`
   return { kind: "ParseError", message: `SyntaxError: ${text}${formatLocation(location)}`, location }
 }
 
