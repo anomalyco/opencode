@@ -48,14 +48,17 @@ impl Kind {
 #[derive(Default)]
 pub struct Parts {
     marks: RefCell<Vec<(ExtmarkId, Kind, usize)>>,
-    /// Keep removed paste data by mark ID so undo and redo can restore it.
+    /// The parts of removed chips by mark ID, so undo and redo can restore them (TS keeps a chip's part as its
+    /// extmark data, `ChipData`).
     dropped: RefCell<Vec<Dropped>>,
 }
 
 struct Dropped {
     id: ExtmarkId,
+    kind: Kind,
+    /// The chip's text, which the restored mark must cover.
     label: String,
-    text: String,
+    part: Value,
 }
 
 impl Parts {
@@ -176,30 +179,31 @@ pub fn sync(prompt: &Inner) {
     let mut mapped = prompt.parts.marks.borrow().clone();
     let mut info = prompt.prompt.borrow_mut();
     let mut dropped = prompt.parts.dropped.borrow_mut();
-    let gone = mapped.iter().filter(|(id, kind, _)| *kind == Kind::Pasted && !marks.iter().any(|mark| mark.id == *id));
-    dropped.extend(gone.filter_map(|&(id, _, index)| {
-        let paste = &info[Kind::Pasted.key()][index];
-        Some(Dropped {
-            id,
-            label: paste["source"]["text"].as_str()?.to_owned(),
-            text: paste["text"].as_str()?.to_owned(),
-        })
+    let gone = mapped.iter().filter(|(id, _, _)| !marks.iter().any(|mark| mark.id == *id));
+    dropped.extend(gone.filter_map(|&(id, kind, index)| {
+        let part = info[kind.key()].get(index)?.clone();
+        Some(Dropped { id, kind, label: part[kind.range()]["text"].as_str()?.to_owned(), part })
     }));
-    // Undo and redo bring back a removed paste's mark with its id; it is the paste again while its label is there.
+    // Undo and redo bring back a removed chip's mark with its id; it is the chip again while its text is there
+    // (`rebindChip`). A file attached again since keeps its own part: the restored chip moves no mention.
     for mark in &marks {
-        let Some(at) = dropped.iter().position(|paste| paste.id == mark.id) else { continue };
+        let Some(at) = dropped.iter().position(|chip| chip.id == mark.id) else { continue };
         if prompt.textarea.buffer().range(mark.start, mark.end).unwrap_or_default() != dropped[at].label {
             continue;
         }
-        let paste = dropped.remove(at);
-        if !info[Kind::Pasted.key()].is_array() {
-            info[Kind::Pasted.key()] = json!([]);
+        let chip = dropped.remove(at);
+        let attached = |list: &Value| {
+            list.as_array().is_some_and(|files| files.iter().any(|file| file["uri"] == chip.part["uri"]))
+        };
+        if chip.kind == Kind::File && attached(&info[Kind::File.key()]) {
+            continue;
         }
-        let Some(pasted) = info[Kind::Pasted.key()].as_array_mut() else { continue };
-        pasted.push(
-            json!({ "text": paste.text, "source": { "start": mark.start, "end": mark.end, "text": paste.label } }),
-        );
-        mapped.push((mark.id, Kind::Pasted, pasted.len() - 1));
+        if !info[chip.kind.key()].is_array() {
+            info[chip.kind.key()] = json!([]);
+        }
+        let Some(list) = info[chip.kind.key()].as_array_mut() else { continue };
+        list.push(chip.part);
+        mapped.push((mark.id, chip.kind, list.len() - 1));
     }
     drop(dropped);
     let mut lists: [Vec<(Option<ExtmarkId>, Value)>; 4] = Default::default();

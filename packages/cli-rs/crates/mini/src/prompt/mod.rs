@@ -115,6 +115,9 @@ struct State {
     parts: Vec<Part>,
     /// Each mark and the part it stands for.
     marks: Vec<(ExtmarkId, usize)>,
+    /// The part each mark was made for, TS's extmark `data`: undo brings back a deleted chip's mark after its part
+    /// left `parts`, and the chip gets its part back.
+    chips: HashMap<ExtmarkId, Part>,
     /// A server command a restored prompt named (`draft.command`).
     command: Option<Command>,
     mode: Option<Mode>,
@@ -673,14 +676,22 @@ impl Inner {
         let mut current = self.textarea.extmarks();
         current.sort_by_key(|mark| mark.id);
         for mark in current {
-            let Some(&(_, index)) = marks.iter().find(|(id, _)| *id == mark.id) else { continue };
-            let Some(part) = parts.get(index) else { continue };
+            let index = marks.iter().find(|(id, _)| *id == mark.id).map(|&(_, index)| index);
+            let part = match index {
+                Some(index) => parts.get(index).cloned(),
+                None => self.state.borrow().chips.get(&mark.id).cloned(),
+            };
+            let Some(part) = part else { continue };
             let text = self.range(mark.start, mark.end);
             if part.mention().map(|mention| mention.text.as_str()) != Some(text.as_str()) {
                 continue;
             }
-            let mut copy = part.clone();
+            let mut copy = part;
             copy.set_mention(Mention { start: mark.start, end: mark.end, text });
+            let Some(index) = index else {
+                next.push(Some(copy));
+                continue;
+            };
             tracked += 1;
             next[index] = Some(copy);
         }
@@ -704,8 +715,11 @@ impl Inner {
                 let id = self.textarea.add_extmark(mention.start..mention.end, ExtmarkOptions::default().atomic());
                 Some((id, index))
             })
-            .collect();
+            .collect::<Vec<_>>();
         let mut state = self.state.borrow_mut();
+        for &(id, index) in &marks {
+            state.chips.insert(id, parts[index].clone());
+        }
         state.parts = parts;
         state.marks = marks;
     }
@@ -748,6 +762,7 @@ impl Inner {
             let mut state = self.state.borrow_mut();
             state.parts.clear();
             state.marks.clear();
+            state.chips.clear();
             state.command = None;
         }
         self.hide();
@@ -987,6 +1002,7 @@ impl Inner {
                     let mut state = self.state.borrow_mut();
                     let index = state.parts.len();
                     state.marks.push((mark, index));
+                    state.chips.insert(mark, part.clone());
                     state.parts.push(part);
                 }
                 self.hide();
@@ -1355,14 +1371,16 @@ impl Inner {
         let mime = uri.strip_prefix("data:").and_then(|rest| rest.split(';').next()).map(str::to_owned);
         let mut state = self.state.borrow_mut();
         let index = state.parts.len();
-        state.marks.push((mark, index));
-        state.parts.push(Part::File(File {
+        let part = Part::File(File {
             url: uri.to_owned(),
             mime,
             filename: filename.map(str::to_owned),
             description: None,
             mention: Some(Mention { start, end, text: label }),
-        }));
+        });
+        state.marks.push((mark, index));
+        state.chips.insert(mark, part.clone());
+        state.parts.push(part);
     }
 
     fn pasted(&self) {
@@ -1649,6 +1667,31 @@ mod tests {
             let typed = if completes { "" } else { "z" };
             assert_eq!((ran.get(), prompt.value().as_str()), (completes, typed), "{config} after {wait} ms");
         }
+    }
+
+    /// Undo brings back a deleted chip and its part (`syncParts` reads the mark's data, #63989).
+    #[test]
+    fn undo_brings_back_a_deleted_chip_with_its_part() {
+        let theme = crate::theme::resolve(&crate::theme::ThemeInput::default());
+        let app = opentui::testing::TestApp::new(40, 12);
+        let info = opencode_local::cli_config::decode_text("{}").unwrap();
+        let prompt = Prompt::new(&app, &theme, false, &info);
+        app.root().add(prompt.root());
+        prompt.install();
+        prompt.focus();
+        let mention = Mention { start: 4, end: 12, text: "@general".into() };
+        let part = Part::Agent { name: "general".into(), mention: Some(mention) };
+        prompt.0.restore(
+            &RunPrompt { text: "ask @general".into(), parts: vec![part.clone()], ..RunPrompt::default() },
+            None,
+        );
+        app.press("backspace");
+        let deleted = prompt.0.current();
+        assert_eq!((deleted.text.as_str(), deleted.parts.len()), ("ask ", 0));
+        app.press("super+z");
+        let restored = prompt.0.current();
+        assert_eq!(restored.text, "ask @general");
+        assert_eq!(restored.parts, [part]);
     }
 
     #[test]

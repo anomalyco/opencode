@@ -335,9 +335,9 @@ fn a_mention_keeps_its_part_through_a_theme_switch() {
     );
 }
 
-// Undo restores the mention's text but not the removed attachment.
+// Undo restores the mention and its attachment (#63989's `rebindChip`).
 #[test]
-fn undo_brings_a_mention_back_as_text() {
+fn undo_brings_a_mention_back_with_its_attachment() {
     let setup = Setup::new();
     setup.app.type_text("ask @gen");
     setup.wait_for("@general");
@@ -356,7 +356,10 @@ fn undo_brings_a_mention_back_as_text() {
     setup.app.press("return");
     let sent = setup.wait_request("POST", "/api/session/ses_a/prompt", 1);
     assert_eq!(sent[0].1["text"], "ask @general ");
-    assert_eq!(sent[0].1["agents"], json!([]));
+    assert_eq!(
+        sent[0].1["agents"],
+        json!([{ "name": "general", "mention": { "start": 4, "end": 12, "text": "@general" } }])
+    );
 }
 
 #[test]
