@@ -12,6 +12,7 @@ use super::{
 use crate::core::geometry::{Bounds, Point, orthogonal_path_points};
 use crate::core::spatial::{Clearance, ClearancePolicy, Policy, Role, SpatialIndex, path_claim, rect_claim};
 use crate::core::text::{js_trim, measure_text_box, split_lines, width};
+use crate::flowchart::types::FlowDirection;
 
 const MAX_STRICT_NOTE_PLACEMENTS: usize = 24;
 
@@ -291,7 +292,7 @@ fn vertical(diagram: &Diagram, min_gap: i32) -> Layout {
     let mut by_rank: IndexMap<i32, Vec<&State>> = IndexMap::new();
     for state in &diagram.states {
         let rank = ranks.get(&state.id).copied().unwrap_or(0);
-        let rank = if diagram.direction == super::StateDirection::BT { max_rank - rank } else { rank };
+        let rank = if diagram.direction == FlowDirection::BT { max_rank - rank } else { rank };
         by_rank.entry(rank).or_default().push(state);
     }
     let mut keys: Vec<i32> = by_rank.keys().copied().collect();
@@ -441,7 +442,7 @@ fn horizontal(diagram: &Diagram, min_gap: i32) -> Layout {
             arena[i].center_x -= min_x;
         }
     }
-    if diagram.direction == super::StateDirection::RL {
+    if diagram.direction == FlowDirection::RL {
         let right = bounds.values().map(|&i| arena[i].left + arena[i].width).fold(0, i32::max);
         for &i in bounds.values() {
             let b = &mut arena[i];

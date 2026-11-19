@@ -7,32 +7,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::core::geometry::Point;
 use crate::core::spatial::{Role, SpatialIndex};
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum StateDirection {
-    TB,
-    TD,
-    BT,
-    LR,
-    RL,
-}
-
-impl StateDirection {
-    pub fn parse(value: &str) -> Option<Self> {
-        Some(match value.to_ascii_uppercase().as_str() {
-            "TB" => Self::TB,
-            "TD" => Self::TD,
-            "BT" => Self::BT,
-            "LR" => Self::LR,
-            "RL" => Self::RL,
-            _ => return None,
-        })
-    }
-
-    pub fn horizontal(self) -> bool {
-        matches!(self, Self::LR | Self::RL)
-    }
-}
+use crate::flowchart::types::FlowDirection;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StateKind {
@@ -79,7 +54,7 @@ pub struct Note {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Diagram {
-    pub direction: StateDirection,
+    pub direction: FlowDirection,
     pub states: Vec<State>,
     pub transitions: Vec<Transition>,
     pub composites: Vec<Composite>,
