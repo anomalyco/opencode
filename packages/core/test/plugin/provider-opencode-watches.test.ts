@@ -583,9 +583,34 @@ describe("OpencodePlugin event watches", () => {
         yield* waitUntil(Effect.sync(() => console.state.opens === 1))
         for (const index of Array.from({ length: 21 }, (_, index) => index)) {
           yield* deliver(console, watchEvent(session.id, `evt_${index}`))
-          yield* TestClock.adjust("3 minutes")
+          yield* TestClock.adjust("7 minutes")
         }
         expect(wakes.map((wake) => wake.resume)).toEqual([...Array.from({ length: 20 }, () => true), false])
+      }),
+    ),
+  )
+
+  it.effect("resumes a held session with a new update after 30 quiet minutes, but not with the held one replayed", () =>
+    withConsole({}, (console) =>
+      Effect.gen(function* () {
+        const { host, wakes, replays } = yield* start(console)
+        const session = yield* host.session.create({})
+        yield* waitUntil(Effect.sync(() => console.state.opens === 1))
+        for (const index of Array.from({ length: 20 }, (_, index) => index)) {
+          yield* deliver(console, watchEvent(session.id, `evt_${index}`))
+          yield* TestClock.adjust("7 minutes")
+        }
+        // The held update's acknowledgement is lost until 30 minutes on, so each connection's snapshot replays it.
+        console.state.lose = 3
+        console.push(watchEvent(session.id, "evt_held"))
+        yield* waitUntil(Effect.sync(() => console.state.lose === 2))
+        for (const replayed of [1, 2, 3]) {
+          yield* TestClock.adjust("10 minutes")
+          console.state.sockets.forEach((socket) => socket.close(OpencodeWatches.LEASE_CLOSE_CODE, "lease"))
+          yield* waitUntil(Effect.sync(() => replays.length === replayed))
+        }
+        yield* deliver(console, watchEvent(session.id, "evt_new"))
+        expect(wakes.map((wake) => wake.resume)).toEqual([...Array.from({ length: 20 }, () => true), false, true])
       }),
     ),
   )
