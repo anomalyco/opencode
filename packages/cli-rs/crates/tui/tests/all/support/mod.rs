@@ -380,6 +380,38 @@ pub fn xdg_paths(home: &Path) -> Paths {
         .unwrap()
 }
 
+/// Compares the screen with the P-COMP fixture `name` inside the bounding box of the fixture cells `inside` picks; the
+/// cells outside it are taken from the fixture. A mismatch writes the screen to `<temp>/opencode-parity/<name>.json`.
+pub fn panel_diff(
+    app: &TestApp,
+    name: &str,
+    expected: &opencode_parity::Fixture,
+    inside: impl Fn(&opentui::native::Cell) -> bool,
+) -> Result<(), String> {
+    let mut actual = opencode_parity::Fixture::from_capture(&app.render());
+    let inside: Vec<(u32, u32)> = (0..expected.height)
+        .flat_map(|y| (0..expected.width).map(move |x| (x, y)))
+        .filter(|&(x, y)| inside(expected.cell(x, y).unwrap()))
+        .collect();
+    let (left, right) = (inside.iter().map(|p| p.0).min().unwrap(), inside.iter().map(|p| p.0).max().unwrap());
+    let (top, bottom) = (inside.iter().map(|p| p.1).min().unwrap(), inside.iter().map(|p| p.1).max().unwrap());
+    for y in 0..expected.height {
+        for x in 0..expected.width {
+            if !(left..=right).contains(&x) || !(top..=bottom).contains(&y) {
+                *actual.cell_mut(x, y).unwrap() = expected.cell(x, y).unwrap().clone();
+            }
+        }
+    }
+    let comparison = opencode_parity::compare(expected, &actual);
+    if comparison.is_equal() {
+        return Ok(());
+    }
+    let path = std::env::temp_dir().join("opencode-parity").join(format!("{name}.json"));
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(&path, actual.to_json()).unwrap();
+    Err(format!("P-COMP {name} (panel {left}..={right} x {top}..={bottom}): {comparison}"))
+}
+
 /// Run one reference configuration operation in `home`, or return `None` without the TypeScript test dependencies.
 pub fn ts_config(home: &Path, op: Value) -> Option<Value> {
     let root = ts_root()?.canonicalize().unwrap();
