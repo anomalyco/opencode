@@ -5,8 +5,9 @@ use std::path::Path;
 use serde_json::Value;
 
 use crate::args::{Shell, Spec};
-use crate::help::{self, strip};
+use crate::help;
 use crate::parse::{self, Outcome};
+use crate::prompt::wrap::strip;
 use crate::{completions, tests::lines_diff};
 
 const PROGRAM: &str = "opencode";
