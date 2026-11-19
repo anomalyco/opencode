@@ -30,9 +30,10 @@ export const notices = [
     detail: undefined,
     detailKey: "settings.about.notices.nerdFonts" as const,
     url: "https://github.com/ryanoasis/nerd-fonts",
-    license: "MIT, CC BY 4.0, Apache License 2.0, SIL Open Font License 1.1",
+    license: "MIT, CC BY 4.0, Apache License 2.0, SIL Open Font License 1.1, The Unlicense",
     notice: nerdFontsNotice.trim(),
-    // The license files the patcher ships; Material Design Icons names the Apache License 2.0 without its text.
+    // Each set's license file from its own repository, with the commit it came from. Material Design Icons names the
+    // Apache License 2.0 without its text.
     text: `${nerdFontsLicenses.trim()}\n\n${apache}`,
   },
   {

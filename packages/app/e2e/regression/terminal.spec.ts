@@ -44,9 +44,10 @@ test("restores a terminal from the server's snapshot after a reload", async ({ p
 
 test("draws terminal icons whose font file arrives after the first paint", async ({ page }) => {
   // The Nerd Fonts icons are a font file of their own, which loads when a terminal opens.
-  const icons = await holdRoute(page, /\/assets\/OpenMono-icons[^/]*\.woff2/)
-  // A folder icon on the first row, with the cursor, which the terminal redraws by itself, on the last one.
-  await openSession(page, {
+  const icons = await holdRoute(page, /OpenMono-icons[^/]*\.woff2/)
+
+  // A folder icon on the first row, with the cursor, whose row the terminal redraws by itself, on the last one.
+  const { persistentPty } = await openSession(page, {
     name: "Terminals",
     persistentPty: {
       initial: [{ id: "pty_icons", sessionID: SESSION, title: "Build", output: "ls \uf07b\x1b[999;1H" }],
@@ -57,23 +58,34 @@ test("draws terminal icons whose font file arrives after the first paint", async
   await showTerminal(page, "Build", "pty_icons")
   await icons.arrived
 
-  // What the first row shows: undefined while it is blank, else a checksum of its pixels.
-  const row = () =>
+  // What the first cells of a row show: undefined while they are blank, else a checksum of their pixels.
+  const row = (index: number) =>
     terminalScreen(page, "pty_icons")
       .locator("canvas")
-      .evaluate((canvas: HTMLCanvasElement) => {
-        const pixels = canvas.getContext("2d")!.getImageData(0, 0, 80, 12).data
+      .evaluate(
+        (canvas: HTMLCanvasElement, input) => {
+          const height = Math.round(canvas.height / input.rows)
+          const pixels = canvas.getContext("2d")!.getImageData(0, input.index * height, 80, height).data
 
-        if (pixels.every((value, index) => value === pixels[index % 4])) return
+          if (pixels.every((value, index) => value === pixels[index % 4])) return
 
-        return pixels.reduce((sum, value) => (sum * 31 + value) >>> 0, 0)
-      })
+          return pixels.reduce((sum, value) => (sum * 31 + value) >>> 0, 0)
+        },
+        { index, rows: persistentPty.terminals[0]!.size.rows },
+      )
 
-  await expect.poll(row).toBeDefined()
-  const fallback = await row()
+  await expect.poll(() => row(0)).toBeDefined()
+  const fallback = await row(0)
   icons.release()
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
 
-  await expect.poll(row).not.toBe(fallback)
+  // The same text on the third row, first drawn with the file loaded, is what the first row must now show.
+  persistentPty.output("pty_icons", "\x1b[3;1Hls \uf07b\x1b[999;1H")
+  await expect.poll(() => row(2)).toBeDefined()
+  const loaded = await row(2)
+  expect(loaded).not.toBe(fallback)
+
+  await expect.poll(() => row(0)).toBe(loaded)
 })
 
 test("after a reload, the close shortcut closes the restored terminal", async ({ page }) => {

@@ -27,13 +27,14 @@
 /* OpenMono, the code and terminal font: the app build of OpenMono Nerd 1.000, which has no ligatures and every
    character one cell wide (script/openmono.ts copies it; SIL OFL 1.1, /assets/OpenMono-OFL.txt). These faces take the
    name ahead of an installed OpenMono, which has ligatures. Regular covers every weight below bold, so only bold
-   syntax tokens, markup and terminal cells load the Bold file.
+   syntax tokens, markup and terminal cells load the Bold file. The files are in src so that the bundler puts a content
+   hash in each URL: the web server lets a browser keep every file but the page for a year.
    The overrides are the font's typographic line metrics (ascender 965, descender 285, no gap; 1.25 em). macOS reads the
    files' hhea table instead (descender 220, gap 65), which makes inline code backgrounds and terminal rows 17px tall,
    not 18px. Remove them if the font's hhea table ever matches its typographic metrics. */
 @font-face {
   font-family: "OpenMono";
-  src: url("/assets/OpenMono-Regular-text.woff2") format("woff2");
+  src: url("./assets/fonts/OpenMono-Regular-text.woff2") format("woff2");
   font-weight: 100 599;
   font-style: normal;
   font-display: swap;
@@ -47,7 +48,7 @@
 
 @font-face {
   font-family: "OpenMono";
-  src: url("/assets/OpenMono-Bold-text.woff2") format("woff2");
+  src: url("./assets/fonts/OpenMono-Bold-text.woff2") format("woff2");
   font-weight: 600 900;
   font-style: normal;
   font-display: swap;
@@ -61,7 +62,7 @@
 
 @font-face {
   font-family: "OpenMono";
-  src: url("/assets/OpenMono-Italic-text.woff2") format("woff2");
+  src: url("./assets/fonts/OpenMono-Italic-text.woff2") format("woff2");
   font-weight: 100 599;
   font-style: italic;
   font-display: swap;
@@ -78,7 +79,7 @@
    would take its icons from another font. */
 @font-face {
   font-family: "OpenMono";
-  src: url("/assets/OpenMono-icons.woff2") format("woff2");
+  src: url("./assets/fonts/OpenMono-icons.woff2") format("woff2");
   font-weight: 100 599;
   font-style: normal;
   font-display: swap;
@@ -92,7 +93,7 @@
 
 @font-face {
   font-family: "OpenMono";
-  src: url("/assets/OpenMono-icons.woff2") format("woff2");
+  src: url("./assets/fonts/OpenMono-icons.woff2") format("woff2");
   font-weight: 600 900;
   font-style: normal;
   font-display: swap;
@@ -106,7 +107,7 @@
 
 @font-face {
   font-family: "OpenMono";
-  src: url("/assets/OpenMono-icons.woff2") format("woff2");
+  src: url("./assets/fonts/OpenMono-icons.woff2") format("woff2");
   font-weight: 100 599;
   font-style: italic;
   font-display: swap;

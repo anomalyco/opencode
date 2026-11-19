@@ -554,8 +554,18 @@ export const Terminal = (props: TerminalProps) => {
 
     // The canvas keeps what it drew, so a character drawn before its font file arrived stays a fallback glyph until
     // its row changes: the icons and the bold and italic styles are files of their own, which load on first use.
-    // Setting the theme is the emulator's full redraw.
-    const redraw = () => setOptionIfSupported(t, "theme", { ...terminalColors() })
+    // When a file of one of the terminal's families arrives, draw every row again.
+    const redraw = (event: FontFaceSetLoadEvent) => {
+      const families = fontFamilies(appearance.font("mono"))
+
+      if (!event.fontfaces.some((face) => fontFamilies(face.family).some((family) => families.includes(family)))) return
+
+      if (!t.renderer || !t.wasmTerm) return
+
+      // The scrollbar fades on the emulator's own frames, so this pass draws none.
+      t.renderer.render(t.wasmTerm, true, t.viewportY, t, 0)
+    }
+
     document.fonts.addEventListener("loadingdone", redraw)
     handles.cleanups.push(() => document.fonts.removeEventListener("loadingdone", redraw))
 
@@ -655,5 +665,15 @@ export const Terminal = (props: TerminalProps) => {
         )}
       </Show>
     </>
+  )
+}
+
+/** The family names of a CSS `font-family` value, without quotes and in lower case, as CSS compares them. */
+function fontFamilies(value: string) {
+  return value.split(",").map((family) =>
+    family
+      .trim()
+      .replace(/^(["'])(.*)\1$/, "$2")
+      .toLowerCase(),
   )
 }
