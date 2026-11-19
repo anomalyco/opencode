@@ -1,6 +1,6 @@
 use crate::bind;
 use crate::dialog::{
-    DialogCx, DialogSize, FocusId, FooterAction, FooterProps, HeaderProps, footer, header, layout_view,
+    DialogButton, DialogButtons, DialogCx, DialogSize, FocusId, FooterAction, HeaderProps, header, layout_view,
 };
 use crate::keymap::{KeymapLayer, TuiCommand};
 use opentui::keymap::{Condition, Disposer};
@@ -122,7 +122,7 @@ pub fn prompt(cx: &Rc<DialogCx>, props: PromptProps) -> (View, Prompt) {
     if !prompt.busy() {
         cx.focus(&prompt.0.field);
     }
-    let root = layout_view(cx, &head, &body, Some(&prompt.0.footer_slot), crate::dialog::DIALOG_INSET, 2);
+    let root = layout_view(cx, &head, &body, Some(&prompt.0.footer_slot), crate::dialog::DIALOG_INSET, 1);
     (root, prompt)
 }
 
@@ -230,16 +230,16 @@ impl Prompt {
         self.render_footer();
     }
 
+    // A Submit button, with the extra actions as hints on the left.
     fn render_footer(&self) {
         let inner = &self.0;
         let cx = &inner.cx;
         let slot = &inner.footer_slot;
         slot.clear();
         let weak: Weak<Inner> = Rc::downgrade(&self.0);
-        let submit = FooterAction::new("submit")
-            .command("dialog.prompt.submit")
-            .on_trigger(bind!(weak, |inner| Prompt(inner).confirm()));
-        let extra: Vec<FooterAction> = inner
+        let submit =
+            DialogButton { label: "Submit".to_owned(), run: Rc::new(bind!(weak, |inner| Prompt(inner).confirm())) };
+        let hints: Vec<FooterAction> = inner
             .props
             .actions
             .iter()
@@ -251,8 +251,6 @@ impl Prompt {
                     .on_trigger(bind!(self.0, |inner| run(&Prompt(inner))))
             })
             .collect();
-        let mut primary = extra;
-        primary.push(submit.disabled(inner.busy.get()));
-        slot.add(&footer(cx, FooterProps { primary, ..FooterProps::default() }));
+        slot.add(&DialogButtons::with_hints(cx, vec![submit], 0, hints).view);
     }
 }

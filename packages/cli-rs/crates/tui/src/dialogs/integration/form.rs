@@ -216,7 +216,8 @@ fn text(local: &Local, title: String, field: FormField, resolve: Resolve) {
     let description = field.description().map(str::to_owned);
     let confirm = resolve.clone();
     replace(local, &resolve, move |cx| {
-        let (errors, set_error) = super::error_slot(cx, true);
+        // An empty box would still take a row in the prompt's gap, so the slot shows only with content.
+        let (errors, set_error) = super::error_slot(cx, description.is_some());
         if let Some(description) = description.clone() {
             errors.insert(0, &Text::new(&cx.app, description).fg(cx.theme.text.muted));
         }
