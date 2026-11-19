@@ -667,21 +667,8 @@ pub struct FooterProps {
 pub fn footer(cx: &DialogCx, props: FooterProps) -> View {
     let theme = &cx.theme;
     let narrow = cx.width() < 60;
-    let resolve = |actions: Vec<FooterAction>| -> Vec<FooterAction> {
-        actions
-            .into_iter()
-            .filter_map(|mut action| {
-                // An action with neither shows its title alone; one with a command hides without a shortcut.
-                let Some(command) = action.command.as_deref().filter(|_| action.key.is_none()) else {
-                    return Some(action);
-                };
-                action.key = Some(cx.keymap.shortcut(command)?);
-                Some(action)
-            })
-            .collect()
-    };
-    let secondary = resolve(props.secondary);
-    let primary = resolve(props.primary);
+    let secondary = resolve_keys(cx, props.secondary);
+    let primary = resolve_keys(cx, props.primary);
     // A hidden child is content that renders nothing in TS.
     let band = !secondary.is_empty() || !primary.is_empty() || props.children.iter().any(|child| child.is_visible());
     let root = View::new(&cx.app).row().justify(Justify::SpaceBetween).gap(2).shrink(0.0);
@@ -717,6 +704,20 @@ pub fn footer(cx: &DialogCx, props: FooterProps) -> View {
         right.add(&footer_item(cx, action, true));
     }
     root.child(&left).child(&right)
+}
+
+// An action with neither a key nor a command shows its title alone; one with a command hides without a shortcut.
+fn resolve_keys(cx: &DialogCx, actions: Vec<FooterAction>) -> Vec<FooterAction> {
+    actions
+        .into_iter()
+        .filter_map(|mut action| {
+            let Some(command) = action.command.as_deref().filter(|_| action.key.is_none()) else {
+                return Some(action);
+            };
+            action.key = Some(cx.keymap.shortcut(command)?);
+            Some(action)
+        })
+        .collect()
 }
 
 fn footer_item(cx: &DialogCx, action: FooterAction, primary: bool) -> AnyWidget {
@@ -758,6 +759,7 @@ pub struct DialogButton {
 
 /// `DialogButtons`: a right-aligned row of buttons; the active one is highlighted, and hovering a button makes it
 /// active. The dialog binds the arrow keys and Enter through [`DialogButtons::step`] and [`DialogButtons::run`].
+/// Hints are extra key actions, shown on the left ([`DialogButtons::with_hints`]).
 #[derive(Clone)]
 pub struct DialogButtons {
     pub view: View,
@@ -772,13 +774,29 @@ struct ButtonsState {
 
 impl DialogButtons {
     pub fn new(cx: &DialogCx, buttons: Vec<DialogButton>, active: usize) -> Self {
-        let view = View::new(&cx.app).row().justify(Justify::End);
+        Self::with_hints(cx, buttons, active, Vec::new())
+    }
+
+    pub fn with_hints(cx: &DialogCx, buttons: Vec<DialogButton>, active: usize, hints: Vec<FooterAction>) -> Self {
+        let hints = resolve_keys(cx, hints);
+        let view =
+            View::new(&cx.app).row().justify(if hints.is_empty() { Justify::End } else { Justify::SpaceBetween });
+        if !hints.is_empty() {
+            // Hint items pad one cell for hover, so pull them back to line up with the body.
+            let left = View::new(&cx.app).row().margin_edge(Edge::Left, -1);
+            for hint in hints {
+                left.add(&footer_item(cx, hint, false));
+            }
+            view.add(&left);
+        }
+        let row = View::new(&cx.app).row();
+        view.add(&row);
         let buttons = buttons
             .into_iter()
             .map(|button| {
                 let label = Text::new(&cx.app, button.label.clone());
                 let item = View::new(&cx.app).padding_x(1).child(&label);
-                view.add(&item);
+                row.add(&item);
                 (button, item, label)
             })
             .collect();

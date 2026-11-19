@@ -1,6 +1,6 @@
 //! Session export options and result dialogs.
 
-use opencode_ui::dialog::{DIALOG_INSET, FooterAction, FooterProps, layout_with};
+use opencode_ui::dialog::{FooterAction, FooterProps, layout};
 use opencode_ui::select::{ActionRun, FooterHint, Group, SelectAction};
 
 use crate::prelude::*;
@@ -155,7 +155,6 @@ pub fn options(tui: &Tui, default_thinking: bool, on_confirm: OnConfirm) {
             };
             let mut props = SelectProps::new("Export session", options());
             props.render_filter = false;
-            props.footer_gap = 2;
             props.on_move = Some(Rc::new({
                 let (selected, refresh) = (selected.clone(), refresh.clone());
                 move |option: &SelectOption<Row>| {
@@ -248,13 +247,11 @@ fn result_with(tui: &Tui, path: String, copied: bool) {
             } else {
                 FooterAction::new("copy path").key("c")
             };
-            layout_with(
+            layout(
                 cx,
                 &header(cx, HeaderProps { on_close: Some(close), ..HeaderProps::new("Session exported") }),
                 &body,
                 Some(FooterProps { primary: vec![action.on_trigger(move || copy())], ..FooterProps::default() }),
-                DIALOG_INSET,
-                2,
             )
         },
         None,
