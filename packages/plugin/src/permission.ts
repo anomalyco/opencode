@@ -12,3 +12,17 @@ export const AssertInput = Schema.Struct({
   source: Permission.Request.fields.source,
 })
 export interface AssertInput extends Schema.Schema.Type<typeof AssertInput> {}
+
+/** A request-scoped automatic review. Approval never grants a saved permission. Experimental. */
+export const ReviewResult = Schema.Struct({
+  decision: Schema.Literals(["approve", "deny", "escalate"]),
+  reason: Schema.String.check(Schema.isMinLength(1)),
+})
+export interface ReviewResult extends Schema.Schema.Type<typeof ReviewResult> {}
+
+/** Runs only for actual requests that still need approval, after permission rules and policy hooks. */
+export interface PermissionReview {
+  readonly request: Permission.Request
+  readonly agent?: Agent.ID
+  result?: ReviewResult
+}
