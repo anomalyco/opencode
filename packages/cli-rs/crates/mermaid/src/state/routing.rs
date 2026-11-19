@@ -8,6 +8,7 @@ use crate::core::drawing::{CornerStyle, Directions, LineStyle, ROUNDED, line_gly
 use crate::core::geometry::{Bounds, Direction, Point, orthogonal_path_points};
 use crate::core::spatial::{Clearance, ClearancePolicy, Policy, Role, SpatialIndex, path_claim, rect_claim};
 use crate::core::text::{split_lines, width};
+use crate::flowchart::types::FlowDirection;
 
 /// State and composite bounds by ID.
 pub type Boxes = IndexMap<String, Bounds>;
@@ -33,11 +34,7 @@ pub fn has_reverse(diagram: &Diagram, transition: &Transition) -> bool {
 }
 
 pub fn is_horizontal_feedback(diagram: &Diagram, from: &Bounds, to: &Bounds) -> bool {
-    if diagram.direction == super::StateDirection::RL {
-        to.center_x > from.center_x
-    } else {
-        to.center_x < from.center_x
-    }
+    if diagram.direction == FlowDirection::RL { to.center_x > from.center_x } else { to.center_x < from.center_x }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -448,7 +445,7 @@ pub fn route_plans(diagram: &Diagram, bounds: &Boxes, lane_y: i32, top_y: Option
         if !diagram.direction.horizontal() {
             let from_parent = state_of(&transition.from).and_then(|s| s.parent_id.as_deref());
             let to_parent = target.and_then(|s| s.parent_id.as_deref());
-            let vertical_feedback = if diagram.direction == super::StateDirection::BT {
+            let vertical_feedback = if diagram.direction == FlowDirection::BT {
                 from.center_y < to.center_y
             } else {
                 from.center_y > to.center_y

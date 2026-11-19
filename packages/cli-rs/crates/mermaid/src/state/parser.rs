@@ -4,10 +4,9 @@ use std::sync::LazyLock;
 use indexmap::IndexMap;
 use regex::Regex;
 
-use super::{
-    Composite, Diagram, Note, NoteSide, State, StateDirection, StateKind, Transition, end_marker_id, start_marker_id,
-};
+use super::{Composite, Diagram, Note, NoteSide, State, StateKind, Transition, end_marker_id, start_marker_id};
 use crate::core::text::{decode, first_meaningful_line, js_trim, numbered_lines, split_lines};
+use crate::flowchart::types::FlowDirection;
 use crate::{Kind, SyntaxError};
 
 fn pattern(source: &str) -> Regex {
@@ -72,7 +71,7 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
     let mut notes: Vec<Note> = Vec::new();
     let mut parents: Vec<(String, usize, String)> = Vec::new();
     let mut pending: Option<PendingNote> = None;
-    let mut direction = StateDirection::LR;
+    let mut direction = FlowDirection::LR;
     let error = |number: usize, line: &str, reason: &str| SyntaxError::new(Kind::State, number, line, reason);
 
     for source in numbered_lines(content) {
@@ -105,7 +104,7 @@ pub fn parse(content: &str) -> Result<Diagram, SyntaxError> {
             if !parents.is_empty() {
                 return Err(error(source.number, line, "Composite-local direction is not supported"));
             }
-            direction = StateDirection::parse(&captures[1]).unwrap_or(StateDirection::LR);
+            direction = FlowDirection::parse(&captures[1]).unwrap_or(FlowDirection::LR);
             continue;
         }
         if let Some(captures) = NOTE_INLINE.captures(line) {

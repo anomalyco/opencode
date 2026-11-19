@@ -2,7 +2,7 @@ use super::layout::{
     Layout, NoteBox, create, expand_for_feedback, expand_for_internal_transitions, note_connector_of, separate_external,
 };
 use super::routing::{Glyph, RenderOptions, RenderPlan, junction_plans, measure_label, render_plans};
-use super::{Diagram, NoteSide, StateDirection, StateKind, is_hidden_composite_marker, visible};
+use super::{Diagram, NoteSide, StateKind, is_hidden_composite_marker, visible};
 use crate::core::canvas::{Canvas, Cell, SizeError, TRIM_BOTH};
 use crate::core::drawing::{
     ArrowHeadStyle, BorderChars, CornerStyle, DOUBLE, Directions, LineStyle, ROUNDED, arrow_head, draw_frame,
@@ -10,6 +10,7 @@ use crate::core::drawing::{
 };
 use crate::core::geometry::{Bounds, direction_between, orthogonal_path_points};
 use crate::core::text::{LABEL_PADDING_X, width};
+use crate::flowchart::types::FlowDirection;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Style {
@@ -157,7 +158,7 @@ fn draw_plan(grid: &mut Grid, plan: &RenderPlan, ramp: bool) {
 pub fn draw(source: &Diagram, max_width: Option<i32>) -> Result<Grid, DrawError> {
     let direction = source.direction;
     let (Some(max_width), true) = (max_width, direction.horizontal()) else { return draw_with(source, direction) };
-    let fallback = if direction == StateDirection::RL { StateDirection::BT } else { StateDirection::TB };
+    let fallback = if direction == FlowDirection::RL { FlowDirection::BT } else { FlowDirection::TB };
     let drawing = match draw_with(source, direction) {
         Ok(grid) => grid,
         Err(DrawError::Size(_)) => return draw_with(source, fallback),
@@ -173,7 +174,7 @@ pub fn draw(source: &Diagram, max_width: Option<i32>) -> Result<Grid, DrawError>
     Ok(folded)
 }
 
-fn draw_with(source: &Diagram, direction: StateDirection) -> Result<Grid, DrawError> {
+fn draw_with(source: &Diagram, direction: FlowDirection) -> Result<Grid, DrawError> {
     let diagram = visible(&Diagram { direction, ..source.clone() });
     let mut budget = super::MAX_SEARCH_VISITS;
     let mut layout = create(&diagram, 5, &mut budget).map_err(DrawError::Layout)?;
