@@ -1255,11 +1255,6 @@ export const dict = {
   "sidebar.recent.unpin": "Anulează fixarea",
   "sidebar.recent.moveUp": "Mută în sus",
   "sidebar.recent.moveDown": "Mută în jos",
-  "settings.experimental.row.newIcons.title": "Pictograme noi",
-  "settings.experimental.row.newIcons.description": "Previzualizează setul de pictograme actualizat",
-  "settings.experimental.row.foldUserMessages.title": "Pliază mesajele lungi",
-  "settings.experimental.row.foldUserMessages.description":
-    "Pliază mesajele tale mai lungi de 12 linii în spatele unui buton Citește mai mult",
   "settings.experimental.row.newTimeline.title": "Cronologie nouă",
   "settings.experimental.row.newTimeline.description":
     "O cronologie a sesiunii reproiectată, care grupează ce a făcut agentul, cu o singură linie de stare sub rundă",
@@ -1270,14 +1265,10 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Alege cum sunt listate sesiunile în bara laterală. Se aplică doar filelor laterale.",
   "settings.experimental.sidebarOrganize.recent": "Recente",
-  "settings.experimental.sidebarOrganize.projects": "Proiecte",
   "settings.experimental.sidebarOrganize.list": "O singură listă",
   "settings.experimental.sidebarOrganize.customize": "Personalizează",
-  "sidebar.organize.projects": "Proiecte",
   "sidebar.organize.openTab": "Deschide fila",
   "sidebar.organize.showMore": "Afișează mai multe",
-  "sidebar.organize.showLess": "Afișează mai puține",
-  "sidebar.organize.empty": "Nicio sesiune încă",
   "sidebar.view.sessions": "Sesiuni",
   "sidebar.view.options": "Opțiuni de vizualizare",
   "sidebar.view.grouping": "Grupează după",
@@ -1392,6 +1383,9 @@ export const dict = {
     "Afișează subagenții separat. Grupează restul activității cu detaliile restrânse.",
   "settings.timeline.description.quiet":
     "Afișează subagenții separat și grupează editările. Ascunde restul activității.",
+  "settings.timeline.row.foldUserMessages.title": "Pliază mesajele lungi",
+  "settings.timeline.row.foldUserMessages.description":
+    "Pliază mesajele tale mai lungi de 12 linii în spatele unui buton Citește mai mult",
   "settings.timeline.row.turnDiffs.title": "Fișiere modificate",
   "settings.timeline.row.turnDiffs.description":
     "Listează fișierele modificate de fiecare rundă când aceasta se încheie",

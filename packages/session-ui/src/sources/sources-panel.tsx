@@ -168,7 +168,7 @@ function SearchStep(props: {
         onClick={toggle}
       >
         <span data-slot="sources-step-icon">
-          <Icon name="magnifying-glass" size="small" />
+          <Icon name="magnifying-glass" />
         </span>
         <span data-slot="sources-step-text">
           <span data-slot="sources-step-label">
@@ -231,7 +231,7 @@ function FetchStep(props: { step: Extract<SourceStep, { type: "fetch" }>; onOpen
         }}
       >
         <span data-slot="sources-step-icon">
-          <Icon name="window-cursor" size="small" />
+          <Icon name="select-element" />
         </span>
         <span data-slot="sources-step-text">
           <span data-slot="sources-step-label">

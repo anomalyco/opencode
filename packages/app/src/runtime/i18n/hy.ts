@@ -1224,11 +1224,6 @@ export const dict = {
   "sidebar.recent.unpin": "Ապամրացնել",
   "sidebar.recent.moveUp": "Տեղափոխել վեր",
   "sidebar.recent.moveDown": "Տեղափոխել վար",
-  "settings.experimental.row.newIcons.title": "Նոր պատկերակներ",
-  "settings.experimental.row.newIcons.description": "Նախադիտել թարմացված պատկերակների հավաքածուն",
-  "settings.experimental.row.foldUserMessages.title": "Ծալել երկար հաղորդագրությունները",
-  "settings.experimental.row.foldUserMessages.description":
-    "Ծալել ձեր 12 տողից երկար հաղորդագրությունները «Կարդալ ավելին» կոճակի հետևում",
   "settings.experimental.row.newTimeline.title": "Նոր ժամանակագիծ",
   "settings.experimental.row.newTimeline.description":
     "Վերանախագծված նիստի ժամանակագիծ, որը խմբավորում է գործակալի արածը՝ մեկ կարգավիճակի տողով քայլի տակ",
@@ -1238,14 +1233,10 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Ընտրեք, թե ինչպես են նիստերը ցուցադրվում կողագոտում։ Կիրառվում է միայն կողային ներդիրների դեպքում։",
   "settings.experimental.sidebarOrganize.recent": "Վերջինները",
-  "settings.experimental.sidebarOrganize.projects": "Նախագծեր",
   "settings.experimental.sidebarOrganize.list": "Մեկ ցուցակ",
   "settings.experimental.sidebarOrganize.customize": "Անհատականացնել",
-  "sidebar.organize.projects": "Նախագծեր",
   "sidebar.organize.openTab": "Բաց ներդիր",
   "sidebar.organize.showMore": "Ցույց տալ ավելին",
-  "sidebar.organize.showLess": "Ցույց տալ ավելի քիչ",
-  "sidebar.organize.empty": "Նիստեր դեռ չկան",
   "sidebar.view.sessions": "Նիստեր",
   "sidebar.view.options": "Դիտման ընտրանքներ",
   "sidebar.view.grouping": "Խմբավորել ըստ",
@@ -1360,6 +1351,9 @@ export const dict = {
     "Ցուցադրել ենթագործակալներին առանձին։ Խմբավորել մյուս գործունեությունը՝ ծալված մանրամասներով։",
   "settings.timeline.description.quiet":
     "Ցուցադրել ենթագործակալներին առանձին և խմբավորել խմբագրումները։ Թաքցնել մյուս գործունեությունը։",
+  "settings.timeline.row.foldUserMessages.title": "Ծալել երկար հաղորդագրությունները",
+  "settings.timeline.row.foldUserMessages.description":
+    "Ծալել ձեր 12 տողից երկար հաղորդագրությունները «Կարդալ ավելին» կոճակի հետևում",
   "settings.timeline.row.turnDiffs.title": "Փոփոխված ֆայլեր",
   "settings.timeline.row.turnDiffs.description":
     "Ցուցադրել յուրաքանչյուր քայլում փոփոխված ֆայլերը, երբ այն ավարտվում է",

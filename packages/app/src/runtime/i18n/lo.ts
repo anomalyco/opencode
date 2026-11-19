@@ -1208,11 +1208,6 @@ export const dict = {
   "sidebar.recent.unpin": "ຖອນປັກໝຸດ",
   "sidebar.recent.moveUp": "ຍ້າຍຂຶ້ນ",
   "sidebar.recent.moveDown": "ຍ້າຍລົງ",
-  "settings.experimental.row.newIcons.title": "ໄອຄອນໃໝ່",
-  "settings.experimental.row.newIcons.description": "ສະແດງຕົວຢ່າງຊຸດໄອຄອນທີ່ອັບເດດແລ້ວ",
-  "settings.experimental.row.foldUserMessages.title": "ພັບຂໍ້ຄວາມຍາວ",
-  "settings.experimental.row.foldUserMessages.description":
-    "ພັບຂໍ້ຄວາມຂອງທ່ານທີ່ຍາວເກີນ 12 ແຖວໄວ້ຫຼັງປຸ່ມ ອ່ານເພີ່ມເຕີມ",
   "settings.experimental.row.newTimeline.title": "ທາມລາຍໃໝ່",
   "settings.experimental.row.newTimeline.description":
     "ທາມລາຍເຊດຊັນທີ່ອອກແບບໃໝ່ ເຊິ່ງຈັດກຸ່ມສິ່ງທີ່ຕົວແທນໄດ້ເຮັດ, ພ້ອມແຖວສະຖານະດຽວຢູ່ລຸ່ມຮອບ",
@@ -1222,14 +1217,10 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "ເລືອກວິທີສະແດງລາຍການເຊດຊັນໃນແຖບດ້ານຂ້າງ. ໃຊ້ກັບແຖບດ້ານຂ້າງເທົ່ານັ້ນ.",
   "settings.experimental.sidebarOrganize.recent": "ຫຼ້າສຸດ",
-  "settings.experimental.sidebarOrganize.projects": "ໂຄງການ",
   "settings.experimental.sidebarOrganize.list": "ລາຍການດຽວ",
   "settings.experimental.sidebarOrganize.customize": "ປັບແຕ່ງ",
-  "sidebar.organize.projects": "ໂຄງການ",
   "sidebar.organize.openTab": "ແຖບທີ່ເປີດ",
   "sidebar.organize.showMore": "ສະແດງເພີ່ມເຕີມ",
-  "sidebar.organize.showLess": "ສະແດງໜ້ອຍລົງ",
-  "sidebar.organize.empty": "ຍັງບໍ່ມີເຊດຊັນ",
   "sidebar.view.sessions": "ເຊດຊັນ",
   "sidebar.view.options": "ຕົວເລືອກມຸມມອງ",
   "sidebar.view.grouping": "ຈັດກຸ່ມຕາມ",
@@ -1340,6 +1331,9 @@ export const dict = {
   "settings.timeline.row.width.wide": "ກວ້າງ",
   "settings.timeline.description.compact": "ສະແດງຕົວແທນຍ່ອຍແຍກຕ່າງຫາກ. ຈັດກຸ່ມການເຄື່ອນໄຫວອື່ນໂດຍຫຍໍ້ລາຍລະອຽດໄວ້.",
   "settings.timeline.description.quiet": "ສະແດງຕົວແທນຍ່ອຍແຍກຕ່າງຫາກ ແລະຈັດກຸ່ມການແກ້ໄຂ. ເຊື່ອງການເຄື່ອນໄຫວອື່ນ.",
+  "settings.timeline.row.foldUserMessages.title": "ພັບຂໍ້ຄວາມຍາວ",
+  "settings.timeline.row.foldUserMessages.description":
+    "ພັບຂໍ້ຄວາມຂອງທ່ານທີ່ຍາວເກີນ 12 ແຖວໄວ້ຫຼັງປຸ່ມ ອ່ານເພີ່ມເຕີມ",
   "settings.timeline.row.turnDiffs.title": "ໄຟລ໌ທີ່ປ່ຽນແປງ",
   "settings.timeline.row.turnDiffs.description": "ສະແດງລາຍການໄຟລ໌ທີ່ແຕ່ລະຮອບປ່ຽນແປງເມື່ອສຳເລັດ",
   "settings.timeline.category.commentary": "ຄຳອະທິບາຍ",

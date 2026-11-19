@@ -1301,11 +1301,6 @@ export const dict = {
   "sidebar.recent.unpin": "Sabitlemeyi kaldır",
   "sidebar.recent.moveUp": "Yukarı taşı",
   "sidebar.recent.moveDown": "Aşağı taşı",
-  "settings.experimental.row.newIcons.title": "Yeni simgeler",
-  "settings.experimental.row.newIcons.description": "Güncellenmiş simge setini önizleyin",
-  "settings.experimental.row.foldUserMessages.title": "Uzun mesajları katla",
-  "settings.experimental.row.foldUserMessages.description":
-    "12 satırı aşan mesajlarınızı Devamını oku düğmesinin arkasına katlayın",
   "settings.experimental.row.newTimeline.title": "Yeni zaman çizelgesi",
   "settings.experimental.row.newTimeline.description":
     "Ajanın yaptıklarını gruplayan ve turun altında tek bir durum satırı gösteren yeniden tasarlanmış oturum zaman çizelgesi",
@@ -1315,14 +1310,10 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Oturumların kenar çubuğunda nasıl listeleneceğini seçin. Yalnızca yan sekmelerde geçerlidir.",
   "settings.experimental.sidebarOrganize.recent": "Son oturumlar",
-  "settings.experimental.sidebarOrganize.projects": "Projeler",
   "settings.experimental.sidebarOrganize.list": "Tek liste",
   "settings.experimental.sidebarOrganize.customize": "Özelleştir",
-  "sidebar.organize.projects": "Projeler",
   "sidebar.organize.openTab": "Açık sekme",
   "sidebar.organize.showMore": "Daha fazla göster",
-  "sidebar.organize.showLess": "Daha az göster",
-  "sidebar.organize.empty": "Henüz oturum yok",
   "sidebar.view.sessions": "Oturumlar",
   "sidebar.view.options": "Görünüm seçenekleri",
   "sidebar.view.grouping": "Gruplama",
@@ -1436,6 +1427,9 @@ export const dict = {
   "settings.timeline.description.compact":
     "Alt ajanları ayrı göster. Diğer etkinlikleri ayrıntıları daraltılmış olarak grupla.",
   "settings.timeline.description.quiet": "Alt ajanları ayrı göster ve düzenlemeleri grupla. Diğer etkinlikleri gizle.",
+  "settings.timeline.row.foldUserMessages.title": "Uzun mesajları katla",
+  "settings.timeline.row.foldUserMessages.description":
+    "12 satırı aşan mesajlarınızı Devamını oku düğmesinin arkasına katlayın",
   "settings.timeline.row.turnDiffs.title": "Değişen dosyalar",
   "settings.timeline.row.turnDiffs.description": "Her tur bittiğinde değiştirdiği dosyaları listele",
   "settings.timeline.category.commentary": "Açıklamalar",

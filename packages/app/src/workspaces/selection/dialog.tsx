@@ -636,7 +636,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
           <Show when={subtitle()}>
             {(value) => (
               <span class="directory-picker-server" dir="ltr">
-                <Icon name="server" size="small" />
+                <Icon name="server" />
                 <span class="truncate">{value()}</span>
               </span>
             )}
@@ -657,7 +657,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
             class="directory-picker-input"
             data-owns-escape={ownsPickerEscape(machines().combobox, committed()) ? "" : undefined}
             appearance="large"
-            leadingIcon={<Icon name="magnifying-glass" size="small" />}
+            leadingIcon={<Icon name="magnifying-glass" />}
             onInput={(event) => dispatchCombobox({ type: "input.changed", value: event.currentTarget.value })}
             role="combobox"
             aria-label={language.t("dialog.directory.search.placeholder")}
@@ -708,7 +708,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
                         onClick={() => dispatchCombobox({ type: "item.clicked", index: index() })}
                       >
                         <span data-slot="menu-v2-item-content">
-                          <Icon name={suggestion.type === "directory" ? "folder" : "open-file"} size="small" />
+                          <Icon name={suggestion.type === "directory" ? "folder" : "open-file"} />
                           <span class="directory-picker-item-name">
                             {pickerBreadcrumbs(suggestion.absolute, home()).at(-1)?.label}
                           </span>
@@ -806,7 +806,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
                 {(crumb, index) => (
                   <>
                     <Show when={index() > 0}>
-                      <Icon name="chevron-right" size="small" class="directory-picker-breadcrumb-separator" />
+                      <Icon name="chevron-right" class="directory-picker-breadcrumb-separator" />
                     </Show>
                     <button
                       type="button"

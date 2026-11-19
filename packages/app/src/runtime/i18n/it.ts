@@ -1253,11 +1253,6 @@ export const dict = {
   "sidebar.recent.unpin": "Non fissare",
   "sidebar.recent.moveUp": "Sposta su",
   "sidebar.recent.moveDown": "Sposta giù",
-  "settings.experimental.row.newIcons.title": "Nuove icone",
-  "settings.experimental.row.newIcons.description": "Anteprima del set di icone aggiornato",
-  "settings.experimental.row.foldUserMessages.title": "Comprimi i messaggi lunghi",
-  "settings.experimental.row.foldUserMessages.description":
-    "Comprimi i tuoi messaggi oltre le 12 righe dietro un pulsante Leggi tutto",
   "settings.experimental.row.newTimeline.title": "Nuova sequenza temporale",
   "settings.experimental.row.newTimeline.description":
     "Una sequenza temporale della sessione riprogettata che raggruppa ciò che ha fatto l'agente, con una riga di stato sotto il turno",
@@ -1267,14 +1262,10 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Scegli come elencare le sessioni nella barra laterale. Si applica solo alle schede laterali.",
   "settings.experimental.sidebarOrganize.recent": "Recenti",
-  "settings.experimental.sidebarOrganize.projects": "Progetti",
   "settings.experimental.sidebarOrganize.list": "Elenco unico",
   "settings.experimental.sidebarOrganize.customize": "Personalizza",
-  "sidebar.organize.projects": "Progetti",
   "sidebar.organize.openTab": "Scheda aperta",
   "sidebar.organize.showMore": "Mostra altro",
-  "sidebar.organize.showLess": "Mostra meno",
-  "sidebar.organize.empty": "Ancora nessuna sessione",
   "sidebar.view.sessions": "Sessioni",
   "sidebar.view.options": "Opzioni di visualizzazione",
   "sidebar.view.grouping": "Raggruppa per",
@@ -1389,6 +1380,9 @@ export const dict = {
     "Mostra i subagenti separatamente. Raggruppa le altre attività con i dettagli compressi.",
   "settings.timeline.description.quiet":
     "Mostra i subagenti separatamente e raggruppa le modifiche. Nascondi le altre attività.",
+  "settings.timeline.row.foldUserMessages.title": "Comprimi i messaggi lunghi",
+  "settings.timeline.row.foldUserMessages.description":
+    "Comprimi i tuoi messaggi oltre le 12 righe dietro un pulsante Leggi tutto",
   "settings.timeline.row.turnDiffs.title": "File modificati",
   "settings.timeline.row.turnDiffs.description": "Elenca i file modificati da ogni turno al suo termine",
   "settings.timeline.category.commentary": "Commenti",

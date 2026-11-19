@@ -48,6 +48,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "Σχολιασμός ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Προσθήκη σχολίου",
+  "ui.lineComment.add": "Προσθήκη σχολίου",
+  "ui.lineComment.actions": "Ενέργειες επιλογής",
   "ui.lineComment.contextPlaceholder": "Προσθήκη περιβάλλοντος για αυτήν την αλλαγή",
   "ui.lineComment.submit": "Σχόλιο",
   "ui.lineComment.cancel": "Ακύρωση",

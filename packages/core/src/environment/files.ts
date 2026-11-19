@@ -47,6 +47,8 @@ export interface FilesImpl {
   readonly remove: (path: string) => Effect.Effect<void, Failed>
   readonly move: (from: string, to: string) => Effect.Effect<void, NotFound | Failed>
   readonly mkdir: (path: string) => Effect.Effect<void, Failed>
+  /** Adds bytes to the end of a file, creating it when missing. */
+  readonly append: (path: string, bytes: Uint8Array) => Effect.Effect<void, Failed>
 }
 
 export interface Files extends FilesImpl {}

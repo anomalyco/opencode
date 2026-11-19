@@ -1242,11 +1242,6 @@ export const dict = {
   "sidebar.recent.unpin": "Ҷудо кардан",
   "sidebar.recent.moveUp": "Ба боло гузоштан",
   "sidebar.recent.moveDown": "Ба поён гузоштан",
-  "settings.experimental.row.newIcons.title": "Нишонаҳои нав",
-  "settings.experimental.row.newIcons.description": "Пешнамоиши маҷмӯи навшудаи нишонаҳо",
-  "settings.experimental.row.foldUserMessages.title": "Печондани паёмҳои дароз",
-  "settings.experimental.row.foldUserMessages.description":
-    "Паёмҳои шумо, ки аз 12 сатр зиёданд, паси тугмаи «Бештар хондан» печонида мешаванд",
   "settings.experimental.row.newTimeline.title": "Ҷадвали вақти нав",
   "settings.experimental.row.newTimeline.description":
     "Ҷадвали вақти аз нав тарҳрезишудаи сессия, ки корҳои агентро гурӯҳбандӣ мекунад ва дар зери давр як сатри ҳолат дорад",
@@ -1256,14 +1251,10 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Интихоб кунед, ки сессияҳо дар панели паҳлӯ чӣ тавр нишон дода шаванд. Танҳо ба варақаҳои паҳлӯ дахл дорад.",
   "settings.experimental.sidebarOrganize.recent": "Охирин",
-  "settings.experimental.sidebarOrganize.projects": "Лоиҳаҳо",
   "settings.experimental.sidebarOrganize.list": "Як рӯйхат",
   "settings.experimental.sidebarOrganize.customize": "Танзим кардан",
-  "sidebar.organize.projects": "Лоиҳаҳо",
   "sidebar.organize.openTab": "Кушодани варақа",
   "sidebar.organize.showMore": "Бештар нишон диҳед",
-  "sidebar.organize.showLess": "Камтар нишон диҳед",
-  "sidebar.organize.empty": "Ҳанӯз сессия нест",
   "sidebar.view.sessions": "Сессияҳо",
   "sidebar.view.options": "Имконоти намоиш",
   "sidebar.view.grouping": "Гурӯҳбандӣ аз рӯи",
@@ -1378,6 +1369,9 @@ export const dict = {
     "Зер-агентҳоро ҷудогона нишон диҳед. Фаъолияти дигарро бо тафсилоти печондашуда гурӯҳбандӣ кунед.",
   "settings.timeline.description.quiet":
     "Зер-агентҳоро ҷудогона нишон диҳед ва таҳрирҳоро гурӯҳбандӣ кунед. Фаъолияти дигарро пинҳон кунед.",
+  "settings.timeline.row.foldUserMessages.title": "Печондани паёмҳои дароз",
+  "settings.timeline.row.foldUserMessages.description":
+    "Паёмҳои шумо, ки аз 12 сатр зиёданд, паси тугмаи «Бештар хондан» печонида мешаванд",
   "settings.timeline.row.turnDiffs.title": "Файлҳои тағйирёфта",
   "settings.timeline.row.turnDiffs.description": "Пас аз анҷоми ҳар давр файлҳои тағйирдодаи онро нишон диҳед",
   "settings.timeline.category.commentary": "Шарҳ",

@@ -48,6 +48,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "Коментирајќи на",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Додадете коментар",
+  "ui.lineComment.add": "Додадете коментар",
+  "ui.lineComment.actions": "Дејства за изборот",
   "ui.lineComment.contextPlaceholder": "Додадете контекст за оваа промена",
   "ui.lineComment.submit": "Коментар",
   "ui.lineComment.cancel": "Откажи",

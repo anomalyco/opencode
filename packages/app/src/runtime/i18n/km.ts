@@ -1215,11 +1215,6 @@ export const dict = {
   "sidebar.recent.unpin": "ដោះខ្ទាស់",
   "sidebar.recent.moveUp": "ផ្លាស់ទីឡើងលើ",
   "sidebar.recent.moveDown": "ផ្លាស់ទីចុះក្រោម",
-  "settings.experimental.row.newIcons.title": "រូបតំណាងថ្មី",
-  "settings.experimental.row.newIcons.description": "មើលសំណុំរូបតំណាងដែលបានធ្វើបច្ចុប្បន្នភាពជាមុន",
-  "settings.experimental.row.foldUserMessages.title": "បត់សារវែងៗ",
-  "settings.experimental.row.foldUserMessages.description":
-    "បត់សាររបស់អ្នកដែលលើសពី 12 បន្ទាត់នៅពីក្រោយប៊ូតុង អានបន្ថែម",
   "settings.experimental.row.newTimeline.title": "បន្ទាត់ពេលវេលាថ្មី",
   "settings.experimental.row.newTimeline.description":
     "បន្ទាត់ពេលវេលាសម័យដែលបានរចនាឡើងវិញ ដែលដាក់ជាក្រុមនូវអ្វីដែលភ្នាក់ងារបានធ្វើ ជាមួយបន្ទាត់ស្ថានភាពមួយនៅខាងក្រោមវេន",
@@ -1229,14 +1224,10 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "ជ្រើសរបៀបរាយបញ្ជីសម័យក្នុងរបារចំហៀង។ អនុវត្តចំពោះផ្ទាំងចំហៀងតែប៉ុណ្ណោះ។",
   "settings.experimental.sidebarOrganize.recent": "ថ្មីៗ",
-  "settings.experimental.sidebarOrganize.projects": "គម្រោង",
   "settings.experimental.sidebarOrganize.list": "បញ្ជីតែមួយ",
   "settings.experimental.sidebarOrganize.customize": "ប្ដូរតាមបំណង",
-  "sidebar.organize.projects": "គម្រោង",
   "sidebar.organize.openTab": "ផ្ទាំងដែលបើក",
   "sidebar.organize.showMore": "បង្ហាញច្រើនទៀត",
-  "sidebar.organize.showLess": "បង្ហាញតិច",
-  "sidebar.organize.empty": "មិនទាន់មានសម័យនៅឡើយទេ",
   "sidebar.view.sessions": "សម័យ",
   "sidebar.view.options": "ជម្រើសទិដ្ឋភាព",
   "sidebar.view.grouping": "ដាក់ជាក្រុមតាម",
@@ -1347,6 +1338,9 @@ export const dict = {
   "settings.timeline.description.compact":
     "បង្ហាញភ្នាក់ងាររងដោយឡែក។ ដាក់សកម្មភាពផ្សេងទៀតជាក្រុមដោយបង្រួមព័ត៌មានលម្អិត។",
   "settings.timeline.description.quiet": "បង្ហាញភ្នាក់ងាររងដោយឡែក និងដាក់ការកែសម្រួលជាក្រុម។ លាក់សកម្មភាពផ្សេងទៀត។",
+  "settings.timeline.row.foldUserMessages.title": "បត់សារវែងៗ",
+  "settings.timeline.row.foldUserMessages.description":
+    "បត់សាររបស់អ្នកដែលលើសពី 12 បន្ទាត់នៅពីក្រោយប៊ូតុង អានបន្ថែម",
   "settings.timeline.row.turnDiffs.title": "ឯកសារដែលបានផ្លាស់ប្តូរ",
   "settings.timeline.row.turnDiffs.description": "រាយបញ្ជីឯកសារដែលវេននីមួយៗបានផ្លាស់ប្តូរនៅពេលវាបញ្ចប់",
   "settings.timeline.category.commentary": "ការអធិប្បាយ",

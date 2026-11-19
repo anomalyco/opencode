@@ -72,6 +72,8 @@ export const dict: Record<Keys, string> = {
   "ui.lineComment.editorLabel.prefix": "Kommentar til ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Legg til kommentar",
+  "ui.lineComment.add": "Legg til kommentar",
+  "ui.lineComment.actions": "Markeringshandlinger",
   "ui.lineComment.contextPlaceholder": "Legg til kontekst for denne endringen",
   "ui.lineComment.submit": "Kommenter",
 

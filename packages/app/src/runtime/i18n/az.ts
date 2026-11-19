@@ -1231,11 +1231,6 @@ export const dict = {
   "sidebar.recent.unpin": "Sancağı götür",
   "sidebar.recent.moveUp": "Yuxarı köçür",
   "sidebar.recent.moveDown": "Aşağı köçür",
-  "settings.experimental.row.newIcons.title": "Yeni ikonlar",
-  "settings.experimental.row.newIcons.description": "Yenilənmiş ikon dəstinə önizləmə",
-  "settings.experimental.row.foldUserMessages.title": "Uzun mesajları qatla",
-  "settings.experimental.row.foldUserMessages.description":
-    "12 sətirdən uzun mesajlarınızı «Ardını oxu» düyməsinin arxasında qatla",
   "settings.experimental.row.newTimeline.title": "Yeni zaman xətti",
   "settings.experimental.row.newTimeline.description":
     "Agentin etdiklərini qruplaşdıran və gedişin altında bir status sətri göstərən yenidən dizayn edilmiş sessiya zaman xətti",
@@ -1245,14 +1240,10 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Sessiyaların yan paneldə necə siyahılanacağını seçin. Yalnız yan tablara aiddir.",
   "settings.experimental.sidebarOrganize.recent": "Son",
-  "settings.experimental.sidebarOrganize.projects": "Layihələr",
   "settings.experimental.sidebarOrganize.list": "Tək siyahı",
   "settings.experimental.sidebarOrganize.customize": "Fərdiləşdir",
-  "sidebar.organize.projects": "Layihələr",
   "sidebar.organize.openTab": "Açıq tab",
   "sidebar.organize.showMore": "Daha çox göstər",
-  "sidebar.organize.showLess": "Daha az göstər",
-  "sidebar.organize.empty": "Hələ sessiya yoxdur",
   "sidebar.view.sessions": "Sessiyalar",
   "sidebar.view.options": "Görünüş seçimləri",
   "sidebar.view.grouping": "Qruplaşdır",
@@ -1367,6 +1358,9 @@ export const dict = {
     "Alt-agentləri ayrıca göstər. Digər fəaliyyəti təfərrüatları yığılmış halda qruplaşdır.",
   "settings.timeline.description.quiet":
     "Alt-agentləri ayrıca göstər və redaktələri qruplaşdır. Digər fəaliyyəti gizlət.",
+  "settings.timeline.row.foldUserMessages.title": "Uzun mesajları qatla",
+  "settings.timeline.row.foldUserMessages.description":
+    "12 sətirdən uzun mesajlarınızı «Ardını oxu» düyməsinin arxasında qatla",
   "settings.timeline.row.turnDiffs.title": "Dəyişmiş fayllar",
   "settings.timeline.row.turnDiffs.description": "Hər gediş bitdikdə dəyişdirdiyi faylları siyahıla",
   "settings.timeline.category.commentary": "Şərhlər",

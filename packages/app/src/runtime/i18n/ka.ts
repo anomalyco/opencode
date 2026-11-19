@@ -1227,11 +1227,6 @@ export const dict = {
   "sidebar.recent.unpin": "მიმაგრების მოხსნა",
   "sidebar.recent.moveUp": "ზემოთ გადატანა",
   "sidebar.recent.moveDown": "ქვემოთ გადატანა",
-  "settings.experimental.row.newIcons.title": "ახალი ხატულები",
-  "settings.experimental.row.newIcons.description": "განახლებული ხატულების ნაკრების წინასწარი ნახვა",
-  "settings.experimental.row.foldUserMessages.title": "გრძელი შეტყობინებების დაკეცვა",
-  "settings.experimental.row.foldUserMessages.description":
-    "12 ხაზზე გრძელი შეტყობინებების დაკეცვა „მეტის წაკითხვა“ ღილაკის მიღმა",
   "settings.experimental.row.newTimeline.title": "ახალი დროის ხაზი",
   "settings.experimental.row.newTimeline.description":
     "სესიის გადამუშავებული დროის ხაზი, რომელიც აჯგუფებს აგენტის ქმედებებს და სვლის ქვემოთ აჩვენებს ერთ სტატუსის ხაზს",
@@ -1241,14 +1236,10 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "აირჩიეთ, როგორ ჩამოითვალოს სესიები გვერდით ზოლში. ეხება მხოლოდ გვერდით ჩანართებს.",
   "settings.experimental.sidebarOrganize.recent": "ბოლოდროინდელი",
-  "settings.experimental.sidebarOrganize.projects": "პროექტები",
   "settings.experimental.sidebarOrganize.list": "ერთი სია",
   "settings.experimental.sidebarOrganize.customize": "მორგება",
-  "sidebar.organize.projects": "პროექტები",
   "sidebar.organize.openTab": "ჩანართის გახსნა",
   "sidebar.organize.showMore": "მეტის ჩვენება",
-  "sidebar.organize.showLess": "ნაკლების ჩვენება",
-  "sidebar.organize.empty": "სესიები ჯერ არ არის",
   "sidebar.view.sessions": "სესიები",
   "sidebar.view.options": "ხედის პარამეტრები",
   "sidebar.view.grouping": "დაჯგუფება",
@@ -1362,6 +1353,9 @@ export const dict = {
   "settings.timeline.description.compact": "ქვეაგენტების ცალკე ჩვენება. სხვა აქტივობის დაჯგუფება დაკეცილი დეტალებით.",
   "settings.timeline.description.quiet":
     "ქვეაგენტების ცალკე ჩვენება და რედაქტირებების დაჯგუფება. სხვა აქტივობის დამალვა.",
+  "settings.timeline.row.foldUserMessages.title": "გრძელი შეტყობინებების დაკეცვა",
+  "settings.timeline.row.foldUserMessages.description":
+    "12 ხაზზე გრძელი შეტყობინებების დაკეცვა „მეტის წაკითხვა“ ღილაკის მიღმა",
   "settings.timeline.row.turnDiffs.title": "შეცვლილი ფაილები",
   "settings.timeline.row.turnDiffs.description": "თითოეული სვლის დასრულებისას მის მიერ შეცვლილი ფაილების ჩამოთვლა",
   "settings.timeline.category.commentary": "კომენტარები",

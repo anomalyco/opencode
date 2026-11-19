@@ -1,11 +1,13 @@
 export * as PatchTool from "./patch.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
-import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { ToolFailure } from "@opencode/ai/effect"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { Effect, Result, Schema } from "effect"
 import { Bom } from "@opencode/util/bom"
+import { Config } from "../../config.js"
+import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
+import { Flag } from "../../flag.js"
 import { toolFailure } from "../runtime.js"
 import { Environment } from "../../environment/index.js"
 import { Formatter } from "../../formatter.js"
@@ -51,18 +53,29 @@ type Prepared =
 export const Plugin = {
   id: "opencode.tool.patch",
   effect: Effect.fn("PatchTool.Plugin")(function* (ctx: Context) {
-    const environment = yield* Environment.Service
     const access = yield* FileAccess.Service
     const fileMutation = yield* FileMutation.Service
     const formatter = yield* Formatter.Service
     const location = yield* Location.Service
     const permission = yield* Permission.Service
+    const config = yield* Config.Service
+    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
+    const flags = yield* Flag.Service
 
     yield* ctx.tool
       .transform((editor) =>
         editor.add({
           name,
-          options: { codemode: false, permission: "edit" },
+          options: flags.resolve(loaded.entries).full_codemode.enabled
+            ? {
+                codemode: {
+                  pinned: true,
+                  description:
+                    "Apply multi-file edits inside `*** Begin Patch` ... `*** End Patch`. Start each operation with `*** Add File: <path>` (every content line prefixed with `+`), `*** Delete File: <path>`, or `*** Update File: <path>` (optional `*** Move to: <path>`, then `@@ [context]` hunks with space/`-`/`+` line prefixes).",
+                },
+                permission: "edit",
+              }
+            : { codemode: false, permission: "edit" },
           description: DESCRIPTION,
           input: Input,
           freeform: { type: "lark", grammar: GRAMMAR },
@@ -92,7 +105,7 @@ export const Plugin = {
                 return yield* new ToolFailure({ message: "patch rejected: empty patch" })
               }
               const prepared: Prepared[] = []
-              const updates = new Map<string, string | null>()
+              const updates = new Map<string, { target: FileAccess.Target; content: string | null }>()
               const resolveTarget = Effect.fnUntraced(function* (value: string) {
                 const target = yield* access.resolve({ path: value, kind: "file" })
                 if (!target.externalDirectory) return target
@@ -115,11 +128,11 @@ export const Plugin = {
                       before: "",
                       after: Bom.split(content).text,
                     })
-                    updates.set(target.absolute, content)
+                    updates.set(target.absolute, { target, content })
                     return
                   }
                   if (hunk.type === "delete") {
-                    const previous = updates.get(target.absolute)
+                    const previous = updates.get(target.absolute)?.content
                     if (previous === null) {
                       return yield* new ToolFailure({
                         message: `patch verification failed: Failed to delete ${target.resource}: file does not exist`,
@@ -128,7 +141,7 @@ export const Plugin = {
                     const before =
                       previous !== undefined
                         ? Bom.split(previous).text
-                        : (yield* FileMutation.readText(environment.files, target.absolute).pipe(
+                        : (yield* FileMutation.readText(target.environment.files, target.absolute).pipe(
                             Effect.mapError(
                               (error) =>
                                 new ToolFailure({
@@ -137,10 +150,10 @@ export const Plugin = {
                             ),
                           )).text
                     prepared.push({ ...hunk, target, before, after: "" })
-                    updates.set(target.absolute, null)
+                    updates.set(target.absolute, { target, content: null })
                     return
                   }
-                  const previous = updates.get(target.absolute)
+                  const previous = updates.get(target.absolute)?.content
                   if (previous === null) {
                     return yield* new ToolFailure({
                       message: `patch verification failed: Failed to read file to update ${target.absolute}: file does not exist`,
@@ -149,7 +162,7 @@ export const Plugin = {
                   const original =
                     previous ??
                     (yield* Effect.gen(function* () {
-                      const content = yield* FileMutation.readText(environment.files, target.absolute).pipe(
+                      const content = yield* FileMutation.readText(target.environment.files, target.absolute).pipe(
                         Effect.mapError(
                           (error) =>
                             new ToolFailure({
@@ -176,10 +189,10 @@ export const Plugin = {
                     moveTarget,
                   })
                   if (moveTarget) {
-                    updates.set(target.absolute, null)
-                    updates.set(moveTarget.absolute, next)
+                    updates.set(target.absolute, { target, content: null })
+                    updates.set(moveTarget.absolute, { target: moveTarget, content: next })
                   } else {
-                    updates.set(target.absolute, next)
+                    updates.set(target.absolute, { target, content: next })
                   }
                 }).pipe(Effect.mapError(toolFailure(`Unable to prepare patch at ${hunk.path}`)))
               }
@@ -213,31 +226,30 @@ export const Plugin = {
                     const recased =
                       moveTarget !== undefined &&
                       moveTarget.absolute.toLowerCase() === change.target.absolute.toLowerCase() &&
-                      (yield* environment.files.stat(change.target.absolute).pipe(
+                      (yield* change.target.environment.files.stat(change.target.absolute).pipe(
                         Effect.map((info) => info.type === "file"),
                         Effect.orElseSucceed(() => false),
                       )) &&
-                      (yield* environment.files.stat(moveTarget.absolute).pipe(
+                      (yield* moveTarget.environment.files.stat(moveTarget.absolute).pipe(
                         Effect.as(true),
                         Effect.orElseSucceed(() => false),
                       ))
                     if (change.type === "delete")
-                      yield* environment.files
+                      yield* change.target.environment.files
                         .remove(change.target.absolute)
                         .pipe(Effect.mapError((error) => fail(`Failed to delete ${change.target.resource}`, error)))
-                    if (change.type !== "delete")
-                      yield* environment.files
-                        .write(
-                          recased ? change.target.absolute : target.absolute,
-                          new TextEncoder().encode(change.content),
-                        )
+                    if (change.type !== "delete") {
+                      const written = recased ? change.target : target
+                      yield* written.environment.files
+                        .write(written.absolute, new TextEncoder().encode(change.content))
                         .pipe(Effect.mapError((error) => fail(`Failed to write ${target.resource}`, error)))
+                    }
                     if (moveTarget && recased)
-                      yield* environment.files
+                      yield* change.target.environment.files
                         .move(change.target.absolute, moveTarget.absolute)
                         .pipe(Effect.mapError((error) => fail(`Failed to rename ${change.target.resource}`, error)))
                     if (moveTarget && !recased)
-                      yield* environment.files
+                      yield* change.target.environment.files
                         .remove(change.target.absolute)
                         .pipe(
                           Effect.mapError((error) =>
@@ -250,17 +262,17 @@ export const Plugin = {
               )
               const formatted = new Map<string, string>()
               yield* Effect.forEach(
-                [...updates.entries()].flatMap(([target, value]) => (value === null ? [] : [target])),
+                [...updates.values()].flatMap((update) => (update.content === null ? [] : [update.target])),
                 (target) =>
                   Effect.gen(function* () {
-                    const current = yield* FileMutation.readText(environment.files, target).pipe(
-                      Effect.mapError((error) => fail(`Failed to read ${target}`, error)),
+                    const current = yield* FileMutation.readText(target.environment.files, target.absolute).pipe(
+                      Effect.mapError((error) => fail(`Failed to read ${target.absolute}`, error)),
                     )
                     formatted.set(
-                      target,
-                      (yield* formatter.file(target))
-                        ? yield* FileMutation.syncTextBom(environment.files, target, current.bom).pipe(
-                            Effect.mapError((error) => fail(`Failed to sync ${target}`, error)),
+                      target.absolute,
+                      (yield* formatter.file(target.absolute))
+                        ? yield* FileMutation.syncTextBom(target.environment.files, target.absolute, current.bom).pipe(
+                            Effect.mapError((error) => fail(`Failed to sync ${target.absolute}`, error)),
                           )
                         : current.text,
                     )
@@ -288,21 +300,6 @@ export const Plugin = {
         }),
       )
       .pipe(Effect.orDie)
-
-    const hook = (event: SessionHooks["context"]) =>
-      Effect.sync(() => {
-        const usePatch =
-          event.model.id.includes("gpt-") && !event.model.id.includes("oss") && !event.model.id.includes("gpt-4")
-        if (usePatch) {
-          delete event.tools.edit
-          delete event.tools.write
-          return
-        }
-        delete event.tools.patch
-      })
-    yield* ctx.session.hook("context", hook)
-    yield* ctx.session.hook("compaction", hook)
-    yield* ctx.session.hook("generate", hook)
   }),
 }
 

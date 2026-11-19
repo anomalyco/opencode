@@ -1264,11 +1264,6 @@ export const dict = {
   "sidebar.recent.unpin": "Odepnout",
   "sidebar.recent.moveUp": "Posunout nahoru",
   "sidebar.recent.moveDown": "Posunout dolů",
-  "settings.experimental.row.newIcons.title": "Nové ikony",
-  "settings.experimental.row.newIcons.description": "Vyzkoušejte aktualizovanou sadu ikon",
-  "settings.experimental.row.foldUserMessages.title": "Sbalit dlouhé zprávy",
-  "settings.experimental.row.foldUserMessages.description":
-    "Sbalit vaše zprávy delší než 12 řádků za tlačítko Číst dále",
   "settings.experimental.row.newTimeline.title": "Nová časová osa",
   "settings.experimental.row.newTimeline.description":
     "Přepracovaná časová osa relace, která seskupuje činnost agenta a pod krokem zobrazuje jeden stavový řádek",
@@ -1278,14 +1273,10 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Zvolte, jak se relace zobrazují v postranním panelu. Platí pouze pro boční karty.",
   "settings.experimental.sidebarOrganize.recent": "Nedávné",
-  "settings.experimental.sidebarOrganize.projects": "Projekty",
   "settings.experimental.sidebarOrganize.list": "Jeden seznam",
   "settings.experimental.sidebarOrganize.customize": "Přizpůsobit",
-  "sidebar.organize.projects": "Projekty",
   "sidebar.organize.openTab": "Otevřít kartu",
   "sidebar.organize.showMore": "Zobrazit více",
-  "sidebar.organize.showLess": "Zobrazit méně",
-  "sidebar.organize.empty": "Zatím žádné relace",
   "sidebar.view.sessions": "Relace",
   "sidebar.view.options": "Možnosti zobrazení",
   "sidebar.view.grouping": "Seskupit podle",
@@ -1398,6 +1389,9 @@ export const dict = {
   "settings.timeline.description.compact":
     "Zobrazit podagenty samostatně. Ostatní aktivitu seskupit se sbalenými podrobnostmi.",
   "settings.timeline.description.quiet": "Zobrazit podagenty samostatně a seskupit úpravy. Ostatní aktivitu skrýt.",
+  "settings.timeline.row.foldUserMessages.title": "Sbalit dlouhé zprávy",
+  "settings.timeline.row.foldUserMessages.description":
+    "Sbalit vaše zprávy delší než 12 řádků za tlačítko Číst dále",
   "settings.timeline.row.turnDiffs.title": "Změněné soubory",
   "settings.timeline.row.turnDiffs.description": "Po dokončení kroku vypsat soubory, které změnil",
   "settings.timeline.category.commentary": "Komentář",

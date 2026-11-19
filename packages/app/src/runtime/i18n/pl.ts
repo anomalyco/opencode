@@ -1282,11 +1282,6 @@ export const dict = {
   "sidebar.recent.unpin": "Odepnij",
   "sidebar.recent.moveUp": "Przenieś w górę",
   "sidebar.recent.moveDown": "Przenieś w dół",
-  "settings.experimental.row.newIcons.title": "Nowe ikony",
-  "settings.experimental.row.newIcons.description": "Wypróbuj zaktualizowany zestaw ikon",
-  "settings.experimental.row.foldUserMessages.title": "Zwijaj długie wiadomości",
-  "settings.experimental.row.foldUserMessages.description":
-    "Zwijaj Twoje wiadomości dłuższe niż 12 linii za przyciskiem Czytaj więcej",
   "settings.experimental.row.newTimeline.title": "Nowa oś czasu",
   "settings.experimental.row.newTimeline.description":
     "Przeprojektowana oś czasu sesji, która grupuje działania agenta, z jednym wierszem statusu pod turą",
@@ -1296,14 +1291,10 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Wybierz sposób wyświetlania sesji na pasku bocznym. Dotyczy tylko kart bocznych.",
   "settings.experimental.sidebarOrganize.recent": "Ostatnie",
-  "settings.experimental.sidebarOrganize.projects": "Projekty",
   "settings.experimental.sidebarOrganize.list": "Jedna lista",
   "settings.experimental.sidebarOrganize.customize": "Dostosuj",
-  "sidebar.organize.projects": "Projekty",
   "sidebar.organize.openTab": "Otwórz kartę",
   "sidebar.organize.showMore": "Pokaż więcej",
-  "sidebar.organize.showLess": "Pokaż mniej",
-  "sidebar.organize.empty": "Brak sesji",
   "sidebar.view.sessions": "Sesje",
   "sidebar.view.options": "Opcje widoku",
   "sidebar.view.grouping": "Grupuj według",
@@ -1417,6 +1408,9 @@ export const dict = {
   "settings.timeline.row.width.wide": "Szeroka",
   "settings.timeline.description.compact": "Pokaż podagentów osobno. Grupuj inną aktywność ze zwiniętymi szczegółami.",
   "settings.timeline.description.quiet": "Pokaż podagentów osobno i grupuj edycje. Ukryj inną aktywność.",
+  "settings.timeline.row.foldUserMessages.title": "Zwijaj długie wiadomości",
+  "settings.timeline.row.foldUserMessages.description":
+    "Zwijaj Twoje wiadomości dłuższe niż 12 linii za przyciskiem Czytaj więcej",
   "settings.timeline.row.turnDiffs.title": "Zmienione pliki",
   "settings.timeline.row.turnDiffs.description": "Po zakończeniu tury wyświetl listę zmienionych w niej plików",
   "settings.timeline.category.commentary": "Komentarz",

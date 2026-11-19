@@ -1,18 +1,13 @@
 import { describe, expect, test } from "bun:test"
-import { createBuiltins } from "../src/runtime/intrinsics.js"
-import { Interpreter } from "../src/runtime/interpreter.js"
-import type { ToolRuntime } from "../src/tool-runtime.js"
-import { CodeBuilder, CodeSizeOverflow, hashOf } from "../src/code.js"
-import { compileSource } from "../src/compiler/compile.js"
-import { CodeFlags, EMPTY_CELLS, Op, packWord, PutKind } from "../src/opcodes.js"
-import { Mode } from "../src/vm.js"
+import { createBuiltins } from "../src/language/runtime/intrinsics.js"
+import { Interpreter } from "../src/language/runtime/interpreter.js"
+import { CodeBuilder, CodeSizeOverflow, hashOf } from "../src/language/code.js"
+import { compileSource } from "../src/language/compiler/compile.js"
+import { CodeFlags, EMPTY_CELLS, Op, packWord, PutKind } from "../src/language/opcodes.js"
+import { Mode } from "../src/language/vm.js"
 import { parseVmSource, type RunOptions, runProgram } from "./run-program.js"
 import { verifyAll, verifyCode } from "./verify-bytecode.js"
 
-const emptyTools = {
-  calls: [],
-  keys: () => [],
-} as unknown as ToolRuntime<never>
 
 const compileVerified = (code: string) => {
   const parsed = parseVmSource(code)
@@ -139,7 +134,7 @@ describe("CodeBuilder and packWord encoding bounds", () => {
     expect(finished.code.length).toBeGreaterThan(66_000)
     expect(verifyCode(finished)).toEqual([])
 
-    const ctx = new Interpreter<never>({ tools: emptyTools, builtins: createBuiltins(), logs: [] })
+    const ctx = new Interpreter<never>({ builtins: createBuiltins(), logs: [] })
     const vm = ctx.vm
     vm.sourceCodes.set("test", [finished])
     const root = vm.acquire(finished)
@@ -206,7 +201,6 @@ describe("wide `a` operands and `execWide` coverage", () => {
     expect(verifyAll(wideCodes)).toEqual([])
 
     const ctx = new Interpreter<never>({
-      tools: emptyTools,
       builtins: createBuiltins(),
       logs: [],
     })

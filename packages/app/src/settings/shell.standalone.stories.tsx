@@ -5,10 +5,12 @@ import { SettingsScreen } from "@/settings/shell"
 import { SettingsSurfaceProvider, type SettingsRootTab } from "@/settings/surface"
 import { LayoutProvider } from "@/shell/state/layout"
 
-function SettingsStory(props: { tab: SettingsRootTab; locked?: boolean }) {
+function SettingsStory(props: { tab: SettingsRootTab; subtab?: string; locked?: boolean }) {
   const history = createMemoryHistory()
 
   const query = new URLSearchParams({ tab: props.tab })
+
+  if (props.subtab) query.set("subtab", props.subtab)
 
   if (props.locked) query.set("server", ServerConnection.key(STORY_LOCKED_SERVER))
   history.set({ value: `/settings?${query}`, replace: true, scroll: false })
@@ -49,6 +51,10 @@ export const Providers = {
 
 export const Models = {
   render: () => <SettingsStory tab="models" />,
+}
+
+export const Plugins = {
+  render: () => <SettingsStory tab="extensions" subtab="plugins" />,
 }
 
 export const UnavailableServer = { render: () => <SettingsStory tab="providers" locked /> }

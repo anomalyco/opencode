@@ -1229,11 +1229,6 @@ export const dict = {
   "sidebar.recent.unpin": "Lösgör",
   "sidebar.recent.moveUp": "Flytta upp",
   "sidebar.recent.moveDown": "Flytta ned",
-  "settings.experimental.row.newIcons.title": "Nya ikoner",
-  "settings.experimental.row.newIcons.description": "Förhandsgranska den uppdaterade ikonuppsättningen",
-  "settings.experimental.row.foldUserMessages.title": "Fäll ihop långa meddelanden",
-  "settings.experimental.row.foldUserMessages.description":
-    "Fäll ihop dina meddelanden efter 12 rader bakom knappen Läs mer",
   "settings.experimental.row.newTimeline.title": "Ny tidslinje",
   "settings.experimental.row.newTimeline.description":
     "En omgjord sessionstidslinje som grupperar vad agenten gjorde, med en statusrad under turen",
@@ -1243,14 +1238,10 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Välj hur sessioner listas i sidofältet. Gäller endast sidoflikar.",
   "settings.experimental.sidebarOrganize.recent": "Senaste",
-  "settings.experimental.sidebarOrganize.projects": "Projekt",
   "settings.experimental.sidebarOrganize.list": "En lista",
   "settings.experimental.sidebarOrganize.customize": "Anpassa",
-  "sidebar.organize.projects": "Projekt",
   "sidebar.organize.openTab": "Öppen flik",
   "sidebar.organize.showMore": "Visa mer",
-  "sidebar.organize.showLess": "Visa mindre",
-  "sidebar.organize.empty": "Inga sessioner ännu",
   "sidebar.view.sessions": "Sessioner",
   "sidebar.view.options": "Visningsalternativ",
   "sidebar.view.grouping": "Gruppera efter",
@@ -1363,6 +1354,9 @@ export const dict = {
   "settings.timeline.description.compact":
     "Visa underagenter separat. Gruppera annan aktivitet med detaljerna ihopfällda.",
   "settings.timeline.description.quiet": "Visa underagenter separat och gruppera redigeringar. Dölj annan aktivitet.",
+  "settings.timeline.row.foldUserMessages.title": "Fäll ihop långa meddelanden",
+  "settings.timeline.row.foldUserMessages.description":
+    "Fäll ihop dina meddelanden efter 12 rader bakom knappen Läs mer",
   "settings.timeline.row.turnDiffs.title": "Ändrade filer",
   "settings.timeline.row.turnDiffs.description": "Lista filerna som varje tur ändrade när den är klar",
   "settings.timeline.category.commentary": "Kommentarer",

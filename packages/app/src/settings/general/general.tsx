@@ -348,6 +348,20 @@ export const SettingsGeneral: Component = () => {
             <TimelineWidthSetting />
             <BackgroundActivitySetting />
             <SettingsRow
+              title={language.t("settings.timeline.row.foldUserMessages.title")}
+              description={language.t("settings.timeline.row.foldUserMessages.description")}
+            >
+              <div data-action="settings-fold-user-messages">
+                <Switch
+                  checked={settings.general.foldUserMessages()}
+                  onChange={(checked) => settings.general.setFoldUserMessages(checked)}
+                  hideLabel
+                >
+                  {language.t("settings.timeline.row.foldUserMessages.title")}
+                </Switch>
+              </div>
+            </SettingsRow>
+            <SettingsRow
               title={language.t("settings.timeline.row.turnDiffs.title")}
               description={language.t("settings.timeline.row.turnDiffs.description")}
             >
@@ -355,6 +369,17 @@ export const SettingsGeneral: Component = () => {
                 <Switch
                   checked={settings.general.showTurnDiffs()}
                   onChange={(checked) => settings.general.setShowTurnDiffs(checked)}
+                />
+              </div>
+            </SettingsRow>
+            <SettingsRow
+              title={language.t("settings.timeline.row.wrapCodeBlocks.title")}
+              description={language.t("settings.timeline.row.wrapCodeBlocks.description")}
+            >
+              <div data-action="settings-wrap-code-blocks">
+                <Switch
+                  checked={settings.general.wrapCodeBlocks()}
+                  onChange={(checked) => settings.general.setWrapCodeBlocks(checked)}
                 />
               </div>
             </SettingsRow>

@@ -1228,11 +1228,6 @@ export const dict = {
   "sidebar.recent.unpin": "আনপিন করুন",
   "sidebar.recent.moveUp": "উপরে সরান",
   "sidebar.recent.moveDown": "নিচে সরান",
-  "settings.experimental.row.newIcons.title": "নতুন আইকন",
-  "settings.experimental.row.newIcons.description": "আপডেট করা আইকন সেটের পূর্বরূপ দেখুন",
-  "settings.experimental.row.foldUserMessages.title": "দীর্ঘ বার্তা ভাঁজ করুন",
-  "settings.experimental.row.foldUserMessages.description":
-    "আপনার 12 লাইনের বেশি বার্তাগুলো একটি আরও পড়ুন বোতামের পেছনে ভাঁজ করুন",
   "settings.experimental.row.newTimeline.title": "নতুন টাইমলাইন",
   "settings.experimental.row.newTimeline.description":
     "নতুনভাবে ডিজাইন করা সেশন টাইমলাইন, যা এজেন্টের কাজগুলোকে গোষ্ঠীবদ্ধ করে এবং টার্নের নিচে একটি স্থিতি লাইন দেখায়",
@@ -1242,14 +1237,10 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "সাইডবারে সেশনগুলো কীভাবে তালিকাভুক্ত হবে তা বেছে নিন। শুধুমাত্র পাশের ট্যাবে প্রযোজ্য।",
   "settings.experimental.sidebarOrganize.recent": "সাম্প্রতিক",
-  "settings.experimental.sidebarOrganize.projects": "প্রকল্প",
   "settings.experimental.sidebarOrganize.list": "একটি তালিকা",
   "settings.experimental.sidebarOrganize.customize": "কাস্টমাইজ করুন",
-  "sidebar.organize.projects": "প্রকল্প",
   "sidebar.organize.openTab": "ট্যাব খুলুন",
   "sidebar.organize.showMore": "আরও দেখান",
-  "sidebar.organize.showLess": "কম দেখান",
-  "sidebar.organize.empty": "এখনও কোনো সেশন নেই",
   "sidebar.view.sessions": "সেশন",
   "sidebar.view.options": "দৃশ্যের বিকল্প",
   "sidebar.view.grouping": "গোষ্ঠীবদ্ধ করুন",
@@ -1362,6 +1353,9 @@ export const dict = {
     "সাবএজেন্ট আলাদাভাবে দেখান। অন্যান্য কার্যকলাপ বিস্তারিত সঙ্কুচিত রেখে গোষ্ঠীবদ্ধ করুন।",
   "settings.timeline.description.quiet":
     "সাবএজেন্ট আলাদাভাবে দেখান এবং সম্পাদনাগুলো গোষ্ঠীবদ্ধ করুন। অন্যান্য কার্যকলাপ লুকান।",
+  "settings.timeline.row.foldUserMessages.title": "দীর্ঘ বার্তা ভাঁজ করুন",
+  "settings.timeline.row.foldUserMessages.description":
+    "আপনার 12 লাইনের বেশি বার্তাগুলো একটি আরও পড়ুন বোতামের পেছনে ভাঁজ করুন",
   "settings.timeline.row.turnDiffs.title": "পরিবর্তিত ফাইল",
   "settings.timeline.row.turnDiffs.description":
     "প্রতিটি টার্ন শেষ হলে সেটি যে ফাইলগুলো পরিবর্তন করেছে তার তালিকা দেখান",

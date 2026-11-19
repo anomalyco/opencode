@@ -1268,11 +1268,6 @@ export const dict = {
   "sidebar.recent.unpin": "Odpni",
   "sidebar.recent.moveUp": "Premakni gor",
   "sidebar.recent.moveDown": "Premakni dol",
-  "settings.experimental.row.newIcons.title": "Nove ikone",
-  "settings.experimental.row.newIcons.description": "Predogled posodobljenega nabora ikon",
-  "settings.experimental.row.foldUserMessages.title": "Zloži dolga sporočila",
-  "settings.experimental.row.foldUserMessages.description":
-    "Vaša sporočila, daljša od 12 vrstic, zloži za gumb Preberi več",
   "settings.experimental.row.newTimeline.title": "Nova časovnica",
   "settings.experimental.row.newTimeline.description":
     "Prenovljena časovnica seje, ki združi, kaj je agent naredil, z eno vrstico stanja pod korakom",
@@ -1282,14 +1277,10 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Izberite, kako so seje navedene v stranski vrstici. Velja samo za stranske zavihke.",
   "settings.experimental.sidebarOrganize.recent": "Nedavno",
-  "settings.experimental.sidebarOrganize.projects": "Projekti",
   "settings.experimental.sidebarOrganize.list": "En seznam",
   "settings.experimental.sidebarOrganize.customize": "Prilagodi",
-  "sidebar.organize.projects": "Projekti",
   "sidebar.organize.openTab": "Odpri zavihek",
   "sidebar.organize.showMore": "Pokaži več",
-  "sidebar.organize.showLess": "Pokaži manj",
-  "sidebar.organize.empty": "Še ni sej",
   "sidebar.view.sessions": "Seje",
   "sidebar.view.options": "Možnosti pogleda",
   "sidebar.view.grouping": "Združi po",
@@ -1403,6 +1394,9 @@ export const dict = {
   "settings.timeline.description.compact":
     "Podagente prikaži ločeno. Drugo dejavnost združi s strnjenimi podrobnostmi.",
   "settings.timeline.description.quiet": "Podagente prikaži ločeno in združi urejanja. Drugo dejavnost skrij.",
+  "settings.timeline.row.foldUserMessages.title": "Zloži dolga sporočila",
+  "settings.timeline.row.foldUserMessages.description":
+    "Vaša sporočila, daljša od 12 vrstic, zloži za gumb Preberi več",
   "settings.timeline.row.turnDiffs.title": "Spremenjene datoteke",
   "settings.timeline.row.turnDiffs.description": "Ob koncu vsakega koraka navedi datoteke, ki jih je spremenil",
   "settings.timeline.category.commentary": "Komentarji",

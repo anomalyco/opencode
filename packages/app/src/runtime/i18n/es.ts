@@ -1318,11 +1318,6 @@ export const dict = {
   "sidebar.recent.unpin": "Desfijar",
   "sidebar.recent.moveUp": "Subir",
   "sidebar.recent.moveDown": "Bajar",
-  "settings.experimental.row.newIcons.title": "Nuevos iconos",
-  "settings.experimental.row.newIcons.description": "Prueba el conjunto de iconos actualizado",
-  "settings.experimental.row.foldUserMessages.title": "Plegar mensajes largos",
-  "settings.experimental.row.foldUserMessages.description":
-    "Pliega tus mensajes de más de 12 líneas tras un botón Leer más",
   "settings.experimental.row.newTimeline.title": "Nueva cronología",
   "settings.experimental.row.newTimeline.description":
     "Una cronología de sesión rediseñada que agrupa lo que hizo el agente, con una línea de estado bajo el turno",
@@ -1332,14 +1327,10 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Elige cómo se listan las sesiones en la barra lateral. Solo se aplica a las pestañas laterales.",
   "settings.experimental.sidebarOrganize.recent": "Recientes",
-  "settings.experimental.sidebarOrganize.projects": "Proyectos",
   "settings.experimental.sidebarOrganize.list": "Una lista",
   "settings.experimental.sidebarOrganize.customize": "Personalizar",
-  "sidebar.organize.projects": "Proyectos",
   "sidebar.organize.openTab": "Abrir pestaña",
   "sidebar.organize.showMore": "Mostrar más",
-  "sidebar.organize.showLess": "Mostrar menos",
-  "sidebar.organize.empty": "Aún no hay sesiones",
   "sidebar.view.sessions": "Sesiones",
   "sidebar.view.options": "Opciones de vista",
   "sidebar.view.grouping": "Agrupar por",
@@ -1454,6 +1445,9 @@ export const dict = {
     "Mostrar los subagentes por separado. Agrupar el resto de la actividad con los detalles contraídos.",
   "settings.timeline.description.quiet":
     "Mostrar los subagentes por separado y agrupar las ediciones. Ocultar el resto de la actividad.",
+  "settings.timeline.row.foldUserMessages.title": "Plegar mensajes largos",
+  "settings.timeline.row.foldUserMessages.description":
+    "Pliega tus mensajes de más de 12 líneas tras un botón Leer más",
   "settings.timeline.row.turnDiffs.title": "Archivos modificados",
   "settings.timeline.row.turnDiffs.description": "Listar los archivos que cambió cada turno al terminar",
   "settings.timeline.category.commentary": "Comentarios",

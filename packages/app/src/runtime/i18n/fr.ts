@@ -1283,11 +1283,6 @@ export const dict = {
   "sidebar.recent.unpin": "Désépingler",
   "sidebar.recent.moveUp": "Monter",
   "sidebar.recent.moveDown": "Descendre",
-  "settings.experimental.row.newIcons.title": "Nouvelles icônes",
-  "settings.experimental.row.newIcons.description": "Prévisualiser le nouveau jeu d’icônes",
-  "settings.experimental.row.foldUserMessages.title": "Replier les longs messages",
-  "settings.experimental.row.foldUserMessages.description":
-    "Replier vos messages au-delà de 12 lignes derrière un bouton Lire la suite",
   "settings.experimental.row.newTimeline.title": "Nouvelle chronologie",
   "settings.experimental.row.newTimeline.description":
     "Une chronologie de session repensée qui regroupe les actions de l’agent, avec une seule ligne d’état sous le tour",
@@ -1297,14 +1292,10 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Choisissez comment les sessions sont listées dans la barre latérale. S’applique uniquement aux onglets latéraux.",
   "settings.experimental.sidebarOrganize.recent": "Récentes",
-  "settings.experimental.sidebarOrganize.projects": "Projets",
   "settings.experimental.sidebarOrganize.list": "Liste unique",
   "settings.experimental.sidebarOrganize.customize": "Personnaliser",
-  "sidebar.organize.projects": "Projets",
   "sidebar.organize.openTab": "Ouvrir l’onglet",
   "sidebar.organize.showMore": "Afficher plus",
-  "sidebar.organize.showLess": "Afficher moins",
-  "sidebar.organize.empty": "Aucune session pour l’instant",
   "sidebar.view.sessions": "Sessions",
   "sidebar.view.options": "Options d’affichage",
   "sidebar.view.grouping": "Regrouper par",
@@ -1420,6 +1411,9 @@ export const dict = {
     "Afficher les sous-agents séparément. Regrouper les autres activités avec les détails réduits.",
   "settings.timeline.description.quiet":
     "Afficher les sous-agents séparément et regrouper les modifications. Masquer les autres activités.",
+  "settings.timeline.row.foldUserMessages.title": "Replier les longs messages",
+  "settings.timeline.row.foldUserMessages.description":
+    "Replier vos messages au-delà de 12 lignes derrière un bouton Lire la suite",
   "settings.timeline.row.turnDiffs.title": "Fichiers modifiés",
   "settings.timeline.row.turnDiffs.description":
     "Lister les fichiers modifiés par chaque tour une fois celui-ci terminé",

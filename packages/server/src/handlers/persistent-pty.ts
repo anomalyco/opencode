@@ -18,10 +18,11 @@ import { Socket } from "effect/socket"
 import { Api } from "../api"
 import { CorsConfig, isAllowedRequestOrigin } from "../cors"
 import { makeArtifact } from "./artifact"
+import { makeBlobGet } from "./blob"
+import { makeAutomation } from "./automation"
 import { makeJob } from "./job"
 import { makeMediaGet } from "./media"
 import { type Outbound, runPtySocket } from "./pty-socket"
-import { makeSchedule } from "./schedule"
 
 export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experimental", (handlers) =>
   Effect.gen(function* () {
@@ -31,10 +32,12 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
     const artifact = yield* makeArtifact
     const job = yield* makeJob
     const mediaGet = yield* makeMediaGet
-    const schedule = yield* makeSchedule
+    const blobGet = yield* makeBlobGet
+    const automation = yield* makeAutomation
 
     return handlers
       .handleRaw("media.get", (ctx) => mediaGet(ctx.params.hash, ctx.request))
+      .handleRaw("blob.get", (ctx) => blobGet(ctx.params.id, ctx.request))
       .handle("job.list", (ctx) => job.list(ctx.query))
       .handle("artifacts.providers", (ctx) => artifact.providers(ctx.query, ctx.request))
       .handle("artifacts.list", (ctx) => artifact.list(ctx.query, ctx.request))
@@ -43,12 +46,12 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
       .handle("artifacts.update", (ctx) => artifact.update(ctx.params.artifactID, ctx.query, ctx.payload, ctx.request))
       .handle("artifacts.delete", (ctx) => artifact.remove(ctx.params.artifactID, ctx.query, ctx.request))
       .handleRaw("artifacts.view", (ctx) => artifact.view(ctx.params.artifactID, ctx.query, ctx.request))
-      .handle("schedule.create", (ctx) => schedule.create(ctx.payload))
-      .handle("schedule.list", (ctx) => schedule.list(ctx.query.sessionID))
-      .handle("schedule.get", (ctx) => schedule.get(ctx.params.scheduleID))
-      .handle("schedule.pause", (ctx) => schedule.pause(ctx.params.scheduleID))
-      .handle("schedule.resume", (ctx) => schedule.resume(ctx.params.scheduleID))
-      .handle("schedule.delete", (ctx) => schedule.remove(ctx.params.scheduleID))
+      .handle("automation.create", (ctx) => automation.create(ctx.payload))
+      .handle("automation.list", (ctx) => automation.list(ctx.query))
+      .handle("automation.get", (ctx) => automation.get(ctx.params.automationID))
+      .handle("automation.pause", (ctx) => automation.pause(ctx.params.automationID))
+      .handle("automation.resume", (ctx) => automation.resume(ctx.params.automationID))
+      .handle("automation.delete", (ctx) => automation.remove(ctx.params.automationID))
       .handle(
         "persistentPty.read",
         Effect.fn(function* (ctx) {

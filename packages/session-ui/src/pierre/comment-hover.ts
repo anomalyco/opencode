@@ -22,6 +22,8 @@ export function createHoverComment(props: {
   label: string
   getHoveredLine: () => HoverCommentLine | undefined
   onSelect: (line: HoverCommentLine) => void
+  /** Whether the line is in the selected range, which a click comments on as a whole rather than starting a new one. */
+  isSelected: (line: HoverCommentLine) => boolean
 }): HoverComment | undefined {
   if (typeof document === "undefined") return
 
@@ -48,16 +50,20 @@ export function createHoverComment(props: {
   button.style.justifyContent = "center"
   button.style.border = "none"
   button.style.borderRadius = "var(--radius-md)"
-  button.style.background = "var(--icon-interactive-base)"
-  button.style.color = "var(--white)"
+  button.style.background = "var(--v2-background-bg-inverse)"
+  button.style.color = "var(--v2-icon-icon-inverse)"
   button.style.boxShadow = "var(--shadow-xs)"
   button.style.padding = "0"
   button.style.cursor = "pointer"
   button.style.position = "relative"
-  button.style.left = "30px"
+  // It overlaps the line number, which Pierre stacks at 1; Pierre's own gutter button uses 4.
+  button.style.zIndex = "4"
+  button.style.left = "-4px"
   button.style.top = "calc((var(--diffs-line-height, 24px) - 20px) / 2)"
 
   let state = INITIAL_HOVER_COMMENT_STATE
+  // Whether the last press went to Pierre, which then opens the draft itself.
+  let forwarded = false
   // Reused for every pointer move and scroll so tracking allocates nothing.
   const syncEvent: HoverCommentSync = { type: "hover.synced", lineNumber: undefined, side: undefined }
 
@@ -88,10 +94,19 @@ export function createHoverComment(props: {
   document.addEventListener("scroll", sync, { passive: true, capture: true })
   button.addEventListener("mouseenter", sync)
   button.addEventListener("mousemove", sync)
+  // Pierre skips presses on a custom gutter button when it selects lines, so hand the press to the line number under
+  // the button: dragging from it then selects lines and ends in a draft for them. On a line that is already selected
+  // the press stays here, as Pierre would unselect or shrink the range, and the click comments on the whole range.
   button.addEventListener("pointerdown", (event) => {
     event.preventDefault()
     event.stopPropagation()
     sync()
+    const line = selectHoverLine(state)
+    forwarded = !line || !props.isSelected(line)
+
+    if (!forwarded) return
+    const slot = button.assignedSlot ?? button.parentElement?.assignedSlot
+    slot?.closest("[data-column-number]")?.dispatchEvent(new PointerEvent("pointerdown", event))
   })
   button.addEventListener("mousedown", (event) => {
     event.preventDefault()
@@ -104,7 +119,8 @@ export function createHoverComment(props: {
     sync()
     const line = selectHoverLine(state)
 
-    if (line) props.onSelect(line)
+    // A keyboard press has no pointer, so it never went to Pierre.
+    if (line && (event.detail === 0 || !forwarded)) props.onSelect(line)
   })
 
   return {

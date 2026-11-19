@@ -327,8 +327,7 @@ const daemonLayer = Layer.effect(
         if (run.stopping) yield* Fiber.interrupt(run.stopping)
         // Stop waiting first, so forgetting the process is not mistaken for losing it.
         if (run.wait) yield* Fiber.interrupt(run.wait)
-        // Forget the process before deleting its file. This also kills what is left of its group, even after a
-        // successful exit, which a spawned command would leave running: the daemon cannot forget a process otherwise.
+        // Terminate a running command or just forget a finished one before deleting its file.
         yield* pty.terminatePipe(run.process).pipe(Effect.ignore)
         yield* Effect.promise(() => unlink(run.info.file).catch(() => {}))
         yield* Deferred.fail(run.done, new NotFoundError({ id }))
@@ -430,13 +429,6 @@ const daemonLayer = Layer.effect(
                   }),
                 ),
               ),
-            ),
-            // Like spawned commands: what a failed command left running in its group is stopped with it, while a
-            // successful one may leave background processes (`cmd &`) behind.
-            Effect.tap((outcome) =>
-              outcome.status === "exited" && outcome.exit !== undefined && outcome.exit !== 0
-                ? pty.signalPipe(run.process, "SIGTERM").pipe(Effect.ignore)
-                : Effect.void,
             ),
             Effect.flatMap((outcome) => finish(run, outcome)),
           ),
@@ -606,6 +598,7 @@ const layer = () =>
       const bus = yield* Bus.Service
       const location = yield* Location.Service
       const global = yield* Global.Service
+      const fs = yield* FSUtil.Service
       const shell = yield* ShellSelect.Service
       const environment = yield* Environment.Service
       const hooks = yield* PluginHooks.Service
@@ -622,9 +615,8 @@ const layer = () =>
         location.workspaceID === undefined && PersistentPty.available ? yield* daemon.at(location) : undefined
 
       const outputDir = path.join(global.data, DIRECTORY, location.project.id)
-      const { mkdir, unlink, stat } = yield* Effect.promise(() => import("fs/promises"))
+      const { unlink, stat } = yield* Effect.promise(() => import("fs/promises"))
       const { createWriteStream, createReadStream } = yield* Effect.promise(() => import("fs"))
-      yield* Effect.promise(() => mkdir(outputDir, { recursive: true }))
 
       yield* Effect.addFinalizer(() =>
         Effect.gen(function* () {
@@ -914,6 +906,11 @@ const layer = () =>
         // Absolute for local commands, so the command reports the same cwd wherever it runs.
         if (location.workspaceID === undefined) invocation.cwd = path.resolve(location.directory, invocation.cwd)
 
+        // Created per command: the directory can be removed while the Location stays open.
+        yield* fs
+          .ensureDir(outputDir)
+          .pipe(Effect.mapError((cause) => new AppProcess.AppProcessError({ command: invocation.command, cause })))
+
         const id = Shell.ID.ascending()
         const args = ShellSelect.args(invocation.shell, invocation.command)
         const file = path.join(outputDir, `${id}.out`)
@@ -1181,6 +1178,7 @@ export const node = makeLocationNode({
     Bus.node,
     Location.node,
     Global.node,
+    FSUtil.node,
     ShellSelect.node,
     Environment.node,
     PluginHooks.node,

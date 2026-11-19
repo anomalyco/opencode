@@ -48,6 +48,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "Se comentează la",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Adaugă comentariu",
+  "ui.lineComment.add": "Adaugă comentariu",
+  "ui.lineComment.actions": "Acțiuni pentru selecție",
   "ui.lineComment.contextPlaceholder": "Adaugă context pentru această modificare",
   "ui.lineComment.submit": "Comentează",
   "ui.lineComment.cancel": "Renunță",

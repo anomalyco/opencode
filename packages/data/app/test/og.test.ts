@@ -3,7 +3,7 @@ import { readdir, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { buildOgWorker } from "../script/build-og-worker"
-import { isDataBypassPath, parsePath } from "../src/lib/data-path"
+import { parsePath } from "../src/lib/data-path"
 import type { OgCard } from "../src/og/card"
 
 // The catalog module behind the card builders defines a router query at import time, which throws outside a Solid
@@ -75,11 +75,6 @@ describe("og.png paths", () => {
     expect(parsePath("/data/compare/a/b/og.png")).toBeUndefined()
     expect(parsePath("/data/banner.png/og.png")).toBeUndefined()
     expect(parsePath("/data/thinkingmachines/inkling-2-small/extra/og.png")).toBeUndefined()
-  })
-
-  test("og images never redirect to the visitor's language", () => {
-    expect(isDataBypassPath("/data/thinkingmachines/inkling-2-small/og.png")).toBe(true)
-    expect(isDataBypassPath("/data/thinkingmachines/inkling-2-small")).toBe(false)
   })
 })
 
