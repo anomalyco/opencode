@@ -9,7 +9,7 @@ import { ShellSelect } from "./select.js"
 import { Wildcard } from "../util/wildcard.js"
 
 type Part = { type: string; text: string; raw: string; unquotedTilde?: boolean }
-const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
+const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location", "sl"])
 const POWERSHELL_LITERAL_FLAG_RE = /^-(?:lp|l(?:i(?:t(?:e(?:r(?:a(?:l(?:p(?:a(?:t(?:h)?)?)?)?)?)?)?)?)?)?|psp(?:a(?:t(?:h)?)?)?):?$/i
 const POWERSHELL_STACK_FLAG_RE = /^-(?:stack(?:name|nam|na|n)?|st):?$/i
 

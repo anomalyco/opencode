@@ -248,4 +248,11 @@ describe("ShellParse", () => {
     )
     expect(powershell.directories).toEqual(["/workspace/src", "/usr/local/bin"])
   })
+
+  test("recognizes PowerShell sl alias (Set-Location) for external_directory checks", async () => {
+    const result = await Effect.runPromise(
+      ShellParse.scan("sl ..\\..\\.. ; Get-Location", "pwsh", "C:\\workspace\\project"),
+    )
+    expect(result.directories).toEqual(["..\\..\\.."])
+  })
 })
