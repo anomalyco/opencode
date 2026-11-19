@@ -1,5 +1,5 @@
 import { Effect, Option } from "effect"
-import { Commands } from "../commands"
+import { AllowElevated, Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { ServerProcess } from "../../server-process"
 
@@ -12,6 +12,7 @@ export default Runtime.handler(
       hostname: Option.getOrUndefined(input.hostname),
       port: Option.getOrUndefined(input.port),
       cors: input.cors.length > 0 ? input.cors : undefined,
+      allowElevated: yield* Effect.serviceOption(AllowElevated).pipe(Effect.map(Option.getOrElse(() => false))),
     })
   }),
 )
