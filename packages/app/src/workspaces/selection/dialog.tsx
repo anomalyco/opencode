@@ -588,6 +588,16 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
         [data-file-tree-virtualized-scroll] {
           overscroll-behavior: contain;
         }
+        /* @pierre/trees paints its truncation marker when the marker cell is
+         * taller than one line. At fractional UI zoom, sub-pixel rounding can
+         * make that cell a fraction of a pixel taller than 1lh, so the marker
+         * shows even when the name fits. Allow 1px of rounding slack.
+         * Upstream: pierrecomputer/pierre#816; remove when #939 ships. */
+        @container measure (height <= calc(1lh + 1px)) {
+          [data-truncate-marker] {
+            opacity: 0 !important;
+          }
+        }
       `,
       onExpansionChange(change) {
         if (change.expanded) dispatchTree({ type: "dir.expanded", dir: change.path })
