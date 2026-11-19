@@ -69,7 +69,8 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const db = (yield* Database.Service).db
     const locks = KeyedMutex.makeUnsafe<Environment.ID>()
-    // The table is the durable copy and is read once: `get` and `list` answer from here, without a query.
+    // Known names are read once per process; a machine another process adds or removes in the shared database shows up
+    // here on restart, as with process-local session execution until clustering. Live connections stay in the dialling process.
     const rows = yield* db.select({ id: MachineTable.id }).from(MachineTable).all().pipe(Effect.orDie)
     // One instance per known id for the life of the process: its running processes must survive reconnects.
     const instances = new Map<Environment.ID, Machine.Interface>(rows.map((row) => [row.id, Machine.make(row.id)]))
@@ -81,12 +82,16 @@ const layer = Layer.effect(
         yield* locks.withLock(id)(
           Effect.gen(function* () {
             if (instances.has(id)) return yield* new AlreadyExists({ machine: id })
-            yield* db
+            const inserted = yield* db
               .insert(MachineTable)
               .values({ id, time_created: yield* Clock.currentTimeMillis })
-              .run()
+              .onConflictDoNothing()
+              .returning({ id: MachineTable.id })
+              .get()
               .pipe(Effect.orDie)
+            // A row another process wrote is still a known machine, so it is taken into memory either way.
             instances.set(id, Machine.make(id))
+            if (!inserted) return yield* new AlreadyExists({ machine: id })
           }),
         )
         return id

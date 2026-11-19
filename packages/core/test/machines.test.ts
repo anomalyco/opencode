@@ -7,7 +7,7 @@ import { Machines } from "@opencode/core/machine/machines"
 import { Global } from "@opencode/util/global"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import path from "node:path"
-import { Cause, Effect, Fiber, PlatformError, Queue, Stream } from "effect"
+import { Cause, Context, Effect, Fiber, Layer, PlatformError, Queue, Stream } from "effect"
 import { ChildProcess } from "effect/process"
 import { makeWorker } from "./fixture/machine-worker"
 import { tmpdirScoped } from "./fixture/tmpdir"
@@ -34,6 +34,23 @@ const connection = (name: string, os: string, arch: string) =>
     send: () => {},
     messages: Stream.fromQueue(queue),
   }))
+
+const tempLayers = (directory: string) =>
+  AppNodeBuilder.build(LayerNode.group([Database.node, Machines.node]), [
+    Global.node.replace(
+      Global.layerWith({
+        data: directory,
+        cache: directory,
+        config: directory,
+        state: directory,
+        tmp: directory,
+        bin: directory,
+        log: directory,
+        repos: directory,
+      }),
+    ),
+    Database.node.replace(Database.configured({ path: path.join(directory, "opencode.db") })),
+  ])
 
 const service = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, Machines.node])))
 
@@ -198,21 +215,7 @@ service.effect("refuses a bad name and a name it already knows", () =>
 it.effect("keeps known machines across a service rebuild and keeps live state in memory only", () =>
   Effect.gen(function* () {
     const tmp = yield* tmpdirScoped()
-    const layers = AppNodeBuilder.build(LayerNode.group([Database.node, Machines.node]), [
-      Global.node.replace(
-        Global.layerWith({
-          data: tmp.path,
-          cache: tmp.path,
-          config: tmp.path,
-          state: tmp.path,
-          tmp: tmp.path,
-          bin: tmp.path,
-          log: tmp.path,
-          repos: tmp.path,
-        }),
-      ),
-      Database.node.replace(Database.configured({ path: path.join(tmp.path, "opencode.db") })),
-    ])
+    const layers = tempLayers(tmp.path)
     yield* Effect.scoped(
       Effect.gen(function* () {
         const machines = yield* Machines.Service
@@ -228,5 +231,22 @@ it.effect("keeps known machines across a service rebuild and keeps live state in
       expect(yield* machines.list()).toEqual([new Machines.Info({ id, online: false })])
       expect((yield* machines.get(id)).id).toBe(id)
     }).pipe(Effect.provide(layers, { local: true }))
+  }),
+)
+
+it.effect("reports a machine another process added to the same database", () =>
+  Effect.gen(function* () {
+    const tmp = yield* tmpdirScoped()
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        const first = Context.get(yield* Layer.build(tempLayers(tmp.path)), Machines.Service)
+        // The second process loaded the empty table before the first one added the machine.
+        const second = Context.get(yield* Layer.build(tempLayers(tmp.path)), Machines.Service)
+        const id = yield* first.add("gpu")
+        expect(yield* second.add("gpu").pipe(Effect.flip)).toBeInstanceOf(Machines.AlreadyExists)
+        expect(yield* second.list()).toEqual([new Machines.Info({ id, online: false })])
+        expect((yield* second.get(id)).id).toBe(id)
+      }),
+    )
   }),
 )
