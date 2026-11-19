@@ -105,7 +105,7 @@ export const Plugin = {
                 return yield* new ToolFailure({ message: "patch rejected: empty patch" })
               }
               const prepared: Prepared[] = []
-              const updates = new Map<string, string | null>()
+              const updates = new Map<string, { target: FileAccess.Target; content: string | null }>()
               const resolveTarget = Effect.fnUntraced(function* (value: string) {
                 const target = yield* access.resolve({ path: value, kind: "file" })
                 if (!target.externalDirectory) return target
@@ -128,11 +128,11 @@ export const Plugin = {
                       before: "",
                       after: Bom.split(content).text,
                     })
-                    updates.set(target.absolute, content)
+                    updates.set(target.absolute, { target, content })
                     return
                   }
                   if (hunk.type === "delete") {
-                    const previous = updates.get(target.absolute)
+                    const previous = updates.get(target.absolute)?.content
                     if (previous === null) {
                       return yield* new ToolFailure({
                         message: `patch verification failed: Failed to delete ${target.resource}: file does not exist`,
@@ -150,10 +150,10 @@ export const Plugin = {
                             ),
                           )).text
                     prepared.push({ ...hunk, target, before, after: "" })
-                    updates.set(target.absolute, null)
+                    updates.set(target.absolute, { target, content: null })
                     return
                   }
-                  const previous = updates.get(target.absolute)
+                  const previous = updates.get(target.absolute)?.content
                   if (previous === null) {
                     return yield* new ToolFailure({
                       message: `patch verification failed: Failed to read file to update ${target.absolute}: file does not exist`,
@@ -189,10 +189,10 @@ export const Plugin = {
                     moveTarget,
                   })
                   if (moveTarget) {
-                    updates.set(target.absolute, null)
-                    updates.set(moveTarget.absolute, next)
+                    updates.set(target.absolute, { target, content: null })
+                    updates.set(moveTarget.absolute, { target: moveTarget, content: next })
                   } else {
-                    updates.set(target.absolute, next)
+                    updates.set(target.absolute, { target, content: next })
                   }
                 }).pipe(Effect.mapError(toolFailure(`Unable to prepare patch at ${hunk.path}`)))
               }
@@ -262,9 +262,7 @@ export const Plugin = {
               )
               const formatted = new Map<string, string>()
               yield* Effect.forEach(
-                [...new Map(targets.map((target) => [target.absolute, target])).values()].filter(
-                  (target) => typeof updates.get(target.absolute) === "string",
-                ),
+                [...updates.values()].flatMap((update) => (update.content === null ? [] : [update.target])),
                 (target) =>
                   Effect.gen(function* () {
                     const current = yield* FileMutation.readText(target.environment.files, target.absolute).pipe(
