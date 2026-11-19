@@ -675,14 +675,9 @@ pub(crate) fn bordered(view: &View, theme: &Theme, border: &abi::Border) {
     .into_iter()
     .filter(|(set, _)| *set)
     .fold(Sides::NONE, |sides, (_, side)| sides.union(side));
-    view.border(match border.style {
-        abi::BorderStyle::Single => BorderStyle::Single,
-        abi::BorderStyle::Double => BorderStyle::Double,
-        abi::BorderStyle::Rounded => BorderStyle::Rounded,
-        abi::BorderStyle::Heavy => BorderStyle::Heavy,
-    })
-    .border_sides(sides)
-    .border_color(color(theme, border.color.as_ref()).unwrap_or(Color::rgb(255, 255, 255)));
+    view.border(border_style(border.style))
+        .border_sides(sides)
+        .border_color(color(theme, border.color.as_ref()).unwrap_or(Color::rgb(255, 255, 255)));
     // OpenTUI refuses a longer title with an error that ends the TUI; no title that long fits a row anyway.
     let cut =
         |title: &String| title[..title.floor_char_boundary(opentui::sys::OT_BUFFER_TEXT_BYTES_MAX as usize)].to_owned();
@@ -696,6 +691,16 @@ pub(crate) fn bordered(view: &View, theme: &Theme, border: &abi::Border) {
     }
     if let Some(title) = &border.bottom_title {
         view.bottom_title(cut(title)).bottom_title_alignment(alignment(border.bottom_title_align));
+    }
+}
+
+/// OpenTUI's border style of `border`.
+pub(crate) fn border_style(border: abi::BorderStyle) -> BorderStyle {
+    match border {
+        abi::BorderStyle::Single => BorderStyle::Single,
+        abi::BorderStyle::Double => BorderStyle::Double,
+        abi::BorderStyle::Rounded => BorderStyle::Rounded,
+        abi::BorderStyle::Heavy => BorderStyle::Heavy,
     }
 }
 

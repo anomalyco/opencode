@@ -741,9 +741,13 @@ impl Tree {
         out
     }
 
-    /// The ids the tree holds, when `key` is its only root: what a keep of the whole tree holds again, with no count.
-    pub fn held_whole(&self, key: &str) -> Option<usize> {
-        matches!(&self.nodes[..], [root] if root.node.id() == Some(key)).then_some(self.ids.len())
+    /// The ids a keep of `key` holds again: the tree's, when `key` is its only root, without a count; else from the
+    /// counts of every id ([`Tree::held_counts`]), which `counts` keeps for the next keep.
+    pub fn held_by(&self, key: &str, counts: &std::cell::OnceCell<HashMap<String, usize>>) -> usize {
+        if matches!(&self.nodes[..], [root] if root.node.id() == Some(key)) {
+            return self.ids.len();
+        }
+        counts.get_or_init(|| self.held_counts()).get(key).copied().unwrap_or(0)
     }
 
     /// Whether a widget of the tree shows the host's code view of a claimed fence ([`Node::Fence`]).
@@ -755,7 +759,7 @@ impl Tree {
 
     /// For each id, the ids the tree holds at it and under it: what a node that keeps it holds again. One walk up
     /// from each id, so a view that keeps every card costs one pass, not one a keep.
-    pub fn held_counts(&self) -> HashMap<String, usize> {
+    fn held_counts(&self) -> HashMap<String, usize> {
         let mut counts: HashMap<&str, usize> = HashMap::with_capacity(self.ids.len());
         let mut visits = 0;
         for key in self.ids.keys() {
