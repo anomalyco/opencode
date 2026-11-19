@@ -674,8 +674,12 @@ fn usable_key(tui: &Tui, key: &str) -> bool {
         .into_iter()
         .filter_map(|key| keymap.parse_key(key).ok().map(|chord| chord.stroke))
         .collect();
-    tui.keymap.parse_binding(key).is_ok_and(|bindings| {
-        bindings.iter().all(|parts| !parts.is_empty() && parts.iter().all(|part| !closing.contains(&part.stroke)))
+    // A key with an unknown token parses to no sequence, and binds nothing.
+    keymap.parse_binding(key).is_ok_and(|bindings| {
+        !bindings.is_empty()
+            && bindings
+                .iter()
+                .all(|parts| !parts.is_empty() && parts.iter().all(|part| !closing.contains(&part.stroke)))
     })
 }
 
