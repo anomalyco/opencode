@@ -151,9 +151,12 @@ fn indexed(palette: Option<&TerminalPalette>) -> Vec<(u8, Color)> {
         .collect()
 }
 
-/// The terminal's default color, with `color` as its snapshot (`RGBA.defaultForeground(color)`).
+/// The terminal's default color, with `color` as its snapshot (`RGBA.defaultForeground(color)`). The snapshot's alpha
+/// stays: the system theme's background is transparent, and a field drawn in it shows the panel behind.
 fn terminal_default(color: Color) -> Color {
-    Color::default_with(color.r, color.g, color.b)
+    let mut value = Color::default_with(color.r, color.g, color.b);
+    value.a = color.a;
+    value
 }
 
 fn map(theme: &UiTheme, indexed: &[(u8, Color)], system: bool) -> RunTheme {
@@ -509,6 +512,9 @@ mod tests {
         assert_eq!(bare.footer.categorical.first().copied().map(rgb), Some((0xad, 0x8e, 0xe6)));
         assert_eq!(rgb(bare.footer.warning), (0xe0, 0xaf, 0x68));
         assert_eq!(bare.background.intent(), Intent::Default);
+        // The focused search field takes the transparent background, so the panel's shade shows through it.
+        let field = bare.footer.formfield_focused_bg;
+        assert_eq!((field.intent(), field.a), (Intent::Default, 0));
         // The same slots as default colors give the same footer.
         let reported = TerminalPalette { foreground: palette.colors[7], background: palette.colors[0], ..palette };
         assert_eq!(resolve(&input(reported)).footer, bare.footer);
