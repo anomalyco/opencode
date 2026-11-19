@@ -1,9 +1,74 @@
 import { constructor, constants, type Method, methods } from "../runtime/native.js"
-import { coerceToNumber, type Value } from "../runtime/objects.js"
+import { coerceToNumber, get, type NativeResult, Obj, type Value } from "../runtime/objects.js"
 import { typeError } from "../runtime/model.js"
 import type { Interpreter } from "../runtime/interpreter.js"
-import { withPrimitives } from "../runtime/callback.js"
+import { withPrimitives, withReads } from "../runtime/callback.js"
+import { arrayLikeTags } from "./date.js"
 import { coerce } from "./value.js"
+
+// Intl.NumberFormat's options, each with the hint its value converts by.
+const numberFormatOptions = [
+  ...[
+    "localeMatcher",
+    "numberingSystem",
+    "style",
+    "currency",
+    "currencyDisplay",
+    "currencySign",
+    "unit",
+    "unitDisplay",
+    "notation",
+    "compactDisplay",
+    "useGrouping",
+    "signDisplay",
+    "roundingMode",
+    "roundingPriority",
+    "trailingZeroDisplay",
+  ].map((name) => [name, "string"] as const),
+  ...[
+    "minimumIntegerDigits",
+    "minimumFractionDigits",
+    "maximumFractionDigits",
+    "minimumSignificantDigits",
+    "maximumSignificantDigits",
+    "roundingIncrement",
+  ].map((name) => [name, "number"] as const),
+]
+
+// The host's Intl.NumberFormat formats; with no locales it stays en-US so output does not depend on the host.
+const toLocaleString = (value: number, locales: Value, options: Value): NativeResult => {
+  // The host's own message for null quotes host source, so this one is thrown here.
+  if (locales === null || options === null) throw typeError("Cannot convert undefined or null to object.")
+  return withReads(() => {
+    const list = locales instanceof Obj ? arrayLikeTags(locales) : []
+    // CanonicalizeLocaleList: an element that is neither a string nor an object is a TypeError, not an invalid tag.
+    if (list.some((tag) => typeof tag !== "string" && !(tag instanceof Obj))) {
+      throw typeError("Number.prototype.toLocaleString: a locale must be a string or an object.")
+    }
+    const length = list.length
+    const read = options instanceof Obj ? numberFormatOptions : []
+    return withPrimitives(
+      [...list.map(() => "string" as const), ...read.map(([, hint]) => hint)],
+      [...list, ...read.map(([name]) => get(options as Obj, name))],
+      (primitives) => {
+        // Intl reads a primitive other than a string as an empty list. The host canonicalizes the tags itself; doing it
+        // here too would canonicalize twice, which breaks some valid tags.
+        const tags =
+          locales instanceof Obj
+            ? primitives.slice(0, length).map((tag) => (typeof tag === "symbol" ? tag : String(tag)))
+            : typeof locales === "string"
+              ? [locales]
+              : []
+        return value.toLocaleString(
+          (tags.length === 0 ? "en-US" : tags) as string | Array<string>,
+          (options instanceof Obj
+            ? Object.fromEntries(read.map(([name], index) => [name, primitives[length + index]]))
+            : options) as Intl.NumberFormatOptions,
+        )
+      },
+    )
+  })
+}
 
 export const numberGlobal = <R>(ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
@@ -48,7 +113,7 @@ export const numberGlobal = <R>(ctx: Interpreter<R>) => {
   ]
   methods(builtins, builtins.Number, [
     formatting("toFixed", (value, digits) => value.toFixed(digits)),
-    ["toLocaleString", 0, (thisValue) => self(thisValue, "toLocaleString").toLocaleString("en-US")],
+    ["toLocaleString", 0, (thisValue, args) => toLocaleString(self(thisValue, "toLocaleString"), args[0], args[1])],
     formatting("toExponential", (value, digits) => value.toExponential(digits)),
     formatting("toPrecision", (value, digits) => (digits === undefined ? value.toString() : value.toPrecision(digits))),
     formatting("toString", (value, radix) => value.toString(radix)),

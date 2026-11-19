@@ -1657,6 +1657,118 @@ describe("toLocaleString", () => {
     ])
   })
 
+  test("numbers honor locales and Intl.NumberFormat options", async () => {
+    expect(
+      await value(`
+      let reads = 0
+      return [
+        (0.5).toLocaleString("en-US", { style: "percent" }),
+        (1234.5).toLocaleString("en-US", { style: "currency", currency: "USD" }),
+        (1234.5678).toLocaleString(undefined, { maximumFractionDigits: 1 }),
+        (1).toLocaleString(undefined, { minimumFractionDigits: 2 }),
+        (5).toLocaleString(undefined, { minimumIntegerDigits: 2 }),
+        (1234).toLocaleString(undefined, { useGrouping: false }),
+        (1234567).toLocaleString("en-US", { notation: "compact" }),
+        (5).toLocaleString("en-US", { signDisplay: "always" }),
+        (1234.5).toLocaleString("de-DE"),
+        (1234.5).toLocaleString(["de-DE", "en-US"]),
+        (1234.5).toLocaleString([]),
+        (1234.5).toLocaleString("en-US", { style: "currency", currency: { toString: () => "EUR" } }),
+        (1.25).toLocaleString("en-US", { get maximumFractionDigits() { reads++; return 0 } }),
+        reads,
+      ]
+    `),
+    ).toEqual([
+      "50%",
+      "$1,234.50",
+      "1,234.6",
+      "1.00",
+      "05",
+      "1234",
+      "1.2M",
+      "+5",
+      "1.234,5",
+      "1.234,5",
+      "1,234.5",
+      "€1,234.50",
+      "1",
+      1,
+    ])
+    expect(
+      await value(`
+      const caught = (f) => { try { f() } catch (e) { return [e.name, e instanceof TypeError || e instanceof RangeError] } }
+      return [
+        caught(() => (1).toLocaleString("en-US", { style: "currency" })),
+        caught(() => (1).toLocaleString("en-US", { maximumFractionDigits: 200 })),
+        caught(() => (1).toLocaleString("xx-!!")),
+        caught(() => (1).toLocaleString(null)),
+      ]
+    `),
+    ).toEqual([
+      ["TypeError", true],
+      ["RangeError", true],
+      ["RangeError", true],
+      ["TypeError", true],
+    ])
+    expect(
+      await value(`
+      return [() => (1).toLocaleString(null), () => (1).toLocaleString("en-US", null)].map((f) => {
+        try { return f() } catch (e) { return e.message }
+      })
+    `),
+    ).toEqual(["Cannot convert undefined or null to object.", "Cannot convert undefined or null to object."])
+  })
+
+  test("number locale tags are canonicalized once, by the host", async () => {
+    expect(
+      await value(`
+      return [
+        (1234.5).toLocaleString("de-x-yes"),
+        (1234.5).toLocaleString(["en-x-yes", "de"]),
+        (1234.5).toLocaleString(5),
+        (1234.5).toLocaleString(Object.assign({ length: 1 }, ["de-x-yes"])),
+      ]
+    `),
+    ).toEqual([
+      (1234.5).toLocaleString("de-x-yes"),
+      (1234.5).toLocaleString(["en-x-yes", "de"]),
+      "1,234.5",
+      (1234.5).toLocaleString("de-x-yes"),
+    ])
+  })
+
+  test("a negative array-like length is an empty locale list", async () => {
+    expect(
+      await value(`
+      return [
+        (1234.5).toLocaleString({ length: -1 }, { style: "percent" }),
+        (1234.5).toLocaleString({ length: -5, 0: "de" }, { maximumFractionDigits: 0 }),
+      ]
+    `),
+    ).toEqual(["123,450%", "1,235"])
+  })
+
+  test("number locale lists follow CanonicalizeLocaleList", async () => {
+    expect(
+      await value(`
+      const caught = (f) => { try { return f() } catch (e) { return e.name } }
+      const holey = ["de-DE"]
+      holey[2] = "en-US"
+      return [
+        caught(() => (1).toLocaleString([5])),
+        caught(() => (1).toLocaleString(["en-US", null])),
+        caught(() => (1).toLocaleString({ length: 1, 0: true })),
+        caught(() => (1).toLocaleString([{ toString: () => 5 }])),
+        caught(() => (1234.5).toLocaleString([{ toString: () => "de-DE" }])),
+        caught(() => (1234.5).toLocaleString(holey)),
+        caught(() => (1234.5).toLocaleString({ length: 2, 1: "de-DE" })),
+        caught(() => (1234.5).toLocaleString(["de-DE", "de-DE"])),
+        caught(() => (1234.5).toLocaleString(true)),
+      ]
+    `),
+    ).toEqual(["TypeError", "TypeError", "TypeError", "RangeError", "1.234,5", "1.234,5", "1.234,5", "1.234,5", "1,234.5"])
+  })
+
   test("arrays join each element's toLocaleString, skipping holes and nullish elements", async () => {
     expect(
       await value(`
