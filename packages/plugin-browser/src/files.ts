@@ -4,13 +4,11 @@ import { Browser } from "./rpc.js"
 import { Tool } from "@opencode/schema/tool"
 import { Effect } from "effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
-import { openContained } from "@opencode/util/contained-file"
-import { FileVerificationError } from "@opencode/util/file-verification"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { workspaceTarget } from "./workspace.js"
 import { previewPath } from "./preview-path.js"
-import { lstat, realpath, stat } from "node:fs/promises"
+import { lstat, open, realpath, stat } from "node:fs/promises"
 import { basename, dirname, extname, join, parse, relative, resolve } from "node:path"
 import { createHash } from "node:crypto"
 import { fileURLToPath } from "node:url"
@@ -43,13 +41,12 @@ export const read = Effect.fn("BrowserFiles.read")((paths: readonly string[], na
       const files: Browser.File[] = []
       let remaining = Browser.MAX_FILE_BYTES
       for (const [index, input] of paths.entries()) {
-          const opened = await openContained(dirname(input), basename(input))
-          if (!opened) throw new Error("Upload paths must name regular files.")
-          const file = opened.file
+          const file = await open(input, "r")
           try {
-            if (opened.path !== input) throw new Error("The upload target changed after permission was checked.")
-            if (opened.size > remaining) throw new Error("The selected upload files exceed 5 MiB in total.")
-            const data = Buffer.alloc(opened.size)
+            const info = await file.stat()
+            if (!info.isFile()) throw new Error("Upload paths must name regular files.")
+            if (info.size > remaining) throw new Error("The selected upload files exceed 5 MiB in total.")
+            const data = Buffer.alloc(info.size)
             let offset = 0
             while (offset < data.length) {
               const { bytesRead } = await file.read(data, offset, data.length - offset, offset)
@@ -216,8 +213,6 @@ export function captureName(name: string) {
 }
 
 function failure(operation: "read" | "save", error: unknown) {
-  if (error instanceof FileVerificationError)
-    return new Tool.Error({ message: error.message, metadata: { code: error._tag } })
   const detail = error instanceof Error ? error.message.slice(0, 400) : String(error).slice(0, 400)
   const code =
     error instanceof Error && "code" in error && typeof error.code === "string" && !detail.startsWith(error.code)
