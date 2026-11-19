@@ -371,6 +371,16 @@ describe("thenables", () => {
   })
 })
 
+describe("crossing to the host", () => {
+  test("a setter-only native accessor is left out of an object with no program accessors", () => {
+    const target = new Obj(createBuiltins().Object)
+    target.props.set("a", { value: 1, writable: true, enumerable: true, configurable: true })
+    target.props.set("w", { get: undefined, set: () => {}, enumerable: true, configurable: true })
+    expect(target.hasProgramAccessors).toBe(false)
+    expect(target.toHost((value) => value)).toEqual({ a: 1 })
+  })
+})
+
 describe("the safety net", () => {
   test("a built-in that reaches a program accessor with no path is a defect in tests, a TypeError otherwise", () => {
     const builtins = createBuiltins()

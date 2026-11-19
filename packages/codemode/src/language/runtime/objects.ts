@@ -47,6 +47,9 @@ export const isProgramHalf = (half: unknown): half is Callable => half !== undef
 export const isProgramAccessor = (slot: Slot): slot is AccessorSlot =>
   !("value" in slot) && (isProgramHalf(slot.get) || isProgramHalf(slot.set))
 
+/** Whether a slot is an accessor with no getter, which reads as undefined and never crosses to the host. */
+const isSetterOnly = (slot: Slot): boolean => !("value" in slot) && slot.get === undefined
+
 // The objects made while a runtime's intrinsics are being made, in creation order; see `makingIntrinsics`.
 let making: Array<Obj> | undefined
 // The `Function.prototype` of the intrinsics being made, for the companions of native accessors.
@@ -169,6 +172,8 @@ export class Obj {
       return Object.fromEntries(
         entries(this).flatMap(([key, value]) => {
           if (key === "__proto__") return []
+          // A setter-only native accessor reads as undefined; it is left out like a program one.
+          if (value === undefined && isSetterOnly(own(this, key)!)) return []
           const copied = item(value)
           return copied === OMITTED ? [] : [[key, copied]]
         }),
@@ -178,7 +183,7 @@ export class Obj {
     return Object.fromEntries(
       keys(this).flatMap((key) => {
         const slot = own(this, key)!
-        if (key === "__proto__" || (!("value" in slot) && slot.get === undefined)) return []
+        if (key === "__proto__" || isSetterOnly(slot)) return []
         const copied = item(getOwn(this, key))
         return copied === OMITTED ? [] : [[key, copied]]
       }),
@@ -1187,6 +1192,7 @@ const defineElement = (target: Indexed, at: number, current: Slot | undefined, d
   if (isAccessorDescriptor(desc)) {
     throw typeError("Accessor properties are not supported on array elements; store the value or use a plain object.")
   }
+  if (target instanceof Bytes && at >= target.bytes.length) return false
   const shared = target instanceof Arr ? target.elements : data
   // An element's own() slot is always data.
   const base = (current as Attributes | undefined) ?? { writable: false, enumerable: false, configurable: false }
@@ -1209,12 +1215,12 @@ const defineElement = (target: Indexed, at: number, current: Slot | undefined, d
 // An array's `length`: its value, or making it read-only, which the shared element attributes can't separate.
 const defineLength = (target: Arr, desc: Descriptor): boolean => {
   if (isAccessorDescriptor(desc) || desc.configurable === true || desc.enumerable === true) return false
+  if (desc.writable === false && target.elements.writable) {
+    throw typeError("Making an array's length read-only is not supported; use Object.freeze.")
+  }
   if ("value" in desc) {
     const length = coerceToNumber(desc.value)
     if (length !== target.items.length && writeElement(target, "length", length) === false) return false
-  }
-  if (desc.writable === false && target.elements.writable) {
-    throw typeError("Making an array's length read-only is not supported; use Object.freeze.")
   }
   return true
 }

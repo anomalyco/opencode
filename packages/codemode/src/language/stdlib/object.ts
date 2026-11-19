@@ -158,6 +158,13 @@ const toPropertyDescriptor = (value: Value): Descriptor => {
 
 // DefinePropertyOrThrow.
 const defineOrThrow = (target: Obj, key: PropertyKey, desc: Descriptor): void => {
+  if (desc.value instanceof Obj) {
+    rejectCircularInsertion(
+      target,
+      desc.value,
+      target instanceof Arr ? "Array assignment result" : "Object assignment result",
+    )
+  }
   if (defineOwnProperty(target, key, desc)) return
   if (!target.extensible && own(target, key) === undefined) {
     throw typeError(`Cannot define property ${String(key)}, object is not extensible`)
@@ -173,7 +180,7 @@ const requireTarget = (value: Value, name: string): Obj => {
 // ObjectDefineProperties: every descriptor is read (getters included) before the first one is defined.
 const defineProperties = (target: Obj, props: Value): Obj => {
   if (props === null || props === undefined) throw typeError(`Cannot convert ${props} to object`)
-  if (!(props instanceof Obj)) return target
+  if (!(props instanceof Obj)) throw typeError("Property description must be an object")
   const descriptors = ownKeys(props)
     .filter((key) => own(props, key)?.enumerable === true)
     .map((key) => [key, toPropertyDescriptor(get(props, key))] as const)

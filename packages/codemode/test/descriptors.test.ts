@@ -220,3 +220,41 @@ describe("Object.create and defineProperties", () => {
     ).toEqual(["b", "a"])
   })
 })
+
+describe("defineProperty edge cases", () => {
+  test("a refused length define leaves length alone, and a frozen array's length cannot change", () => {
+    expect(
+      value(`const a = [1]
+        let refused
+        try { Object.defineProperty(a, "length", { value: 5, writable: false }) } catch (e) { refused = e.message }
+        const f = Object.freeze([1])
+        let frozen
+        try { Object.defineProperty(f, "length", { value: 5 }) } catch (e) { frozen = e.message }
+        return [a.length, refused, f.length, frozen]`),
+    ).toEqual([
+      1,
+      "Making an array's length read-only is not supported; use Object.freeze.",
+      1,
+      "Cannot redefine property: length",
+    ])
+  })
+
+  test("a Uint8Array index past the end is refused", () => {
+    expect(
+      error(
+        `Object.defineProperty(new Uint8Array(2), 5, { value: 99, writable: true, enumerable: true, configurable: true })`,
+      ),
+    ).toBe("TypeError: Cannot redefine property: 5 (line 1, col 1)")
+  })
+
+  test("defineProperties needs an object of descriptors", () => {
+    expect(error(`Object.defineProperties({}, "ab")`)).toBe(
+      "TypeError: Property description must be an object (line 1, col 1)",
+    )
+  })
+
+  test("defining a value refuses a cycle the way an assignment does", () => {
+    const assigned = error(`const a = {}; a.self = a`)
+    expect(error(`const a = {}; Object.defineProperty(a, "self", { value: a })`)).toBe(assigned)
+  })
+})
