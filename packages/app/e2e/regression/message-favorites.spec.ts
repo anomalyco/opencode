@@ -4,16 +4,25 @@ import { openUserMessageMenu } from "../utils/timeline"
 
 test("favorites a prompt and an answer, then jumps from the list", async ({ page }) => {
   await setupTimeline(page, {
-    messages: [userMessage(), assistantMessage([textPart("prt_favorite_answer", "The answer worth keeping")])],
+    messages: [
+      userMessage(),
+      assistantMessage([
+        textPart(
+          "prt_favorite_answer",
+          `The answer worth keeping. ${"It needs enough lines to push the prompt out of view. ".repeat(80)}`,
+        ),
+      ]),
+    ],
   })
 
   // The response actions only paint while their reply is hovered.
   const assistant = page.locator(`[data-timeline-part-id="${assistantID}:text:0"]`)
+  const footer = assistant.locator('[data-slot="text-part-copy-wrapper"]')
   await assistant.hover()
-  await assistant.screenshot({ path: test.info().outputPath("favorite-toggle-before.png"), animations: "disabled" })
+  await footer.screenshot({ path: test.info().outputPath("favorite-toggle-before.png"), animations: "disabled" })
   await assistant.getByRole("button", { name: "Add to favorites", exact: true }).click()
   await expect(assistant.getByRole("button", { name: "Remove from favorites", exact: true })).toBeVisible()
-  await assistant.screenshot({ path: test.info().outputPath("favorite-toggle-after.png"), animations: "disabled" })
+  await footer.screenshot({ path: test.info().outputPath("favorite-toggle-after.png"), animations: "disabled" })
 
   const userRow = page.locator(`[data-timeline-row="UserMessage"][data-message-id="${userID}"]`)
   const menu = await openUserMessageMenu(page, userRow)
@@ -35,6 +44,11 @@ test("favorites a prompt and an answer, then jumps from the list", async ({ page
     userID,
   )
 
+  // Scroll away from the prompt first, so the jump has somewhere to land.
+  const scroller = page.getByRole("region", { name: "scrollable content" })
+  await scroller.evaluate((element) => element.scrollTo(0, element.scrollHeight))
+  await expect(userRow).not.toBeInViewport()
+
   await page.locator("[data-session-title]").getByRole("button", { name: "More options", exact: true }).click()
   await page.getByRole("menuitem", { name: "Favorite messages…", exact: true }).click()
 
@@ -44,7 +58,7 @@ test("favorites a prompt and an answer, then jumps from the list", async ({ page
   await expect(dialog.getByRole("option").filter({ hasText: "Build the timeline stability matrix" })).toBeVisible()
   await page.screenshot({ path: test.info().outputPath("favorites-dialog.png"), animations: "disabled" })
 
-  await dialog.getByRole("option").filter({ hasText: "The answer worth keeping" }).click()
+  await dialog.getByRole("option").filter({ hasText: "Build the timeline stability matrix" }).click()
   await expect(dialog).toBeHidden()
   await expect(userRow).toBeInViewport()
 })
