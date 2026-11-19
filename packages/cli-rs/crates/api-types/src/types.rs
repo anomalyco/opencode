@@ -8382,6 +8382,253 @@ pub struct ShellDeleted {
     pub data: ShellDeletedData,
 }
 
+literal_enum! {
+/// `Job.Status`
+JobStatus {
+    Running => "running",
+    Completed => "completed",
+    Error => "error",
+    Cancelled => "cancelled",
+}
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct JobTime {
+    #[serde(serialize_with = "crate::ser::number")]
+    pub started: f64,
+    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
+    pub completed: Option<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct JobShell {
+    pub kind: String,
+    pub id: String,
+    #[serde(rename = "sessionID")]
+    pub session_id: SessionID,
+    pub status: JobStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    pub time: JobTime,
+    #[serde(rename = "shellID")]
+    pub shell_id: String,
+    pub command: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct JobSubagent {
+    pub kind: String,
+    pub id: String,
+    #[serde(rename = "sessionID")]
+    pub session_id: SessionID,
+    pub status: JobStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    pub time: JobTime,
+    #[serde(rename = "childSessionID")]
+    pub child_session_id: SessionID,
+    pub agent: String,
+    pub description: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct JobImage {
+    pub kind: String,
+    pub id: String,
+    #[serde(rename = "sessionID")]
+    pub session_id: SessionID,
+    pub status: JobStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    pub time: JobTime,
+    pub path: String,
+    pub model: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct JobVideo {
+    pub kind: String,
+    pub id: String,
+    #[serde(rename = "sessionID")]
+    pub session_id: SessionID,
+    pub status: JobStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    pub time: JobTime,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct JobCodeMode {
+    pub kind: String,
+    pub id: String,
+    #[serde(rename = "sessionID")]
+    pub session_id: SessionID,
+    pub status: JobStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    pub time: JobTime,
+}
+
+/// `Job.Info`, tagged by `kind`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum JobInfo {
+    Shell(JobShell),
+    Subagent(JobSubagent),
+    Image(JobImage),
+    Video(JobVideo),
+    Codemode(JobCodeMode),
+    /// A member this client does not know, kept as it arrived.
+    Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for JobInfo {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl JobInfo {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+        match raw.field("kind").as_str() {
+            Some("shell") => raw.variant().map(Self::Shell),
+            Some("subagent") => raw.variant().map(Self::Subagent),
+            Some("image") => raw.variant().map(Self::Image),
+            Some("video") => raw.variant().map(Self::Video),
+            Some("codemode") => raw.variant().map(Self::Codemode),
+            _ => raw.unknown().map(Self::Unknown),
+        }
+    }
+}
+
+impl JobInfo {
+    /// The `kind` tag, also of an unknown member.
+    pub fn tag(&self) -> &str {
+        match self {
+            Self::Shell(value) => value.kind.as_str(),
+            Self::Subagent(value) => value.kind.as_str(),
+            Self::Image(value) => value.kind.as_str(),
+            Self::Video(value) => value.kind.as_str(),
+            Self::Codemode(value) => value.kind.as_str(),
+            Self::Unknown(value) => value.get("kind").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `id` field, also of an unknown member.
+    pub fn id(&self) -> &str {
+        match self {
+            Self::Shell(value) => value.id.as_str(),
+            Self::Subagent(value) => value.id.as_str(),
+            Self::Image(value) => value.id.as_str(),
+            Self::Video(value) => value.id.as_str(),
+            Self::Codemode(value) => value.id.as_str(),
+            Self::Unknown(value) => value.get("id").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `sessionID` field, also of an unknown member.
+    pub fn session_id(&self) -> &str {
+        match self {
+            Self::Shell(value) => value.session_id.as_str(),
+            Self::Subagent(value) => value.session_id.as_str(),
+            Self::Image(value) => value.session_id.as_str(),
+            Self::Video(value) => value.session_id.as_str(),
+            Self::Codemode(value) => value.session_id.as_str(),
+            Self::Unknown(value) => value.get("sessionID").and_then(serde_json::Value::as_str).unwrap_or_default(),
+        }
+    }
+
+    /// The `status` field, of the members that have it.
+    pub fn status(&self) -> Option<&JobStatus> {
+        match self {
+            Self::Shell(value) => Some(&value.status),
+            Self::Subagent(value) => Some(&value.status),
+            Self::Image(value) => Some(&value.status),
+            Self::Video(value) => Some(&value.status),
+            Self::Codemode(value) => Some(&value.status),
+            Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `title` field, of the members that have it.
+    pub fn title(&self) -> Option<&str> {
+        match self {
+            Self::Shell(value) => value.title.as_deref(),
+            Self::Subagent(value) => value.title.as_deref(),
+            Self::Image(value) => value.title.as_deref(),
+            Self::Video(value) => value.title.as_deref(),
+            Self::Codemode(value) => value.title.as_deref(),
+            Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `time` field, of the members that have it.
+    pub fn time(&self) -> Option<&JobTime> {
+        match self {
+            Self::Shell(value) => Some(&value.time),
+            Self::Subagent(value) => Some(&value.time),
+            Self::Image(value) => Some(&value.time),
+            Self::Video(value) => Some(&value.time),
+            Self::Codemode(value) => Some(&value.time),
+            Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `time.started` field, also of an unknown member.
+    pub fn time_started(&self) -> f64 {
+        match self {
+            Self::Shell(value) => value.time.started,
+            Self::Subagent(value) => value.time.started,
+            Self::Image(value) => value.time.started,
+            Self::Video(value) => value.time.started,
+            Self::Codemode(value) => value.time.started,
+            Self::Unknown(value) => {
+                value.pointer("/time/started").and_then(serde_json::Value::as_f64).unwrap_or_default()
+            }
+        }
+    }
+
+    /// The `time.completed` field, of the members that have it.
+    pub fn time_completed(&self) -> Option<f64> {
+        match self {
+            Self::Shell(value) => value.time.completed,
+            Self::Subagent(value) => value.time.completed,
+            Self::Image(value) => value.time.completed,
+            Self::Video(value) => value.time.completed,
+            Self::Codemode(value) => value.time.completed,
+            Self::Unknown(_) => None,
+        }
+    }
+
+    /// The `path` field, of the members that have it.
+    pub fn path(&self) -> Option<&str> {
+        match self {
+            Self::Image(value) => Some(value.path.as_str()),
+            Self::Video(value) => Some(value.path.as_str()),
+            Self::Shell(_) | Self::Subagent(_) | Self::Codemode(_) | Self::Unknown(_) => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ExperimentalJobUpdatedData {
+    pub info: JobInfo,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ExperimentalJobUpdated {
+    pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
+    pub created: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<IndexMap<String, serde_json::Value>>,
+    pub r#type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location: Option<LocationRef>,
+    pub data: ExperimentalJobUpdatedData,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct FormCreatedData {
     pub form: FormInfo,
@@ -8878,6 +9125,7 @@ pub enum V2Event {
     ShellCreated(ShellCreated),
     ShellExited(ShellExited),
     ShellDeleted(ShellDeleted),
+    ExperimentalJobUpdated(ExperimentalJobUpdated),
     FormCreated(FormCreated),
     FormReplied(FormReplied),
     FormCancelled(FormCancelled),
@@ -8991,6 +9239,7 @@ impl V2Event {
             Some("shell.created") => raw.variant().map(Self::ShellCreated),
             Some("shell.exited") => raw.variant().map(Self::ShellExited),
             Some("shell.deleted") => raw.variant().map(Self::ShellDeleted),
+            Some("experimental.job.updated") => raw.variant().map(Self::ExperimentalJobUpdated),
             Some("form.created") => raw.variant().map(Self::FormCreated),
             Some("form.replied") => raw.variant().map(Self::FormReplied),
             Some("form.cancelled") => raw.variant().map(Self::FormCancelled),
@@ -9100,6 +9349,7 @@ impl V2Event {
             Self::ShellCreated(value) => value.r#type.as_str(),
             Self::ShellExited(value) => value.r#type.as_str(),
             Self::ShellDeleted(value) => value.r#type.as_str(),
+            Self::ExperimentalJobUpdated(value) => value.r#type.as_str(),
             Self::FormCreated(value) => value.r#type.as_str(),
             Self::FormReplied(value) => value.r#type.as_str(),
             Self::FormCancelled(value) => value.r#type.as_str(),
@@ -9207,6 +9457,7 @@ impl V2Event {
             Self::ShellCreated(value) => value.id.as_str(),
             Self::ShellExited(value) => value.id.as_str(),
             Self::ShellDeleted(value) => value.id.as_str(),
+            Self::ExperimentalJobUpdated(value) => value.id.as_str(),
             Self::FormCreated(value) => value.id.as_str(),
             Self::FormReplied(value) => value.id.as_str(),
             Self::FormCancelled(value) => value.id.as_str(),
@@ -9314,6 +9565,7 @@ impl V2Event {
             Self::ShellCreated(value) => Some(value.created),
             Self::ShellExited(value) => Some(value.created),
             Self::ShellDeleted(value) => Some(value.created),
+            Self::ExperimentalJobUpdated(value) => Some(value.created),
             Self::FormCreated(value) => Some(value.created),
             Self::FormReplied(value) => Some(value.created),
             Self::FormCancelled(value) => Some(value.created),
@@ -9420,6 +9672,7 @@ impl V2Event {
             Self::ShellCreated(value) => value.metadata.as_ref(),
             Self::ShellExited(value) => value.metadata.as_ref(),
             Self::ShellDeleted(value) => value.metadata.as_ref(),
+            Self::ExperimentalJobUpdated(value) => value.metadata.as_ref(),
             Self::FormCreated(value) => value.metadata.as_ref(),
             Self::FormReplied(value) => value.metadata.as_ref(),
             Self::FormCancelled(value) => value.metadata.as_ref(),
@@ -9527,6 +9780,7 @@ impl V2Event {
             | Self::ShellCreated(_)
             | Self::ShellExited(_)
             | Self::ShellDeleted(_)
+            | Self::ExperimentalJobUpdated(_)
             | Self::FormCreated(_)
             | Self::FormReplied(_)
             | Self::FormCancelled(_)
@@ -9634,6 +9888,7 @@ impl V2Event {
             | Self::ShellCreated(_)
             | Self::ShellExited(_)
             | Self::ShellDeleted(_)
+            | Self::ExperimentalJobUpdated(_)
             | Self::FormCreated(_)
             | Self::FormReplied(_)
             | Self::FormCancelled(_)
@@ -9741,6 +9996,7 @@ impl V2Event {
             | Self::ShellCreated(_)
             | Self::ShellExited(_)
             | Self::ShellDeleted(_)
+            | Self::ExperimentalJobUpdated(_)
             | Self::FormCreated(_)
             | Self::FormReplied(_)
             | Self::FormCancelled(_)
@@ -10496,16 +10752,6 @@ JobKind {
 }
 }
 
-literal_enum! {
-/// `Job.Status`
-JobStatus {
-    Running => "running",
-    Completed => "completed",
-    Error => "error",
-    Cancelled => "cancelled",
-}
-}
-
 /// Input of `Client::experimental_job_list`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalJobListInput {
@@ -10515,227 +10761,14 @@ pub struct ExperimentalJobListInput {
     pub descendants: Option<bool>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct JobTime {
-    #[serde(serialize_with = "crate::ser::number")]
-    pub started: f64,
-    #[serde(default, serialize_with = "crate::ser::option_number", skip_serializing_if = "Option::is_none")]
-    pub completed: Option<f64>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct JobShell {
-    pub kind: String,
-    pub id: String,
-    #[serde(rename = "sessionID")]
-    pub session_id: SessionID,
-    pub status: JobStatus,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-    pub time: JobTime,
-    #[serde(rename = "shellID")]
-    pub shell_id: String,
-    pub command: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct JobSubagent {
-    pub kind: String,
-    pub id: String,
-    #[serde(rename = "sessionID")]
-    pub session_id: SessionID,
-    pub status: JobStatus,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-    pub time: JobTime,
-    #[serde(rename = "childSessionID")]
-    pub child_session_id: SessionID,
-    pub agent: String,
-    pub description: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct JobImage {
-    pub kind: String,
-    pub id: String,
-    #[serde(rename = "sessionID")]
-    pub session_id: SessionID,
-    pub status: JobStatus,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-    pub time: JobTime,
-    pub path: String,
-    pub model: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct JobVideo {
-    pub kind: String,
-    pub id: String,
-    #[serde(rename = "sessionID")]
-    pub session_id: SessionID,
-    pub status: JobStatus,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-    pub time: JobTime,
-    pub path: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct JobCodeMode {
-    pub kind: String,
-    pub id: String,
-    #[serde(rename = "sessionID")]
-    pub session_id: SessionID,
-    pub status: JobStatus,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-    pub time: JobTime,
-}
-
-/// `Job.Info`, tagged by `kind`.
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(untagged)]
-pub enum JobInfo {
-    Shell(JobShell),
-    Subagent(JobSubagent),
-    Image(JobImage),
-    Video(JobVideo),
-    Codemode(JobCodeMode),
-    /// A member this client does not know, kept as it arrived.
-    Unknown(serde_json::Value),
-}
-
-impl<'de> Deserialize<'de> for JobInfo {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        crate::de::union(deserializer, Self::from_raw)
-    }
-}
-
-impl JobInfo {
-    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
-        match raw.field("kind").as_str() {
-            Some("shell") => raw.variant().map(Self::Shell),
-            Some("subagent") => raw.variant().map(Self::Subagent),
-            Some("image") => raw.variant().map(Self::Image),
-            Some("video") => raw.variant().map(Self::Video),
-            Some("codemode") => raw.variant().map(Self::Codemode),
-            _ => raw.unknown().map(Self::Unknown),
-        }
-    }
-}
-
-impl JobInfo {
-    /// The `kind` tag, also of an unknown member.
-    pub fn tag(&self) -> &str {
-        match self {
-            Self::Shell(value) => value.kind.as_str(),
-            Self::Subagent(value) => value.kind.as_str(),
-            Self::Image(value) => value.kind.as_str(),
-            Self::Video(value) => value.kind.as_str(),
-            Self::Codemode(value) => value.kind.as_str(),
-            Self::Unknown(value) => value.get("kind").and_then(serde_json::Value::as_str).unwrap_or_default(),
-        }
-    }
-
-    /// The `id` field, also of an unknown member.
-    pub fn id(&self) -> &str {
-        match self {
-            Self::Shell(value) => value.id.as_str(),
-            Self::Subagent(value) => value.id.as_str(),
-            Self::Image(value) => value.id.as_str(),
-            Self::Video(value) => value.id.as_str(),
-            Self::Codemode(value) => value.id.as_str(),
-            Self::Unknown(value) => value.get("id").and_then(serde_json::Value::as_str).unwrap_or_default(),
-        }
-    }
-
-    /// The `sessionID` field, also of an unknown member.
-    pub fn session_id(&self) -> &str {
-        match self {
-            Self::Shell(value) => value.session_id.as_str(),
-            Self::Subagent(value) => value.session_id.as_str(),
-            Self::Image(value) => value.session_id.as_str(),
-            Self::Video(value) => value.session_id.as_str(),
-            Self::Codemode(value) => value.session_id.as_str(),
-            Self::Unknown(value) => value.get("sessionID").and_then(serde_json::Value::as_str).unwrap_or_default(),
-        }
-    }
-
-    /// The `status` field, of the members that have it.
-    pub fn status(&self) -> Option<&JobStatus> {
-        match self {
-            Self::Shell(value) => Some(&value.status),
-            Self::Subagent(value) => Some(&value.status),
-            Self::Image(value) => Some(&value.status),
-            Self::Video(value) => Some(&value.status),
-            Self::Codemode(value) => Some(&value.status),
-            Self::Unknown(_) => None,
-        }
-    }
-
-    /// The `title` field, of the members that have it.
-    pub fn title(&self) -> Option<&str> {
-        match self {
-            Self::Shell(value) => value.title.as_deref(),
-            Self::Subagent(value) => value.title.as_deref(),
-            Self::Image(value) => value.title.as_deref(),
-            Self::Video(value) => value.title.as_deref(),
-            Self::Codemode(value) => value.title.as_deref(),
-            Self::Unknown(_) => None,
-        }
-    }
-
-    /// The `time` field, of the members that have it.
-    pub fn time(&self) -> Option<&JobTime> {
-        match self {
-            Self::Shell(value) => Some(&value.time),
-            Self::Subagent(value) => Some(&value.time),
-            Self::Image(value) => Some(&value.time),
-            Self::Video(value) => Some(&value.time),
-            Self::Codemode(value) => Some(&value.time),
-            Self::Unknown(_) => None,
-        }
-    }
-
-    /// The `time.started` field, also of an unknown member.
-    pub fn time_started(&self) -> f64 {
-        match self {
-            Self::Shell(value) => value.time.started,
-            Self::Subagent(value) => value.time.started,
-            Self::Image(value) => value.time.started,
-            Self::Video(value) => value.time.started,
-            Self::Codemode(value) => value.time.started,
-            Self::Unknown(value) => {
-                value.pointer("/time/started").and_then(serde_json::Value::as_f64).unwrap_or_default()
-            }
-        }
-    }
-
-    /// The `time.completed` field, of the members that have it.
-    pub fn time_completed(&self) -> Option<f64> {
-        match self {
-            Self::Shell(value) => value.time.completed,
-            Self::Subagent(value) => value.time.completed,
-            Self::Image(value) => value.time.completed,
-            Self::Video(value) => value.time.completed,
-            Self::Codemode(value) => value.time.completed,
-            Self::Unknown(_) => None,
-        }
-    }
-
-    /// The `path` field, of the members that have it.
-    pub fn path(&self) -> Option<&str> {
-        match self {
-            Self::Image(value) => Some(value.path.as_str()),
-            Self::Video(value) => Some(value.path.as_str()),
-            Self::Shell(_) | Self::Subagent(_) | Self::Codemode(_) | Self::Unknown(_) => None,
-        }
-    }
-}
-
 /// Output of `Client::experimental_job_list`.
 pub type ExperimentalJobListOutput = Vec<JobInfo>;
+
+/// Input of `Client::experimental_job_cancel`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalJobCancelInput {
+    pub id: String,
+}
 
 /// Input of `Client::shell_list`.
 #[derive(Debug, Clone, PartialEq, Default)]

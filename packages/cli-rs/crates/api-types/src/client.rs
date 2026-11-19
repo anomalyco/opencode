@@ -1752,6 +1752,13 @@ pub fn experimental_job_list(input: &ExperimentalJobListInput) -> Call<Experimen
     call
 }
 
+/// `POST /api/experimental/job/:id/cancel` (`job.cancel`)
+pub fn experimental_job_cancel(input: &ExperimentalJobCancelInput) -> Call<()> {
+    let mut call = Call::new("POST", String::new(), Reply::Empty, 204, &[400, 401]);
+    call.path = format!("/api/experimental/job/{}/cancel", call.param(&input.id));
+    call
+}
+
 /// `GET /api/shell` (`list`)
 pub fn shell_list(input: &ShellListInput) -> Call<ShellListOutput> {
     let mut call = Call::new("GET", "/api/shell".to_owned(), Reply::Json, 200, &[400, 401, 404]);
@@ -2935,6 +2942,9 @@ pub fn probe(name: &str, input: &serde_json::Value) -> Option<Result<Call<serde_
             })
             .cast())
         })()),
+        "experimental.job.cancel" => {
+            Some((|| Ok(experimental_job_cancel(&ExperimentalJobCancelInput { id: field(input, "id")? }).cast()))())
+        }
         "shell.list" => Some((|| Ok(shell_list(&ShellListInput { location: field(input, "location")? }).cast()))()),
         "shell.create" => Some((|| {
             Ok(shell_create(&ShellCreateInput {
