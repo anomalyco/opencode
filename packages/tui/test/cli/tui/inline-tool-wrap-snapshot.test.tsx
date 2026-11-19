@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, setSystemTime, test } from "bun:test"
 import { createStore } from "solid-js/store"
-import { createToolElapsed } from "../../../src/routes/session/tool-elapsed"
+import { createToolElapsed } from "@opencode/ui/hooks"
 import { ConfigProvider, resolve } from "../../../src/config"
 import { ThemeProvider } from "../../../src/context/theme"
 import { TestTuiContexts } from "../../fixture/tui-environment"

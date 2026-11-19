@@ -44,6 +44,10 @@ export const RunningAndFinished = {
         ),
         time: { created: started - 5000, ran: started, completed: state.completed },
       },
+      {
+        ...storyTool("elapsed_hours", "shell", "completed", { command: "sleep 7200" }),
+        time: { created: started - 7_210_000, ran: started - 7_200_000, completed: started },
+      },
       { ...storyTool("elapsed_pending", "plugin_tool", "streaming", {}), time: { created: started } },
     ]
 

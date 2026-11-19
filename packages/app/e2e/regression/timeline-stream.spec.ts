@@ -34,6 +34,13 @@ import {
 
 const detailed = timelinePresets[2].value
 
+// Group headers append their elapsed time, e.g. "Used1Read4s"; the duration stays optional but anchored.
+const elapsed = String.raw`(?:\s*(?:[\d,]+h\s+[\d,]+m|[\d,]+m\s+[\d,]+s|[\d,]+s))?`
+
+const usedLabel = (count: number, names: string) => new RegExp(`^Used\\s*${count}\\s*${names}${elapsed}$`)
+
+const usedRead = usedLabel(1, "Read")
+
 const user = { id: "msg_user", type: "user", text: "Run it", time: { created: 1 } } satisfies SessionMessageInfo
 
 const completed = {
@@ -602,7 +609,7 @@ test("shows a background subagent's outcome as its own row where it finished", a
     sessions: [session(), session({ id: childID, parentID: sessionID, title: "Map the inbox" })],
   })
 
-  await expect(page.getByText(/^Used\s*1\s*Read$/)).toBeVisible()
+  await expect(page.getByText(usedRead)).toBeVisible()
 
   await timeline.send([
     inboxEnqueued({
@@ -629,10 +636,10 @@ test("shows a background subagent's outcome as its own row where it finished", a
 
   // The outcome sits between the work before and after it instead of folding into either group.
   const notice = page.locator('[data-slot="session-timeline-notice"]')
-  await expect(page.getByText(/^Used\s*1\s*Read$/).or(notice)).toHaveText([
-    /^Used\s*1\s*Read$/,
+  await expect(page.getByText(usedRead).or(notice)).toHaveText([
+    usedRead,
     /^Explore finished · Map the inbox$/,
-    /^Used\s*1\s*Read$/,
+    usedRead,
   ])
   await expect(notice).toHaveAttribute("data-outcome", "completed")
 
@@ -914,7 +921,7 @@ test.describe("Working", () => {
 
       const trigger = page
         .locator('[data-component="collapsed-tool-group"]')
-        .getByRole("button", { name: "Used 2 Shell", exact: true, includeHidden: true })
+        .getByRole("button", { name: usedLabel(2, "Shell"), includeHidden: true })
 
       await expect(trigger).toHaveAttribute("aria-expanded", "false")
       await expect(working).toBeVisible()
@@ -1267,7 +1274,7 @@ test.describe("background work", () => {
       .locator('[data-timeline-part-ids="call_shell_backgrounded"]')
       .locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
 
-    await expect(used).toHaveText(/^Used\s*1\s*Shell$/)
+    await expect(used).toHaveText(usedLabel(1, "Shell"))
     await expect(used).toHaveAttribute("aria-expanded", "false")
     const summary = "1 subagent · 1 shell"
     const list = page.getByRole("menu", { name: summary, exact: true })

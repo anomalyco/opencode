@@ -5,7 +5,8 @@ story("shows a delegating row while subagent input streams", async ({ mount }) =
   const timeline = await mount("current-session-research-agents--agent-research", { args: { scenario: "delegation" } })
   const delegating = timeline.locator('[data-component="task-tool-delegating"]')
   await expect(delegating).toBeVisible()
-  await expect(delegating).toHaveText("Delegating agent…")
+  // The live row appends its elapsed time; the duration stays optional but anchored.
+  await expect(delegating).toHaveText(/^Delegating agent…(?:\s*(?:[\d,]+h\s+[\d,]+m|[\d,]+m\s+[\d,]+s|[\d,]+s))?$/)
   await expect(delegating).toHaveCSS("line-height", "16px")
   await expect(delegating.locator('[data-component="session-progress-indicator-v2"]')).toBeVisible()
   await expect(timeline.locator('[data-component="task-tool-card"]')).toHaveCount(0)

@@ -1,6 +1,7 @@
-import { createEffect, createMemo, createSignal, onCleanup, Show, type Accessor } from "solid-js"
-import { useI18n } from "@opencode/ui/context/i18n"
+import { createMemo, Show } from "solid-js"
+import { useI18n, type UiI18n } from "@opencode/ui/context/i18n"
 import type { SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client/promise"
+import { createToolElapsed } from "@opencode/ui/hooks"
 
 /**
  * The moment a live timer should count from. Displayed content can predate the newest user prompt:
@@ -19,25 +20,23 @@ export function anchorElapsedStart(created: number, messages: Iterable<SessionMe
   return start
 }
 
-export function createToolElapsed(
-  time: Accessor<SessionMessageAssistantTool["time"] | undefined>,
-  running: Accessor<boolean>,
-) {
-  const [now, setNow] = createSignal(Date.now())
-  createEffect(() => {
-    if (time()?.ran === undefined || time()?.completed !== undefined || !running()) return
-    setNow(Date.now())
-    const timer = setInterval(() => setNow(Date.now()), 1000)
-    onCleanup(() => clearInterval(timer))
-  })
+/** One duration format for every elapsed row, including the hours branch a long run needs. */
+export function formatElapsed(ms: number, i18n: UiI18n) {
+  const numfmt = new Intl.NumberFormat(i18n.locale())
 
-  return createMemo(() => {
-    const start = time()?.ran
-    const end = time()?.completed ?? (running() ? now() : undefined)
+  const total = Math.max(0, Math.floor(ms / 1000))
 
-    if (start === undefined || end === undefined) return undefined
+  if (total < 60) return i18n.t("ui.message.duration.seconds", { count: numfmt.format(total) })
 
-    return Math.max(0, end - start)
+  if (total < 3600)
+    return i18n.t("ui.message.duration.minutesSeconds", {
+      minutes: numfmt.format(Math.floor(total / 60)),
+      seconds: numfmt.format(total % 60),
+    })
+
+  return i18n.t("ui.message.duration.hoursMinutes", {
+    hours: numfmt.format(Math.floor(total / 3600)),
+    minutes: numfmt.format(Math.floor(total / 60) % 60),
   })
 }
 
@@ -49,17 +48,16 @@ export function ToolElapsed(props: { time?: SessionMessageAssistantTool["time"];
     () => props.running ?? false,
   )
 
-  const text = () => {
-    const seconds = Math.floor((elapsed() ?? 0) / 1000)
+  const text = createMemo(() => {
+    const value = elapsed()
 
-    return seconds < 60
-      ? i18n.t("ui.message.duration.seconds", { count: seconds })
-      : i18n.t("ui.message.duration.minutesSeconds", { minutes: Math.floor(seconds / 60), seconds: seconds % 60 })
-  }
+    return value === undefined ? undefined : formatElapsed(value, i18n)
+  })
 
   return (
     <Show when={elapsed() !== undefined}>
-      <span data-slot="tool-elapsed" class="shrink-0 text-text-weak whitespace-nowrap">
+      {/* The tick redraws every second, so it stays out of the row's accessible name instead of renaming it. */}
+      <span data-slot="tool-elapsed" class="shrink-0 text-text-weak whitespace-nowrap" aria-hidden="true">
         {text()}
       </span>
     </Show>
