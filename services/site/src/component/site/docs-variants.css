@@ -3,7 +3,7 @@
    is the style the docs have today, so it has no rules here. Each option is one block, keyed by the
    site root's data-docs-variants ("callout-3" and so on) and scoped to docs pages, so a chosen option
    can be kept and the rest deleted. Vocabulary (from /font, legal, changelog, press and brand):
-   hairline rules, OpenTUI Mono annotations in small uppercase with a little tracking, plates with a ruled
+   hairline rules, OpenMono annotations in small uppercase with a little tracking, plates with a ruled
    header, em dash and tree marks, crosshair grids, pipes on the left, ink (inverted) panels, neutral
    greys only, square corners. */
 
@@ -155,7 +155,7 @@
 
 /* Option 6, the site scale (★ the default, 5 Nov 2026): the marketing site's tokens and the typography
    review (local review notes), so docs read like the rest of the site. Levels only step down:
-   H1 the page title and H2 the section title (OpenTUI Mono, as on the home page), H3 and H4 in Inter by
+   H1 the page title and H2 the section title (OpenMono, as on the home page), H3 and H4 in Inter by
    weight, H5 and H6 as uppercase mono labels that never go below small text. The lead is one step
    above the body; small is one step below. Phones get the larger values from the token block. */
 [data-page="docs"][data-docs-variants~="typography-6"] [data-component="docs-article"] {
@@ -766,7 +766,7 @@
 }
 
 /* With the Vercel square code tabs, plan tabs (which switch prose, not code) take the code tabs'
-   label: OpenTUI Mono, muted until selected, with the 2px ink underline and an inside focus ring. */
+   label: OpenMono, muted until selected, with the 2px ink underline and an inside focus ring. */
 [data-page="docs"][data-docs-variants~="tabs-6"] [data-component="docs-article"] [data-component="plan-tabs"] {
   [role="tablist"] {
     overflow-x: auto;
@@ -846,7 +846,7 @@
 
 /* ───────────── Titled code (figure with a caption) ─────────────
    From v2's astro-code-figure (bordered, a 12px muted caption row with a bottom rule).
-   2 · v2 · 3 · v2 with a OpenTUI Mono uppercase caption · 4 · the caption as a tab above the box
+   2 · v2 · 3 · v2 with an OpenMono uppercase caption · 4 · the caption as a tab above the box
    5 · v2 with a file mark before the name (Next.js, Vercel) */
 
 [data-page="docs"]:is(
@@ -1397,7 +1397,7 @@
 
 /* ───────────── Cards ─────────────
    From v2's Card and CardGroup (1px border, 1rem padding, 0.75rem gap, muted description, the
-   surface on hover). 2 · v2 · 3 · v2 with OpenTUI Mono titles · 4 · v1's link card, an arrow at the right
+   surface on hover). 2 · v2 · 3 · v2 with OpenMono titles · 4 · v1's link card, an arrow at the right
    5 · one joined grid with shared rules */
 
 [data-page="docs"]:is(
@@ -1503,7 +1503,7 @@
 
 /* ───────────── Tables ─────────────
    From v2's prose tables (13px, a rule under every row, no side padding on the left).
-   2 · v2 · 3 · v2 with a OpenTUI Mono uppercase head on a strong rule · 4 · v2 with zebra rows
+   2 · v2 · 3 · v2 with an OpenMono uppercase head on a strong rule · 4 · v2 with zebra rows
    5 · a full grid */
 
 [data-page="docs"]:is(
@@ -1567,7 +1567,7 @@
   }
 }
 
-/* David's pick (5 Nov 2026), with the head in the reference tables' label style (12px OpenTUI Mono,
+/* David's pick (5 Nov 2026), with the head in the reference tables' label style (12px OpenMono,
    uppercase, +0.04em, grey) on the code header tone, and 12px inside every cell. */
 [data-page="docs"][data-docs-variants~="tables-5"]
   [data-component="docs-article"]
@@ -2170,7 +2170,7 @@
 
 /* ───────────── Prev / next ─────────────
    v2 has none, so these follow v1's Starlight pagination (two boxes, a small label over the title,
-   next aligned right). 2 · v1's boxes · 3 · arrows on a rule, no boxes · 4 · OpenTUI Mono labels on a
+   next aligned right). 2 · v1's boxes · 3 · arrows on a rule, no boxes · 4 · OpenMono labels on a
    rule · 5 · one compact line */
 
 [data-page="docs"]:is(
@@ -2343,7 +2343,7 @@
 
 /* ───────────── Breadcrumbs ─────────────
    Neither docs has breadcrumbs, so these use v2's sidebar voice (muted links, the current page in
-   the foreground). 2 · 13px muted · 3 · OpenTUI Mono uppercase · 4 · underlined links · 5 · over a rule */
+   the foreground). 2 · 13px muted · 3 · OpenMono uppercase · 4 · underlined links · 5 · over a rule */
 
 [data-page="docs"]:is(
     [data-docs-variants~="breadcrumbs-2"],
@@ -2534,7 +2534,7 @@
 
 /* ───────────── Edit on GitHub, last updated ─────────────
    v2 has none, so these follow v1's Starlight page footer (a muted edit link, the date beside it).
-   2 · v1's row, link left and date right, over a rule · 3 · stacked · 4 · OpenTUI Mono uppercase
+   2 · v1's row, link left and date right, over a rule · 3 · stacked · 4 · OpenMono uppercase
    5 · right aligned with a pencil mark */
 
 [data-page="docs"]:is(
@@ -2592,7 +2592,7 @@
 
 /* ───────────── Feedback ─────────────
    No docs have one, so the buttons borrow v2's search trigger. 2 · v2's bordered buttons
-   3 · text links · 4 · a ruled block · 5 · OpenTUI Mono uppercase */
+   3 · text links · 4 · a ruled block · 5 · OpenMono uppercase */
 
 [data-page="docs"]:is(
     [data-docs-variants~="feedback-2"],

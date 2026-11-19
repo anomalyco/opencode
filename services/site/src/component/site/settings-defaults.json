@@ -48,7 +48,7 @@
   "consoleClearing": 65,
   "sidebar": "fifth column",
   "bodyWeight": "400",
-  "monoFont": "OpenTUI Mono",
+  "monoFont": "OpenMono",
   "wordmarkHatch": 1,
   "wordmarkNodes": "on",
   "footerWordmark": "on",
@@ -366,7 +366,7 @@
   "arcadeVersion": "3D",
   "arcadeMode": "layers",
   "arcadeModeRevision": 2,
-  "monoFontRevision": 2,
+  "monoFontRevision": 3,
   "docsChoicesApplied": {
     "typography": "4",
     "lists": "3",

@@ -373,7 +373,7 @@ export const content = {
       badges: {
         body: "ใส่ป้ายใน README เอกสาร หรือเว็บไซต์ของคุณ และลิงก์ไปที่ opencode.ai เลือกไฟล์แบบสว่างหรือมืดตามพื้นหลัง (HTML จะสลับให้เอง) และอย่าเปลี่ยนสีหรือข้อความ",
         sizes: "ทุกสไตล์มีขนาด 20, 32 และ 44px (Shields มีเฉพาะ 20px) ทั้งแบบ SVG และ PNG ขนาด 2×",
-        mono: "แต่ละไฟล์มีแบบข้อความ OpenTUI Mono ด้วย เพิ่ม -mono ก่อนนามสกุลไฟล์ เช่น opencode-works-with-a-light-20-mono.svg หรือ -mono-caps สำหรับ OpenTUI Mono ตัวพิมพ์ใหญ่",
+        mono: "แต่ละไฟล์มีแบบข้อความ OpenMono ด้วย เพิ่ม -mono ก่อนนามสกุลไฟล์ เช่น opencode-works-with-a-light-20-mono.svg หรือ -mono-caps สำหรับ OpenMono ตัวพิมพ์ใหญ่",
         groups: {
           "works-with": {
             title: "Works with",

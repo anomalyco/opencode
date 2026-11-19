@@ -8,17 +8,17 @@
 [data-architect-cover] {
   --ink: #000;
   --mono:
-    "OpenTUI Mono", "OC Arabic", "OC Thai", "OpenTUI Mono Menlo", "OpenTUI Mono Consolas", "OpenTUI Mono Courier",
-    ui-monospace, monospace;
+    "OpenMono", "OC Arabic", "OC Thai", "OpenMono Menlo", "OpenMono Consolas", "OpenMono Courier", ui-monospace,
+    monospace;
   --sans: "Inter", "OC Arabic", "OC Thai", ui-sans-serif, system-ui, sans-serif;
-  /* OpenTUI Mono sets about 5% smaller than Inter at one point size (cap height 0.69 vs 0.73 em,
+  /* OpenMono sets about 5% smaller than Inter at one point size (cap height 0.69 vs 0.73 em,
      x-height 0.52 vs 0.55), so mono labels beside Inter text are scaled by this to look the same size. */
   --mono-optical: 1.05;
   position: relative;
   color: var(--ink);
   font-family: var(--sans);
 
-  /* Settings › Architect labels: the mono labels in capitals, tracked a little. OpenTUI Mono's
+  /* Settings › Architect labels: the mono labels in capitals, tracked a little. OpenMono's
      capitals are the height its sentence-case labels already start at, so they sit on the rows the same way. */
   &[data-label-case="upper"] {
     [data-architect-part="title"] p,
@@ -134,8 +134,8 @@
     --ink-70: #626262;
     --ink-20: #d2d2d2;
     --mono:
-      "OpenTUI Mono", "OC Arabic", "OC Thai", "OpenTUI Mono Menlo", "OpenTUI Mono Consolas", "OpenTUI Mono Courier",
-      ui-monospace, monospace;
+      "OpenMono", "OC Arabic", "OC Thai", "OpenMono Menlo", "OpenMono Consolas", "OpenMono Courier", ui-monospace,
+      monospace;
     --sans: "Inter", "OC Arabic", "OC Thai", ui-sans-serif, system-ui, sans-serif;
     --meta: 38mm;
     /* One line weight for every rule a style draws (the architect style sets it from its layout). */

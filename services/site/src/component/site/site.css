@@ -166,13 +166,13 @@ html:has([data-site][data-theme="dark"]) {
   --font-sans:
     "Inter", "OC Arabic", "OC Thai", var(--font-cjk, ui-sans-serif), ui-sans-serif, system-ui, -apple-system,
     BlinkMacSystemFont, "Segoe UI", sans-serif;
-  /* OpenTUI Mono for every visitor; the "OpenTUI Mono" system faces stand in for it while it loads,
+  /* OpenMono for every visitor; the "OpenMono" system faces stand in for it while it loads,
      at its size (mono-fonts.ts). The Arabic and Thai faces come ahead of the stand-ins, whose
      Courier New has monospaced Arabic. --mono-choice is Settings › Mono font, a family and a comma
      ahead of the stack (mono-fonts.ts). */
   --font-mono:
-    var(--mono-choice,) "OpenTUI Mono", "OC Arabic", "OC Thai", "OpenTUI Mono Menlo", "OpenTUI Mono Consolas",
-    "OpenTUI Mono Courier", var(--font-cjk, ui-monospace), ui-monospace, monospace;
+    var(--mono-choice,) "OpenMono", "OC Arabic", "OC Thai", "OpenMono Menlo", "OpenMono Consolas", "OpenMono Courier",
+    var(--font-cjk, ui-monospace), ui-monospace, monospace;
   --sidebar-width: 14.75rem;
   --gutter: 1rem;
   --edge: 1.5rem;
@@ -237,7 +237,7 @@ html:has([data-site][data-theme="dark"]) {
   --mono-size: var(--fs-ui);
   /* Body copy. Phones raise it (see the mobile type scale near the end of this file). */
   --body-size: var(--fs-body);
-  /* Section titles ("What is OpenCode?", "FAQ") and product names. The site serves OpenTUI Mono
+  /* Section titles ("What is OpenCode?", "FAQ") and product names. The site serves OpenMono
      in Regular and Bold only, so a hairline stroke adds the "medium" weight; drop it for a real medium face. */
   --title-size: var(--fs-title);
   --title-stroke: 0.2px currentColor;
@@ -252,7 +252,7 @@ html:has([data-site][data-theme="dark"]) {
      much further left, so its visible edge sits on --edge like the right side. */
   --bracket-bearing: calc(var(--mono-size) * 0.154);
   /* The ink of the nav's "[01]", from the left edge of "[" to the right edge of "]": 2.092em in
-     OpenTUI Mono. The logo's box spans it. Settings › Nav numbers "1" narrows it to "[1]" (see the end). */
+     OpenMono. The logo's box spans it. Settings › Nav numbers "1" narrows it to "[1]" (see the end). */
   --bracket-ink: calc(var(--mono-size) * 2.092);
 
   display: block;
@@ -1005,15 +1005,15 @@ html:has([data-site][data-theme="dark"]) {
     overflow: visible;
   }
 
-  /* Page header: the large OpenTUI Mono title and its Inter description. Every page starts with one. */
+  /* Page header: the large OpenMono title and its Inter description. Every page starts with one. */
   [data-component="hero"] {
     display: flex;
     flex-direction: column;
     gap: 2.5rem;
 
     h1 {
-      /* Trimmed to OpenTUI Mono's cap height and baseline so the first line lines up exactly with the
-         top of the nav. The trim is computed from OpenTUI Mono's metrics (cap 0.69, ascent 0.965,
+      /* Trimmed to OpenMono's cap height and baseline so the first line lines up exactly with the
+         top of the nav. The trim is computed from OpenMono's metrics (cap 0.69, ascent 0.965,
          descent 0.22) rather than with text-box, which measures whichever font is showing: its
          stand-in (scaled Menlo, cap 0.73) made the box 2px taller until the web font arrived, and
          the subtitle below moved up when it did. The box is now the same with either font. */
@@ -1440,7 +1440,7 @@ html:has([data-site][data-theme="dark"]) {
   [data-component="status"] [data-slot="bars"] {
     box-sizing: border-box;
     width: 4ch;
-    /* Inset to the ink of OpenTUI Mono's "[" and "]" glyphs, not their full character cells. */
+    /* Inset to the ink of OpenMono's "[" and "]" glyphs, not their full character cells. */
     padding: 0 0.154em;
     /* The same ink box as the "[" and "]" glyphs beside the other links: as wide and as tall,
        and level with them. */

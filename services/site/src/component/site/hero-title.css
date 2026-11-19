@@ -21,7 +21,7 @@
    | full      | as above                             | content width ÷ 31 characters, one line |
    | three-up  | 3 cards (or content) ÷ title length, one line, with either option              |
 
-   A line of n characters at size s is n × 0.57s wide (OpenTUI Mono advances 0.6em; the tracking takes
+   A line of n characters at size s is n × 0.57s wide (OpenMono advances 0.6em; the tracking takes
    0.03em), less 2% for room. --title-chars counts cells, not characters (hero-title.ts): a CJK
    character is about 1.7 cells. Hero size scales the 64px and fluid sizes and can only shrink a fitted
    one. The 64px size keeps a 15-character measure, so the title breaks after "The open source".

@@ -4,12 +4,13 @@ import { interFaces } from "~/component/site/inter-fonts"
 import { monoFontFaces } from "~/component/site/mono-fonts"
 
 const root = path.resolve(import.meta.dir, "..")
-// The licensed mono face the site used before OpenTUI Mono, and its foundry. Built from parts so
-// this file doesn't match itself; the lookahead skips codes like "TX020" in vendored bundles.
-const retired = new RegExp(["t", "x-?02(?!\\d)", "|", "be", "rkeley"].join(""), "i")
+// The mono faces the site used to serve: a licensed one and its foundry, and the one before
+// OpenMono. Built from parts so this file doesn't match itself; the lookahead skips codes like
+// "TX020" in vendored bundles.
+const retired = new RegExp(["t", "x-?02(?!\\d)", "|", "be", "rkeley", "|", "open", "tui[-_ ]?mono"].join(""), "i")
 
 describe("fonts", () => {
-  test("no file names or mentions the retired mono face", async () => {
+  test("no file names or mentions a retired mono face", async () => {
     const files = (await Bun.$`git ls-files -co --exclude-standard`.cwd(root).text()).split("\n").filter(Boolean)
     const hits = (
       await Promise.all(
@@ -30,12 +31,12 @@ describe("fonts", () => {
     expect(hits).toEqual([])
   })
 
-  test("the mono stack starts with OpenTUI Mono, served from our own files", async () => {
+  test("the mono stack starts with OpenMono, served from our own files", async () => {
     const css = await Bun.file(path.join(root, "src/component/site/site.css")).text()
-    expect(css).toMatch(/--font-mono:\s*var\(--mono-choice,\) "OpenTUI Mono",/)
-    const ranges = await Bun.file(path.join(root, "src/asset/fonts/opentui-mono.json")).json()
-    expect(Object.keys(ranges)).toEqual(["latin", "rest"])
-    expect(await Bun.file(path.join(root, "src/asset/fonts/OpenTUIMono-OFL.txt")).exists()).toBe(true)
+    expect(css).toMatch(/--font-mono:\s*var\(--mono-choice,\) "OpenMono",/)
+    const ranges = await Bun.file(path.join(root, "src/asset/fonts/openmono.json")).json()
+    expect(Object.keys(ranges)).toEqual(["latin", "cyrillic", "rest"])
+    expect(await Bun.file(path.join(root, "src/asset/fonts/OpenMono-OFL.txt")).exists()).toBe(true)
   })
 
   test("the stylesheet's faces are the ones mono-fonts.ts and inter-fonts.ts describe", async () => {

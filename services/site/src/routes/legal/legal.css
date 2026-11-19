@@ -112,7 +112,7 @@
       color: var(--text-strong);
     }
 
-    /* Section titles follow the site: OpenTUI Mono, regular weight. h2 at the title size like the Press
+    /* Section titles follow the site: OpenMono, regular weight. h2 at the title size like the Press
        and Brand section titles, h3 at the mono size like Brand's subsections, h4 the same in the
        body colour. */
     h2,
@@ -609,7 +609,7 @@
   }
 
   /* "grouped": the group names are the page's only headings, set like every section title on the
-     site (OpenTUI Mono, regular) but smaller (13px, under the 15px document names) and lighter (--text-weak) so the document names under
+     site (OpenMono, regular) but smaller (13px, under the 15px document names) and lighter (--text-weak) so the document names under
      them read darkest, and without the title's faux-medium stroke. Clicking one still copies its
      address. */
   [data-slot="group"] {

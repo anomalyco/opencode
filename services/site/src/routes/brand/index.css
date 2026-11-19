@@ -201,7 +201,7 @@
 
     /* As wide as its button and lined up with its left edge (placeMenu opens it where it fits, and
        on phones as wide as the screen less 16px a side); a long label ends in "…". Rows as in
-       the logo menu (site.css), but OpenTUI Mono at 14px rather than its 12px (David found 12px too small);
+       the logo menu (site.css), but OpenMono at 14px rather than its 12px (David found 12px too small);
        0.5rem × 0.875rem padding, 14px icons, the popover
        background and shadow, and the grey menu states (a tint and a mid-grey bar on hover and
        keyboard focus). */
@@ -1020,7 +1020,7 @@
     text-wrap: pretty;
   }
 
-  /* Inline names and commands: OpenTUI Mono on a grey chip. */
+  /* Inline names and commands: OpenMono on a grey chip. */
   code {
     padding: 0.0625rem 0.3125rem;
     background: var(--bg-weaker);
@@ -1064,8 +1064,8 @@
   }
 
   /* Badges: a row per style, as the logo and wordmark sections, with a Light and a Dark card side by
-     side (one column where two would be too narrow). Settings › Badge font shows the Inter, OpenTUI Mono
-     or uppercase OpenTUI Mono files. */
+     side (one column where two would be too narrow). Settings › Badge font shows the Inter, OpenMono
+     or uppercase OpenMono files. */
   /* Straight after the description: its 12px margin and the 8px gap put the tabs about as far below
      it as the cards sit below the tabs. */
   [data-component="badges"] {

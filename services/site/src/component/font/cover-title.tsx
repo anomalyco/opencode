@@ -262,7 +262,7 @@ export function CoverTitle() {
       const settle = 1 - (1 - Math.min(1, Math.max(0, (t - program.end) / SETTLE))) ** 5
       const fade = (to: number) => 1 + (to - 1) * settle
       context.clearRect(0, 0, canvas.width, canvas.height)
-      context.font = `${10 * dpr}px "OpenTUI Mono", "OpenTUI Mono Menlo", ui-monospace, monospace`
+      context.font = `${10 * dpr}px "OpenMono", "OpenMono Menlo", ui-monospace, monospace`
       context.textBaseline = "alphabetic"
       // On a narrow canvas the module label is wider than a letter, so only the first letter carries it.
       const everyLabel = context.measureText("4 × 120u").width + 4 * dpr <= 5 * md
@@ -397,7 +397,7 @@ export function CoverTitle() {
     layout()
     draw(elapsed)
     // The readout and labels are canvas text: start once the mono font is in, so they don't swap faces mid-plot.
-    const fontReady = document.fonts.load(`${10 * dpr}px "OpenTUI Mono"`).catch(() => undefined)
+    const fontReady = document.fonts.load(`${10 * dpr}px "OpenMono"`).catch(() => undefined)
 
     // Starts once most of the title is in view, and pauses whenever it leaves the screen.
     const observer = new IntersectionObserver(
