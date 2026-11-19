@@ -150,7 +150,8 @@ impl ForOf for FillCollection {
         let id = fr.slot(vm, FOR_OF_SLOTS).obj().unwrap_or(0);
         if matches!(vm.heap[id as usize].kind, Kind::Set(_)) {
             let key = vm.map_key(&x);
-            table(vm, id).set(key, x, Value::Undef);
+            let entry_key = vm.map_entry_key(key, x);
+            table(vm, id).set(key, entry_key, Value::Undef);
             fuel::native(vm);
             return Ok(Flow::Next);
         }
@@ -161,7 +162,8 @@ impl ForOf for FillCollection {
         let k = vm.get_elem(&x, &Value::Num(0.0))?;
         let v = vm.get_elem(&x, &Value::Num(1.0))?;
         let key = vm.map_key(&k);
-        table(vm, id).set(key, k, v);
+        let entry_key = vm.map_entry_key(key, k);
+        table(vm, id).set(key, entry_key, v);
         fuel::native(vm);
         Ok(Flow::Next)
     }
@@ -210,14 +212,16 @@ fn map_get(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
 fn map_set(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = map_of::<false>(vm, &this, "set")?;
     let key = vm.map_key(&arg(args, 0));
-    table(vm, id).set(key, arg(args, 0), arg(args, 1));
+    let entry_key = vm.map_entry_key(key, arg(args, 0));
+    table(vm, id).set(key, entry_key, arg(args, 1));
     Ok(this)
 }
 
 fn set_add(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let id = map_of::<true>(vm, &this, "add")?;
     let key = vm.map_key(&arg(args, 0));
-    table(vm, id).set(key, arg(args, 0), Value::Undef);
+    let entry_key = vm.map_entry_key(key, arg(args, 0));
+    table(vm, id).set(key, entry_key, Value::Undef);
     Ok(this)
 }
 

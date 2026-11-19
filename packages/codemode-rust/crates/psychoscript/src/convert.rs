@@ -529,7 +529,8 @@ fn json_entries(vm: &mut Vm, id: Id, allow: Option<&[Atom]>) -> Vec<(Atom, Value
 
 // ---------- JSON.stringify's internal walk ----------
 
-/// A key as the walk keeps it in its slots: its atom.
+/// The current key's atom as the walk keeps it in `J_ATOM`. A number holds no atom alive, but `J_KEY` always holds
+/// the same key as its atom's string, which does.
 fn atom_slot(a: Atom) -> Value {
     Value::Num(a as f64)
 }
@@ -543,7 +544,8 @@ fn push_walk_keys(vm: &mut Vm, id: Id, allow: Option<Id>) -> usize {
         Kind::Error(_) => {
             let rest = vm.own_keys(id).into_iter().filter(|k| *k != nk && *k != mk);
             let keys: Vec<Atom> = [nk, mk].into_iter().chain(rest).collect();
-            vm.stack.extend(keys.into_iter().map(key_slot));
+            vm.stack
+                .extend(keys.into_iter().map(|k| key_slot(&vm.atoms, k)));
         }
         Kind::Ordinary => {
             // Without index keys, the own keys are the enumerable string-keyed properties in their order.
@@ -553,20 +555,22 @@ fn push_walk_keys(vm: &mut Vm, id: Id, allow: Option<Id>) -> usize {
                     props
                         .iter()
                         .filter(|p| p.flags & ENUMERABLE != 0 && p.key > SYM_ASYNC_ITERATOR)
-                        .map(|p| key_slot(p.key)),
+                        .map(|p| key_slot(&vm.atoms, p.key)),
                 );
             } else {
                 let keys = vm.own_keys(id);
-                vm.stack.extend(keys.into_iter().map(key_slot));
+                vm.stack
+                    .extend(keys.into_iter().map(|k| key_slot(&vm.atoms, k)));
             }
         }
         Kind::Arguments(_) | Kind::Live(_) => {
             let keys = vm.own_keys(id);
-            vm.stack.extend(keys.into_iter().map(key_slot));
+            vm.stack
+                .extend(keys.into_iter().map(|k| key_slot(&vm.atoms, k)));
         }
         _ => {}
     }
-    // The property list holds atoms, as the keys do.
+    // The property list holds the keys' atoms' strings, as the keys do.
     if let Some(allow) = allow {
         let own = vm.stack.split_off(start);
         if let Kind::Array(listed) = &vm.heap[allow as usize].kind {
@@ -581,16 +585,17 @@ fn push_walk_keys(vm: &mut Vm, id: Id, allow: Option<Id>) -> usize {
     vm.stack.len() - start
 }
 
-/// A key's atom as the walk's slots keep it.
-fn key_slot(a: Atom) -> Slot {
-    Slot::index(a as usize)
+/// A key as the walk's slots keep it: its atom's string, which keeps the atom alive while the walk holds it.
+fn key_slot(atoms: &crate::strings::Strings, a: Atom) -> Slot {
+    Slot::pack(Value::Str(atoms.atom_str(a)))
 }
 
 // The slots of the internal walk's frame: the replacer (or undefined), the property list (an internal array of its
-// keys' atoms, or undefined), the indent (undefined for none), the output written before the last call (an internal
-// byte buffer, or undefined), and how many containers deep the walk is; then the value it visits (`holder[key]`, the
-// key a number for an array's element, the value read once the visit starts), what the call it waits on is for, and
-// the key's atom off an array; then, per container, an object's keys' atoms, then the container, whether it is an
+// keys' atoms' strings, or undefined), the indent (undefined for none), the output written before the last call (an
+// internal byte buffer, or undefined), and how many containers deep the walk is; then the value it visits
+// (`holder[key]`, the key a number for an array's element, the value read once the visit starts), what the call it
+// waits on is for, and the key's atom off an array; then, per container, an object's keys (as their atoms' strings, so
+// the collector sees them), then the container, whether it is an
 // object (undefined for an array), how many children it has, the next one, and whether none was written yet. The
 // innermost container's slots are the top of the frame's stack whenever a step runs.
 const J_F: usize = 0;
@@ -641,7 +646,7 @@ pub fn enter_stringify(vm: &mut Vm, callee: Id, v: Value, opts: Stringify) -> Re
     vm.define(holder, empty, v);
     let allow = match opts.allow {
         Some(allow) => {
-            let keys = allow.into_iter().map(atom_slot).collect();
+            let keys = allow.into_iter().map(|a| vm.atom_val(a)).collect();
             vm.new_array(keys)
         }
         None => Value::Undef,
@@ -1036,7 +1041,7 @@ fn allow_list(vm: &mut Vm, fr: crate::native::Frame) -> Option<Vec<Atom>> {
     Some(
         keys.iter()
             .filter_map(|k| match k {
-                Value::Num(a) => Some(*a as Atom),
+                Value::Str(s) => Some(vm.atoms.intern_id(*s)),
                 _ => None,
             })
             .collect(),
@@ -1123,9 +1128,13 @@ fn child(
             vm.fuel(1);
             vm.fuel(crate::vm::NATIVE_FUEL);
             vm.fuel(crate::vm::NATIVE_FUEL);
-            let atom = fr.index(vm, at - n + i) as Atom;
+            let key = fr.get(vm, at - n + i);
+            let atom = match key {
+                Value::Str(s) => vm.atoms.intern_id(s),
+                _ => 0,
+            };
             fr.set_index(vm, J_ATOM, atom as usize);
-            vm.atom_val(atom)
+            key
         }
     };
     fr.set(vm, J_HOLDER, Value::Obj(id));

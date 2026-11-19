@@ -30,3 +30,85 @@ fn a_value_swapped_out_of_a_cell_survives_the_cycle() {
     let outcome = Runtime::make().execute(code);
     assert_eq!(outcome.json().unwrap(), serde_json::json!(0));
 }
+
+/// Map keys and property names made and dropped all the time: their atoms are freed and their ids reused, so the
+/// atom table stays near what is live (about 2,000 keys) instead of growing by one per key ever used (about 200,000
+/// here). The run stops for the host every round, where it reports its heap.
+#[cfg(feature = "gc-stats")]
+#[test]
+fn atoms_of_dropped_keys_are_freed() {
+    use std::sync::{Arc, Mutex};
+
+    use psychoscript::{HostFunction, HostValue};
+
+    let code = r#"
+        const m = new Map()
+        let n = 0
+        for (let round = 0; round < 200; round++) {
+          for (let j = 0; j < 500; j++, n++) {
+            m.set("key" + n, n)
+            if (n >= 1000) m.delete("key" + (n - 1000))
+            const o = { [`dyn${n}`]: n }
+            o[`dyn${n + 1}`] = n
+            delete o[`dyn${n}`]
+          }
+          await tick()
+        }
+        let sum = 0
+        for (const [k, v] of m) if (k === "key" + v) sum += 1
+        return [m.size, sum, m.get("key" + (n - 1))]
+    "#;
+    let peak = Arc::new(Mutex::new(0u64));
+    let seen = peak.clone();
+    let rt = Runtime::make().globals(move |run| {
+        let (run, seen) = (run.clone(), seen.clone());
+        [(
+            "tick",
+            HostFunction::new_async(move |_, _| {
+                let atoms = run.heap_stats().atoms;
+                let mut p = seen.lock().unwrap();
+                *p = (*p).max(atoms);
+                async { Ok(HostValue::Undefined) }
+            }),
+        )]
+    });
+    let outcome = rt.execute(code);
+    assert_eq!(
+        outcome.json().unwrap(),
+        serde_json::json!([1000, 1000, 99999])
+    );
+    let peak = *peak.lock().unwrap();
+    assert!(peak > 0 && peak < 40_000, "{peak} atoms at most");
+}
+
+/// `JSON.stringify` keeps an object's keys while a replacer runs, and the replacer may delete the properties and
+/// allocate enough for cycles to run: the keys still left to write, held by nothing but the walk, must keep their
+/// atoms, or they would print under another key's name. Cycles overlap the walk reliably only with
+/// `PSYCHOSCRIPT_GC_STRESS=1`.
+#[test]
+fn keys_only_json_stringify_holds_survive() {
+    let code = r#"
+        function churn() {
+          const a = []
+          for (let i = 0; i < 200; i++) a.push({ i })
+          return a.length
+        }
+        let bad = 0
+        for (let r = 0; r < 40; r++) {
+          const o = {}
+          for (let k = 0; k < 10; k++) o["p" + r + "_" + k] = k
+          const first = "p" + r + "_0"
+          const got = JSON.stringify(o, function (key, v) {
+            churn()
+            if (key === first) for (const k of Object.keys(this)) if (k !== first) delete this[k]
+            return v === undefined ? "gone" : v
+          })
+          let want = '{"' + first + '":0'
+          for (let k = 1; k < 10; k++) want += ',"p' + r + "_" + k + '":"gone"'
+          if (got !== want + "}") bad++
+        }
+        return bad
+    "#;
+    let outcome = Runtime::make().execute(code);
+    assert_eq!(outcome.json().unwrap(), serde_json::json!(0));
+}

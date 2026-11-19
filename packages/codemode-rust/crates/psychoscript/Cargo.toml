@@ -29,3 +29,7 @@ serde_json = { version = "1", features = ["preserve_order"] }
 tz-rs = "0.7"
 unicode-normalization = "0.1"
 url = "2.5"
+
+# The crate's own tests read `Run::heap_stats` (tests/gc.rs), so they build it with `gc-stats`; normal builds don't.
+[dev-dependencies]
+psychoscript = { path = ".", features = ["gc-stats"] }

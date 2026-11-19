@@ -11,9 +11,11 @@ pub struct HeapStats {
     pub objects: u64,
     pub cells: u64,
     pub strings: u64,
+    pub atoms: u64,
     pub peak_objects: u64,
     pub peak_cells: u64,
     pub peak_strings: u64,
+    pub peak_atoms: u64,
     /// Collection steps taken, and their total and individual durations.
     pub steps: u64,
     pub gc_ns: u64,
@@ -21,26 +23,29 @@ pub struct HeapStats {
 }
 
 impl Vm {
-    /// Live slots now: objects, cells, strings. A collector that reuses slots subtracts its free ones.
-    pub fn heap_counts(&self) -> (u64, u64, u64) {
+    /// Live slots now, freed ones left out: objects, cells, strings, atoms.
+    pub fn heap_counts(&self) -> (u64, u64, u64, u64) {
         let (objects, cells) = self.gc.free_counts();
         (
             (self.heap.len() - objects) as u64,
             (self.cells.len() - cells) as u64,
             (self.atoms.bufs.len() - self.atoms.gc.free.len()) as u64,
+            (self.atoms.atom_str.len() - self.atoms.gc.atom_free.len()) as u64,
         )
     }
 
     /// Copies the counts to the run's stats. A collector also calls it just before it frees, so the peaks hold.
     pub fn publish_stats(&self) {
-        let (objects, cells, strings) = self.heap_counts();
+        let (objects, cells, strings, atoms) = self.heap_counts();
         let mut s = self.host.run.stats();
         s.objects = objects;
         s.cells = cells;
         s.strings = strings;
+        s.atoms = atoms;
         s.peak_objects = s.peak_objects.max(objects);
         s.peak_cells = s.peak_cells.max(cells);
         s.peak_strings = s.peak_strings.max(strings);
+        s.peak_atoms = s.peak_atoms.max(atoms);
     }
 
     /// Records one collection step of `ns` nanoseconds.

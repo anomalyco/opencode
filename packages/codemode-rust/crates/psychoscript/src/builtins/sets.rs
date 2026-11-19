@@ -95,7 +95,8 @@ fn map_get_or_insert(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     if let Some(v) = table(vm, id).get(key) {
         return Ok(v);
     }
-    table(vm, id).set(key, arg(args, 0), arg(args, 1));
+    let entry_key = vm.map_entry_key(key, arg(args, 0));
+    table(vm, id).set(key, entry_key, arg(args, 1));
     Ok(arg(args, 1))
 }
 
@@ -129,7 +130,8 @@ fn get_or_insert_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, Valu
             let k = fr.get(vm, 1);
             let key = vm.map_key(&k);
             let v = r.get();
-            table(vm, id).set(key, k, v);
+            let entry_key = vm.map_entry_key(key, k);
+            table(vm, id).set(key, entry_key, v);
             fuel::native(vm);
             vm.bytecode_builtin();
             Ok(Step::Done(v))
@@ -275,7 +277,8 @@ fn map_groups(vm: &mut Vm, pairs: impl Iterator<Item = (Value, Value)>) -> Value
             }
             _ => {
                 let arr = vm.new_array(vec![item]);
-                table(vm, id).set(key, k, arr);
+                let entry_key = vm.map_entry_key(key, k);
+                table(vm, id).set(key, entry_key, arr);
             }
         }
     }
@@ -326,7 +329,8 @@ fn new_set(vm: &mut Vm, entries: Vec<Value>) -> Id {
     let id = vm.alloc(Obj::new(Some(proto), Kind::Set(Box::default())));
     for v in entries {
         let key = vm.map_key(&v);
-        table(vm, id).set(key, v, Value::Undef);
+        let entry_key = vm.map_entry_key(key, v);
+        table(vm, id).set(key, entry_key, Value::Undef);
     }
     id
 }
@@ -605,7 +609,8 @@ fn answer(vm: &mut Vm, name: &str, result: Option<Id>, item: Value, found: bool)
         ("intersection", Some(res)) => {
             if found {
                 let key = vm.map_key(&item);
-                table(vm, res).set(key, item, Value::Undef);
+                let entry_key = vm.map_entry_key(key, item);
+                table(vm, res).set(key, entry_key, Value::Undef);
                 fuel::native(vm);
             }
             false
@@ -664,12 +669,14 @@ fn take_key(
     fuel::native(vm);
     match (name, result) {
         ("union", Some(res)) => {
-            table(vm, res).set(key, item, Value::Undef);
+            let entry_key = vm.map_entry_key(key, item);
+            table(vm, res).set(key, entry_key, Value::Undef);
             fuel::native(vm);
         }
         ("intersection", Some(res)) => {
             if found {
-                table(vm, res).set(key, item, Value::Undef);
+                let entry_key = vm.map_entry_key(key, item);
+                table(vm, res).set(key, entry_key, Value::Undef);
                 fuel::native(vm);
             }
         }
@@ -681,7 +688,8 @@ fn take_key(
             if found {
                 table(vm, res).delete(key);
             } else {
-                table(vm, res).set(key, item, Value::Undef);
+                let entry_key = vm.map_entry_key(key, item);
+                table(vm, res).set(key, entry_key, Value::Undef);
             }
             fuel::native(vm);
         }
@@ -777,11 +785,13 @@ impl ForOf for WeakFill {
             let v = vm.get_elem(&item, &Value::Num(1.0))?;
             weak_key(vm, &k, "as weak map key")?;
             let key = vm.map_key(&k);
-            table(vm, id).set(key, k, v);
+            let entry_key = vm.map_entry_key(key, k);
+            table(vm, id).set(key, entry_key, v);
         } else {
             weak_key(vm, &item, "in weak set")?;
             let key = vm.map_key(&item);
-            table(vm, id).set(key, item, Value::Undef);
+            let entry_key = vm.map_entry_key(key, item);
+            table(vm, id).set(key, entry_key, Value::Undef);
         }
         fuel::native(vm);
         Ok(Flow::Next)
@@ -854,7 +864,8 @@ fn weak_set(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let k = arg(args, 0);
     weak_key(vm, &k, "as weak map key")?;
     let key = vm.map_key(&k);
-    table(vm, id).set(key, k, arg(args, 1));
+    let entry_key = vm.map_entry_key(key, k);
+    table(vm, id).set(key, entry_key, arg(args, 1));
     Ok(this)
 }
 
@@ -894,7 +905,8 @@ fn weak_add(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     let k = arg(args, 0);
     weak_key(vm, &k, "in weak set")?;
     let key = vm.map_key(&k);
-    table(vm, id).set(key, k, Value::Undef);
+    let entry_key = vm.map_entry_key(key, k);
+    table(vm, id).set(key, entry_key, Value::Undef);
     Ok(this)
 }
 
@@ -906,7 +918,8 @@ fn weak_get_or_insert(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     if let Some(v) = table(vm, id).get(key) {
         return Ok(v);
     }
-    table(vm, id).set(key, k, arg(args, 1));
+    let entry_key = vm.map_entry_key(key, k);
+    table(vm, id).set(key, entry_key, arg(args, 1));
     Ok(arg(args, 1))
 }
 

@@ -5,17 +5,18 @@
 //! a walk over the two (as [`reachable`], and the collector's marking) sees everything a run can reach.
 
 use crate::object::*;
-use crate::strings::StrId;
+use crate::strings::{Atom, StrId};
 use crate::value::{Id, Slot, Value};
 use crate::vm::{Frame, FrameKind, Job, Reaction, Resume, SavedFrame, Vm};
 
-/// What a walk finds: an object, a string or a closure cell. A stack slot whose bits could be a cell's raw index (see
-/// `Op::NewCell`) is reported as that cell, which may not exist.
+/// What a walk finds: an object, a string, a closure cell, or an atom (a property key or a name). A stack slot whose
+/// bits could be a cell's raw index (see `Op::NewCell`) is reported as that cell, which may not exist.
 #[derive(Clone, Copy)]
 pub enum Ref {
     Obj(Id),
     Str(StrId),
     Cell(u32),
+    Atom(Atom),
 }
 
 /// Marks every object reachable from the run's roots; the objects every fresh run makes, and every cell, are roots
@@ -66,7 +67,13 @@ pub fn roots(vm: &Vm, visit: &mut impl FnMut(Ref)) {
         t.frame(f);
     }
     t.vals(vm.globals.iter());
-    t.vals(vm.global_map.values());
+    for (k, v) in &vm.global_map {
+        t.atom(*k);
+        t.val(v);
+    }
+    for a in &vm.global_names {
+        t.atom(*a);
+    }
     t.vals(vm.consts.iter());
     let std = &vm.realm.std;
     for id in [
@@ -157,6 +164,9 @@ pub fn roots(vm: &Vm, visit: &mut impl FnMut(Ref)) {
     }
     t.vals(h.modules_loaded.values());
     t.vals(h.namespaces.values());
+    for a in h.host_namespaces.keys() {
+        t.atom(*a);
+    }
     if let Some(o) = &vm.outcome {
         t.outcome(o);
     }
@@ -174,12 +184,13 @@ pub fn head(o: &Obj, visit: &mut impl FnMut(Ref)) {
     Tracer(visit).head(o);
 }
 
-/// The slots of `o` from `from` to `to`, of the [`bulk_len`] there are: its properties' values, then its
+/// The slots of `o` from `from` to `to`, of the [`bulk_len`] there are: its properties (key and value), then its
 /// elements or entries. These are what may be long, which the collector traces a range at a time.
 pub fn bulk(o: &Obj, from: usize, to: usize, visit: &mut impl FnMut(Ref)) {
     let mut t = Tracer(visit);
     let props = &o.props.items;
     for p in range(props, from, to) {
+        t.atom(p.key);
         t.val(&p.value);
     }
     let (from, to) = (
@@ -220,6 +231,10 @@ struct Tracer<'f, F>(&'f mut F);
 impl<F: FnMut(Ref)> Tracer<'_, F> {
     fn id(&mut self, id: Id) {
         (self.0)(Ref::Obj(id));
+    }
+
+    fn atom(&mut self, a: Atom) {
+        (self.0)(Ref::Atom(a));
     }
 
     fn val(&mut self, v: &Value) {
@@ -332,10 +347,15 @@ impl<F: FnMut(Ref)> Tracer<'_, F> {
             | Kind::Date(_)
             | Kind::Bytes(_)
             | Kind::TextDecoder(_)
-            | Kind::Headers(_)
-            | Kind::Live(_) => {}
+            | Kind::Headers(_) => {}
             Kind::StrIter { s, .. } => self.val(&Value::Str(*s)),
+            Kind::Live(l) => {
+                for (k, _) in &l.accessors {
+                    self.atom(*k);
+                }
+            }
             Kind::Namespace(ns) => {
+                self.atom(ns.name);
                 if !ns.is_root() {
                     self.id(ns.parent);
                 }
@@ -346,7 +366,10 @@ impl<F: FnMut(Ref)> Tracer<'_, F> {
                     (self.0)(Ref::Cell(*cell));
                 }
             }
-            Kind::Native { data, .. } => self.val(data),
+            Kind::Native { data, name, .. } => {
+                self.atom(*name);
+                self.val(data);
+            }
             Kind::Bound(b) => {
                 self.val(&b.0);
                 self.val(&b.1);

@@ -1510,8 +1510,9 @@ impl Dec<'_> {
                 e => {
                     let k = self.val(at(e, 0)?)?;
                     let v = self.val(at(e, 1)?)?;
-                    keys.push(Some(vm.map_key(&k)));
-                    entries.push(Some((k, v)));
+                    let key = vm.map_key(&k);
+                    keys.push(Some(key));
+                    entries.push(Some((vm.map_entry_key(key, k), v)));
                 }
             }
         }
@@ -1955,9 +1956,16 @@ pub fn restore(vm: &mut Vm, snapshot: &Snapshot, program_hash: &str) -> R<()> {
     for t in field_list(st, "strings")? {
         texts.push((string(at(t, 0)?)?, boolean(at(t, 1)?)?));
     }
-    let atoms: Vec<u32> = field_list(st, "atoms")?
+    // A freed atom is saved as null and restored as a free id.
+    let atoms: Vec<Option<u32>> = field_list(st, "atoms")?
         .iter()
-        .map(u32_)
+        .map(|a| {
+            if a.is_null() {
+                Ok(None)
+            } else {
+                u32_(a).map(Some)
+            }
+        })
         .collect::<R<_>>()?;
     vm.atoms.restore(texts, atoms).map_err(invalid)?;
 

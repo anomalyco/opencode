@@ -1606,8 +1606,9 @@ fn from_host(
                 let k = from_host(vm, k, label, &place.child(None), depth + 1)?;
                 let item = from_host(vm, item, label, &place.child(None), depth + 1)?;
                 let mk = vm.map_key(&k);
+                let entry_key = vm.map_entry_key(mk, k);
                 if let Kind::Map(m) = &mut vm.heap[id as usize].kind {
-                    m.set(mk, k, item);
+                    m.set(mk, entry_key, item);
                 }
             }
             Value::Obj(id)
@@ -1618,8 +1619,9 @@ fn from_host(
             for item in items {
                 let k = from_host(vm, item, label, &place.child(None), depth + 1)?;
                 let mk = vm.map_key(&k);
+                let entry_key = vm.map_entry_key(mk, k);
                 if let Kind::Set(m) = &mut vm.heap[id as usize].kind {
-                    m.set(mk, k, Value::Undef);
+                    m.set(mk, entry_key, Value::Undef);
                 }
             }
             Value::Obj(id)

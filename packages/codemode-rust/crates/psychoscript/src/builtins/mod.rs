@@ -180,6 +180,8 @@ pub fn arg(args: &[Value], i: usize) -> Value {
 }
 
 impl Vm {
+    // Inlined into `method`; see there.
+    #[inline(always)]
     pub fn native_fn(&mut self, name: &'static str, length: u8, f: NativeFn, data: Value) -> Value {
         let name = self.atoms.intern_static(name);
         let proto = self.realm.function_proto;
@@ -195,8 +197,9 @@ impl Vm {
         )))
     }
 
-    // Inlined into the setup of built-ins, which the collector's hooks in `alloc` and `heap[_]` otherwise stop.
-    #[inline]
+    // Inlined into the setup of built-ins, which runs for every run: with the collector's hooks in `alloc`, `heap[_]`
+    // and the interner, the compiler stops doing so itself, and setting up a run costs a few percent more.
+    #[inline(always)]
     pub fn method(&mut self, target: Id, name: &'static str, length: u8, f: NativeFn) -> Value {
         let v = self.native_fn(name, length, f, Value::Undef);
         let key = self.atoms.intern(name);
@@ -210,8 +213,8 @@ impl Vm {
         }
     }
 
-    // As `method`.
-    #[inline]
+    // Inlined as `method` is.
+    #[inline(always)]
     fn constant(&mut self, target: Id, name: &'static str, v: Value) {
         let key = self.atoms.intern_static(name);
         self.heap[target as usize].props.insert(key, v, FIXED);

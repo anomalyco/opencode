@@ -201,6 +201,7 @@ fn heap_json(s: &psychoscript::HeapStats) -> Json {
         "objects": s.objects, "peak_objects": s.peak_objects,
         "cells": s.cells, "peak_cells": s.peak_cells,
         "strings": s.strings, "peak_strings": s.peak_strings,
+        "atoms": s.atoms, "peak_atoms": s.peak_atoms,
         "gc_steps": s.steps, "gc_ms": s.gc_ns as f64 / 1e6,
         "pause_us": percentiles(&mut pauses, 1e3),
     })

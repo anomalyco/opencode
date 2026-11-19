@@ -1334,6 +1334,15 @@ impl Vm {
         }
     }
 
+    /// A Map or Set key as its entry keeps it: a string as its atom's own string, so the entry keeps the atom, and
+    /// with it the key's hash, alive.
+    pub fn map_entry_key(&self, key: MapKey, k: Value) -> Value {
+        match key {
+            MapKey::Str(a) => self.atom_val(a),
+            _ => k,
+        }
+    }
+
     pub fn static_id(&mut self, s: &str) -> StrId {
         let a = self.atoms.intern(s);
         self.atoms.atom_str(a)

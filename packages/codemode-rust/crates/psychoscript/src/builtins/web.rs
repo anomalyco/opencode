@@ -1237,8 +1237,9 @@ fn clone_value(vm: &mut Vm, v: &Value, memo: &mut Vec<(Id, Id)>) -> Res {
                 let k = clone_value(vm, &k, memo)?;
                 let val = clone_value(vm, &val, memo)?;
                 let key = vm.map_key(&k);
+                let entry_key = vm.map_entry_key(key, k);
                 if let Kind::Map(m) | Kind::Set(m) = &mut vm.heap[copy as usize].kind {
-                    m.set(key, k, val);
+                    m.set(key, entry_key, val);
                 }
             }
             Ok(Value::Obj(copy))

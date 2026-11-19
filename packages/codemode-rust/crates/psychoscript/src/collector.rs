@@ -23,18 +23,24 @@
 //!   at once.
 //! - Stack slots hold a cell as its raw index, which reads as a tiny number, so the stack is scanned conservatively for
 //!   cells: a slot whose bits are a valid cell index keeps that cell. Zero keeps cell 0.
-//! - What a fresh runtime makes (objects, strings and cells below `snapshot_base`) and every atom are permanent.
+//! - What a fresh runtime makes (objects, strings, cells and atoms below `snapshot_base`, a compiled program's atoms
+//!   among them) is permanent.
+//! - An atom lives exactly as long as its string. Marking an object marks its keys' atoms, a Map or Set keeps a string
+//!   key as its atom's string, and so does `JSON.stringify` for the keys it holds. The interner is a weak table: while
+//!   a cycle runs, an atom it gives out is shaded, as anything the program obtains then is black. The sweep frees the
+//!   atoms whose strings were not reached, before it frees strings, and the interner reuses their ids.
 //! - Short strings share an arena buffer. Once it is large a cycle retires it: the sweep copies its surviving strings
 //!   out, and the cycle after drops it. Any other shared buffer is dropped once no live string points into it.
-//! - Snapshots need nothing of their own: a freed object saves as an empty object, a freed string as "" and a freed
-//!   cell as undefined, which a resumed run collects again.
+//! - Snapshots save a freed object as an empty object, a freed string as "" and a freed cell as undefined, which a
+//!   resumed run collects again, and a freed atom as null, which it restores as a free id.
 
+use std::borrow::Cow;
 use std::ops::{Deref, DerefMut, Index, IndexMut};
 use std::slice::SliceIndex;
 
 use crate::object::{Kind, Obj};
 use crate::reach::Ref;
-use crate::strings::{NO_GROW, StrBuf, StrId, Strings};
+use crate::strings::{Atom, NO_ATOM, NO_GROW, StrBuf, StrId, Strings};
 use crate::value::{Id, Slot, Value};
 use crate::vm::{MAX_OBJECTS, Vm};
 
@@ -42,8 +48,6 @@ const WHITE: u8 = 0;
 const GREY: u8 = 1;
 const BLACK: u8 = 2;
 const FREE: u8 = 3;
-/// An atom's string: never freed, so no cycle marks it again.
-const PERM: u8 = 4;
 
 /// Slots in use (objects, cells and strings) at which the first cycle starts. A reducer event stays far below it, and
 /// of the benchmark programs only the JSON round trip reaches it.
@@ -263,11 +267,10 @@ pub struct StrGc {
     /// The VM should look at the debt or the threshold.
     pub(crate) wanted: bool,
     sweep: (usize, usize),
-    /// Atoms before this one have permanent strings; `atom_at` is how far this cycle got, and `atom_skip` the first
-    /// atom whose string is too new to colour yet.
-    atoms_done: usize,
-    atom_at: usize,
-    atom_skip: Option<usize>,
+    /// Freed atoms, whose ids the interner reuses.
+    pub(crate) atom_free: Vec<Atom>,
+    /// The atoms the sweep looks at: those made after the fresh runtime and before marking ended.
+    atom_sweep: (usize, usize),
     /// Per shared buffer as of the cycle's start: whether a live string points into it.
     grow_live: Vec<bool>,
     /// Retired short-string buffers: their surviving strings are copied out at the sweep.
@@ -284,9 +287,8 @@ impl StrGc {
             debt: 0,
             wanted: false,
             sweep: (0, 0),
-            atoms_done: 0,
-            atom_at: 0,
-            atom_skip: None,
+            atom_free: Vec::new(),
+            atom_sweep: (0, 0),
             grow_live: Vec::new(),
             retired: Vec::new(),
             grow_free: Vec::new(),
@@ -364,8 +366,6 @@ impl Strings {
         gc.phase = Phase::Mark;
         self.gc_limit = 0;
         gc.color.resize(self.bufs.len(), WHITE);
-        gc.atom_at = gc.atoms_done;
-        gc.atom_skip = None;
         gc.grow_live.clear();
         gc.grow_live.resize(self.grow.len(), false);
         gc.retired.resize(self.grow.len(), false);
@@ -381,32 +381,76 @@ impl Strings {
         }
     }
 
-    /// Makes the strings of atoms made since the last cycle permanent, with text of their own so they need no shared
-    /// buffer, up to `max` work units; returns the work done. Each atom costs this once rather than once per cycle.
-    fn perm_atoms(&mut self, max: usize) -> usize {
-        let end = self.counts().1;
-        let mut work = 0;
-        while self.gc.atom_at < end && work < max {
-            let a = self.gc.atom_at;
-            self.gc.atom_at += 1;
-            work += 1;
-            let id = self.atom_str(a as u32) as usize;
-            match self.gc.color.get(id) {
-                // Made during this cycle, so it survives it; the next cycle colours it.
-                None => {
-                    self.gc.atom_skip.get_or_insert(a);
-                }
-                Some(&PERM) => {}
-                Some(_) => {
-                    self.gc.color[id] = PERM;
-                    if self.bufs[id].grow != NO_GROW {
-                        self.own_text(id);
-                        work += FREE_WORK;
-                    }
-                }
-            }
+    /// Frees atom `a` if its string was not reached, before the string itself is swept. Returns the work done.
+    fn sweep_atom(&mut self, a: usize) -> usize {
+        let s = self.atom_str[a] as usize;
+        if self.gc.color.get(s) != Some(&WHITE) {
+            return 1;
         }
-        work
+        // Out of the table for the lookup, which reads the text in it.
+        let mut map = std::mem::take(&mut self.map);
+        map.remove(self.get(s as StrId));
+        self.map = map;
+        self.atom_str[a] = NO_ATOM;
+        self.atom_index[a] = u32::MAX;
+        self.gc.atom_free.push(a as Atom);
+        1 + FREE_WORK
+    }
+
+    /// `insert_atom` past the limit: at a freed atom's id if there is one, and surviving the cycle in progress.
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn insert_atom_slow(&mut self, s: Cow<'static, str>, id: StrId) -> Atom {
+        let index = crate::value::index_of_key(&s).unwrap_or(u32::MAX);
+        let a = match self.gc.atom_free.pop() {
+            Some(a) => {
+                self.atom_str[a as usize] = id;
+                self.atom_index[a as usize] = index;
+                a
+            }
+            None => {
+                self.atom_str.push(id);
+                self.atom_index.push(index);
+                (self.atom_str.len() - 1) as Atom
+            }
+        };
+        self.map.insert(s, a);
+        self.shade_atom(a)
+    }
+
+    /// A saved run's freed atom, restored as a free id.
+    pub(crate) fn free_atom_slot(&mut self) {
+        let a = self.atom_str.len() as Atom;
+        self.atom_str.push(NO_ATOM);
+        self.atom_index.push(u32::MAX);
+        self.gc.atom_free.push(a);
+        self.gc_limit = 0;
+    }
+
+    /// The interner's barrier: an atom it gives out while a cycle runs survives the cycle, as the string of a new one
+    /// does. While sweeping, it needs it only until both the atoms' sweep, which runs first, and the strings' have
+    /// passed it.
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn shade_atom(&mut self, a: Atom) -> Atom {
+        let id = self.atom_str[a as usize] as usize;
+        let gc = &mut *self.gc;
+        let unswept = match gc.phase {
+            Phase::Idle => false,
+            Phase::Mark => true,
+            Phase::Sweep => a as usize >= gc.atom_sweep.0 || id >= gc.sweep.0,
+        };
+        if !unswept || gc.color.get(id) != Some(&WHITE) {
+            return a;
+        }
+        gc.color[id] = BLACK;
+        let g = self.bufs[id].grow as usize;
+        if gc.retired.get(g) != Some(&true)
+            && let Some(l) = gc.grow_live.get_mut(g)
+        {
+            *l = true;
+        }
+        a
     }
 
     /// Drops every shared buffer no live string points into, except the short strings' current one.
@@ -474,6 +518,12 @@ impl Marker<'_> {
                 }
             }
             Ref::Str(s) => self.mark_str(s),
+            // An atom lives as long as its string; the fresh runtime's are never swept.
+            Ref::Atom(a) => {
+                if let Some(s) = self.vm.atoms.atom_str.get(a as usize) {
+                    self.mark_str(*s);
+                }
+            }
             Ref::Cell(c) => {
                 if let Some(k) = self.cells.get_mut(c as usize)
                     && *k == WHITE
@@ -643,7 +693,8 @@ impl Vm {
         let limit = |len: usize, free: bool| if free { 0 } else { len + room };
         self.gc.obj_limit = limit(self.heap.len(), !self.gc.free.is_empty()).min(MAX_OBJECTS);
         self.gc.cell_limit = limit(self.cells.len(), !self.gc.cell_free.is_empty());
-        self.atoms.gc_limit = limit(self.atoms.bufs.len(), !self.atoms.gc.free.is_empty());
+        let strings_free = !self.atoms.gc.free.is_empty() || !self.atoms.gc.atom_free.is_empty();
+        self.atoms.gc_limit = limit(self.atoms.bufs.len(), strings_free);
     }
 
     fn gc_request(&mut self) {
@@ -732,20 +783,9 @@ impl Vm {
     }
 
     fn gc_mark(&mut self, budget: usize) {
-        let spent = self.atoms.perm_atoms(budget / 2);
-        // The atoms made since the last cycle go first, so few are left for the atomic end.
-        let atoms_left = self.atoms.gc.atom_at < self.atoms.counts().1;
-        let done = self.with_marker(|m| {
-            m.work = spent;
-            m.propagate(budget)
-        });
-        if !done || atoms_left {
+        if !self.with_marker(|m| m.propagate(budget)) {
             return;
         }
-        // Atoms made since the last step, which nothing may reach but the interner.
-        self.atoms.perm_atoms(usize::MAX);
-        let gc = &mut self.atoms.gc;
-        gc.atoms_done = gc.atom_skip.unwrap_or(gc.atom_at);
         self.heap.marking = false;
         self.gc.live = self.gc_used();
         self.gc.phase = Phase::Sweep;
@@ -754,6 +794,7 @@ impl Vm {
         self.gc.obj_sweep = (base.heap, self.heap.len());
         self.gc.cell_sweep = (base.cells, self.gc.cell_color.len());
         self.atoms.gc.sweep = (base.bufs, self.atoms.gc.color.len());
+        self.atoms.gc.atom_sweep = (base.atoms, self.atoms.atom_str.len());
     }
 
     /// Runs `f` with the colours taken out of the VM, then puts them back.
@@ -791,6 +832,13 @@ impl Vm {
         self.publish_stats();
         let mut work = 0;
         let free = self.gc.free.len() + self.gc.cell_free.len() + self.atoms.gc.free.len();
+        // Atoms go first, while their strings' texts are still there to find them by.
+        let (mut at, end) = self.atoms.gc.atom_sweep;
+        while at < end && work < budget {
+            work += self.atoms.sweep_atom(at);
+            at += 1;
+        }
+        self.atoms.gc.atom_sweep.0 = at;
         let (mut at, end) = self.gc.obj_sweep;
         while at < end && work < budget {
             work += 1;

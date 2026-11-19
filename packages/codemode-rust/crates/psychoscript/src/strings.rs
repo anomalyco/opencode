@@ -46,6 +46,8 @@ pub struct StrBuf {
 }
 
 pub(crate) const NO_GROW: u32 = u32::MAX;
+/// The string of a freed atom.
+pub(crate) const NO_ATOM: StrId = StrId::MAX;
 const NO_WTF: u32 = u32::MAX;
 
 impl StrBuf {
@@ -192,10 +194,11 @@ pub struct Strings {
     /// The `grow` buffer short strings are appended to, so making one allocates nothing of its own.
     pub(crate) arena: u32,
     pub(crate) wtf: Vec<Box<[u16]>>,
-    map: FxHashMap<Cow<'static, str>, Atom>,
-    atom_str: Vec<StrId>,
-    atom_index: Vec<u32>,
-    /// A new string at this many takes the collector's path (`push_slow`); the rest of its state is boxed, as only
+    pub(crate) map: FxHashMap<Cow<'static, str>, Atom>,
+    pub(crate) atom_str: Vec<StrId>,
+    pub(crate) atom_index: Vec<u32>,
+    /// A new string or atom at this many strings takes the collector's path (`push_slow`, `insert_atom_slow`): 0
+    /// while a cycle runs or freed strings or atoms wait for reuse. The rest of its state is boxed, as only
     /// this is read on every allocation, and a larger `Strings` moves the VM's fields after it out of the dispatch
     /// loop's short addressing.
     pub(crate) gc_limit: usize,
@@ -506,7 +509,7 @@ impl Strings {
 
     pub fn intern(&mut self, s: &str) -> Atom {
         if let Some(a) = self.map.get(s) {
-            return *a;
+            return self.found(*a);
         }
         if has_mark(s) {
             // Keyed by the canonical carrier the string gets.
@@ -524,7 +527,7 @@ impl Strings {
 
     pub fn intern_static(&mut self, s: &'static str) -> Atom {
         if let Some(a) = self.map.get(s) {
-            return *a;
+            return self.found(*a);
         }
         let id = self.alloc_static(s);
         self.insert_atom(Cow::Borrowed(s), id)
@@ -532,7 +535,7 @@ impl Strings {
 
     pub fn intern_id(&mut self, id: StrId) -> Atom {
         if let Some(a) = self.map.get(self.get(id)) {
-            return *a;
+            return self.found(*a);
         }
         let b = &self.bufs[id as usize];
         let text = if b.grow == NO_GROW {
@@ -549,25 +552,37 @@ impl Strings {
     }
 
     /// The strings and atoms made after the given counts: each string's text and builder flag, and each atom's
-    /// string.
-    pub(crate) fn save_from(&self, bufs: usize, atoms: usize) -> (Vec<(String, bool)>, Vec<StrId>) {
+    /// string, `None` for a freed atom.
+    pub(crate) fn save_from(
+        &self,
+        bufs: usize,
+        atoms: usize,
+    ) -> (Vec<(String, bool)>, Vec<Option<StrId>>) {
         let texts = (bufs..self.bufs.len())
             .map(|i| (self.get(i as StrId).to_owned(), self.bufs[i].builder))
             .collect();
-        (texts, self.atom_str[atoms..].to_vec())
+        let atoms = self.atom_str[atoms..]
+            .iter()
+            .map(|id| (*id != NO_ATOM).then_some(*id))
+            .collect();
+        (texts, atoms)
     }
 
-    /// Appends saved strings and atoms after the base this table has.
+    /// Appends saved strings and atoms after the base this table has, each atom at its saved id.
     pub(crate) fn restore(
         &mut self,
         texts: Vec<(String, bool)>,
-        atoms: Vec<StrId>,
+        atoms: Vec<Option<StrId>>,
     ) -> Result<(), String> {
         for (text, builder) in texts {
             let id = self.alloc(text);
             self.bufs[id as usize].builder = builder;
         }
         for id in atoms {
+            let Some(id) = id else {
+                self.free_atom_slot();
+                continue;
+            };
             if id as usize >= self.bufs.len() {
                 return Err(format!("atom string {id} does not exist"));
             }
@@ -575,17 +590,35 @@ impl Strings {
             if self.map.contains_key(text.as_str()) {
                 return Err(format!("atom {text:?} is saved twice"));
             }
-            self.insert_atom(Cow::Owned(text), id);
+            let a = self.atom_str.len() as Atom;
+            self.atom_str.push(id);
+            self.atom_index
+                .push(index_of_key(&text).unwrap_or(u32::MAX));
+            self.map.insert(Cow::Owned(text), a);
         }
         Ok(())
     }
 
     fn insert_atom(&mut self, s: Cow<'static, str>, id: StrId) -> Atom {
+        if self.gc_limit == 0 {
+            return self.insert_atom_slow(s, id);
+        }
         let a = self.atom_str.len() as Atom;
         self.atom_str.push(id);
         self.atom_index.push(index_of_key(&s).unwrap_or(u32::MAX));
         self.map.insert(s, a);
         a
+    }
+
+    /// An atom the interner gives out: while a cycle runs, it must survive it, as everything the program comes by
+    /// then does.
+    #[inline(always)]
+    fn found(&mut self, a: Atom) -> Atom {
+        if self.gc_limit != 0 {
+            return a;
+        }
+        // A tail call, so the interner's lookups need no frame of their own for it.
+        self.shade_atom(a)
     }
 
     /// The string value of an atom.
