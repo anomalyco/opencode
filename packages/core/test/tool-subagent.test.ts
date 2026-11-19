@@ -797,7 +797,7 @@ describe("SubagentTool", () => {
     ),
   )
 
-  it.live("syncs updated parent permissions on continuation without loosening child-specific restrictions", () =>
+  it.live("cascades parent setPermissions to inherited descendants while leaving custom children untouched", () =>
     tmpdirScoped().pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
@@ -823,71 +823,43 @@ describe("SubagentTool", () => {
           const childID = outputSessionID(first.metadata)
           expect((yield* sessions.get(childID)).permissions).toEqual(initialPermissions)
 
-          const tightenedPermissions: Permission.Ruleset = [
-            { action: "edit", resource: "*", effect: "allow" },
-            { action: "bash", resource: "*", effect: "deny" },
-          ]
-          yield* sessions.setPermissions({ sessionID: parent.id, permissions: tightenedPermissions })
+          const customPermissions: Permission.Ruleset = [{ action: "edit", resource: "*", effect: "deny" }]
+          const readOnlyChild = yield* sessions.create({
+            parentID: parent.id,
+            title: "readonly review",
+            agent: Agent.ID.make("reviewer"),
+            model: childModel,
+            permissions: customPermissions,
+          })
 
-          const second = yield* executeTool(registry, {
-            sessionID: parent.id,
-            ...toolIdentity,
-            call: {
-              type: "tool-call",
-              id: "call-perm-sync-2",
-              name: SubagentTool.name,
-              input: {
-                agent: "reviewer",
-                description: "follow up",
-                prompt: "continue under tightened permissions",
-                sessionID: childID,
-              },
-            },
-          })
-          expect(second).toMatchObject({
-            status: "completed",
-            metadata: { sessionID: childID, status: "running" },
-          })
-          expect((yield* sessions.get(childID)).permissions).toEqual(tightenedPermissions)
+          // Ordered parent rules (`bash * deny` followed by `bash git * allow`, plus `edit * ask`) propagate intact
+          // to the inherited child without loosening or altering `readOnlyChild`'s custom rules.
+          const updatedPermissions: Permission.Ruleset = [
+            { action: "edit", resource: "*", effect: "ask" },
+            { action: "bash", resource: "*", effect: "deny" },
+            { action: "bash", resource: "git *", effect: "allow" },
+          ]
+          yield* sessions.setPermissions({ sessionID: parent.id, permissions: updatedPermissions })
+
+          expect((yield* sessions.get(childID)).permissions).toEqual(updatedPermissions)
           expect(
             yield* permission
               .assertNotDenied({
                 sessionID: childID,
                 agent: Agent.ID.make("reviewer"),
                 action: "bash",
-                resources: ["git status"],
+                resources: ["rm -rf /"],
               })
               .pipe(Effect.flip),
           ).toBeInstanceOf(Permission.BlockedError)
-
-          // A child given custom read-only permissions (by a plugin at creation or via session.update) must keep
-          // its own restrictions when continued, while still receiving non-allow parent rules.
-          const readOnlyChild = yield* sessions.create({
-            parentID: parent.id,
-            title: "readonly review",
+          yield* permission.assertNotDenied({
+            sessionID: childID,
             agent: Agent.ID.make("reviewer"),
-            model: childModel,
-            permissions: [{ action: "edit", resource: "*", effect: "deny" }],
+            action: "bash",
+            resources: ["git status"],
           })
-          yield* executeTool(registry, {
-            sessionID: parent.id,
-            ...toolIdentity,
-            call: {
-              type: "tool-call",
-              id: "call-perm-readonly-child",
-              name: SubagentTool.name,
-              input: {
-                agent: "reviewer",
-                description: "continue readonly",
-                prompt: "continue without edit",
-                sessionID: readOnlyChild.id,
-              },
-            },
-          })
-          expect((yield* sessions.get(readOnlyChild.id)).permissions).toEqual([
-            { action: "edit", resource: "*", effect: "deny" },
-            { action: "bash", resource: "*", effect: "deny" },
-          ])
+
+          expect((yield* sessions.get(readOnlyChild.id)).permissions).toEqual(customPermissions)
           expect(
             yield* permission
               .assertNotDenied({
