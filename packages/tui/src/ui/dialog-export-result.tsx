@@ -3,7 +3,7 @@ import { useNewDesigns } from "../config"
 import { useClipboard } from "../context/clipboard"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
-import { DialogButtons, DialogHeader, DialogLayout, useDialog, type DialogContext } from "./dialog"
+import { DialogHeader, DialogLayout, useDialog, type DialogContext } from "./dialog"
 import { useToast } from "./toast"
 
 export function DialogExportResult(props: { path: string; onClose?: () => void }) {
@@ -47,19 +47,15 @@ export function DialogExportResult(props: { path: string; onClose?: () => void }
   return (
     <DialogLayout
       header={<DialogHeader title="Session exported" onClose={close} />}
-      buttons={
-        newDesigns() ? (
-          <DialogButtons
-            buttons={[{ label: "Close", run: close }]}
-            active={0}
-            hints={[
-              copied()
-                ? { title: "copied", key: "✓", color: theme.text.feedback.success.base, onTrigger: copy }
-                : { title: "copy path", key: "c", onTrigger: copy },
-            ]}
-          />
-        ) : undefined
-      }
+      footer={{
+        actions: {
+          primary: [
+            copied()
+              ? { title: "copied", key: "✓", color: theme.text.feedback.success.base, onTrigger: copy }
+              : { title: "copy path", key: "c", onTrigger: copy },
+          ],
+        },
+      }}
       legacyFooter={
         <box flexDirection="row" justifyContent="flex-end" gap={1}>
           <box
