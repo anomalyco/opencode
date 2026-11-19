@@ -1093,6 +1093,132 @@ export const defineAccessorHalf = (
   target.props.set(name, slot)
 }
 
+/** A property descriptor a program gave: a field present means the descriptor has it (`"get" in desc`), as in the spec. */
+export type Descriptor = {
+  value?: Value
+  writable?: boolean
+  get?: Callable | undefined
+  set?: Callable | undefined
+  enumerable?: boolean
+  configurable?: boolean
+}
+
+const isAccessorDescriptor = (desc: Descriptor) => "get" in desc || "set" in desc
+const isDataDescriptor = (desc: Descriptor) => "value" in desc || "writable" in desc
+
+/**
+ * ValidateAndApplyPropertyDescriptor for an own property: false where the spec answers false (the caller throws), and
+ * a TypeError for what the object model cannot hold (an accessor on an array element, elements whose attributes differ
+ * from their array's shared ones). Everything is checked before anything changes.
+ */
+export const defineOwnProperty = (target: Obj, key: PropertyKey, desc: Descriptor): boolean => {
+  const name = canonical(key)
+  const current = own(target, key)
+  if (current === undefined && !target.extensible) return false
+  if (current !== undefined && !compatible(current, desc)) return false
+  if (isIndexed(target)) {
+    const at = index(target, name)
+    if (at !== undefined) return defineElement(target, at, current, desc)
+    if (target instanceof Arr && name === "length") return defineLength(target, desc)
+  }
+  const slot = current === undefined ? created(desc) : applied(current, desc)
+  if (isProgramAccessor(slot)) target.hasProgramAccessors = true
+  changed(target)
+  target.props.set(name, slot)
+  return true
+}
+
+// Whether `desc` may change a non-configurable `current` (a configurable one may change in any way).
+const compatible = (current: Slot, desc: Descriptor): boolean => {
+  if (current.configurable) return true
+  if (desc.configurable === true) return false
+  if ("enumerable" in desc && desc.enumerable !== current.enumerable) return false
+  if ("value" in current) {
+    if (isAccessorDescriptor(desc)) return false
+    if (current.writable) return true
+    return desc.writable !== true && !("value" in desc && !Object.is(desc.value, current.value))
+  }
+  if (isDataDescriptor(desc)) return false
+  return (
+    (!("get" in desc) || accessorHalf(desc.get) === current.get) &&
+    (!("set" in desc) || accessorHalf(desc.set) === current.set)
+  )
+}
+
+// A new property: what the descriptor gives, and false or undefined for what it leaves out.
+const created = (desc: Descriptor): Slot => {
+  const enumerable = desc.enumerable ?? false
+  const configurable = desc.configurable ?? false
+  if (isAccessorDescriptor(desc)) {
+    return {
+      get: accessorHalf(desc.get) as Getter | Callable | undefined,
+      set: accessorHalf(desc.set) as Setter | Callable | undefined,
+      enumerable,
+      configurable,
+    }
+  }
+  return { value: desc.value, writable: desc.writable ?? false, enumerable, configurable }
+}
+
+// An existing property with the descriptor's fields applied: a kind change keeps only the attributes.
+const applied = (current: Slot, desc: Descriptor): Slot => {
+  const enumerable = desc.enumerable ?? current.enumerable
+  const configurable = desc.configurable ?? current.configurable
+  if ("value" in current && isAccessorDescriptor(desc)) return created({ ...desc, enumerable, configurable })
+  if (!("value" in current) && isDataDescriptor(desc)) return created({ ...desc, enumerable, configurable })
+  if ("value" in current) {
+    return {
+      value: "value" in desc ? desc.value : current.value,
+      writable: desc.writable ?? current.writable,
+      enumerable,
+      configurable,
+    }
+  }
+  return {
+    get: "get" in desc ? (accessorHalf(desc.get) as Getter | Callable | undefined) : current.get,
+    set: "set" in desc ? (accessorHalf(desc.set) as Setter | Callable | undefined) : current.set,
+    enumerable,
+    configurable,
+  }
+}
+
+// An array or Uint8Array element: elements have no slots, so only data with the collection's own attributes fits.
+const defineElement = (target: Indexed, at: number, current: Slot | undefined, desc: Descriptor): boolean => {
+  if (isAccessorDescriptor(desc)) {
+    throw typeError("Accessor properties are not supported on array elements; store the value or use a plain object.")
+  }
+  const shared = target instanceof Arr ? target.elements : data
+  // An element's own() slot is always data.
+  const base = (current as Attributes | undefined) ?? { writable: false, enumerable: false, configurable: false }
+  const writable = desc.writable ?? base.writable
+  const enumerable = desc.enumerable ?? base.enumerable
+  const configurable = desc.configurable ?? base.configurable
+  if (writable !== shared.writable || enumerable !== shared.enumerable || configurable !== shared.configurable) {
+    throw typeError(
+      "Array elements share their attributes; only writable, enumerable and configurable equal to the array's are supported.",
+    )
+  }
+  if (current === undefined || "value" in desc) {
+    changed(target)
+    if (target instanceof Bytes) target.bytes[at] = coerceToNumber(desc.value)
+    else target.items[at] = desc.value
+  }
+  return true
+}
+
+// An array's `length`: its value, or making it read-only, which the shared element attributes can't separate.
+const defineLength = (target: Arr, desc: Descriptor): boolean => {
+  if (isAccessorDescriptor(desc) || desc.configurable === true || desc.enumerable === true) return false
+  if ("value" in desc) {
+    const length = coerceToNumber(desc.value)
+    if (length !== target.items.length && writeElement(target, "length", length) === false) return false
+  }
+  if (desc.writable === false && target.elements.writable) {
+    throw typeError("Making an array's length read-only is not supported; use Object.freeze.")
+  }
+  return true
+}
+
 export const remove = (target: Obj, key: PropertyKey): boolean => {
   const name = canonical(key)
   if (isIndexed(target)) {

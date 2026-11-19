@@ -364,8 +364,14 @@ reject }` object.
 - [x] `Object.create(proto)` with an object or `null` prototype; any other prototype is a `TypeError`
       (`Object prototype may only be an Object or null`). Inherited reads, `in`, `hasOwnProperty`, own-only
       `Object.keys`, and `for...in` follow the chain as in JS. A second `properties`
-      argument other than `undefined` throws a `TypeError`: property descriptors are not supported (there is no
-      `Object.defineProperty` either).
+      argument defines properties from descriptors, as `Object.defineProperties` does.
+- [x] `Object.defineProperty`, `defineProperties`, `getOwnPropertyDescriptor(s)` and `getOwnPropertyNames`, with the
+      spec's validation (non-configurable and non-writable rules, `SameValue`, extensibility) and descriptor objects
+      read through getters and the prototype chain. Built-in accessors (`Map.prototype.size`, `URL.prototype.href`, …)
+      show as callable functions and can be redefined, one half at a time.
+- [ ] Array elements share one set of attributes, so `defineProperty` on an index takes only the array's own
+      attributes (new elements must say `writable`, `enumerable` and `configurable` true), never an accessor, and an
+      array's `length` can't be made read-only on its own (use `Object.freeze`).
 - [x] `Object.freeze`, `Object.seal`, and `Object.preventExtensions`, with `isFrozen`, `isSealed`, and `isExtensible`.
       Each returns its argument and passes primitives through (`Object.freeze(1) === 1`, `Object.isFrozen(1)`).
       Programs run as strict code, so violations throw `TypeError`: `Cannot assign to read only property 'a'`,
