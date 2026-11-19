@@ -853,18 +853,19 @@ describe("ReadTool", () => {
           call: { type: "tool-call", id: "call-ranked", name: "read", input: { path: "config.ts" } },
         }).pipe(Effect.map((result) => result.error?.message))
 
-      // Listed worst first: a typo, a containing name, the same stem, and the same name in another case.
+      // Listed worst first by name, which is the reverse of their rank: a typo, a containing name,
+      // the same stem, and the same name in another case.
       yield* Effect.forEach(
-        ["confix.ts", "config.test.ts", "config.json", "Config.ts"],
+        ["acnfig.ts", "cconfig.ts", "config.json", "Config.ts"],
         (name) => seed(path.join(process.cwd(), name)),
         { discard: true },
       )
       expect(yield* read()).toBe(
-        "File not found: config.ts\n\nDid you mean one of these?\nConfig.ts\nconfig.json\nconfig.test.ts",
+        "File not found: config.ts\n\nDid you mean one of these?\nConfig.ts\nconfig.json\ncconfig.ts",
       )
       yield* files.remove(AbsolutePath.make(path.join(process.cwd(), "Config.ts")))
       expect(yield* read()).toBe(
-        "File not found: config.ts\n\nDid you mean one of these?\nconfig.json\nconfig.test.ts\nconfix.ts",
+        "File not found: config.ts\n\nDid you mean one of these?\nconfig.json\ncconfig.ts\nacnfig.ts",
       )
     }),
   )
