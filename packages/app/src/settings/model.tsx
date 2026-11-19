@@ -137,7 +137,7 @@ const generalSchema = Persistence.struct({
   newTimeline: Persistence.optional(Schema.Boolean),
   // Browser-style session tab grouping across vertical and horizontal tabs.
   tabGroups: Persistence.optional(Schema.Boolean),
-  // One side panel state and width for every session tab, instead of one per tab.
+  // One side panel open state for every session tab, instead of one per tab.
   sharedSidePanel: Persistence.optional(Schema.Boolean),
   // "projects" is retired; `resolveSidebarOrganize` moves it to its replacement.
   sidebarOrganize: Schema.Literals(["projects", "list", "customize", "recent", "consolidated"]),

@@ -118,11 +118,10 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
     const [info, setInfo, , infoReady] = persisted(Persist.window("tabs.info"), TabStorage.Infos, {})
     const [regions, setRegions, , regionsReady] = persisted(Persist.window("tabs.panes"), TabStorage.Regions, {})
-    // The side region and session width every tab uses while the shared side panel setting is on.
-    const [sharedRegion, setSharedRegion] = persisted(Persist.window("tabs.panes.shared"), TabStorage.Region, {})
+    // Whether the side region is open in every tab while the shared side panel setting is on.
+    const [sharedSide, setSharedSide] = persisted(Persist.window("tabs.panes.shared"), TabStorage.SharedSide, {})
 
-    const shared = (key: TabRegion | TabRegionSize) =>
-      settings.general.sharedSidePanel() && (key === "side" || key === "sessionWidth")
+    const shared = (region: TabRegion) => region === "side" && settings.general.sharedSidePanel()
 
     const [closed, setClosed, , closedReady] = persisted(Persist.window("tabs.closed"), TabStorage.Closed, [])
     const [promotion, setPromotion] = createSignal(INITIAL_TAB_PROMOTION_STATE)
@@ -879,14 +878,14 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       region(tab: Tab | undefined, region: TabRegion, fallback = false) {
         if (!tab) return fallback
 
-        if (shared(region)) return sharedRegion[region] ?? fallback
+        if (shared(region)) return sharedSide.opened ?? fallback
 
         return regions[tabKey(tab)]?.[region] ?? fallback
       },
       setRegion(tab: Tab | undefined, region: TabRegion, opened: boolean) {
         if (!tab) return
 
-        if (shared(region)) return setSharedRegion(region, opened)
+        if (shared(region)) return setSharedSide("opened", opened)
 
         const key = tabKey(tab)
         const current = regions[key]
@@ -904,15 +903,10 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       regionSize(tab: Tab | undefined, size: TabRegionSize) {
         if (!tab) return
 
-        if (shared(size)) return sharedRegion[size]
-
         return regions[tabKey(tab)]?.[size]
       },
       setRegionSize(tab: Tab | undefined, size: TabRegionSize, value: number) {
         if (!tab) return
-
-        if (shared(size)) return setSharedRegion(size, value)
-
         const key = tabKey(tab)
         const current = regions[key]
 
