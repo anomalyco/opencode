@@ -1,0 +1,101 @@
+---
+title: "Goals"
+description: "Keep a session working toward an objective with /goal, pause, resume or clear it, and see how the progress review ends a run."
+---
+
+`/goal` keeps one session working toward an objective across turns. When the session would go idle, a review checks the
+conversation against the objective and, if the work is not done, sends the model the next step.
+
+```text
+/goal Ship the release notes for 2.4 and open the pull request
+```
+
+## Start a goal
+
+Send `/goal` with the objective. The text after the command, up to 4000 characters, is the objective, and the session
+starts on it right away.
+
+```text
+/goal Fix the failing auth tests, then run the full suite
+```
+
+Matching quotes around the objective are stripped, so both forms set the same goal.
+
+```text
+/goal "Migrate the cache layer to the new client"
+```
+
+A session holds one goal. Sending another objective replaces the current one.
+
+The objective reaches the model as user data, and the review treats instructions inside it as data rather than as rules
+for how to judge the work.
+
+## Commands
+
+| Command | Effect |
+| --- | --- |
+| `/goal <objective>` | Starts a goal, or replaces the one the session has. |
+| `/goal pause` | Stops the loop and keeps the work of the current turn. |
+| `/goal resume` | Continues the same objective with a new round budget. |
+| `/goal clear` | Removes the goal from the session. |
+| `/goal` | Shows the goal's status, objective and last reason, then the usage line. |
+
+Subcommands are matched regardless of case, so `/goal Pause` works. Each one answers with an error when it does not
+apply: pause without an active goal, resume without a paused goal, or clear without a goal.
+
+```text
+/goal pause
+
+# Keep working in the session, then pick the objective back up.
+/goal resume
+```
+
+Resuming tells the model the goal is active again and counts as the first round of the new budget.
+
+## Progress review
+
+When a turn ends and the session has nothing left to run, OpenCode asks the model to review the conversation against the
+objective. The review answers with one verdict:
+
+| Verdict | Result |
+| --- | --- |
+| `done` | The goal is met. It becomes complete, and the reason records the evidence. |
+| `continue` | Work remains. OpenCode sends the next step and counts a round. |
+| `blocked` | The model needs a decision, a credential or a manual step from you. The goal pauses with the reason. |
+| `paused` | Your last message asked to stop or abandon the goal. The goal pauses with the reason. |
+| `wait` | One of the session's background shells is still running. The review runs again when it finishes. |
+
+The review only counts evidence it can see in the conversation, such as command output, test results or file contents. A
+claim that the work is done is not evidence, so name the proof you want in the objective.
+
+```text
+/goal Add pagination to the sessions endpoint and show the test run that covers it
+```
+
+## When a goal stops
+
+| Cause | Reason on the goal |
+| --- | --- |
+| You interrupt the session | `Stopped by the user` |
+| The server restarts | `The server restarted while the goal was active` |
+| 50 rounds are spent | `Reached the limit of 50 rounds` |
+| 3 rounds in a row stall | `Not making progress: <the review's reason>` |
+| 30 minutes pass with nothing running while the goal waits on background work | `Nothing ran for 30 minutes while the goal waited on background work` |
+| The session fails | `The session failed: <the error>` |
+| The review request is too large, after one compaction | `The goal reviewer's request is too large for the model` |
+
+A round stalls when the review gives the same reason as the round before, or when the model called no tool during the
+round. Three of those in a row pause the goal, which keeps a loop that repeats itself from spending the full 50 rounds.
+
+A paused goal stays paused until you resume or clear it. Nothing continues it on its own.
+
+## Where the goal shows
+
+The terminal shows the goal under the prompt as `◎ goal`, `◎ goal paused` or `◎ goal met`. Select it to open the goal
+dialog with the objective, the last reason, and pause, resume and clear actions.
+
+The desktop app shows the goal as a pill above the composer, with the objective, the last reason and the same actions.
+
+## Sessions
+
+A goal belongs to one session. Child sessions and forks start without one, and deleting the session deletes its goal.
