@@ -17307,6 +17307,9 @@
               }
             ]
           },
+          "console_memory": {
+            "type": "boolean"
+          },
           "providers": {
             "type": "object",
             "additionalProperties": {
@@ -17778,9 +17781,18 @@
                 "type": "null"
               }
             ]
+          },
+          "console_memory": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
-        "required": ["shell"],
         "additionalProperties": false
       },
       "Config.Plugin.EntryEncoded": {

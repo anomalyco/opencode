@@ -615,7 +615,8 @@ export const dict = {
   "tips.browse.description": "Let OpenCode work in your browser with your tabs, logins, and extensions.",
   "tips.browse.install": "Install",
   "tips.hex.title": "Use your voice",
-  "tips.hex.description": "Hex lets you hold a key and speak your prompts. It runs on your computer and works in any app.",
+  "tips.hex.description":
+    "Hex lets you hold a key and speak your prompts. It runs on your computer and works in any app.",
   "tips.hex.install": "Install Hex",
   "home.workspaceTip": "Start next session in a new workspace to keep changes isolated",
 
@@ -1132,6 +1133,9 @@ export const dict = {
   "settings.general.row.shell.description": "Shell used by the terminal and agent tools",
   "settings.general.row.shell.autoDefault": "Auto (Default)",
   "settings.general.row.shell.terminalOnly": "terminal only",
+  "settings.general.row.consoleMemory.title": "OpenCode Console memory",
+  "settings.general.row.consoleMemory.description":
+    "Use your OpenCode Console workspace's shared memory on this server when the workspace offers it",
   "settings.general.row.colorScheme.title": "Color scheme",
   "settings.general.row.colorScheme.description": "Choose whether OpenCode follows the system, light, or dark theme",
   "settings.general.row.theme.title": "Theme",

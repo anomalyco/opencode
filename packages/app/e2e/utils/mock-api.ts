@@ -229,7 +229,10 @@ const Group = HttpApiGroup.make("mock")
   .add(HttpApiEndpoint.get("configShells", "/api/config/shell", { success: Json }))
   .add(
     HttpApiEndpoint.patch("configUpdate", "/api/experimental/config", {
-      payload: Schema.Struct({ shell: Schema.NullOr(Schema.String) }),
+      payload: Schema.Struct({
+        shell: Schema.optional(Schema.NullOr(Schema.String)),
+        console_memory: Schema.optional(Schema.NullOr(Schema.Boolean)),
+      }),
       success: HttpApiSchema.NoContent,
     }),
   )

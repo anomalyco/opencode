@@ -2571,6 +2571,7 @@ export type ConfigEntry =
         plugins?: Array<string | { package: string; options?: { [x: string]: JsonValue } }>
         worktree?: ConfigWorktree
         warming?: boolean | { prompt?: string; interval?: "auto" | (string & {}); duration?: string }
+        console_memory?: boolean
         providers?: {
           [x: string]: {
             canonical?: ProviderID
@@ -4945,7 +4946,10 @@ export type ConfigGetOutput = Array<ConfigEntry>
 
 export type ConfigShellsOutput = Array<ConfigShellOption>
 
-export type ExperimentalConfigUpdateInput = { readonly shell: string | null }
+export type ExperimentalConfigUpdateInput = {
+  readonly shell?: string | null | undefined
+  readonly console_memory?: boolean | null | undefined
+}
 
 export type ExperimentalConfigUpdateOutput = void
 

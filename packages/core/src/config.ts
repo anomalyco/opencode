@@ -186,13 +186,15 @@ export const layer = (options?: Options) =>
         // Logging out drops the saved remote config, so the source supplies nothing until a fresh fetch succeeds.
         if (!variables) return yield* wellknown.clearCached(entry.origin).pipe(Effect.as([]))
         // A failed refresh keeps the last resolved config so remote providers and allowlists do not disappear.
-        const configs = yield* wellknown.resolve(entry, variables).pipe(
-          Effect.catch((error) =>
-            Effect.logWarning("failed to load wellknown config", { source: entry.origin, error }).pipe(
-              Effect.andThen(wellknown.cached(entry.origin)),
+        const configs = yield* wellknown
+          .resolve(entry, variables)
+          .pipe(
+            Effect.catch((error) =>
+              Effect.logWarning("failed to load wellknown config", { source: entry.origin, error }).pipe(
+                Effect.andThen(wellknown.cached(entry.origin)),
+              ),
             ),
-          ),
-        )
+          )
         return yield* Effect.forEach(configs, (config) =>
           ConfigVariable.substitute({
             type: "virtual",
@@ -473,14 +475,21 @@ export const layer = (options?: Options) =>
           const filepath =
             (yield* Effect.filter(candidates, fs.isFile)).at(-1) ?? path.join(directory, "opencode.jsonc")
           const text = (yield* fs.readFileStringSafe(filepath)) ?? "{}\n"
+          // Each key the patch names is set, or removed when null; the rest of the file, comments included, stays.
           const updated = yield* Effect.try({
             try: () =>
-              applyEdits(
-                text,
-                modify(text, ["shell"], patch.shell ?? undefined, {
-                  formattingOptions: { tabSize: 2, insertSpaces: true },
-                }),
-              ),
+              Object.entries(patch)
+                .filter(([, value]) => value !== undefined)
+                .reduce(
+                  (current, [key, value]) =>
+                    applyEdits(
+                      current,
+                      modify(current, [key], value ?? undefined, {
+                        formattingOptions: { tabSize: 2, insertSpaces: true },
+                      }),
+                    ),
+                  text,
+                ),
             catch: (cause) => new FSUtil.FileSystemError({ method: "config.update", cause }),
           })
           yield* fs.writeWithDirs(filepath, updated.endsWith("\n") ? updated : `${updated}\n`)

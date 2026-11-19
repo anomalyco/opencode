@@ -17,6 +17,7 @@ import { App } from "../../app.js"
 import { Bus } from "../../bus.js"
 import { Config } from "../../config.js"
 import { ConfigIntegration } from "../../config/integration.js"
+import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { ConfigProviderPlugin } from "../../config/plugin/provider.js"
 import { SkillFile } from "../../config/plugin/skill-file.js"
 import { ConsoleAccess } from "../../console-access.js"
@@ -347,12 +348,21 @@ export const OpencodePlugin = define<
       const watching = allowed && next.remote?.watches === true && (yield* flags.enabled("console_watches"))
       yield* syncWatches(watching ? next.connection : undefined)
       yield* artifacts.sync(allowed && next.remote?.artifacts === true ? next.connection : undefined, watching)
-      const remembering = allowed && next.remote?.memory === true && (yield* flags.enabled("console_memory"))
-      yield* member(remembering ? next.connection : undefined).pipe(
-        Effect.flatMap(memory.sync),
-        Effect.catch((cause) => Effect.logWarning("failed to connect the workspace's memory", { cause })),
-      )
+      const offering = allowed && next.remote?.memory === true && (yield* flags.enabled("console_memory"))
+      offered = offering ? next.connection : undefined
+      yield* remember
     })
+    // The connection whose Console offers the workspace's memory, if any.
+    let offered: ActiveConnection
+    // Memory connects to what the Console offers unless this installation's config says `console_memory: false`. One
+    // at a time: Console config changes and local config changes both lead here.
+    const remembering = Semaphore.makeUnsafe(1)
+    const remember = remembering.withPermit(
+      Effect.gen(function* () {
+        const off = Config.latest(yield* config.entries(), "console_memory") === false
+        yield* memory.sync(yield* member(off ? undefined : offered))
+      }).pipe(Effect.catch((cause) => Effect.logWarning("failed to connect the workspace's memory", { cause }))),
+    )
     // Watching starts when the console_watches flag is on and the Console's config says the workspace has event watches,
     // and stops when either no longer holds.
     const syncWatches = (connection: ActiveConnection) =>
@@ -487,6 +497,8 @@ export const OpencodePlugin = define<
       editor.method.update({ integrationID: "opencode", method: { type: "key", label: "API key (service account)" } })
     })
 
+    // Config isn't reloaded into plugins, so a change to `console_memory` reconnects memory here, without a restart.
+    yield* ConfigEntryObserver.observe(config, ctx.event, remember)
     snapshot = yield* load()
     yield* publish(snapshot)
     yield* ctx.provider.transform((providers) => {

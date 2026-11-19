@@ -98,6 +98,18 @@ export function createOptimisticSetting<T, M, S>(options: {
   }
 }
 
+/** A server setting the server didn't save, as a toast. */
+function reportWriteFailure(language: ReturnType<typeof useLanguage>, failure: SettingWriteFailure) {
+  showToast({
+    variant: "error",
+    title: language.t("common.requestFailed"),
+    description:
+      failure.kind === "timeout"
+        ? language.t("home.sessions.load.timeout")
+        : failure.message || language.t("common.requestFailed"),
+  })
+}
+
 export function createServerShellController(server: Accessor<ServerConnection.Any>) {
   const language = useLanguage()
 
@@ -126,20 +138,50 @@ export function createServerShellController(server: Accessor<ServerConnection.An
     write: async (value, context) => {
       await context.sdk.api.experimental.config.update({ shell: value || null })
     },
-    onError: (failure) =>
-      showToast({
-        variant: "error",
-        title: language.t("common.requestFailed"),
-        description:
-          failure.kind === "timeout"
-            ? language.t("home.sessions.load.timeout")
-            : failure.message || language.t("common.requestFailed"),
-      }),
+    onError: (failure) => reportWriteFailure(language, failure),
   })
 
   return {
     shells: setting.meta,
     current: setting.value,
+    select: setting.select,
+  }
+}
+
+/**
+ * Whether a server's OpenCode uses the OpenCode Console workspace's shared memory, as its global config says: on unless
+ * `console_memory` is false. Turning it on removes the setting, so the default applies again.
+ */
+export function createServerConsoleMemoryController(server: Accessor<ServerConnection.Any>) {
+  const language = useLanguage()
+
+  const setting = createOptimisticSetting({
+    source: useServerCtx(server),
+    initial: true,
+    initialMeta: undefined,
+    load: async (context) => {
+      const entries = await context.sdk.api.config.get().catch(() => [])
+      const boundary = entries.findIndex((entry) => entry.type === "directory")
+      const global = boundary === -1 ? entries : entries.slice(0, boundary)
+
+      return {
+        meta: undefined,
+        value:
+          global
+            .flatMap((entry) =>
+              entry.type === "document" && entry.info.console_memory !== undefined ? [entry.info.console_memory] : [],
+            )
+            .at(-1) ?? true,
+      }
+    },
+    write: async (value, context) => {
+      await context.sdk.api.experimental.config.update({ console_memory: value ? null : false })
+    },
+    onError: (failure) => reportWriteFailure(language, failure),
+  })
+
+  return {
+    enabled: setting.value,
     select: setting.select,
   }
 }
@@ -265,6 +307,8 @@ export function createSoundSettingsController() {
 }
 
 export type ShellSettingsController = ReturnType<typeof createServerShellController>
+
+export type ConsoleMemorySettingsController = ReturnType<typeof createServerConsoleMemoryController>
 
 export type AppearanceSettingsController = ReturnType<typeof createAppearanceSettingsController>
 

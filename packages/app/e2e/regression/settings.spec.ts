@@ -485,6 +485,27 @@ test("single-server settings expose scoped pages without a server picker", async
 
   await page.getByRole("option", { name: "bash", exact: true }).click()
   expect((await updated).postDataJSON()).toEqual({ shell: "bash" })
+
+  // Console memory is on unless config turns it off; the switch writes the key the config file takes, and turning it
+  // back on removes it.
+  const row = settings.locator('[data-action="settings-console-memory"]')
+  const memory = row.getByRole("switch")
+  await expect(memory).toBeChecked()
+
+  const off = page.waitForRequest(
+    (request) => request.method() === "PATCH" && new URL(request.url()).pathname === "/api/experimental/config",
+  )
+
+  await row.locator('[data-slot="switch-control"]').click()
+  expect((await off).postDataJSON()).toEqual({ console_memory: false })
+  await expect(memory).not.toBeChecked()
+
+  const on = page.waitForRequest(
+    (request) => request.method() === "PATCH" && new URL(request.url()).pathname === "/api/experimental/config",
+  )
+
+  await row.locator('[data-slot="switch-control"]').click()
+  expect((await on).postDataJSON()).toEqual({ console_memory: null })
 })
 
 test("several servers share one selected server across per-server pages", async ({ page }) => {

@@ -5,11 +5,14 @@ import { $ } from "bun"
 import { Message, SystemPart } from "@opencode/ai/effect"
 import type { Plugin as PluginContext } from "@opencode/plugin/effect"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
+import { Document, Event, Info } from "@opencode/schema/config"
 import { Model } from "@opencode/schema/model"
 import { Effect, Exit, Fiber, Layer, Queue, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Agent } from "@opencode/core/agent"
+import { Bus } from "@opencode/core/bus"
 import { Command } from "@opencode/core/command"
+import { Config } from "@opencode/core/config"
 import { Credential } from "@opencode/core/credential"
 import { Flag } from "@opencode/core/flag"
 import { Integration } from "@opencode/core/integration"
@@ -456,6 +459,42 @@ describe("OpencodePlugin memory", () => {
         expect(yield* memoryTools).toEqual([])
       }),
     ),
+  )
+
+  capturing("console_memory,memory_capture").effect(
+    "does nothing while this installation's config turns memory off, and follows the setting without a restart",
+    () =>
+      withConsole((console) =>
+        Effect.gen(function* () {
+          const config = yield* Config.Test
+          const bus = yield* Bus.Service
+          const hooks = yield* PluginHooks.Service
+          const off = [new Document({ type: "document", info: new Info({ console_memory: false }) })]
+          distiller.prompts.length = 0
+          distiller.reply = JSON.stringify({ candidates: [{ kind: "gotcha", title: "T", body: "Claim: x" }] })
+          yield* config.setEntries(off)
+          const { host } = yield* start(console)
+          // The Console offers memory, but the installation said no: no tools, and none of the background work.
+          const session = yield* host.session.create({})
+          yield* prompt(session.id, "Fix the tests")
+          yield* hooks.trigger("session", "context", request(session.id, "Fix the tests"))
+          yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 1, output: " 1 fail" })
+          yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 0, output: " 1 pass" })
+          yield* drain
+          expect(yield* memoryTools).toEqual([])
+          expect(console.state.requests.filter((item) => item.path.startsWith("/api/memory"))).toEqual([])
+          expect(distiller.prompts).toEqual([])
+
+          // Removing the setting, as the settings toggle does, brings memory back on the next config reload.
+          yield* config.setEntries([])
+          yield* bus.publish(Event.Updated, {})
+          yield* eventually(memoryTools, (tools) => tools.includes("search"))
+
+          yield* config.setEntries(off)
+          yield* bus.publish(Event.Updated, {})
+          yield* eventually(memoryTools, (tools) => tools.length === 0)
+        }),
+      ),
   )
 
   it.effect("searches with the files the session worked on and reads as the signed-in member", () =>

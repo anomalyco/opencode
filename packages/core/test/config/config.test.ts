@@ -289,6 +289,35 @@ describe("Config", () => {
     ),
   )
 
+  it.live("writes only the settings an update names into the global config file, and removes one set to null", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const file = path.join(global, "opencode.jsonc")
+        const read = Effect.promise(() => fs.readFile(file, "utf8"))
+        return Effect.promise(async () => {
+          await fs.mkdir(global, { recursive: true })
+          await fs.writeFile(file, '{\n  // The user\'s own note\n  "shell": "zsh"\n}\n')
+        }).pipe(
+          Effect.andThen(
+            Effect.gen(function* () {
+              const config = yield* Config.Service
+              yield* config.update!({ console_memory: false })
+              expect(yield* read).toBe(
+                '{\n  // The user\'s own note\n  "shell": "zsh",\n  "console_memory": false\n}\n',
+              )
+              yield* config.update!({ console_memory: null })
+              expect(yield* read).toBe('{\n  // The user\'s own note\n  "shell": "zsh"\n}\n')
+              // The JSONC editor takes a comment out with the last property it sat above.
+              yield* config.update!({ shell: null })
+              expect(yield* read).toBe("{\n}\n")
+            }).pipe(Effect.provide(testLayer(tmp.path, global))),
+          ),
+        )
+      }),
+    ),
+  )
+
   it.live("loads system configuration at highest priority", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) => {

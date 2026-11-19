@@ -10,8 +10,8 @@ import { ServerConnection } from "@/runtime/server/registry"
 import { useServerCollectionController } from "@/servers/registry/controller"
 import { DialogServer } from "@/servers/connect/dialog"
 import { SettingsList } from "@/settings/list"
-import { ShellSetting } from "@/settings/general/general"
-import { createServerShellController } from "@/settings/general/controllers"
+import { ConsoleMemorySetting, ShellSetting } from "@/settings/general/general"
+import { createServerConsoleMemoryController, createServerShellController } from "@/settings/general/controllers"
 import type { SettingsServer } from "./inventory"
 import { serverPagesConnection, unauthorizedHttpServer } from "./machine"
 import "@/settings/settings.css"
@@ -38,6 +38,7 @@ export const SettingsServerGeneral: Component<{ entry: SettingsServer; onAddServ
               <h3 class="settings-section-title">{language.t("settings.tab.preferences")}</h3>
               <SettingsList>
                 <ServerShell server={server} />
+                <ServerConsoleMemory server={server} />
               </SettingsList>
             </section>
           )}
@@ -156,6 +157,7 @@ function ServerConnectionRow(props: {
                       domain={controller}
                       onEdit={edit}
                       shell={createServerShellController(() => ready)}
+                      memory={createServerConsoleMemoryController(() => ready)}
                       action={props.action ?? "settings-shell"}
                     />
                   )}
@@ -175,4 +177,10 @@ function ServerShell(props: { server: ServerConnection.Any }) {
   const controller = createServerShellController(() => props.server)
 
   return <ShellSetting controller={controller} />
+}
+
+function ServerConsoleMemory(props: { server: ServerConnection.Any }) {
+  const controller = createServerConsoleMemoryController(() => props.server)
+
+  return <ConsoleMemorySetting controller={controller} />
 }
