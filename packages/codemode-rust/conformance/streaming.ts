@@ -33,8 +33,8 @@
 // - A suspension starts the program, suspends it once `wait` was called (or, when the program has no `wait(` call,
 //   50 ms after `fetch` was called), resumes the suspended state from bytes (`Language.toBytes`) in the same runtime,
 //   and records `suspend: { ok: true }` and `resume: { ok: true, value } | { ok: false, kind, message }` (a
-//   `SnapshotError` failing the resume: `{ ok: false, error: "SnapshotError", message }`), or `suspend: { ok: false,
-//   message }` for a `SuspendError`, or `suspend: { ok: false, outcome }` when the run had already ended.
+//   `SnapshotError` failing the resume: `{ ok: false, message }`), or `suspend: { ok: false, message }` for a
+//   `SuspendError`, or `suspend: { ok: false, outcome }` when the run had already ended.
 // - `log`: what `fetch`'s bodies, `send` and `refuse` logged, in order.
 
 import { join } from "node:path"
