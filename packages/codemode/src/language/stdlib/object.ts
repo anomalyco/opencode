@@ -180,10 +180,15 @@ const requireTarget = (value: Value, name: string): Obj => {
 // ObjectDefineProperties: every descriptor is read (getters included) before the first one is defined.
 const defineProperties = (target: Obj, props: Value): Obj => {
   if (props === null || props === undefined) throw typeError(`Cannot convert ${props} to object`)
-  if (!(props instanceof Obj)) throw typeError("Property description must be an object")
-  const descriptors = ownKeys(props)
-    .filter((key) => own(props, key)?.enumerable === true)
-    .map((key) => [key, toPropertyDescriptor(get(props, key))] as const)
+  // ToObject: a string's indexes are its only own enumerable properties; other primitives have none.
+  const descriptors =
+    props instanceof Obj
+      ? ownKeys(props)
+          .filter((key) => own(props, key)?.enumerable === true)
+          .map((key) => [key, toPropertyDescriptor(get(props, key))] as const)
+      : typeof props === "string"
+        ? [...props].map((char, index) => [String(index), toPropertyDescriptor(char)] as const)
+        : []
   if (readsPending()) return target
   for (const [key, desc] of descriptors) defineOrThrow(target, key, desc)
   return target

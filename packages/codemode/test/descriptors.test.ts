@@ -247,10 +247,15 @@ describe("defineProperty edge cases", () => {
     ).toBe("TypeError: Cannot redefine property: 5 (line 1, col 1)")
   })
 
-  test("defineProperties needs an object of descriptors", () => {
+  test("defineProperties converts its argument with ToObject", () => {
     expect(error(`Object.defineProperties({}, "ab")`)).toBe(
-      "TypeError: Property description must be an object (line 1, col 1)",
+      "TypeError: Property description must be an object: a string (line 1, col 1)",
     )
+    expect(value(`return [Object.defineProperties({ a: 1 }, 5), Object.defineProperties({ b: 2 }, true)]`)).toEqual([
+      { a: 1 },
+      { b: 2 },
+    ])
+    expect(error(`Object.defineProperties({}, null)`)).toBe("TypeError: Cannot convert null to object (line 1, col 1)")
   })
 
   test("defining a value refuses a cycle the way an assignment does", () => {
