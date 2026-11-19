@@ -967,6 +967,120 @@ test("completes exploration and keeps live rows when a queued prompt is promoted
   }
 })
 
+test("does not rebuild transcript rows when a refresh or a streaming answer changes none of their inputs", async () => {
+  const events = createEventStream()
+  const sessionID = "session-rows-stable"
+  let reads = 0
+  const calls = createFetch((url) => {
+    if (url.pathname === `/api/session/${sessionID}`)
+      return json({
+        data: {
+          id: sessionID,
+          projectID: "proj_test",
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 0, updated: reads },
+          title: `Read ${reads++}`,
+          location: { directory },
+        },
+      })
+    if (url.pathname === `/api/session/${sessionID}/message`)
+      return json({
+        data: [
+          { id: "msg_second", type: "user", text: "Second", time: { created: 2 } },
+          { id: "msg_first", type: "user", text: "First", time: { created: 1 } },
+        ],
+        cursor: {},
+      })
+  }, events)
+  let data!: ReturnType<typeof useData>
+  let client!: ReturnType<typeof useClient>
+  let synced = false
+  // Only a full rebuild reads the session's inputs as a list.
+  let rebuilds = 0
+
+  function Probe() {
+    client = useClient()
+    data = useData()
+    const list = data.session.input.list
+    data.session.input.list = (id) => {
+      rebuilds++
+      return list(id)
+    }
+    createSessionRows(
+      () => sessionID,
+      () => (synced = true),
+    )
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await wait(() => client.connection.status() === "connected")
+    await wait(() => synced)
+    const settled = rebuilds
+    // Each read replaces the session's info, as a running session's refresh does on every status change.
+    for (let read = 0; read < 5; read++) {
+      data.session.invalidate(sessionID)
+      await data.session.sync(sessionID)
+    }
+    expect(data.session.get(sessionID)?.title).toBe(`Read ${reads - 1}`)
+    expect(rebuilds).toBe(settled)
+
+    // A new assistant message changes the message list, so it may rebuild once. Its streamed text may not.
+    emitEvent(events, {
+      id: "evt_stable_step",
+      created: 1,
+      type: "session.step.started",
+      durable: durable(sessionID),
+      data: {
+        started: 1,
+        sessionID,
+        assistantMessageID: "message-assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+      },
+    })
+    await wait(() => data.session.message.get(sessionID, "message-assistant") !== undefined)
+    const streaming = rebuilds
+    emitEvent(events, {
+      id: "evt_stable_text",
+      created: 1,
+      type: "session.text.started",
+      durable: durable(sessionID, 1),
+      data: { sessionID, assistantMessageID: "message-assistant", ordinal: 0 },
+    })
+    for (let token = 0; token < 5; token++)
+      emitEvent(events, {
+        id: `evt_stable_delta_${token}`,
+        created: 2,
+        type: "session.text.delta",
+        data: { sessionID, assistantMessageID: "message-assistant", ordinal: 0, delta: `word${token} ` },
+      })
+    await wait(() => {
+      const message = data.session.message.get(sessionID, "message-assistant")
+      return (
+        message?.type === "assistant" &&
+        message.content.some((part) => part.type === "text" && part.text.includes("word4"))
+      )
+    })
+    expect(rebuilds).toBe(streaming)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("updates and removes queued inputs from durable lifecycle events", async () => {
   const events = createEventStream()
   const sessionID = "session-queue-management"
@@ -1113,6 +1227,71 @@ test("classifies live tool rows independently of their call ID", async () => {
     expect(unwrap(rows)).toMatchObject([
       { type: "part", ref: { messageID: "message-assistant", partID: "reasoning:0" } },
     ])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("shows an older page of assistant messages loaded into a session", async () => {
+  const events = createEventStream()
+  const sessionID = "session-older-answers"
+  const model = { id: "model", providerID: "provider" }
+  const answer = (index: number) => ({
+    type: "assistant",
+    id: `msg_${String(index).padStart(3, "0")}`,
+    agent: "build",
+    model,
+    time: { created: index, completed: index },
+    finish: "stop",
+    content: [{ type: "text", text: `Answer ${index}` }],
+  })
+  // The newest page opens with the prompt, so the older page holds only assistant messages.
+  const history = [
+    ...Array.from({ length: 10 }, (_, index) => answer(index + 1)),
+    { type: "user", id: "msg_011", text: "Ask", time: { created: 11 } },
+    ...Array.from({ length: 19 }, (_, index) => answer(index + 12)),
+  ]
+  const calls = createFetch((url) => {
+    if (url.pathname !== `/api/session/${sessionID}/message`) return
+    const cursor = url.searchParams.get("cursor")
+    const end = Number(cursor ?? history.length)
+    const start = Math.max(0, end - Number(url.searchParams.get("limit") ?? 20))
+    return json({ data: history.slice(start, end).toReversed(), cursor: start > 0 ? { next: String(start) } : {} })
+  }, events)
+  let rows!: ReturnType<typeof createSessionRows>
+  let client!: ReturnType<typeof useClient>
+  let data!: ReturnType<typeof useData>
+  let synced = false
+  const oldest = () => rows.find((row) => row.type === "part" && row.ref.messageID === "msg_001")
+
+  function Probe() {
+    client = useClient()
+    data = useData()
+    rows = createSessionRows(
+      () => sessionID,
+      () => (synced = true),
+    )
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await wait(() => client.connection.status() === "connected")
+    await wait(() => synced)
+    expect(oldest()).toBeUndefined()
+    await data.session.message.loadMore(sessionID)
+    await wait(() => oldest() !== undefined)
   } finally {
     app.renderer.destroy()
   }
