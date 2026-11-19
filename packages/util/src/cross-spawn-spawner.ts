@@ -382,11 +382,18 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
     )
   }
 
+  // cross-spawn cannot stat an app execution alias, so it sends the path through cmd.exe.
+  // PowerShell reparses that command line. A space in the path is then a script-file
+  // argument and the process exits 64. An absolute Windows executable can be spawned
+  // directly; cmd.exe is only needed for scripts and shebangs.
   const launchProcess = (command: ChildProcess.StandardCommand, file: string, opts: NodeChildProcess.SpawnOptions) =>
     Effect.callback<Spawned, PlatformError.PlatformError>((resume) => {
       const closed = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
       const exited = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
-      const proc = launch(file, command.args.map(unwrap), opts)
+      const argv = command.args.map(unwrap)
+      const direct =
+        globalThis.process.platform === "win32" && path.isAbsolute(file) && /\.(?:exe|com)$/i.test(file)
+      const proc = direct ? NodeChildProcess.spawn(file, argv, opts) : launch(file, argv, opts)
       let settle = () => {}
       let end = false
       let exit: readonly [code: number | null, signal: NodeJS.Signals | null] | undefined

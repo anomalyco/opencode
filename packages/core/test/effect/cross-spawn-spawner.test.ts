@@ -585,6 +585,19 @@ describe("cross-spawn spawner", () => {
     // Skipped where PowerShell 7 is not installed from the Microsoft Store for the user; see the fixture.
     const storePwsh = pwsh ? fx.live : fx.live.skip
     storePwsh(
+      "runs a store pwsh alias when its path contains a space",
+      Effect.gen(function* () {
+        if (!pwsh!.file.includes(" ")) return
+        const out = yield* ChildProcessSpawner.ChildProcessSpawner.use((svc) =>
+          svc.string(
+            ChildProcess.make(pwsh!.file, ["-NoProfile", "-NonInteractive", "-Command", "Write-Output ok"]),
+          ),
+        )
+        expect(out.trim()).toBe("ok")
+      }),
+    )
+
+    storePwsh(
       "keeps every line of a command run through an app execution alias",
       Effect.gen(function* () {
         const out = yield* ChildProcessSpawner.ChildProcessSpawner.use((svc) =>
