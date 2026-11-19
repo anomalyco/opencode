@@ -70,19 +70,35 @@ function decodePath(value: string) {
   }
 }
 
+// Mermaid SVG skips the sanitizer: only https hrefs stay live, local paths load like Markdown images.
+export function prepareSvgImages(root: Element) {
+  root.querySelectorAll("image").forEach((image) => {
+    const href = image.getAttribute("href") ?? ""
+
+    if (/^https:\/\//i.test(href)) return
+    image.removeAttribute("href")
+    const path = localImagePath(href)
+
+    if (path) image.setAttribute("data-local-image", path)
+  })
+}
+
 export function createMarkdownImages(read: ReadMarkdownImage) {
   let state = INITIAL_MARKDOWN_IMAGES_STATE
   let root: HTMLElement | undefined
   const pending = new Map<number, { controller?: AbortController; timer: ReturnType<typeof setTimeout> }>()
 
   const images = (container: HTMLElement) =>
-    Array.from(container.querySelectorAll<HTMLImageElement>("img[data-local-image]"))
+    Array.from(
+      container.querySelectorAll<HTMLImageElement | SVGImageElement>("img[data-local-image], image[data-local-image]"),
+    )
 
   const syncDom = (container: HTMLElement) =>
     images(container).forEach((image) => {
       const url = selectMarkdownImageUrl(state, image.dataset.localImage ?? "")
+      const attribute = image instanceof SVGImageElement ? "href" : "src"
 
-      if (url && image.getAttribute("src") !== url) image.src = url
+      if (url && image.getAttribute(attribute) !== url) image.setAttribute(attribute, url)
     })
 
   const dispatch = (event: MarkdownImagesEvent) => {
