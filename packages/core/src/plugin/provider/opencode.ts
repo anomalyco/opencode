@@ -82,6 +82,8 @@ type ConsoleConfig = NonNullable<Effect.Success<ReturnType<typeof fetchConfig>>>
   readonly skills: (typeof ConsoleSkills.Type)["skills"]
 }
 const signedOutMessage = "Reconnect OpenCode Console to continue"
+/** The MCP server Console's config names, whose tools register in this namespace; its task tools have "task" in their names. */
+const consoleServer = "opencode_console"
 const ssoMessage = (organization: string | undefined) =>
   `Sign in with SSO again to use ${organization ?? "your OpenCode Console organization"}`
 
@@ -224,6 +226,24 @@ export const OpencodePlugin = define<
     const watches = yield* OpencodeWatches.make(ctx, http)
     const artifacts = yield* OpencodeArtifacts.make(ctx, http)
     const tasks = yield* OpencodeTasks.make(ctx, http)
+    // `console_tasks: false` in this installation's config keeps the Console's task list away: no task tools, no claim
+    // renewals. Console's own document never decides it; the member's choice in Console is Console's to apply.
+    const tasksSetting = config.entries().pipe(
+      Effect.map(
+        (entries) =>
+          Config.latest(
+            entries.filter((entry) => !(entry instanceof ConfigIntegration.Document)),
+            "console_tasks",
+          ) !== false,
+      ),
+    )
+    let tasksOn = yield* tasksSetting
+    // What the last publish allowed, so a change of the setting alone re-syncs claims.
+    let published: { connection: ActiveConnection; watching: boolean; allowed: boolean } = {
+      connection: undefined,
+      watching: false,
+      allowed: false,
+    }
 
     // Every project signed in to the same workspace shares one fetch, reused while it is younger than `maxAge`.
     const load = Effect.fn("OpencodePlugin.load")(function* (maxAge: Duration.Input = Duration.minutes(1)) {
@@ -341,14 +361,16 @@ export const OpencodePlugin = define<
       const allowed = document !== undefined && (!config.integration || isDeepStrictEqual(integrated, document))
       yield* syncInstructionsAndSkills(next, allowed)
       const watching = allowed && next.remote?.watches === true && (yield* flags.enabled("console_watches"))
-      // Claims are only ever made through the Console's MCP, which offers its task tools only while Tasks are on.
-      const claiming = allowed && (yield* flags.enabled("console_tasks"))
-      yield* syncConsole(next.connection, watching, claiming)
+      published = { connection: next.connection, watching, allowed }
+      yield* syncConsole(next.connection, watching, yield* claiming(allowed))
       yield* artifacts.sync(allowed && next.remote?.artifacts === true ? next.connection : undefined, watching)
     })
+    // Claims are only ever made through the Console's MCP, which offers its task tools only while Tasks are on.
+    const claiming = (allowed: boolean) =>
+      flags.enabled("console_tasks").pipe(Effect.map((flag) => allowed && flag && tasksOn))
     // Watching starts when the console_watches flag is on and the Console's config says the workspace has event watches,
-    // and stops when either no longer holds. Task claims are kept alive while the console_tasks flag is on and the
-    // integration is allowed.
+    // and stops when either no longer holds. Task claims are kept alive while the console_tasks flag and setting are on
+    // and the integration is allowed.
     const syncConsole = Effect.fnUntraced(
       function* (connection: ActiveConnection, watching: boolean, claiming: boolean) {
         const credential = connection && (yield* ctx.integration.connection.resolve(connection))
@@ -484,6 +506,30 @@ export const OpencodePlugin = define<
 
     snapshot = yield* load()
     yield* publish(snapshot)
+    yield* ctx.tool.transform((editor) => {
+      if (tasksOn) return
+      editor
+        .list()
+        .filter((tool) => tool.options?.namespace === consoleServer && /(^|_)tasks?(_|$)/.test(tool.name))
+        .forEach((tool) => editor.remove(tool.id))
+    })
+    // The setting applies as config reloads, without a restart.
+    yield* ctx.event.subscribe({ types: ["config.updated"] }).pipe(
+      Stream.runForEach(() =>
+        Effect.gen(function* () {
+          const next = yield* tasksSetting
+          if (next === tasksOn) return
+          tasksOn = next
+          yield* ctx.tool.reload()
+          yield* loading.withPermit(
+            Effect.gen(function* () {
+              yield* syncConsole(published.connection, published.watching, yield* claiming(published.allowed))
+            }),
+          )
+        }),
+      ),
+      Effect.forkIn(scope, { startImmediately: true }),
+    )
     yield* ctx.provider.transform((providers) => {
       if (integrated) ConfigProviderPlugin.integrate(providers, integrated)
     })

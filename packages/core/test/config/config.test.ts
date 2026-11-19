@@ -2394,3 +2394,33 @@ describe("Config", () => {
     ),
   )
 })
+
+describe("Config.update", () => {
+  it.live("changes only the keys a patch names, and removes the ones it sets to null", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const file = path.join(global, "opencode.jsonc")
+        const read = Effect.promise(async () => (await Bun.file(file).text()).replace(/\s+/g, " ").trim())
+        return Effect.promise(async () => {
+          await fs.mkdir(global, { recursive: true })
+          await fs.writeFile(file, '{\n  // kept\n  "shell": "/bin/zsh"\n}\n')
+        }).pipe(
+          Effect.andThen(
+            Effect.gen(function* () {
+              const config = yield* Config.Service
+              const update = yield* Effect.fromNullishOr(config.update)
+              yield* update({ console_tasks: false })
+              expect(yield* read).toBe('{ // kept "shell": "/bin/zsh", "console_tasks": false }')
+              yield* update({ console_tasks: null })
+              expect(yield* read).toBe('{ // kept "shell": "/bin/zsh" }')
+              // The comment went with the last key it sat above.
+              yield* update({ shell: null })
+              expect(yield* read).toBe("{ }")
+            }).pipe(Effect.provide(testLayer(tmp.path, global))),
+          ),
+        )
+      }),
+    ),
+  )
+})

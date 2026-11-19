@@ -3,6 +3,8 @@ import { Duration, Effect, Exit, Layer, Random, Schema, Scope } from "effect"
 import { HttpClient } from "effect/http"
 import { TestClock } from "effect/testing"
 import { Agent } from "@opencode/core/agent"
+import { Bus } from "@opencode/core/bus"
+import { Config } from "@opencode/core/config"
 import { Credential } from "@opencode/core/credential"
 import { Flag } from "@opencode/core/flag"
 import { Integration } from "@opencode/core/integration"
@@ -15,6 +17,8 @@ import { Session } from "@opencode/core/session"
 import { SessionMessage } from "@opencode/core/session/message"
 import { Tool } from "@opencode/core/tool"
 import { McpTool } from "@opencode/core/tool/mcp"
+import { Document, Event, Info } from "@opencode/schema/config"
+import { eventually } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -336,6 +340,61 @@ describe("OpencodePlugin task claims", () => {
         expect(sent(console, OpencodeTasks.RELEASE_PATH)).toEqual([gone.id])
       }),
     ),
+  )
+
+  it.effect(
+    "offers no Console task tools and renews nothing while console_tasks is false, until the config drops it",
+    () =>
+      withConsole((console) =>
+        Effect.gen(function* () {
+          const config = yield* Config.Test
+          const bus = yield* Bus.Service
+          const registry = yield* Tool.Service
+          yield* config.setEntries([
+            new Document({ type: "document", info: Schema.decodeUnknownSync(Info)({ console_tasks: false }) }),
+          ])
+          // Console's MCP tools register before plugins load, as MCP's do.
+          yield* registry.transform((editor) =>
+            ["claim_task", "list_tasks", "list_task_projects", "get_context"].forEach((name) =>
+              editor.add({
+                name,
+                options: { namespace: McpTool.namespace("opencode_console") },
+                description: name,
+                input: Schema.Struct({}),
+                execute: () => Effect.succeed({ content: "ok" }),
+              }),
+            ),
+          )
+          const consoleTools = registry
+            .list()
+            .pipe(
+              Effect.map((tools) =>
+                tools.filter((tool) => tool.options?.namespace === "opencode_console").map((tool) => tool.name),
+              ),
+            )
+          yield* signIn(console)
+          const host = yield* start(console)
+          const session = yield* host.session.create({})
+
+          expect(yield* consoleTools).toEqual(["get_context"])
+          yield* claim(session.id)
+          yield* pass(console, 6)
+          expect(console.state.requests).toEqual([])
+
+          // Removing the setting turns it back on without a restart.
+          yield* config.setEntries([])
+          yield* bus.publish(Event.Updated, {})
+          expect((yield* eventually(consoleTools, (tools) => tools.length === 4)).toSorted()).toEqual([
+            "claim_task",
+            "get_context",
+            "list_task_projects",
+            "list_tasks",
+          ])
+          yield* claim(session.id)
+          yield* until(console, 1)
+          expect(sent(console, OpencodeTasks.RENEW_PATH)).toEqual([session.id])
+        }),
+      ),
   )
 
   released.effect("does nothing while the console_tasks flag is off", () =>

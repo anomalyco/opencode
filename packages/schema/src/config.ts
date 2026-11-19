@@ -112,12 +112,18 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   warming: ConfigWarming.Warming.pipe(optional).annotate({
     description: "Keep recently active sessions warm with transient model requests (default: false)",
   }),
+  console_tasks: Schema.Boolean.pipe(optional).annotate({
+    description:
+      "Use the OpenCode Console task list when the Console workspace offers it: its task tools, and keeping the claims of live sessions from lapsing (default: true)",
+  }),
   providers: Schema.Record(Schema.String, ConfigProvider.Info).pipe(optional),
   experimental: ConfigExperimental.Info.pipe(optional),
 }) {}
 
+/** Changes the global config's keys that are present: a value sets one, `null` removes it. Absent keys stay as they are. */
 export const Patch = Schema.Struct({
-  shell: Schema.NullOr(Schema.String),
+  shell: Schema.NullOr(Schema.String).pipe(optional),
+  console_tasks: Schema.NullOr(Schema.Boolean).pipe(optional),
 }).annotate({ identifier: "Config.Patch" })
 export interface Patch extends Schema.Schema.Type<typeof Patch> {}
 
