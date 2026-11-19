@@ -29,6 +29,7 @@ export const docsSections: DocsSection[] = [
         items: [
           { title: "Intro", slug: "index" },
           { title: "Config", slug: "config" },
+          { title: "Goal", slug: "goal" },
           { title: "Migrate from V1", slug: "migrate-v1" },
           { title: "Troubleshooting", slug: "troubleshooting" },
         ],

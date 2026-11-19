@@ -1,0 +1,56 @@
+---
+title: "Goal"
+description: "Run autonomous multi-step objectives with the native /goal command."
+---
+
+The `/goal` command sets a persistent objective for the session. OpenCode works autonomously toward the goal through iterative steps, reviewing progress until the objective is complete.
+
+## Usage
+
+Start a new goal by providing an objective:
+
+```text
+/goal Refactor the authentication module and add unit tests
+```
+
+Manage ongoing goal execution with subcommands:
+
+```text
+/goal pause
+/goal resume
+/goal clear
+```
+
+## Subcommands
+
+### Objective
+
+Provide a clear description of the target outcome after `/goal`. OpenCode arms the goal and begins execution across session steps.
+
+```text
+/goal Add dark mode toggle to the settings panel
+```
+
+### Pause
+
+Pause autonomous execution temporarily without clearing the objective state.
+
+```text
+/goal pause
+```
+
+### Resume
+
+Resume a paused goal from where it left off.
+
+```text
+/goal resume
+```
+
+### Clear
+
+Cancel and remove the active goal from the session.
+
+```text
+/goal clear
+```
