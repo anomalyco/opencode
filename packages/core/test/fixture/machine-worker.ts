@@ -4,7 +4,7 @@ import { Cause, Effect, Fiber, Queue, Stream } from "effect"
 
 /** A process the fake worker ran. The test decides what it prints and when it exits. */
 export interface Run {
-  readonly id: string
+  readonly id: Machine.ProcessID
   readonly pid: number
   readonly argv: ReadonlyArray<string>
   readonly cwd: string
@@ -47,10 +47,10 @@ export const makeWorker = (machine: Machine.Interface) =>
     /** Every message that reached the worker. */
     const received: Machine.ToWorker[] = []
     const drops: Array<{ readonly direction: Direction; readonly type: string }> = []
-    let instance = crypto.randomUUID()
-    let table = new Map<string, Process>()
+    let instance = Machine.Instance.make(crypto.randomUUID())
+    let table = new Map<Machine.ProcessID, Process>()
     /** Processes the next hello still lists, then forgets before the home can attach. */
-    const forgetting = new Set<string>()
+    const forgetting = new Set<Machine.ProcessID>()
     let link: Link | undefined
 
     const dropped = (direction: Direction, type: string) => {
@@ -239,14 +239,14 @@ export const makeWorker = (machine: Machine.Interface) =>
       /** A new worker process: new instance, no processes, then it dials in again. */
       restart: Effect.gen(function* () {
         yield* cut
-        instance = crypto.randomUUID()
+        instance = Machine.Instance.make(crypto.randomUUID())
         table = new Map()
         yield* dial
       }),
       /** Forgets a process, as a worker may once it has run a while. */
-      forget: (processID: string) => table.delete(processID),
+      forget: (processID: Machine.ProcessID) => table.delete(processID),
       /** Forgets a process after listing it in the next hello, before the home can attach to it. */
-      forgetAfterHello: (processID: string) => forgetting.add(processID),
+      forgetAfterHello: (processID: Machine.ProcessID) => forgetting.add(processID),
       /** Drops the next message of `type` heading to `direction`. */
       drop: (direction: Direction, type: string) => drops.push({ direction, type }),
     }

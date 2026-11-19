@@ -3,7 +3,7 @@ import { Cause, Deferred, Effect, PlatformError, Queue, Redacted, Schema, Sink, 
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { Environment } from "../environment/index.js"
 import { Failed, NotFound, WrongKind, type DirEntry, type FileInfo } from "../environment/files.js"
-import { Signal, type FileCall, type FromWorker, type Hello, type ToWorker } from "./wire.js"
+import { ProcessID, Signal, type FileCall, type FromWorker, type Hello, type Instance, type ToWorker } from "./wire.js"
 
 /** How long a start whose connection was lost waits for the worker to come back before it is reported unknown. */
 const START_GRACE = "15 seconds"
@@ -75,11 +75,11 @@ export const make = (id: Environment.ID): Interface => {
   // Each change to this state, with the messages it sends, is one synchronous step: nothing else runs and nothing is
   // interrupted half-way through one, so a command is never reported unsent after it was sent. Hence the plain
   // variables and the `Unsafe` calls.
-  const processes = new Map<string, Process>()
+  const processes = new Map<ProcessID, Process>()
   let link: Link | undefined
   let next = Deferred.makeUnsafe<Link>()
   /** The worker behind the newest connection. Every process in `processes` was started on it. */
-  let instance: string | undefined
+  let instance: Instance | undefined
   let req = 0
   const online = Effect.suspend(() => (link ? Effect.succeed(link) : Deferred.await(next)))
   const platform = (method: string) => (cause: Error) =>
@@ -95,7 +95,7 @@ export const make = (id: Environment.ID): Interface => {
   }
 
   // The process will not be heard from again: whoever waits on it gets `error`.
-  const gone = (processID: string, process: Process, error: Error) => {
+  const gone = (processID: ProcessID, process: Process, error: Error) => {
     processes.delete(processID)
     Deferred.doneUnsafe(process.started, Effect.fail(error))
     Deferred.doneUnsafe(process.exited, Effect.fail(error))
@@ -192,7 +192,7 @@ export const make = (id: Environment.ID): Interface => {
       if (options.cwd === undefined) return yield* unsupported("a command without a working directory is")
       if (!Schema.is(Signal)(killSignal)) return yield* unsupported(`${killSignal} is`)
 
-      const processID = crypto.randomUUID()
+      const processID = ProcessID.make(crypto.randomUUID())
       const process: Process = {
         started: Deferred.makeUnsafe(),
         output: yield* Queue.unbounded<Uint8Array, PlatformError.PlatformError | Cause.Done>(),

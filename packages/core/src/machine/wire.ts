@@ -6,13 +6,21 @@ import { FileType } from "../environment/files.js"
 
 const Bytes = Schema.Uint8ArrayFromBase64
 
+/** Names a process between the home and the worker. The home makes it when it starts the process. */
+export const ProcessID = Schema.String.pipe(Schema.brand("Machine.ProcessID"))
+export type ProcessID = typeof ProcessID.Type
+
+/** One run of the worker program. */
+export const Instance = Schema.String.pipe(Schema.brand("Machine.Instance"))
+export type Instance = typeof Instance.Type
+
 /** The signals a worker can send to a process. */
 export const Signal = Schema.Literals(["SIGTERM", "SIGKILL", "SIGINT"])
 export type Signal = typeof Signal.Type
 
 const FileInfo = Schema.Struct({ type: FileType, size: Schema.Number, mtimeMs: Schema.Number })
 
-const exit = { type: Schema.Literal("exit"), id: Schema.String, bytes: Schema.Number }
+const exit = { type: Schema.Literal("exit"), id: ProcessID, bytes: Schema.Number }
 /** A file call and its reply carry the same `req`. */
 const fs = { type: Schema.Literal("fs"), req: Schema.Number }
 
@@ -23,10 +31,10 @@ export const Hello = Schema.Struct({
   os: Schema.String,
   arch: Schema.String,
   /** Made once per worker process start: a new value means every process the worker held is gone. */
-  instance: Schema.String,
+  instance: Instance,
   processes: Schema.Array(
     Schema.Struct({
-      id: Schema.String,
+      id: ProcessID,
       pid: Schema.Number,
       state: Schema.Literals(["running", "exited"]),
       bytes: Schema.Number,
@@ -39,16 +47,16 @@ export type Hello = typeof Hello.Type
 
 export const FromWorker = Schema.Union([
   Hello,
-  Schema.Struct({ type: Schema.Literal("started"), id: Schema.String, pid: Schema.Number }),
+  Schema.Struct({ type: Schema.Literal("started"), id: ProcessID, pid: Schema.Number }),
   /** A start, attach or kill that could not be done. */
   Schema.Struct({
     type: Schema.Literal("failed"),
-    id: Schema.String,
+    id: ProcessID,
     request: Schema.Literals(["start", "attach", "kill"]),
     message: Schema.String,
   }),
   /** `offset` is the position of the first byte of `data` in the process's merged stdout and stderr. */
-  Schema.Struct({ type: Schema.Literal("output"), id: Schema.String, offset: Schema.Number, data: Bytes }),
+  Schema.Struct({ type: Schema.Literal("output"), id: ProcessID, offset: Schema.Number, data: Bytes }),
   Schema.Struct({ ...exit, code: Schema.Number }),
   Schema.Struct({ ...exit, code: Schema.Null, signal: Schema.String }),
   Schema.Struct({
@@ -91,17 +99,17 @@ export const ToWorker = Schema.Union([
   /** Starts the process and attaches to its output from byte 0. */
   Schema.Struct({
     type: Schema.Literal("start"),
-    id: Schema.String,
+    id: ProcessID,
     argv: Schema.Array(Schema.String),
     cwd: Schema.String,
     /** Set over the worker's own environment. */
     env: Schema.Record(Schema.String, Schema.String),
   }),
   /** Sends output from byte `from` on, then the exit once every byte is sent. Replaces an earlier attach. */
-  Schema.Struct({ type: Schema.Literal("attach"), id: Schema.String, from: Schema.Number }),
-  Schema.Struct({ type: Schema.Literal("kill"), id: Schema.String, signal: Signal }),
+  Schema.Struct({ type: Schema.Literal("attach"), id: ProcessID, from: Schema.Number }),
+  Schema.Struct({ type: Schema.Literal("kill"), id: ProcessID, signal: Signal }),
   /** Sent once the home has the process's exit: the worker may forget the process and its output. */
-  Schema.Struct({ type: Schema.Literal("release"), id: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("release"), id: ProcessID }),
   FileCall,
 ])
 export type ToWorker = typeof ToWorker.Type

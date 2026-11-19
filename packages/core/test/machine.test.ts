@@ -26,7 +26,7 @@ const hello = (processes: Machine.Hello["processes"] = []): Machine.Hello => ({
   name: "gpu",
   os: "linux",
   arch: "x64",
-  instance: "a",
+  instance: Machine.Instance.make("a"),
   processes,
 })
 const count = (received: ReadonlyArray<Machine.ToWorker>, type: Machine.ToWorker["type"]) =>
@@ -226,14 +226,14 @@ describe("machine driver", () => {
           const machine = Machine.make(Environment.ID.make("gpu"))
           const messages = yield* Queue.unbounded<Exclude<Machine.FromWorker, Machine.Hello>>()
           const late: Machine.ToWorker[] = []
-          let id = ""
+          const started: Machine.ProcessID[] = []
           let replaced = false
           // A scheduler that pauses the connection every few steps, so the newer one can arrive between two messages.
           yield* Effect.forkChild(
             machine.connect({
               hello: hello(),
               send: (message) => {
-                if (message.type === "start") id = message.id
+                if (message.type === "start") started.push(message.id)
                 if (replaced) late.push(message)
               },
               messages: Stream.fromQueue(messages),
@@ -244,6 +244,7 @@ describe("machine driver", () => {
           yield* Effect.forkChild(machine.environment.spawner.spawn(command).pipe(Scope.provide(yield* Scope.make())), {
             startImmediately: true,
           })
+          const id = started[0]
           // One chunk, long enough that the paused connection handles it in several steps.
           Queue.offerAllUnsafe(messages, [
             { type: "started", id, pid: 7 },
@@ -517,10 +518,11 @@ describe("machine driver", () => {
 describe("machine wire", () => {
   it.effect("encodes bytes as base64 and decodes them back", () =>
     Effect.sync(() => {
-      const output: Machine.FromWorker = { type: "output", id: "p1", offset: 0, data: bytes("hi") }
+      const id = Machine.ProcessID.make("p1")
+      const output: Machine.FromWorker = { type: "output", id, offset: 0, data: bytes("hi") }
       const write: Machine.ToWorker = { type: "fs", req: 7, call: "write", path: "/a", bytes: bytes("hi") }
-      const failed: Machine.FromWorker = { type: "failed", id: "p1", request: "attach", message: "unknown process" }
-      const release: Machine.ToWorker = { type: "release", id: "p1" }
+      const failed: Machine.FromWorker = { type: "failed", id, request: "attach", message: "unknown process" }
+      const release: Machine.ToWorker = { type: "release", id }
       const json = JSON.parse(JSON.stringify(Schema.encodeSync(Machine.FromWorker)(output)))
       expect(json).toEqual({ type: "output", id: "p1", offset: 0, data: "aGk=" })
       expect(Schema.decodeUnknownSync(Machine.FromWorker)(json)).toEqual(output)
