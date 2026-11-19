@@ -77,6 +77,8 @@ import { DialogGoUpsell } from "../../component/dialog-go-upsell"
 import { UsageLimitNotice, useLimitNotice, useUsageAlerts } from "../../component/usage"
 import { useStorage } from "../../context/storage"
 import { Composer } from "./composer"
+import { busyTab } from "./composer/tabs"
+import { ownedJobs } from "../../util/session"
 import { filetype } from "../../util/filetype"
 import parsers from "../../parsers-config"
 import { errorMessage } from "../../util/error"
@@ -229,6 +231,18 @@ export function Session(props: {
       item.delivery === "queue" ? [{ id: item.id, text: item.payload.text, payload: item.payload }] : [],
     ),
   )
+  const openingTab = () => {
+    const jobs = data.job.list(route.sessionID)
+    return busyTab({
+      scripts: jobs.some((job) => job.kind === "codemode" && job.sessionID === route.sessionID),
+      subagents: descendantSessionIDs().some(
+        (id) =>
+          data.session.status(id) === "running" ||
+          ownedJobs(jobs, id, (sessionID) => data.session.get(sessionID)?.parentID).length > 0,
+      ),
+      shells: data.shell.list(location()).some((shell) => shell.metadata.sessionID === route.sessionID),
+    })
+  }
   const [composer, setComposer] = createStore({
     open: false,
     tab: undefined as string | undefined,
@@ -1409,7 +1423,7 @@ export function Session(props: {
       run: (tab?: string) => {
         if (tab === "shell" || tab === "subagents" || tab === "scripts") setComposer({ open: true, tab })
         else if (composer.open || session()?.parentID) setComposer("open", false)
-        else setComposer({ open: true, tab: "subagents" })
+        else setComposer({ open: true, tab: openingTab() })
         dialog.clear()
       },
     },

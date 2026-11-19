@@ -6,6 +6,7 @@ import { TextAttributes } from "@opentui/core"
 import { useInteractivity } from "../../context/interactivity"
 import { stringWidth } from "../../util/string-width"
 import { createGoal, GoalStatus } from "./goal"
+import { busyTab } from "../../routes/session/composer/tabs"
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -88,7 +89,7 @@ export function PromptFooter(props: {
                   onMouseUp={() =>
                     props.context.keymap.dispatch(
                       "session.child.first",
-                      scripts() ? "scripts" : subagents() ? "subagents" : "shell",
+                      busyTab({ scripts: !!scripts(), subagents: !!subagents(), shells: !!shells() }),
                     )
                   }
                 >

@@ -2,7 +2,7 @@
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { createSignal } from "solid-js"
-import { createComposerTabs } from "../../src/routes/session/composer/tabs"
+import { busyTab, createComposerTabs } from "../../src/routes/session/composer/tabs"
 
 async function setup(defaultTab?: string) {
   const [open, setOpen] = createSignal(false)
@@ -70,4 +70,10 @@ test("composer tabs switch to the requested tab once it registers, until the use
   } finally {
     app.renderer.destroy()
   }
+})
+
+test("the picker opens on the first busy tab, else Subagents", () => {
+  expect(busyTab({ scripts: true, subagents: false, shells: true })).toBe("scripts")
+  expect(busyTab({ scripts: false, subagents: false, shells: true })).toBe("shell")
+  expect(busyTab({ scripts: false, subagents: false, shells: false })).toBe("subagents")
 })

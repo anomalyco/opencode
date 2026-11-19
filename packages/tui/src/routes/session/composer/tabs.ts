@@ -9,6 +9,14 @@ const rank = (id: string) => {
   return index < 0 ? order.length : index
 }
 
+// The tab the picker opens on when nothing asks for one: the first that has something running, else Subagents.
+export function busyTab(input: { scripts: boolean; subagents: boolean; shells: boolean }) {
+  if (input.scripts) return "scripts"
+  if (input.subagents) return "subagents"
+  if (input.shells) return "shell"
+  return "subagents"
+}
+
 // The picker's tabs in a fixed order, and which one is active. Tabs that come and go while it is open, like Scripts,
 // leave the active tab alone unless they remove it.
 export function createComposerTabs(input: { open: () => boolean; defaultTab: () => string | undefined }) {
