@@ -1,6 +1,6 @@
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { CAPTURE_DEADLINE_MS, FULL_PAGE_DEADLINE_MS } from "./capture"
-import { FileVerificationError } from "@opencode/util/file-verification"
+import { FileVerificationError } from "./file-verification"
 import { NavigationDeadlineError } from "./navigation-deadline"
 
 /** A failure the server acts on by its code, such as a wait whose condition never held. */

@@ -1,8 +1,7 @@
 import { realpath } from "node:fs/promises"
 import { relative } from "node:path"
-import { openContained } from "@opencode/util/contained-file"
-import { FileVerificationError } from "@opencode/util/file-verification"
-import { openPreviewFile, previewAllowed } from "@opencode/util/preview-scope"
+import { FileVerificationError } from "./file-verification"
+import { openContained, openPreviewFile, previewAllowed, type HandlePath } from "./disk"
 import { fileURLToPath } from "node:url"
 import { fileURLWithin } from "./policy"
 import { previewResource } from "./preview"
@@ -36,6 +35,7 @@ export async function resolvePreviewRequest(
   initiator: string | undefined,
   grants: ReadonlyMap<string, PreviewSource>,
   signal: AbortSignal,
+  verifier: HandlePath,
 ) {
   if ((method !== "GET" && method !== "HEAD") || !URL.canParse(url)) return
   const host = new URL(url).host
@@ -88,7 +88,7 @@ export async function resolvePreviewRequest(
   if (!root) return
   const path = relative(root, fileURLToPath(file)).replaceAll("\\", "/")
   const entry = path === grant.document && initiator === undefined && grant.takeEntry()
-  const target = await openPreviewFile(root, grant.document, path, entry, grant.identity).catch(FileVerificationError.orMissing)
+  const target = await openPreviewFile(verifier, root, grant.document, path, entry, grant.identity).catch(FileVerificationError.orMissing)
 
   if (target === "denied") {
     grant.denied()
@@ -103,8 +103,8 @@ export async function resolvePreviewRequest(
 }
 
 /** Resolve again at each authority boundary. A path checked when displayed may no longer name the same file. */
-export async function workspaceFile(file: string, roots: readonly string[]) {
-  const target = await openWorkspaceFile(file, roots)
+export async function workspaceFile(verifier: HandlePath, file: string, roots: readonly string[]) {
+  const target = await openWorkspaceFile(verifier, file, roots)
 
   if (!target) return
   await target.file.close()
@@ -112,13 +112,13 @@ export async function workspaceFile(file: string, roots: readonly string[]) {
   return { path: target.path, size: target.size }
 }
 
-async function openWorkspaceFile(file: string, roots: readonly string[]) {
+async function openWorkspaceFile(verifier: HandlePath, file: string, roots: readonly string[]) {
   const root = roots.find((root) => fileURLWithin(file, [root]))
 
   if (!root) return
 
   try {
-    return await openContained(await realpath(root), relative(root, fileURLToPath(file)))
+    return await openContained(verifier, await realpath(root), relative(root, fileURLToPath(file)))
   } catch (error) {
     // Missing, unreadable, malformed or replaced between lookups: no file grant.
     return FileVerificationError.orMissing(error)

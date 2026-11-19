@@ -46,7 +46,8 @@ import type { SitePermissions } from "./site-permissions"
 import type { SystemMedia } from "./system-media"
 import { workspaceFile, type WorkspaceSource } from "./workspace-file"
 import { workspacePages } from "./workspace-pages"
-import { FileVerificationError } from "@opencode/util/file-verification"
+import { FileVerificationError } from "./file-verification"
+import type { HandlePath } from "./disk"
 import { artifactKind } from "@opencode/util/artifact"
 import { fileTab, reusableFile, workspaceFileURL } from "./link"
 import { createPreviews } from "./profile/previews"
@@ -111,6 +112,8 @@ export function createBrowserPane(input: {
   readonly system: SystemMedia
   /** Whether the build offers the device toolbar. */
   readonly toolbar: boolean
+  /** The plugin instance's file verifier, for workspace files. */
+  readonly verifier: HandlePath
   readonly emit: (window: number, value: { readonly binding: string; readonly event: PaneEvent }) => void
 }) {
   const machine: PaneMachine = { state: createPaneState() }
@@ -170,7 +173,7 @@ export function createBrowserPane(input: {
 
       const remote = shared ? undefined : electron.session.fromPartition(partition)
       const abort = new AbortController()
-      const previews = remote ? createPreviews(remote, abort.signal) : input.profile.previews
+      const previews = remote ? createPreviews(remote, abort.signal, input.verifier) : input.profile.previews
       const unguard = remote ? guardSession(remote, downloads, input.profile.permissions) : () => undefined
 
       const closed = () => dispatchBinding(binding, { type: "owner.closed" })
@@ -255,7 +258,7 @@ export function createBrowserPane(input: {
 
             handle.source = source
             handle.artifacts = () => artifactPages(previews, server, session.location.directory, abort.signal)
-            handle.workspace = (identity) => workspacePages(previews, session.location.directory, source, abort.signal, identity)
+            handle.workspace = (identity) => workspacePages(previews, input.verifier, session.location.directory, source, abort.signal, identity)
 
             if (shared) handle.network = createDirectNetwork(input.profile.session)
 
@@ -495,7 +498,7 @@ export function createBrowserPane(input: {
       owned(window, binding)
       const tab = page(binding, tabID)
       const url = tab?.state().url
-      const file = url && await workspaceFile(url, selectFileRoots(machine.state, binding))
+      const file = url && await workspaceFile(input.verifier, url, selectFileRoots(machine.state, binding))
 
       if (!file || !tab || page(binding, tabID) !== tab || tab.state().url !== url) throw new Error("browser.address.workspace")
       // Reveal a regular file in its folder; never hand even a validated file to its executable association.
@@ -828,6 +831,7 @@ export function createBrowserPane(input: {
           if (current()) await execute(binding, { action, files: [] }, handle.abort.signal, "user")
         },
         open: async (url) => { if (current()) await execute(binding, { action: { type: "tabs.open", url }, files: [] }, handle.abort.signal, "user", "new", childActivity(activity)) },
+        verifier: input.verifier,
       },
       embeds: input.embeds,
       sites: input.sites,
@@ -1044,7 +1048,7 @@ export function createBrowserPane(input: {
       const remote = remoteSource(binding)
       const url = remote ? `${remote.prefix}${path.split("/").map(encodeURIComponent).join("/")}` : roots[0] && workspaceFileURL(roots[0], path)
 
-      if (!url || !(remote ? Number.isSafeInteger(await remote.stat(path, signal)) : await workspaceFile(url, roots)))
+      if (!url || !(remote ? Number.isSafeInteger(await remote.stat(path, signal)) : await workspaceFile(input.verifier, url, roots)))
         throw new CodedError(Browser.FailureCode.previewUnavailable, "The workspace file no longer exists or cannot be read by this session.")
       signal.throwIfAborted()
       normalizeURL(url, pagePolicy(binding))

@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import type { PreviewSource } from "../workspace-file"
+import { createHandlePath } from "../disk"
 import { servePreview } from "./serve"
 
 type Remote = Extract<PreviewSource, { type: "remote" }>
@@ -16,7 +17,7 @@ test("artifact responses install Chromium's connection allowlist even for script
     ],
   ])
 
-  const response = await servePreview(new Request("oc-preview://site/asset.js"), grants)
+  const response = await servePreview(new Request("oc-preview://site/asset.js"), grants, createHandlePath())
   expect(response.headers.get("connection-allowlist")).toBe("(response-origin);webrtc=block")
   expect(response.headers.get("x-dns-prefetch-control")).toBe("off")
   expect(await response.text()).toBe("example")
@@ -45,6 +46,7 @@ function fixture(read: Remote["read"]) {
       servePreview(
         new Request("oc-preview://test/notes.txt", { method, headers: range ? { range } : undefined }),
         grants,
+        createHandlePath(),
       ),
   }
 }

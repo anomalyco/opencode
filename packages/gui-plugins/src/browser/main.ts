@@ -8,6 +8,7 @@ import { BrowserPane } from "./ipc"
 import { BrowserProfile } from "./profile/ipc"
 import { BrowserSites, createSitePermissions } from "./site-permissions"
 import { createSystemMedia } from "./system-media"
+import { createHandlePath } from "./disk"
 import {
   createMainPaneState,
   isLoadingPaneAttempt,
@@ -29,6 +30,8 @@ const setup: Plugin.MainSetup = (ctx) => {
   // The desktop's one browser profile, created the first time a pane or the settings page needs it. A failed creation
   // is forgotten, so the next request tries again.
   const loaded: LoadedProfile = {}
+  // Names open files by the kernel's path for them. Its native libraries are released when this instance ends.
+  const verifier = createHandlePath()
 
   const profile = () => {
     if (ctx.signal.aborted) return Promise.reject(new Error("browser.pane.unavailable"))
@@ -44,6 +47,7 @@ const setup: Plugin.MainSetup = (ctx) => {
           log: ctx.log,
           changed: () => profiles.changed(),
           cookiesChanged: () => profiles.emit("cookies", {}),
+          verifier,
         }),
       )
       .then((value) => {
@@ -95,6 +99,7 @@ const setup: Plugin.MainSetup = (ctx) => {
                   // the system is asked only after a click on Allow.
                   system: createSystemMedia(ctx.app.packaged ? undefined : (line) => ctx.log.write("info", line)),
                   toolbar: viewportToolbarAvailable(ctx.app.channel),
+                  verifier,
                   emit: (window, value) => provider.emit("event", value, window),
                 }),
               })
@@ -250,6 +255,7 @@ const setup: Plugin.MainSetup = (ctx) => {
     await disposing
     const value = loaded.value ?? (await loaded.profile?.catch(() => undefined))
     value?.dispose()
+    await verifier.close()
   })
 }
 

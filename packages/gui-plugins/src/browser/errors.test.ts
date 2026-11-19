@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { Browser } from "@opencode/plugin-browser/rpc"
-import { FileVerificationError } from "@opencode/util/file-verification"
+import { FileVerificationError } from "./file-verification"
 import { undrawableMessage } from "./capture"
 import { browserFailure, CodedError, missingArtifact, pageReports, protocolError } from "./errors"
 import { NavigationDeadlineError } from "./navigation-deadline"

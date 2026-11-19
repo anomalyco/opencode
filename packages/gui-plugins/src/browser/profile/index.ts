@@ -18,6 +18,7 @@ import { cookiesPersist } from "./probe"
 import { extensionDigest } from "./integrity"
 import { createFilterGate, filterReady, filterKind } from "./filter-startup"
 import { createPreviews } from "./previews"
+import type { HandlePath } from "../disk"
 import {
   displayName,
   extensionID,
@@ -75,9 +76,11 @@ export async function createBrowserProfile(input: {
   log: Log
   changed: () => void
   cookiesChanged: () => void
+  /** The plugin instance's file verifier, for previews and extension stylesheets. */
+  verifier: HandlePath
 }) {
   const session = electron.session.fromPartition(PARTITION)
-  const previews = createPreviews(session, input.signal)
+  const previews = createPreviews(session, input.signal, input.verifier)
   session.setUserAgent(browserUserAgent(session.getUserAgent()))
   // Each tab's download handler by its web contents ID; the pane fills it. Guarded before any extension loads or pane
   // exists, so no page of the profile ever has Electron's default handlers, which grant every permission.
@@ -201,6 +204,7 @@ export async function createBrowserProfile(input: {
     storage: input.storage,
     log: input.log,
     changed: input.changed,
+    verifier: input.verifier,
   }).catch((cause: unknown) => {
     release()
     throw cause

@@ -3,7 +3,7 @@ import { link, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
-import { previewRoot } from "@opencode/util/preview-scope"
+import { createHandlePath, previewRoot } from "./disk"
 import { resolvePreviewRequest, workspaceFile, type PreviewSource } from "./workspace-file"
 import { workspacePages } from "./workspace-pages"
 
@@ -11,6 +11,8 @@ test("external hand-off uses a live grant, its pinned root and the physical HTML
   const temp = await mkdtemp(path.join(tmpdir(), "handoff-"))
   await using cleanup = new AsyncDisposableStack()
   cleanup.defer(() => rm(temp, { recursive: true, force: true }))
+  const verifier = createHandlePath()
+  cleanup.defer(() => verifier.close())
   const root = await realpath(temp)
   const reports = path.join(root, "reports")
   const file = path.join(reports, "report.html")
@@ -19,7 +21,7 @@ test("external hand-off uses a live grant, its pinned root and the physical HTML
   await writeFile(path.join(root, "other.html"), "outside grant")
   const host = "11111111-1111-1111-1111-111111111111"
 
-  const pages = workspacePages({ grant: () => ({ host, release() {} }) }, root,
+  const pages = workspacePages({ grant: () => ({ host, release() {} }) }, verifier, root,
     { type: "local", roots: () => [root] }, new AbortController().signal)
 
   const url = await pages.load(pathToFileURL(file).href, () => {})
@@ -54,7 +56,8 @@ test("preview and reveal resolve existing regular files under the real workspace
   const alias = path.join(temp, "alias")
   const name = process.platform === "win32" ? "50% #[日本語].txt" : "50% #?[日本語].txt"
   const file = path.join(repo, name)
-  const lookup = (candidate: string, root = repo) => workspaceFile(pathToFileURL(candidate).href, [root])
+  const verifier = createHandlePath()
+  const lookup = (candidate: string, root = repo) => workspaceFile(verifier, pathToFileURL(candidate).href, [root])
 
   try {
     await Promise.all([mkdir(repo), mkdir(sibling)])
@@ -70,7 +73,7 @@ test("preview and reveal resolve existing regular files under the real workspace
     await symlink(repo, path.join(repo, "reports", "alias"), directoryLink)
     const identity = (await previewRoot(repo)).id
     const restricted = new Map<string, PreviewSource>([["scoped", {type:"local", identity, roots:()=>[repo], document:"reports/index.html", takeEntry:()=>false, denied:()=>{}}]])
-    const scoped = (path: string) => resolvePreviewRequest(pathToFileURL(path).href.replace("file://", "oc-preview://scoped"), "GET", "oc-preview://scoped", restricted, new AbortController().signal)
+    const scoped = (path: string) => resolvePreviewRequest(pathToFileURL(path).href.replace("file://", "oc-preview://scoped"), "GET", "oc-preview://scoped", restricted, new AbortController().signal, verifier)
     const control = await scoped(doc)
     expect(control?.type).toBe("local")
 
@@ -87,7 +90,7 @@ test("preview and reveal resolve existing regular files under the real workspace
     const scope = { identity, document:"index.html", takeEntry:()=>false, denied:()=>{} }
     const grants = new Map([["first", { ...scope,type: "local" as const, roots: () => [repo] }]])
     const url = pathToFileURL(file).href.replace("file://", "oc-preview://first")
-    const request = (method: string) => resolvePreviewRequest(url, method, "oc-preview://first", grants, new AbortController().signal)
+    const request = (method: string) => resolvePreviewRequest(url, method, "oc-preview://first", grants, new AbortController().signal, verifier)
 
     for (const method of ["GET", "HEAD"]) {
       const opened = await request(method)
@@ -115,7 +118,7 @@ test("preview and reveal resolve existing regular files under the real workspace
       }, read: () => Promise.reject(new Error("unexpected byte read")) }],
     ])
 
-    const resolve = (address: string, method = "GET", initiator?: string) => resolvePreviewRequest(address, method, initiator, sources, new AbortController().signal)
+    const resolve = (address: string, method = "GET", initiator?: string) => resolvePreviewRequest(address, method, initiator, sources, new AbortController().signal, verifier)
     expect(await resolve("oc-preview://remote/server-only.html")).toMatchObject({ type: "remote", size: 17 })
     expect(await resolve("oc-preview://local/server-only.html")).toBeUndefined()
     const disk = pathToFileURL(file).href.replace("file://", "oc-preview://local")
@@ -143,6 +146,7 @@ test("preview and reveal resolve existing regular files under the real workspace
       expect(await lookup(path.join(repo, "broken"))).toBeUndefined()
     }
   } finally {
+    await verifier.close()
     await rm(temp, { recursive: true, force: true })
   }
 })

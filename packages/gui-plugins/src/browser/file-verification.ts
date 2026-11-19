@@ -8,19 +8,11 @@ export class FileVerificationError extends Error {
     super(FileVerificationError.description)
   }
 
+  // SAFETY: a rejection's reason is unknown by contract; this is the boundary that classifies it, by `instanceof` only.
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- see SAFETY above
   static orMissing(error: unknown) {
     if (error instanceof FileVerificationError) throw error
+
     return undefined
   }
-}
-
-let reported = false
-
-/** Log at the origin only; a page may request hundreds of resources from the same unavailable verifier. */
-export function verificationUnavailable(cause?: unknown): never {
-  if (!reported) {
-    reported = true
-    console.warn(FileVerificationError.code, cause instanceof Error ? cause.message : FileVerificationError.description)
-  }
-  throw new FileVerificationError()
 }

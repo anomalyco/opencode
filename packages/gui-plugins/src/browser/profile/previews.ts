@@ -2,9 +2,10 @@ import type { Session } from "electron"
 import { previewScheme } from "../scheme"
 import type { PreviewSource } from "../workspace-file"
 import { servePreview } from "./serve"
-import { FileVerificationError } from "@opencode/util/file-verification"
+import { FileVerificationError } from "../file-verification"
+import type { HandlePath } from "../disk"
 
-export function createPreviews(session: Session, signal: AbortSignal) {
+export function createPreviews(session: Session, signal: AbortSignal, verifier: HandlePath) {
   signal.throwIfAborted()
   const grants = new Map<string, PreviewSource>()
   const failures = new Map<string, string>()
@@ -21,7 +22,7 @@ export function createPreviews(session: Session, signal: AbortSignal) {
 
     if (failures.get(host) === request.url) failures.delete(host)
 
-    return servePreview(request, grants).catch((error) => {
+    return servePreview(request, grants, verifier).catch((error) => {
       if (error instanceof FileVerificationError && grants.has(host)) failures.set(host, request.url)
 
       return Response.error()

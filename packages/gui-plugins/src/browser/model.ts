@@ -1,4 +1,4 @@
-import { FileVerificationError } from "@opencode/util/file-verification"
+import { FileVerificationError } from "./file-verification"
 import { builtinContext } from "@opencode/plugin/gui/builtin"
 import { FileSource } from "../file/contract"
 import { ACTIVATION_DELAY_MS } from "./activation-delay"

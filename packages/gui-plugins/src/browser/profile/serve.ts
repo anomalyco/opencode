@@ -1,19 +1,21 @@
 import { resolvePreviewRequest, type PreviewSource } from "../workspace-file"
 import { FSUtil } from "@opencode/util/fs-util"
 import type { FileHandle } from "node:fs/promises"
+import type { HandlePath } from "../disk"
 import { Readable } from "node:stream"
 import { previewRange } from "./range"
 
 export async function servePreview(
   request: Request,
   grants: ReadonlyMap<string, PreviewSource>,
+  verifier: HandlePath,
 ) {
   const host = new URL(request.url).host
   // Electron adds the Chromium initiator (not a renderer-supplied HTTP header) to protocol Requests.
   // SAFETY: Electron's Protocol.handle assigns ProtocolRequest.initiatorOrigin (string or undefined).
   const initiator = (request as Request & { initiatorOrigin?: string }).initiatorOrigin
 
-  const target = await resolvePreviewRequest(request.url, request.method, initiator, grants, request.signal)
+  const target = await resolvePreviewRequest(request.url, request.method, initiator, grants, request.signal, verifier)
 
   if (!target) return Response.error()
 

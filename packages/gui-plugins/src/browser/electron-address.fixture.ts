@@ -21,6 +21,7 @@ const server = createServer((request, response) => {
 void electron.app.whenReady().then(async () => {
   const { Browser } = await import("@opencode/plugin-browser/rpc")
   const { createBrowserPage } = await import("./chromium")
+  const { createHandlePath } = await import("./disk")
   const { refusal } = await import("./policy")
   const { createPreviews } = await import("./profile/previews")
   const { guardSession } = await import("./session-guard")
@@ -69,7 +70,8 @@ void electron.app.whenReady().then(async () => {
   const refs = { next: 0 }
   const partition = "address-fixture"
   const session = electron.session.fromPartition(partition)
-  const previews = createPreviews(session, signal)
+  const verifier = createHandlePath()
+  const previews = createPreviews(session, signal, verifier)
   guardSession(session, new Map())
   // The extension startup gate, closed on demand: it holds web navigations until its extensions answer.
   const gate = { held: false }
@@ -90,14 +92,14 @@ void electron.app.whenReady().then(async () => {
     local: true,
     signal,
     fileRoots: () => [root],
-    workspace: workspacePages(previews, root, { type: "local", roots: () => [root] }, signal),
+    workspace: workspacePages(previews, verifier, root, { type: "local", roots: () => [root] }, signal),
     previewFailure: previews.failure,
     waitForFilters: (url, stop) =>
       gate.held && /^https?:/.test(url)
         ? new Promise<void>((_resolve, reject) => stop.addEventListener("abort", () => reject(stop.reason), { once: true }))
         : undefined,
     shared: { ref: () => `e${++refs.next}` },
-    menu: { t: (key) => key, extensions: () => [], navigate: async () => undefined, open: async () => undefined },
+    menu: { t: (key) => key, extensions: () => [], navigate: async () => undefined, open: async () => undefined, verifier },
     embeds,
     sites: createSitePermissions(storage, () => undefined),
     system: createSystemMedia(),

@@ -1,4 +1,4 @@
-import { FileVerificationError } from "@opencode/util/file-verification"
+import { FileVerificationError } from "../file-verification"
 
 export default {
   "external.reveal": "Show file in folder",

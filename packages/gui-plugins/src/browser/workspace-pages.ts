@@ -1,17 +1,18 @@
 import { relative } from "node:path"
 import { homedir } from "node:os"
 import { fileURLToPath } from "node:url"
-import { openPreviewFile, previewAllowed, previewRoot } from "@opencode/util/preview-scope"
+import { openPreviewFile, previewAllowed, previewRoot, type HandlePath } from "./disk"
 import type { createPreviews } from "./profile/previews"
 import type { WorkspaceSource } from "./workspace-file"
 import { fileURLWithin } from "./policy"
 import { previewAddress, previewFile } from "./preview"
 import { remotePath } from "./remote-address"
-import { FileVerificationError } from "@opencode/util/file-verification"
+import { FileVerificationError } from "./file-verification"
 
 /** Only main's explicit load mints an origin. Page navigation and history can use but never enlarge its grant. */
 export function workspacePages(
   previews: Pick<ReturnType<typeof createPreviews>, "grant">,
+  verifier: HandlePath,
   root: string,
   source: WorkspaceSource,
   lifetime: AbortSignal,
@@ -124,7 +125,7 @@ export function workspacePages(
       const file = display && path(display)
 
       if (source.type !== "local" || !grant || !file || !/\.html?$/i.test(file)) return false
-      const opened = await openPreviewFile(root, grant.document, file, file === grant.document, grant.identity)
+      const opened = await openPreviewFile(verifier, root, grant.document, file, file === grant.document, grant.identity)
 
       if (!opened || opened === "denied") return false
       await using _handle = opened.file
@@ -145,7 +146,7 @@ export function workspacePages(
       const doc = grant.document
 
       if (source.type === "remote") return Number.isSafeInteger(await source.stat(file, signal))
-      const opened = await openPreviewFile(root, doc, file, file === doc, grant.identity).catch(FileVerificationError.orMissing)
+      const opened = await openPreviewFile(verifier, root, doc, file, file === doc, grant.identity).catch(FileVerificationError.orMissing)
 
       if (!opened || opened === "denied") return false
       await opened.file.close()

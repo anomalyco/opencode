@@ -5,6 +5,7 @@ import path from "node:path"
 import { EventEmitter } from "node:events"
 import type { Extension } from "electron"
 import { runInNewContext } from "node:vm"
+import { createHandlePath } from "../../disk/handle-path"
 import { canStyle, createStyles } from "./styles"
 import { apiManifest } from "./manifest"
 import type { ExtensionTabs } from "./tabs"
@@ -81,15 +82,16 @@ function fixture() {
  return () => release() },
   }
 
+  const verifier = createHandlePath()
   // SAFETY: this fixture implements the registry and Electron frame operations used by createStyles above.
   // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
-  const styles = createStyles(registry as unknown as ExtensionTabs, apiManifest)
+  const styles = createStyles(registry as unknown as ExtensionTabs, apiManifest, verifier)
   const extension: Extension = { id: "fixture", name: "Fixture", path: "", version: "1", url: "chrome-extension://fixture/", manifest: { permissions: ["activeTab"] } }
   const mv2 = (args: Parameters<(typeof styles.module.methods)[string]>[1]) => Promise.resolve().then(() => styles.module.methods["tabs.insertCSS"]!({ extension }, args))
   const mv3 = (target: { tabId: number; frameIds?: number[]; allFrames?: boolean }) => styles.module.methods["scripting.insertCSS"]!({ extension }, [{ target }])
   const navigate = (url: string) => { main.url = url; main.origin = new URL(url).origin; contents.emit("did-navigate") }
 
-  return { root, styles, extension, mv2, mv3, navigate, close: () => release(), forgotten, css }
+  return { root, styles, extension, mv2, mv3, navigate, close: () => release(), forgotten, css, verifier }
 }
 
 test("a toolbar grant covers only this tab and origin until cross-origin navigation, release or forget", async () => {
@@ -148,6 +150,7 @@ test("file CSS stays in the physical package and has a bounded read", async () =
     }
 
     expect(f.css).toEqual(["inside"])
+    await f.verifier.close()
   } finally { await rm(dir, { recursive: true, force: true }) }
 })
 

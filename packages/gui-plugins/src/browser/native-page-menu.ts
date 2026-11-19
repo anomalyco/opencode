@@ -6,6 +6,7 @@ import { externalAction } from "./address"
 import { pageReports } from "./errors"
 import { pageMenu, menuAddress, type MenuAction, type MenuPolicy } from "./page-menu"
 import { workspaceFile } from "./workspace-file"
+import type { HandlePath } from "./disk"
 import { extensionResource } from "./profile/extension-api/resource"
 
 export type PageMenuHost = {
@@ -13,6 +14,8 @@ export type PageMenuHost = {
   extensions: (contents: number, params: Electron.ContextMenuParams) => Electron.MenuItemConstructorOptions[]
   navigate: (action: "back" | "forward" | "reload" | "hardReload") => Promise<void>
   open: (url: string) => Promise<void>
+  /** The plugin instance's file verifier, for a workspace file the menu opens. */
+  verifier: HandlePath
 }
 
 /** The only native menu on a pane view. Menu commands stay in main; the page supplies neither commands nor paths. */
@@ -103,7 +106,7 @@ export function attachPageMenu(
 
       if (!url) return input.failed()
 
-      if (url.startsWith("file:") && !(await workspaceFile(url, input.policy.fileRoots ?? []))) return input.failed()
+      if (url.startsWith("file:") && !(await workspaceFile(input.verifier, url, input.policy.fileRoots ?? []))) return input.failed()
 
       if (!current()) return
 

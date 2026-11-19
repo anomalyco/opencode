@@ -20,10 +20,6 @@
     "./*": "./src/*.ts"
   },
   "imports": {
-    "#handle-path": {
-      "workerd": "./src/handle-path.workerd.ts",
-      "default": "./src/handle-path.ts"
-    },
     "#global-roots": {
       "workerd": "./src/global-roots.workerd.ts",
       "default": "./src/global-roots.ts"
@@ -60,7 +56,6 @@
     "@opentelemetry/sdk-trace-node": "2.8.0",
     "cross-spawn": "catalog:",
     "effect": "catalog:",
-    "ffi-rs": "1.3.7",
     "glob": "13.0.5",
     "mime-types": "3.0.2",
     "minimatch": "10.2.5",

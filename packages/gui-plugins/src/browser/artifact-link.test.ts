@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { artifactAddress, artifactLink, artifactResource, artifactWebURL } from "./artifact-link"
+import { createHandlePath } from "./disk"
 import { resolvePreviewRequest, type PreviewSource } from "./workspace-file"
 
 const base = "https://example.test:444/mounted"
@@ -52,7 +53,7 @@ test("no foreign origin, path or method can choose where the grant sends credent
   ])
 
   const request = (path: string, method = "GET", origin: string | undefined = "oc-preview://first") =>
-    resolvePreviewRequest(`oc-preview://first/${path}`, method, origin, grants, AbortSignal.timeout(1000))
+    resolvePreviewRequest(`oc-preview://first/${path}`, method, origin, grants, AbortSignal.timeout(1000), createHandlePath())
 
   expect(await request("")).toMatchObject({ route: `${view}/` })
   expect(await request("assets/app.js?location[directory]=other", "HEAD")).toMatchObject({

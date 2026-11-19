@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { FileVerificationError } from "@opencode/util/file-verification"
+import { FileVerificationError } from "./file-verification"
 import { commandFailure, loadFailure } from "./failure"
 import en from "./i18n/en"
 

@@ -12,6 +12,7 @@ import { createPermissions } from "./permissions"
 import { createPopups, type PopupPlacement } from "./popup"
 import { createStorageSync } from "./storage-sync"
 import { createStyles } from "./styles"
+import type { HandlePath } from "../../disk/handle-path"
 import { createStubs } from "./stubs"
 import { createExtensionTabs } from "./tabs"
 import { createWebNavigation } from "./web-navigation"
@@ -33,13 +34,14 @@ export async function createExtensionApis(input: {
   storage: Storage
   log: Log
   changed: () => void
+  verifier: HandlePath
 }) {
   const bus: Bus = {}
   const emit: Emit = (name, args, extension) => bus.emit?.(name, args, extension)
   const extensions = () => input.session.extensions.getAllExtensions()
   const manifest = createManifests()
   const tabs = createExtensionTabs({ emit, extensions, manifest })
-  const styles = createStyles(tabs, manifest)
+  const styles = createStyles(tabs, manifest, input.verifier)
   const menus = createContextMenus({ tabs, emit, extensions, manifest, storage: input.storage, grant: styles.grant })
   const popups = createPopups({ partition: input.partition, tabs })
 

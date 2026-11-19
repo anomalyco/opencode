@@ -3,6 +3,7 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator"
 import { remotePreview } from "./remote-preview"
 import { workspaceFileURL } from "./link"
 import { previewAddress } from "./preview"
+import { createHandlePath } from "./disk"
 import { resolvePreviewRequest, type PreviewSource } from "./workspace-file"
 
 // Main uses the host HTTP stack, not the DOM's CORS preflight implementation.
@@ -92,7 +93,7 @@ test("the authenticated read under a server base path names exactly the file val
       const url = previewAddress(workspaceFileURL("/work", path, "ses_x"), "grant", [], source.prefix)
 
       const file =
-        url && (await resolvePreviewRequest(`${url}?ignored=yes`, "GET", undefined, grants, controller.signal))
+        url && (await resolvePreviewRequest(`${url}?ignored=yes`, "GET", undefined, grants, controller.signal, createHandlePath()))
 
       if (!file || file.type !== "remote") throw new Error("expected remote file")
       expect(await (await file.read(file.path, undefined, controller.signal)).text()).toBe("x")

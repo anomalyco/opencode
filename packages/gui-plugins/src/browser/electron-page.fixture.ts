@@ -39,6 +39,7 @@ void electron.app.whenReady().then(async () => {
   const { Schema } = await import("effect")
   const { Browser } = await import("@opencode/plugin-browser/rpc")
   const { createBrowserPage } = await import("./chromium")
+  const { createHandlePath } = await import("./disk")
   const { createBrowserPane } = await import("./pane")
   const { RefsStore } = await import("./refs")
   const { activityOwner } = await import("./policy")
@@ -48,6 +49,7 @@ void electron.app.whenReady().then(async () => {
   const address = server.address()
   const origin = `http://127.0.0.1:${address instanceof Object ? address.port : 0}`
   const win = new electron.BrowserWindow({ show: false, width: 800, height: 600 })
+  const verifier = createHandlePath()
   const values = new Map<string, unknown>()
 
   // SAFETY: the site permissions, the saved tabs and the reserved refs read only `store` and its `value` and `set`.
@@ -103,7 +105,7 @@ void electron.app.whenReady().then(async () => {
     local: true,
     signal,
     shared: { ref: () => `e${++refs.next}` },
-    menu: { t: (key) => key, extensions: () => [], navigate: async () => undefined, open: async () => undefined },
+    menu: { t: (key) => key, extensions: () => [], navigate: async () => undefined, open: async () => undefined, verifier },
     embeds,
     sites,
     system,
@@ -217,6 +219,7 @@ void electron.app.whenReady().then(async () => {
     profile,
     sites,
     system,
+    verifier,
     emit: () => undefined,
   })
 

@@ -3,7 +3,7 @@
 // "Request failed": a code this file does not know gets a sentence from what was being attempted, and is reported
 // as unknown so the model logs it.
 import type { Browser } from "@opencode/plugin-browser/rpc"
-import { FileVerificationError } from "@opencode/util/file-verification"
+import { FileVerificationError } from "./file-verification"
 import type { RefusalNotice } from "./ipc"
 
 /**

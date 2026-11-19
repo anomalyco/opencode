@@ -2,7 +2,8 @@ import { once } from "node:events"
 import { realpath } from "node:fs/promises"
 import type { Extension, WebFrameMain } from "electron"
 import { Schema } from "effect"
-import { openContained } from "@opencode/util/contained-file"
+import { openContained } from "../../disk/contained-file"
+import type { HandlePath } from "../../disk/handle-path"
 import { method, type ApiModule, type ExtensionContext } from "./api"
 import { matchesHost } from "./match-pattern"
 import type { Manifests } from "./manifest"
@@ -38,7 +39,7 @@ function publicTop(top: string, appURL: string) {
   return url && /^https?:$/.test(url.protocol) && url.origin !== URL.parse(appURL)?.origin
 }
 
-export function createStyles(tabs: ExtensionTabs, manifest: Manifests) {
+export function createStyles(tabs: ExtensionTabs, manifest: Manifests, verifier: HandlePath) {
   const grants = new Map<number, Map<string, string>>()
   const owners = new Map<string, AbortController>()
 
@@ -108,7 +109,7 @@ export function createStyles(tabs: ExtensionTabs, manifest: Manifests) {
     const targets = frames.filter((f): f is WebFrameMain => !!f && allowed(f))
 
     if (!targets.length) throw new Error(denied)
-    const css = details.code ?? await packageCSS(extension, details.file ?? "")
+    const css = details.code ?? await packageCSS(verifier, extension, details.file ?? "")
 
     const results = await Promise.allSettled(targets.map(async frame => {
       if (!allowed(frame)) throw new Error("The target frame is no longer available.")
@@ -201,11 +202,11 @@ export function createStyles(tabs: ExtensionTabs, manifest: Manifests) {
   return { module, grant }
 }
 
-async function packageCSS(extension: Extension, resource: string) {
+async function packageCSS(verifier: HandlePath, extension: Extension, resource: string) {
   const path = resource.replace(/^\/(?!\/)/, "")
 
   if (!path || /[\\:%?#]/.test(path)) throw new Error("Invalid extension stylesheet path.")
-  const opened = await realpath(extension.path).then(root => openContained(root, path)).catch(() => undefined)
+  const opened = await realpath(extension.path).then(root => openContained(verifier, root, path)).catch(() => undefined)
 
   if (!opened) throw new Error(`Could not load file: '${resource}'.`)
 
