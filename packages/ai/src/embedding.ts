@@ -5,7 +5,7 @@ import { tryRequest } from "./media-model.js"
 import {
   type AIError,
   type BaseRequest,
-  type HttpOptions,
+  type TransportOptions,
   ModelID,
   ProviderID,
   ProviderMetadata,
@@ -38,7 +38,10 @@ export type EmbeddingOptions = Record<string, unknown>
 /** What an embedding model's route does; `EmbeddingRoute.make(...).model(...)` builds one from a protocol. */
 export interface EmbeddingModelRoute<Options extends EmbeddingOptions = EmbeddingOptions> {
   readonly id: string
-  generate(request: EmbeddingRequest<EmbeddingModel<Options>>, execute: Execute): Effect.Effect<EmbeddingResponse, AIError>
+  generate(
+    request: EmbeddingRequest<EmbeddingModel<Options>>,
+    execute: Execute,
+  ): Effect.Effect<EmbeddingResponse, AIError>
 }
 
 export class EmbeddingModel<Options extends EmbeddingOptions = EmbeddingOptions> {
@@ -46,7 +49,8 @@ export class EmbeddingModel<Options extends EmbeddingOptions = EmbeddingOptions>
   readonly id: ModelID
   readonly provider: ProviderID
   readonly route: EmbeddingModelRoute<Options>
-  readonly http?: HttpOptions
+  /** Deployment headers, timeouts and `http` overlays, below each request's own. */
+  readonly transport?: TransportOptions
   /** Defaults under each request's `providerOptions`, such as options a provider package reads from its settings. */
   readonly providerOptions?: ProviderOptions
 
@@ -54,7 +58,7 @@ export class EmbeddingModel<Options extends EmbeddingOptions = EmbeddingOptions>
     this.id = input.id
     this.provider = input.provider
     this.route = input.route
-    this.http = input.http
+    this.transport = input.transport
     this.providerOptions = input.providerOptions
   }
 
@@ -72,7 +76,7 @@ export namespace EmbeddingModel {
     readonly id: ModelID
     readonly provider: ProviderID
     readonly route: EmbeddingModelRoute<Options>
-    readonly http?: HttpOptions
+    readonly transport?: TransportOptions
     readonly providerOptions?: ProviderOptions
   }
 

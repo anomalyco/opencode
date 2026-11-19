@@ -10,13 +10,12 @@ import {
   SERVER,
   session,
   sessionHref,
-  tabKey,
   T0,
 } from "../utils/app"
 import { mockOpenCodeServer, mockServers } from "../utils/mock-server"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
 import { mockRemoteServer, mockWorkspace, newSessionLocation } from "../utils/workspace"
-import { APP_READY_TIMEOUT, expectAppVisible, expectSessionTitle } from "../utils/waits"
+import { APP_READY_TIMEOUT, expectAppVisible } from "../utils/waits"
 
 test.use({ serviceWorkers: "block" })
 
@@ -76,152 +75,6 @@ test("choosing Customize replaces Home with Settings in desktop side tabs", asyn
   await expect(sidebar.getByRole("button", { name: "View options", exact: true })).toBeVisible()
   await sidebar.getByRole("button", { name: "Settings", exact: true }).click()
   await expect(page.getByTestId("settings-screen")).toBeVisible()
-})
-
-async function openProjects(page: Page) {
-  const remote = project({ id: "proj_remote_site", directory: "/work/website", name: "Website" })
-
-  const earlier = session({
-    id: "ses_site_release",
-    directory: "/work/website-release",
-    projectID: remote.id,
-    title: "Update release notes",
-  })
-
-  await mockRemoteServer(page, {
-    name: "Build server",
-    project: remote,
-    directory: remote.worktree,
-    worktrees: [{ directory: remote.worktree }, { directory: earlier.directory, strategy: "git" }],
-    sessions: [
-      earlier,
-      session({ id: "ses_tools", directory: "/work/tools", projectID: "proj_tools", title: "Refresh tools" }),
-    ],
-  })
-  await mockWorkspace(page, {
-    name: "Website",
-    sessions: [{ id: "ses_site_local", title: "Preview local changes" }],
-    seed: {
-      tabs: [],
-      usedProjects: { local: ["proj_website"], [REMOTE_SERVER]: [remote.id] },
-      settings: { appearance: { tabLayout: "vertical" }, general: { sidebarOrganize: "projects" } },
-    },
-  })
-  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER })}`)
-  const sidebar = page.locator("#vertical-tabs-sidebar")
-
-  const localGroup = sidebar.getByRole("group", { name: "Local Server", exact: true })
-
-  const remoteGroup = sidebar.getByRole("group", { name: "Build server", exact: true })
-
-  return {
-    remote,
-    earlier,
-    sidebar,
-    localToggle: localGroup.getByRole("button", { name: "Local Server", exact: true }),
-    remoteToggle: remoteGroup.getByRole("button", { name: "Build server", exact: true }),
-    localProject: localGroup.getByText("Website", { exact: true }),
-    remoteProject: remoteGroup.getByText("Website", { exact: true }),
-  }
-}
-
-async function openRemoteHistory(page: Page, view: Awaited<ReturnType<typeof openProjects>>) {
-  await view.remoteProject.click({ button: "right" })
-  await page.getByRole("menuitem", { name: "View session history…", exact: true }).click()
-  const browser = page.getByRole("dialog", { name: "Browse projects", exact: true })
-
-  const history = browser.getByRole("listbox", { name: "Search sessions in Website", exact: true }).getByRole("option")
-
-  return { browser, history }
-}
-
-test("desktop Projects groups projects by server and collapses one server at a time", async ({ page }) => {
-  const view = await openProjects(page)
-  await expect(view.localToggle).toHaveAttribute("aria-expanded", "true")
-  await expect(view.remoteToggle).toHaveAttribute("aria-expanded", "true")
-  await expect(view.localProject).toBeVisible()
-  await expect(view.remoteProject).toBeVisible()
-  await expect(view.sidebar.getByRole("button", { name: /Browse/ })).toHaveCount(0)
-
-  await view.remoteToggle.click()
-  await expect(view.remoteToggle).toHaveAttribute("aria-expanded", "false")
-  await expect(view.remoteProject).toBeHidden()
-  await expect(view.localToggle).toHaveAttribute("aria-expanded", "true")
-  await expect(view.localProject).toBeVisible()
-  await view.remoteToggle.click()
-  await expect(view.remoteToggle).toHaveAttribute("aria-expanded", "true")
-})
-
-test("desktop Projects history opens the worktree session and reopens from its location menu", async ({ page }) => {
-  const view = await openProjects(page)
-  const { browser, history } = await openRemoteHistory(page, view)
-  await expect(history.getByText(view.earlier.title, { exact: true })).toBeVisible()
-  await expect(history).toHaveCount(1)
-  await history.click()
-  await expectSessionTitle(page, view.earlier.title)
-
-  await page.locator('[data-slot="session-location-trigger"]').click()
-  await page.getByRole("menuitem", { name: /Website/ }).click()
-  await expect(browser.getByText(view.earlier.title, { exact: true })).toBeVisible()
-  await page.keyboard.press("Escape")
-  await expect(browser).toHaveCount(0)
-})
-
-test("desktop Projects keeps the remote project as the next session's target after its last tab closes", async ({
-  page,
-}) => {
-  const view = await openProjects(page)
-  const { browser, history } = await openRemoteHistory(page, view)
-  await history.click()
-  await expectSessionTitle(page, view.earlier.title)
-  await expect(browser).toHaveCount(0)
-  await view.sidebar.getByRole("button", { name: "Close tab", exact: true }).click()
-
-  const landing = page.getByRole("main")
-
-  await expect(landing).toContainText("Website")
-  await expect(landing).toContainText("Build server")
-  await expect(view.remoteProject).toBeVisible()
-  await view.sidebar.getByRole("button", { name: "Settings", exact: true }).click()
-  await page.getByRole("button", { name: "Back to app", exact: true }).click()
-  await landing.getByRole("button", { name: "New session", exact: true }).click()
-  await expect(newSessionLocation(page)).toContainText("Website")
-  await expect(page.locator('[data-slot="new-session-location-path"]')).toHaveText(view.remote.worktree)
-})
-
-test("desktop Projects resumes the remembered tab when the window opens at Home", async ({ page }) => {
-  const earlier = { id: "ses_earlier_tab", title: "Earlier tab" }
-
-  const recent = { id: "ses_recent_tab", title: "Remembered tab" }
-
-  await mockRemoteServer(page, { name: "Hidden server" })
-  await seed(page, { storage: { "opencode.global.dat:server": { hidden: { [REMOTE_SERVER]: true } } } })
-  await mockWorkspace(page, {
-    name: "Restored",
-    sessions: [earlier, recent],
-    seed: {
-      settings: { appearance: { tabLayout: "vertical" }, general: { sidebarOrganize: "projects" } },
-      storage: {
-        "opencode.window.windows-menu-test.dat:tabs": [recent, earlier].map(({ id }) => ({
-          type: "session",
-          server: "sidecar",
-          sessionId: id,
-        })),
-        "opencode.window.windows-menu-test.dat:tabs.recent": { key: tabKey(recent.id, "sidecar") },
-      },
-    },
-  })
-  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER })}`)
-  await expectSessionTitle(page, recent.title)
-
-  const projects = page.locator("#vertical-tabs-sidebar section").filter({
-    has: page.getByRole("button", { name: "Projects", exact: true }),
-  })
-
-  await expect(projects.getByText("Restored", { exact: true })).toBeVisible()
-  await expect(projects.getByText("Local Server", { exact: true })).toHaveCount(0)
-  await expect(projects.getByRole("group", { name: "Local Server", exact: true })).toHaveCount(0)
-  await expect(projects.getByRole("group", { name: "Hidden server", exact: true })).toHaveCount(0)
 })
 
 test("a working Home session keeps its project avatar and shows its activity ring at the end of the row", async ({

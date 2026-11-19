@@ -138,9 +138,11 @@ const readLayer = (imageLayer: Layer.Layer<Image.Service>) =>
     config,
     imageLayer,
   )
-const it = testEffect(readLayer(imageLayer))
+const noFlagOverrides = Layer.succeed(Flag.Overrides, undefined)
+const it = testEffect(readLayer(imageLayer).pipe(Layer.provide(noFlagOverrides)))
+const codeModeIt = testEffect(readLayer(imageLayer).pipe(Layer.provide(Layer.succeed(Flag.Overrides, "full_codemode"))))
 // Real-file tests provide their own layer per temp folder.
-const live = testEffect(Layer.empty)
+const live = testEffect(noFlagOverrides)
 // Reads through the real filesystem with the location at `directory`.
 const readReal = (directory: string, file: string) =>
   Effect.gen(function* () {
@@ -173,7 +175,7 @@ const readMissing = (directory: string, file: string) =>
   readReal(directory, file).pipe(Effect.map((result) => result.error?.message))
 const write = (file: string) =>
   Effect.promise(() => fs.mkdir(path.dirname(file), { recursive: true }).then(() => fs.writeFile(file, "x\n")))
-const itWithoutResizer = testEffect(readLayer(unavailableImage))
+const itWithoutResizer = testEffect(readLayer(unavailableImage).pipe(Layer.provide(noFlagOverrides)))
 const sessionID = Session.ID.make("ses_read_tool_test")
 
 describe("ReadTool", () => {
@@ -195,7 +197,9 @@ describe("ReadTool", () => {
     Effect.gen(function* () {
       const registry = yield* Tool.Service
 
-      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["read", "execute"])
+      const direct = yield* toolDefinitions(registry)
+      expect(direct.map((tool) => tool.name)).toEqual(["read", "execute"])
+      expect(direct[0]?.description).toContain("Each text line is prefixed by its 1-based line number")
       expect(
         (yield* toolDefinitions(registry, [{ action: "read", resource: "*", effect: "deny" }])).map(
           (tool) => tool.name,
@@ -219,6 +223,25 @@ describe("ReadTool", () => {
         },
       ])
       expect(listCalls).toEqual([])
+    }),
+  )
+
+  codeModeIt.effect("places read in Code Mode with full_codemode unless demoted to direct", () =>
+    Effect.gen(function* () {
+      const registry = yield* Tool.Service
+      const inCodeMode = yield* registry.snapshot()
+      expect(inCodeMode.definitions.map((tool) => tool.name)).toEqual(["execute"])
+      expect(inCodeMode.codeModeCatalog?.tools[0]).toMatchObject({
+        type: "tool",
+        name: "read",
+        pinned: true,
+      })
+      expect(inCodeMode.codeModeCatalog?.tools[0]?.description).toContain(
+        "Reading an image or PDF automatically attaches it to the execute result",
+      )
+      const demoted = yield* registry.snapshot(undefined, { tools: { direct: new Set(["read"]) } })
+      expect(demoted.definitions.map((tool) => tool.name)).toEqual(["read", "execute"])
+      expect(demoted.definitions[0]?.description).toContain("Each text line is prefixed by its 1-based line number")
     }),
   )
 
