@@ -170,10 +170,21 @@ impl Local {
 
     pub fn sync(&self, changes: &Changes) {
         let location = self.tui_location();
-        if self.state.borrow().location.as_ref() != Some(&location) {
-            self.relocate(location);
+        let relocated = self.state.borrow().location.as_ref() != Some(&location);
+        if relocated {
+            self.relocate(location.clone());
         } else if changes.all || changes.location(&location) {
             self.notify();
+        }
+        // A connection can open after these reads: the server does not replay what it sent before the
+        // subscription, and the model list it answers before its providers settle is empty with no later event
+        // delivered (the model route says so). Every connection marks every change, so read them again, as a
+        // reconnect needs too. `relocate` has just read them.
+        if changes.all && !relocated {
+            for catalog in CATALOGS {
+                self.data.catalog_invalidate(catalog, Some(&location));
+                self.read(catalog, &location);
+            }
         }
         let sessions: Vec<SessionID> = if changes.all {
             self.state

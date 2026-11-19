@@ -31,6 +31,8 @@ struct Server {
     routes: Value,
     seen: Mutex<Vec<(String, String)>>,
     writes: Mutex<Vec<(String, Value)>>,
+    /// Answers `/api/model` with an empty list, as the server does before its providers settle.
+    models_empty: std::sync::atomic::AtomicBool,
 }
 
 impl Server {
@@ -38,7 +40,12 @@ impl Server {
         let text = std::fs::read_to_string(fixtures_dir().join("E.16/server.json")).unwrap();
         let mut server: Value = serde_json::from_str(&text).unwrap();
         shift_resets(&mut server["routes"]);
-        Arc::new(Self { routes: server["routes"].clone(), seen: Mutex::default(), writes: Mutex::default() })
+        Arc::new(Self {
+            routes: server["routes"].clone(),
+            seen: Mutex::default(),
+            writes: Mutex::default(),
+            models_empty: std::sync::atomic::AtomicBool::new(false),
+        })
     }
 
     fn seen(&self) -> Vec<(String, String)> {
@@ -74,6 +81,9 @@ impl Transport for Server {
                 } }),
             ),
             ("GET", "/api/config") => (200, json!([])),
+            ("GET", "/api/model") if self.models_empty.load(std::sync::atomic::Ordering::SeqCst) => {
+                (200, json!({ "location": location, "data": [] }))
+            }
             ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
             ("GET", path) if self.routes.get(path).is_some() => {
                 (200, json!({ "location": location, "data": self.routes[path] }))
@@ -122,12 +132,15 @@ struct Kit {
 }
 
 fn kit(width: u16, height: u16) -> Kit {
+    kit_with(width, height, Server::new())
+}
+
+fn kit_with(width: u16, height: u16, fixture: Arc<Server>) -> Kit {
     let app = support::dark_app(width, height);
     let keymap = Rc::new(DialogKeymap::new(Keybinds::defaults(), Options::default()));
     route_keys(&app, keymap.clone());
     let toasts = Toasts::new(&app, theme(), &app.root());
     let dialogs = Dialogs::new(&app, keymap, theme());
-    let fixture = Server::new();
     let client = Client::with_transport("http://opencode.local", fixture.clone()).unwrap();
     let state = state();
     let data = Data::with_runtime(
@@ -162,6 +175,26 @@ impl Kit {
         let found = self.app.wait_until(WAIT, || self.app.text().contains(text));
         assert!(found, "{text:?} never showed:\n{}", self.app.text());
     }
+}
+
+#[test]
+fn a_connection_reads_the_catalogs_again_after_the_server_answered_before_its_providers() {
+    // The model route lists "the current snapshot", which may precede the providers' settlement; the
+    // `model.updated` that announces the settlement is not replayed to a subscription that opens after it. The
+    // client reads the catalogs before the stream connects, so the connection itself reads them again.
+    let fixture = Server::new();
+    fixture.models_empty.store(true, std::sync::atomic::Ordering::SeqCst);
+    let kit = kit_with(90, 34, fixture.clone());
+    assert_eq!(kit.local.models(|models| models.len()), 0);
+    assert!(kit.local.current().is_none());
+
+    fixture.models_empty.store(false, std::sync::atomic::Ordering::SeqCst);
+    kit.local.sync(&opencode_store::Changes::everything());
+    let loaded = kit.app.wait_until(WAIT, || !kit.local.models(|models| models.is_empty()));
+    assert!(loaded, "the catalogs were not read again: {:?}", fixture.seen());
+    let reads =
+        fixture.seen().iter().filter(|(method, path)| method == "GET" && path.starts_with("/api/model")).count();
+    assert_eq!(reads, 2, "{:?}", fixture.seen());
 }
 
 #[test]
