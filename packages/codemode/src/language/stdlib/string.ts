@@ -18,7 +18,7 @@ import {
   type Value,
 } from "../runtime/objects.js"
 import { containsOpaqueReference, typeofValue } from "../runtime/references.js"
-import { isSupportedCallback, requireCallback, withPrimitives } from "../runtime/callback.js"
+import { isSupportedCallback, requireCallback, withPrimitives, withReads } from "../runtime/callback.js"
 import type { Interpreter } from "../runtime/interpreter.js"
 import { matchToValue, withHostRegex } from "./regexp.js"
 import { coerce } from "./value.js"
@@ -85,10 +85,19 @@ const replaceWithCallback = <R>(
   )
   const last = matches.at(-1)
   const rest = value.slice(last === undefined ? 0 : last.offset + last.match.length)
-  return new Invoke(ctx.prelude.fn("replaceWith"), undefined, [new Arr(builtins.Array, pieces), rest, callback], undefined)
+  return new Invoke(
+    ctx.prelude.fn("replaceWith"),
+    undefined,
+    [new Arr(builtins.Array, pieces), rest, callback],
+    undefined,
+  )
 }
 
 type Match = { readonly match: string; readonly offset: number; readonly args: Array<Value> }
+
+// The options Intl.Collator reads; the boolean ones take an object as true instead of converting it.
+const collatorOptions = ["usage", "localeMatcher", "collation", "numeric", "caseFirst", "sensitivity", "ignorePunctuation"]
+const collatorFlags = new Set(["numeric", "ignorePunctuation"])
 
 export const stringGlobal = <R>(ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
@@ -108,27 +117,28 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
     [
       "raw",
       1,
-      (_, args) => {
-        const template = args[0]
-        const raw = template instanceof Obj ? get(template, "raw") : undefined
-        if (!(raw instanceof Obj)) throw typeError("String.raw expects a template object with a raw array.")
-        const count = Math.max(0, coerceToInteger(get(raw, "length")))
-        checkArrayLength(count)
-        // Each literal is followed by its substitution, except the last literal, or when substitutions run out.
-        const parts = Array.from({ length: count }, (_, index) =>
-          index + 1 < count && index + 1 < args.length ? [get(raw, index), args[index + 1]] : [get(raw, index)],
-        ).flat()
-        return withPrimitives(
-          "string",
-          parts,
-          (strings) => {
-            const output = strings.map(coerceToString).join("")
-            checkStringLength(output.length)
-            return output
-          },
-          true,
-        )
-      },
+      (_, args) =>
+        withReads(() => {
+          const template = args[0]
+          const raw = template instanceof Obj ? get(template, "raw") : undefined
+          if (!(raw instanceof Obj)) throw typeError("String.raw expects a template object with a raw array.")
+          const count = Math.max(0, coerceToInteger(get(raw, "length")))
+          checkArrayLength(count)
+          // Each literal is followed by its substitution, except the last literal, or when substitutions run out.
+          const parts = Array.from({ length: count }, (_, index) =>
+            index + 1 < count && index + 1 < args.length ? [get(raw, index), args[index + 1]] : [get(raw, index)],
+          ).flat()
+          return withPrimitives(
+            "string",
+            parts,
+            (strings) => {
+              const output = strings.map(coerceToString).join("")
+              checkStringLength(output.length)
+              return output
+            },
+            true,
+          )
+        }),
     ],
   ])
 
@@ -227,8 +237,39 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
     simple("trimLeft", 0, (value) => value.trimStart()),
     simple("trimEnd", 0, (value) => value.trimEnd()),
     simple("trimRight", 0, (value) => value.trimEnd()),
-    // Locale/options are deliberately unsupported; comparison uses the host default locale.
-    simple("localeCompare", 1, (value, args) => value.localeCompare(str("localeCompare", args, 0)), ["string"]),
+    simple("localeCompare", 1, (value, args) => {
+      const that = str("localeCompare", args, 0)
+      if (args[1] === undefined && args[2] === undefined) return value.localeCompare(that)
+      const locales = args[1]
+      const options = args[2]
+      if (locales === null || options === null) {
+        throw typeError("String.localeCompare cannot take null locales or options; pass undefined for the defaults.")
+      }
+      return withReads(() => {
+        // The host collator reads a locale list and these options; objects among them convert to strings first.
+        const length = locales instanceof Obj ? Math.max(0, coerceToInteger(get(locales, "length"))) : 0
+        checkArrayLength(length)
+        const list = locales instanceof Obj ? Array.from({ length }, (_, index) => get(locales, index)) : undefined
+        const read = options instanceof Obj ? collatorOptions.map((key) => get(options, key)) : []
+        const flags = read.map((option, index) =>
+          collatorFlags.has(collatorOptions[index]!) && option instanceof Obj ? true : option,
+        )
+        return withPrimitives("string", [...(list ?? []), ...flags], (primitives) => {
+          const hostLocales = list === undefined ? locales : primitives.slice(0, list.length)
+          const hostOptions =
+            options instanceof Obj
+              ? Object.fromEntries(collatorOptions.map((key, index) => [key, primitives[(list?.length ?? 0) + index]]))
+              : options
+          try {
+            return value.localeCompare(that, hostLocales as string | Array<string>, hostOptions as Intl.CollatorOptions)
+          } catch (error) {
+            if (error instanceof RangeError) throw rangeError(`String.localeCompare: ${error.message}`)
+            if (error instanceof TypeError) throw typeError(`String.localeCompare: ${error.message}`)
+            throw error
+          }
+        })
+      })
+    }, ["string"]),
     simple(
       "normalize",
       0,

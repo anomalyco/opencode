@@ -31,7 +31,9 @@ const POLL_RETRY_WEBSOCKET = Duration.minutes(10)
 export const WINDOW_LIMIT = 5
 export const PROMPT_LIMIT = 20
 // The stored wakes since the prompt and their times; a count stored before the window reads as none.
-const decodeWakes = Schema.decodeUnknownOption(Schema.Struct({ count: Schema.Number, at: Schema.Array(Schema.Number) }))
+const decodeWakes = Schema.decodeUnknownOption(
+  Schema.Struct({ count: Schema.Number, at: Schema.Array(Schema.Number), last: Schema.optional(Schema.Number) }),
+)
 const DELETED_RETENTION = Duration.hours(72)
 const namespace = "console_watch"
 
@@ -114,6 +116,7 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
   let current: { readonly member: Member; readonly lease: Scope.Closeable } | undefined
   const streakKey = (sessionID: string) => `watch-streak:${sessionID}`
   const deletedKey = (sessionID: string) => `watch-deleted:${sessionID}`
+  const unattendedKey = (watchID: string) => `watch-unattended:${watchID}`
 
   const wake = Effect.fnUntraced(function* (member: Member, sessionID: Session.ID, events: ReadonlyArray<WatchEvent>) {
     const ids = events.map((event) => event.id)
@@ -128,15 +131,20 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
       return ids
     }
     const now = yield* Clock.currentTimeMillis
-    // The member's own words count from zero, as a prompt does.
+    // The member's own words count from zero, as a prompt does, and so does an update after 30 minutes without any.
     const own = events.some((event) => event.actor.self === true && !event.actor.bot)
-    const kept = own ? undefined : Option.getOrUndefined(decodeWakes(yield* ctx.storage.get(streakKey(sessionID))))
+    const stored = Option.getOrUndefined(decodeWakes(yield* ctx.storage.get(streakKey(sessionID))))
+    const kept = own || now - (stored?.last ?? now) >= Duration.toMillis(Duration.minutes(30)) ? undefined : stored
     const recent = (kept?.at ?? []).filter((at) => now - at < Duration.toMillis(Duration.minutes(10)))
     const count = kept?.count ?? 0
+    // Updates from watches made unattended, such as a router's, skip the 20 since the prompt but never the window.
+    const unattended = (yield* Effect.forEach(new Set(events.map((event) => event.watchID)), (id) =>
+      ctx.storage.get(unattendedKey(id)),
+    )).every((value) => value === true)
     // CI runs pace themselves, so their updates count toward 20 since the prompt but not the 10-minute window.
-    const ci = events.every((event) => event.kind === "workflow_run" || event.kind === "workflow_job")
-    const resume = (ci || recent.length < WINDOW_LIMIT) && count < PROMPT_LIMIT
-    const paused = !resume || (!ci && recent.length + 1 >= WINDOW_LIMIT) || count + 1 >= PROMPT_LIMIT
+    const ci = !unattended && events.every((event) => event.kind === "workflow_run" || event.kind === "workflow_job")
+    const resume = (ci || recent.length < WINDOW_LIMIT) && (unattended || count < PROMPT_LIMIT)
+    const paused = !resume || (!ci && recent.length + 1 >= WINDOW_LIMIT) || (!unattended && count + 1 >= PROMPT_LIMIT)
     // The same events delivered again, after a lost acknowledgement, conflict with the message they already made:
     // they were delivered, so they're acknowledged without another wake.
     const delivered = yield* ctx.session
@@ -155,8 +163,13 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
         Effect.as(true),
         Effect.catchIf(Predicate.isTagged("Session.SyntheticConflictError"), () => Effect.succeed(false)),
       )
-    if (delivered && resume)
-      yield* ctx.storage.set(streakKey(sessionID), { count: count + 1, at: ci ? recent : [...recent, now] })
+    // A held update counts toward the 30 minutes too; a replay conflicts above and counts toward nothing.
+    if (delivered)
+      yield* ctx.storage.set(streakKey(sessionID), {
+        count: resume ? count + 1 : count,
+        at: ci || !resume ? recent : [...recent, now],
+        last: now,
+      })
     return ids
   })
 
@@ -280,6 +293,12 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
               description: "How long to watch from now, in minutes; the event type's own default otherwise",
             }),
           ),
+          unattended: Schema.optional(
+            Schema.Boolean.annotate({
+              description:
+                "For a session whose job is to keep handling a stream unattended, such as a router: its updates keep waking the session past 20 since the user's last prompt, though never more than 5 in 10 minutes",
+            }),
+          ),
         }),
         output: Watch,
         options: { namespace, codemode: { pinned: true } },
@@ -300,6 +319,8 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
               ...body,
               ...(input.minutes === undefined ? {} : { minutes: input.minutes }),
             })
+            // Wake policy is the client's, so Console never hears of it; the mark goes quiet with the watch.
+            if (input.unattended) yield* ctx.storage.set(unattendedKey(watch.id), true)
             return {
               output: watch,
               content: `Watching ${label(watch)} until ${watch.expiresAt} (${watch.id}). This session wakes when it changes.`,

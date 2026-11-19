@@ -1,4 +1,3 @@
-import { useDialog } from "@opencode/ui/context/dialog"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Icon } from "@opencode/ui/icon"
 import { Keybind } from "@opencode/ui/keybind"
@@ -14,7 +13,6 @@ import {
   ProjectAvatar,
 } from "@opencode/ui/project-avatar"
 import { Schema } from "effect"
-import { createPresence } from "@/runtime/presence"
 import { Composer } from "@/composer/composer"
 import { ComposerDropzone } from "@/composer/dropzone"
 import type { ComposerModel } from "@/composer/model"
@@ -26,7 +24,7 @@ import {
 import type { useNewSessionLocationDialog } from "@/new-session/location/dialog"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useWorkspaceLocation } from "@/workspaces/location"
-import { useProviders } from "@/providers/catalog/providers"
+import { createProviderTip, ProviderTip } from "@/providers/connect/tip"
 import { NEW_SESSION_CONTENT_WIDTH } from "@/new-session/layout"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
@@ -51,14 +49,8 @@ import {
   type WordmarkEvent,
 } from "./wordmark-machine"
 
-const providerTipDismissalDuration = 30 * 24 * 60 * 60 * 1000
-
 export const WorkspaceOnboardingSchema = Persistence.struct({
   used: Schema.Boolean,
-})
-
-export const ProviderTipSchema = Persistence.struct({
-  dismissedAt: Schema.Finite,
 })
 
 export function NewSessionView(props: {
@@ -101,6 +93,7 @@ export function NewSessionView(props: {
       <div
         ref={panel}
         data-component="new-session"
+        data-focus-scope
         class="relative isolate flex-1 min-h-0 overflow-hidden rounded-[10px] bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]"
       >
         <ComposerDropzone
@@ -169,87 +162,10 @@ export function NewSessionView(props: {
 }
 
 function NewSessionTips(props: { selection: ComposerModel["model"]["selection"]; onDone: () => void }) {
-  const language = useLanguage()
-  const dialog = useDialog()
   const sdk = useWorkspaceLocation()
-  const providers = useProviders(() => sdk().directory)
+  const tip = createProviderTip(() => sdk().directory)
 
-  const [providerState, setProviderState, , providerReady] = persisted(
-    Persist.global("new-session.provider-tip"),
-    ProviderTipSchema,
-    { dismissedAt: 0 },
-  )
-
-  const providerVisible = createMemo(
-    () =>
-      providerReady() &&
-      providers.anyConnection() === false &&
-      Date.now() - providerState.dismissedAt >= providerTipDismissalDuration,
-  )
-
-  const tip = providerVisible
-  const [ref, setRef] = createSignal<HTMLDivElement>()
-
-  const presence = createPresence({
-    show: tip,
-    element: () => ref() ?? null,
-  })
-
-  const open = () => {
-    if (!tip()) return
-
-    void import("@/providers/connect/dialog").then(({ DialogConnectProvider }) => {
-      void dialog.show(() => (
-        <DialogConnectProvider directory={sdk().directory} selection={props.selection} onDone={props.onDone} />
-      ))
-    })
-  }
-
-  const dismiss = () => {
-    if (!tip()) return
-
-    setProviderState("dismissedAt", Date.now())
-  }
-
-  return (
-    <Show when={presence.present()}>
-      <div class="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-10">
-        <div
-          ref={setRef}
-          data-component="new-session-tip"
-          data-visible={tip()}
-          class="group/new-session-tip pointer-events-auto relative flex h-6 max-w-full items-center transition-[opacity,transform] duration-[250ms] ease-[cubic-bezier(0.215,0.61,0.355,1)] motion-reduce:transition-none"
-          classList={{ "data-[visible=false]:animate-out fade-out slide-out-to-bottom-4": true }}
-        >
-          <button
-            type="button"
-            class="flex h-6 min-w-0 items-center rounded-[4px] pl-1.5 text-[13px] leading-text-compact tracking-[-0.04px] text-v2-text-text-faint transition-[background-color,color] duration-150 ease-in-out hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-muted focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-muted focus-visible:outline-none"
-            onClick={open}
-          >
-            <span class="truncate">{language.t("home.providerTip")}</span>
-            <span class="flex size-6 shrink-0 items-center justify-center" aria-hidden="true">
-              <Icon name="chevron-down" class="-rotate-90" />
-            </span>
-          </button>
-          <Tooltip
-            class="hover-reveal absolute left-full top-0 flex h-6 w-7 items-center justify-end delay-0 duration-0 group-hover/new-session-tip:delay-[250ms] group-hover/new-session-tip:duration-150 group-hover/new-session-tip:opacity-100 focus-within:delay-0 focus-within:duration-0 focus-within:opacity-100"
-            placement="top"
-            openDelay={800}
-            value={language.t("common.dismiss")}
-          >
-            <button
-              type="button"
-              class="flex size-6 items-center justify-center rounded-[4px] text-v2-icon-icon-muted transition-[background-color,color] duration-150 ease-in-out hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-icon-icon-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-icon-icon-base focus-visible:outline-none"
-              aria-label={language.t("common.dismiss")}
-              onClick={dismiss}
-            >
-              <Icon name="close" />
-            </button>
-          </Tooltip>
-        </div>
-      </div>
-    </Show>
-  )
+  return <ProviderTip tip={tip} selection={props.selection} onDone={props.onDone} />
 }
 
 // Keeps as many leading segments as fit, then "…/", then the last two segments. The cut always lands on a slash.
@@ -276,7 +192,7 @@ function fitPath(value: string, width: number, font: string) {
 }
 
 const TRIGGER =
-  "flex h-7 items-center gap-1.5 rounded-sm text-start ps-1.5 pe-2 text-v2-text-text-muted transition-colors hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none"
+  "flex h-7 items-center gap-1.5 rounded-[4px] text-start ps-1.5 pe-2 text-v2-text-text-muted transition-colors hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base"
 
 function NewSessionLocation(props: {
   project: PromptProject

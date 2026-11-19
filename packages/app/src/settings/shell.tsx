@@ -140,6 +140,7 @@ export function SettingsScreen() {
     <div
       ref={root}
       data-testid="settings-screen"
+      data-focus-scope
       class="settings-screen"
       tabIndex={-1}
       onKeyDown={(event) => {

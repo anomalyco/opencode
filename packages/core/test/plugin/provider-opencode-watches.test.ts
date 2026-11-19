@@ -38,10 +38,11 @@ const watchEvent = (
     readonly body?: string
     readonly status?: string | null
     readonly routingKey?: string
+    readonly watchID?: string
   } = {},
 ) => ({
   id,
-  watchID: "ew_1",
+  watchID: overrides.watchID ?? "ew_1",
   sessionID,
   source: overrides.source ?? "github",
   routingKey: overrides.routingKey ?? "github:acme/app#1",
@@ -583,9 +584,77 @@ describe("OpencodePlugin event watches", () => {
         yield* waitUntil(Effect.sync(() => console.state.opens === 1))
         for (const index of Array.from({ length: 21 }, (_, index) => index)) {
           yield* deliver(console, watchEvent(session.id, `evt_${index}`))
-          yield* TestClock.adjust("3 minutes")
+          yield* TestClock.adjust("7 minutes")
         }
         expect(wakes.map((wake) => wake.resume)).toEqual([...Array.from({ length: 20 }, () => true), false])
+      }),
+    ),
+  )
+
+  it.effect("keeps resuming an unattended watch past 20 since the prompt, while other watches still wait", () =>
+    withConsole({}, (console) =>
+      Effect.gen(function* () {
+        const { host, wakes } = yield* start(console)
+        const session = yield* host.session.create({})
+        yield* (yield* watchTool("watch")).execute(
+          { server: "slack", event: "slack.mention", unattended: true },
+          context(session.id),
+        )
+        expect(console.state.requests.find((request) => request.method === "POST")?.body).toEqual({
+          sessionID: session.id,
+          server: "slack",
+          event: "slack.mention",
+          arguments: {},
+        })
+        yield* waitUntil(Effect.sync(() => console.state.opens === 1))
+        for (const index of Array.from({ length: 25 }, (_, index) => index)) {
+          yield* deliver(console, watchEvent(session.id, `evt_${index}`, { watchID: "ew_new" }))
+          yield* TestClock.adjust("7 minutes")
+        }
+        yield* deliver(console, watchEvent(session.id, "evt_other"))
+        expect(wakes.map((wake) => wake.resume)).toEqual([...Array.from({ length: 25 }, () => true), false])
+      }),
+    ),
+  )
+
+  it.effect("holds an unattended watch's sixth update in 10 minutes, CI included", () =>
+    withConsole({}, (console) =>
+      Effect.gen(function* () {
+        const { host, wakes } = yield* start(console)
+        const session = yield* host.session.create({})
+        yield* (yield* watchTool("watch")).execute({ target: "acme/app#1", unattended: true }, context(session.id))
+        yield* waitUntil(Effect.sync(() => console.state.opens === 1))
+        for (const index of [1, 2, 3, 4, 5, 6])
+          yield* deliver(
+            console,
+            watchEvent(session.id, `evt_${index}`, { watchID: "ew_new", kind: "workflow_run", status: "success" }),
+          )
+        expect(wakes.map((wake) => wake.resume)).toEqual([true, true, true, true, true, false])
+      }),
+    ),
+  )
+
+  it.effect("resumes a held session with a new update after 30 quiet minutes, but not with the held one replayed", () =>
+    withConsole({}, (console) =>
+      Effect.gen(function* () {
+        const { host, wakes, replays } = yield* start(console)
+        const session = yield* host.session.create({})
+        yield* waitUntil(Effect.sync(() => console.state.opens === 1))
+        for (const index of Array.from({ length: 20 }, (_, index) => index)) {
+          yield* deliver(console, watchEvent(session.id, `evt_${index}`))
+          yield* TestClock.adjust("7 minutes")
+        }
+        // The held update's acknowledgement is lost until 30 minutes on, so each connection's snapshot replays it.
+        console.state.lose = 3
+        console.push(watchEvent(session.id, "evt_held"))
+        yield* waitUntil(Effect.sync(() => console.state.lose === 2))
+        for (const replayed of [1, 2, 3]) {
+          yield* TestClock.adjust("10 minutes")
+          console.state.sockets.forEach((socket) => socket.close(OpencodeWatches.LEASE_CLOSE_CODE, "lease"))
+          yield* waitUntil(Effect.sync(() => replays.length === replayed))
+        }
+        yield* deliver(console, watchEvent(session.id, "evt_new"))
+        expect(wakes.map((wake) => wake.resume)).toEqual([...Array.from({ length: 20 }, () => true), false, true])
       }),
     ),
   )

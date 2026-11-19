@@ -19,13 +19,14 @@ import {
   type Native,
   Arr,
   ErrorObj,
+  errorToString,
   Obj,
   coerceToString,
   type Value,
 } from "./objects.js"
 import type { Interpreter } from "./interpreter.js"
 import { Invoke } from "./signals.js"
-import { withPrimitives } from "./callback.js"
+import { withPrimitives, withReads } from "./callback.js"
 import { formatValue } from "../stdlib/console.js"
 import { inPrelude } from "./source.js"
 
@@ -119,13 +120,21 @@ export const locate = (error: unknown, node?: AstNode): unknown => {
   return error
 }
 
-/** The program value a handler receives for a failure; one failure always yields the same value. */
-export const materialize = <R>(ctx: Interpreter<R>, thrown: unknown): Value => {
+/**
+ * The program value a handler receives for a failure; one failure always yields the same value. A host failure has no
+ * site of its own, so its `stack` names `site`, where the handler observed it, when there is one.
+ */
+export const materialize = <R>(ctx: Interpreter<R>, thrown: unknown, site?: AstNode): Value => {
   if (thrown instanceof Throw) return thrown.value
   const builtins = ctx.builtins
   if (thrown instanceof PendingThrow) {
     if (thrown.value === undefined) {
-      thrown.value = createErrorValue(builtins[thrown.type], thrown.message)
+      const node = thrown.node
+      thrown.value = createErrorValue(
+        builtins[thrown.type],
+        thrown.message,
+        node?.loc && !inPrelude(node) ? stackFrame(node) : "",
+      )
       thrown.value.failure = thrown
     }
     return thrown.value
@@ -133,18 +142,18 @@ export const materialize = <R>(ctx: Interpreter<R>, thrown: unknown): Value => {
   return createErrorValue(
     builtins[thrown instanceof Error ? errorType(thrown) : "Error"],
     normalizeError(thrown).message,
+    site?.loc ? stackFrame(site) : "",
   )
 }
 
-/** Error.prototype.toString: `name: message`, omitting whichever side is empty. */
-const errorToString = (self: Obj): string => {
-  const name = get(self, "name")
-  const message = get(self, "message")
-  const shownName = name === undefined ? "Error" : coerceToString(name)
-  const shownMessage = message === undefined ? "" : coerceToString(message)
-  if (shownMessage === "") return shownName
-  if (shownName === "") return shownMessage
-  return `${shownName}: ${shownMessage}`
+/**
+ * One V8-style `stack` line for a program site: `at name (<program>:line:col)`, or `at <program>:line:col` at top
+ * level. The location is in the submitted source and never names a host file.
+ */
+export const stackFrame = (node: AstNode, name?: string): string => {
+  const location = sourceLocation(node)
+  const at = `<program>:${location.line}:${location.column}`
+  return `\n    at ${name === undefined ? at : `${name} (${at})`}`
 }
 
 export const createAggregateErrorValue = <R>(
@@ -176,8 +185,13 @@ export const errorGlobal = <R>(type: ErrorType, ctx: Interpreter<R>) => {
         "string",
         message === undefined ? [] : [message],
         ([text]) => {
-          const created = withCause(createErrorValue(proto, message === undefined ? "" : coerceToString(text)), args[2])
-          return new Invoke(ctx.prelude.fn("aggregateError"), undefined, [created, args[0]], undefined)
+          return withReads(() => {
+            const created = withCause(
+              createErrorValue(proto, message === undefined ? "" : coerceToString(text), ctx.vm.stackTrace()),
+              args[2],
+            )
+            return new Invoke(ctx.prelude.fn("aggregateError"), undefined, [created, args[0]], undefined)
+          })
         },
         true,
       )
@@ -186,7 +200,13 @@ export const errorGlobal = <R>(type: ErrorType, ctx: Interpreter<R>) => {
     return withPrimitives(
       "string",
       message === undefined ? [] : [message],
-      ([text]) => withCause(createErrorValue(proto, message === undefined ? undefined : coerceToString(text)), args[1]),
+      ([text]) =>
+        withReads(() =>
+          withCause(
+            createErrorValue(proto, message === undefined ? undefined : coerceToString(text), ctx.vm.stackTrace()),
+            args[1],
+          ),
+        ),
       true,
     )
   }
@@ -198,7 +218,11 @@ export const errorGlobal = <R>(type: ErrorType, ctx: Interpreter<R>) => {
   })
   if (type === "Error") {
     methods(builtins, prototype, [
-      ["toString", 0, (thisValue) => errorToString(receiver(Obj, thisValue, "Error.prototype.toString"))],
+      [
+        "toString",
+        0,
+        (thisValue) => withReads(() => errorToString(receiver(Obj, thisValue, "Error.prototype.toString"), get)),
+      ],
     ])
     methods(builtins, ctor, [["isError", 1, (_, args) => args[0] instanceof ErrorObj]])
     return ctor

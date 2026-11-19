@@ -10,11 +10,10 @@ import { type Diagnostic, PendingThrow } from "../src/language/runtime/model.js"
 import type { Value } from "../src/language/runtime/objects.js"
 import { Interruption } from "../src/language/runtime/signals.js"
 import type { Source } from "../src/language/runtime/source.js"
-import type { Snapshot } from "../src/language/snapshot/snapshot.js"
+import { fromBytes, type Snapshot, toBytes } from "../src/language/snapshot/snapshot.js"
 
 /** A quoted `file:` URL for a module relative to `test`, to import from a script run with `bun -e` on any platform. */
-export const moduleUrl = (relative: string) =>
-  JSON.stringify(pathToFileURL(path.join(import.meta.dir, relative)).href)
+export const moduleUrl = (relative: string) => JSON.stringify(pathToFileURL(path.join(import.meta.dir, relative)).href)
 
 /** How a run ended, shaped like a CodeMode result with no tool calls. */
 export type Result =
@@ -37,7 +36,7 @@ export type RunOptions = {
   readonly bindings?: (ctx: Interpreter<never>) => ReadonlyArray<readonly [string, Value]>
   readonly maxSlices?: number
   /**
-   * Round-trip mode: slice after every `every` fuel ticks, then save the state as JSON and continue in a fresh runtime
+   * Round-trip mode: slice after every `every` fuel ticks, then save the state to bytes and continue in a fresh runtime
    * restored from it, at most `max` times (default 200).
    */
   readonly roundTrip?: { readonly every: number; readonly max?: number }
@@ -92,7 +91,7 @@ export const runProgram = (code: string, options?: RunOptions): Result => {
         options?.onTrip?.(snapshot)
         ctx = runtime(undefined)
         vm = ctx.vm
-        vm.restore(JSON.parse(JSON.stringify(snapshot)), {
+        vm.restore(fromBytes(toBytes(snapshot)), {
           parse: (code) => {
             const again = parseVmSource(code)
             if (!again.ok) throw new Error(again.error.message)

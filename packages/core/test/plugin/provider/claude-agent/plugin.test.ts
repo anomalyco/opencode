@@ -126,6 +126,7 @@ describe("ClaudeAgentPlugin", () => {
         Effect.provideService(
           Environment.Service,
           Environment.Service.of({
+            id: Environment.localID,
             files: makeFiles({ spawner: EnvironmentUnavailable.spawner }),
             spawner: EnvironmentUnavailable.spawner,
           }),

@@ -24,6 +24,13 @@
       margin: 0;
       padding: 0;
 
+      /* Items overlap by a pixel, so the next item would paint over the bottom of this one's inset ring. Sticky
+         headers are raised in sticky-accordion-header.css. */
+      &:not([data-component="sticky-accordion-header"]):has(> [data-slot="accordion-trigger"]:focus-visible) {
+        position: relative;
+        z-index: 1;
+      }
+
       [data-slot="accordion-trigger"] {
         width: 100%;
         display: flex;
@@ -55,8 +62,10 @@
             background-color: var(--v2-overlay-simple-overlay-hover);
           }
         }
+        /* Inset, because the trigger is a full-width row that its container clips. */
         &:focus-visible {
-          outline: none;
+          outline: 2px solid var(--v2-border-border-focus);
+          outline-offset: -2px;
         }
         &[data-disabled] {
           cursor: not-allowed;

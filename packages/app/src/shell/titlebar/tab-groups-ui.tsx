@@ -943,7 +943,7 @@ function GroupEditorMenuItems(props: { group: ComputedTabGroup }) {
                   aria-label={language.t(`tabs.groups.color.${color}`)}
                   title={language.t(`tabs.groups.color.${color}`)}
                   data-group-color={color}
-                  class="flex size-5 items-center justify-center rounded-full transition-transform hover:scale-110 focus-visible:outline-none"
+                  class="flex size-5 items-center justify-center rounded-full transition-transform hover:scale-110"
                   classList={{
                     "ring-2 ring-v2-text-text-base ring-offset-1 ring-offset-v2-background-bg-base": selected(),
                   }}
@@ -1006,7 +1006,7 @@ export function TabGroupHeader(props: { group: ComputedTabGroup }) {
         type="button"
         aria-expanded={!props.group.collapsed}
         onClick={() => tabGroups.toggleCollapsed(props.group.key)}
-        class="flex h-full min-w-0 flex-1 items-center gap-1.5 text-start focus-visible:outline-none"
+        class="flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-[6px] text-start focus-visible:-outline-offset-2"
       >
         <span data-tab-group-chip data-group-color={props.group.color} class="max-w-full min-w-0">
           <span class="min-w-0 truncate" dir="auto">
@@ -1114,7 +1114,7 @@ export function TabGroupingMenu() {
         aria-label={language.t("tabs.groups.menu")}
         title={language.t("tabs.groups.menu")}
         data-action="tab-groups-menu"
-        class="my-auto flex size-5 shrink-0 items-center justify-center rounded-[4px] text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-icon-icon-base focus-visible:outline-none [app-region:no-drag]"
+        class="my-auto flex size-5 shrink-0 items-center justify-center rounded-[4px] text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-icon-icon-base focus-visible:-outline-offset-2 [app-region:no-drag]"
       >
         <Icon name="sliders" />
       </Menu.Trigger>

@@ -1,8 +1,9 @@
 import { parse, type Expression, type MemberExpression, type NewExpression } from "acorn"
 import type { Diagnostic } from "./runtime/model.js"
 import { conversions } from "./runtime/callback.js"
-import { locate, materialize } from "./runtime/errors.js"
+import { locate, materialize, stackFrame } from "./runtime/errors.js"
 import type { Interpreter } from "./runtime/interpreter.js"
+import { type Builtins, isErrorType } from "./runtime/intrinsics.js"
 import { checkArrayLength, checkStringLength } from "./runtime/limits.js"
 import {
   AsyncIteratorSymbol,
@@ -19,10 +20,14 @@ import {
 import {
   Arguments,
   Arr,
-  assign,
   BoundFn,
   Builtin,
   type Callable,
+  copyDataProperties,
+  defineAccessorHalf,
+  peek,
+  GetterCall,
+  lookup,
   coerceToNumber,
   coerceToString,
   define,
@@ -30,7 +35,9 @@ import {
   frozen,
   GeneratorObj,
   get,
+  defineOwnProperty,
   getOwn,
+  own,
   hasOwn,
   HostNamespace,
   IteratorObj,
@@ -44,10 +51,11 @@ import {
   type Value,
 } from "./runtime/objects.js"
 import {
+  accessProperty,
   applyBinaryOperator,
   assignToReference,
   builtinCursor,
-  destructuredProperty,
+  failedAssignment,
   forInKeys,
   instanceofValue,
   isThenable,
@@ -55,11 +63,10 @@ import {
   notConstructible,
   operatorConversion,
   propertyKey,
-  readProperty,
-  readReference,
   requireIteratorMethod,
   requireIteratorObject,
   requireMemberBase,
+  requirePromiseProperty,
   resolveProperty,
   writableReference,
 } from "./runtime/operations.js"
@@ -70,6 +77,7 @@ import {
   type Completion,
   Convert,
   type GeneratorRequest,
+  Prefetch,
   Interruption,
   Invoke,
   MAX_CALL_DEPTH,
@@ -128,7 +136,7 @@ import {
   type TemplateSite,
   UnaryOp,
 } from "./opcodes.js"
-import { hidden } from "./runtime/objects.js"
+import { ClassInfo, hidden } from "./runtime/objects.js"
 
 const contiguous = <T>(): Array<T> => {
   const a: Array<unknown> = [""]
@@ -152,6 +160,13 @@ export const Mode = {
   REJECT_ONLY: 4,
   PROGRAM: 5,
   BOUNDARY_OUT: 6,
+  /**
+   * Runs a program getter an iterator op met (`$vmRedo`), then runs the op again from its first word: its `target` is
+   * `[pc, ...values the op had read]`, and the op replays those and the getter's value in order (see `redoRead`).
+   */
+  REDO: 7,
+  /** A class constructor run by `new`: hands the caller its result if that is an object, else its `this`. */
+  CONSTRUCT: 8,
 } as const
 
 export type FrameMode = (typeof Mode)[keyof typeof Mode]
@@ -245,6 +260,13 @@ export class Vm {
   outcome: Completion | undefined = undefined
   /** Round-trip test mode (task C): slice after this many fuel ticks, so the run is saved and restored all through. */
   tripEvery = 0
+  /**
+   * The reads an iterator op replays while it runs again after a getter (`Mode.REDO`). It never outlives the
+   * `exec` turn the getter returned in, so it is never saved.
+   */
+  redo:
+    | { readonly frame: Frame; readonly pc: number; readonly values: ReadonlyArray<Value>; next: number }
+    | undefined = undefined
 
   constructor(readonly ctx: Interpreter<unknown>) {
     this.scheduler = new VmScheduler(this)
@@ -490,6 +512,26 @@ export class Vm {
     return undefined
   }
 
+  /** The program frames on the stack as `stack` lines, innermost first, at most 10 as V8's `Error.stackTraceLimit`. */
+  stackTrace(): string {
+    let trace = ""
+    let shown = 0
+    for (let i = this.frames.length - 1; i >= 0 && shown < 10; i--) {
+      const frame = this.frames[i]!
+      const code = frame.code
+      if ((code.flags & CodeFlags.INTERNAL) !== 0) continue
+      const site = code.siteAt(frame.pc)
+      if (!site?.loc) continue
+      const name = frame.fn ? peek(frame.fn, "name") : undefined
+      trace += stackFrame(
+        site,
+        (code.flags & CodeFlags.PROGRAM) !== 0 ? undefined : (typeof name === "string" && name) || "<anonymous>",
+      )
+      shown++
+    }
+    return trace
+  }
+
   private exec(): number {
     const frames = this.frames
     const hole = HOLE
@@ -703,6 +745,10 @@ export class Vm {
             frame.pc = pc
             frame.sp = sp
             sp = this.execGetProp(frame, o, key, mode, pc, sp)
+            if (sp < 0) {
+              if (sp === GETTER_ENTERED) continue outer
+              return sp === GETTER_FUEL ? 1 : 2
+            }
             pc++
             continue
           }
@@ -726,8 +772,11 @@ export class Vm {
             }
             frame.pc = pc
             frame.sp = sp
-            if (this.execGetElem(frame, o, keyVal, mode, pc, sp)) continue outer
-            sp = frame.sp
+            sp = this.execGetElem(frame, o, keyVal, mode, pc, sp)
+            if (sp < 0) {
+              if (sp === GETTER_ENTERED) continue outer
+              return sp === GETTER_FUEL ? 1 : 2
+            }
             pc++
             continue
           }
@@ -737,7 +786,7 @@ export class Vm {
             const o = regs[sp - 1] as Value
             frame.pc = pc
             frame.sp = sp
-            this.execPutProp(fcode, o, consts[w >>> 16] as string, v, pc)
+            if (this.execPutProp(frame, o, consts[w >>> 16] as string, v, pc, sp)) continue outer
             regs[sp - 1] = v
             pc++
             continue
@@ -757,14 +806,15 @@ export class Vm {
               o.extensible
             ) {
               const items = o.items
-              if (keyVal < items.length) {
+              // A hole or a new element looks at the prototypes first, which may hold a program setter there.
+              if (keyVal < items.length && (keyVal in items || this.plainArrayChain(o))) {
                 if (keyVal === 0) items[0] = ""
                 items[keyVal] = v
                 regs[sp - 1] = v
                 pc++
                 continue
               }
-              if (keyVal === items.length && keyVal < 10_000_000) {
+              if (keyVal === items.length && keyVal < 10_000_000 && this.plainArrayChain(o)) {
                 items.push(v)
                 regs[sp - 1] = v
                 pc++
@@ -773,7 +823,7 @@ export class Vm {
             }
             frame.pc = pc
             frame.sp = sp
-            this.execPutElem(fcode, o, keyVal, v, pc)
+            if (this.execPutProp(frame, o, propertyKey(keyVal), v, pc, sp)) continue outer
             regs[sp - 1] = v
             pc++
             continue
@@ -830,7 +880,7 @@ export class Vm {
             const rhs = regs[--sp] as Value
             frame.pc = pc
             frame.sp = sp
-            regs[sp - 1] = this.execInstanceof(fcode, regs[sp - 1] as Value, rhs, pc)
+            if (this.execInstanceof(frame, regs[sp - 1] as Value, rhs, pc, sp)) continue outer
             pc++
             continue
           }
@@ -855,13 +905,14 @@ export class Vm {
           case 39: // Op.COPY_DATA_PROPS
             frame.pc = pc
             frame.sp = --sp
-            this.execCopyDataProps(fcode, regs[sp - 1] as Obj, regs[sp] as Value, pc)
+            if (this.execCopyDataProps(frame, regs[sp - 1] as Obj, regs[sp] as Value, pc, sp)) continue outer
             pc++
             continue
           case 40: // Op.COPY_REST
             frame.pc = pc
             frame.sp = sp
-            sp = this.execCopyRest(fcode, regs, w >>> 16, pc, sp)
+            sp = this.execCopyRest(frame, regs, w >>> 16, pc, sp)
+            if (sp < 0) continue outer
             pc++
             continue
           case 41: // Op.TEMPLATE
@@ -1189,7 +1240,8 @@ export class Vm {
             const callee = regs[base - 1]
             if (callee instanceof FnCtor) {
               const c = callee.code
-              if ((c.flags & 518) === 0) {
+              // Not async, generator, needing arguments, or a class constructor.
+              if ((c.flags & 774) === 0) {
                 const counted = (c.flags & 64) === 0
                 if (counted && this.depth > 10_000) {
                   this.failCallDepth(frame, fcode, pc, sp)
@@ -1271,12 +1323,13 @@ export class Vm {
             frame.pc = pc
             frame.sp = sp
             pc = this.execIterOpen(frame, (w >>> 8) & 0xff, pc, sp)
+            if (pc < 0) continue outer
             sp = frame.sp
             continue
           case 75: // Op.ITER_INIT
             frame.pc = pc
             frame.sp = sp
-            this.execIterInit(frame, (w >>> 8) & 0xff, pc, sp)
+            if (this.execIterInit(frame, (w >>> 8) & 0xff, pc, sp)) continue outer
             pc++
             continue
           case 76: {
@@ -1299,10 +1352,12 @@ export class Vm {
           }
           case 77: // Op.ITER_RESULT
             pc = this.execIterResult(frame, (w >>> 8) & 0xff, w >>> 16, pc, sp)
+            if (pc < 0) continue outer
             sp = frame.sp
             continue
           case 78: // Op.ITER_CLOSE
             pc = this.execIterClose(frame, (w >>> 8) & 0xff, w >>> 16, pc, sp)
+            if (pc < 0) continue outer
             sp = frame.sp
             continue
           case 79: // Op.ITER_APPEND_ALL
@@ -1338,14 +1393,63 @@ export class Vm {
             frame.pc = pc
             frame.sp = sp
             pc = this.onYstar(frame, (w >>> 8) & 0xff, w >>> 16, pc, sp)
+            if (pc < 0) continue outer
             sp = frame.sp
             continue
           case 86: // Op.YSTAR_RESULT
             frame.pc = pc
             frame.sp = sp
             pc = this.onYstarResult(frame, (w >>> 8) & 0xff, w >>> 16, pc, sp)
+            if (pc < 0) continue outer
             sp = frame.sp
             continue
+          case 88: // Op.DEFINE_ACCESSOR
+            sp = this.execDefineAccessor(regs, consts, (w >>> 8) & 0xff, w >>> 16, sp)
+            pc++
+            continue
+          case 89: // Op.CLASS
+            sp = this.execClass(frame, (w >>> 8) & 0xff, pc, sp)
+            pc++
+            continue
+          case 90: // Op.DEFINE_METHOD
+            sp = this.execDefineMethod(regs, consts, (w >>> 8) & 0xff, w >>> 16, sp)
+            pc++
+            continue
+          case 91: // Op.SET_FIELDS
+            sp = this.execSetFields(regs, sp)
+            pc++
+            continue
+          case 92: {
+            // Op.INIT_FIELDS
+            frame.pc = pc
+            const called = this.execInitFields(frame, (w >>> 8) & 0xff, pc, sp)
+            if (called === 1) {
+              if (this.fuel <= 0) return 1
+              continue outer
+            }
+            if (called === 2) return 2
+            sp = frame.sp
+            pc++
+            frame.pc = pc
+            continue
+          }
+          case 93: // Op.SUPER_CALL
+          case 94: // Op.SUPER_BIND
+          case 96: // Op.GET_SUPER
+          case 98: // Op.SET_HOME
+          case 97: {
+            // Op.PUT_SUPER
+            frame.pc = pc
+            frame.sp = sp
+            const nextPc = this.execWide(frame, w & 0xff, (w >>> 8) & 0xff, w >>> 16, pc)
+            if (nextPc < 0) {
+              if (nextPc === -1) continue outer
+              return -2 - nextPc
+            }
+            sp = frame.sp
+            pc = nextPc
+            continue
+          }
           default:
             this.failOpcode(w & 0xff)
         }
@@ -1367,8 +1471,25 @@ export class Vm {
     checkStringLength(len)
   }
 
-  private execInstanceof(fcode: Code, lhs: Value, rhs: Value, pc: number): boolean {
-    return instanceofValue(lhs, rhs, fcode.siteAt(pc)!)
+  // `lhs instanceof rhs` into the stack at `sp - 1`; true when a program `prototype` getter runs first.
+  private execInstanceof(frame: Frame, lhs: Value, rhs: Value, pc: number, sp: number): boolean {
+    const site = frame.code.siteAt(pc)!
+    const result = instanceofValue(lhs, rhs, site)
+    if (!(result instanceof GetterCall)) {
+      frame.regs[sp - 1] = result
+      return false
+    }
+    frame.sp = sp - 1
+    this.pushInternalCall("$vmInstanceof", [lhs, rhs], site)
+    return true
+  }
+
+  // Whether an array's chain is the built-in one with no program accessors, so a hole or append can skip it.
+  private plainArrayChain(o: Arr): boolean {
+    const proto = o.proto
+    return (
+      proto === this.ctx.builtins.Array && !proto.hasProgramAccessors && !this.ctx.builtins.Object.hasProgramAccessors
+    )
   }
 
   private execBinopSlow(frame: Frame, sub: number, a: Value, b: Value, pc: number, sp: number): boolean {
@@ -1402,11 +1523,11 @@ export class Vm {
   }
 
   private onYstar(frame: Frame, slot: number, bx: number, pc: number, sp: number): number {
-    return execYstar(frame, slot, bx, pc, sp)
+    return execYstar(this, frame, slot, bx, pc, sp)
   }
 
   private onYstarResult(frame: Frame, slot: number, bx: number, pc: number, sp: number): number {
-    return execYstarResult(frame, slot, bx, pc, sp)
+    return execYstarResult(this, frame, slot, bx, pc, sp)
   }
 
   private failOpcode(op: number): never {
@@ -1422,6 +1543,7 @@ export class Vm {
   private failTdz(frame: Frame, name: string, pc: number, sp: number): never {
     frame.pc = pc
     frame.sp = sp
+    if (name === "this") throw referenceError(THIS_BEFORE_SUPER, frame.code.siteAt(pc))
     throw referenceError(`Cannot access '${name}' before initialization.`, frame.code.siteAt(pc))
   }
 
@@ -1453,10 +1575,15 @@ export class Vm {
   }
 
   private execArgs(frame: Frame, kind: number, bx: number): unknown {
-    if (kind === 0) return new Arguments(this.ctx.builtins.Object, frame.args ?? [])
+    if (kind === 0) {
+      const made = new Arguments(this.ctx.builtins.Object, frame.args ?? [])
+      define(made, IteratorSymbol, this.ctx.prelude.fn("argumentsValues"), hidden)
+      return made
+    }
     if (kind === 1) return new Arr(this.ctx.builtins.Array, (frame.args ?? []).slice(bx))
     if (kind === 2) return frame.fn
     if (kind === 3) return frame.thisValue
+    if (kind === 5) return frame.fn!.home
     return frame.args?.[bx]
   }
 
@@ -1469,6 +1596,8 @@ export class Vm {
   ): void {
     const fn = regs[sp - 1]
     if (!(fn instanceof Fn)) return
+    // A class with its own static `name` member keeps it.
+    if (fn.klass !== undefined && hasStaticName(fn)) return
     if (mode === 0) {
       define(fn, "name", consts[bx] as string, readonly)
       return
@@ -1480,7 +1609,8 @@ export class Vm {
         : key === AsyncIteratorSymbol
           ? "[Symbol.asyncIterator]"
           : String(key)
-    define(fn, "name", name, readonly)
+    // Modes 2 and 3 name an accessor's function: `get x`, `set x`.
+    define(fn, "name", mode === 2 ? `get ${name}` : mode === 3 ? `set ${name}` : name, readonly)
   }
 
   private execToKey(frame: Frame, v: Value, pc: number, sp: number): boolean {
@@ -1538,27 +1668,229 @@ export class Vm {
       return sp
     }
     const v = regs[--sp] as Value
-    const k = regs[--sp] as PropertyKey
-    define(regs[sp - 1] as Obj, k, v)
+    if (computed === 1) {
+      const k = regs[--sp] as PropertyKey
+      define(regs[sp - 1] as Obj, k, v)
+      return sp
+    }
+    // A class field (a bit 1): CreateDataPropertyOrThrow, which fails on a frozen or non-configurable target.
+    const k = (computed & 1) !== 0 ? (regs[--sp] as PropertyKey) : (consts[bx] as string)
+    const desc = { value: v, writable: true, enumerable: true, configurable: true }
+    if (!defineOwnProperty(regs[sp - 1] as Obj, k, desc)) throw typeError(`Cannot define property ${String(k)}.`)
     return sp
   }
 
-  private execCopyDataProps(fcode: Code, o: Obj, src: Value, pc: number): void {
-    if (src !== null && src !== undefined) {
-      assign(o, enumerableSource(this.ctx, "Object spread", src, fcode.siteAt(pc)!))
-    }
+  // An object literal's getter or setter: `[o, fn]`, or `[o, key, fn]` computed, leaves `[o]`.
+  private execDefineAccessor(
+    regs: Array<unknown>,
+    consts: ReadonlyArray<ConstValue>,
+    a: number,
+    bx: number,
+    sp: number,
+  ): number {
+    const fn = regs[--sp] as Fn
+    const key = (a & 1) !== 0 ? (regs[--sp] as PropertyKey) : (consts[bx] as string)
+    defineAccessorHalf(regs[sp - 1] as Obj, key, (a & 2) !== 0 ? "set" : "get", fn)
+    return sp
   }
 
-  private execCopyRest(fcode: Code, regs: Array<unknown>, n: number, pc: number, sp: number): number {
+  // The constructor on top gets its prototype, `[ctor] -> [ctor, proto]`; with a parent (a 1), it inherits from it:
+  // `[parent, ctor] -> [ctor, proto]`.
+  private execClass(frame: Frame, a: number, pc: number, sp: number): number {
+    const regs = frame.regs
+    const ctor = regs[sp - 1] as Fn
+    if ((a & 1) === 0) {
+      const proto = new Obj(this.ctx.builtins.Object)
+      ctor.klass = new ClassInfo(false)
+      ctor.home = proto
+      define(ctor, "prototype", proto, frozen)
+      define(proto, "constructor", ctor, hidden)
+      regs[sp] = proto
+      return sp + 1
+    }
+    const parent = classParent(regs[sp - 2] as Value, frame.code.siteAt(pc), this.ctx.builtins)
+    const proto = new Obj(get(parent, "prototype") as Obj)
+    ctor.proto = parent
+    ctor.klass = new ClassInfo(true)
+    ctor.home = proto
+    define(ctor, "prototype", proto, frozen)
+    define(proto, "constructor", ctor, hidden)
+    regs[sp - 2] = ctor
+    regs[sp - 1] = proto
+    return sp
+  }
+
+  // `super(...args)`: constructs the running constructor's parent for the new target in local `bx`.
+  private execSuperCall(frame: Frame, a: number, bx: number, pc: number): number {
+    const regs = frame.regs
+    let sp = frame.sp
+    const args = a === 255 ? [...(regs[--sp] as Arr).items] : (regs.slice(sp - a, sp) as Array<Value>)
+    if (a !== 255) sp -= a
+    frame.sp = sp
+    frame.pc = pc
+    const parent = frame.fn!.proto
+    if (isErrorConstructor(parent, this.ctx.builtins)) {
+      return this.execConstruct(frame, parent, args, callSiteOf(frame, pc), regs[bx] as Fn)
+    }
+    if (!(parent instanceof Fn) || parent.klass === undefined) {
+      throw typeError(`Super constructor ${describeValue(parent)} of anonymous class is not a constructor`, frame.code.siteAt(pc))
+    }
+    return this.constructClass(frame, parent, args, callSiteOf(frame, pc), regs[bx] as Fn)
+  }
+
+  // A derived constructor's `this` binding (local `bx`, a cell when `a` is 1).
+  private thisBinding(frame: Frame, a: number, bx: number): unknown {
+    return a === 1 ? (frame.regs[bx] as Cell).v : frame.regs[bx]
+  }
+
+  // `super()` returned the instance on top: it becomes `this`, once.
+  private execSuperBind(frame: Frame, a: number, bx: number, pc: number): void {
+    const regs = frame.regs
+    if (this.thisBinding(frame, a, bx) !== HOLE) {
+      throw referenceError("Super constructor may only be called once", frame.code.siteAt(pc))
+    }
+    const instance = regs[frame.sp - 1] as Value
+    if (a === 1) (regs[bx] as Cell).v = instance
+    else regs[bx] = instance
+    frame.thisValue = instance
+    frame.target = undefined
+  }
+
+  // `super.x` / `super[key]`: reads from the home object's prototype with `this` as the receiver.
+  private execGetSuper(frame: Frame, a: number, bx: number, pc: number): number {
+    const regs = frame.regs
+    let sp = frame.sp
+    const key = (a & 2) !== 0 ? (regs[--sp] as PropertyKey) : (frame.code.consts[bx] as string)
+    const self = regs[--sp] as Value
+    const proto = superBase(regs[--sp] as Obj, frame.code.siteAt(pc))
+    const mode = a & 1
+    const v = this.readObjProp(proto, typeof key === "number" ? String(key) : key, self, frame.code, pc)
+    if (v instanceof GetterCall) return this.enterGetter(frame, v.getter, self, sp, mode, pc)
+    return writeRead(regs, sp, mode, self, v)
+  }
+
+  // `super.x = v`: a setter on the home object's prototype chain runs with `this`; otherwise `this` takes the write.
+  private execPutSuper(frame: Frame, a: number, bx: number, pc: number): boolean {
+    const regs = frame.regs
+    let sp = frame.sp
+    const v = regs[--sp] as Value
+    const key = (a & 2) !== 0 ? (regs[--sp] as PropertyKey) : (frame.code.consts[bx] as string)
+    const self = regs[--sp] as Value
+    const site = frame.code.siteAt(pc)
+    const proto = superBase(regs[--sp] as Obj, site)
+    frame.sp = sp
+    const slot = lookup(proto, key)
+    let setter: Callable | undefined
+    if (slot !== undefined && !("value" in slot)) {
+      if (slot.set === undefined) throw typeError(`Cannot set property ${String(key)}, which has only a getter.`, site)
+      if (typeof slot.set === "function") slot.set(self, v)
+      else setter = slot.set
+    } else {
+      if (!(self instanceof Obj)) throw typeError(`Cannot set property ${String(key)} of ${describeValue(self)}.`, site)
+      try {
+        setter = assignToReference(self, key, v, undefined)
+      } catch (err) {
+        throw locate(err, site)
+      }
+    }
+    if (setter !== undefined) {
+      this.pushInternalCall("$vmSet", [setter, self, v], callSiteOf(frame, pc))
+      return true
+    }
+    regs[frame.sp++] = v
+    return false
+  }
+
+  // `[ctor, proto, fn] -> [ctor, proto]`: a hidden method on the prototype, or on the constructor when static.
+  private execDefineMethod(
+    regs: Array<unknown>,
+    consts: ReadonlyArray<ConstValue>,
+    a: number,
+    bx: number,
+    sp: number,
+  ): number {
+    const fn = regs[--sp] as Fn
+    const key = (a & 2) !== 0 ? (regs[--sp] as PropertyKey) : (consts[bx] as string)
+    const home = regs[(a & 1) !== 0 ? sp - 2 : sp - 1] as Obj
+    const name =
+      typeof key === "symbol"
+        ? key === IteratorSymbol
+          ? "[Symbol.iterator]"
+          : key === AsyncIteratorSymbol
+            ? "[Symbol.asyncIterator]"
+            : `[${key.description ?? ""}]`
+        : String(key)
+    fn.home = home
+    if (key === "prototype" && home instanceof Fn && home.klass !== undefined)
+      throw typeError("Classes may not have a static property named 'prototype'.")
+    if ((a & 12) === 0) {
+      define(fn, "name", name, readonly)
+      define(home, key, fn, hidden)
+      return sp
+    }
+    const half = (a & 4) !== 0 ? "get" : "set"
+    define(fn, "name", `${half} ${name}`, readonly)
+    defineAccessorHalf(home, key, half, fn, false)
+    return sp
+  }
+
+  // `[ctor, proto, fn] -> [ctor, proto]`: `fn` defines the class's instance fields, with the prototype as its home.
+  private execSetFields(regs: Array<unknown>, sp: number): number {
+    const fn = regs[--sp] as Fn
+    fn.home = regs[sp - 1] as Obj
+    ;(regs[sp - 2] as Fn).klass!.fields = fn
+    return sp
+  }
+
+  // Calls a field initializer: the running constructor's on its `this` (a 0), or a static one on the class (a 1).
+  private execInitFields(frame: Frame, a: number, pc: number, sp: number): number {
+    const regs = frame.regs
+    if (a === 0) {
+      frame.sp = sp
+      const fields = frame.fn!.klass!.fields
+      if (fields === undefined) {
+        regs[frame.sp++] = undefined
+        return 0
+      }
+      return this.invokeCallable(frame, fields, frame.thisValue, [], callSiteOf(frame, pc), pc)
+    }
+    const fn = regs[--sp] as Fn
+    const target = regs[--sp] as Obj
+    fn.home = target
+    frame.sp = sp
+    return this.invokeCallable(frame, fn, target, [], callSiteOf(frame, pc), pc)
+  }
+
+  // `{ ...src }` into `o` (at `sp - 1`, `src` popped): true when a source with program getters is copied in the prelude.
+  private execCopyDataProps(frame: Frame, o: Obj, src: Value, pc: number, sp: number): boolean {
+    if (src === null || src === undefined) return false
+    const source = enumerableSource(this.ctx, "Object spread", src, frame.code.siteAt(pc)!)
+    if (!source.hasProgramAccessors) {
+      copyDataProperties(o, source)
+      return false
+    }
+    frame.sp = sp - 1
+    this.pushInternalCall("$vmCopyDataProps", [o, source, undefined], callSiteOf(frame, pc))
+    return true
+  }
+
+  // `{ ...rest } = src`, less the `n` keys on the stack: the new sp, or -1 when the copy runs in the prelude.
+  private execCopyRest(frame: Frame, regs: Array<unknown>, n: number, pc: number, sp: number): number {
     const consumed = new Set<PropertyKey>()
     for (let i = sp - n; i < sp; i++) {
       const k = regs[i] as PropertyKey
       consumed.add(typeof k === "symbol" ? k : String(k))
     }
     sp -= n
-    const src = regs[sp - 1] as Value
     const rest = new Obj(this.ctx.builtins.Object)
-    assign(rest, enumerableSource(this.ctx, "Object destructuring", src, fcode.siteAt(pc)!), consumed)
+    const source = enumerableSource(this.ctx, "Object destructuring", regs[sp - 1] as Value, frame.code.siteAt(pc)!)
+    if (source.hasProgramAccessors) {
+      frame.sp = sp - 1
+      const excluded = new Arr(this.ctx.builtins.Array, [...consumed] as Array<Value>)
+      this.pushInternalCall("$vmCopyDataProps", [rest, source, excluded], callSiteOf(frame, pc))
+      return -1
+    }
+    copyDataProperties(rest, source, consumed)
     regs[sp - 1] = rest
     return sp
   }
@@ -1695,6 +2027,32 @@ export class Vm {
       frame.sp = sp
       return this.finishProgram(frame, v)
     }
+    if (frame.mode === Mode.CONSTRUCT) {
+      frames.pop()
+      // A derived constructor's return rules apply once it has returned, so its own handlers cannot catch them.
+      const unbound = !(v instanceof Obj) && frame.fn!.klass!.derived && (v !== undefined || frame.target !== undefined)
+      if (unbound) {
+        const site = frame.code.siteAt(pc)
+        this.release(frame)
+        if (v !== undefined) throw typeError("Derived constructors may only return object or undefined", site)
+        throw referenceError(THIS_BEFORE_SUPER, site)
+      }
+      const made = v instanceof Obj ? v : frame.thisValue
+      this.release(frame)
+      const caller = frames[frames.length - 1]!
+      caller.regs[caller.sp++] = made
+      caller.pc++
+      return true
+    }
+    if (frame.mode === Mode.REDO) {
+      frames.pop()
+      const saved = (frame.target as Arr).items
+      const caller = frames[frames.length - 1]!
+      caller.pc = saved[0] as number
+      this.redo = { frame: caller, pc: caller.pc, values: [...saved.slice(1), v], next: 0 }
+      this.release(frame)
+      return true
+    }
     frames.pop()
     this.release(frame)
     return true
@@ -1715,7 +2073,10 @@ export class Vm {
     const regs = frame.regs
     if (n === 255) {
       const callee = regs[sp - 1] as Value
-      if (!(callee instanceof Builtin) || callee.construct === undefined) {
+      if (
+        !(callee instanceof Fn && callee.klass !== undefined) &&
+        (!(callee instanceof Builtin) || callee.construct === undefined)
+      ) {
         frame.pc = pc
         frame.sp = sp
         throw notConstructible(callee, fcode.siteAt(pc) as NewExpression)
@@ -1725,19 +2086,39 @@ export class Vm {
     }
     frame.pc = pc
     const base = sp - n
-    const callee = regs[base - 1] as Builtin
+    const callee = regs[base - 1] as Builtin | Fn
     const args = regs.slice(base, sp) as Array<Value>
     frame.sp = base - 1
+    if (callee instanceof Fn) return this.constructClass(frame, callee, args, callSiteOf(frame, pc))
     return this.execConstruct(frame, callee, args, callSiteOf(frame, pc))
   }
 
   private execNewSpread(frame: Frame, pc: number, sp: number): number {
     const regs = frame.regs
     const argsArr = regs[--sp] as Arr
-    const callee = regs[--sp] as Builtin
+    const callee = regs[--sp] as Builtin | Fn
     frame.pc = pc
     frame.sp = sp
+    if (callee instanceof Fn) return this.constructClass(frame, callee, [...argsArr.items], callSiteOf(frame, pc))
     return this.execConstruct(frame, callee, [...argsArr.items], callSiteOf(frame, pc))
+  }
+
+  // `new C(...)`, or `super(...)` for `newTarget`, runs C's constructor (`Mode.CONSTRUCT`): a base class's on a new
+  // instance of `newTarget.prototype`; a derived class's with `newTarget` as its `this` until `super()` binds one.
+  private constructClass(
+    callerFrame: Frame,
+    ctor: Fn,
+    args: Array<Value>,
+    site: AstNode | undefined,
+    newTarget: Fn = ctor,
+  ): number {
+    if (this.depth > MAX_CALL_DEPTH) throw rangeError("Maximum call stack size exceeded", site ?? this.currentSite())
+    const proto = get(newTarget, "prototype")
+    const self = ctor.klass!.derived ? newTarget : new Obj(proto instanceof Obj ? proto : this.ctx.builtins.Object)
+    // A derived constructor's frame holds its new target until `super()` binds `this`.
+    this.pushFn(ctor, self, args, site ?? callerFrame.origin, Mode.CONSTRUCT, ctor.klass!.derived ? newTarget : undefined)
+    this.fuel--
+    return 1
   }
 
   private execIterStepSlow(frame: Frame, custom: CustomIter, bx: number, pc: number, sp: number): boolean {
@@ -1765,33 +2146,40 @@ export class Vm {
     return false
   }
 
+  // Returns the next pc, or REDO_ENTERED (here and in the other ops that read through `redoRead`).
   private execIterResult(frame: Frame, slot: number, bx: number, pc: number, sp: number): number {
     const regs = frame.regs
-    const res = regs[--sp] as Value
+    const res = regs[sp - 1] as Value
     frame.pc = pc
-    frame.sp = sp
+    frame.sp = sp - 1
     if (!(res instanceof Obj)) {
       throw typeError("Iterator next() result must be an object.", frame.code.siteAt(pc))
     }
-    const done = Boolean(this.readObjProp(res, "done", frame.code, pc))
+    const reads: Array<Value> = []
+    const done = this.redoRead(frame, res, "done", res, pc, sp, reads)
+    if (done === REDO) return REDO_ENTERED
     if (done) return bx
     ;(regs[slot] as CustomIter).done = false
-    regs[sp] = this.readObjProp(res, "value", frame.code, pc)
-    frame.sp = sp + 1
+    const value = this.redoRead(frame, res, "value", res, pc, sp, reads)
+    if (value === REDO) return REDO_ENTERED
+    regs[sp - 1] = value
+    frame.sp = sp
     return pc + 1
   }
 
   private execIterClose(frame: Frame, slot: number, bx: number, pc: number, sp: number): number {
     const regs = frame.regs
     const rec = regs[slot]
-    if (!(rec instanceof CustomIter) || rec.done) {
+    // Running again after a `return` getter, the record is already closed.
+    if (!(rec instanceof CustomIter) || (rec.done && !this.replaying(frame, pc))) {
       frame.sp = sp
       return bx
     }
     frame.pc = pc
     frame.sp = sp
     rec.done = true
-    const ret = this.readObjProp(rec.iterator, "return", frame.code, pc)
+    const ret = this.redoRead(frame, rec.iterator, "return", rec.iterator, pc, sp, [])
+    if (ret === REDO) return REDO_ENTERED
     if (ret === undefined || ret === null) return bx
     const method = requireIteratorMethod(ret, "Iterator return", frame.code.siteAt(pc))
     regs[sp++] = rec.iterator
@@ -1813,15 +2201,18 @@ export class Vm {
     return pc + 1
   }
 
-  private readObjProp(target: Obj, key: string | symbol, fcode: Code, pc: number): Value {
+  // A named property read for an op: the value, or a program getter for the op to enter with `receiver`.
+  private readObjProp(target: Obj, key: string | symbol, receiver: Value, fcode: Code, pc: number): Value | GetterCall {
     for (let cur: Obj | null = target; cur !== null; cur = cur.proto) {
       if (cur.props.size === 0) continue
       const slot = cur.props.get(key)
       if (slot !== undefined) {
         if ("value" in slot) return slot.value
-        if (slot.get === undefined) return undefined
+        const getter = slot.get
+        if (getter === undefined) return undefined
+        if (typeof getter !== "function") return new GetterCall(getter)
         try {
-          return slot.get(target)
+          return getter(receiver)
         } catch (err) {
           throw locate(err, fcode.siteAt(pc))
         }
@@ -1830,11 +2221,77 @@ export class Vm {
     return undefined
   }
 
+  /**
+   * One property read of an iterator op that may meet a program getter: the value, or REDO once the getter is entered
+   * (`Mode.REDO`), with the op's stack back as it found it (`sp0`) so it can run again from its first word. `reads` is
+   * the op's reads so far this run; each value read is added to it. Running again, the op's reads replay in order.
+   */
+  redoRead(
+    frame: Frame,
+    target: Obj,
+    key: string | symbol,
+    receiver: Value,
+    pc: number,
+    sp0: number,
+    reads: Array<Value>,
+  ): Value | typeof REDO {
+    const start = instructionStart(frame.code.code, pc)
+    const redo = this.redo
+    if (redo !== undefined && redo.frame === frame && redo.pc === start && redo.next < redo.values.length) {
+      const replayed = redo.values[redo.next++]
+      reads.push(replayed)
+      return replayed
+    }
+    const v = this.readObjProp(target, key, receiver, frame.code, pc)
+    if (!(v instanceof GetterCall)) {
+      reads.push(v)
+      return v
+    }
+    this.redo = undefined
+    frame.pc = start
+    frame.sp = sp0
+    this.pushInternal(
+      internalCode("$vmRedo"),
+      [v.getter, receiver],
+      callSiteOf(frame, pc),
+      Mode.REDO,
+      new Arr(this.ctx.builtins.Array, [start, ...reads]),
+    )
+    return REDO
+  }
+
+  // Whether the op at `pc` is running again after a getter, with reads left to replay.
+  private replaying(frame: Frame, pc: number): boolean {
+    const redo = this.redo
+    return (
+      redo !== undefined &&
+      redo.frame === frame &&
+      redo.pc === instructionStart(frame.code.code, pc) &&
+      redo.next < redo.values.length
+    )
+  }
+
+  /**
+   * Enters the program getter of a member read whose result goes at `at` (a method read keeps the receiver there and the
+   * value above it), as a call from the instruction at `pc`. Returns the new sp when the getter answered at once, or
+   * `GETTER_ENTERED`, `GETTER_FUEL` (entered, and the slice is over) or `GETTER_BLOCKED`.
+   */
+  private enterGetter(frame: Frame, getter: Callable, receiver: Value, at: number, mode: number, pc: number): number {
+    if (mode === 1) frame.regs[at++] = receiver
+    frame.sp = at
+    frame.pc = pc
+    const called = this.invokeCallable(frame, getter, receiver, [], callSiteOf(frame, pc), pc)
+    if (called === 0) return frame.sp
+    if (called === 2) return GETTER_BLOCKED
+    return this.fuel <= 0 ? GETTER_FUEL : GETTER_ENTERED
+  }
+
   unwind(rawError: unknown): boolean {
     // An interruption skips every handler, but still completes each frame by its mode: a frame that settles a
     // promise rejects it, so whatever awaits that promise is interrupted in turn.
     const interrupted = rawError instanceof Interruption
     const error = interrupted ? rawError : locate(rawError, this.currentSite())
+    this.redo = undefined
 
     if (this.frames.length === 0) {
       this.outcome = abrupt(error)
@@ -1853,7 +2310,11 @@ export class Vm {
           const target = handlers[i + 2]!
           const depth = handlers[i + 3]!
           const sp = fcode.locals + depth
-          frame.regs[sp] = materialize(this.ctx, error)
+          frame.regs[sp] = materialize(
+            this.ctx,
+            error,
+            (fcode.flags & CodeFlags.INTERNAL) === 0 ? fcode.siteAt(faultPc) : undefined,
+          )
           frame.sp = sp + 1
           frame.pc = target
           return true
@@ -1862,7 +2323,7 @@ export class Vm {
 
       this.frames.pop()
       const mode = frame.mode
-      if (mode === Mode.CALLER) {
+      if (mode === Mode.CALLER || mode === Mode.REDO || mode === Mode.CONSTRUCT) {
         this.release(frame)
         continue
       }
@@ -1981,33 +2442,37 @@ export class Vm {
     return sp + 1
   }
 
+  // A named member read (`o.key`; mode 1 a method read, 2 a destructured property): the new sp, or a getter code.
   private execGetProp(frame: Frame, o: Value, key: string, mode: number, pc: number, sp: number): number {
     const regs = frame.regs
     if (mode !== 2 && o instanceof Obj && !(o instanceof PromiseObj)) {
-      const v = key === "length" && o instanceof Arr ? o.items.length : this.readObjProp(o, key, frame.code, pc)
+      const v = key === "length" && o instanceof Arr ? o.items.length : this.readObjProp(o, key, o, frame.code, pc)
+      if (v instanceof GetterCall) return this.enterGetter(frame, v.getter, o, sp - 1, mode, pc)
       return writeRead(regs, sp - 1, mode, o, v)
     }
     if (mode !== 2 && typeof o === "string") {
-      const v = key === "length" ? o.length : this.readObjProp(this.ctx.builtins.String, key, frame.code, pc)
+      const v = key === "length" ? o.length : this.readObjProp(this.ctx.builtins.String, key, o, frame.code, pc)
+      if (v instanceof GetterCall) return this.enterGetter(frame, v.getter, o, sp - 1, mode, pc)
       return writeRead(regs, sp - 1, mode, o, v)
     }
     if (o instanceof HostNamespace) {
       return writeRead(regs, sp - 1, mode, undefined, new HostNamespace(o.root, [...o.path, key]))
     }
-    const site = frame.code.siteAt(pc)!
-    if (mode === 2) {
-      regs[sp - 1] = destructuredProperty(this.ctx.builtins, o, key, site)
-      return sp
-    }
-    return this.readMember(regs, sp - 1, mode, o, key, site)
+    return this.readMember(frame, sp - 1, mode, o, key, frame.code.siteAt(pc)!, pc)
   }
 
-  private execGetElem(frame: Frame, o: Value, keyVal: Value, mode: number, pc: number, sp: number): boolean {
+  // A computed member read (`o[key]`), as `execGetProp`; `GETTER_ENTERED` also when the key converts in the prelude.
+  private execGetElem(frame: Frame, o: Value, keyVal: Value, mode: number, pc: number, sp: number): number {
     if (mode === 0) {
-      if (typeof o === "string" && typeof keyVal === "number" && keyVal >= 0 && (keyVal | 0) === keyVal) {
+      if (
+        typeof o === "string" &&
+        typeof keyVal === "number" &&
+        keyVal >= 0 &&
+        keyVal < o.length &&
+        (keyVal | 0) === keyVal
+      ) {
         frame.regs[sp - 2] = o[keyVal]
-        frame.sp = sp - 1
-        return false
+        return sp - 1
       }
       if (o instanceof Obj && !(o instanceof PromiseObj)) {
         if (typeof keyVal === "number" && !(o instanceof Arr)) {
@@ -2018,14 +2483,14 @@ export class Vm {
             o.proto.intrinsic > 0
           ) {
             frame.regs[sp - 2] = undefined
-            frame.sp = sp - 1
-            return false
+            return sp - 1
           }
         }
         if (typeof keyVal === "string" && o.constructor === Obj) {
-          frame.regs[sp - 2] = this.readObjProp(o, keyVal, frame.code, pc)
-          frame.sp = sp - 1
-          return false
+          const v = this.readObjProp(o, keyVal, o, frame.code, pc)
+          if (v instanceof GetterCall) return this.enterGetter(frame, v.getter, o, sp - 2, 0, pc)
+          frame.regs[sp - 2] = v
+          return sp - 1
         }
       }
     }
@@ -2035,31 +2500,22 @@ export class Vm {
     if (keyVal instanceof Obj && !isOpaque(keyVal)) {
       frame.sp = sp - 2
       this.pushInternalCall("$vmGetElem", [o, keyVal], memberNode.property ?? site)
-      return true
+      return GETTER_ENTERED
     }
-    const key = propertyKey(keyVal)
-    if (mode === 2) {
-      frame.regs[sp - 2] = destructuredProperty(this.ctx.builtins, o, key, site)
-      frame.sp = sp - 1
-      return false
-    }
-    frame.sp = this.readMember(frame.regs, sp - 2, mode, o, key, site)
-    return false
+    return this.readMember(frame, sp - 2, mode, o, propertyKey(keyVal), site, pc)
   }
 
-  // Reads `o[key]` for the member expression at `site` into `regs` at `at`; see `writeRead`.
-  private readMember(
-    regs: Array<unknown>,
-    at: number,
-    mode: number,
-    o: Value,
-    key: PropertyKey,
-    site: AstNode,
-  ): number {
+  // Reads `o[key]` for the member expression (or destructured property, mode 2) at `site` into the stack at `at`; see
+  // `writeRead`. A destructured promise is read as is; a member read of one must name a property it has.
+  private readMember(frame: Frame, at: number, mode: number, o: Value, key: PropertyKey, site: AstNode, pc: number) {
+    const regs = frame.regs
     const ref = this.resolveMember(o, key, site)
     if (ref instanceof HostNamespace) return writeRead(regs, at, mode, undefined, ref)
     if ("value" in ref) return writeRead(regs, at, mode, undefined, ref.value)
-    return writeRead(regs, at, mode, ref.receiver, readReference(ref, site as MemberExpression))
+    if (mode !== 2) requirePromiseProperty(ref, site)
+    const v = accessProperty(ref.target, ref.key, site, ref.receiver)
+    if (v instanceof GetterCall) return this.enterGetter(frame, v.getter, ref.receiver, at, mode, pc)
+    return writeRead(regs, at, mode, ref.receiver, v)
   }
 
   // The reference `o[key]` that the member expression at `site` names.
@@ -2068,22 +2524,41 @@ export class Vm {
     return resolveProperty(this.ctx.builtins, o, key, member.object ?? site, member.property ?? site)
   }
 
-  private execPutProp(fcode: Code, o: Value, key: PropertyKey, v: Value, pc: number): void {
-    if (!(o instanceof Obj)) {
-      const site = fcode.siteAt(pc)!
-      const ref = resolveProperty(this.ctx.builtins, o, key, site, site)
-      writableReference(ref, site as MemberExpression)
-      return
-    }
+  // `o[key] = v`, with `v` popped and `o` at `sp - 1`. True when a program setter runs (`$vmSet` answers `v`).
+  private execPutProp(frame: Frame, o: Value, key: PropertyKey, v: Value, pc: number, sp: number): boolean {
+    const fcode = frame.code
+    let setter: Callable | undefined
     try {
-      assignToReference(o, key, v, undefined!)
+      setter = o instanceof Obj ? assignToReference(o, key, v, undefined) : this.primitiveSetter(fcode, o, key, v, pc)
     } catch (err) {
       throw locate(err, fcode.siteAt(pc))
     }
+    if (setter === undefined) return false
+    frame.sp = sp - 1
+    this.pushInternalCall("$vmSet", [setter, o, v], callSiteOf(frame, pc))
+    return true
   }
 
-  private execPutElem(fcode: Code, o: Value, keyVal: Value, v: Value, pc: number): void {
-    this.execPutProp(fcode, o, propertyKey(keyVal), v, pc)
+  // A write to a primitive's property: only an inherited setter can take it (with the primitive as `this`).
+  private primitiveSetter(fcode: Code, o: Value, key: PropertyKey, v: Value, pc: number): Callable | undefined {
+    const site = fcode.siteAt(pc)!
+    const ref = resolveProperty(this.ctx.builtins, o, key, site, site)
+    if (!(ref instanceof HostNamespace) && !("value" in ref)) {
+      const slot = lookup(ref.target, ref.key)
+      if (slot !== undefined && !("value" in slot)) {
+        const setter = slot.set
+        if (setter === undefined) throw failedAssignment(o, ref.key, site)
+        if (typeof setter !== "function") return setter
+        try {
+          setter(o, v)
+        } catch (err) {
+          throw locate(err, site)
+        }
+        return undefined
+      }
+    }
+    writableReference(ref, site as MemberExpression)
+    return undefined
   }
 
   private execDeleteProp(fcode: Code, o: Value, key: PropertyKey, pc: number): boolean {
@@ -2125,7 +2600,13 @@ export class Vm {
       return
     }
     const key = kind === CheckBaseKind.WRITE_PROP ? (fcode.consts[bx] as string) : propertyKey(regs[sp - 1] as Value)
-    readReference(writableReference(this.resolveMember(base, key, site), memberNode), memberNode)
+    const ref = this.resolveMember(base, key, site)
+    // A primitive's inherited accessor takes the write (see `primitiveSetter`); the base is all that's checked here.
+    if (!(ref instanceof HostNamespace) && !("value" in ref) && ref.receiver !== ref.target) {
+      const slot = lookup(ref.target, ref.key)
+      if (slot !== undefined && !("value" in slot)) return
+    }
+    requirePromiseProperty(writableReference(ref, memberNode), memberNode)
   }
 
   private execBinarySlow(frame: Frame, op: string, a: Value, b: Value, pc: number, sp: number): boolean {
@@ -2185,7 +2666,11 @@ export class Vm {
       const site = callee.callback && callee.call.length < 3 ? undefined : callSiteOf(frame, pc)
       const res = callee.call(thisVal, args, site)
       if (this.tripEvery === 0) this.fuel -= NATIVE_FUEL
-      if ((res as unknown) !== BLOCK && (res as unknown) !== ENTERED && (res === null || typeof res !== "object" || res instanceof Obj)) {
+      if (
+        (res as unknown) !== BLOCK &&
+        (res as unknown) !== ENTERED &&
+        (res === null || typeof res !== "object" || res instanceof Obj)
+      ) {
         normalizeItems(res)
         regs[base - 2] = res
         frame.sp = base - 1
@@ -2223,7 +2708,8 @@ export class Vm {
       } catch (err) {
         throw locate(err, site ?? this.currentSite())
       }
-      if (res instanceof Convert) {
+      // `$Replay` hands a built-in's next request back to `$vmReplay`'s loop.
+      if ((res instanceof Convert || res instanceof Prefetch) && callee.name === "$Replay") {
         callerFrame.regs[callerFrame.sp++] = res as unknown as Value
         return 0
       }
@@ -2241,6 +2727,12 @@ export class Vm {
 
     if (callee instanceof Fn) {
       const code = callee.code
+      if ((code.flags & CodeFlags.CLASS_CONSTRUCTOR) !== 0) {
+        throw typeError(
+          `Class constructor ${String(get(callee, "name"))} cannot be invoked without 'new'`,
+          site ?? this.currentSite(),
+        )
+      }
       const counted = (code.flags & CodeFlags.INTERNAL) === 0
       if (counted && this.depth > MAX_CALL_DEPTH) {
         throw rangeError("Maximum call stack size exceeded", site ?? this.currentSite())
@@ -2273,28 +2765,38 @@ export class Vm {
         const callNode = site as { readonly callee?: Expression } | undefined
         throw typeError(`${callee.root} is not a function.`, callNode?.callee ?? site)
       }
-      return this.hostResult(callerFrame, this.ctx.callNamespace(callee, args, site ?? this.currentSite()))
+      const result = this.ctx.callNamespace(callee, args, site ?? this.currentSite())
+      if (result instanceof Prefetch) {
+        return this.settleNativeResult(callerFrame, result, callee, undefined, args, false, site, pc)
+      }
+      return this.hostResult(callerFrame, result)
     }
 
     const callNode = site as { readonly callee?: Expression } | undefined
     throw notAFunction(callNode?.callee, site ?? this.currentSite())
   }
 
-  private execConstruct(callerFrame: Frame, ctor: Builtin, args: Array<Value>, site: AstNode | undefined): number {
+  private execConstruct(
+    callerFrame: Frame,
+    ctor: Builtin,
+    args: Array<Value>,
+    site: AstNode | undefined,
+    newTarget: Builtin | Fn = ctor,
+  ): number {
     conversions.count = 0
     let res: NativeResult
     try {
-      res = ctor.construct!(args, ctor, site ?? this.currentSite())
+      res = ctor.construct!(args, newTarget, site ?? this.currentSite())
     } catch (err) {
       throw locate(err, site ?? this.currentSite())
     }
-    return this.settleNativeResult(callerFrame, res, ctor, ctor, args, true, site, callerFrame.pc)
+    return this.settleNativeResult(callerFrame, res, ctor, newTarget, args, true, site, callerFrame.pc)
   }
 
   private settleNativeResult(
     callerFrame: Frame,
     res: NativeResult,
-    callable: Builtin | undefined,
+    callable: Builtin | HostNamespace | undefined,
     thisOrNewTarget: Value,
     args: Array<Value>,
     constructing: boolean,
@@ -2312,15 +2814,16 @@ export class Vm {
     }
     if ((res as unknown) === BLOCK) return 2
     if ((res as unknown) === ENTERED) return 1
-    if (res instanceof Convert) {
+    if (res instanceof Convert || res instanceof Prefetch) {
       const builtins = this.ctx.builtins
       this.pushInternalCall(
-        "$vmConvert",
+        "$vmReplay",
         [
           callable!,
           thisOrNewTarget,
           new Arr(builtins.Array, args),
           constructing,
+          new Arr(builtins.Array, []),
           new Arr(builtins.Array, []),
           res as unknown as Value,
         ],
@@ -2368,7 +2871,7 @@ export class Vm {
 
   // A host operation's answer, by `invokeCallable`'s convention: a value is pushed (0), a frame entered (1), or the job
   // blocks (2).
-  private hostResult(callerFrame: Frame, result: HostResult): number {
+  private hostResult(callerFrame: Frame, result: Exclude<HostResult, Prefetch>): number {
     if (result === ENTERED) return 1
     if (result === BLOCK) return 2
     callerFrame.regs[callerFrame.sp++] = result
@@ -2458,16 +2961,21 @@ export class Vm {
       }
     }
     const site = fcode.siteAt(pc) ?? frame.origin
+    const reads: Array<Value> = []
     if (context === IterContext.FOR_AWAIT || context === IterContext.ASYNC_DELEGATE) {
-      if (this.openWithMethod(frame, v, AsyncIteratorSymbol, site, sp)) return pc + 1
+      const opened = this.openWithMethod(frame, v, AsyncIteratorSymbol, site, pc, sp, reads)
+      if (opened !== false) return opened === REDO ? REDO_ENTERED : pc + 1
       const cursor = builtinCursor(this.ctx.builtins, v)
       if (cursor !== undefined) {
         const adapter = new AsyncFromSyncIterator(this.ctx.builtins.AsyncFromSyncIterator, cursor, site!)
-        frame.regs[sp - 1] = new CustomIter(adapter, get(adapter, "next"))
+        const next = this.redoRead(frame, adapter, "next", adapter, pc, sp, reads)
+        if (next === REDO) return REDO_ENTERED
+        frame.regs[sp - 1] = new CustomIter(adapter, next)
         return skipJump(fcode.code, pc)
       }
       if (v instanceof Obj) {
-        const syncMethod = readProperty(v, IteratorSymbol, site)
+        const syncMethod = this.redoRead(frame, v, IteratorSymbol, v, pc, sp, reads)
+        if (syncMethod === REDO) return REDO_ENTERED
         if (syncMethod !== undefined && syncMethod !== null) {
           const callable = requireIteratorMethod(syncMethod, "Iterator method", site)
           const openCode = internalCode("$vmOpenSyncForAsync")
@@ -2484,18 +2992,22 @@ export class Vm {
     }
 
     if (context === IterContext.DELEGATE) {
-      if (this.openWithMethod(frame, v, IteratorSymbol, site, sp)) return pc + 1
+      const opened = this.openWithMethod(frame, v, IteratorSymbol, site, pc, sp, reads)
+      if (opened !== false) return opened === REDO ? REDO_ENTERED : pc + 1
       const cursor = builtinCursor(this.ctx.builtins, v)
       if (cursor !== undefined) {
         const iterObj =
           cursor instanceof Position ? new IteratorObj(this.ctx.builtins.Iterator, cursor) : cursor.iterator
-        frame.regs[sp - 1] = new CustomIter(iterObj, get(iterObj, "next"))
+        const next = this.redoRead(frame, iterObj, "next", iterObj, pc, sp, reads)
+        if (next === REDO) return REDO_ENTERED
+        frame.regs[sp - 1] = new CustomIter(iterObj, next)
         return skipJump(fcode.code, pc)
       }
       throw typeError("yield* requires a compatible iterable value.", site)
     }
 
-    if (this.openWithMethod(frame, v, IteratorSymbol, site, sp)) return pc + 1
+    const opened = this.openWithMethod(frame, v, IteratorSymbol, site, pc, sp, reads)
+    if (opened !== false) return opened === REDO ? REDO_ENTERED : pc + 1
     if (context === IterContext.FOR_OF) {
       throw invalidData(`for...of requires an iterable value, received ${describeValue(v)}.`, site)
     }
@@ -2510,22 +3022,34 @@ export class Vm {
     )
   }
 
-  private execIterInit(frame: Frame, context: number, pc: number, sp: number): void {
+  // True when a `next` getter is entered first.
+  private execIterInit(frame: Frame, context: number, pc: number, sp: number): boolean {
     const site = frame.code.siteAt(pc) ?? frame.origin
     const v = frame.regs[sp - 1] as Value
     if (context === IterContext.CHECK_OBJECT) {
       requireIteratorObject(v, "Iterator return() result", site)
-      return
+      return false
     }
     const obj = requireIteratorObject(v, "Iterator method result", site)
-    const next = requireIteratorMethod(readProperty(obj, "next", site), "Iterator next", site)
-    frame.regs[sp - 1] = this.customIter(obj, next)
+    const read = this.redoRead(frame, obj, "next", obj, pc, sp, [])
+    if (read === REDO) return true
+    frame.regs[sp - 1] = this.customIter(obj, requireIteratorMethod(read, "Iterator next", site))
+    return false
   }
 
-  // Opens `v` with its own `symbol` method, when it has one: the next instruction calls it.
-  private openWithMethod(frame: Frame, v: Value, symbol: symbol, site: AstNode | undefined, sp: number): boolean {
+  // Opens `v` with its own `symbol` method, when it has one (true): the next instruction calls it.
+  private openWithMethod(
+    frame: Frame,
+    v: Value,
+    symbol: symbol,
+    site: AstNode | undefined,
+    pc: number,
+    sp: number,
+    reads: Array<Value>,
+  ): boolean | typeof REDO {
     if (!(v instanceof Obj)) return false
-    const method = readProperty(v, symbol, site)
+    const method = this.redoRead(frame, v, symbol, v, pc, sp, reads)
+    if (method === REDO) return REDO
     if (method === undefined || method === null) return false
     frame.regs[sp - 1] = v
     frame.regs[sp] = requireIteratorMethod(method, "Iterator method", site)
@@ -2540,7 +3064,7 @@ export class Vm {
     custom.rawGen =
       iterator instanceof GeneratorObj &&
       !iterator.asynchronous &&
-      (next === get(builtins.Generator, "next") || next === get(builtins.IteratorHelper, "next"))
+      (next === peek(builtins.Generator, "next") || next === peek(builtins.IteratorHelper, "next"))
     return custom
   }
 
@@ -2673,15 +3197,19 @@ export class Vm {
         frame.sp = this.execImport(frame, a, bx, pc, sp)
         return pc + 1
       case Op.GET_PROP:
-        frame.sp = this.execGetProp(frame, regs[sp - 1] as Value, consts[bx] as string, a, pc, sp)
+      case Op.GET_ELEM: {
+        const r =
+          op === Op.GET_PROP
+            ? this.execGetProp(frame, regs[sp - 1] as Value, consts[bx] as string, a, pc, sp)
+            : this.execGetElem(frame, regs[sp - 2] as Value, regs[sp - 1] as Value, a, pc, sp)
+        if (r < 0) return r === GETTER_ENTERED ? -1 : r === GETTER_FUEL ? -3 : -4
+        frame.sp = r
         return pc + 1
-      case Op.GET_ELEM:
-        if (this.execGetElem(frame, regs[sp - 2] as Value, regs[sp - 1] as Value, a, pc, sp)) return -1
-        return pc + 1
+      }
       case Op.PUT_PROP: {
         const v = regs[--sp] as Value
         frame.sp = sp
-        this.execPutProp(fcode, regs[sp - 1] as Value, consts[bx] as string, v, pc)
+        if (this.execPutProp(frame, regs[sp - 1] as Value, consts[bx] as string, v, pc, sp)) return -1
         regs[sp - 1] = v
         return pc + 1
       }
@@ -2689,7 +3217,7 @@ export class Vm {
         const v = regs[--sp] as Value
         const keyVal = regs[--sp] as Value
         frame.sp = sp
-        this.execPutElem(fcode, regs[sp - 1] as Value, keyVal, v, pc)
+        if (this.execPutProp(frame, regs[sp - 1] as Value, propertyKey(keyVal), v, pc, sp)) return -1
         regs[sp - 1] = v
         return pc + 1
       }
@@ -2721,7 +3249,7 @@ export class Vm {
       case Op.INSTANCEOF: {
         const rhs = regs[--sp] as Value
         frame.sp = sp
-        regs[sp - 1] = this.execInstanceof(fcode, regs[sp - 1] as Value, rhs, pc)
+        if (this.execInstanceof(frame, regs[sp - 1] as Value, rhs, pc, sp)) return -1
         return pc + 1
       }
       case Op.NEW_OBJECT:
@@ -2739,11 +3267,14 @@ export class Vm {
         return pc + 1
       case Op.COPY_DATA_PROPS:
         frame.sp = --sp
-        this.execCopyDataProps(fcode, regs[sp - 1] as Obj, regs[sp] as Value, pc)
+        if (this.execCopyDataProps(frame, regs[sp - 1] as Obj, regs[sp] as Value, pc, sp)) return -1
         return pc + 1
-      case Op.COPY_REST:
-        frame.sp = this.execCopyRest(fcode, regs, bx, pc, sp)
+      case Op.COPY_REST: {
+        const r = this.execCopyRest(frame, regs, bx, pc, sp)
+        if (r < 0) return -1
+        frame.sp = r
         return pc + 1
+      }
       case Op.TEMPLATE:
         regs[sp++] = this.getTemplateObject(fcode, consts[bx] as TemplateSite)
         frame.sp = sp
@@ -2928,7 +3459,7 @@ export class Vm {
       case Op.ITER_OPEN:
         return this.execIterOpen(frame, a, pc, sp)
       case Op.ITER_INIT:
-        this.execIterInit(frame, a, pc, sp)
+        if (this.execIterInit(frame, a, pc, sp)) return -1
         return pc + 1
       case Op.ITER_STEP: {
         const rec = regs[a]
@@ -2965,13 +3496,103 @@ export class Vm {
         execAwait(this, frame, a, pc, sp)
         return -1
       case Op.YSTAR:
-        return execYstar(frame, a, bx, pc, sp)
+        return execYstar(this, frame, a, bx, pc, sp)
       case Op.YSTAR_RESULT:
-        return execYstarResult(frame, a, bx, pc, sp)
+        return execYstarResult(this, frame, a, bx, pc, sp)
+      case Op.DEFINE_ACCESSOR:
+        frame.sp = this.execDefineAccessor(regs, consts, a, bx, sp)
+        return pc + 1
+      case Op.CLASS:
+        frame.sp = this.execClass(frame, a, pc, sp)
+        return pc + 1
+      case Op.SUPER_CALL: {
+        const made = this.execSuperCall(frame, a, bx, pc)
+        if (made === 1) return -1
+        if (made === 2) return -4
+        return pc + 1
+      }
+      case Op.SUPER_BIND:
+        this.execSuperBind(frame, a, bx, pc)
+        return pc + 1
+      case Op.GET_SUPER: {
+        const r = this.execGetSuper(frame, a, bx, pc)
+        if (r < 0) return r === GETTER_ENTERED ? -1 : r === GETTER_FUEL ? -3 : -4
+        frame.sp = r
+        return pc + 1
+      }
+      case Op.PUT_SUPER:
+        return this.execPutSuper(frame, a, bx, pc) ? -1 : pc + 1
+      case Op.SET_HOME:
+        ;(regs[sp - 1] as Fn).home = regs[sp - 1 - a] as Obj
+        return pc + 1
+      case Op.DEFINE_METHOD:
+        frame.sp = this.execDefineMethod(regs, consts, a, bx, sp)
+        return pc + 1
+      case Op.SET_FIELDS:
+        frame.sp = this.execSetFields(regs, sp)
+        return pc + 1
+      case Op.INIT_FIELDS: {
+        const called = this.execInitFields(frame, a, pc, sp)
+        if (called === 1) return this.fuel <= 0 ? -3 : -1
+        if (called === 2) return -4
+        frame.pc = pc + 1
+        return pc + 1
+      }
       default:
         throw new Error(`Unexpected wide op ${op}`)
     }
   }
+}
+
+// What `execGetProp` / `execGetElem` return in place of a stack pointer once they enter a frame (a getter, say): it runs
+// now (`continue outer`), the slice is over, or the job blocks on the host call the getter made.
+const hasStaticName = (fn: Fn): boolean => {
+  const slot = own(fn, "name")
+  return slot !== undefined && (!("value" in slot) || typeof slot.value !== "string")
+}
+
+const THIS_BEFORE_SUPER =
+  "Must call super constructor in derived class before accessing 'this' or returning from derived constructor"
+
+// What a class may extend: another class or an error constructor. Other built-ins and `null` are refused.
+const classParent = (parent: Value, site: AstNode | undefined, builtins: Builtins): Fn | Builtin => {
+  if (parent === null) throw typeError("Classes extending null are not supported.", site)
+  if (parent instanceof Fn && parent.klass !== undefined) return parent
+  if (isErrorConstructor(parent, builtins)) return parent
+  if (parent instanceof Builtin && parent.construct !== undefined) {
+    throw typeError(
+      `Extending the built-in ${String(peek(parent, "name"))} is not supported. Only classes and Error types can be extended.`,
+      site,
+    )
+  }
+  throw typeError(`Class extends value ${describeValue(parent)} is not a constructor or null.`, site)
+}
+
+const isErrorConstructor = (value: Value, builtins: Builtins): value is Builtin => {
+  if (!(value instanceof Builtin)) return false
+  const name = peek(value, "name")
+  return typeof name === "string" && isErrorType(name) && peek(builtins[name], "constructor") === value
+}
+
+// The object `super.x` reads from: the home object's prototype.
+const superBase = (home: Obj, site: AstNode | undefined): Obj => {
+  if (home.proto === null) throw typeError("Cannot use 'super' here: the home object has no prototype.", site)
+  return home.proto
+}
+
+const GETTER_ENTERED = -1
+const GETTER_FUEL = -2
+const GETTER_BLOCKED = -3
+
+// `redoRead`'s answer once it entered a getter, and the iterator ops' (a negative pc, so `continue outer`).
+export const REDO: unique symbol = Symbol("vm.redo")
+export const REDO_ENTERED = -1
+
+// The first word of the instruction whose opcode word is at `pc`: before its `EXTRA` prefix words, if any.
+const instructionStart = (code: Int32Array, pc: number): number => {
+  if (pc > 0 && (code[pc - 1]! & 0xff) === Op.EXTRA)
+    return pc > 1 && (code[pc - 2]! & 0xff) === Op.EXTRA ? pc - 2 : pc - 1
+  return pc
 }
 
 // Skips the `JUMP slow` instruction following a test-and-skip `ITER_OPEN` or `ITER_STEP`.

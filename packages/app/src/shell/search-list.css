@@ -57,6 +57,17 @@
   outline: none;
 }
 
+@media (forced-colors: active) {
+  .search-list-row:is([data-active], :focus-visible) {
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  .search-list-row:is([data-active], :focus-visible) * {
+    color: inherit;
+  }
+}
+
 .search-list-row-text {
   display: flex;
   min-width: 0;
@@ -279,10 +290,8 @@
 
 /* A list dialog with a compact header and a bare search, as in the integration and manage models dialogs. */
 [data-component="dialog-v2"] [data-slot="dialog-container"] [data-slot="dialog-content"].search-dialog {
-  /* Trailing controls sit 10px from both the top and the end edge. */
   [data-slot="dialog-header"] {
-    padding-block: 10px 6px;
-    padding-inline: 14px 10px;
+    padding: 14px 16px 8px;
 
     [data-slot="dialog-close-button"] {
       margin-top: 0;
@@ -308,8 +317,9 @@
   }
 
   [data-slot="dialog-description"] {
-    font-size: 12px;
+    font-size: 13px;
     line-height: var(--line-height-base);
+    letter-spacing: -0.04px;
   }
 }
 

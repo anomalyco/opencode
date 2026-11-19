@@ -30,7 +30,6 @@ import {
   selectMenuRestoreTriggerWithoutRing,
   transitionMenu,
   type MenuEvent,
-  type MenuInputGesture,
   type MenuState,
 } from "./machine"
 import {
@@ -45,6 +44,7 @@ import {
   type SubmenuEvent,
   type SubmenuState,
 } from "./submenu-machine"
+import { createOverlayFocus, openGesture, releaseOpenGesture, retainOpenGesture } from "../../context/overlay-focus"
 import "./menu.css"
 
 const ChevronRight: Component = () => (
@@ -81,9 +81,10 @@ type MenuContextValue = {
   modal: Accessor<boolean>
   onOutsideInteract: () => void
   onCloseAutoFocus: () => void
+  restoreFocus?: (event: Event) => void
 }
 
-// Context menus restore focus through Kobalte alone, so they never run the dropdown machine.
+// Context menus restore focus through `restoreFocus`, so they never run the dropdown machine.
 const UNTRACKED_MENU: MenuContextValue = {
   appearance: () => "compact",
   state: () => createMenuState(false),
@@ -93,52 +94,6 @@ const UNTRACKED_MENU: MenuContextValue = {
 }
 
 const MenuAppearanceContext = createContext<MenuContextValue>(UNTRACKED_MENU)
-
-// One set of window listeners serves every mounted menu. Capture runs before the trigger's own handlers, so while an
-// input event dispatches, `gesture` names the input that may open a menu. It clears once that event's task ends, so a
-// later open without input counts as programmatic.
-let trackers = 0
-
-let gesture: MenuInputGesture = "none"
-
-let gestureReset: ReturnType<typeof setTimeout> | undefined
-
-const trackGesture = (event: Event) => {
-  if (!event.isTrusted) return
-  // Keyboard activation fires a click with no press count.
-  gesture =
-    event.type === "keydown" || (event instanceof MouseEvent && event.type === "click" && event.detail === 0)
-      ? "keyboard"
-      : "pointer"
-
-  // A microtask would run between listeners of this same dispatch, before the trigger's handler reads the gesture.
-  if (gestureReset !== undefined) return
-  gestureReset = setTimeout(() => {
-    gestureReset = undefined
-    gesture = "none"
-  })
-}
-
-const GESTURE_EVENTS = ["pointerdown", "click", "keydown"] as const
-
-const GESTURE_LISTENER_OPTIONS = { capture: true, passive: true }
-
-function retainGestureTracker() {
-  trackers += 1
-
-  if (trackers === 1)
-    GESTURE_EVENTS.forEach((type) => window.addEventListener(type, trackGesture, GESTURE_LISTENER_OPTIONS))
-}
-
-function releaseGestureTracker() {
-  trackers -= 1
-
-  if (trackers > 0) return
-  GESTURE_EVENTS.forEach((type) => window.removeEventListener(type, trackGesture, GESTURE_LISTENER_OPTIONS))
-  clearTimeout(gestureReset)
-  gestureReset = undefined
-  gesture = "none"
-}
 
 function useMenuContext() {
   const ctx = useContext(MenuAppearanceContext)
@@ -497,16 +452,16 @@ function MenuRoot(props: MenuProps) {
   const [menuState, setMenuState] = createSignal(createMenuState(initialOpen))
   const dispatch = (event: MenuEvent) => setMenuState((state) => transitionMenu(state, event))
 
-  retainGestureTracker()
+  retainOpenGesture()
   onCleanup(() => {
-    releaseGestureTracker()
+    releaseOpenGesture()
     dispatch(MENU_DISPOSED)
   })
 
   // Kobalte does not report a controlled open it did not ask for, so a controlled menu follows `open` itself.
   createComputed(() => {
     if (props.open === undefined) return
-    dispatch(openChangedEvent(props.open, gesture))
+    dispatch(openChangedEvent(props.open, openGesture()))
   })
 
   const context = {
@@ -522,7 +477,7 @@ function MenuRoot(props: MenuProps) {
       <DropdownMenu
         {...rest}
         onOpenChange={(open) => {
-          if (props.open === undefined) dispatch(openChangedEvent(open, gesture))
+          if (props.open === undefined) dispatch(openChangedEvent(open, openGesture()))
           local.onOpenChange?.(open)
         }}
       >
@@ -537,23 +492,38 @@ export interface MenuContextProps extends ComponentProps<typeof ContextMenu> {
 }
 
 function MenuContextRoot(props: MenuContextProps) {
-  const [local, rest] = splitProps(props, ["appearance", "children"])
+  const [local, rest] = splitProps(props, ["appearance", "children", "onOpenChange"])
   const appearance = () => local.appearance ?? "compact"
+  const overlayFocus = createOverlayFocus()
 
   return (
-    <MenuAppearanceContext.Provider value={{ ...UNTRACKED_MENU, appearance }}>
-      <ContextMenu {...rest}>{local.children}</ContextMenu>
+    <MenuAppearanceContext.Provider
+      value={{ ...UNTRACKED_MENU, appearance, restoreFocus: (event) => overlayFocus.restore(event) }}
+    >
+      <ContextMenu
+        {...rest}
+        onOpenChange={(open) => {
+          overlayFocus.openChanged(open)
+          local.onOpenChange?.(open)
+        }}
+      >
+        {local.children}
+      </ContextMenu>
     </MenuAppearanceContext.Provider>
   )
 }
 
 function MenuContextContent(props: ComponentProps<typeof ContextMenu.Content>) {
   const ctx = useMenuContext()
-  const [s, r] = splitProps(props, ["class", "classList", "children"])
+  const [s, r] = splitProps(props, ["class", "classList", "children", "onCloseAutoFocus"])
 
   return (
     <ContextMenu.Content
       {...r}
+      onCloseAutoFocus={(event) => {
+        s.onCloseAutoFocus?.(event)
+        ctx.restoreFocus?.(event)
+      }}
       data-component="menu-v2-content"
       data-appearance={ctx.appearance()}
       classList={{ ...s.classList, [s.class ?? ""]: !!s.class }}

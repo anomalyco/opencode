@@ -21,7 +21,7 @@ import {
   type Value,
 } from "../runtime/objects.js"
 import { describeValue, rejectCircularInsertion } from "../runtime/references.js"
-import { requireCallback, withPrimitives } from "../runtime/callback.js"
+import { requireCallback, withPrimitives, readsPending, withReads } from "../runtime/callback.js"
 import type { Interpreter } from "../runtime/interpreter.js"
 import { compareText } from "../runtime/operations.js"
 
@@ -42,12 +42,16 @@ const iterable = (builtins: Builtins, value: Value) => {
   return method !== undefined && method !== null
 }
 
-const arrayFrom = <R>(ctx: Interpreter<R>, args: Array<Value>): Value | Invoke => {
+const arrayFrom = <R>(ctx: Interpreter<R>, args: Array<Value>) => withReads(() => arrayFromReads(ctx, args))
+
+// Under `withReads`: an iterator method that is a getter is read before `length` could be.
+const arrayFromReads = <R>(ctx: Interpreter<R>, args: Array<Value>): Value | Invoke => {
   const source = args[0]
   const mapper = args.length < 2 || args[1] === undefined ? undefined : requireCallback(args[1], "Array.from")
   if (iterable(ctx.builtins, source)) {
     return new Invoke(ctx.prelude.fn("arrayFromIterable"), undefined, [source, mapper, args[2]], undefined)
   }
+  if (readsPending()) return undefined
   if (source instanceof GeneratorObj) {
     throw typeError(`Array.from expects a synchronous iterable or array-like value, received ${describeValue(source)}.`)
   }

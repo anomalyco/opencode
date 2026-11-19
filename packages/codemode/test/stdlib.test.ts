@@ -1070,6 +1070,14 @@ describe("Uint8Array", () => {
     expect((await error(`Uint8Array.from(/x/)`)).message).toContain("received a RegExp")
   })
 
+  test("BYTES_PER_ELEMENT is a read-only 1 on Uint8Array, Buffer and their instances", async () => {
+    expect(
+      await value(`const d = Object.getOwnPropertyDescriptor(Uint8Array, "BYTES_PER_ELEMENT")
+        return [Uint8Array.BYTES_PER_ELEMENT, new Uint8Array(1).BYTES_PER_ELEMENT, Buffer.BYTES_PER_ELEMENT,
+          Buffer.alloc(1).BYTES_PER_ELEMENT, 4 * Uint8Array.BYTES_PER_ELEMENT, d.writable, d.enumerable, Object.keys(Uint8Array)]`),
+    ).toEqual([1, 1, 1, 1, 4, false, false, []])
+  })
+
   test("index reads and writes clamp to a byte and ignore out-of-range writes, like JS", async () => {
     expect(
       await value(`
@@ -1153,6 +1161,35 @@ describe("Uint8Array", () => {
       message: expect.stringContaining("SyntaxError"),
     })
     expect(await error(`Uint8Array.fromHex("zz")`)).toMatchObject({ message: expect.stringContaining("SyntaxError") })
+  })
+
+  test("base64 alphabet, omitPadding, and lastChunkHandling options", async () => {
+    expect(
+      await value(`
+      const bytes = new Uint8Array([251, 255])
+      let reads = 0
+      return [
+        bytes.toBase64({ alphabet: "base64url" }), bytes.toBase64({ omitPadding: true }),
+        bytes.toBase64({ alphabet: "base64url", omitPadding: 1 }), bytes.toBase64({}),
+        bytes.toBase64({ get alphabet() { reads++; return "base64url" } }), reads,
+        [...Uint8Array.fromBase64("-_8=", { alphabet: "base64url" })], [...Uint8Array.fromBase64("+/8")],
+        [...Uint8Array.fromBase64("AQ", { lastChunkHandling: "stop-before-partial" })],
+        [...Uint8Array.fromBase64("AR==")],
+        Buffer.from([251, 255]).toString("base64url"), [...Buffer.from("-_8", "base64url")],
+      ]
+    `),
+    ).toEqual(["-_8=", "+/8", "-_8", "+/8=", "-_8=", 1, [251, 255], [251, 255], [], [1], "-_8", [251, 255]])
+    const message = async (code: string) => (await error(code)).message
+    expect(await message(`Uint8Array.fromBase64("-_8=")`)).toContain("SyntaxError")
+    expect(await message(`Uint8Array.fromBase64("AQ", { lastChunkHandling: "strict" })`)).toContain("SyntaxError")
+    expect(await message(`Uint8Array.fromBase64("AR==", { lastChunkHandling: "strict" })`)).toContain("SyntaxError")
+    expect(await message(`new Uint8Array(1).toBase64({ alphabet: "hex" })`)).toContain(
+      'TypeError: Uint8Array.prototype.toBase64 requires that alphabet be "base64" or "base64url"',
+    )
+    expect(await message(`new Uint8Array(1).toBase64(null)`)).toContain("requires that options be an object")
+    expect(await message(`Uint8Array.fromBase64("AQ", { lastChunkHandling: "partial" })`)).toContain(
+      "TypeError: Uint8Array.fromBase64 requires that lastChunkHandling be",
+    )
   })
 
   test("coercion, console, JSON, and Object.prototype.toString", async () => {
@@ -1598,7 +1635,7 @@ describe("console.log of errors", () => {
 })
 
 describe("toLocaleString", () => {
-  test("numbers and dates format as en-US in UTC; everything else falls back to toString", async () => {
+  test("numbers format as en-US and dates as en-US in the local timezone; everything else falls back to toString", async () => {
     expect(
       await value(`
       return [
@@ -1609,9 +1646,9 @@ describe("toLocaleString", () => {
     `),
     ).toEqual([
       "1,234,567.891",
-      "1/1/1970, 12:00:00 AM",
-      "1/1/1970",
-      "12:00:00 AM",
+      new Date(0).toLocaleString("en-US"),
+      new Date(0).toLocaleDateString("en-US"),
+      new Date(0).toLocaleTimeString("en-US"),
       "a",
       "true",
       "[object Object]",
@@ -1627,10 +1664,77 @@ describe("toLocaleString", () => {
       const item = { toLocaleString() { calls++; return "o" } }
       return [[1234.5, "x", null, undefined, item, new Date(0)].toLocaleString(), [, item, , item].toLocaleString(), calls]
     `),
-    ).toEqual(["1,234.5,x,,,o,1/1/1970, 12:00:00 AM", ",o,,o", 3])
+    ).toEqual([`1,234.5,x,,,o,${new Date(0).toLocaleString("en-US")}`, ",o,,o", 3])
     expect((await error(`const f = ({}).toLocaleString; f()`)).message).toContain(
       "Object.prototype.toLocaleString called on null or undefined",
     )
+  })
+
+  test("dates honor the locale and options, through Intl", async () => {
+    expect(
+      await value(`
+      const d = new Date(Date.UTC(2024, 0, 15, 13, 5, 9))
+      return [
+        d.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }),
+        d.toLocaleDateString(undefined, { weekday: "long", timeZone: "UTC" }),
+        d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }),
+        d.toLocaleString("de-DE", { timeZone: "UTC" }),
+        d.toLocaleString("en-GB", { timeZone: "UTC" }),
+        d.toLocaleString(["fr-FR"], { timeZone: "UTC", dateStyle: "full", timeStyle: "short" }),
+        d.toLocaleTimeString("en-US", { timeZone: "America/New_York", timeZoneName: "short", hour: "2-digit", minute: "2-digit" }),
+        d.toLocaleString("en-US", { timeZone: "UTC", hour12: false }),
+        new Date(NaN).toLocaleString("en-US", { timeZone: "UTC" }),
+        d.toLocaleDateString({ length: 1, 0: "de-DE" }, { timeZone: "UTC" }),
+        d.toLocaleDateString({}, { timeZone: "UTC" }),
+      ]
+    `),
+    ).toEqual([
+      "1/15/2024, 10:05:09 PM",
+      "Monday",
+      "Jan 15",
+      "15.1.2024, 13:05:09",
+      "15/01/2024, 13:05:09",
+      "lundi 15 janvier 2024 à 13:05",
+      "08:05 AM EST",
+      "1/15/2024, 13:05:09",
+      "Invalid Date",
+      "15.1.2024",
+      "1/15/2024",
+    ])
+  })
+
+  test("date formatting without a timeZone uses the local time, like getHours", async () => {
+    expect(
+      await value(`
+      const d = new Date(Date.UTC(2024, 0, 15, 13, 5, 9))
+      return [d.toLocaleString(), Number(d.toLocaleTimeString("en-US", { hour: "numeric", hour12: false })) === d.getHours()]
+    `),
+    ).toEqual([new Date(Date.UTC(2024, 0, 15, 13, 5, 9)).toLocaleString("en-US"), true])
+  })
+
+  test("date options are read once, through getters and conversions", async () => {
+    expect(
+      await value(`
+      let calls = 0
+      const options = { get timeZone() { calls++; return { toString: () => "Asia/Tokyo" } }, hour: "numeric", hour12: false }
+      return [new Date(Date.UTC(2024, 0, 15, 13)).toLocaleTimeString([{ toString: () => "en-US" }], options), calls]
+    `),
+    ).toEqual(["22", 1])
+  })
+
+  test("invalid date options throw like Intl", async () => {
+    expect(
+      await value(`
+      const d = new Date(0)
+      return [
+        () => d.toLocaleString("en-US", { timeZone: "Nope" }),
+        () => d.toLocaleTimeString("en-US", { dateStyle: "short" }),
+        () => d.toLocaleString("en-US", null),
+        () => d.toLocaleString(null),
+        () => d.toLocaleString("!!"),
+      ].map((f) => { try { return f() } catch (e) { return e.name } })
+    `),
+    ).toEqual(["RangeError", "TypeError", "TypeError", "TypeError", "RangeError"])
   })
 
   test("toLocaleLowerCase and toLocaleUpperCase ignore the locale argument", async () => {
@@ -1659,7 +1763,7 @@ describe("stdlib integration", () => {
     const shadowed = await error(`const Date = 5; return new Date()`)
     expect(shadowed.message).toStartWith("TypeError: Date is not a constructor.")
     const fn = await error(`const f = () => 1; return new f()`)
-    expect(fn.message).toStartWith("TypeError: f cannot be constructed")
+    expect(fn.message).toStartWith("TypeError: f is not a constructor: only classes")
   })
 
   test("Object.is uses SameValue semantics", async () => {

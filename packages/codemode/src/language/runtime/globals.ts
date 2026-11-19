@@ -1,4 +1,5 @@
-import { Arr, BoundFn, Callable, coerceToInteger, get, Obj, type Value } from "./objects.js"
+import { Arr, BoundFn, Callable, coerceToInteger, defineAccessor, get, Obj, type Value } from "./objects.js"
+import { withReads } from "./callback.js"
 import { arrayGlobal } from "../stdlib/array.js"
 import { textDecoderGlobal, textEncoderGlobal, uint8ArrayGlobal } from "../stdlib/bytes.js"
 import { bufferGlobal } from "../stdlib/buffer.js"
@@ -37,14 +38,37 @@ const functionGlobal = <R>(ctx: Interpreter<R>) => {
     [
       "apply",
       2,
-      (thisValue, args, site) => new Invoke(target(thisValue, "apply"), args[0], listFromArrayLike(args[1]), site),
+      (thisValue, args, site) =>
+        withReads(() => new Invoke(target(thisValue, "apply"), args[0], listFromArrayLike(args[1]), site)),
     ],
     [
       "bind",
       1,
-      (thisValue, args) => new BoundFn(ctx.builtins.Function, target(thisValue, "bind"), args[0], args.slice(1)),
+      (thisValue, args) =>
+        withReads(() => {
+          const fn = target(thisValue, "bind")
+          const name = get(fn, "name")
+          const length = get(fn, "length")
+          return new BoundFn(
+            ctx.builtins.Function,
+            fn,
+            args[0],
+            args.slice(1),
+            typeof name === "string" ? name : "",
+            typeof length === "number" && !Number.isNaN(length)
+              ? Math.max(0, Math.trunc(length) - Math.max(0, args.length - 1))
+              : 0,
+          )
+        }),
     ],
   ])
+  // AddRestrictedFunctionProperties: strict functions have no caller or arguments of their own.
+  // Each half gets its own function: the intrinsics name a native accessor half by the function it wraps.
+  const restricted = (): never => {
+    throw typeError("'caller' and 'arguments' are restricted function properties and cannot be accessed in this context.")
+  }
+  for (const key of ["caller", "arguments"])
+    defineAccessor(ctx.builtins.Function, key, () => restricted(), () => restricted())
   return constructor(ctx.builtins, ctx.builtins.Function, {
     name: "Function",
     length: 1,

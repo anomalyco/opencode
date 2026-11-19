@@ -13,7 +13,12 @@ import {
   DateObj,
   ErrorObj,
   get,
+  type Getter,
   HeadersObj,
+  HostNamespace,
+  isProgramAccessor,
+  reads,
+  lookup,
   keys,
   type NativeResult,
   Obj,
@@ -22,9 +27,10 @@ import {
   URLSearchParamsObj,
   type Value,
 } from "./runtime/objects.js"
-import { applyBinaryOperator, operatorConversion, propertyKey } from "./runtime/operations.js"
+import { applyBinaryOperator, hasInstance, operatorConversion, propertyKey } from "./runtime/operations.js"
 import { isOpaque, typeofValue } from "./runtime/references.js"
-import { Convert } from "./runtime/signals.js"
+import { Convert, normal, Prefetch } from "./runtime/signals.js"
+import type { Resolving } from "./scheduler.js"
 import type { Code } from "./code.js"
 import { builtinCodes } from "./prelude/bytecode.js"
 import { UnaryOp } from "./opcodes.js"
@@ -46,13 +52,13 @@ function $vmToPrimitive(v, hint) {
   if (!$IsDataObj(v)) return v
   const first = hint === "string" || (hint === "default" && $IsDate(v)) ? "toString" : "valueOf"
   const second = first === "toString" ? "valueOf" : "toString"
-  const m1 = $GetMethod(v, first)
-  if (m1 !== undefined) {
+  const m1 = v[first]
+  if ($IsCallableAny(m1)) {
     const r1 = $Call(m1, v)
     if (!$IsObj(r1)) return r1
   }
-  const m2 = $GetMethod(v, second)
-  if (m2 !== undefined) {
+  const m2 = v[second]
+  if ($IsCallableAny(m2)) {
     const r2 = $Call(m2, v)
     if (!$IsObj(r2)) return r2
   }
@@ -93,6 +99,40 @@ function $vmBinary(op, lhs, rhs) {
   return $ApplyBinary(op, l, r)
 }
 
+// A write that reached a program setter: the assignment's value is what was assigned, not what the setter returns.
+function $vmSet(setter, receiver, value) {
+  $Call(setter, receiver, value)
+  return value
+}
+
+function $vmInstanceof(lhs, rhs) {
+  return $HasInstance(lhs, rhs.prototype)
+}
+
+// A getter an iterator op met; the op runs again with its value (see Mode.REDO).
+function $vmRedo(getter, receiver) {
+  return $Call(getter, receiver)
+}
+
+// A promise resolved with an object whose then is a program getter: the getter runs in this job.
+function $vmThenableGet(thenable, resolve, reject) {
+  const then = thenable.then
+  if ($IsFunction(then)) $Call(then, thenable, resolve, reject)
+  else $FulfillWith(thenable)
+}
+
+// Spread and rest from a source with program getters: each getter runs once, in key order, and the copy is data.
+function $vmCopyDataProps(target, source, excluded) {
+  const keys = $OwnKeys(source, false, excluded)
+  let index = 0
+  while (index < keys.length) {
+    const key = keys[index]
+    if ($IsEnumerableOwn(source, key)) $Define(target, key, source[key], true)
+    index++
+  }
+  return target
+}
+
 function $vmGetElem(o, k) {
   return o[$vmToKey(k)]
 }
@@ -101,24 +141,40 @@ function $vmDeleteElem(o, k) {
   return delete o[$vmToKey(k)]
 }
 
-function $vmConvert(callable, target, args, constructing, replay, req) {
+// A built-in that asked for conversions (a Convert) or program getters (a Prefetch) before it can go on: runs them in
+// program code, then the built-in again with what they gave (replay by ordinal, read as receiver, key, value), until
+// it asks for nothing more. With no request, it runs again straight away.
+function $vmReplay(callable, target, args, constructing, replay, read, req) {
   while (true) {
-    const values = $ConvValues(req)
-    const coerce = $ConvFlag(req, 0)
-    const ordinal = $ConvFlag(req, 1)
-    const len = values.length
-    const converted = []
-    let i = 0
-    while (i < len) {
-      const val = values[i]
-      const hint = $ConvHint(req, i)
-      const prim = $IsObj(val) ? $vmToPrimitive(val, hint) : val
-      converted[i] = coerce ? $ConvCoerce(hint, prim) : prim
-      i++
+    if ($IsPrefetch(req)) {
+      const pairs = $PrefetchReads(req)
+      let at = 0
+      while (at < pairs.length) {
+        const receiver = pairs[at]
+        const key = pairs[at + 1]
+        $ArraySet(read, read.length, receiver)
+        $ArraySet(read, read.length, key)
+        $ArraySet(read, read.length, receiver[key])
+        at += 2
+      }
+    } else if (req !== undefined) {
+      const values = $ConvValues(req)
+      const coerce = $ConvFlag(req, 0)
+      const ordinal = $ConvFlag(req, 1)
+      const len = values.length
+      const converted = []
+      let i = 0
+      while (i < len) {
+        const val = values[i]
+        const hint = $ConvHint(req, i)
+        const prim = $IsObj(val) ? $vmToPrimitive(val, hint) : val
+        $ArraySet(converted, i, coerce ? $ConvCoerce(hint, prim) : prim)
+        i++
+      }
+      $ArraySet(replay, ordinal, converted)
     }
-    replay[ordinal] = converted
-    const res = $ConvReplay(callable, target, args, constructing, replay)
-    if (!$IsConvert(res)) return res
+    const res = $Replay(callable, target, args, constructing, replay, read)
+    if (!$IsConvert(res) && !$IsPrefetch(res)) return res
     req = res
   }
 }
@@ -147,7 +203,7 @@ function $vmJsonVisitor(boundary, replacer, properties) {
     if (kind === 2) return null
     if (kind === 3) return $JsonSpecial(val, boundary)
     const target = kind === 4 ? $SetToArray(val) : val
-    ancestors[ancestors.length] = target
+    $ArraySet(ancestors, ancestors.length, target)
     let out
     if ($IsArray(target)) {
       out = []
@@ -155,7 +211,7 @@ function $vmJsonVisitor(boundary, replacer, properties) {
       let i = 0
       while (i < len) {
         const elem = yield* visit(target, String(i), depth + 1)
-        out[i] = elem === undefined ? null : elem
+        $ArraySet(out, i, elem === undefined ? null : elem)
         i++
       }
     } else {
@@ -193,18 +249,19 @@ function $vmCombine(name, items) {
 }
 
 function $vmOpenSyncForAsync(v, method) {
-  return $WrapAsyncFromSync($Call(method, v))
+  const it = $AfsRequireObj($Call(method, v))
+  return $WrapAsyncFromSync(it, it.next)
 }
 
 function $vmAsyncFromSync(adapter, kind, hasArg, val) {
   const iter = $AfsGetIter(adapter)
-  const method = kind === "next" ? $AfsGetNext(adapter) : $AfsGetMethod(adapter, iter, kind)
+  const method = kind === "next" ? $AfsGetNext(adapter) : $AfsMethod(adapter, iter[kind], kind)
   if (method === undefined || method === null) {
     if (kind === "return") {
       $AfsResolveDone(val)
       return
     }
-    const ret = $AfsGetMethod(adapter, iter, "return")
+    const ret = $AfsMethod(adapter, iter.return, "return")
     if (ret !== undefined && ret !== null) {
       $AfsCheckObj(adapter, $Call(ret, iter), "return")
     }
@@ -223,14 +280,15 @@ function $vmAsyncFromSyncClose(iter) {
   if (ret !== undefined && ret !== null) $Call(ret, iter)
 }
 
-// A host call whose arguments hold promises that haven't fulfilled: waits for each, then calls again.
-async function $vmHostWait(promises, callee, args) {
+// A host call whose arguments hold promises that haven't fulfilled: waits for each, then calls again with the getter
+// values read so far (read, as $vmReplay keeps them), so no getter runs twice; getters inside the values are read then.
+async function $vmHostWait(promises, callee, args, read) {
   let i = 0
   while (i < promises.length) {
     await promises[i]
     i++
   }
-  return $Apply(callee, undefined, args)
+  return $vmReplay(callee, undefined, args, false, [], read, undefined)
 }
 
 async function $vmResult(value) {
@@ -271,11 +329,17 @@ export const registerVmIntrinsics = (map: Map<string, unknown>, vm: Vm): void =>
   add("$IsPromise", ([v]) => v instanceof PromiseObj)
   add("$IsArray", ([v]) => v instanceof Arr)
   add("$IsCallableAny", ([v]) => v instanceof Callable)
-  add("$GetMethod", ([v, name]) => {
-    const m = get(v as Obj, name as string)
-    return m instanceof Callable ? m : undefined
+  add("$IsFunction", ([v]) => typeofValue(v) === "function")
+  // Fulfills the promise the running `$vmThenableGet` settles, without adopting the value again.
+  add("$FulfillWith", ([value]) => {
+    const resolving = vm.frames[vm.frames.length - 1]!.target as Resolving
+    if (resolving.done) return undefined
+    resolving.done = true
+    vm.scheduler.settle(resolving.promise, normal(value))
+    return undefined
   })
   add("$PropKey", ([v]) => propertyKey(v) as Value)
+  add("$HasInstance", ([lhs, prototype]) => hasInstance(lhs, prototype, currentSite()))
   add("$CoerceToString", ([v]) => coerceToString(v))
   add("$ApplyToNumeric", ([incFlag, v]) => {
     if (isOpaque(v)) {
@@ -309,18 +373,35 @@ export const registerVmIntrinsics = (map: Map<string, unknown>, vm: Vm): void =>
   })
   add("$ConvCoerce", ([hint, val]) => (hint === "string" ? coerceToString(val) : coerceToNumber(val)))
   add("$IsConvert", ([res]) => res instanceof Convert)
-  add("$ConvReplay", ([callable, target, args, constructing, replay]) => {
+  add("$IsPrefetch", ([res]) => res instanceof Prefetch)
+  add("$PrefetchReads", ([req]) => new Arr(builtins.Array, [...(req as unknown as Prefetch).reads]))
+  add("$Replay", ([callable, target, args, constructing, replay, read]) => {
     const rep = (replay as Arr).items.map((item) => (item instanceof Arr ? item.items : undefined))
+    const table = new Map<Value, Map<string | symbol, Value>>()
+    const items = (read as Arr).items
+    for (let at = 0; at < items.length; at += 3) {
+      const receiver = items[at]
+      const key = items[at + 1] as string | symbol
+      const known = table.get(receiver) ?? new Map<string | symbol, Value>()
+      known.set(key, items[at + 2])
+      table.set(receiver, known)
+    }
+    const outer = [reads.table, reads.list] as const
     conversions.count = 0
     conversions.replay = rep
+    reads.table = table
+    reads.list = read as Arr
     try {
-      const fnObj = callable as Builtin
       const argList = (args as Arr).items
+      if (callable instanceof HostNamespace) return ctx.callNamespace(callable, argList, currentSite()) as NativeResult
+      const fnObj = callable as Builtin
       return constructing
         ? fnObj.construct!(argList, target as Builtin, currentSite())
         : fnObj.invoke(target, argList, currentSite())
     } finally {
       conversions.replay = undefined
+      reads.table = outer[0]
+      reads.list = outer[1]
     }
   })
 
@@ -361,6 +442,8 @@ export const registerVmIntrinsics = (map: Map<string, unknown>, vm: Vm): void =>
     return new Arr(builtins.Array, error ? ["name", "message", ...list] : list)
   })
   add("$ArrayPop", ([arr]) => (arr as Arr).items.pop())
+  // Writes an element of an internal array without going through the prototype chain, where a program accessor could catch it.
+  add("$ArraySet", ([arr, index, value]) => ((arr as Arr).items[index as number] = value))
   add("$JsonFinish", ([boundary, root, properties, indent]) => {
     const plain = toPlainJson(root)
     if (boundary) return plain as Value
@@ -463,16 +546,20 @@ export const tryFastBoundaryOrJson = (
     if (cur === null || typeof cur === "string" || typeof cur === "boolean") return { ok: true, json: cur }
     if (cur instanceof PromiseObj) return { ok: false }
     if (!(cur instanceof Obj)) return { ok: true, json: {} }
+    // Program getters run in the prelude walk.
+    if (cur.hasProgramAccessors) return { ok: false }
     if (seen.has(cur)) {
       if (--remainingRevisits <= 0) return { ok: false }
     } else {
       seen.add(cur)
     }
     const plain = cur.constructor === Obj
-    const toJSON =
+    const toJSONSlot =
       plain && cur.proto === objectProto && objectProto.intrinsic > 0 && !cur.props.has("toJSON")
         ? undefined
-        : get(cur, "toJSON")
+        : lookup(cur, "toJSON")
+    if (toJSONSlot !== undefined && isProgramAccessor(toJSONSlot)) return { ok: false }
+    const toJSON = toJSONSlot === undefined ? undefined : get(cur, "toJSON")
     if (toJSON instanceof Callable) {
       if (cur instanceof DateObj && toJSON === (dateProtoToJSON ??= get(builtins.Date, "toJSON"))) {
         return { ok: true, json: Number.isFinite(cur.time) ? new Date(cur.time).toISOString() : null }
@@ -505,6 +592,8 @@ export const tryFastBoundaryOrJson = (
       const out: Record<string, Json> = {}
       if (cur instanceof ErrorObj) {
         for (const k of ["name", "message"]) {
+          const slot = lookup(cur, k)
+          if (slot !== undefined && isProgramAccessor(slot)) return { ok: false }
           const r = visit(get(cur, k), depth + 1)
           if (!r.ok) return r
           if (r.json !== undefined) out[k] = r.json
@@ -514,7 +603,8 @@ export const tryFastBoundaryOrJson = (
       for (const [k, slot] of plain ? cur.props : keys(cur).map((key) => [key, undefined] as const)) {
         if (typeof k !== "string" || (slot !== undefined && !slot.enumerable)) continue
         if (boundary && k === "__proto__") continue
-        const propVal = slot === undefined ? get(cur, k) : "value" in slot ? slot.value : slot.get?.(cur)
+        const propVal =
+          slot === undefined ? get(cur, k) : "value" in slot ? slot.value : (slot.get as Getter | undefined)?.(cur)
         const r = visit(propVal, depth + 1)
         if (!r.ok) return r
         if (r.json !== undefined) {

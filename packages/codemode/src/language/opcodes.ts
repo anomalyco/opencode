@@ -83,6 +83,7 @@ export const Op = {
   NEW_OBJECT: 35,
   NEW_ARRAY: 36,
   ARRAY_APPEND: 37,
+  // a bit 0: computed key on the stack; bit 1: a class field, which throws when it cannot be defined.
   DEFINE_FIELD: 38,
   COPY_DATA_PROPS: 39,
   COPY_REST: 40,
@@ -145,6 +146,34 @@ export const Op = {
 
   // Program (1)
   END_PROGRAM: 87,
+
+  // Literals, added later: `get x() {}` / `set x(v) {}` (a bit 0: computed key; bit 1: setter)
+  DEFINE_ACCESSOR: 88,
+
+  // Classes: `CLASS` turns the constructor on top into a class, `[ctor] -> [ctor, proto]`; `DEFINE_METHOD` defines the
+  // method on top as a hidden property of the prototype, or of the constructor when a bit 0 is set: `[ctor, proto, fn]
+  // -> [ctor, proto]`, keyed by constant `bx`.
+  CLASS: 89,
+  // DEFINE_METHOD's `a`: 1 static, 2 computed (`[.., key, fn]`), 4 getter, 8 setter (non-enumerable accessors).
+  DEFINE_METHOD: 90,
+  // `SET_FIELDS` makes the field-initializer function on top the class's: `[ctor, proto, fn] -> [ctor, proto]`.
+  // `INIT_FIELDS` runs field initializers: a 0 calls the running constructor's with its `this`, `[] -> [result]`;
+  // a 1 calls a static initializer with the constructor as `this`, `[ctor, fn] -> [result]`.
+  SET_FIELDS: 91,
+  INIT_FIELDS: 92,
+  // Inheritance. `SUPER_CALL` constructs the parent of the running constructor for its new target (local `bx`):
+  // `[...args] -> [instance]` with `a` args, or `[argsArr] -> [instance]` when `a` is 255.
+  SUPER_CALL: 93,
+  // `SUPER_BIND` makes the instance on top the derived constructor's `this` (local `bx`, a cell when `a` is 1):
+  // `[instance] -> [instance]`. Once only.
+  SUPER_BIND: 94,
+  // `super.x`: `[home, this] -> [value]` (`[this, value]` when bit 0 keeps the receiver), keyed by constant `bx`, or
+  // by a key on top when bit 1 is set (`[home, this, key]`).
+  GET_SUPER: 96,
+  // `super.x = v`: `[home, this, v] -> [v]`, or `[home, this, key, v] -> [v]` when bit 1 is set.
+  PUT_SUPER: 97,
+  // An object literal method that uses `super` gets the object at depth `a` as its home: `[o, .., fn]` unchanged.
+  SET_HOME: 98,
 } as const
 
 export type OpCode = (typeof Op)[keyof typeof Op]
@@ -250,7 +279,15 @@ export const CodeFlags = {
   USES_ARGUMENTS: 1 << 5,
   INTERNAL: 1 << 6,
   PROGRAM: 1 << 7,
+  /** A class constructor: `new` only, calling it throws. */
+  CLASS_CONSTRUCTOR: 1 << 8,
   NEEDS_ARGS: 1 << 9,
+  /** The constructor of a class with `extends`. */
+  DERIVED: 1 << 10,
+  /** A class method, with a home object. */
+  METHOD: 1 << 11,
+  /** A class's hidden field-initializer function. */
+  FIELD_INIT: 1 << 12,
 } as const
 
 /** Constant pool descriptors. */

@@ -60,6 +60,7 @@ const npmLayer = Layer.succeed(
     resolve: (name) => Effect.succeed({ directory: "", name }),
     check: () => Effect.succeed(false),
     update: (name) => Effect.succeed({ directory: "", name }),
+    reject: () => Effect.succeed(false),
     which: () => Effect.undefined,
   }),
 )
@@ -97,7 +98,11 @@ const permissionLayer = Layer.succeed(
   }),
 )
 
-export const makePluginTestLayer = (permission = permissionLayer, generate = generateLayer) =>
+export const makePluginTestLayer = (
+  permission = permissionLayer,
+  generate = generateLayer,
+  replacements: LayerNode.Replacements = [],
+) =>
   AppNodeBuilder.build(
     LayerNode.group([
       App.node,
@@ -157,6 +162,7 @@ export const makePluginTestLayer = (permission = permissionLayer, generate = gen
       Generate.node.replace(generate),
       Permission.node.replace(permission),
       offlineModels,
+      ...replacements,
     ],
   ).pipe(Layer.provideMerge(configLayer))
 

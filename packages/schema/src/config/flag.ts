@@ -1,14 +1,14 @@
 export * as ConfigFlag from "./flag.js"
 
-/** The `OPENCODE_FLAGS` entry that turns every flag on, as in `all,-media_blob`. It is not a flag key. */
+/** The `OPENCODE_FLAGS` entry that enables all flags except opt-in-only flags, as in `all,-media_blob`. */
 export const wildcard = "all"
 
 /**
- * Every feature flag, by key, with what it turns on. Flags default to on in local and dev builds and off in releases;
- * `experimental.<key>` in config and `OPENCODE_FLAGS` override that, and `OPENCODE_FLAGS=all` or
- * `experimental.all_flags: true` turn every flag on. Read one with Core's `Flag.enabled("<key>")`.
+ * Flags default to on in local and dev builds and off in releases, except for `optInOnly` flags, which must be
+ * named explicitly in `experimental.<key>` or `OPENCODE_FLAGS`. Read a flag with Core's `Flag.enabled("<key>")`.
  */
 export const registry = {
+  todo: "Enable the experimental todowrite tool. Off by default in every build, including local and dev; opt in with OPENCODE_FLAGS=todo or experimental.todo: true.",
   media_blob: "Store new session media once in a deduplicated blob table instead of inline in every message row.",
   automations:
     "Run a prompt or Code Mode action on a timer, or on a connected MCP server's push event when mcp_events is enabled.",
@@ -22,6 +22,8 @@ export const registry = {
   full_codemode: "Enable the full Code Mode work in progress.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry
+
+export const optInOnly: ReadonlySet<Key> = new Set(["todo"])
 
 /** Earlier names of a flag, still read from `experimental.<name>` and `OPENCODE_FLAGS` when the new key is unset. */
 export const aliases = {
