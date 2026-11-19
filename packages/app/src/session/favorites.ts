@@ -12,6 +12,8 @@ export type MessageFavorite = {
   readonly server: string
   readonly sessionID: string
   readonly messageID: string
+  /** The prompt row that owns the message, used to scroll an assistant favorite into view. */
+  readonly anchorID?: string
   readonly role: MessageFavoriteRole
   readonly text: string
   readonly created: number
@@ -26,6 +28,7 @@ const MessageFavorites = Persistence.struct({
       server: Schema.String,
       sessionID: Schema.String,
       messageID: Schema.String,
+      anchorID: Schema.optional(Schema.String),
       role: Schema.Literals(["user", "assistant"]),
       text: Schema.String,
       created: Schema.Number,
@@ -62,6 +65,15 @@ export function removeMessageFavorite(messages: readonly MessageFavorite[], targ
   return messages.filter((message) => favoriteKey(message) !== key)
 }
 
+/** Drops every favorite of a deleted session, including its assistant messages. */
+export function forgetSessionFavorites(
+  messages: readonly MessageFavorite[],
+  server: string,
+  sessionID: string,
+) {
+  return messages.filter((message) => message.server !== server || message.sessionID !== sessionID)
+}
+
 export type MessageFavorites = ReturnType<typeof createMessageFavorites>
 
 /** Saved messages, local to this desktop like pinned sessions. */
@@ -92,6 +104,13 @@ export function createMessageFavorites() {
       return state.messages
         .filter((message) => normalize(message.server) === normalized && message.sessionID === sessionID)
         .toSorted((a, b) => b.favorited - a.favorited)
+    },
+    forget(server: string, sessionID: string) {
+      const normalized = normalize(server)
+
+      set("messages", (messages) =>
+        forgetSessionFavorites(messages.map(saved), normalized, sessionID),
+      )
     },
     toggle(input: Omit<MessageFavorite, "server" | "favorited"> & { server: string; favorited?: number }) {
       const favorite = saved({ ...input, favorited: input.favorited ?? Date.now() })

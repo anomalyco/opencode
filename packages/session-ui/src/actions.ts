@@ -41,7 +41,14 @@ export type SessionUserActions = {
   /** Saves a message locally so the user can find it again from the favorites list. */
   favorites?: {
     has: (messageID: string) => boolean
-    toggle: (input: { messageID: string; role: "user" | "assistant"; text: string; created: number }) => void
+    toggle: (input: {
+      messageID: string
+      /** The prompt row that owns an assistant message; the timeline only anchors prompts. */
+      anchorID?: string
+      role: "user" | "assistant"
+      text: string
+      created: number
+    }) => void
   }
   revert?: (input: { sessionID: string; messageID: string }) => Promise<void> | void
   /** Starts a new session with the history before this message and its prompt in the composer. */

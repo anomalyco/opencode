@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test"
-import { addMessageFavorite, hasMessageFavorite, removeMessageFavorite, type MessageFavorite } from "./favorites"
+import {
+  addMessageFavorite,
+  forgetSessionFavorites,
+  hasMessageFavorite,
+  removeMessageFavorite,
+  type MessageFavorite,
+} from "./favorites"
 
 const saved: MessageFavorite = {
   server: "server",
@@ -25,4 +31,13 @@ test("removes only the matching message", () => {
 
   expect(removeMessageFavorite(messages, saved)).toEqual([other])
   expect(hasMessageFavorite(removeMessageFavorite(messages, saved), saved)).toBeFalse()
+})
+
+test("forgets every favorite of a deleted session, including assistant answers", () => {
+  const otherSession = { ...saved, sessionID: "other" }
+  const otherServer = { ...saved, server: "elsewhere" }
+  const messages = addMessageFavorite(addMessageFavorite([], saved), otherSession)
+  messages.push(otherServer)
+
+  expect(forgetSessionFavorites(messages, "server", "session")).toEqual([otherSession, otherServer])
 })

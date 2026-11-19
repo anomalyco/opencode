@@ -84,6 +84,7 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
                 server.projects.forServer(effect.key),
                 notificationCoordinator,
                 sessionPreferences,
+                messageFavorites,
               ),
               dispose,
             }),
@@ -206,6 +207,7 @@ function createServerController(
   projects: ReturnType<typeof createServerProjects>,
   notificationCoordinator: ReturnType<typeof createNotificationCoordinator>,
   sessionPreferences: ReturnType<typeof createSessionPreferences>,
+  messageFavorites: ReturnType<typeof createMessageFavorites>,
 ) {
   const language = useLanguage()
   const settings = useSettings()
@@ -262,7 +264,12 @@ function createServerController(
 
   const sync = createServerSyncContext(sdk, data)
   const autoApprove = createPermissionAutoApprover({ sdk, data })
-  onCleanup(data.on("session.deleted", (event) => sessionPreferences.forget(connKey, event.data.sessionID)))
+  onCleanup(
+    data.on("session.deleted", (event) => {
+      sessionPreferences.forget(connKey, event.data.sessionID)
+      messageFavorites.forget(connKey, event.data.sessionID)
+    }),
+  )
 
   const notification = createServerNotificationState({
     sdk,

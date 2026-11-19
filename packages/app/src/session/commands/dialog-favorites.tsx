@@ -27,6 +27,7 @@ export function DialogFavorites(props: { session: SessionCommandContext["session
   const prompts = createMemo<JumpPrompt[]>(() =>
     favorites.list(server.key, id).map((favorite) => ({
       id: favorite.messageID,
+      anchorID: favorite.anchorID,
       text: `${language.t(favorite.role === "user" ? "dialog.favorites.you" : "dialog.favorites.assistant")}: ${favorite.text}`,
       created: favorite.created,
     })),
@@ -39,7 +40,8 @@ export function DialogFavorites(props: { session: SessionCommandContext["session
   }
 
   // A favorite can point at a message older than the loaded timeline, so page back until it is there.
-  const open = async (messageID: string) => {
+  // The jump itself targets the prompt row: an assistant message has no DOM anchor of its own.
+  const open = async (messageID: string, anchorID?: string) => {
     controller?.abort()
     const current = new AbortController()
     controller = current
@@ -53,8 +55,12 @@ export function DialogFavorites(props: { session: SessionCommandContext["session
         current.signal.throwIfAborted()
       }
 
+      const message = data.session.message.get(id, messageID)
+      const parent = message?.type === "assistant" ? message.metadata?.parentID : undefined
+      const target = anchorID ?? (typeof parent === "string" ? parent : messageID)
+
       dialog.close()
-      props.onJump(messageID)
+      props.onJump(target)
     } catch {
       if (!current.signal.aborted) setFailed(true)
     } finally {
@@ -77,7 +83,7 @@ export function DialogFavorites(props: { session: SessionCommandContext["session
       empty={language.t("dialog.favorites.empty")}
       noMatches={language.t("dialog.favorites.noMatches")}
       onClose={() => dialog.close()}
-      onJump={(row) => void open(row.id)}
+      onJump={(row) => void open(row.id, row.anchorID)}
     />
   )
 }
