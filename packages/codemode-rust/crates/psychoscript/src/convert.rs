@@ -3,18 +3,16 @@
 use std::fmt::Write as _;
 
 use crate::object::*;
-use crate::strings::{external_text, has_mark, host_text};
+use crate::strings::{external_text, has_mark};
 use crate::value::{Id, Slot, Value, write_num};
 use crate::vm::{Res, Vm};
 use crate::{DiagnosticKind, Json};
 
 pub const MAX_VALUE_DEPTH: usize = 32;
 
-/// A string as the host gets it; only a carrier needs converting.
+/// A string of the result as run text (a carrier keeps unpaired surrogates: see `strings`), which `Data` decodes
+/// once the result has crossed.
 pub(crate) fn host_string(vm: &Vm, s: crate::strings::StrId) -> String {
-    if vm.atoms.is_wtf(s) {
-        return host_text(vm.text(s)).into_owned();
-    }
     vm.text(s).to_owned()
 }
 
@@ -112,13 +110,10 @@ fn to_json_inner(
                 Kind::Error(_) => {
                     let mut map = serde_json::Map::new();
                     let (name, message) = error_parts(vm, id);
-                    map.insert("name".into(), Json::String(host_text(&name).into_owned()));
-                    map.insert(
-                        "message".into(),
-                        Json::String(host_text(&message).into_owned()),
-                    );
+                    map.insert("name".into(), Json::String(name));
+                    map.insert("message".into(), Json::String(message));
                     for (k, val) in vm.own_entries(id) {
-                        let ks = host_text(vm.atoms.text(k)).into_owned();
+                        let ks = vm.atoms.text(k).to_owned();
                         if ks == "__proto__" || ks == "name" || ks == "message" {
                             continue;
                         }

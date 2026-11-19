@@ -16,7 +16,7 @@ use serde_json::json;
 
 fn value(rt: &Runtime, code: &str) -> Json {
     match rt.execute(code).result {
-        Ok(v) => v,
+        Ok(v) => v.to_json(),
         Err(e) => panic!("expected success, got {}: {}", e.kind, e.message),
     }
 }

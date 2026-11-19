@@ -13,7 +13,7 @@ use crate::runtime::{ProgramOptions, Run};
 use crate::strings::Strings;
 use crate::value::Value;
 use crate::vm::Vm;
-use crate::{Diagnostic, DiagnosticKind, Json, Outcome, Runtime};
+use crate::{Data, Diagnostic, DiagnosticKind, HostString, Json, Outcome, Runtime};
 
 /// Small programs run on the caller's thread with a modest native-stack budget. Larger ones, whose parse can
 /// recurse deeper, run on their own thread with a large stack; the reservation is virtual, only touched pages are
@@ -214,9 +214,9 @@ pub fn finish(r: Running<'_>) -> Outcome {
     let result = match (vm.fatal.clone(), vm.outcome.take()) {
         (Some((kind, message)), _) => Err(diagnostic(kind, message)),
         (None, Some(Ok(v))) => match vm.result_json.take() {
-            Some(j) => Ok(j),
+            Some(j) => Ok(Data::from_run_json(j)),
             None => match convert::to_json(vm, &v) {
-                Ok(j) => Ok(j),
+                Ok(j) => Ok(Data::from_run_json(j)),
                 Err(e) => Err(diagnose(vm, &e, code)),
             },
         },
@@ -235,7 +235,10 @@ pub fn finish(r: Running<'_>) -> Outcome {
     } else {
         Vec::new()
     };
-    let logs = std::mem::take(&mut vm.logs);
+    let logs = std::mem::take(&mut vm.logs)
+        .iter()
+        .map(|l| HostString::from_run_text(l))
+        .collect();
     let metadata = vm.host.run.metadata();
     bound_output(
         Outcome {
@@ -370,17 +373,17 @@ fn bound_output(mut outcome: Outcome, max: Option<usize>) -> Outcome {
     let Some(max) = max else { return outcome };
     let mut value_bytes = 0;
     if let Ok(v) = &outcome.result {
-        let text = v.to_string();
+        let text = v.to_json_string();
         value_bytes = text.len();
         if value_bytes > max {
             let mut cut = max;
             while !text.is_char_boundary(cut) {
                 cut -= 1;
             }
-            outcome.result = Ok(Json::String(format!(
+            outcome.result = Ok(Data::String(HostString::from(format!(
                 "{} [result truncated: {value_bytes} bytes exceeds the {max}-byte output limit; return a smaller value]",
                 &text[..cut]
-            )));
+            ))));
             outcome.truncated = true;
         }
     }
@@ -407,7 +410,8 @@ fn bound_output(mut outcome: Outcome, max: Option<usize>) -> Outcome {
     let mut used = 0;
     let mut kept = 0;
     for line in &outcome.logs {
-        used += line.len() + 1;
+        // As UTF-8, an unpaired surrogate takes U+FFFD's three bytes.
+        used += line.to_string_lossy().len() + 1;
         if used > budget {
             break;
         }
@@ -418,7 +422,7 @@ fn bound_output(mut outcome: Outcome, max: Option<usize>) -> Outcome {
         outcome.logs.truncate(kept);
         outcome
             .logs
-            .push(format!("[logs truncated: showing {kept} of {total} lines]"));
+            .push(format!("[logs truncated: showing {kept} of {total} lines]").into());
         outcome.truncated = true;
     }
     outcome

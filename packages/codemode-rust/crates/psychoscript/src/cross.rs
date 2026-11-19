@@ -141,7 +141,7 @@ fn flat(vm: &Vm, v: &Value) -> Option<Json> {
             Value::Str(s) => Json::String(crate::convert::host_string(vm, s)),
             _ => return None,
         };
-        out.insert(crate::strings::host_text(k).into_owned(), j);
+        out.insert(k.to_owned(), j);
     }
     Some(Json::Object(out))
 }
@@ -259,7 +259,7 @@ impl FastWalk {
                 match self.visit(vm, &v, depth + 1)? {
                     None => return Ok(None),
                     Some(Some(j)) => {
-                        out.insert(crate::strings::host_text(vm.atoms.text(k)).into_owned(), j);
+                        out.insert(vm.atoms.text(k).to_owned(), j);
                     }
                     Some(None) => {}
                 }
@@ -270,7 +270,7 @@ impl FastWalk {
             if name == "__proto__" {
                 continue;
             }
-            let name = crate::strings::host_text(name).into_owned();
+            let name = name.to_owned();
             match self.visit(vm, &v, depth + 1)? {
                 None => return Ok(None),
                 Some(Some(j)) => {
@@ -334,10 +334,7 @@ fn plain_json(vm: &Vm, v: &Value) -> Option<Json> {
                         continue;
                     }
                     if let Some(j) = plain_json(vm, &p.value) {
-                        out.insert(
-                            crate::strings::host_text(vm.atoms.text(p.key)).into_owned(),
-                            j,
-                        );
+                        out.insert(vm.atoms.text(p.key).to_owned(), j);
                     }
                 }
                 Json::Object(out)

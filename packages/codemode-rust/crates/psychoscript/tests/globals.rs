@@ -135,7 +135,7 @@ fn lenient(held: &Held) -> Runtime {
 
 fn value(rt: &Runtime, code: &str) -> Json {
     match rt.execute(code).result {
-        Ok(v) => v,
+        Ok(v) => v.to_json(),
         Err(d) => panic!("expected success, got {:?}: {}", d.kind, d.message),
     }
 }

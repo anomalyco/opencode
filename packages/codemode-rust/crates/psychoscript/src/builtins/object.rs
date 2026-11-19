@@ -1040,7 +1040,7 @@ fn log_line(vm: &mut Vm, prefix: &str, args: &[Value]) -> Res {
         }
         line.push_str(&convert::format_value(vm, a));
     }
-    vm.logs.push(crate::strings::host_text(&line).into_owned());
+    vm.logs.push(line);
     Ok(Value::Undef)
 }
 
@@ -1236,8 +1236,7 @@ fn console_table(vm: &mut Vm, _this: Value, args: &[Value], _: Id) -> Res {
         }
         lines.push(line.join("\t"));
     }
-    vm.logs
-        .push(crate::strings::host_text(&lines.join("\n")).into_owned());
+    vm.logs.push(lines.join("\n"));
     Ok(Value::Undef)
 }
 

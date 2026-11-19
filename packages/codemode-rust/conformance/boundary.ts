@@ -36,9 +36,14 @@
 // - `fs`: `fs`, `{ readFile, promises: { readFile } }`: `readFile(path)` sync, giving `"text of <path>"`;
 //   `promises.readFile(path)` async, giving `path`.
 //
+// `results` entries run in `Runtime.make({ limits? })` with no globals: what a program returns and logs when its strings
+// have unpaired surrogates, which the result and logs keep, and how the output limit measures them.
+//
 // boundary.json: `{ boundary: { samples: { name: described }, programs: [{ code, outcome, kept }] },
-// configuration: [{ globals, modules, translate?, code, outcome, seen }] }`; `outcome` is `{ ok: true, value }` or
-// `{ ok: false, kind, message }`, `modules` `null` when the entry names none of its own.
+// configuration: [{ globals, modules, translate?, code, outcome, seen }], results: [{ code, limits?, value, logs,
+// truncated }] }`; `outcome` is `{ ok: true, value }` or `{ ok: false, kind, message }`, `modules` `null` when the
+// entry names none of its own. A `results` entry's `value` is the result's value as `describe` writes it, and `logs`
+// its log lines as `describe` writes a string.
 
 import { join } from "node:path"
 import { writeRecording } from "./recording.ts"
@@ -285,5 +290,29 @@ for (const item of configurationCases) {
   configuration.push({ ...item, modules: item.modules ?? null, outcome: outcome(result), seen })
 }
 
-writeRecording(join(import.meta.dir, "boundary.json"), { boundary, configuration })
-console.log(`${boundary.programs.length} boundary programs, ${configuration.length} configurations`)
+const resultCases: Array<{ code: string; limits?: { maxOutputBytes: number } }> = [
+  {
+    code: `console.log("a\\ud800"); console.log("pair \\ud83d\\ude00", "\\udc00"); console.log({ k: "\\udbff" })
+return { s: "x\\udbff", ["\\udfff"]: ["\\ud800", { k: "\\ud83d" }], pair: "\\ud83d\\ude00", n: 1 }`,
+  },
+  { code: `return "\\ud800\\udc00\\udc00"` },
+  { code: `return ["\\ud800".repeat(10), 1]`, limits: { maxOutputBytes: 20 } },
+  { code: `console.log("\\ud800".repeat(4)); console.log("b"); return 1`, limits: { maxOutputBytes: 14 } },
+]
+const results: Array<unknown> = []
+for (const item of resultCases) {
+  const runtime = Runtime.make(item.limits === undefined ? {} : { limits: item.limits })
+  const result = await Effect.runPromise(runtime.execute(item.code))
+  if (!result.ok) throw new Error(`${item.code} failed: ${result.error.message}`)
+  results.push({
+    ...item,
+    value: describe(result.value),
+    logs: (result.logs ?? []).map(describe),
+    truncated: result.truncated === true,
+  })
+}
+
+writeRecording(join(import.meta.dir, "boundary.json"), { boundary, configuration, results })
+console.log(
+  `${boundary.programs.length} boundary programs, ${configuration.length} configurations, ${results.length} results`,
+)

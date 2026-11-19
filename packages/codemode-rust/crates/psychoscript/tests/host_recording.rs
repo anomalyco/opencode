@@ -315,14 +315,14 @@ fn diagnostic(d: &Diagnostic) -> Json {
 /// The run's `Result` as the reference gives it.
 fn result(o: &Outcome) -> Json {
     let mut out = match &o.result {
-        Ok(value) => json!({ "ok": true, "value": value }),
+        Ok(value) => json!({ "ok": true, "value": value.to_json() }),
         Err(d) => json!({ "ok": false, "error": diagnostic(d) }),
     };
     if !o.warnings.is_empty() {
         out["warnings"] = Json::Array(o.warnings.iter().map(diagnostic).collect());
     }
     if !o.logs.is_empty() {
-        out["logs"] = json!(o.logs);
+        out["logs"] = json!(o.log_lines());
     }
     if o.truncated {
         out["truncated"] = json!(true);

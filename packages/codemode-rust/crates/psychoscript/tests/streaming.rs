@@ -209,8 +209,8 @@ fn cancels(log: &Json) -> Json {
 
 fn outcome(o: &psychoscript::Outcome) -> Json {
     match &o.result {
-        Ok(value) if o.logs.is_empty() => json!({ "ok": true, "value": value }),
-        Ok(value) => json!({ "ok": true, "value": value, "logs": o.logs }),
+        Ok(value) if o.logs.is_empty() => json!({ "ok": true, "value": value.to_json() }),
+        Ok(value) => json!({ "ok": true, "value": value.to_json(), "logs": o.log_lines() }),
         Err(d) => json!({ "ok": false, "kind": d.kind.name(), "message": d.message }),
     }
 }
@@ -218,7 +218,7 @@ fn outcome(o: &psychoscript::Outcome) -> Json {
 /// A finished run's outcome as the reference's result object writes it.
 fn ended(o: &psychoscript::Outcome) -> Json {
     let mut out = match &o.result {
-        Ok(value) => json!({ "ok": true, "value": value }),
+        Ok(value) => json!({ "ok": true, "value": value.to_json() }),
         Err(d) => {
             let mut error = json!({ "kind": d.kind.name(), "message": d.message });
             if !d.suggestions.is_empty() {
@@ -228,7 +228,7 @@ fn ended(o: &psychoscript::Outcome) -> Json {
         }
     };
     if !o.logs.is_empty() {
-        out["logs"] = json!(o.logs);
+        out["logs"] = json!(o.log_lines());
     }
     out["metadata"] = o.metadata.clone();
     out

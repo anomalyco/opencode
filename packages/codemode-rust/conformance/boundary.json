@@ -79,5 +79,11 @@
     {"globals":["fs"],"code":"try { require(\"./x\") } catch (e) { return e.message }","modules":null,"outcome":{"ok":true,"value":"Cannot import \"./x\": local files can't be imported."},"seen":[]},
     {"globals":["fs"],"code":"import { writeFile } from \"fs\"","modules":null,"outcome":{"ok":false,"kind":"ExecutionFailure","message":"SyntaxError: \"fs\" has no export named \"writeFile\". (line 1, col 10)"},"seen":[]},
     {"globals":[],"code":"require(\"fs\")","modules":null,"outcome":{"ok":false,"kind":"ExecutionFailure","message":"Error: Cannot import \"fs\": this runtime doesn't provide it. (line 1, col 1)"},"seen":[]}
+  ],
+  "results": [
+    {"code":"console.log(\"a\\ud800\"); console.log(\"pair \\ud83d\\ude00\", \"\\udc00\"); console.log({ k: \"\\udbff\" })\nreturn { s: \"x\\udbff\", [\"\\udfff\"]: [\"\\ud800\", { k: \"\\ud83d\" }], pair: \"\\ud83d\\ude00\", n: 1 }","value":{"object":[["s",{"string":[120,56319]}],[{"string":[57343]},{"array":[{"string":[55296]},{"object":[["k",{"string":[55357]}]]}]}],["pair","😀"],["n",1]]},"logs":[{"string":[97,55296]},{"string":[112,97,105,114,32,55357,56832,32,56320]},"{\"k\":\"\\udbff\"}"],"truncated":false},
+    {"code":"return \"\\ud800\\udc00\\udc00\"","value":{"string":[55296,56320,56320]},"logs":[],"truncated":false},
+    {"code":"return [\"\\ud800\".repeat(10), 1]","limits":{"maxOutputBytes":20},"value":"[\"\\ud800\\ud800\\ud800 [result truncated: 66 bytes exceeds the 20-byte output limit; return a smaller value]","logs":[],"truncated":true},
+    {"code":"console.log(\"\\ud800\".repeat(4)); console.log(\"b\"); return 1","limits":{"maxOutputBytes":14},"value":1,"logs":[{"string":[55296,55296,55296,55296]},"[logs truncated: showing 1 of 2 lines]"],"truncated":true}
   ]
 }

@@ -59,7 +59,7 @@ fn check(name: &str, code: &str, expected: &Json) -> Result<(), String> {
     let mut problems = Vec::new();
     match (&outcome.result, expected["ok"].as_bool()) {
         (Ok(value), Some(true)) => {
-            if !same(value, &expected["value"]) {
+            if !same(&value.to_json(), &expected["value"]) {
                 problems.push(format!(
                     "value\n    expected: {}\n    actual:   {value}",
                     expected["value"]
@@ -96,7 +96,7 @@ fn check(name: &str, code: &str, expected: &Json) -> Result<(), String> {
         ));
     }
     if let Some(logs) = expected.get("logs") {
-        let actual = Json::from(outcome.logs.clone());
+        let actual = Json::from(outcome.log_lines());
         if !same(&actual, logs) {
             problems.push(format!(
                 "logs\n    expected: {logs}\n    actual:   {actual}"

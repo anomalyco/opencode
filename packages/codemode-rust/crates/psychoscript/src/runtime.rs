@@ -5,21 +5,42 @@ use std::sync::{Arc, Mutex};
 
 use crate::host::RunId;
 use crate::{
-    Diagnostic, HostValue, Interrupted, Json, Limits, Program, Snapshot, SnapshotError, from_bytes,
+    Data, Diagnostic, HostString, HostValue, Interrupted, Json, Limits, Program, Snapshot,
+    SnapshotError, from_bytes,
 };
 
 /// How a run ended: its value or failure, with what it logged and its metadata.
 #[derive(Clone, Debug)]
 pub struct Outcome {
-    /// `Ok(value)` is JSON-safe; `undefined` becomes `null`.
-    pub result: Result<Json, Diagnostic>,
+    /// `Ok(value)`: the program's value as JSON data, `undefined` as `null`. Its strings keep unpaired surrogates;
+    /// [`Outcome::json`] gives it as a `serde_json::Value`.
+    pub result: Result<Data, Diagnostic>,
     /// Non-fatal diagnostics.
     pub warnings: Vec<Diagnostic>,
-    pub logs: Vec<String>,
+    /// What the program logged, a line each, with unpaired surrogates kept; [`Outcome::log_lines`] gives `String`s.
+    pub logs: Vec<HostString>,
     /// Whether `max_output_bytes` cut the retained result or logs.
     pub truncated: bool,
     /// The run's metadata as its host functions left it (see [`Run::set_metadata`]); `null` when none was set.
     pub metadata: Json,
+}
+
+impl Outcome {
+    /// The result with its value as a `serde_json::Value`, U+FFFD for each unpaired surrogate.
+    pub fn json(&self) -> Result<Json, Diagnostic> {
+        self.result
+            .as_ref()
+            .map(Data::to_json)
+            .map_err(Clone::clone)
+    }
+
+    /// The logs as `String`s, U+FFFD for each unpaired surrogate.
+    pub fn log_lines(&self) -> Vec<String> {
+        self.logs
+            .iter()
+            .map(|l| l.to_string_lossy().into_owned())
+            .collect()
+    }
 }
 
 /// The run a runtime's globals are made for, the reference's `Run`: its id, and metadata its host functions may keep

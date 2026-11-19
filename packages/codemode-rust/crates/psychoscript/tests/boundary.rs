@@ -5,8 +5,8 @@
 use std::sync::{Arc, Mutex};
 
 use psychoscript::{
-    HostError, HostFunction, HostString, HostValue, Json, Returned, Runtime, Translate,
-    TranslateFunctions, TranslatePromises,
+    Data, HostError, HostFunction, HostString, HostValue, Json, Limits, Returned, Runtime,
+    Translate, TranslateFunctions, TranslatePromises,
 };
 use serde_json::json;
 
@@ -27,7 +27,7 @@ fn fixture() -> Json {
 
 fn outcome(o: &psychoscript::Outcome) -> Json {
     match &o.result {
-        Ok(value) => json!({ "ok": true, "value": value }),
+        Ok(value) => json!({ "ok": true, "value": value.to_json() }),
         Err(d) => json!({ "ok": false, "kind": d.kind.name(), "message": d.message }),
     }
 }
@@ -423,6 +423,64 @@ fn runtimes_made_with_different_globals_and_module_names_match_the_reference() {
         let o = rt.execute(code);
         let actual = json!({ "outcome": outcome(&o), "seen": *seen.lock().unwrap() });
         let expected = json!({ "outcome": case["outcome"], "seen": case["seen"] });
+        if !same(&actual, &expected) {
+            failures.push(format!(
+                "{code}\n  expected {expected}\n  actual   {actual}"
+            ));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "{} mismatches:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
+}
+
+/// A result's value as `describe` writes it.
+fn described_data(d: &Data) -> Json {
+    match d {
+        Data::Null => Json::Null,
+        Data::Bool(b) => json!(b),
+        Data::Number(n) => Json::Number(n.clone()),
+        Data::String(s) => reference::text(s),
+        Data::Array(items) => {
+            json!({ "array": items.iter().map(described_data).collect::<Vec<_>>() })
+        }
+        Data::Object(fields) => json!({
+            "object": fields
+                .iter()
+                .map(|(k, v)| json!([reference::text(k), described_data(v)]))
+                .collect::<Vec<_>>()
+        }),
+    }
+}
+
+#[test]
+fn results_and_logs_keep_unpaired_surrogates_as_the_reference_does() {
+    let fixture = fixture();
+    let cases = fixture["results"].as_array().unwrap();
+    assert!(cases.len() >= 4);
+    let mut failures = Vec::new();
+    for case in cases {
+        let rt = Runtime::make().limits(Limits {
+            timeout_ms: None,
+            max_output_bytes: case["limits"]["maxOutputBytes"]
+                .as_u64()
+                .map(|n| n as usize),
+        });
+        let code = case["code"].as_str().unwrap();
+        let o = rt.execute(code);
+        let actual = match &o.result {
+            Ok(value) => json!({
+                "value": described_data(value),
+                "logs": o.logs.iter().map(reference::text).collect::<Vec<_>>(),
+                "truncated": o.truncated,
+            }),
+            Err(d) => json!({ "error": d.message }),
+        };
+        let expected =
+            json!({ "value": case["value"], "logs": case["logs"], "truncated": case["truncated"] });
         if !same(&actual, &expected) {
             failures.push(format!(
                 "{code}\n  expected {expected}\n  actual   {actual}"

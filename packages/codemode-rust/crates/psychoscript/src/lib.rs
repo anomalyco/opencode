@@ -14,6 +14,7 @@ mod compiler;
 mod conversion;
 mod convert;
 mod cross;
+mod data;
 mod diagnostic;
 mod exec;
 mod host;
@@ -36,6 +37,7 @@ pub mod test262;
 mod value;
 mod vm;
 
+pub use data::Data;
 pub use diagnostic::{Diagnostic, DiagnosticKind, Interrupted, Limits};
 pub use exec::BoxFuture;
 pub use host_function::{

@@ -85,7 +85,7 @@ fn main() {
         sorted.sort_by(f64::total_cmp);
         let (median, min) = (sorted[sorted.len() / 2], sorted[0]);
         if json {
-            report.push(json!({ "slug": slug, "name": name, "value": value, "median_ms": median, "min_ms": min, "times_ms": times }));
+            report.push(json!({ "slug": slug, "name": name, "value": value.to_json(), "median_ms": median, "min_ms": min, "times_ms": times }));
         } else {
             println!("{name:<28} {median:>8.1} ms  (min {min:.1} ms)");
         }

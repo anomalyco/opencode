@@ -63,7 +63,8 @@ fn output_limit_truncates_result_and_logs() {
     let value = outcome.result.unwrap();
     assert!(
         value
-            .as_str()
+            .as_string()
+            .and_then(|s| s.as_str())
             .unwrap()
             .contains("[result truncated: 102 bytes")
     );
