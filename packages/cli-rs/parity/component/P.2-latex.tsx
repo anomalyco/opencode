@@ -49,10 +49,9 @@ function TextPart(props: { text: string }) {
     <box paddingLeft={3} flexShrink={0}>
       <markdown
         syntaxStyle={themes.currentSyntax()}
-        renderNode={createMarkdownCodeBlockRenderer({ latex: render, math: render })}
+        renderBlock={createMarkdownCodeBlockRenderer({ latex: render, math: render })}
         content={props.text.trim()}
         streaming={false}
-        internalBlockMode="top-level"
         tableOptions={{ style: "grid", cellPaddingX: 1 }}
         conceal={true}
         fg={theme.markdown.text}

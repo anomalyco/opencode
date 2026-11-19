@@ -15,7 +15,7 @@ function TextPart(props: { text: string }) {
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
   const renderer = useRenderer()
-  const renderNode = createMarkdownCodeBlockRenderer({
+  const renderBlock = createMarkdownCodeBlockRenderer({
     mermaid: createMermaidCodeBlockRenderer(renderer, () => ({
       colors: resolveOpenCodeDiagramPalette(theme as Parameters<typeof resolveOpenCodeDiagramPalette>[0], "dark"),
     })),
@@ -26,12 +26,11 @@ function TextPart(props: { text: string }) {
         syntaxStyle={syntax()}
         content={props.text.trim()}
         streaming={false}
-        internalBlockMode="top-level"
         tableOptions={{ style: "grid", cellPaddingX: 1 }}
         conceal={true}
         fg={theme.markdown.text}
         bg={theme.background.base}
-        renderNode={renderNode}
+        renderBlock={renderBlock}
       />
     </box>
   )
