@@ -889,9 +889,9 @@ const layer = () =>
       ) {
         const sessionID = input.metadata?.sessionID
         const target = input.environment ?? environment
-        // Local only on this server's own machine: the Location's environment, outside a workspace. A command anywhere
-        // else takes none of this machine's variables, keeps its cwd as given and is spawned from the server.
-        const local = location.workspaceID === undefined && target === environment
+        // Local only on this server's own machine: the Location's environment, by id, outside a workspace. A command
+        // anywhere else takes none of this machine's variables, keeps its cwd as given and is spawned from the server.
+        const local = location.workspaceID === undefined && target.id === environment.id
         const baseEnv = local
           ? ((Schema.is(SessionSchema.ID)(sessionID) ? yield* environments.get(sessionID) : undefined) ?? process.env)
           : undefined

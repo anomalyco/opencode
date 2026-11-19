@@ -1094,7 +1094,6 @@ export const dict = {
   "session.activity.shells.other": "{{count}} ሼሎች",
   "session.activity.scripts.one": "{{count}} ስክሪፕት",
   "session.activity.scripts.other": "{{count}} ስክሪፕቶች",
-  "session.activity.background": "የዳራ ሥራ",
   "session.activity.shell.back": "ወደ ዳራ ሥራ ተመለስ",
   "session.activity.shell.stop": "አቁም",
   "session.activity.shell.stopping": "በማቆም ላይ…",

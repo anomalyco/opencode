@@ -40,6 +40,13 @@ export interface Target {
   readonly environment: Environment.Interface
 }
 
+/**
+ * Identifies a target's file: the same path in two environments is two files. The id's length comes first so no
+ * id and path can read as another pair's key, and the keys of one environment sort as its paths do.
+ */
+export const key = (target: Pick<Target, "absolute" | "environment">) =>
+  `${target.environment.id.length}:${target.environment.id}:${target.absolute}`
+
 export type Invocation = Pick<Tool.Context, "sessionID" | "agent" | "messageID" | "id">
 
 export interface ReadOptions {

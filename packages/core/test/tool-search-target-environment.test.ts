@@ -49,7 +49,10 @@ describe("search tools", () => {
         const sessionSpawns: ChildProcess.Command[] = []
         const target = yield* Layer.build(recordingEnvironmentLayer(targetSpawns))
         const session = yield* Layer.build(recordingEnvironmentLayer(sessionSpawns))
-        const other = elsewhere(tmp.path, Context.get(target, Environment.Service))
+        const other = elsewhere(tmp.path, {
+          ...Context.get(target, Environment.Service),
+          id: Environment.ID.make("elsewhere"),
+        })
         const execute = (registry: Tool.Interface, name: string, input: unknown) =>
           executeTool(registry, {
             sessionID,
@@ -76,6 +79,7 @@ describe("search tools", () => {
                 Layer.succeed(
                   Environment.Service,
                   Environment.Service.of({
+                    id: Environment.localID,
                     files: Environment.makeFiles(Environment.makeMemoryDriver()),
                     spawner: Context.get(session, Environment.Service).spawner,
                   }),

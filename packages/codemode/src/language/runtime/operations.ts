@@ -96,7 +96,7 @@ export const notConstructible = (callee: Value, node: NewExpression) => {
   const name = calleeDescription(node.callee) ?? "The called value"
   const message =
     callee instanceof Fn
-      ? `${name} cannot be constructed: user-defined constructors and classes are not supported. Call it as a function that returns a plain object instead.`
+      ? `${name} is not a constructor: only classes can be constructed with new. Use a class, or call it as a function that returns an object.`
       : callee instanceof Builtin
         ? `new ${name}(...) is not supported; call ${name}(...) without new instead.`
         : `${name} is not a constructor.`

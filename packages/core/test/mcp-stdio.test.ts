@@ -92,6 +92,7 @@ async function read(output: ReadonlyArray<Uint8Array>, options?: { open: boolean
   const environment = Layer.succeed(
     Environment.Service,
     Environment.Service.of({
+      id: Environment.localID,
       files: Environment.makeFiles(driver),
       spawner: ChildProcessSpawner.make(() =>
         Effect.succeed(

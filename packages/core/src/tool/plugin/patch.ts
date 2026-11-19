@@ -83,6 +83,8 @@ export const Plugin = {
           execute: (input, context) => {
             const completed: string[] = []
             const parsed = Patch.parse(input.patchText)
+            // The lock is taken before any path resolves, because resolving asks for approval one hunk at a time.
+            // These are still paths, so the lock places them in the session's environment.
             const lockTargets = Result.isSuccess(parsed)
               ? parsed.success.flatMap((hunk) => [
                   FileAccess.resolvePath(location.directory, hunk.path),
@@ -118,6 +120,7 @@ export const Plugin = {
               for (const hunk of hunks) {
                 yield* Effect.gen(function* () {
                   const target = yield* resolveTarget(hunk.path)
+                  const file = FileAccess.key(target)
                   if (hunk.type === "add") {
                     const content =
                       hunk.contents.endsWith("\n") || hunk.contents === "" ? hunk.contents : `${hunk.contents}\n`
@@ -128,11 +131,11 @@ export const Plugin = {
                       before: "",
                       after: Bom.split(content).text,
                     })
-                    updates.set(target.absolute, { target, content })
+                    updates.set(file, { target, content })
                     return
                   }
                   if (hunk.type === "delete") {
-                    const previous = updates.get(target.absolute)?.content
+                    const previous = updates.get(file)?.content
                     if (previous === null) {
                       return yield* new ToolFailure({
                         message: `patch verification failed: Failed to delete ${target.resource}: file does not exist`,
@@ -150,10 +153,10 @@ export const Plugin = {
                             ),
                           )).text
                     prepared.push({ ...hunk, target, before, after: "" })
-                    updates.set(target.absolute, { target, content: null })
+                    updates.set(file, { target, content: null })
                     return
                   }
-                  const previous = updates.get(target.absolute)?.content
+                  const previous = updates.get(file)?.content
                   if (previous === null) {
                     return yield* new ToolFailure({
                       message: `patch verification failed: Failed to read file to update ${target.absolute}: file does not exist`,
@@ -162,7 +165,10 @@ export const Plugin = {
                   const original =
                     previous ??
                     (yield* Effect.gen(function* () {
-                      const content = yield* FileMutation.readText(target.environment.files, target.absolute).pipe(
+                      const content = yield* FileMutation.readEditableText(
+                        target.environment.files,
+                        target.absolute,
+                      ).pipe(
                         Effect.mapError(
                           (error) =>
                             new ToolFailure({
@@ -178,7 +184,7 @@ export const Plugin = {
                     catch: (error) => new ToolFailure({ message: `patch verification failed: ${errorMessage(error)}` }),
                   })
                   const move = hunk.movePath ? yield* resolveTarget(hunk.movePath) : undefined
-                  const moveTarget = move && move.absolute !== target.absolute ? move : undefined
+                  const moveTarget = move && FileAccess.key(move) !== file ? move : undefined
                   const next = Patch.joinBom(update.content, update.bom)
                   prepared.push({
                     ...hunk,
@@ -189,10 +195,10 @@ export const Plugin = {
                     moveTarget,
                   })
                   if (moveTarget) {
-                    updates.set(target.absolute, { target, content: null })
-                    updates.set(moveTarget.absolute, { target: moveTarget, content: next })
+                    updates.set(file, { target, content: null })
+                    updates.set(FileAccess.key(moveTarget), { target: moveTarget, content: next })
                   } else {
-                    updates.set(target.absolute, { target, content: next })
+                    updates.set(file, { target, content: next })
                   }
                 }).pipe(Effect.mapError(toolFailure(`Unable to prepare patch at ${hunk.path}`)))
               }
@@ -223,8 +229,10 @@ export const Plugin = {
                     // On macOS and Windows a move that only changes case targets the same file, so the new name already
                     // exists, and writing it then removing the old one would delete the file. Such a move writes in
                     // place and renames. Symlinks keep the write-and-remove path, which leaves their target alone.
+                    // The same path in another environment is another file, so a move there is never a rename.
                     const recased =
                       moveTarget !== undefined &&
+                      moveTarget.environment.id === change.target.environment.id &&
                       moveTarget.absolute.toLowerCase() === change.target.absolute.toLowerCase() &&
                       (yield* change.target.environment.files.stat(change.target.absolute).pipe(
                         Effect.map((info) => info.type === "file"),
@@ -269,8 +277,8 @@ export const Plugin = {
                       Effect.mapError((error) => fail(`Failed to read ${target.absolute}`, error)),
                     )
                     formatted.set(
-                      target.absolute,
-                      (yield* formatter.file(target.absolute))
+                      FileAccess.key(target),
+                      (yield* formatter.file(target))
                         ? yield* FileMutation.syncTextBom(target.environment.files, target.absolute, current.bom).pipe(
                             Effect.mapError((error) => fail(`Failed to sync ${target.absolute}`, error)),
                           )
@@ -282,7 +290,7 @@ export const Plugin = {
               const files = prepared.map((change) => {
                 if (change.type === "delete") return patchFile(change)
                 const target = change.type === "update" && change.moveTarget ? change.moveTarget : change.target
-                return patchFile(change, formatted.get(target.absolute))
+                return patchFile(change, formatted.get(FileAccess.key(target)))
               })
               return {
                 // The multi-file patch contract intentionally leaves structured output empty.

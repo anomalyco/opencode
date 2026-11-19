@@ -254,6 +254,17 @@ export const SettingsGeneral: Component = () => {
       <h3 class="settings-section-title">{language.t("settings.general.section.general")}</h3>
       <SettingsList>
         <InterfaceModeSetting />
+        <SettingsRow
+          title={language.t("settings.general.row.sharedSidePanel.title")}
+          description={language.t("settings.general.row.sharedSidePanel.description")}
+        >
+          <div data-action="settings-shared-side-panel">
+            <Switch
+              checked={settings.general.sharedSidePanel()}
+              onChange={(checked) => settings.general.setSharedSidePanel(checked)}
+            />
+          </div>
+        </SettingsRow>
         <LanguageSetting />
 
         <WorkspaceDestinationSetting />

@@ -1130,8 +1130,19 @@ story("resizes a device with the RTL side grip by pointer and keyboard", async (
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
   await expect(root.locator('img[elementtiming="embed-snapshot"]')).toHaveCount(0)
   await page.mouse.up()
+
+  const bottomGrip = root.getByRole("separator", { name: "Resize viewport height", exact: true })
+
+  await expect(grip).toHaveCSS("outline-style", "none")
+  await bottomGrip.press("Shift+Tab")
+  await expect(grip).toBeFocused()
+  await expect(grip).toHaveCSS("outline-offset", "-2px")
   await grip.press("Shift+ArrowRight")
   await expect(width).toHaveValue("398")
+
+  await page.keyboard.press("Tab")
+  await expect(bottomGrip).toBeFocused()
+  await expect(bottomGrip).toHaveCSS("outline-offset", "-2px")
 })
 
 story("pins the responsive dimensions when a manual preview scale is selected", async ({ page }) => {

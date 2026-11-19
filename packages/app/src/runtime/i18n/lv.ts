@@ -1175,7 +1175,6 @@ export const dict = {
   "session.activity.scripts.zero": "{{count}} skriptu",
   "session.activity.scripts.one": "{{count}} skripts",
   "session.activity.scripts.other": "{{count}} skripti",
-  "session.activity.background": "Fona darbs",
   "session.activity.shell.back": "Atpakaļ uz fona darbiem",
   "session.activity.shell.stop": "Apturēt",
   "session.activity.shell.stopping": "Aptur…",

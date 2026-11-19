@@ -195,7 +195,7 @@ const ModelList: Component<{
               data-component="settings-row"
               data-option-key={modelKey(item)}
               aria-pressed={controller.current() === modelKey(item)}
-              class="-mx-4 w-[calc(100%+32px)] px-4 text-start first:rounded-t-lg last:rounded-b-lg hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+              class="-mx-4 w-[calc(100%+32px)] px-4 text-start first:rounded-t-lg last:rounded-b-lg hover:bg-v2-overlay-simple-overlay-hover focus-visible:-outline-offset-2"
               classList={{ "bg-v2-overlay-simple-overlay-hover": store.active === modelKey(item) }}
               onMouseEnter={() => setStore("active", modelKey(item))}
               onMouseLeave={() => setStore("active", "")}

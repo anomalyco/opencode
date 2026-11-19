@@ -1155,7 +1155,6 @@ export const dict = {
   "session.activity.shells.other": "⁨{{count}}⁩ شیل",
   "session.activity.scripts.one": "⁨{{count}}⁩ سکرپٹ",
   "session.activity.scripts.other": "⁨{{count}}⁩ سکرپٹ",
-  "session.activity.background": "پس منظر دا کم",
   "session.activity.shell.back": "پس منظر دے کم تے واپس جاؤ",
   "session.activity.shell.stop": "روکو",
   "session.activity.shell.stopping": "رُک رہیا اے…",

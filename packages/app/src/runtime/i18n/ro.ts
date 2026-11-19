@@ -1174,7 +1174,6 @@ export const dict = {
   "session.activity.scripts.one": "{{count}} script",
   "session.activity.scripts.few": "{{count}} scripturi",
   "session.activity.scripts.other": "{{count}} de scripturi",
-  "session.activity.background": "Lucru în fundal",
   "session.activity.shell.back": "Înapoi la activitatea din fundal",
   "session.activity.shell.stop": "Oprește",
   "session.activity.shell.stopping": "Se oprește…",

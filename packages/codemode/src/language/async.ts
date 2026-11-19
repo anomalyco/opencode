@@ -360,7 +360,7 @@ export class VmScheduler {
 
     if (callable instanceof Fn) {
       const code = callable.code
-      if ((code.flags & (CodeFlags.ASYNC | CodeFlags.GENERATOR)) === 0) {
+      if ((code.flags & (CodeFlags.ASYNC | CodeFlags.GENERATOR | CodeFlags.CLASS_CONSTRUCTOR)) === 0) {
         const counted = (code.flags & CodeFlags.INTERNAL) === 0
         if (counted && vm.depth > MAX_CALL_DEPTH) {
           target.reject(rangeError("Maximum call stack size exceeded", site ?? vm.currentSite()))

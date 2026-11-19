@@ -3,9 +3,8 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { Effect, Fiber } from "effect"
 import { Host, Runtime, toBytes } from "../src/language/index.js"
-import { getInternalPrelude } from "../src/language/internal-prelude.js"
-import { compiledPrelude } from "../src/language/prelude/prelude.js"
-import type { Snapshot } from "../src/language/snapshot/snapshot.js"
+import { parking } from "../src/language/runtime/driver.js"
+import { savedFrames as frames } from "../src/language/snapshot.js"
 import { runProgram } from "./run-program.js"
 
 // Suspending and resuming a run at every point a program getter or setter can run or be pending. Each language-level
@@ -13,26 +12,6 @@ import { runProgram } from "./run-program.js"
 // saved stacks must include the point under test (a getter's frame, the helper running it), and both runs must end
 // the same way. Host calls in flight are suspended with `program.suspend()` and resumed with `runtime.resume`, in
 // this process and in another one.
-
-type Saved = { readonly t?: string; readonly f?: ReadonlyArray<unknown>; readonly o?: ReadonlyArray<unknown> }
-
-// The frames a saved state holds (the job stack, parked awaits, suspended generators): each one's function name, or
-// the internal helper it runs, with "(redo)" for a getter an iterator op is running (`Mode.REDO`).
-const frames = (snapshot: Snapshot): Array<string> => {
-  const records = snapshot.records as ReadonlyArray<Saved | undefined>
-  return records.flatMap((record) => {
-    if (record?.t !== "Frame") return []
-    const [fn, code, , , , , , mode] = record.f as [unknown, [string, [string, string, number]], ...Array<unknown>]
-    const redo = mode === 7 ? " (redo)" : ""
-    if (Array.isArray(fn) && fn[0] === "r") {
-      const props = records[fn[1] as number]!.o!
-      return [`${String(props[props.indexOf("name") + 1])}${redo}`]
-    }
-    const [, source, index] = code[1]
-    const codes = source === "@vm-internal" ? getInternalPrelude().codes : compiledPrelude().codes
-    return [`${codes[index]!.name}${redo}`]
-  })
-}
 
 /** Runs `code` straight through and with a save and restore at every slice; what the saved stacks held. */
 const suspendEverywhere = (code: string) => {
@@ -237,23 +216,22 @@ const suspendInFlight = async (code: string) => {
   return { resumed, plain, kept: second.kept, keptPlain: straight.kept, state: suspended.state, bytes }
 }
 
-// Round-trip mode yields at its checkpoints, so `slow` starting doesn't mean the run is parked on it yet. Suspend
-// after `slow` starts, and if the saved stack hasn't reached `$vmHostWait`, run again and let it go on longer.
+// Runs `code` until it is parked waiting on `slow`, and suspends it there; the gate opens after the suspend.
 const suspendParked = async (code: string) => {
-  for (let attempt = 0; attempt < 50; attempt++) {
-    const gate = latch()
-    const first = hosting(gate.promise)
-    const program = first.runtime.program(code, { runId: "r" })
-    const fiber = Effect.runFork(program.run())
-    await first.started
-    for (let i = 0; i < attempt; i++) await new Promise((done) => setImmediate(done))
-    const suspended = await Effect.runPromise(program.suspend())
-    gate.resolve()
-    await Effect.runPromise(Fiber.join(fiber))
-    if (suspended.ok !== "suspended") throw new Error(`expected a suspended run, got ${JSON.stringify(suspended)}`)
-    if (frames(suspended.state).includes("$vmHostWait")) return suspended
-  }
-  throw new Error("the run never parked on $vmHostWait while `slow` was in flight")
+  const gate = latch()
+  const first = hosting(gate.promise)
+  const parked = latch()
+  parking.onPark = parked.resolve
+  const program = first.runtime.program(code, { runId: "r" })
+  const fiber = Effect.runFork(program.run())
+  await Promise.all([first.started, parked.promise])
+  parking.onPark = undefined
+  const suspended = await Effect.runPromise(program.suspend())
+  // The suspended run's host call settles before any resume.
+  gate.resolve()
+  await Effect.runPromise(Fiber.join(fiber))
+  if (suspended.ok !== "suspended") throw new Error(`expected a suspended run, got ${JSON.stringify(suspended)}`)
+  return { state: suspended.state, runtime: first.runtime }
 }
 
 describe("suspended while a getter waits on a host call", () => {
@@ -265,9 +243,7 @@ describe("suspended while a getter waits on a host call", () => {
     const run = await suspendInFlight(code)
     expect(run.plain).toMatchObject({ ok: true, value: [[42], 42] })
     expect(run.resumed).toMatchObject({ ok: true, value: [[42], 42] })
-    expect(frames(run.state)).toEqual(
-      expect.arrayContaining(["get x", "get value", "$vmRedo (redo)", "$vmHostWait"]),
-    )
+    expect(frames(run.state)).toEqual(expect.arrayContaining(["get x", "get value", "$vmRedo (redo)", "$vmHostWait"]))
   })
 
   test("a getter waiting under REDO itself", async () => {
@@ -344,24 +320,52 @@ describe("suspended while a getter waits on a host call", () => {
       return [out, [...it]]`
     const same = await suspendParked(code)
     const again = hosting(undefined)
-    expect(await Effect.runPromise(again.runtime.resume(same.state).run())).toMatchObject({ ok: true, value: [[0, 2], [0, 2]] })
+    expect(await Effect.runPromise(again.runtime.resume(same.state).run())).toMatchObject({
+      ok: true,
+      value: [
+        [0, 2],
+        [0, 2],
+      ],
+    })
     const run = await suspendInFlight(code)
-    expect(run.plain).toMatchObject({ ok: true, value: [[0, 2], [0, 2]] })
+    expect(run.plain).toMatchObject({
+      ok: true,
+      value: [
+        [0, 2],
+        [0, 2],
+      ],
+    })
     expect(run.resumed).toEqual(run.plain)
     expect(frames(run.state)).toEqual(expect.arrayContaining(["get next", "$vmRedo (redo)", "$vmHostWait"]))
-  }, 3000)
+  })
 
   for (const [name, code, value] of [
-    ["yield*", `function* g() { return yield* { [Symbol.iterator]() { let i = 0; return { get next() { const k = pick(slow(1)); return () => ({ done: i >= 2, value: i++ * k }) } } } } } return [...g()]`, [0, 2]],
-    ["for await", `const out = []; for await (const x of { [Symbol.asyncIterator]() { let i = 0; return { get next() { const k = pick(slow(1)); return async () => ({ done: i >= 2, value: i++ * k }) } } } }) out.push(x); return out`, [0, 2]],
-    ["destructure", `const [a, b] = { [Symbol.iterator]() { let i = 0; return { get next() { const k = pick(slow(1)); return () => ({ done: false, value: ++i * k }) } } } }; return [a, b]`, [2, 4]],
-    ["Array.from", `return Array.from({ [Symbol.iterator]() { let i = 0; return { get next() { const k = pick(slow(1)); return () => ({ done: i >= 2, value: i++ * k }) } } } })`, [0, 2]],
+    [
+      "yield*",
+      `function* g() { return yield* { [Symbol.iterator]() { let i = 0; return { get next() { const k = pick(slow(1)); return () => ({ done: i >= 2, value: i++ * k }) } } } } } return [...g()]`,
+      [0, 2],
+    ],
+    [
+      "for await",
+      `const out = []; for await (const x of { [Symbol.asyncIterator]() { let i = 0; return { get next() { const k = pick(slow(1)); return async () => ({ done: i >= 2, value: i++ * k }) } } } }) out.push(x); return out`,
+      [0, 2],
+    ],
+    [
+      "destructure",
+      `const [a, b] = { [Symbol.iterator]() { let i = 0; return { get next() { const k = pick(slow(1)); return () => ({ done: false, value: ++i * k }) } } } }; return [a, b]`,
+      [2, 4],
+    ],
+    [
+      "Array.from",
+      `return Array.from({ [Symbol.iterator]() { let i = 0; return { get next() { const k = pick(slow(1)); return () => ({ done: i >= 2, value: i++ * k }) } } } })`,
+      [0, 2],
+    ],
   ] as const) {
     test(`an iterator's next getter waiting on a host call (${name})`, async () => {
       const run = await suspendInFlight(code)
       expect(run.plain).toMatchObject({ ok: true, value })
       expect(run.resumed).toEqual(run.plain)
-    }, 3000)
+    })
   }
 
   for (const from of ["state", "bytes"] as const) {
@@ -369,28 +373,13 @@ describe("suspended while a getter waits on a host call", () => {
       const code = `
         const it = { [Symbol.iterator]() { let i = 0; return { get next() { const k = pick(slow(1)); return () => ({ done: i >= 2, value: i++ * k }) } } } }
         return [...it]`
-      for (let attempt = 0; attempt < 50; attempt++) {
-        const gate = latch()
-        const first = hosting(gate.promise)
-        const program = first.runtime.program(code, { runId: "r" })
-        const fiber = Effect.runFork(program.run())
-        await first.started
-        for (let i = 0; i < attempt; i++) await new Promise((done) => setImmediate(done))
-        const suspended = await Effect.runPromise(program.suspend())
-        // The suspended run's host call settles before the resume.
-        gate.resolve()
-        await Effect.runPromise(Fiber.join(fiber))
-        if (suspended.ok !== "suspended") throw new Error(`expected a suspended run, got ${JSON.stringify(suspended)}`)
-        if (!frames(suspended.state).includes("$vmHostWait")) continue
-        expect(frames(suspended.state)).toEqual(expect.arrayContaining(["get next", "$vmRedo (redo)"]))
-        const resumed = await Effect.runPromise(
-          first.runtime.resume(from === "state" ? suspended.state : toBytes(suspended.state)).run(),
-        )
-        expect(resumed).toMatchObject({ ok: true, value: [0, 2] })
-        return
-      }
-      throw new Error("the run never parked on $vmHostWait while `slow` was in flight")
-    }, 3000)
+      const suspended = await suspendParked(code)
+      expect(frames(suspended.state)).toEqual(expect.arrayContaining(["get next", "$vmRedo (redo)", "$vmHostWait"]))
+      const resumed = await Effect.runPromise(
+        suspended.runtime.resume(from === "state" ? suspended.state : toBytes(suspended.state)).run(),
+      )
+      expect(resumed).toMatchObject({ ok: true, value: [0, 2] })
+    })
   }
 
   test("a getter inside an iterator op, resumed in another process", async () => {

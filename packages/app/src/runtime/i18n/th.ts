@@ -1182,7 +1182,6 @@ export const dict = {
   "session.activity.shells.other": "เชลล์ {{count}} ตัว",
   "session.activity.scripts.one": "สคริปต์ {{count}} ตัว",
   "session.activity.scripts.other": "สคริปต์ {{count}} ตัว",
-  "session.activity.background": "งานเบื้องหลัง",
   "session.activity.shell.back": "กลับไปยังงานเบื้องหลัง",
   "session.activity.shell.stop": "หยุด",
   "session.activity.shell.stopping": "กำลังหยุด…",
