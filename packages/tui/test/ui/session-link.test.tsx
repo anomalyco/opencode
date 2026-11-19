@@ -100,7 +100,12 @@ test("session links in markdown", async () => {
     await Promise.all([...fetched.values()].map((request) => request.promise))
     // The client marks the session missing once it has read the 404.
     await app.waitFor(() => data.session.missing(missing))
-    await waitForHighlightedFrame(app, () => linked().length > 0)
+    // In top-level mode every block highlights on its own, so the link can land before the list does.
+    await waitForHighlightedFrame(
+      app,
+      (frame) =>
+        linked().length > 0 && [current, archived.id, unknown, missing, known.id].every((id) => frame.includes(id)),
+    )
     const frame = app.captureCharFrame()
     // The long title wraps; the current, archived, missing and still-loading sessions stay IDs.
     expect(linked()).toBe("@Fix the flaky reconnect test on Windows")

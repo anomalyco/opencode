@@ -1641,12 +1641,17 @@ test.skipIf(process.platform === "win32").each(["manual", "select"] as const)(
       expect(setup.renderer.currentFocusedEditor?.plainText).toBe("")
       setup.mockInput.pressKey("x", { ctrl: true })
       setup.mockInput.pressKey("t")
-      await setup.waitForFrame((frame) => frame.includes("alpha beta gamma"))
-      expect(setup.renderer.currentFocusedRenderable).toBeInstanceOf(EmbeddedTerminalRenderable)
+      // The closed terminal can still be on the last frame, so the text alone does not mean it reopened.
+      await setup.waitForFrame(
+        (frame) =>
+          frame.includes("alpha beta gamma") &&
+          setup.renderer.currentFocusedRenderable instanceof EmbeddedTerminalRenderable,
+      )
       setup.mockInput.pressKey("x", { ctrl: true })
       setup.mockInput.pressArrow("down")
       await setup.waitForFrame((frame) => frame.includes("Subagents") && frame.includes("Terminals"))
-      expect(setup.renderer.currentFocusedRenderable).not.toBeInstanceOf(EmbeddedTerminalRenderable)
+      // A failed toBeInstanceOf prints the whole renderable tree, millions of lines.
+      expect(setup.renderer.currentFocusedRenderable instanceof EmbeddedTerminalRenderable).toBeFalse()
 
       setup.renderer.destroy()
       await task
