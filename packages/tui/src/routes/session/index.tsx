@@ -31,6 +31,7 @@ import {
   TextAttributes,
   RGBA,
   MouseEvent,
+  type TextBufferRenderable,
 } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import {
@@ -93,7 +94,7 @@ import { PermissionPrompt } from "./permission"
 import { FormPrompt } from "./form"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { DialogExportResult } from "../../ui/dialog-export-result"
-import { useConfig, useNewDesigns } from "../../config"
+import { useConfig, useNewDesigns, useSessionFindExperiment } from "../../config"
 import { useClipboard } from "../../context/clipboard"
 import { nextThinkingMode, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
@@ -135,6 +136,8 @@ import { SessionGroupView } from "./group-view"
 import { useEntryAnchor } from "./anchor-view"
 import { containsAnchor, createTimelineAnchors, groupID } from "./anchors"
 import { rowsAfter, rowsBefore, rowWeight } from "./mount-budget"
+import { findMatches, findParts, findPattern, offsetRow, sameFindMatch, type FindMatch } from "./find"
+import { FindBar, FindText } from "./find-view"
 export { InlineToolRow } from "./message-parts"
 export { toolDisplay } from "./message-parts"
 
@@ -898,6 +901,79 @@ export function Session(props: {
       alignMessage(messageID, Math.max(0, y - (message?.type === "assistant" ? 1 : 0)))
     })
 
+  // Find, like the web app's: plain case-insensitive text over the loaded prompts and assistant
+  // text. A new query selects the first match; a selected match that goes away falls back to it.
+  const findEnabled = useSessionFindExperiment()
+  const [findOpen, setFindOpen] = createSignal(false)
+  const [findFocus, setFindFocus] = createSignal(0)
+  const [findQuery, setFindQuery] = createSignal("")
+  const [findSelected, setFindSelected] = createSignal<FindMatch>()
+  const findActivePattern = createMemo(() => (findOpen() ? findPattern(findQuery()) : undefined), undefined, {
+    equals: (previous, next) => previous?.source === next?.source,
+  })
+  const findList = createMemo(() => {
+    const pattern = findActivePattern()
+    if (!pattern) return []
+    return findMatches(
+      findParts(rows, (messageID) => data.session.message.get(route.sessionID, messageID)),
+      pattern,
+    )
+  })
+  const findIndex = createMemo(() => Math.max(0, findList().findIndex((match) => sameFindMatch(match, findSelected()))))
+  const findCurrent = () => findList()[findIndex()]
+  // The match a reveal is waiting for, and where a part last rendered the current match.
+  let findSeek: FindMatch | undefined
+  let findSpot: { match: FindMatch; pattern: RegExp; node: TextBufferRenderable; offset: number } | undefined
+
+  const revealFind = (match: FindMatch | undefined) => {
+    findSeek = match
+    if (match) ensureAllRows(() => locateFind(match))
+  }
+  const locateFind = (match: FindMatch) => {
+    if (findSeek !== match || !scroll || scroll.isDestroyed) return
+    const spot = findSpot
+    if (spot && sameFindMatch(spot.match, match) && spot.pattern === findActivePattern() && !spot.node.isDestroyed) {
+      findSeek = undefined
+      centerFind(match.messageID, spot.node.y + offsetRow(spot.node.lineInfo, spot.node.plainText, spot.offset))
+      return
+    }
+    // Until the match's block paints and reports its row, bring the part on screen.
+    const anchor = anchors.get({ type: "part", ref: { messageID: match.messageID, partID: match.partID } })
+    if (!anchor) return
+    const viewport = scroll.viewport
+    if (anchor.node.y + anchor.node.height > viewport.y && anchor.node.y < viewport.y + viewport.height) return
+    centerFind(match.messageID, anchor.node.y)
+  }
+  const centerFind = (messageID: string, y: number) => {
+    const slack = scroll.getRenderable(NAVIGATION_SLACK_ID)?.height ?? 0
+    const top = scroll.scrollTop + y - scroll.viewport.y - Math.floor(scroll.viewport.height / 2)
+    alignMessage(messageID, Math.max(0, Math.min(top, scroll.scrollHeight - slack - scroll.viewport.height)))
+  }
+  const searchFind = (value: string) => {
+    const previous = findActivePattern()
+    setFindQuery(value)
+    // Whitespace or case changes keep the current match.
+    if (findActivePattern() === previous) return
+    setFindSelected(undefined)
+    revealFind(findCurrent())
+  }
+  const moveFind = (delta: 1 | -1) => {
+    const list = findList()
+    if (list.length === 0) return
+    const next = list[(findIndex() + delta + list.length) % list.length]
+    setFindSelected(next)
+    revealFind(next)
+  }
+  const closeFind = () => {
+    findSeek = undefined
+    batch(() => {
+      setFindOpen(false)
+      setFindQuery("")
+      setFindSelected(undefined)
+    })
+    prompt()?.focus()
+  }
+
   function toBottom() {
     clearMessageNavigation()
     ensureAllRowsPending = undefined
@@ -1078,6 +1154,20 @@ export function Session(props: {
       slash: { name: "timeline" },
       run: () => {
         dialog.replace(() => <DialogTimeline sessionID={route.sessionID} onMove={jumpToMessage} />)
+      },
+    },
+    {
+      title: "Find in session",
+      id: "session.find",
+      group: "Session",
+      enabled: findEnabled(),
+      slash: { name: "find" },
+      run: () => {
+        dialog.clear()
+        batch(() => {
+          setFindOpen(true)
+          setFindFocus((count) => count + 1)
+        })
       },
     },
     {
@@ -1516,6 +1606,17 @@ export function Session(props: {
         config,
         mutatePending,
         pendingDelivery: (inboxID) => pendingDeliveries().get(inboxID),
+        find: {
+          pattern: findActivePattern,
+          current: findCurrent,
+          located: (match, node, offset) => {
+            const pattern = findActivePattern()
+            if (!pattern) return
+            findSpot = { match, pattern, node, offset }
+            const seek = findSeek
+            if (seek && sameFindMatch(seek, match)) afterLayout(() => locateFind(seek))
+          },
+        },
       }}
     >
       <box flexDirection="row" flexGrow={1} minHeight={0}>
@@ -1602,6 +1703,17 @@ export function Session(props: {
             <box flexShrink={0}>
               <Show when={!composer.open && !disabled() && queuedPrompts().length > 0}>
                 <QueuedPromptDock prompts={queuedPrompts()} onOpen={openQueuedPrompts} />
+              </Show>
+              <Show when={findOpen()}>
+                <FindBar
+                  query={findQuery()}
+                  index={findIndex()}
+                  count={findList().length}
+                  focus={findFocus()}
+                  onInput={searchFind}
+                  onMove={moveFind}
+                  onClose={closeFind}
+                />
               </Show>
               <Slot path="session.composer.top" input={{ sessionID: route.sessionID }} />
               <Composer
@@ -1998,6 +2110,7 @@ function SessionPartView(props: {
           <Match when={item().type === "text"}>
             <TextPart
               part={item() as SessionMessageAssistantText}
+              partID={props.partRef.partID}
               message={message() as SessionMessageAssistant}
               last={false}
             />
@@ -2440,7 +2553,10 @@ function UserMessage(props: { message: SessionMessageUser }) {
           backgroundColor={hover() ? theme.decrease(theme.background.raised.base) : theme.background.raised.base}
           flexShrink={0}
         >
-          <text fg={theme.text.base}>{props.message.text}</text>
+          <FindText
+            part={{ messageID: props.message.id, partID: "message", text: props.message.text }}
+            fg={theme.text.base}
+          />
           <Show when={skills().length}>
             <box flexDirection="row" paddingTop={1} gap={1} flexWrap="wrap">
               <For each={skills()}>

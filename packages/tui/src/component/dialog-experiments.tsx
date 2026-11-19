@@ -25,6 +25,11 @@ export const experiments: Experiment[] = [
     title: "TUI tools",
     description: "Let the agent open terminals in this TUI (requires server support)",
   },
+  {
+    id: "session-find",
+    title: "Find in session",
+    description: "Search the open session's messages with /find or <leader>f",
+  },
 ]
 
 export function DialogExperiments() {
