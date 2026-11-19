@@ -8,6 +8,10 @@ inputs:
     description: Space-separated name=digest pairs for artifacts made by sign jobs, from their job outputs
     required: false
     default: ""
+  require-digests:
+    description: Require every artifact to match a reported digest (deploy jobs set this)
+    required: false
+    default: "false"
 runs:
   using: composite
   steps:
@@ -19,3 +23,4 @@ runs:
       run: bash "${GITHUB_ACTION_PATH//\\//}/../verify-artifacts.sh" "$RUNNER_TEMP/in"
       env:
         OPENCODE_DIGESTS: ${{ inputs.digests }}
+        OPENCODE_REQUIRE_DIGESTS: ${{ inputs.require-digests }}

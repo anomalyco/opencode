@@ -27,9 +27,9 @@ describe("OpenAI Images recorded", () => {
       })
 
       expect(response.images).toHaveLength(1)
-      expect(response.image.mediaType).toBe("image/jpeg")
-      expect(response.image.info).toEqual({ format: "jpeg", width: 1024, height: 1024 })
-      expect((yield* response.image.bytes()).length).toBeGreaterThan(0)
+      expect(response.images[0].mediaType).toBe("image/jpeg")
+      expect(response.images[0].info).toEqual({ format: "jpeg", width: 1024, height: 1024 })
+      expect((yield* response.images[0].bytes()).length).toBeGreaterThan(0)
       expect(response.providerMetadata).toEqual({
         openai: { outputFormat: "jpeg", size: "1024x1024", quality: "low", background: "opaque" },
       })
@@ -57,8 +57,8 @@ describe("OpenAI Images recorded", () => {
           providerOptions: { size: "1024x1024", outputFormat: "jpeg", quality: "low", outputCompression: 10 },
         })
 
-        expect(response.image.mediaType).toBe("image/jpeg")
-        expect(dimensions(yield* response.image.bytes())).toEqual({ width: 1024, height: 1024 })
+        expect(response.images[0].mediaType).toBe("image/jpeg")
+        expect(dimensions(yield* response.images[0].bytes())).toEqual({ width: 1024, height: 1024 })
       }),
   )
 

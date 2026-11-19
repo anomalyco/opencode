@@ -1,12 +1,35 @@
-// @ts-nocheck
-import { For, onCleanup } from "solid-js"
+import { createEffect, For, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { TextReveal } from "./text-reveal"
+
+const defaults = {
+  text: "Refactor ToolStatusTitle DOM measurement",
+  growOnly: true,
+  truncate: false,
+  duration: 600,
+  bounce: 1,
+  bounceSoft: 1,
+  hybridTravel: 25,
+  hybridEdge: 17,
+  edge: 17,
+  revealTravel: 0,
+}
 
 export default {
   title: "UI/TextReveal",
   id: "components-text-reveal",
   tags: ["autodocs"],
+  component: TextReveal,
+  args: defaults,
+  argTypes: {
+    duration: { control: { type: "range", min: 100, max: 1400, step: 10 } },
+    bounce: { control: { type: "range", min: 1, max: 2, step: 0.01 } },
+    bounceSoft: { control: { type: "range", min: 1, max: 1.5, step: 0.01 } },
+    hybridTravel: { control: { type: "range", min: 0, max: 40, step: 1 } },
+    hybridEdge: { control: { type: "range", min: 0, max: 40, step: 1 } },
+    edge: { control: { type: "range", min: 0, max: 40, step: 1 } },
+    revealTravel: { control: { type: "range", min: 0, max: 16, step: 1 } },
+  },
   parameters: {
     docs: {
       description: {
@@ -22,7 +45,7 @@ Playground for the TextReveal text transition component.
 }
 
 const TEXTS = [
-  "Refactor ToolStatusTitle DOM measurement",
+  defaults.text,
   "Remove inline measure nodes",
   "Run typechecks and report changes",
   "Verify reduced-motion behavior",
@@ -87,18 +110,29 @@ const headingSlot = {
 } as const
 
 export const Playground = {
-  render: () => {
+  render: (args: typeof defaults) => {
     const [state, setState] = createStore({
+      ...defaults,
       index: 0,
       cycling: false,
-      growOnly: true,
-      duration: 600,
-      bounce: 1.0,
-      bounceSoft: 1.0,
-      hybridTravel: 25,
-      hybridEdge: 17,
-      edge: 17,
-      revealTravel: 0,
+    })
+
+    for (const key of [
+      "duration",
+      "bounce",
+      "bounceSoft",
+      "hybridTravel",
+      "hybridEdge",
+      "edge",
+      "revealTravel",
+    ] as const) {
+      createEffect(() => setState(key, args[key]))
+    }
+
+    createEffect(() => setState("growOnly", args.growOnly))
+    createEffect(() => {
+      setState("text", args.text)
+      setState("index", 0)
     })
 
     const index = () => state.index
@@ -113,7 +147,7 @@ export const Playground = {
     const revealTravel = () => state.revealTravel
 
     let timer: number | undefined
-    const text = () => TEXTS[index()]
+    const text = () => (index() === 0 ? state.text || undefined : TEXTS[index()])
     const next = () => setState("index", (value) => (value + 1) % TEXTS.length)
     const prev = () => setState("index", (value) => (value - 1 + TEXTS.length) % TEXTS.length)
 
@@ -150,7 +184,7 @@ export const Playground = {
             <span style={cardLabel}>text-reveal (mask wipe + slide)</span>
             <div style={previewRow}>
               <span>Thinking</span>
-              <span style={headingSlot}>
+              <span style={{ ...headingSlot, width: args.truncate ? "180px" : undefined }}>
                 <TextReveal
                   class="text-14-regular"
                   text={text()}
@@ -160,6 +194,7 @@ export const Playground = {
                   spring={spring()}
                   springSoft={springSoft()}
                   growOnly={growOnly()}
+                  truncate={args.truncate}
                 />
               </span>
             </div>
@@ -169,7 +204,7 @@ export const Playground = {
             <span style={cardLabel}>text-reveal (mask wipe only)</span>
             <div style={previewRow}>
               <span>Thinking</span>
-              <span style={headingSlot}>
+              <span style={{ ...headingSlot, width: args.truncate ? "180px" : undefined }}>
                 <TextReveal
                   class="text-14-regular"
                   text={text()}
@@ -179,6 +214,7 @@ export const Playground = {
                   spring={spring()}
                   springSoft={springSoft()}
                   growOnly={growOnly()}
+                  truncate={args.truncate}
                 />
               </span>
             </div>
@@ -189,7 +225,7 @@ export const Playground = {
           <For each={TEXTS}>
             {(t, i) => (
               <button onClick={() => setState("index", i())} style={btn(index() === i())}>
-                {t ?? "(none)"}
+                {(i() === 0 ? state.text : t) || "(none)"}
               </button>
             )}
           </For>

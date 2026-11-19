@@ -11,7 +11,7 @@ import { ServerConnection } from "../../src/runtime/server/registry"
 import { usePluginServers } from "../../src/runtime/plugin/servers"
 
 /** The input of a WSL or SSH method this fixture answers. */
-type FixtureInput = { id?: string; name?: string }
+type FixtureInput = { id?: string; name?: string; target?: string; prompt?: string; value?: string }
 
 /** A main-side method: SSH `start` answers with the state revision, the others with nothing. */
 type FixtureMethod = (input: FixtureInput) => number | void
@@ -64,12 +64,14 @@ export function mount(input: {
     const [store, setStore] = createStore<{
       calls: string[]
       connects: number
+      passphraseAnswered: boolean
       available: boolean
       state: WslServersState
       ssh: SshState
     }>({
       calls: [],
       connects: 0,
+      passphraseAnswered: false,
       available: true,
       ssh: {
         revision: 0,
@@ -186,11 +188,40 @@ export function mount(input: {
 
     const ssh = {
       // Like main: a connect opens a new tunnel to a remote server with a new password.
-      start() {
+      start(value) {
         setStore("connects", (count) => count + 1)
+
+        if (!store.ssh.servers.length && value.id && value.target) {
+          const config = { id: value.id, target: value.target, name: value.name ?? "" }
+
+          setStore("ssh", (state) => ({
+            revision: state.revision + 1,
+            servers: [{ config, saved: false, stage: "connecting", detail: "" }],
+          }))
+
+          if (value.target === "ssh dev@key-fallback")
+            setSsh({
+              stage: "authentication",
+              prompt: { id: "key", text: "Enter passphrase for key 'id_ed25519':", confirm: false },
+            })
+
+          return store.ssh.revision
+        }
+
         setSsh({ stage: "ready", http: { url: input.ssh ?? "", password: `ssh-${store.connects + 1}` } })
 
         return store.ssh.revision
+      },
+      respond(value) {
+        const server = store.ssh.servers.find((item) => item.config.id === value.id)
+
+        if (!server?.prompt || server.prompt.id !== value.prompt) throw new Error("Unexpected SSH prompt")
+
+        if (value.prompt === "key" && value.value === "incorrect-passphrase")
+          return setStore("passphraseAnswered", true)
+
+        if (value.prompt !== "account" || value.value !== "fixture-password") throw new Error("Unexpected SSH answer")
+        setSsh({ saved: true, stage: "ready", prompt: undefined, http: { url: input.server, password: "ssh-1" } })
       },
     } satisfies Readonly<Record<string, FixtureMethod>>
 
@@ -303,6 +334,41 @@ export function mount(input: {
               />
               SSH plugin
             </label>
+            <Show when={store.ssh.servers.some((item) => !item.saved && item.stage === "connecting")}>
+              <button
+                type="button"
+                onClick={() => {
+                  setSsh({ saved: true, stage: "ready", http: { url: input.server, password: "ssh-1" } })
+                  publish("ssh")
+                }}
+              >
+                Finish SSH connection
+              </button>
+            </Show>
+            {/* askpass accepts the answer before ssh rejects the key and asks for the account password. */}
+            <Show when={store.passphraseAnswered}>
+              <button
+                type="button"
+                onClick={() => {
+                  setSsh({ stage: "connecting", prompt: undefined })
+                  publish("ssh")
+                }}
+              >
+                Clear SSH passphrase prompt
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSsh({
+                    stage: "authentication",
+                    prompt: { id: "account", text: "dev@key-fallback's password:", confirm: false },
+                  })
+                  publish("ssh")
+                }}
+              >
+                Request SSH account password
+              </button>
+            </Show>
             {/* The SSH tunnel dropping, which only main notices. */}
             <Show when={input.ssh}>
               <button

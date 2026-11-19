@@ -17,6 +17,7 @@ export type ComposerSubmission = {
   images: ImageAttachmentPart[]
   selection: ComposerSelection
   delivery: ComposerDelivery
+  first?: boolean
 }
 
 type QuoteItem = Extract<ComposerSubmission["context"][number], { type: "quote" }>
@@ -88,6 +89,7 @@ export type SubmitSnapshot = {
   text: string
   mode: "normal" | "shell"
   alternate: boolean
+  first?: boolean
   delivery: ComposerDelivery
   selection: ComposerSelection | undefined
   loading: boolean
@@ -142,7 +144,7 @@ export type ComposerSubmitEffect =
   | { type: "notify.missing-selection" }
   | { type: "notify.unqueueable" }
   | { type: "interrupt" }
-  | { type: "submit.retry"; alternate: boolean; done: SubmitDone }
+  | { type: "submit.retry"; alternate: boolean; first?: boolean; done: SubmitDone }
   /** Shows a held prompt in its Session's timeline and clears the composer it came from. */
   | { type: "hold.show"; attempt: number; session: ComposerSession; snapshot: SubmitSnapshot }
   /** Removes a cancelled held prompt from the timeline and returns it to the composer it left. */
@@ -224,7 +226,14 @@ export function transitionComposerSubmit(
     if (!state.shown)
       return {
         state: { type: "idle", attempt: state.attempt },
-        effects: [{ type: "submit.retry", alternate: state.snapshot.alternate, done: state.done }],
+        effects: [
+          {
+            type: "submit.retry",
+            alternate: state.snapshot.alternate,
+            first: state.snapshot.first,
+            done: state.done,
+          },
+        ],
       }
 
     // The composer already cleared, so the send goes on from what was captured at Enter.
@@ -372,6 +381,7 @@ function prepare(
     images: snapshot.draft.prompt.filter((part): part is ImageAttachmentPart => part.type === "image"),
     selection,
     delivery: snapshot.delivery,
+    first: snapshot.first,
   }
 
   // Only a prompt is admitted under its ID; shell commands and server commands always start fresh.

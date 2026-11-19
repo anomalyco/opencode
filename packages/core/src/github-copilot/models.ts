@@ -8,6 +8,7 @@ import { Provider } from "../provider.js"
 
 const RemoteModel = Schema.Struct({
   model_picker_enabled: Schema.Boolean,
+  is_chat_fallback: Schema.optional(Schema.Boolean),
   id: Schema.String,
   name: Schema.String,
   version: Schema.String,
@@ -15,6 +16,7 @@ const RemoteModel = Schema.Struct({
   policy: Schema.optional(Schema.Struct({ state: Schema.optional(Schema.String) })),
   billing: Schema.optional(
     Schema.Struct({
+      auto_discount: Schema.optional(Schema.Number),
       token_prices: Schema.optional(
         Schema.Struct({
           batch_size: Schema.Number,
@@ -121,6 +123,29 @@ export function derive(baseURL: string, remote: Snapshot, existing: readonly Mod
   }
 
   return result
+}
+
+/** Copilot's Auto model. Copilot's router picks the model that serves each Session from the account's Auto pool. */
+export const auto = Model.ID.make("auto")
+
+export function autoModel(baseURL: string, remote: Snapshot) {
+  const pool = Array.from(remote.values()).filter((model) => model.billing?.auto_discount !== undefined)
+  if (pool.length === 0) return
+  const route = routeFor(auto, "chat", baseURL)
+  const limits = pool.map((model) => model.capabilities.limits)
+  return Model.Info.make({
+    ...Model.Info.default(Provider.ID.githubCopilot, auto),
+    name: "Auto",
+    package: route.package,
+    settings: { baseURL: route.baseURL },
+    capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+    // Any pool model may serve a Session, so show the smallest window.
+    limit: {
+      context: Math.min(...limits.map((limit) => limit.max_context_window_tokens ?? limit.max_prompt_tokens)),
+      input: Math.min(...limits.map((limit) => limit.max_prompt_tokens)),
+      output: Math.min(...limits.map((limit) => limit.max_output_tokens)),
+    },
+  })
 }
 
 function usable(model: RemoteModel): model is UsableModel {

@@ -28,4 +28,5 @@ export default {
   "export.success.description": "Oturum {{filename}} dosyasına kaydedildi",
   "export.failed.title": "Oturum dışa aktarılamadı",
   "export.failed.description": "Oturum dışa aktarılırken bir hata oluştu",
+  "usage.toggle": "Oturum bağlamını aç/kapat",
 }

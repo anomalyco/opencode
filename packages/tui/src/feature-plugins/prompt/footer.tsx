@@ -75,7 +75,9 @@ export function PromptFooter(props: {
                   flexShrink={0}
                   onMouseOver={() => setLiveHovered(true)}
                   onMouseOut={() => setLiveHovered(false)}
-                  onMouseUp={() => props.context.keymap.dispatch("session.child.first")}
+                  onMouseUp={() =>
+                    props.context.keymap.dispatch("session.child.first", subagents() ? "subagents" : "shell")
+                  }
                 >
                   <text
                     fg={liveHovered() ? props.context.theme.text.base : props.context.theme.text.muted}

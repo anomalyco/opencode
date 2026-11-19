@@ -89,7 +89,7 @@ export function PanelTrigger(props: {
           event.stopPropagation()
           props.onClose(props.value)
         }}
-        icon={<Icon name="xmark-small" />}
+        icon={<Icon name="close" />}
         aria-label={language.t("common.closeTab")}
       />,
     )

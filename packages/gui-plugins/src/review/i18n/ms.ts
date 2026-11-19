@@ -13,4 +13,12 @@ export default {
   "settings.wrapLines.title": "Balut garisan",
   "settings.wrapLines.description":
     "Balut garisan panjang dalam perbezaan mudah alih dan bukannya menatal secara mendatar",
+  "menu.count.one": "{{count}} fail diubah",
+  "menu.count.other": "{{count}} fail diubah",
+  "folder.more": "{{count}} · lagi tidak ditunjukkan",
+  "folder.failed": "Tidak dapat memuatkan perubahan",
+  "command.open": "Buka semakan",
+  "load.failed": "Tidak dapat memuatkan perubahan",
+  "load.timeout": "Pelayan mengambil masa terlalu lama untuk menjawab",
+  offline: "Tidak dapat mencapai pelayan ini",
 }

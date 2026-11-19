@@ -255,7 +255,13 @@ export function Select<T>(props: SelectProps<T>) {
         </span>
       </Trigger>
       <Portal>
-        <Content class={local.contentClass} data-component="menu-v2-content" data-slot="select-v2-content">
+        {/* A modal dialog hides what's outside it from assistive tech, and this list is portaled outside it. */}
+        <Content
+          class={local.contentClass}
+          data-kb-top-layer=""
+          data-component="menu-v2-content"
+          data-slot="select-v2-content"
+        >
           <MenuScroll viewportRef={(element) => (scroller = element)}>
             <Listbox data-slot="select-v2-listbox" scrollRef={() => scroller} />
           </MenuScroll>

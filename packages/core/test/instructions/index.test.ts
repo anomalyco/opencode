@@ -180,9 +180,9 @@ describe("Instructions", () => {
   )
 
   test("hashes objects independently of key order", () => {
-    expect(Instructions.hash({ a: 1, b: { x: true, y: false } })).toBe(
-      Instructions.hash({ b: { y: false, x: true }, a: 1 }),
-    )
+    const hash = Instructions.Hash.make("21dc66ac9fce28900235d1cf33c48a7d131c80022dfa54990c7ef3070e926210")
+    expect(Instructions.hash({ a: 1, b: { x: true, y: false } })).toBe(hash)
+    expect(Instructions.hash({ b: { y: false, x: true }, a: 1 })).toBe(hash)
   })
 
   test("renders sources in composition order", () => {

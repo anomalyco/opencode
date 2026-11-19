@@ -1,6 +1,6 @@
-// @ts-nocheck
+import { createEffect, createSignal } from "solid-js"
 import { Icon } from "@opencode/ui/icon"
-import { Checkbox } from "./checkbox"
+import { Checkbox, type CheckboxProps } from "./checkbox"
 
 const docs = `### Overview
 Checkbox control for multi-select or agreement inputs.
@@ -17,20 +17,48 @@ Checkbox control for multi-select or agreement inputs.
 - Compact uses \`data-slot="checkbox-v2"\` with \`--v2-background-bg-accent\`, \`--v2-border-border-strong\` and \`--v2-state-fg-danger\`.
 `
 
+function Sample(props: CheckboxProps) {
+  const [checked, setChecked] = createSignal(false)
+
+  createEffect(() => setChecked(!!props.defaultChecked))
+
+  return <Checkbox {...props} checked={checked()} onChange={setChecked} />
+}
+
 export default {
   title: "UI/Checkbox",
   id: "ui-checkbox",
   component: Checkbox,
+  render: Sample,
+  args: {
+    appearance: "standard",
+    surface: "base",
+    defaultChecked: true,
+    indeterminate: false,
+    disabled: false,
+    readOnly: false,
+    required: false,
+    validationState: "valid",
+    hideLabel: false,
+    children: "Checkbox",
+    description: "",
+  } satisfies CheckboxProps,
+  argTypes: {
+    appearance: { options: ["standard", "compact"] },
+    surface: { options: ["base", "layer-1"] },
+    validationState: { options: ["valid", "invalid"] },
+  },
   tags: ["autodocs"],
   parameters: { docs: { description: { component: docs } } },
 }
 
-export const Basic = { render: () => <Checkbox defaultChecked>Checkbox</Checkbox> }
+export const Basic = {}
 
 export const States = {
-  render: () => (
+  args: { children: "Checked" },
+  render: (args: CheckboxProps) => (
     <div style={{ display: "grid", gap: "12px" }}>
-      <Checkbox defaultChecked>Checked</Checkbox>
+      <Sample {...args} />
       <Checkbox>Unchecked</Checkbox>
       <Checkbox disabled>Disabled</Checkbox>
       <Checkbox description="Helper text">With description</Checkbox>
@@ -39,21 +67,17 @@ export const States = {
 }
 
 export const CustomIcon = {
-  render: () => (
-    <Checkbox icon={<Icon name="check" size="small" />} defaultChecked>
-      Custom icon
-    </Checkbox>
-  ),
+  args: { children: "Custom icon" },
+  render: (args: CheckboxProps) => <Sample {...args} icon={<Icon name="check" size="small" />} />,
 }
 
-export const HiddenLabel = { render: () => <Checkbox hideLabel>Hidden label</Checkbox> }
+export const HiddenLabel = { args: { children: "Hidden label", defaultChecked: false, hideLabel: true } }
 
 export const Compact = {
-  render: () => (
+  args: { appearance: "compact", children: "Default", description: "Suffix", defaultChecked: false },
+  render: (args: CheckboxProps) => (
     <div style={{ display: "grid", gap: "16px" }}>
-      <Checkbox appearance="compact" description="Suffix">
-        Default
-      </Checkbox>
+      <Sample {...args} />
       <Checkbox appearance="compact" defaultChecked description="Suffix">
         Checked
       </Checkbox>

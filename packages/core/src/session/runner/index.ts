@@ -38,6 +38,8 @@ export interface Interface {
     readonly promotable?: Promotable
     /** The previous drain ran a step before handing off, so reaching idle still runs the idle hook. */
     readonly stepped?: boolean
+    /** Why the execution is being interrupted, once it is: `"user"` when someone stopped it. */
+    readonly interruption?: () => "user" | "shutdown" | undefined
   }) => Effect.Effect<DrainResult, RunError>
 }
 

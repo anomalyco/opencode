@@ -28,4 +28,5 @@ export default {
   "export.success.description": "စက်ရှင်ကို {{filename}} သို့ သိမ်းထားသည်။",
   "export.failed.title": "စက်ရှင်ကို ထုတ်ယူ၍မရပါ။",
   "export.failed.description": "စက်ရှင်ကို ထုတ်ယူနေစဉ် အမှားအယွင်းတစ်ခု ဖြစ်ပွားခဲ့သည်။",
+  "usage.toggle": "စက်ရှင် ဆက်စပ်အကြောင်းအရာ ဖွင့်/ပိတ်",
 }

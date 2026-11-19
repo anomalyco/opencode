@@ -1,5 +1,5 @@
 import { For } from "solid-js"
-import { useI18n } from "~/context/i18n"
+import { useI18n } from "~/context/i18n-context"
 import { ThemeIcon, themes } from "./icons"
 
 // Small pieces of the site's chrome that need no router or settings, so pages that render on the

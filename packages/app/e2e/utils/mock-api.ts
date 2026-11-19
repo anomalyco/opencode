@@ -388,12 +388,7 @@ const Group = HttpApiGroup.make("mock")
   .add(
     HttpApiEndpoint.post("sessionView", "/api/session/:sessionID/view", {
       params: SessionParams,
-      success: NoContent,
-    }),
-  )
-  .add(
-    HttpApiEndpoint.post("sessionView", "/api/session/:sessionID/view", {
-      params: SessionParams,
+      payload: Schema.Struct({ idle: Schema.Number }),
       success: NoContent,
     }),
   )

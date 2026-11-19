@@ -654,12 +654,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   const searchInTitle = () => newDesigns() && props.searchInTitle === true && props.renderFilter !== false
 
-  // Terminals paint the glyph under a block cursor in their own color, so a near-white cursor hides the
-  // placeholder's first letter. Until the user types, match the highlighted row so that letter shows through.
-  const searchCursorColor = () => {
-    if (!newDesigns()) return theme.text.formfield.focused
-    return store.filter.length > 0 ? theme.text.base : theme.background.action.primary.focused
-  }
+  const searchCursorColor = () => (newDesigns() ? theme.text.base : theme.text.formfield.focused)
 
   const searchInput = () => (
     <input

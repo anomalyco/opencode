@@ -1,6 +1,6 @@
-// @ts-nocheck
+import { createEffect, createSignal } from "solid-js"
 import { Accordion } from "@opencode/ui/accordion"
-import * as mod from "./sticky-accordion-header"
+import { StickyAccordionHeader } from "./sticky-accordion-header"
 
 const docs = `### Overview
 Sticky accordion header wrapper for persistent section labels.
@@ -27,7 +27,7 @@ Use only inside \`Accordion.Item\` with \`Accordion.Trigger\`.
 export default {
   title: "UI/StickyAccordionHeader",
   id: "components-sticky-accordion-header",
-  component: mod.StickyAccordionHeader,
+  component: StickyAccordionHeader,
   tags: ["autodocs"],
   parameters: {
     docs: {
@@ -39,16 +39,26 @@ export default {
 }
 
 export const Basic = {
-  render: () => (
-    <Accordion value="first">
-      <Accordion.Item value="first">
-        <mod.StickyAccordionHeader>
-          <Accordion.Trigger>Sticky header</Accordion.Trigger>
-        </mod.StickyAccordionHeader>
-        <Accordion.Content>
-          <div style={{ color: "var(--text-weak)", padding: "8px 0" }}>Accordion content.</div>
-        </Accordion.Content>
-      </Accordion.Item>
-    </Accordion>
-  ),
+  args: { expanded: false, disabled: false },
+  render: (props: { expanded: boolean; disabled: boolean }) => {
+    const [expanded, setExpanded] = createSignal(props.expanded)
+    createEffect(() => setExpanded(props.expanded))
+
+    return (
+      <Accordion
+        collapsible
+        value={expanded() ? ["first"] : []}
+        onChange={(items: string[]) => setExpanded(items.includes("first"))}
+      >
+        <Accordion.Item value="first" disabled={props.disabled}>
+          <StickyAccordionHeader>
+            <Accordion.Trigger>Sticky header</Accordion.Trigger>
+          </StickyAccordionHeader>
+          <Accordion.Content>
+            <div style={{ color: "var(--text-weak)", padding: "8px 0" }}>Accordion content.</div>
+          </Accordion.Content>
+        </Accordion.Item>
+      </Accordion>
+    )
+  },
 }

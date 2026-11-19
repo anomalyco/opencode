@@ -78,7 +78,7 @@ test("keeps the parent title anchored when opening a subagent", async ({ page })
   }
 })
 
-test("navigates from a running subagent card and hides background controls in the child", async ({ page }) => {
+test("navigates from a running subagent card without a background control", async ({ page }) => {
   const runningChildID = "ses_running_child"
   await setupTimeline(page, {
     settings: { timelineDetail: { ...timelinePresets[2].value, subagents: { placement: "separate" } } },
@@ -95,11 +95,12 @@ test("navigates from a running subagent card and hides background controls in th
             id: "call_subagent",
             name: "subagent",
             state: {
-              status: "running",
+              status: "completed",
               input: { description: "Inspect code" },
               metadata: { status: "running", sessionID: runningChildID },
+              content: [{ type: "text", text: "The subagent is working in the background." }],
             },
-            time: { created: 2 },
+            time: { created: 2, completed: 3 },
           },
         ],
         time: { created: 2 },
@@ -109,7 +110,7 @@ test("navigates from a running subagent card and hides background controls in th
     sessionStatus: { [sessionID]: { type: "busy" }, [runningChildID]: { type: "busy" } },
   })
   const hint = page.getByRole("button", { name: /move running work to the background/i })
-  await expect(hint).toBeVisible()
+  await expect(hint).toHaveCount(0)
   await page.locator('[data-component="task-tool-card"]').click()
   await expect(page).toHaveURL(new RegExp(`/session/${runningChildID}$`))
   await expect(hint).toHaveCount(0)
@@ -331,14 +332,35 @@ test.describe("session ID links", () => {
     await expectSessionTitle(page, "Timeline visual stability")
     const markdown = page.locator('[data-component="markdown"]').filter({ hasText: "Visit" })
     await expect(markdown).toHaveAttribute("data-markdown-ready", "")
-    await expect(markdown.getByRole("button", { name: "Linked session", exact: true })).toHaveCount(2)
+    await expect(markdown.getByRole("button", { name: "@Linked session", exact: true })).toHaveCount(2)
     await markdown
       .locator("p")
       .filter({ hasText: "Or" })
-      .getByRole("button", { name: "Linked session", exact: true })
+      .getByRole("button", { name: "@Linked session", exact: true })
       .press("Enter")
     await expectPath(page, sessionHref(target))
     await expect(page.locator(`[data-titlebar-tab-link][href$="/session/${target}"]`)).toContainText("Linked session")
+  })
+
+  test("titles a session this window never loaded and copies its ID from the context menu", async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"])
+    await setupTimeline(page, {
+      sessions: [session(), session({ id: target, title: "Linked session" })],
+      messages: [userMessage(), assistantMessage([textPart("prt_session_menu", `Visit ${target}.`)])],
+    })
+    await expectSessionTitle(page, "Timeline visual stability")
+    const markdown = page.locator('[data-component="markdown"]').filter({ hasText: "Visit" })
+    await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+    await markdown.getByRole("button", { name: "@Linked session", exact: true }).click({ button: "right" })
+    await expect(page.getByRole("menuitem", { name: "Open Session", exact: true })).toBeVisible()
+    await expect(page.getByRole("menuitem", { name: "Copy Session Title", exact: true })).toBeVisible()
+    await page.getByRole("menuitem", { name: "Copy Session ID", exact: true }).click()
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(target)
+    await expect(page.getByRole("menu")).toHaveCount(0)
+    await expectPath(page, sessionHref(sessionID))
   })
 
   test("does not navigate to an ID that is absent from the current server", async ({ page }) => {

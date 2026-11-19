@@ -76,7 +76,7 @@
     [data-component="products"]:not([data-layout="grid"])
       [data-component="product-card"]
       [data-component="site-button"]:not([aria-disabled="true"]):active {
-      background: hsl(0, 0%, 84%);
+      background: var(--fixed-light-press);
     }
   }
 
@@ -247,8 +247,8 @@
       line-height: 1.5;
       text-transform: uppercase;
       letter-spacing: 0.06em;
-      background: #fff;
-      color: hsl(0, 0%, 8%);
+      background: var(--fixed-white);
+      color: var(--fixed-ink);
     }
 
     [data-product="terminal"],
@@ -274,7 +274,7 @@
       font-size: calc((100cqw - 3rem) / 32 / 0.6);
       line-height: 1.55;
       white-space: pre;
-      color: #eeeeee;
+      color: var(--fixed-dark-text);
     }
 
     h3 {
@@ -427,7 +427,8 @@
     }
   }
 
-  /* OpenCode dark theme syntax colors for the SDK snippet, in the card and on its page. */
+  /* OpenCode dark theme syntax colors for the SDK snippet, in the card and on its page.
+     grey-ok: the OpenCode theme's own syntax colours */
   [data-product="sdk"] [data-slot="code"] {
     [data-c] {
       color: #808080;
@@ -457,13 +458,14 @@
       color: #eeeeee;
     }
   }
+  /* grey-ok-end */
 }
 
 /* A store that is coming soon (the status flag in product-data.ts), in a menu or a sheet: grey and
    inert like a disabled button, and still focusable, so keyboard focus keeps its tint. */
 [data-site] [data-component="site-menu"] [data-slot="menu"] > [data-slot="store"][aria-disabled="true"],
 [data-component="sheet"][data-sheet="product"] [data-slot="row"][aria-disabled="true"] {
-  color: light-dark(hsl(0, 0%, 60%), hsl(0, 0%, 36%));
+  color: var(--text-disabled);
   cursor: not-allowed;
 
   &:not(:focus-visible) {
@@ -609,7 +611,7 @@
       /* The covers' own flat backdrop (#161616 as browsers decode it) once the resting frame has
          painted, so the space the moved cover leaves blends in; the tone stays until then. */
       &:has(img[data-poster][data-loaded]) {
-        background: #161616;
+        background: var(--card-media-bg);
       }
 
       /* The resting cover's subject (wordmark and prompt, orb, terminal, code) is centred in its
@@ -622,7 +624,7 @@
         transform: translateY(round(-10cqw, 1px));
         /* The backdrop below the moved frame, part of the layer, so it covers the hover video's
            poster underneath and fades out with the cover when the hover cut plays. */
-        box-shadow: 0 0 0 200cqw #161616;
+        box-shadow: 0 0 0 200cqw var(--card-media-bg);
       }
 
       /* The sizzle reel (the hover video, which plays by itself on phones) moves up too, by what
@@ -631,7 +633,7 @@
          below, under the darkest part of the gradient. */
       > video:not([data-slot]) {
         transform: translateY(round(var(--reel-shift), 1px));
-        box-shadow: 0 0 0 200cqw #161616;
+        box-shadow: 0 0 0 200cqw var(--card-media-bg);
       }
 
       &[data-product="desktop"] {
@@ -842,8 +844,9 @@
   }
 
   /* The hero and the skeleton paint together, the skeleton complete: the hero waits for the
-     skeleton's few hundred bytes, so the carousel's frame is there from the hero's first paint. */
-  [data-component="hero"]:not(:has(~ [data-component="products-skeleton"] ~ *)),
+     skeleton's few hundred bytes, so the carousel's frame is there from the hero's first paint. A
+     page rendered in one piece (production's, src/static/render.tsx) has the carousel instead. */
+  [data-component="hero"]:not(:has(~ [data-component="products-skeleton"] ~ *, ~ [data-component="products"])),
   [data-component="products-skeleton"]:not(:has(~ *)) {
     visibility: hidden;
   }
@@ -859,5 +862,105 @@
       > :not([data-slot="media"]) {
       display: none;
     }
+  }
+}
+
+/* Settings › Card to page: while a card grows into its product page, the hero carries the card's
+   transition name, so the browser morphs one into the other; with reduced motion ("fade") the pages
+   only crossfade (card-morph.ts). In the shell's stylesheet: between documents the arriving page
+   draws the transition, and the home page doesn't load the product pages' stylesheet. */
+:root[data-card-grow="grow"] [data-component="product-hero"],
+:root[data-card-grow="shrink"] [data-component="product-hero"] {
+  view-transition-name: product-hero;
+}
+
+/* Shrinking back, the card's still is new on the page and would be caught halfway through its
+   fade-in: show it at once. */
+:root[data-card-grow] [data-site] [data-component="product-card"] [data-slot="still"]:not([data-hidden]) {
+  opacity: 1;
+  animation: none;
+}
+
+/* Timing comes from Settings › Card to page through custom properties on :root (set when the
+   transition starts; the pseudo-elements inherit from :root). The fallbacks are the defaults. */
+::view-transition-group(product-hero) {
+  animation-duration: var(--card-duration, 360ms);
+  animation-timing-function: var(--card-easing, cubic-bezier(0.32, 0.72, 0, 1));
+}
+
+/* The page itself does not move or resize, so its group needs no animation; the browser's own
+   250ms one would keep the transition (and the page's input) waiting after the box has landed. */
+:root[data-card-grow]::view-transition-group(root) {
+  animation: none;
+}
+
+/* The card is 4:5 and the hero 16:10: both snapshots fill the growing box (cover), so the crop
+   changes smoothly instead of the image stretching. The box clips them, or the portrait card
+   would spill out above and below it. The card image hands over to the hero image early and
+   quickly, so the two are never both half visible for long. */
+::view-transition-group(product-hero) {
+  overflow: clip;
+}
+
+::view-transition-old(product-hero),
+::view-transition-new(product-hero) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  mix-blend-mode: normal;
+}
+
+/* The card stays solid underneath while the hero fades in on top (and the hero under the card when
+   shrinking back), so the box never turns see-through halfway. The two pictures are cropped
+   differently; a light blur over the handover blends them into one changing picture instead of
+   two overlapping ones. */
+::view-transition-old(product-hero) {
+  animation: var(--card-image-fade, 140ms) cubic-bezier(0.23, 1, 0.32, 1) both card-image-out;
+}
+
+::view-transition-new(product-hero) {
+  animation: var(--card-image-fade, 140ms) cubic-bezier(0.23, 1, 0.32, 1) both card-image-in;
+}
+
+/* Shrinking back with the card off screen: no card to shrink into, so the hero fades with the page. */
+::view-transition-old(product-hero):only-child {
+  animation: var(--card-page-fade, 200ms) cubic-bezier(0.23, 1, 0.32, 1) var(--card-page-delay, 40ms) both card-grow-out;
+}
+
+/* The new page fades in over the old one, which stays solid underneath, so whatever is the same on
+   both pages (the sidebar, the GitHub link, the background) never changes. Fading both pages
+   showed the dark background through them and dimmed the whole screen for a few frames. */
+:root[data-card-grow]::view-transition-old(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+:root[data-card-grow]::view-transition-new(root) {
+  animation: var(--card-page-fade, 200ms) cubic-bezier(0.23, 1, 0.32, 1) var(--card-page-delay, 40ms) both card-grow-in;
+  mix-blend-mode: normal;
+}
+
+@keyframes card-grow-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes card-grow-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes card-image-out {
+  to {
+    filter: blur(4px);
+  }
+}
+
+@keyframes card-image-in {
+  from {
+    opacity: 0;
+    filter: blur(4px);
   }
 }

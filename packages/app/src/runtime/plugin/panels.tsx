@@ -48,6 +48,7 @@ type Tabs = Accessor<{
   setActive(tab: string | undefined): void
   close(tab: string): void
   remap(rewrite: (tab: string) => string): void
+  target(pane: SessionPane, plugin?: string, index?: number): void
 }>
 
 export type RegionEntry = {
@@ -470,8 +471,10 @@ export function createRegion(input: {
       const entry = byKey().get(key)
       const last = stored().length === 1 && stored()[0] === key
       const closed = entry && closedEntry(key, entry.provider, panelInput(input.view, input.screen, { tab: entry.tab }))
+      const index = stored().indexOf(key)
 
-      if (closed) input.closed.push(input.view(), closed)
+      if (closed)
+        input.closed.push(input.view(), { ...closed, pane: paneOfKey(key), index: index === -1 ? undefined : index })
       // New tabs left in the strip keep the region open.
       batch(() => {
         input.tabs().close(key)
@@ -496,13 +499,17 @@ export function createRegion(input: {
 
       return input.closed.list(input.view()).filter((entry) => !!entry.file && !open.has(entry.key))
     }),
-    /** Brings back the closed tab under `key`, or the newest one. */
-    reopen(key?: string) {
+    /** When the tab `reopen()` brings back closed. */
+    lastClosedTime: () => input.closed.list(input.view())[0]?.closed,
+    /** Brings back the closed tab under `key`, or the newest one, where it closed or in `pane`. */
+    reopen(key?: string, pane?: SessionPane) {
       const entry = input.closed.take(input.view(), key)
 
       if (!entry) return
       const plugin = entry.key.slice(0, entry.key.indexOf(":"))
       const provider = providers().find((item) => item.plugin === plugin)?.value
+
+      if (!stored().includes(entry.key)) input.tabs().target(pane ?? entry.pane ?? "side", plugin, entry.index)
 
       if (!provider?.restore) return input.open(entry.key)
       provider.restore({

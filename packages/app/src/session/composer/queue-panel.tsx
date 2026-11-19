@@ -9,9 +9,11 @@ import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Loader } from "@opencode/ui/loader"
+import { Keybind } from "@opencode/ui/keybind"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { prefersReducedMotion } from "@opencode/ui/motion"
 import { useLanguage } from "@/runtime/i18n/language"
+import { formatKeybind } from "@/shell/commands/command"
 import type { SessionQueueView } from "./queue"
 import type { QueueRow } from "./queue-machine"
 import {
@@ -254,7 +256,14 @@ function SessionQueueRow(props: { queue: SessionQueueView; id: string; row: Queu
               <Tooltip
                 placement="top"
                 inactive={!props.queue.working()}
-                value={language.t("session.queue.steerTooltip")}
+                value={
+                  <div class="flex items-center gap-4">
+                    <span>{language.t("session.queue.steerTooltip")}</span>
+                    <Show when={props.index === 0}>
+                      <Keybind keys={[formatKeybind("mod", language.t), "↵"]} variant="neutral" />
+                    </Show>
+                  </div>
+                }
               >
                 <Button
                   data-action="session-queue-steer"
@@ -275,7 +284,7 @@ function SessionQueueRow(props: { queue: SessionQueueView; id: string; row: Queu
                   type="button"
                   class="rounded-sm"
                   variant="ghost-muted"
-                  icon={<Icon name="outline-undo" />}
+                  icon={<Icon name="reset" />}
                   disabled={props.queue.busy()}
                   aria-label={language.t("session.queue.undo")}
                   onClick={() => props.queue.undo(props.id)}
@@ -289,7 +298,7 @@ function SessionQueueRow(props: { queue: SessionQueueView; id: string; row: Queu
                   type="button"
                   class="rounded-sm"
                   variant="ghost-muted"
-                  icon={<Icon name="outline-xmark" />}
+                  icon={<Icon name="close" />}
                   disabled={props.queue.busy()}
                   aria-label={language.t("session.queue.remove")}
                   onClick={() => void props.queue.remove(props.id)}

@@ -447,17 +447,23 @@ describe("provider error classification", () => {
     expect(isContextOverflow("Too many tokens")).toBe(true)
   })
 
-  test("classifies 429 token throttles as retryable rate limits, not context overflow", () => {
+  test("classifies 429 throttles as retryable rate limits, not context overflow", () => {
     const bodies = [
       // Cerebras, captured live
       '{"message":"Tokens per minute limit exceeded - too many tokens processed.","type":"too_many_tokens_error","param":"quota","code":"token_quota_exceeded"}',
       '{"message":"Token limit reached: too many tokens per minute for this model."}',
+      '{"error":{"message":"User 10s request rate limit exhausted (3 of 3).","type":"rate_limit_exceeded","code":null}}',
     ]
     for (const body of bodies) {
       const error = new AIError({
-        reason: classifyProviderFailure({ message: providerErrorMessage(body), status: 429, rawBody: body }),
+        reason: classifyProviderFailure({
+          message: providerErrorMessage(body),
+          status: 429,
+          rawBody: body,
+          retryAfterMs: 4000,
+        }),
       })
-      expect(error.reason._tag).toBe("RateLimit")
+      expect(error.reason).toMatchObject({ _tag: "RateLimit", retryAfterMs: 4000 })
       expect(isRetryable(error)).toBe(true)
     }
   })

@@ -1,3 +1,4 @@
+import { rawTime } from "./data"
 import type { SessionInfo, SessionsResponse } from "@opencode/client/promise"
 import { pathKey } from "@/workspaces/path-key"
 import { SESSION_RECENT_LIMIT, SESSION_RECENT_WINDOW } from "@/runtime/server/global-sync/types"
@@ -37,10 +38,8 @@ export function parseSessionIndex(sessions: SessionInfo[]) {
   return sessions.filter((session) => !session.parentID && session.time.archived === undefined)
 }
 
-export function mergeSessionIndex(fetched: SessionInfo[], known: SessionInfo[]) {
-  return parseSessionIndex([
-    ...new Map([...fetched, ...known].map((session) => [session.id, session] as const)).values(),
-  ])
+export function mergeSessionIndex(fetched: readonly SessionInfo[], known: readonly SessionInfo[]) {
+  return mergeRootSessionIndex(fetched, known).filter((session) => session.time.archived === undefined)
 }
 
 export function retainSessions(sessions: SessionInfo[], limit: number, now: number) {
@@ -58,4 +57,25 @@ export function retainSessions(sessions: SessionInfo[], limit: number, now: numb
 
     return [...sorted.slice(0, limit), ...recent]
   })
+}
+
+/** Merge live metadata into indexed roots. Only a completed run advances an indexed row's recency. */
+export function mergeRootSessionIndex(indexed: readonly SessionInfo[], known: readonly SessionInfo[]) {
+  const rows = new Map(indexed.map((info) => [info.id, info]))
+
+  for (const info of known) {
+    const row = rows.get(info.id)
+
+    if (!row) {
+      rows.set(info.id, info)
+      continue
+    }
+
+    // A projected send bump must not reach `apply` as a server time, so copy the raw one.
+    const updated = rawTime(row)
+    const passive = (info.time.idle ?? 0) <= (row.time.idle ?? 0) && info.time.updated !== updated
+    rows.set(info.id, passive ? { ...info, time: { ...info.time, updated } } : info)
+  }
+
+  return [...rows.values()].filter((info) => !info.parentID)
 }

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="1 1 14 14" fill="none">
+  <g style="color: var(--v2-icon-icon-accent)">
+    <circle cx="8" cy="8" r="6.5" stroke="currentColor"/>
+    <circle cx="8" cy="8" r="2" fill="currentColor">
+      <animate attributeName="r" dur="2.4s" repeatCount="indefinite" calcMode="spline" values="2;2;5.6;5.6" keyTimes="0;0.16667;0.91667;1" keySplines="0 0 1 1;0.2 0.6 0.35 1;0 0 1 1"/>
+      <animate attributeName="opacity" dur="2.4s" repeatCount="indefinite" calcMode="spline" values="1;1;0;0" keyTimes="0;0.16667;0.91667;1" keySplines="0 0 1 1;0.3 0.4 0.5 1;0 0 1 1"/>
+    </circle>
+    <circle cx="8" cy="8" r="2" fill="currentColor">
+      <animate attributeName="r" dur="2.4s" repeatCount="indefinite" calcMode="spline" values="2;2;0;0;2;2" keyTimes="0;0.16666;0.16667;0.33333;0.75;1" keySplines="0 0 1 1;0 0 1 1;0 0 1 1;0.33 0 0.2 1;0 0 1 1"/>
+      <animate attributeName="opacity" dur="2.4s" repeatCount="indefinite" calcMode="spline" values="1;1;0;0;1;1" keyTimes="0;0.16666;0.16667;0.33333;0.75;1" keySplines="0 0 1 1;0 0 1 1;0 0 1 1;0.33 0 0.2 1;0 0 1 1"/>
+    </circle>
+  </g>
+</svg>

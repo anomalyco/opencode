@@ -1,6 +1,6 @@
 export * as McpPool from "./pool.js"
 
-import type { OAuthClientProvider } from "@modelcontextprotocol/client"
+import type { AuthProvider } from "@modelcontextprotocol/client"
 import type { Mcp } from "@opencode/schema/mcp"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -24,7 +24,7 @@ export interface Input extends McpConnection.Input {
 
 export interface Selection {
   readonly key: string
-  readonly authProvider: Effect.Effect<OAuthClientProvider | undefined>
+  readonly authProvider: Effect.Effect<AuthProvider | undefined>
 }
 
 export interface Interface {
@@ -51,9 +51,10 @@ export const key = (input: {
   /** The active OAuth credential's ID, which a token refresh keeps and a sign-in replaces. */
   readonly credential?: string
   readonly clientInfo?: { readonly name: string; readonly version: string }
+  readonly mcpEvents?: boolean
 }) => {
   const config = input.config
-  const common = [config.protocol, config.timeout ?? null, input.clientInfo ?? null]
+  const common = [config.protocol, config.timeout ?? null, input.clientInfo ?? null, input.mcpEvents === true]
   if (config.type === "remote")
     return JSON.stringify([
       "remote",
@@ -88,7 +89,7 @@ function fingerprint(secret: string | Record<string, string> | undefined) {
 // A Location holding a shared connection. The pool reaches Locations only through the holders
 // registered right now, never through the one that opened the connection.
 interface Holder {
-  readonly authProvider: Effect.Effect<OAuthClientProvider | undefined>
+  readonly authProvider: Effect.Effect<AuthProvider | undefined>
   readonly elicitation: McpClient.ElicitationHandler["create"]
   readonly closed: (reason: string) => void
   readonly changed: (kind: McpConnection.Kind) => void
@@ -123,7 +124,7 @@ export const layer = Layer.effect(
     const unfixed = new Set<string>()
 
     // Takes only data from the Location that opens it: the connection outlives that Location's claim.
-    const open = (key: string, input: Pick<Input, "name" | "config" | "directory" | "clientInfo">) => {
+    const open = (key: string, input: Pick<Input, "name" | "config" | "directory" | "clientInfo" | "mcpEvents">) => {
       const slot: Slot = {
         holders: new Set(),
         lock: Semaphore.makeUnsafe(1),
@@ -135,6 +136,7 @@ export const layer = Layer.effect(
           directory: input.directory,
           shared: true,
           clientInfo: input.clientInfo,
+          mcpEvents: input.mcpEvents,
           // Every holder of a key presents the same credential, so any of them can build the provider.
           authProvider: Effect.suspend(() => slot.holders.values().next().value?.authProvider ?? Effect.undefined),
           elicitation: {
@@ -241,7 +243,13 @@ export const layer = Layer.effect(
       if (unpoolable.has(key)) return "private" as const
       const slot =
         slots.get(key) ??
-        open(key, { name: input.name, config: input.config, directory: input.directory, clientInfo: input.clientInfo })
+        open(key, {
+          name: input.name,
+          config: input.config,
+          directory: input.directory,
+          clientInfo: input.clientInfo,
+          mcpEvents: input.mcpEvents,
+        })
       yield* Effect.acquireRelease(
         Effect.sync(() => slot.holders.add(holder)),
         () => release(key, slot, holder),

@@ -18,16 +18,20 @@ export type PickerDirState =
   | { readonly status: "ready" }
   | { readonly status: "failed" }
 
-/** A chosen folder inside the root. Its ancestors list and expand in order from `index`, then it is selected. */
+/**
+ * A chosen folder inside the root. Its ancestors list and expand in order from `index`, then it is selected, and
+ * `submit` confirms it once selected.
+ */
 export type PickerReveal = {
   readonly target: string
   readonly relative: string
   readonly index: number
   readonly fromInput: boolean
+  readonly submit: boolean
 }
 
-/** The root to open, and the child of it to select once it lists. */
-export type PickerTarget = { readonly root: string; readonly selectChild?: string }
+/** The root to open, the child of it to select once it lists, and whether to confirm it then. */
+export type PickerTarget = { readonly root: string; readonly selectChild?: string; readonly submit?: boolean }
 
 /**
  * The folder browser. `issued` numbers every location and listing request, so a result for an earlier root, reveal or
@@ -49,6 +53,7 @@ export type PickerTreeState =
       readonly attempt: number
       readonly root: string
       readonly selectChild?: string
+      readonly submit?: boolean
       readonly locationDirectory?: string
     }
   | {
@@ -79,9 +84,8 @@ export type PickerTreeEvent =
   | { readonly type: "location.failed"; readonly attempt: number }
   | { readonly type: "location.timed-out"; readonly attempt: number }
   | ({ readonly type: "navigate" } & PickerNavigation)
-  | ({ readonly type: "directory.chosen"; readonly fromInput: boolean } & PickerNavigation)
+  | ({ readonly type: "directory.chosen"; readonly fromInput: boolean; readonly submit?: boolean } & PickerNavigation)
   | { readonly type: "file.chosen"; readonly absolute: string; readonly home: string }
-  | { readonly type: "selection.cleared" }
   | { readonly type: "tree.selected"; readonly path: string | undefined }
   | { readonly type: "dir.expanded"; readonly dir: string }
   | {
@@ -113,6 +117,7 @@ export type PickerTreeEffect =
   | { readonly type: "tree.clear-selection" }
   | { readonly type: "tree.focus-initial" }
   | { readonly type: "tree.refresh-decorations" }
+  | { readonly type: "submit" }
 
 export type PickerTreeTransition = { readonly state: PickerTreeState; readonly effects: readonly PickerTreeEffect[] }
 
@@ -172,8 +177,6 @@ export function transitionPickerTree(
     return select(state, event.path ? (policy.selection(state.root, event.path) ?? "") : "")
   }
 
-  if (event.type === "selection.cleared") return select(state, "")
-
   return select(
     state,
     policy.selection(state.root, pickerFileSearchQuery(state.root, event.absolute, event.home)) ?? "",
@@ -225,12 +228,18 @@ function choose(
     const relative = pickerRelativePath(state.root, value)
 
     if (relative === "") {
-      return { state: { ...state, selected: "", reveal: undefined }, effects: [{ type: "tree.clear-selection" }] }
+      return {
+        state: { ...state, selected: "", reveal: undefined },
+        effects: [{ type: "tree.clear-selection" }, ...submitted(event.submit)],
+      }
     }
 
     if (relative) {
       return advanceReveal(
-        { ...state, reveal: { target: value, relative, index: 0, fromInput: event.fromInput } },
+        {
+          ...state,
+          reveal: { target: value, relative, index: 0, fromInput: event.fromInput, submit: event.submit ?? false },
+        },
         [],
         policy,
       )
@@ -240,10 +249,10 @@ function choose(
   const parent = pickerParent(value)
 
   if (parent && getFilename(value) && parent !== value && parent === event.home) {
-    return open(state, { root: parent, selectChild: value }, event.located)
+    return open(state, { root: parent, selectChild: value, submit: event.submit }, event.located)
   }
 
-  return open(state, { root: value }, event.located)
+  return open(state, { root: value, submit: event.submit }, event.located)
 }
 
 // A new root drops every listing, queued preload and reveal of the previous one.
@@ -268,6 +277,7 @@ function open(state: LiveTree, next: PickerTarget, located: boolean): PickerTree
       attempt,
       root: next.root,
       selectChild: next.selectChild,
+      submit: next.submit,
       locationDirectory: state.locationDirectory,
     },
     effects: [{ type: "queue.reset" }, { type: "tree.reset" }, list(next.root, "", attempt, "user")],
@@ -358,6 +368,7 @@ function openRoot(
       ...listed.effects,
       entry ? { type: "tree.select", entry } : { type: "tree.focus-initial" },
       ...children.map((name, index) => list(state.root, name, state.issued + index + 1, "background")),
+      ...submitted(state.submit),
     ],
   }
 }
@@ -420,9 +431,12 @@ function finishReveal(
 ): PickerTreeTransition {
   const entry = `${reveal.relative}/`
 
-  if (!state.entries[entry]) return open({ ...state, reveal: undefined }, { root: reveal.target }, true)
+  if (!state.entries[entry]) {
+    return open({ ...state, reveal: undefined }, { root: reveal.target, submit: reveal.submit }, true)
+  }
+
   const selected = { ...state, reveal: undefined, selected: policy.selection(state.root, entry) ?? "" }
-  const selecting = [...effects, { type: "tree.select" as const, entry }]
+  const selecting = [...effects, { type: "tree.select" as const, entry }, ...submitted(reveal.submit)]
 
   if (!reveal.fromInput) return { state: selected, effects: selecting }
 
@@ -481,6 +495,10 @@ function resolveLocation(attempt: number): PickerTreeEffect {
 
 function list(root: string, dir: string, attempt: number, priority: "user" | "background"): PickerTreeEffect {
   return { type: "list", root, dir, attempt, priority, timeoutMs: PICKER_LOAD_TIMEOUT_MS }
+}
+
+function submitted(submit: boolean | undefined): PickerTreeEffect[] {
+  return submit ? [{ type: "submit" }] : []
 }
 
 function unchanged(state: PickerTreeState): PickerTreeTransition {

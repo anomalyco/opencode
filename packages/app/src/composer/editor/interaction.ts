@@ -75,7 +75,7 @@ export type ComposerEditorView = {
       delivery: Accessor<ComposerDelivery | undefined>
       onSubmit: (key: string, comment: string) => Promise<boolean>
     }
-    onSubmit: (options?: { alternate?: boolean }) => void
+    onSubmit: (options?: { alternate?: boolean; first?: boolean }) => void
     onStop: () => void
   }
   shell?: {
@@ -287,9 +287,12 @@ export function createComposerEditor(input: {
   })
   onCleanup(() => dispatchMentionSearch({ type: "disposed" }))
 
+  const contextOpen = createMemo(() => state.popover.type === "context")
+  const fileRows = createMemo(() => selectMentionFiles(mentionSearch()))
+
   const contextList = useFilteredList<ComposerSuggestion>({
     items: (query) => {
-      if (state.popover.type !== "context") return []
+      if (!contextOpen()) return []
 
       const sessions = input.searchSessions?.(query) ?? []
 
@@ -301,12 +304,7 @@ export function createComposerEditor(input: {
 
       const seen = new Set(recent.map((item) => item.id))
 
-      return [
-        ...fixed,
-        ...sessions,
-        ...recent,
-        ...selectMentionFiles(mentionSearch()).filter((item) => !seen.has(item.id)),
-      ]
+      return [...fixed, ...sessions, ...recent, ...fileRows().filter((item) => !seen.has(item.id))]
     },
     key: (item) => item.id,
     filterKeys: ["label"],
@@ -476,19 +474,6 @@ export function createComposerEditor(input: {
 
     flushFocus()
 
-    if (
-      mode() === "normal" &&
-      (event.metaKey || event.ctrlKey) &&
-      !event.altKey &&
-      !event.shiftKey &&
-      event.key.toLowerCase() === "u"
-    ) {
-      event.preventDefault()
-      attach()
-
-      return true
-    }
-
     const ctrl = event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
     const open = isComposerPopoverOpen(readState())
 
@@ -535,18 +520,6 @@ export function createComposerEditor(input: {
     if (event.key === "Escape" && input.view.submit.queue?.editing()) {
       event.preventDefault()
       input.view.submit.queue.cancelEdit()
-
-      return true
-    }
-
-    const stop =
-      (input.view.submit.working?.() || input.view.submit.held?.()) &&
-      ((event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "g") ||
-        event.key === "Escape")
-
-    if (stop) {
-      event.preventDefault()
-      input.view.submit.onStop()
 
       return true
     }
@@ -748,7 +721,7 @@ export function createComposerEditor(input: {
     openShell() {
       dispatch({ type: "mode.shell" })
     },
-    submit(options?: { alternate?: boolean }) {
+    submit(options?: { alternate?: boolean; first?: boolean }) {
       if (input.view.submit.available?.() === false) return
 
       if (input.view.draftOnly) return

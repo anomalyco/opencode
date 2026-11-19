@@ -53,8 +53,8 @@ week), downloaded from the live site's `/_build/retained.json`, so pages already
 code after a deploy (`script/retain-assets.ts`). A rollback in the Cloudflare dashboard restores the older
 version's assets only, so tabs opened on the rolled-back build reload once.
 
-The V2 docs at `/docs` are part of this app (`src/docs/`, see `src/docs/AGENTS.md`). `script/build.ts` prerenders
-them into the Worker's assets after `vite build`. A `/docs` URL without a V2 page redirects to the V1 docs app on
-docs.opencode.ai.
+The V2 docs at `/docs` and the V1 docs at `/v1/docs` are part of this app (`src/docs/`, see `src/docs/AGENTS.md`).
+`script/build.ts` prerenders them into the Worker's assets after `vite build`. A `/docs` URL without a V2 page
+redirects to the same path on the V1 docs.
 
 ## This project was created with the [Solid CLI](https://github.com/solidjs-community/solid-cli)

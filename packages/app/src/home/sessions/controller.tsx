@@ -3,7 +3,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { Button } from "@opencode/ui/button"
 import { DialogFooter, DialogHeader, DialogTitleGroup, Dialog } from "@opencode/ui/dialog"
 import { prefersReducedMotion } from "@opencode/ui/motion"
-import { hashKey, onlineManager, useQueryClient } from "@tanstack/solid-query"
+import { hashKey, onlineManager, useQuery, useQueryClient } from "@tanstack/solid-query"
 import {
   type Accessor,
   createEffect,
@@ -16,13 +16,7 @@ import {
 } from "solid-js"
 import { notifySessionTabsRemoved } from "@/shell/titlebar/session-events"
 import { useCommand } from "@/shell/commands/command"
-import {
-  SESSION_INDEX_LIMIT,
-  SESSION_LIST_LIMIT,
-  mergeSessionIndex,
-  retainSessions,
-} from "@/runtime/server/session-index"
-import type { LocalProject } from "@/shell/state/layout"
+import { SESSION_LIST_LIMIT, mergeSessionIndex, retainSessions } from "@/runtime/server/session-index"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useGlobal } from "@/runtime/server/runtime"
@@ -45,6 +39,7 @@ import { sessionLabel, sessionTitle } from "@/session/title"
 import { showToast } from "@/shell/notifications/toast"
 import { archiveHomeSession } from "./archive"
 import { sessionIndexQuery } from "@/runtime/server/session-queries"
+import { lookupHomeSession, projectSessionDirectories, projectSessionsQuery } from "./queries"
 import {
   HOME_SESSIONS_STALE_MS,
   INITIAL_HOME_SESSIONS_LOAD_STATE,
@@ -84,7 +79,7 @@ export function createHomeSessionsController(home: HomeController) {
     if (!selected) return
     const project = home.project.selected()
 
-    return project ? directories(project) : [selected]
+    return project ? projectSessionDirectories(project) : [selected]
   })
 
   const [load, setLoad] = createSignal(INITIAL_HOME_SESSIONS_LOAD_STATE)
@@ -234,42 +229,9 @@ export function createHomeSessionsController(home: HomeController) {
     return (conn && queryClient.getQueryData<SessionInfo[]>(["home-sessions", conn])) || []
   })
 
-  // The shared index holds one bounded page of the newest sessions. A project scoped to older history asks the server
-  // for that directory's newest sessions directly, so selecting a quiet project still lists its sessions.
-  const [scopedSessions, setScopedSessions] = createSignal<SessionInfo[]>([])
-  let scopedKey: string | undefined
-
-  createEffect(() => {
-    const directories = projectDirectories()
-    const conn = home.server.focused()
-    const ctx = home.server.focusedContext()
-
-    if (!directories || !conn || !ctx) {
-      scopedKey = undefined
-      setScopedSessions([])
-
-      return
-    }
-
-    const key = `${ServerConnection.key(conn)}\0${directories.map(pathKey).join("\0")}`
-
-    if (key === scopedKey) return
-    scopedKey = key
-    const controller = new AbortController()
-    setScopedSessions([])
-    void Promise.allSettled(
-      directories.map((directory) =>
-        ctx.sdk.api.session.list(
-          { directory, limit: SESSION_INDEX_LIMIT, order: "desc", parentID: null },
-          { signal: controller.signal },
-        ),
-      ),
-    ).then((results) => {
-      if (controller.signal.aborted) return
-      setScopedSessions(results.flatMap((result) => (result.status === "fulfilled" ? result.value.data : [])))
-    })
-    onCleanup(() => controller.abort())
-  })
+  const scoped = useQuery(() =>
+    projectSessionsQuery(home.server.focused(), home.server.focusedContext(), projectDirectories()),
+  )
 
   const indexedSessions = createMemo(() => {
     const ctx = home.server.focusedContext()
@@ -279,7 +241,10 @@ export function createHomeSessionsController(home: HomeController) {
 
     return retainSessions(
       ctx.data.session.apply(
-        mergeSessionIndex([...fetchedSessions(), ...scopedSessions()], ctx.data.session.list()),
+        mergeSessionIndex(
+          [...fetchedSessions(), ...(scoped.isPending ? [] : (scoped.data?.().sessions ?? []))],
+          ctx.data.session.known(),
+        ),
       ),
       SESSION_LIST_LIMIT,
       Date.now(),
@@ -390,10 +355,7 @@ export function createHomeSessionsController(home: HomeController) {
       .update({ sessionID: session.id, title: next }, { signal })
       .then(() => {
         ctx.data.session.remember({ ...(ctx.data.session.get(session.id) ?? session), title: next })
-        // Rename advances time.updated server-side; re-sync the canonical
-        // record so date grouping and ordering do not go stale.
-        ctx.data.session.invalidate(session.id)
-        void ctx.data.session.sync(session.id).catch(() => {})
+        // Rename advances time.updated server-side; like the iOS app, the session moves when the list next reloads.
         queryClient.setQueryData<SessionInfo[]>(["home-sessions", conn], (current) =>
           current?.map((item) => (item.id === session.id ? { ...item, title: next } : item)),
         )
@@ -550,9 +512,9 @@ export function createHomeSessionsController(home: HomeController) {
         const ctx = home.server.focusedContext()
 
         if (!ctx) return
-        const result = await ctx.sdk.api.session.get({ sessionID }, { signal })
+        const result = await lookupHomeSession(ctx, sessionID, signal)
 
-        if (result.time.archived) return
+        if (!result) return
 
         return buildHomeSessionRecords({
           sessions: () => [result],
@@ -580,7 +542,8 @@ export function createHomeSessionsController(home: HomeController) {
           const tab = tabs.addSessionTab({ server: connKey, sessionId: session.id })
 
           if (!options?.background) tabs.select(tab)
-          ctx.data.session.remember(session)
+          // Keep the canonical record's server times: the list row may carry a local send bump.
+          ctx.data.session.remember(ctx.data.session.get(session.id) ?? session)
 
           if (!options?.background) ctx.projects.touch(directory)
         })
@@ -621,10 +584,6 @@ export function createHomeSessionsController(home: HomeController) {
   }
 }
 
-function directories(project: LocalProject) {
-  return [project.worktree, ...(project.sandboxes ?? [])]
-}
-
 const HOME_ROW_SELECTOR = '[data-component="home-session-row-container"]'
 
 function homeRowTops() {
@@ -660,7 +619,10 @@ function localDay(date: Date) {
   return date.getFullYear() * 10_000 + date.getMonth() * 100 + date.getDate()
 }
 
-function groupSessions(records: HomeSessionRecord[], language: ReturnType<typeof useLanguage>): HomeSessionGroup[] {
+export function groupSessions(
+  records: HomeSessionRecord[],
+  language: ReturnType<typeof useLanguage>,
+): HomeSessionGroup[] {
   const now = new Date()
   const today = localDay(now)
   const yesterday = localDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1))
