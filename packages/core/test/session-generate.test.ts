@@ -59,6 +59,7 @@ import { asc, eq } from "drizzle-orm"
 import { Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { testEffect } from "./lib/effect"
+import { disabledWatcher } from "./fixture/watcher"
 
 const requests: LLMRequest[] = []
 const options: Array<StreamOptions | undefined> = []
@@ -179,6 +180,7 @@ const it = testEffect(
       PluginSupervisor.node.replace(Layer.empty),
       Tool.node.replace(tools),
       Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
+      disabledWatcher,
     ],
   ),
 )

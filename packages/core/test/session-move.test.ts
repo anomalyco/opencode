@@ -27,6 +27,7 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Global } from "@opencode/util/global"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
+import { disabledWatcher } from "./fixture/watcher"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { globalProjectNode } from "./lib/project"
@@ -34,7 +35,12 @@ import { globalProjectNode } from "./lib/project"
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
-    [Project.node.replace(globalProjectNode), SessionExecution.node.replace(SessionExecution.noopLayer), offlineModels],
+    [
+      Project.node.replace(globalProjectNode),
+      SessionExecution.node.replace(SessionExecution.noopLayer),
+      offlineModels,
+      disabledWatcher,
+    ],
   ),
 )
 const itWithActiveExecution = testEffect(
@@ -56,7 +62,7 @@ const itWithActiveExecution = testEffect(
             (ref: Location.Ref) =>
               Layer.merge(
                 LayerNode.compile(Location.boundNode(ref), {
-                  replacements: [Project.node.replace(globalProjectNode), offlineModels],
+                  replacements: [Project.node.replace(globalProjectNode), offlineModels, disabledWatcher],
                 }),
                 Layer.succeed(SessionRunner.Service, { drain: () => Effect.never }),
               ) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
@@ -90,6 +96,7 @@ const itWithExecution = testEffect(
   AppNodeBuilder.build(LayerNode.group([Session.node, SessionExecution.node]), [
     Global.node.replace(tempGlobalLayer),
     offlineModels,
+    disabledWatcher,
   ]),
 )
 // Windows does not enforce POSIX mode bits, and root can traverse mode-000 directories.
@@ -108,6 +115,7 @@ const sourceProbe = (options: { execution?: boolean } = {}) =>
         Global.node.replace(tempGlobalLayer),
         ...(options.execution ? [] : [SessionExecution.node.replace(SessionExecution.noopLayer)]),
         offlineModels,
+        disabledWatcher,
         Instance.node.replace(
           makeGlobalNode({
             service: Instance.Service,
@@ -154,6 +162,7 @@ describe("Session.move", () => {
           Project.node.replace(globalProjectNode),
           SessionExecution.node.replace(SessionExecution.noopLayer),
           offlineModels,
+          disabledWatcher,
         ]),
       )
       const moves = Context.get(context, SessionMove.Service)
@@ -194,6 +203,7 @@ describe("Session.move", () => {
           SessionExecution.node.replace(SessionExecution.noopLayer),
           SessionMove.node.replace(Layer.succeed(SessionMove.Service, { move: () => Effect.fail(rejection) })),
           offlineModels,
+          disabledWatcher,
         ]),
       )
       const sessions = Context.get(context, Session.Service)
@@ -278,6 +288,7 @@ describe("Session.move", () => {
             Global.node.replace(tempGlobalLayer),
             SessionExecution.node.replace(SessionExecution.noopLayer),
             offlineModels,
+            disabledWatcher,
             Instance.node.replace(
               makeGlobalNode({
                 service: Instance.Service,

@@ -24,6 +24,7 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
+import { disabledWatcher } from "./fixture/watcher"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
@@ -35,6 +36,7 @@ const it = testEffect(
       Global.node.replace(tempGlobalLayer),
       SessionExecution.node.replace(SessionExecution.noopLayer),
       offlineModels,
+      disabledWatcher,
     ],
   ),
 )

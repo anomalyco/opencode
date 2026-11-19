@@ -15,6 +15,7 @@ import { Shell } from "@opencode/core/shell"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { location } from "./fixture/location"
 import { offlineModels } from "./fixture/models"
+import { disabledWatcher } from "./fixture/watcher"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
@@ -61,6 +62,7 @@ const it = testEffect(
     Bus.node.replace(Bus.configured({ persist: true })),
     SessionExecution.node.replace(executionLayer.pipe(Layer.provide(controlLayer))),
     offlineModels,
+    disabledWatcher,
   ]).pipe(Layer.provideMerge(controlLayer)),
 )
 

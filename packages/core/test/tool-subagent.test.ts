@@ -40,6 +40,7 @@ import { Tool } from "@opencode/core/tool"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
+import { disabledWatcher } from "./fixture/watcher"
 import { testEffect } from "./lib/effect"
 import { executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
 
@@ -149,6 +150,7 @@ const replacements = [
   SessionExecution.node.replace(executionNode),
   Global.node.replace(tempGlobalLayer),
   offlineModels,
+  disabledWatcher,
 ] satisfies LayerNode.Replacements
 const productionIt = testEffect(AppNodeBuilder.build(nodes, replacements))
 const it = testEffect(
@@ -161,6 +163,7 @@ const completionIt = testEffect(
     AppNodeBuilder.build(LayerNode.group([nodes, SessionRestart.node, KV.node]), [
       Global.node.replace(tempGlobalLayer),
       offlineModels,
+      disabledWatcher,
       PluginSupervisor.node.replace(subagentPluginSupervisor),
       LayerNodePlatform.llmClient.replace(completionLLM),
       SessionRunnerModel.node.replace(

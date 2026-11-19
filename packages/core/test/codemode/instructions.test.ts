@@ -8,6 +8,7 @@ import { Tool } from "@opencode/core/tool"
 import { Effect, Schema } from "effect"
 import { it } from "../lib/effect"
 import { readInitial, readUpdate } from "../lib/instructions"
+import { disabledWatcher } from "../fixture/watcher"
 
 const echo: CodeModeCatalog.Tool = {
   type: "tool",
@@ -88,6 +89,7 @@ describe("CodeModeInstructions", () => {
     }
     const layer = AppNodeBuilder.build(Tool.node, [
       Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
+      disabledWatcher,
     ])
 
     return Effect.gen(function* () {

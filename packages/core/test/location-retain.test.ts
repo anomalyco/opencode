@@ -17,6 +17,7 @@ import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionStore } from "@opencode/core/session/store"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
+import { disabledWatcher } from "./fixture/watcher"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
@@ -40,6 +41,7 @@ const it = testEffect(
     [
       Global.node.replace(tempGlobalLayer),
       offlineModels,
+      disabledWatcher,
       LocationActivity.node.replace(
         makeGlobalNode({
           service: LocationActivity.Service,
