@@ -44,7 +44,7 @@ export function SubagentsTab(props: { sessionID: string }) {
     const current = session()
     if (!current) return []
 
-    const jobs = data.job.list(current.id)
+    const jobs = data.job.list(data.session.root(current.id))
     const result = sessionFamily<SessionInfo>(data.session.list(), current.id).map(
       ({ session, prefix }): SubagentEntry => {
         const title = withTimestampedFallback(session)

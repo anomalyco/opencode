@@ -16,25 +16,30 @@ export function ScriptsTab(props: { sessionID: string }) {
   const composer = useComposerTab()
   const shortcuts = Keymap.useShortcuts()
 
-  const entries = createMemo(() =>
-    data.job
-      .list(props.sessionID)
-      .filter((job) => job.kind === "codemode" && job.sessionID === props.sessionID)
-      .map((job) => ({
-        id: job.id,
-        label: scriptLabel(data.session.message.list(props.sessionID), job),
-        started: job.time.started,
-      })),
+  // Scripts show for the main session only, like desktop.
+  const runningScripts = createMemo(() =>
+    data.session.get(props.sessionID)?.parentID
+      ? []
+      : data.job.list(props.sessionID).filter((job) => job.kind === "codemode" && job.sessionID === props.sessionID),
   )
+  // Labels scan the transcript, so only while the tab shows.
+  const entries = createMemo(() => {
+    if (!composer.active("scripts")) return []
+    const messages = data.session.message.list(props.sessionID)
+    return runningScripts().map((job) => ({
+      id: job.id,
+      label: scriptLabel(messages, job),
+      started: job.time.started,
+    }))
+  })
 
   const [store, setStore] = createStore({ selected: 0 })
   const [now, setNow] = createSignal(Date.now())
   let scroll: ScrollBoxRenderable | undefined
 
-  const selectedEntry = createMemo(() => entries()[store.selected])
-
   createEffect(() => {
-    if (store.selected >= entries().length) setStore("selected", Math.max(0, entries().length - 1))
+    const count = runningScripts().length
+    if (store.selected >= count) setStore("selected", Math.max(0, count - 1))
   })
 
   createEffect(() => {
@@ -45,7 +50,7 @@ export function ScriptsTab(props: { sessionID: string }) {
   })
 
   createEffect(() => {
-    if (!scroll) return
+    if (!scroll || scroll.isDestroyed) return
     const target = scroll.getChildren()[store.selected]
     if (!target) return
     const y = target.y - scroll.y
@@ -57,7 +62,7 @@ export function ScriptsTab(props: { sessionID: string }) {
 
   createEffect(
     on(
-      () => entries().length > 0,
+      () => runningScripts().length > 0,
       (running) => {
         if (!running) return
         onCleanup(
@@ -65,7 +70,9 @@ export function ScriptsTab(props: { sessionID: string }) {
             id: "scripts",
             label: "Scripts",
             hints: () =>
-              selectedEntry() ? [{ label: "cancel", shortcut: shortcuts.get("composer.script.cancel") ?? "" }] : [],
+              runningScripts()[store.selected]
+                ? [{ label: "cancel", shortcut: shortcuts.get("composer.script.cancel") ?? "" }]
+                : [],
           }),
         )
       },
@@ -94,9 +101,9 @@ export function ScriptsTab(props: { sessionID: string }) {
         title: "Next script",
         group: "Composer",
         run() {
-          const list = entries()
-          if (list.length === 0) return
-          setStore("selected", (prev) => (prev + 1) % list.length)
+          const count = runningScripts().length
+          if (count === 0) return
+          setStore("selected", (prev) => (prev + 1) % count)
         },
       },
       {
@@ -104,8 +111,8 @@ export function ScriptsTab(props: { sessionID: string }) {
         title: "Cancel script",
         group: "Composer",
         run() {
-          const entry = selectedEntry()
-          if (entry) void client.api.experimental.job.cancel({ id: entry.id })
+          const job = runningScripts()[store.selected]
+          if (job) void client.api.experimental.job.cancel({ id: job.id })
         },
       },
     ],
@@ -124,6 +131,7 @@ export function ScriptsTab(props: { sessionID: string }) {
             return (
               <box
                 flexDirection="row"
+                gap={1}
                 paddingLeft={1}
                 paddingRight={1}
                 backgroundColor={
@@ -136,11 +144,16 @@ export function ScriptsTab(props: { sessionID: string }) {
                     fg={active() ? theme.text.action.primary.focused : theme.text.action.primary.base}
                     attributes={active() ? TextAttributes.BOLD : undefined}
                     wrapMode="none"
+                    truncate
                   >
                     {entry.label}
                   </text>
                 </box>
-                <text fg={active() ? theme.text.action.primary.focused : theme.text.muted} wrapMode="none">
+                <text
+                  fg={active() ? theme.text.action.primary.focused : theme.text.muted}
+                  wrapMode="none"
+                  flexShrink={0}
+                >
                   {elapsed()}
                 </text>
               </box>

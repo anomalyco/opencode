@@ -4,7 +4,6 @@ import { contextUsage, formatContextUsage, ownedJobs } from "../../util/session"
 import { useTerminalDimensions } from "@opentui/solid"
 import { TextAttributes } from "@opentui/core"
 import { useInteractivity } from "../../context/interactivity"
-import { useData } from "../../context/data"
 import { stringWidth } from "../../util/string-width"
 import { createGoal, GoalStatus } from "./goal"
 
@@ -21,26 +20,25 @@ export function PromptFooter(props: {
 }) {
   const dimensions = useTerminalDimensions()
   const [liveHovered, setLiveHovered] = createSignal(false)
-  const data = useData()
-  const jobs = createMemo(() => (props.sessionID ? data.job.list(props.sessionID) : []))
+  const jobs = createMemo(() => (props.sessionID ? props.context.data.job.list(props.sessionID) : []))
   const scripts = createMemo(() => {
     const count = jobs().filter((job) => job.kind === "codemode" && job.sessionID === props.sessionID).length
     return count ? `${count} script${count === 1 ? "" : "s"}` : undefined
   })
   const subagents = createMemo(() => {
-    if (!props.sessionID) return 0
+    if (!props.sessionID) return undefined
     const count = props.context.data.session
       .family(props.sessionID)
       .filter(
         (id) =>
           id !== props.sessionID &&
           (props.context.data.session.status(id) === "running" ||
-            ownedJobs(jobs(), id, (sessionID) => data.session.get(sessionID)?.parentID).length > 0),
+            ownedJobs(jobs(), id, (sessionID) => props.context.data.session.get(sessionID)?.parentID).length > 0),
       ).length
     return count ? `${count} subagent${count === 1 ? "" : "s"}` : undefined
   })
   const shells = createMemo(() => {
-    if (!props.sessionID) return 0
+    if (!props.sessionID) return undefined
     const count = props.context.data.shell
       .list(props.context.location)
       .filter((shell) => shell.metadata.sessionID === props.sessionID).length
@@ -61,7 +59,7 @@ export function PromptFooter(props: {
       cost > 0 ? money.format(cost) : undefined,
     ].filter((item): item is string => Boolean(item))
   })
-  const live = createMemo(() => [scripts(), subagents(), shells()].filter((item) => Boolean(item)))
+  const live = createMemo(() => [scripts(), subagents(), shells()].filter((item): item is string => Boolean(item)))
   const goal = createGoal(props.context, () => props.sessionID)
   // Prompt hints read as disabled while the session does not own input, e.g. while a side panel is focused.
   const interactive = useInteractivity()

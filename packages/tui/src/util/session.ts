@@ -73,7 +73,9 @@ export function ownedJobs(jobs: readonly JobInfo[], sessionID: string, parentID:
     while (current && !seen.has(current)) {
       if (current === sessionID) return true
       seen.add(current)
-      current = parentID(current)
+      // A subagent job runs in the direct child of the session that started it.
+      current =
+        parentID(current) ?? (job.kind === "subagent" && current === job.childSessionID ? job.sessionID : undefined)
     }
     return false
   })

@@ -350,7 +350,6 @@ export function Session(props: {
         data.session.sync(sessionID, { children: true }),
         data.session.permission.sync(sessionID).catch(() => undefined),
         data.session.form.sync(sessionID).catch(() => undefined),
-        data.job.sync(sessionID).catch(() => undefined),
       ])
       const info = data.session.get(sessionID)
       if (!info) {
@@ -363,6 +362,7 @@ export function Session(props: {
         return
       }
       editor.reconnect(info.location.directory)
+      void data.job.sync(data.session.root(sessionID)).catch(() => undefined)
       setSynced(true)
     })().catch((error) => {
       if (route.sessionID !== sessionID) return

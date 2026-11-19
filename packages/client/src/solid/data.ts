@@ -147,6 +147,10 @@ type Store = {
   location: Record<string, LocationData>
   // Running background jobs keyed by job id, for the session trees that synced them. Settled jobs are removed.
   job: Record<string, JobInfo>
+  // Job ids the server listed for each synced tree root (it filters descendants itself), plus ids that events added
+  // for owners known to be in the tree. Loaded session info only reaches direct children, so walking parents alone
+  // would drop a grandchild's jobs.
+  jobTree: Record<string, Record<string, true>>
 }
 
 export function locationKey(location: LocationRef) {
@@ -351,6 +355,7 @@ export function createData(config: CreateDataInput) {
     },
     location: {},
     job: {},
+    jobTree: {},
   })
 
   const [defaultLocation, setDefaultLocation] = createSignal<LocationRef>({ directory: config.directory })
@@ -363,8 +368,9 @@ export function createData(config: CreateDataInput) {
   const stored = (message: SessionMessageInfo) => (omitFiles() ? omitMessageFileData(message) : message)
   const sync = createSync()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
-  // Session trees whose running jobs were listed, so a reconnect lists them again.
-  const jobTrees = new Set<string>()
+  // Job events that arrive while a tree's list is in flight, applied over its response: the latest info, or undefined
+  // once settled.
+  const jobUpdates = new Map<string, Map<string, JobInfo | undefined>>()
   const pendingUpdates = new Map<string, Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>>()
 
   function setSessionActive(sessionID: string, status: DataSessionStatus) {
@@ -716,6 +722,7 @@ export function createData(config: CreateDataInput) {
 
   function removeSession(sessionID: string) {
     activeUpdates?.set(sessionID, undefined)
+    removeJobTree(sessionID)
     store.session.pending[sessionID]?.forEach((item) => outbox.delete(item.id))
     messageIndex.delete(sessionID)
     sync.invalidate(`session:${sessionID}`)
@@ -782,17 +789,34 @@ export function createData(config: CreateDataInput) {
         )
         refresh(() => result.location.vcs.sync())
         refresh(() => result.project.sync())
-        jobTrees.forEach((sessionID) => refresh(() => result.job.sync(sessionID)))
+        Object.keys(store.jobTree).forEach((sessionID) => {
+          result.job.invalidate(sessionID)
+          refresh(() => result.job.sync(sessionID))
+        })
         return
       }
       case "experimental.job.updated": {
         const info = event.data.info
-        if (info.status === "running") setStore("job", info.id, info)
-        else if (store.job[info.id])
+        const running = info.status === "running"
+        jobUpdates.forEach((updates) => updates.set(info.id, running ? info : undefined))
+        if (!running) {
+          if (!store.job[info.id]) return
           setStore(
-            "job",
-            produce((draft) => void delete draft[info.id]),
+            produce((draft) => {
+              delete draft.job[info.id]
+              Object.values(draft.jobTree).forEach((members) => delete members[info.id])
+            }),
           )
+          return
+        }
+        setStore(
+          produce((draft) => {
+            draft.job[info.id] = info
+            Object.entries(draft.jobTree).forEach(([rootID, members]) => {
+              if (jobWithin(info, rootID)) members[info.id] = true
+            })
+          }),
+        )
         return
       }
       case "project.updated":
@@ -1565,6 +1589,26 @@ export function createData(config: CreateDataInput) {
     return false
   }
 
+  // A subagent job's session is the parent of the child it runs, so either can place it in a tree.
+  function jobWithin(job: JobInfo, ancestorID: string) {
+    return (
+      withinTree(job.sessionID, ancestorID) || (job.kind === "subagent" && withinTree(job.childSessionID, ancestorID))
+    )
+  }
+
+  function removeJobTree(rootID: string) {
+    jobUpdates.delete(rootID)
+    sync.invalidate(`job:${rootID}`)
+    const members = store.jobTree[rootID]
+    if (!members) return
+    setStore(
+      produce((draft) => {
+        Object.keys(members).forEach((id) => delete draft.job[id])
+        delete draft.jobTree[rootID]
+      }),
+    )
+  }
+
   const result = {
     on: config.event.on,
     listen: config.event.listen,
@@ -2149,22 +2193,39 @@ export function createData(config: CreateDataInput) {
       invalidate: shells.invalidate,
     },
     job: {
-      // Running jobs owned by the session or any session below it.
+      // Running jobs owned by the session or any session below it: a synced tree's listed members, plus jobs whose
+      // owner loaded session info places below it.
       list(sessionID: string) {
-        return Object.values(store.job).filter((job) => withinTree(job.sessionID, sessionID))
+        const members = store.jobTree[sessionID]
+        return Object.values(store.job).filter((job) => members?.[job.id] || jobWithin(job, sessionID))
       },
       sync(sessionID: string) {
-        jobTrees.add(sessionID)
         return sync.run(`job:${sessionID}`, async () => {
-          const list = await api().experimental.job.list({ sessionID, descendants: true, status: "running" })
-          const ids = new Set(list.map((job) => job.id))
+          const updates = new Map<string, JobInfo | undefined>()
+          jobUpdates.set(sessionID, updates)
+          const list = await api()
+            .experimental.job.list({ sessionID, descendants: true, status: "running" })
+            .catch((error: unknown) => {
+              if (jobUpdates.get(sessionID) === updates) jobUpdates.delete(sessionID)
+              return evictMissing(error)
+            })
+          if (jobUpdates.get(sessionID) !== updates) return
+          jobUpdates.delete(sessionID)
+          const listed = new Map(list.map((job) => [job.id, job]))
+          const next = new Map(listed)
+          updates.forEach((info, id) => {
+            if (!info) return next.delete(id)
+            if (listed.has(id) || jobWithin(info, sessionID)) next.set(id, info)
+          })
+          const previous = store.jobTree[sessionID] ?? {}
           setStore(
-            "job",
             produce((draft) => {
-              Object.values(draft).forEach((job) => {
-                if (!ids.has(job.id) && withinTree(job.sessionID, sessionID)) delete draft[job.id]
+              Object.values(draft.job).forEach((job) => {
+                if (next.has(job.id)) return
+                if (previous[job.id] || jobWithin(job, sessionID)) delete draft.job[job.id]
               })
-              list.forEach((job) => (draft[job.id] = job))
+              next.forEach((job, id) => (draft.job[id] = job))
+              draft.jobTree[sessionID] = Object.fromEntries([...next.keys()].map((id) => [id, true as const]))
             }),
           )
         })
