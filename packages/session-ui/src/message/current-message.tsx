@@ -77,6 +77,8 @@ export function SessionAssistantContent(props: {
   onToolOpenChange?: (open: boolean) => void
   onContentRendered?: () => void
   favorites?: NonNullable<SessionUserActions["favorites"]>
+  /** The prompt row that owns this assistant message, which is the row the timeline can scroll to. */
+  anchorID?: string
 }) {
   return (
     <Switch>
@@ -93,6 +95,7 @@ export function SessionAssistantContent(props: {
             sources={props.sources}
             onOpenSources={props.onOpenSources}
             favorites={props.favorites}
+            anchorID={props.anchorID}
           />
         )}
       </Match>

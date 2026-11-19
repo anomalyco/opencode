@@ -55,9 +55,10 @@ export function DialogFavorites(props: { session: SessionCommandContext["session
         current.signal.throwIfAborted()
       }
 
-      const message = data.session.message.get(id, messageID)
-      const parent = message?.type === "assistant" ? message.metadata?.parentID : undefined
-      const target = anchorID ?? (typeof parent === "string" ? parent : messageID)
+      const messages = data.session.message.list(id)
+      const index = messages.findIndex((message) => message.id === messageID)
+      const prompt = index < 0 ? undefined : messages.slice(0, index).findLast((message) => message.type === "user")
+      const target = anchorID ?? prompt?.id ?? messageID
 
       dialog.close()
       props.onJump(target)

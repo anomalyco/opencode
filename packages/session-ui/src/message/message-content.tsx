@@ -1162,6 +1162,8 @@ export function AssistantTextContent(props: {
   sources?: TurnSources
   onOpenSources?: () => void
   favorites?: NonNullable<SessionUserActions["favorites"]>
+  /** The prompt row that owns this assistant message; the timeline only anchors prompts. */
+  anchorID?: string
 }) {
   const data = useData()
   const i18n = useI18n()
@@ -1229,14 +1231,6 @@ export function AssistantTextContent(props: {
   const favoriteText = () =>
     props.message.content.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n\n") || props.text
 
-  // Assistant messages do not get a timeline anchor of their own; the prompt
-  // that started the turn does. Keep that id so the favorites dialog can jump.
-  const favoriteAnchor = () => {
-    const parent = props.message.metadata?.parentID
-
-    return typeof parent === "string" ? parent : undefined
-  }
-
   return (
     <Show when={props.text}>
       <div data-component="text-part" data-timeline-part-id={props.id}>
@@ -1292,7 +1286,7 @@ export function AssistantTextContent(props: {
                   onClick={() =>
                     favorites().toggle({
                       messageID: props.message.id,
-                      anchorID: favoriteAnchor(),
+                      anchorID: props.anchorID,
                       role: "assistant",
                       text: favoriteText(),
                       created: props.message.time.created,
