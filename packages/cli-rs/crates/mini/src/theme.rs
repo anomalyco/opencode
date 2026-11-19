@@ -181,7 +181,7 @@ fn map(theme: &UiTheme, indexed: &[(u8, Color)], system: bool) -> RunTheme {
     let text = &theme.text;
     let mut categorical: Vec<Color> = Vec::new();
     for scale in theme.categorical() {
-        let color = exact(scale.step(200));
+        let color = exact(scale.step(400));
         if !categorical.contains(&color) {
             categorical.push(color);
         }
@@ -206,9 +206,9 @@ fn map(theme: &UiTheme, indexed: &[(u8, Color)], system: bool) -> RunTheme {
             formfield_focused_bg: exact(theme.background.formfield.focused),
             formfield_focused_text: exact(text.formfield.focused),
             selection: exact(text.formfield.selected),
-            running: exact(theme.interactive().step(200)),
-            question: exact(theme.accent().step(200)),
-            permission: exact(theme.accent().step(200)),
+            running: exact(theme.interactive().step(400)),
+            question: exact(theme.accent().step(400)),
+            permission: exact(theme.accent().step(400)),
             success: exact(text.feedback.success.base),
             link: exact(theme.markdown.link),
             categorical,
@@ -495,8 +495,8 @@ mod tests {
     }
 
     /// A terminal that reports its palette but not its default colors (no OSC 10 or 11 reply) still gets the system
-    /// theme from slots 0 and 7, and its accents from the slots as `migrateV1` lays them out: the agent rail in slot 5
-    /// (secondary), warnings in slot 3.
+    /// theme from slots 0 and 7, and its accents from the slots as `migrateV1` lays them out: the agent rail from slot 5
+    /// (secondary) at step 400, as TS reads it since #64988, and warnings in slot 3.
     #[test]
     fn system_theme_derives_from_the_palette_without_default_colors() {
         let slots = ["#1a1b26", "#f7768e", "#9ece6a", "#e0af68", "#7aa2f7", "#ad8ee6", "#449dab", "#a9b1d6"];
@@ -509,7 +509,7 @@ mod tests {
         };
         let bare = resolve(&input(palette.clone()));
         let rgb = |color: Color| (color.r, color.g, color.b);
-        assert_eq!(bare.footer.categorical.first().copied().map(rgb), Some((0xad, 0x8e, 0xe6)));
+        assert_eq!(bare.footer.categorical.first().copied().map(rgb), Some((125, 100, 171)));
         assert_eq!(rgb(bare.footer.warning), (0xe0, 0xaf, 0x68));
         assert_eq!(bare.background.intent(), Intent::Default);
         // The focused search field takes the transparent background, so the panel's shade shows through it.

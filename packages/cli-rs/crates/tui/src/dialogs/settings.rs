@@ -637,12 +637,15 @@ fn apply(tui: &Tui, info: Info) {
 }
 
 pub fn value(tui: &Tui, setting: &Setting) -> Value {
+    // The theme state resolves aliases and missing themes, so it names what is actually shown.
+    if setting.is_theme() {
+        return Value::from(tui.theme.borrow().selected());
+    }
     let config = tui.settings.info().to_value();
     let current =
         setting.path.iter().try_fold(&config, |node, key| node.get(*key)).filter(|value| !value.is_null()).cloned();
     match current {
         Some(value) => value,
-        None if setting.is_theme() => Value::from(tui.theme.borrow().selected()),
         None => setting.default.value(),
     }
 }
