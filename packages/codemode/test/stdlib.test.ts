@@ -1657,6 +1657,59 @@ describe("toLocaleString", () => {
     ])
   })
 
+  test("numbers honor locales and Intl.NumberFormat options", async () => {
+    expect(
+      await value(`
+      let reads = 0
+      return [
+        (0.5).toLocaleString("en-US", { style: "percent" }),
+        (1234.5).toLocaleString("en-US", { style: "currency", currency: "USD" }),
+        (1234.5678).toLocaleString(undefined, { maximumFractionDigits: 1 }),
+        (1).toLocaleString(undefined, { minimumFractionDigits: 2 }),
+        (5).toLocaleString(undefined, { minimumIntegerDigits: 2 }),
+        (1234).toLocaleString(undefined, { useGrouping: false }),
+        (1234567).toLocaleString("en-US", { notation: "compact" }),
+        (5).toLocaleString("en-US", { signDisplay: "always" }),
+        (1234.5).toLocaleString("de-DE"),
+        (1234.5).toLocaleString(["de-DE", "en-US"]),
+        (1234.5).toLocaleString("en-US", { style: "currency", currency: { toString: () => "EUR" } }),
+        (1.25).toLocaleString("en-US", { get maximumFractionDigits() { reads++; return 0 } }),
+        reads,
+      ]
+    `),
+    ).toEqual([
+      "50%",
+      "$1,234.50",
+      "1,234.6",
+      "1.00",
+      "05",
+      "1234",
+      "1.2M",
+      "+5",
+      "1.234,5",
+      "1.234,5",
+      "€1,234.50",
+      "1",
+      1,
+    ])
+    expect(
+      await value(`
+      const caught = (f) => { try { f() } catch (e) { return [e.name, e instanceof TypeError || e instanceof RangeError] } }
+      return [
+        caught(() => (1).toLocaleString("en-US", { style: "currency" })),
+        caught(() => (1).toLocaleString("en-US", { maximumFractionDigits: 200 })),
+        caught(() => (1).toLocaleString("xx-!!")),
+        caught(() => (1).toLocaleString(null)),
+      ]
+    `),
+    ).toEqual([
+      ["TypeError", true],
+      ["RangeError", true],
+      ["RangeError", true],
+      ["TypeError", true],
+    ])
+  })
+
   test("arrays join each element's toLocaleString, skipping holes and nullish elements", async () => {
     expect(
       await value(`

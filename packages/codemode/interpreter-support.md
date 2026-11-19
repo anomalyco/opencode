@@ -460,7 +460,8 @@ reject }` object.
 - [x] Number predicates/parsers: `Number.isInteger`, `Number.isFinite`, `Number.isNaN`, `Number.isSafeInteger`,
       `Number.parseInt`, and `Number.parseFloat`.
 - [x] Number formatting: `toFixed`, `toPrecision`, `toExponential`, `toString`, `valueOf`, and `toLocaleString`, which
-      always formats as `en-US` (`"1,234.5"`) so output does not depend on the host.
+      honors locales and `Intl.NumberFormat` options and formats as `en-US` (`"1,234.5"`) when no locale is given so
+      output does not depend on the host.
 - [x] `Number.prototype.toString` truncates a fractional radix before validating the 2–36 range; invalid radixes
       throw a catchable `RangeError`.
 - [x] Number constants: `MAX_SAFE_INTEGER`, `MIN_SAFE_INTEGER`, `MAX_VALUE`, `MIN_VALUE`, `EPSILON`, `NaN`,

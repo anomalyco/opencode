@@ -1,9 +1,63 @@
 import { constructor, constants, type Method, methods } from "../runtime/native.js"
-import { coerceToNumber, type Value } from "../runtime/objects.js"
+import { coerceToInteger, coerceToNumber, get, type NativeResult, Obj, type Value } from "../runtime/objects.js"
 import { typeError } from "../runtime/model.js"
 import type { Interpreter } from "../runtime/interpreter.js"
-import { withPrimitives } from "../runtime/callback.js"
+import { withPrimitives, withReads } from "../runtime/callback.js"
+import { checkArrayLength } from "../runtime/limits.js"
 import { coerce } from "./value.js"
+
+// Intl.NumberFormat's options, each with the hint its value converts by.
+const numberFormatOptions = [
+  ...[
+    "localeMatcher",
+    "numberingSystem",
+    "style",
+    "currency",
+    "currencyDisplay",
+    "currencySign",
+    "unit",
+    "unitDisplay",
+    "notation",
+    "compactDisplay",
+    "useGrouping",
+    "signDisplay",
+    "roundingMode",
+    "roundingPriority",
+    "trailingZeroDisplay",
+  ].map((name) => [name, "string"] as const),
+  ...[
+    "minimumIntegerDigits",
+    "minimumFractionDigits",
+    "maximumFractionDigits",
+    "minimumSignificantDigits",
+    "maximumSignificantDigits",
+    "roundingIncrement",
+  ].map((name) => [name, "number"] as const),
+]
+
+// The host's Intl.NumberFormat formats; without locales it stays en-US so output does not depend on the host.
+const toLocaleString = (value: number, locales: Value, options: Value): NativeResult =>
+  withReads(() => {
+    const length = locales instanceof Obj ? coerceToInteger(get(locales, "length")) : 0
+    checkArrayLength(length)
+    const list = Array.from({ length }, (_, index) => get(locales as Obj, index))
+    const read = options instanceof Obj ? numberFormatOptions : []
+    return withPrimitives(
+      [...list.map(() => "string" as const), ...read.map(([, hint]) => hint)],
+      [...list, ...read.map(([name]) => get(options as Obj, name))],
+      (primitives) =>
+        value.toLocaleString(
+          (locales instanceof Obj
+            ? primitives.slice(0, length)
+            : locales === undefined
+              ? "en-US"
+              : locales) as Intl.LocalesArgument,
+          (options instanceof Obj
+            ? Object.fromEntries(read.map(([name], index) => [name, primitives[length + index]]))
+            : options) as Intl.NumberFormatOptions,
+        ),
+    )
+  })
 
 export const numberGlobal = <R>(ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
@@ -48,7 +102,7 @@ export const numberGlobal = <R>(ctx: Interpreter<R>) => {
   ]
   methods(builtins, builtins.Number, [
     formatting("toFixed", (value, digits) => value.toFixed(digits)),
-    ["toLocaleString", 0, (thisValue) => self(thisValue, "toLocaleString").toLocaleString("en-US")],
+    ["toLocaleString", 0, (thisValue, args) => toLocaleString(self(thisValue, "toLocaleString"), args[0], args[1])],
     formatting("toExponential", (value, digits) => value.toExponential(digits)),
     formatting("toPrecision", (value, digits) => (digits === undefined ? value.toString() : value.toPrecision(digits))),
     formatting("toString", (value, radix) => value.toString(radix)),
