@@ -6,6 +6,9 @@
 //! `psychoscript-bench --plugin [--runs N] SOURCE...` is the plugin-event benchmark instead: the conformance
 //! reducer handling a `git.status` command, N warm-up runs then N timed runs, as JSON lines of µs per execute: from
 //! the source, and from the program `Runtime::compile` made of it once (`compiled_*`).
+//!
+//! Both report instructions retired too where the platform counts them (macOS): the median per iteration for a
+//! program, the mean per execute for the plugin event.
 
 use std::path::PathBuf;
 use std::time::Instant;
@@ -13,6 +16,7 @@ use std::time::Instant;
 use psychoscript::{HostValue, Json, ProgramOptions, Runtime};
 use serde_json::json;
 
+mod counters;
 #[path = "../../conformance/reference.rs"]
 mod reference;
 
@@ -82,23 +86,27 @@ fn main() {
             Ok(value) => value,
             Err(d) => panic!("{name} failed: {d:?}"),
         };
-        let times: Vec<f64> = (0..iterations)
+        let (times, mut instructions): (Vec<f64>, Vec<u64>) = (0..iterations)
             .map(|_| {
+                let before = counters::instructions();
                 let start = Instant::now();
                 let _ = execute(&code);
-                start.elapsed().as_secs_f64() * 1e3
+                let ms = start.elapsed().as_secs_f64() * 1e3;
+                (ms, counters::instructions() - before)
             })
-            .collect();
+            .unzip();
         if times.is_empty() {
             continue;
         }
         let mut sorted = times.clone();
         sorted.sort_by(f64::total_cmp);
         let (median, min) = (sorted[sorted.len() / 2], sorted[0]);
+        instructions.sort_unstable();
+        let insns = instructions[instructions.len() / 2];
         if json {
-            report.push(json!({ "slug": slug, "name": name, "value": value.to_json(), "median_ms": median, "min_ms": min, "times_ms": times }));
+            report.push(json!({ "slug": slug, "name": name, "value": value.to_json(), "median_ms": median, "min_ms": min, "times_ms": times, "median_instructions": insns }));
         } else {
-            println!("{name:<28} {median:>8.1} ms  (min {min:.1} ms)");
+            println!("{name:<28} {median:>8.1} ms  (min {min:.1} ms)  {insns:>12} insns");
         }
     }
     if json {
@@ -140,21 +148,24 @@ fn plugin(mut args: impl Iterator<Item = String>) {
                 "median_us": from_source.0,
                 "min_us": from_source.1,
                 "mean_us": from_source.2,
+                "mean_instructions": from_source.3,
                 "compiled_median_us": from_compiled.0,
                 "compiled_min_us": from_compiled.1,
                 "compiled_mean_us": from_compiled.2,
+                "compiled_mean_instructions": from_compiled.3,
             })
         );
     }
 }
 
-/// `runs` warm-up runs, the first checking the result, then the median, min and mean µs of `runs` timed ones.
+/// `runs` warm-up runs, the first checking the result, then the median, min and mean µs of `runs` timed ones, and
+/// their mean instructions.
 fn timed(
     runs: usize,
     source: &str,
     expected: &Json,
     mut execute: impl FnMut() -> psychoscript::Outcome,
-) -> (f64, f64, f64) {
+) -> (f64, f64, f64, u64) {
     match execute().result {
         Ok(value) if value == *expected => {}
         other => panic!("{source}: unexpected outcome {other:?}"),
@@ -162,6 +173,7 @@ fn timed(
     for _ in 1..runs {
         let _ = execute();
     }
+    let before = counters::instructions();
     let times: Vec<f64> = (0..runs)
         .map(|_| {
             let start = Instant::now();
@@ -169,10 +181,11 @@ fn timed(
             start.elapsed().as_secs_f64() * 1e6
         })
         .collect();
+    let insns = (counters::instructions() - before) / runs.max(1) as u64;
     let mut sorted = times.clone();
     sorted.sort_by(f64::total_cmp);
     let mean = times.iter().sum::<f64>() / runs.max(1) as f64;
-    (sorted[runs / 2], sorted[0], mean)
+    (sorted[runs / 2], sorted[0], mean, insns)
 }
 
 /// Polls a future to its end on this thread, parking until it is woken.

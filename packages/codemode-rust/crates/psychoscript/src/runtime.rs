@@ -49,6 +49,8 @@ impl Outcome {
 pub struct Run {
     pub(crate) id: RunId,
     metadata: Arc<Mutex<Data>>,
+    #[cfg(feature = "gc-stats")]
+    stats: Arc<Mutex<crate::HeapStats>>,
 }
 
 impl Run {
@@ -56,7 +58,21 @@ impl Run {
         Self {
             id: Arc::new(id.map(std::sync::OnceLock::from).unwrap_or_default()),
             metadata: Arc::new(Mutex::new(metadata)),
+            #[cfg(feature = "gc-stats")]
+            stats: Arc::default(),
         }
+    }
+
+    /// The run's heap as of its last stop for the host (`gc-stats` builds only).
+    #[cfg(feature = "gc-stats")]
+    #[doc(hidden)]
+    pub fn heap_stats(&self) -> crate::HeapStats {
+        self.stats().clone()
+    }
+
+    #[cfg(feature = "gc-stats")]
+    pub(crate) fn stats(&self) -> std::sync::MutexGuard<'_, crate::HeapStats> {
+        self.stats.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     /// The run's id, the first part of its calls' keys: the one [`ProgramOptions::run_id`] gave, or a random UUID.

@@ -370,6 +370,8 @@ impl<'a> Program<'a> {
                 if !r.vm.suspended {
                     let _ = r.vm.drive();
                 }
+                #[cfg(feature = "gc-stats")]
+                r.vm.publish_stats();
                 if let Some(o) = &mut r.vm.host.offload {
                     o.at = None;
                 }
