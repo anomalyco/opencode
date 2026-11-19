@@ -1,7 +1,7 @@
 // The last turn's diff (F15, DLG47): in a session, `d` opens the diff source dialog with "Last turn" offered,
 // selecting it loads `/api/session/:id/diff`, `m` marks a file reviewed, and a turn that runs and ends loads the
 // diff again, which starts the reviewed marks over.
-import { assistant, defineApp, session, user } from "../../lib/app"
+import { assistant, defineApp, location, session, user } from "../../lib/app"
 import { repoFixture } from "../E.15a/repo"
 
 const base = {
@@ -17,10 +17,6 @@ const turn = await repoFixture(base, {
   "src/tree.ts": "export type Tree = { children: Tree[] }\n",
 })
 
-const here = {
-  directory: "/tmp/opencode/packages/tui",
-  project: { id: "proj_test", directory: "/tmp/opencode", canonical: "/tmp/opencode" },
-}
 const id = "ses_d"
 let seq = 0
 const execution = (type: string) => ({
@@ -49,8 +45,8 @@ export default defineApp({
     },
     { path: `/api/session/${id}/inbox`, json: { data: [] } },
     { path: `/api/session/${id}/diff`, json: { data: turn.files } },
-    { path: "/api/vcs/base", json: { location: here, data: { name: "main", ref: "main", source: "default" } } },
-    { path: "/api/vcs/diff", json: { location: here, data: branch.files } },
+    { path: "/api/vcs/base", json: { location, data: { name: "main", ref: "main", source: "default" } } },
+    { path: "/api/vcs/diff", json: { location, data: branch.files } },
   ],
   steps: [
     { checkpoint: "session", until: "The parser changes are ready." },

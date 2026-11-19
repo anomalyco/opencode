@@ -2,26 +2,9 @@
 // sidebar, its prompt and tool segments in `theme.hue.accent[500]`. The JS host's theme had no `hue`, so the slot
 // crashed ("undefined is not an object (evaluating 'theme.hue.accent')") and drew nothing. TS loads the package from
 // node_modules; the Rust client runs the same files on the JS host through the V2 compatibility layer.
-import { assistant, defineApp, session, user } from "../../lib/app"
+import { assistant, defineApp, location, model, session, user } from "../../lib/app"
 
 const id = "ses_h"
-const location = {
-  directory: "/tmp/opencode/packages/tui",
-  project: { id: "proj_test", directory: "/tmp/opencode", canonical: "/tmp/opencode" },
-}
-const model = {
-  id: "model",
-  modelID: "model",
-  providerID: "provider",
-  name: "Model",
-  capabilities: { tools: true, input: ["text"], output: ["text"] },
-  variants: [],
-  time: { released: 0 },
-  cost: [{ input: 3, output: 15, cache: { read: 0.3, write: 3.75 } }],
-  status: "active",
-  enabled: true,
-  limit: { context: 200000, output: 32000 },
-}
 const reply = {
   ...assistant("msg_2", "Measured.", 2000),
   cost: 0.42,
@@ -38,7 +21,10 @@ export default defineApp({
   env: { OPENCODE_PARITY_PLUGIN: "npm" },
   args: { sessionID: id },
   routes: [
-    { path: `/api/session/${id}`, json: { data: { ...session(id, "Measure the context", { updated: 2 }), cost: 0.42 } } },
+    {
+      path: `/api/session/${id}`,
+      json: { data: { ...session(id, "Measure the context", { updated: 2 }), cost: 0.42 } },
+    },
     { path: "/api/session", json: { data: [session(id, "Measure the context", { updated: 2 })], cursor: {} } },
     { path: `/api/session/${id}/message`, json: { data: [reply, user("msg_1", "Measure it", 1000)], cursor: {} } },
     { path: `/api/session/${id}/inbox`, json: { data: [] } },

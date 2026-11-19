@@ -1,7 +1,7 @@
 // The diff viewer (F15) over a repository fixture: `/diff` docks the viewer beside the session (compact, unified),
 // `]` jumps to a hunk, `n` to the next file, `m` marks it reviewed, `f` goes full screen with the file tree and the
 // split view, `v` switches to unified, `s` shows one file, `b` hides the tree, and `q` closes the viewer.
-import { assistant, defineApp, session, user } from "../../lib/app"
+import { assistant, defineApp, location, session, user } from "../../lib/app"
 import { repoDiff } from "./repo"
 
 const lines = (count: number, line: (index: number) => string) =>
@@ -24,11 +24,6 @@ const files = await repoDiff(
   },
 )
 
-const here = {
-  directory: "/tmp/opencode/packages/tui",
-  project: { id: "proj_test", directory: "/tmp/opencode", canonical: "/tmp/opencode" },
-}
-
 export default defineApp({
   width: 140,
   height: 40,
@@ -44,8 +39,8 @@ export default defineApp({
       },
     },
     { path: "/api/session/ses_d/inbox", json: { data: [] } },
-    { path: "/api/vcs/base", json: { location: here, data: { name: "main", ref: "main", source: "default" } } },
-    { path: "/api/vcs/diff", json: { location: here, data: files } },
+    { path: "/api/vcs/base", json: { location, data: { name: "main", ref: "main", source: "default" } } },
+    { path: "/api/vcs/diff", json: { location, data: files } },
   ],
   steps: [
     { checkpoint: "session", until: "The parser changes are ready." },

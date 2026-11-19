@@ -2,10 +2,9 @@
 // (#63967): the output is an emoji and then 65,535 units, so the 65,536-unit tail would start on the emoji's second
 // half. Every read answers the whole output, so each poll appends it again and the tail stays the same text; Home
 // shows its first line, which starts with `x` and not with the emoji or half of it.
-import { assistant, defineApp, session, user } from "../../lib/app"
+import { assistant, defineApp, location, session, user } from "../../lib/app"
 
 const directory = "/tmp/opencode/packages/tui"
-const location = { directory, project: { id: "proj_test", directory: "/tmp/opencode", canonical: "/tmp/opencode" } }
 const rest = `${"x".repeat(1023)}\n`.repeat(63) + "x".repeat(1023)
 const output = `😀${rest}`
 const size = Buffer.byteLength(output)

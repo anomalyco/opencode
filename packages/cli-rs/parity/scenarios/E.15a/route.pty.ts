@@ -1,13 +1,10 @@
 // The diff viewer in a real terminal (F15, phase P6c): on home, `/diff` opens the full-screen route with the file tree,
 // `]` steps to a hunk, a wheel step scrolls the cards, a right press on a tree row opens the file menu, enter marks the
 // file complete, and `q` goes back home. The source is Uncommitted, so no base is read.
+import { location } from "../../lib/app"
 import { definePty } from "../../pty/run"
 import { home, homeMasks, press, release } from "../OT/home"
 
-const here = {
-  directory: "/tmp/opencode/packages/tui",
-  project: { id: "proj_test", directory: "/tmp/opencode", canonical: "/tmp/opencode" },
-}
 const lines = (count: number, line: (index: number) => string) =>
   Array.from({ length: count }, (_, index) => line(index + 1)).join("\n")
 const file = (name: string, changed: number) => ({
@@ -34,7 +31,7 @@ export default definePty({
     routes: [
       {
         path: "/api/vcs/diff",
-        json: { location: here, data: [file("src/lexer.ts", 4), file("src/parser.ts", 15)] },
+        json: { location, data: [file("src/lexer.ts", 4), file("src/parser.ts", 15)] },
       },
     ],
   },

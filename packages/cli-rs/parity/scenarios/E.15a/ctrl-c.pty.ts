@@ -1,13 +1,10 @@
 // Ctrl+C in the diff viewer (F15, big-boi's review of P6c): TS binds `app.exit` to close the viewer, so the chord in
 // the full-screen route goes back home and the app keeps running; a second one on home, with an empty prompt, exits.
 // Rust's host takes the reserved chord, which no plugin sees, to leave a plugin's route.
+import { location } from "../../lib/app"
 import { definePty } from "../../pty/run"
 import { home, homeMasks } from "../OT/home"
 
-const here = {
-  directory: "/tmp/opencode/packages/tui",
-  project: { id: "proj_test", directory: "/tmp/opencode", canonical: "/tmp/opencode" },
-}
 const config = JSON.stringify({
   experimental: { "new-designs": true },
   debug: { devtools: false },
@@ -25,7 +22,7 @@ export default definePty({
       {
         path: "/api/vcs/diff",
         json: {
-          location: here,
+          location,
           data: [
             {
               file: "src/lexer.ts",

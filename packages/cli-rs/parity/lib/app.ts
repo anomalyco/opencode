@@ -12,6 +12,27 @@ export type Mask = ({ x: number; y: number; width: number; height: number } | { 
   reason: string
 }
 
+// The location the TS TUI runs in, as the fake server's location answers name it.
+export const location = {
+  directory: "/tmp/opencode/packages/tui",
+  project: { id: "proj_test", directory: "/tmp/opencode", canonical: "/tmp/opencode" },
+}
+
+// A connected model with a price and a context limit, for a catalog's `model` answer.
+export const model = {
+  id: "model",
+  modelID: "model",
+  providerID: "provider",
+  name: "Model",
+  capabilities: { tools: true, input: ["text"], output: ["text"] },
+  variants: [],
+  time: { released: 0 },
+  cost: [{ input: 3, output: 15, cache: { read: 0.3, write: 3.75 } }],
+  status: "active",
+  enabled: true,
+  limit: { context: 200000, output: 32000 },
+}
+
 // The home prompt's placeholder at the default 100 columns, to the end of the row.
 export const HOME_PLACEHOLDER = {
   x: 16,

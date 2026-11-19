@@ -1,7 +1,7 @@
 // The diff viewer as a full-screen route (F15): `/diff` on home opens it with the file tree and unified hunks (the
 // patches are too narrow to split at 120 columns). `]` and `[` step through hunks across files, `s` and `m` review
 // the single file and move on, and `q` goes back home.
-import { defineApp } from "../../lib/app"
+import { defineApp, location } from "../../lib/app"
 import { repoDiff } from "./repo"
 
 const lines = (count: number, line: (index: number) => string) =>
@@ -22,11 +22,6 @@ const files = await repoDiff(
   },
 )
 
-const here = {
-  directory: "/tmp/opencode/packages/tui",
-  project: { id: "proj_test", directory: "/tmp/opencode", canonical: "/tmp/opencode" },
-}
-
 export default defineApp({
   width: 120,
   height: 30,
@@ -34,9 +29,9 @@ export default defineApp({
   routes: [
     {
       path: "/api/vcs/base",
-      json: { location: here, data: { name: "origin/main", ref: "origin/main", source: "reflog" } },
+      json: { location, data: { name: "origin/main", ref: "origin/main", source: "reflog" } },
     },
-    { path: "/api/vcs/diff", json: { location: here, data: files } },
+    { path: "/api/vcs/diff", json: { location, data: files } },
   ],
   steps: [
     // Typing before the prompt is mounted loses the keys.

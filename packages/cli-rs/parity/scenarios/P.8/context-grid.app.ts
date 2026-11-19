@@ -2,26 +2,9 @@
 // squares in the sidebar, and its `/contextgrid` page (a route of the plugin's own, with its keyboard mode), which
 // escape leaves for the session. TS loads the package from node_modules; the Rust client runs the same files on the JS
 // host through the V2 compatibility layer, and its native and Luau ports in its place (`app::ports_replay`).
-import { assistant, defineApp, session, user } from "../../lib/app"
+import { assistant, defineApp, location, model, session, user } from "../../lib/app"
 
 const id = "ses_g"
-const location = {
-  directory: "/tmp/opencode/packages/tui",
-  project: { id: "proj_test", directory: "/tmp/opencode", canonical: "/tmp/opencode" },
-}
-const model = {
-  id: "model",
-  modelID: "model",
-  providerID: "provider",
-  name: "Model",
-  capabilities: { tools: true, input: ["text"], output: ["text"] },
-  variants: [],
-  time: { released: 0 },
-  cost: [{ input: 3, output: 15, cache: { read: 0.3, write: 3.75 } }],
-  status: "active",
-  enabled: true,
-  limit: { context: 200000, output: 32000 },
-}
 const reply = {
   ...assistant("msg_2", [
     { type: "text", text: "The file says what the release holds; the notes follow it." },
@@ -29,7 +12,11 @@ const reply = {
       type: "tool",
       id: "call_1",
       name: "read",
-      state: { status: "completed", input: { path: "CHANGELOG.md" }, content: [{ type: "text", text: "x".repeat(40000) }] },
+      state: {
+        status: "completed",
+        input: { path: "CHANGELOG.md" },
+        content: [{ type: "text", text: "x".repeat(40000) }],
+      },
       time: { created: 2, ran: 2, completed: 3 },
     },
   ]),
