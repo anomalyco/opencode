@@ -64,11 +64,153 @@ story("sanitizes raw HTML while preserving supported Markdown markup", async ({ 
   expect(result).toEqual([
     "<p><strong>Safe</strong> <em>formatting</em> <code>const x = 1</code></p>",
     '<img data-local-image="safe.png"><a>unsafe</a>',
-    '<a href="https://example.com" target="_blank" rel="nofollow noopener noreferrer">external</a><a data-local-link="/local" role="link" tabindex="0">local</a>',
-    '<form name="user-content-document" id="user-content-location"><input name="user-content-cookie"></form>',
-    "<math><mrow><mi>x</mi><mo>+</mo><mn>1</mn></mrow></math>",
-    '<svg viewBox="0 0 10 10"><path d="M0 0L10 10"></path></svg>',
+    '<a href="https://example.com" target="_blank" rel="nofollow noopener noreferrer" class="external-link">external</a><a data-local-link="/local" role="link" tabindex="0">local</a>',
+    '',
+    '<math data-markdown-contain=""><mrow data-markdown-contain=""><mi data-markdown-contain="">x</mi><mo data-markdown-contain="">+</mo><mn data-markdown-contain="">1</mn></mrow></math>',
+    '<svg viewBox="0 0 10 10" data-markdown-contain=""><path d="M0 0L10 10" data-markdown-contain=""></path></svg>',
   ])
+})
+
+story("authored HTML cannot supply application behavior attributes", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { sanitizeMarkdown } = await import(fixture)
+    const names = ["data-owns-keyboard", "data-owns-escape", "data-prevent-autofocus", "data-floating-overlay", "data-app-link", "data-local-link", "data-local-image", "data-slot", "data-component", "data-future-marker", "aria-owns", "aria-controls", "aria-modal", "aria-hidden", "role", "class", "tabindex", "contenteditable", "draggable", "inert", "hidden", "popover", "autofocus", "slot", "part", "exportparts", "for", "form", "formaction", "command", "commandfor", "accesskey"]
+    const box = document.createElement("div")
+    box.innerHTML = sanitizeMarkdown(`<a href="#sample" id="sample" name="legacy" ${names.map(n => `${n}="fixture"`).join(" ")}>sample</a><label for="sample">label</label>`)
+    const a = box.querySelector("a")!
+
+    return { retained: names.filter(n => a.hasAttribute(n)), id: a.id, name: a.name, labelFor: box.querySelector("label")?.htmlFor, custom: sanitizeMarkdown('<a is="fixture-link">custom label</a>') }
+  }, fixture)
+
+  expect(result).toEqual({ retained: [], id: "user-content-sample", name: "user-content-legacy", labelFor: undefined, custom: "custom label" })
+})
+
+story("limits authored presentation to text", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { sanitizeMarkdown } = await import(fixture)
+    const fragment = document.createElement("template")
+    fragment.innerHTML = sanitizeMarkdown([
+      '<p style="position:relative;transform:scale(2);pointer-events:none;color:teal;text-align:center">sample</p>',
+      '<span popover="manual">sample</span><button commandfor="unused" command="close" popovertarget="unused">sample</button><dialog>sample</dialog>',
+    ].join(""))
+
+    return {
+      style: fragment.content.querySelector("p")?.style.cssText,
+      active: fragment.content.querySelectorAll("[popover], [commandfor], [command], [popovertarget], dialog").length,
+    }
+  }, fixture)
+
+  expect(result).toEqual({ style: "color: teal; text-align: center;", active: 0 })
+})
+
+story("restores layout from the math renderer, never from markup claiming to be KaTeX", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({ text: 'Real: $\\frac{x}{y}$.\n\n<span id="0123456789abcdef0123456789abcdef" class="katex" data-markdown-renderer="math" style="position:relative;top:2px">Authored</span>' })
+  }, fixture)
+  const md = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(md.locator('.katex-html [style*="top:"]')).not.toHaveCount(0)
+  await expect(md.locator('.katex-html').getByText("x", { exact: true })).toBeVisible()
+  const authored = md.getByText("Authored", { exact: true })
+  await expect(authored).not.toHaveAttribute("style")
+  await expect(authored).not.toHaveAttribute("data-markdown-renderer")
+  await expect(authored).toHaveAttribute("data-markdown-contain", "")
+})
+
+story("renders task-list boxes but never authored form controls or embedded documents", async ({ page }) => {
+  await page.evaluate(async url => {
+    const { mountMarkdown } = await import(url)
+    await mountMarkdown({ text: '- [x] Complete\n- [ ] Pending\n\n<form><button>Sample label</button><input type="checkbox" checked disabled></form>\n\n<figure><figcaption>Caption</figcaption></figure>' })
+  }, fixture)
+  const md = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(md.getByText("Sample label")).toBeVisible()
+  await expect(md.locator("form,button")).toHaveCount(0)
+  await expect(md.locator("input")).toHaveCount(2)
+  await expect(md.locator('li input[disabled][checked]')).toHaveCount(1)
+  await expect(md.locator('li input[disabled]:not([checked])')).toHaveCount(1)
+  await expect(md.locator("figcaption")).toHaveText("Caption")
+  // A submitted form would navigate the window to its own address and reload the app.
+  await page.evaluate(() => Object.assign(window, { notReloaded: true }))
+  await md.getByText("Sample label").click()
+  await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 100)))
+  expect(await page.evaluate(() => "notReloaded" in window)).toBe(true)
+})
+
+story("keeps the document markup models write", async ({ page }) => {
+  await page.evaluate(async (url) => {
+    const { mountMarkdown } = await import(url)
+    await mountMarkdown({
+      text: [
+        "<details open><summary>Summary</summary>Press <kbd>Enter</kbd>: H<sub>2</sub>O, x<sup>2</sup>, <mark>marked</mark>, <abbr title=\"HyperText\">HTML</abbr><br>next</details>",
+        "<center>Centred</center>\n\n<hr>\n\n<figure><img width=\"64\" alt=\"Figure\" src=\"https://example.invalid/figure.png\"><figcaption>Caption</figcaption></figure>",
+        "<div align=\"center\"><span style=\"color:teal\">Teal</span></div>",
+        "<table><caption>Rows</caption><thead><tr><th>A</th></tr></thead><tbody><tr><td>1</td></tr></tbody><tfoot><tr><td>Sum</td></tr></tfoot></table>",
+      ].join("\n\n"),
+    })
+  }, fixture)
+  const md = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(md.locator("details[open] > summary")).toHaveText("Summary")
+
+  for (const tag of ["kbd", "sub", "sup", "mark", "abbr[title]", "br", "hr", "center", "figure", "figcaption", "img[width]", "caption", "thead", "tbody", "tfoot", "div[align]"])
+    await expect(md.locator(tag), tag).toHaveCount(1)
+  await expect(md.getByText("Teal", { exact: true })).toHaveCSS("color", "rgb(0, 128, 128)")
+})
+
+story("keeps safe presentation and labels on inline SVG, images and links", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { sanitizeMarkdown } = await import(fixture)
+    const box = document.createElement("div")
+    box.innerHTML = sanitizeMarkdown([
+      '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" onload="alert(1)">',
+      '<path d="M5 12h14" fill="url(#paint)" stroke="#ff0000" opacity="0.5" stroke-dasharray="2 2"></path>',
+      '<use href="#paint"></use><image href="https://example.invalid/a.png"></image><foreignObject><p>embedded</p></foreignObject>',
+      '<a href="https://example.invalid/"><path d="M0 0"></path></a></svg>',
+      '<svg width="99999" height="10%"></svg>',
+      '<a href="https://example.invalid/" aria-label="Home" aria-describedby="x">home</a><img alt="" aria-label="Chart" src="https://example.invalid/b.png"><div aria-label="Region">text</div>',
+    ].join(""))
+    const [icon, large] = box.querySelectorAll("svg")
+    const attributes = (node: Element | null) => Object.fromEntries(Array.from(node?.attributes ?? [], (a) => [a.name, a.value]))
+
+    return {
+      icon: attributes(icon),
+      path: attributes(icon.querySelector("path")),
+      children: Array.from(icon.children, (child) => child.localName),
+      large: attributes(large),
+      link: attributes(box.querySelector("a")),
+      image: box.querySelector("img")?.getAttribute("aria-label"),
+      region: box.querySelector("div")?.hasAttribute("aria-label"),
+    }
+  }, fixture)
+
+  expect(result).toEqual({
+    icon: { width: "24", height: "24", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true", "data-markdown-contain": "" },
+    path: { d: "M5 12h14", stroke: "#ff0000", opacity: "0.5", "stroke-dasharray": "2 2", "data-markdown-contain": "" },
+    children: ["path"],
+    large: { width: "2048", height: "10%", "data-markdown-contain": "" },
+    link: { href: "https://example.invalid/", "aria-label": "Home" },
+    image: "Chart",
+    region: false,
+  })
+})
+
+story("bounds author-sized math to its own line box", async ({ page }) => {
+  await page.evaluate(async (url) => {
+    const { mountMarkdown } = await import(url)
+    await mountMarkdown({ text: "Before $\\raisebox{-40em}{\\colorbox{red}{\\rule{60em}{30em}}}$ after.\n\nNext paragraph." })
+  }, fixture)
+  const md = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(md.locator(".katex")).toHaveCount(1)
+
+  const box = await md.evaluate((root) => ({
+    widest: Math.max(...Array.from(root.querySelectorAll(".katex-html *"), (node) => node.getBoundingClientRect().width)),
+    em: parseFloat(getComputedStyle(root.querySelector(".katex")!).fontSize),
+    overflow: getComputedStyle(root.querySelector(".katex .katex-base")!).overflow,
+  }))
+  // KaTeX caps every authored size at maxSize (10em, plus the colour box's padding), and each line box clips the ink
+  // that offsets and negative margins push out.
+
+  expect(box.widest).toBeLessThan(box.em * 11)
+  expect(box.overflow).toBe("clip")
 })
 
 story("keeps Markdown sanitization and link protections after Mermaid renders", async ({ page }) => {
@@ -110,7 +252,7 @@ story("keeps Markdown sanitization and link protections after Mermaid renders", 
   }, fixture)
 
   expect(result.before).toBe(
-    '<a href="https://example.com" target="_blank" rel="nofollow noopener noreferrer">external</a><img data-local-image="safe.png">',
+    '<a href="https://example.com" target="_blank" rel="nofollow noopener noreferrer" class="external-link">external</a><img data-local-image="safe.png">',
   )
   expect(result.renders).toEqual([
     { root: "svg", text: expect.stringContaining("Start"), unsafe: 0, links: [], markdown: result.before },
@@ -1038,6 +1180,24 @@ story("preserves streamed math through completion and a fresh render", async ({ 
   await expect(markdown.locator(".katex")).toHaveCount(3)
   await expect(markdown.locator(".katex-display")).toHaveCount(1)
   await expect(markdown.locator(".katex-error")).toHaveCount(0)
+})
+
+story("keeps an unchanged streamed formula, and a selection in it, while text after it streams", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({ text: "Formula $x^2$ and", streaming: true })
+  }, fixture)
+  const harness = page.getByTestId("markdown-fixture")
+  const markdown = harness.locator('[data-component="markdown"]')
+  const math = await markdown.locator("math").elementHandle()
+  await markdown.locator("math").evaluate((node) => getSelection()?.selectAllChildren(node))
+  // Typing would move the selection into the field; the stream changes the text without focus.
+  await harness.getByLabel("Markdown text").evaluate((field: HTMLTextAreaElement) => {
+    field.value = "Formula $x^2$ and more words"
+    field.dispatchEvent(new Event("input", { bubbles: true }))
+  })
+  await expect(markdown).toContainText("more words")
+  expect(await markdown.locator("math").evaluate((node, kept) => [node === kept, getSelection()?.anchorNode === kept], math)).toEqual([true, true])
 })
 
 for (const theme of ["light", "dark"]) {

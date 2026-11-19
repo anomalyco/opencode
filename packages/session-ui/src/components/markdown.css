@@ -54,6 +54,15 @@
   /* Reset & Base Typography */
   min-width: 0;
   max-width: 100%;
+  /* Bare prose keeps its collapsed margins and rasterization. Markup that could pick up layout from the app's
+     styles is paint-contained, including fixed descendants, without creating a scrollport for sticky headers. */
+  &:has([data-markdown-contain]) { contain: paint; }
+  /* Each base is an existing atomic line box. Clip its positioned ink without making the whole formula atomic
+     (which would change wrapping), changing its baseline, or introducing a scroll container. */
+  .katex .katex-base, .katex .katex-tag {
+    overflow: clip;
+    overflow-clip-margin: 0.125em;
+  }
   overflow-wrap: break-word;
   color: var(--v2-text-text-base);
   font-family: var(--font-family-sans);
@@ -527,6 +536,7 @@
 
   table {
     width: 100%;
+    max-width: 100%;
     border-collapse: separate;
     border-spacing: 0;
     color: var(--v2-text-text-base);
