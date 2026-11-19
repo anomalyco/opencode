@@ -172,7 +172,8 @@ const suspend = async (entry: Entry) => {
   }
   const outcome = suspended.success
   const ran = await Effect.runPromise(Fiber.join(fiber))
-  if (outcome.ok !== "suspended") return { ...named(entry), suspend: { ok: false, outcome }, made: made.state.made, log: made.log }
+  if (outcome.ok !== "suspended")
+    return { ...named(entry), suspend: { ok: false, outcome }, made: made.state.made, log: made.log }
   made.state.resumed = true
   const resumed = await Effect.runPromise(made.runtime.resume(ref.Language.toBytes(outcome.state)).run())
   return {
@@ -191,11 +192,18 @@ const executes: Array<Entry> = [
   { code: `const a = double(2); const b = inc(a); return [a, b, typeof double, double.name, double.length]` },
   { code: `const p = load(1); return [p instanceof Promise, await p]` },
   { code: `const p = promised(3); return [p instanceof Promise, await p]` },
-  { code: `return [find().items.length, (await find()).items.length, await find().then((r) => r.items[1]), Object.keys(find())]` },
-  { code: `const log = []; load(1).then(() => log.push("load")); promised(2).then(() => log.push("promised")); Promise.resolve().then(() => log.push("job")); log.push(inc(1)); await null; await null; await null; return log` },
+  {
+    code: `return [find().items.length, (await find()).items.length, await find().then((r) => r.items[1]), Object.keys(find())]`,
+  },
+  {
+    code: `const log = []; load(1).then(() => log.push("load")); promised(2).then(() => log.push("promised")); Promise.resolve().then(() => log.push("job")); log.push(inc(1)); await null; await null; await null; return log`,
+  },
   // Call keys: every call of a host function takes the next id, in program order.
   { code: `note(); note(1); await load(1); note("a", [2]); await post(3); return 1`, runId: "r" },
-  { code: `const p = post(1); note(2); const q = Promise.all([post(3), load(4)]); note(5); await p; await q; return 1`, runId: "k" },
+  {
+    code: `const p = post(1); note(2); const q = Promise.all([post(3), load(4)]); note(5); await p; await q; return 1`,
+    runId: "k",
+  },
   // Arguments and results cross as structured copies.
   {
     code: `note({ at: new Date(5), m: new Map([["k", 1]]), s: new Set(["a"]), u: new URL("https://a.test/"), e: new RangeError("r") }); const r = open(); return [typeof r.read, r.read(), r.read.name]`,
@@ -211,12 +219,16 @@ const executes: Array<Entry> = [
   { code: `new double(1)` },
   { code: `try { new load(1) } catch (e) { return [e.name, e.message] }` },
   // Namespaces, Host.missing and Host.fail.
-  { code: `return [await api.issues.list(), Object.keys(api), Object.keys(api.issues), typeof api.x, typeof api.issues.list]` },
+  {
+    code: `return [await api.issues.list(), Object.keys(api), Object.keys(api.issues), typeof api.x, typeof api.issues.list]`,
+  },
   { code: `return api.issues.nope()` },
   { code: `try { api.nope() } catch (e) { return [e.name, e.message, e instanceof Error] }` },
   { code: `refuse()` },
   { code: `try { refuse() } catch (e) { return [e.name, e.message] }` },
-  { code: `const out = []; for (const k in api) out.push(k); return [out, api.issues === api.issues, String(api.issues)]` },
+  {
+    code: `const out = []; for (const k in api) out.push(k); return [out, api.issues === api.issues, String(api.issues)]`,
+  },
   // run.metadata is the result's.
   { code: `count(); count(); return count()` },
   { code: `return 1` },
@@ -289,7 +301,11 @@ const suspensions: Array<Entry> = [
   // promises: "await" keeps waiting across a suspend.
   { code: `return [note({ n: wait() }), await wait()]`, runId: "t", translate: wait },
   // Limits are saved with the run.
-  { code: `await wait(); console.log("x".repeat(20)); return "y".repeat(20)`, runId: "l", limits: { maxOutputBytes: 10 } },
+  {
+    code: `await wait(); console.log("x".repeat(20)); return "y".repeat(20)`,
+    runId: "l",
+    limits: { maxOutputBytes: 10 },
+  },
 ]
 
 const recordAll = async () => {

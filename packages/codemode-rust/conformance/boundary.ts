@@ -51,7 +51,9 @@ const Runtime = ref.Language.Runtime
 const tools = toolsGlobal(ref)
 
 const outcome = (result: { ok: boolean; value?: unknown; error?: { kind: string; message: string } }) =>
-  result.ok ? { ok: true, value: result.value } : { ok: false, kind: result.error!.kind, message: result.error!.message }
+  result.ok
+    ? { ok: true, value: result.value }
+    : { ok: false, kind: result.error!.kind, message: result.error!.message }
 
 const samples: Record<string, unknown> = {
   date: new Date(0),
@@ -59,7 +61,11 @@ const samples: Record<string, unknown> = {
   regexp: /a+\/b/gi,
   url: new URL("https://user@a.test:8080/p a?q=1&r=%20#h"),
   params: new URLSearchParams("a=1&b=2&a=3"),
-  headers: new Headers([["X-B", "2"], ["x-a", "1"], ["X-A", " 3 "]]),
+  headers: new Headers([
+    ["X-B", "2"],
+    ["x-a", "1"],
+    ["X-A", " 3 "],
+  ]),
   bytes: new Uint8Array([1, 2, 3]),
   buffer: Buffer.from("hi"),
   arrayBuffer: new Uint8Array([4, 5]).buffer,
@@ -111,7 +117,6 @@ boundaryPrograms.push(
   `const log = []; async function f() { log.push("f"); const v = keep((async () => { await null; log.push("v"); return 1 })()); log.push("kept"); return v } const p = f(); log.push("after"); await p; return log`,
   `function* g() { yield keep((async () => { await null; return 1 })()) } return [...g()]`,
 )
-
 
 const probe = (kept: Array<unknown>) => ({
   tools,
@@ -184,7 +189,10 @@ const library: Record<string, { globals: Record<string, unknown>; modules?: Reco
     },
   },
   plain: { globals: { plain: Host.fn(() => 1) } },
-  bun: { globals: { Bun: { file: Host.fn(([path]: ReadonlyArray<string>) => ({ name: path })) } }, modules: { bun: "Bun" } },
+  bun: {
+    globals: { Bun: { file: Host.fn(([path]: ReadonlyArray<string>) => ({ name: path })) } },
+    modules: { bun: "Bun" },
+  },
   one: { globals: { A: { id: Host.fn(() => "a") } }, modules: { shared: "A" } },
   two: { globals: { B: { id: Host.fn(() => "b") } }, modules: { shared: "B" } },
   fs: {
@@ -212,7 +220,11 @@ const configurationCases: Array<ConfigurationCase> = [
   { globals: ["sum"], code: `return new Sum(1, 2).total + 1` },
   { globals: ["sum"], code: `return new Sum(...[1, 2]).total + 1` },
   { globals: ["sum"], code: `return new Sum((async () => { await null; return 1 })(), 2).total + 1` },
-  { globals: ["sum"], translate: { promises: "await" }, code: `return new Sum((async () => { await null; return 1 })(), 2).total + 1` },
+  {
+    globals: ["sum"],
+    translate: { promises: "await" },
+    code: `return new Sum((async () => { await null; return 1 })(), 2).total + 1`,
+  },
   { globals: ["plain"], code: `new plain()` },
   { globals: ["plain", "later"], code: `try { new later(1) } catch (e) { return e.message }` },
   // Module names load their globals; a name whose global the runtime lacks loads nothing; a later set's name wins.

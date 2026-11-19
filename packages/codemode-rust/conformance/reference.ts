@@ -32,13 +32,26 @@ export const toolsGlobal = (ref: Reference) => {
   const Host = ref.Language.Host
   const echo = Host.fn(
     ([input]: ReadonlyArray<unknown>) =>
-      Effect.succeed(typeof input === "object" && input !== null && Object.hasOwn(input, "id") ? (input as { id: unknown }).id : null),
+      Effect.succeed(
+        typeof input === "object" && input !== null && Object.hasOwn(input, "id")
+          ? (input as { id: unknown }).id
+          : null,
+      ),
     { type: "async" },
   )
   const fail = Host.fn((_: ReadonlyArray<unknown>) => Effect.fail(Host.fail("HostFailure", "boom")), { type: "async" })
-  const status = Host.fn((_: ReadonlyArray<unknown>) => Effect.succeed({ branch: "main", dirty: true }), { type: "async" })
-  const functions = new Map<string, unknown>([["echo", echo], ["fail", fail], ["git.status", status]])
-  const namespaces = new Map([["", ["echo", "fail", "git"]], ["git", ["status"]]])
+  const status = Host.fn((_: ReadonlyArray<unknown>) => Effect.succeed({ branch: "main", dirty: true }), {
+    type: "async",
+  })
+  const functions = new Map<string, unknown>([
+    ["echo", echo],
+    ["fail", fail],
+    ["git.status", status],
+  ])
+  const namespaces = new Map([
+    ["", ["echo", "fail", "git"]],
+    ["git", ["status"]],
+  ])
   return Host.namespace({
     keys: (path: ReadonlyArray<string>) => {
       const name = path.join(".")
@@ -82,7 +95,8 @@ export const describe = (v: unknown): unknown => {
   if (v instanceof ArrayBuffer) return { arrayBuffer: [...new Uint8Array(v)] }
   if (v instanceof Map) return { map: [...v].map(([k, x]) => [describe(k), describe(x)]) }
   if (v instanceof Set) return { set: [...v].map(describe) }
-  if (Array.isArray(v)) return { array: Array.from({ length: v.length }, (_, i) => (i in v ? describe(v[i]) : { hole: true })) }
+  if (Array.isArray(v))
+    return { array: Array.from({ length: v.length }, (_, i) => (i in v ? describe(v[i]) : { hole: true })) }
   if (v instanceof Error) {
     const fields = v as unknown as Record<string, unknown>
     return {
