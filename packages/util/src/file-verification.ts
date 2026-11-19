@@ -12,16 +12,6 @@ export class FileVerificationError extends Error {
     if (error instanceof FileVerificationError) throw error
     return undefined
   }
-
-  static readonly header = "x-opencode-file-error"
-
-  static async check(response: Response) {
-    if (response.status === 503 && response.headers.get(this.header) === this.code) {
-      await response.body?.cancel()
-      throw new FileVerificationError()
-    }
-    return response
-  }
 }
 
 let reported = false

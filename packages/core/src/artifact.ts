@@ -17,8 +17,6 @@ import {
 } from "@opencode/schema/artifact"
 import type { SessionID } from "@opencode/schema/session-id"
 import { Global } from "@opencode/util/global"
-import { openContained } from "@opencode/util/contained-file"
-import { FileVerificationError } from "@opencode/util/file-verification"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
 import { Bus } from "./bus.js"
@@ -176,7 +174,7 @@ export interface Interface extends State.Transformable<Editor> {
   readonly readLocalFile: (
     id: ID,
     subpath?: string,
-  ) => Effect.Effect<LocalFile, DisabledError | NotFoundError | FileMissingError | FileVerificationError | InvalidError>
+  ) => Effect.Effect<LocalFile, DisabledError | NotFoundError | FileMissingError | InvalidError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Artifact") {}
@@ -436,19 +434,15 @@ const layer = Layer.effect(
           })
         }
         const requested = subpath?.trim() ? yield* normalizePath(subpath) : existing.info.entry
-        const bytes = yield* Effect.tryPromise({
-          try: async () => {
-            const root = path.join(await fs.realpath(rootDir), id)
-            const opened = await openContained(root, requested)
-            if (!opened) throw new Error("Unavailable artifact file")
-            try {
-              return new Uint8Array(await opened.file.readFile())
-            } finally {
-              await opened.file.close()
-            }
-          },
-          catch: (error) => error instanceof FileVerificationError ? error : new FileMissingError({ artifactID: id, path: requested }),
-        })
+        const target = path.join(itemDir(id), ...requested.split("/"))
+        const exists = yield* Effect.promise(() =>
+          fs
+            .stat(target)
+            .then((stat) => stat.isFile())
+            .catch(() => false),
+        )
+        if (!exists) return yield* new FileMissingError({ artifactID: id, path: requested })
+        const bytes = yield* Effect.promise(() => fs.readFile(target).then((buf) => new Uint8Array(buf)))
         return { bytes, mime: detectFileMime(requested, bytes) }
       }),
     })

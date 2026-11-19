@@ -1,7 +1,6 @@
 import type { ServerEndpoint } from "@opencode/plugin/gui/main"
 import { artifactAddress, artifactResource, artifactViewPath } from "./artifact-link"
 import type { createPreviews } from "./profile/previews"
-import { FileVerificationError } from "@opencode/util/file-verification"
 
 /** One tab's grants, allocated only by a deliberate load/restore, never by an incoming protocol request. */
 export function artifactPages(
@@ -21,7 +20,7 @@ export function artifactPages(
       redirect: "error",
       method,
       signal: AbortSignal.any([signal, lifetime]),
-    }).then((response) => FileVerificationError.check(response))
+    })
   }
 
   return {
@@ -51,7 +50,7 @@ export function artifactPages(
 
       return read(artifactViewPath(item), "HEAD", AbortSignal.timeout(15_000)).then(
         (r) => r.status === 200,
-        (error) => FileVerificationError.orMissing(error) ?? false,
+        () => false,
       )
     },
     dispose() {

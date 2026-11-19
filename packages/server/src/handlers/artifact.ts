@@ -1,5 +1,4 @@
 import { Artifact } from "@opencode/core/artifact"
-import { FileVerificationError } from "@opencode/util/file-verification"
 import { KV } from "@opencode/core/kv"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
@@ -225,13 +224,7 @@ export const makeArtifact = Effect.gen(function* () {
             },
           })
         }),
-      ).pipe(
-        Effect.catchTag(FileVerificationError.code, () => Effect.succeed(HttpServerResponse.empty({
-          status: 503,
-          headers: { [FileVerificationError.header]: FileVerificationError.code, "cache-control": "no-store" },
-        }))),
-        mapCommon,
-      ),
+      ).pipe(mapCommon),
   }
 })
 
