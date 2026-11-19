@@ -148,6 +148,12 @@ export const Op = {
 
   // Literals, added later: `get x() {}` / `set x(v) {}` (a bit 0: computed key; bit 1: setter)
   DEFINE_ACCESSOR: 88,
+
+  // Classes: `CLASS` turns the constructor on top into a class, `[ctor] -> [ctor, proto]`; `DEFINE_METHOD` defines the
+  // method on top as a hidden property of the prototype, or of the constructor when a bit 0 is set: `[ctor, proto, fn]
+  // -> [ctor, proto]`, keyed by constant `bx`.
+  CLASS: 89,
+  DEFINE_METHOD: 90,
 } as const
 
 export type OpCode = (typeof Op)[keyof typeof Op]
@@ -253,7 +259,15 @@ export const CodeFlags = {
   USES_ARGUMENTS: 1 << 5,
   INTERNAL: 1 << 6,
   PROGRAM: 1 << 7,
+  /** A class constructor: `new` only, calling it throws. */
+  CLASS_CONSTRUCTOR: 1 << 8,
   NEEDS_ARGS: 1 << 9,
+  /** The constructor of a class with `extends`. */
+  DERIVED: 1 << 10,
+  /** A class method, with a home object. */
+  METHOD: 1 << 11,
+  /** A class's hidden field-initializer function. */
+  FIELD_INIT: 1 << 12,
 } as const
 
 /** Constant pool descriptors. */

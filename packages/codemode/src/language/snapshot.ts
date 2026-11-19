@@ -1,7 +1,7 @@
 import packageJson from "../../package.json" with { type: "json" }
 import type { Interruption } from "./runtime/signals.js"
 import { staticNames, unchanged } from "./runtime/intrinsic-names.js"
-import { Arr, Fn, Obj } from "./runtime/objects.js"
+import { Arr, ClassInfo, Fn, Obj } from "./runtime/objects.js"
 import { nodeId, type Source } from "./runtime/source.js"
 import { type ClassSpec, codecShape, decode, encode, type Json, SnapshotError } from "./snapshot/codec.js"
 import { FORMAT, type Header, hash, hostsId, type Snapshot, validate } from "./snapshot/snapshot.js"
@@ -90,12 +90,13 @@ const vmSpecs = (): ReadonlyArray<ClassSpec> =>
     {
       name: "Fn",
       ctor: Fn,
-      fields: ["code", "cells"],
+      fields: ["code", "cells", "home", "klass"],
       skip: ["length"],
       obj: true,
       constants: { tag: "Function" },
       reset: restoreFn,
     },
+    { name: "ClassInfo", ctor: ClassInfo, fields: ["derived", "fields", "errorBase"] },
     { name: "VmInternalFn", ctor: VmInternalFn, fields: ["code", "boundArgs"] },
     { name: "FinallyTarget", ctor: FinallyTarget, fields: ["vm", "made", "site", "outcome"] },
     { name: "AsyncFromSyncCloseTarget", ctor: AsyncFromSyncCloseTarget, fields: ["made", "reason"] },
@@ -324,7 +325,11 @@ function restoreFrame(frame: Frame): void {
     invalid(`a frame's mode ${String(frame.mode)} is unknown.`)
   if (frame.mode === Mode.PROGRAM && (code.flags & CodeFlags.PROGRAM) === 0)
     invalid("a frame's mode does not fit its code.")
-  const settles = frame.mode !== Mode.CALLER && frame.mode !== Mode.PROGRAM && frame.mode !== Mode.BOUNDARY_OUT
+  const settles =
+    frame.mode !== Mode.CALLER &&
+    frame.mode !== Mode.CONSTRUCT &&
+    frame.mode !== Mode.PROGRAM &&
+    frame.mode !== Mode.BOUNDARY_OUT
   if (!settles && frame.target !== undefined) invalid("a frame that settles nothing has a target.")
   if (frame.mode === Mode.REDO) {
     const target = frame.target
@@ -347,7 +352,7 @@ function restoreStack(vm: Vm): void {
     invalid("the job stack is not frames.")
   vm.frames.forEach((frame, at) => {
     const bottomOnly = frame.mode === Mode.PROGRAM || frame.mode === Mode.BOUNDARY_OUT
-    const above = frame.mode === Mode.CALLER || frame.mode === Mode.REDO
+    const above = frame.mode === Mode.CALLER || frame.mode === Mode.REDO || frame.mode === Mode.CONSTRUCT
     if ((at === 0 && above) || (at > 0 && bottomOnly)) invalid("a frame is out of place on the job stack.")
     // A getter frame's op runs again in the frame under it.
     if (

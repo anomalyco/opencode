@@ -133,7 +133,7 @@ import {
   type TemplateSite,
   UnaryOp,
 } from "./opcodes.js"
-import { hidden } from "./runtime/objects.js"
+import { ClassInfo, hidden } from "./runtime/objects.js"
 
 const contiguous = <T>(): Array<T> => {
   const a: Array<unknown> = [""]
@@ -162,6 +162,8 @@ export const Mode = {
    * `[pc, ...values the op had read]`, and the op replays those and the getter's value in order (see `redoRead`).
    */
   REDO: 7,
+  /** A class constructor run by `new`: hands the caller its result if that is an object, else its `this`. */
+  CONSTRUCT: 8,
 } as const
 
 export type FrameMode = (typeof Mode)[keyof typeof Mode]
@@ -1215,7 +1217,8 @@ export class Vm {
             const callee = regs[base - 1]
             if (callee instanceof FnCtor) {
               const c = callee.code
-              if ((c.flags & 518) === 0) {
+              // Not async, generator, needing arguments, or a class constructor.
+              if ((c.flags & 774) === 0) {
                 const counted = (c.flags & 64) === 0
                 if (counted && this.depth > 10_000) {
                   this.failCallDepth(frame, fcode, pc, sp)
@@ -1379,6 +1382,14 @@ export class Vm {
             continue
           case 88: // Op.DEFINE_ACCESSOR
             sp = this.execDefineAccessor(regs, consts, (w >>> 8) & 0xff, w >>> 16, sp)
+            pc++
+            continue
+          case 89: // Op.CLASS
+            sp = this.execClass(regs, sp)
+            pc++
+            continue
+          case 90: // Op.DEFINE_METHOD
+            sp = this.execDefineMethod(regs, consts, (w >>> 8) & 0xff, w >>> 16, sp)
             pc++
             continue
           default:
@@ -1614,6 +1625,34 @@ export class Vm {
     return sp
   }
 
+  // A base class: the constructor on top gets its prototype, `[ctor] -> [ctor, proto]`.
+  private execClass(regs: Array<unknown>, sp: number): number {
+    const ctor = regs[sp - 1] as Fn
+    const proto = new Obj(this.ctx.builtins.Object)
+    ctor.klass = new ClassInfo(false)
+    define(ctor, "prototype", proto, frozen)
+    define(proto, "constructor", ctor, hidden)
+    regs[sp] = proto
+    return sp + 1
+  }
+
+  // `[ctor, proto, fn] -> [ctor, proto]`: a hidden method on the prototype, or on the constructor when static.
+  private execDefineMethod(
+    regs: Array<unknown>,
+    consts: ReadonlyArray<ConstValue>,
+    a: number,
+    bx: number,
+    sp: number,
+  ): number {
+    const fn = regs[--sp] as Fn
+    const home = regs[(a & 1) !== 0 ? sp - 2 : sp - 1] as Obj
+    const key = consts[bx] as string
+    fn.home = home
+    define(fn, "name", key, readonly)
+    define(home, key, fn, hidden)
+    return sp
+  }
+
   // `{ ...src }` into `o` (at `sp - 1`, `src` popped): true when a source with program getters is copied in the prelude.
   private execCopyDataProps(frame: Frame, o: Obj, src: Value, pc: number, sp: number): boolean {
     if (src === null || src === undefined) return false
@@ -1780,6 +1819,15 @@ export class Vm {
       frame.sp = sp
       return this.finishProgram(frame, v)
     }
+    if (frame.mode === Mode.CONSTRUCT) {
+      frames.pop()
+      const made = v instanceof Obj ? v : frame.thisValue
+      this.release(frame)
+      const caller = frames[frames.length - 1]!
+      caller.regs[caller.sp++] = made
+      caller.pc++
+      return true
+    }
     if (frame.mode === Mode.REDO) {
       frames.pop()
       const saved = (frame.target as Arr).items
@@ -1809,7 +1857,7 @@ export class Vm {
     const regs = frame.regs
     if (n === 255) {
       const callee = regs[sp - 1] as Value
-      if (!(callee instanceof Builtin) || callee.construct === undefined) {
+      if (!(callee instanceof Fn && callee.klass !== undefined) && (!(callee instanceof Builtin) || callee.construct === undefined)) {
         frame.pc = pc
         frame.sp = sp
         throw notConstructible(callee, fcode.siteAt(pc) as NewExpression)
@@ -1819,19 +1867,31 @@ export class Vm {
     }
     frame.pc = pc
     const base = sp - n
-    const callee = regs[base - 1] as Builtin
+    const callee = regs[base - 1] as Builtin | Fn
     const args = regs.slice(base, sp) as Array<Value>
     frame.sp = base - 1
+    if (callee instanceof Fn) return this.constructClass(frame, callee, args, callSiteOf(frame, pc))
     return this.execConstruct(frame, callee, args, callSiteOf(frame, pc))
   }
 
   private execNewSpread(frame: Frame, pc: number, sp: number): number {
     const regs = frame.regs
     const argsArr = regs[--sp] as Arr
-    const callee = regs[--sp] as Builtin
+    const callee = regs[--sp] as Builtin | Fn
     frame.pc = pc
     frame.sp = sp
+    if (callee instanceof Fn) return this.constructClass(frame, callee, [...argsArr.items], callSiteOf(frame, pc))
     return this.execConstruct(frame, callee, [...argsArr.items], callSiteOf(frame, pc))
+  }
+
+  // `new C(...)` on a base class: runs its constructor on a new instance of `C.prototype` (`Mode.CONSTRUCT`).
+  private constructClass(callerFrame: Frame, ctor: Fn, args: Array<Value>, site: AstNode | undefined): number {
+    if (this.depth > MAX_CALL_DEPTH) throw rangeError("Maximum call stack size exceeded", site ?? this.currentSite())
+    const proto = get(ctor, "prototype")
+    const instance = new Obj(proto instanceof Obj ? proto : this.ctx.builtins.Object)
+    this.pushFn(ctor, instance, args, site ?? callerFrame.origin, Mode.CONSTRUCT)
+    this.fuel--
+    return 1
   }
 
   private execIterStepSlow(frame: Frame, custom: CustomIter, bx: number, pc: number, sp: number): boolean {
@@ -2032,7 +2092,7 @@ export class Vm {
 
       this.frames.pop()
       const mode = frame.mode
-      if (mode === Mode.CALLER || mode === Mode.REDO) {
+      if (mode === Mode.CALLER || mode === Mode.REDO || mode === Mode.CONSTRUCT) {
         this.release(frame)
         continue
       }
@@ -2436,6 +2496,12 @@ export class Vm {
 
     if (callee instanceof Fn) {
       const code = callee.code
+      if ((code.flags & CodeFlags.CLASS_CONSTRUCTOR) !== 0) {
+        throw typeError(
+          `Class constructor ${String(get(callee, "name"))} cannot be invoked without 'new'`,
+          site ?? this.currentSite(),
+        )
+      }
       const counted = (code.flags & CodeFlags.INTERNAL) === 0
       if (counted && this.depth > MAX_CALL_DEPTH) {
         throw rangeError("Maximum call stack size exceeded", site ?? this.currentSite())
@@ -3198,6 +3264,12 @@ export class Vm {
         return execYstarResult(this, frame, a, bx, pc, sp)
       case Op.DEFINE_ACCESSOR:
         frame.sp = this.execDefineAccessor(regs, consts, a, bx, sp)
+        return pc + 1
+      case Op.CLASS:
+        frame.sp = this.execClass(regs, sp)
+        return pc + 1
+      case Op.DEFINE_METHOD:
+        frame.sp = this.execDefineMethod(regs, consts, a, bx, sp)
         return pc + 1
       default:
         throw new Error(`Unexpected wide op ${op}`)

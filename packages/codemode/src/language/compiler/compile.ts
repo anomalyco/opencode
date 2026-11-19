@@ -8,6 +8,7 @@ import type {
   BlockStatement,
   CallExpression,
   CatchClause,
+  ClassExpression,
   ConditionalExpression,
   DoWhileStatement,
   Expression,
@@ -58,10 +59,12 @@ import {
 import {
   analyzeScopes,
   type Decl,
+  type ClassNode,
   type FunctionInfo,
   type ResolvedRef,
   type Scope,
   type ScopeAnalysis,
+  supportedClassMember,
 } from "./scope.js"
 
 /** Each binary operator as the op and `a` operand that apply it. */
@@ -107,8 +110,11 @@ const logicalCond = (operator: string) =>
       : CondKind.NOT_NULLISH_KEEP
 
 /** NamedEvaluation: whether `node` is an anonymous function definition, which takes the name it is assigned to. */
-const isAnonymousFunction = (node: Expression): node is FunctionExpression | ArrowFunctionExpression =>
-  node.type === "ArrowFunctionExpression" || (node.type === "FunctionExpression" && !node.id)
+const isAnonymousFunction = (
+  node: Expression,
+): node is FunctionExpression | ArrowFunctionExpression | ClassExpression =>
+  node.type === "ArrowFunctionExpression" ||
+  ((node.type === "FunctionExpression" || node.type === "ClassExpression") && !node.id)
 
 type LoopEntry = {
   readonly kind: "loop"
@@ -681,6 +687,26 @@ const compileFunctionBody = (
       else compileExpression(decl.init)
       compilePattern(decl.id, !isVar, !isVar, decl)
     }
+  }
+
+  // Leaves the class constructor on the stack.
+  const compileClass = (node: ClassNode): void => {
+    const unsupported = node.superClass ?? node.body.body.find((member) => !supportedClassMember(member))
+    if (unsupported) return emitUnsupported(classSyntaxName(unsupported), unsupported)
+    const scope = analysis.scopeOfNode.get(node)!
+    emitScopePrologue(scope, true)
+    const ctor = analysis.classConstructors.get(node)!
+    builder.emit(Op.CLOSURE, 0, analysis.nodeToFunction.get(ctor)!.index, idx(node), 1)
+    builder.emit(Op.CLASS, 0, 0, idx(node), 1)
+    for (const member of node.body.body) {
+      if (member.type !== "MethodDefinition" || member.kind === "constructor") continue
+      builder.emit(Op.CLOSURE, 0, analysis.nodeToFunction.get(member.value)!.index, idx(member), 1)
+      builder.emit(Op.DEFINE_METHOD, member.static ? 1 : 0, builder.constant(keyName(member.key)), idx(member), -1)
+    }
+    builder.emit(Op.POP, 0, 0, idx(node), -1)
+    if (!node.id) return
+    builder.emit(Op.DUP, 0, 0, idx(node), 1)
+    emitStoreDecl(scope.decls.get(node.id.name)!, true, node)
   }
 
   const compileBlockStatement = (node: BlockStatement, labels?: Set<string>): void =>
@@ -1472,6 +1498,11 @@ const compileFunctionBody = (
   const statements: Compilers<Statement | ModuleDeclaration, Set<string>> = {
     EmptyStatement: () => {},
     FunctionDeclaration: () => {},
+    ClassDeclaration: (stmt) => {
+      compileClass(stmt)
+      if (builder.depth < 0 || !stmt.id) return
+      emitStoreDecl(analysis.scopeOfNode.get(stmt)!.parent!.decls.get(stmt.id.name)!, true, stmt)
+    },
     ImportDeclaration: (stmt) => {
       if (isProgram) return
       const message = "An import declaration may only appear at the top level of the program."
@@ -1512,6 +1543,7 @@ const compileFunctionBody = (
     FunctionExpression: (expr) => builder.emit(Op.CLOSURE, 0, analysis.nodeToFunction.get(expr)!.index, idx(expr), 1),
     ArrowFunctionExpression: (expr) =>
       builder.emit(Op.CLOSURE, 0, analysis.nodeToFunction.get(expr)!.index, idx(expr), 1),
+    ClassExpression: compileClass,
     ArrayExpression: compileArrayExpression,
     ObjectExpression: compileObjectExpression,
     TemplateLiteral: compileTemplateLiteral,
@@ -1608,6 +1640,18 @@ const compileFunctionBody = (
   }
 
   return builder.finish()
+}
+
+// What an unsupported class element or `extends` is called in the error.
+const classSyntaxName = (node: AstNode): string => {
+  const member = node as ClassNode["body"]["body"][number]
+  if (member.type === "StaticBlock") return "StaticBlock"
+  if (member.type !== "MethodDefinition" && member.type !== "PropertyDefinition") return "ClassHeritage"
+  if (member.key.type === "PrivateIdentifier") return "PrivateIdentifier"
+  if (member.type === "PropertyDefinition") return "PropertyDefinition"
+  if (member.kind === "get" || member.kind === "set") return `${member.kind === "get" ? "Getter" : "Setter"}`
+  if (member.computed) return "ComputedClassMember"
+  return member.value.async ? "AsyncMethod" : "GeneratorMethod"
 }
 
 const propertyName = (node: MemberExpression): string => (node.property as { name: string }).name

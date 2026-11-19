@@ -283,9 +283,22 @@ export class Fn extends Callable {
   ) {
     super(proto, name, code.length)
   }
+  /** [[HomeObject]]: the prototype or constructor a class method was defined on. */
+  home: Obj | undefined = undefined
+  /** Set on class constructors only. */
+  klass: ClassInfo | undefined = undefined
   get generator(): boolean {
     return (this.code.flags & CodeFlags.GENERATOR) !== 0
   }
+}
+
+/** What a class constructor knows about its class. */
+export class ClassInfo {
+  constructor(
+    readonly derived: boolean,
+    public fields: Fn | undefined = undefined,
+    readonly errorBase: Callable | undefined = undefined,
+  ) {}
 }
 
 /** The strict `arguments` object: an ordinary object with indexed own properties and a hidden `length`. */

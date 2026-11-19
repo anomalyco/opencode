@@ -71,11 +71,11 @@ describe("new on a non-constructible callee", () => {
     expect((await error(`return new Function("return 1")`)).message).not.toContain("not a constructor")
   })
 
-  test("classes remain unsupported syntax", async () => {
-    const failure = await error(`class A {}; return new A()`)
+  test("class inheritance remains unsupported syntax", async () => {
+    const failure = await error(`class A extends Object {}; return new A()`)
     expect(failure.kind).toBe("UnsupportedSyntax")
     expect(failure.message).toStartWith(
-      "SyntaxError: Syntax 'ClassDeclaration' is not supported. This is a restricted JavaScript-like language. Supported: ",
+      "SyntaxError: Syntax 'ClassHeritage' is not supported. This is a restricted JavaScript-like language. Supported: ",
     )
     expect(failure.message).toContain("Unsupported: classes, BigInt, and custom Symbols.")
   })

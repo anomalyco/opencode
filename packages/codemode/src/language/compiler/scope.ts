@@ -3,6 +3,8 @@ import type {
   ArrowFunctionExpression,
   BlockStatement,
   CatchClause,
+  ClassDeclaration,
+  ClassExpression,
   Expression,
   FunctionDeclaration,
   FunctionExpression,
@@ -77,7 +79,20 @@ export type ScopeAnalysis = {
   readonly scopeOfNode: ReadonlyMap<AnyNode, Scope>
   readonly refs: ReadonlyMap<Identifier, ResolvedRef>
   readonly thisRefs: ReadonlyMap<AnyNode, ResolvedRef>
+  /** Each class's constructor: its own, or a synthetic empty one when it has none. */
+  readonly classConstructors: ReadonlyMap<ClassNode, FunctionExpression>
 }
+
+export type ClassNode = ClassDeclaration | ClassExpression
+
+/** The class elements phase 1 compiles: plain-named methods and the constructor. Anything else is refused. */
+export const supportedClassMember = (member: ClassNode["body"]["body"][number]): boolean =>
+  member.type === "MethodDefinition" &&
+  !member.computed &&
+  (member.key.type === "Identifier" || (member.key.type === "Literal" && typeof member.key.value === "string")) &&
+  (member.kind === "method" || member.kind === "constructor") &&
+  !member.value.async &&
+  !member.value.generator
 
 /**
  * Pass 1: walks the AST to build lexical/var scopes, assign pre-order function indices,
@@ -87,6 +102,7 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
   const functions: Array<FunctionInfo> = []
   const nodeToFunction = new Map<FunctionNode, FunctionInfo>()
   const scopeOfNode = new Map<AnyNode, Scope>()
+  const classConstructors = new Map<ClassNode, FunctionExpression>()
   const unresolved: Array<{ readonly node: AnyNode; readonly name: string; readonly scope: Scope; fnIndex: number }> =
     []
 
@@ -110,7 +126,12 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
     }
   }
 
-  const visitFunction = (node: FunctionNode, parentScope: Scope | undefined, parentFnIndex: number): FunctionInfo => {
+  const visitFunction = (
+    node: FunctionNode,
+    parentScope: Scope | undefined,
+    parentFnIndex: number,
+    className?: string,
+  ): FunctionInfo => {
     const index = functions.length
     const isProgram = node.type === "Program"
     const isArrow = node.type === "ArrowFunctionExpression"
@@ -134,7 +155,7 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
       index,
       node,
       parentIndex: parentFnIndex,
-      name: isProgram ? "<program>" : isArrow ? "" : (node.id?.name ?? ""),
+      name: isProgram ? "<program>" : isArrow ? "" : (className ?? node.id?.name ?? ""),
       flags,
       length: lengthEnd === -1 ? params.length : lengthEnd,
       params,
@@ -196,6 +217,8 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
       }
     }
     for (const stmt of stmts) if (stmt.type === "VariableDeclaration") declareLexical(stmt, lexicalScope, fnInfo)
+    for (const stmt of stmts)
+      if (stmt.type === "ClassDeclaration" && stmt.id) addDecl(lexicalScope, fnInfo, stmt.id.name, "let", true)
     for (const stmt of stmts) {
       if (stmt.type !== "FunctionDeclaration" || !stmt.id || (internal && isProgram)) continue
       const decl = addDecl(lexicalScope, fnInfo, stmt.id.name, "function", true)
@@ -332,6 +355,9 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
         if (stmt.handler) visitCatchClause(stmt.handler, scope, varScope, fnInfo)
         if (stmt.finalizer) visitBlock(stmt.finalizer, new Scope(scope), varScope, fnInfo)
         break
+      case "ClassDeclaration":
+        visitClass(stmt, scope, fnInfo)
+        break
       case "FunctionDeclaration": {
         const childFn = visitFunction(stmt, scope, fnInfo.index)
         const hoisted = scope.hoistedFunctions.find((h) => h.node === stmt)
@@ -400,6 +426,9 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
       case "ArrowFunctionExpression":
         visitFunction(expr, scope, fnInfo.index)
         break
+      case "ClassExpression":
+        visitClass(expr, scope, fnInfo)
+        break
       case "BinaryExpression":
       case "LogicalExpression":
         visit(expr.left)
@@ -459,6 +488,35 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
         visit(expr.source)
         if (expr.options) visit(expr.options)
         break
+    }
+  }
+
+  // The class body sees its own name as an immutable binding; the constructor and methods are functions in it.
+  function visitClass(node: ClassNode, scope: Scope, fnInfo: FunctionInfo): void {
+    if (node.superClass || !node.body.body.every(supportedClassMember)) return
+    const classScope = new Scope(scope)
+    scopeOfNode.set(node, classScope)
+    if (node.id) addDecl(classScope, fnInfo, node.id.name, "const", false)
+    const methods = node.body.body.filter((m) => m.type === "MethodDefinition")
+    const ctor =
+      methods.find((m) => m.kind === "constructor")?.value ??
+      ({
+        type: "FunctionExpression",
+        id: null,
+        params: [],
+        body: { type: "BlockStatement", body: [], start: node.start, end: node.end },
+        generator: false,
+        expression: false,
+        async: false,
+        start: node.start,
+        end: node.end,
+      } as FunctionExpression)
+    classConstructors.set(node, ctor)
+    const ctorInfo = visitFunction(ctor, classScope, fnInfo.index, node.id?.name ?? "")
+    ctorInfo.flags |= CodeFlags.CLASS_CONSTRUCTOR
+    for (const m of methods) {
+      if (m.kind === "constructor") continue
+      visitFunction(m.value, classScope, fnInfo.index).flags |= CodeFlags.METHOD
     }
   }
 
@@ -522,7 +580,7 @@ export const analyzeScopes = (source: Source, internal = false): ScopeAnalysis =
   // Patch `from === 0` upvalue indices now that parent local slots are assigned
   for (const fnInfo of functions) for (const u of fnInfo.upvalues) if (u.from === 0) u.index = u.decl.slot
 
-  return { functions, nodeToFunction, scopeOfNode, refs, thisRefs }
+  return { functions, nodeToFunction, scopeOfNode, refs, thisRefs, classConstructors }
 }
 
 const collectPatternNames = (pattern: Pattern, out: Array<string> = []): Array<string> => {
