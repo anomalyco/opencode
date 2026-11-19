@@ -221,6 +221,7 @@ function migrateMode(theme: Theme, mode: Mode): ThemeDefinition {
         action: { primary: { $hovered: "$background.raised.high" } },
       },
     },
+    ...(theme.thinkingOpacity === 0.6 ? {} : { thinkingOpacity: theme.thinkingOpacity }),
   })
 }
 
@@ -380,10 +381,13 @@ export function resolveV1(theme: ThemeV1Json, mode: "dark" | "light"): Theme {
     ? resolveColor(theme.theme.backgroundMenu)
     : resolved.backgroundElement
 
+  const raw = theme.theme.thinkingOpacity
+  const thinkingOpacity = typeof raw === "number" && Number.isFinite(raw) ? Math.min(1, Math.max(0, raw)) : 0.6
+
   return {
     ...resolved,
     _hasSelectedListItemText: hasSelectedListItemText,
-    thinkingOpacity: theme.theme.thinkingOpacity ?? 0.6,
+    thinkingOpacity,
   } as Theme
 }
 
