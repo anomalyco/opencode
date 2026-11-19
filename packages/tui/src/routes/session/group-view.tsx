@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
+import { createContext, createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
 import { RGBA, type Renderable } from "@opentui/core"
 import { useRenderer, type JSX } from "@opentui/solid"
 import type { SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client"
@@ -8,7 +8,13 @@ import { SplitBorder } from "../../ui/border"
 import { Locale } from "../../util/locale"
 import { EntryAnchor, GroupAnchor, visitEntries } from "./anchor-view"
 import { groupID } from "./anchors"
-import { instructionPaths, type PartRef, type SessionEntry, type SessionGroup, type SessionNode } from "./grouping/session"
+import {
+  instructionPaths,
+  type PartRef,
+  type SessionEntry,
+  type SessionGroup,
+  type SessionNode,
+} from "./grouping/session"
 import { summarizeActivity } from "./activity-summary"
 import { InlineToolRow, ReasoningBody, reasoningContent, toolDisplay } from "./message-parts"
 import { use } from "./render-context"
@@ -18,7 +24,11 @@ type Renderers = {
   message: (messageID: string) => SessionMessageInfo | undefined
   entry: (entry: SessionEntry, images?: boolean) => JSX.Element
   images: (parts: readonly SessionMessageAssistantTool[]) => JSX.Element
+  files?: (parts: readonly SessionMessageAssistantTool[]) => JSX.Element
 }
+
+/** Set inside a group: the group shows its scripts' changed files under itself, so they stay visible when folded. */
+export const ExecuteFilesShownByGroup = createContext(false)
 
 type GroupProps = Renderers & {
   node: Extract<SessionNode, { type: "group" }>
@@ -30,14 +40,28 @@ type GroupProps = Renderers & {
 }
 
 export function SessionGroupView(props: Renderers & { row: SessionGroup }) {
+  const scripts = createMemo(() =>
+    descendants(props.row).flatMap((entry) => {
+      if (entry.type !== "part") return []
+      const message = props.message(entry.ref.messageID)
+      if (message?.type !== "assistant") return []
+      const part = resolvePart(message, entry.ref.partID)
+      return part?.type === "tool" && part.name === "execute" ? [part] : []
+    }),
+  )
   return (
-    <Group
-      {...props}
-      node={props.row}
-      level={0}
-      completed={props.row.completed}
-      pending={props.row.kind === "exploration" || props.row.kind === "activity" ? props.row.pending : []}
-    />
+    <>
+      <ExecuteFilesShownByGroup.Provider value={true}>
+        <Group
+          {...props}
+          node={props.row}
+          level={0}
+          completed={props.row.completed}
+          pending={props.row.kind === "exploration" || props.row.kind === "activity" ? props.row.pending : []}
+        />
+      </ExecuteFilesShownByGroup.Provider>
+      {props.files?.(scripts())}
+    </>
   )
 }
 
