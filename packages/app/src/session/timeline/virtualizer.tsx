@@ -117,6 +117,8 @@ type Input = {
   onContentResize: () => void
   /** Height of the composer region floating over the timeline's bottom edge, where the timeline fades out. */
   bottomInset?: Accessor<number>
+  /** Room the live status line needs above the old 36px lane, so it keeps its gap to the activity pill below. */
+  tailExtra?: Accessor<number>
   setVisibleRef?: (element: HTMLDivElement | undefined) => void
   onScheduleScrollState: (element: HTMLDivElement) => void
   onUserScroll: (target?: EventTarget | null) => void
@@ -155,7 +157,7 @@ export function createTimelineVirtualizer(input: Input) {
   // activity pill and its 10px composer gap. Without hover the pill grows from 32px to its 44px touch size
   // (composer-lane.css), and the tail grows with it. Both come and go inside it, so neither moves the rows above.
   const touch = createMediaQuery("(hover: none)")
-  const tailSize = () => (touch() ? 104 : 92)
+  const tailSize = () => (touch() ? 104 : 92) + (input.tailExtra?.() ?? 0)
   const ownerSessionKey = input.sessionKey()
   const entry = cache.get(ownerSessionKey)
   const cached = entry?.presentationKey === input.presentationKey?.() ? entry : undefined
