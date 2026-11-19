@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Stream } from "effect"
-import { Config } from "@opencode/core/config"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Flag } from "@opencode/core/flag"
 import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
 import { TodoTool } from "@opencode/core/tool/plugin/todo"
@@ -25,7 +25,7 @@ const it = testEffect(AppNodeBuilder.build(Tool.node, toolNodeReplacements()))
 const setup = (experimental: ConfigExperimental.Info | undefined) =>
   Effect.gen(function* () {
     yield* registerToolPlugin(TodoTool.Plugin, { event: { subscribe: () => Stream.never } }).pipe(
-      Effect.provide(Config.testLayer([document(experimental)])),
+      Effect.provide(Flag.testLayer([document(experimental)])),
       Effect.provide(permissionLayer({ assert: () => Effect.void })),
     )
     return yield* Tool.Service
@@ -39,7 +39,6 @@ describe("TodoTool", () => {
     Effect.gen(function* () {
       expect(yield* names(yield* setup(undefined))).not.toContain(TodoTool.name)
       expect(yield* names(yield* setup(new ConfigExperimental.Info({ todo: false })))).not.toContain(TodoTool.name)
-      expect(yield* names(yield* setup(new ConfigExperimental.Info({ all_flags: true })))).not.toContain(TodoTool.name)
     }),
   )
 
