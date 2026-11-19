@@ -753,8 +753,10 @@ fn multi_line_titles_scroll_by_the_rows_they_draw() {
         kit.app.press("down");
         kit.app.render();
     }
+    // An overflowing list cuts off rather than giving its last row to a `…` (#64934).
     let screen = kit.app.render().text();
-    assert!(screen.contains('…'), "{screen}");
+    assert!(!screen.contains('…'), "{screen}");
+    assert!(screen.contains("Item 5"), "{screen}");
 }
 
 #[test]

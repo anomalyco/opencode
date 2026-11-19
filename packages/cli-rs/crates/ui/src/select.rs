@@ -234,8 +234,10 @@ pub struct SelectProps<T> {
     pub title: String,
     /// Muted line below the title.
     pub description: Option<String>,
-    /// Blank rows above the footer; 1 by default.
+    /// Blank rows above the footer while it shows; 1 by default.
     pub footer_gap: u32,
+    /// Fill the parent's height, keeping the footer at the bottom.
+    pub grow: bool,
     pub placeholder: Option<String>,
     /// Puts the search input in the header row in place of the title.
     pub search_in_title: bool,
@@ -285,6 +287,7 @@ impl<T: Clone + 'static> SelectProps<T> {
             title: title.into(),
             description: None,
             footer_gap: 1,
+            grow: false,
             placeholder: None,
             search_in_title: false,
             title_placeholder: None,
@@ -329,8 +332,6 @@ struct State<T> {
     grouped: Vec<(String, Vec<usize>)>,
     flat: Vec<usize>,
     filtered: Vec<SelectOption<T>>,
-    /// Whether the last row is the `…` that says more rows are below.
-    ellipsis: bool,
 }
 
 struct Inner<T> {
@@ -353,7 +354,7 @@ struct Inner<T> {
     active: Cell<Option<usize>>,
     /// Whether the body holds the list rather than the empty view.
     listed: Cell<bool>,
-    /// What follows the list in the body: the `…` and the detail area.
+    /// What follows the list in the body: the detail area.
     tail: RefCell<Vec<AnyWidget>>,
     /// What the footer shows, to rebuild it only when that changes.
     footer_key: RefCell<Option<FooterKey>>,
@@ -458,7 +459,6 @@ pub fn select<T: Clone + PartialEq + 'static>(cx: &Rc<DialogCx>, props: SelectPr
             grouped: Vec::new(),
             flat: Vec::new(),
             filtered: Vec::new(),
-            ellipsis: false,
         }),
         input: input.clone(),
         body,
@@ -482,7 +482,6 @@ pub fn select<T: Clone + PartialEq + 'static>(cx: &Rc<DialogCx>, props: SelectPr
     let handle = Select(inner);
     handle.0.state.borrow_mut().options = (handle.0.props.options)("");
     handle.recompute();
-    handle.update_overflow();
     handle.focus_initial();
     handle.register_layer();
     let weak = Rc::downgrade(&handle.0);
@@ -501,12 +500,6 @@ pub fn select<T: Clone + PartialEq + 'static>(cx: &Rc<DialogCx>, props: SelectPr
     cx.on_close(opentui::keymap::Disposer::new(move || {
         resizes.remove_handler(resized);
     }));
-    handle.0.scroll.on_mouse(move |cx, event| {
-        if !matches!(event.kind, MouseEventKind::ScrollUp | MouseEventKind::ScrollDown) {
-            return;
-        }
-        cx.app().defer(bind!(weak, |inner, _cx| Select(inner).wheeled()));
-    });
 
     let props = &handle.0.props;
     let on_close: Option<Rc<dyn Fn()>> = props.on_cancel.clone();
@@ -561,6 +554,13 @@ pub fn select<T: Clone + PartialEq + 'static>(cx: &Rc<DialogCx>, props: SelectPr
     }
     let root =
         layout_view(cx, &head, &handle.0.body, Some(&handle.0.footer_slot), DIALOG_INSET, handle.0.props.footer_gap);
+    if handle.0.props.grow {
+        // The layout and the body's wrapper grow, so the footer sits at the bottom of the parent.
+        root.grow(1.0);
+        if let Some(wrapper) = root.children().get(1) {
+            wrapper.grow(1.0);
+        }
+    }
     (root, handle)
 }
 
@@ -665,7 +665,6 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
             self.remember_selection();
         }
         self.0.scroll.scroll_to(0.0, kept.top);
-        self.update_overflow();
         self.render();
     }
 
@@ -1065,45 +1064,10 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         self.0.cx.layer(KeymapLayer::<FocusId> { commands, ..KeymapLayer::default() });
     }
 
-    // The list height: `min(rows, floor(height / 2) - 6)`, less the row the `…` takes.
+    // The list height: `min(rows, floor(height / 2) - 6)`; an overflowing list cuts off.
     fn list_height(&self) -> u32 {
         let (rows, limit) = self.list_rows();
-        rows.min(limit).saturating_sub(u32::from(self.0.state.borrow().ellipsis))
-    }
-
-    // An overflowing list gives its last row to a `…` while rows are below the view. At the bottom the `…` hands
-    // its row back to the list, so the dialog keeps its height. The scroll position is the one the moves made so
-    // far land on; with the `…` the view is one row shorter, so a list scrolled one row past the end loses it.
-    // Whether rows are below is TS `scrollTop + viewport.height < scrollHeight`, by the rows the titles draw.
-    fn update_overflow(&self) {
-        let (rows, limit) = self.list_rows();
-        let top = self.0.scroll.scroll_position().1;
-        let drawn = self.drawn_rows();
-        let mut state = self.0.state.borrow_mut();
-        let view = f64::from(limit) - if state.ellipsis { 1.0 } else { 0.0 };
-        state.ellipsis = rows > limit && top + view < f64::from(drawn);
-    }
-
-    // The rows the whole list draws, a title's line breaks included.
-    fn drawn_rows(&self) -> u32 {
-        let state = self.0.state.borrow();
-        let headers: u32 = state
-            .grouped
-            .iter()
-            .enumerate()
-            .filter(|(_, (category, _))| !category.is_empty())
-            .map(|(i, _)| if i > 0 { 2 } else { 1 })
-            .sum();
-        state.flat.iter().map(|&index| option_rows(&state.filtered[index])).sum::<u32>() + headers
-    }
-
-    // A wheel scroll moved the list.
-    fn wheeled(&self) {
-        let before = self.0.state.borrow().ellipsis;
-        self.update_overflow();
-        if self.0.state.borrow().ellipsis != before {
-            self.render();
-        }
+        rows.min(limit)
     }
 
     // The rows of the whole list and the most it shows.
@@ -1227,7 +1191,6 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
             .any(|&index| state.filtered[index].detail.is_some())
             .then(|| selected.and_then(|index| state.filtered[index].detail.clone()));
         drop(state);
-        self.update_overflow();
         scroll.height(self.list_height());
         let mut tail = self.0.tail.borrow_mut();
         if self.0.listed.replace(true) {
@@ -1235,14 +1198,6 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         } else {
             body.clear();
             body.add(scroll);
-        }
-        if self.0.state.borrow().ellipsis {
-            let ellipsis = View::new(app)
-                .padding_edge(Edge::Left, DIALOG_LIST_INSET)
-                .shrink(0.0)
-                .child(&Text::new(app, "…").fg(theme.text.muted));
-            body.add(&ellipsis);
-            tail.push(ellipsis.as_any());
         }
         if let Some(detail) = detail {
             let area = View::new(app).padding_edge(Edge::Top, 1).padding_x(DIALOG_LIST_INSET).shrink(0.0);
@@ -1473,6 +1428,12 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         }
         self.0.footer_key.replace(Some(key));
         slot.clear();
+        // Without actions or content there is no footer, so the list ends one blank row above the dialog edge.
+        let shown = !items.is_empty() || props.footer.is_some();
+        slot.visible(shown);
+        if !shown {
+            return;
+        }
         let pick = |group: Group| -> Vec<FooterAction> {
             items.iter().filter(|(of, _)| *of == group).map(|(_, action)| action.clone()).collect()
         };
@@ -1583,10 +1544,9 @@ fn option_row<T>(
         }
         row.add(&cell);
     }
-    View::new(app)
-        .row()
-        .child(&Text::new(app, if active { "┃" } else { " " }).width(1).shrink(0.0).fg(theme.text.formfield.focused))
-        .child(&row)
+    // A row with its own background, like a destructive confirmation, draws its bar in that color.
+    let bar = option.bg.unwrap_or(theme.text.formfield.focused);
+    View::new(app).row().child(&Text::new(app, if active { "┃" } else { " " }).width(1).shrink(0.0).fg(bar)).child(&row)
 }
 
 pub fn reconcile(selected: usize, count: usize) -> usize {
