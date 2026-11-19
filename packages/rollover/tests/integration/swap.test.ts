@@ -152,8 +152,9 @@ describe("runTransform", () => {
     await writeCfg(dir)
     const sid = "fresh"
     const { deps, store } = makeDeps(dir, sid)
-    // Long enough to be above the 1000-token override; extraction has not run yet,
-    // so the decision defers and leaves the freshly created state untouched.
+    // Long enough to be above the 1000-token override. v2: the swap is
+    // deterministic and never waits for extraction, so the freshly created
+    // state already carries the swap.
     const raw = [
       { id: "a1", role: "assistant", content: [{ type: "text", text: "x".repeat(5000) }] },
       { id: "u2", role: "user", content: [{ type: "text", text: "q" }] },
@@ -164,15 +165,16 @@ describe("runTransform", () => {
       v: 1,
       sessionId: sid,
       settings: {},
-      epoch: 0,
+      epoch: 1,
       extractedUntilMessageId: null,
-      lastContextTokens: 0,
+      lastContextTokens: expect.any(Number),
       lastContextSource: "estimate",
-      lastContextAt: 0,
-      rollover: null,
-      decidedUserMessageIds: [],
+      lastContextAt: expect.any(Number),
+      rollover: expect.objectContaining({ cutoffMessageId: "u2", epochAtSwap: 0 }),
+      decidedUserMessageIds: ["u2"],
       consolidatedAtRecordCount: 0,
       touchedFiles: {},
+      lastRollover: expect.any(Object),
     })
     rmSync(dir, { recursive: true, force: true })
   })
