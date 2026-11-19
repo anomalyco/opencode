@@ -25,13 +25,36 @@ import { Session } from "@opencode/core/session"
 import { SessionMessage } from "@opencode/core/session/message"
 import { Tool } from "@opencode/core/tool"
 import { initGit } from "../fixture/git"
-import { eventually } from "../lib/eventually"
+import { eventually, waitUntil } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
-import { PluginTestLayer } from "./fixture"
+import { Generate } from "@opencode/core/generate"
+import { OpencodeMemoryCapture } from "@opencode/core/plugin/provider/opencode-memory-capture"
+import { makePluginTestLayer, PluginTestLayer } from "./fixture"
 
 const withFlags = (overrides: string) =>
   testEffect(PluginTestLayer.pipe(Layer.provide(Layer.succeed(Flag.Overrides, overrides))))
 const it = withFlags("console_memory")
+/** What the stand-in model answers a distillation, and the prompts it was given. */
+const distiller = { reply: "", prompts: new Array<string>() }
+const generating = Layer.succeed(
+  Generate.Service,
+  Generate.Service.of({
+    text: (input) =>
+      Effect.sync(() => {
+        distiller.prompts.push(input.prompt)
+        return distiller.reply
+      }),
+    image: () => Effect.die("unused"),
+    decisions: () => Effect.die("unused"),
+    video: {
+      start: () => Effect.die("unused"),
+      status: () => Effect.die("unused"),
+      result: () => Effect.die("unused"),
+    },
+  }),
+)
+const capturing = (overrides: string) =>
+  testEffect(makePluginTestLayer(undefined, generating).pipe(Layer.provide(Layer.succeed(Flag.Overrides, overrides))))
 const released = withFlags("-console_memory")
 
 type Synthetic = Parameters<PluginContext.Context["session"]["synthetic"]>[0]
@@ -133,6 +156,7 @@ function fakeConsole() {
       if (url.pathname === "/api/memory/search")
         return Response.json({ status: state.hits.length === 0 ? "no_reliable_entry" : "ok", results: state.hits })
       if (url.pathname === "/api/memory/inject") return Response.json({ entries: state.injected })
+      if (url.pathname === "/api/memory/candidates") return Response.json({ id: "cand_1", status: "pending" })
       if (url.pathname === "/api/memory/entries" && request.method === "POST") {
         const key = String(body?.idempotencyKey)
         const saved = state.published.get(key)
@@ -862,63 +886,6 @@ describe("OpencodePlugin memory", () => {
     ),
   )
 
-  it.effect("reminds a session once, when it would go idle after a verified fix, that it may publish", () =>
-    withConsole((console) =>
-      Effect.gen(function* () {
-        const { host, synthetic } = yield* start(console)
-        const hooks = yield* PluginHooks.Service
-        const idle = (sessionID: Session.ID, background: ReadonlyArray<{ sessionID: Session.ID }> = []) =>
-          hooks.trigger("session", "experimental.idle", { sessionID, background } as never)
-        const fix = (sessionID: Session.ID) =>
-          Effect.gen(function* () {
-            yield* ran(sessionID, "shell", { command: "bun test" }, { exitCode: 1, output: "(fail) dayKey\n 1 fail" })
-            yield* ran(sessionID, "edit", { path: "src/dates.ts", oldString: "a", newString: "b" })
-            yield* ran(sessionID, "shell", { command: "bun test" }, { exitCode: 0, output: " 2 pass\n 0 fail" })
-          })
-
-        // Nothing learned yet: no reminder.
-        const session = yield* host.session.create({})
-        yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 0, output: " 2 pass\n 0 fail" })
-        yield* idle(session.id)
-        expect(synthetic).toEqual([])
-
-        yield* fix(session.id)
-        // While its own shell still runs in the background, the session isn't done.
-        yield* idle(session.id, [{ sessionID: session.id }])
-        expect(synthetic).toEqual([])
-        yield* idle(session.id)
-        expect(synthetic).toMatchObject([
-          {
-            sessionID: session.id,
-            text: OpencodeMemoryPolicy.initial.reminder("verified fix (tests that failed now pass)"),
-            metadata: {
-              source: "console.memory",
-              kind: "publish-reminder",
-              lesson: "verified fix (tests that failed now pass)",
-            },
-          },
-        ])
-        expect(synthetic[0]).not.toHaveProperty("resume")
-        // Once per session.
-        yield* fix(session.id)
-        yield* idle(session.id)
-        expect(synthetic).toHaveLength(1)
-
-        // A subagent's session leaves publishing to its parent.
-        const child = yield* host.session.create({ parentID: session.id })
-        yield* fix(child.id)
-        yield* idle(child.id)
-        expect(synthetic).toHaveLength(1)
-
-        // The publish tool's description is the template the reminder points at.
-        const publish = yield* memoryTool("publish")
-        expect(publish.description.split("\n")[0]).toStartWith("Most sessions should publish nothing.")
-        expect(publish.description).toContain("\nClaim: ")
-        expect(publish.description).toContain("\nVerify: the command to run and the result to expect. / Avoid: ")
-      }),
-    ),
-  )
-
   it.effect("checks paths exist, marks a session that took in outside input as tainted, and passes on evidence", () =>
     withConsole((console) =>
       Effect.gen(function* () {
@@ -1269,6 +1236,152 @@ describe("OpencodePlugin memory", () => {
   )
 })
 
+describe("OpencodePlugin memory capture", () => {
+  capturing("console_memory,memory_capture").effect(
+    "logs every turn, distils at a boundary out of band, and sends what it finds as a pending candidate",
+    () =>
+      withConsole((console) =>
+        Effect.gen(function* () {
+          distiller.prompts.length = 0
+          distiller.reply = JSON.stringify({
+            candidates: [
+              {
+                kind: "procedure",
+                title: "Tests need ACME_DB_URL",
+                body: "Claim: plain bun test fails without ACME_DB_URL.\nApplies when: test/\nAction: run ACME_DB_URL=memory://test bun test\nVerify: 2 pass\nAnchors: src/config.ts\nEvidence: failed, then passed with it",
+                errors: ["Error: ACME_DB_URL is not set"],
+              },
+              { kind: "nonsense", title: "dropped" },
+            ],
+          })
+          const { host, synthetic } = yield* start(console)
+          const hooks = yield* PluginHooks.Service
+          const session = yield* host.session.create({})
+          yield* prompt(session.id, "Add isWeekend to src/dates.ts and make the tests pass")
+          yield* hooks.trigger("session", "context", request(session.id, "Add isWeekend"))
+          yield* ran(
+            session.id,
+            "shell",
+            { command: "bun test" },
+            { exitCode: 1, output: "Error: ACME_DB_URL is not set\n 1 fail" },
+          )
+          yield* ran(session.id, "edit", { path: "src/dates.ts", oldString: "a", newString: "b" })
+          // Nothing distilled yet: no boundary.
+          expect(distiller.prompts).toEqual([])
+          yield* ran(
+            session.id,
+            "shell",
+            { command: "ACME_DB_URL=memory://test bun test" },
+            { exitCode: 0, output: " 2 pass\n 0 fail" },
+          )
+
+          // A test that passes after one failed closes the segment: one distillation, in the background.
+          yield* waitUntil(
+            Effect.sync(() => console.state.requests.some((item) => item.path === "/api/memory/candidates")),
+          )
+          expect(distiller.prompts).toHaveLength(1)
+          expect(distiller.prompts[0]).toContain("The boundary: test.")
+          expect(distiller.prompts[0]).toContain("#2 ran `bun test` → exit 1 FAILED\nError: ACME_DB_URL is not set")
+          const sent = console.state.requests.filter((item) => item.path === "/api/memory/candidates")
+          expect(sent).toHaveLength(1)
+          expect(sent[0]?.body).toEqual({
+            sessionID: session.id,
+            boundary: "test",
+            kind: "procedure",
+            title: "Tests need ACME_DB_URL",
+            body: expect.stringMatching(/^Claim: plain bun test fails/),
+            errors: ["Error: ACME_DB_URL is not set"],
+            evidence: [{ kind: "test", ref: "ACME_DB_URL=memory://test bun test" }],
+            events: { from: 0, to: 3 },
+            source: { sessionID: session.id },
+            idempotencyKey: `${session.id}:0:0`,
+          })
+          // The coding session got no message from any of it.
+          expect(synthetic).toEqual([])
+
+          // Every event is in the plugin's own log, in order.
+          const log = yield* host.storage.scan({ prefix: `memory-log:${session.id}:`, limit: 50 })
+          expect(log.entries.map((item) => (item.value as { type: string }).type)).toEqual([
+            "prompt",
+            "shell",
+            "edit",
+            "shell",
+          ])
+
+          // No reminder when the session would go idle.
+          yield* hooks.trigger("session", "experimental.idle", { sessionID: session.id, background: [] } as never)
+          expect(synthetic).toEqual([])
+        }),
+      ),
+  )
+
+  capturing("console_memory,-memory_capture").effect("records and distils nothing with the switch off", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        distiller.prompts.length = 0
+        const { host } = yield* start(console)
+        const session = yield* host.session.create({})
+        yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 1, output: " 1 fail" })
+        yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 0, output: " 1 pass" })
+        const log = yield* host.storage.scan({ prefix: `memory-log:${session.id}:`, limit: 50 })
+        expect(log.entries).toEqual([])
+        expect(distiller.prompts).toEqual([])
+      }),
+    ),
+  )
+})
+
+describe("OpencodeMemoryCapture", () => {
+  const shell = (command: string, failed: boolean, test = true): OpencodeMemoryCapture.Event => ({
+    type: "shell",
+    command,
+    exit: failed ? 1 : 0,
+    failed,
+    test,
+    tail: "",
+  })
+  const edit: OpencodeMemoryCapture.Event = { type: "edit", files: ["src/a.ts"] }
+  const ask = (text: string, correction = false): OpencodeMemoryCapture.Event => ({ type: "prompt", text, correction })
+
+  test("finds the work boundaries the harness sees", () => {
+    const boundary = OpencodeMemoryCapture.boundary
+    expect(boundary([shell("bun test", true), edit], shell("bun test", false))).toBe("test")
+    expect(boundary([edit], shell("bun test", false))).toBeUndefined()
+    expect(boundary([], { type: "commit", sha: "abc" })).toBe("commit")
+    expect(boundary([edit], ask("Now add a test"))).toBe("task")
+    expect(boundary([edit], ask("No, don't change the config", true))).toBe("correction")
+    expect(boundary([edit], { type: "subtask" })).toBe("subtask")
+    expect(boundary([edit], { type: "compaction" })).toBe("compaction")
+    // Without work in between: no task, correction, subtask or compaction boundary.
+    expect(boundary([ask("Hi")], ask("Don't do that", true))).toBeUndefined()
+    expect(boundary([{ type: "read", files: ["a"] }], { type: "compaction" })).toBeUndefined()
+  })
+
+  test("links commits and passing runs after failures as evidence, and keeps only well-formed candidates", () => {
+    expect(
+      OpencodeMemoryCapture.evidence([
+        shell("bun test", false),
+        shell("bun test", true),
+        edit,
+        shell("bun test", false),
+        { type: "commit", sha: "abc123" },
+      ]),
+    ).toEqual([
+      { kind: "test", ref: "bun test" },
+      { kind: "commit", ref: "abc123" },
+    ])
+    expect(OpencodeMemoryCapture.candidates("no json here")).toEqual([])
+    expect(
+      OpencodeMemoryCapture.candidates(
+        '```json\n{"candidates": [{"kind": "gotcha", "title": "T", "body": "B"}, {"kind": "x"}]}\n```',
+      ),
+    ).toEqual([{ kind: "gotcha", title: "T", body: "B" }])
+    expect(OpencodeMemoryCapture.prompt({ segment: [edit], boundary: "commit" })).toContain(
+      'Most records yield nothing: then answer {"candidates": []}.',
+    )
+  })
+})
+
 describe("OpencodeMemoryPolicy.initial", () => {
   const session = (overrides: Record<string, unknown> = {}) =>
     ({ time: { created: 0, updated: 0 }, ...overrides }) as unknown as Session.Info
@@ -1314,31 +1427,6 @@ describe("OpencodeMemoryPolicy.initial", () => {
     expect(
       OpencodeMemoryPolicy.initial.inject(failure, signals({ injected: { prompt: 1, failure: 2 } }), session()),
     ).toBeUndefined()
-  })
-
-  test("finds a verified fix or a dead end worked past in a session's test runs and edits", () => {
-    const lesson = OpencodeMemoryPolicy.initial.lesson
-    const work = (lastEdit: number, ...tests: Array<[number, boolean]>) => ({
-      step: 10,
-      lastEdit,
-      tests: tests.map(([step, failed]) => ({ step, failed })),
-    })
-    expect(lesson(work(3, [1, true], [5, false]))).toBe("verified fix (tests that failed now pass)")
-    expect(lesson(work(8, [1, true], [2, true], [9, false]))).toBe("verified fix (tests that failed now pass)")
-    // Failing runs, all after the last edit, then a passing one: worked past without a change, a dead end.
-    expect(lesson(work(-1, [1, true], [2, true], [3, false]))).toBe(
-      "dead end you worked past (several failing attempts before a passing run)",
-    )
-    // Passing without a failure first, one failure without an edit before it, or no pass after the last edit: nothing.
-    expect(lesson(work(3, [5, false]))).toBeUndefined()
-    expect(lesson(work(-1, [1, true], [2, false]))).toBeUndefined()
-    expect(lesson(work(6, [1, true], [5, false]))).toBeUndefined()
-    expect(OpencodeMemoryPolicy.initial.test("ACME_DB_URL=memory://test bun test 2>&1 | tail -20")).toBe(true)
-    expect(OpencodeMemoryPolicy.initial.test("uv run pytest -x tests/test_x.py")).toBe(true)
-    expect(OpencodeMemoryPolicy.initial.test("git status && ls src")).toBe(false)
-    expect(OpencodeMemoryPolicy.initial.reminder("verified fix (tests that failed now pass)")).toStartWith(
-      "This session had a verified fix (tests that failed now pass). If it taught something",
-    )
   })
 
   test("counts a command as failed by its exit code, or by its output when a pipe hides the exit code", () => {

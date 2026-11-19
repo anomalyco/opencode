@@ -65,18 +65,6 @@ export interface Signals {
   readonly injected: { readonly prompt: number; readonly failure: number }
 }
 
-/**
- * The session's test-like runs and edits, in the order its tools finished, for telling whether it verified a fix or
- * worked past a dead end.
- */
-export interface Work {
-  /** Tool calls finished so far; each run and edit is numbered by it. */
-  readonly step: number
-  /** The step of the last file change, or -1 before any. */
-  readonly lastEdit: number
-  readonly tests: ReadonlyArray<{ readonly step: number; readonly failed: boolean }>
-}
-
 /** What a session can tell Console about its work besides the query, as Console's inject and search take it. */
 export interface Context {
   readonly repo?: string
@@ -123,13 +111,8 @@ export interface Policy {
   readonly nudge: (entry: Given) => string
   /** Whether a command is a test or build run, the kind that tells whether a fix worked. Runs on every shell command. */
   readonly test: (command: string) => boolean
-  /**
-   * What, in the session's work, may be worth publishing once its task is done: a verified fix or a dead end worked
-   * past, described for the reminder, or undefined for nothing.
-   */
-  readonly lesson: (work: Work) => string | undefined
-  /** The one reminder a session gets when it would go idle after such work. */
-  readonly reminder: (lesson: string) => string
+  /** Whether a user's message reads as correcting the agent. Runs on every prompt, so it must be cheap. */
+  readonly corrective: (message: string) => boolean
 }
 
 // Placeholders until the retrieval benchmark and the correction study set them.
@@ -200,19 +183,7 @@ export const initial: Policy = {
       .toSorted((a, b) => b.shared.length - a.shared.length)[0]?.entry
   },
   test: (command) => TEST.test(command),
-  // The publish audit's WB2 triggers (bench/library/writes): a test-like run failing before the last edit and passing
-  // after it, or several failing runs before a passing one.
-  lesson: (work) => {
-    const passed = work.tests.find((test) => !test.failed && test.step > work.lastEdit)
-    if (passed === undefined) return undefined
-    if (work.tests.some((test) => test.failed && test.step < work.lastEdit))
-      return "verified fix (tests that failed now pass)"
-    if (work.tests.filter((test) => test.failed && test.step < passed.step).length >= 2)
-      return "dead end you worked past (several failing attempts before a passing run)"
-    return undefined
-  },
-  reminder: (lesson) =>
-    `This session had a ${lesson}. If it taught something an agent on a different task in this repository would need, and it isn't already in the code, docs or memory, you may publish it with memory publish, following its template, as it holds for the repository as committed (not files or settings you added). Most sessions publish nothing; then just say so. Don't change the code any more.`,
+  corrective: (message) => CORRECTION.test(message),
   nudge: (entry) =>
     `<memory-correction>The user's last message may correct memory entry ${entry.id} r${entry.revision} "${line(entry.title)}". If it does, fix that entry now with memory \`edit\` (only the changed text, revision ${entry.revision}); otherwise ignore this.</memory-correction>`,
 }

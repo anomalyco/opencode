@@ -16,7 +16,9 @@ import { ChildProcess } from "effect/process"
 import { Git } from "../../git.js"
 import { AbsolutePath } from "../../schema.js"
 import { normalizeContent } from "../../tool/runtime.js"
+import { Flag } from "../../flag.js"
 import { OpencodeMemoryAccess } from "./opencode-memory-access.js"
+import { OpencodeMemoryCapture } from "./opencode-memory-capture.js"
 import { OpencodeMemoryPolicy } from "./opencode-memory-policy.js"
 import { OpencodeWatches } from "./opencode-watches.js"
 
@@ -29,8 +31,12 @@ const MAX_FILES = 20
 /** Entries a session was given that a correction may name, and how much of each is kept to match it. */
 const MAX_GIVEN = 10
 const MAX_GIVEN_TEXT = 2000
-/** Test-like runs a session's publish reminder looks back over. */
-const MAX_TESTS = 50
+/** Events kept in memory since a session's last boundary; the log keeps them all. */
+const MAX_SEGMENT = 200
+/** Distillations per session: one per boundary, at most this many. */
+const MAX_DISTILLATIONS = 20
+/** The end of a command's output an event keeps. */
+const MAX_TAIL = 1500
 /** How long the workspace's list of restricted repositories is reused before Console is asked again. */
 const ANCHORS_MAX_AGE = 60 * 1000
 /** The most repositories a reader's reachable set names, as Console takes it. */
@@ -165,10 +171,12 @@ type Tracked = {
   compactions: number
   /** A compaction ended since the delivered entries were last given. */
   redeliver?: boolean
-  /** Test-like runs and edits, for the publish reminder. */
-  readonly work: { step: number; lastEdit: number; readonly tests: Array<{ step: number; failed: boolean }> }
-  /** The session had its publish reminder. */
-  reminded?: boolean
+  /** The session's events since its last work boundary, and where they start in its log. */
+  readonly segment: Array<OpencodeMemoryCapture.Event>
+  from: number
+  /** The next position in the session's event log, read from storage on its first event in this process. */
+  next?: number
+  distillations: number
   /** The session took in outside input, so what it publishes is marked tainted and never promoted. */
   tainted?: boolean
   task?: string
@@ -195,6 +203,7 @@ export const make = Effect.fnUntraced(function* (
   const scope = yield* Scope.Scope
   const git = yield* Git.Service
   const processes = yield* AppProcess.Service
+  const flags = yield* Flag.Service
   const github = OpencodeMemoryAccess.make(http, processes, yield* OpencodeMemoryAccess.GitHub)
   let current: { console: OpencodeWatches.Console; readonly lease: Scope.Closeable } | undefined
   const sessions = new Map<string, Tracked>()
@@ -207,7 +216,9 @@ export const make = Effect.fnUntraced(function* (
       shown: new Map(),
       delivered: new Map(),
       compactions: 0,
-      work: { step: 0, lastEdit: -1, tests: [] },
+      segment: [],
+      from: 0,
+      distillations: 0,
     }
     sessions.delete(sessionID)
     sessions.set(sessionID, found)
@@ -294,6 +305,14 @@ export const make = Effect.fnUntraced(function* (
         message: `Nothing was sent: ${result.field} holds ${result.kind}, which may not go into the workspace's shared memory. ${result.repair}, then call ${namespace}.${tool} again.`,
       })
     })
+
+  // The checkout's current commit, after the session committed.
+  const head = Effect.gen(function* () {
+    const result = yield* processes.run(
+      ChildProcess.make("git", ["rev-parse", "HEAD"], { cwd: (yield* roots).checkout, stdin: "ignore" }),
+    )
+    return result.exitCode === 0 ? result.stdout.toString().trim() : undefined
+  }).pipe(Effect.orElseSucceed(() => undefined))
 
   /**
    * Refuses a write whose `paths` name a repository path that isn't there. Only clear paths (with a `/`) are checked:
@@ -471,8 +490,98 @@ export const make = Effect.fnUntraced(function* (
     ...(input.errors === undefined ? {} : { errors: input.errors }),
   })
 
+  // The model distillation runs on: a DeepSeek flash model when one is available, else OpenCode's default.
+  const distiller = yield* Effect.cached(
+    ctx.model.list({ types: ["chat"] }).pipe(
+      Effect.map((models) => {
+        const found = models.data.find((model) => /deepseek/i.test(model.id) && /flash/i.test(model.id))
+        return found === undefined ? undefined : { id: found.id, providerID: found.providerID }
+      }),
+      Effect.orElseSucceed(() => undefined),
+    ),
+  )
+
+  /**
+   * Distils the segment a boundary closed into candidate entries, out of band (a stateless generation, nothing in the
+   * coding session), and sends each that passes the write checks to Console as pending, with the segment's evidence.
+   */
+  const distill = (
+    sessionID: Session.ID,
+    segment: ReadonlyArray<OpencodeMemoryCapture.Event>,
+    boundary: OpencodeMemoryCapture.Boundary,
+    events: { readonly from: number; readonly to: number },
+  ) =>
+    Effect.gen(function* () {
+      const model = yield* distiller
+      const answer = yield* ctx.experimental.generate.text({
+        prompt: OpencodeMemoryCapture.prompt({ segment, boundary }),
+        ...(model === undefined ? {} : { model }),
+      })
+      const found = OpencodeMemoryCapture.candidates(answer.text)
+      if (found.length === 0) return
+      const source = yield* checkout
+      const anchor =
+        "repo" in source && source.repo
+          ? yield* anchored(source.repo.slice("https://".length)).pipe(Effect.orElseSucceed(() => undefined))
+          : undefined
+      // Without its repository's id, who may read a candidate from a repository can't be recorded: none is sent.
+      if ("repo" in source && source.repo && anchor === undefined) return
+      const evidence = OpencodeMemoryCapture.evidence(segment)
+      yield* Effect.forEach(found, (candidate, index) =>
+        Effect.gen(function* () {
+          const fields = yield* shared("publish", { ...metadata(candidate), body: candidate.body })
+          yield* resolved("publish", Schema.decodeUnknownOption(Paths)(fields.paths).pipe(Option.getOrUndefined))
+          yield* committed("publish", fields)
+          yield* call(Schema.Struct({ id: Schema.optional(Schema.String) }), "POST", "/api/memory/candidates", {
+            sessionID,
+            boundary,
+            ...fields,
+            ...(evidence.length === 0 ? {} : { evidence }),
+            events,
+            source: { ...source, sessionID },
+            ...(anchor === undefined ? {} : { anchor }),
+            ...(tracked(sessionID).tainted ? { tainted: true } : {}),
+            ...(yield* reader),
+            idempotencyKey: `${sessionID}:${events.from}:${index}`.slice(0, 128),
+          })
+        }).pipe(Effect.catch((cause) => Effect.logDebug("memory candidate not sent", { cause }))),
+      )
+    }).pipe(Effect.catch((cause) => Effect.logDebug("memory distillation failed", { cause })))
+
   const start = Effect.fnUntraced(function* () {
     const lease = yield* Scope.Scope
+    const capturing = yield* flags.enabled("memory_capture")
+    /**
+     * Appends `event` to the session's event log, which only this plugin writes and nothing ever rewrites, and, when it
+     * closes a work boundary, distils what happened since the last one in the background.
+     */
+    const record = (sessionID: Session.ID, event: OpencodeMemoryCapture.Event) =>
+      Effect.gen(function* () {
+        if (!capturing) return
+        const state = tracked(sessionID)
+        const head = `memory-log-head:${sessionID}`
+        const at =
+          state.next ?? Option.getOrElse(Schema.decodeUnknownOption(Schema.Int)(yield* ctx.storage.get(head)), () => 0)
+        state.next = at + 1
+        yield* ctx.storage.set(`memory-log:${sessionID}:${String(at).padStart(10, "0")}`, event)
+        yield* ctx.storage.set(head, at + 1)
+        const boundary = OpencodeMemoryCapture.boundary(state.segment, event)
+        // A new task message starts the next segment; every other boundary event ends the one it closes.
+        const closes = event.type === "prompt" && boundary === "task" ? [] : [event]
+        if (boundary === undefined) {
+          if (state.segment.length === 0) state.from = at
+          state.segment.push(event)
+          if (state.segment.length > MAX_SEGMENT) state.segment.splice(0, state.segment.length - MAX_SEGMENT)
+          return
+        }
+        const segment = [...state.segment, ...closes]
+        const events = { from: state.from, to: closes.length === 0 ? at - 1 : at }
+        state.segment.splice(0, state.segment.length, ...(closes.length === 0 ? [event] : []))
+        state.from = closes.length === 0 ? at : at + 1
+        if (state.distillations >= MAX_DISTILLATIONS) return
+        state.distillations++
+        yield* distill(sessionID, segment, boundary, events).pipe(Effect.forkIn(lease, { startImmediately: true }))
+      }).pipe(Effect.catch((cause) => Effect.logDebug("failed to record a session event", { cause })))
     // Read now, so the first moment doesn't wait on Git or GitHub.
     yield* repository.pipe(Effect.forkIn(lease, { startImmediately: true }))
     yield* reachable.pipe(Effect.forkIn(lease, { startImmediately: true }))
@@ -524,6 +633,11 @@ export const make = Effect.fnUntraced(function* (
         state.task ??= event.prompt.text
         const corrected = policy.correction(event.prompt.text, [...state.given.values()])
         if (corrected) state.nudge = { entry: corrected, messageID: event.messageID }
+        yield* record(event.sessionID, {
+          type: "prompt",
+          text: event.prompt.text.slice(0, MAX_TAIL),
+          correction: corrected !== undefined || policy.corrective(event.prompt.text),
+        })
         yield* begin(event.sessionID, {
           type: "prompt",
           text: event.prompt.text,
@@ -543,15 +657,18 @@ export const make = Effect.fnUntraced(function* (
     yield* ctx.tool.hook("execute.after", (event) => {
       if (event.status !== "completed") return Effect.void
       const files = touched(event.tool, event.input).map((file) => relative(ctx.location.directory, file))
-      const work = tracked(event.sessionID).work
-      work.step++
+      const recorded =
+        files.length > 0
+          ? record(event.sessionID, { type: event.tool === "read" ? "read" : "edit", files })
+          : event.tool === "subagent"
+            ? record(event.sessionID, { type: "subtask" })
+            : Effect.void
       if (
         event.tool === "webfetch" ||
         event.tool === "websearch" ||
         (event.tool === "read" && files.some((file) => path.isAbsolute(file)))
       )
         tracked(event.sessionID).tainted = true
-      if (event.tool !== "read" && files.length > 0) work.lastEdit = work.step
       if (files.length > 0) {
         const state = tracked(event.sessionID)
         files.forEach((file) => {
@@ -560,18 +677,33 @@ export const make = Effect.fnUntraced(function* (
         })
         state.files.splice(0, Math.max(0, state.files.length - MAX_FILES))
       }
-      if (event.tool !== "shell") return Effect.void
+      if (event.tool !== "shell") return recorded
       const shell = Option.all({
         input: Schema.decodeUnknownOption(ShellInput)(event.input),
         output: Schema.decodeUnknownOption(ShellOutput)(event.result.output),
       })
       // A command still running in the background, or one a signal ended, has no exit code yet.
       if (Option.isNone(shell) || shell.value.output.exitCode === null) return Effect.void
-      if (OUTSIDE.test(shell.value.input.command)) tracked(event.sessionID).tainted = true
-      const failed = policy.failed(shell.value.input.command, shell.value.output.output, shell.value.output.exitCode)
-      if (policy.test(shell.value.input.command)) work.tests.push({ step: work.step, failed })
-      if (work.tests.length > MAX_TESTS) work.tests.splice(0, work.tests.length - MAX_TESTS)
-      if (!failed) return Effect.void
+      const command = shell.value.input.command
+      const exitCode = shell.value.output.exitCode
+      if (OUTSIDE.test(command)) tracked(event.sessionID).tainted = true
+      const failed = policy.failed(command, shell.value.output.output, exitCode)
+      const ran = record(event.sessionID, {
+        type: "shell",
+        command: command.slice(0, MAX_TAIL),
+        exit: exitCode,
+        failed,
+        test: policy.test(command),
+        tail: shell.value.output.output.slice(-MAX_TAIL),
+      }).pipe(
+        // A commit the session made is a boundary of its own, with its hash as evidence.
+        Effect.andThen(
+          exitCode === 0 && /\bgit\b[^|;&]*\bcommit\b/.test(command)
+            ? head.pipe(Effect.flatMap((sha) => (sha ? record(event.sessionID, { type: "commit", sha }) : Effect.void)))
+            : Effect.void,
+        ),
+      )
+      if (!failed) return ran
       const moment = {
         type: "failure" as const,
         command: shell.value.input.command,
@@ -581,6 +713,7 @@ export const make = Effect.fnUntraced(function* (
       // Appended to the failing command's own result, where the agent reads the failure, so it's in the next request
       // without a message of its own. The command's result waits for Console at most the policy's timeout.
       return Effect.gen(function* () {
+        yield* ran
         const entries = yield* ask(event.sessionID, moment)
         if (entries === undefined || entries.length === 0) return
         const ids = entries.map((entry) => `${entry.id}@${entry.revision}`)
@@ -595,36 +728,16 @@ export const make = Effect.fnUntraced(function* (
         deliver(tracked(event.sessionID), entries)
       })
     })
-    // Once its task is done, a session that verified a fix or worked past a dead end is reminded, once, that it may
-    // publish what it learned (the publish audit's WB2: agents publish nothing unprompted). Not while its own work runs
-    // in the background, and not in a subagent's or fork's session, whose parent decides.
-    yield* ctx.session.hook("experimental.idle", (event) =>
-      Effect.gen(function* () {
-        const state = sessions.get(event.sessionID)
-        if (!state || state.reminded || event.background.some((job) => job.sessionID === event.sessionID)) return
-        const lesson = policy.lesson(state.work)
-        if (lesson === undefined) return
-        const session = yield* ctx.session.get({ sessionID: event.sessionID })
-        if (session.parentID !== undefined || session.fork) return
-        state.reminded = true
-        yield* ctx.session.synthetic({
-          sessionID: event.sessionID,
-          id: messageID(event.sessionID, "publish-reminder"),
-          text: policy.reminder(lesson),
-          description: "Memory: the session may publish what it learned",
-          metadata: { source: "console.memory", kind: "publish-reminder", lesson },
-        })
-      }).pipe(Effect.catch((cause) => Effect.logWarning("failed to remind the session to publish", { cause }))),
-    )
     // A compaction drops what was injected from the conversation, and the agent's view of entries with it.
     yield* ctx.event.subscribe({ types: ["session.compaction.ended"] }).pipe(
       Stream.runForEach((event) =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
           const state = sessions.get(event.data.sessionID)
           if (!state) return
           state.compactions++
           state.shown.clear()
           if (state.delivered.size > 0) state.redeliver = true
+          yield* record(event.data.sessionID, { type: "compaction" })
         }),
       ),
       Effect.forkIn(lease, { startImmediately: true }),
