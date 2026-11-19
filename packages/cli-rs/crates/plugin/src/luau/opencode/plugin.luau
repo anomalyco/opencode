@@ -5976,7 +5976,8 @@ export type Json = {
     --- `text` as a value and `nil`, or `nil` and why. A `null` field is left out and a `null` item is `null`; with
     --- `{ null = true }` every `null` is `null`.
     decode: (text: string, options: { null: boolean? }?) -> (any, string?),
-    --- The JSON text of `value`.
+    --- The JSON text of `value`: an object's keys in byte order (a number key as its text), an array's items in order,
+    --- the same in every VM. `pairs` walks a table in no set order, which differs from VM to VM.
     encode: (value: any) -> string,
     --- Whether table `t` goes to JSON as an array.
     isArray: (t: { [any]: any }) -> boolean,

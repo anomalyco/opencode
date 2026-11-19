@@ -51,6 +51,10 @@ pub(super) const TOKENS: &[&str] = &[
 /// The items an array's `Vec` holds before it grows: its length, up to this, as a length is not yet charged.
 const ITEMS_AHEAD: usize = 1024;
 
+/// The most keys a hand decoder reads of one table: more than any table it reads has fields, so a table with more has a
+/// key only serde knows.
+const FIELDS: usize = 24;
+
 /// How deep a value's tables may nest: past the layout depth ([`crate::reconcile::MAX_DEPTH`]) twice over, as a node's
 /// children are a table in a table.
 const DEPTH: usize = 2 * crate::reconcile::MAX_DEPTH as usize;
@@ -254,27 +258,15 @@ impl Decode {
     /// # Safety
     /// As for [`Decode::top`].
     unsafe fn render_fast(&mut self, state: *mut ffi::lua_State, index: c_int) -> Result<abi::Render, Slow> {
-        // SAFETY: as the caller's; each pair is popped before the next.
+        // SAFETY: as the caller's.
         unsafe {
             table(state, index)?;
-            self.enter(state, index, 0)?;
             let (mut kind, mut node) = (None, None);
-            let mut iter = 0;
-            loop {
-                iter = ffi::lua_rawiter(state, index, iter);
-                if iter < 0 {
-                    break;
-                }
-                let top = ffi::lua_gettop(state);
-                let pair = match self.field_name(state, top - 1) {
-                    Ok(b"type") => self.word(state, top).map(|word| kind = Some(word)),
-                    Ok(b"node") => self.node(state, top, 1).map(|value| node = Some(value)).map_err(Slow::from),
-                    Ok(_) => Err(Slow::Serde),
-                    Err(slow) => Err(slow),
-                };
-                ffi::lua_pop(state, 2);
-                pair?;
-            }
+            self.fields(state, index, 0, |decode, name, at| match name {
+                b"type" => decode.word(state, at).map(|word| kind = Some(word)),
+                b"node" => decode.node(state, at, 1).map(|value| node = Some(value)).map_err(Slow::from),
+                _ => Err(Slow::Serde),
+            })?;
             match (kind, node) {
                 (Some(b"show"), Some(node)) => Ok(abi::Render::Show(node)),
                 (Some(b"keep"), None) => Ok(abi::Render::Keep),
@@ -427,8 +419,9 @@ impl Decode {
         }
     }
 
-    /// Each pair of the table at `index`, `depth` deep, entered first: `read` gets the key and the value's absolute
-    /// slot, and the pair is popped after it.
+    /// Each pair of the table at `index`, `depth` deep, entered first, in the byte order of the keys: `read` gets the
+    /// key and the value's absolute slot, and the pair is popped after it. The order of `lua_rawiter` follows the VM's
+    /// hash seed; in key order, the field that fails first, and so the error, is the same in every VM.
     ///
     /// # Safety
     /// As for [`Decode::top`], with a table at `index`.
@@ -439,23 +432,34 @@ impl Decode {
         depth: usize,
         mut read: impl FnMut(&mut Self, &[u8], c_int) -> Result<(), Slow>,
     ) -> Result<(), Slow> {
-        // SAFETY: as the caller's; each pair is popped before the next.
+        // SAFETY: as the caller's; each pair is popped before the next, and a key lives while its table does.
         unsafe {
             self.enter(state, index, depth)?;
-            let mut iter = 0;
+            let mut keys = [(&[][..], 0); FIELDS];
+            let (mut count, mut iter) = (0, 0);
             loop {
                 iter = ffi::lua_rawiter(state, index, iter);
                 if iter < 0 {
-                    return Ok(());
+                    break;
                 }
-                let top = ffi::lua_gettop(state);
-                let pair = match self.field_name(state, top - 1) {
-                    Ok(name) => read(self, name, top),
-                    Err(slow) => Err(slow),
-                };
+                let name = self.field_name(state, ffi::lua_gettop(state) - 1);
+                ffi::lua_pop(state, 2);
+                if count == FIELDS {
+                    return Err(Slow::Serde);
+                }
+                // `lua_rawiter` from a pair's slot gives that pair again.
+                keys[count] = (name?, iter - 1);
+                count += 1;
+            }
+            let keys = &mut keys[..count];
+            keys.sort_unstable_by(|a, b| a.0.cmp(b.0));
+            for &(name, slot) in &*keys {
+                ffi::lua_rawiter(state, index, slot);
+                let pair = read(self, name, ffi::lua_gettop(state));
                 ffi::lua_pop(state, 2);
                 pair?;
             }
+            Ok(())
         }
     }
 
@@ -1007,8 +1011,60 @@ impl Slot<'_> {
                 return visitor.visit_seq(Seq { decode, state, index, depth, at: 1, length });
             }
             let Slot { decode, state, index, depth } = self;
-            visitor.visit_map(Pairs { decode, state, index, depth, iter: 0 })
+            let slots = keys(decode, state, index)?.into_iter();
+            visitor.visit_map(Pairs { decode, state, index, depth, slots })
         }
+    }
+}
+
+/// The slots of the pairs of the table at `index`, in the byte order of their keys as JSON writes them, a number as
+/// its text: the order of `lua_rawiter` follows the VM's hash seed, and an object's fields, and which of them a
+/// refusal names, must not. Two keys that write the same (`1` and `"1"`) are refused, as which one's value won would
+/// depend on that order too.
+///
+/// # Safety
+/// `index` is a valid absolute slot of `state` that holds a table, with room for a pair.
+unsafe fn keys(decode: &Decode, state: *mut ffi::lua_State, index: c_int) -> Result<Vec<c_int>, Refused> {
+    let mut keys: Vec<(Cow<[u8]>, c_int)> = Vec::new();
+    // SAFETY: as documented; each pair is popped before the next, and a key lives while its table does.
+    unsafe {
+        let mut iter = 0;
+        loop {
+            iter = ffi::lua_rawiter(state, index, iter);
+            if iter < 0 {
+                break;
+            }
+            let name = match ffi::lua_type(state, -2) {
+                ffi::LUA_TSTRING => Ok(Cow::Borrowed(raw_bytes(state, -2))),
+                ffi::LUA_TNUMBER => {
+                    Ok(Cow::Owned(number_name(ffi::lua_tonumberx(state, -2, std::ptr::null_mut())).into_bytes()))
+                }
+                kind => Err(Refused::Value(format!("a key of type {}", type_name(kind)))),
+            };
+            ffi::lua_pop(state, 2);
+            // Each pair's value is a part at least: a table of more is refused before its keys are kept.
+            if decode.values + keys.len() as u64 >= decode.most_values {
+                return Err(Refused::Bound(format!("it holds more than {} parts", decode.most_values)));
+            }
+            // `lua_rawiter` from a pair's slot gives that pair again.
+            keys.push((name?, iter - 1));
+        }
+    }
+    keys.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+    if let Some(twice) = keys.windows(2).find(|pair| pair[0].0 == pair[1].0) {
+        return Err(Refused::Value(format!(
+            "two keys write as the JSON key {:?}",
+            String::from_utf8_lossy(&twice[0].0)
+        )));
+    }
+    Ok(keys.into_iter().map(|(_, slot)| slot).collect())
+}
+
+/// A number key as JSON writes it: a whole number without a fraction.
+fn number_name(number: f64) -> String {
+    match number.fract() == 0.0 {
+        true => (number as i64).to_string(),
+        false => number.to_string(),
     }
 }
 
@@ -1129,25 +1185,27 @@ impl<'de> de::SeqAccess<'de> for Seq<'_> {
     }
 }
 
-/// A table's pairs, as `lua_rawiter` gives them: the pair stays on the stack from its key until its value is read.
+/// A table's pairs, in the order of their keys ([`keys`]): the pair stays on the stack from its key until its value is
+/// read.
 struct Pairs<'d> {
     decode: &'d mut Decode,
     state: *mut ffi::lua_State,
     index: c_int,
     depth: usize,
-    iter: c_int,
+    slots: std::vec::IntoIter<c_int>,
 }
 
 impl<'de> de::MapAccess<'de> for Pairs<'_> {
     type Error = Refused;
 
     fn next_key_seed<K: DeserializeSeed<'de>>(&mut self, seed: K) -> Result<Option<K::Value>, Refused> {
-        // SAFETY: the table is at `index`, with room for a pair, which `next_value_seed` pops, or this on an error.
+        let Some(slot) = self.slots.next() else {
+            return Ok(None);
+        };
+        // SAFETY: the table is at `index`, unchanged since its keys were read, with room for a pair, which
+        // `next_value_seed` pops, or this on an error.
         unsafe {
-            self.iter = ffi::lua_rawiter(self.state, self.index, self.iter);
-            if self.iter < 0 {
-                return Ok(None);
-            }
+            ffi::lua_rawiter(self.state, self.index, slot);
             let key = ffi::lua_gettop(self.state) - 1;
             let read = seed.deserialize(Key { decode: self.decode, state: self.state, index: key });
             if read.is_err() {
@@ -1223,11 +1281,7 @@ impl<'de> Deserializer<'de> for Key<'_> {
             match ffi::lua_type(self.state, self.index) {
                 ffi::LUA_TSTRING => visitor.visit_str(self.decode.key(raw_bytes(self.state, self.index))?),
                 ffi::LUA_TNUMBER => {
-                    let number = ffi::lua_tonumberx(self.state, self.index, std::ptr::null_mut());
-                    let name = match number.fract() == 0.0 {
-                        true => (number as i64).to_string(),
-                        false => number.to_string(),
-                    };
+                    let name = number_name(ffi::lua_tonumberx(self.state, self.index, std::ptr::null_mut()));
                     self.decode.charge_bytes(name.len())?;
                     visitor.visit_str(&name)
                 }
