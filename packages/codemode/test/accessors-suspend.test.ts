@@ -336,6 +336,34 @@ describe("suspended while a getter waits on a host call", () => {
     }
   })
 
+  test("an iterator's next getter waiting on a host call", async () => {
+    const code = `
+      const it = { [Symbol.iterator]() { let i = 0; return { get next() { const k = pick(slow(1)); return () => ({ done: i >= 2, value: i++ * k }) } } } }
+      const out = []
+      for (const x of it) out.push(x)
+      return [out, [...it]]`
+    const same = await suspendParked(code)
+    const again = hosting(undefined)
+    expect(await Effect.runPromise(again.runtime.resume(same.state).run())).toMatchObject({ ok: true, value: [[0, 2], [0, 2]] })
+    const run = await suspendInFlight(code)
+    expect(run.plain).toMatchObject({ ok: true, value: [[0, 2], [0, 2]] })
+    expect(run.resumed).toEqual(run.plain)
+    expect(frames(run.state)).toEqual(expect.arrayContaining(["get next", "$vmRedo (redo)", "$vmHostWait"]))
+  }, 3000)
+
+  for (const [name, code, value] of [
+    ["yield*", `function* g() { return yield* { [Symbol.iterator]() { let i = 0; return { get next() { const k = pick(slow(1)); return () => ({ done: i >= 2, value: i++ * k }) } } } } } return [...g()]`, [0, 2]],
+    ["for await", `const out = []; for await (const x of { [Symbol.asyncIterator]() { let i = 0; return { get next() { const k = pick(slow(1)); return async () => ({ done: i >= 2, value: i++ * k }) } } } }) out.push(x); return out`, [0, 2]],
+    ["destructure", `const [a, b] = { [Symbol.iterator]() { let i = 0; return { get next() { const k = pick(slow(1)); return () => ({ done: false, value: ++i * k }) } } } }; return [a, b]`, [2, 4]],
+    ["Array.from", `return Array.from({ [Symbol.iterator]() { let i = 0; return { get next() { const k = pick(slow(1)); return () => ({ done: i >= 2, value: i++ * k }) } } } })`, [0, 2]],
+  ] as const) {
+    test(`an iterator's next getter waiting on a host call (${name})`, async () => {
+      const run = await suspendInFlight(code)
+      expect(run.plain).toMatchObject({ ok: true, value })
+      expect(run.resumed).toEqual(run.plain)
+    }, 3000)
+  }
+
   test("a getter inside an iterator op, resumed in another process", async () => {
     const code = `
       const it = { [Symbol.iterator]() { let i = 0; return { get next() { return () => ({ get done() { return pick(slow(i)) > 4 }, value: i++ }) } } } }
