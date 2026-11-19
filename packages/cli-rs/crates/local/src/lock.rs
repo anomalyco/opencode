@@ -427,7 +427,7 @@ mod tests {
         assert!(fs::read_dir(dir.path()).unwrap().next().is_none());
     }
 
-    #[cfg(windows)]
+    // Windows reports `ERROR_ACCESS_DENIED` (5) busy and tries it `BUSY_TRIES` times more; elsewhere 5 is `EIO` and fails at once.
     #[test]
     fn a_lock_path_that_stays_busy_fails_after_the_bound() {
         let mut calls = 0;
@@ -436,6 +436,6 @@ mod tests {
             Err::<(), _>(io::Error::from_raw_os_error(5))
         });
         assert_eq!(result.unwrap_err().raw_os_error(), Some(5));
-        assert_eq!(calls, BUSY_TRIES + 1);
+        assert_eq!(calls, if cfg!(windows) { BUSY_TRIES + 1 } else { 1 });
     }
 }
