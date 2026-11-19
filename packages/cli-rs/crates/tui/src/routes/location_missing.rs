@@ -135,20 +135,7 @@ fn view(tui: &Tui, session: &SessionID, directory: &str) -> View {
             .child(&Text::new(app, "enter").fg(theme.text.base))
             .child(&Text::new(app, "confirm").fg(theme.text.muted)),
     );
-    let narrow = app.size().0 < 80;
-    let footer = View::new(app)
-        .direction(if narrow { FlexDirection::Column } else { FlexDirection::Row })
-        .shrink(0.0)
-        .gap(1)
-        .padding_edge(Edge::Top, 1)
-        .padding_edge(Edge::Left, 2)
-        .padding_edge(Edge::Right, 3)
-        .padding_edge(Edge::Bottom, 1)
-        .bg(theme.decrease(&theme.background.raised.base, 1))
-        .justify(if narrow { Justify::Start } else { Justify::SpaceBetween })
-        .align_items(if narrow { Align::Start } else { Align::Center })
-        .child(&actions)
-        .child(&hints);
+    let footer = super::session::permission::footer(app, &theme, app.size().0 < 80).child(&actions).child(&hints);
     let (session, directory) = (session.clone(), directory.to_owned());
     action.mouse_pointer(MousePointer::POINTER).on_click(bind!(tui, |tui, _, _| choose(
         &tui,

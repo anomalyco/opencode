@@ -630,7 +630,8 @@ fn reply(
     });
 }
 
-fn footer(app: &App, theme: &Theme, narrow: bool) -> View {
+/// The footer band of an inline prompt panel: a column when narrow, else a row.
+pub(crate) fn footer(app: &App, theme: &Theme, narrow: bool) -> View {
     View::new(app)
         .direction(if narrow { FlexDirection::Column } else { FlexDirection::Row })
         .shrink(0.0)
