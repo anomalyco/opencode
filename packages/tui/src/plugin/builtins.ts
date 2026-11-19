@@ -7,6 +7,7 @@ import SidebarLimit from "../feature-plugins/sidebar/limit"
 import SidebarMcp from "../feature-plugins/sidebar/mcp"
 import SidebarTodo from "../feature-plugins/sidebar/todo"
 import DiffViewer from "../feature-plugins/system/diff-viewer"
+import Inbox from "../feature-plugins/system/inbox"
 import Notifications from "../feature-plugins/system/notifications"
 import Plugins from "../feature-plugins/system/plugins"
 import Storybook from "../feature-plugins/system/storybook"
@@ -23,6 +24,7 @@ export const builtins = [
   SidebarMcp,
   SidebarTodo,
   SidebarFooter,
+  Inbox,
   Notifications,
   Plugins,
   Stats,

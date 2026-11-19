@@ -45,7 +45,8 @@ test
   const calls = createFetch((url, request) => {
     if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
     if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
-    if (url.pathname === `/api/session/${session.id}/message`) return json({ data: messages.toReversed(), cursor: {} })
+    if (url.pathname === `/api/session/${session.id}/message`)
+      return json({ data: messages.toReversed(), cursor: {} })
     if (url.pathname === `/api/session/${session.id}/inbox`) return json({ data: [] })
     if (url.pathname === `/api/session/${session.id}/permission`) return json({ data: [] })
     if (url.pathname === `/api/experimental/session/${session.id}/terminal`)
@@ -58,6 +59,7 @@ test
       return json({ data: { ticket: "fixture" } })
     return undefined
   }, createEventStream())
+  const input: string[] = []
   const server = Bun.serve({
     port: 0,
     idleTimeout: 0,
@@ -70,7 +72,9 @@ test
         socket.send(JSON.stringify({ type: "attached", inputProtocol: 1, role: "controller", info: pty }))
         socket.send(JSON.stringify({ type: "replay_complete" }))
       },
-      message() {},
+      message(_, data) {
+        if (typeof data !== "string" && data[0] === 1) input.push(data.subarray(5).toString())
+      },
     },
   })
   const { run } = await import("../src/app")
@@ -79,7 +83,12 @@ test
       app: { name: "test", version: "test", channel: "test" },
       server: { endpoint: { url: server.url.toString() } },
       config: {
-        get: async () => ({ animations: false, tabs: { mode: "off" } }),
+        get: async () => ({
+          animations: false,
+          tabs: { mode: "off" },
+          session: {},
+          keybinds: { "session.inbox.toggle": "f7" },
+        }),
         update: async () => ({}),
       },
       packages: { prepare: async () => ({ directory: "" }) },
@@ -115,6 +124,15 @@ test
     setup.mockInput.pressArrow("right")
     const terminal = setup.renderer.currentFocusedRenderable
     if (!(terminal instanceof EmbeddedTerminalRenderable)) throw new Error("Terminal was not focused")
+    if (width === 120) {
+      setup.mockInput.pressKey("F7")
+      await setup.waitForFrame((frame) => frame.includes("Search inbox sessions"))
+      setup.mockInput.pressKey("F7")
+      await setup.waitFor(() => setup.renderer.currentFocusedRenderable === terminal)
+      setup.mockInput.pressKey("z")
+      await setup.waitFor(() => input.length > 0)
+      expect(input).toEqual(["z"])
+    }
     await setup.waitForVisualIdle()
     const focused = scroll.scrollTop
     await setup.mockMouse.scroll(scroll.viewport.x + 2, scroll.viewport.y + 2, "up")

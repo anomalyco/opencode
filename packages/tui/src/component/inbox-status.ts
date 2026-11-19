@@ -1,0 +1,18 @@
+import type { useTheme } from "../context/theme"
+import type { InboxRow } from "./inbox-data"
+
+export function inboxStatus(theme: Pick<ReturnType<typeof useTheme>, "text">, detail: InboxRow["detail"]) {
+  const feedback = theme.text.feedback
+  switch (detail) {
+    case "Answer question":
+      return { marker: "[?]", label: "", color: feedback.info.base }
+    case "Review permission":
+      return { marker: "[!]", label: "", color: feedback.warning.base }
+    case "Working":
+      return { spinner: true, label: "", color: feedback.info.base }
+    case "Failed":
+      return { label: detail, color: feedback.error.base }
+    case "":
+      return { label: detail, color: theme.text.muted }
+  }
+}

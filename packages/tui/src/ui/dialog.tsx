@@ -4,6 +4,7 @@ import {
   children,
   createContext,
   createEffect,
+  createMemo,
   createSignal,
   For,
   onCleanup,
@@ -20,6 +21,7 @@ import { useToast } from "./toast"
 import { useClipboard } from "../context/clipboard"
 import { useConfig, useNewDesigns } from "../config"
 import { copy, copyOnSelectRelease } from "../util/selection"
+import { createAnimatable, tween } from "./animation"
 
 export type DialogSize = "medium" | "large" | "xlarge"
 
@@ -33,16 +35,31 @@ export function dialogWidth(size: DialogSize) {
   return 60
 }
 
+export function drawerWidth(columns: number) {
+  return columns < 72 ? columns : Math.max(56, Math.ceil(columns / 2))
+}
+
 export function Dialog(
   props: ParentProps<{
     size?: DialogSize
     centered?: boolean
+    drawer?: boolean
     onClose: () => void
   }>,
 ) {
   const dimensions = useTerminalDimensions()
   const theme = useTheme().surface("dialog")
   const renderer = useRenderer()
+  const config = useConfig().data
+  const drawerOffset = createMemo(() => {
+    if (!props.drawer) return
+    const motion = createAnimatable(
+      { progress: 0 },
+      { enabled: () => config.animations !== false, transition: tween({ duration: 0.16 }) },
+    )
+    motion.animate({ progress: 1 })
+    return () => Math.round((motion.value().progress - 1) * drawerWidth(dimensions().width))
+  })
 
   let dismiss = false
   return (
@@ -60,11 +77,11 @@ export function Dialog(
         }}
         width={dimensions().width}
         height={dimensions().height}
-        alignItems="center"
+        alignItems={props.drawer ? "flex-start" : "center"}
         justifyContent={props.centered ? "center" : undefined}
         position="absolute"
         zIndex={3000}
-        paddingTop={props.centered ? 0 : dimensions().height / 4}
+        paddingTop={props.drawer || props.centered ? 0 : dimensions().height / 4}
         left={0}
         top={0}
         backgroundColor={RGBA.fromInts(0, 0, 0, 150)}
@@ -77,8 +94,11 @@ export function Dialog(
             dismiss = false
             e.stopPropagation()
           }}
-          width={dialogWidth(props.size ?? "medium")}
-          maxWidth={dimensions().width - 2}
+          id={props.drawer ? "dialog-drawer" : undefined}
+          left={drawerOffset()?.()}
+          height={props.drawer ? "100%" : undefined}
+          width={props.drawer ? drawerWidth(dimensions().width) : dialogWidth(props.size ?? "medium")}
+          maxWidth={props.drawer ? undefined : dimensions().width - 2}
           backgroundColor={theme.background.base}
           paddingTop={1}
         >
@@ -341,6 +361,7 @@ function init() {
       element: () => JSX.Element
       onClose?: () => void
       key?: unknown
+      drawer?: boolean
     }[],
     size: "medium" as DialogSize,
     centered: false,
@@ -429,7 +450,11 @@ function init() {
       })
       refocus()
     },
-    replace(input: () => JSX.Element, onClose?: () => void, options?: { key?: unknown; size?: DialogSize }) {
+    replace(
+      input: () => JSX.Element,
+      onClose?: () => void,
+      options?: { key?: unknown; size?: DialogSize; drawer?: boolean },
+    ) {
       if (store.stack.length === 0) {
         focus = renderer.currentFocusedRenderable
         focus?.blur()
@@ -445,6 +470,7 @@ function init() {
             element: input,
             onClose,
             key: options?.key,
+            drawer: options?.drawer,
           },
         ])
       })
@@ -502,7 +528,12 @@ export function DialogProvider(props: ParentProps) {
         }
       >
         <Show when={value.stack.length}>
-          <Dialog onClose={() => value.clear()} size={value.size} centered={value.centered}>
+          <Dialog
+            onClose={() => value.clear()}
+            size={value.size}
+            centered={value.centered}
+            drawer={value.stack.at(-1)?.drawer}
+          >
             {/* Render each entry once: inserting the element function directly would re-run it, remounting
                 the dialog with fresh state, whenever a signal it reads at its root (e.g. a top-level <Show>) changes. */}
             <Show when={value.stack.at(-1)} keyed>
