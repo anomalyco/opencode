@@ -813,7 +813,6 @@ export const dict = {
   "sidebar.settings": "Settings",
   "sidebar.help": "Help",
   "sidebar.inbox.empty": "Sessions you work on will appear here",
-  "sidebar.inbox.filters": "Filter sessions",
   "sidebar.inbox.section.needsAttention": "Needs attention",
   "sidebar.inbox.section.unread": "Unread",
   "sidebar.inbox.showMore": "Show more",
@@ -1208,8 +1207,8 @@ export const dict = {
   "settings.general.row.mobileTitlebarBottom.title": "Bottom navigation",
   "settings.general.row.mobileTitlebarBottom.description": "Place the title bar at the bottom of the screen on mobile",
   "settings.general.row.showCustomAgents.title": "Show agent",
-  "settings.general.row.showArchivedSessions.title": "Show archived sessions",
-  "settings.general.row.showArchivedSessions.description": "Include archived sessions in the Inbox sidebar.",
+  "settings.general.row.showArchivedShortcut.title": "Show Archived shortcut",
+  "settings.general.row.showArchivedShortcut.description": "Show a shortcut to archived sessions in the Inbox sidebar.",
   "settings.general.row.showCustomAgents.description":
     "Switch between agents in the composer. When hidden, defaults to Build agent.",
   "settings.general.row.followUpBehavior.title": "Follow-up behavior",

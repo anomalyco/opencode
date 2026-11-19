@@ -53,22 +53,13 @@ test("Home keeps the session list in every interface mode", async ({ page }) => 
   }
 })
 
-test("the Inbox archive filter shares Preferences, persists, and follows live archive changes", async ({ page }) => {
-  const archivedRequests: string[] = []
-  page.on("request", (request) => {
-    const url = new URL(request.url())
-
-    if (url.pathname === "/api/session" && url.searchParams.get("archived") === "true") {
-      archivedRequests.push(request.url())
-    }
-  })
-
+test("the Inbox Archived shortcut can be hidden in Preferences and stays hidden after reload", async ({ page }) => {
   const workspace = await mockWorkspace(page, {
-    name: "Archive filter",
+    name: "Archived shortcut",
     sessions: [
-      { id: "ses_filter_recent", title: "Recent result", time: { created: T0, updated: T0 + 10, idle: T0 + 10 } },
+      { id: "ses_shortcut_recent", title: "Recent result", time: { created: T0, updated: T0 + 10, idle: T0 + 10 } },
       {
-        id: "ses_filter_archived",
+        id: "ses_shortcut_archived",
         title: "Archived result",
         time: { created: T0, updated: T0 + 20, idle: T0 + 20, archived: T0 + 30 },
       },
@@ -80,89 +71,44 @@ test("the Inbox archive filter shares Preferences, persists, and follows live ar
     },
   })
 
-  await page.goto("/")
+  await page.goto(sessionHref(workspace.sessions[1]!.id))
   const sidebar = page.locator('[data-slot="sidebar-inbox"]')
   const recent = sidebar.getByRole("button", { name: /Recent result/ })
   const archived = sidebar.getByRole("button", { name: /Archived result/ })
   const archives = sidebar.getByRole("button", { name: "Archived", exact: true })
-  const filter = sidebar.getByRole("button", { name: "Filter sessions", exact: true })
-  const option = page.getByRole("menuitemcheckbox", { name: "Show archived sessions", exact: true })
-  await expect(recent).toBeVisible()
-  await expect(archives).toBeHidden()
-  expect(archivedRequests).toHaveLength(0)
-
-  await filter.click()
-  await expect(option).not.toBeChecked()
-  await option.click()
-  await expect(option).toBeChecked()
-  await page.keyboard.press("Escape")
-  await expect(archives).toBeVisible()
-  expect(archivedRequests).toHaveLength(1)
-
-  // Archived search restores a selected result, so leave the result archived here.
-  await archives.click()
-  const search = page.getByRole("dialog")
-  await expect(search.getByText("Archived result", { exact: true })).toBeVisible()
-  await page.keyboard.press("Escape")
-  await expect(search).toBeHidden()
-  await page.goto(sessionHref(workspace.sessions[1]!.id))
-  await expect(archived).toBeVisible()
   await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
+  await expect(recent).toBeVisible()
+  await expect(archived).toBeVisible()
+  await expect(archives).toBeVisible()
 
   await page.keyboard.press("Control+,")
   const settings = page.getByTestId("settings-screen")
-  const setting = settings.getByRole("switch", { name: "Show archived sessions", exact: true })
+  await settings.getByRole("tab", { name: "Preferences", exact: true }).click()
+  const setting = settings.getByRole("switch", { name: "Show Archived shortcut", exact: true })
   await expect(setting).toBeChecked()
   await setting.locator("..").locator('[data-slot="switch-control"]').click()
   await expect(setting).not.toBeChecked()
   await settings.getByRole("button", { name: "Back to app", exact: true }).click()
-  await expect(archived).toBeHidden()
+  await expect(archived).toBeVisible()
   await expect(archives).toBeHidden()
   await expect(page).toHaveURL(new RegExp(`/session/${workspace.sessions[1]!.id}$`))
   await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
 
-  // An already loaded archive must stay hidden too, including after reopening the client.
   await page.reload()
   await expect(recent).toBeVisible()
-  await expect(archived).toBeHidden()
-  await filter.click()
-  await expect(option).not.toBeChecked()
-  await option.click()
-  await page.keyboard.press("Escape")
   await expect(archived).toBeVisible()
-  await page.reload()
-  await expect(archived).toBeVisible()
-  await filter.click()
-  await expect(option).toBeChecked()
-  await option.click()
-  await page.keyboard.press("Escape")
-  await expect(archived).toBeHidden()
-
-  await recent.click()
+  await expect(archives).toBeHidden()
   await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
-  workspace.sessions[0]!.time.archived = T0 + 40
-  await workspace.push([
-    {
-      id: "evt_filter_archive",
-      created: T0 + 40,
-      type: "session.archived",
-      durable: { aggregateID: workspace.sessions[0]!.id, seq: 1, version: 1 },
-      data: { sessionID: workspace.sessions[0]!.id },
-    },
-  ])
-  await expect(recent).toBeHidden()
-  await expect(sidebar.getByText("Sessions you work on will appear here", { exact: true })).toBeVisible()
-  workspace.sessions[0]!.time.archived = undefined
-  await workspace.push([
-    {
-      id: "evt_filter_unarchive",
-      created: T0 + 50,
-      type: "session.unarchived",
-      durable: { aggregateID: workspace.sessions[0]!.id, seq: 2, version: 1 },
-      data: { sessionID: workspace.sessions[0]!.id },
-    },
-  ])
-  await expect(recent).toBeVisible()
+
+  await page.keyboard.press("Control+,")
+  await settings.getByRole("tab", { name: "Preferences", exact: true }).click()
+  await expect(setting).not.toBeChecked()
+  await setting.locator("..").locator('[data-slot="switch-control"]').click()
+  await expect(setting).toBeChecked()
+  await settings.getByRole("button", { name: "Back to app", exact: true }).click()
+  await expect(archives).toBeVisible()
+  await archives.click()
+  await expect(page.getByRole("dialog").getByText("Archived result", { exact: true })).toBeVisible()
 })
 
 test("choosing Customize replaces Home with Settings in desktop side tabs", async ({ page }) => {

@@ -54,7 +54,7 @@ export function SidebarInbox() {
   const settings = useSettings()
   const inbox = createSessionInbox({
     get archived() {
-      return settings.general.showArchivedSessions()
+      return settings.general.showArchivedShortcut()
     },
   })
 
@@ -281,25 +281,6 @@ export function SidebarInbox() {
   return (
     <InboxSessionList
       loading={inbox.loading()}
-      filters={
-        <div class="flex shrink-0 justify-end pb-1">
-          <Menu modal={false} placement="bottom-end">
-            <Menu.Trigger as={Button} variant="ghost-muted" size="small" icon="sliders">
-              {language.t("sidebar.inbox.filters")}
-            </Menu.Trigger>
-            <Menu.Portal>
-              <Menu.Content>
-                <Menu.CheckboxItem
-                  checked={settings.general.showArchivedSessions()}
-                  onChange={settings.general.setShowArchivedSessions}
-                >
-                  {language.t("settings.general.row.showArchivedSessions.title")}
-                </Menu.CheckboxItem>
-              </Menu.Content>
-            </Menu.Portal>
-          </Menu>
-        </div>
-      }
       announcement={announcement.text}
       current={{
         get count() {
@@ -318,7 +299,7 @@ export function SidebarInbox() {
         },
         onToggle: () => setState("workingExpanded", !state.workingExpanded),
       }}
-      archived={sections().archived}
+      archived={settings.general.showArchivedShortcut() && sections().archived}
       onArchived={async () => {
         const { DialogSessionSearch } = await import("@/shell/commands/session-search")
 
@@ -366,7 +347,6 @@ function DeleteDialog(props: { title: string | undefined; onConfirm: () => void 
 
 export function InboxSessionList(props: {
   loading?: boolean
-  filters?: JSX.Element
   announcement?: string
   current: { count: number; rows: () => JSX.Element }
   sections: { id: string; label: string; count: number; rows: () => JSX.Element; more?: () => JSX.Element }[]
@@ -458,7 +438,6 @@ export function InboxSessionList(props: {
         <span class="sr-only" role="status" aria-atomic="true">
           {props.announcement}
         </span>
-        {props.filters}
         <Show
           when={!props.loading}
           fallback={

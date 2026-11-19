@@ -31,10 +31,10 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   { tab: "general", label: "settings.general.row.language.title", target: "settings-language" },
   {
     tab: "general",
-    label: "settings.general.row.showArchivedSessions.title",
-    description: "settings.general.row.showArchivedSessions.description",
-    target: "settings-show-archived-sessions",
-    keywords: "sidebar inbox archive hide filter",
+    label: "settings.general.row.showArchivedShortcut.title",
+    description: "settings.general.row.showArchivedShortcut.description",
+    target: "settings-show-archived-shortcut",
+    keywords: "sidebar inbox archive hide shortcut",
   },
   {
     tab: "general",
