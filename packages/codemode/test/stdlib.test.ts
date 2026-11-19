@@ -1719,6 +1719,24 @@ describe("toLocaleString", () => {
     ).toEqual(["Cannot convert undefined or null to object.", "Cannot convert undefined or null to object."])
   })
 
+  test("number locale tags are canonicalized once, by the host", async () => {
+    expect(
+      await value(`
+      return [
+        (1234.5).toLocaleString("de-x-yes"),
+        (1234.5).toLocaleString(["en-x-yes", "de"]),
+        (1234.5).toLocaleString(5),
+        (1234.5).toLocaleString(Object.assign({ length: 1 }, ["de-x-yes"])),
+      ]
+    `),
+    ).toEqual([
+      (1234.5).toLocaleString("de-x-yes"),
+      (1234.5).toLocaleString(["en-x-yes", "de"]),
+      "1,234.5",
+      (1234.5).toLocaleString("de-x-yes"),
+    ])
+  })
+
   test("a negative array-like length is an empty locale list", async () => {
     expect(
       await value(`

@@ -48,11 +48,12 @@ const toLocaleString = (value: number, locales: Value, options: Value): NativeRe
       [...list.map(() => "string" as const), ...read.map(([, hint]) => hint)],
       [...list, ...read.map(([name]) => get(options as Obj, name))],
       (primitives) => {
-        const hostLocales = locales instanceof Obj ? primitives.slice(0, length) : locales
-        for (const tag of Array.isArray(hostLocales) ? hostLocales : [hostLocales]) checkLocaleTag(tag)
-        const canonical = Intl.getCanonicalLocales(hostLocales as string | Array<string>)
+        // Intl reads a primitive other than a string as an empty list. The host canonicalizes the tags itself; doing it
+        // here too would canonicalize twice, which breaks some valid tags.
+        const tags = locales instanceof Obj ? primitives.slice(0, length) : typeof locales === "string" ? [locales] : []
+        for (const tag of tags) checkLocaleTag(tag)
         return value.toLocaleString(
-          canonical.length === 0 ? "en-US" : canonical,
+          (tags.length === 0 ? "en-US" : tags) as string | Array<string>,
           (options instanceof Obj
             ? Object.fromEntries(read.map(([name], index) => [name, primitives[length + index]]))
             : options) as Intl.NumberFormatOptions,
