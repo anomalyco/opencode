@@ -4,7 +4,6 @@ import { useData } from "../../context/data"
 import { DialogSelect } from "../../ui/dialog-select"
 import { useClipboard } from "../../context/clipboard"
 import { useToast } from "../../ui/toast"
-import { useClient } from "../../context/client"
 import { errorMessage } from "../../util/error"
 import { DialogFork } from "./dialog-fork"
 import { usePromptRestore } from "../../prompt/restore"
@@ -15,7 +14,6 @@ export function DialogMessage(props: { messageID: string; sessionID: string }) {
   const data = useData()
   const clipboard = useClipboard()
   const toast = useToast()
-  const client = useClient()
   const renderer = useRenderer()
   const restorePrompt = usePromptRestore()
   const newDesigns = useNewDesigns()
@@ -42,7 +40,7 @@ export function DialogMessage(props: { messageID: string; sessionID: string }) {
             // The composer changes only once the revert is staged, so a failed revert leaves the draft alone.
             void (async () => {
               const restored = value?.type === "user" ? await restorePrompt(value) : undefined
-              await client.api.session.revert.stage({ sessionID, messageID })
+              await data.session.undo({ sessionID, messageID })
               if (restored) appendToSessionPrompt(sessionID, restored, renderer.widthMethod)
             })().catch((error) => toast.show({ message: errorMessage(error), variant: "error", duration: 5000 }))
             dialog.clear()
