@@ -1,4 +1,4 @@
-import type { BrowserWindow, Session } from "electron"
+import type { BeforeSendResponse, BrowserWindow, OnBeforeSendHeadersListenerDetails, Session } from "electron"
 import { SidecarCredentials } from "../service/sidecar-credentials"
 import { addRendererHeaders, hasHeader, upsertHeader } from "./headers"
 import { isRendererUrl } from "./scheme"
@@ -95,25 +95,43 @@ export function wireRendererHeaders(win: BrowserWindow) {
   // decision, so adding Authorization here does not reintroduce one.
   //
   // Only the renderer's own top-level frame is credentialed. Other content in this session (web views,
-  // embedded pages) can reach the same loopback origin and must not inherit its access. Requests with
+  // embedded pages) can reach the same sidecar origin and must not inherit its access. Requests with
   // no frame, such as from a service worker, are not credentialed either; the renderer registers none.
-  session.webRequest.onBeforeSendHeaders(
-    { urls: ["http://127.0.0.1/*", "http://localhost/*"] },
-    (details, callback) => {
-      const frame = details.frame
-      const renderer = !!frame && frame.parent === null && isRendererUrl(frame.url)
-      const authorization = renderer && SidecarCredentials.authorization(SidecarCredentials.get(), details.url)
+  const credential = (
+    details: OnBeforeSendHeadersListenerDetails,
+    callback: (response: BeforeSendResponse) => void,
+  ) => {
+    const frame = details.frame
+    const renderer = !!frame && frame.parent === null && isRendererUrl(frame.url)
+    const authorization = renderer && SidecarCredentials.authorization(SidecarCredentials.get(), details.url)
 
-      if (authorization && !hasHeader(details.requestHeaders, "Authorization")) {
-        upsertHeader(details.requestHeaders, "Authorization", authorization)
-      }
+    if (authorization && !hasHeader(details.requestHeaders, "Authorization")) {
+      upsertHeader(details.requestHeaders, "Authorization", authorization)
+    }
 
-      callback({ requestHeaders: details.requestHeaders })
-    },
-  )
+    callback({ requestHeaders: details.requestHeaders })
+  }
+
+  // A service configured to listen on another address (a LAN or Tailscale IP) is still the sidecar, so the filter
+  // follows its host. Electron keeps one listener per event, so each registration replaces the last.
+  const follow = () =>
+    session.webRequest.onBeforeSendHeaders({ urls: sidecarUrls(SidecarCredentials.get()) }, credential)
+
+  follow()
+  SidecarCredentials.onChange(follow)
   session.webRequest.onHeadersReceived((details, callback) => {
     const responseHeaders = details.responseHeaders ?? {}
     addRendererHeaders(responseHeaders, { document: isRendererUrl(details.url, true) })
     callback({ responseHeaders })
   })
+}
+
+// Match patterns ignore the port when they name none, so one pattern covers every port on the host.
+function sidecarUrls(sidecar: SidecarCredentials.Data | undefined) {
+  const loopback = ["http://127.0.0.1/*", "http://localhost/*"]
+
+  if (!sidecar || !URL.canParse(sidecar.url)) return loopback
+  const url = new URL(sidecar.url)
+
+  return [...new Set([...loopback, `${url.protocol}//${url.hostname}/*`])]
 }
