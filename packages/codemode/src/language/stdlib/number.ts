@@ -36,8 +36,10 @@ const numberFormatOptions = [
 ]
 
 // The host's Intl.NumberFormat formats; with no locales it stays en-US so output does not depend on the host.
-const toLocaleString = (value: number, locales: Value, options: Value): NativeResult =>
-  withReads(() => {
+const toLocaleString = (value: number, locales: Value, options: Value): NativeResult => {
+  // The host's own message for null quotes host source, so this one is thrown here.
+  if (locales === null || options === null) throw typeError("Cannot convert undefined or null to object.")
+  return withReads(() => {
     const length = locales instanceof Obj ? coerceToInteger(get(locales, "length")) : 0
     checkLocaleCount(length)
     const list = Array.from({ length }, (_, index) => get(locales as Obj, index))
@@ -58,6 +60,7 @@ const toLocaleString = (value: number, locales: Value, options: Value): NativeRe
       },
     )
   })
+}
 
 export const numberGlobal = <R>(ctx: Interpreter<R>) => {
   const builtins = ctx.builtins

@@ -1710,6 +1710,13 @@ describe("toLocaleString", () => {
       ["RangeError", true],
       ["TypeError", true],
     ])
+    expect(
+      await value(`
+      return [() => (1).toLocaleString(null), () => (1).toLocaleString("en-US", null)].map((f) => {
+        try { return f() } catch (e) { return e.message }
+      })
+    `),
+    ).toEqual(["Cannot convert undefined or null to object.", "Cannot convert undefined or null to object."])
   })
 
   test("numbers cap their locale list before reading it, and each tag's length", async () => {
