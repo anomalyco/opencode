@@ -67,8 +67,12 @@ pub fn run(input: Input) -> error::Result<()> {
     let mut writer = Writer::new(footer.clone(), Scrollback::new(&app)?, theme.clone(), settings.mono, true);
     writer.set_shell_output(settings.shell_output == Visibility::Show);
     writer.set_image_preview(input.config.session.as_ref().and_then(|session| session.image_preview).unwrap_or(false));
+    let markdown_source = input.config.session.as_ref().and_then(|session| session.markdown)
+        == Some(opencode_local::cli_config::Markdown::Source);
+    writer.set_markdown_source(markdown_source);
     let prompt = Prompt::new(&app, &theme, settings.mono, &input.config);
     let footers = Footers::new(&app, &prompt, &theme, settings.mono);
+    footers.set_markdown_source(markdown_source);
     let status = Text::new(&app, "").wrap(WrapMode::None).truncate(true).height(1).shrink(0.0);
     status.grow(1.0).basis(Length::Auto).min_width(0);
     // The work spinner's cell and its gap, shown while a turn runs (`mini-work-spinner`).

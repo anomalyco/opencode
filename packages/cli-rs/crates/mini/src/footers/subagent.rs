@@ -22,6 +22,8 @@ pub struct Body<'a> {
     /// The interrupt key, shown while the child runs.
     pub interrupt: Option<String>,
     pub shell_output: bool,
+    /// `session.markdown: "source"`.
+    pub markdown_source: bool,
     pub theme: &'a RunTheme,
     pub mono: bool,
     /// The inspector's size inside its border.
@@ -176,7 +178,8 @@ impl Inspector {
                 );
             }
             Some(commits) => {
-                let options = BodyOptions { shell_output: body.shell_output, mono };
+                let options =
+                    BodyOptions { shell_output: body.shell_output, mono, markdown_source: body.markdown_source };
                 let mut previous: Option<&Commit> = None;
                 for commit in commits {
                     let entry = entry_body(commit, options);

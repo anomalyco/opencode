@@ -189,6 +189,8 @@ struct Inner {
     body: View,
     theme: RefCell<RunTheme>,
     mono: bool,
+    /// `session.markdown: "source"`, for the subagent inspector's reasoning.
+    markdown_source: Cell<bool>,
     home: Option<std::path::PathBuf>,
     target: RefCell<Option<Target>>,
     tracker: RefCell<Option<Tracker>>,
@@ -260,6 +262,7 @@ impl Footers {
             body,
             theme: RefCell::new(theme.clone()),
             mono,
+            markdown_source: Cell::new(false),
             home: std::env::home_dir(),
             target: RefCell::default(),
             tracker: RefCell::default(),
@@ -279,6 +282,10 @@ impl Footers {
 
     pub fn root(&self) -> &View {
         &self.0.root
+    }
+
+    pub fn set_markdown_source(&self, source: bool) {
+        self.0.markdown_source.set(source);
     }
 
     pub fn set_hooks(&self, hooks: Hooks) {
@@ -833,6 +840,7 @@ impl Inner {
                 commits: commits.as_deref(),
                 interrupt,
                 shell_output,
+                markdown_source: self.markdown_source.get(),
                 theme: &run,
                 mono: self.mono,
                 width: width.saturating_sub(1),
