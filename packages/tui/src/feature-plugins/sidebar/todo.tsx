@@ -18,7 +18,7 @@ export function SidebarTodo(props: { context: Plugin.Context; sessionID: string 
 
   return (
     <Show when={list().length > 0}>
-      <box>
+      <box flexShrink={0}>
         <box
           flexDirection="row"
           gap={1}
