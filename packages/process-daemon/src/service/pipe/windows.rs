@@ -16,7 +16,7 @@ use std::io;
 use std::marker::PhantomData;
 use std::mem::{size_of, size_of_val};
 use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
-use std::os::windows::io::{AsRawHandle, OwnedHandle};
+use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 use std::path::Path;
 use std::ptr::{null, null_mut};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -254,42 +254,16 @@ fn spawn(
 }
 
 /// A created, still suspended process. Dropping it before [`Self::resume`]
-/// terminates it, so an early error or unwind never strands a suspended child
-/// holding the output pipe or working directory open.
+/// terminates it, so an early error or unwind doesn't leave the suspended
+/// child running.
 struct Spawned {
     pid: u32,
+    /// Taken by `resume`; `Drop` terminates the child while it is still here.
     process: Option<OwnedHandle>,
-    thread: Option<OwnedHandle>,
+    thread: OwnedHandle,
 }
 
 impl Spawned {
-    /// Adopts the handles returned by a successful `CreateProcessW`.
-    unsafe fn adopt(info: PROCESS_INFORMATION) -> io::Result<Self> {
-        let process = owned_handle(info.hProcess);
-        let thread = owned_handle(info.hThread);
-        let mut this = Self {
-            pid: info.dwProcessId,
-            process: None,
-            thread: None,
-        };
-        match (process, thread) {
-            (Ok(process), Ok(thread)) => {
-                this.process = Some(process);
-                this.thread = Some(thread);
-                Ok(this)
-            }
-            (Ok(process), Err(error)) => {
-                // Arm `Drop` so returning terminates the suspended process.
-                this.process = Some(process);
-                Err(error)
-            }
-            (Err(error), thread) => {
-                drop(thread);
-                Err(error)
-            }
-        }
-    }
-
     fn process(&self) -> &OwnedHandle {
         self.process
             .as_ref()
@@ -297,12 +271,8 @@ impl Spawned {
     }
 
     fn resume(mut self) -> io::Result<(u32, OwnedHandle)> {
-        let thread = self
-            .thread
-            .as_ref()
-            .expect("thread handle is live until resume");
         // SAFETY: the thread handle is live and uniquely owned.
-        if unsafe { ResumeThread(thread.as_raw_handle()) } == u32::MAX {
+        if unsafe { ResumeThread(self.thread.as_raw_handle()) } == u32::MAX {
             return Err(io::Error::last_os_error());
         }
         Ok((
@@ -371,7 +341,13 @@ fn create_process(request: &CreatePipe, client: &OwnedHandle) -> io::Result<Spaw
         return Err(io::Error::last_os_error());
     }
     // SAFETY: CreateProcessW returned new, uniquely owned handles.
-    unsafe { Spawned::adopt(info) }
+    Ok(unsafe {
+        Spawned {
+            pid: info.dwProcessId,
+            process: Some(OwnedHandle::from_raw_handle(info.hProcess)),
+            thread: OwnedHandle::from_raw_handle(info.hThread),
+        }
+    })
 }
 
 /// Waits for the child to exit, then reports the exit code, or the signal the
@@ -1232,7 +1208,7 @@ mod tests {
         let gate_arg = gate.0.display().to_string().replace('\'', "''");
 
         let start = |id, command: &str| {
-            let request = test_request(
+            let mut request = test_request(
                 alias,
                 &[
                     "-NoLogo",
@@ -1242,6 +1218,8 @@ mod tests {
                     command,
                 ],
             );
+            // The full environment, as OpenCode passes it to the shell.
+            request.env = std::env::vars().collect();
             let OutputPipe { server, client } = output_pipe().unwrap();
             Guarded {
                 process: spawn(id, &request, Job::new(id), client).unwrap(),
