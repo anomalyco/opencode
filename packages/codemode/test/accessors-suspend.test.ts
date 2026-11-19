@@ -233,6 +233,8 @@ const suspendInFlight = async (code: string) => {
   const program = first.runtime.program(code, { runId: "r" })
   const fiber = Effect.runFork(program.run())
   await first.started
+  // Round-trip mode yields at its checkpoints, so let the run go on until it blocks on `slow` before suspending.
+  for (let i = 0; i < 10; i++) await new Promise((done) => setImmediate(done))
   const suspended = await Effect.runPromise(program.suspend())
   if (suspended.ok !== "suspended") throw new Error(`expected a suspended run, got ${JSON.stringify(suspended)}`)
   gate.resolve()
