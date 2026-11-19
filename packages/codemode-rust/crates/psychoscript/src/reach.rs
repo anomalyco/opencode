@@ -1,29 +1,27 @@
 //! Which heap objects a run can still reach, for a snapshot: the reference saves only what is reachable, so a value
 //! the program dropped never stops a resume. Every cell, stack slot and coroutine counts as a root.
+//!
+//! The walk over an object's references and over the run's roots is shared with the collector (`Visit`), which also
+//! follows strings and closure cells.
 
 use crate::object::*;
+use crate::strings::StrId;
 use crate::value::{Id, Slot, Value};
 use crate::vm::{Frame, Job, Reaction, SavedFrame, Vm};
 
-struct Walk<'v> {
-    heap: &'v [Obj],
-    seen: Vec<bool>,
-    todo: Vec<Id>,
-}
+/// A walk over references: every object, string and cell a value, frame, object or root holds.
+pub(crate) trait Visit {
+    fn id(&mut self, id: Id);
 
-impl Walk<'_> {
-    fn id(&mut self, id: Id) {
-        if let Some(seen) = self.seen.get_mut(id as usize)
-            && !*seen
-        {
-            *seen = true;
-            self.todo.push(id);
-        }
-    }
+    fn str(&mut self, _s: StrId) {}
+
+    fn cell(&mut self, _c: u32) {}
 
     fn val(&mut self, v: &Value) {
-        if let Value::Obj(id) = v {
-            self.id(*id);
+        match v {
+            Value::Obj(id) => self.id(*id),
+            Value::Str(s) => self.str(*s),
+            _ => {}
         }
     }
 
@@ -41,6 +39,9 @@ impl Walk<'_> {
 
     fn frame(&mut self, f: &Frame) {
         self.vals(f.extra.iter());
+        for c in f.upvals.iter() {
+            self.cell(*c);
+        }
         if let crate::vm::FrameKind::Generator(g, _) = f.kind {
             self.id(g);
         }
@@ -102,38 +103,68 @@ impl Walk<'_> {
         }
     }
 
-    fn map(&mut self, m: &OrderedMap) {
-        for (k, v) in m.entries.iter().flatten() {
-            self.val(k);
-            self.val(v);
+    fn object(&mut self, o: &Obj) {
+        self.head(o);
+        self.bulk(o, 0, usize::MAX);
+    }
+
+    /// The slots of `o` from `from` to `to`, in the order properties, then elements or entries: the parts that may be
+    /// long, which a collector traces a range at a time.
+    fn bulk(&mut self, o: &Obj, from: usize, to: usize) {
+        let props = &o.props.items;
+        for p in range(props, from, to) {
+            self.val(&p.value);
+        }
+        let (from, to) = (
+            from.saturating_sub(props.len()),
+            to.saturating_sub(props.len()),
+        );
+        match &o.kind {
+            Kind::Array(items) | Kind::Arguments(items) => self.vals(range(items, from, to)),
+            Kind::ListIter { items, .. } => self.vals(range(items, from, to)),
+            Kind::Map(m) | Kind::Set(m) | Kind::WeakMap(m) | Kind::WeakSet(m) => {
+                for (k, v) in range(&m.entries, from, to).iter().flatten() {
+                    self.val(k);
+                    self.val(v);
+                }
+            }
+            _ => {}
         }
     }
 
-    fn object(&mut self, o: &Obj) {
+    /// Everything `o` refers to apart from its `bulk`.
+    fn head(&mut self, o: &Obj) {
         if let Some(p) = o.proto {
             self.id(p);
         }
-        for p in &o.props.items {
-            self.val(&p.value);
-        }
         match &o.kind {
             Kind::Ordinary
+            | Kind::Array(_)
+            | Kind::Arguments(_)
+            | Kind::ListIter { .. }
+            | Kind::Map(_)
+            | Kind::Set(_)
+            | Kind::WeakMap(_)
+            | Kind::WeakSet(_)
             | Kind::Error(_)
             | Kind::RegExp(_)
             | Kind::Date(_)
             | Kind::Bytes(_)
             | Kind::TextDecoder(_)
             | Kind::Headers(_)
-            | Kind::StrIter { .. }
             | Kind::Live(_) => {}
+            Kind::StrIter { s, .. } => self.str(*s),
             Kind::Namespace(ns) => {
                 if !ns.is_root() {
                     self.id(ns.parent);
                 }
             }
-            Kind::Array(items) | Kind::Arguments(items) => self.vals(items.iter()),
-            Kind::ListIter { items, .. } => self.vals(items.iter()),
-            Kind::Closure(c) => self.val(&c.this),
+            Kind::Closure(c) => {
+                self.val(&c.this);
+                for cell in c.upvals.iter() {
+                    self.cell(*cell);
+                }
+            }
             Kind::Native { data, .. } => self.val(data),
             Kind::Bound(b) => {
                 self.val(&b.0);
@@ -149,7 +180,6 @@ impl Walk<'_> {
                     self.reaction(r);
                 }
             }
-            Kind::Map(m) | Kind::Set(m) | Kind::WeakMap(m) | Kind::WeakSet(m) => self.map(m),
             Kind::Generator(g) => self.gen_state(g),
             Kind::ArrayIter { target, .. }
             | Kind::MapIter { target, .. }
@@ -167,6 +197,7 @@ impl Walk<'_> {
                 use crate::builtins::iterator::HelperOp;
                 self.val(&h.iter);
                 self.val(&h.next);
+                self.val(&h.site);
                 match &h.op {
                     HelperOp::Map(f) | HelperOp::Filter(f) => self.val(f),
                     HelperOp::FlatMap(f, inner) => {
@@ -200,6 +231,28 @@ impl Walk<'_> {
     }
 }
 
+/// The part of `s` from `from` to `to`, as far as it goes.
+fn range<T>(s: &[T], from: usize, to: usize) -> &[T] {
+    &s[from.min(s.len())..to.min(s.len())]
+}
+
+struct Walk<'v> {
+    heap: &'v [Obj],
+    seen: Vec<bool>,
+    todo: Vec<Id>,
+}
+
+impl Visit for Walk<'_> {
+    fn id(&mut self, id: Id) {
+        if let Some(seen) = self.seen.get_mut(id as usize)
+            && !*seen
+        {
+            *seen = true;
+            self.todo.push(id);
+        }
+    }
+}
+
 /// Marks every object reachable from the run's roots; the objects every fresh run makes are roots too.
 pub fn reachable(vm: &Vm) -> Vec<bool> {
     let mut w = Walk {
@@ -211,6 +264,17 @@ pub fn reachable(vm: &Vm) -> Vec<bool> {
         w.id(id as Id);
     }
     w.slots(&vm.cells);
+    roots(&mut w, vm);
+    while let Some(id) = w.todo.pop() {
+        let o = &w.heap[id as usize];
+        w.object(o);
+    }
+    w.seen
+}
+
+/// Visits the run's roots apart from its cells and the objects every fresh run makes: the stack, frames, globals,
+/// jobs, coroutines and what the host holds.
+pub(crate) fn roots(w: &mut impl Visit, vm: &Vm) {
     w.slots(&vm.stack);
     for f in &vm.frames {
         w.frame(f);
@@ -271,9 +335,4 @@ pub fn reachable(vm: &Vm) -> Vec<bool> {
     if let Some(o) = &vm.outcome {
         w.outcome(o);
     }
-    while let Some(id) = w.todo.pop() {
-        let o = &w.heap[id as usize];
-        w.object(o);
-    }
-    w.seen
 }
