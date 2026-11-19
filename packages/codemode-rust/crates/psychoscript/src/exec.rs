@@ -134,6 +134,11 @@ impl<'a, T> Tasks<'a, T> {
         self.live == 0
     }
 
+    /// The tags of the futures in flight.
+    pub fn tags(&self) -> impl Iterator<Item = u32> + '_ {
+        self.slots.iter().flatten().map(|slot| slot.tag)
+    }
+
     /// Starts a future: it is polled once now, so its work begins at the call. `Ready` means it finished already.
     /// While the run computes on a worker thread, that poll happens back `home`, where the run is driven.
     pub fn spawn(&mut self, tag: u32, future: BoxFuture<'a, T>, home: Option<&Home>) -> Poll<T>

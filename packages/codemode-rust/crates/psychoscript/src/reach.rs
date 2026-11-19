@@ -1,29 +1,149 @@
 //! Which heap objects a run can still reach, for a snapshot: the reference saves only what is reachable, so a value
 //! the program dropped never stops a resume. Every cell, stack slot and coroutine counts as a root.
+//!
+//! [`roots`] lists every value the VM holds outside its heap, and [`children`] every value one object holds: a walk
+//! over the two (as [`reachable`], and a collector's mark phase) sees everything a run can reach.
 
 use crate::object::*;
 use crate::value::{Id, Slot, Value};
-use crate::vm::{Frame, Job, Reaction, SavedFrame, Vm};
+use crate::vm::{Frame, FrameKind, Job, Reaction, Resume, SavedFrame, Vm};
 
-struct Walk<'v> {
-    heap: &'v [Obj],
+/// Marks every object reachable from the run's roots; the objects every fresh run makes are roots too.
+pub fn reachable(vm: &Vm) -> Vec<bool> {
+    let mut m = Marks {
+        seen: vec![false; vm.heap.len()],
+        todo: Vec::new(),
+    };
+    for id in 0..vm.snapshot_base.heap.min(vm.heap.len()) {
+        m.mark(Value::Obj(id as Id));
+    }
+    roots(vm, &mut |v| m.mark(v));
+    while let Some(id) = m.todo.pop() {
+        children(&vm.heap[id as usize], &mut |v| m.mark(v));
+    }
+    m.seen
+}
+
+struct Marks {
     seen: Vec<bool>,
     todo: Vec<Id>,
 }
 
-impl Walk<'_> {
-    fn id(&mut self, id: Id) {
-        if let Some(seen) = self.seen.get_mut(id as usize)
+impl Marks {
+    fn mark(&mut self, v: Value) {
+        if let Value::Obj(id) = v
+            && let Some(seen) = self.seen.get_mut(id as usize)
             && !*seen
         {
             *seen = true;
             self.todo.push(id);
         }
     }
+}
+
+/// Every value the VM holds outside its heap objects: cells, stacks, frames, globals, constants, jobs, coroutines,
+/// the host's calls (queued, in flight, settled), and the outcome.
+pub fn roots(vm: &Vm, visit: &mut impl FnMut(Value)) {
+    let mut t = Tracer(visit);
+    t.slots(&vm.cells);
+    t.slots(&vm.stack);
+    for f in &vm.frames {
+        t.frame(f);
+    }
+    t.vals(vm.globals.iter());
+    t.vals(vm.global_map.values());
+    t.vals(vm.consts.iter());
+    for id in vm.template_objs_ref().iter().flatten() {
+        t.id(*id);
+    }
+    for j in &vm.jobs {
+        match j {
+            Job::Reaction(r, o) => {
+                t.reaction(r);
+                t.outcome(o);
+            }
+            Job::Thenable {
+                promise,
+                thenable,
+                then,
+            } => {
+                t.id(*promise);
+                t.val(thenable);
+                t.val(then);
+            }
+        }
+    }
+    for (p, _) in &vm.inbox {
+        t.id(*p);
+    }
+    for c in &vm.coroutines {
+        if let Some(s) = &c.saved {
+            t.saved(s);
+        }
+        if let Some(p) = c.promise {
+            t.id(p);
+        }
+    }
+    t.vals(vm.replay.iter());
+    match &vm.convert_req {
+        Some(crate::conversion::Request::One(v, _)) => t.val(v),
+        Some(crate::conversion::Request::List(values, ..)) => t.vals(values.iter()),
+        None => {}
+    }
+    let h = &vm.host;
+    for q in &h.queued {
+        match q {
+            crate::host::Queued::Call(p, _, r, _) => {
+                t.id(*p);
+                t.id(r.promise);
+            }
+            crate::host::Queued::Work(p, _, f) => {
+                t.id(*p);
+                t.id(f.promise);
+            }
+        }
+    }
+    for tag in h.tasks.tags() {
+        t.id(tag);
+    }
+    for call in &h.calls {
+        t.id(call.promise);
+    }
+    for r in &h.restarts {
+        t.id(r.promise);
+    }
+    for id in h.suggestions.keys() {
+        t.id(*id);
+    }
+    if let Some(p) = h.promise_like {
+        t.id(p);
+    }
+    for (p, v) in &h.unhandled {
+        t.id(*p);
+        t.val(v);
+    }
+    t.vals(h.modules_loaded.values());
+    t.vals(h.namespaces.values());
+    if let Some(o) = &vm.outcome {
+        t.outcome(o);
+    }
+}
+
+/// Every value an object holds: its prototype, its properties, and what its kind keeps.
+pub fn children(o: &Obj, visit: &mut impl FnMut(Value)) {
+    Tracer(visit).object(o);
+}
+
+struct Tracer<'f, F>(&'f mut F);
+
+impl<F: FnMut(Value)> Tracer<'_, F> {
+    fn id(&mut self, id: Id) {
+        (self.0)(Value::Obj(id));
+    }
 
     fn val(&mut self, v: &Value) {
-        if let Value::Obj(id) = v {
-            self.id(*id);
+        if let Value::Obj(_) = v {
+            (self.0)(*v);
         }
     }
 
@@ -41,8 +161,11 @@ impl Walk<'_> {
 
     fn frame(&mut self, f: &Frame) {
         self.vals(f.extra.iter());
-        if let crate::vm::FrameKind::Generator(g, _) = f.kind {
+        if let FrameKind::Generator(g, resume) = f.kind {
             self.id(g);
+            if let Resume::Collect(a) = resume {
+                self.id(a);
+            }
         }
     }
 
@@ -167,6 +290,7 @@ impl Walk<'_> {
                 use crate::builtins::iterator::HelperOp;
                 self.val(&h.iter);
                 self.val(&h.next);
+                self.val(&h.site);
                 match &h.op {
                     HelperOp::Map(f) | HelperOp::Filter(f) => self.val(f),
                     HelperOp::FlatMap(f, inner) => {
@@ -198,82 +322,4 @@ impl Walk<'_> {
             }
         }
     }
-}
-
-/// Marks every object reachable from the run's roots; the objects every fresh run makes are roots too.
-pub fn reachable(vm: &Vm) -> Vec<bool> {
-    let mut w = Walk {
-        heap: &vm.heap,
-        seen: vec![false; vm.heap.len()],
-        todo: Vec::new(),
-    };
-    for id in 0..vm.snapshot_base.heap.min(vm.heap.len()) {
-        w.id(id as Id);
-    }
-    w.slots(&vm.cells);
-    w.slots(&vm.stack);
-    for f in &vm.frames {
-        w.frame(f);
-    }
-    w.vals(vm.globals.iter());
-    w.vals(vm.global_map.values());
-    w.vals(vm.consts.iter());
-    for t in vm.template_objs_ref().iter().flatten() {
-        w.id(*t);
-    }
-    for j in &vm.jobs {
-        match j {
-            Job::Reaction(r, o) => {
-                w.reaction(r);
-                w.outcome(o);
-            }
-            Job::Thenable {
-                promise,
-                thenable,
-                then,
-            } => {
-                w.id(*promise);
-                w.val(thenable);
-                w.val(then);
-            }
-        }
-    }
-    for (p, _) in &vm.inbox {
-        w.id(*p);
-    }
-    for c in &vm.coroutines {
-        if let Some(s) = &c.saved {
-            w.saved(s);
-        }
-        if let Some(p) = c.promise {
-            w.id(p);
-        }
-    }
-    let h = &vm.host;
-    for call in &h.calls {
-        w.id(call.promise);
-    }
-    for r in &h.restarts {
-        w.id(r.promise);
-    }
-    for id in h.suggestions.keys() {
-        w.id(*id);
-    }
-    if let Some(p) = h.promise_like {
-        w.id(p);
-    }
-    for (p, v) in &h.unhandled {
-        w.id(*p);
-        w.val(v);
-    }
-    w.vals(h.modules_loaded.values());
-    w.vals(h.namespaces.values());
-    if let Some(o) = &vm.outcome {
-        w.outcome(o);
-    }
-    while let Some(id) = w.todo.pop() {
-        let o = &w.heap[id as usize];
-        w.object(o);
-    }
-    w.seen
 }
