@@ -81,7 +81,7 @@ const layer = Layer.effect(
     const withLock: Interface["withLock"] = (targets) => (effect) =>
       [...new Set(targets.map(FSUtil.resolve))]
         .sort()
-        .reduceRight((result, target) => transactionLocks.withLock(target)(result), effect)
+        .reduceRight((result, target) => transactionLocks.withLock(target, { timeout: "30 seconds" })(result), effect)
     const withTargetLock =
       (target: Target) =>
       <A, E, R>(effect: Effect.Effect<A, E, R>) =>
