@@ -73,6 +73,8 @@ const Hit = Schema.Struct({
   revision: Schema.Number,
   score: Schema.Number,
   status: Schema.optional(Schema.Literals(["live", "provisional"])),
+  /** While its latest revision is pending: the revision still served. */
+  liveRevision: Schema.optional(Schema.Number),
 })
 const Injected = Schema.Struct({
   id: Schema.String,
@@ -117,6 +119,8 @@ const Entry = Schema.Struct({
   retired: Schema.optional(
     Schema.Struct({ at: Schema.String, reason: Schema.String, supersededBy: Schema.optional(Schema.String) }),
   ),
+  status: Schema.optional(Schema.Literals(["live", "provisional"])),
+  liveRevision: Schema.optional(Schema.Number),
 })
 type Entry = typeof Entry.Type
 /** What a write answers: the new revision and a short diff of what changed, enough to write again without a read. */
@@ -131,6 +135,12 @@ const Written = Schema.Struct({
   warnings: Schema.optional(Schema.Array(Schema.String)),
   replayed: Schema.optional(Schema.Boolean),
   merged: Schema.optional(Schema.Boolean),
+  /**
+   * `provisional` while the new revision waits for evidence that it holds, `liveRevision` naming the one still served
+   * until then.
+   */
+  status: Schema.optional(Schema.Literals(["live", "provisional"])),
+  liveRevision: Schema.optional(Schema.Number),
 })
 type Written = typeof Written.Type
 /** A refused write: nothing was written; Console says why, what the entry holds now, and the one call to make next. */
@@ -1523,12 +1533,18 @@ function expectOk(response: HttpClientResponse.HttpClientResponse) {
 /** A write's answer: the new revision, how it applied, what Console warns about, then the diff of what changed. */
 function receipt(id: string, written: Written) {
   return [
-    `${written.id ?? id} is now r${written.revision}${written.rebasedFrom === undefined ? "" : written.merged ? ` (merged word by word with the changes since r${written.rebasedFrom}: check the diff)` : ` (applied over changes since r${written.rebasedFrom})`}.`,
+    `${written.id ?? id} is now r${written.revision}${written.rebasedFrom === undefined ? "" : written.merged ? ` (merged word by word with the changes since r${written.rebasedFrom}: check the diff)` : ` (applied over changes since r${written.rebasedFrom})`}.${pending(written) ?? ""}`,
     ...(written.changesSince === undefined ? [] : [`Changes since r${written.rebasedFrom}:`, written.changesSince]),
     ...(written.matched?.includes("fuzzy") ? ["An oldText matched only approximately: check the diff."] : []),
     ...(written.warnings ?? []).map((warning) => `Warning: ${warning}`),
     ...(written.diff ? [written.diff] : []),
   ].join("\n")
+}
+
+/** What a pending revision's answer, hit or entry says about it: the revision still in use until evidence backs it. */
+function pending(item: { readonly status?: string; readonly liveRevision?: number }) {
+  if (item.status !== "provisional" || item.liveRevision === undefined) return undefined
+  return ` It's pending, revision ${item.liveRevision} is still in use.`
 }
 
 /** A message ID that the same session and `key` always give, so admitting it again changes nothing. */
@@ -1546,6 +1562,9 @@ function show(entry: Entry) {
     (source?.repo ?? entry.repo) &&
       `${source?.repo ?? entry.repo}${source?.branch ? `@${source.branch}` : ""}${source?.commitSha ? ` ${source.commitSha.slice(0, 12)}` : ""}`,
     entry.updatedBy && `${entry.updatedBy.label}${entry.updatedAt ? ` ${entry.updatedAt.slice(0, 10)}` : ""}`,
+    entry.status === "provisional" &&
+      entry.liveRevision !== undefined &&
+      `pending, revision ${entry.liveRevision} is still in use`,
   ]
   const errors = entry.errors && entry.errors.length > 0 ? `\nErrors: ${entry.errors.join(" | ")}` : ""
   const retired = entry.retired

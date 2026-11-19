@@ -7,7 +7,7 @@ import type { Plugin as PluginContext } from "@opencode/plugin/effect"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { Model } from "@opencode/schema/model"
-import { Effect, Exit, Fiber, Layer, Queue, Scope, Stream } from "effect"
+import { Deferred, Effect, Exit, Fiber, Layer, Queue, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Agent } from "@opencode/core/agent"
 import { Bus } from "@opencode/core/bus"
@@ -41,12 +41,19 @@ const withFlags = (overrides: string) =>
   testEffect(PluginTestLayer.pipe(Layer.provide(Layer.succeed(Flag.Overrides, overrides))))
 const it = withFlags("console_memory")
 /** What the stand-in model answers a distillation, the prompts it was given, and the model each named. */
-const distiller = { reply: "", prompts: new Array<string>(), models: new Array<string | undefined>() }
+const distiller = {
+  reply: "",
+  prompts: new Array<string>(),
+  models: new Array<string | undefined>(),
+  /** Holds each answer until the test releases it, as a slow model would. */
+  gate: undefined as Deferred.Deferred<void> | undefined,
+}
 const generating = Layer.succeed(
   Generate.Service,
   Generate.Service.of({
     text: (input) =>
-      Effect.sync(() => {
+      Effect.gen(function* () {
+        if (distiller.gate) yield* Deferred.await(distiller.gate)
         distiller.prompts.push(input.prompt)
         distiller.models.push(input.model && `${input.model.providerID}/${input.model.id}`)
         return distiller.reply
@@ -119,6 +126,13 @@ function fakeConsole() {
     matched: undefined as string[] | undefined,
     /** Each entry's current revision, 1 until written. */
     revisions: new Map<string, number>(),
+    /**
+     * The revision of each entry Console serves, 1 until a revision is backed: a patch without the user's confirmation
+     * waits, pending, until evidence for that revision comes.
+     */
+    live: new Map<string, number>(),
+    /** Each entry's current body, once a write changed it. */
+    bodies: new Map<string, string>(),
     /** Applies a write over changes since its revision, as Console does when they don't touch it. */
     rebase: false,
     /** What `GET /api/memory/standing` answers, or a 404 while unset. */
@@ -132,6 +146,23 @@ function fakeConsole() {
     repositories: new Map<string, { id: number; visibility: string }>(),
     readable: new Set<number>(),
     github: new Array<{ path: string; authorization: string | null }>(),
+  }
+  // The user's confirmation backs a revision, unless its session took in outside input.
+  const confirms = (body: Record<string, unknown> | undefined) =>
+    body?.tainted !== true &&
+    Array.isArray(body?.evidence) &&
+    body.evidence.some((link: { kind?: string }) => link.kind === "confirmation")
+  // An entry's head revision as Console answers for it: pending while another revision is still served.
+  const served = (id: string) => {
+    const head = state.revisions.get(id)
+    if (head === undefined) return {}
+    const live = state.live.get(id) ?? 1
+    const body = state.bodies.get(id)
+    return {
+      revision: head,
+      ...(body === undefined ? {} : { body }),
+      ...(live === head ? { status: "live" } : { status: "provisional", liveRevision: live }),
+    }
   }
   const refuse = (status: number, error: Record<string, unknown> & { message: string; next: string }) =>
     Response.json({ ...error, message: `${error.message} ${error.next}` }, { status })
@@ -185,8 +216,13 @@ function fakeConsole() {
         state.published.set(key, created)
         return Response.json({ ...created, nearest: state.hits })
       }
-      if (/^\/api\/memory\/entries\/[^/]+\/evidence$/.test(url.pathname) && request.method === "POST")
-        return Response.json({})
+      const backed = url.pathname.match(/^\/api\/memory\/entries\/([^/]+)\/evidence$/)?.[1]
+      if (backed && request.method === "POST") {
+        const head = state.revisions.get(backed) ?? 1
+        // A confirmation for a revision since replaced is ignored.
+        if (body?.revision === head && confirms(body)) state.live.set(backed, head)
+        return Response.json({ id: backed, status: (state.live.get(backed) ?? 1) === head ? "live" : "provisional" })
+      }
       const retired = url.pathname.match(/^\/api\/memory\/entries\/([^/]+)\/retire$/)?.[1]
       if (retired && request.method === "POST") {
         const revision = (state.revisions.get(retired) ?? 1) + 1
@@ -203,9 +239,9 @@ function fakeConsole() {
         )
       if (id === "mem_web" && request.method === "GET") return Response.json(entry(id, { repo: "github.com/acme/web" }))
       if (id === "mem_app" && request.method === "GET") return Response.json(entry(id, { repo: "github.com/acme/app" }))
-      if (id && request.method === "GET") return Response.json(entry(id))
+      if (id && request.method === "GET") return Response.json(entry(id, served(id)))
       if (id && request.method === "PATCH") {
-        const current = entry(id).body
+        const current = state.bodies.get(id) ?? entry(id).body
         if (state.rebase)
           return Response.json({
             id,
@@ -243,10 +279,13 @@ function fakeConsole() {
           edits?.reduce((text, edit) => text.replace(edit.oldText, edit.newText), current) ??
           (typeof body?.append === "string" ? `${current}\n\n${body.append}` : (body?.body as string | undefined))
         state.revisions.set(id, revision + 1)
+        if (changed !== undefined) state.bodies.set(id, changed)
+        if (confirms(body)) state.live.set(id, revision + 1)
         return Response.json({
           id,
           revision: revision + 1,
           nearest: [],
+          ...served(id),
           ...(changed === undefined ? {} : { diff: `--- body\n-${current}\n+${changed}` }),
           ...(edits && state.matched ? { matched: state.matched } : {}),
           ...(typeof body?.body === "string" && body.body.length < current.length / 2
@@ -702,7 +741,10 @@ describe("OpencodePlugin memory", () => {
           },
           context(session.id),
         )
-        expect(edited.content).toBe("mem_1 is now r2.\n--- body\n-Body of mem_1\nMore\n+Use bun for mem_1\n")
+        // Without evidence the new revision waits, and the answer says which one is still in use.
+        expect(edited.content).toBe(
+          "mem_1 is now r2. It's pending, revision 1 is still in use.\n--- body\n-Body of mem_1\nMore\n+Use bun for mem_1\n",
+        )
         expect(console.state.requests.at(-1)).toEqual({
           method: "PATCH",
           path: "/api/memory/entries/mem_1",
@@ -729,7 +771,7 @@ describe("OpencodePlugin memory", () => {
             "Closest text, check it's your target: line 1 (42% similar)",
             "```text\nBody of mem_1\n```",
             "Current body (r2):",
-            "```text\nBody of mem_1\nMore\n```",
+            "```text\nUse bun for mem_1\n\n```",
             "Next: Copy oldText exactly from body and patch again with expectedRevision 2.",
           ].join("\n"),
         )
@@ -761,7 +803,7 @@ describe("OpencodePlugin memory", () => {
         // A fuzzy match is flagged, so the agent checks the diff.
         console.state.matched = ["fuzzy"]
         const fuzzy = yield* edit.execute(
-          { id: "mem_1", revision: 1, oldText: "More", newText: "Less" },
+          { id: "mem_1", revision: 1, oldText: "Use bun", newText: "Use Bun" },
           context(session.id),
         )
         expect(fuzzy.content).toContain("An oldText matched only approximately: check the diff.")
@@ -837,15 +879,6 @@ describe("OpencodePlugin memory", () => {
       Effect.gen(function* () {
         const { host } = yield* start(console)
         const session = yield* host.session.create({})
-        yield* (yield* memoryTool("append")).execute(
-          { id: "mem_1", revision: 1, text: "Also on CI." },
-          context(session.id),
-        )
-        expect(console.state.requests.at(-1)?.body).toEqual({
-          expectedRevision: 1,
-          append: "Also on CI.",
-          source: { sessionID: session.id },
-        })
 
         // A rewrite replaces what the entry says: it starts from a revision the session was shown whole.
         const asked = console.state.requests.length
@@ -858,6 +891,16 @@ describe("OpencodePlugin memory", () => {
         expect(console.state.requests.length).toBe(asked)
         yield* (yield* memoryTool("read")).execute({ id: "mem_1" }, context(session.id))
 
+        yield* (yield* memoryTool("append")).execute(
+          { id: "mem_1", revision: 1, text: "Also on CI." },
+          context(session.id),
+        )
+        expect(console.state.requests.at(-1)?.body).toEqual({
+          expectedRevision: 1,
+          append: "Also on CI.",
+          source: { sessionID: session.id },
+        })
+
         // The rewrite cites r1, which the session read; its own append since doesn't make it stale.
         const rewritten = yield* (yield* memoryTool("rewrite")).execute(
           { id: "mem_1", revision: 1, body: "Short" },
@@ -869,7 +912,7 @@ describe("OpencodePlugin memory", () => {
           source: { sessionID: session.id },
         })
         expect(rewritten.content).toBe(
-          "mem_1 is now r3.\nWarning: The rewrite removed more than 30% of the body.\n--- body\n-Body of mem_1\nMore\n+Short",
+          "mem_1 is now r3. It's pending, revision 1 is still in use.\nWarning: The rewrite removed more than 30% of the body.\n--- body\n-Body of mem_1\nMore\n\nAlso on CI.\n+Short",
         )
 
         const retired = yield* (yield* memoryTool("retire")).execute(
@@ -1135,10 +1178,17 @@ describe("OpencodePlugin memory", () => {
         const search = yield* memoryTool("search")
         const none = yield* search.execute({ query: "deploy" }, context(session.id))
         expect(none.content).toBe("No reliable memory entry found.")
-        console.state.hits = [{ ...hit("mem_new", 0.8), status: "provisional" } as ReturnType<typeof hit>]
+        console.state.hits = [
+          { ...hit("mem_new", 0.8), status: "provisional" } as ReturnType<typeof hit>,
+          { ...hit("mem_edited", 0.7), revision: 2, status: "provisional", liveRevision: 1 } as ReturnType<typeof hit>,
+        ]
         const found = yield* search.execute({ query: "deploy" }, context(session.id))
+        // A new entry no teammate backed yet, and a pending revision of one whose earlier revision is still in use.
         expect(resultText(found)).toBe(
-          "- mem_new r1 bug (provisional: no teammate has backed it yet): Entry mem_new — About mem_new",
+          [
+            "- mem_new r1 bug (provisional: no teammate has backed it yet): Entry mem_new — About mem_new",
+            "- mem_edited r2 bug (pending, revision 1 is still in use): Entry mem_edited — About mem_edited",
+          ].join("\n"),
         )
       }),
     ),
@@ -1851,51 +1901,61 @@ describe("OpencodePlugin memory capture", () => {
             edits: [{ oldText: "More", newText: "Less" }],
             evidence: [{ kind: "confirmation", ref: correction }],
           })
-          // The entry keeps its history; nothing replaces or retires it.
+          // The user's words came first, so the patch carries them and its revision is live at once. The entry keeps
+          // its history; nothing replaces or retires it.
           yield* drain
+          expect(console.state.live.get("mem_1")).toBe(2)
           expect(publishes(console)).toEqual([])
         }),
       ),
   )
 
   capturing("console_memory,memory_capture").effect(
-    "backs the session's own edit of an entry with the user's confirmation when the distiller's correction no longer applies",
+    "makes the agent's own correction of an entry live with the user's confirmation when it was written first",
     () =>
       withConsole((console) =>
         Effect.gen(function* () {
-          distiller.reply = correcting("More, as before")
+          // The distiller answers after the agent's turn, as a model slower than the turn does.
+          const gate = yield* Deferred.make<void>()
+          distiller.gate = gate
+          distiller.reply = correcting("More")
           const { host } = yield* start(console)
           const session = yield* host.session.create({})
-          yield* (yield* memoryTool("read")).execute({ id: "mem_1" }, context(session.id))
-          yield* (yield* memoryTool("edit")).execute(
+          const read = yield* memoryTool("read")
+          yield* read.execute({ id: "mem_1" }, context(session.id))
+          yield* prompt(session.id, correction)
+
+          // The agent fixes the entry without evidence: Console keeps serving r1 until something backs r2.
+          const edited = yield* (yield* memoryTool("edit")).execute(
             { id: "mem_1", revision: 1, oldText: "More", newText: "Less, in every log message" },
             context(session.id, "call_edit"),
           )
-          yield* prompt(session.id, correction)
-          yield* waitUntil(
-            Effect.sync(() =>
-              console.state.requests.some((item) => item.path === "/api/memory/entries/mem_1/evidence"),
-            ),
+          expect(edited.content).toStartWith("mem_1 is now r2. It's pending, revision 1 is still in use.")
+          expect((yield* read.execute({ id: "mem_1" }, context(session.id, "call_pending"))).content).toStartWith(
+            "mem_1 r2 bug · deploy · apps/worker/ · github.com/acme/app@main abc123 · ada@example.com 1970-01-01 · pending, revision 1 is still in use\n",
           )
+
+          // The distiller's edit, made from r1's text, no longer applies; the user's words back the agent's r2.
+          yield* Deferred.succeed(gate, undefined)
+          const evidence = () =>
+            console.state.requests.filter((item) => item.path === "/api/memory/entries/mem_1/evidence")
+          yield* waitUntil(Effect.sync(() => evidence().length > 0))
           yield* drain
-          expect(patches(console)[1]?.body).toMatchObject({ expectedRevision: 2 })
-          // The agent's edit, without evidence, left the entry contested; the user's words back the revision it wrote,
-          // and the entry is neither superseded nor written again.
-          expect(
-            console.state.requests
-              .filter((item) => item.path === "/api/memory/entries/mem_1/evidence")
-              .map((item) => item.body),
-          ).toEqual([
+          expect(evidence().map((item) => item.body)).toEqual([
             expect.objectContaining({
               evidence: [{ kind: "confirmation", ref: correction }],
-              // The revision the agent's edit wrote, which the confirmation backs.
               revision: 2,
               source: expect.objectContaining({ sessionID: session.id }),
             }),
           ])
           expect(patches(console)).toHaveLength(2)
           expect(publishes(console)).toEqual([])
-        }),
+          // r2 is what Console serves now.
+          expect(console.state.live.get("mem_1")).toBe(2)
+          expect((yield* read.execute({ id: "mem_1" }, context(session.id, "call_live"))).content).toStartWith(
+            "mem_1 r2 bug · deploy · apps/worker/ · github.com/acme/app@main abc123 · ada@example.com 1970-01-01\n",
+          )
+        }).pipe(Effect.ensuring(Effect.sync(() => (distiller.gate = undefined)))),
       ),
   )
 
