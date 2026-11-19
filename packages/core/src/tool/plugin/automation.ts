@@ -84,12 +84,12 @@ export const Plugin = {
         editor.namespace({
           name: "automation",
           description:
-            "Schedule work for later: run a prompt or Code Mode action once at a time, on a repeat (every N minutes or hours, or a cron), or when a connected MCP server pushes an event. Use one instead of sleeping or polling, and give it an expiry.",
+            "Schedule recurring or one-off jobs (cron jobs, timers, reminders): a prompt or Code Mode action that runs at a time, every interval, on a cron or when a connected MCP server pushes an event. When you're about to agree to do something later or on a repeat, create one instead of promising it in your reply; nothing else would carry the promise out. Never sleep or poll to wait.",
         })
         editor.add({
           name: "create",
           description:
-            "Schedule a prompt or Code Mode action: once at a time (\"in 20 minutes\"), on a repeat (every 2 hours, a cron) or on a connected MCP server's push event. A prompt can target this session, another session in this project or a new subagent child. Code runs without a model and can return one send: { send: { prompt } } steers this session; add to: { subagent } inside send for a permitted quiet child. Omit send to stay quiet.",
+            "Schedule a recurring or one-off job: a prompt or Code Mode action that runs once at a time (\"in 20 minutes\", an ISO time), every interval (\"2 hours\"), on a cron or on a connected MCP server's push event. Give a repeating job an `expires`. A code action runs without a model, so use it for quiet checks and send a prompt only when something needs attention. A prompt can target this session, another session in this project or a new subagent child. Code runs without a model and can return one send: { send: { prompt } } steers this session; add to: { subagent } inside send for a permitted quiet child. Omit send to stay quiet.",
           input: Automation.Request,
           output: View,
           options: { namespace: "automation", codemode: { pinned: true } },
