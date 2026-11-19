@@ -10,6 +10,9 @@ import { abrupt, type Completion, Interruption, normal } from "./signals.js"
 /** What `Driver.run` returns once the run was suspended: its state is saved, and the VM stopped. */
 export const SUSPENDED: unique symbol = Symbol("codemode.suspended")
 
+/** For tests: `onPark` is called each time a run has nothing to do but wait on host calls in flight. */
+export const parking: { onPark?: () => void } = {}
+
 /**
  * Runs the VM (see `Vm`) in Effect: the only place program execution meets the host. It calls `vm.run`
  * until the program ends, and does what each stop asks: yields to the Effect scheduler for a slice, and starts the host
@@ -58,6 +61,7 @@ export class Driver<R> {
         }
         if (stop.kind === "host") {
           if (stop.calls.length === 0) {
+            parking.onPark?.()
             yield* self.settled
             continue
           }
