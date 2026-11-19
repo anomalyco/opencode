@@ -327,7 +327,7 @@ fn it_drop(vm: &mut Vm, this: Value, args: &[Value], _: Id) -> Res {
     Ok(primed(vm, iter, next, HelperOp::Drop(n)))
 }
 
-fn helper_mut<'a>(vm: &'a mut Vm, id: Id) -> &'a mut Helper {
+fn helper_mut(vm: &mut Vm, id: Id) -> &mut Helper {
     match &mut vm.heap[id as usize].kind {
         Kind::IterHelper(h) => h,
         _ => unreachable!("checked by this_helper"),

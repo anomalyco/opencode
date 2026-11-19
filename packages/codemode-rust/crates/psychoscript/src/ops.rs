@@ -20,7 +20,7 @@ pub enum Hint {
     String,
 }
 
-impl<'rt> Vm<'rt> {
+impl Vm {
     // ---------- property reads ----------
 
     #[inline(never)]

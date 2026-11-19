@@ -179,7 +179,7 @@ pub fn arg(args: &[Value], i: usize) -> Value {
     args.get(i).cloned().unwrap_or_default()
 }
 
-impl<'rt> Vm<'rt> {
+impl Vm {
     pub fn native_fn(&mut self, name: &'static str, length: u8, f: NativeFn, data: Value) -> Value {
         let name = self.atoms.intern_static(name);
         let proto = self.realm.function_proto;

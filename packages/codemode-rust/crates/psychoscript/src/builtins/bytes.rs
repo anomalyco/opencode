@@ -124,7 +124,7 @@ fn this_bytes(vm: &mut Vm, this: &Value, name: &str) -> Result<Id, Value> {
     ))
 }
 
-pub fn bytes_ref<'a>(vm: &'a Vm, id: Id) -> &'a Bytes {
+pub fn bytes_ref(vm: &Vm, id: Id) -> &Bytes {
     match &vm.heap[id as usize].kind {
         Kind::Bytes(b) => b,
         _ => unreachable!("checked by this_bytes"),
@@ -606,7 +606,7 @@ fn collect_map(vm: &mut Vm, fr: Frame, k: usize) -> Result<Step, Value> {
     fr.call_slots(vm, f, this_arg, [Slot::pack(v), Slot::index(k)])
 }
 
-fn values_of<'a>(vm: &'a Vm, s: Slot) -> &'a [Value] {
+fn values_of(vm: &Vm, s: Slot) -> &[Value] {
     match s.obj().map(|o| &vm.heap[o as usize].kind) {
         Some(Kind::Array(values)) => values,
         _ => &[],

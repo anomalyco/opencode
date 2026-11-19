@@ -123,7 +123,7 @@ pub(crate) fn settle_step(vm: &mut Vm, fr: Frame, input: Input) -> Result<Step, 
     }))
 }
 
-impl<'rt> Vm<'rt> {
+impl Vm {
     pub fn new_promise(&mut self) -> Id {
         let proto = self.realm.promise_proto;
         self.alloc(Obj::new(
@@ -528,7 +528,7 @@ fn resolver_reject(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Res
 
 // ---------- async generators ----------
 
-impl<'rt> Vm<'rt> {
+impl Vm {
     /// Creates the async iterator prototypes. Runs while built-ins are set up.
     pub fn setup_async_iteration(&mut self) {
         let op = self.realm.object_proto;

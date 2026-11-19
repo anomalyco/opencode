@@ -161,7 +161,7 @@ type GlobalsFn = dyn Fn(&Run) -> Vec<(String, HostValue)> + Send + Sync;
 #[derive(Default)]
 pub(crate) struct Setup {
     pub globals: Option<Box<GlobalsFn>>,
-    pub modules: Vec<(String, String)>,
+    pub modules: Arc<[(String, String)]>,
     pub limits: Limits,
     pub translate: Translate,
 }
@@ -216,7 +216,8 @@ impl Runtime {
         self.setup.modules = modules
             .into_iter()
             .map(|(k, v)| (k.into(), v.into()))
-            .collect();
+            .collect::<Vec<_>>()
+            .into();
         self
     }
 

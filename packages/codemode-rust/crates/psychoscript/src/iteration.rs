@@ -70,7 +70,7 @@ pub(crate) const BY_RESUME: usize = 2;
 /// Its `return` called to close it, as it lacks the `throw` asked for: the promise is rejected after.
 pub(crate) const BY_CLOSE: usize = 3;
 
-impl Vm<'_> {
+impl Vm {
     /// Whether `it`, kept with `next` in an iterator record, is stepped through a call the VM makes for it: anything
     /// but a built-in iterator stepped directly and a generator.
     pub(crate) fn steps_by_call(&self, it: Slot, next: Slot) -> bool {

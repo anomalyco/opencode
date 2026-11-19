@@ -152,7 +152,7 @@ fn is_runtime_reference(vm: &Vm, v: &Value) -> bool {
 
 // ---------- URL ----------
 
-fn url_data<'a>(vm: &'a Vm, id: Id) -> &'a UrlData {
+fn url_data(vm: &Vm, id: Id) -> &UrlData {
     match &vm.heap[id as usize].kind {
         Kind::Url(u) => u,
         _ => unreachable!("checked by the receiver test"),
@@ -369,7 +369,7 @@ pub fn url_href(vm: &Vm, id: Id) -> String {
 
 // ---------- URLSearchParams ----------
 
-fn params_mut<'a>(vm: &'a mut Vm, id: Id) -> &'a mut Params {
+fn params_mut(vm: &mut Vm, id: Id) -> &mut Params {
     match &mut vm.heap[id as usize].kind {
         Kind::SearchParams(p) => p,
         _ => unreachable!("checked by the receiver test"),
@@ -891,7 +891,7 @@ pub fn header_entries(list: &[(String, String)]) -> Vec<(String, String)> {
     out
 }
 
-fn headers_mut<'a>(vm: &'a mut Vm, id: Id) -> &'a mut HeaderList {
+fn headers_mut(vm: &mut Vm, id: Id) -> &mut HeaderList {
     match &mut vm.heap[id as usize].kind {
         Kind::Headers(h) => h,
         _ => unreachable!("checked by the receiver test"),

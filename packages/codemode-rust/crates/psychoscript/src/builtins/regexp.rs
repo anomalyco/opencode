@@ -367,14 +367,14 @@ pub fn as_regexp(vm: &Vm, v: &Value) -> Option<Id> {
     }
 }
 
-fn data<'a>(vm: &'a Vm, id: Id) -> &'a RegExpData {
+fn data(vm: &Vm, id: Id) -> &RegExpData {
     match &vm.heap[id as usize].kind {
         Kind::RegExp(r) => r,
         _ => unreachable!("checked by as_regexp"),
     }
 }
 
-fn data_mut<'a>(vm: &'a mut Vm, id: Id) -> &'a mut RegExpData {
+fn data_mut(vm: &mut Vm, id: Id) -> &mut RegExpData {
     match &mut vm.heap[id as usize].kind {
         Kind::RegExp(r) => r,
         _ => unreachable!("checked by as_regexp"),

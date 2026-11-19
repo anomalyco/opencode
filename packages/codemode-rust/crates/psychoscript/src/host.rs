@@ -276,16 +276,16 @@ impl SuspendWatch for Unwatched {
 pub type Globals = Arc<[(String, HostValue)]>;
 
 /// The host state of one run.
-pub struct RunHost<'rt> {
+pub struct RunHost {
     /// The run's host globals.
     pub(crate) globals: Globals,
     /// Module names that load a global, beyond its own name.
-    pub(crate) modules: &'rt [(String, String)],
+    pub(crate) modules: Arc<[(String, String)]>,
     pub(crate) translate: Translate,
     /// The run as its globals see it: its id and metadata.
     pub(crate) run: Run,
     pub(crate) next_call: u64,
-    pub tasks: Tasks<'rt, Settlement>,
+    pub tasks: Tasks<'static, Settlement>,
     pub(crate) functions: Vec<FnEntry>,
     /// Host calls in flight.
     pub calls: Vec<InFlight>,
@@ -361,7 +361,7 @@ pub(crate) struct Meter {
     pub counted: bool,
 }
 
-impl<'rt> RunHost<'rt> {
+impl RunHost {
     /// A point where the reference starts the calls queued so far: a new job, or a finished synchronous call.
     #[inline]
     pub fn next_epoch(&self) {
@@ -371,7 +371,7 @@ impl<'rt> RunHost<'rt> {
 
     pub(crate) fn new(
         globals: Globals,
-        modules: &'rt [(String, String)],
+        modules: Arc<[(String, String)]>,
         translate: Translate,
         run: Run,
     ) -> Self {
@@ -411,7 +411,7 @@ impl<'rt> RunHost<'rt> {
     pub(crate) fn bare() -> Self {
         Self::new(
             Arc::from([]),
-            &[],
+            Arc::from([]),
             Translate::default(),
             Run::new(None, Data::Null),
         )
@@ -511,7 +511,7 @@ impl<'rt> RunHost<'rt> {
     }
 }
 
-impl Drop for RunHost<'_> {
+impl Drop for RunHost {
     fn drop(&mut self) {
         self.cancel_durable();
     }
@@ -914,10 +914,10 @@ fn block(vm: &mut Vm, work: BoxFuture<'static, HostResult>) -> HostResult {
 }
 
 /// Runs a future for a call, recorded as in flight while it runs.
-fn track<'rt>(
-    vm: &mut Vm<'rt>,
+fn track(
+    vm: &mut Vm,
     p: Id,
-    future: BoxFuture<'rt, Settlement>,
+    future: BoxFuture<'static, Settlement>,
     in_flight: impl FnOnce() -> InFlight,
 ) {
     match vm.host.tasks.spawn(p, future) {
@@ -1809,7 +1809,7 @@ fn module(vm: &mut Vm, specifier: &str) -> Res {
         return Ok(*v);
     }
     // A module name the runtime maps to a global.
-    let modules = vm.host.modules;
+    let modules = vm.host.modules.clone();
     let named = modules
         .iter()
         .find(|(m, _)| *m == name)

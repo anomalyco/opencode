@@ -221,7 +221,7 @@ pub struct Realm {
     pub std: crate::builtins::StdProtos,
 }
 
-pub struct Vm<'rt> {
+pub struct Vm {
     pub heap: Vec<Obj>,
     pub cells: Vec<Slot>,
     pub atoms: Strings,
@@ -248,7 +248,7 @@ pub struct Vm<'rt> {
     pub inbox: VecDeque<(Id, crate::host::Settlement)>,
     pub coroutines: Vec<Coroutine>,
     pub logs: Vec<String>,
-    pub host: crate::host::RunHost<'rt>,
+    pub host: crate::host::RunHost,
     pub limits: Limits,
     pub start: Instant,
     /// Steps left before `budget_out`: the nearer of the reference's fuel and this VM's own check of the clock and of
@@ -303,8 +303,8 @@ pub struct Vm<'rt> {
     pub(crate) replay_meter: Option<crate::conversion::Meter>,
 }
 
-impl<'rt> Vm<'rt> {
-    pub fn new(host: crate::host::RunHost<'rt>, limits: Limits, atoms: Strings) -> Self {
+impl Vm {
+    pub fn new(host: crate::host::RunHost, limits: Limits, atoms: Strings) -> Self {
         let mut atoms = atoms;
         let names = Names {
             length: atoms.intern_static("length"),

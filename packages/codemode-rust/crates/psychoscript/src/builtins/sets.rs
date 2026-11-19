@@ -62,7 +62,7 @@ pub fn setup(vm: &mut Vm) {
     );
 }
 
-fn table<'a>(vm: &'a mut Vm<'_>, id: Id) -> &'a mut OrderedMap {
+fn table(vm: &mut Vm, id: Id) -> &mut OrderedMap {
     match &mut vm.heap[id as usize].kind {
         Kind::Map(m) | Kind::Set(m) | Kind::WeakMap(m) | Kind::WeakSet(m) => m,
         _ => unreachable!("checked by the receiver test"),

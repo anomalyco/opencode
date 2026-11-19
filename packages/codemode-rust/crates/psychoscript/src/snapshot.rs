@@ -317,8 +317,8 @@ pub struct Capture<'c> {
     pub active_ms: u64,
 }
 
-struct Enc<'v, 'rt> {
-    vm: &'v Vm<'rt>,
+struct Enc<'v> {
+    vm: &'v Vm,
     natives: &'static Natives,
     protos: FxHashMap<usize, usize>,
     buffers: Vec<Arc<std::sync::Mutex<Vec<u8>>>>,
@@ -391,7 +391,7 @@ pub fn capture(vm: &Vm, c: &Capture) -> Result<Snapshot, Refusal> {
     ))
 }
 
-impl Enc<'_, '_> {
+impl Enc<'_> {
     fn state(&mut self, c: &Capture) -> R<J> {
         let vm = self.vm;
         let base = vm.snapshot_base;
@@ -909,7 +909,12 @@ fn baseline(vm: &Vm, code: &str) -> R<Vec<J>> {
     let program =
         crate::run::compile(code, &mut atoms).map_err(|e| SnapshotError::new(e.message))?;
     let h = &vm.host;
-    let host = host::RunHost::new(h.globals.clone(), h.modules, h.translate, h.run.clone());
+    let host = host::RunHost::new(
+        h.globals.clone(),
+        h.modules.clone(),
+        h.translate,
+        h.run.clone(),
+    );
     let mut fresh = Vm::new(host, vm.limits, atoms);
     fresh.setup();
     crate::builtins::ensure_globals(&mut fresh, &program.globals);

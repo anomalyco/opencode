@@ -137,7 +137,7 @@ pub(crate) enum Request {
     List(Vec<Value>, Vec<Hint>, bool),
 }
 
-impl Vm<'_> {
+impl Vm {
     /// Whether converting `v` with `hint` calls the program: one of the methods ToPrimitive may call is not native.
     pub(crate) fn converts_by_call(&mut self, v: &Value, hint: Hint) -> bool {
         let Value::Obj(id) = v else { return false };

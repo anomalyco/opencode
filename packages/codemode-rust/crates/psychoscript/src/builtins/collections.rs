@@ -134,7 +134,7 @@ fn map_of<const SET: bool>(vm: &mut Vm, this: &Value, what: &str) -> Result<Id, 
     ))
 }
 
-fn table<'a>(vm: &'a mut Vm<'_>, id: Id) -> &'a mut OrderedMap {
+fn table(vm: &mut Vm, id: Id) -> &mut OrderedMap {
     match &mut vm.heap[id as usize].kind {
         Kind::Map(m) | Kind::Set(m) => m,
         _ => unreachable!("checked by map_of"),
