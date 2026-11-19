@@ -1,0 +1,19 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "wildberries": {
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "name": "Wildberries",
+      "settings": {
+        "baseURL": "http://127.0.0.1:3001/v1",
+        "apiKey": "wb-harness"
+      },
+      "models": {
+        "wb-agent": {
+          "name": "Wildberries agent",
+          "capabilities": { "tools": true }
+        }
+      }
+    }
+  }
+}
