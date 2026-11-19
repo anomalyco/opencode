@@ -90,6 +90,32 @@ impl Flow {
     ) {
         self.local.app.spawn(future, move |_, result| done(result));
     }
+
+    /// Shows an attempt's dialog while it starts. Returns `(closed, handed_off)`: `closed` turns true when the dialog
+    /// is dismissed before the caller sets `handed_off`.
+    fn starting(
+        &self,
+        options: DialogOptions,
+        view: impl Fn(&Rc<DialogCx>) -> View + 'static,
+    ) -> (Rc<Cell<bool>>, Rc<Cell<bool>>) {
+        let closed = Rc::new(Cell::new(false));
+        let handed_off = Rc::new(Cell::new(false));
+        let (dismissed, kept) = (closed.clone(), handed_off.clone());
+        self.local.dialogs.replace(
+            move |cx| {
+                let (dismissed, kept) = (dismissed.clone(), kept.clone());
+                cx.on_dismiss(move || {
+                    if !kept.get() {
+                        dismissed.set(true);
+                    }
+                });
+                view(cx)
+            },
+            None,
+            options,
+        );
+        (closed, handed_off)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -772,25 +798,9 @@ fn oauth_starting(
     method: IntegrationOAuthMethod,
     answer: Option<FormAnswer>,
 ) {
-    let closed = Rc::new(Cell::new(false));
-    let handed_off = Rc::new(Cell::new(false));
-    {
-        let title = method.label.clone();
-        let (closed, handed_off) = (closed.clone(), handed_off.clone());
-        flow.local.dialogs.replace(
-            move |cx| {
-                let (closed, handed_off) = (closed.clone(), handed_off.clone());
-                cx.on_dismiss(move || {
-                    if !handed_off.get() {
-                        closed.set(true);
-                    }
-                });
-                oauth_view(cx, &title, None, "Starting authorization…", None)
-            },
-            None,
-            DialogOptions::default(),
-        );
-    }
+    let title = method.label.clone();
+    let (closed, handed_off) = flow
+        .starting(DialogOptions::default(), move |cx| oauth_view(cx, &title, None, "Starting authorization…", None));
     let client = flow.local.client.clone();
     let input = IntegrationOauthConnectInput {
         integration_id: integration.id.clone(),
@@ -1157,25 +1167,9 @@ pub(super) fn oauth_code(text: &str) -> Option<String> {
 }
 
 fn command_starting(flow: &Flow, integration: IntegrationInfo, method: IntegrationCommandMethod) {
-    let closed = Rc::new(Cell::new(false));
-    let handed_off = Rc::new(Cell::new(false));
-    {
-        let title = method.label.clone();
-        let (closed, handed_off) = (closed.clone(), handed_off.clone());
-        flow.local.dialogs.replace(
-            move |cx| {
-                let (closed, handed_off) = (closed.clone(), handed_off.clone());
-                cx.on_dismiss(move || {
-                    if !handed_off.get() {
-                        closed.set(true);
-                    }
-                });
-                command_view(cx, &title, "Starting command…").0
-            },
-            None,
-            DialogOptions::new(DialogSize::Large),
-        );
-    }
+    let title = method.label.clone();
+    let (closed, handed_off) =
+        flow.starting(DialogOptions::new(DialogSize::Large), move |cx| command_view(cx, &title, "Starting command…").0);
     let client = flow.local.client.clone();
     let input = IntegrationCommandConnectInput {
         integration_id: integration.id.clone(),
