@@ -427,6 +427,9 @@ for (const action of ["tray", "picker"] as const) {
     })
 
     await expect(page.getByText("Refactor the parser", { exact: true })).toBeVisible()
+    // Loading the selected model clears the tray, just like switching models does.
+    const modelButton = page.locator('[data-action="composer-model"]')
+    await expect(modelButton).toContainText("GLM-5 Go")
 
     // The refusal OpenCode Console sends a Go subscriber at a limit, as core records it.
     const body = {
@@ -473,13 +476,13 @@ for (const action of ["tray", "picker"] as const) {
     if (action === "tray") await tray.getByRole("button", { name: "Switch to a free model", exact: true }).click()
 
     if (action === "picker") {
-      await page.locator('[data-action="composer-model"]').click()
+      await modelButton.click()
       const picker = page.getByRole("dialog", { name: "Select model", exact: true })
       await picker.getByRole("combobox", { name: "Search models", exact: true }).fill("Big Pickle")
       await picker.getByRole("option", { name: /Big Pickle/ }).click()
     }
 
-    await expect(page.locator('[data-action="composer-model"]')).toContainText("Big Pickle")
+    await expect(modelButton).toContainText("Big Pickle")
     await expect(tray).toHaveCount(0)
     await expect(view.editor).toHaveText("Refactor the parser")
   })
