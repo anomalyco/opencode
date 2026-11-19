@@ -177,6 +177,12 @@ impl<'a, T> Tasks<'a, T> {
         Poll::Pending
     }
 
+    /// The tags of the tasks in flight, for a collector that moves what they name.
+    #[cfg(feature = "gc-nursery")]
+    pub fn tags_mut(&mut self) -> impl Iterator<Item = &mut u32> {
+        self.slots.iter_mut().flatten().map(|s| &mut s.tag)
+    }
+
     /// Polls every task woken since the last call; returns the finished ones with their tags, in completion order.
     pub fn poll_ready(&mut self) -> Vec<(u32, T)> {
         let ready = {

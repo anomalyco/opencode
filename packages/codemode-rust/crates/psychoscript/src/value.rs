@@ -446,6 +446,15 @@ const T_OBJ: u64 = 0xfffd;
 const T_SYM: u64 = 0xfffe;
 const T_UNINIT: u64 = 0xffff;
 
+/// The tag of a stack slot that holds a closure cell's index (`Op::NewCell`). Without a collector the slot holds the
+/// bare index; the moving collector (`gc_nursery`) tags it beyond `Uninit`'s bits, so it can find and rewrite cell
+/// slots.
+pub const CELL: u64 = if cfg!(feature = "gc-nursery") {
+    T_UNINIT << 48 | 1 << 32
+} else {
+    0
+};
+
 /// A value packed into one word (NaN-boxing), for the VM stack and closure cells. Numbers are their own bits, with
 /// every NaN canonicalized; other values live in the negative quiet-NaN space with a 32-bit payload.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -500,6 +509,27 @@ impl Slot {
     #[inline(always)]
     pub fn payload(self) -> u32 {
         self.0 as u32
+    }
+
+    /// A stack slot holding the index of a closure cell.
+    #[inline(always)]
+    pub fn cell(c: usize) -> Slot {
+        Slot(CELL | c as u64)
+    }
+
+    /// The closure cell a `Slot::cell` slot holds.
+    #[inline(always)]
+    pub fn cell_index(self) -> usize {
+        if cfg!(feature = "gc-nursery") {
+            return self.0 as u32 as usize;
+        }
+        self.0 as usize
+    }
+
+    /// Whether this holds a closure cell's index; always false without the moving collector.
+    #[inline(always)]
+    pub fn is_cell(self) -> bool {
+        CELL != 0 && self.0 >> 32 == CELL >> 32
     }
 
     #[inline(always)]

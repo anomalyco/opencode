@@ -1289,9 +1289,7 @@ impl Vm {
                 if *n >= 0.0 && *n < 10.0 && n.fract() == 0.0 {
                     return Ok(self.char_strs[b'0' as usize + *n as usize]);
                 }
-                if self.atoms.bufs.len() >= crate::vm::MAX_STRINGS {
-                    self.out_of_memory();
-                }
+                self.check_strings();
                 self.atoms.alloc_num(*n)
             }
             Value::Bool(b) => return Ok(self.static_id(if *b { "true" } else { "false" })),
@@ -1399,8 +1397,16 @@ impl Vm {
     /// `Strings::concat_num`, counted against the strings a run may make.
     #[inline]
     fn concat_num(&mut self, s: StrId, n: f64, num_first: bool) -> Option<Value> {
+        #[cfg(not(feature = "gc-nursery"))]
         if self.atoms.bufs.len() >= crate::vm::MAX_STRINGS {
             return None;
+        }
+        #[cfg(feature = "gc-nursery")]
+        if self.atoms.bufs.len() >= self.gc.str_limit {
+            if self.atoms.bufs.len() >= crate::vm::MAX_STRINGS {
+                return None;
+            }
+            self.gc_request();
         }
         self.atoms.concat_num(s, n, num_first).map(Value::Str)
     }

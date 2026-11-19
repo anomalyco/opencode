@@ -280,6 +280,26 @@ impl OrderedMap {
         self.index.clear();
         self.live = 0;
     }
+
+    /// Rekeys the object keys a moving collection moved: all removed before any is added, so a new id equal to another
+    /// key's old one never collides.
+    #[cfg(feature = "gc-nursery")]
+    pub fn remap_objects(&mut self, mut to: impl FnMut(Id) -> Id) {
+        let moved: Vec<(Id, Id, u32)> = self
+            .index
+            .iter()
+            .filter_map(|(k, i)| match k {
+                MapKey::Obj(id) if to(*id) != *id => Some((*id, to(*id), *i)),
+                _ => None,
+            })
+            .collect();
+        for (id, _, _) in &moved {
+            self.index.remove(&MapKey::Obj(*id));
+        }
+        for (_, id, i) in moved {
+            self.index.insert(MapKey::Obj(id), i);
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

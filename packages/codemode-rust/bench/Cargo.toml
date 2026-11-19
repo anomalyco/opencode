@@ -11,6 +11,7 @@ serde_json = { version = "1", features = ["float_roundtrip"] }
 [features]
 # Per-run heap counts for the memory benchmarks (`examples/gc_bench.rs`).
 gc-stats = ["psychoscript/gc-stats"]
+gc-nursery = ["psychoscript/gc-nursery"]
 
 [[example]]
 name = "gc_bench"

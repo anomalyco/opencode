@@ -19,7 +19,7 @@ pub type Res = Result<Value, Value>;
 pub type NativeFn = fn(&mut Vm, Value, &[Value], Id) -> Res;
 
 pub const MAX_DEPTH: usize = 10_000;
-const MAX_OBJECTS: usize = 2_000_000;
+pub(crate) const MAX_OBJECTS: usize = 2_000_000;
 pub(crate) const MAX_STRINGS: usize = 4_000_000;
 const MAX_NATIVE_DEPTH: usize = 400;
 pub(crate) const FUEL: i32 = 20_000;
@@ -222,7 +222,10 @@ pub struct Realm {
 }
 
 pub struct Vm {
+    #[cfg(not(feature = "gc-nursery"))]
     pub heap: Vec<Obj>,
+    #[cfg(feature = "gc-nursery")]
+    pub heap: crate::gc_nursery::Heap,
     pub cells: Vec<Slot>,
     pub atoms: Strings,
     pub stack: Vec<Slot>,
@@ -240,7 +243,7 @@ pub struct Vm {
     pub global_names: Vec<Atom>,
     pub global_map: FxHashMap<Atom, Value>,
     pub consts: Vec<Value>,
-    templates: Vec<TemplateSite>,
+    pub(crate) templates: Vec<TemplateSite>,
     /// Each tagged template site's strings array, once made.
     template_objs: Vec<Option<Id>>,
     pub protos: Vec<Arc<FuncProto>>,
@@ -301,6 +304,8 @@ pub struct Vm {
     /// The answers a rerun takes in order, and what the meter was when it started.
     pub(crate) replay: VecDeque<Value>,
     pub(crate) replay_meter: Option<crate::conversion::Meter>,
+    #[cfg(feature = "gc-nursery")]
+    pub(crate) gc: crate::gc_nursery::Gc,
 }
 
 impl Vm {
@@ -334,7 +339,10 @@ impl Vm {
             .map(|d| d.as_nanos() as u64)
             .unwrap_or(0x9e3779b97f4a7c15);
         Vm {
+            #[cfg(not(feature = "gc-nursery"))]
             heap: Vec::with_capacity(1024),
+            #[cfg(feature = "gc-nursery")]
+            heap: crate::gc_nursery::Heap::with_capacity(1024),
             cells: Vec::new(),
             atoms,
             stack: Vec::with_capacity(1024),
@@ -386,6 +394,8 @@ impl Vm {
             convert_req: None,
             replay: VecDeque::new(),
             replay_meter: None,
+            #[cfg(feature = "gc-nursery")]
+            gc: crate::gc_nursery::Gc::default(),
         }
     }
 
@@ -411,8 +421,13 @@ impl Vm {
 
     #[inline]
     pub fn alloc(&mut self, obj: Obj) -> Id {
+        #[cfg(not(feature = "gc-nursery"))]
         if self.heap.len() >= MAX_OBJECTS {
             self.out_of_memory();
+        }
+        #[cfg(feature = "gc-nursery")]
+        if self.heap.len() >= self.gc.limit {
+            self.objects_full();
         }
         self.heap.push(obj);
         (self.heap.len() - 1) as Id
@@ -431,6 +446,38 @@ impl Vm {
             self.host.meter.fuel = 1;
             self.rebudget();
         }
+    }
+
+    /// The object limit was reached: the hard cap, or the next collection's threshold.
+    #[cfg(feature = "gc-nursery")]
+    #[cold]
+    fn objects_full(&mut self) {
+        if self.heap.len() >= MAX_OBJECTS {
+            return self.out_of_memory();
+        }
+        self.gc_request();
+    }
+
+    /// Counts a string against the cap, and against the next collection's threshold.
+    #[inline(always)]
+    pub(crate) fn check_strings(&mut self) {
+        #[cfg(not(feature = "gc-nursery"))]
+        if self.atoms.bufs.len() >= MAX_STRINGS {
+            self.out_of_memory();
+        }
+        #[cfg(feature = "gc-nursery")]
+        if self.atoms.bufs.len() >= self.gc.str_limit {
+            self.strings_full();
+        }
+    }
+
+    #[cfg(feature = "gc-nursery")]
+    #[cold]
+    fn strings_full(&mut self) {
+        if self.atoms.bufs.len() >= MAX_STRINGS {
+            return self.out_of_memory();
+        }
+        self.gc_request();
     }
 
     pub fn new_object(&mut self) -> Id {
@@ -452,9 +499,7 @@ impl Vm {
 
     /// The concatenation of strings, appending in place to the first one's buffer when it can.
     pub fn concat_strs(&mut self, parts: &[StrId]) -> Value {
-        if self.atoms.bufs.len() >= MAX_STRINGS {
-            self.out_of_memory();
-        }
+        self.check_strings();
         Value::Str(self.atoms.concat(parts))
     }
 
@@ -465,9 +510,7 @@ impl Vm {
 
     #[inline]
     pub fn string_val(&mut self, s: String) -> Value {
-        if self.atoms.bufs.len() >= MAX_STRINGS {
-            self.out_of_memory();
-        }
+        self.check_strings();
         Value::Str(self.atoms.alloc(s))
     }
 
@@ -781,7 +824,7 @@ impl Vm {
         }
         if self.json_walks == u32::MAX {
             self.json_walks = 0;
-            for o in &mut self.heap {
+            for o in self.heap.iter_mut() {
                 o.visit = 0;
             }
         }
@@ -884,6 +927,11 @@ impl Vm {
     /// Notes a suspend request, or a round trip that is due, every few steps.
     #[cold]
     fn checkpoint(&mut self) {
+        // The collector's own stop is set aside, so a suspend requested here is told apart from it.
+        #[cfg(feature = "gc-nursery")]
+        if std::mem::take(&mut self.gc.owns_suspend) {
+            self.suspend_wanted = false;
+        }
         if self.roundtrip_every > 0 {
             self.host.meter.fuel = self.roundtrip_every as i32;
             self.suspend_wanted = true;
@@ -898,6 +946,11 @@ impl Vm {
         }
         if self.host.shared.requested() {
             self.suspend_wanted = true;
+        }
+        #[cfg(feature = "gc-nursery")]
+        if self.gc.wanted && !self.suspend_wanted {
+            self.suspend_wanted = true;
+            self.gc.owns_suspend = true;
         }
     }
 
@@ -2801,17 +2854,21 @@ impl Vm {
                         self.stack.push(v);
                     }
                     Op::NewCell(i) => {
+                        #[cfg(feature = "gc-nursery")]
+                        if self.cells.len() >= self.gc.cell_limit {
+                            self.gc_request();
+                        }
                         self.cells.push(Slot::UNINIT);
-                        let c = self.cells.len() as u64 - 1;
-                        self.stack[base + i as usize] = Slot(c);
+                        let c = self.cells.len() - 1;
+                        self.stack[base + i as usize] = Slot::cell(c);
                     }
                     Op::GetCell(i) => {
-                        let c = self.stack[base + i as usize].0 as usize;
+                        let c = self.stack[base + i as usize].cell_index();
                         let v = self.cells.get(c).copied().unwrap_or(Slot::UNINIT);
                         self.stack.push(v);
                     }
                     Op::GetCellChk(i, name) => {
-                        let c = self.stack[base + i as usize].0 as usize;
+                        let c = self.stack[base + i as usize].cell_index();
                         let v = self.cells.get(c).copied().unwrap_or(Slot::UNINIT);
                         if v == Slot::UNINIT {
                             throw!(self.tdz_error(name));
@@ -2820,7 +2877,11 @@ impl Vm {
                     }
                     Op::SetCell(i) => {
                         let v = self.stack.pop().unwrap_or_default();
-                        let c = self.stack[base + i as usize].0 as usize;
+                        let c = self.stack[base + i as usize].cell_index();
+                        #[cfg(feature = "gc-nursery")]
+                        if c < self.gc.cell_old {
+                            self.remember_cell(c);
+                        }
                         if let Some(cell) = self.cells.get_mut(c) {
                             *cell = v;
                         }
@@ -2841,6 +2902,10 @@ impl Vm {
                     Op::SetUpval(i) => {
                         let v = self.stack.pop().unwrap_or_default();
                         let c = self.frames[fi].upvals[i as usize];
+                        #[cfg(feature = "gc-nursery")]
+                        if (c as usize) < self.gc.cell_old {
+                            self.remember_cell(c as usize);
+                        }
                         self.cells[c as usize] = v;
                     }
                     Op::GetGlobal(g) => {
@@ -3382,6 +3447,11 @@ impl Vm {
                         if (t as usize) < pc {
                             tri!(self.tick());
                             if self.suspend_wanted && resumable {
+                                #[cfg(feature = "gc-nursery")]
+                                if !self.gc_safe_point() {
+                                    pc = t as usize;
+                                    continue;
+                                }
                                 self.frames[fi].pc = t as usize;
                                 self.suspended = true;
                                 return Ok(Exit::Suspend);
@@ -3433,6 +3503,11 @@ impl Vm {
                             if (t as usize) < pc {
                                 tri!(self.tick());
                                 if self.suspend_wanted && resumable {
+                                    #[cfg(feature = "gc-nursery")]
+                                    if !self.gc_safe_point() {
+                                        pc = t as usize;
+                                        continue;
+                                    }
                                     self.frames[fi].pc = t as usize;
                                     self.suspended = true;
                                     return Ok(Exit::Suspend);
@@ -4018,7 +4093,15 @@ impl Vm {
             if self.suspended {
                 return Ok(());
             }
-            if self.suspend_wanted || self.host.shared.requested() {
+            #[cfg(feature = "gc-nursery")]
+            let stop = if self.gc.wanted {
+                self.gc_safe_point()
+            } else {
+                self.suspend_wanted
+            };
+            #[cfg(not(feature = "gc-nursery"))]
+            let stop = self.suspend_wanted;
+            if stop || self.host.shared.requested() {
                 self.suspended = true;
                 return Ok(());
             }

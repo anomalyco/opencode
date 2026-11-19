@@ -126,7 +126,7 @@ fn natives() -> &'static Natives {
         let mut list: Vec<NativeFn> = Vec::new();
         list.extend(host::snapshot_natives());
         list.extend(crate::promise::snapshot_natives());
-        for o in &vm.heap {
+        for o in vm.heap.iter() {
             if let Kind::Native { f, .. } = &o.kind {
                 list.push(*f);
             }
@@ -249,6 +249,9 @@ fn val(v: &Value) -> J {
 }
 
 fn slot(s: &Slot) -> J {
+    if s.is_cell() {
+        return J::from(format!("c{}", s.cell_index()));
+    }
     val(&s.get())
 }
 
@@ -408,8 +411,10 @@ impl Enc<'_> {
         let mut rest = Vec::new();
         // A streaming response's live accessors have no data form: one the run can still reach fails the resume, as
         // in the reference.
-        let live = vm.heap[base.heap..]
+        let live = vm
+            .heap
             .iter()
+            .skip(base.heap)
             .any(|o| matches!(o.kind, Kind::Live(_)))
             .then(|| crate::reach::reachable(vm));
         for (i, o) in vm.heap.iter().enumerate().skip(base.heap) {
@@ -1307,6 +1312,13 @@ impl Dec<'_> {
     }
 
     fn slot(&self, j: &J) -> R<Slot> {
+        #[cfg(feature = "gc-nursery")]
+        if let Some(c) = j.as_str().and_then(|t| t.strip_prefix('c')) {
+            let c = c
+                .parse::<usize>()
+                .map_err(|_| invalid("a cell reference is malformed."))?;
+            return Ok(Slot::cell(c));
+        }
         Ok(Slot::pack(self.val(j)?))
     }
 

@@ -37,15 +37,30 @@ pub struct StrBuf {
     /// Only one local slot holds this string, so `+=` may append in place.
     pub builder: bool,
     /// When not `NO_GROW`, the text is the `len` bytes at `aux` in `Strings::grow[grow]` rather than `s`.
-    grow: u32,
-    len: u32,
+    pub(crate) grow: u32,
+    pub(crate) len: u32,
     /// For a string in a `grow` buffer, its offset there. Otherwise, when not `NO_WTF`, the text is a carrier and
     /// `Strings::wtf[aux]` holds the code units.
-    aux: u32,
+    pub(crate) aux: u32,
 }
 
-const NO_GROW: u32 = u32::MAX;
-const NO_WTF: u32 = u32::MAX;
+impl StrBuf {
+    /// An empty entry, for a moving collector's holes.
+    #[cfg(feature = "gc-nursery")]
+    pub(crate) fn hole() -> StrBuf {
+        StrBuf {
+            s: Cow::Borrowed(""),
+            ascii: true,
+            builder: false,
+            grow: NO_GROW,
+            len: 0,
+            aux: NO_WTF,
+        }
+    }
+}
+
+pub(crate) const NO_GROW: u32 = u32::MAX;
+pub(crate) const NO_WTF: u32 = u32::MAX;
 
 /// Starts an escape in a carrier text. U+10FFFF is a noncharacter, so real text almost never holds one.
 pub const MARK: char = '\u{10FFFF}';
@@ -160,12 +175,12 @@ const GROW_MIN: usize = 64;
 
 pub struct Strings {
     pub bufs: Vec<StrBuf>,
-    grow: Vec<String>,
+    pub(crate) grow: Vec<String>,
     /// The `grow` buffer short strings are appended to, so making one allocates nothing of its own.
-    arena: u32,
-    wtf: Vec<Box<[u16]>>,
+    pub(crate) arena: u32,
+    pub(crate) wtf: Vec<Box<[u16]>>,
     map: FxHashMap<Cow<'static, str>, Atom>,
-    atom_str: Vec<StrId>,
+    pub(crate) atom_str: Vec<StrId>,
     atom_index: Vec<u32>,
 }
 
