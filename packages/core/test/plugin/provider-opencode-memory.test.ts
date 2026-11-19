@@ -9,6 +9,7 @@ import { Model } from "@opencode/schema/model"
 import { Effect, Exit, Fiber, Layer, Queue, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Agent } from "@opencode/core/agent"
+import { Command } from "@opencode/core/command"
 import { Credential } from "@opencode/core/credential"
 import { Flag } from "@opencode/core/flag"
 import { Integration } from "@opencode/core/integration"
@@ -1796,7 +1797,7 @@ describe("OpencodePlugin memory capture", () => {
   )
 
   capturing("console_memory,memory_capture").effect(
-    "takes only what a person typed as the user's word, not a subagent's task, a command or an automation",
+    "takes the user's prompts and the commands they run as their word, not a subagent's task or an automation's",
     () =>
       withConsole((console) =>
         Effect.gen(function* () {
@@ -1814,19 +1815,35 @@ describe("OpencodePlugin memory capture", () => {
             ],
           })
           const { host } = yield* start(console)
+          // Admitted the way core admits them: a subagent's task in its child session, an automation's with its id.
           const parent = yield* host.session.create({})
           const child = yield* host.session.create({ parentID: parent.id })
-          yield* prompt(child.id, rule)
+          yield* host.session.prompt({ sessionID: child.id, text: rule, resume: false })
           const scheduled = yield* host.session.create({})
-          yield* prompt(scheduled.id, rule, { automation: { id: "aut_1" } })
-          // A command's prompt carries its name, as core records it.
-          const commanded = yield* host.session.create({})
-          yield* prompt(commanded.id, rule, { command: { name: "house" } })
+          yield* host.session.prompt({
+            sessionID: scheduled.id,
+            text: rule,
+            metadata: { automation: { id: "aut_1" } },
+            resume: false,
+          })
           yield* drain
           expect(console.state.requests.filter((item) => item.path === "/api/memory/entries")).toEqual([])
 
-          // The same words typed by the user confirm it.
-          yield* prompt(parent.id, rule)
+          // A command the user runs prompts with its own text; the user chose it, so its words are theirs.
+          yield* host.command.transform((editor) =>
+            editor.add({
+              name: "house",
+              execute: (input) =>
+                host.session
+                  .prompt({ sessionID: input.sessionID, text: rule, delivery: input.delivery, resume: false })
+                  .pipe(Effect.asVoid),
+            }),
+          )
+          const commands = yield* Command.Service
+          yield* commands.execute({
+            name: "house",
+            invocation: { sessionID: parent.id, prompt: { text: "" }, delivery: "steer" },
+          })
           yield* waitUntil(
             Effect.sync(() => console.state.requests.some((item) => item.path === "/api/memory/entries")),
           )
@@ -1934,7 +1951,7 @@ describe("OpencodeMemoryCapture", () => {
     expect(OpencodeMemoryCapture.backing(candidate("we never stub the network in tests"), segment)).toBe("dropped")
     expect(OpencodeMemoryCapture.backing(candidate(), segment)).toBe("dropped")
     expect(OpencodeMemoryCapture.backing(candidate(undefined, "observed"), segment)).toBe("observed")
-    // The same words in a message no person typed (a subagent's task, a command's template) aren't the user's.
+    // The same words in a message that isn't the user's (a subagent's task, an automation's) aren't their confirmation.
     const given = [ask("Add isWeekend. From now on we never mock the clock in tests.", false, false)]
     expect(OpencodeMemoryCapture.backing(candidate("From now on we never mock the clock"), given)).toBe("dropped")
   })

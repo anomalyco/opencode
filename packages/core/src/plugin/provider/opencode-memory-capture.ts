@@ -4,9 +4,9 @@ import { Option, Schema } from "effect"
 
 /**
  * One thing a session did, as the harness saw it: recorded every turn, mechanically, without a model. `prompt` is a
- * message the session was given, `user` when a person typed it (not a subagent's task from its parent, a command's
- * template or an automation), `shell` a finished command, `edit` and `read` the files a tool changed or read, `commit` a commit
- * the session made, `subtask` a subagent finishing, `compaction` the conversation being compacted.
+ * message the session was given, `user` when it is the user's own (typed, or a command they ran; not a subagent's task
+ * from its parent or an automation's), `shell` a finished command, `edit` and `read` the files a tool changed or read,
+ * `commit` a commit the session made, `subtask` a subagent finishing, `compaction` the conversation being compacted.
  */
 export type Event =
   | { readonly type: "prompt"; readonly text: string; readonly correction: boolean; readonly user: boolean }

@@ -184,8 +184,6 @@ const OUTSIDE = /\b(?:curl|wget|gh (?:issue|pr|api|repo clone)|git clone)\b/
 const OUTSIDE_TOOLS = new Set(["webfetch", "websearch", "opencode_read_mcp_resource"])
 /** `git commit`, after any global options, as its own command. */
 const COMMIT = /(?:^|[;&|(]\s*)git(?:\s+(?:-[Cc]\s+\S+|--?[\w-]+(?:=\S+)?))*\s+commit\b/m
-/** Metadata a prompt carries when no person typed it: an automation's, a command's or a plugin's. */
-const GENERATED = ["automation", "command", "source"]
 const KindInput = Kind.annotate({
   description:
     "bug: symptom, cause, fix. convention: how this code does it. procedure: build, test, CI, release. gotcha: an API or tool pitfall. decision: what and why, with commits. failed-approach: what didn't work and why",
@@ -830,13 +828,12 @@ export const make = Effect.fnUntraced(function* (
       Effect.gen(function* () {
         const state = tracked(event.sessionID)
         state.task ??= event.prompt.text
-        // Only what a person typed is the user's word: a subagent's task comes from its parent's model, and commands,
-        // automations and plugins write theirs from templates. Only it confirms an entry or reads as a correction.
+        // Only the user's own prompts are their word: what they typed, or a command they chose to run. A subagent's task
+        // comes from its parent's model and an automation's from its schedule or trigger. Only the user's word confirms
+        // an entry, states a rule or reads as a correction.
         const session = yield* ctx.session.get({ sessionID: event.sessionID }).pipe(Effect.option)
         const user =
-          Option.isSome(session) &&
-          session.value.parentID === undefined &&
-          !GENERATED.some((key) => event.metadata?.[key] !== undefined)
+          Option.isSome(session) && session.value.parentID === undefined && event.metadata?.automation === undefined
         const corrected = user ? policy.correction(event.prompt.text, [...state.given.values()]) : undefined
         yield* record(event.sessionID, {
           type: "prompt",
