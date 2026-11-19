@@ -1,8 +1,33 @@
 import { render } from "solid-js/web"
 import { createStore } from "solid-js/store"
 import { BasicTool } from "../src/components/basic-tool"
+import { CurrentSessionProviders } from "../src/storybook/current-session-story"
+import { storyDocument } from "../src/storybook/current-session-scenarios"
+import { ToolDisplay } from "../src/tools/tool-renderer"
 
 export { getCachedMarkdown } from "../src/components/markdown-cache"
+
+export function mountGenericTool(input: { message?: string }, output?: string) {
+  const host = document.createElement("section")
+  host.dataset.testid = "generic-tool-fixture"
+  host.style.cssText = "max-width: 720px; padding: 24px"
+  document.body.appendChild(host)
+  render(
+    () => (
+      <CurrentSessionProviders document={storyDocument([])}>
+        <ToolDisplay
+          id="generic_disclosure"
+          tool="messageSession"
+          status="completed"
+          input={input}
+          output={output}
+          metadata={{}}
+        />
+      </CurrentSessionProviders>
+    ),
+    host,
+  )
+}
 
 export function mountBasicTool() {
   const host = document.createElement("div")
