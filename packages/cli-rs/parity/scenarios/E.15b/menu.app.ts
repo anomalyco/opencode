@@ -1,7 +1,7 @@
 // The shortcuts dialog and the file menu (F15, DLG48 and DLG49) on the full-screen route with the file tree: `?`
 // shows the shortcuts as bound, a right-click on a tree row opens the file menu, Enter marks the file complete, and
 // the menu opened again offers to mark it incomplete until Escape closes it.
-import { defineApp } from "../../lib/app"
+import { defineApp, location } from "../../lib/app"
 import { repoFixture } from "../E.15a/repo"
 
 const repo = await repoFixture(
@@ -12,18 +12,13 @@ const repo = await repoFixture(
   },
 )
 
-const here = {
-  directory: "/tmp/opencode/packages/tui",
-  project: { id: "proj_test", directory: "/tmp/opencode", canonical: "/tmp/opencode" },
-}
-
 export default defineApp({
   width: 120,
   height: 30,
   config: { experimental: { "new-designs": true } },
   routes: [
-    { path: "/api/vcs/base", json: { location: here, data: { name: "main", ref: "main", source: "default" } } },
-    { path: "/api/vcs/diff", json: { location: here, data: repo.files } },
+    { path: "/api/vcs/base", json: { location, data: { name: "main", ref: "main", source: "default" } } },
+    { path: "/api/vcs/diff", json: { location, data: repo.files } },
   ],
   steps: [
     {

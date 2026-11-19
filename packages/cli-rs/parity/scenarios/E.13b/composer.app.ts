@@ -2,10 +2,9 @@
 // session's family; Down moves, Ctrl+A shows the inactive ones, Enter opens a subagent, whose session shows the
 // composer instead of a prompt, and Escape goes back to the parent. Right goes to the Shell tab, Enter opens the shell
 // output dialog, Ctrl+D kills the shell, the Terminals tab offers a new terminal, and Escape gives the prompt back.
-import { assistant, defineApp, session, user } from "../../lib/app"
+import { assistant, defineApp, location, session, user } from "../../lib/app"
 
 const directory = "/tmp/opencode/packages/tui"
-const location = { directory, project: { id: "proj_test", directory: "/tmp/opencode", canonical: "/tmp/opencode" } }
 
 const child = (id: string, parentID: string, title: string, updated: number, agent?: string) => ({
   ...session(id, title, { updated }),
@@ -33,7 +32,10 @@ const shell = {
 }
 
 const transcript = (id: string, text: string) => [
-  { path: `/api/session/${id}/message`, json: { data: [assistant(`msg_${id}_2`, "Done.", 2000), user(`msg_${id}_1`, text, 1000)], cursor: {} } },
+  {
+    path: `/api/session/${id}/message`,
+    json: { data: [assistant(`msg_${id}_2`, "Done.", 2000), user(`msg_${id}_1`, text, 1000)], cursor: {} },
+  },
   { path: `/api/session/${id}/inbox`, json: { data: [] } },
 ]
 

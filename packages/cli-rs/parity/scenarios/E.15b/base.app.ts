@@ -1,7 +1,7 @@
 // The base branch dialog (F15, DLG46 and DLG47) on the full-screen route: `d` opens the diff source dialog, whose
 // "Base" row names the reported base; it opens the branch picker over the repository's branches, with the reported
 // base marked. Choosing a branch loads the diff against it, and the source dialog then names the chosen base.
-import { defineApp } from "../../lib/app"
+import { defineApp, location } from "../../lib/app"
 import { repoFixture } from "../E.15a/repo"
 
 const repo = await repoFixture(
@@ -13,19 +13,14 @@ const repo = await repoFixture(
   { branches: ["feature/lexer", "release"] },
 )
 
-const here = {
-  directory: "/tmp/opencode/packages/tui",
-  project: { id: "proj_test", directory: "/tmp/opencode", canonical: "/tmp/opencode" },
-}
-
 export default defineApp({
   width: 80,
   height: 30,
   config: { experimental: { "new-designs": true } },
   routes: [
-    { path: "/api/vcs/base", json: { location: here, data: { name: "main", ref: "main", source: "default" } } },
-    { path: "/api/vcs/diff", json: { location: here, data: repo.files } },
-    { path: "/api/vcs/branch", json: { location: here, data: repo.branches } },
+    { path: "/api/vcs/base", json: { location, data: { name: "main", ref: "main", source: "default" } } },
+    { path: "/api/vcs/diff", json: { location, data: repo.files } },
+    { path: "/api/vcs/branch", json: { location, data: repo.branches } },
   ],
   steps: [
     {

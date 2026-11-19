@@ -1,9 +1,8 @@
 // Clicks in the composer (#60168): with a running shell and no running subagent, a click on the footer's
 // "1 shell" opens the composer on the Shell tab, and a click on a tab label switches to it.
-import { assistant, defineApp, session, user } from "../../lib/app"
+import { assistant, defineApp, location, session, user } from "../../lib/app"
 
 const directory = "/tmp/opencode/packages/tui"
-const location = { directory, project: { id: "proj_test", directory: "/tmp/opencode", canonical: "/tmp/opencode" } }
 
 const shell = {
   id: "sh_1",

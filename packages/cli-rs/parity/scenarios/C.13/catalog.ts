@@ -1,10 +1,6 @@
 // The catalogs a prompt needs before it can submit: one agent, one provider, one model, as full wire objects.
+import { location } from "../../lib/app"
 import type { Route } from "../../lib/app"
-
-const location = {
-  directory: "/tmp/opencode/packages/tui",
-  project: { id: "proj_test", directory: "/tmp/opencode", canonical: "/tmp/opencode" },
-}
 
 const agent = {
   id: "build",

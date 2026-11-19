@@ -2,25 +2,8 @@
 // and cost (Context), the MCP servers folded above two with their statuses, the todo list, the getting started
 // card (no provider connected), and the location. `<leader>b` hides it and writes `session.sidebar: "hide"`,
 // and shows it again; a click on the MCP header folds the list.
-import { assistant, defineApp, session, user } from "../../lib/app"
+import { assistant, defineApp, location, model, session, user } from "../../lib/app"
 
-const location = {
-  directory: "/tmp/opencode/packages/tui",
-  project: { id: "proj_test", directory: "/tmp/opencode", canonical: "/tmp/opencode" },
-}
-const model = {
-  id: "model",
-  modelID: "model",
-  providerID: "provider",
-  name: "Model",
-  capabilities: { tools: true, input: ["text"], output: ["text"] },
-  variants: [],
-  time: { released: 0 },
-  cost: [{ input: 3, output: 15, cache: { read: 0.3, write: 3.75 } }],
-  status: "active",
-  enabled: true,
-  limit: { context: 200000, output: 32000 },
-}
 const todos = [
   { content: "Write the changelog", status: "completed" },
   { content: "Tag the release", status: "in_progress" },

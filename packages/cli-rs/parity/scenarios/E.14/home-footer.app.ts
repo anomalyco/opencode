@@ -1,10 +1,5 @@
 // The home footer (F01): the connected MCP servers of the default location with `/mcps`, then the version.
-import { defineApp, HOME_PLACEHOLDER } from "../../lib/app"
-
-const location = {
-  directory: "/tmp/opencode/packages/tui",
-  project: { id: "proj_test", directory: "/tmp/opencode", canonical: "/tmp/opencode" },
-}
+import { defineApp, HOME_PLACEHOLDER, location } from "../../lib/app"
 
 export default defineApp({
   config: { experimental: { "new-designs": true } },

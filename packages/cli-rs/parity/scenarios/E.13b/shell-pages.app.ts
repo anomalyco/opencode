@@ -3,10 +3,9 @@
 // bytes, the second starts with it, and the third answers nothing and keeps its cursor before `€`: the dialog waits
 // for the next poll instead of asking again at once. The joined text is 65,541 code units, so the dialog keeps the
 // newest 65,536 and notes the earlier output. The view follows the end, where the last line shows the emoji whole.
-import { assistant, defineApp, session, user } from "../../lib/app"
+import { assistant, defineApp, location, session, user } from "../../lib/app"
 
 const directory = "/tmp/opencode/packages/tui"
-const location = { directory, project: { id: "proj_test", directory: "/tmp/opencode", canonical: "/tmp/opencode" } }
 const first = `${"x".repeat(1023)}\n`.repeat(63) + `${"x".repeat(1017)}\ntail `
 const second = "😀 end"
 const size = Buffer.byteLength(first + second) + 2
