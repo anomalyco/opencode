@@ -1408,17 +1408,7 @@ function structuralTypes(schemas: ReadonlyArray<Schema.Top>, mutable: boolean, r
       .filter((reference) => anonymous.has(reference.$ref))
       .map((reference) => [reference.$ref, reference.code.Type]),
   )
-  const inlineAnonymous = (type: string, seen = new Set<string>()): string => {
-    for (const [reference, value] of anonymousTypes) {
-      const pattern = `(?<![A-Za-z0-9_$.'"])${reference.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![A-Za-z0-9_$.'"])`
-      if (!new RegExp(pattern).test(type)) continue
-      if (seen.has(reference)) {
-        throw new GenerationError({ reason: `Recursive Promise types are not implemented: ${reference}` })
-      }
-      type = type.replaceAll(new RegExp(pattern, "g"), `(${inlineAnonymous(value, new Set([...seen, reference]))})`)
-    }
-    return type
-  }
+  const inlineAnonymous = expandReferences(anonymousTypes)
   const names = new Map<string, string>()
   const usedNames = new Set(reservedNames)
   const references = document.references.nonRecursives.filter((reference) => !anonymous.has(reference.$ref))
@@ -1429,12 +1419,12 @@ function structuralTypes(schemas: ReadonlyArray<Schema.Top>, mutable: boolean, r
     names.set(reference.$ref, name)
     usedNames.add(name)
   }
+  const namePattern = referencePattern(names.keys())
   const render = (type: string) => {
-    for (const [reference, name] of names) {
-      const pattern = `(?<![A-Za-z0-9_$.'"])${reference.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![A-Za-z0-9_$.'"])`
-      type = type.replace(new RegExp(pattern, "g"), name)
-    }
-    const output = type.replaceAll("Schema.Json", "JsonValue").replaceAll(/(?<!["'])\bunknown\b(?!["'])/g, "any")
+    const output = type
+      .replace(namePattern, (reference) => names.get(reference) ?? reference)
+      .replaceAll("Schema.Json", "JsonValue")
+      .replaceAll(/(?<!["'])\bunknown\b(?!["'])/g, "any")
     return mutable ? mutableType(preserveStringSuggestions(output)) : preserveStringSuggestions(output)
   }
   const equivalent = new Map<string, string>()
@@ -1464,6 +1454,30 @@ function structuralTypes(schemas: ReadonlyArray<Schema.Top>, mutable: boolean, r
   }
 }
 
+// Replaces every reference to a named type with its parenthesized definition, recursively.
+function expandReferences(references: ReadonlyMap<string, string>) {
+  const pattern = referencePattern(references.keys())
+  const expand = (type: string, seen: ReadonlySet<string> = new Set()): string =>
+    type.replace(pattern, (reference) => {
+      if (seen.has(reference)) {
+        throw new GenerationError({ reason: `Recursive Promise types are not implemented: ${reference}` })
+      }
+      return `(${expand(references.get(reference) ?? reference, new Set([...seen, reference]))})`
+    })
+  return expand
+}
+
+// Matches any of the references as a whole token in one pass. Building a RegExp per reference for every type made
+// emitting the Server contract cost types x references regexes, hundreds of milliseconds.
+function referencePattern(references: Iterable<string>) {
+  const alternatives = Array.from(references, (reference) => reference.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+  if (alternatives.length === 0) return /(?!)/g
+  return new RegExp(
+    `(?<![A-Za-z0-9_$.'"])(?:${alternatives.toSorted((a, b) => b.length - a.length).join("|")})(?![A-Za-z0-9_$.'"])`,
+    "g",
+  )
+}
+
 function uniqueTypeName(seed: string, used: ReadonlySet<string>, suffix = 1): string {
   const name = suffix === 1 ? seed : `${seed}${suffix}`
   return used.has(name) ? uniqueTypeName(seed, used, suffix + 1) : name
@@ -1474,20 +1488,9 @@ function structuralType(schema: Schema.Top) {
   if (document.artifacts.length > 0 || Object.keys(document.references.recursives).length > 0) {
     throw new GenerationError({ reason: "Referenced Promise types are not implemented" })
   }
-  const references = new Map(
-    document.references.nonRecursives.map((reference) => [reference.$ref, reference.code.Type]),
+  const expand = expandReferences(
+    new Map(document.references.nonRecursives.map((reference) => [reference.$ref, reference.code.Type])),
   )
-  const expand = (type: string, seen = new Set<string>()): string => {
-    for (const [reference, value] of references) {
-      const pattern = `(?<![A-Za-z0-9_$.'"])${reference.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![A-Za-z0-9_$.'"])`
-      if (!new RegExp(pattern).test(type)) continue
-      if (seen.has(reference)) {
-        throw new GenerationError({ reason: `Recursive Promise types are not implemented: ${reference}` })
-      }
-      type = type.replace(new RegExp(pattern, "g"), `(${expand(value, new Set([...seen, reference]))})`)
-    }
-    return type
-  }
   return preserveStringSuggestions(expand(document.codes[0].Type).replaceAll("Schema.Json", "JsonValue"))
 }
 
