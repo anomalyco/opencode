@@ -3337,8 +3337,11 @@ fn snapshot_across_a_new_build(held: bool) {
 fn a_fetch_the_host_does_not_take_fails_over_the_pipe() {
     let Some(config) = config() else { return };
     let (root, plugin, log) = plugin_files("refused", "fetched");
+    // Its call stages 128 effects before the fetch. The host takes a fetch only while the effects that wait leave it
+    // room for the call's own: the queue sits exactly at its bound, a fetch alone can find the last place, and the
+    // call's margin keeps the answer the same wherever in a frame the queue stands.
     let module = format!(
-        "import {{ appendFileSync }} from \"node:fs\"\nexport default {{ id: \"example.refused\", setup(api) {{\n  const carrier = api[Symbol.for(\"opencode.carrier\")]\n  carrier.command({{ name: \"refused.fetch\", title: \"refused.fetch\" }}, async () => {{\n    const result = await carrier.fetch({{ method: \"GET\", path: \"/api/session\" }})\n    appendFileSync({log:?}, Object.keys(result ?? {{}}).join(\",\") + \"\\n\")\n  }})\n}} }}\n"
+        "import {{ appendFileSync }} from \"node:fs\"\nexport default {{ id: \"example.refused\", setup(api) {{\n  const carrier = api[Symbol.for(\"opencode.carrier\")]\n  carrier.command({{ name: \"refused.fetch\", title: \"refused.fetch\" }}, async () => {{\n    for (let i = 0; i < 128; i++) api.ui.toast.show({{ message: \"staged\" }})\n    const result = await carrier.fetch({{ method: \"GET\", path: \"/api/session\" }})\n    appendFileSync({log:?}, Object.keys(result ?? {{}}).join(\",\") + \"\\n\")\n  }})\n}} }}\n"
     );
     std::fs::write(plugin.join("tui.ts"), module).unwrap();
     let server = support::Fake::new(|seen| match seen.path.as_str() {
@@ -3352,7 +3355,16 @@ fn a_fetch_the_host_does_not_take_fails_over_the_pipe() {
     h.wait_for("chain ready");
     let lines = || std::fs::read_to_string(&log).unwrap_or_default();
     h.tui.keymap.dispatch("chain.fan", None);
-    for _ in 0..80 {
+    // The fan fills the queue of effects to its bound, where a fetch finds no room: wait for the bound itself, not for
+    // a number of frames (a frame runs a budget, and the chain adds a little back as it runs).
+    let begun = Instant::now();
+    while opencode_plugin::effects_waiting() < opencode_plugin::EFFECTS_BOUND {
+        assert!(
+            begun.elapsed() < Duration::from_secs(30),
+            "{} effects wait, under the queue's bound of {}",
+            opencode_plugin::effects_waiting(),
+            opencode_plugin::EFFECTS_BOUND
+        );
         h.app.render();
     }
     h.tui.keymap.dispatch("refused.fetch", None);

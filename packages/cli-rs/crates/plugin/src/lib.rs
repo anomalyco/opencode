@@ -1881,6 +1881,9 @@ const QUEUE: usize = 1 << 16;
 /// Maximum effects shared by all drains in one painted frame.
 #[doc(hidden)]
 pub const FRAME_EFFECTS: usize = 1024;
+/// The most effects that wait on one thread before the host refuses a request, for the rows that fill the queue.
+#[doc(hidden)]
+pub const EFFECTS_BOUND: usize = QUEUE;
 
 /// After an idle interval, reset the budget without forcing a paint just for timer ticks.
 const FRAME_SLOT: std::time::Duration = std::time::Duration::from_millis(16);
