@@ -2,6 +2,7 @@ import { createMemo, For, type JSX, onCleanup, Show, splitProps } from "solid-js
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Popover } from "@kobalte/core/popover"
+import { createOverlayFocus } from "@opencode/ui/context/overlay-focus"
 import {
   displayName,
   getProjectAvatarGenerated,
@@ -86,6 +87,11 @@ export type HomeProjectsViewProps = {
 
 export function HomeProjectsView(props: HomeProjectsViewProps) {
   const [state, setState] = createStore({ open: false })
+
+  const overlayFocus = createOverlayFocus()
+
+  let trigger: HTMLButtonElement | undefined
+
   const selected = createMemo(() => props.projects.find((project) => project.worktree === props.selection.directory))
 
   const server = createMemo(() =>
@@ -96,7 +102,10 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
     <Show when={props.dropdown} fallback={<HomeProjectsPanel {...props} />}>
       <Popover
         open={state.open}
-        onOpenChange={(open) => setState("open", open)}
+        onOpenChange={(open) => {
+          overlayFocus.openChanged(open)
+          setState("open", open)
+        }}
         placement={props.scope ? "bottom-end" : "bottom-start"}
         sameWidth={!props.scope}
         gutter={props.scope ? 8 : 6}
@@ -105,9 +114,10 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
           when={props.scope}
           fallback={
             <Popover.Trigger
+              ref={trigger}
               data-component="home-projects-dropdown"
               aria-label={props.language.t("home.projects")}
-              class="flex h-10 w-full min-w-0 items-center gap-2 rounded-[6px] bg-v2-background-bg-base px-1.5 text-start text-v2-text-text-base outline-none hover:bg-v2-background-bg-layer-01"
+              class="flex h-10 w-full min-w-0 items-center gap-2 rounded-[6px] bg-v2-background-bg-base px-1.5 text-start text-v2-text-text-base hover:bg-v2-background-bg-layer-01 focus-visible:-outline-offset-2"
             >
               <Show when={selected()} fallback={<Icon name="folder" />}>
                 {(project) => <HomeProjectAvatar project={project()} />}
@@ -131,9 +141,10 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
           }
         >
           <Popover.Trigger
+            ref={trigger}
             data-action="home-project-scope"
             aria-label={props.language.t("home.projects")}
-            class="relative z-20 -me-1 flex h-7 min-w-0 max-w-[220px] shrink-0 items-center gap-1.5 rounded-[4px] ps-2 pe-1.5 text-[13px] leading-[var(--line-height-compact)] [font-weight:440] text-v2-text-text-muted outline-none hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover data-[expanded]:bg-v2-overlay-simple-overlay-pressed data-[expanded]:text-v2-text-text-base"
+            class="relative z-20 -me-1 flex h-7 min-w-0 max-w-[220px] shrink-0 items-center gap-1.5 rounded-[4px] ps-2 pe-1.5 text-[13px] leading-[var(--line-height-compact)] [font-weight:440] text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base data-[expanded]:bg-v2-overlay-simple-overlay-pressed data-[expanded]:text-v2-text-text-base"
             onMouseDown={(event: MouseEvent) => event.preventDefault()}
           >
             <Show when={selected()}>{(project) => <HomeProjectAvatar project={project()} />}</Show>
@@ -148,6 +159,7 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
         <Popover.Portal>
           <Popover.Content
             aria-label={props.language.t("home.projects")}
+            onCloseAutoFocus={(event) => overlayFocus.restore(event, trigger)}
             dir={props.language.direction()}
             style={props.scope ? { width: "280px" } : undefined}
             class="z-50 max-h-[min(70dvh,var(--kb-popper-content-available-height))] overflow-hidden rounded-[10px] bg-v2-background-bg-base p-1.5 shadow-[var(--v2-elevation-floating)] outline-none data-[expanded]:animate-in data-[expanded]:fade-in data-[expanded]:slide-in-from-top-2 duration-150 ease-out motion-reduce:animate-none"

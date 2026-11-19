@@ -79,6 +79,12 @@ const groups: Group[] = [
         render: () => <IconButton variant={variant} icon={<Icon name="plus" />} aria-label="Add" />,
       })),
       {
+        name: "Button loading",
+        source: "ui/src/actions/button/button.css",
+        note: "Keeps the ring while it keeps focus. aria-busy and its loading text say it is working.",
+        render: () => <Button variant="loading">Loading</Button>,
+      },
+      {
         name: "New session project selector",
         source: "app/src/new-session/view.tsx",
         render: () => (
@@ -578,12 +584,6 @@ const groups: Group[] = [
             <Icon name="chevron-down" />
           </button>
         ),
-      },
-      {
-        name: "Button loading",
-        source: "ui/src/actions/button/button.css",
-        note: "Excluded from the Button ring while it works.",
-        render: () => <Button variant="loading">Loading</Button>,
       },
       {
         name: "InlineInput",

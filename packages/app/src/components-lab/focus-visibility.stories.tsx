@@ -7,6 +7,7 @@ import "@/session/session-identity-header.css"
 import "@/settings/settings.css"
 import "@/settings/general/interface-mode.css"
 import "@/settings/workspaces/project.css"
+import "@/providers/connect/models.css"
 import "@/shell/palette-menu.css"
 import "@/shell/search-list.css"
 import "@opencode/session-ui/sources/panel"
@@ -34,6 +35,10 @@ import { TextInput } from "@opencode/ui/text-input"
 import { createEffect, createSignal, createUniqueId, For, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { createTabStripScroll } from "@/runtime/plugin/tab-strip-scroll"
 import { createFieldFocus } from "@opencode/ui/context/field-focus"
+import { createOverlayFocus } from "@opencode/ui/context/overlay-focus"
+import { Menu } from "@opencode/ui/menu"
+import { Popover } from "@kobalte/core/popover"
+import { WaitingButton } from "@/providers/connect/step-actions"
 import { SessionHeaderActions } from "@/session/header/session-header-actions"
 import { SettingsList } from "@/settings/list"
 import { SettingsRow } from "@/settings/row"
@@ -1195,6 +1200,252 @@ const surfaces: Surface[] = [
     ],
   },
   {
+    name: "Overlay focus return",
+    cases: [
+      {
+        name: "Select: Escape after a click rings the trigger",
+        failure: "Inconsistent",
+        target: '[data-component="select-v2"]',
+        keys: "Click the select, press Escape: no ring. Tab to it, press ArrowDown, then Escape or Enter: the ring returns.",
+        sizing: "Any select. Kobalte returns focus with a plain focus(), and Chromium rings it because Escape is a key press.",
+        source: "ui/src/forms/select/select.tsx, ui/src/context/overlay-focus.tsx",
+        fix: "The wrapper records how the list opened (createOverlayFocus) and restores the trigger with that ring: none after a pointer open, the ring after a keyboard open, however it closed.",
+        render: () => (
+          <Select options={["English", "Deutsch", "Français"]} current="English" onSelect={() => undefined} />
+        ),
+      },
+      {
+        name: "Context menu: Escape after a right-click rings the row",
+        failure: "Inconsistent",
+        target: "button",
+        keys: "Right-click the row, then press Escape: no ring.",
+        sizing: "Any context menu: titlebar tabs, Home sessions and projects, file trees.",
+        source: "ui/src/navigation/menu/menu.tsx (Menu.Context)",
+        fix: "Context menus returned focus through Kobalte alone. They now record how they opened, as dropdown menus do, and return focus to what had it with that ring.",
+        render: () => (
+          <Menu.Context gutter={6}>
+            <Menu.Context.Trigger>
+              <button
+                type="button"
+                class="flex h-8 w-[260px] items-center rounded-md px-2 text-start text-13-regular hover:bg-v2-overlay-simple-overlay-hover focus-visible:-outline-offset-2"
+              >
+                Refactor the session store
+              </button>
+            </Menu.Context.Trigger>
+            <Menu.Context.Portal>
+              <Menu.Context.Content>
+                <Menu.Item>Rename</Menu.Item>
+                <Menu.Item>Archive</Menu.Item>
+              </Menu.Context.Content>
+            </Menu.Context.Portal>
+          </Menu.Context>
+        ),
+      },
+      {
+        name: "Home project picker: no keyboard ring, then a ring after Escape",
+        failure: "Invisible",
+        target: '[data-component="home-projects-dropdown"]',
+        keys: "On a narrow Home, Tab to the project picker. Click it and press Escape: no ring.",
+        sizing: "Below the Home breakpoint, the picker replaces the projects panel and fills its column.",
+        source: "app/src/home/projects/view.tsx",
+        fix: "The trigger suppressed its outline, so it never showed focus. It now takes the shared ring inset (-2px), and the popover restores it with createOverlayFocus, as Select does.",
+        render: () => <OverlayPopover component="home-projects-dropdown" label="All projects" width="280px" />,
+      },
+      {
+        name: "Composer todo and plugin pills: Escape after a click rings the pill",
+        failure: "Inconsistent",
+        target: '[data-component="session-todo-pill"]',
+        keys: "Click the todo pill, press Escape: no ring. Tab to it, press Enter, then Escape: the ring returns.",
+        sizing: "The pills in the lane above the composer.",
+        source: "app/src/session/composer/todo-pill.tsx, plugin-pills.tsx",
+        fix: "Both popovers restore their pill with createOverlayFocus instead of Kobalte's plain focus().",
+        render: () => <OverlayPopover component="session-todo-pill" label="2 of 5 done" />,
+      },
+    ],
+    also: [
+      "Reviewed, left as is: the Home browse dialog's fallback focus (home/projects/browse.tsx) runs only when the opener has gone; the mobile panel drawer's Back and the location picker's Choose return follow the key or click that closed them.",
+      "The workspace selector (new-session/workspace/selector.tsx) returns focus to the composer, whose field ring follows field-focus.tsx.",
+    ],
+  },
+  {
+    name: "Provider dialogs",
+    cases: [
+      {
+        name: "Connect provider list: Tab and arrow keys only change the background",
+        failure: "Inconsistent",
+        target: "[data-provider-id]",
+        keys: "Open Connect, then press ArrowDown in the search field, or Tab into the list.",
+        sizing: "Full-width rows in a scroller with no side padding.",
+        source: "app/src/providers/connect/dialog.tsx (ProviderList)",
+        fix: "The rows picked their background on :focus, so a click drew it too, and drew no ring. They now take the shared ring inset (-2px) on :focus-visible; hover and the arrow-key highlight keep the background.",
+        render: () => (
+          <div class="flex w-[320px] flex-col gap-0.5 overflow-y-auto">
+            <For each={["OpenCode Zen", "Anthropic", "OpenAI"]}>
+              {(name) => (
+                <button
+                  type="button"
+                  data-provider-id={name}
+                  class="flex min-h-8 w-full items-center gap-2 rounded-md py-1.5 ps-2 pe-2 text-left text-[13px] leading-5 tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus-visible:-outline-offset-2"
+                >
+                  <Icon name="server" class="shrink-0 text-v2-icon-icon-base" />
+                  <span class="min-w-0 truncate font-[440] text-v2-text-text-base">{name}</span>
+                </button>
+              )}
+            </For>
+          </div>
+        ),
+      },
+      {
+        name: "Sign-in method: keyboard focus only changes the background",
+        failure: "Inconsistent",
+        target: '[data-action="provider-connect-method"]',
+        keys: "Open Connect, choose a provider with more than one sign-in method, then Tab to a method.",
+        sizing: "Full-width rows.",
+        source: "app/src/providers/connect/dialog.tsx (MethodSelection)",
+        fix: "The shared ring inset (-2px) replaces the background. The chevron still appears on hover and keyboard focus.",
+        render: () => (
+          <div class="flex w-[320px] flex-col">
+            <For each={["Sign in with a browser", "Enter an API key"]}>
+              {(label) => (
+                <button
+                  type="button"
+                  data-action="provider-connect-method"
+                  class="group flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] leading-5 tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus-visible:-outline-offset-2"
+                >
+                  <Icon name="server" class="shrink-0 text-v2-icon-icon-muted" />
+                  <span class="min-w-0 flex-1 truncate font-[530] text-v2-text-text-base">{label}</span>
+                  <Icon
+                    name="chevron-right"
+                    class="shrink-0 text-v2-icon-icon-muted opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
+                  />
+                </button>
+              )}
+            </For>
+          </div>
+        ),
+      },
+      {
+        name: "Paste the redirect URL: focus only underlines the toggle",
+        failure: "Inconsistent",
+        target: "button[aria-expanded]",
+        keys: "Start a browser sign-in, then Tab to the paste toggle under the waiting button.",
+        sizing: "The toggle stretches across the step, between its top and bottom borders.",
+        source: "app/src/providers/connect/dialog.tsx (OAuth paste)",
+        fix: "The underline is gone. The toggle takes a 6px radius and the shared ring inset (-2px), inside the borders.",
+        render: () => (
+          <div class="flex w-[320px] flex-col self-stretch border-y border-v2-border-border-muted text-13-regular">
+            <button
+              type="button"
+              aria-expanded={false}
+              class="flex h-12 items-center gap-1.5 rounded-md text-start font-[440] text-v2-text-text-base focus-visible:-outline-offset-2"
+            >
+              <Icon name="chevron-right" class="shrink-0 text-v2-icon-icon-muted" />
+              Paste the redirect URL instead
+            </button>
+          </div>
+        ),
+      },
+      {
+        name: "Remote server label: focus only changes the text colour",
+        failure: "Inconsistent",
+        target: '[tabindex="0"]',
+        keys: "Connect a provider on a remote server, then Tab to the server label in the dialog header.",
+        sizing: "A compact label that opens a tooltip.",
+        source: "app/src/providers/connect/dialog.tsx (DialogHeader)",
+        fix: "The label uses the shared 2px outset ring with its 4px radius; the text colour no longer changes.",
+        render: () => (
+          <div data-slot="dialog-header" class="flex w-[320px] items-center justify-end p-4">
+            <span
+              tabindex="0"
+              class="me-3 flex min-w-0 shrink-0 items-center gap-1.5 rounded-sm text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted"
+            >
+              <Icon name="server" class="shrink-0 text-v2-icon-icon-muted" />
+              <span class="max-w-40 truncate">On devbox</span>
+            </span>
+          </div>
+        ),
+      },
+      {
+        name: "First models after connecting: keyboard focus only changes the background",
+        failure: "Inconsistent",
+        target: ".connected-model-row",
+        keys: "Connect a provider for the first time, then Tab to a model.",
+        sizing: "Full-width radio rows in a list that clips them.",
+        source: "app/src/providers/connect/dialog.tsx (ConnectionModelList), models.css",
+        fix: "The row draws the shared ring inset (-2px) instead of the hover background, inside the list's clip. A checked row keeps its check, so selection stays distinct.",
+        render: () => (
+          <div data-component="first-provider-models" class="flex w-[360px] flex-col px-2">
+            <SettingsList>
+              <For each={["Claude Sonnet 4.5", "Claude Opus 4.6"]}>
+                {(name, index) => (
+                  <div class="connected-model-row-shell">
+                    <button
+                      type="button"
+                      role="radio"
+                      data-component="settings-row"
+                      aria-checked={index() === 0}
+                      class="connected-model-row text-start"
+                    >
+                      <div data-slot="settings-row-copy">
+                        <div data-slot="settings-row-title">
+                          <span class="min-w-0 truncate">{name}</span>
+                        </div>
+                      </div>
+                      <div data-slot="settings-row-control" class="size-4">
+                        <Show when={index() === 0}>
+                          <Icon name="check" class="shrink-0 text-v2-icon-icon-base" />
+                        </Show>
+                      </div>
+                    </button>
+                  </div>
+                )}
+              </For>
+            </SettingsList>
+          </div>
+        ),
+      },
+      {
+        name: "Choose a model, no paid provider: rows and cards only change the background",
+        failure: "Inconsistent",
+        target: "[data-provider-id]",
+        keys: "Without a paid provider, open the model picker, then Tab or press ArrowDown.",
+        sizing: "Full-width model rows, two-column provider cards and a full-width View more row.",
+        source: "app/src/providers/models/unpaid.tsx",
+        fix: "All three picked a background on :focus, so a click drew it too. Rows and View more take the shared ring inset (-2px); the cards have room, so they take it outset (2px). Hover keeps the background.",
+        render: () => (
+          <div class="flex w-[400px] flex-col items-start rounded-lg border-[0.5px] border-v2-border-border-muted bg-v2-background-bg-layer-02 p-2.5">
+            <button
+              type="button"
+              class="flex w-full flex-row items-center gap-1.5 rounded-md px-3 py-2 text-left text-[13px] font-[530] leading-5 text-v2-text-text-base hover:bg-v2-overlay-simple-overlay-hover focus-visible:-outline-offset-2"
+            >
+              Big Pickle
+            </button>
+            <div class="grid w-full grid-cols-2 gap-x-2 gap-y-1.5">
+              <For each={["OpenCode Zen", "OpenCode Go"]}>
+                {(name) => (
+                  <button
+                    type="button"
+                    data-provider-id={name}
+                    class="flex min-h-11 w-full flex-row items-start gap-2 rounded-md border-[0.5px] border-v2-border-border-strong bg-v2-background-bg-base px-3 py-2.5 text-left text-[13px] font-[530] leading-5 text-v2-text-text-base hover:bg-v2-background-bg-layer-01"
+                  >
+                    {name}
+                  </button>
+                )}
+              </For>
+              <button
+                type="button"
+                class="col-span-full flex h-8 w-full items-center justify-start rounded-md px-3 text-left text-[13px] font-[440] leading-5 text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover focus-visible:-outline-offset-2"
+              >
+                View more providers
+              </button>
+            </div>
+          </div>
+        ),
+      },
+    ],
+    also: [],
+  },
+  {
     name: "Shared controls",
     cases: [
       {
@@ -1315,6 +1566,16 @@ const surfaces: Surface[] = [
             <TextInput value="Clearable" showClearButton clearLabel="Clear" />
           </div>
         ),
+      },
+      {
+        name: "Busy button: the ring disappears while it works",
+        failure: "Invisible",
+        target: '[data-component="button-v2"]',
+        keys: "Start a provider sign-in that waits for the browser, then Tab to the waiting button.",
+        sizing: "Any Button with the loading variant that keeps focus.",
+        source: "ui/src/actions/button/button.css, button.tsx, app/src/providers/connect/step-actions.tsx",
+        fix: "The loading variant no longer drops the ring. The ring alone can't say whether the button works, so Button also sets aria-busy for it, and the spinner and its text show the wait.",
+        render: () => <WaitingButton>Waiting for the browser…</WaitingButton>,
       },
       {
         name: "Small controls: 2.5px and 1px offsets",
@@ -1825,3 +2086,32 @@ export default {
 }
 
 export const AllSurfaces = { render: (args: VisibilityArgs) => <FocusVisibility {...args} /> }
+
+// The popover wiring the Home project picker and the composer pills share.
+function OverlayPopover(props: { component: string; label: string; width?: string }) {
+  const overlayFocus = createOverlayFocus()
+
+  let trigger: HTMLButtonElement | undefined
+
+  return (
+    <Popover onOpenChange={overlayFocus.openChanged} placement="bottom-start" gutter={6}>
+      <Popover.Trigger
+        ref={trigger}
+        data-component={props.component}
+        class="flex h-8 items-center gap-2 rounded-[6px] px-2 text-start text-13-regular hover:bg-v2-background-bg-layer-01 focus-visible:-outline-offset-2"
+        style={{ width: props.width }}
+      >
+        {props.label}
+        <Icon name="chevron-down" class="shrink-0 text-v2-icon-icon-muted" />
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          class="z-50 rounded-[10px] bg-v2-background-bg-base p-3 text-13-regular shadow-[var(--v2-elevation-floating)] outline-none"
+          onCloseAutoFocus={(event) => overlayFocus.restore(event, trigger)}
+        >
+          Popover content
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover>
+  )
+}

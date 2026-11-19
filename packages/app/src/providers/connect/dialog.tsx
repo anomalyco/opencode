@@ -241,7 +241,7 @@ export const DialogConnectProvider: Component<{
               placement="bottom"
               contentClass="!max-w-64 !whitespace-normal"
               triggerTabIndex={0}
-              class="me-3 flex min-w-0 shrink-0 !cursor-default items-center gap-1.5 rounded-sm text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted focus-visible:outline-none focus-visible:text-v2-text-text-base"
+              class="me-3 flex min-w-0 shrink-0 !cursor-default items-center gap-1.5 rounded-sm text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted"
             >
               <Icon name="server" class="shrink-0 text-v2-icon-icon-muted" />
               <span class="max-w-40 truncate">{language.t("provider.connect.remote.label", { server: server() })}</span>
@@ -419,7 +419,7 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
                         <button
                           type="button"
                           data-provider-id={provider.id}
-                          class="flex min-h-8 w-full items-center gap-2 rounded-md py-1.5 ps-2 pe-2 text-left text-[13px] leading-5 tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none disabled:pointer-events-none"
+                          class="flex min-h-8 w-full items-center gap-2 rounded-md py-1.5 ps-2 pe-2 text-left text-[13px] leading-5 tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus-visible:-outline-offset-2 disabled:pointer-events-none"
                           classList={{ "bg-v2-overlay-simple-overlay-hover": store.active === provider.id }}
                           onMouseEnter={() => setStore("active", provider.id)}
                           disabled={disabled(provider)}
@@ -830,7 +830,7 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
             <button
               type="button"
               data-action="provider-connect-method"
-              class="group flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] leading-5 tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+              class="group flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] leading-5 tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus-visible:-outline-offset-2"
               onClick={() => props.controller.input({ type: "method.selected", index: index() })}
             >
               <Icon name={METHOD_ICON[item.type]} class="shrink-0 text-v2-icon-icon-muted" />
@@ -1055,7 +1055,7 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
               <button
                 type="button"
                 aria-expanded={pasteOpen()}
-                class="flex h-12 items-center gap-1.5 text-start font-[440] text-v2-text-text-base focus-visible:outline-none focus-visible:underline"
+                class="flex h-12 items-center gap-1.5 rounded-md text-start font-[440] text-v2-text-text-base focus-visible:-outline-offset-2"
                 onClick={() => props.controller.input({ type: "paste.toggled", open: !pasteOpen() })}
               >
                 <Icon
@@ -1367,7 +1367,7 @@ function ProviderSteps(props: { provider: string; controller: ProviderDialogCont
                     data-first-provider-model=""
                     data-selected={checked() ? "" : undefined}
                     aria-checked={checked()}
-                    class="connected-model-row text-start focus-visible:outline-none"
+                    class="connected-model-row text-start"
                     onClick={() => props.controller.dispatch({ type: "model.selected", modelKey: modelKey(model) })}
                   >
                     <div data-slot="settings-row-copy">
