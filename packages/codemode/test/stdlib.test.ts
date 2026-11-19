@@ -1659,7 +1659,7 @@ describe("stdlib integration", () => {
     const shadowed = await error(`const Date = 5; return new Date()`)
     expect(shadowed.message).toStartWith("TypeError: Date is not a constructor.")
     const fn = await error(`const f = () => 1; return new f()`)
-    expect(fn.message).toStartWith("TypeError: f cannot be constructed")
+    expect(fn.message).toStartWith("TypeError: f is not a constructor: only classes")
   })
 
   test("Object.is uses SameValue semantics", async () => {

@@ -248,7 +248,7 @@ const compileFunctionBody = (
     emitThrowError(
       {
         type: "SyntaxError",
-        message: `Syntax '${kindName}' is not supported. ${supportedSyntaxMessage}`,
+        message: unsupportedFeatureMessages[kindName] ?? `Syntax '${kindName}' is not supported. ${supportedSyntaxMessage}`,
         kind: "UnsupportedSyntax",
         suggestions: [supportedSyntaxMessage],
       },
@@ -268,11 +268,16 @@ const compileFunctionBody = (
   const thisOperand = (): [number, number] => [fnInfo.thisDecl!.captured ? 1 : 0, fnInfo.thisDecl!.slot]
 
   // `super.x` parses inside object methods but is not supported. Code after the error is unreachable, so it emits nothing.
-  const unsupportedSuper = (node: MemberExpression): boolean => {
+  // `construct` names the unsupported use when `super` itself is in a class method.
+  const unsupportedSuper = (node: MemberExpression, construct?: string): boolean => {
     if (node.object.type !== "Super") return false
-    emitUnsupported("Super", node.object)
+    if (construct && analysis.superRefs.has(node.object)) emitUnsupportedSuper(`${construct} is not supported.`, node.object)
+    else emitUnsupported("Super", node.object)
     return true
   }
+
+  const emitUnsupportedSuper = (message: string, node: AstNode): void =>
+    emitThrowError({ type: "SyntaxError", message, kind: "UnsupportedSyntax", suggestions: [supportedSyntaxMessage] }, node)
 
   const putKind = (decl: Decl, isInit: boolean) =>
     isInit ? PutKind.INIT : decl.mutable ? PutKind.ASSIGN : PutKind.CONST
@@ -526,7 +531,7 @@ const compileFunctionBody = (
         // Stack has [value]. Evaluate target object and key, then write [value].
         const valSlot = allocSlot("%mval")
         builder.emit(Op.PUT_LOCAL, PutKind.INIT, valSlot, idx(pattern), -1)
-        if (unsupportedSuper(pattern)) return
+        if (unsupportedSuper(pattern, "Destructuring into super.x")) return
         compileExpression(pattern.object as Expression)
         if (pattern.computed) {
           compileExpression(pattern.property as Expression)
@@ -1199,7 +1204,7 @@ const compileFunctionBody = (
       builder.emit(Op.PUSH_BOOL, 1, 0, idx(node), 1)
       return
     }
-    if (unsupportedSuper(target)) return
+    if (unsupportedSuper(target, "delete super.x")) return
     const shortLabel = isChain || target.optional ? builder.newLabel(builder.depth + 1) : undefined
     compileExpression(target.object as Expression, shortLabel)
     if (target.optional && shortLabel) {
@@ -1238,7 +1243,7 @@ const compileFunctionBody = (
         arg,
       )
     }
-    if (unsupportedSuper(arg)) return
+    if (unsupportedSuper(arg, "Updating super.x with ++ or --")) return
     compileExpression(arg.object as Expression)
     const k = arg.computed ? 0 : builder.constant(propertyName(arg))
     if (arg.computed) {
@@ -1343,7 +1348,7 @@ const compileFunctionBody = (
       builder.emit(Op.PUT_SUPER, left.computed ? 2 : 0, k, idx(left), left.computed ? -3 : -2)
       return
     }
-    if (unsupportedSuper(left)) return
+    if (unsupportedSuper(left, `Compound assignment to super.x (${op})`)) return
 
     const baseDepth = builder.depth
     compileExpression(left.object as Expression)
@@ -1456,7 +1461,10 @@ const compileFunctionBody = (
 
   // `super(...)` in a derived constructor: constructs the parent for the new target, binds `this`, then the fields.
   const compileSuperCall = (node: CallExpression): void => {
-    if ((fnInfo.flags & CodeFlags.DERIVED) === 0) return emitUnsupported("Super", node.callee)
+    if ((fnInfo.flags & CodeFlags.DERIVED) === 0)
+      return fnInfo.node.type === "ArrowFunctionExpression"
+        ? emitUnsupportedSuper("super() inside an arrow function is not supported. Call super() directly in the constructor.", node.callee)
+        : emitUnsupported("Super", node.callee)
     const spread = emitArguments(node.arguments, node)
     const n = node.arguments.length
     builder.emit(Op.SUPER_CALL, spread ? 255 : n, fnInfo.newTargetDecl!.slot, idx(node), spread ? 0 : 1 - n)
@@ -1757,6 +1765,13 @@ const compileFunctionBody = (
   }
 
   return builder.finish()
+}
+
+const unsupportedFeatureMessages: Record<string, string> = {
+  PrivateIdentifier: "Private class members (#name) are not supported. Use a regular property instead.",
+  StaticBlock: "Class static blocks are not supported. Assign static fields instead.",
+  MetaProperty: "new.target is not supported.",
+  Super: "'super' is only supported in class methods.",
 }
 
 // What an unsupported class element or `extends` is called in the error.

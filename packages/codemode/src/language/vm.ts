@@ -36,6 +36,7 @@ import {
   GeneratorObj,
   get,
   getOwn,
+  own,
   hasOwn,
   HostNamespace,
   IteratorObj,
@@ -1574,6 +1575,8 @@ export class Vm {
   ): void {
     const fn = regs[sp - 1]
     if (!(fn instanceof Fn)) return
+    // A class with its own static `name` member keeps it.
+    if (fn.klass !== undefined && hasStaticName(fn)) return
     if (mode === 0) {
       define(fn, "name", consts[bx] as string, readonly)
       return
@@ -1799,6 +1802,8 @@ export class Vm {
             : `[${key.description ?? ""}]`
         : String(key)
     fn.home = home
+    if (key === "prototype" && home instanceof Fn && home.klass !== undefined)
+      throw typeError("Classes may not have a static property named 'prototype'.")
     if ((a & 12) === 0) {
       define(fn, "name", name, readonly)
       define(home, key, fn, hidden)
@@ -3509,6 +3514,11 @@ export class Vm {
 
 // What `execGetProp` / `execGetElem` return in place of a stack pointer once they enter a frame (a getter, say): it runs
 // now (`continue outer`), the slice is over, or the job blocks on the host call the getter made.
+const hasStaticName = (fn: Fn): boolean => {
+  const slot = own(fn, "name")
+  return slot !== undefined && (!("value" in slot) || typeof slot.value !== "string")
+}
+
 const THIS_BEFORE_SUPER =
   "Must call super constructor in derived class before accessing 'this' or returning from derived constructor"
 

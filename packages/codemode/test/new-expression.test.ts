@@ -51,10 +51,10 @@ describe("new on a non-constructible callee", () => {
   test("user-defined functions explain the documented gap", async () => {
     const failure = await error(`function Point(x) { return { x } }; return new Point(1)`)
     expect(failure.message).toStartWith(
-      "TypeError: Point cannot be constructed: user-defined constructors and classes are not supported. Call it as a function that returns a plain object instead.",
+      "TypeError: Point is not a constructor: only classes can be constructed with new. Use a class, or call it as a function that returns an object.",
     )
     expect((await error(`const make = () => ({}); return new make()`)).message).toStartWith(
-      "TypeError: make cannot be constructed",
+      "TypeError: make is not a constructor",
     )
   })
 

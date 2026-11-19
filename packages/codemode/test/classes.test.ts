@@ -406,3 +406,87 @@ describe("showing and copying class values", () => {
     ).toEqual(['{"x":1}', { x: 1 }, true, false, "undefined"])
   })
 })
+
+describe("unsupported features", () => {
+  const message = async (code: string) => {
+    const result = await run(code)
+    if (result.ok) throw new Error("expected an error")
+    return result.error.message
+  }
+
+  test("private fields", async () => {
+    expect(await message("class A { #x = 1 }")).toStartWith("SyntaxError: Private class members (#name) are not supported. Use a regular property instead.")
+  })
+
+  test("private methods", async () => {
+    expect(await message("class A { #m() {} }")).toStartWith("SyntaxError: Private class members (#name) are not supported. Use a regular property instead.")
+  })
+
+  test("#x in o", async () => {
+    expect(await message("class A { has(o) { return #x in o } }")).toStartWith("SyntaxError: Private class members (#name) are not supported. Use a regular property instead.")
+  })
+
+  test("static blocks", async () => {
+    expect(await message("class A { static { } }")).toStartWith("SyntaxError: Class static blocks are not supported. Assign static fields instead.")
+  })
+
+  test("new.target", async () => {
+    expect(await message("function f() { return new.target }\nreturn f()")).toStartWith("SyntaxError: new.target is not supported.")
+  })
+
+  test("decorators", async () => {
+    expect(await message("class A { @dec m() {} }")).toStartWith("SyntaxError: Decorators are not supported.")
+  })
+
+  test("super in an object method", async () => {
+    expect(await message("const o = { m() { return super.x } }\nreturn o.m()")).toStartWith("SyntaxError: 'super' is only supported in class methods.")
+  })
+
+  test("extends null", async () => {
+    expect(await message("class A extends null {}")).toStartWith("TypeError: Classes extending null are not supported.")
+  })
+
+  test("new on a plain function", async () => {
+    expect(await message("function f() {}\nreturn new f()")).toStartWith("TypeError: f is not a constructor: only classes can be constructed with new. Use a class, or call it as a function that returns an object.")
+  })
+
+  test("calling a class", async () => {
+    expect(await message("class A {}\nreturn A()")).toStartWith("TypeError: Class constructor A cannot be invoked without 'new'")
+  })
+
+  test("extending a built-in", async () => {
+    expect(await message("class A extends Map {}")).toStartWith("TypeError: Extending the built-in Map is not supported. Only classes and Error types can be extended.")
+  })
+
+  test("this before super()", async () => {
+    expect(await message("class A {}\nclass B extends A { constructor() { this.x = 1; super() } }\nreturn new B()")).toStartWith("ReferenceError: Must call super constructor in derived class before accessing 'this' or returning from derived constructor")
+  })
+
+  test("super() twice", async () => {
+    expect(await message("class A {}\nclass B extends A { constructor() { super(); super() } }\nreturn new B()")).toStartWith("ReferenceError: Super constructor may only be called once")
+  })
+
+  test("super() in an arrow", async () => {
+    expect(await message("class A {}\nclass B extends A { constructor() { const f = () => super(); f() } }\nreturn new B()")).toStartWith("SyntaxError: super() inside an arrow function is not supported. Call super() directly in the constructor.")
+  })
+
+  test("compound super assignment", async () => {
+    expect(await message("class A {}\nclass B extends A { m() { super.x += 1 } }\nreturn new B().m()")).toStartWith("SyntaxError: Compound assignment to super.x (+=) is not supported.")
+  })
+
+  test("super update", async () => {
+    expect(await message("class A {}\nclass B extends A { m() { super.x++ } }\nreturn new B().m()")).toStartWith("SyntaxError: Updating super.x with ++ or -- is not supported.")
+  })
+
+  test("delete super.x", async () => {
+    expect(await message("class A {}\nclass B extends A { m() { delete super.x } }\nreturn new B().m()")).toStartWith("SyntaxError: delete super.x is not supported.")
+  })
+
+  test("destructuring into super.x", async () => {
+    expect(await message("class A {}\nclass B extends A { m() { [super.x] = [1] } }\nreturn new B().m()")).toStartWith("SyntaxError: Destructuring into super.x is not supported.")
+  })
+
+  test("a static member named prototype", async () => {
+    expect(await message("class A { static [\"prototype\"]() {} }")).toStartWith("TypeError: Classes may not have a static property named 'prototype'.")
+  })
+})
