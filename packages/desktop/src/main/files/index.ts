@@ -132,7 +132,7 @@ function make(
         return
       }
 
-      if (process.platform === "win32" && /^powershell(\.exe)?$/i.test(path.basename(application))) {
+      if (process.platform === "win32" && /^(?:powershell|pwsh)(?:\.exe)?$/i.test(path.basename(application))) {
         const info = yield* fs.stat(target)
         const cwd = info.type === "Directory" ? target : path.dirname(target)
 

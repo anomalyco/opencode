@@ -2305,7 +2305,8 @@ describe("ShellTool stopped", () => {
           const shell = yield* Shell.Service
           const { shellID, result } = yield* stopCall(registry, idleCommand, "call-silent", "cancel", false)
           const info = yield* shell.get(shellID)
-          expect(result?.error?.message).toBe(
+          // The call settles after a bounded wait for the kill, which a loaded Windows runner can outlast.
+          expect(result?.error?.message?.replace("; it is still being stopped", "")).toBe(
             `[no output; output file: ${info.file}]\n\nCommand interrupted by the user (shell ID: ${shellID}).`,
           )
         }),

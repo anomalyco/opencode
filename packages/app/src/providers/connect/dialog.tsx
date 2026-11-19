@@ -107,10 +107,8 @@ export const DialogConnectProvider: Component<{
 
   return (
     <Dialog
-      size="normal"
+      size="large"
       fit
-      anchored
-      containerClass="!bg-v2-background-bg-base"
       preventBackdropDismiss={view().preventBackdropDismiss}
       onCloseAutoFocus={(event) => {
         if (view().completed && props.selection && props.onDone) {
@@ -127,13 +125,11 @@ export const DialogConnectProvider: Component<{
       }}
       class="[font-family:var(--v2-font-family-sans)]"
       classList={{
-        "[&_[data-slot=dialog-header]]:!px-4 [&_[data-slot=dialog-header]]:!pt-4 [&_[data-slot=dialog-close-button]]:!mt-0 [&_[data-slot=dialog-close-button]]:!-me-0.5": true,
+        "[&_[data-slot=dialog-header]]:!px-4 [&_[data-slot=dialog-header]]:!pt-3.5 [&_[data-slot=dialog-close-button]]:!mt-0 [&_[data-slot=dialog-close-button]]:!-me-0.5": true,
         "[&_[data-slot=dialog-header]]:!pb-2": frame() !== "models",
         "[&_[data-slot=dialog-header-title]]:!text-[15px] [&_[data-slot=dialog-header-title]]:!tracking-[-0.13px]":
           frame() === "models",
         "search-dialog": frame() === "picker" || frame() === "accounts",
-        "[&_[data-slot=dialog-description]]:!text-[13px] [&_[data-slot=dialog-description]]:!tracking-[-0.04px]":
-          frame() === "picker",
       }}
     >
       <DialogHeader closeLabel={language.t("common.close")}>

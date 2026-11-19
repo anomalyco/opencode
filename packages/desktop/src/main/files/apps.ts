@@ -23,6 +23,11 @@ export const checkAppExists = Effect.fn("DesktopFiles.checkAppExists")(function*
 export const resolveAppPath = Effect.fn("DesktopFiles.resolveAppPath")(function* (appName: string) {
   if (process.platform !== "win32") return appName
 
+  // Like Windows Terminal, the PowerShell entry opens PowerShell 7 when it is installed and Windows PowerShell otherwise.
+  if (appName === "powershell") {
+    return (yield* resolveWindowsAppPath("pwsh")) ?? (yield* resolveWindowsAppPath(appName))
+  }
+
   return yield* resolveWindowsAppPath(appName)
 })
 

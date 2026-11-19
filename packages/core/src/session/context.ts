@@ -8,7 +8,6 @@ import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { CodeModeInstructions } from "../codemode/instructions.js"
 import { CodeModeTool } from "../codemode/tool.js"
 import { Database } from "../database/database.js"
-import { Environment } from "../environment/index.js"
 import { FileAccess } from "../file-access.js"
 import { FileMutation } from "../file-mutation.js"
 import { FileWrite } from "../file-write.js"
@@ -167,7 +166,12 @@ const layer = Layer.effect(
       const policyModel = selected?.info ?? (fallbackRef && Model.Info.default(fallbackRef.providerID, fallbackRef.id))
       const tools = yield* registry.snapshot(permissions, {
         services,
-        tools: modelTools({ model: policyModel, websearch: hasWebSearch, fullCodeMode }),
+        // An agent that can't run `execute` (such as explore) keeps every tool direct, so give it the flag-off policy.
+        tools: modelTools({
+          model: policyModel,
+          websearch: hasWebSearch,
+          fullCodeMode: fullCodeMode && Tool.codeModeAvailable(permissions),
+        }),
       })
       const loaded = yield* Effect.all(
         {
@@ -243,7 +247,6 @@ export const node = makeLocationNode({
     Agent.node,
     Model.node,
     Database.node,
-    Environment.node,
     FileAccess.node,
     FileMutation.node,
     FileWrite.node,
