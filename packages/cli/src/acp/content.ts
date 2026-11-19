@@ -50,15 +50,18 @@ function contentBlockToParts(block: ContentBlock): PromptPart[] {
         const filepath = path.sep === "\\" ? decoded.replace(/\\/g, "/") : decoded
         return [{ type: "text", text: `[${filepath}${line ? `:${line}` : ""}]\n${block.resource.text}` }]
       }
-      if (!block.resource.mimeType) return []
+      // ACP v1 makes mimeType optional on an embedded resource. Dropping the blob
+      // when it is absent loses the attachment silently; default to the generic
+      // binary type instead.
+      const mimeType = block.resource.mimeType ?? "application/octet-stream"
       return [
         {
           type: "file",
           url: block.resource.uri.startsWith("data:")
             ? block.resource.uri
-            : `data:${block.resource.mimeType};base64,${block.resource.blob}`,
+            : `data:${mimeType};base64,${block.resource.blob}`,
           filename: filenameFromUri(block.resource.uri) ?? "file",
-          mime: block.resource.mimeType,
+          mime: mimeType,
         },
       ]
     default:
