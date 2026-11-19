@@ -30,7 +30,6 @@ const realUser = (id: string) => msg(id, "user", [{ type: "text", text: "hello" 
 describe("decideSwap", () => {
   const common = {
     thresholdValue: 100000,
-    extractionCaughtUp: true,
     toolsOpen: false,
     contextTokens: 200000,
   }
@@ -85,22 +84,31 @@ describe("decideSwap", () => {
     expect(d).toEqual({ action: "defer", reason: "open_tools", userMessageId: "u2" })
   })
 
-  test("extraction lagging → defer", () => {
+  test("swap fires with the extraction cursor never advanced (v2: no extraction precondition)", () => {
     const msgs = [msg("a1", "assistant"), realUser("u2")]
-    const d = decideSwap({ msgs, st: baseState({ extractedUntilMessageId: "other" }), ...common })
-    expect(d).toEqual({ action: "defer", reason: "extraction_lagging", userMessageId: "u2" })
+    const st = baseState({ extractedUntilMessageId: null })
+    const d = decideSwap({ msgs, st, ...common })
+    expect(d).toEqual({ action: "swap", userMessageId: "u2" })
   })
 
-  test("extraction in flight → defer", () => {
+  test("swap fires with the cursor behind the last assistant (extraction cannot gate the swap)", () => {
     const msgs = [msg("a1", "assistant"), realUser("u2")]
-    const d = decideSwap({ msgs, st: baseState(), ...common, extractionCaughtUp: false })
-    expect(d).toEqual({ action: "defer", reason: "extraction_lagging", userMessageId: "u2" })
+    const st = baseState({ extractedUntilMessageId: "other" })
+    const d = decideSwap({ msgs, st, ...common })
+    expect(d).toEqual({ action: "swap", userMessageId: "u2" })
+  })
+
+  test("ignoreDecided re-evaluates a prompt the automatic flow already decided", () => {
+    const msgs = [msg("a1", "assistant"), realUser("u2")]
+    const st = baseState({ decidedUserMessageIds: ["u2"] })
+    const d = decideSwap({ msgs, st, ...common, ignoreDecided: true })
+    expect(d).toEqual({ action: "swap", userMessageId: "u2" })
   })
 
   test("contextTokens falls back to st.lastContextTokens", () => {
     const msgs = [msg("a1", "assistant"), realUser("u2")]
     const st = baseState({ lastContextTokens: 200000 })
-    const d = decideSwap({ msgs, st, thresholdValue: 100000, extractionCaughtUp: true, toolsOpen: false, contextTokens: null })
+    const d = decideSwap({ msgs, st, thresholdValue: 100000, toolsOpen: false, contextTokens: null })
     expect(d.action).toBe("swap")
   })
 

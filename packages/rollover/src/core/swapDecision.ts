@@ -7,7 +7,6 @@ export interface SwapContext {
   msgs: NMessage[]
   st: SessionState
   thresholdValue: number
-  extractionCaughtUp: boolean
   toolsOpen: boolean
   contextTokens: number | null
   /**
@@ -18,12 +17,22 @@ export interface SwapContext {
    * where the last message is the assistant's finished reply.
    */
   anchor?: "last" | "lastUser"
+  /**
+   * Explicit user-triggered re-decision: the automatic flow records one
+   * decision per user prompt — a prompt marked decided while the context was
+   * still below the threshold stays decided there, so once the threshold is
+   * crossed (mid-turn), re-evaluating the same prompt finds it "already
+   * decided" and the swap could never complete on the immediate path. The
+   * `/rollover` command's immediate swap passes this to re-evaluate
+   * regardless; the automatic context hook keeps the one-decision gate.
+   */
+  ignoreDecided?: boolean
 }
 
 export type SwapDecision =
   | { action: "swap"; userMessageId: string }
   | { action: "none"; markDecided: boolean; userMessageId: string }
-  | { action: "defer"; reason: "open_tools" | "extraction_lagging"; userMessageId: string }
+  | { action: "defer"; reason: "open_tools"; userMessageId: string }
 
 export function decideSwap(ctx: SwapContext): SwapDecision {
   const { msgs, st } = ctx
@@ -36,7 +45,7 @@ export function decideSwap(ctx: SwapContext): SwapDecision {
     return { action: "none", markDecided: false, userMessageId: id }
   }
   // Condition 2: not already decided.
-  if (st.decidedUserMessageIds.includes(last.id)) {
+  if (!ctx.ignoreDecided && st.decidedUserMessageIds.includes(last.id)) {
     return { action: "none", markDecided: false, userMessageId: last.id }
   }
   // Condition 3: at least one prior completed assistant turn.
@@ -52,17 +61,10 @@ export function decideSwap(ctx: SwapContext): SwapDecision {
     return { action: "none", markDecided: true, userMessageId: last.id }
   }
 
-  // Condition 5: safe point.
-  const lastAssistant = [...msgs].reverse().find((m) => m.role === "assistant")
-  const lastAssistantId = lastAssistant?.id ?? null
-  const extractionOk =
-    lastAssistantId !== null && st.extractedUntilMessageId === lastAssistantId && ctx.extractionCaughtUp
-
+  // Condition 5: safe point. The only remaining blocker is an open tool part:
+  // extraction can no longer gate the swap (v2) — it is background enrichment.
   if (ctx.toolsOpen) {
     return { action: "defer", reason: "open_tools", userMessageId: last.id }
-  }
-  if (!extractionOk) {
-    return { action: "defer", reason: "extraction_lagging", userMessageId: last.id }
   }
 
   return { action: "swap", userMessageId: last.id }
