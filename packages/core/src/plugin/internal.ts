@@ -87,7 +87,6 @@ import { McpEventTools } from "../tool/plugin/mcp-events.js"
 import { McpResourceTools } from "../tool/plugin/mcp-resource.js"
 import { OpenCodeTools } from "../tool/plugin/opencode.js"
 import { QuestionTool } from "../tool/plugin/question.js"
-import { ReadToolFileSystem } from "../tool/read-filesystem.js"
 import { ReadTool } from "../tool/plugin/read.js"
 import { ArtifactTools } from "../tool/plugin/artifact.js"
 import { AutomationTools } from "../tool/plugin/automation.js"
@@ -161,7 +160,6 @@ const services = [
   Npm.Service,
   Permission.Service,
   Form.Service,
-  ReadToolFileSystem.Service,
   Reference.Service,
   WebSearch.Service,
   Ripgrep.Service,
@@ -225,7 +223,6 @@ export const requirements = LayerNode.group([
   Npm.node,
   Permission.node,
   Form.node,
-  ReadToolFileSystem.node,
   Reference.node,
   WebSearch.node,
   Ripgrep.node,
