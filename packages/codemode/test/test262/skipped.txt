@@ -2400,7 +2400,6 @@ language/expressions/arrow-function/dstr/ary-ptrn-elem-id-iter-val-array-prototy
 language/expressions/arrow-function/dstr/dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/expressions/arrow-function/lexical-super-call-from-within-constructor.js  # Expected a ReferenceError but got a SyntaxError
-language/expressions/arrow-function/lexical-super-property-from-within-constructor.js  # TypeError: undefined is not an object (evaluating '…')
 language/expressions/arrow-function/lexical-supercall-from-immediately-invoked-arrow.js  # UnsupportedSyntax: SyntaxError: super() inside an arrow function is not supported. Call super() dire
 language/expressions/arrow-function/lexical-this.js  # TypeError: F is not a constructor: only classes can be constructed with new. Use a class, or call it
 language/expressions/assignment/8.14.4-8-b_2.js  # TypeError: Object.defineProperty called on non-object
@@ -2782,8 +2781,6 @@ language/statements/class/subclass/superclass-prototype-setter-constructor.js  #
 language/statements/class/subclass/superclass-prototype-setter-method-override.js  # TypeError: Class extends value a function is not a constructor or null.
 language/statements/class/subclass/superclass-static-method-override.js  # TypeError: Class extends value a function is not a constructor or null.
 language/statements/class/super/in-constructor-superproperty-evaluation.js  # TypeError: Extending the built-in Object is not supported. Only classes and Error types can be exten
-language/statements/class/super/in-constructor.js  # TypeError: undefined is not an object (evaluating '…')
-language/statements/class/syntax/class-body-method-definition-super-property.js  # TypeError: undefined is not an object (evaluating '…')
 language/statements/const/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/const/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/statements/for-await-of/async-from-sync-iterator-continuation-abrupt-completion-get-constructor.js  # Actual ["start", "tick 1", "tick 2"] and expected ["start", "tick 1", "tick 2", "catch"] should have

@@ -1673,6 +1673,7 @@ export class Vm {
     if ((a & 1) === 0) {
       const proto = new Obj(this.ctx.builtins.Object)
       ctor.klass = new ClassInfo(false)
+      ctor.home = proto
       define(ctor, "prototype", proto, frozen)
       define(proto, "constructor", ctor, hidden)
       regs[sp] = proto
@@ -1682,6 +1683,7 @@ export class Vm {
     const proto = new Obj(get(parent, "prototype") as Obj)
     ctor.proto = parent
     ctor.klass = new ClassInfo(true)
+    ctor.home = proto
     define(ctor, "prototype", proto, frozen)
     define(proto, "constructor", ctor, hidden)
     regs[sp - 2] = ctor
