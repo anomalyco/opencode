@@ -5,7 +5,7 @@ use opencode_ui::tool_info::primitive_input_summary;
 use super::dispatch::{ICON_WIDTH, Inline, InlineTool, Props, Status};
 use crate::prelude::*;
 use crate::routes::session::messages::list::Context;
-use opencode_ui::prompt_input::paste::strip_ansi;
+use opentui::input::strip_ansi_sequences;
 
 pub struct Generic(Rc<Inner>);
 
@@ -53,7 +53,7 @@ impl Generic {
 
     pub fn update(&self, _cx: &Context<'_>, props: &Props<'_>) {
         let inner = &self.0;
-        let output = strip_ansi(props.output.as_deref().unwrap_or_default().trim());
+        let output = strip_ansi_sequences(props.output.as_deref().unwrap_or_default().trim());
         let entries: Vec<(String, String)> = props
             .input
             .iter()

@@ -1,8 +1,5 @@
-use std::sync::LazyLock;
-
 use base64::Engine;
 use opentui::native::ClipboardOutcome;
-use regex::Regex;
 
 /// The clipboard as `clipboard.read` returns it.
 #[derive(Clone, Debug, PartialEq)]
@@ -44,17 +41,6 @@ pub fn decode_paste_bytes(bytes: &[u8]) -> String {
     text.strip_prefix('\u{feff}').unwrap_or(&text).to_owned()
 }
 
-/// `stripAnsiSequences`: ECMA-48 control sequences and strings in ESC and C1 form, cut-off ones too.
-pub fn strip_ansi(text: &str) -> String {
-    static ANSI: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(
-            r"(?:\x1b\[|\x9b)[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]?|(?:\x1b[P\]X^_]|[\x90\x98\x9d-\x9f])[^\x07\x1b\x9c]*(?:\x07|\x1b\\|\x9c)?|\x1b[\x20-\x2f]*[\x30-\x7e]?",
-        )
-        .expect("the ANSI pattern compiles")
-    });
-    ANSI.replace_all(text, "").into_owned()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -86,16 +72,5 @@ mod tests {
         for quiet in [ClipboardOutcome::Empty, ClipboardOutcome::Cancelled] {
             assert_eq!(content(quiet), Ok(None));
         }
-    }
-
-    #[test]
-    fn ansi_sequences_are_stripped_like_core() {
-        assert_eq!(strip_ansi("\x1b[1;31mred\x1b[0m ok"), "red ok");
-        assert_eq!(strip_ansi("\x1b]0;title\x07text"), "text");
-        assert_eq!(strip_ansi("\x1b]8;;http://x\x1b\\link"), "link");
-        assert_eq!(strip_ansi("a\x1b(Bb"), "ab");
-        assert_eq!(strip_ansi("cut\x1b["), "cut");
-        assert_eq!(strip_ansi("\u{9b}31mc1"), "c1");
-        assert_eq!(strip_ansi("lone\x1b"), "lone");
     }
 }

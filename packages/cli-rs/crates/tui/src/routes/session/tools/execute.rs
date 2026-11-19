@@ -8,7 +8,7 @@ use crate::dialogs::execute::{self, Live};
 use crate::prelude::*;
 use crate::routes::session::messages::list::Context;
 use crate::routes::session::messages::shell::collapse_tool_output;
-use opencode_ui::prompt_input::paste::strip_ansi;
+use opentui::input::strip_ansi_sequences;
 
 pub struct Execute(Rc<Inner>);
 
@@ -119,7 +119,7 @@ impl Execute {
         }
         drop(rows);
 
-        let output = strip_ansi(props.output.as_deref().unwrap_or_default().trim());
+        let output = strip_ansi_sequences(props.output.as_deref().unwrap_or_default().trim());
         let preview = (failed && !output.is_empty()).then(|| {
             let width = (content_width(cx) - 6).max(20) as usize;
             collapse_tool_output(&output, 4, 4 * width).0

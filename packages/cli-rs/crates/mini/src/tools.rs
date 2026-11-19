@@ -2,7 +2,7 @@
 //! shared with `run`.
 
 use opencode_api::generated::{SessionMessageAssistantToolState as State, ToolContent};
-use opencode_ui::prompt_input::paste::strip_ansi;
+use opentui::input::strip_ansi_sequences;
 use opencode_ui::tool_info::{
     Todo, TodoStatus, canonical_tool_name, normalize_input, normalize_metadata, parse_todos, primitive_input_summary,
     todo_marker, tool_display_content, tool_display_metadata, tool_output_text, tool_path, web_search_provider_label,
@@ -274,7 +274,7 @@ fn shell_start(frame: &Frame) -> String {
 }
 
 fn shell_progress(frame: &Frame) -> String {
-    let out = strip_ansi(&frame.raw);
+    let out = strip_ansi_sequences(&frame.raw);
     let command = frame.input("command").trim();
     let format = |text: &str| {
         let body = text.trim_start_matches('\n').trim_end_matches('\n');
@@ -538,7 +538,7 @@ pub fn entry_body(commit: &Commit, raw: &str, options: BodyOptions) -> Option<Bo
         return match commit.phase {
             Phase::Start => text_body(format!("$ {command}")),
             Phase::Progress => {
-                let body = strip_ansi(raw);
+                let body = strip_ansi_sequences(raw);
                 let body = body.trim_start_matches('\n').trim_end_matches('\n');
                 match (body.is_empty(), command.is_empty()) {
                     (true, _) => None,

@@ -15,7 +15,7 @@ use crate::prelude::*;
 use crate::routes::session::messages::images::{Images, tool_images};
 use crate::routes::session::messages::list::Context;
 use crate::routes::session::permission;
-use opencode_ui::prompt_input::paste::strip_ansi;
+use opentui::input::strip_ansi_sequences;
 
 /// `INLINE_TOOL_ICON_WIDTH`.
 pub const ICON_WIDTH: u16 = 2;
@@ -342,7 +342,7 @@ impl Inline {
             spinner: false,
             text: String::new(),
             permission: props.permission,
-            error: props.error().map(strip_ansi),
+            error: props.error().map(strip_ansi_sequences),
             clickable: false,
             badge: None,
             error_click: false,
@@ -765,7 +765,7 @@ impl BlockTool {
             }
         }
         *inner.header_widgets.borrow_mut() = widgets;
-        let error = block.error.as_deref().map(strip_ansi).unwrap_or_default();
+        let error = block.error.as_deref().map(strip_ansi_sequences).unwrap_or_default();
         inner.error.visible(!error.is_empty());
         inner.error.fg(colors.error.unwrap_or(theme.text.feedback.error.base));
         inner.error.set_text(error);

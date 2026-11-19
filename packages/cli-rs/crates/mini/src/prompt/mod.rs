@@ -15,7 +15,8 @@ use opencode_ui::dialog::{DialogKeymap, expire_leader, route_keys};
 use opencode_ui::keymap::{Keybinds, KeymapLayer, TuiCommand};
 use opencode_ui::prompt_input::editor::{Mention, normalize, realign_mentions};
 use opencode_ui::prompt_input::parse;
-use opencode_ui::prompt_input::paste::{Content, content, strip_ansi};
+use opencode_ui::prompt_input::paste::{Content, content};
+use opentui::input::strip_ansi_sequences;
 use opencode_ui::prompt_input::{self, attach, replace};
 use opentui::input::KeyEvent;
 use opentui::keymap::{Condition, Disposer};
@@ -1281,7 +1282,7 @@ impl Inner {
     }
 
     fn paste_text(self: &Rc<Self>, text: String) {
-        let normalized = strip_ansi(&text).replace("\r\n", "\n").replace('\r', "\n");
+        let normalized = strip_ansi_sequences(&text).replace("\r\n", "\n").replace('\r', "\n");
         let windows = cfg!(windows);
         if self.state.borrow().shell || !attach::may_attach(normalized.trim(), windows) {
             self.state.borrow_mut().pasting = false;
