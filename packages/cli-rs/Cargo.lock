@@ -13,9 +13,9 @@ dependencies = [
 
 [[package]]
 name = "anomalyco-opentui"
-version = "0.9.4"
+version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95c79d287cfe519c62bce1a2bb66db8459c3df476c80aa7a0fd570b5f57ea2ca"
+checksum = "26aec5e42095863a2e946e56315128a50f0b33cb404417e0c58e3303ae1c9bc0"
 dependencies = [
  "anomalyco-opentui-sys",
  "libc",
@@ -31,9 +31,9 @@ dependencies = [
 
 [[package]]
 name = "anomalyco-opentui-sys"
-version = "0.9.4"
+version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7db7fb64775ff79d0a5a94ca4e83670c0bbdbd3c4a61deab7bb28721582a99cf"
+checksum = "b3ef90bed7c50913c53a57f8f558cb0ed1847fa0e3b49ff51375b8ba84c5c031"
 
 [[package]]
 name = "atomic-waker"
