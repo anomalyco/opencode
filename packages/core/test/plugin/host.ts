@@ -74,7 +74,10 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       },
       generate: {
         text: () => Effect.die("unused experimental.generate.text"),
-        image: () => Effect.die("unused experimental.generate.image"),
+        image: {
+          create: () => Effect.die("unused experimental.generate.image.create"),
+          get: () => Effect.die("unused experimental.generate.image.get"),
+        },
         decisions: () => Effect.die("unused experimental.generate.decisions"),
       },
       artifact: {

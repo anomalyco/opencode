@@ -16,6 +16,8 @@ import { Session } from "../../session.js"
 import { Shell } from "../../shell.js"
 import { ShellTool } from "../../tool/plugin/shell.js"
 import { VideoGenerateTool } from "../../tool/plugin/video-generate.js"
+import { ImageGeneration } from "../../image-generation.js"
+import { ImageGenerateTool } from "../../tool/plugin/image-generate.js"
 import { VideoGeneration } from "../../video-generation.js"
 import { SessionEvent } from "../event.js"
 import { SessionExecution } from "../execution.js"
@@ -259,6 +261,50 @@ export const layer = (options?: Options) =>
         })
       })
 
+      // The request ran in the process that stopped, so only an image that finished before it can still be saved.
+      const recoverImageJob = Effect.fnUntraced(function* (
+        background: Job.Background,
+        recovery: Extract<Job.Recovery, { kind: "image" }>,
+        notices: Notices,
+      ) {
+        const imageID = recovery.imageID
+        if (background.status !== "running" || !imageID) return yield* recoverToolJob(background, recovery)
+        const session = yield* store.get(recovery.sessionID)
+        const services = session
+          ? yield* Effect.all([
+              Effect.serviceOption(ImageGeneration.Service),
+              Effect.serviceOption(BlobStore.Service),
+              Effect.serviceOption(FSUtil.Service),
+              Effect.serviceOption(Environment.Service),
+            ]).pipe(
+              Effect.map((found) => Option.all(found)),
+              instances.provide(session),
+              Effect.catchTag("FileSystem.DirectoryNotFoundError", () => Effect.succeed(Option.none())),
+            )
+          : Option.none()
+        if (Option.isNone(services)) return yield* recoverToolJob(background, recovery)
+        const [images, blobs, fs, environment] = services.value
+        const job = yield* images.get(imageID).pipe(Effect.option)
+        if (Option.isNone(job) || job.value.status !== "completed") {
+          yield* images.cancel(imageID).pipe(Effect.ignore)
+          return yield* recoverToolJob(background, recovery)
+        }
+        yield* ImageGenerateTool.track({
+          jobs,
+          sessions: notices,
+          images,
+          blobs,
+          fs,
+          files: environment.files,
+          scope,
+          notificationID: background.notificationID,
+          sessionID: recovery.sessionID,
+          imageID,
+          path: recovery.path,
+          model: recovery.model,
+        })
+      })
+
       // The Shell of a session's Location, booted so it takes back the commands the daemon still runs for it.
       const shellOf = Effect.fnUntraced(function* (sessionID: SessionSchema.ID) {
         const session = yield* store.get(sessionID)
@@ -485,6 +531,7 @@ export const layer = (options?: Options) =>
               if (recovery.kind === "subagent" || !(yield* recoverable(background))) return
               if (recovery.kind === "shell") return yield* recoverShellJob(background, recovery, notices, reattached)
               if (recovery.kind === "video") return yield* recoverVideoJob(background, recovery, notices)
+              if (recovery.kind === "image") return yield* recoverImageJob(background, recovery, notices)
               yield* recoverToolJob(background, recovery)
             }),
             { discard: true },

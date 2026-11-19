@@ -85,6 +85,51 @@ export const ImageResult = Schema.Struct({
   native: Native.pipe(optional),
 }).annotate({ identifier: "Generate.ImageResult" })
 
+// Strict, because the server names files after it.
+export const ImageID = Schema.String.check(Schema.isPattern(/^image_[0-9a-f]{12}[0-9A-Za-z]{14}$/u)).pipe(
+  Schema.brand("Generate.ImageID"),
+  Schema.annotate({ identifier: "Generate.ImageID" }),
+  statics((schema) => ({
+    create: () => schema.make("image_" + descending()),
+  })),
+)
+export type ImageID = typeof ImageID.Type
+
+export const ImageErrorReason = Schema.Literals(["failed", "cancelled", "unknown"]).annotate({
+  identifier: "Generate.ImageErrorReason",
+  description:
+    "failed: the provider rejected or failed the request. cancelled: the job was cancelled. unknown: no result in time, such as when the server generating it stopped",
+})
+export type ImageErrorReason = typeof ImageErrorReason.Type
+
+export interface ImageRunning extends Schema.Schema.Type<typeof ImageRunning> {}
+export const ImageRunning = Schema.Struct({
+  id: ImageID,
+  status: Schema.Literal("running"),
+}).annotate({ identifier: "Generate.ImageRunning" })
+
+export interface ImageCompleted extends Schema.Schema.Type<typeof ImageCompleted> {}
+export const ImageCompleted = Schema.Struct({
+  id: ImageID,
+  status: Schema.Literal("completed"),
+  blobs: Schema.NonEmptyArray(BlobStore.Info).annotate(
+    description("The finished images. Read each with GET /api/experimental/blob/:id"),
+  ),
+}).annotate({ identifier: "Generate.ImageCompleted" })
+
+export interface ImageError extends Schema.Schema.Type<typeof ImageError> {}
+export const ImageError = Schema.Struct({
+  id: ImageID,
+  status: Schema.Literal("error"),
+  error: Schema.String,
+  reason: ImageErrorReason,
+}).annotate({ identifier: "Generate.ImageError" })
+
+export type ImageJob = ImageRunning | ImageCompleted | ImageError
+export const ImageJob = Schema.Union([ImageRunning, ImageCompleted, ImageError]).annotate({
+  identifier: "Generate.ImageJob",
+})
+
 // ---------------------------------------------------------------------------
 // Video
 // ---------------------------------------------------------------------------

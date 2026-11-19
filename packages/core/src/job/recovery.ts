@@ -1,4 +1,4 @@
-import { VideoID } from "@opencode/schema/generate"
+import { ImageID, VideoID } from "@opencode/schema/generate"
 import { Schema } from "effect"
 import { SessionSchema } from "../session/schema.js"
 
@@ -39,7 +39,8 @@ export type OutstandingItem = typeof OutstandingItem.Type
 export const RecoverySchema = Schema.Union([
   CodeMode,
   Shell,
-  Image,
+  // Rows from before image jobs had IDs have none.
+  Schema.Struct({ ...Image.fields, imageID: Schema.optionalKey(ImageID) }),
   Schema.Struct({ ...Video.fields, videoID: VideoID }),
   Schema.Struct({
     ...subagent,

@@ -44,6 +44,7 @@ import { SkillDiscovery } from "@opencode/core/skill/discovery"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { Tool } from "@opencode/core/tool"
 import { Vcs } from "@opencode/core/vcs"
+import { ImageGeneration } from "@opencode/core/image-generation"
 import { VideoGeneration } from "@opencode/core/video-generation"
 import { WebSearch } from "@opencode/core/websearch"
 import { Worktree } from "@opencode/core/worktree"
@@ -71,6 +72,7 @@ const generateLayer = Layer.succeed(
   Generate.Service.of({
     text: () => Effect.succeed(""),
     image: () => Effect.die("unused"),
+    checkImage: () => Effect.void,
     decisions: () => Effect.die("unused"),
     video: {
       start: () => Effect.die("unused"),
@@ -149,6 +151,7 @@ export const makePluginTestLayer = (
       SkillDiscovery.node,
       Tool.node,
       Vcs.node,
+      ImageGeneration.node,
       VideoGeneration.node,
       Watcher.node,
       WebSearch.node,

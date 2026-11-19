@@ -709,11 +709,13 @@ const review = await ctx.experimental.generate.text({
   prompt: "Review this proposed action.",
 })
 
-const { images } = await ctx.experimental.generate.image({
+// Images generate in the background: poll the job, then read each image from GET /api/experimental/blob/:id.
+const { id } = await ctx.experimental.generate.image.create({
   model: { providerID: "openai", id: "gpt-image-1-mini" },
   prompt: "A watercolor fox in the snow",
   aspect: "16:9",
 })
+const image = await ctx.experimental.generate.image.get({ id }) // running, completed with blobs, or error
 
 const { answers } = await ctx.experimental.generate.decisions({
   model: { providerID: "opencode", id: "jev-1.13" },

@@ -5370,16 +5370,16 @@
     "/api/experimental/generate/image": {
       "post": {
         "tags": ["generate"],
-        "operationId": "experimental.generate.image",
+        "operationId": "experimental.generate.image.create",
         "parameters": [],
         "security": [],
         "responses": {
           "200": {
-            "description": "GenerateImageResponse",
+            "description": "GenerateImageCreateResponse",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GenerateImageResponse"
+                  "$ref": "#/components/schemas/GenerateImageCreateResponse"
                 }
               }
             }
@@ -5455,8 +5455,8 @@
             }
           }
         },
-        "description": "Generate or edit images with an image model using the server's base configuration and return them as base64. Stateless: nothing is stored.",
-        "summary": "Generate images",
+        "description": "Start generating or editing images with an image model using the server's base configuration and return the job's ID at once. The server makes the request and stores the finished images as blobs; read the job with GET /api/experimental/generate/image/:id and each image with GET /api/experimental/blob/:id. Experimental: may change without compatibility guarantees.",
+        "summary": "Create an image generation",
         "requestBody": {
           "content": {
             "application/json": {
@@ -5467,6 +5467,74 @@
           },
           "required": true
         }
+      }
+    },
+    "/api/experimental/generate/image/{id}": {
+      "get": {
+        "tags": ["generate"],
+        "operationId": "experimental.generate.image.get",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Generate.ImageID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "GenerateImageGetResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerateImageGetResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ImageNotFoundError | LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ImageNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Read an image job: running, completed with its images' blobs, or error with a reason. A job whose server stopped mid-request fails with reason unknown 30 minutes after it started. A job is not found 24 hours after it finished, or once none of its blobs remain. Experimental: may change without compatibility guarantees.",
+        "summary": "Read an image generation"
       }
     },
     "/api/experimental/generate/video": {
@@ -19996,6 +20064,58 @@
         "pattern": "^[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[Ee][+-]?\\d+)?:[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[Ee][+-]?\\d+)?$",
         "description": "Aspect ratio as width:height, for example 16:9"
       },
+      "Generate.ImageCompleted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Generate.ImageID"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["completed"]
+          },
+          "blobs": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "$ref": "#/components/schemas/Blob.Info"
+              }
+            ],
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/Blob.Info"
+            },
+            "description": "The finished images. Read each with GET /api/experimental/blob/:id"
+          }
+        },
+        "required": ["id", "status", "blobs"],
+        "additionalProperties": false
+      },
+      "Generate.ImageError": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Generate.ImageID"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["error"]
+          },
+          "error": {
+            "type": "string"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/Generate.ImageErrorReason"
+          }
+        },
+        "required": ["id", "status", "error", "reason"],
+        "additionalProperties": false
+      },
+      "Generate.ImageErrorReason": {
+        "type": "string",
+        "enum": ["failed", "cancelled", "unknown"],
+        "description": "failed: the provider rejected or failed the request. cancelled: the job was cancelled. unknown: no result in time, such as when the server generating it stopped"
+      },
       "Generate.ImageFile": {
         "type": "object",
         "properties": {
@@ -20012,25 +20132,22 @@
         "required": ["data", "mime"],
         "additionalProperties": false
       },
-      "Generate.ImageOutput": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["image"]
+      "Generate.ImageID": {
+        "type": "string",
+        "pattern": "^image_[0-9a-f]{12}[0-9A-Za-z]{14}$"
+      },
+      "Generate.ImageJob": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Generate.ImageRunning"
           },
-          "data": {
-            "$ref": "#/components/schemas/Prompt.Base64"
+          {
+            "$ref": "#/components/schemas/Generate.ImageCompleted"
           },
-          "mime": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
+          {
+            "$ref": "#/components/schemas/Generate.ImageError"
           }
-        },
-        "required": ["type", "data", "mime"],
-        "additionalProperties": false
+        ]
       },
       "Generate.ImageRequest": {
         "type": "object",
@@ -20074,26 +20191,18 @@
         ],
         "description": "Size tier such as 1K, 2K or 4K; 1K is about as many pixels as 1024x1024 at the requested aspect"
       },
-      "Generate.ImageResult": {
+      "Generate.ImageRunning": {
         "type": "object",
         "properties": {
-          "images": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Generate.ImageOutput"
-            }
+          "id": {
+            "$ref": "#/components/schemas/Generate.ImageID"
           },
-          "cost": {
-            "$ref": "#/components/schemas/Money.USD"
-          },
-          "tokens": {
-            "$ref": "#/components/schemas/Generate.Usage"
-          },
-          "native": {
-            "$ref": "#/components/schemas/Generate.Native"
+          "status": {
+            "type": "string",
+            "enum": ["running"]
           }
         },
-        "required": ["images"],
+        "required": ["id", "status"],
         "additionalProperties": false
       },
       "Generate.Native": {
@@ -20394,11 +20503,21 @@
         "required": ["data"],
         "additionalProperties": false
       },
-      "GenerateImageResponse": {
+      "GenerateImageCreateResponse": {
         "type": "object",
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/Generate.ImageResult"
+            "$ref": "#/components/schemas/Generate.ImageRunning"
+          }
+        },
+        "required": ["data"],
+        "additionalProperties": false
+      },
+      "GenerateImageGetResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Generate.ImageJob"
           }
         },
         "required": ["data"],
@@ -20439,6 +20558,23 @@
           }
         },
         "required": ["data"],
+        "additionalProperties": false
+      },
+      "ImageNotFoundErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["ImageNotFoundError"]
+          },
+          "imageID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "imageID", "message"],
         "additionalProperties": false
       },
       "Instruction.Hash": {

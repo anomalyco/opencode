@@ -4,6 +4,7 @@ import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
 import {
   ForbiddenError,
+  ImageNotFoundError,
   VideoNotFoundError,
   InvalidRequestError,
   LocationNotFoundError,
@@ -58,16 +59,30 @@ export const GenerateGroup = HttpApiGroup.make("server.generate")
     ),
   )
   .add(
-    HttpApiEndpoint.post("generate.image", "/api/experimental/generate/image", {
+    HttpApiEndpoint.post("generate.image.create", "/api/experimental/generate/image", {
       payload: Generate.ImageRequest,
-      success: Schema.Struct({ data: Generate.ImageResult }).annotate({ identifier: "GenerateImageResponse" }),
+      success: Schema.Struct({ data: Generate.ImageRunning }).annotate({ identifier: "GenerateImageCreateResponse" }),
       error: errors,
     }).annotateMerge(
       OpenApi.annotations({
-        identifier: "experimental.generate.image",
-        summary: "Generate images",
+        identifier: "experimental.generate.image.create",
+        summary: "Create an image generation",
         description:
-          "Generate or edit images with an image model using the server's base configuration and return them as base64. Stateless: nothing is stored.",
+          "Start generating or editing images with an image model using the server's base configuration and return the job's ID at once. The server makes the request and stores the finished images as blobs; read the job with GET /api/experimental/generate/image/:id and each image with GET /api/experimental/blob/:id. Experimental: may change without compatibility guarantees.",
+      }),
+    ),
+  )
+  .add(
+    HttpApiEndpoint.get("generate.image.get", "/api/experimental/generate/image/:id", {
+      params: { id: Generate.ImageID },
+      success: Schema.Struct({ data: Generate.ImageJob }).annotate({ identifier: "GenerateImageGetResponse" }),
+      error: [ImageNotFoundError, LocationNotFoundError],
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "experimental.generate.image.get",
+        summary: "Read an image generation",
+        description:
+          "Read an image job: running, completed with its images' blobs, or error with a reason. A job whose server stopped mid-request fails with reason unknown 30 minutes after it started. A job is not found 24 hours after it finished, or once none of its blobs remain. Experimental: may change without compatibility guarantees.",
       }),
     ),
   )
