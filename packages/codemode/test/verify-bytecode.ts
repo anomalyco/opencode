@@ -204,6 +204,31 @@ export const verifyCode = (c: Code): Array<string> => {
       case Op.DEFINE_ACCESSOR:
         next((a & 1) === 0 ? -1 : -2)
         break
+      case Op.CLASS:
+        next((a & 1) === 0 ? 1 : 0)
+        break
+      case Op.SUPER_CALL:
+        next(a === 255 ? 0 : 1 - a)
+        break
+      case Op.SUPER_BIND:
+      case Op.CTOR_RETURN:
+        next(0)
+        break
+      case Op.GET_SUPER:
+        next(((a & 1) === 0 ? -1 : 0) - ((a & 2) === 0 ? 0 : 1))
+        break
+      case Op.PUT_SUPER:
+        next((a & 2) === 0 ? -2 : -3)
+        break
+      case Op.DEFINE_METHOD:
+        next((a & 2) === 0 ? -1 : -2)
+        break
+      case Op.SET_FIELDS:
+        next(-1)
+        break
+      case Op.INIT_FIELDS:
+        next(a === 0 ? 1 : -1)
+        break
       case Op.NEW_ARRAY:
       case Op.CONCAT:
         next(1 - bx)
