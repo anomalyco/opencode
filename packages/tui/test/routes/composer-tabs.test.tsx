@@ -2,7 +2,8 @@
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { createSignal } from "solid-js"
-import { createComposerTabs } from "../../src/routes/session/composer/tabs"
+import type { Plugin } from "@opencode/plugin/tui"
+import { busyCounts, busyTab, createComposerTabs } from "../../src/routes/session/composer/tabs"
 
 async function setup(defaultTab?: string) {
   const [open, setOpen] = createSignal(false)
@@ -70,4 +71,27 @@ test("composer tabs switch to the requested tab once it registers, until the use
   } finally {
     app.renderer.destroy()
   }
+})
+
+test("the picker opens on the first busy tab, else Subagents", () => {
+  const counts = (jobs: unknown[], shells: unknown[]) =>
+    busyCounts({
+      data: {
+        job: { list: () => jobs },
+        session: { family: () => ["ses_root", "ses_child"], status: () => "idle", get: () => undefined },
+        shell: { list: () => shells },
+      } as unknown as Plugin.Context["data"],
+      sessionID: "ses_root",
+      location: { directory: "/project" },
+    })
+
+  const script = counts([{ id: "job_1", kind: "codemode", sessionID: "ses_root" }], [])
+  expect(script).toEqual({ scripts: 1, subagents: 0, shells: 0 })
+  expect(busyTab(script)).toBe("scripts")
+
+  const shell = counts([], [{ metadata: { sessionID: "ses_root" } }, { metadata: { sessionID: "ses_other" } }])
+  expect(shell).toEqual({ scripts: 0, subagents: 0, shells: 1 })
+  expect(busyTab(shell)).toBe("shell")
+
+  expect(busyTab(counts([], []))).toBe("subagents")
 })
