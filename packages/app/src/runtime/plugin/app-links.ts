@@ -14,6 +14,20 @@ function target(event: Event) {
   return { anchor, href }
 }
 
+/**
+ * Where a click on another app's address goes. A mail address opens in the system mail app, as on dev, never in the
+ * browser pane; one with an attachment parameter could make the mail app attach a local file, so it is only copied.
+ * Any other address goes to the reviewer when one is installed, and is copied when none is.
+ */
+export function appLinkRoute(href: string, reviewer: boolean) {
+  if (/^mailto:/i.test(href))
+    return Array.from(URL.parse(href)?.searchParams.keys() ?? []).some((key) => /^(?:attach|attachment)$/i.test(key))
+      ? "copy"
+      : "mail"
+
+  return reviewer ? "review" : "copy"
+}
+
 function modified(event: MouseEvent | KeyboardEvent) {
   return event.metaKey || event.shiftKey || event.ctrlKey || event.altKey
 }

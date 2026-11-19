@@ -38,7 +38,7 @@ import { BuiltinAppLink, BuiltinSlot, type BuiltinSlotMap } from "@opencode/plug
 import { usePlatform } from "@/runtime/platform/platform"
 import { useLanguage } from "@/runtime/i18n/language"
 import { showToast } from "@/shell/notifications/toast"
-import { createAppLinks } from "./app-links"
+import { appLinkRoute, createAppLinks } from "./app-links"
 import { PluginContext } from "@opencode/plugin/gui/host"
 import { usePluginHost, type Item } from "./host"
 import { createLinkCheck } from "./link-check"
@@ -203,12 +203,19 @@ export function PluginLinks(props: ParentProps<{ session: MountedSession; active
 export function createWebLinks(session: () => MountedSession) {
   const host = usePluginHost()
   const language = useLanguage()
+  const platform = usePlatform()
 
-  if (usePlatform().platform === "desktop") createAppLinks((href) => {
+  if (platform.platform === "desktop") createAppLinks((href) => {
     const handler = host.items(BuiltinAppLink)[0]
+    const route = appLinkRoute(href, !!handler)
 
-    if (handler) return handler.value.review(href)
-    showToast({ title: language.t("common.requestFailed") })
+    if (route === "mail") return platform.openExternal(href)
+
+    if (route === "review") return handler?.value.review(href)
+    void navigator.clipboard.writeText(href).then(
+      () => showToast({ title: language.t("common.copied") }),
+      () => showToast({ title: language.t("common.requestFailed") }),
+    )
   })
 
   makeEventListener(document, "click", (event) => {

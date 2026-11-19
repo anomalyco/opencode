@@ -61,6 +61,8 @@ import { type BuiltinLayout } from "@opencode/plugin/gui/builtin"
 /** The renderer host pieces the pane runs on, passed in by `packages/app/component-tests/browser-pane.spec.ts`. */
 type PaneHost = {
   createAppLinks(review: (href: string) => void): void
+  /** The host's routing of another app's address: the system mail app, the review, or a copy. */
+  appLinkRoute(href: string, reviewer: boolean): "mail" | "review" | "copy"
   createEmbeds(input: {
     bridge: Bridge | undefined
     zoom: () => number
@@ -633,7 +635,11 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
     const plugin = fake as unknown as Context & SetupContext<typeof definition>
     const model = createModel(plugin)
 
+    // As the host routes it; a mail or copied address is recorded on the body instead of leaving the page.
     if ("createAppLinks" in input) input.createAppLinks((href) => {
+      const route = input.appLinkRoute(href, true)
+
+      if (route !== "review") return void (document.body.dataset[route] = href)
       const view = session()
 
       if (view) void model.reviewLink(view, href)

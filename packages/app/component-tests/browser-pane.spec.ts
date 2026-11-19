@@ -26,7 +26,7 @@ story.beforeEach(async ({ mount, page }) => {
 
 async function mountPane(page: Page) {
   await page.evaluate(async (modules) => {
-    const [{ mountBrowserPane }, { createEmbeds }, { createAppLinks }, panelMotion, language] = await Promise.all([
+    const [{ mountBrowserPane }, { createEmbeds }, { appLinkRoute, createAppLinks }, panelMotion, language] = await Promise.all([
       import(modules.fixture),
       import(modules.embeds),
       import(modules.links),
@@ -37,6 +37,7 @@ async function mountPane(page: Page) {
     mountBrowserPane({
       createEmbeds,
       createAppLinks,
+      appLinkRoute,
       panelMotion,
       LanguageProvider: language.LanguageProvider,
       UiI18nBridge: language.UiI18nBridge,
@@ -99,8 +100,8 @@ story("reviews the actual application target only after a trusted click", async 
 
 story("accepts an assistive activation of the focused link, not a synthetic or unfocused one", async ({ page }) => {
   const sanitizer = sourceURL(new URL("../../session-ui/src/components/markdown-cache.tsx", import.meta.url))
-  // A mail link keeps its href, so Chromium activates it on Enter.
-  const url = "mailto:assistive@example.invalid"
+  // A phone link keeps its href, so Chromium activates it on Enter.
+  const url = "tel:+15555550100"
   await page.evaluate(async ({ sanitizer, url }) => {
     const { enableMarkdownAppLinks, sanitizeMarkdown } = await import(sanitizer)
     const row = document.createElement("div")
@@ -157,15 +158,36 @@ story("reviews an application link that carries download, and leaves a web downl
   const notice = page.locator("#browser-panel").getByRole("status").filter({ hasText: "From the conversation" })
   const mail = page.getByRole("link", { name: "Mail" })
   await expect(mail).not.toHaveAttribute("download")
-  // The attribute put back after sanitizing does not take the link past the review either.
+  // The attribute put back after sanitizing does not take the link past the host either: a mail link with an
+  // attachment is only copied.
   await mail.evaluate((node) => node.setAttribute("download", ""))
   await mail.click()
-  await expect(notice).toContainText("mailto:download@example.invalid?attach=fixture")
+  await expect(page.locator("body")).toHaveAttribute("data-copy", "mailto:download@example.invalid?attach=fixture")
+  await expect(notice).toHaveCount(0)
   await page.getByRole("link", { name: "Vault" }).click()
   await expect(notice).toContainText("obsidian://open?vault=download")
   await page.getByRole("link", { name: "Report" }).click()
   await expect(page.getByTestId("download-links")).toHaveAttribute("data-passed", "Report")
   await expect(notice).toContainText("obsidian://open?vault=download")
+})
+
+story("opens a mail link in the system mail app, never in the pane", async ({ page }) => {
+  const sanitizer = sourceURL(new URL("../../session-ui/src/components/markdown-cache.tsx", import.meta.url))
+  const url = "mailto:hello@example.invalid?subject=Report"
+  await page.evaluate(async ({ sanitizer, url }) => {
+    const { enableMarkdownAppLinks, sanitizeMarkdown } = await import(sanitizer)
+    const row = document.createElement("div")
+    row.dataset.paneRow = ""
+    row.innerHTML = sanitizeMarkdown(`<a href="${url}">Write to us</a>`)
+    enableMarkdownAppLinks(row)
+    // A click the host does not take would navigate the fixture page away.
+    row.addEventListener("click", (event) => event.preventDefault())
+    document.querySelector('[data-testid="browser-pane-fixture"]')?.prepend(row)
+  }, { sanitizer, url })
+  await page.getByRole("link", { name: "Write to us" }).click()
+  await expect(page.locator("body")).toHaveAttribute("data-mail", url)
+  await expect(page.locator("#browser-panel").getByText(url)).toHaveCount(0)
+  await expect(page.locator("#browser-panel").getByRole("status").filter({ hasText: "From the conversation" })).toHaveCount(0)
 })
 
 story("moves the native page when a fixed-size pane changes position", async ({ page }) => {
