@@ -2,13 +2,18 @@
 //! kinds and types fall back to serde. Charge every table visit, including empty slots and fallback walks, before
 //! allocating. Shared or sparse tables must not bypass the work budget. Unmarked empty tables decode as arrays; the
 //! object marker forces an object.
+//!
+//! Tables are walked with `lua_rawiterpeek`, which describes a slot's key and value where `lua_rawiter` pushes them. A
+//! string it describes is borrowed from the VM for the whole decode, which is sound because nothing a decode calls can
+//! run the collector: no call allocates an object but `lua_rawgetfield`'s interned name and the stack's growth, and
+//! neither steps the GC. So even a weak table keeps its slots, and their strings, until the decode returns.
 
 #![allow(unsafe_code)]
 
 use std::any::Any;
 use std::borrow::Cow;
 use std::fmt;
-use std::os::raw::c_int;
+use std::os::raw::{c_char, c_int};
 
 use mlua::{AppDataRef, Function, LightUserData, Lua, Value, ffi};
 use opencode_plugin_abi::{self as abi, v2};
@@ -58,6 +63,78 @@ const FIELDS: usize = 24;
 /// How deep a value's tables may nest: past the layout depth ([`crate::reconcile::MAX_DEPTH`]) twice over, as a node's
 /// children are a table in a table.
 const DEPTH: usize = 2 * crate::reconcile::MAX_DEPTH as usize;
+
+/// A slot's key or value as `lua_rawiterpeek` describes it: `lua_Peek` of the fork's `lua.h` (luau-src-rs, since
+/// `52ad5bc`), which mlua-sys does not bind.
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct Peek {
+    /// Its `LUA_T*` type.
+    kind: c_int,
+    /// A string's atom as stored; this decoder matches names by their bytes instead.
+    _atom: c_int,
+    boolean: c_int,
+    number: f64,
+    /// A string's bytes, `len` of them: valid while the string is reachable and the GC does not run (the module's
+    /// comment).
+    str: *const c_char,
+    len: usize,
+}
+
+/// `lua_rawiterpeek` pushes a value that is not a boolean, number or string (`LUA_PEEKPUSH`).
+const PEEK_PUSH: c_int = 1;
+
+unsafe extern "C-unwind" {
+    /// `lua_rawiter` that writes the slot's key to `key` (when not null) and its value to `value` instead of pushing
+    /// them, pushing only a value of another type when `flags` has [`PEEK_PUSH`]. It never runs the GC; the push grows
+    /// the stack when it has no free slot, as `lua_rawiter` does.
+    fn lua_rawiterpeek(
+        state: *mut ffi::lua_State,
+        index: c_int,
+        iter: c_int,
+        key: *mut Peek,
+        value: *mut Peek,
+        flags: c_int,
+    ) -> c_int;
+}
+
+impl Peek {
+    const NONE: Peek = Peek { kind: ffi::LUA_TNIL, _atom: -1, boolean: 0, number: 0.0, str: std::ptr::null(), len: 0 };
+
+    /// Whether `lua_rawiterpeek` pushed this value, with [`PEEK_PUSH`].
+    fn pushed(&self) -> bool {
+        !matches!(self.kind, ffi::LUA_TBOOLEAN | ffi::LUA_TNUMBER | ffi::LUA_TSTRING)
+    }
+
+    /// A string's bytes.
+    ///
+    /// # Safety
+    /// This describes a string, which lives as long as `'a` (the module's comment).
+    unsafe fn bytes<'a>(&self) -> &'a [u8] {
+        // SAFETY: as documented; `str` points at `len` bytes.
+        unsafe { std::slice::from_raw_parts(self.str.cast::<u8>(), self.len) }
+    }
+}
+
+/// A field's value in the table at `table`, in slot `slot` of its walk: a boolean, number or string is read from
+/// `value`, and any other value at `at`, where the walk pushed it.
+#[derive(Clone, Copy)]
+struct Field {
+    value: Peek,
+    table: c_int,
+    slot: c_int,
+    at: c_int,
+}
+
+impl Field {
+    /// The value's stack slot, when it is a table; any other value is serde's to judge.
+    fn table(&self) -> Result<c_int, Slow> {
+        match self.value.kind {
+            ffi::LUA_TTABLE => Ok(self.at),
+            _ => Err(Slow::Serde),
+        }
+    }
+}
 
 /// Why a value cannot cross: refused by a bound (`luau-1`, which fails the call) or not a value of the contract.
 #[derive(Debug)]
@@ -263,8 +340,11 @@ impl Decode {
             table(state, index)?;
             let (mut kind, mut node) = (None, None);
             self.fields(state, index, 0, |decode, name, at| match name {
-                b"type" => decode.word(state, at).map(|word| kind = Some(word)),
-                b"node" => decode.node(state, at, 1).map(|value| node = Some(value)).map_err(Slow::from),
+                b"type" => decode.word(at).map(|word| kind = Some(word)),
+                b"node" => decode
+                    .on_stack(state, at, |decode, at| decode.node(state, at, 1))
+                    .map(|value| node = Some(value))
+                    .map_err(Slow::from),
                 _ => Err(Slow::Serde),
             })?;
             match (kind, node) {
@@ -420,8 +500,8 @@ impl Decode {
     }
 
     /// Each pair of the table at `index`, `depth` deep, entered first, in the byte order of the keys: `read` gets the
-    /// key and the value's absolute slot, and the pair is popped after it. The order of `lua_rawiter` follows the VM's
-    /// hash seed; in key order, the field that fails first, and so the error, is the same in every VM.
+    /// key and the value, which is popped after it if the walk pushed it. The order of a walk follows the VM's hash
+    /// seed; in key order, the field that fails first, and so the error, is the same in every VM.
     ///
     /// # Safety
     /// As for [`Decode::top`], with a table at `index`.
@@ -430,93 +510,102 @@ impl Decode {
         state: *mut ffi::lua_State,
         index: c_int,
         depth: usize,
-        mut read: impl FnMut(&mut Self, &[u8], c_int) -> Result<(), Slow>,
+        mut read: impl FnMut(&mut Self, &[u8], Field) -> Result<(), Slow>,
     ) -> Result<(), Slow> {
-        // SAFETY: as the caller's; each pair is popped before the next, and a key lives while its table does.
+        // SAFETY: as the caller's; the first walk pushes nothing, the second pushes one value at a time, popped after
+        // it, and a key lives while its table does.
         unsafe {
             self.enter(state, index, depth)?;
             let mut keys = [(&[][..], 0); FIELDS];
             let (mut count, mut iter) = (0, 0);
+            let (mut key, mut value) = (Peek::NONE, Peek::NONE);
             loop {
-                iter = ffi::lua_rawiter(state, index, iter);
+                iter = lua_rawiterpeek(state, index, iter, &mut key, &mut value, 0);
                 if iter < 0 {
                     break;
                 }
-                let name = self.field_name(state, ffi::lua_gettop(state) - 1);
-                ffi::lua_pop(state, 2);
+                // A key a hand decoder knows is one of its ASCII field names, and any other is serde's to judge,
+                // UTF-8 included. Any key that is not a string is serde's too.
+                let name = match key.kind {
+                    ffi::LUA_TSTRING => Ok(key.bytes()),
+                    _ => Err(Slow::Serde),
+                };
+                let name = name.and_then(|name| self.charge_bytes(name.len()).map(|()| name).map_err(Slow::from));
                 if count == FIELDS {
                     return Err(Slow::Serde);
                 }
-                // `lua_rawiter` from a pair's slot gives that pair again.
+                // A walk from a pair's slot gives that pair again.
                 keys[count] = (name?, iter - 1);
                 count += 1;
             }
             let keys = &mut keys[..count];
             keys.sort_unstable_by(|a, b| a.0.cmp(b.0));
+            // Each value is described again rather than kept from the walk: copying the descriptions measured slower.
             for &(name, slot) in &*keys {
-                ffi::lua_rawiter(state, index, slot);
-                let pair = read(self, name, ffi::lua_gettop(state));
-                ffi::lua_pop(state, 2);
+                lua_rawiterpeek(state, index, slot, std::ptr::null_mut(), &mut value, PEEK_PUSH);
+                let at = ffi::lua_gettop(state);
+                let pair = read(self, name, Field { value, table: index, slot, at });
+                if value.pushed() {
+                    ffi::lua_pop(state, 1);
+                }
                 pair?;
             }
             Ok(())
         }
     }
 
-    /// The string key at `index`, charged, as its bytes: a key a hand decoder knows is one of its ASCII field names,
-    /// and any other is serde's to judge, UTF-8 included. Any key that is not a string is serde's too.
+    /// `read` of the field's value on the stack: a boolean, number or string, which the walk did not push, is pushed
+    /// with its key for it, and popped after.
     ///
     /// # Safety
-    /// As for [`Decode::top`].
-    unsafe fn field_name<'s>(&mut self, state: *mut ffi::lua_State, index: c_int) -> Result<&'s [u8], Slow> {
-        // SAFETY: as the caller's; the key lives while its table does.
+    /// As for [`Decode::top`], with room for a pair.
+    unsafe fn on_stack<T>(
+        &mut self,
+        state: *mut ffi::lua_State,
+        field: Field,
+        read: impl FnOnce(&mut Self, c_int) -> T,
+    ) -> T {
+        if field.value.pushed() {
+            return read(self, field.at);
+        }
+        // SAFETY: as the caller's; `lua_rawiter` from a pair's slot pushes that pair again.
         unsafe {
-            if ffi::lua_type(state, index) != ffi::LUA_TSTRING {
-                return Err(Slow::Serde);
-            }
-            let name = raw_bytes(state, index);
-            self.charge_bytes(name.len())?;
-            Ok(name)
+            ffi::lua_rawiter(state, field.table, field.slot);
+            let value = read(self, ffi::lua_gettop(state));
+            ffi::lua_pop(state, 2);
+            value
         }
     }
 
     /// A boolean field.
-    ///
-    /// # Safety
-    /// As for [`Decode::top`].
-    unsafe fn boolean(&mut self, state: *mut ffi::lua_State, index: c_int) -> Result<bool, Slow> {
-        // SAFETY: as the caller's.
-        unsafe {
-            if ffi::lua_type(state, index) != ffi::LUA_TBOOLEAN {
-                return Err(Slow::Serde);
-            }
-            self.charge(1)?;
-            Ok(ffi::lua_toboolean(state, index) != 0)
+    fn boolean(&mut self, field: Field) -> Result<bool, Slow> {
+        if field.value.kind != ffi::LUA_TBOOLEAN {
+            return Err(Slow::Serde);
         }
+        self.charge(1)?;
+        Ok(field.value.boolean != 0)
     }
 
     /// A string field.
     ///
     /// # Safety
     /// As for [`Decode::top`].
-    unsafe fn string(&mut self, state: *mut ffi::lua_State, index: c_int) -> Result<String, Slow> {
+    unsafe fn string(&mut self, field: Field) -> Result<String, Slow> {
         // SAFETY: as the caller's.
-        unsafe { self.str(state, index).map(str::to_owned) }
+        unsafe { self.str(field).map(str::to_owned) }
     }
 
     /// A string field, borrowed from the VM.
     ///
     /// # Safety
     /// As for [`Decode::top`].
-    unsafe fn str<'s>(&mut self, state: *mut ffi::lua_State, index: c_int) -> Result<&'s str, Slow> {
-        // SAFETY: as the caller's; the string lives while its table does.
-        unsafe {
-            if ffi::lua_type(state, index) != ffi::LUA_TSTRING {
-                return Err(Slow::Serde);
-            }
-            self.charge(1)?;
-            self.text(raw_bytes(state, index)).map_err(Slow::from_field)
+    unsafe fn str<'s>(&mut self, field: Field) -> Result<&'s str, Slow> {
+        if field.value.kind != ffi::LUA_TSTRING {
+            return Err(Slow::Serde);
         }
+        self.charge(1)?;
+        // SAFETY: as the caller's; the string lives while its table does.
+        self.text(unsafe { field.value.bytes() }).map_err(Slow::from_field)
     }
 
     /// A string field as its bytes, charged, to match against ASCII words: a string that matches none is serde's to
@@ -524,17 +613,15 @@ impl Decode {
     ///
     /// # Safety
     /// As for [`Decode::top`].
-    unsafe fn word<'s>(&mut self, state: *mut ffi::lua_State, index: c_int) -> Result<&'s [u8], Slow> {
-        // SAFETY: as the caller's; the string lives while its table does.
-        unsafe {
-            if ffi::lua_type(state, index) != ffi::LUA_TSTRING {
-                return Err(Slow::Serde);
-            }
-            self.charge(1)?;
-            let word = raw_bytes(state, index);
-            self.charge_bytes(word.len())?;
-            Ok(word)
+    unsafe fn word<'s>(&mut self, field: Field) -> Result<&'s [u8], Slow> {
+        if field.value.kind != ffi::LUA_TSTRING {
+            return Err(Slow::Serde);
         }
+        self.charge(1)?;
+        // SAFETY: as the caller's; the string lives while its table does.
+        let word = unsafe { field.value.bytes() };
+        self.charge_bytes(word.len())?;
+        Ok(word)
     }
 
     /// A click field, `depth` deep: a command on a press or a release. Any other action is serde's.
@@ -544,18 +631,18 @@ impl Decode {
     unsafe fn click(
         &mut self,
         state: *mut ffi::lua_State,
-        index: c_int,
+        field: Field,
         depth: usize,
     ) -> Result<Option<abi::Click>, Slow> {
         let (mut action, mut on) = (None, None);
+        let index = field.table()?;
         // SAFETY: as the caller's.
         unsafe {
-            table(state, index)?;
             self.fields(state, index, depth, |decode, name, at| {
                 match name {
                     b"action" => action = Some(decode.action(state, at, depth + 1)?),
                     b"on" => {
-                        on = Some(match decode.word(state, at)? {
+                        on = Some(match decode.word(at)? {
                             b"up" => abi::Press::Up,
                             b"down" => abi::Press::Down,
                             _ => return Err(Slow::Serde),
@@ -571,16 +658,16 @@ impl Decode {
 
     /// # Safety
     /// As for [`Decode::top`].
-    unsafe fn action(&mut self, state: *mut ffi::lua_State, index: c_int, depth: usize) -> Result<abi::Action, Slow> {
+    unsafe fn action(&mut self, state: *mut ffi::lua_State, field: Field, depth: usize) -> Result<abi::Action, Slow> {
         let (mut command, mut name, mut input) = (false, None, None);
+        let index = field.table()?;
         // SAFETY: as the caller's.
         unsafe {
-            table(state, index)?;
             self.fields(state, index, depth, |decode, key, at| {
                 match key {
-                    b"type" => command = decode.word(state, at)? == b"command",
-                    b"name" => name = Some(decode.string(state, at)?),
-                    b"input" => input = Some(decode.string(state, at)?),
+                    b"type" => command = decode.word(at)? == b"command",
+                    b"name" => name = Some(decode.string(at)?),
+                    b"input" => input = Some(decode.string(at)?),
                     _ => return Err(Slow::Serde),
                 }
                 Ok(())
@@ -593,31 +680,25 @@ impl Decode {
     }
 
     /// A `u16` field: a whole number in its range.
-    ///
-    /// # Safety
-    /// As for [`Decode::top`].
-    unsafe fn small(&mut self, state: *mut ffi::lua_State, index: c_int) -> Result<u16, Slow> {
-        // SAFETY: as the caller's.
-        unsafe {
-            if ffi::lua_type(state, index) != ffi::LUA_TNUMBER {
-                return Err(Slow::Serde);
-            }
-            let number = ffi::lua_tonumberx(state, index, std::ptr::null_mut());
-            if number.fract() != 0.0 || !(0.0..=f64::from(u16::MAX)).contains(&number) {
-                return Err(Slow::Serde);
-            }
-            self.charge(1)?;
-            Ok(number as u16)
+    fn small(&mut self, field: Field) -> Result<u16, Slow> {
+        let number = field.value.number;
+        if field.value.kind != ffi::LUA_TNUMBER
+            || number.fract() != 0.0
+            || !(0.0..=f64::from(u16::MAX)).contains(&number)
+        {
+            return Err(Slow::Serde);
         }
+        self.charge(1)?;
+        Ok(number as u16)
     }
 
     /// An optional color field: a token or `#rrggbbaa` (`Color` is untagged, which serde decodes by buffering).
     ///
     /// # Safety
     /// As for [`Decode::top`].
-    unsafe fn color(&mut self, state: *mut ffi::lua_State, index: c_int) -> Result<Option<abi::Color>, Slow> {
+    unsafe fn color(&mut self, field: Field) -> Result<Option<abi::Color>, Slow> {
         // SAFETY: as the caller's.
-        let text = unsafe { self.str(state, index)? };
+        let text = unsafe { self.str(field)? };
         Ok(Some(match abi::Rgba::parse(text).filter(|_| text.len() == 9) {
             Some(rgba) => abi::Color::Rgba(rgba),
             None => abi::Color::Token(match TOKENS.iter().find(|token| **token == text) {
@@ -634,17 +715,22 @@ impl Decode {
     unsafe fn serde<T: DeserializeOwned>(
         &mut self,
         state: *mut ffi::lua_State,
-        index: c_int,
+        field: Field,
         depth: usize,
     ) -> Result<T, Slow> {
-        T::deserialize(Slot { decode: self, state, index, depth }).map_err(Slow::from_field)
+        // SAFETY: as the caller's.
+        unsafe {
+            self.on_stack(state, field, |decode, index| T::deserialize(Slot { decode, state, index, depth }))
+                .map_err(Slow::from_field)
+        }
     }
 
-    /// The spans at `index`, `depth` deep.
+    /// The spans of a field, `depth` deep.
     ///
     /// # Safety
     /// As for [`Decode::top`].
-    unsafe fn spans(&mut self, state: *mut ffi::lua_State, index: c_int, depth: usize) -> Result<Vec<abi::Span>, Slow> {
+    unsafe fn spans(&mut self, state: *mut ffi::lua_State, field: Field, depth: usize) -> Result<Vec<abi::Span>, Slow> {
+        let index = field.table()?;
         // SAFETY: as the caller's.
         let mut spans = Vec::with_capacity(unsafe { length(state, index) });
         // SAFETY: as the caller's.
@@ -667,15 +753,15 @@ impl Decode {
             let mut text = None;
             self.fields(state, index, depth, |decode, name, at| {
                 match name {
-                    b"text" => text = Some(decode.string(state, at)?),
-                    b"fg" => span.fg = decode.color(state, at)?,
-                    b"bg" => span.bg = decode.color(state, at)?,
-                    b"bold" => span.bold = decode.boolean(state, at)?,
-                    b"italic" => span.italic = decode.boolean(state, at)?,
-                    b"underline" => span.underline = decode.boolean(state, at)?,
-                    b"dim" => span.dim = decode.boolean(state, at)?,
-                    b"strikethrough" => span.strikethrough = decode.boolean(state, at)?,
-                    b"link" => span.link = Some(decode.string(state, at)?),
+                    b"text" => text = Some(decode.string(at)?),
+                    b"fg" => span.fg = decode.color(at)?,
+                    b"bg" => span.bg = decode.color(at)?,
+                    b"bold" => span.bold = decode.boolean(at)?,
+                    b"italic" => span.italic = decode.boolean(at)?,
+                    b"underline" => span.underline = decode.boolean(at)?,
+                    b"dim" => span.dim = decode.boolean(at)?,
+                    b"strikethrough" => span.strikethrough = decode.boolean(at)?,
+                    b"link" => span.link = Some(decode.string(at)?),
                     _ => return Err(Slow::Serde),
                 }
                 Ok(())
@@ -685,17 +771,18 @@ impl Decode {
         }
     }
 
-    /// The children at `index`, `depth` deep being their parent's, each read by `node`.
+    /// The children of a field, `depth` deep being their parent's, each read by `node`.
     ///
     /// # Safety
     /// As for [`Decode::top`].
     unsafe fn children<N>(
         &mut self,
         state: *mut ffi::lua_State,
-        index: c_int,
+        field: Field,
         depth: usize,
         node: NodeFn<N>,
     ) -> Result<Vec<N>, Slow> {
+        let index = field.table()?;
         // SAFETY: as the caller's.
         let mut children = Vec::with_capacity(unsafe { length(state, index) });
         // SAFETY: as the caller's.
@@ -708,8 +795,8 @@ impl Decode {
         Ok(children)
     }
 
-    /// Each item of the array at `index`, `depth` deep, in one pass: `read` gets the item's absolute slot, and the pair is
-    /// popped after it. A table whose keys are not `1..n` in that order (`n` its border) is serde's to read.
+    /// Each item of the array at `index`, `depth` deep, in one pass: `read` gets the item's absolute slot, and the item
+    /// is popped after it. A table whose keys are not `1..n` in that order (`n` its border) is serde's to read.
     ///
     /// # Safety
     /// As for [`Decode::top`].
@@ -720,7 +807,7 @@ impl Decode {
         depth: usize,
         mut read: impl FnMut(&mut Self, c_int) -> Result<(), Slow>,
     ) -> Result<(), Slow> {
-        // SAFETY: as the caller's; each pair is popped before the next.
+        // SAFETY: as the caller's; what each step pushes is popped before the next.
         unsafe {
             table(state, index)?;
             self.enter(state, index, depth)?;
@@ -728,16 +815,24 @@ impl Decode {
                 return Err(Slow::Serde);
             }
             let (mut iter, mut next) = (0, 1.0);
+            let (mut key, mut value) = (Peek::NONE, Peek::NONE);
             loop {
-                iter = ffi::lua_rawiter(state, index, iter);
+                iter = lua_rawiterpeek(state, index, iter, &mut key, &mut value, PEEK_PUSH);
                 if iter < 0 {
                     break;
                 }
-                let top = ffi::lua_gettop(state);
-                let in_order = ffi::lua_type(state, top - 1) == ffi::LUA_TNUMBER
-                    && ffi::lua_tonumberx(state, top - 1, std::ptr::null_mut()) == next;
-                let item = if in_order { read(self, top) } else { Err(Slow::Serde) };
-                ffi::lua_pop(state, 2);
+                let in_order = key.kind == ffi::LUA_TNUMBER && key.number == next;
+                let pushed = match value.pushed() {
+                    true => 1,
+                    // A boolean, number or string, for `read` to judge: pushed with its key.
+                    false if in_order => {
+                        ffi::lua_rawiter(state, index, iter - 1);
+                        2
+                    }
+                    false => 0,
+                };
+                let item = if in_order { read(self, ffi::lua_gettop(state)) } else { Err(Slow::Serde) };
+                ffi::lua_pop(state, pushed);
                 item?;
                 next += 1.0;
             }
@@ -824,7 +919,7 @@ impl<N> BoxFields<N> {
         }
     }
 
-    /// The key `name` of a box of contract 2.0, its value at `at`.
+    /// The key `name` of a box of contract 2.0, its value `at`.
     ///
     /// # Safety
     /// As for [`Decode::top`].
@@ -833,26 +928,26 @@ impl<N> BoxFields<N> {
         decode: &mut Decode,
         state: *mut ffi::lua_State,
         name: &[u8],
-        at: c_int,
+        at: Field,
         depth: usize,
     ) -> Result<(), Slow> {
         let (own, depth) = (depth, depth + 1);
         // SAFETY: as the caller's.
         unsafe {
             match name {
-                b"type" => drop(decode.word(state, at)?),
-                b"row" => self.row = decode.boolean(state, at)?,
-                b"gap" => self.gap = decode.small(state, at)?,
+                b"type" => drop(decode.word(at)?),
+                b"row" => self.row = decode.boolean(at)?,
+                b"gap" => self.gap = decode.small(at)?,
                 b"padding" => self.padding = decode.serde(state, at, depth)?,
                 b"justify" => self.justify = decode.serde(state, at, depth)?,
                 b"align" => self.align = decode.serde(state, at, depth)?,
-                b"bg" => self.bg = decode.color(state, at)?,
+                b"bg" => self.bg = decode.color(at)?,
                 b"layout" => self.layout = decode.serde(state, at, depth)?,
                 b"on_click" => self.on_click = decode.click(state, at, depth)?,
                 b"children" => self.children = decode.children(state, at, own, self.node)?,
                 b"border" => self.border = decode.serde(state, at, depth)?,
                 b"padding_sides" => self.padding_sides = decode.serde(state, at, depth)?,
-                b"wrap" => self.wrap = decode.boolean(state, at)?,
+                b"wrap" => self.wrap = decode.boolean(at)?,
                 b"overflow" => self.overflow = decode.serde(state, at, depth)?,
                 _ => return Err(Slow::Serde),
             }
@@ -860,7 +955,7 @@ impl<N> BoxFields<N> {
         Ok(())
     }
 
-    /// The key `name` of a surface's box, its value at `at`.
+    /// The key `name` of a surface's box, its value `at`.
     ///
     /// # Safety
     /// As for [`Decode::top`].
@@ -869,17 +964,17 @@ impl<N> BoxFields<N> {
         decode: &mut Decode,
         state: *mut ffi::lua_State,
         name: &[u8],
-        at: c_int,
+        at: Field,
         depth: usize,
     ) -> Result<(), Slow> {
         // SAFETY: as the caller's.
         unsafe {
             match name {
-                b"id" => self.id = Some(decode.string(state, at)?),
+                b"id" => self.id = Some(decode.string(at)?),
                 b"sticky" => self.sticky = decode.serde(state, at, depth + 1)?,
                 b"anchor" => self.anchor = decode.serde(state, at, depth + 1)?,
                 b"split" => self.split = decode.serde(state, at, depth + 1)?,
-                b"visible" => self.visible = decode.boolean(state, at)?,
+                b"visible" => self.visible = decode.boolean(at)?,
                 name => return self.read(decode, state, name, at, depth),
             }
         }
@@ -919,7 +1014,7 @@ impl Default for TextFields {
 }
 
 impl TextFields {
-    /// The key `name` of a text node of contract 2.0, its value at `at`.
+    /// The key `name` of a text node of contract 2.0, its value `at`.
     ///
     /// # Safety
     /// As for [`Decode::top`].
@@ -928,20 +1023,20 @@ impl TextFields {
         decode: &mut Decode,
         state: *mut ffi::lua_State,
         name: &[u8],
-        at: c_int,
+        at: Field,
         depth: usize,
     ) -> Result<(), Slow> {
         let depth = depth + 1;
         // SAFETY: as the caller's.
         unsafe {
             match name {
-                b"type" => drop(decode.word(state, at)?),
+                b"type" => drop(decode.word(at)?),
                 b"spans" => self.spans = Some(decode.spans(state, at, depth)?),
-                b"fg" => self.fg = decode.color(state, at)?,
+                b"fg" => self.fg = decode.color(at)?,
                 b"wrap" => self.wrap = decode.serde(state, at, depth)?,
-                b"truncate" => self.truncate = decode.boolean(state, at)?,
-                b"selectable" => self.selectable = decode.boolean(state, at)?,
-                b"hover_fg" => self.hover_fg = decode.color(state, at)?,
+                b"truncate" => self.truncate = decode.boolean(at)?,
+                b"selectable" => self.selectable = decode.boolean(at)?,
+                b"hover_fg" => self.hover_fg = decode.color(at)?,
                 b"layout" => self.layout = decode.serde(state, at, depth)?,
                 b"on_click" => self.on_click = decode.click(state, at, depth)?,
                 _ => return Err(Slow::Serde),
@@ -950,7 +1045,7 @@ impl TextFields {
         Ok(())
     }
 
-    /// The key `name` of a surface's text node, its value at `at`.
+    /// The key `name` of a surface's text node, its value `at`.
     ///
     /// # Safety
     /// As for [`Decode::top`].
@@ -959,14 +1054,14 @@ impl TextFields {
         decode: &mut Decode,
         state: *mut ffi::lua_State,
         name: &[u8],
-        at: c_int,
+        at: Field,
         depth: usize,
     ) -> Result<(), Slow> {
         // SAFETY: as the caller's.
         unsafe {
             match name {
-                b"id" => self.id = Some(decode.string(state, at)?),
-                b"hover_events" => self.hover_events = decode.boolean(state, at)?,
+                b"id" => self.id = Some(decode.string(at)?),
+                b"hover_events" => self.hover_events = decode.boolean(at)?,
                 name => return self.read(decode, state, name, at, depth),
             }
         }
@@ -1023,30 +1118,27 @@ impl Slot<'_> {
 /// depend on that order too.
 ///
 /// # Safety
-/// `index` is a valid absolute slot of `state` that holds a table, with room for a pair.
+/// `index` is a valid absolute slot of `state` that holds a table.
 unsafe fn keys(decode: &Decode, state: *mut ffi::lua_State, index: c_int) -> Result<Vec<c_int>, Refused> {
     let mut keys: Vec<(Cow<[u8]>, c_int)> = Vec::new();
-    // SAFETY: as documented; each pair is popped before the next, and a key lives while its table does.
+    // SAFETY: as documented; the walk pushes nothing, and a key lives while its table does.
     unsafe {
-        let mut iter = 0;
+        let (mut iter, mut key, mut value) = (0, Peek::NONE, Peek::NONE);
         loop {
-            iter = ffi::lua_rawiter(state, index, iter);
+            iter = lua_rawiterpeek(state, index, iter, &mut key, &mut value, 0);
             if iter < 0 {
                 break;
             }
-            let name = match ffi::lua_type(state, -2) {
-                ffi::LUA_TSTRING => Ok(Cow::Borrowed(raw_bytes(state, -2))),
-                ffi::LUA_TNUMBER => {
-                    Ok(Cow::Owned(number_name(ffi::lua_tonumberx(state, -2, std::ptr::null_mut())).into_bytes()))
-                }
+            let name = match key.kind {
+                ffi::LUA_TSTRING => Ok(Cow::Borrowed(key.bytes())),
+                ffi::LUA_TNUMBER => Ok(Cow::Owned(number_name(key.number).into_bytes())),
                 kind => Err(Refused::Value(format!("a key of type {}", type_name(kind)))),
             };
-            ffi::lua_pop(state, 2);
             // Each pair's value is a part at least: a table of more is refused before its keys are kept.
             if decode.values + keys.len() as u64 >= decode.most_values {
                 return Err(Refused::Bound(format!("it holds more than {} parts", decode.most_values)));
             }
-            // `lua_rawiter` from a pair's slot gives that pair again.
+            // A walk from a pair's slot gives that pair again.
             keys.push((name?, iter - 1));
         }
     }
@@ -1130,8 +1222,9 @@ impl<'de> Deserializer<'de> for Slot<'_> {
                     if iter < 0 {
                         return Err(refused());
                     }
-                    if ffi::lua_rawiter(self.state, self.index, iter) >= 0 {
-                        ffi::lua_pop(self.state, 4);
+                    let mut value = Peek::NONE;
+                    if lua_rawiterpeek(self.state, self.index, iter, std::ptr::null_mut(), &mut value, 0) >= 0 {
+                        ffi::lua_pop(self.state, 2);
                         return Err(refused());
                     }
                     let top = ffi::lua_gettop(self.state);
@@ -1326,21 +1419,20 @@ unsafe fn kind<'a>(state: *mut ffi::lua_State, index: c_int) -> Option<&'a [u8]>
 /// is `null`), as the walk to JSON took one.
 ///
 /// # Safety
-/// `index` is a valid absolute slot of `state` that holds a table, with room for a pair.
+/// `index` is a valid absolute slot of `state` that holds a table.
 unsafe fn is_array(state: *mut ffi::lua_State, index: c_int, length: usize) -> bool {
-    // SAFETY: as documented; each pair is popped before the next.
+    // SAFETY: as documented; the walk pushes nothing.
     unsafe {
-        let mut iter = 0;
+        let (mut iter, mut key, mut value) = (0, Peek::NONE, Peek::NONE);
         loop {
-            iter = ffi::lua_rawiter(state, index, iter);
+            iter = lua_rawiterpeek(state, index, iter, &mut key, &mut value, 0);
             if iter < 0 {
                 return true;
             }
-            let item = ffi::lua_type(state, -2) == ffi::LUA_TNUMBER && {
-                let key = ffi::lua_tonumberx(state, -2, std::ptr::null_mut());
-                key.fract() == 0.0 && key >= 1.0 && key <= length as f64
-            };
-            ffi::lua_pop(state, 2);
+            let item = key.kind == ffi::LUA_TNUMBER
+                && key.number.fract() == 0.0
+                && key.number >= 1.0
+                && key.number <= length as f64;
             if !item {
                 return false;
             }
