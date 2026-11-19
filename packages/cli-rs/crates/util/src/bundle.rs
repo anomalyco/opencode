@@ -2,6 +2,8 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::path::realpath;
+
 /// The bundled TypeScript binary's file name.
 pub const SERVER: &str = if cfg!(windows) { "opencode.exe" } else { "opencode" };
 
@@ -15,15 +17,6 @@ pub fn beside(executable: &Path) -> Option<PathBuf> {
     let real = realpath(executable)?;
     let server = realpath(&real.parent()?.join(SERVER))?;
     (server != real && server.is_file()).then_some(server)
-}
-
-// `canonicalize` without the `\\?\` prefix Windows adds, as `fs.realpathSync` gives it.
-fn realpath(path: &Path) -> Option<PathBuf> {
-    let real = std::fs::canonicalize(path).ok()?;
-    Some(match real.to_str() {
-        Some(text) => PathBuf::from(crate::path::strip_verbatim(text).as_ref()),
-        None => real,
-    })
 }
 
 #[cfg(test)]

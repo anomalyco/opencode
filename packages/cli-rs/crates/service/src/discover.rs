@@ -9,6 +9,7 @@ use opencode_api::transport::Transport;
 use opencode_local::channel;
 use opencode_local::paths::Paths;
 use opencode_local::registration;
+use opencode_util::path::realpath;
 
 use crate::probe::{self, Decision, LocalService, REQUEST_TIMEOUT};
 use crate::ts_command::TsCommand;
@@ -162,19 +163,6 @@ fn resolve(program: &std::ffi::OsStr) -> Option<PathBuf> {
         .and_then(|candidate| realpath(&candidate))
 }
 
-// `fs.realpathSync`: `canonicalize` without the verbatim prefix Windows adds.
-fn realpath(path: &Path) -> Option<PathBuf> {
-    std::fs::canonicalize(path).ok().map(strip_verbatim)
-}
-
-// `\\?\C:\x` → `C:\x` and `\\?\UNC\server\share` → `\\server\share`, as `opencode_util::path::strip_verbatim` does.
-fn strip_verbatim(path: PathBuf) -> PathBuf {
-    match path.to_str() {
-        Some(text) => PathBuf::from(opencode_util::path::strip_verbatim(text).as_ref()),
-        None => path,
-    }
-}
-
 impl Missing {
     fn add(&mut self, file: &Path, unusable: Unusable) {
         let reason = match unusable {
@@ -288,20 +276,6 @@ mod tests {
     fn ready(port: u16) -> (String, Reply) {
         let body = format!(r#"{{"version":"1.0.0","pid":{port}}}"#).leak();
         (format!("http://127.0.0.1:{port}/api/info"), Reply::json(200, body))
-    }
-
-    #[test]
-    fn verbatim_prefixes_strip_as_realpath() {
-        let cases = [
-            (r"\\?\C:\Program Files\opencode.exe", r"C:\Program Files\opencode.exe"),
-            (r"\\?\UNC\srv\share\opencode.exe", r"\\srv\share\opencode.exe"),
-            (r"\\?\Volume{1}\opencode.exe", r"\\?\Volume{1}\opencode.exe"),
-            (r"C:\opencode.exe", r"C:\opencode.exe"),
-            ("/usr/bin/opencode", "/usr/bin/opencode"),
-        ];
-        for (canonical, expected) in cases {
-            assert_eq!(strip_verbatim(PathBuf::from(canonical)), PathBuf::from(expected));
-        }
     }
 
     #[cfg(windows)]
