@@ -6,7 +6,8 @@
  "config": {
   "experimental": {"new-designs":true},
   "plugins": ["./out/npm/node_modules/opencode-file-browser"],
-  "animations": false
+  "animations": false,
+  "theme": {"name":"opencode"}
  },
  "args": {},
  "env": {

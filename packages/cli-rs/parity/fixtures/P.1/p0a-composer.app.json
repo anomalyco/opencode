@@ -6,7 +6,8 @@
  "config": {
   "plugins": ["./plugins/p0a"],
   "animations": false,
-  "experimental": {"new-designs":true}
+  "experimental": {"new-designs":true},
+  "theme": {"name":"opencode"}
  },
  "args": {},
  "env": {

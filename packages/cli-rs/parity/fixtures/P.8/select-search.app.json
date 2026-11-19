@@ -6,7 +6,8 @@
  "config": {
   "experimental": {"new-designs":true},
   "plugins": ["./plugins/v2search"],
-  "animations": false
+  "animations": false,
+  "theme": {"name":"opencode"}
  },
  "args": {},
  "env": {

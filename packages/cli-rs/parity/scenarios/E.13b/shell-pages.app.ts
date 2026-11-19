@@ -54,8 +54,8 @@ export default defineApp({
   ],
   steps: [
     { checkpoint: "session", until: "Run it" },
+    // The picker opens on the first busy tab, Shell (#64972).
     { keys: ["down"] },
-    { keys: ["right"] },
     { checkpoint: "shell", until: "render-frames" },
     { keys: ["enter"] },
     { checkpoint: "output", until: "Earlier output omitted" },

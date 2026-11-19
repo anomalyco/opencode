@@ -5,7 +5,8 @@
  "directory": "/tmp/opencode/packages/tui",
  "config": {
   "animations": false,
-  "experimental": {"new-designs":true}
+  "experimental": {"new-designs":true},
+  "theme": {"name":"opencode"}
  },
  "args": {},
  "routes": [

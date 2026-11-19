@@ -6,7 +6,8 @@
  "config": {
   "experimental": {"new-designs":true},
   "plugins": ["./out/npm/node_modules/opencode-session-usage"],
-  "animations": false
+  "animations": false,
+  "theme": {"name":"opencode"}
  },
  "args": {
   "sessionID": "ses_u"
@@ -30,6 +31,7 @@
    {"method":"GET","path":"/api/agent","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
    {"method":"GET","path":"/api/command","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"location":{"directory":"/tmp/opencode/packages/tui","project":{"id":"proj_test","directory":"/tmp/opencode","canonical":"/tmp/opencode"}},"data":[]}},
    {"method":"GET","path":"/api/config","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":[]},
+   {"method":"GET","path":"/api/experimental/job","query":{"descendants":["true"],"sessionID":["ses_u"],"status":["running"]},"status":200,"json":{"data":[]}},
    {"method":"GET","path":"/api/experimental/migration/v1","query":{},"status":200,"json":{"status":"completed"}},
    {"method":"GET","path":"/api/experimental/session/ses_u/terminal","query":{},"status":200,"json":{"data":[]}},
    {"method":"GET","path":"/api/experimental/usage/limits","query":{"location[directory]":["/tmp/opencode/packages/tui"]},"status":200,"json":{"data":{"go":{"rolling":{"percent":12,"limited":false,"resetsAt":0},"weekly":{"percent":75,"limited":false,"resetsAt":0},"monthly":{"percent":95,"limited":false,"resetsAt":0}}}}},
