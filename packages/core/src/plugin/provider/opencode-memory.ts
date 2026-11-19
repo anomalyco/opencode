@@ -198,8 +198,6 @@ type Tracked = {
   next?: number
   /** What the current user turn still allows for boundaries inside it. */
   allowance: number
-  /** What the session's distillations cost: calls, estimated tokens, and USD at list price for those with one. */
-  readonly writer: { calls: number; inputTokens: number; outputTokens: number; costUSD: number; unpriced: number }
   /** The session took in outside input, so what it publishes is marked tainted and never promoted. */
   tainted?: boolean
   /** The repository (`host/owner/name`) of each entry the session read, unless it holds anywhere (tagged general). */
@@ -246,7 +244,6 @@ export const make = Effect.fnUntraced(function* (
       segment: [],
       from: 0,
       allowance: DISTILLATIONS_PER_TURN,
-      writer: { calls: 0, inputTokens: 0, outputTokens: 0, costUSD: 0, unpriced: 0 },
       about: new Map(),
     }
     sessions.delete(sessionID)
@@ -528,53 +525,21 @@ export const make = Effect.fnUntraced(function* (
     ...(input.errors === undefined ? {} : { errors: input.errors }),
   })
 
-  // The models distillation may run on, in order: the DeepSeek flash models listed, paid before free (a route may refuse
-  // a signed-in caller), each with its list price, or the same model's under another provider when its own listing has
-  // none; OpenCode's default model comes after them.
+  // The models distillation may run on, in order: the DeepSeek flash models listed (a cheap, capable writer), paid
+  // before free, since a free route may refuse a signed-in caller; OpenCode's default model comes after them.
   const distillers = yield* Effect.cached(
     ctx.model.list({ types: ["chat"] }).pipe(
-      Effect.map((models) => {
-        const price = (id: string, cost: (typeof models.data)[number]["cost"]) => {
-          const listed =
-            cost.length > 0 ? cost : (models.data.find((other) => other.id === id && other.cost.length > 0)?.cost ?? [])
-          const base = listed.find((tier) => tier.tier === undefined) ?? listed[0]
-          return base === undefined ? undefined : { input: Number(base.input), output: Number(base.output) }
-        }
-        return models.data
+      Effect.map((models) =>
+        models.data
           .filter((model) => /deepseek/i.test(model.id) && /flash/i.test(model.id))
           .toSorted((a, b) => Number(/free/i.test(a.id)) - Number(/free/i.test(b.id)))
-          .map((model) => ({ ref: { id: model.id, providerID: model.providerID }, price: price(model.id, model.cost) }))
-      }),
+          .map((model) => ({ id: model.id, providerID: model.providerID })),
+      ),
       Effect.orElseSucceed(() => []),
     ),
   )
   // The first of them that answered, tried first from then on.
   let answering: number | undefined
-
-  /**
-   * Adds a distillation to the session's writer totals, kept in plugin storage (`memory-writer:<session>`) and logged:
-   * calls, tokens estimated at characters ÷ 4 (the generation reports no usage), and their cost at the model's list
-   * price, with the calls whose price isn't known counted apart.
-   */
-  const spent = (
-    sessionID: Session.ID,
-    prompt: string,
-    text: string,
-    price: { readonly input: number; readonly output: number } | undefined,
-  ) =>
-    Effect.gen(function* () {
-      const state = tracked(sessionID)
-      const input = Math.ceil(prompt.length / 4)
-      const output = Math.ceil(text.length / 4)
-      const writer = state.writer
-      writer.calls++
-      writer.inputTokens += input
-      writer.outputTokens += output
-      if (price === undefined) writer.unpriced++
-      else writer.costUSD += (input * price.input + output * price.output) / 1_000_000
-      yield* ctx.storage.set(`memory-writer:${sessionID}`, { ...writer, estimated: true })
-      yield* Effect.logInfo("memory writer", { sessionID, ...writer })
-    })
 
   /**
    * Distils the segment a boundary closed into candidate entries, out of band (a stateless generation, nothing in the
@@ -595,17 +560,15 @@ export const make = Effect.fnUntraced(function* (
       const order = [...(answering === undefined ? [] : [answering]), ...models.keys()].filter(
         (index, at, all) => all.indexOf(index) === at,
       )
-      // A listed model can still refuse the request; OpenCode's default model is the last try, at a price not known here.
+      // A listed model can still refuse the request; OpenCode's default model is the last try.
       const answer = yield* Effect.firstSuccessOf([
         ...order.map((index) =>
-          ctx.experimental.generate.text({ prompt, model: models[index]!.ref }).pipe(
-            Effect.tap(() => Effect.sync(() => (answering = index))),
-            Effect.map((result) => ({ ...result, price: models[index]!.price })),
-          ),
+          ctx.experimental.generate
+            .text({ prompt, model: models[index]! })
+            .pipe(Effect.tap(() => Effect.sync(() => (answering = index)))),
         ),
-        ctx.experimental.generate.text({ prompt }).pipe(Effect.map((result) => ({ ...result, price: undefined }))),
+        ctx.experimental.generate.text({ prompt }),
       ])
-      yield* spent(sessionID, prompt, answer.text, answer.price)
       const found = OpencodeMemoryCapture.candidates(answer.text)
       if (found.length === 0) return
       const source = yield* checkout
@@ -904,7 +867,7 @@ export const make = Effect.fnUntraced(function* (
         }).pipe(Effect.timeout(policy.timeout))
         const block = policy.standing(answer.entries, name)
         if (block.dropped.length > 0)
-          yield* Effect.logInfo("memory standing block over its cap", {
+          yield* Effect.logDebug("memory standing block over its cap", {
             dropped: block.dropped.map((entry) => `${entry.id}@${entry.revision}`),
           })
         if (block.text === undefined) return ""
@@ -912,13 +875,6 @@ export const make = Effect.fnUntraced(function* (
         block.shown.forEach((entry) =>
           give(state, { id: entry.id, revision: entry.revision, title: entry.title, text: entry.body }),
         )
-        yield* Effect.logInfo("memory standing block", {
-          sessionID,
-          moment: "standing",
-          slot: "system",
-          entries: block.shown.map((entry) => `${entry.id}@${entry.revision}`),
-          chars: block.text.length,
-        })
         return block.text
       }).pipe(Effect.catch((cause) => Effect.logDebug("no memory standing block", { cause }).pipe(Effect.as(""))))
 

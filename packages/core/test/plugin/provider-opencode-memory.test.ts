@@ -1419,15 +1419,6 @@ describe("OpencodePlugin memory capture", () => {
             source: { sessionID: session.id },
             idempotencyKey: `${session.id}:test:0:0`,
           })
-          // What the writer cost the session, where a benchmark or the user can read it.
-          expect(yield* host.storage.get(`memory-writer:${session.id}`)).toEqual({
-            calls: 1,
-            inputTokens: Math.ceil(distiller.prompts[0]!.length / 4),
-            outputTokens: Math.ceil(distiller.reply.length / 4),
-            costUSD: 0,
-            unpriced: 1,
-            estimated: true,
-          })
           // The coding session got no message from any of it.
           expect(synthetic).toEqual([])
 
