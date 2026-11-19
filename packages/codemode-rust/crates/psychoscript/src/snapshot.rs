@@ -1401,6 +1401,7 @@ impl Dec<'_> {
             kind,
             is_base: boolean(at(j, 8)?)?,
             yield_pc: u32_(at(j, 9)?)?,
+            depth: 0,
         }))
     }
 
@@ -1953,6 +1954,7 @@ pub fn restore(vm: &mut Vm, snapshot: &Snapshot, program_hash: &str) -> R<()> {
         .iter()
         .map(|f| dec.frame(vm, f))
         .collect::<R<_>>()?;
+    vm.recount_frames();
     *vm.handlers_mut() = dec.handlers(field(st, "handlers")?)?;
     vm.globals = dec.vals(field(st, "globals")?)?;
     if vm.globals.len() != vm.global_names.len() {

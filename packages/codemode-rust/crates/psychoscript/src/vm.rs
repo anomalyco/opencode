@@ -77,6 +77,9 @@ pub struct Frame {
     pub is_base: bool,
     /// Where a generator's frame last yielded, or `NO_YIELD` before its first `yield`.
     pub yield_pc: u32,
+    /// The frames that count toward the call-stack limit up to this one, itself included: see `program_depth`. Set
+    /// when the frame is pushed (`push_frame`).
+    pub depth: u32,
 }
 
 pub const NO_YIELD: u32 = u32::MAX;
@@ -1030,13 +1033,43 @@ impl<'rt> Vm<'rt> {
 
     /// The frames that count toward the call-stack limit: the reference runs its built-ins as internal code, which
     /// does not count, so native frames do not either.
+    /// Only asked once more than `MAX_DEPTH` frames run, where `push_frame` keeps the count.
+    #[inline]
+    fn program_depth(&self) -> usize {
+        self.frames.last().map_or(0, |f| f.depth as usize)
+    }
+
+    /// Pushes a frame. Above `MAX_DEPTH` frames, where the call-stack limit is checked, the frame also records how
+    /// many frames count toward it (all but native ones): counted once on crossing, then kept from the frame below.
+    #[inline]
+    pub(crate) fn push_frame(&mut self, mut f: Box<Frame>) {
+        let len = self.frames.len();
+        if len >= MAX_DEPTH {
+            let below = match len {
+                MAX_DEPTH => self.counted_frames(),
+                _ => self.frames[len - 1].depth,
+            };
+            f.depth = below + u32::from(!matches!(f.kind, FrameKind::Native(..)));
+        }
+        self.frames.push(f);
+    }
+
     #[cold]
     #[inline(never)]
-    fn program_depth(&self) -> usize {
+    fn counted_frames(&self) -> u32 {
         self.frames
             .iter()
             .filter(|f| !matches!(f.kind, FrameKind::Native(..)))
-            .count()
+            .count() as u32
+    }
+
+    /// Counts every frame toward the call-stack limit again, after the frames were replaced at once.
+    pub(crate) fn recount_frames(&mut self) {
+        let mut depth = 0;
+        for f in &mut self.frames {
+            depth += u32::from(!matches!(f.kind, FrameKind::Native(..)));
+            f.depth = depth;
+        }
     }
 
     /// Pushes a native frame for the built-in `callee` called on `this`, with `locals` as its first slots, and has
@@ -1129,9 +1162,9 @@ impl<'rt> Vm<'rt> {
                 f.kind = FrameKind::Native(op, sub);
                 f.is_base = false;
                 f.yield_pc = NO_YIELD;
-                self.frames.push(f);
+                self.push_frame(f);
             }
-            None => self.frames.push(Box::new(Frame {
+            None => self.push_frame(Box::new(Frame {
                 func: self.native_proto.clone(),
                 pc: crate::native::START,
                 base,
@@ -1142,6 +1175,7 @@ impl<'rt> Vm<'rt> {
                 kind: FrameKind::Native(op, sub),
                 is_base: false,
                 yield_pc: NO_YIELD,
+                depth: 0,
             })),
         }
         self.entered = true;
@@ -1224,7 +1258,7 @@ impl<'rt> Vm<'rt> {
         // stalls on store forwarding.
         match self.spare_frames.pop() {
             Some(spare) => {
-                self.frames.push(spare);
+                self.push_frame(spare);
                 let f = self.frames.last_mut().expect("frame");
                 f.func = proto;
                 f.pc = 0;
@@ -1237,7 +1271,7 @@ impl<'rt> Vm<'rt> {
                 f.is_base = is_base;
                 f.yield_pc = NO_YIELD;
             }
-            None => self.frames.push(Box::new(Frame {
+            None => self.push_frame(Box::new(Frame {
                 func: proto,
                 pc: 0,
                 base,
@@ -1248,6 +1282,7 @@ impl<'rt> Vm<'rt> {
                 kind,
                 is_base,
                 yield_pc: NO_YIELD,
+                depth: 0,
             })),
         }
         Ok(())
@@ -1804,7 +1839,7 @@ impl<'rt> Vm<'rt> {
         frame.hbase = hbase;
         self.stack.append(&mut saved.stack);
         self.handlers.append(&mut saved.handlers);
-        self.frames.push(frame);
+        self.push_frame(frame);
         if !saved.above.is_empty() {
             self.restore_above(saved, base, hbase);
         }
@@ -1840,7 +1875,7 @@ impl<'rt> Vm<'rt> {
         self.handlers.append(&mut saved.handlers);
         let end = |r: usize| splits.get(r).map_or(flat.len(), |s| s.1 as usize);
         self.stack.extend_from_slice(&flat[..end(0)]);
-        self.frames.push(first);
+        self.push_frame(first);
         // The region of the segment the frames being restored are in: 0 below the first generator.
         let mut region = 0;
         for (j, mut f) in saved.above.drain(..).enumerate() {
@@ -1861,7 +1896,7 @@ impl<'rt> Vm<'rt> {
                 r => f.base + 2 - splits[r - 1].1 as usize,
             };
             f.hbase += hbase;
-            self.frames.push(f);
+            self.push_frame(f);
         }
         true
     }
@@ -1873,7 +1908,7 @@ impl<'rt> Vm<'rt> {
         for mut f in saved.above.drain(..) {
             f.base += base;
             f.hbase += hbase;
-            self.frames.push(f);
+            self.push_frame(f);
         }
     }
 
@@ -2147,7 +2182,7 @@ impl<'rt> Vm<'rt> {
         }
         *state = GenState::Running(saved);
         // Move the frame unchanged and adjust it in place: narrow writes to a moved value stall its copy.
-        self.frames.push(frame);
+        self.push_frame(frame);
         let f = self.frames.last_mut().expect("frame");
         f.kind = FrameKind::Generator(g, resume);
         f.is_base = is_base;
