@@ -83,6 +83,16 @@ export interface Data {
     readonly message: {
       list(sessionID: string): SessionMessageInfo[]
       get(sessionID: string, messageID: string): SessionMessageInfo | undefined
+      more(sessionID: string): boolean
+      loading(sessionID: string): boolean
+      loadMore(
+        sessionID: string,
+        options?: {
+          all?: boolean
+          signal?: AbortSignal
+          beforePublish?: () => void
+        },
+      ): Promise<void>
       sync(sessionID: string): Promise<void>
       invalidate(sessionID: string): void
     }

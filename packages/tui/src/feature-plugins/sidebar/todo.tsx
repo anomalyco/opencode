@@ -1,17 +1,28 @@
 import { Plugin } from "@opencode/plugin/tui"
-import { createMemo, For, Show } from "solid-js"
+import { createEffect, createMemo, For, Show } from "solid-js"
 import { TodoItem } from "../../component/todo-item"
 import { sessionTodos } from "../../util/todo"
 
 export function SidebarTodo(props: { context: Plugin.Context; sessionID: string }) {
   const [view, updateView] = props.context.storage.store("view", { initial: { open: true } })
   const theme = props.context.theme
+  const sessionID = props.sessionID
+  const messages = () => props.context.data.session.message.list(sessionID)
   const list = createMemo(() =>
-    sessionTodos(
-      props.context.data.session.message.list(props.sessionID),
-      props.context.data.session.get(props.sessionID)?.revert?.messageID,
-    ),
+    sessionTodos(messages(), props.context.data.session.get(sessionID)?.revert?.messageID),
   )
+  const more = createMemo(() => props.context.data.session.message.more(sessionID))
+  const loading = createMemo(() => props.context.data.session.message.loading(sessionID))
+
+  // The todo list is derived from the loaded messages. After a restart only the
+  // first page of history is loaded, so a `todowrite` older than that window is
+  // invisible and the sidebar stays empty. Load older pages until a todowrite
+  // turns up or there are no more messages to load.
+  createEffect(() => {
+    if (list().length > 0 || loading() || !more()) return
+    void props.context.data.session.message.loadMore(sessionID)
+  })
+
   const remaining = createMemo(
     () => list().filter((item) => item.status === "pending" || item.status === "in_progress").length,
   )
