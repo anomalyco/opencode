@@ -1309,3 +1309,103 @@ export const activePermissionRequest = {
   save: ["npm publish *"],
   source: { type: "tool", messageID: "msg_assistant_permission_pending", id: "tool_permission_pending" },
 } satisfies PermissionRequest
+
+export function commentaryRuns() {
+  const prompt = user("user", "Check the job", 0)
+
+  const idle = (id: string, offset: number) =>
+    ({ id, type: "idle", outcome: "succeeded", time: { created: STORY_TIME + offset } }) satisfies SessionMessageInfo
+
+  const notice = (id: string, offset: number) =>
+    ({
+      id,
+      type: "synthetic",
+      text: "Job updated",
+      description: "Job updated",
+      metadata: { source: "console.watch" },
+      time: { created: STORY_TIME + offset },
+    }) satisfies SessionMessageInfo
+
+  const execute = (id: string, offset: number) =>
+    completedTool({ id, name: "execute", offset, args: {}, output: "Done" })
+
+  const complete = [
+    prompt,
+    assistant({
+      id: "reply",
+      offset: 1_000,
+      content: [{ type: "text", text: "The job is queued." }],
+      completed: 2_000,
+    }),
+    idle("idle", 3_000),
+    ...[1, 2, 3].flatMap((index) => {
+      const offset = index * 10_000
+
+      return [
+        notice(`notice-${index}`, offset),
+        assistant({
+          id: `work-${index}`,
+          offset: offset + 1_000,
+          content: [{ type: "text", text: "Checking the update." }, execute(`tool-${index}`, offset + 1_000)],
+          completed: offset + 2_000,
+        }),
+        assistant({
+          id: `reply-${index}`,
+          offset: offset + 3_000,
+          content: [{ type: "text", text: "I checked the update." }],
+          completed: offset + 4_000,
+        }),
+        idle(`idle-${index}`, offset + 5_000),
+      ]
+    }),
+    user("next-user", "Check the job again", 40_000),
+  ]
+
+  const prior = assistant({
+    id: "prior",
+    offset: 1_000,
+    content: [{ type: "text", text: "Waiting for the result.", native: { phase: "commentary" } }],
+    completed: 2_000,
+  })
+
+  const wake = [
+    notice("wake", 4_000),
+    assistant({
+      id: "working",
+      offset: 5_000,
+      content: [
+        { type: "text", text: "Checking again." },
+        runningTool({ id: "running", name: "execute", offset: 5_000, args: {} }),
+      ],
+    }),
+  ]
+
+  const busy = [prompt, prior, idle("idle", 3_000), ...wake]
+
+  const failed = [
+    prompt,
+    prior,
+    {
+      id: "failed",
+      type: "idle",
+      outcome: "failed",
+      error: { type: "provider.no-route", message: "Model unavailable" },
+      time: { created: STORY_TIME + 3_000 },
+    },
+    ...wake,
+  ] satisfies SessionMessageInfo[]
+
+  const toolOnly = [
+    ...complete.slice(0, -1),
+    notice("tool-only-notice", 40_000),
+    assistant({
+      id: "tool-only-work",
+      offset: 41_000,
+      content: [execute("tool-only-call", 41_000)],
+      completed: 42_000,
+    }),
+    idle("tool-only-idle", 43_000),
+  ]
+
+  return { complete, busy, failed, toolOnly }
+}
