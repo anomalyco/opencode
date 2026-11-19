@@ -152,9 +152,9 @@ function $vmReplay(callable, target, args, constructing, replay, read, req) {
       while (at < pairs.length) {
         const receiver = pairs[at]
         const key = pairs[at + 1]
-        read[read.length] = receiver
-        read[read.length] = key
-        read[read.length] = receiver[key]
+        $ArraySet(read, read.length, receiver)
+        $ArraySet(read, read.length, key)
+        $ArraySet(read, read.length, receiver[key])
         at += 2
       }
     } else if (req !== undefined) {
@@ -168,10 +168,10 @@ function $vmReplay(callable, target, args, constructing, replay, read, req) {
         const val = values[i]
         const hint = $ConvHint(req, i)
         const prim = $IsObj(val) ? $vmToPrimitive(val, hint) : val
-        converted[i] = coerce ? $ConvCoerce(hint, prim) : prim
+        $ArraySet(converted, i, coerce ? $ConvCoerce(hint, prim) : prim)
         i++
       }
-      replay[ordinal] = converted
+      $ArraySet(replay, ordinal, converted)
     }
     const res = $Replay(callable, target, args, constructing, replay, read)
     if (!$IsConvert(res) && !$IsPrefetch(res)) return res
@@ -203,7 +203,7 @@ function $vmJsonVisitor(boundary, replacer, properties) {
     if (kind === 2) return null
     if (kind === 3) return $JsonSpecial(val, boundary)
     const target = kind === 4 ? $SetToArray(val) : val
-    ancestors[ancestors.length] = target
+    $ArraySet(ancestors, ancestors.length, target)
     let out
     if ($IsArray(target)) {
       out = []
@@ -211,7 +211,7 @@ function $vmJsonVisitor(boundary, replacer, properties) {
       let i = 0
       while (i < len) {
         const elem = yield* visit(target, String(i), depth + 1)
-        out[i] = elem === undefined ? null : elem
+        $ArraySet(out, i, elem === undefined ? null : elem)
         i++
       }
     } else {
@@ -442,6 +442,8 @@ export const registerVmIntrinsics = (map: Map<string, unknown>, vm: Vm): void =>
     return new Arr(builtins.Array, error ? ["name", "message", ...list] : list)
   })
   add("$ArrayPop", ([arr]) => (arr as Arr).items.pop())
+  // Writes an element of an internal array without going through the prototype chain, where a program accessor could catch it.
+  add("$ArraySet", ([arr, index, value]) => ((arr as Arr).items[index as number] = value))
   add("$JsonFinish", ([boundary, root, properties, indent]) => {
     const plain = toPlainJson(root)
     if (boundary) return plain as Value

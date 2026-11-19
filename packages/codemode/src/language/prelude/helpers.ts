@@ -116,6 +116,14 @@ export const helpers = (ctx: Interpreter<unknown>): Array<readonly [string, Valu
         return target
       },
     ],
+    /** Writes an element of a prelude-made array without going through the prototype chain. */
+    $ArraySet: [
+      3,
+      ([array, index, value]) => {
+        ;(array as Arr).items[index as number] = value
+        return value
+      },
+    ],
     $SumPrecise: [1, ([numbers]) => Math.sumPrecise((numbers as Arr).items as Array<number>)],
     /** A Uint8Array of the values (see `collectBytes`). */
     $Bytes: [

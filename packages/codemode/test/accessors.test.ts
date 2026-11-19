@@ -386,3 +386,35 @@ describe("the safety net", () => {
     }
   })
 })
+
+// Each program runs in a fresh runtime, so the accessor on Object.prototype ends with it; the programs that do not
+// return through it also delete it before they finish.
+describe("internal arrays ignore indexed accessors on Object.prototype", () => {
+  test("a setter does not catch the writes of a replayed built-in", () => {
+    expect(
+      value(`Object.defineProperty(Object.prototype, 0, { set(v) {}, configurable: true })
+      const o = Object.defineProperty({}, "a", { get value() { return 1 } })
+      delete Object.prototype[0]
+      return o.a`),
+    ).toBe(1)
+  })
+
+  test("a getter-only accessor does not break defineProperty, JSON.stringify or Object.entries", () => {
+    expect(
+      value(`Object.defineProperty(Object.prototype, 0, { get() { return "p" }, configurable: true })
+      const o = Object.defineProperty({}, "a", { get value() { return 1 } })
+      const json = JSON.stringify({ x: [1, 2], y: { z: 3 } })
+      const entries = Object.entries({ b: 2, c: 3 })
+      const values = Object.values({ b: 2 })
+      delete Object.prototype[0]
+      return [o.a, json, entries, values]`),
+    ).toEqual([1, '{"x":[1,2],"y":{"z":3}}', [["b", 2], ["c", 3]], [2]])
+  })
+
+  test("a getter-only accessor does not break returning an object", () => {
+    expect(
+      value(`Object.defineProperty(Object.prototype, 0, { get() { return "p" }, configurable: true })
+      return { list: [1, [2, 3]], nested: { k: "v" } }`),
+    ).toEqual({ list: [1, [2, 3]], nested: { k: "v" } })
+  })
+})
