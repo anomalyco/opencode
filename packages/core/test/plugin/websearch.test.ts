@@ -4,6 +4,7 @@ import { Integration } from "@opencode/core/integration"
 import { WebSearch } from "@opencode/core/websearch"
 import { WebSearchExa } from "@opencode/core/plugin/websearch/exa"
 import { WebSearchFirecrawl } from "@opencode/core/plugin/websearch/firecrawl"
+import { WebSearchJevlin } from "@opencode/core/plugin/websearch/jevlin"
 import { WebSearchParallel } from "@opencode/core/plugin/websearch/parallel"
 import { WebSearchTavily } from "@opencode/core/plugin/websearch/tavily"
 import { WebSearchTinyFish } from "@opencode/core/plugin/websearch/tinyfish"
@@ -284,6 +285,79 @@ describe("built-in web search providers", () => {
         headers: { authorization: "Bearer tavily-secret", "x-client-name": "opencode2" },
       })
       expect(requests[1]?.headers["x-tavily-access-mode"]).toBeUndefined()
+    }),
+  )
+
+  it.effect("offers Jevlin only while a key is connected", () =>
+    Effect.gen(function* () {
+      resetWebSearchFixture(
+        JSON.stringify({
+          request_id: "01a1",
+          merged: [
+            {
+              url: "https://effect.website",
+              title: "Effect",
+              excerpt: "Effect documentation",
+              published: "2026-07-25T00:00:00.000Z",
+              found_by: [
+                { provider: "exa", rank: 1 },
+                { provider: "brave", rank: 3 },
+                { provider: "exa", rank: 5 },
+              ],
+              votes: 2,
+            },
+            { url: "https://example.com", published: null, found_by: [] },
+          ],
+        }),
+      )
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      yield* WebSearchJevlin.Plugin.effect(
+        host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
+      )
+
+      expect(yield* integrations.get(Integration.ID.make("jevlin"))).toMatchObject({
+        id: "jevlin",
+        name: "Jevlin",
+        methods: [{ type: "key" }, { type: "env", names: ["JEVLIN_API_KEY"] }],
+      })
+      // Jevlin has no keyless mode, so `random` must not be able to pick it before a key is connected.
+      expect(yield* websearch.providers()).toEqual([])
+      const query = { query: "effect typescript", providerID: WebSearch.ID.make("jevlin") }
+      expect(yield* websearch.query(query).pipe(Effect.flip)).toBeInstanceOf(WebSearch.ProviderNotFoundError)
+      expect(requests).toHaveLength(0)
+
+      yield* integrations.connection.key({
+        integrationID: Integration.ID.make("jevlin"),
+        key: "jevlin-secret",
+      })
+      yield* Effect.yieldNow
+      expect(yield* websearch.providers()).toEqual([{ id: WebSearch.ID.make("jevlin"), name: "Jevlin" }])
+      expect(yield* websearch.query(query)).toEqual(
+        new WebSearch.Response({
+          providerID: WebSearch.ID.make("jevlin"),
+          results: [
+            {
+              url: "https://effect.website",
+              title: "Effect",
+              content: "Found by exa, brave.\nEffect documentation",
+              time: { published: Date.parse("2026-07-25T00:00:00.000Z") },
+            },
+            { url: "https://example.com", time: {} },
+          ],
+        }),
+      )
+      expect(requests[0]).toMatchObject({
+        url: WebSearchJevlin.endpoint,
+        headers: { authorization: "Bearer jevlin-secret" },
+        body: { query: "effect typescript", view: "merged", max_results: 8, merged_limit: 8 },
+      })
+
+      const connection = yield* integrations.connection.active(Integration.ID.make("jevlin"))
+      if (connection?.type !== "credential") throw new Error("expected a stored Jevlin credential")
+      yield* integrations.connection.remove(connection.id)
+      yield* Effect.yieldNow
+      expect(yield* websearch.providers()).toEqual([])
     }),
   )
 
