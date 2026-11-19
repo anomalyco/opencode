@@ -17,11 +17,13 @@ export default definePty({
     )
     await Bun.write(`${root}/work/img.png`, Buffer.from(png, "base64"))
   },
+  // A paste resolves its file off the input path and draws nothing until then, so each step waits for what it
+  // checks; a quiet screen alone can come before a slow paste lands (as attach.pty.ts does).
   steps: [
     opened,
-    { keys: "look at ", settle: 200 },
-    { keys: "\x1b[200~img.png\x1b[201~", settle: 600, checkpoint: "previewed" },
-    { keys: "\x03", settle: 300, checkpoint: "cleared" },
+    { keys: "look at ", until: { screen: "┃ look at" }, settle: 200 },
+    { keys: "\x1b[200~img.png\x1b[201~", until: { screen: "[Image 1]" }, settle: 600, checkpoint: "previewed" },
+    { keys: "\x03", until: { gone: "look at" }, settle: 300, checkpoint: "cleared" },
     ...leave,
   ],
   exits: true,
