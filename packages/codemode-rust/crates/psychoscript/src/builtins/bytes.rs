@@ -336,7 +336,6 @@ pub fn setup(vm: &mut Vm) {
     let op = vm.realm.object_proto;
     let proto = vm.plain(op);
     vm.realm.std.uint8 = proto;
-    super::accessors(vm, proto, &["length"]);
     let ctor = vm.ctor("Uint8Array", 3, uint8_ctor, proto, Value::Undef);
     vm.methods(
         ctor,
@@ -347,6 +346,9 @@ pub fn setup(vm: &mut Vm) {
             ("fromHex", 1, uint8_from_hex),
         ],
     );
+    vm.constant(ctor, "BYTES_PER_ELEMENT", Value::Num(1.0));
+    vm.constant(proto, "BYTES_PER_ELEMENT", Value::Num(1.0));
+    super::accessors(vm, proto, &["length"]);
     vm.methods(
         proto,
         &[
@@ -365,36 +367,38 @@ pub fn setup(vm: &mut Vm) {
             ("toBase64", 0, u_to_base64),
             ("toHex", 0, u_to_hex),
             ("keys", 0, u_keys),
+            ("values", 0, u_values),
             ("entries", 0, u_entries),
-            ("forEach", 1, u_for_each),
             ("map", 1, u_map),
             ("filter", 1, u_filter),
+            ("forEach", 1, u_for_each),
+            ("some", 1, u_some),
+            ("every", 1, u_every),
             ("find", 1, u_find),
             ("findIndex", 1, u_find_index),
             ("findLast", 1, u_find_last),
             ("findLastIndex", 1, u_find_last_index),
-            ("some", 1, u_some),
-            ("every", 1, u_every),
             ("reduce", 1, u_reduce),
             ("reduceRight", 1, u_reduce_right),
         ],
     );
-    let values = vm.method(proto, "values", 0, u_values);
+    let vk = vm.atoms.intern_static("values");
+    let values = vm.get_obj(proto, vk);
     vm.define_hidden(proto, SYM_ITERATOR, values);
 
     let ep = vm.plain(op);
     vm.realm.std.text_encoder = ep;
-    vm.ctor("TextEncoder", 0, encoder_ctor, ep, Value::Undef);
-    vm.method(ep, "encode", 0, encoder_encode);
     let utf8 = vm.static_str("utf-8");
     let ek = vm.atoms.intern_static("encoding");
     vm.define_hidden(ep, ek, utf8);
+    vm.method(ep, "encode", 0, encoder_encode);
+    vm.ctor("TextEncoder", 0, encoder_ctor, ep, Value::Undef);
 
     let dp = vm.plain(op);
     vm.realm.std.text_decoder = dp;
     super::accessors(vm, dp, &["encoding", "fatal", "ignoreBOM"]);
-    vm.ctor("TextDecoder", 0, decoder_ctor, dp, Value::Undef);
     vm.method(dp, "decode", 0, decoder_decode);
+    vm.ctor("TextDecoder", 0, decoder_ctor, dp, Value::Undef);
 
     let atob = vm.native_fn("atob", 1, global_atob, Value::Undef);
     vm.global("atob", atob);

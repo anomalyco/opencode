@@ -20,6 +20,7 @@ use crate::bytecode::{
     Arith, Capture, FuncProto, ITER_DELEGATE, ITER_DESTRUCTURE, ITER_FOR_AWAIT, ITER_FOR_OF, Op,
     Program, TemplateSite,
 };
+use crate::bytecode::{CLASS_BASE, CLASS_DERIVED};
 use crate::strings::{Atom, Strings};
 use crate::value::{Value, num_to_string};
 use crate::vm::{REQ_NEXT, REQ_RETURN, REQ_THROW};
@@ -107,6 +108,24 @@ pub fn compile(source: &str, atoms: &mut Strings) -> R<Program> {
             offset: Some(export.span().start),
         });
     }
+    // Acorn does not read decorators: the first `@` is an unexpected character.
+    struct Decorators(Option<u32>);
+    impl<'a> Visit<'a> for Decorators {
+        fn visit_decorator(&mut self, it: &Decorator<'a>) {
+            if self.0.is_none_or(|at| it.span.start < at) {
+                self.0 = Some(it.span.start);
+            }
+        }
+    }
+    let mut decorators = Decorators(None);
+    decorators.visit_program(program);
+    if let Some(at) = decorators.0 {
+        return Err(CompileError {
+            kind: DiagnosticKind::ParseError,
+            message: parse_message("Unexpected character '@'"),
+            offset: Some(at),
+        });
+    }
     let mut depth = DepthCheck {
         depth: 0,
         deepest: None,
@@ -130,6 +149,7 @@ pub fn compile(source: &str, atoms: &mut Strings) -> R<Program> {
     let mut c = Compiler::new(scoping, semantic.semantic.nodes(), atoms);
     c.await_alias = await_alias;
     c.find_unbound(program);
+    c.find_field_values(program);
     c.compute_captured();
     c.compile_program(program)?;
     Ok(Program {
@@ -455,6 +475,14 @@ fn parse_error(
 }
 
 fn parse_message(reason: &str) -> String {
+    // The reference names the class features it refuses.
+    if reason == "Unexpected character '@'" {
+        return "SyntaxError: Decorators are not supported.".to_owned();
+    }
+    if reason.starts_with("Private field '#") {
+        return "SyntaxError: Private class members (#name) are not supported. Use a regular property instead."
+            .to_owned();
+    }
     let dot = if reason.ends_with('.') { "" } else { "." };
     format!("SyntaxError: {reason}{dot} Code must be plain JavaScript written as a program body.")
 }
@@ -1125,6 +1153,18 @@ struct FnState<'a> {
     sites: Vec<(u32, [u32; 2])>,
     /// The instruction index a jump may land on; no instruction fuses across it.
     barrier: usize,
+    /// A class constructor: `CLASS_BASE` or `CLASS_DERIVED`.
+    class: u8,
+    /// Whether its class has instance fields.
+    fields: bool,
+    /// A method, which `super.x` may appear in.
+    method: bool,
+    /// A derived constructor's `this` binding, unbound until `super()`, and its new target's local.
+    this_store: Option<Store>,
+    this_upval: Option<u32>,
+    new_target: u32,
+    /// A method whose `super` reads its home object, or an arrow that takes it from its method.
+    home: bool,
 }
 
 struct Compiler<'a, 's> {
@@ -1154,6 +1194,16 @@ struct Compiler<'a, 's> {
     args_owner: FxHashMap<ScopeId, bool>,
     /// `var`s declared only inside a `with` body, which never runs, so the reference never binds them.
     unbound: FxHashSet<SymbolId>,
+    /// The spans of class field initializers, which run in a function of their own (see `compile_class`).
+    field_values: Vec<oxc_span::Span>,
+    /// While a class is compiled, its name's symbol to its inner binding.
+    class_inner: FxHashMap<SymbolId, SymbolId>,
+    /// A computed field's key binding, by the field's start.
+    field_keys: FxHashMap<u32, SymbolId>,
+    /// Bindings the compiler makes, numbered after the program's symbols.
+    pseudo: usize,
+    /// Whether the function compiled last uses its home object (`super`).
+    last_home: bool,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -1188,6 +1238,11 @@ impl<'a, 's> Compiler<'a, 's> {
             param_tdz: FxHashSet::default(),
             args_owner: FxHashMap::default(),
             unbound: FxHashSet::default(),
+            field_values: Vec::new(),
+            class_inner: FxHashMap::default(),
+            field_keys: FxHashMap::default(),
+            pseudo: 0,
+            last_home: false,
         }
     }
 
@@ -1246,7 +1301,13 @@ impl<'a, 's> Compiler<'a, 's> {
                         f
                     }
                 };
-                if ref_fn != decl_fn {
+                let at = self
+                    .nodes
+                    .kind(self.scoping.get_reference(*rid).node_id())
+                    .span()
+                    .start;
+                if ref_fn != decl_fn || self.in_other_field(at, self.scoping.symbol_span(sym).start)
+                {
                     self.captured.insert(sym);
                     break;
                 }
@@ -1473,6 +1534,7 @@ impl<'a, 's> Compiler<'a, 's> {
         };
         let tdz = (flags.intersects(SymbolFlags::BlockScopedVariable | SymbolFlags::ConstVariable)
             && !flags.contains(SymbolFlags::Function))
+            || flags.is_class()
             || self.param_tdz.contains(&s);
         let decl_end = self.decl_end(s);
         let name = self.atom(self.scoping.symbol_name(s));
@@ -1681,6 +1743,7 @@ impl<'a, 's> Compiler<'a, 's> {
     }
 
     fn load_symbol(&mut self, s: SymbolId, ref_pos: u32) -> R<()> {
+        let s = self.class_inner.get(&s).copied().unwrap_or(s);
         let info = self.symbol_info(s)?;
         let chk = self.needs_check(&info, ref_pos);
         if info.depth == self.depth() {
@@ -1703,6 +1766,7 @@ impl<'a, 's> Compiler<'a, 's> {
 
     /// Pops the top of the stack into the binding.
     fn store_symbol(&mut self, s: SymbolId, mode: BindMode, ref_pos: u32) -> R<()> {
+        let s = self.class_inner.get(&s).copied().unwrap_or(s);
         let info = self.symbol_info(s)?;
         if mode == BindMode::Assign {
             if info.is_const || self.readonly.contains(&s) {
@@ -1727,8 +1791,7 @@ impl<'a, 's> Compiler<'a, 's> {
         Ok(())
     }
 
-    /// The binding a name refers to; `None` for a global. A class's name is not a binding: classes do not run, so as
-    /// in the reference, the name reads the global of that name.
+    /// The binding a name refers to; `None` for a global.
     fn ident_symbol(&self, id: &IdentifierReference) -> Option<SymbolId> {
         id.reference_id
             .get()
@@ -1739,7 +1802,7 @@ impl<'a, 's> Compiler<'a, 's> {
     /// Whether the reference binds a declared name: not a class's name, nor a `var` that only syntax that never runs
     /// declares.
     fn is_bound(&self, s: SymbolId) -> bool {
-        !self.scoping.symbol_flags(s).is_class() && !self.unbound.contains(&s)
+        !self.unbound.contains(&s)
     }
 
     fn find_unbound(&mut self, program: &oxc_ast::ast::Program) {
@@ -1950,6 +2013,8 @@ impl<'a, 's> Compiler<'a, 's> {
                 is_generator: false,
                 is_arrow: false,
                 is_program: true,
+                class: 0,
+                home: false,
                 needs_extra: false,
                 callees: f.callees,
                 sites: f.sites,
@@ -1981,7 +2046,10 @@ impl<'a, 's> Compiler<'a, 's> {
         };
         let idx = self.compile_function(FnSpec {
             name: own_name,
-            params: &f.params,
+            params: Some(&f.params),
+            class: 0,
+            fields: false,
+            method: false,
             body: FnBody::Block(body),
             scope: f.scope_id.get(),
             is_async: f.r#async,
@@ -2007,7 +2075,10 @@ impl<'a, 's> Compiler<'a, 's> {
         };
         let idx = self.compile_function(FnSpec {
             name: name.unwrap_or(""),
-            params: &f.params,
+            params: Some(&f.params),
+            class: 0,
+            fields: false,
+            method: false,
             body,
             scope: f.scope_id.get(),
             is_async: f.r#async,
@@ -2025,24 +2096,39 @@ impl<'a, 's> Compiler<'a, 's> {
         self.fns.push(FnState::new(spec.is_arrow));
         self.f().is_async = spec.is_async;
         self.f().is_generator = spec.is_generator;
-        let params = spec.params;
-        let nparams = params.items.len() as u32;
+        self.f().class = spec.class;
+        self.f().fields = spec.fields;
+        self.f().method = spec.method;
+        let no_items: &[FormalParameter<'a>] = &[];
+        let (items, rest) = match spec.params {
+            Some(p) => (&p.items[..], p.rest.as_deref()),
+            None => (no_items, None),
+        };
+        let nparams = items.len() as u32;
         self.f().nlocals = nparams;
-        let length = params
-            .items
-            .iter()
-            .take_while(|p| p.initializer.is_none())
-            .count() as u32;
-        if params.rest.is_some() {
+        let length = items.iter().take_while(|p| p.initializer.is_none()).count() as u32;
+        if rest.is_some() {
             self.f().needs_extra = true;
+        }
+        // A derived constructor gets its new target as `this`; its own `this` is unbound until `super()`.
+        if spec.class == CLASS_DERIVED {
+            let nt = self.new_local();
+            self.emit(Op::This);
+            self.emit(Op::SetLocal(nt));
+            let c = self.new_cell();
+            self.emit(Op::NewCell(c));
+            self.emit(Op::Uninit);
+            self.emit(Op::SetCell(c));
+            self.f().new_target = nt;
+            self.f().this_store = Some(Store::Cell(c));
         }
         // Simple parameters bind straight to their argument slot. With parameter expressions, every parameter is
         // bound in order instead, so one read before its turn is in its TDZ.
-        let simple = params.rest.is_none()
-            && params.items.iter().all(|p| {
+        let simple = rest.is_none()
+            && items.iter().all(|p| {
                 p.initializer.is_none() && matches!(p.pattern, BindingPattern::BindingIdentifier(_))
             });
-        for (i, p) in params.items.iter().enumerate() {
+        for (i, p) in items.iter().enumerate() {
             if let BindingPattern::BindingIdentifier(id) = &p.pattern
                 && let Some(s) = id.symbol_id.get()
             {
@@ -2083,7 +2169,7 @@ impl<'a, 's> Compiler<'a, 's> {
             self.emit(Op::Callee);
             self.store_symbol(s, BindMode::Init, 0)?;
         }
-        for (i, p) in params.items.iter().enumerate() {
+        for (i, p) in items.iter().enumerate() {
             if simple
                 && let BindingPattern::BindingIdentifier(id) = &p.pattern
                 && let Some(s) = id.symbol_id.get()
@@ -2105,12 +2191,18 @@ impl<'a, 's> Compiler<'a, 's> {
             }
             self.bind_pattern(&p.pattern, BindMode::Init)?;
         }
-        if let Some(rest) = &params.rest {
+        if let Some(rest) = rest {
             self.emit(Op::Rest(nparams));
             self.bind_pattern(&rest.rest.argument, BindMode::Init)?;
         }
         if spec.is_generator {
             self.emit(Op::GeneratorStart);
+        }
+        // A base class's instance fields are defined as its constructor starts.
+        if spec.class == CLASS_BASE && spec.fields {
+            self.emit(Op::This);
+            self.emit(Op::InitFields);
+            self.emit(Op::Pop);
         }
         match spec.body {
             FnBody::Block(b) => {
@@ -2118,15 +2210,43 @@ impl<'a, 's> Compiler<'a, 's> {
                 for st in &b.statements {
                     self.stmt(st)?;
                 }
+                if spec.class != 0 {
+                    self.pos = b.span.start;
+                }
                 self.emit(Op::Undef);
+                self.ctor_result();
                 self.emit(Op::Return);
             }
             FnBody::Expr(e) => {
                 self.expr(e)?;
                 self.emit(Op::Return);
             }
+            FnBody::DefaultCtor(at) => {
+                self.pos = at;
+                if spec.class == CLASS_DERIVED {
+                    self.f().needs_extra = true;
+                    self.emit(Op::Rest(0));
+                    self.super_call_with(None, at)?;
+                    self.emit(Op::Pop);
+                }
+                self.emit(Op::Undef);
+                self.ctor_result();
+                self.emit(Op::Return);
+            }
+            FnBody::Fields(fields, at) => {
+                self.pos = at;
+                self.emit(Op::This);
+                for p in fields {
+                    self.class_field(p)?;
+                }
+                self.pos = at;
+                self.emit(Op::Pop);
+                self.emit(Op::Undef);
+                self.emit(Op::Return);
+            }
         }
         let f = self.fns.pop().expect("function state");
+        self.last_home = f.home;
         self.chains = saved_chains;
         self.pos = saved_pos;
         let name = self.atom(spec.name);
@@ -2142,6 +2262,8 @@ impl<'a, 's> Compiler<'a, 's> {
             is_generator: spec.is_generator,
             is_arrow: spec.is_arrow,
             is_program: false,
+            class: spec.class,
+            home: spec.is_arrow && f.home,
             needs_extra: f.needs_extra,
             callees: f.callees,
             sites: f.sites,
@@ -2225,7 +2347,7 @@ impl<'a, 's> Compiler<'a, 's> {
             Statement::LabeledStatement(l) => self.labeled(l),
             Statement::SwitchStatement(s) => self.switch(s, Vec::new()),
             Statement::TryStatement(t) => self.try_stmt(t),
-            Statement::ClassDeclaration(c) => self.throw_syntax("ClassDeclaration", c.span),
+            Statement::ClassDeclaration(c) => self.class_declaration(c),
             Statement::WithStatement(w) => self.throw_syntax("WithStatement", w.span),
             // Bound before the body runs (see `imports`); one below the top level of the program does nothing there,
             // and in a function throws when it runs.
@@ -2428,6 +2550,7 @@ impl<'a, 's> Compiler<'a, 's> {
             )
         });
         if !unwinding {
+            self.ctor_result();
             self.emit(Op::Return);
             return Ok(());
         }
@@ -2436,6 +2559,7 @@ impl<'a, 's> Compiler<'a, 's> {
         let n = self.f().controls.len();
         self.unwind_to(0, n)?;
         self.emit(Op::GetLocal(tmp));
+        self.ctor_result();
         self.emit(Op::Return);
         Ok(())
     }
@@ -3187,6 +3311,9 @@ impl<'a, 's> Compiler<'a, 's> {
     }
 
     fn assign_simple(&mut self, s: &'a SimpleAssignmentTarget<'a>) -> R<()> {
+        if let Some(m) = Self::super_member(s.as_member_expression()) {
+            return self.super_target(m.object().span());
+        }
         match s {
             SimpleAssignmentTarget::AssignmentTargetIdentifier(id) => self.store_ident(id),
             SimpleAssignmentTarget::StaticMemberExpression(m) => {
@@ -3214,6 +3341,10 @@ impl<'a, 's> Compiler<'a, 's> {
 
     fn expr_named(&mut self, e: &'a Expression<'a>, name: Option<&str>) -> R<()> {
         match e {
+            Expression::ClassExpression(c) if c.id.is_none() => {
+                self.pos = c.span.start;
+                self.compile_class(c, name)
+            }
             Expression::ArrowFunctionExpression(a) => {
                 self.pos = a.span.start;
                 self.closure_for_arrow(a, name)
@@ -3249,9 +3380,7 @@ impl<'a, 's> Compiler<'a, 's> {
             }
             Expression::TemplateLiteral(t) => self.template(t)?,
             Expression::Identifier(id) => self.load_ident(id)?,
-            Expression::ThisExpression(_) => {
-                self.emit(Op::This);
-            }
+            Expression::ThisExpression(_) => self.emit_this()?,
             Expression::ArrayExpression(a) => self.array_lit(a)?,
             Expression::ObjectExpression(o) => self.object_lit(o)?,
             Expression::ArrowFunctionExpression(a) => self.closure_for_arrow(a, None)?,
@@ -3305,6 +3434,16 @@ impl<'a, 's> Compiler<'a, 's> {
                 };
                 self.name_callee(at, &n.callee);
             }
+            Expression::StaticMemberExpression(m) if matches!(m.object, Expression::Super(_)) => {
+                if let Some(m) = e.as_member_expression() {
+                    self.super_get(m, false)?;
+                }
+            }
+            Expression::ComputedMemberExpression(m) if matches!(m.object, Expression::Super(_)) => {
+                if let Some(m) = e.as_member_expression() {
+                    self.super_get(m, false)?;
+                }
+            }
             Expression::StaticMemberExpression(m) => {
                 self.expr(&m.object)?;
                 if m.optional {
@@ -3339,7 +3478,7 @@ impl<'a, 's> Compiler<'a, 's> {
                 self.emit(Op::Await);
             }
             Expression::YieldExpression(y) => self.yield_expr(y, false)?,
-            Expression::ClassExpression(c) => self.throw_syntax("ClassExpression", c.span)?,
+            Expression::ClassExpression(c) => self.compile_class(c, None)?,
             Expression::RegExpLiteral(r) => {
                 let pattern = r.regex.pattern.text.as_str();
                 let flags = r.regex.flags.to_string();
@@ -3540,7 +3679,8 @@ impl<'a, 's> Compiler<'a, 's> {
                         match static_key(&p.key, p.computed) {
                             Some(k) => {
                                 let name = format!("{} {k}", if setter { "set" } else { "get" });
-                                self.expr_named(&p.value, Some(&name))?;
+                                self.object_method(&p.value, &name)?;
+                                self.set_home(1);
                                 let a = self.atom(&k);
                                 self.pos = p.span.start;
                                 self.emit(Op::DefineAccessor(a, setter));
@@ -3551,7 +3691,8 @@ impl<'a, 's> Compiler<'a, 's> {
                                 };
                                 self.expr(e)?;
                                 self.emit_at(e.without_parentheses().span().start, Op::ToKey);
-                                self.expr(&p.value)?;
+                                self.object_method(&p.value, "")?;
+                                self.set_home(2);
                                 self.pos = p.span.start;
                                 self.emit(Op::DefineAccessorElem(setter));
                             }
@@ -3561,8 +3702,14 @@ impl<'a, 's> Compiler<'a, 's> {
                     self.pos = p.span.start;
                     match static_key(&p.key, p.computed) {
                         Some(k) => {
-                            self.expr_named(&p.value, Some(&k))?;
+                            if p.method {
+                                self.object_method(&p.value, &k)?;
+                                self.set_home(1);
+                            } else {
+                                self.expr_named(&p.value, Some(&k))?;
+                            }
                             let a = self.atom(&k);
+                            self.pos = p.span.start;
                             self.emit(Op::DefineField(a));
                         }
                         None => {
@@ -3571,7 +3718,19 @@ impl<'a, 's> Compiler<'a, 's> {
                             };
                             self.expr(e)?;
                             self.emit_at(e.without_parentheses().span().start, Op::ToKey);
-                            self.expr(&p.value)?;
+                            if p.method {
+                                self.object_method(&p.value, "")?;
+                            } else {
+                                self.expr(&p.value)?;
+                            }
+                            // A computed key names an anonymous function when the literal runs.
+                            if is_anonymous_fn(&p.value) {
+                                self.emit_at(p.value.span().start, Op::NameByKey(0));
+                            }
+                            if p.method {
+                                self.set_home(2);
+                            }
+                            self.pos = p.span.start;
                             self.emit(Op::DefineElem);
                         }
                     }
@@ -3630,6 +3789,9 @@ impl<'a, 's> Compiler<'a, 's> {
             self.emit(Op::True);
             return Ok(());
         };
+        if let Some(m) = Self::super_member(Some(member)) {
+            return self.super_delete(m);
+        }
         self.chains.push(Vec::new());
         match member {
             MemberExpression::StaticMemberExpression(m) => {
@@ -3670,6 +3832,11 @@ impl<'a, 's> Compiler<'a, 's> {
 
     fn call(&mut self, c: &'a CallExpression<'a>) -> R<()> {
         match &c.callee {
+            callee if Self::super_member(callee.as_member_expression()).is_some() => {
+                if let Some(m) = callee.as_member_expression() {
+                    self.super_get(m, true)?;
+                }
+            }
             Expression::StaticMemberExpression(m) => {
                 self.expr(&m.object)?;
                 if m.optional {
@@ -3687,10 +3854,7 @@ impl<'a, 's> Compiler<'a, 's> {
                 self.elem_key(&m.object, &m.expression)?;
                 self.emit(Op::Swap);
             }
-            Expression::Super(s) => {
-                self.throw_syntax("Super", s.span)?;
-                return Ok(());
-            }
+            Expression::Super(_) => return self.super_call(c),
             callee => {
                 self.expr(callee)?;
                 self.emit(Op::Undef);
@@ -3766,6 +3930,9 @@ impl<'a, 's> Compiler<'a, 's> {
     }
 
     fn assignment(&mut self, a: &'a AssignmentExpression<'a>) -> R<()> {
+        if let Some(m) = Self::super_member(a.left.as_member_expression()) {
+            return self.super_assign(m, a);
+        }
         let op = a.operator;
         if op == AssignmentOperator::Assign {
             match &a.left {
@@ -3870,6 +4037,9 @@ impl<'a, 's> Compiler<'a, 's> {
     }
 
     fn update(&mut self, u: &'a UpdateExpression<'a>) -> R<()> {
+        if let Some(m) = Self::super_member(u.argument.as_member_expression()) {
+            return self.super_update(m, u);
+        }
         let step = if u.operator == UpdateOperator::Increment {
             Op::Inc
         } else {
@@ -3945,11 +4115,19 @@ enum KeyRef {
 enum FnBody<'a> {
     Block(&'a FunctionBody<'a>),
     Expr(&'a Expression<'a>),
+    /// A class without a constructor of its own: `constructor() {}`, or `constructor(...args) { super(...args) }`.
+    DefaultCtor(u32),
+    /// A class's field initializer: defines the fields on `this`, in order.
+    Fields(Vec<&'a PropertyDefinition<'a>>, u32),
 }
 
 struct FnSpec<'a, 'n> {
     name: &'n str,
-    params: &'a FormalParameters<'a>,
+    params: Option<&'a FormalParameters<'a>>,
+    /// A class constructor (`CLASS_BASE`, `CLASS_DERIVED`) and whether its class has instance fields.
+    class: u8,
+    fields: bool,
+    method: bool,
     body: FnBody<'a>,
     scope: Option<ScopeId>,
     is_async: bool,
@@ -3976,6 +4154,13 @@ impl<'a> FnState<'a> {
             callees: Vec::new(),
             sites: Vec::new(),
             barrier: 0,
+            class: 0,
+            fields: false,
+            method: false,
+            this_store: None,
+            this_upval: None,
+            new_target: 0,
+            home: false,
         }
     }
 }
@@ -4076,5 +4261,697 @@ fn compound_op(op: AssignmentOperator) -> Op {
         AssignmentOperator::BitwiseXOR => Op::BitXor,
         AssignmentOperator::BitwiseAnd => Op::BitAnd,
         _ => Op::Nop,
+    }
+}
+
+// ---------- classes ----------
+
+/// A class element the reference compiles: a method, an accessor or a field, with a plain or computed name.
+fn supported_member(m: &ClassElement) -> bool {
+    let (key, computed) = match m {
+        ClassElement::MethodDefinition(d) => (&d.key, d.computed),
+        ClassElement::PropertyDefinition(d) => (&d.key, d.computed),
+        _ => return false,
+    };
+    computed
+        || matches!(
+            key,
+            PropertyKey::StaticIdentifier(_)
+                | PropertyKey::StringLiteral(_)
+                | PropertyKey::NumericLiteral(_)
+        )
+}
+
+/// What an unsupported class element is called in the error (the reference's `classSyntaxName`).
+fn class_syntax_name(m: &ClassElement) -> &'static str {
+    match m {
+        ClassElement::StaticBlock(_) => "StaticBlock",
+        ClassElement::MethodDefinition(d) => {
+            if matches!(d.key, PropertyKey::PrivateIdentifier(_)) {
+                "PrivateIdentifier"
+            } else if d.kind == MethodDefinitionKind::Get {
+                "Getter"
+            } else if d.kind == MethodDefinitionKind::Set {
+                "Setter"
+            } else if d.computed {
+                "ComputedClassMember"
+            } else if d.value.r#async {
+                "AsyncMethod"
+            } else {
+                "GeneratorMethod"
+            }
+        }
+        ClassElement::PropertyDefinition(d) => {
+            if matches!(d.key, PropertyKey::PrivateIdentifier(_)) {
+                "PrivateIdentifier"
+            } else if d.computed {
+                "ComputedClassMember"
+            } else {
+                "PropertyDefinition"
+            }
+        }
+        _ => "ClassHeritage",
+    }
+}
+
+/// NamedEvaluation: whether `e` is an anonymous function or class definition, which takes the name it is given.
+fn is_anonymous_fn(e: &Expression) -> bool {
+    match e {
+        Expression::ArrowFunctionExpression(_) => true,
+        Expression::FunctionExpression(f) => f.id.is_none(),
+        Expression::ClassExpression(c) => c.id.is_none(),
+        _ => false,
+    }
+}
+
+impl<'a, 's> Compiler<'a, 's> {
+    /// Notes the class field initializers, whose references come from a function of their own.
+    fn find_field_values(&mut self, program: &oxc_ast::ast::Program) {
+        struct Fields(Vec<oxc_span::Span>);
+        impl<'a> Visit<'a> for Fields {
+            fn visit_property_definition(&mut self, it: &PropertyDefinition<'a>) {
+                if let Some(v) = &it.value {
+                    self.0.push(v.span());
+                }
+                walk::walk_property_definition(self, it);
+            }
+        }
+        let mut f = Fields(Vec::new());
+        f.visit_program(program);
+        self.field_values = f.0;
+    }
+
+    /// Whether a reference at `at` is in a field initializer that its declaration at `decl` is not in.
+    fn in_other_field(&self, at: u32, decl: u32) -> bool {
+        self.field_values
+            .iter()
+            .any(|v| v.start <= at && at < v.end && !(v.start <= decl && decl < v.end))
+    }
+
+    /// A binding the compiler makes, as a cell of the running function.
+    fn pseudo_binding(&mut self, name: &str, tdz: bool) -> (SymbolId, u32) {
+        let s = SymbolId::from_usize(self.scoping.symbols_len() + self.pseudo);
+        self.pseudo += 1;
+        let c = self.new_cell();
+        let name = self.atom(name);
+        self.syms.insert(
+            s,
+            SymInfo {
+                depth: self.depth(),
+                store: Store::Cell(c),
+                tdz,
+                is_const: true,
+                decl_end: u32::MAX,
+                switch_scoped: false,
+                name,
+            },
+        );
+        (s, c)
+    }
+
+    /// `this`: a derived constructor's binding (also from its arrows), checked for `super()`, or the frame's.
+    fn emit_this(&mut self) -> R<()> {
+        let Some(d) = self.fns.iter().rposition(|f| !f.is_arrow) else {
+            self.emit(Op::This);
+            return Ok(());
+        };
+        let Some(store) = self.fns[d].this_store else {
+            self.emit(Op::This);
+            return Ok(());
+        };
+        let name = self.atom("this");
+        if d == self.depth() {
+            match store {
+                Store::Cell(c) => self.emit(Op::GetCellChk(c, name)),
+                Store::Local(l) => self.emit(Op::GetLocalChk(l, name)),
+            };
+            return Ok(());
+        }
+        let u = self.resolve_this_upval(self.depth())?;
+        self.emit(Op::GetUpvalChk(u, name));
+        Ok(())
+    }
+
+    fn resolve_this_upval(&mut self, depth: usize) -> R<u32> {
+        if let Some(u) = self.fns[depth].this_upval {
+            return Ok(u);
+        }
+        let parent = depth - 1;
+        let cap = if self.fns[parent].is_arrow {
+            Capture::Upval(self.resolve_this_upval(parent)?)
+        } else {
+            match self.fns[parent].this_store {
+                Some(Store::Cell(c)) => Capture::Cell(c),
+                _ => {
+                    return Err(CompileError {
+                        kind: DiagnosticKind::ExecutionFailure,
+                        message: "internal: a captured this has no cell".into(),
+                        offset: Some(self.pos),
+                    });
+                }
+            }
+        };
+        let f = &mut self.fns[depth];
+        f.captures.push(cap);
+        let i = f.captures.len() as u32 - 1;
+        f.this_upval = Some(i);
+        Ok(i)
+    }
+
+    /// Before a class constructor's `return`: `[v] -> [result]` by the return rules.
+    fn ctor_result(&mut self) {
+        let class = self.f().class;
+        if class == 0 {
+            return;
+        }
+        match self.f().this_store {
+            Some(Store::Cell(c)) => self.emit(Op::GetCell(c)),
+            Some(Store::Local(l)) => self.emit(Op::GetLocal(l)),
+            None => self.emit(Op::This),
+        };
+        self.emit(Op::CtorReturn(class == CLASS_DERIVED));
+    }
+
+    fn class_declaration(&mut self, c: &'a Class<'a>) -> R<()> {
+        if c.body.body.iter().any(|m| !supported_member(m)) {
+            return self.compile_class(c, None);
+        }
+        self.compile_class(c, None)?;
+        match c.id.as_ref().and_then(|id| id.symbol_id.get()) {
+            Some(s) => self.store_symbol(s, BindMode::Init, c.span.start),
+            None => {
+                self.emit(Op::Pop);
+                Ok(())
+            }
+        }
+    }
+
+    /// A class definition, which leaves its constructor on the stack (see `classes.rs`). `name` is an anonymous
+    /// class's NamedEvaluation name.
+    fn compile_class(&mut self, c: &'a Class<'a>, name: Option<&str>) -> R<()> {
+        if let Some(m) = c.body.body.iter().find(|m| !supported_member(m)) {
+            return self.throw_syntax(class_syntax_name(m), m.span());
+        }
+        let saved_pos = self.pos;
+        self.pos = c.span.start;
+        // The class's own name inside it: an immutable binding, in its TDZ until the class is defined.
+        let mut restore = None;
+        let inner = match &c.id {
+            Some(id) => {
+                let (ps, cell) = self.pseudo_binding(id.name.as_str(), true);
+                self.emit(Op::NewCell(cell));
+                self.emit(Op::Uninit);
+                self.emit(Op::SetCell(cell));
+                if let Some(s) = id.symbol_id.get() {
+                    restore = Some((s, self.class_inner.insert(s, ps)));
+                }
+                Some(cell)
+            }
+            None => None,
+        };
+        // A computed field's key is evaluated once, in order, into a binding of its own.
+        for m in &c.body.body {
+            if let ClassElement::PropertyDefinition(p) = m
+                && p.computed
+            {
+                let (ps, cell) = self.pseudo_binding("%key", false);
+                self.emit(Op::NewCell(cell));
+                self.field_keys.insert(p.span.start, ps);
+            }
+        }
+        let heritage = c.heritage.as_ref().map(|h| &h.expression);
+        let derived = heritage.is_some();
+        if let Some(sc) = heritage {
+            self.expr(sc)?;
+        }
+        let ctor = c.body.body.iter().find_map(|m| match m {
+            ClassElement::MethodDefinition(d) if d.kind == MethodDefinitionKind::Constructor => {
+                Some(d)
+            }
+            _ => None,
+        });
+        let instance: Vec<&'a PropertyDefinition<'a>> = c
+            .body
+            .body
+            .iter()
+            .filter_map(|m| match m {
+                ClassElement::PropertyDefinition(p) if !p.r#static => Some(&**p),
+                _ => None,
+            })
+            .collect();
+        let statics: Vec<&'a PropertyDefinition<'a>> = c
+            .body
+            .body
+            .iter()
+            .filter_map(|m| match m {
+                ClassElement::PropertyDefinition(p) if p.r#static => Some(&**p),
+                _ => None,
+            })
+            .collect();
+        let class_name =
+            c.id.as_ref()
+                .map(|id| id.name.as_str())
+                .or(name)
+                .unwrap_or("");
+        let class = if derived { CLASS_DERIVED } else { CLASS_BASE };
+        let fields = !instance.is_empty();
+        let idx = match ctor {
+            Some(d) => {
+                let Some(body) = &d.value.body else {
+                    return Err(unsupported("Function declarations without a body", d.span));
+                };
+                self.compile_function(FnSpec {
+                    name: class_name,
+                    params: Some(&d.value.params),
+                    class,
+                    fields,
+                    method: true,
+                    body: FnBody::Block(body),
+                    scope: d.value.scope_id.get(),
+                    is_async: false,
+                    is_generator: false,
+                    is_arrow: false,
+                    self_sym: None,
+                })?
+            }
+            None => self.compile_function(FnSpec {
+                name: class_name,
+                params: None,
+                class,
+                fields,
+                method: true,
+                body: FnBody::DefaultCtor(c.span.start),
+                scope: None,
+                is_async: false,
+                is_generator: false,
+                is_arrow: false,
+                self_sym: None,
+            })?,
+        };
+        self.pos = c.span.start;
+        self.emit(Op::Closure(idx));
+        let at = heritage.map_or(c.span.start, |s| s.without_parentheses().span().start);
+        self.emit_at(at, Op::Class(derived));
+        for m in &c.body.body {
+            match m {
+                ClassElement::PropertyDefinition(p) if p.computed => {
+                    let Some(e) = p.key.as_expression() else {
+                        continue;
+                    };
+                    self.expr(e)?;
+                    self.emit_at(e.without_parentheses().span().start, Op::ToKey);
+                    if let Some(s) = self.field_keys.get(&p.span.start).copied() {
+                        self.store_symbol(s, BindMode::Init, p.span.start)?;
+                    }
+                }
+                ClassElement::MethodDefinition(d)
+                    if d.kind != MethodDefinitionKind::Constructor =>
+                {
+                    let key = if d.computed {
+                        let Some(e) = d.key.as_expression() else {
+                            continue;
+                        };
+                        self.expr(e)?;
+                        self.emit_at(e.without_parentheses().span().start, Op::ToKey);
+                        0
+                    } else {
+                        let k = static_key(&d.key, false).unwrap_or_default();
+                        self.atom(&k)
+                    };
+                    let kind = match d.kind {
+                        MethodDefinitionKind::Get => 4,
+                        MethodDefinitionKind::Set => 8,
+                        _ => 0,
+                    };
+                    let flags = u8::from(d.r#static) | if d.computed { 2 } else { 0 } | kind;
+                    self.pos = d.span.start;
+                    self.closure_for_method(&d.value, "")?;
+                    self.pos = d.span.start;
+                    self.emit(Op::DefineMethod(key, flags));
+                }
+                _ => {}
+            }
+        }
+        if fields {
+            let idx = self.compile_function(FnSpec {
+                name: "<instance_members_initializer>",
+                params: None,
+                class: 0,
+                fields: false,
+                method: true,
+                body: FnBody::Fields(instance, c.span.start),
+                scope: None,
+                is_async: false,
+                is_generator: false,
+                is_arrow: false,
+                self_sym: None,
+            })?;
+            self.pos = c.span.start;
+            self.emit(Op::Closure(idx));
+            self.emit(Op::SetFields);
+        }
+        self.pos = c.span.start;
+        self.emit(Op::Pop);
+        if let Some(cell) = inner {
+            self.emit(Op::Dup);
+            self.emit(Op::SetCell(cell));
+        }
+        if !statics.is_empty() {
+            let idx = self.compile_function(FnSpec {
+                name: "<static_initializer>",
+                params: None,
+                class: 0,
+                fields: false,
+                method: true,
+                body: FnBody::Fields(statics, c.span.start),
+                scope: None,
+                is_async: false,
+                is_generator: false,
+                is_arrow: false,
+                self_sym: None,
+            })?;
+            self.pos = c.span.start;
+            self.emit(Op::Dup);
+            self.emit(Op::Closure(idx));
+            self.emit(Op::InitStatic);
+            self.emit(Op::Pop);
+        }
+        if let Some((s, old)) = restore {
+            match old {
+                Some(o) => self.class_inner.insert(s, o),
+                None => self.class_inner.remove(&s),
+            };
+        }
+        self.pos = saved_pos;
+        Ok(())
+    }
+
+    /// A method's closure: a function that may use `super`.
+    fn closure_for_method(&mut self, f: &'a Function<'a>, name: &str) -> R<()> {
+        let Some(body) = &f.body else {
+            return Err(unsupported("Function declarations without a body", f.span));
+        };
+        let idx = self.compile_function(FnSpec {
+            name,
+            params: Some(&f.params),
+            class: 0,
+            fields: false,
+            method: true,
+            body: FnBody::Block(body),
+            scope: f.scope_id.get(),
+            is_async: f.r#async,
+            is_generator: f.generator,
+            is_arrow: false,
+            self_sym: None,
+        })?;
+        self.emit(Op::Closure(idx));
+        Ok(())
+    }
+
+    /// One field in a field initializer, `[this] -> [this]`.
+    fn class_field(&mut self, p: &'a PropertyDefinition<'a>) -> R<()> {
+        self.pos = p.span.start;
+        if let Some(s) = self.field_keys.get(&p.span.start).copied() {
+            self.load_symbol(s, p.span.start)?;
+            match &p.value {
+                Some(v) => {
+                    self.expr(v)?;
+                    if is_anonymous_fn(v) {
+                        self.emit_at(v.span().start, Op::NameByKey(0));
+                    }
+                }
+                None => {
+                    self.emit(Op::Undef);
+                }
+            }
+            self.pos = p.span.start;
+            self.emit(Op::DefineClassField(0, true));
+            return Ok(());
+        }
+        let name = static_key(&p.key, false).unwrap_or_default();
+        match &p.value {
+            Some(v) => self.expr_named(v, Some(&name))?,
+            None => {
+                self.emit(Op::Undef);
+            }
+        }
+        let a = self.atom(&name);
+        self.pos = p.span.start;
+        self.emit(Op::DefineClassField(a, false));
+        Ok(())
+    }
+
+    /// `super(...)` in a derived constructor.
+    fn super_call(&mut self, c: &'a CallExpression<'a>) -> R<()> {
+        if self.f().class != CLASS_DERIVED {
+            if self.f().is_arrow {
+                return self.throw_message(
+                    "super() inside an arrow function is not supported. Call super() directly in the constructor.",
+                    c.callee.span(),
+                );
+            }
+            return self.throw_syntax("Super", c.callee.span());
+        }
+        let argc = self.args(&c.arguments)?;
+        self.super_call_with(argc, c.span.start)
+    }
+
+    /// Constructs the parent with the arguments on the stack (an array when `argc` is `None`), binds `this`, then
+    /// defines the instance fields: `[...] -> [instance]`.
+    fn super_call_with(&mut self, argc: Option<u32>, at: u32) -> R<()> {
+        self.pos = at;
+        let nt = self.f().new_target;
+        self.emit(Op::SuperCall(argc.unwrap_or(u32::MAX), nt));
+        let Some(Store::Cell(c)) = self.f().this_store else {
+            return Ok(());
+        };
+        self.emit(Op::GetCell(c));
+        self.emit(Op::SuperBind);
+        self.emit(Op::Dup);
+        self.emit(Op::SetCell(c));
+        if self.f().fields {
+            self.emit(Op::Dup);
+            self.emit(Op::InitFields);
+            self.emit(Op::Pop);
+        }
+        Ok(())
+    }
+
+    /// An object literal's method or accessor: a method's closure, so it may use `super`.
+    fn object_method(&mut self, v: &'a Expression<'a>, name: &str) -> R<()> {
+        self.last_home = false;
+        match v {
+            Expression::FunctionExpression(f) => {
+                self.pos = f.span.start;
+                let Some(body) = &f.body else {
+                    return Err(unsupported("Function declarations without a body", f.span));
+                };
+                let own = f.id.as_ref().map_or(name, |id| id.name.as_str());
+                let idx = self.compile_function(FnSpec {
+                    name: own,
+                    params: Some(&f.params),
+                    class: 0,
+                    fields: false,
+                    method: true,
+                    body: FnBody::Block(body),
+                    scope: f.scope_id.get(),
+                    is_async: f.r#async,
+                    is_generator: f.generator,
+                    is_arrow: false,
+                    self_sym: None,
+                })?;
+                self.emit(Op::Closure(idx));
+                Ok(())
+            }
+            other => self.expr_named(other, Some(name)),
+        }
+    }
+
+    /// Gives the method just made the object `depth` below it as its home, when it uses `super`.
+    fn set_home(&mut self, depth: u32) {
+        if std::mem::take(&mut self.last_home) {
+            self.emit(Op::SetHome(depth));
+        }
+    }
+
+    /// Throws a SyntaxError of kind UnsupportedSyntax with this message when it runs.
+    fn throw_message(&mut self, message: &str, span: oxc_span::Span) -> R<()> {
+        self.throw_syntax(&format!("!{message}"), span)
+    }
+
+    /// Whether `super` here is in a method (through arrows), whose home object it reads.
+    fn in_method(&self) -> bool {
+        self.fns
+            .iter()
+            .rposition(|f| !f.is_arrow)
+            .is_some_and(|d| self.fns[d].method)
+    }
+
+    /// `super.x`'s base: pushes the home object and `this`. False, after the error, outside methods.
+    fn super_base(&mut self, at: oxc_span::Span) -> R<bool> {
+        let Some(d) = self.fns.iter().rposition(|f| !f.is_arrow) else {
+            self.throw_syntax("Super", at)?;
+            return Ok(false);
+        };
+        if !self.fns[d].method {
+            self.throw_syntax("Super", at)?;
+            return Ok(false);
+        }
+        for f in &mut self.fns[d..] {
+            f.home = true;
+        }
+        self.emit(Op::Home);
+        self.emit_this()?;
+        Ok(true)
+    }
+
+    /// `super.x` or `super[k]`'s base and key: `[home, this, (key)]`; false outside methods.
+    fn super_ref(&mut self, m: &'a MemberExpression<'a>) -> R<Option<(Atom, u8)>> {
+        if !self.super_base(m.object().span())? {
+            return Ok(None);
+        }
+        Ok(Some(match m {
+            MemberExpression::ComputedMemberExpression(c) => {
+                self.expr(&c.expression)?;
+                self.emit_at(c.expression.without_parentheses().span().start, Op::ToKey);
+                (0, 2)
+            }
+            MemberExpression::StaticMemberExpression(s) => (self.atom(s.property.name.as_str()), 0),
+            MemberExpression::PrivateFieldExpression(_) => (0, 0),
+        }))
+    }
+
+    /// `m` when it is a member of `super`.
+    fn super_member(m: Option<&'a MemberExpression<'a>>) -> Option<&'a MemberExpression<'a>> {
+        m.filter(|m| matches!(m.object(), Expression::Super(_)))
+    }
+
+    /// Reads `super.x` (`keep`: `[f, this]` for a call).
+    fn super_get(&mut self, m: &'a MemberExpression<'a>, keep: bool) -> R<()> {
+        let Some((a, flags)) = self.super_ref(m)? else {
+            return Ok(());
+        };
+        self.pos = m.span().start;
+        self.emit(Op::GetSuper(a, flags | u8::from(keep)));
+        Ok(())
+    }
+
+    /// Stores `[home, this, (key)]` in locals for a read-modify-write of `super.x`.
+    fn super_save(&mut self, flags: u8) -> Vec<u32> {
+        let n = if flags & 2 != 0 { 3 } else { 2 };
+        let locals: Vec<u32> = (0..n).map(|_| self.new_local()).collect();
+        for l in locals.iter().rev() {
+            self.emit(Op::SetLocal(*l));
+        }
+        locals
+    }
+
+    fn super_load(&mut self, locals: &[u32]) {
+        for l in locals {
+            self.emit(Op::GetLocal(*l));
+        }
+    }
+
+    /// `super.x = v`, `super.x op= v` and the logical assignments.
+    fn super_assign(
+        &mut self,
+        m: &'a MemberExpression<'a>,
+        a: &'a AssignmentExpression<'a>,
+    ) -> R<()> {
+        let Some((key, flags)) = self.super_ref(m)? else {
+            return Ok(());
+        };
+        let at = m.span().start;
+        if a.operator == AssignmentOperator::Assign {
+            self.expr(&a.right)?;
+            self.pos = at;
+            self.emit(Op::PutSuper(key, flags));
+            return Ok(());
+        }
+        let base = self.super_save(flags);
+        self.super_load(&base);
+        self.pos = at;
+        self.emit(Op::GetSuper(key, flags));
+        let logical = match a.operator {
+            AssignmentOperator::LogicalAnd => Some(Op::JumpIfFalseKeep(0)),
+            AssignmentOperator::LogicalOr => Some(Op::JumpIfTrueKeep(0)),
+            AssignmentOperator::LogicalNullish => Some(Op::JumpIfNotNullishKeep(0)),
+            _ => None,
+        };
+        let v = self.new_local();
+        if let Some(jop) = logical {
+            let j = self.emit(jop);
+            self.expr(&a.right)?;
+            self.emit(Op::SetLocal(v));
+            self.super_load(&base);
+            self.emit(Op::GetLocal(v));
+            self.pos = at;
+            self.emit(Op::PutSuper(key, flags));
+            self.patch(j);
+            return Ok(());
+        }
+        self.expr(&a.right)?;
+        self.pos = a.span.start;
+        self.emit(compound_op(a.operator));
+        self.emit(Op::SetLocal(v));
+        self.super_load(&base);
+        self.emit(Op::GetLocal(v));
+        self.pos = at;
+        self.emit(Op::PutSuper(key, flags));
+        Ok(())
+    }
+
+    /// `super.x++` and the like.
+    fn super_update(&mut self, m: &'a MemberExpression<'a>, u: &'a UpdateExpression<'a>) -> R<()> {
+        let Some((key, flags)) = self.super_ref(m)? else {
+            return Ok(());
+        };
+        let at = m.span().start;
+        let base = self.super_save(flags);
+        self.super_load(&base);
+        self.pos = at;
+        self.emit(Op::GetSuper(key, flags));
+        self.emit(Op::ToNumeric);
+        let old = self.new_local();
+        if !u.prefix {
+            self.emit(Op::Dup);
+            self.emit(Op::SetLocal(old));
+        }
+        self.pos = u.span.start;
+        self.emit(if u.operator == UpdateOperator::Increment {
+            Op::Inc
+        } else {
+            Op::Dec
+        });
+        let v = self.new_local();
+        self.emit(Op::SetLocal(v));
+        self.super_load(&base);
+        self.emit(Op::GetLocal(v));
+        self.pos = at;
+        self.emit(Op::PutSuper(key, flags));
+        if !u.prefix {
+            self.emit(Op::Pop);
+            self.emit(Op::GetLocal(old));
+        }
+        Ok(())
+    }
+
+    /// `delete super.x`: evaluates the reference, then throws.
+    fn super_delete(&mut self, m: &'a MemberExpression<'a>) -> R<()> {
+        if self.super_ref(m)?.is_none() {
+            return Ok(());
+        }
+        let msg = self.str_const("Unsupported reference to 'super'.");
+        self.pos = m.span().start;
+        self.emit(Op::ThrowReference(msg));
+        Ok(())
+    }
+
+    /// A destructuring target `super.x`, which is not supported.
+    fn super_target(&mut self, at: oxc_span::Span) -> R<()> {
+        if self.in_method() {
+            return self.throw_message("Destructuring into super.x is not supported.", at);
+        }
+        self.throw_syntax("Super", at)
     }
 }

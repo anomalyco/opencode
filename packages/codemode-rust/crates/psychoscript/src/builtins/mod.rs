@@ -215,7 +215,7 @@ impl Vm {
 
     // Inlined as `method` is.
     #[inline(always)]
-    fn constant(&mut self, target: Id, name: &'static str, v: Value) {
+    pub(crate) fn constant(&mut self, target: Id, name: &'static str, v: Value) {
         let key = self.atoms.intern_static(name);
         self.heap[target as usize].props.insert(key, v, FIXED);
     }
@@ -304,6 +304,14 @@ impl Vm {
         self.realm.iter_proto = self.plain(object_proto);
         let ip = self.realm.iter_proto;
         self.realm.generator_proto = self.plain(ip);
+        // %GeneratorPrototype%'s `constructor` is %GeneratorFunction.prototype%, read-only, before its methods.
+        let fp = self.realm.function_proto;
+        let gfp = self.alloc(Obj::new(Some(fp), Kind::Ordinary));
+        self.realm.generator_function_proto = gfp;
+        let (gp, ck) = (self.realm.generator_proto, self.names.constructor);
+        self.heap[gp as usize]
+            .props
+            .push_new(ck, Value::Obj(gfp), 0);
         let values = self.native_fn("argumentsValues", 0, arguments_values, Value::Undef);
         self.realm.arguments_values = values.as_obj().unwrap_or(0);
 
@@ -529,6 +537,9 @@ fn accessors(vm: &mut Vm, proto: Id, names: &[&'static str]) {
 
 /// The error for reading an accessor of `this`, which is not the kind the accessor belongs to.
 pub fn accessor_error(vm: &mut Vm, this: Id, key: Atom) -> Value {
+    if std::mem::take(&mut vm.restricted_hit) {
+        return object::restricted(vm, Value::Undef, &[], 0).unwrap_err();
+    }
     let (pk, nk) = (vm.names.constructor, vm.names.name);
     let mut owner = Some(this);
     while let Some(o) = owner {

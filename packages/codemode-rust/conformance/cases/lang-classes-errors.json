@@ -1,0 +1,153 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      "threw",
+      "TypeError",
+      "Cannot define property f."
+    ],
+    [
+      "threw",
+      "ReferenceError",
+      "Must call super constructor in derived class before accessing 'this' or returning from derived constructor"
+    ],
+    [
+      "threw",
+      "ReferenceError",
+      "Must call super constructor in derived class before accessing 'this' or returning from derived constructor"
+    ],
+    [
+      "threw",
+      "ReferenceError",
+      "Must call super constructor in derived class before accessing 'this' or returning from derived constructor"
+    ],
+    [
+      "threw",
+      "ReferenceError",
+      "Super constructor may only be called once"
+    ],
+    [
+      "threw",
+      "TypeError",
+      "Derived constructors may only return object or undefined"
+    ],
+    [
+      "threw",
+      "TypeError",
+      "Classes extending null are not supported."
+    ],
+    [
+      "threw",
+      "TypeError",
+      "Class extends value a number is not a constructor or null."
+    ],
+    [
+      "threw",
+      "TypeError",
+      "Class extends value a function is not a constructor or null."
+    ],
+    [
+      "threw",
+      "SyntaxError",
+      "Private class members (#name) are not supported. Use a regular property instead."
+    ],
+    [
+      "threw",
+      "SyntaxError",
+      "Private class members (#name) are not supported. Use a regular property instead."
+    ],
+    [
+      "threw",
+      "SyntaxError",
+      "Class static blocks are not supported. Assign static fields instead."
+    ],
+    [
+      "threw",
+      "SyntaxError",
+      "new.target is not supported."
+    ],
+    [
+      "threw",
+      "TypeError",
+      "f is not a constructor: only classes can be constructed with new. Use a class, or call it as a function that returns an object."
+    ],
+    [
+      "threw",
+      "TypeError",
+      "Class constructor A cannot be invoked without 'new'"
+    ],
+    [
+      "threw",
+      "TypeError",
+      "Extending the built-in Map is not supported. Only classes and Error types can be extended."
+    ],
+    [
+      "threw",
+      "ReferenceError",
+      "Must call super constructor in derived class before accessing 'this' or returning from derived constructor"
+    ],
+    [
+      "threw",
+      "ReferenceError",
+      "Super constructor may only be called once"
+    ],
+    [
+      "threw",
+      "SyntaxError",
+      "super() inside an arrow function is not supported. Call super() directly in the constructor."
+    ],
+    [
+      "threw",
+      "SyntaxError",
+      "Destructuring into super.x is not supported."
+    ],
+    [
+      "threw",
+      "TypeError",
+      "Classes may not have a static property named 'prototype'."
+    ],
+    [
+      "threw",
+      "TypeError",
+      "Extending the built-in Map is not supported. Only classes and Error types can be extended."
+    ],
+    [
+      "threw",
+      "TypeError",
+      "Extending the built-in Set is not supported. Only classes and Error types can be extended."
+    ],
+    [
+      "threw",
+      "TypeError",
+      "Extending the built-in Promise is not supported. Only classes and Error types can be extended."
+    ],
+    [
+      "threw",
+      "TypeError",
+      "Extending the built-in Date is not supported. Only classes and Error types can be extended."
+    ],
+    [
+      "threw",
+      "TypeError",
+      "Extending the built-in RegExp is not supported. Only classes and Error types can be extended."
+    ],
+    [
+      "threw",
+      "TypeError",
+      "Extending the built-in URL is not supported. Only classes and Error types can be extended."
+    ],
+    [
+      "threw",
+      "TypeError",
+      "Extending the built-in Array is not supported. Only classes and Error types can be extended."
+    ],
+    [
+      "threw",
+      "TypeError",
+      "Extending the built-in Object is not supported. Only classes and Error types can be extended."
+    ]
+  ],
+  "logs": [],
+  "metadata": null
+}

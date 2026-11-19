@@ -1,7 +1,7 @@
 {
   "bindings": {},
-  "ok": false,
-  "kind": "UnsupportedSyntax",
+  "ok": true,
+  "value": {},
   "logs": [],
   "metadata": null
 }

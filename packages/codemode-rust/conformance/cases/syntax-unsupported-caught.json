@@ -2,11 +2,7 @@
   "bindings": {},
   "ok": true,
   "value": [
-    [
-      "SyntaxError",
-      true,
-      "Syntax 'ClassDeclaration' is not supported"
-    ],
+    null,
     [
       "SyntaxError",
       true,
@@ -20,17 +16,13 @@
     [
       "SyntaxError",
       true,
-      "Syntax 'MetaProperty' is not supported"
+      "new"
     ],
+    null,
     [
-      "SyntaxError",
-      true,
-      "Syntax 'ClassExpression' is not supported"
-    ],
-    [
-      "SyntaxError",
-      true,
-      "Syntax 'Super' is not supported"
+      "TypeError",
+      false,
+      "The called value is not a function"
     ]
   ],
   "logs": [

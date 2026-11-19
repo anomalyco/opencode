@@ -86,6 +86,8 @@ fn run_here(code: &str, timeout_ms: u64) -> Run {
             proto,
             upvals: Arc::from(Vec::new()),
             this: Value::Undef,
+            home: Value::Undef,
+            fields: Value::Undef,
         })),
     )));
     match vm.call(&main, Value::Undef, &[]) {

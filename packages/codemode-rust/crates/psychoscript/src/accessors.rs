@@ -95,7 +95,14 @@ impl Vm {
     pub(crate) fn is_companion(&self, v: &Value) -> bool {
         matches!(v, Value::Obj(id) if matches!(&self.heap[*id as usize].kind,
             Kind::Native { f, .. } if std::ptr::fn_addr_eq(*f, companion_get as crate::vm::NativeFn)
-                || std::ptr::fn_addr_eq(*f, companion_set as crate::vm::NativeFn)))
+                || std::ptr::fn_addr_eq(*f, companion_set as crate::vm::NativeFn)
+                || std::ptr::fn_addr_eq(*f, crate::builtins::object::restricted as crate::vm::NativeFn)))
+    }
+
+    /// Whether `v` is a half of `Function.prototype`'s `caller` or `arguments`, which always throws.
+    pub(crate) fn is_restricted(&self, v: &Value) -> bool {
+        matches!(v, Value::Obj(id) if matches!(&self.heap[*id as usize].kind,
+            Kind::Native { f, .. } if std::ptr::fn_addr_eq(*f, crate::builtins::object::restricted as crate::vm::NativeFn)))
     }
 
     /// Whether an accessor half is a program function, which only program code may call.
@@ -116,6 +123,10 @@ impl Vm {
         let a = self.pair(pair);
         if let Value::Undef = a.get {
             return Value::Undef;
+        }
+        if self.is_restricted(&a.get) {
+            self.restricted_hit = true;
+            return Value::Uninit;
         }
         if self.is_companion(&a.get) {
             return self.companion_value(receiver, key);
@@ -158,7 +169,7 @@ impl Vm {
 
     /// The value a built-in accessor's getter gives `receiver`, or `Uninit` for a receiver of another kind (which a
     /// read turns into `accessor_error`).
-    fn companion_value(&mut self, receiver: Value, key: Atom) -> Value {
+    pub(crate) fn companion_value(&mut self, receiver: Value, key: Atom) -> Value {
         let Value::Obj(id) = receiver else {
             return Value::Uninit;
         };
@@ -291,6 +302,7 @@ impl Vm {
         self.op_access = true;
         let v = self.get_obj(id, key);
         self.op_access = outer;
+        self.restricted_hit = false;
         match self.getter_hit.take() {
             Some(_) => Value::Undef,
             None => v,
@@ -454,25 +466,34 @@ impl Vm {
     /// which the reference reads in program code: a program getter is called here, inline, to completion. A getter
     /// read this way cannot park or suspend the run.
     pub(crate) fn get_calling(&mut self, id: Id, key: Atom) -> Res {
+        // Restored after, for the instruction whose read this is part of (a key's conversion).
+        let outer = self.op_access;
         self.op_access = true;
         let v = self.get_obj(id, key);
         self.op_access = false;
-        match self.getter_hit.take() {
+        let r = match self.getter_hit.take() {
             Some(g) => self.call(&g, Value::Obj(id), &[]),
             None => Ok(v),
-        }
+        };
+        self.op_access = outer;
+        r
     }
 
     /// `get_calling` for any value: a primitive's read through its prototype, an object's own.
     pub(crate) fn get_calling_value(&mut self, v: &Value, key: Atom) -> Res {
+        let outer = self.op_access;
         self.op_access = true;
         let r = self.get(v, key);
         self.op_access = false;
-        let x = r?;
-        match self.getter_hit.take() {
-            Some(g) => self.call(&g, *v, &[]),
-            None => Ok(x),
-        }
+        let r = match r {
+            Err(e) => Err(e),
+            Ok(x) => match self.getter_hit.take() {
+                Some(g) => self.call(&g, *v, &[]),
+                None => Ok(x),
+            },
+        };
+        self.op_access = outer;
+        r
     }
 
     /// Whether `id`'s chain has a program getter for `key` first, which `get_calling` would call.
@@ -807,6 +828,10 @@ impl Vm {
             _ => {}
         }
         let is_array = matches!(self.heap[id as usize].kind, Kind::Array(_));
+        let is_fn = matches!(
+            self.heap[id as usize].kind,
+            Kind::Closure(_) | Kind::Native { .. }
+        );
         out.extend(leading.iter().copied());
         let props = &self.heap[id as usize].props;
         let mut ints = Vec::new();
@@ -828,7 +853,14 @@ impl Vm {
             }
         }
         ints.sort_unstable_by_key(|(i, _)| *i);
+        // A function's integer keys come before its `length` and `name`.
+        if is_fn {
+            out.truncate(out.len() - leading.len());
+        }
         out.extend(ints.into_iter().map(|(_, k)| k));
+        if is_fn {
+            out.extend(leading.iter().copied());
+        }
         out.extend(strs);
         out.extend(syms);
         out

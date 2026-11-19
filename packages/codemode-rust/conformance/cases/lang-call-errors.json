@@ -15,7 +15,7 @@
     "onThis": "TypeError: The called value is not a function.",
     "builtin": "TypeError: Math.nope is not a function.",
     "newValue": "TypeError: o.a is not a constructor.",
-    "newArrow": "TypeError: The called value cannot be constructed: user-defined constructors and classes are not supported. Call it as a function that returns a plain object instead.",
+    "newArrow": "TypeError: The called value is not a constructor: only classes can be constructed with new. Use a class, or call it as a function that returns an object.",
     "newBuiltin": "TypeError: new Math.max(...) is not supported; call Math.max(...) without new instead.",
     "receivers": [
       "TypeError: Function.prototype.call called on incompatible receiver a number.",

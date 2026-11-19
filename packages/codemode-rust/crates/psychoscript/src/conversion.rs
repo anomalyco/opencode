@@ -442,10 +442,27 @@ impl Vm {
                 Value::Num(if extra2 == 0 { x + 1.0 } else { x - 1.0 })
             }
             TO_STR => Value::Str(self.string_of(&a)?),
-            GET_ELEM => self.get_elem(&a, &b)?,
-            SET_ELEM => {
-                self.check_assignment(&a, &c)?;
+            // A program getter or setter the access meets is handed back for the convert frame to call (`run_op`).
+            // A nullish base fails before its key converts.
+            GET_ELEM if a.is_nullish() => self.get_elem(&a, &b)?,
+            SET_ELEM if a.is_nullish() => {
                 self.set_elem(&a, &b, c)?;
+                c
+            }
+            GET_ELEM => {
+                let k = self.key_of(&b)?;
+                self.op_access = true;
+                let v = self.get(&a, k);
+                self.op_access = false;
+                v?
+            }
+            SET_ELEM => {
+                let k = self.key_of(&b)?;
+                self.check_assignment_at(&a, k, &c)?;
+                self.op_access = true;
+                let r = self.set(&a, k, c);
+                self.op_access = false;
+                r?;
                 c
             }
             DEL_ELEM => {
@@ -834,10 +851,23 @@ fn run_op(vm: &mut Vm, fr: Frame) -> Result<Step, Value> {
     let r = vm.op_slow(code, a, b, c, extra, extra2);
     vm.convert_ok = false;
     if vm.convert_req.is_some() {
+        vm.getter_hit = None;
+        vm.setter_hit = None;
         return convert_next(vm, fr);
     }
     vm.end_replay(false);
-    finish_op(vm, fr, code, r?, extra, extra2)
+    let v = r?;
+    // The element read or written is a program accessor's: its call's outcome is the instruction's.
+    if let Some(g) = vm.getter_hit.take() {
+        fr.set_index(vm, PHASE, WAITING);
+        return fr.call_slots(vm, Slot::pack(g), Slot::pack(a), []);
+    }
+    if let Some(s) = vm.setter_hit.take() {
+        fr.set_index(vm, PHASE, WAITING);
+        vm.enter_setter(s, a, c)?;
+        return Ok(Step::Pushed);
+    }
+    finish_op(vm, fr, code, v, extra, extra2)
 }
 
 /// Hands an operation's result back as its instruction does.

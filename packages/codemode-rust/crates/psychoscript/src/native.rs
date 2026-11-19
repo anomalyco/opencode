@@ -153,6 +153,8 @@ pub fn proto() -> FuncProto {
         is_generator: false,
         is_arrow: false,
         is_program: false,
+        class: 0,
+        home: false,
         needs_extra: false,
         callees: Vec::new(),
         sites: Vec::new(),

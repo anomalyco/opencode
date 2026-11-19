@@ -46,16 +46,15 @@ pub fn setup(vm: &mut Vm) {
         op,
         &[
             ("hasOwnProperty", 1, proto_has_own_property),
+            ("isPrototypeOf", 1, proto_is_prototype_of),
+            ("propertyIsEnumerable", 1, proto_property_is_enumerable),
             ("toString", 0, proto_to_string),
             ("toLocaleString", 0, proto_to_locale_string),
             ("valueOf", 0, proto_value_of),
-            ("isPrototypeOf", 1, proto_is_prototype_of),
-            ("propertyIsEnumerable", 1, proto_property_is_enumerable),
         ],
     );
 
     let fp = vm.realm.function_proto;
-    vm.ctor("Function", 1, function_ctor, fp, Value::Undef);
     vm.methods(
         fp,
         &[
@@ -64,6 +63,21 @@ pub fn setup(vm: &mut Vm) {
             ("bind", 1, function_bind),
         ],
     );
+    // AddRestrictedFunctionProperties: functions have no `caller` or `arguments` of their own. Each half is a native
+    // of its own, which built-ins read without running program code.
+    for (key, get, set) in [
+        ("caller", "get caller", "set caller"),
+        ("arguments", "get arguments", "set arguments"),
+    ] {
+        let g = vm.native_fn(get, 0, restricted, Value::Undef);
+        let s = vm.native_fn(set, 1, restricted, Value::Undef);
+        let pair = vm.new_pair(g, s);
+        let k = vm.atoms.intern_static(key);
+        vm.heap[fp as usize].props.push_new(k, pair, ACCESSOR);
+    }
+    // So a write to a function's `caller` or `arguments` finds the accessor (see `Vm::inherited_accessor`).
+    vm.heap[fp as usize].flags |= ACCESSORS;
+    vm.ctor("Function", 1, function_ctor, fp, Value::Undef);
 
     let errors = [
         ("Error", vm.realm.error_proto),
@@ -81,6 +95,10 @@ pub fn setup(vm: &mut Vm) {
         } else {
             error_ctor
         };
+        // `name` and `message` come before `constructor`, as the reference defines them.
+        let (n, m) = (vm.static_str(name), vm.static_str(""));
+        vm.define_hidden(proto, nk, n);
+        vm.define_hidden(proto, mk, m);
         let c = vm.ctor(name, 1, f, proto, Value::Obj(proto));
         if name == "Error" {
             error_ctor_id = c;
@@ -88,18 +106,15 @@ pub fn setup(vm: &mut Vm) {
         } else {
             vm.heap[c as usize].proto = Some(error_ctor_id);
         }
-        let (n, m) = (vm.static_str(name), vm.static_str(""));
-        vm.define_hidden(proto, nk, n);
-        vm.define_hidden(proto, mk, m);
     }
     for name in ["EvalError", "URIError"] {
         let ep = vm.realm.error_proto;
         let proto = vm.plain(ep);
-        let c = vm.ctor(name, 1, error_ctor, proto, Value::Obj(proto));
-        vm.heap[c as usize].proto = Some(error_ctor_id);
         let (n, m) = (vm.static_str(name), vm.static_str(""));
         vm.define_hidden(proto, nk, n);
         vm.define_hidden(proto, mk, m);
+        let c = vm.ctor(name, 1, error_ctor, proto, Value::Obj(proto));
+        vm.heap[c as usize].proto = Some(error_ctor_id);
         if name == "URIError" {
             vm.realm.std.uri_error = proto;
         }
@@ -118,14 +133,16 @@ pub fn setup(vm: &mut Vm) {
     );
 
     let sp = vm.realm.symbol_proto;
-    let symbol = vm.ctor("Symbol", 0, symbol_ctor, sp, Value::Undef);
     // `Symbol` is neither a callback nor a constructor: `new Symbol()` asks for a call instead, as the reference does.
+    // It has no `prototype`: a symbol's members are not reachable.
+    let symbol = vm
+        .native_fn("Symbol", 0, symbol_ctor, Value::Undef)
+        .as_obj()
+        .unwrap_or(0);
+    vm.global("Symbol", Value::Obj(symbol));
     vm.heap[symbol as usize].flags |= NOT_CALLBACK;
-    if let Kind::Native { ctor, .. } = &mut vm.heap[symbol as usize].kind {
-        *ctor = false;
-    }
-    vm.constant(symbol, "iterator", Value::Sym(0));
     vm.constant(symbol, "asyncIterator", Value::Sym(1));
+    vm.constant(symbol, "iterator", Value::Sym(0));
     vm.methods(sp, &[("toString", 0, symbol_to_string)]);
 
     let json = vm.new_object();
@@ -997,11 +1014,28 @@ fn make_error_from(vm: &mut Vm, proto: Id, message: &Value, options: &Value) -> 
     Ok(Value::Obj(id))
 }
 
+/// The prototype a constructed error gets: its type's, or for `super(...)` in a class its new target's own
+/// `prototype` (the reference's `prototypeFrom`).
+fn error_proto(vm: &mut Vm, callee: Id, fallback: Id) -> Id {
+    let proto = vm.native_data(callee).as_obj().unwrap_or(fallback);
+    let Some(nt) = vm.new_target.take() else {
+        return proto;
+    };
+    match vm.heap[nt as usize].props.prop(vm.names.prototype) {
+        Some(p) if p.flags & ACCESSOR == 0 => p.value.as_obj().unwrap_or(proto),
+        _ => proto,
+    }
+}
+
+/// Whether `id` is an error type's constructor, which a class may extend.
+pub(crate) fn is_error_ctor(vm: &Vm, id: Id) -> bool {
+    matches!(&vm.heap[id as usize].kind, Kind::Native { f, .. }
+        if std::ptr::fn_addr_eq(*f, error_ctor as crate::vm::NativeFn)
+            || std::ptr::fn_addr_eq(*f, aggregate_error_ctor as crate::vm::NativeFn))
+}
+
 fn error_ctor(vm: &mut Vm, _this: Value, args: &[Value], callee: Id) -> Res {
-    let proto = vm
-        .native_data(callee)
-        .as_obj()
-        .unwrap_or(vm.realm.error_proto);
+    let proto = error_proto(vm, callee, vm.realm.error_proto);
     let mut c = fuel::Conversions::default();
     let message = error_message(vm, &mut c, arg(args, 0))?;
     let r = make_error_from(vm, proto, &message, &arg(args, 1));
@@ -1018,10 +1052,7 @@ fn error_message(vm: &mut Vm, c: &mut fuel::Conversions, message: Value) -> Res 
 }
 
 fn aggregate_error_ctor(vm: &mut Vm, this: Value, args: &[Value], callee: Id) -> Res {
-    let proto = vm
-        .native_data(callee)
-        .as_obj()
-        .unwrap_or(vm.realm.aggregate_error_proto);
+    let proto = error_proto(vm, callee, vm.realm.aggregate_error_proto);
     let mut c = fuel::Conversions::default();
     let message = error_message(vm, &mut c, arg(args, 1))?;
     let e = make_error_from(vm, proto, &message, &arg(args, 2))?;
@@ -1664,4 +1695,11 @@ pub(crate) fn family_step(
         crate::accessors::SUB_SETTER => crate::accessors::setter_step(vm, fr, input),
         _ => Ok(crate::native::Step::Done(Value::Undef)),
     }
+}
+
+/// The halves of `Function.prototype`'s `caller` and `arguments`.
+pub(crate) fn restricted(vm: &mut Vm, _this: Value, _args: &[Value], _: Id) -> Res {
+    Err(vm.type_error(
+        "'caller' and 'arguments' are restricted function properties and cannot be accessed in this context.",
+    ))
 }

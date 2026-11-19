@@ -81,6 +81,42 @@ pub enum Op {
     DefineAccessor(Atom, bool),
     /// The same with a computed key, which is under the function.
     DefineAccessorElem(bool),
+    /// Names the anonymous function on top by the key under it (the reference's `SET_NAME` 1, 2 and 3): `0` the key,
+    /// `1` `get <key>`, `2` `set <key>`.
+    NameByKey(u8),
+    /// Classes. `Class(derived)` makes the constructor on top a class: `[ctor] -> [ctor, proto]`, or with a parent
+    /// `[parent, ctor] -> [ctor, proto]`.
+    Class(bool),
+    /// `[ctor, proto, (key), fn] -> [ctor, proto]`: a hidden method of the prototype, or of the constructor when
+    /// static. The flags: 1 static, 2 computed key, 4 getter, 8 setter.
+    DefineMethod(Atom, u8),
+    /// `[ctor, proto, fn] -> [ctor, proto]`: `fn` defines the class's instance fields.
+    SetFields,
+    /// `[this] -> [result]`: runs the running constructor's instance field initializer on `this`, when it has one.
+    InitFields,
+    /// `[ctor, fn] -> [result]`: runs a static field initializer with the constructor as `this`.
+    InitStatic,
+    /// `super(...)` in a derived constructor: constructs its parent for the new target in local `.1`, `[...args] ->
+    /// [instance]` with `.0` arguments, or `[argsArr] -> [instance]` when `.0` is `u32::MAX`.
+    SuperCall(u32, u32),
+    /// `[instance, this] -> [instance]`: fails unless the `this` binding is still unbound.
+    SuperBind,
+    /// `super.x`: `[home, this, (key)] -> [value]`, or `[value, this]` to call it. The flags: 1 keep the receiver,
+    /// 2 computed key.
+    GetSuper(Atom, u8),
+    /// `super.x = v`: `[home, this, (key), v] -> [v]`. The flags: 2 computed key.
+    PutSuper(Atom, u8),
+    /// Throws a ReferenceError with this message.
+    ThrowReference(u32),
+    /// An object literal method that uses `super` gets the object `.0` below it as its home: `[o, .., fn]`.
+    SetHome(u32),
+    /// The running method's home object.
+    Home,
+    /// A class constructor's result, `[v, this] -> [result]`: `v` if it is an object, else `this`; a derived
+    /// constructor (`true`) refuses any other value and an unbound `this`.
+    CtorReturn(bool),
+    /// A class field, `[o, (key), v] -> [o]` (key on the stack when `.1`): defined as data, or a TypeError.
+    DefineClassField(Atom, bool),
     NewObject,
     NewArray(u32),
     ArrayPush,
@@ -249,6 +285,9 @@ pub enum Capture {
     Upval(u32),
 }
 
+pub const CLASS_BASE: u8 = 1;
+pub const CLASS_DERIVED: u8 = 2;
+
 #[derive(Debug)]
 pub struct FuncProto {
     pub name: Atom,
@@ -263,6 +302,10 @@ pub struct FuncProto {
     pub is_generator: bool,
     pub is_arrow: bool,
     pub is_program: bool,
+    /// A class constructor: `CLASS_BASE` or `CLASS_DERIVED`, else 0. Only `new` may call it.
+    pub class: u8,
+    /// An arrow that reads its method's home object (`super`): it takes it when it is made.
+    pub home: bool,
     /// Keeps arguments beyond `nparams` for rest parameters and `arguments`.
     pub needs_extra: bool,
     /// How each call or `new` names its callee in errors (`o.f`, `f(...)`), by the instruction's index, ascending.

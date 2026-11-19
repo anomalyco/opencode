@@ -1,0 +1,320 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      1,
+      2,
+      "B",
+      "Named",
+      true,
+      "function"
+    ],
+    [
+      1,
+      2,
+      {
+        "x": 1,
+        "y": 2
+      },
+      2,
+      "Point"
+    ],
+    [
+      {
+        "other": true
+      },
+      {
+        "a": 1
+      }
+    ],
+    [
+      3,
+      "Counter",
+      "inc",
+      "make"
+    ],
+    [
+      [
+        "a"
+      ],
+      "{\"a\":1}",
+      [
+        "a"
+      ],
+      [],
+      [],
+      false,
+      true
+    ],
+    [
+      true,
+      "Class constructor A cannot be invoked without 'new'",
+      true,
+      true
+    ],
+    [
+      true,
+      false,
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      "function"
+    ],
+    [
+      true,
+      2
+    ],
+    [
+      "a1",
+      "b2",
+      "C",
+      {
+        "x": 1,
+        "y": 2
+      },
+      true,
+      true,
+      true,
+      true,
+      "C"
+    ],
+    [
+      true,
+      true,
+      false,
+      true,
+      false
+    ],
+    [
+      "t",
+      "t"
+    ],
+    [
+      [
+        10,
+        2,
+        3
+      ],
+      [
+        4,
+        5
+      ],
+      0
+    ],
+    [
+      "B>A.m1!",
+      "B>A.g!",
+      "A:v+",
+      "proto-dataA.m2!",
+      "B>A.smB",
+      "B>A.sg"
+    ],
+    [
+      3,
+      [
+        "x"
+      ]
+    ],
+    [
+      1,
+      2,
+      3,
+      26,
+      7,
+      26,
+      25,
+      "ReferenceError"
+    ],
+    "C",
+    [
+      true,
+      false,
+      true,
+      true
+    ],
+    [
+      [
+        "A11",
+        "A12"
+      ],
+      "A1",
+      1
+    ],
+    [
+      "B.before",
+      "A.field",
+      "A.ctor",
+      "B.field:2",
+      "B.after:4",
+      "C.field"
+    ],
+    [
+      {
+        "other": true
+      },
+      {
+        "early": true
+      },
+      true,
+      {
+        "replaced": 1,
+        "mine": 2
+      }
+    ],
+    [
+      1,
+      true,
+      "LB",
+      [],
+      false
+    ],
+    [
+      [
+        1,
+        2
+      ],
+      "agg",
+      "AggregateError",
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      "NotFound",
+      "NotFound: x",
+      404,
+      "why",
+      true,
+      false,
+      "Got: z",
+      ""
+    ],
+    [
+      true,
+      "m"
+    ],
+    {
+      "name": "E",
+      "message": "x"
+    },
+    {
+      "name": "Error",
+      "message": "x"
+    },
+    [
+      "{\"name\":\"Error\",\"message\":\"x\"}",
+      "{\"name\":\"Error\",\"message\":\"x\"}"
+    ],
+    [
+      "{\"x\":1}",
+      {
+        "x": 1
+      },
+      true,
+      false,
+      "undefined"
+    ],
+    [
+      true,
+      true,
+      true,
+      "m",
+      "Error",
+      "Error: m",
+      "[object Error]",
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      "m",
+      "TypeError",
+      "TypeError: m",
+      "[object Error]",
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      "m",
+      "RangeError",
+      "RangeError: m",
+      "[object Error]",
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      "m",
+      "SyntaxError",
+      "SyntaxError: m",
+      "[object Error]",
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      "m",
+      "ReferenceError",
+      "ReferenceError: m",
+      "[object Error]",
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      "m",
+      "EvalError",
+      "EvalError: m",
+      "[object Error]",
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      "m",
+      "URIError",
+      "URIError: m",
+      "[object Error]",
+      true,
+      true
+    ],
+    [
+      7,
+      8,
+      true,
+      true,
+      [
+        "v"
+      ]
+    ],
+    1
+  ],
+  "logs": [
+    "Cache {\"size\":2}",
+    "Empty {}",
+    "Lru {\"size\":2,\"hits\":0}",
+    "[Empty {},{\"c\":Cache {\"size\":2}}]",
+    "[class Cache] [class Lru extends Cache] [class (anonymous)]",
+    "E: bad",
+    "{\"a\":1}"
+  ],
+  "metadata": null
+}

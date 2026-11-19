@@ -11,6 +11,7 @@
 mod accessors;
 mod builtins;
 mod bytecode;
+mod classes;
 mod collector;
 mod compiler;
 mod conversion;

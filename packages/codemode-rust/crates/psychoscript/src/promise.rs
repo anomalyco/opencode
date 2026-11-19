@@ -590,15 +590,19 @@ impl Vm {
         let f = self.native_fn("[Symbol.asyncIterator]", 0, async_iter_self, Value::Undef);
         self.define_hidden(aip, SYM_ASYNC_ITERATOR, f);
         let agp = self.alloc(Obj::new(Some(aip), Kind::Ordinary));
+        let fp = self.realm.function_proto;
+        let agfp = self.alloc(Obj::new(Some(fp), Kind::Ordinary));
+        self.realm.async_generator_function_proto = agfp;
+        let ck = self.names.constructor;
+        self.heap[agp as usize]
+            .props
+            .push_new(ck, Value::Obj(agfp), 0);
         self.method(agp, "next", 1, async_gen_next);
         self.method(agp, "return", 1, async_gen_return);
         self.method(agp, "throw", 1, async_gen_throw);
         self.realm.async_generator_proto = agp;
         self.realm.async_from_sync_proto = self.alloc(Obj::new(Some(aip), Kind::Ordinary));
-        let fp = self.realm.function_proto;
-        self.realm.generator_function_proto = self.alloc(Obj::new(Some(fp), Kind::Ordinary));
         self.realm.async_function_proto = self.alloc(Obj::new(Some(fp), Kind::Ordinary));
-        self.realm.async_generator_function_proto = self.alloc(Obj::new(Some(fp), Kind::Ordinary));
         // Each generator function's default `prototype`'s prototype, read-only as the reference's.
         let pk = self.names.prototype;
         let (gfp, gp) = (

@@ -332,6 +332,8 @@ impl<F: FnMut(Ref)> Tracer<'_, F> {
             }
             Kind::Closure(c) => {
                 self.val(&c.this);
+                self.val(&c.home);
+                self.val(&c.fields);
                 for cell in c.upvals.iter() {
                     (self.0)(Ref::Cell(*cell));
                 }

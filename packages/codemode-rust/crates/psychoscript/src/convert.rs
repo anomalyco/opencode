@@ -1542,7 +1542,16 @@ fn format_inner(vm: &mut Vm, out: &mut String, v: &Value, seen: &mut Vec<Id>) {
                     }
                     out.push(']');
                 }
+                Kind::Closure(c) if c.proto.class != 0 => {
+                    let s = vm.class_shown(id);
+                    out.push_str(&s);
+                }
                 Kind::Ordinary | Kind::Arguments(_) => {
+                    // An instance of a class shows its class's name first.
+                    if let Some(name) = vm.instance_class_name(id) {
+                        out.push_str(&name);
+                        out.push(' ');
+                    }
                     out.push('{');
                     for (i, (k, val)) in vm.shown_entries(id).into_iter().enumerate() {
                         if i > 0 {

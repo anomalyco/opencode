@@ -167,6 +167,8 @@ pub fn setup(vm: &mut Vm) {
     let proto = vm.plain(up);
     vm.realm.std.buffer = proto;
     let ctor = vm.ctor("Buffer", 2, buffer_call, proto, Value::Undef);
+    // Bun inherits this from Uint8Array; Buffer's constructor here does not.
+    vm.constant(ctor, "BYTES_PER_ELEMENT", Value::Num(1.0));
     vm.methods(
         ctor,
         &[
@@ -198,9 +200,6 @@ pub fn setup(vm: &mut Vm) {
             ("write", 4, b_write),
             ("fill", 4, b_fill),
             ("copy", 4, b_copy),
-            ("swap16", 0, b_swap16),
-            ("swap32", 0, b_swap32),
-            ("swap64", 0, b_swap64),
         ],
     );
     for (i, (name, ..)) in NUMERIC.iter().enumerate() {
@@ -208,6 +207,14 @@ pub fn setup(vm: &mut Vm) {
         let k = vm.atoms.intern_static(name);
         vm.define_hidden(proto, k, f);
     }
+    vm.methods(
+        proto,
+        &[
+            ("swap16", 0, b_swap16),
+            ("swap32", 0, b_swap32),
+            ("swap64", 0, b_swap64),
+        ],
+    );
 }
 
 fn wrap(vm: &mut Vm, data: Vec<u8>) -> Value {

@@ -183,6 +183,10 @@ pub struct Closure {
     pub proto: Arc<FuncProto>,
     pub upvals: Arc<[u32]>,
     pub this: Value,
+    /// [[HomeObject]]: the object a method was defined on, which `super` reads from; undefined for others.
+    pub home: Value,
+    /// A class constructor's instance field initializer, once its class has one.
+    pub fields: Value,
 }
 
 pub enum PromiseState {

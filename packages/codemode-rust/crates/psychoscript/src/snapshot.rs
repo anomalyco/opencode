@@ -545,7 +545,14 @@ impl Enc<'_> {
             Kind::Arguments(items) => json!(["g", vals(items)]),
             Kind::Closure(c) => {
                 let proto = self.proto(&c.proto)?;
-                json!(["c", proto, c.upvals.to_vec(), val(&c.this)])
+                json!([
+                    "c",
+                    proto,
+                    c.upvals.to_vec(),
+                    val(&c.this),
+                    val(&c.home),
+                    val(&c.fields)
+                ])
             }
             Kind::Native {
                 f,
@@ -1611,6 +1618,8 @@ impl Dec<'_> {
                     proto: p,
                     upvals: upvals.into(),
                     this: self.val(f(3)?)?,
+                    home: self.val(f(4)?)?,
+                    fields: self.val(f(5)?)?,
                 }))
             }
             "n" => {

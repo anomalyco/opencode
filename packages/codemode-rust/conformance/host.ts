@@ -344,6 +344,16 @@ const suspensions: Array<Entry> = [
     code: `let n = 0; const o = { get x() { return ++n }, set x(v) { n = v } }; o.x; await wait(); o.x = 10; return [o.x, Object.getOwnPropertyDescriptor(o, "x").get.name, Object.keys(o)]`,
     runId: "g",
   },
+  // Classes: a host call waited on in a constructor, field, static field, method, accessor, async or generator method,
+  // derived constructor or Error subclass, suspended and resumed.
+  { code: `class A { constructor(n) { this.v = double(wait()) + n } m() { return this.v + 1 } } const a = new A(1); return [a.v, a.m(), a instanceof A, Object.keys(a)]`, runId: "k", translate: wait },
+  { code: `class A { static scale = 2; a = 1; v = double(wait()) + this.a; w = this.v * A.scale; constructor() { this.after = this.w } } const a = new A(); return [a.v, a.w, a.after, Object.keys(a)]`, runId: "k", translate: wait },
+  { code: `class A { static v = double(wait()); static w = A.v + 1 } return [A.v, A.w]`, runId: "k", translate: wait },
+  { code: `class A { constructor() { this.base = 1 } m() { return this.base + double(wait()) } } return [new A().m()]`, runId: "k", translate: wait },
+  { code: `class A { constructor() { this.n = 20 } get v() { return double(wait()) + this.n } set w(x) { this.got = double(wait()) + x } } const a = new A(); a.w = 1; return [a.v, a.got]`, runId: "k", translate: wait },
+  { code: `class A { async load() { const v = await wait(); return v + 1 } *items() { yield 1; yield double(wait()); yield 3 } } const a = new A(); return [await a.load(), [...a.items()]]`, runId: "k", translate: wait },
+  { code: `class A { constructor(n) { this.v = double(wait()) + n } } class B extends A { constructor() { super(1); this.w = this.v + 1 } m() { return super.constructor.name + this.w } } const b = new B(); return [b.v, b.w, b.m(), b instanceof A]`, runId: "k", translate: wait },
+  { code: `class Base extends Error { name = "Base" } class NotFound extends Base { constructor(n) { super("missing", { cause: n }); this.code = double(wait()) } } try { throw new NotFound(3) } catch (e) { return [e instanceof NotFound, e.name, e.message, e.cause, e.code, String(e)] }`, runId: "k", translate: wait },
   // Limits are saved with the run.
   {
     code: `await wait(); console.log("x".repeat(20)); return "y".repeat(20)`,

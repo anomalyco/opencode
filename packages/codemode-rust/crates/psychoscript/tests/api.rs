@@ -95,30 +95,30 @@ fn host_arguments_and_results_are_copies() {
 
 #[test]
 fn unsupported_syntax_has_a_location() {
-    let d = run(&Runtime::make(), "const a = 1\nconst B = class {}")
-        .result
-        .unwrap_err();
+    let d = run(
+        &Runtime::make(),
+        "const a = 1\nconst B = class { static {} }",
+    )
+    .result
+    .unwrap_err();
     assert_eq!(d.kind, DiagnosticKind::UnsupportedSyntax);
-    assert_eq!(d.location, Some((2, 11)));
-    // As the reference reports it: the node type, then the orientation it also suggests (the streaming recording
-    // checks the message, not the suggestions).
+    assert_eq!(d.location, Some((2, 19)));
+    // As the reference reports it, with the orientation it also suggests (the streaming recording checks the
+    // message, not the suggestions).
     assert_eq!(d.suggestions.len(), 1);
     assert_eq!(
         d.message,
-        format!(
-            "SyntaxError: Syntax 'ClassExpression' is not supported. {} (line 2, col 11)",
-            d.suggestions[0]
-        )
+        "SyntaxError: Class static blocks are not supported. Assign static fields instead. (line 2, col 19)"
     );
     // Rethrown, it keeps them.
     let again = run(
         &Runtime::make(),
-        "let e; try { class A {} } catch (x) { e = x }\nthrow e",
+        "let e; try { class A { static {} } } catch (x) { e = x }\nthrow e",
     )
     .result
     .unwrap_err();
     assert_eq!(again.kind, DiagnosticKind::UnsupportedSyntax);
-    assert_eq!(again.location, Some((1, 14)));
+    assert_eq!(again.location, Some((1, 24)));
     assert_eq!(again.suggestions, d.suggestions);
 }
 

@@ -262,6 +262,9 @@ impl Vm {
                 "Cannot set property '{k}' of {d} which has only a getter."
             )));
         }
+        if self.is_restricted(&s) {
+            return crate::builtins::object::restricted(self, receiver, &[], 0).map(|_| ());
+        }
         if self.is_companion(&s) {
             let id = s.as_obj().unwrap_or(0);
             crate::accessors::companion_set(self, receiver, &[val], id)?;

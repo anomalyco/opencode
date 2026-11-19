@@ -260,6 +260,8 @@ pub fn call_main(vm: &mut Vm) {
             proto,
             upvals: Arc::from(Vec::new()),
             this: Value::Undef,
+            home: Value::Undef,
+            fields: Value::Undef,
         })),
     )));
     vm.resumable_run = true;

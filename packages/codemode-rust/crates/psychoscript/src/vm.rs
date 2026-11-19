@@ -316,6 +316,12 @@ pub struct Vm {
     pub(crate) setter_hit: Option<Value>,
     /// The `next` an iterator opened from native code was read as, for its record (see `Vm::record_next_of`).
     pub(crate) opened_next: Option<(Id, Value)>,
+    /// Set while `new` pushes a class constructor's frame, the one call a class constructor accepts.
+    pub(crate) constructing: bool,
+    /// A read reached `Function.prototype`'s restricted `caller` or `arguments` (see `accessor_error`).
+    pub(crate) restricted_hit: bool,
+    /// The new target of a built-in constructor `super(...)` calls: its instance's prototype is the target's.
+    pub(crate) new_target: Option<Id>,
     pub(crate) gc: crate::collector::Gc,
 }
 
@@ -407,6 +413,9 @@ impl Vm {
             getter_hit: None,
             setter_hit: None,
             opened_next: None,
+            constructing: false,
+            restricted_hit: false,
+            new_target: None,
             gc: crate::collector::Gc::new(),
         }
     }
@@ -617,7 +626,20 @@ impl Vm {
     fn unsupported_syntax(&mut self, kind: &str) -> Value {
         let p = self.realm.syntax_error_proto;
         let help = crate::compiler::SUPPORTED_SYNTAX;
-        let msg = format!("Syntax '{kind}' is not supported. {help}");
+        // The reference's messages for the features that have one, and a message of its own after `!`.
+        let msg = match kind {
+            "PrivateIdentifier" => {
+                "Private class members (#name) are not supported. Use a regular property instead."
+                    .to_owned()
+            }
+            "StaticBlock" => {
+                "Class static blocks are not supported. Assign static fields instead.".to_owned()
+            }
+            "MetaProperty" => "new.target is not supported.".to_owned(),
+            "Super" => "'super' is only supported in class methods.".to_owned(),
+            k if k.starts_with('!') => k[1..].to_owned(),
+            _ => format!("Syntax '{kind}' is not supported. {help}"),
+        };
         let e = self.failure(p, &msg, DiagnosticKind::UnsupportedSyntax);
         if let Value::Obj(id) = e {
             self.host.suggestions.insert(id, vec![help.into()]);
@@ -1306,6 +1328,14 @@ impl Vm {
         argc: usize,
         is_base: bool,
     ) -> Result<(), Value> {
+        // A class constructor runs only for `new` (see `classes.rs`).
+        if let Kind::Closure(c) = &self.heap[id as usize].kind
+            && c.proto.class != 0
+            && !std::mem::take(&mut self.constructing)
+        {
+            self.stack.truncate(fpos);
+            return Err(self.class_call_error(id));
+        }
         // The reference counts the program's own frame and refuses a call once more than `MAX_DEPTH` are running:
         // `MAX_DEPTH` frames may run above the program.
         if self.frames.len() > MAX_DEPTH && self.program_depth() > MAX_DEPTH {
@@ -1380,6 +1410,11 @@ impl Vm {
             })),
         }
         Ok(())
+    }
+
+    /// Pushes a closure's frame for a call whose callee, receiver and arguments are on the stack from `fpos`.
+    pub(crate) fn enter_closure(&mut self, id: Id, fpos: usize, argc: usize) -> Result<(), Value> {
+        self.push_closure_frame(id, fpos, argc, false)
     }
 
     /// The `Call` instruction: returns whether a frame was pushed.
@@ -1527,9 +1562,15 @@ impl Vm {
     }
 
     #[inline(never)]
-    fn construct_op(&mut self, argc: usize) -> Result<bool, Value> {
+    pub(crate) fn construct_op(&mut self, argc: usize) -> Result<bool, Value> {
         let fpos = self.stack.len() - argc - 2;
         let callee = self.stack[fpos].get();
+        if let Value::Obj(id) = callee
+            && self.class_of(&callee) != 0
+        {
+            self.construct_class(id, id, fpos, argc)?;
+            return Ok(true);
+        }
         let args: Vec<Value> = self.stack.drain(fpos + 2..).map(Slot::get).collect();
         self.stack.truncate(fpos);
         if let Value::Obj(id) = callee
@@ -1563,7 +1604,7 @@ impl Vm {
         let kind = callee.as_obj().map(|id| &self.heap[id as usize].kind);
         let message = match kind {
             Some(Kind::Closure(_)) => format!(
-                "{name} cannot be constructed: user-defined constructors and classes are not supported. Call it as a function that returns a plain object instead."
+                "{name} is not a constructor: only classes can be constructed with new. Use a class, or call it as a function that returns an object."
             ),
             Some(Kind::Native { .. }) => {
                 format!("new {name}(...) is not supported; call {name}(...) without new instead.")
@@ -2578,7 +2619,7 @@ impl Vm {
     // ---------- the run loop ----------
 
     #[inline(always)]
-    fn pop(&mut self) -> Value {
+    pub(crate) fn pop(&mut self) -> Value {
         self.stack.pop().unwrap_or_default().get()
     }
 
@@ -2588,7 +2629,7 @@ impl Vm {
     }
 
     #[inline(always)]
-    fn top(&self) -> Value {
+    pub(crate) fn top(&self) -> Value {
         self.stack.last().copied().unwrap_or_default().get()
     }
 
@@ -2632,6 +2673,12 @@ impl Vm {
         } else {
             Value::Undef
         };
+        // An arrow that uses `super` takes its method's home object.
+        let home = if proto.home {
+            self.home_of(self.stack[f.base - 2].get())
+        } else {
+            Value::Undef
+        };
         let fp = match (proto.is_generator, proto.is_async) {
             (true, true) => self.realm.async_generator_function_proto,
             (true, false) => self.realm.generator_function_proto,
@@ -2645,6 +2692,8 @@ impl Vm {
                 proto,
                 upvals,
                 this,
+                home,
+                fields: Value::Undef,
             })),
         ));
         // A generator function has its own `prototype`, which its generators inherit from.
@@ -2993,6 +3042,13 @@ impl Vm {
                         };
                         throw!(self.type_error(&m));
                     }
+                    Op::ThrowReference(msg) => {
+                        let m = match self.consts[msg as usize] {
+                            Value::Str(s) => self.text(s).to_owned(),
+                            _ => String::new(),
+                        };
+                        throw!(self.reference_error(&m));
+                    }
                     Op::ThrowUnsupported(kind) => {
                         let kind = match self.consts[kind as usize] {
                             Value::Str(s) => self.text(s).to_owned(),
@@ -3241,6 +3297,67 @@ impl Vm {
                             self.define_accessor_half(id, a, setter, f, true);
                         }
                     }
+                    Op::NameByKey(mode) => tri!(self.name_by_key(mode)),
+                    Op::Class(derived) => tri!(self.class_op(derived)),
+                    Op::DefineMethod(a, flags) => tri!(self.define_method(a, flags)),
+                    Op::SetFields => self.set_fields(),
+                    Op::InitFields => {
+                        self.frames[fi].pc = pc;
+                        let callee = self.stack[base - 2].get();
+                        if tri!(self.init_fields(callee)) {
+                            continue 'outer;
+                        }
+                    }
+                    Op::InitStatic => {
+                        self.frames[fi].pc = pc;
+                        if tri!(self.init_static()) {
+                            continue 'outer;
+                        }
+                    }
+                    Op::SuperCall(argc, nt) => {
+                        self.frames[fi].pc = pc;
+                        if tri!(self.super_call(base, argc, nt)) {
+                            continue 'outer;
+                        }
+                    }
+                    Op::SuperBind => tri!(self.super_bind()),
+                    Op::GetSuper(a, flags) => {
+                        if let Some((g, this)) = tri!(self.get_super(a, flags)) {
+                            self.frames[fi].pc = pc;
+                            if flags & 1 != 0 {
+                                tri!(self.enter_getter_method(g, this));
+                                continue 'outer;
+                            }
+                            if tri!(self.enter_getter(g, this)) {
+                                continue 'outer;
+                            }
+                        }
+                    }
+                    Op::PutSuper(a, flags) => {
+                        if let Some((s, this, v)) = tri!(self.put_super(a, flags)) {
+                            self.frames[fi].pc = pc;
+                            tri!(self.enter_setter(s, this, v));
+                            continue 'outer;
+                        }
+                    }
+                    Op::SetHome(depth) => {
+                        let n = self.stack.len();
+                        let (f, home) = (
+                            self.stack[n - 1].get(),
+                            self.stack[n - 1 - depth as usize].get(),
+                        );
+                        if let Value::Obj(fid) = f
+                            && let Kind::Closure(c) = &mut self.heap[fid as usize].kind
+                        {
+                            c.home = home;
+                        }
+                    }
+                    Op::Home => {
+                        let h = self.home_of(self.stack[base - 2].get());
+                        self.push(h);
+                    }
+                    Op::CtorReturn(derived) => tri!(self.ctor_return(derived)),
+                    Op::DefineClassField(a, computed) => tri!(self.define_class_field(a, computed)),
                     Op::DefineField(a) => {
                         let v = self.pop();
                         if let Value::Obj(id) = self.top() {
@@ -4211,6 +4328,10 @@ impl Vm {
     #[inline(never)]
     fn tdz_error(&mut self, name: Atom) -> Value {
         let n = self.atoms.text(name).to_owned();
+        // A derived constructor's `this` before `super()` (see `classes.rs`).
+        if n == "this" {
+            return self.this_before_super();
+        }
         self.reference_error(&format!("Cannot access '{n}' before initialization."))
     }
 
