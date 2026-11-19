@@ -36,12 +36,12 @@ export interface TextWriteResult extends WriteResult {
 
 export interface Interface {
   /**
-   * Serialize a complete read/prepare/write mutation transaction by file. A path that is not resolved yet locks
-   * as that path in the session's environment.
+   * Serialize a complete read/prepare/write mutation transaction by file. A typed path is located first, so it
+   * names its machine when the text does.
    */
   readonly withLock: (
-    targets: ReadonlyArray<Pick<Target, "absolute" | "environment"> | string>,
-  ) => <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
+    targets: ReadonlyArray<FileAccess.Place | string>,
+  ) => <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E | Environment.Failed, R>
   readonly write: (input: WriteInput) => Effect.Effect<WriteResult, Environment.Failed>
   /** Add bytes to the end of a file, creating it when missing. */
   readonly append: (input: WriteInput) => Effect.Effect<WriteResult, Environment.Failed>
@@ -97,20 +97,26 @@ const transactionLocks = KeyedMutex.makeUnsafe<string>()
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const session = yield* Environment.Service
+    const access = yield* FileAccess.Service
     const locks = KeyedMutex.makeUnsafe<string>()
     const withLock: Interface["withLock"] = (targets) => (effect) =>
-      [
-        ...new Set(
-          targets
-            .map((target) => (typeof target === "string" ? { absolute: target, environment: session } : target))
-            .map((target) =>
-              FileAccess.key({ ...target, absolute: AbsolutePath.make(FSUtil.resolve(target.absolute)) }),
+      Effect.gen(function* () {
+        const places = yield* Effect.forEach(targets, (target) =>
+          typeof target === "string" ? access.locate(target) : Effect.succeed(target),
+        )
+        return yield* [
+          ...new Set(
+            places.map((target) =>
+              FileAccess.key({
+                absolute: AbsolutePath.make(FSUtil.resolve(target.absolute)),
+                environment: target.environment,
+              }),
             ),
-        ),
-      ]
-        .sort()
-        .reduceRight((result, file) => transactionLocks.withLock(file)(result), effect)
+          ),
+        ]
+          .sort()
+          .reduceRight((result, file) => transactionLocks.withLock(file)(result), effect)
+      })
     const withTargetLock =
       (target: Target) =>
       <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -166,7 +172,7 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Environment.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [FileAccess.node] })
 
 /**
  * Deferred until the corresponding integrations exist.

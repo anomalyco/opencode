@@ -4,8 +4,10 @@ import { Environment } from "@opencode/core/environment/index"
 import { FileAccess } from "@opencode/core/file-access"
 import { FileMutation } from "@opencode/core/file-mutation"
 import { FileWrite } from "@opencode/core/file-write"
+import { Flag } from "@opencode/core/flag"
 import { Formatter } from "@opencode/core/formatter"
 import { Location } from "@opencode/core/location"
+import { Machines } from "@opencode/core/machine/machines"
 import { Permission } from "@opencode/core/permission"
 import { AbsolutePath } from "@opencode/core/schema"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -34,6 +36,17 @@ export const codeModeServices = (
               ),
             ),
             Formatter.node.replace(Layer.mock(Formatter.Service, { file: formatter })),
+            Flag.node.replace(
+              Layer.mock(Flag.Service, {
+                enabled: () => Effect.succeed(false),
+                resolve: (entries) => Flag.resolve({ entries, channel: "release" }),
+              }),
+            ),
+            Machines.node.replace(
+              Layer.mock(Machines.Service, {
+                get: (id) => Effect.fail(new Machines.NotFound({ machine: id })),
+              }),
+            ),
             Permission.node.replace(permissionLayer(permission)),
           ],
         ),
