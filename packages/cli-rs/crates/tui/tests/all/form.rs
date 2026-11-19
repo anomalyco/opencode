@@ -125,6 +125,19 @@ fn a_single_choice_submits_on_enter_and_the_prompt_returns() {
     harness.wait_gone("Deploy settings");
 }
 
+/// TS strips a paste's escape sequences before the custom answer takes it; the field would show them as notation.
+#[test]
+fn a_pasted_custom_answer_loses_its_escape_sequences() {
+    let harness = session_form(json!([{
+        "key": "target", "type": "string", "title": "Target", "custom": true,
+        "options": [{ "value": "staging", "label": "Staging" }],
+    }]));
+    harness.wait_for("Deploy settings");
+    harness.app.paste("\x1b[31mblue\x1b[0m");
+    let screen = harness.wait_for("blue");
+    assert!(!screen.contains("[31m") && !screen.contains("^["), "{screen}");
+}
+
 #[test]
 fn escape_cancels_the_form() {
     let harness = session_form(json!([{ "key": "ok", "type": "boolean", "title": "Continue?" }]));
