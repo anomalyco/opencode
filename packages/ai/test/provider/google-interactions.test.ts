@@ -203,12 +203,13 @@ describe("Google Interactions response continuation", () => {
     maxTokens: 66000,
     tools: [{ name: "lookup", description: "Lookup", inputSchema: { type: "object" } }],
   })
-  const scripted = (...responses: ReadonlyArray<string | ReadableStream<Uint8Array>>) => {
+  const scripted = (...responses: ReadonlyArray<string | ReadableStream<Uint8Array> | Response>) => {
     const bodies: Array<Record<string, unknown>> = []
     const layer = dynamicResponse((input) =>
       Effect.sync(() => {
         const response = responses[Math.min(bodies.length, responses.length - 1)]
         bodies.push(JSON.parse(input.text))
+        if (response instanceof Response) return input.respond(response.body, response)
         return input.respond(response, { headers: { "content-type": "text/event-stream" } })
       }),
     )
@@ -230,6 +231,20 @@ describe("Google Interactions response continuation", () => {
     event_type: "interaction.completed",
     interaction: { status: "completed", ...interaction },
   })
+
+  const continueWith = (token: string) =>
+    sseEvents(completed({ status: "requires_continuation", continuation_token: token }))
+
+  const disconnect = (frames: string, message: string) => {
+    let sent = false
+    return new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sent) return controller.error(new Error(message))
+        sent = true
+        controller.enqueue(new TextEncoder().encode(frames))
+      },
+    })
+  }
 
   it.effect("joins two hops into one response with signatures, tool calls, and combined usage", () =>
     Effect.gen(function* () {
@@ -336,15 +351,8 @@ describe("Google Interactions response continuation", () => {
         checkpoint("resume", { total_input_tokens: 10, total_output_tokens: 1 }),
         { event_type: "step.stop", index: 0 },
       )
-      let sent = false
       const server = scripted(
-        new ReadableStream({
-          pull(controller) {
-            if (sent) return controller.error(new Error("connection reset"))
-            sent = true
-            controller.enqueue(new TextEncoder().encode(frames))
-          },
-        }),
+        disconnect(frames, "connection reset"),
         sseEvents(
           startText(0),
           text(0, ", two."),
@@ -443,17 +451,88 @@ describe("Google Interactions response continuation", () => {
     }),
   )
 
-  it.effect("caps a response that keeps asking for another request", () =>
+  it.effect("stops when a completed hop returns its own start token", () =>
     Effect.gen(function* () {
-      const server = scripted(sseEvents(completed({ status: "requires_continuation", continuation_token: "repeat" })))
+      const server = scripted(continueWith("repeat"), continueWith("repeat"), sseEvents(completed()))
       const error = yield* LLMClient.generate(request).pipe(Effect.provide(server.layer), Effect.flip)
 
-      expect(server.bodies).toHaveLength(21)
+      expect(server.bodies.map((body) => body.continuation_token)).toEqual([undefined, "repeat"])
+      expect(error.reason).toMatchObject({ _tag: "InvalidProviderOutput", classification: "incomplete-stream" })
+    }),
+  )
+
+  it.effect("reconnects three times without progress and surfaces the last disconnect", () =>
+    Effect.gen(function* () {
+      const empty = sseEvents()
+      const server = scripted(
+        continueWith("repeat"),
+        disconnect(empty, "first connection reset"),
+        empty,
+        disconnect(empty, "last connection reset"),
+        empty,
+        sseEvents(completed()),
+      )
+      const error = yield* LLMClient.generate(request).pipe(Effect.provide(server.layer), Effect.flip)
+
+      expect(server.bodies.map((body) => body.continuation_token)).toEqual([
+        undefined,
+        "repeat",
+        "repeat",
+        "repeat",
+        "repeat",
+      ])
       expect(error.reason).toMatchObject({
         _tag: "InvalidProviderOutput",
-        message: "Google Interactions exceeded the continuation limit",
+        classification: "incomplete-stream",
+        message: expect.stringContaining("last connection reset"),
       })
-      expect(isRetryable(error)).toBe(false)
+      expect(isRetryable(error)).toBe(true)
+    }),
+  )
+
+  it.effect("resets the reconnect budget after a new checkpoint", () =>
+    Effect.gen(function* () {
+      const empty = sseEvents()
+      const server = scripted(
+        continueWith("first"),
+        empty,
+        empty,
+        empty,
+        sseEvents(checkpoint("new")),
+        empty,
+        empty,
+        empty,
+        sseEvents(completed()),
+      )
+      const result = yield* LLMClient.generate(request).pipe(Effect.provide(server.layer))
+
+      expect(server.bodies.map((body) => body.continuation_token)).toEqual([
+        undefined,
+        "first",
+        "first",
+        "first",
+        "first",
+        "new",
+        "new",
+        "new",
+        "new",
+      ])
+      expect(result.finishReason.normalized).toBe("stop")
+    }),
+  )
+
+  it.effect("does not resume when a continuation request gets an HTTP error", () =>
+    Effect.gen(function* () {
+      const server = scripted(
+        continueWith("next-hop"),
+        Response.json({ error: { message: "Too many requests" } }, { status: 429 }),
+        sseEvents(completed()),
+      )
+      const error = yield* LLMClient.generate(request).pipe(Effect.provide(server.layer), Effect.flip)
+
+      expect(server.bodies.map((body) => body.continuation_token)).toEqual([undefined, "next-hop"])
+      expect(error.reason).toMatchObject({ _tag: "RateLimit", http: { status: 429 } })
+      expect(isRetryable(error)).toBe(true)
     }),
   )
 })

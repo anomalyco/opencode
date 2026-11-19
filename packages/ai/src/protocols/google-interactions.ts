@@ -31,8 +31,8 @@ import { ToolStream } from "./utils/tool-stream.js"
 
 const ADAPTER = "google-interactions"
 const CONTINUATION = "requires_continuation"
-// A 1M-token context can span up to 16 full streaming hops. Leave room for checkpoint recovery.
-const MAX_CONTINUATIONS = 20
+// Matches Google's GenAI SDKs (Python, JS, and Go).
+const MAX_STREAM_RECONNECTS_WITHOUT_PROGRESS = 3
 const SKIP_THOUGHT_SIGNATURE_VALIDATOR = "skip_thought_signature_validator"
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
@@ -681,6 +681,13 @@ export interface Prepared {
   readonly input: TransportPrepareInput<Body>
 }
 
+interface Resume {
+  readonly token: string
+  readonly owner?: string
+  readonly reconnectsWithoutProgress: number
+  readonly lastError?: AIError
+}
+
 const sse = HttpTransport.sseJson.with<Body>()
 const WireEvent = Protocol.jsonEvent(Event)
 const decodeEvent = Schema.decodeUnknownEffect(WireEvent)
@@ -694,10 +701,10 @@ export const transport: Transport<Body, Prepared, Event | NextRequest> = {
       const raw = new WeakMap<object, string>()
       const respond = (
         execution: TransportExecution<string>,
-        hop: number,
+        resume?: Resume,
       ): Stream.Stream<Event | NextRequest, AIError> =>
         Stream.suspend(() => {
-          let token: string | undefined
+          let token = resume?.token
           let owner: string | undefined
           let status: string | undefined
           let contentSinceToken = false
@@ -765,14 +772,36 @@ export const transport: Transport<Body, Prepared, Event | NextRequest> = {
             Stream.concat(
               Stream.suspend(() => {
                 const needsContinuation = status === CONTINUATION
-                const resumable = terminal ? needsContinuation : needsContinuation || status === "in_progress"
+                const resumable = needsContinuation || (!terminal && (status === undefined || status === "in_progress"))
+                const newToken = token !== resume?.token
                 // An interrupted tool call may carry arguments across the checkpoint. Don't finalize it on EOF.
-                if (token && resumable && !contentSinceToken && (terminal || pendingTools.size === 0)) {
-                  if (hop >= MAX_CONTINUATIONS)
+                if (
+                  token &&
+                  resumable &&
+                  !contentSinceToken &&
+                  (terminal || pendingTools.size === 0) &&
+                  (!needsContinuation || newToken)
+                ) {
+                  const reconnectsWithoutProgress = newToken ? 0 : (resume?.reconnectsWithoutProgress ?? 0) + 1
+                  const lastError = dropped ?? (newToken ? undefined : resume?.lastError)
+                  if (reconnectsWithoutProgress > MAX_STREAM_RECONNECTS_WITHOUT_PROGRESS) {
+                    if (!lastError) return Stream.empty
                     return Stream.fail(
-                      ProviderShared.eventError(label, "Google Interactions exceeded the continuation limit"),
+                      new AIError({
+                        reason: new InvalidProviderOutputError({
+                          route: label,
+                          message: lastError.reason.message,
+                          classification: "incomplete-stream",
+                          cause: lastError,
+                          http: lastError.reason.http,
+                        }),
+                      }),
                     )
-                  return Stream.concat(Stream.succeed(new NextRequest()), next(token, owner, hop + 1))
+                  }
+                  return Stream.concat(
+                    Stream.succeed(new NextRequest()),
+                    next({ token, owner: newToken ? owner : resume?.owner, reconnectsWithoutProgress, lastError }),
+                  )
                 }
                 if (dropped) return Stream.fail(dropped)
                 if (terminal && needsContinuation && !token)
@@ -783,7 +812,7 @@ export const transport: Transport<Body, Prepared, Event | NextRequest> = {
             ),
           )
         })
-      const next = (token: string, owner: string | undefined, hop: number) => {
+      const next = (resume: Resume) => {
         const body = prepared.input.body
         return Stream.unwrap(
           sse
@@ -791,19 +820,19 @@ export const transport: Transport<Body, Prepared, Event | NextRequest> = {
               ...prepared.input,
               body: {
                 ...body,
-                continuation_token: token,
-                ...(body.store && owner ? { input: undefined, previous_interaction_id: owner } : {}),
+                continuation_token: resume.token,
+                ...(body.store && resume.owner ? { input: undefined, previous_interaction_id: resume.owner } : {}),
               },
             })
             .pipe(
               Effect.flatMap((continued) => sse.execute(continued, request, runtime)),
-              Effect.map((execution) => respond(execution, hop)),
+              Effect.map((execution) => respond(execution, resume)),
             ),
         )
       }
       const first = yield* sse.execute(prepared.http, request, runtime)
       return {
-        frames: respond(first, 0),
+        frames: respond(first),
         http: first.http,
         body: (frame) => raw.get(frame),
         raw: (frame) => {
