@@ -12,7 +12,8 @@ import { type Diagnostic, formatLocation, sourceLocation } from "./model.js"
 import { Driver, SUSPENDED } from "./driver.js"
 import { Interruption } from "./signals.js"
 import { Source } from "./source.js"
-import type { Vm } from "../vm.js"
+import { compileCodes, type Vm } from "../vm.js"
+import type { Code } from "../code.js"
 import type { Translate } from "../runtime.js"
 
 /**
@@ -91,23 +92,49 @@ export const finishExecution = <E, R>(outcome: Effect.Effect<Outcome, E, R>): Ef
     }
   })
 
+/**
+ * A program compiled once to run many times, in any runtime: its parse and its bytecode, which no run changes. A run
+ * of it is the same as a run of its source, and so is a state saved from one.
+ */
+export class Compiled {
+  /** @internal */
+  constructor(
+    /** The program's source. */
+    readonly code: string,
+    /** @internal */
+    readonly source: Source,
+    /** @internal */
+    readonly codes: ReadonlyArray<Code> | RangeError,
+  ) {}
+}
+
+/**
+ * Parses and compiles a program, or gives the diagnostic its run would fail with before running anything: an empty
+ * program or a syntax error. Unsupported syntax still fails where it runs, as from source.
+ */
+export const compileProgram = (
+  code: string,
+): { readonly ok: true; readonly compiled: Compiled } | { readonly ok: false; readonly error: Diagnostic } => {
+  if (code.trim().length === 0) return { ok: false, error: { kind: "ParseError", message: "Code cannot be empty." } }
+  const parsed = parseProgram(code)
+  if (!parsed.ok) return parsed
+  return { ok: true, compiled: new Compiled(code, parsed.source, compileCodes(parsed.source)) }
+}
+
 /** A program ready to run on the VM: nothing runs until `run`. */
 export const startProgram = <R>(
   setup: Setup<R>,
-  code: string,
+  code: string | Compiled,
   bindings?: Readonly<Record<string, Json>>,
   runId: string = crypto.randomUUID(),
 ): Running<R> =>
   new Running(setup, 0, () => {
-    if (code.trim().length === 0) {
-      return { ok: false, error: { kind: "ParseError", message: "Code cannot be empty." }, metadata: null }
-    }
-    const parsed = parseProgram(code)
-    if (!parsed.ok) return { ok: false, error: parsed.error, metadata: null }
+    const compiled = typeof code === "string" ? compileProgram(code) : { ok: true as const, compiled: code }
+    if (!compiled.ok) return { ok: false, error: compiled.error, metadata: null }
     const run: Run = { id: runId, metadata: null }
     const runtime = instantiate(setup, run, bindings)
     runtime.vm.hosts.runId = runId
-    runtime.vm.start(parsed.source)
+    runtime.vm.start(compiled.compiled.source, compiled.compiled.codes)
     return [runtime, run] as const
   })
 

@@ -198,6 +198,16 @@ const allocRegs = (size: number): Array<unknown> => {
   return regs
 }
 
+/** A program's bytecode, or the RangeError of one nested deeper than the compiler's host stack. */
+export const compileCodes = (source: Source): ReadonlyArray<Code> | RangeError => {
+  try {
+    return compileSource(source)
+  } catch (error) {
+    if (!(error instanceof RangeError)) throw error
+    return error
+  }
+}
+
 /** Internal closure wrapper that does not touch `builtins.Function` or `nativeRule.sealed`. */
 export class VmInternalFn {
   constructor(
@@ -275,17 +285,14 @@ export class Vm {
     return this.intrinsics.get(name)
   }
 
-  /** Queues the program's body as the root frame. */
-  start(source: Source): void {
+  /** Queues the program's body as the root frame, from its bytecode (`compileCodes`) when it is compiled already. */
+  start(source: Source, compiled?: ReadonlyArray<Code> | RangeError): void {
     if (!warmed) warmupVm(this)
     this.ctx.sources.set(source.id, source)
-    let codes: ReadonlyArray<Code>
-    try {
-      codes = compileSource(source)
-    } catch (error) {
-      // A program nested deeper than the compiler's host stack fails the run, as running it would.
-      if (!(error instanceof RangeError)) throw error
-      this.outcome = abrupt(error)
+    const codes = compiled ?? compileCodes(source)
+    // A program nested deeper than the compiler's host stack fails the run, as running it would.
+    if (codes instanceof RangeError) {
+      this.outcome = abrupt(codes)
       return
     }
     this.sourceCodes.set(source.id, codes)
