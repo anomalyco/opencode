@@ -30,7 +30,7 @@ import { Persistence } from "@/runtime/persistence/schema"
 import { usePluginHost } from "./host"
 import { Contribution } from "./render"
 import { usePluginAttachment } from "./attachment"
-import { legacyKeys, panelKey } from "./panel-keys"
+import { legacyKeys, panelKey, pruneTransientKeys } from "./panel-keys"
 import { closedEntry, createSideFocus, type ClosedTabs } from "./closed-tabs"
 import {
   createNewTabsState,
@@ -194,18 +194,6 @@ export function createRegion(input: {
     input.tabs().remap(rewrite)
   })
 
-  // Transient panels are not restored: their stored keys leave once the panel stops listing them.
-  createEffect(() => {
-    const listed = new Set(entries().map((entry) => entry.key))
-    const transient = providers().flatMap((item) => (item.value.transient ? [`${item.plugin}:`] : []))
-
-    if (transient.length === 0) return
-    const all = stored()
-    const next = all.filter((key) => listed.has(key) || !transient.some((prefix) => key.startsWith(prefix)))
-
-    if (next.length !== all.length) input.tabs().setAll(next)
-  })
-
   const strip = createMemo(() => {
     const listed = stored().flatMap((key) => {
       const entry = byKey().get(key)
@@ -330,7 +318,18 @@ export function createRegion(input: {
     return entry ? paneOf(entry) : "side"
   })
 
-  const empty = createMemo(() => strip().length === 0)
+  // The stored keys of transient tabs their panel no longer lists, which an effect below removes.
+  const transientPruned = createMemo(() => {
+    const transient = providers().flatMap((item) => (item.value.transient ? [`${item.plugin}:`] : []))
+
+    if (transient.length === 0) return undefined
+
+    return pruneTransientKeys(stored(), new Set(byKey().keys()), transient)
+  })
+
+  // A strip whose last tab is a transient one about to leave is not empty yet: its removal closes the region rather
+  // than opening a New tab in it.
+  const empty = createMemo(() => strip().length === 0 && transientPruned() === undefined)
 
   // Focus leaves before the close starts, back to where it was; otherwise the panel hands it to its toggle.
   const giveBackFocus = () => {
@@ -377,6 +376,20 @@ export function createRegion(input: {
       },
     }),
   )
+
+  // Transient panels are not restored: their stored keys leave once the panel stops listing them. One that leaves
+  // the strip empty, like a terminal whose shell exited, closes the region as closing the last tab does.
+  createEffect(() => {
+    const pruned = transientPruned()
+
+    if (!pruned) return
+
+    batch(() => {
+      input.tabs().setAll(pruned.keys)
+
+      if (pruned.emptied && selectPaneNewTabs(untrack(newTabsState), "side").length === 0) emptied()
+    })
+  })
 
   const newTabs = (pane: SessionPane) => selectPaneNewTabs(newTabsState(), pane)
 
