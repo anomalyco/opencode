@@ -31,6 +31,7 @@ import { Skill } from "../../skill.js"
 import { SkillDiscovery } from "../../skill/discovery.js"
 import { WebSearch } from "../../websearch.js"
 import { OpencodeArtifacts } from "./opencode-artifacts.js"
+import { OpencodeTasks } from "./opencode-tasks.js"
 import { OpencodeWatches } from "./opencode-watches.js"
 import { ProviderRefresh } from "./refresh.js"
 
@@ -222,6 +223,7 @@ export const OpencodePlugin = define<
     let explainers: Effect.Success<ReturnType<typeof ctx.session.hook>>[] = []
     const watches = yield* OpencodeWatches.make(ctx, http)
     const artifacts = yield* OpencodeArtifacts.make(ctx, http)
+    const tasks = yield* OpencodeTasks.make(ctx, http)
 
     // Every project signed in to the same workspace shares one fetch, reused while it is younger than `maxAge`.
     const load = Effect.fn("OpencodePlugin.load")(function* (maxAge: Duration.Input = Duration.minutes(1)) {
@@ -339,30 +341,36 @@ export const OpencodePlugin = define<
       const allowed = document !== undefined && (!config.integration || isDeepStrictEqual(integrated, document))
       yield* syncInstructionsAndSkills(next, allowed)
       const watching = allowed && next.remote?.watches === true && (yield* flags.enabled("console_watches"))
-      yield* syncWatches(watching ? next.connection : undefined)
+      // Claims are only ever made through the Console's MCP, which offers its task tools only while Tasks are on.
+      const claiming = allowed && (yield* flags.enabled("console_tasks"))
+      yield* syncConsole(next.connection, watching, claiming)
       yield* artifacts.sync(allowed && next.remote?.artifacts === true ? next.connection : undefined, watching)
     })
     // Watching starts when the console_watches flag is on and the Console's config says the workspace has event watches,
-    // and stops when either no longer holds.
-    const syncWatches = Effect.fnUntraced(
-      function* (connection: ActiveConnection) {
+    // and stops when either no longer holds. Task claims are kept alive while the console_tasks flag is on.
+    const syncConsole = Effect.fnUntraced(
+      function* (connection: ActiveConnection, watching: boolean, claiming: boolean) {
         const credential = connection && (yield* ctx.integration.connection.resolve(connection))
-        if (!connection || !credential || credential.type === "external") return yield* watches.sync(undefined)
-        yield* watches.sync({
-          key: workspaceKey(connection, credential),
-          server: yield* normalizeServer(ConsoleAccess.server(credential)),
-          headers: ctx.integration.connection
-            .resolve(connection)
-            .pipe(
-              Effect.flatMap((current) =>
-                current && current.type !== "external"
-                  ? Effect.succeed(ConsoleAccess.headers(current))
-                  : Effect.fail(new Error("OpenCode Console is not connected")),
-              ),
-            ),
-        })
+        const console =
+          connection && credential && credential.type !== "external" && (watching || claiming)
+            ? {
+                key: workspaceKey(connection, credential),
+                server: yield* normalizeServer(ConsoleAccess.server(credential)),
+                headers: ctx.integration.connection
+                  .resolve(connection)
+                  .pipe(
+                    Effect.flatMap((current) =>
+                      current && current.type !== "external"
+                        ? Effect.succeed(ConsoleAccess.headers(current))
+                        : Effect.fail(new Error("OpenCode Console is not connected")),
+                    ),
+                  ),
+              }
+            : undefined
+        yield* watches.sync(watching ? console : undefined)
+        yield* tasks.sync(claiming ? console : undefined)
       },
-      Effect.catch((cause) => Effect.logWarning("failed to start Console event watches", { cause })),
+      Effect.catch((cause) => Effect.logWarning("failed to start Console event watches or task claims", { cause })),
     )
     const syncInstructionsAndSkills = (next: typeof snapshot, allowed: boolean) => {
       const remote = allowed ? next.remote : undefined
