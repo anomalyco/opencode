@@ -1,6 +1,6 @@
 //! Interpreter benchmarks, mirroring the reference `script/bench.ts`: median and fastest wall-clock milliseconds per
 //! program. Each iteration calls `execute` on the source, with one warm-up run that also checks the program succeeds.
-//! Usage: psychoscript-bench [--iterations N] [--filter name] [--json] [--cases DIR]
+//! Usage: psychoscript-bench [--iterations N] [--filter name] [--json] [--cases DIR] [--async]
 //! `--iterations 0` runs only the warm-up, for one-shot measurements such as peak RSS.
 //!
 //! `psychoscript-bench --plugin [--runs N] SOURCE...` is the plugin-event benchmark instead: the conformance
@@ -41,6 +41,7 @@ fn main() {
     let mut iterations = 11usize;
     let mut filter = String::new();
     let mut json = false;
+    let mut future = false;
     let mut dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../conformance/cases");
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -53,12 +54,21 @@ fn main() {
             }
             "--filter" => filter = args.next().expect("--filter name"),
             "--json" => json = true,
+            "--async" => future = true,
             "--cases" => dir = args.next().expect("--cases DIR").into(),
             other => panic!("unknown argument {other}"),
         }
     }
 
     let runtime = runtime();
+    let options = psychoscript::ProgramOptions::new();
+    // `--async` drives each run as a future, where a long one computes on a worker thread.
+    let execute = |code: &str| {
+        if future {
+            return block_on(runtime.execute_async(code, &options)).expect("not interrupted");
+        }
+        runtime.execute(code)
+    };
     let mut report = Vec::new();
     for (slug, name) in CASES {
         if !(slug.contains(&filter) || name.contains(&filter)) {
@@ -67,14 +77,14 @@ fn main() {
         let path = dir.join(format!("bench-{slug}.js"));
         let code =
             std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
-        let value = match runtime.execute(&code).result {
+        let value = match execute(&code).result {
             Ok(value) => value,
             Err(d) => panic!("{name} failed: {d:?}"),
         };
         let times: Vec<f64> = (0..iterations)
             .map(|_| {
                 let start = Instant::now();
-                let _ = runtime.execute(&code);
+                let _ = execute(&code);
                 start.elapsed().as_secs_f64() * 1e3
             })
             .collect();
@@ -133,5 +143,24 @@ fn plugin(mut args: impl Iterator<Item = String>) {
             "{}",
             json!({ "source": source, "bytes": code.len(), "median_us": sorted[runs / 2], "min_us": sorted[0], "mean_us": mean })
         );
+    }
+}
+
+/// Polls a future to its end on this thread, parking until it is woken.
+fn block_on<F: std::future::Future>(future: F) -> F::Output {
+    struct Unpark(std::thread::Thread);
+    impl std::task::Wake for Unpark {
+        fn wake(self: std::sync::Arc<Self>) {
+            self.0.unpark();
+        }
+    }
+    let waker = std::task::Waker::from(std::sync::Arc::new(Unpark(std::thread::current())));
+    let mut cx = std::task::Context::from_waker(&waker);
+    let mut future = std::pin::pin!(future);
+    loop {
+        if let std::task::Poll::Ready(v) = future.as_mut().poll(&mut cx) {
+            return v;
+        }
+        std::thread::park();
     }
 }
