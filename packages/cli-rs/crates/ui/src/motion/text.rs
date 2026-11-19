@@ -5,7 +5,6 @@ use super::{Motion, channels, millis, running};
 use opentui::App;
 use opentui::prelude::*;
 use opentui::widget::{Component, Constraint, Custom, Element, Painter, Widget};
-use std::cell::Cell;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -148,9 +147,6 @@ struct FadeView {
     sweep_offset: f64,
     sweep_width: Option<f64>,
     motion: Rc<Motion>,
-    /// Whether the frame that reached the end of the fade was painted; the TypeScript renderable paints that one
-    /// frame shaded and plain text after it.
-    finished: Cell<bool>,
 }
 
 impl FadeInText {
@@ -163,7 +159,6 @@ impl FadeInText {
             sweep_offset: 0.0,
             sweep_width: None,
             motion: Motion::new(app, true, None, Some(FADE_DURATION), Duration::ZERO),
-            finished: Cell::new(false),
         };
         let widget = Custom::measured(app, view);
         widget.with(|view| view.motion.clone()).follow(&widget);
@@ -211,11 +206,12 @@ impl Component for FadeView {
     fn paint(&self, painter: &mut Painter<'_>) {
         self.motion.paint(painter);
         let elapsed = self.motion.clock.get();
-        if !self.enabled || !running() || self.finished.get() {
+        // The tick that reaches the end runs before the frame, so that frame draws plain text, as TypeScript's
+        // `onAnimationTick` on the shared clock does.
+        if !self.enabled || !running() || elapsed >= FADE_DURATION {
             painter.text(0, 0, &self.text, Style::new().fg(self.fg).bg(Color::TRANSPARENT));
             return;
         }
-        self.finished.set(elapsed >= FADE_DURATION);
         paint_shaded(painter, &self.text, self.fg, self.backdrop, |column, end| {
             fade_strength(elapsed, column, end, self.sweep_offset, self.sweep_width)
         });
