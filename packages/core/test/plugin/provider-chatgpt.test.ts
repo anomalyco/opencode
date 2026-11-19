@@ -161,7 +161,7 @@ describe("ChatGPTPlugin", () => {
     }),
   )
 
-  it.live("revokes the refresh token at the discovered endpoint", () =>
+  it.live("revokes the refresh token with the issued client ID", () =>
     Effect.gen(function* () {
       const forms = new Array<Record<string, string>>()
       const statuses = [200, 503]
@@ -170,9 +170,6 @@ describe("ChatGPTPlugin", () => {
           Bun.serve({
             port: 0,
             fetch: async (request) => {
-              const url = new URL(request.url)
-              if (url.pathname === "/.well-known/openid-configuration")
-                return Response.json({ revocation_endpoint: `${url.origin}/oauth/revoke` })
               expect(request.method).toBe("POST")
               expect(request.headers.get("content-type")).toBe("application/x-www-form-urlencoded")
               forms.push(Object.fromEntries(new URLSearchParams(await request.text())))
@@ -182,7 +179,7 @@ describe("ChatGPTPlugin", () => {
         ),
         (server) => Effect.sync(() => server.stop()),
       )
-      const discovery = `http://localhost:${server.port}/.well-known/openid-configuration`
+      const url = `http://localhost:${server.port}/oauth/revoke`
       const value = Credential.OAuth.make({
         type: "oauth",
         methodID: Integration.MethodID.make("chatgpt-token-sharing"),
@@ -192,11 +189,11 @@ describe("ChatGPTPlugin", () => {
         metadata: { clientID: "oaiapp_issued" },
       })
 
-      yield* revoke(value, App.make(), discovery)
+      yield* revoke(value, App.make(), url)
       const form = { token: "refresh-token", token_type_hint: "refresh_token", client_id: "oaiapp_issued" }
       expect(forms).toEqual([form])
 
-      expect(yield* Effect.flip(revoke(value, App.make(), discovery))).toBeInstanceOf(Error)
+      expect(yield* Effect.flip(revoke(value, App.make(), url))).toBeInstanceOf(Error)
       expect(forms).toHaveLength(2)
     }),
   )

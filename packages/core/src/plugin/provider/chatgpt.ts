@@ -24,6 +24,7 @@ const registrationClientID = "dynamic_agent_client"
 const agentName = "OpenCode"
 const issuer = "https://auth.openai.com"
 const tokenURL = `${issuer}/api/accounts/oauth/token`
+const revokeURL = `${issuer}/api/accounts/oauth/revoke`
 const resource = "https://api.openai.com/v1"
 const tokenSharingScope = "chatgpt.tokens.use.direct"
 const providerID = Provider.ID.openai
@@ -418,36 +419,25 @@ function refresh(value: Credential.OAuth, app: App.Info) {
 }
 
 // Revokes the refresh token so OpenAI ends the session; already-invalid tokens also answer 200.
-export function revoke(
-  value: Credential.OAuth,
-  app: App.Info,
-  discovery = `${issuer}/.well-known/openid-configuration`,
-) {
+export function revoke(value: Credential.OAuth, app: App.Info, url = revokeURL) {
   return Effect.gen(function* () {
     const metadata = Option.getOrUndefined(decodeMetadata(value.metadata))
     if (!metadata) return yield* Effect.fail(new Error("This ChatGPT connection has no registered client ID."))
-    yield* Effect.gen(function* () {
-      const config = yield* request<{ revocation_endpoint?: string }>(discovery, {
-        headers: { "User-Agent": App.useragent(app) },
-      })
-      if (!config.revocation_endpoint) return yield* Effect.fail(new Error("OpenAI has no revocation endpoint."))
-      const endpoint = config.revocation_endpoint
-      yield* Effect.tryPromise({
-        try: async (signal) => {
-          const response = await fetch(endpoint, {
-            method: "POST",
-            headers: headers(app),
-            body: new URLSearchParams({
-              token: value.refresh,
-              token_type_hint: "refresh_token",
-              client_id: metadata.clientID,
-            }).toString(),
-            signal,
-          })
-          if (!response.ok) throw new Error(`Revocation failed: ${response.status}`)
-        },
-        catch: (cause) => cause,
-      })
+    yield* Effect.tryPromise({
+      try: async (signal) => {
+        const response = await fetch(url, {
+          method: "POST",
+          headers: headers(app),
+          body: new URLSearchParams({
+            token: value.refresh,
+            token_type_hint: "refresh_token",
+            client_id: metadata.clientID,
+          }).toString(),
+          signal,
+        })
+        if (!response.ok) throw new Error(`Revocation failed: ${response.status}`)
+      },
+      catch: (cause) => cause,
     }).pipe(
       // Logout waits on this, so give up quickly; an unrevoked token just expires unused.
       Effect.timeout("5 seconds"),
