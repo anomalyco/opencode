@@ -37,7 +37,7 @@ const ListOutput = Schema.Struct({
 })
 
 export const IDInput = Schema.Struct({
-  id: Automation.ID.annotate({ description: "Automation id from automation_list." }),
+  id: Automation.ID.annotate({ description: "Automation id from automation.list." }),
 })
 
 const RemoveOutput = Schema.Struct({ id: Automation.ID, removed: Schema.Boolean })
@@ -81,24 +81,29 @@ export const Plugin = {
     yield* ctx.tool
       .transform((editor) => {
         if (!enabled()) return
-        editor.add({
-          name: "automation_create",
+        editor.namespace({
+          name: "automation",
           description:
-            "Run a prompt or Code Mode action on a timer or a connected MCP server's push event. A prompt can target this session, another session in this project or a new subagent child. Code runs without a model and can return one send: { send: { prompt } } steers this session; add to: { subagent } inside send for a permitted quiet child. Omit send to stay quiet.",
+            "Schedule work for later: run a prompt or Code Mode action once at a time, on a repeat (every N minutes or hours, or a cron), or when a connected MCP server pushes an event. Use one instead of sleeping or polling, and give it an expiry.",
+        })
+        editor.add({
+          name: "create",
+          description:
+            "Schedule a prompt or Code Mode action: once at a time (\"in 20 minutes\"), on a repeat (every 2 hours, a cron) or on a connected MCP server's push event. A prompt can target this session, another session in this project or a new subagent child. Code runs without a model and can return one send: { send: { prompt } } steers this session; add to: { subagent } inside send for a permitted quiet child. Omit send to stay quiet.",
           input: Automation.Request,
           output: View,
-          options: { namespace: "opencode", codemode: true },
+          options: { namespace: "automation", codemode: { pinned: true } },
           execute: (input, context) =>
             automations
               .create({ ...input, sessionID: context.sessionID }, Permission.invocation(context))
               .pipe(Effect.map(changed("Created")), Effect.mapError(failure)),
         })
         editor.add({
-          name: "automation_list",
+          name: "list",
           description: "List this project's automations with their status and next run, and the current time.",
           input: Schema.Struct({}),
           output: ListOutput,
-          options: { namespace: "opencode", codemode: true },
+          options: { namespace: "automation", codemode: { pinned: true } },
           execute: (_, context) =>
             Effect.gen(function* () {
               const session = yield* caller(context.sessionID)
@@ -111,11 +116,11 @@ export const Plugin = {
             }).pipe(Effect.mapError(failure)),
         })
         editor.add({
-          name: "automation_pause",
+          name: "pause",
           description: "Pause an automation. It keeps its settings and does not run until resumed.",
           input: IDInput,
           output: View,
-          options: { namespace: "opencode", codemode: true },
+          options: { namespace: "automation", codemode: { pinned: true } },
           execute: (input, context) =>
             owned(input.id, context.sessionID).pipe(
               Effect.andThen(automations.pause(input.id)),
@@ -124,12 +129,12 @@ export const Plugin = {
             ),
         })
         editor.add({
-          name: "automation_resume",
+          name: "resume",
           description:
             "Resume a paused automation. A missed `at` runs once; repeating timers resume at their next slot. Event watches request replay from their saved cursor.",
           input: IDInput,
           output: View,
-          options: { namespace: "opencode", codemode: true },
+          options: { namespace: "automation", codemode: { pinned: true } },
           execute: (input, context) =>
             owned(input.id, context.sessionID).pipe(
               Effect.andThen(automations.resume(input.id)),
@@ -138,11 +143,11 @@ export const Plugin = {
             ),
         })
         editor.add({
-          name: "automation_delete",
+          name: "delete",
           description: "Delete an automation for good.",
           input: IDInput,
           output: RemoveOutput,
-          options: { namespace: "opencode", codemode: true },
+          options: { namespace: "automation", codemode: { pinned: true } },
           execute: (input, context) =>
             owned(input.id, context.sessionID).pipe(
               Effect.andThen(automations.remove(input.id)),
