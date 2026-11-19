@@ -1,7 +1,14 @@
 export * as ConfigMCPV1 from "./mcp.js"
 
 import { Schema } from "effect"
+import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { PositiveInt } from "../../schema.js"
+
+// Reuse the V2 timeout object so the V1 and V2 shapes cannot drift apart.
+const TimeoutDescription =
+  "Timeout in ms for MCP server requests. A bare number applies to connecting, fetching tools, and execution alike. " +
+  "When unset the defaults are 30000 (30 seconds) for connecting and fetching tools and 12 hours for execution. " +
+  "Pass { startup, catalog, execution } to set the phases separately so a longer startup does not shorten execution."
 
 export const Local = Schema.Struct({
   type: Schema.Literal("local").annotate({ description: "Type of MCP server connection" }),
@@ -20,8 +27,8 @@ export const Local = Schema.Struct({
   codemode: Schema.optional(Schema.Boolean).annotate({
     description: "Expose this server's tools through Code Mode. Defaults to true.",
   }),
-  timeout: Schema.optional(PositiveInt).annotate({
-    description: "Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.",
+  timeout: Schema.optional(Schema.Union([PositiveInt, ConfigMCP.Timeout])).annotate({
+    description: TimeoutDescription,
   }),
 }).annotate({ identifier: "McpLocalConfig" })
 export type Local = Schema.Schema.Type<typeof Local>
@@ -59,8 +66,8 @@ export const Remote = Schema.Struct({
   oauth: Schema.optional(Schema.Union([OAuth, Schema.Literal(false)])).annotate({
     description: "OAuth authentication configuration for the MCP server. Set to false to disable OAuth auto-detection.",
   }),
-  timeout: Schema.optional(PositiveInt).annotate({
-    description: "Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.",
+  timeout: Schema.optional(Schema.Union([PositiveInt, ConfigMCP.Timeout])).annotate({
+    description: TimeoutDescription,
   }),
 }).annotate({ identifier: "McpRemoteConfig" })
 export type Remote = Schema.Schema.Type<typeof Remote>
