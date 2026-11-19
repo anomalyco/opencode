@@ -1,5 +1,5 @@
 import { $ } from "bun"
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Deferred, Duration, Effect, Fiber, Layer, Logger, Option, Schedule, Stream } from "effect"
@@ -86,6 +86,31 @@ describe("Watcher lifecycle", () => {
       }).pipe(Effect.provide(AppNodeBuilder.build(Watcher.node)), Effect.provide(Logger.layer([logger]))),
     )
   })
+
+  // Lowering the process descriptor limit makes inotify_init1 fail without using up the user's shared inotify budget.
+  test.skipIf(process.platform !== "linux")(
+    "skips a directory watch with a warning when no inotify instance can be created",
+    async () => {
+      await using tmp = await tmpdir()
+      const child = Bun.spawn(
+        [
+          "sh",
+          "-c",
+          'ulimit -n 256 && exec "$@"',
+          "sh",
+          process.execPath,
+          path.join(import.meta.dir, "../fixture/watcher-fd-limit.ts"),
+          tmp.path,
+        ],
+        { stdout: "pipe", stderr: "pipe", timeout: 15_000 },
+      )
+      const [stdout, stderr] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()])
+      expect(stderr).toBe("")
+      expect(stdout).toContain("fs.inotify.max_user_instances")
+      expect(stdout.trim().split("\n").at(-1)).toBe("skipped")
+      expect(await child.exited).toBe(0)
+    },
+  )
 
   it.effect("signals readiness after acquisition and buffers updates published by the ready callback", () =>
     Effect.gen(function* () {

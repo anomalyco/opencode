@@ -3,12 +3,14 @@ export * as Watcher from "./watcher.js"
 // @ts-ignore
 import { createWrapper } from "@parcel/watcher/wrapper.js"
 import type ParcelWatcher from "@parcel/watcher"
+import type { dlopen } from "bun:ffi"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { isRecord } from "@opencode/util/record"
 import { Cause, Context, Effect, Layer, PubSub, RcMap, Stream } from "effect"
 import { lazy } from "../util/lazy.js"
 import { watch } from "node:fs"
+import { createRequire } from "node:module"
 import path from "path"
 import loadBinding from "./watcher-binding.js"
 
@@ -21,6 +23,31 @@ const watcher = lazy((): typeof ParcelWatcher | undefined => {
     return
   }
 })
+
+// Parcel's inotify backend blocks the calling thread forever when it cannot create an inotify instance: subscribe
+// waits for a start signal that the failed start never sends, so SUBSCRIBE_TIMEOUT_MS never fires. Creating and
+// closing an instance first detects that. Only Bun can make the call; elsewhere the check is skipped.
+const libc = lazy(() => {
+  if (typeof Bun === "undefined") return
+  try {
+    const ffi: { dlopen: typeof dlopen } = createRequire(import.meta.url)("bun:ffi")
+    return ffi.dlopen("libc.so.6", {
+      inotify_init1: { args: ["i32"], returns: "i32" },
+      close: { args: ["i32"], returns: "i32" },
+    }).symbols
+  } catch {
+    return
+  }
+})
+
+function inotifyAvailable() {
+  const symbols = libc()
+  if (!symbols) return true
+  const fd = symbols.inotify_init1(0)
+  if (fd < 0) return false
+  symbols.close(fd)
+  return true
+}
 
 function getBackend() {
   if (process.platform === "win32") return "windows"
@@ -254,6 +281,12 @@ function subscribeDirectory(
     return Effect.logError("watcher backend not supported", { directory, platform: process.platform }).pipe(
       Effect.as(undefined),
     )
+  }
+  if (backend === "inotify" && !inotifyAvailable()) {
+    return Effect.logWarning(
+      "file watching disabled: cannot create an inotify instance; the fs.inotify.max_user_instances limit is likely reached",
+      { directory },
+    ).pipe(Effect.as(undefined))
   }
   const callback: ParcelWatcher.SubscribeCallback = (error, updates) => {
     if (error) Effect.runFork(Effect.logError("watcher callback failed", { error }))
