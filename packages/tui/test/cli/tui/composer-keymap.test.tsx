@@ -21,9 +21,27 @@ import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
 const sessions = {
-  parent: session("parent", "Parent"),
-  "child-a": session("child-a", "First", "parent"),
-  "child-b": session("child-b", "Second", "parent"),
+  parent: {
+    ...session("parent", "Parent"),
+    model: { providerID: "openai", id: "parent-model", variant: "max" },
+  },
+  "child-a": {
+    ...session("child-a", "First", "parent"),
+    model: { providerID: "openai", id: "gpt-6-sol", variant: "high" },
+  },
+  "child-b": {
+    ...session("child-b", "Second", "parent"),
+    model: { providerID: "openai", id: "gpt-6-luna", variant: "default" },
+  },
+  "child-no-agent": {
+    ...session("child-no-agent", "Unnamed", "parent"),
+    agent: undefined,
+    model: { providerID: "openai", id: "gpt-6-sol", variant: "high" },
+  },
+  "child-unavailable": {
+    ...session("child-unavailable", "Unavailable", "parent"),
+    model: { providerID: "openai", id: "missing-model", variant: "high" },
+  },
   "child-c": session("child-c", "Third", "parent"),
 }
 
@@ -36,6 +54,8 @@ async function renderComposer(
   defaultTab: "subagents" | "shell",
   keybinds: Partial<TuiKeybind.Keybinds>,
   focusedTextarea = false,
+  sessionID = "parent",
+  width = 100,
 ) {
   const events = createEventStream()
   const interrupted: string[] = []
@@ -46,6 +66,17 @@ async function renderComposer(
   let dispatch!: ReturnType<typeof Keymap.use>["dispatch"]
   let route!: ReturnType<typeof useRoute>
   const calls = createFetch((url, request) => {
+    if (url.pathname === "/api/model")
+      return json({
+        location: { directory },
+        data: [
+          { providerID: "openai", id: "gpt-6-sol", name: "GPT-6 Sol" },
+          { providerID: "openai", id: "gpt-6-luna", name: "GPT-6 Luna" },
+          { providerID: "openai", id: "parent-model", name: "Parent Model" },
+        ],
+      })
+    if (url.pathname === "/api/provider")
+      return json({ location: { directory }, data: [{ id: "openai", name: "OpenAI" }] })
     if (url.pathname === "/api/session/active")
       return json({ data: { "child-a": { type: "running" }, "child-b": { type: "running" } } })
     const sessionID = url.pathname.match(/^\/api\/session\/([^/]+)$/)?.[1]
@@ -85,6 +116,8 @@ async function renderComposer(
         data.session.sync("parent"),
         data.session.sync("child-a"),
         data.session.sync("child-b"),
+        data.session.sync(sessionID),
+        data.location.sync({ directory }),
         data.session.sync("child-c"),
         data.shell.sync(),
       ])
@@ -97,7 +130,13 @@ async function renderComposer(
         {/* Mirrors the app, which keys the session route by sessionID and remounts it on navigation. */}
         <Show when={route.data.type === "session" ? route.data.sessionID : undefined} keyed>
           {(sessionID) => (
-            <Composer sessionID={sessionID} open={true} defaultTab={defaultTab} onClose={() => closed++} />
+            <Composer
+              sessionID={sessionID}
+              open={true}
+              defaultTab={defaultTab}
+              terminals={false}
+              onClose={() => closed++}
+            />
           )}
         </Show>
       </>
@@ -123,7 +162,7 @@ async function renderComposer(
                 <ClientProvider api={createApi(calls.fetch)}>
                   <DataProvider directory={process.cwd()}>
                     <LocationProvider>
-                      <RouteProvider initialRoute={{ type: "session", sessionID: "parent" }}>
+                      <RouteProvider initialRoute={{ type: "session", sessionID }}>
                         <ThemeProvider mode="dark" source={{ discover: async () => ({}) }}>
                           <ToastProvider>
                             <DialogProvider>
@@ -142,7 +181,7 @@ async function renderComposer(
         </TuiAppProvider>
       </TestTuiContexts>
     ),
-    { width: 100, height: 20, kittyKeyboard: true },
+    { width, height: 20, kittyKeyboard: true },
   )
   await ready.promise
   await app.renderOnce()
@@ -152,9 +191,103 @@ async function renderComposer(
     removed,
     viewed,
     route: () => route.data,
+    navigate: route.navigate,
     dispatch: (command: string) => dispatch(command),
     closed: () => closed,
   }
+}
+
+test("opened child uses the main prompt model metadata row", async () => {
+  const composer = await renderComposer("subagents", {}, false, "child-a")
+  try {
+    const frame = composer.app.captureCharFrame()
+    expect(frame).toContain("GPT-6 Sol")
+    expect(frame).toContain("OpenAI")
+    expect(frame).toContain("high")
+  } finally {
+    composer.app.renderer.destroy()
+  }
+})
+
+test("opened child still shows its model when its agent is missing", async () => {
+  const composer = await renderComposer("subagents", {}, false, "child-no-agent")
+  try {
+    expect(composer.app.captureCharFrame()).toContain("Subagent · GPT-6 Sol OpenAI · high")
+  } finally {
+    composer.app.renderer.destroy()
+  }
+})
+
+test("opened child omits the default variant like the main prompt", async () => {
+  const composer = await renderComposer("subagents", {}, false, "child-b")
+  try {
+    const frame = composer.app.captureCharFrame()
+    expect(frame).toContain("Build · GPT-6 Luna OpenAI")
+    expect(frame).not.toContain("· default")
+  } finally {
+    composer.app.renderer.destroy()
+  }
+})
+
+test("a child without a model does not borrow the parent model", async () => {
+  const composer = await renderComposer("subagents", {}, false, "child-c")
+  try {
+    const frame = composer.app.captureCharFrame()
+    expect(frame).not.toContain("Parent Model")
+    expect(frame).not.toContain("OpenAI")
+    expect(frame).not.toContain("unavailable")
+  } finally {
+    composer.app.renderer.destroy()
+  }
+})
+
+test("an unavailable child model uses its persisted ID", async () => {
+  const composer = await renderComposer("subagents", {}, false, "child-unavailable")
+  try {
+    const frame = composer.app.captureCharFrame()
+    expect(frame).toContain("missing-model (unavailable)")
+    expect(frame).toContain("high")
+    expect(frame).not.toContain("Parent Model")
+  } finally {
+    composer.app.renderer.destroy()
+  }
+})
+
+test("navigation replaces child metadata and removes it in the parent view", async () => {
+  const composer = await renderComposer("subagents", {}, false, "child-a")
+  try {
+    expect(composer.app.captureCharFrame()).toContain("GPT-6 Sol OpenAI · high")
+    composer.navigate({ type: "session", sessionID: "child-b" })
+    await composer.app.renderOnce()
+    const child = composer.app.captureCharFrame()
+    expect(child).toContain("GPT-6 Luna")
+    expect(child).not.toContain("GPT-6 Sol")
+    expect(child).not.toContain("· high")
+    expect(child).not.toContain("· default")
+    composer.navigate({ type: "session", sessionID: "parent" })
+    await composer.app.renderOnce()
+    const parent = composer.app.captureCharFrame()
+    expect(parent).not.toContain("GPT-6 Luna")
+    expect(parent).not.toContain("Parent Model")
+    expect(parent).not.toContain("OpenAI")
+  } finally {
+    composer.app.renderer.destroy()
+  }
+})
+
+for (const width of [80, 40]) {
+  test(`opened child metadata fits a ${width}-column terminal`, async () => {
+    const composer = await renderComposer("subagents", {}, false, "child-a", width)
+    try {
+      const frame = composer.app.captureCharFrame()
+      expect(frame).toContain("GPT-6 Sol")
+      expect(frame).toContain("high")
+      if (width === 80) expect(frame).toContain("OpenAI")
+      for (const line of frame.split("\n")) expect(line.length).toBeLessThanOrEqual(width)
+    } finally {
+      composer.app.renderer.destroy()
+    }
+  })
 }
 
 test("disabled subagent bindings have no component fallbacks", async () => {
@@ -177,6 +310,9 @@ test("disabled subagent bindings have no component fallbacks", async () => {
     composer.app.mockInput.pressArrow("down")
     composer.dispatch("composer.subagent.select")
     expect(composer.route()).toMatchObject({ type: "session", sessionID: "child-a" })
+    await composer.app.renderOnce()
+    expect(composer.app.captureCharFrame()).toContain("GPT-6 Sol")
+    expect(composer.app.captureCharFrame()).toContain("high")
   } finally {
     composer.app.renderer.destroy()
   }
