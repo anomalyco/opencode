@@ -1,4 +1,5 @@
 import { onCleanup } from "solid-js"
+import type { ConfigEntry } from "@opencode/client/promise"
 import {
   createSoundPreviewState,
   transitionSoundPreview,
@@ -46,6 +47,24 @@ export function createShellOptions(input: { shells: ShellOption[]; current: stri
   }
 
   return options
+}
+
+/**
+ * Whether a server's global config leaves OpenCode Console's task list on: `console_tasks` is on unless one of its config
+ * files sets it to false. Console's own document, which has no file, never decides it.
+ */
+export function consoleTasksEnabled(entries: readonly ConfigEntry[]) {
+  const boundary = entries.findIndex((entry) => entry.type === "directory")
+
+  return (
+    (boundary === -1 ? entries : entries.slice(0, boundary))
+      .flatMap((entry) =>
+        entry.type === "document" && entry.path !== undefined && entry.info.console_tasks !== undefined
+          ? [entry.info.console_tasks]
+          : [],
+      )
+      .at(-1) !== false
+  )
 }
 
 export function createSoundPreviewController(player: (id: string | undefined) => Promise<(() => void) | undefined>) {

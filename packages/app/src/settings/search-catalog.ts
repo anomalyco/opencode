@@ -285,6 +285,13 @@ export const serverSettings: Entry<SettingsServerTab | "servers">[] = [
     description: "settings.general.row.shell.description",
     keywords: "bash zsh powershell",
   },
+  {
+    tab: "servers",
+    label: "settings.general.row.consoleTasks.title",
+    target: "settings-console-tasks",
+    description: "settings.general.row.consoleTasks.description",
+    keywords: "todo claims opt out",
+  },
 ]
 
 export const projectSettings: Entry<SettingsProjectTab>[] = [

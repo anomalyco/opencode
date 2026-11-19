@@ -6,13 +6,14 @@ import type { ServerActionsController } from "@/servers/registry/controller"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection } from "@/runtime/server/registry"
 import { createShellOptions } from "@/settings/general/behavior"
-import type { ShellSettingsController } from "@/settings/general/controllers"
+import type { ConsoleTasksSettingsController, ShellSettingsController } from "@/settings/general/controllers"
 
 export const ServerRowMenu: Component<{
   server: ServerConnection.Any
   domain: ServerActionsController
   onEdit: (server: ServerConnection.Http) => void
   shell?: ShellSettingsController
+  consoleTasks?: ConsoleTasksSettingsController
   action?: string
   open?: boolean
   onOpenChange?: (open: boolean) => void
@@ -28,6 +29,7 @@ export const ServerRowMenu: Component<{
       canHide={props.domain.connection.canHide(key)}
       hidden={props.domain.connection.isHidden(key)}
       shell={props.shell}
+      consoleTasks={props.consoleTasks}
       action={props.action}
       onEdit={props.onEdit}
       onRemove={() => props.domain.connection.remove(key)}
@@ -50,6 +52,7 @@ export function serverMenuLabels(language: ReturnType<typeof useLanguage>) {
     shell: language.t("settings.general.row.shell.title"),
     shellAuto: language.t("settings.general.row.shell.autoDefault"),
     shellTerminalOnly: language.t("settings.general.row.shell.terminalOnly"),
+    consoleTasks: language.t("settings.general.row.consoleTasks.title"),
   }
 }
 
@@ -60,6 +63,7 @@ export const ServerRowMenuView: Component<{
   canHide?: boolean
   hidden?: boolean
   shell?: ShellSettingsController
+  consoleTasks?: ConsoleTasksSettingsController
   action?: string
   onEdit: (server: ServerConnection.Http) => void
   onRemove: () => void
@@ -96,6 +100,13 @@ export const ServerRowMenuView: Component<{
               {props.labels.edit}
             </Menu.Item>
             <Show when={props.shell}>{(shell) => <ShellSubmenu shell={shell()} labels={props.labels} />}</Show>
+            <Show when={props.consoleTasks}>
+              {(tasks) => (
+                <Menu.CheckboxItem checked={tasks().enabled()} onChange={tasks().select}>
+                  {props.labels.consoleTasks}
+                </Menu.CheckboxItem>
+              )}
+            </Show>
             <Show when={props.hidden}>
               <Menu.Item onSelect={props.onShow}>{props.labels.show}</Menu.Item>
             </Show>

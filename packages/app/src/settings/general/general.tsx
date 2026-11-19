@@ -19,7 +19,11 @@ import { formatKeybind } from "@/shell/commands/command"
 import { SettingsList } from "@/settings/list"
 import { SettingsRow } from "@/settings/row"
 import { createShellOptions } from "./behavior"
-import { createOptimisticSetting, type ShellSettingsController } from "./controllers"
+import {
+  createOptimisticSetting,
+  type ConsoleTasksSettingsController,
+  type ShellSettingsController,
+} from "./controllers"
 import { InterfaceModeSetting } from "./interface-mode"
 import "@/settings/settings.css"
 
@@ -102,6 +106,21 @@ export const ShellSetting: Component<{ controller: ShellSettingsController }> = 
         }}
         onSelect={(option) => option && props.controller.select(option.value)}
       />
+    </SettingsRow>
+  )
+}
+
+export const ConsoleTasksSetting: Component<{ controller: ConsoleTasksSettingsController }> = (props) => {
+  const language = useLanguage()
+
+  return (
+    <SettingsRow
+      title={language.t("settings.general.row.consoleTasks.title")}
+      description={language.t("settings.general.row.consoleTasks.description")}
+    >
+      <div data-action="settings-console-tasks">
+        <Switch checked={props.controller.enabled()} onChange={props.controller.select} />
+      </div>
     </SettingsRow>
   )
 }

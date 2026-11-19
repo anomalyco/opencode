@@ -10,8 +10,8 @@ import { ServerConnection } from "@/runtime/server/registry"
 import { useServerCollectionController } from "@/servers/registry/controller"
 import { DialogServer } from "@/servers/connect/dialog"
 import { SettingsList } from "@/settings/list"
-import { ShellSetting } from "@/settings/general/general"
-import { createServerShellController } from "@/settings/general/controllers"
+import { ConsoleTasksSetting, ShellSetting } from "@/settings/general/general"
+import { createServerConsoleTasksController, createServerShellController } from "@/settings/general/controllers"
 import type { SettingsServer } from "./inventory"
 import { serverPagesConnection, unauthorizedHttpServer } from "./machine"
 import "@/settings/settings.css"
@@ -38,6 +38,7 @@ export const SettingsServerGeneral: Component<{ entry: SettingsServer; onAddServ
               <h3 class="settings-section-title">{language.t("settings.tab.preferences")}</h3>
               <SettingsList>
                 <ServerShell server={server} />
+                <ConsoleTasksSetting controller={createServerConsoleTasksController(() => server)} />
               </SettingsList>
             </section>
           )}
@@ -156,6 +157,7 @@ function ServerConnectionRow(props: {
                       domain={controller}
                       onEdit={edit}
                       shell={createServerShellController(() => ready)}
+                      consoleTasks={createServerConsoleTasksController(() => ready)}
                       action={props.action ?? "settings-shell"}
                     />
                   )}

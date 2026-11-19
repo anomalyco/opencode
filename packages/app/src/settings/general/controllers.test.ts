@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "bun:test"
 import { createRoot } from "solid-js"
-import { createShellOptions, createSoundPreviewController } from "./behavior"
+import { consoleTasksEnabled, createShellOptions, createSoundPreviewController } from "./behavior"
 
 describe("settings controllers", () => {
   test("normalizes shell names and preserves an unavailable configured shell", () => {
@@ -20,6 +20,28 @@ describe("settings controllers", () => {
       { id: "/bin/zsh", value: "zsh", name: "zsh", terminalOnly: false },
       { id: "fish", value: "fish", name: "fish", terminalOnly: false },
     ])
+  })
+
+  test("reads OpenCode Console tasks as on unless a global config file sets console_tasks to false", () => {
+    const file = (path: string, console_tasks?: boolean) =>
+      ({ type: "document", path, info: console_tasks === undefined ? {} : { console_tasks } }) as const
+
+    const directory = { type: "directory", path: "/project/.opencode" } as const
+
+    expect(consoleTasksEnabled([])).toBe(true)
+    expect(
+      consoleTasksEnabled([file("/etc/opencode/opencode.json"), file("/config/opencode/opencode.json", false)]),
+    ).toBe(false)
+    // The last file that names it wins.
+    expect(
+      consoleTasksEnabled([file("/etc/opencode/opencode.json", false), file("/config/opencode/opencode.json", true)]),
+    ).toBe(true)
+    // Console's own document has no file and never decides it.
+    expect(consoleTasksEnabled([{ type: "document", info: { console_tasks: false } }])).toBe(true)
+    // Only the global part counts: what follows the first discovery directory is a project's.
+    expect(
+      consoleTasksEnabled([file("/config/opencode/opencode.json"), directory, file("/project/opencode.json", false)]),
+    ).toBe(true)
   })
 
   test("debounces previews and stops owned audio on disposal", async () => {

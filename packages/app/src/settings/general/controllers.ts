@@ -18,7 +18,7 @@ import {
 import { usePlatform } from "@/runtime/platform/platform"
 import { desktopZoomLevels, type DesktopZoomLevel } from "@/shell/commands/desktop-menu"
 import { playSoundById, SOUND_OPTIONS } from "@/shell/notifications/sound"
-import { createSoundPreviewController } from "./behavior"
+import { consoleTasksEnabled, createSoundPreviewController } from "./behavior"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useServerCtx } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -144,6 +144,39 @@ export function createServerShellController(server: Accessor<ServerConnection.An
   }
 }
 
+/** Whether a server offers OpenCode Console's task list, written as `console_tasks` in its global config. */
+export function createServerConsoleTasksController(server: Accessor<ServerConnection.Any>) {
+  const language = useLanguage()
+
+  const setting = createOptimisticSetting({
+    source: useServerCtx(server),
+    initial: true,
+    initialMeta: undefined,
+    load: async (context) => ({
+      meta: undefined,
+      value: consoleTasksEnabled(await context.sdk.api.config.get().catch(() => [])),
+    }),
+    // On is the default, so turning it on removes the key rather than writing true.
+    write: async (value, context) => {
+      await context.sdk.api.experimental.config.update({ console_tasks: value ? null : false })
+    },
+    onError: (failure) =>
+      showToast({
+        variant: "error",
+        title: language.t("common.requestFailed"),
+        description:
+          failure.kind === "timeout"
+            ? language.t("home.sessions.load.timeout")
+            : failure.message || language.t("common.requestFailed"),
+      }),
+  })
+
+  return {
+    enabled: setting.value,
+    select: setting.select,
+  }
+}
+
 export function createAppearanceSettingsController() {
   const settings = useSettings()
   const platform = usePlatform()
@@ -265,6 +298,8 @@ export function createSoundSettingsController() {
 }
 
 export type ShellSettingsController = ReturnType<typeof createServerShellController>
+
+export type ConsoleTasksSettingsController = ReturnType<typeof createServerConsoleTasksController>
 
 export type AppearanceSettingsController = ReturnType<typeof createAppearanceSettingsController>
 

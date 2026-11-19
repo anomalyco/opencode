@@ -1194,6 +1194,9 @@ export const dict = {
   "settings.general.row.shell.description": "Shell used by the terminal and agent tools",
   "settings.general.row.shell.autoDefault": "Auto (Default)",
   "settings.general.row.shell.terminalOnly": "terminal only",
+  "settings.general.row.consoleTasks.title": "OpenCode Console tasks",
+  "settings.general.row.consoleTasks.description":
+    "Offer agents your OpenCode Console task list and keep the tasks they claim from lapsing while their sessions live",
   "settings.general.row.colorScheme.title": "Color scheme",
   "settings.general.row.colorScheme.description": "Choose whether OpenCode follows the system, light, or dark theme",
   "settings.general.row.theme.title": "Theme",
