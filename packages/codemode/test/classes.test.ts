@@ -229,6 +229,27 @@ describe("class inheritance", () => {
     ).toEqual([3, ["x"]])
   })
 
+  test("super.x with ++, --, compound and logical assignment, and delete super.x", () => {
+    expect(
+      value(`
+        class A { get x() { return this._x ?? 1 } set x(v) { this._x = v } }
+        class B extends A {
+          m() {
+            const r = [super.x++, super.x, ++super.x]
+            super.x += 10
+            super["x"] *= 2
+            super.x ||= 5
+            super.y ??= 7
+            const k = "x"
+            r.push(this.x, this.y, super[k]--, this.x)
+            try { delete super.x } catch (e) { r.push(e.name) }
+            return r
+          }
+        }
+        return new B().m()`),
+    ).toEqual([1, 2, 3, 26, 7, 26, 25, "ReferenceError"])
+  })
+
   test("arrows capture super and this", () => {
     expect(
       value(`
@@ -468,18 +489,6 @@ describe("unsupported features", () => {
 
   test("super() in an arrow", async () => {
     expect(await message("class A {}\nclass B extends A { constructor() { const f = () => super(); f() } }\nreturn new B()")).toStartWith("SyntaxError: super() inside an arrow function is not supported. Call super() directly in the constructor.")
-  })
-
-  test("compound super assignment", async () => {
-    expect(await message("class A {}\nclass B extends A { m() { super.x += 1 } }\nreturn new B().m()")).toStartWith("SyntaxError: Compound assignment to super.x (+=) is not supported.")
-  })
-
-  test("super update", async () => {
-    expect(await message("class A {}\nclass B extends A { m() { super.x++ } }\nreturn new B().m()")).toStartWith("SyntaxError: Updating super.x with ++ or -- is not supported.")
-  })
-
-  test("delete super.x", async () => {
-    expect(await message("class A {}\nclass B extends A { m() { delete super.x } }\nreturn new B().m()")).toStartWith("SyntaxError: delete super.x is not supported.")
   })
 
   test("destructuring into super.x", async () => {

@@ -264,6 +264,25 @@ const compileFunctionBody = (
     return true
   }
 
+  // Pushes [home, this(, key)] and reads super.x above them; returns how many base values stay for emitPutSuper.
+  const emitSuperRead = (node: MemberExpression): number => {
+    emitSuperBase(node)
+    if (node.computed) {
+      compileExpression(node.property as Expression)
+      builder.emit(Op.TO_KEY, 0, 0, idx(node.property), 0)
+    }
+    const n = node.computed ? 3 : 2
+    for (let i = 0; i < n; i++) builder.emit(Op.PICK, n - 1, 0, idx(node), 1)
+    const k = node.computed ? 0 : builder.constant(propertyName(node))
+    builder.emit(Op.GET_SUPER, node.computed ? 2 : 0, k, idx(node), node.computed ? -2 : -1)
+    return n
+  }
+
+  const emitPutSuper = (node: MemberExpression): void => {
+    const k = node.computed ? 0 : builder.constant(propertyName(node))
+    builder.emit(Op.PUT_SUPER, node.computed ? 2 : 0, k, idx(node), node.computed ? -3 : -2)
+  }
+
   // A derived constructor's `this` binding: SUPER_BIND writes it in place.
   const thisOperand = (): [number, number] => [fnInfo.thisDecl!.captured ? 1 : 0, fnInfo.thisDecl!.slot]
 
@@ -1204,7 +1223,16 @@ const compileFunctionBody = (
       builder.emit(Op.PUSH_BOOL, 1, 0, idx(node), 1)
       return
     }
-    if (unsupportedSuper(target, "delete super.x")) return
+    if (target.object.type === "Super" && analysis.superRefs.has(target.object)) {
+      // `delete super.x` evaluates the reference (`this` first, then the key) and always throws.
+      emitSuperBase(target)
+      if (target.computed) {
+        compileExpression(target.property as Expression)
+        builder.emit(Op.TO_KEY, 0, 0, idx(target.property), 0)
+      }
+      return emitThrowError({ type: "ReferenceError", message: "Unsupported reference to 'super'." }, target)
+    }
+    if (unsupportedSuper(target)) return
     const shortLabel = isChain || target.optional ? builder.newLabel(builder.depth + 1) : undefined
     compileExpression(target.object as Expression, shortLabel)
     if (target.optional && shortLabel) {
@@ -1243,7 +1271,19 @@ const compileFunctionBody = (
         arg,
       )
     }
-    if (unsupportedSuper(arg, "Updating super.x with ++ or --")) return
+    if (arg.object.type === "Super" && analysis.superRefs.has(arg.object)) {
+      const n = emitSuperRead(arg)
+      builder.emit(Op.TO_NUMERIC, incFlag, 0, idx(arg), 0)
+      if (!node.prefix) {
+        builder.emit(Op.DUP, 0, 0, idx(node), 1)
+        builder.emit(Op.ROT, n + 1, 0, idx(node), 0)
+      }
+      builder.emit(Op.INC, incFlag, 0, idx(node), 0)
+      emitPutSuper(arg)
+      if (!node.prefix) builder.emit(Op.POP, 0, 0, idx(node), -1)
+      return
+    }
+    if (unsupportedSuper(arg)) return
     compileExpression(arg.object as Expression)
     const k = arg.computed ? 0 : builder.constant(propertyName(arg))
     if (arg.computed) {
@@ -1344,11 +1384,31 @@ const compileFunctionBody = (
         builder.emit(Op.TO_KEY, 0, 0, idx(left.property), 0)
       }
       compileExpression(node.right)
-      const k = left.computed ? 0 : builder.constant(propertyName(left))
-      builder.emit(Op.PUT_SUPER, left.computed ? 2 : 0, k, idx(left), left.computed ? -3 : -2)
+      emitPutSuper(left)
       return
     }
-    if (unsupportedSuper(left, `Compound assignment to super.x (${op})`)) return
+    if (left.object.type === "Super" && analysis.superRefs.has(left.object)) {
+      // [home, this(, key)] stays below the value for PUT_SUPER.
+      const n = emitSuperRead(left)
+      if (!isLogical) {
+        compileExpression(node.right)
+        emitBinaryOp(op.slice(0, -1), node)
+        emitPutSuper(left)
+        return
+      }
+      const shortLabel = builder.newLabel(builder.depth)
+      const endLabel = builder.newLabel(builder.depth - n)
+      builder.emitJump(Op.JUMP_COND, logicalCond(op), shortLabel, idx(node), 0, -1)
+      compileExpression(node.right)
+      emitPutSuper(left)
+      builder.emitJump(Op.JUMP, 0, endLabel, idx(node), 0, -1)
+      builder.mark(shortLabel)
+      builder.emit(Op.ROT, n, 0, idx(node), 0)
+      builder.emit(Op.POPN, 0, n, idx(node), -n)
+      builder.mark(endLabel)
+      return
+    }
+    if (unsupportedSuper(left)) return
 
     const baseDepth = builder.depth
     compileExpression(left.object as Expression)

@@ -2525,9 +2525,7 @@ language/expressions/delete/S11.4.1_A3.2_T3.js  # TypeError: MyFunction is not a
 language/expressions/delete/S11.4.1_A3.3_T3.js  # TypeError: MyFunction is not a constructor: only classes can be constructed with new. Use a class, o
 language/expressions/delete/S8.12.7_A2_T2.js  # TypeError: Palette is not a constructor: only classes can be constructed with new. Use a class, or c
 language/expressions/delete/non-reference-return-true.js  # TypeError: Only data fields may be deleted.
-language/expressions/delete/super-property-method.js  # Expected a ReferenceError but got a SyntaxError
 language/expressions/delete/super-property-topropertykey.js  # Expected a ReferenceError but got a SyntaxError
-language/expressions/delete/super-property-uninitialized-this.js  # Expected a ReferenceError but got a SyntaxError
 language/expressions/delete/super-property.js  # TypeError: Extending the built-in Object is not supported. Only classes and Error types can be exten
 language/expressions/division/S11.5.2_A3_T1.5.js  # TypeError: Binary operators require data values.
 language/expressions/function/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
@@ -2647,8 +2645,6 @@ language/expressions/super/prop-expr-obj-err.js  # Expected SameValue(«SyntaxEr
 language/expressions/super/prop-expr-obj-key-err.js  # Expected SameValue(«SyntaxError: '…' is only supported in class methods.», «Test262Error: ») to be t
 language/expressions/super/prop-expr-obj-ref-strict.js  # UnsupportedSyntax: SyntaxError: '…' is only supported in class methods.
 language/expressions/super/prop-expr-obj-unresolvable.js  # Expected SameValue(«SyntaxError», «ReferenceError») to be true
-language/expressions/super/prop-expr-uninitialized-this-putvalue-compound-assign.js  # Expected a ReferenceError but got a SyntaxError
-language/expressions/super/prop-expr-uninitialized-this-putvalue-increment.js  # Expected a ReferenceError but got a SyntaxError
 language/expressions/super/prop-poisoned-underscore-proto.js  # UnsupportedSyntax: SyntaxError: '…' is only supported in class methods.
 language/expressions/tagged-template/constructor-invocation.js  # TypeError: The called value is not a constructor: only classes can be constructed with new. Use a cl
 language/expressions/tagged-template/template-object-frozen-strict.js  # Expected a TypeError to be thrown but no exception was thrown at all
