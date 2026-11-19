@@ -1,6 +1,7 @@
 import { Icon } from "@opencode/ui/icon"
 import { Menu } from "@opencode/ui/menu"
 import { Popover } from "@kobalte/core/popover"
+import { createOverlayFocus } from "@opencode/ui/context/overlay-focus"
 import { createMemo, For, Match, Show, Switch, untrack, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import {
@@ -73,6 +74,10 @@ function PluginPill(props: { pill: ComposerPill; input: ComposerPillProps; align
   const view = createMemo(() => props.pill.show(props.input))
   const [state, setState] = createStore({ open: false })
 
+  const overlayFocus = createOverlayFocus()
+
+  let trigger: HTMLButtonElement | undefined
+
   return (
     <Show when={view()}>
       {(current) => (
@@ -93,11 +98,15 @@ function PluginPill(props: { pill: ComposerPill; input: ComposerPillProps; align
             {(menu) => (
               <Popover
                 open={state.open}
-                onOpenChange={(open) => setState("open", open)}
+                onOpenChange={(open) => {
+                  overlayFocus.openChanged(open)
+                  setState("open", open)
+                }}
                 placement={composerLanePlacement(alignment())}
                 gutter={8}
               >
                 <Popover.Trigger
+                  ref={trigger}
                   as="button"
                   type="button"
                   data-slot="session-plugin-pill"
@@ -112,6 +121,7 @@ function PluginPill(props: { pill: ComposerPill; input: ComposerPillProps; align
                     aria-label={current().title ?? current().label}
                     data-composer-pill-panel
                     class="w-80 p-1"
+                    onCloseAutoFocus={(event) => overlayFocus.restore(event, trigger)}
                   >
                     {/* Untracked: the content renders once per open; its own reactivity updates it in place. */}
                     {untrack(() =>

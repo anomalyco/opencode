@@ -1,4 +1,5 @@
 import { For, Match, Show, Switch, createUniqueId } from "solid-js"
+import { Icon } from "@opencode/ui/icon"
 import { Select } from "@opencode/ui/select"
 import { useLanguage } from "@/runtime/i18n/language"
 import { type TabLayout, useSettings } from "@/settings/model"
@@ -89,6 +90,9 @@ function NavigationSetting() {
                 </Show>
               </span>
               <span data-slot="navigation-mode-name">{language.t(`settings.general.row.navigation.${mode}`)}</span>
+              <Show when={settings.appearance.navigation() === mode}>
+                <ModeCheck />
+              </Show>
             </label>
           )}
         </For>
@@ -158,11 +162,22 @@ function TabLayoutSetting() {
                 </span>
               </span>
               <span data-slot="interface-mode-name">{language.t(`settings.general.row.interfaceMode.${mode.id}`)}</span>
+              <Show when={settings.appearance.tabLayout() === mode.layout}>
+                <ModeCheck />
+              </Show>
             </label>
           )}
         </For>
       </fieldset>
     </SettingsRow>
+  )
+}
+
+function ModeCheck() {
+  return (
+    <span data-slot="mode-option-check" aria-hidden="true">
+      <Icon name="check" size="small" />
+    </span>
   )
 }
 

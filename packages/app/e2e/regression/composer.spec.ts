@@ -5,6 +5,43 @@ import { mockPluginsActivating, type MockServerConfig } from "../utils/mock-serv
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] })
 
+test("the composer preserves its ring on dialog return and leaves autofocus and clicks quiet", async ({ page }) => {
+  const view = await openSession(page, { name: "ComposerKeyboardFocus" })
+
+  const frame = page.locator('[data-component="composer"]').filter({ has: view.editor })
+
+  await expect(view.editor).toBeFocused()
+  await expect(frame).toHaveCSS("outline-style", "none")
+
+  await page.keyboard.press("Shift+Tab")
+  await expect(view.editor).not.toBeFocused()
+  await page.keyboard.press("Tab")
+  await expect(view.editor).toBeFocused()
+  await expect(frame).toHaveCSS("outline-style", "solid")
+
+  const modifier = await page.evaluate(() => (/Mac/i.test(navigator.platform) ? "Meta" : "Control"))
+
+  const dialog = page.getByRole("dialog")
+
+  await page.keyboard.press(`${modifier}+Shift+p`)
+  await expect(dialog.getByRole("combobox")).toBeFocused()
+  await page.keyboard.press("Escape")
+  await expect(view.editor).toBeFocused()
+  await expect(frame).toHaveCSS("outline-style", "solid")
+
+  await view.editor.click()
+  await expect(view.editor).toBeFocused()
+  await expect(frame).toHaveCSS("outline-style", "none")
+  await page.keyboard.type("Still quiet")
+  await expect(frame).toHaveCSS("outline-style", "none")
+  await page.keyboard.press(`${modifier}+Shift+p`)
+  await expect(dialog.getByRole("combobox")).toBeFocused()
+  await page.mouse.click(20, 200)
+  await expect(dialog).toBeHidden()
+  await expect(view.editor).toBeFocused()
+  await expect(frame).toHaveCSS("outline-style", "none")
+})
+
 test("mention a session by title, send its stable token, and open its own tab", async ({ page }) => {
   const target = "ses_0123456789abcdefghijklmnop"
   const prompts: Parameters<NonNullable<MockServerConfig["onPrompt"]>>[0]["body"][] = []

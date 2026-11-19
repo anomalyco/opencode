@@ -49,7 +49,7 @@ import "./session-identity-header.css"
 
 const SessionHeaderCollapse = createContext<() => number>(() => 0)
 
-export function SessionTitleHeader(props: ParentProps) {
+export function SessionTitleHeader(props: ParentProps<{ separateFade?: boolean }>) {
   return (
     <>
       {/* The bottom inset reserves room for the fade without covering rows stuck below the bar. */}
@@ -59,12 +59,20 @@ export function SessionTitleHeader(props: ParentProps) {
           <div class="min-w-0 flex-1">{props.children}</div>
         </div>
       </div>
-      {/* Stuck timeline headers stack above this fade, so it only fades content scrolling under the bar. */}
-      <div
-        aria-hidden="true"
-        class="session-header-fade pointer-events-none sticky z-[5] -mt-4 h-4 w-full bg-[linear-gradient(to_bottom,var(--v2-background-bg-base),transparent)]"
-      />
+      <Show when={!props.separateFade}>
+        <SessionHeaderFade />
+      </Show>
     </>
+  )
+}
+
+export function SessionHeaderFade() {
+  // Stuck timeline headers stack above this fade, so it only fades content scrolling under the bar.
+  return (
+    <div
+      aria-hidden="true"
+      class="session-header-fade pointer-events-none sticky z-[5] -mt-4 h-4 w-full bg-[linear-gradient(to_bottom,var(--v2-background-bg-base),transparent)]"
+    />
   )
 }
 
@@ -223,7 +231,7 @@ export function SessionLocation(props: {
           <Menu.Trigger
             data-slot="session-location-trigger"
             aria-label={label()}
-            class="relative flex h-7 min-w-0 max-w-full shrink items-center gap-2 overflow-hidden rounded-[6px] px-1.5 text-start text-[13px] font-normal leading-[var(--line-height-compact)] tracking-[-0.04px] text-v2-text-text-muted transition-colors hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none data-[expanded]:bg-v2-overlay-simple-overlay-hover data-[expanded]:text-v2-text-text-base"
+            class="relative flex h-7 min-w-0 max-w-full shrink items-center gap-2 overflow-hidden rounded-[6px] px-1.5 text-start text-[13px] font-normal leading-[var(--line-height-compact)] tracking-[-0.04px] text-v2-text-text-muted transition-colors hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base data-[expanded]:bg-v2-overlay-simple-overlay-hover data-[expanded]:text-v2-text-text-base"
           >
             <ProjectAvatar
               class="shrink-0"
@@ -507,7 +515,7 @@ export function SessionAncestorTrail(props: {
                 data-slot={ancestor.direct ? "session-title-parent" : "session-title-ancestor"}
                 data-session-id={ancestor.id}
                 title={ancestor.title}
-                class="h-7 max-w-[min(200px,40vw)] shrink-0 truncate rounded-[6px] px-1.5 text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-muted focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-muted focus-visible:outline-none"
+                class="h-7 max-w-[min(200px,40vw)] shrink-0 truncate rounded-[6px] px-1.5 text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-muted"
                 onClick={() => open(props.sessionID, ancestor.id)}
               >
                 <bdi dir="auto">{ancestor.title}</bdi>
