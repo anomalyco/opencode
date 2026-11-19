@@ -66,7 +66,10 @@ type Spec = {
 }
 
 const respond = (spec: Spec, log: Array<unknown>) => {
-  const encoder = { encode: (chunk: string | Array<number>) => (typeof chunk === "string" ? new TextEncoder().encode(chunk) : new Uint8Array(chunk)) }
+  const encoder = {
+    encode: (chunk: string | Array<number>) =>
+      typeof chunk === "string" ? new TextEncoder().encode(chunk) : new Uint8Array(chunk),
+  }
   let index = 0
   const body =
     spec.chunks === undefined
@@ -139,24 +142,100 @@ const globals = (log: Array<unknown>, wait: { resumed: () => boolean; started: (
 const runtime = (log: Array<unknown>, wait: { resumed: () => boolean; started: () => void }, fetched?: () => void) =>
   Runtime.make({ globals: () => globals(log, wait, fetched), translate: { functions: "drop", promises: "await" } })
 
-const text = { chunks: ["hel", "lo"], status: 201, statusText: "Created", headers: { "Content-Type": "text/plain", "X-A": "1" } }
+const text = {
+  chunks: ["hel", "lo"],
+  status: 201,
+  statusText: "Created",
+  headers: { "Content-Type": "text/plain", "X-A": "1" },
+}
 const json = { chunks: ['{"a":', "[1,2]}"], headers: { "content-type": "application/json" } }
 
 // Bodies `json()` reads, valid and not: the reference's messages are its host runtime's.
 const jsonBodies = [
-  "", " ", "{", "[1,", "abc", "nul", "tru", "1 2", '{"a":1}x', '{"a" 1}', "{a:1}", "[1,]", '{"a":1,}', '"x', '"\\q"',
-  '"\\u12"', "01", "-", "1.", "1e", ".5", "+1", "[1 2]", '{"a":1 "b":2}', "'x'", "\u00a0 1", '"\t"',
-  '{"__proto__":1,"a":2,"a":3}', "1e400", "-0", "[[[[]]]]", '{"":""}', "NaN", "Infinity", "undefined",
-  "true false", ":", ",", "}", "]", "[", '"a\\"', '{"a":}', '{"a":1,"b"}', '{,}', "[,1]", "1e+", "0x10", "1_0",
-  '"\\x41"', '"\\u00e9"', "\u2028 1", "[1]]", "{}}", "nulll", "truex", " \n\t\r 7 ", "\f1", '"\u0000"', '{"a":[}',
-  "123abc", "[-]", "[1,,2]", '"\\"', "1.5e3", "-1.5E-3", "1e-400", "9007199254740993", '{"a":{"b":[1,{"c":null}]}}',
+  "",
+  " ",
+  "{",
+  "[1,",
+  "abc",
+  "nul",
+  "tru",
+  "1 2",
+  '{"a":1}x',
+  '{"a" 1}',
+  "{a:1}",
+  "[1,]",
+  '{"a":1,}',
+  '"x',
+  '"\\q"',
+  '"\\u12"',
+  "01",
+  "-",
+  "1.",
+  "1e",
+  ".5",
+  "+1",
+  "[1 2]",
+  '{"a":1 "b":2}',
+  "'x'",
+  "\u00a0 1",
+  '"\t"',
+  '{"__proto__":1,"a":2,"a":3}',
+  "1e400",
+  "-0",
+  "[[[[]]]]",
+  '{"":""}',
+  "NaN",
+  "Infinity",
+  "undefined",
+  "true false",
+  ":",
+  ",",
+  "}",
+  "]",
+  "[",
+  '"a\\"',
+  '{"a":}',
+  '{"a":1,"b"}',
+  "{,}",
+  "[,1]",
+  "1e+",
+  "0x10",
+  "1_0",
+  '"\\x41"',
+  '"\\u00e9"',
+  "\u2028 1",
+  "[1]]",
+  "{}}",
+  "nulll",
+  "truex",
+  " \n\t\r 7 ",
+  "\f1",
+  '"\u0000"',
+  '{"a":[}',
+  "123abc",
+  "[-]",
+  "[1,,2]",
+  '"\\"',
+  "1.5e3",
+  "-1.5E-3",
+  "1e-400",
+  "9007199254740993",
+  '{"a":{"b":[1,{"c":null}]}}',
 ]
 
 // Bodies whose JSON holds lone surrogates, escaped pairs and U+10FFFF, as escapes and as UTF-8.
 const surrogateBodies = [
-  ['"\\ud800"'], ['"\\udc00x"'], ['"a\\ud800\\ud800b"'], ['"\\ud83d\\ude00"'], ['"\\udbff\\udfff"'], ['"\\ud800\\udc00\\udc00"'],
-  ['{"\\ud800":"\\udc00"}'], ['{"k\\udfff":"\\udbff\\udfffz"}'], [[0x22, 0xf4, 0x8f, 0xbf, 0xbf, 0x22]],
-  [[0x22, 0xf4, 0x8f, 0xbf, 0xbf, 0xf4, 0x8f, 0xbf, 0xbf, 0x5c, 0x75, 0x64, 0x38, 0x30, 0x30, 0x22]], [[0x22, 0xed, 0xa0, 0x80, 0x22]],
+  ['"\\ud800"'],
+  ['"\\udc00x"'],
+  ['"a\\ud800\\ud800b"'],
+  ['"\\ud83d\\ude00"'],
+  ['"\\udbff\\udfff"'],
+  ['"\\ud800\\udc00\\udc00"'],
+  ['{"\\ud800":"\\udc00"}'],
+  ['{"k\\udfff":"\\udbff\\udfffz"}'],
+  [[0x22, 0xf4, 0x8f, 0xbf, 0xbf, 0x22]],
+  [[0x22, 0xf4, 0x8f, 0xbf, 0xbf, 0xf4, 0x8f, 0xbf, 0xbf, 0x5c, 0x75, 0x64, 0x38, 0x30, 0x30, 0x22]],
+  [[0x22, 0xed, 0xa0, 0x80, 0x22]],
 ]
 
 const programs: Array<string> = [
@@ -349,38 +428,120 @@ programs.push(
   busy("let i = 0", "while (i < 30000) { if (flip < 0 && r.body.locked) flip = i; i++ }"),
   busy("let i = 0", "do { if (flip < 0 && r.body.locked) flip = i; i++; if (i % 2) continue } while (i < 30000)"),
   busy("", "for (let i = 0; ; i++) { if (i % 3 === 0) continue; if (flip < 0 && r.body.locked) { flip = i; break } }"),
-  busy("", "outer: for (let i = 0; i < 300; i++) for (let j = 0; j < 100; j++) { if (j === 50) continue outer; if (flip < 0 && r.body.locked) flip = i * 1000 + j }"),
+  busy(
+    "",
+    "outer: for (let i = 0; i < 300; i++) for (let j = 0; j < 100; j++) { if (j === 50) continue outer; if (flip < 0 && r.body.locked) flip = i * 1000 + j }",
+  ),
   busy("const f = (x) => x", "for (let i = 0; i < 30000; i++) { f(i); if (flip < 0 && r.body.locked) flip = i }"),
-  busy("function f(x) { return x }", "for (let i = 0; i < 30000; i++) { f?.(f(i)); if (flip < 0 && r.body.locked) flip = i }"),
-  busy("const o = { m(x) { return x } }", "for (let i = 0; i < 30000; i++) { o.m(i); if (flip < 0 && r.body.locked) flip = i }"),
-  busy("const f = (...x) => x; const g = f.bind(null, 1)", "for (let i = 0; i < 30000; i++) { f(...[i]); g(i); if (flip < 0 && r.body.locked) flip = i }"),
+  busy(
+    "function f(x) { return x }",
+    "for (let i = 0; i < 30000; i++) { f?.(f(i)); if (flip < 0 && r.body.locked) flip = i }",
+  ),
+  busy(
+    "const o = { m(x) { return x } }",
+    "for (let i = 0; i < 30000; i++) { o.m(i); if (flip < 0 && r.body.locked) flip = i }",
+  ),
+  busy(
+    "const f = (...x) => x; const g = f.bind(null, 1)",
+    "for (let i = 0; i < 30000; i++) { f(...[i]); g(i); if (flip < 0 && r.body.locked) flip = i }",
+  ),
   busy("", "for (let i = 0; i < 30000; i++) { Math.abs(i); if (flip < 0 && r.body.locked) flip = i }"),
-  busy("const a = []", "for (let i = 0; i < 30000; i++) { a.push(String(i)); JSON.stringify(i); if (flip < 0 && r.body.locked) flip = i }"),
+  busy(
+    "const a = []",
+    "for (let i = 0; i < 30000; i++) { a.push(String(i)); JSON.stringify(i); if (flip < 0 && r.body.locked) flip = i }",
+  ),
   busy("", "for (let i = 0; i < 30000; i++) { new Map(); [i].length; if (flip < 0 && r.body.locked) flip = i }"),
   busy("", "for (let i = 0; i < 30000; i++) { echo(i); if (flip < 0 && r.body.locked) flip = i }"),
-  busy("", "for (let i = 0; i < 30000; i++) { try { if (i % 7 === 0) throw new Error('x') } catch {} finally { if (flip < 0 && r.body.locked) flip = i } }"),
-  busy("const tag = (s, v) => v", "for (let i = 0; i < 30000; i++) { tag`a${i}b`; if (flip < 0 && r.body.locked) flip = i }"),
-  busy("const a = []; for (let i = 0; i < 30000; i++) a[i] = i", "for (const i of a) { if (flip < 0 && r.body.locked) flip = i }"),
-  busy("const o = {}; for (let i = 0; i < 20000; i++) o['k' + i] = i", "for (const k in o) { if (flip < 0 && r.body.locked) flip = o[k] }"),
-  busy("function* gen() { for (let i = 0; i < 30000; i++) yield i }", "for (const i of gen()) { if (flip < 0 && r.body.locked) flip = i }"),
-  busy("function* gen() { for (let i = 0; i < 30000; i++) yield i }", "const it = gen(); for (let x = it.next(); !x.done; x = it.next()) { if (flip < 0 && r.body.locked) flip = x.value }"),
-  busy("function* gen() { for (let i = 0; i < 30000; i++) yield i }", "const all = [...gen()]; for (const i of all) { if (flip < 0 && r.body.locked) flip = i }"),
-  busy("function* gen() { for (let i = 0; i < 3; i++) yield i }", "for (let i = 0; i < 30000; i++) { const [a, b] = gen(); if (flip < 0 && r.body.locked) flip = i }"),
-  busy("const a = []; for (let i = 0; i < 30000; i++) a[i] = i; function* gen() { yield* a }", "for (const i of gen()) { if (flip < 0 && r.body.locked) flip = i }"),
-  busy("function* inner() { for (let i = 0; i < 30000; i++) yield i } function* gen() { yield* inner() }", "for (const i of gen()) { if (flip < 0 && r.body.locked) flip = i }"),
-  busy("const it = { [Symbol.iterator]() { let i = 0; return { next: () => ({ done: i >= 30000, value: i++ }) } } }", "for (const i of it) { if (flip < 0 && r.body.locked) flip = i }"),
-  busy("const m = new Map(); for (let i = 0; i < 30000; i++) m.set(i, i)", "for (const [k] of m) { if (flip < 0 && r.body.locked) flip = k }"),
-  busy("const a = []; for (let i = 0; i < 30000; i++) a[i] = i", "for (const i of a.values()) { if (flip < 0 && r.body.locked) flip = i }"),
+  busy(
+    "",
+    "for (let i = 0; i < 30000; i++) { try { if (i % 7 === 0) throw new Error('x') } catch {} finally { if (flip < 0 && r.body.locked) flip = i } }",
+  ),
+  busy(
+    "const tag = (s, v) => v",
+    "for (let i = 0; i < 30000; i++) { tag`a${i}b`; if (flip < 0 && r.body.locked) flip = i }",
+  ),
+  busy(
+    "const a = []; for (let i = 0; i < 30000; i++) a[i] = i",
+    "for (const i of a) { if (flip < 0 && r.body.locked) flip = i }",
+  ),
+  busy(
+    "const o = {}; for (let i = 0; i < 20000; i++) o['k' + i] = i",
+    "for (const k in o) { if (flip < 0 && r.body.locked) flip = o[k] }",
+  ),
+  busy(
+    "function* gen() { for (let i = 0; i < 30000; i++) yield i }",
+    "for (const i of gen()) { if (flip < 0 && r.body.locked) flip = i }",
+  ),
+  busy(
+    "function* gen() { for (let i = 0; i < 30000; i++) yield i }",
+    "const it = gen(); for (let x = it.next(); !x.done; x = it.next()) { if (flip < 0 && r.body.locked) flip = x.value }",
+  ),
+  busy(
+    "function* gen() { for (let i = 0; i < 30000; i++) yield i }",
+    "const all = [...gen()]; for (const i of all) { if (flip < 0 && r.body.locked) flip = i }",
+  ),
+  busy(
+    "function* gen() { for (let i = 0; i < 3; i++) yield i }",
+    "for (let i = 0; i < 30000; i++) { const [a, b] = gen(); if (flip < 0 && r.body.locked) flip = i }",
+  ),
+  busy(
+    "const a = []; for (let i = 0; i < 30000; i++) a[i] = i; function* gen() { yield* a }",
+    "for (const i of gen()) { if (flip < 0 && r.body.locked) flip = i }",
+  ),
+  busy(
+    "function* inner() { for (let i = 0; i < 30000; i++) yield i } function* gen() { yield* inner() }",
+    "for (const i of gen()) { if (flip < 0 && r.body.locked) flip = i }",
+  ),
+  busy(
+    "const it = { [Symbol.iterator]() { let i = 0; return { next: () => ({ done: i >= 30000, value: i++ }) } } }",
+    "for (const i of it) { if (flip < 0 && r.body.locked) flip = i }",
+  ),
+  busy(
+    "const m = new Map(); for (let i = 0; i < 30000; i++) m.set(i, i)",
+    "for (const [k] of m) { if (flip < 0 && r.body.locked) flip = k }",
+  ),
+  busy(
+    "const a = []; for (let i = 0; i < 30000; i++) a[i] = i",
+    "for (const i of a.values()) { if (flip < 0 && r.body.locked) flip = i }",
+  ),
   busy("", "for (const c of 'x'.repeat(30000)) { if (flip < 0 && r.body.locked) flip = 1 }"),
-  busy("const a = []; for (let i = 0; i < 30000; i++) a[i] = i", "for await (const i of a) { if (flip < 0 && r.body.locked) flip = i }"),
-  busy("async function* gen() { for (let i = 0; i < 30000; i++) yield i }", "for await (const i of gen()) { if (flip < 0 && r.body.locked) flip = i }"),
-  busy("const it = { [Symbol.iterator]() { let i = 0; return { next: () => ({ done: i >= 30000, value: i++ }) } } }; function* gen() { yield* it }", "for (const i of gen()) { if (flip < 0 && r.body.locked) flip = i }"),
-  busy("function* gen() { yield 1; yield 2 }", "for (let i = 0; i < 30000; i++) { for (const x of gen()) break; if (flip < 0 && r.body.locked) flip = i }"),
-  busy("const h = async (x) => x", "for (let i = 0; i < 30000; i++) { await h(i); if (flip < 0 && r.body.locked) flip = i }"),
-  busy("for (let i = 0; i < 25000; i++) {}", "for (let i = 0; i < 30000; i++) { if (flip < 0 && r.body.locked) flip = i }"),
+  busy(
+    "const a = []; for (let i = 0; i < 30000; i++) a[i] = i",
+    "for await (const i of a) { if (flip < 0 && r.body.locked) flip = i }",
+  ),
+  busy(
+    "async function* gen() { for (let i = 0; i < 30000; i++) yield i }",
+    "for await (const i of gen()) { if (flip < 0 && r.body.locked) flip = i }",
+  ),
+  busy(
+    "const it = { [Symbol.iterator]() { let i = 0; return { next: () => ({ done: i >= 30000, value: i++ }) } } }; function* gen() { yield* it }",
+    "for (const i of gen()) { if (flip < 0 && r.body.locked) flip = i }",
+  ),
+  busy(
+    "function* gen() { yield 1; yield 2 }",
+    "for (let i = 0; i < 30000; i++) { for (const x of gen()) break; if (flip < 0 && r.body.locked) flip = i }",
+  ),
+  busy(
+    "const h = async (x) => x",
+    "for (let i = 0; i < 30000; i++) { await h(i); if (flip < 0 && r.body.locked) flip = i }",
+  ),
+  busy(
+    "for (let i = 0; i < 25000; i++) {}",
+    "for (let i = 0; i < 30000; i++) { if (flip < 0 && r.body.locked) flip = i }",
+  ),
   busy("", "for (let i = 0; i < 30000; i++) { if (flip < 0 && r.bodyUsed) flip = i }", "r.body.cancel()", "r.bodyUsed"),
-  busy("const reader = r.body.getReader()", "for (let i = 0; i < 30000; i++) { if (flip < 0 && r.bodyUsed) flip = i }", "reader.read()", "r.bodyUsed"),
-  busy("", "for (let j = 0; j < 3; j++) { const q = r.body.cancel(); for (let i = 0; i < 9000; i++) { if (flip < 0 && r.bodyUsed) flip = j * 100000 + i } await q.catch(() => 0) }", "Promise.resolve()", "r.bodyUsed"),
+  busy(
+    "const reader = r.body.getReader()",
+    "for (let i = 0; i < 30000; i++) { if (flip < 0 && r.bodyUsed) flip = i }",
+    "reader.read()",
+    "r.bodyUsed",
+  ),
+  busy(
+    "",
+    "for (let j = 0; j < 3; j++) { const q = r.body.cancel(); for (let i = 0; i < 9000; i++) { if (flip < 0 && r.bodyUsed) flip = j * 100000 + i } await q.catch(() => 0) }",
+    "Promise.resolve()",
+    "r.bodyUsed",
+  ),
 )
 
 // Busy loops over the built-ins the reference writes in its bytecode prelude, which spend that bytecode's fuel.
@@ -408,24 +569,58 @@ programs.push(
   after("const pairs = d.slice(0, 1000).map((x) => [x, x])", "new Map(pairs)"),
   during("const m = new Map(d.slice(0, 9000).map((x) => [x, x]))", "m.forEach(see)"),
   during("", "Object.groupBy(a, (x) => see(x) % 3)"),
-  during("const m = new Map()", "for (let i = 0; i < 30000; i++) { m.getOrInsertComputed(i % 100, see); m.getOrInsert(i, 1) }"),
+  during(
+    "const m = new Map()",
+    "for (let i = 0; i < 30000; i++) { m.getOrInsertComputed(i % 100, see); m.getOrInsert(i, 1) }",
+  ),
   // One method stands for the Set methods: they share the prelude loop and the set-like path.
   ...["union"].flatMap((name) => [
-    after(`const s1 = new Set(${range(0, 1000)}); const s2 = new Set(${range(500, 1500)}); const s3 = new Set(${range(0, 300)})`,
-      `s1.${name}(s2); s3.${name}(s1); s1.${name}(s3)`),
-    during(`const like = { size: 3, has: (x) => see(x) % 7 === 0, keys: () => [1, 2, 3].values() }; const s1 = new Set(${range(0, 2)})`,
-      `for (let j = 0; j < 3000; j++) { s1.${name}(like); see(j) }`),
+    after(
+      `const s1 = new Set(${range(0, 1000)}); const s2 = new Set(${range(500, 1500)}); const s3 = new Set(${range(0, 300)})`,
+      `s1.${name}(s2); s3.${name}(s1); s1.${name}(s3)`,
+    ),
+    during(
+      `const like = { size: 3, has: (x) => see(x) % 7 === 0, keys: () => [1, 2, 3].values() }; const s1 = new Set(${range(0, 2)})`,
+      `for (let j = 0; j < 3000; j++) { s1.${name}(like); see(j) }`,
+    ),
   ]),
   during("const u = new Uint8Array(d.slice(0, 20000))", "u.forEach(see); u.map(see); u.filter(see)"),
-  after("const b = d.slice(0, 3000); const u = new Uint8Array(3000)", "new Uint8Array(b); Uint8Array.from(b); u.set(b); u.set(new Uint8Array(b)); new Uint8Array(u)"),
-  during("const b = d.slice(0, 3000).reverse()", "b.slice().sort((x, y) => see(x) - y); b.toSorted((x, y) => see(y) - x)"),
-  after("const b = d.slice(0, 20000).reverse(); const c = d.slice(0, 4096)", "b.slice().sort(); c.slice().sort(); b.toSorted(); [3, 1, 2].sort((x, y) => x - y)"),
-  during("const s = 'ab'.repeat(5000)", "s.replace(/b/g, see); s.replaceAll('a', see); s.replace('b', see); 'é'.repeat(2000).replaceAll('é', see); s.replace(/z/g, see)"),
-  during("const j = JSON.stringify({ x: d.slice(0, 3000), y: { z: d.slice(0, 2000) } })", "JSON.parse(j, (key, v) => see(v))"),
-  after("const pairs = d.slice(0, 2000).map((x) => [x, x])", "Object.fromEntries(pairs); Object.fromEntries(new Map(pairs)); Math.sumPrecise(d); AggregateError(d.slice(0, 1000)); new AggregateError(d)"),
-  after("const pairs = d.slice(0, 1000).map((x) => ['k' + x, String(x)])", "new Headers(pairs); new URLSearchParams(pairs); new Headers({ a: 'b' }); new URLSearchParams(new URLSearchParams('a=b'))"),
-  during("const h = new Headers(d.slice(0, 2000).map((x) => ['k' + x, String(x)])); const q = new URLSearchParams(d.slice(0, 2000).map((x) => ['k', String(x)]))", "h.forEach(see); q.forEach(see)"),
-  during("const s = []; s[10000005] = 7; s[3] = 1; s[20] = 2", "s.forEach(see); s.reduceRight((t, x) => see(t), 0); [s].flatMap((x) => see(x))"),
+  after(
+    "const b = d.slice(0, 3000); const u = new Uint8Array(3000)",
+    "new Uint8Array(b); Uint8Array.from(b); u.set(b); u.set(new Uint8Array(b)); new Uint8Array(u)",
+  ),
+  during(
+    "const b = d.slice(0, 3000).reverse()",
+    "b.slice().sort((x, y) => see(x) - y); b.toSorted((x, y) => see(y) - x)",
+  ),
+  after(
+    "const b = d.slice(0, 20000).reverse(); const c = d.slice(0, 4096)",
+    "b.slice().sort(); c.slice().sort(); b.toSorted(); [3, 1, 2].sort((x, y) => x - y)",
+  ),
+  during(
+    "const s = 'ab'.repeat(5000)",
+    "s.replace(/b/g, see); s.replaceAll('a', see); s.replace('b', see); 'é'.repeat(2000).replaceAll('é', see); s.replace(/z/g, see)",
+  ),
+  during(
+    "const j = JSON.stringify({ x: d.slice(0, 3000), y: { z: d.slice(0, 2000) } })",
+    "JSON.parse(j, (key, v) => see(v))",
+  ),
+  after(
+    "const pairs = d.slice(0, 2000).map((x) => [x, x])",
+    "Object.fromEntries(pairs); Object.fromEntries(new Map(pairs)); Math.sumPrecise(d); AggregateError(d.slice(0, 1000)); new AggregateError(d)",
+  ),
+  after(
+    "const pairs = d.slice(0, 1000).map((x) => ['k' + x, String(x)])",
+    "new Headers(pairs); new URLSearchParams(pairs); new Headers({ a: 'b' }); new URLSearchParams(new URLSearchParams('a=b'))",
+  ),
+  during(
+    "const h = new Headers(d.slice(0, 2000).map((x) => ['k' + x, String(x)])); const q = new URLSearchParams(d.slice(0, 2000).map((x) => ['k', String(x)]))",
+    "h.forEach(see); q.forEach(see)",
+  ),
+  during(
+    "const s = []; s[10000005] = 7; s[3] = 1; s[20] = 2",
+    "s.forEach(see); s.reduceRight((t, x) => see(t), 0); [s].flatMap((x) => see(x))",
+  ),
   after("const s = []; s[10000005] = 7; s[3] = 1; s[20] = 2", "s.forEach((x) => x)"),
 )
 
@@ -438,13 +633,31 @@ const wrapped =
 programs.push(
   during("", "d.values().map(see).toArray()"),
   during("", "d.values().flatMap((x) => [see(x), x]).toArray()"),
-  during("", "d.values().reduce((s, x) => see(s)); d.values().some((x) => see(x) > 15000); d.values().every((x) => see(x) < 15000); d.values().find((x) => see(x) > 20000)"),
+  during(
+    "",
+    "d.values().reduce((s, x) => see(s)); d.values().some((x) => see(x) > 15000); d.values().every((x) => see(x) < 15000); d.values().find((x) => see(x) > 20000)",
+  ),
   during(gen, "for (let j = 0; j < 3000; j++) { const h = g(5).map(see); h.next(); h.return(); see(j) }"),
-  during(gen, "for (let j = 0; j < 3000; j++) { Iterator.from(g(2)).toArray(); Iterator.from([1, 2]).toArray(); Iterator.from('ab').toArray(); see(j) }"),
-  during("let n = 0; const custom = { next: () => ({ done: n++ % 4 === 3, value: n }) }", "for (let j = 0; j < 3000; j++) { Iterator.from(custom).toArray(); Iterator.prototype.toArray.call(custom); see(j) }"),
-  during(wrapped, "for (let j = 0; j < 1000; j++) { for (const x of A) {} const [y, z] = M; [...S]; for (const x of T) break; const [h] = H; [...L]; see(j) }"),
-  during(wrapped, "for (let j = 0; j < 1000; j++) { Array.from(A); new Map(M); Object.fromEntries(M); new Set(S); Promise.all(T); new Headers(H); see(j) }"),
-  during(gen, "const b = d.slice(0, 7); for (let j = 0; j < 3000; j++) { Promise.all(b); Promise.race([1]); Promise.any(g(3)); Promise.allSettled([]); see(j) }"),
+  during(
+    gen,
+    "for (let j = 0; j < 3000; j++) { Iterator.from(g(2)).toArray(); Iterator.from([1, 2]).toArray(); Iterator.from('ab').toArray(); see(j) }",
+  ),
+  during(
+    "let n = 0; const custom = { next: () => ({ done: n++ % 4 === 3, value: n }) }",
+    "for (let j = 0; j < 3000; j++) { Iterator.from(custom).toArray(); Iterator.prototype.toArray.call(custom); see(j) }",
+  ),
+  during(
+    wrapped,
+    "for (let j = 0; j < 1000; j++) { for (const x of A) {} const [y, z] = M; [...S]; for (const x of T) break; const [h] = H; [...L]; see(j) }",
+  ),
+  during(
+    wrapped,
+    "for (let j = 0; j < 1000; j++) { Array.from(A); new Map(M); Object.fromEntries(M); new Set(S); Promise.all(T); new Headers(H); see(j) }",
+  ),
+  during(
+    gen,
+    "const b = d.slice(0, 7); for (let j = 0; j < 3000; j++) { Promise.all(b); Promise.race([1]); Promise.any(g(3)); Promise.allSettled([]); see(j) }",
+  ),
 )
 
 // for await over a sync iterable steps it through an adapter whose native next the loop calls; one the reference does
@@ -457,10 +670,20 @@ const syncs =
   "   const wrapped = { [Symbol.iterator]: () => [1, 2][Symbol.iterator]() }; const h = new Headers([['a', 'b']])\n" +
   "   async function* ag() { yield 1; yield* g(2) }"
 programs.push(
-  after(syncs, "for (let j = 0; j < 37; j++) { for await (const x of [1, 2]) {} for await (const x of 'ab') {} for await (const x of new Map([[1, 2]])) {} }"),
+  after(
+    syncs,
+    "for (let j = 0; j < 37; j++) { for await (const x of [1, 2]) {} for await (const x of 'ab') {} for await (const x of new Map([[1, 2]])) {} }",
+  ),
   after(syncs, "for (let j = 0; j < 37; j++) { for await (const x of ag()) {} }"),
-  after(syncs + "; async function* a2() { yield* g(2) }", "for (let j = 0; j < 37; j++) { for await (const x of a2()) {} }"),
-  after(syncs + "; const ai = { [Symbol.asyncIterator]() { let c = 0; return { next: async () => ({ done: c++ >= 2, value: 1 }) } } }; async function* a7() { yield* ai }", "for (let j = 0; j < 37; j++) { for await (const x of a7()) {} }"),
+  after(
+    syncs + "; async function* a2() { yield* g(2) }",
+    "for (let j = 0; j < 37; j++) { for await (const x of a2()) {} }",
+  ),
+  after(
+    syncs +
+      "; const ai = { [Symbol.asyncIterator]() { let c = 0; return { next: async () => ({ done: c++ >= 2, value: 1 }) } } }; async function* a7() { yield* ai }",
+    "for (let j = 0; j < 37; j++) { for await (const x of a7()) {} }",
+  ),
 )
 
 // A built-in that needs primitives lists them; once one is an object, the reference converts the list in its internal
@@ -470,29 +693,54 @@ const objects =
   "   const v = { valueOf: () => see(1) }"
 programs.push(
   during(objects, "for (let j = 0; j < 1000; j++) { 'abc'.slice(o, 2); 'abc'.padStart(o, s); see(j) }"),
-  during(objects, "for (let j = 0; j < 1000; j++) { 'abc'.slice(v); Math.min(v, v); new Error(v); [1, 2].at(v); see(j) }"),
+  during(
+    objects,
+    "for (let j = 0; j < 1000; j++) { 'abc'.slice(v); Math.min(v, v); new Error(v); [1, 2].at(v); see(j) }",
+  ),
   during(objects, "for (let j = 0; j < 1000; j++) { [s, 'a', o].sort(); [n, 2, 1].toSorted(); [3, 1].sort(); see(j) }"),
-  after(objects, "const big = Array.from({ length: 5000 }, (_, i) => i % 2 ? { toString: () => 'x' + i } : 'y' + i); big.sort()"),
+  after(
+    objects,
+    "const big = Array.from({ length: 5000 }, (_, i) => i % 2 ? { toString: () => 'x' + i } : 'y' + i); big.sort()",
+  ),
   // A namespace converts for nothing and starts no conversion; a promise costs its $vmToPrimitive call and stays.
-  after(objects + "; const pr = Promise.resolve(1)",
-    "for (let j = 0; j < 300; j++) { String(tools); [1, 2].join(tools.git); Math.max(o, tools); [1, 2].slice(o, tools.echo); String(pr); Math.max(pr, v); [pr].join(); `${pr}`; ({ [pr]: 1 }) }"),
-  after(objects + "; const pr = Promise.resolve(1)",
-    "for (let j = 0; j < 300; j++) { try { 'abc'.at(v, pr) } catch {} try { 'abc'.indexOf(pr) } catch {} try { 'abc'.padStart(v, tools) } catch {} try { Object.keys(pr) } catch {} try { ({ ...tools }) } catch {} }"),
+  after(
+    objects + "; const pr = Promise.resolve(1)",
+    "for (let j = 0; j < 300; j++) { String(tools); [1, 2].join(tools.git); Math.max(o, tools); [1, 2].slice(o, tools.echo); String(pr); Math.max(pr, v); [pr].join(); `${pr}`; ({ [pr]: 1 }) }",
+  ),
+  after(
+    objects + "; const pr = Promise.resolve(1)",
+    "for (let j = 0; j < 300; j++) { try { 'abc'.at(v, pr) } catch {} try { 'abc'.indexOf(pr) } catch {} try { 'abc'.padStart(v, tools) } catch {} try { Object.keys(pr) } catch {} try { ({ ...tools }) } catch {} }",
+  ),
 )
 
 // JSON.stringify with a replacer, a property list or a toJSON of the program's runs the reference's internal walk.
-const doc = "const doc = { a: d.slice(0, 50), b: { c: 1, d: [1, { e: 2 }], f: undefined, g: () => 1 }, h: 'x', i: null, j: new Date(0), k: new Map() }"
+const doc =
+  "const doc = { a: d.slice(0, 50), b: { c: 1, d: [1, { e: 2 }], f: undefined, g: () => 1 }, h: 'x', i: null, j: new Date(0), k: new Map() }"
 programs.push(
   during(doc, "for (let j = 0; j < 300; j++) { JSON.stringify(doc, (key, v) => see(v)); see(j) }"),
   during(doc, "for (let j = 0; j < 3000; j++) { JSON.stringify(doc, ['a', 'b', 'c']); JSON.stringify(doc); see(j) }"),
-  after(doc + "; const t = { x: [1, 2, { toJSON: () => 7 }], y: doc }", "JSON.stringify(t); JSON.stringify([doc, { toJSON() { return 1 } }])"),
+  after(
+    doc + "; const t = { x: [1, 2, { toJSON: () => 7 }], y: doc }",
+    "JSON.stringify(t); JSON.stringify([doc, { toJSON() { return 1 } }])",
+  ),
   // Past depth 100 the internal walk throws through `$Throw`.
-  after("let deep = 1; for (let i = 0; i < 101; i++) deep = { deep }", "for (let j = 0; j < 37; j++) try { JSON.stringify(deep, (k, v) => v) } catch {}"),
+  after(
+    "let deep = 1; for (let i = 0; i < 101; i++) deep = { deep }",
+    "for (let j = 0; j < 37; j++) try { JSON.stringify(deep, (k, v) => v) } catch {}",
+  ),
   // The native walk gives up at its 2,048th visit of an object it has seen already.
-  after("const x = { a: 1 }; const many = Array(2049).fill(x); const fewer = Array(2048).fill(x)", "JSON.stringify(many); JSON.stringify(fewer)"),
-  after("const x = [1, { b: 2 }]; const nest = Array(1100).fill({ p: x, q: x })", "JSON.stringify(nest); JSON.stringify(nest.slice(0, 600))"),
-  during("const o = { valueOf: () => see(1), toString: () => 'k' }; const x = {}; let m = { valueOf() { return 2 } }",
-    "for (let i = 0; i < 3000; i++) { o * 2; 2 < o; o >= 1; -o; o + 1; 'x' + o; o == 1; 1 != o; o | 0; `${o}`; x[o] = 1; m++; see(i) }"),
+  after(
+    "const x = { a: 1 }; const many = Array(2049).fill(x); const fewer = Array(2048).fill(x)",
+    "JSON.stringify(many); JSON.stringify(fewer)",
+  ),
+  after(
+    "const x = [1, { b: 2 }]; const nest = Array(1100).fill({ p: x, q: x })",
+    "JSON.stringify(nest); JSON.stringify(nest.slice(0, 600))",
+  ),
+  during(
+    "const o = { valueOf: () => see(1), toString: () => 'k' }; const x = {}; let m = { valueOf() { return 2 } }",
+    "for (let i = 0; i < 3000; i++) { o * 2; 2 < o; o >= 1; -o; o + 1; 'x' + o; o == 1; 1 != o; o | 0; `${o}`; x[o] = 1; m++; see(i) }",
+  ),
   `const ks = []; const s = JSON.stringify({ h: new Headers({ a: 'b' }), e: new TypeError('x'), u: new Uint8Array([1]) }, (k, v) => { ks.push(k); return v }, 1)
    return [s, ks, JSON.stringify({ h: new Headers({ a: 'b' }) }, ['h', 'z'])]`,
 )
@@ -600,8 +848,14 @@ programs.push(
   after("", "for (let j = 0; j < 37; j++) await send({ p: Promise.resolve(j), a: [1, { b: 2 }, [3]], s: 'x' })"),
   // Spreading a generator opens it with a call of its `Symbol.iterator`.
   after("function* g() { yield 1 }", "for (let j = 0; j < 37; j++) [...g()]"),
-  after("", "for (let j = 0; j < 37; j++) await send([Promise.resolve(1), [Promise.resolve(2), [Promise.resolve(3)]]])"),
-  after("const t = { toJSON: () => [1, 2] }", "for (let j = 0; j < 37; j++) await send({ t, p: Promise.resolve(1), e: new Error('x'), u: undefined })"),
+  after(
+    "",
+    "for (let j = 0; j < 37; j++) await send([Promise.resolve(1), [Promise.resolve(2), [Promise.resolve(3)]]])",
+  ),
+  after(
+    "const t = { toJSON: () => [1, 2] }",
+    "for (let j = 0; j < 37; j++) await send({ t, p: Promise.resolve(1), e: new Error('x'), u: undefined })",
+  ),
   after("", "for (let j = 0; j < 37; j++) hold({ query: Promise.resolve('echo'), limit: 1 })"),
   after("", "for (let j = 0; j < 37; j++) await refuse({}).catch(() => 0)"),
   after("", "for (let j = 0; j < 37; j++) await Promise.resolve(j).then((x) => x)"),
@@ -609,10 +863,19 @@ programs.push(
   after("", "for (let j = 0; j < 37; j++) await Promise.resolve({ then(done) { done(j) } })"),
   after("", "for (let j = 0; j < 37; j++) await Promise.resolve(j).finally(() => 0)"),
   after("", "for (let j = 0; j < 37; j++) await Promise.try(() => j)"),
-  after("let o = 1; for (let i = 0; i < 101; i++) o = { o }", "for (let j = 0; j < 37; j++) await send({ p: Promise.resolve(1), o }).catch(() => 0)"),
-  during("const t = { toJSON: () => see(1) }", "for (let j = 0; j < 300; j++) { send({ t, a: [1, 2, { c: 3 }] }); see(j) }"),
+  after(
+    "let o = 1; for (let i = 0; i < 101; i++) o = { o }",
+    "for (let j = 0; j < 37; j++) await send({ p: Promise.resolve(1), o }).catch(() => 0)",
+  ),
+  during(
+    "const t = { toJSON: () => see(1) }",
+    "for (let j = 0; j < 300; j++) { send({ t, a: [1, 2, { c: 3 }] }); see(j) }",
+  ),
   during("const t = { toJSON: () => see(1) }", "for (let j = 0; j < 300; j++) { hold({ query: t }); see(j) }"),
-  during("const x = { v: 1 }; const many = Array(2049).fill(x)", "for (let j = 0; j < 30; j++) { send({ many }); see(j) }"),
+  during(
+    "const x = { v: 1 }; const many = Array(2049).fill(x)",
+    "for (let j = 0; j < 30; j++) { send({ many }); see(j) }",
+  ),
 )
 
 // Suspending while a run holds a response: `wait` is idempotent and answers only once the run resumed.
@@ -701,7 +964,9 @@ const expected = await recordAll()
 const again = await recordAll()
 const unstable = (["programs", "suspensions"] as const).flatMap((kind) =>
   expected[kind].flatMap((entry, i) =>
-    JSON.stringify(entry) === JSON.stringify(again[kind][i]) ? [] : [`${kind}[${i}]: ${(entry as { code: string }).code}`],
+    JSON.stringify(entry) === JSON.stringify(again[kind][i])
+      ? []
+      : [`${kind}[${i}]: ${(entry as { code: string }).code}`],
   ),
 )
 if (unstable.length > 0) {

@@ -5,7 +5,8 @@ type Helpers = {
   text: unknown
 }
 
-const holdingIterable = "{ [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n > 1, value: S(++n) }), return: () => ({}) } } }"
+const holdingIterable =
+  "{ [Symbol.iterator]() { let n = 0; return { next: () => ({ done: n > 1, value: S(++n) }), return: () => ({}) } } }"
 
 export default (_: Helpers) => ({
   holds: [
