@@ -1,8 +1,9 @@
-import { createSignal, onCleanup, Show, untrack } from "solid-js"
-import { ComposerPill, createKeyed, type ComposerPillProps, type Plugin } from "@opencode/plugin/gui"
+import { createSignal, Match, onCleanup, Show, Switch, untrack } from "solid-js"
+import { ComposerPill, createKeyed, Style, type ComposerPillProps, type Plugin } from "@opencode/plugin/gui"
 import { Goal } from "@opencode/schema/goal"
 import { Button } from "@opencode/ui/button"
 import { showToast } from "@opencode/ui/toast"
+import styles from "./goal.css?inline"
 import type GoalDefinition from "./index"
 import {
   createGoalState,
@@ -16,18 +17,20 @@ import {
   type GoalEvent,
 } from "./machine"
 
-const status = {
-  active: { label: "title", icon: "outline-steer", tone: undefined },
-  paused: { label: "paused", icon: "circle-exclamation", tone: "warning" },
-  complete: { label: "met", icon: "circle-check", tone: "success" },
-} as const
-
 /**
- * The session's `/goal` above its composer: the status as a pill, and a popover headed by the objective with the
- * actions that apply. The server's goal plugin owns the goal and serves it over its RPC; a bare `/goal` shows the last
- * reason.
+ * The session's `/goal` above its composer: the status as a pill with its own glyph, and a popover with the
+ * objective, the last reason and the actions that apply. The server's goal plugin owns the goal and serves it over
+ * its RPC; a bare `/goal` shows the last reason.
  */
 const setup: Plugin.Setup<typeof GoalDefinition> = (ctx) => {
+  // The pill and the popover's status line of each goal status. The pill shows the plugin's own glyphs: the host
+  // colors a paused and a reached goal by `tone`, and the active glyph carries the accent color itself.
+  const status = {
+    active: { label: "active", status: "statusActive", icon: ctx.icons.active, tone: undefined },
+    paused: { label: "paused", status: "statusPaused", icon: ctx.icons.paused, tone: "warning" },
+    complete: { label: "reached", status: "statusFinished", icon: ctx.icons.complete, tone: "success" },
+  } as const
+
   const [goalState, setGoalState] = createSignal(createGoalState())
   // Ends a subscription, snapshot fetch, retry timer or command by its id.
   const running = new Map<number, () => void>()
@@ -196,6 +199,8 @@ const setup: Plugin.Setup<typeof GoalDefinition> = (ctx) => {
       action,
     })
 
+  ctx.add(Style, styles)
+
   ctx.add(ComposerPill, {
     id: "goal",
     show: (input) => {
@@ -205,7 +210,7 @@ const setup: Plugin.Setup<typeof GoalDefinition> = (ctx) => {
 
       const view = status[current.status]
 
-      return { label: ctx.t(view.label), icon: view.icon, tone: view.tone, title: current.objective }
+      return { label: ctx.t(view.label), icon: view.icon, tone: view.tone }
     },
     menu: (input) => {
       const busy = () => selectGoalBusy(goalState(), input.session.key)
@@ -216,21 +221,64 @@ const setup: Plugin.Setup<typeof GoalDefinition> = (ctx) => {
       }
 
       return (
-        <div class="flex justify-end gap-1 px-1 pt-1">
-          <Show when={goal(input)?.status === "active"}>
-            <Button size="small" variant="ghost" icon="stop" disabled={busy()} onClick={() => run("pause")}>
-              {ctx.t("pause")}
-            </Button>
-          </Show>
-          <Show when={goal(input)?.status === "paused"}>
-            <Button size="small" variant="ghost" icon="refresh" disabled={busy()} onClick={() => run("resume")}>
-              {ctx.t("resume")}
-            </Button>
-          </Show>
-          <Button size="small" variant="ghost" icon="trash" disabled={busy()} onClick={() => run("clear")}>
-            {ctx.t("clear")}
-          </Button>
-        </div>
+        <Show when={goal(input)}>
+          {(current) => (
+            <div data-component="goal-panel">
+              <p dir="auto" data-slot="goal-objective" data-scrollable>
+                {current().objective}
+              </p>
+              {/* Until the goal has a reason, the status is the pill's alone. */}
+              <Show when={current().reason}>
+                {(reason) => (
+                  <>
+                    <div data-slot="goal-divider" aria-hidden="true" />
+                    <div class="flex flex-col">
+                      <span data-slot="goal-status" data-status={current().status}>
+                        {ctx.t(status[current().status].status)}
+                      </span>
+                      <p dir="auto" data-slot="goal-reason">
+                        {reason()}
+                      </p>
+                    </div>
+                  </>
+                )}
+              </Show>
+              <div class="flex flex-wrap gap-2 pt-1">
+                <Switch>
+                  <Match when={current().status === "active"}>
+                    <Button data-action="goal-pause" size="small" disabled={busy()} onClick={() => run("pause")}>
+                      {ctx.t("pause")}
+                    </Button>
+                  </Match>
+                  <Match when={current().status === "paused"}>
+                    <Button data-action="goal-resume" size="small" disabled={busy()} onClick={() => run("resume")}>
+                      {ctx.t("resume")}
+                    </Button>
+                  </Match>
+                </Switch>
+                <Show
+                  when={current().status === "complete"}
+                  fallback={
+                    <Button
+                      data-action="goal-clear"
+                      size="small"
+                      variant="danger"
+                      disabled={busy()}
+                      onClick={() => run("clear")}
+                    >
+                      {ctx.t("clear")}
+                    </Button>
+                  }
+                >
+                  {/* A reached goal has nothing left to stop, so clearing it only dismisses the pill. */}
+                  <Button data-action="goal-dismiss" size="small" disabled={busy()} onClick={() => run("clear")}>
+                    {ctx.t("dismiss")}
+                  </Button>
+                </Show>
+              </div>
+            </div>
+          )}
+        </Show>
       )
     },
   })

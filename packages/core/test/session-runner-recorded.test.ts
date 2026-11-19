@@ -66,6 +66,7 @@ const model = OpenAIChat.route
   })
   .model({ id: "gpt-4o-mini", capabilities: { promptCacheKey: true } })
 const models = Layer.mock(SessionRunnerModel.Service)({
+  select: (session) => Effect.fail(new SessionRunnerModel.ModelNotSelectedError({ sessionID: session.id })),
   resolve: () =>
     Effect.succeed(
       SessionRunnerModel.resolved(model, {

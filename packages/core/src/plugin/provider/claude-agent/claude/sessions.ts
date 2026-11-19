@@ -468,7 +468,9 @@ export function registry() {
       return entry
     }
 
-    const run = Effect.fn("ClaudeSessions.run")(function* (request: Request) {
+    const run = Effect.fn("ClaudeSessions.run")(function* (asked: Request) {
+      const connection = asked.connection && ClaudeQueryOptions.withoutDefaultFolder(asked.connection, input.io)
+      const request = { ...asked, connection }
       const entry = entryFor(request)
       yield* entry.lock.withPermit(
         Effect.gen(function* () {

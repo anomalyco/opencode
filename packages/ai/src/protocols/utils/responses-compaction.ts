@@ -1,4 +1,4 @@
-import { Effect, Schema, Stream } from "effect"
+import { Effect, Schema } from "effect"
 import {
   AIError,
   InvalidProviderOutputError,
@@ -125,7 +125,10 @@ export const make = (
       auth: route.auth,
       encodeBody: Schema.encodeSync(Schema.fromJsonString(Body)),
     })
-    const response = yield* RequestExecutor.withTls(executor.execute, request.http?.tls)(
+    const response = yield* RequestExecutor.withTimeout(
+      RequestExecutor.withTls(executor.execute, request.http?.tls),
+      request.timeout,
+    )(
       ProviderShared.jsonPost({
         url: parts.url,
         body: parts.bodyText,
@@ -134,13 +137,7 @@ export const make = (
       }),
       RequestExecutor.withFetch(request.fetch, options?.http),
     )
-    const text = yield* RequestExecutor.responseStream(response).pipe(
-      Stream.decodeText(),
-      Stream.runFold(
-        () => "",
-        (text, chunk) => text + chunk,
-      ),
-    )
+    const text = yield* RequestExecutor.responseText(response)
     const invalid = (message: string, cause?: unknown) =>
       new AIError({
         reason: new InvalidProviderOutputError({

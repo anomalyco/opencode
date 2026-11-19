@@ -6,7 +6,7 @@ import type { ProviderAuthOption } from "../route/auth-options.js"
 import { Route } from "../route/client.js"
 import { DecisionRoute } from "../route/decision.js"
 import { Endpoint } from "../route/endpoint.js"
-import { ProviderID, type ModelID, type ProviderOptions, type RequestOptions } from "../schema/index.js"
+import { mergeTransport, ProviderID, type ModelID, type ProviderOptions, type RequestOptions } from "../schema/index.js"
 import type { OpenAIProviderOptionsInput } from "./openai-options.js"
 import { bearerRouteDefaults, toConfig } from "./settings.js"
 
@@ -63,8 +63,7 @@ export const configure = (input: Config = {}) => {
     protocol: decisionProtocol,
     endpoint: Endpoint.path("/systemone", { baseURL: options.endpoint.baseURL }),
     auth: options.auth,
-    headers: input.headers,
-    http: input.http,
+    ...mergeTransport(input),
   })
   const decision = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
     decisionRoute.model<BasetenDecisionOptions>({ id: modelID, providerOptions })

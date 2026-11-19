@@ -15,6 +15,12 @@ type Connection = NonNullable<Effect.Success<ReturnType<Context["integration"]["
 
 const Prepared = Schema.Struct({ missing: Schema.Array(Schema.String) })
 const Published = Schema.Struct({ url: Schema.String })
+const Files = Schema.Struct({
+  revision: Schema.Number,
+  files: Schema.Array(
+    Schema.Struct({ path: Schema.String, sha256: Schema.String, text: Schema.optional(Schema.String) }),
+  ),
+})
 const Problem = Schema.Struct({ message: Schema.optional(Schema.String), owner: Schema.optional(Schema.String) })
 
 /**
@@ -97,8 +103,27 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
           Effect.flatMap((slug) => publish(slug, input, true)),
           Effect.map((published) => ({ url: published.url })),
         ),
-      // Console has no API that returns an artifact's files.
-      read: () => Effect.fail(new Error("OpenCode Console can't return an artifact's files yet")),
+      // Console inlines UTF-8 text files up to a limit; the rest download as blobs of the same revision.
+      read: (id) =>
+        Effect.gen(function* () {
+          const slug = yield* slugOf(id)
+          const send = yield* sender(ctx, http, connection, slug)
+          const listing = yield* send("GET", `/api/artifacts/${slug}/files`).pipe(
+            Effect.flatMap(HttpClientResponse.schemaBodyJson(Files)),
+          )
+          const files = yield* Effect.forEach(
+            listing.files,
+            (file) =>
+              file.text !== undefined
+                ? Effect.succeed([file.path, new TextEncoder().encode(file.text)] as const)
+                : send("GET", `/api/artifacts/${slug}/blobs/${file.sha256}?revision=${listing.revision}`).pipe(
+                    Effect.flatMap((response) => response.arrayBuffer),
+                    Effect.map((bytes) => [file.path, new Uint8Array(bytes)] as const),
+                  ),
+            { concurrency: 4 },
+          )
+          return Object.fromEntries(files)
+        }).pipe(Effect.scoped),
       delete: (id) =>
         Effect.gen(function* () {
           const slug = yield* slugOf(id)
@@ -151,7 +176,7 @@ const sender = Effect.fnUntraced(function* (
   const credential = yield* ctx.integration.connection.resolve(connection)
   if (!credential || credential.type === "external")
     return yield* Effect.fail(new Error("OpenCode Console is not connected"))
-  return (method: "POST" | "PUT" | "DELETE", path: string, body?: Uint8Array | object) => {
+  return (method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: Uint8Array | object) => {
     const request = HttpClientRequest.make(method)(`${ConsoleAccess.server(credential)}${path}`).pipe(
       HttpClientRequest.acceptJson,
       HttpClientRequest.setHeaders(ConsoleAccess.headers(credential)),
@@ -177,7 +202,9 @@ const sender = Effect.fnUntraced(function* (
                       problem?.owner !== undefined
                         ? `${problem.owner} already shared an OpenCode Console artifact named ${slug}; give this one another title`
                         : response.status === 404
-                          ? "Artifacts are off for this OpenCode Console workspace"
+                          ? method === "GET"
+                            ? `OpenCode Console has no artifact named ${slug}`
+                            : "Artifacts are off for this OpenCode Console workspace"
                           : (problem?.message ?? `OpenCode Console answered ${response.status}`),
                     ),
                   ),

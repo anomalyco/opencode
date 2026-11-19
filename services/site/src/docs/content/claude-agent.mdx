@@ -131,14 +131,20 @@ account's folder.
 ## Rotate between accounts
 
 If you have several interchangeable accounts, OpenCode can move to the next one when an account hits its usage limit.
-Sign in to each account in its own folder, then list the folders:
+Sign in to each extra account in its own folder. Your existing login in `~/.claude` can stay as it is:
+
+```bash
+CLAUDE_CONFIG_DIR="$HOME/.claude-1" claude auth login
+```
+
+Then list the folders:
 
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "providers": {
     "claude-agent": {
-      "settings": { "configDir": ["~/.claude-1", "~/.claude-2"] },
+      "settings": { "configDir": ["~/.claude", "~/.claude-1"] },
     },
   },
 }

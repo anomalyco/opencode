@@ -501,6 +501,7 @@ const workspaceModelScenario = (fixture: Fixture, policy: "eager" | "lazy") =>
       },
     })
     const models = Layer.mock(SessionRunnerModel.Service, {
+      select: (session) => Effect.fail(new SessionRunnerModel.ModelNotSelectedError({ sessionID: session.id })),
       resolve: () =>
         Effect.succeed(
           SessionRunnerModel.resolved(model, {
@@ -602,6 +603,7 @@ it.live(
           return TestLLM.toolCall("call-shell", "shell", { command: "echo hi" })
         })
         const models = Layer.mock(SessionRunnerModel.Service, {
+          select: (session) => Effect.fail(new SessionRunnerModel.ModelNotSelectedError({ sessionID: session.id })),
           resolve: () =>
             Effect.succeed(
               SessionRunnerModel.resolved(model, {

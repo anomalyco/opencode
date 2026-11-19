@@ -32,6 +32,15 @@ const LocationInput = Schema.Struct({
 export const Input = LocationInput
 type Missing = { input: string; requested: FileAccess.Target; context: FileAccess.Invocation }
 
+const description = (codemode: boolean) =>
+  [
+    "Read the contents of a file or directory. Supports text files, images, and PDFs.",
+    codemode
+      ? "Reading an image or PDF automatically attaches it to the execute result, even if the program doesn't return or print the media reference."
+      : "Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line.",
+    "Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files.",
+  ].join(" ")
+
 export const Plugin = {
   id: "opencode.tool.read",
   effect: Effect.fn("ReadTool.Plugin")(function* (ctx: Context) {
@@ -49,22 +58,13 @@ export const Plugin = {
     const discovery = yield* InstructionDiscovery.Service
 
     yield* ctx.tool
-      .transform((editor) => {
-        const codeMode = flags.resolve(loaded.entries).full_codemode.enabled
+      .transform((editor) =>
         editor.add({
           name,
-          options: codeMode ? { codemode: true, pinned: true } : { codemode: false },
-          description: [
-            "Read the contents of a file or directory. Supports text files, images, and PDFs.",
-            ...(codeMode
-              ? [
-                  "Reading an image or PDF automatically attaches it to the execute result, even if the program doesn't return or print the media reference.",
-                ]
-              : [
-                  "Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line.",
-                ]),
-            "Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files.",
-          ].join(" "),
+          options: flags.resolve(loaded.entries).full_codemode.enabled
+            ? { codemode: { pinned: true, description: description(true) } }
+            : { codemode: false },
+          description: description(false),
           input: Input,
           output: ReadToolFileSystem.Output,
           execute: (input, context) => {
@@ -198,8 +198,8 @@ export const Plugin = {
               }),
             )
           },
-        })
-      })
+        }),
+      )
       .pipe(Effect.orDie)
 
     const alternatePath = Effect.fn("ReadTool.alternatePath")(function* (absolute: string) {
