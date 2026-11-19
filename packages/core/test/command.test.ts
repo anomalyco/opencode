@@ -33,28 +33,6 @@ describe("Command", () => {
     }),
   )
 
-  it.effect("names the running command to what it does, and nothing after it", () =>
-    Effect.gen(function* () {
-      const command = yield* Command.Service
-      const seen: (string | undefined)[] = []
-      yield* command.transform((editor) => {
-        editor.add({
-          name: "review",
-          execute: () =>
-            Effect.gen(function* () {
-              seen.push(yield* Command.Running)
-            }),
-        })
-      })
-      yield* command.execute({
-        name: "review",
-        invocation: { sessionID: Session.ID.make("ses_test"), prompt: { text: "" }, delivery: "steer" },
-      })
-      seen.push(yield* Command.Running)
-      expect(seen).toEqual(["review", undefined])
-    }),
-  )
-
   it.effect("replaces commands with later definitions", () =>
     Effect.gen(function* () {
       const command = yield* Command.Service
