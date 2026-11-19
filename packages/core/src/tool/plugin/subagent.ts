@@ -158,9 +158,13 @@ export const Plugin = {
               if (existing !== undefined) {
                 const switched = existing.agent !== agent.id
                 const model = override ?? (switched ? agent.model : undefined)
+                const permissionsChanged = !samePermissions(existing.permissions, parent.permissions)
                 yield* Effect.all([
                   switched ? sessions.switchAgent({ sessionID: existing.id, agent: agent.id }) : Effect.void,
                   model === undefined ? Effect.void : sessions.switchModel({ sessionID: existing.id, model }),
+                  permissionsChanged
+                    ? sessions.setPermissions({ sessionID: existing.id, permissions: parent.permissions ?? [] })
+                    : Effect.void,
                 ]).pipe(
                   Effect.mapError(
                     (error) => new ToolFailure({ message: `Failed to switch subagent session: ${existing.id}`, error }),
@@ -243,12 +247,14 @@ export const Plugin = {
         if (!tool) return
         const selected = yield* agents.resolve(event.agent)
         if (!selected) return
+        const session = yield* sessions.get(event.sessionID).pipe(Effect.orElseSucceed(() => undefined))
+        const rules = Permission.merge(selected.permissions, session?.permissions ?? [])
         const available = (yield* agents.list())
           .filter(
             (agent) =>
               agent.mode !== "primary" &&
               !agent.hidden &&
-              Permission.evaluate(name, agent.id, selected.permissions).effect !== "deny",
+              Permission.evaluate(name, agent.id, rules).effect !== "deny",
           )
           .toSorted((a, b) => a.id.localeCompare(b.id))
         if (available.length === 0) return
@@ -266,4 +272,14 @@ export const Plugin = {
     yield* ctx.session.hook("compaction", hook)
     yield* ctx.session.hook("generate", hook)
   }),
+}
+
+function samePermissions(left: Permission.Ruleset | undefined, right: Permission.Ruleset | undefined) {
+  const a = left ?? []
+  const b = right ?? []
+  if (a.length !== b.length) return false
+  return a.every(
+    (rule, index) =>
+      rule.action === b[index]?.action && rule.resource === b[index]?.resource && rule.effect === b[index]?.effect,
+  )
 }
