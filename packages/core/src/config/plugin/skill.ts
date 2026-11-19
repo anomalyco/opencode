@@ -17,6 +17,9 @@ import { SkillScan } from "./skill-scan.js"
 
 type Source = Skill.DirectorySource | Skill.UrlSource
 
+// Below this many skills linked from one folder, a watch each costs under 70 ms on macOS.
+const SHARED_WATCH_MIN = 10
+
 export const Plugin = define({
   id: "opencode.config.skill",
   effect: Effect.fn(function* (ctx) {
@@ -34,7 +37,12 @@ export const Plugin = define({
     const changes = yield* PubSub.sliding<string>(1)
     const lock = Semaphore.makeUnsafe(1)
 
-    const watch = Effect.fn("ConfigSkillPlugin.watch")(function* (directory: string, type: "file" | "directory") {
+    const watch = Effect.fn("ConfigSkillPlugin.watch")(function* (
+      directory: string,
+      type: "file" | "directory",
+      // Limits a directory watch to updates on these files or the folders holding them.
+      only?: readonly string[],
+    ) {
       const target = path.resolve(directory)
       const updates = yield* watcher.subscribe(
         type === "directory" ? { path: target, type, ignore: SkillScan.ignore } : { path: target, type },
@@ -42,8 +50,29 @@ export const Plugin = define({
       yield* FiberMap.run(
         watches,
         `${type}:${target}`,
-        updates.pipe(Stream.runForEach((update) => PubSub.publish(changes, update.path).pipe(Effect.asVoid))),
+        updates.pipe(
+          Stream.filter((update) => !only || only.some((file) => FSUtil.contains(update.path, file))),
+          Stream.runForEach((update) => PubSub.publish(changes, update.path).pipe(Effect.asVoid)),
+        ),
         { onlyIfMissing: true, startImmediately: true },
+      )
+    })
+
+    // macOS and Windows watch a folder tree with one native watch, while a file watch costs one each (about 7 ms apiece
+    // on macOS, so 2000 linked skills took 14 s). There, a folder many skills are linked from gets one watch shared by
+    // them. Fewer links keep a watch each, so a lone skill linked from its own repo never watches the folder above it.
+    // Linux keeps a watch per file: a folder tree there takes a watch per directory, and /nix/store holds over a million.
+    const watchLinked = Effect.fn("ConfigSkillPlugin.watchLinked")(function* (files: readonly string[]) {
+      const folders = Map.groupBy(files, (file) =>
+        path.dirname(path.basename(file) === "SKILL.md" ? path.dirname(file) : file),
+      )
+      yield* Effect.forEach(
+        folders,
+        ([folder, linked]) =>
+          process.platform === "linux" || linked.length < SHARED_WATCH_MIN
+            ? Effect.forEach(linked, (file) => watch(file, "file"), { discard: true })
+            : watch(folder, "directory", linked),
+        { discard: true },
       )
     })
 
@@ -119,10 +148,11 @@ export const Plugin = define({
             )
       const roots = (yield* Effect.forEach(directories, watchDirectory)).flat()
       const skills: Skill.Info[] = []
+      const linked: string[] = []
       for (const directory of directories) {
         for (const filepath of yield* SkillScan.scan(directory)) {
           const resolved = yield* fs.realPath(filepath).pipe(Effect.orElseSucceed(() => filepath))
-          if (!roots.some((root) => FSUtil.contains(root, resolved))) yield* watch(resolved, "file")
+          if (!roots.some((root) => FSUtil.contains(root, resolved))) linked.push(resolved)
           const content = yield* fs.readFileStringSafe(filepath).pipe(Effect.orElseSucceed(() => undefined))
           if (!content) continue
           const parsed = SkillFile.parse(directory, filepath, content)
@@ -143,17 +173,24 @@ export const Plugin = define({
         directories,
         skills: skills.map((skill) => skill.id),
       })
-      return skills
+      return { skills, roots, linked }
     })
 
     const refresh = Effect.fn("ConfigSkillPlugin.refresh")(
       function* (file?: string) {
         yield* FiberMap.clear(watches)
         const skills = new Map<Skill.ID, Skill.Info>()
+        const roots: string[] = []
+        const linked: string[] = []
         const current = sources()
         for (const source of current) {
-          for (const skill of yield* load(source)) skills.set(skill.id, skill)
+          const result = yield* load(source)
+          for (const skill of result.skills) skills.set(skill.id, skill)
+          roots.push(...result.roots)
+          linked.push(...result.linked)
         }
+        // Linked skills are watched once every source is, so a skill inside another source keeps that source's watch.
+        yield* watchLinked([...new Set(linked)].filter((file) => !roots.some((root) => FSUtil.contains(root, file))))
         loaded.skills = Array.from(skills.values())
         if (file) {
           yield* Effect.logInfo("skills rescanned", {
