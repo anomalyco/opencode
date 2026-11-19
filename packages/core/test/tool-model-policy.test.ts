@@ -281,6 +281,12 @@ describe("SessionContext.select model tool policy", () => {
         const directInstructions = (yield* readInitial(gptDirect.instructions)).text
         expect(directInstructions).toContain("Alpha docs")
         expect(directInstructions).not.toContain("through `execute`")
+        // Without `execute`, as for the explore agent, the search and fetch tools stay direct.
+        for (const name of ["glob", "grep", "webfetch"]) expect(names(gptDirect)).toContain(name)
+        const deepseekDirect = yield* select("deepseek", "deepseek-reasoner", [
+          { action: "execute", resource: "*", effect: "deny" },
+        ])
+        for (const name of ["glob", "grep", "webfetch"]) expect(names(deepseekDirect)).toContain(name)
 
         const claude = yield* select("anthropic", "claude-sonnet-4-5")
         expect(names(claude)).toEqual(["execute"])
