@@ -2173,7 +2173,13 @@ export class Vm {
   // A computed member read (`o[key]`), as `execGetProp`; `GETTER_ENTERED` also when the key converts in the prelude.
   private execGetElem(frame: Frame, o: Value, keyVal: Value, mode: number, pc: number, sp: number): number {
     if (mode === 0) {
-      if (typeof o === "string" && typeof keyVal === "number" && keyVal >= 0 && (keyVal | 0) === keyVal) {
+      if (
+        typeof o === "string" &&
+        typeof keyVal === "number" &&
+        keyVal >= 0 &&
+        keyVal < o.length &&
+        (keyVal | 0) === keyVal
+      ) {
         frame.regs[sp - 2] = o[keyVal]
         return sp - 1
       }

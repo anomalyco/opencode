@@ -29,7 +29,7 @@ import {
   coerceToString,
   type Value,
 } from "./objects.js"
-import { describeValue, isOpaque, rejectCircularInsertion, typeofValue } from "./references.js"
+import { circularValue, describeValue, hasCircularReference, isOpaque, typeofValue } from "./references.js"
 import type { Interpreter } from "./interpreter.js"
 import { enumerableSource } from "../stdlib/object.js"
 
@@ -292,7 +292,7 @@ export const resolveProperty = (
   if (typeof objectValue === "string") {
     if (key === "length") return { value: objectValue.length }
     const index = typeof key === "symbol" ? undefined : parseArrayIndex(key)
-    if (index !== undefined) return { value: objectValue[index] }
+    if (index !== undefined && index < objectValue.length) return { value: objectValue[index] }
   }
   const proto = primitivePrototype(builtins, objectValue)
   if (proto !== undefined) return { target: proto, key, receiver: objectValue }
@@ -369,16 +369,8 @@ export const assignToReference = (
   try {
     // An accessor decides what a write stores (or refuses it), so only a data write can make a cycle. The cycle check
     // goes first: the lookup is only needed in the rare case it fails.
-    if (next instanceof Obj) {
-      try {
-        rejectCircularInsertion(
-          target,
-          next,
-          target instanceof Arr ? "Array assignment result" : "Object assignment result",
-        )
-      } catch (error) {
-        if (!isAccessor(lookup(target, key))) throw error
-      }
+    if (next instanceof Obj && hasCircularReference(target, next) && !isAccessor(lookup(target, key))) {
+      throw circularValue(target instanceof Arr ? "Array assignment result" : "Object assignment result")
     }
     written = set(target, key, next)
   } catch (error) {

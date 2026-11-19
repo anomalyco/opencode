@@ -55,7 +55,9 @@ const functionGlobal = <R>(ctx: Interpreter<R>) => {
             args[0],
             args.slice(1),
             typeof name === "string" ? name : "",
-            typeof length === "number" ? Math.max(0, Math.trunc(length) - Math.max(0, args.length - 1)) : 0,
+            typeof length === "number" && !Number.isNaN(length)
+              ? Math.max(0, Math.trunc(length) - Math.max(0, args.length - 1))
+              : 0,
           )
         }),
     ],

@@ -427,4 +427,27 @@ describe("internal arrays ignore indexed accessors on Object.prototype", () => {
       return { list: [1, [2, 3]], nested: { k: "v" } }`),
     ).toEqual({ list: [1, [2, 3]], nested: { k: "v" } })
   })
+
+  test("a String.prototype index getter past the string's end is read", () => {
+    expect(
+      value(`Object.defineProperty(String.prototype, 5, { get() { return "g" }, configurable: true })
+      const r = ["a"[5], "abc"[1]]
+      delete String.prototype[5]
+      return r`),
+    ).toEqual(["g", "b"])
+  })
+
+  test("bind gives length 0 when the target's length is NaN or not a number", () => {
+    expect(
+      value(`const f = Object.defineProperty(function (a, b) {}, "length", { value: NaN })
+      const g = Object.defineProperty(function (a, b) {}, "length", { get() { return "2" } })
+      return [f.bind(null).length, g.bind(null).length]`),
+    ).toEqual([0, 0])
+  })
+
+  test("assigning a cycle through a data property is still rejected", () => {
+    const result = runProgram(`const o = {}; o.self = o; return 1`)
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error.message).toContain("Object assignment result contains a circular value.")
+  })
 })

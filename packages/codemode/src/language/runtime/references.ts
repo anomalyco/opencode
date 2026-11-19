@@ -56,10 +56,13 @@ export const rejectCircularInsertion = (
   label: string,
   seen = new Set<object>(),
 ): void => {
-  if (find(value, (current) => current === container, isRuntimeReference, seen)) {
-    throw invalidData(`${label} contains a circular value.`)
-  }
+  if (hasCircularReference(container, value, seen)) throw circularValue(label)
 }
+
+export const hasCircularReference = (container: Obj, value: Value, seen = new Set<object>()): boolean =>
+  find(value, (current) => current === container, isRuntimeReference, seen)
+
+export const circularValue = (label: string) => invalidData(`${label} contains a circular value.`)
 
 export const describeValue = (value: Value): string => {
   if (value === null || value === undefined) return String(value)
