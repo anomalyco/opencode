@@ -258,6 +258,7 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
       <div data-slot="home-projects-scroll" class="flex min-h-0 min-w-0 shrink flex-col">
         <div
           data-slot="home-projects-viewport"
+          data-focus-scope
           data-scrollable
           class="min-h-0 flex-1 overflow-y-auto"
           ref={(element) => {

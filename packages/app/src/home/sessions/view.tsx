@@ -271,6 +271,7 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
       </div>
       <div
         data-slot="home-sessions-list"
+        data-focus-scope
         data-reveal={skeleton() || undefined}
         class="relative -mr-3 min-h-[calc(100cqh-64px)] md:min-h-[calc(100cqh-72px)] lg:min-h-[calc(100cqh-96px)]"
         aria-busy={props.listView.status === "loading"}

@@ -6,6 +6,7 @@ import "@/shell/titlebar/titlebar.css"
 import "@/session/session-identity-header.css"
 import "@/settings/settings.css"
 import "@/settings/general/interface-mode.css"
+import "@/shell/titlebar/pinned-area.css"
 import "@/settings/workspaces/project.css"
 import "@/providers/connect/models.css"
 import "@/shell/palette-menu.css"
@@ -18,6 +19,7 @@ import { File } from "@opencode/session-ui/file"
 import { SessionFilePanelV2 } from "@opencode/session-ui/v2/session-file-panel-v2"
 import { SessionReviewV2Sidebar, SessionReviewV2SidebarToggle } from "@opencode/session-ui/v2/session-review-v2"
 import { Accordion } from "@opencode/ui/accordion"
+import { StickyAccordionHeader } from "@opencode/ui/sticky-accordion-header"
 import { Button } from "@opencode/ui/button"
 import { Checkbox } from "@opencode/ui/checkbox"
 import { Collapsible } from "@opencode/ui/collapsible"
@@ -36,6 +38,9 @@ import { createEffect, createSignal, createUniqueId, For, onCleanup, onMount, Sh
 import { createTabStripScroll } from "@/runtime/plugin/tab-strip-scroll"
 import { createFieldFocus } from "@opencode/ui/context/field-focus"
 import { createOverlayFocus } from "@opencode/ui/context/overlay-focus"
+import { installFocusRescue } from "@opencode/ui/context/focus-rescue"
+import { useDialog } from "@opencode/ui/context/dialog"
+import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@opencode/ui/dialog"
 import { Menu } from "@opencode/ui/menu"
 import { Popover } from "@kobalte/core/popover"
 import { WaitingButton } from "@/providers/connect/step-actions"
@@ -51,7 +56,8 @@ import { forceFocusStyles } from "./force-focus"
 // is left where the browser's own scroll-into-view puts it, as the keys do. Real keyboard focus takes over from there.
 
 // Inconsistent: focus showed, but not as the shared ring (another colour, width, offset or shape, or a background).
-type Failure = "Occluded" | "Clipped" | "Invisible" | "Inconsistent"
+// Lost: focus fell to the page when the focused element went.
+type Failure = "Occluded" | "Clipped" | "Invisible" | "Inconsistent" | "Lost"
 
 type Case = {
   name: string
@@ -895,16 +901,8 @@ const surfaces: Surface[] = [
         keys: "Tab onto the selected Interface layout card.",
         sizing: "The card has a separate selected border and an outset focus ring.",
         source: "app/src/settings/general/interface-mode.css",
-        fix: "Use a neutral selected border. Blue is reserved for keyboard focus.",
-        render: () => (
-          <fieldset data-component="interface-mode">
-            <label data-slot="interface-mode-option" data-checked>
-              <input type="radio" name="focus-lab-layout" checked />
-              <span data-slot="interface-mode-sketch" aria-hidden="true" />
-              <span data-slot="interface-mode-name">Top tabs</span>
-            </label>
-          </fieldset>
-        ),
+        fix: "Selection is a 2px neutral border, a check outside the corner and a faded sketch on the other cards. Blue is only the keyboard ring.",
+        render: () => <ModeCards group="interface" />,
       },
       ...(["Work account", "Add account"] as const).map(
         (label): Case => ({
@@ -1200,6 +1198,401 @@ const surfaces: Surface[] = [
     ],
   },
   {
+    name: "Consolidated navigation and other dev changes",
+    cases: [
+      {
+        name: "Sidebar actions: New session, Sessions and Settings draw an outset ring",
+        failure: "Inconsistent",
+        target: '[data-action="vertical-tabs-home"]',
+        keys: "With Consolidated navigation, Tab from Toggle sidebar to Sessions.",
+        sizing: "Full-width 28px rows; the outset ring ran 2px past the row into the sidebar's padding.",
+        source: "app/src/shell/titlebar/titlebar.tsx (SidebarAction), tab-nav.css",
+        fix: "[data-titlebar-tab-action] rows draw the shared ring inset (-2px), as the session tabs below them do. That covers the sidebar actions, the recently closed list and project session rows.",
+        render: () => (
+          <div class="flex w-[240px] flex-col gap-[3px] bg-v2-background-bg-deep p-2">
+            <For
+              each={
+                [
+                  ["vertical-tabs-new", "edit", "New session"],
+                  ["vertical-tabs-home", "sessions-stack", "Sessions"],
+                  ["vertical-tabs-settings", "settings-gear", "Settings"],
+                ] as const
+              }
+            >
+              {([action, icon, label]) => (
+                <button
+                  type="button"
+                  data-titlebar-tab-action
+                  data-action={action}
+                  class="group flex h-7 w-full items-center gap-2 rounded-[6px] px-2 text-[13px] leading-[var(--line-height-compact)] text-v2-text-text-faint hover:text-v2-text-text-base"
+                >
+                  <Icon name={icon} class="shrink-0" />
+                  <span class="min-w-0 truncate">{label}</span>
+                </button>
+              )}
+            </For>
+          </div>
+        ),
+      },
+      {
+        name: "Toggle sidebar: the ring loses 1px on the right",
+        failure: "Clipped",
+        target: '[aria-label="Toggle sidebar"]',
+        keys: "Tab from New session to Toggle sidebar in the sidebar header.",
+        sizing: "The 32px button sits flush with the sidebar's end edge, which clips.",
+        source: "app/src/shell/sidebar-toggle.tsx",
+        fix: "The toggle draws the shared ring inset (-2px), wherever it sits.",
+        render: () => (
+          <div class="flex h-9 w-[240px] items-center justify-end overflow-hidden bg-v2-background-bg-deep">
+            <IconButton
+              variant="ghost-muted"
+              size="large"
+              class="shrink-0 focus-visible:-outline-offset-2"
+              aria-label="Toggle sidebar"
+              icon={<Icon name="layout-left-full" />}
+            />
+          </div>
+        ),
+      },
+      {
+        name: "Recent and Inbox Show more: a full-width button with an outset ring cut at both sides",
+        failure: "Clipped",
+        target: '[data-component="button-v2"]',
+        keys: "Tab past the last Recent row to Show more.",
+        sizing: "w-full in the sidebar's scroller; the ring reached 4px past each side.",
+        source: "app/src/shell/titlebar/recent-sessions.tsx, inbox.tsx",
+        fix: "Show more, Show less and Archived draw the shared ring inset (-2px).",
+        render: () => (
+          <div class="w-[240px] overflow-y-auto">
+            <Button
+              variant="ghost-muted"
+              size="normal"
+              class="w-full justify-start px-2 focus-visible:-outline-offset-2"
+            >
+              Show more
+            </Button>
+          </div>
+        ),
+      },
+      {
+        name: "Inbox rows and headings: keyboard focus only changes the background",
+        failure: "Inconsistent",
+        target: '[data-slot="sidebar-inbox-item"]',
+        keys: "With the Inbox layout, Tab into the list and move with the arrow keys.",
+        sizing: "Roving focus: one row is the Tab stop, arrows move between rows.",
+        source: "app/src/shell/titlebar/inbox.tsx",
+        fix: "Roving focus shows a ring on the focused row. Rows and section headings take the shared ring inset (-2px); the selected row keeps its pressed background, so selection stays distinct.",
+        render: () => (
+          <div class="flex w-[260px] flex-col gap-1">
+            <button
+              type="button"
+              aria-expanded="true"
+              class="flex h-6 w-full items-center rounded-[6px] px-2 text-start text-[13px] leading-4 font-medium text-v2-text-text-muted focus-visible:-outline-offset-2"
+            >
+              Needs attention
+            </button>
+            <button
+              type="button"
+              data-slot="sidebar-inbox-item"
+              class="flex h-[54px] w-full flex-col gap-1.5 rounded-[6px] p-2 text-start text-13-regular hover:bg-v2-overlay-simple-overlay-hover focus-visible:-outline-offset-2"
+            >
+              Refactor the session store
+            </button>
+          </div>
+        ),
+      },
+      {
+        name: "Tab groups: the header, colour swatches and menu draw no ring",
+        failure: "Invisible",
+        target: "[data-tab-group-header] button",
+        keys: "With tab groups on, Tab to a group's header, then open its menu and Tab to the colours.",
+        sizing: "The header fills its row; the swatches sit in a menu; the menu trigger is 20px.",
+        source: "app/src/shell/titlebar/tab-groups-ui.tsx",
+        fix: "All three suppressed the outline. The header and its menu trigger take the shared ring inset (-2px); swatches take the default ring, over the selected swatch's neutral ring.",
+        render: () => (
+          <div data-tab-group-header class="flex h-7 w-[240px] items-center gap-1 px-1">
+            <button
+              type="button"
+              aria-expanded="true"
+              class="flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-[6px] px-1 text-start text-13-medium focus-visible:-outline-offset-2"
+            >
+              Release
+            </button>
+            <button
+              type="button"
+              aria-label="Group options"
+              class="my-auto flex size-5 shrink-0 items-center justify-center rounded-[4px] text-v2-icon-icon-muted focus-visible:-outline-offset-2"
+            >
+              <Icon name="sliders" />
+            </button>
+          </div>
+        ),
+      },
+      {
+        name: "Mobile tabs drawer: New session, Home, Settings and Help only change the background",
+        failure: "Inconsistent",
+        target: '[data-action="mobile-tabs-new-session"]',
+        keys: "Below the mobile breakpoint, open the tabs drawer and Tab past the tabs.",
+        sizing: "Full-width rows in the drawer.",
+        source: "app/src/shell/titlebar/titlebar.tsx",
+        fix: "The rows take the shared ring inset (-2px); hover keeps its background.",
+        render: () => (
+          <button
+            type="button"
+            data-action="mobile-tabs-new-session"
+            class="flex h-7 w-[260px] items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 hover:bg-v2-background-bg-layer-02 focus-visible:-outline-offset-2"
+          >
+            <Icon name="plus" />
+            New session
+          </button>
+        ),
+      },
+      {
+        name: "Model picker and MCP error: rows and Back only change the background",
+        failure: "Inconsistent",
+        target: '[data-component="settings-row"]',
+        keys: "Open the model picker and Tab into the list; or open an MCP's error and Tab to Back.",
+        sizing: "Full-width catalog rows; a 20px back button in the dialog header.",
+        source: "app/src/providers/models/select-dialog.tsx, providers/connect/mcp-dialog.tsx",
+        fix: "Rows that are Tab stops take the shared ring inset (-2px); the arrow-key highlight stays a background. Back takes the default ring.",
+        render: () => (
+          <div class="w-[360px]">
+            <SettingsList variant="catalog">
+              <button
+                type="button"
+                data-component="settings-row"
+                class="w-full px-4 text-start hover:bg-v2-overlay-simple-overlay-hover focus-visible:-outline-offset-2"
+              >
+                <div data-slot="settings-row-copy">
+                  <div data-slot="settings-row-title">Claude Sonnet 4.5</div>
+                </div>
+              </button>
+            </SettingsList>
+          </div>
+        ),
+      },
+      {
+        name: "Pinned group: keyboard focus only changes the background",
+        failure: "Inconsistent",
+        target: '[data-slot="pinned-group-trigger"]',
+        keys: "With Consolidated navigation, pin sessions into a group, then Tab to the group.",
+        sizing: "A 28px square in the clipped titlebar row; a full-width row in side tabs.",
+        source: "app/src/shell/titlebar/pinned-area.tsx, pinned-area.css",
+        fix: "The group takes the shared ring inset (-2px), like the pinned tabs beside it, and sits above the group's outline so it covers none of the ring.",
+        render: () => (
+          <div data-component="pinned-group" data-orientation="horizontal" class="relative flex items-center gap-1 p-1">
+            <button
+              type="button"
+              data-slot="pinned-group-trigger"
+              aria-label="Release"
+              class="flex size-7 shrink-0 items-center justify-center rounded-[6px] hover:bg-v2-overlay-simple-overlay-hover focus-visible:-outline-offset-2"
+            >
+              <span class="size-3 rounded-[3px] bg-v2-background-bg-accent" />
+            </button>
+          </div>
+        ),
+      },
+      {
+        name: "Pinned group menu: Escape drops focus on the page",
+        failure: "Lost",
+        target: '[data-slot="pinned-group-trigger"]',
+        keys: "In top tabs, focus a group and press Shift+F10 or right-click it, then Escape.",
+        sizing: "The top-tabs menu's only trigger is a hidden span, so Kobalte had nothing to return to.",
+        source: "app/src/shell/titlebar/pinned-area.tsx",
+        fix: "The menu records how it opened (createOverlayFocus) and returns focus to the control that opened it: the group, or the ⋯ in side tabs.",
+        render: () => (
+          <button
+            type="button"
+            data-slot="pinned-group-trigger"
+            aria-label="Release"
+            class="flex size-7 items-center justify-center rounded-[6px] focus-visible:-outline-offset-2"
+          >
+            <span class="size-3 rounded-[3px] bg-v2-background-bg-accent" />
+          </button>
+        ),
+      },
+      {
+        name: "Recent group heading: keyboard focus only changes the background",
+        failure: "Inconsistent",
+        target: "button[aria-expanded]",
+        keys: "With Recent grouped by date, status or project, Tab to a heading.",
+        sizing: "A full-width heading in the sidebar's scroller.",
+        source: "app/src/shell/titlebar/recent-sessions.tsx",
+        fix: "The heading takes the shared ring inset (-2px).",
+        render: () => (
+          <div class="w-[240px] overflow-y-auto">
+            <button
+              type="button"
+              aria-expanded="true"
+              class="flex h-6 w-full items-center gap-1 rounded-[6px] ps-2 pe-8 text-start text-[13px] leading-4 font-medium text-v2-text-text-muted focus-visible:-outline-offset-2"
+            >
+              Today
+            </button>
+          </div>
+        ),
+      },
+      {
+        name: "Recent view options: the ring loses its top edge",
+        failure: "Clipped",
+        target: '[data-slot="recent-view-trigger"]',
+        keys: "With nothing pinned, Tab to the options button beside the Recent heading.",
+        sizing: "A 20px button centred in a 24px heading at the top of the scroller.",
+        source: "app/src/shell/titlebar/recent-view-menu.tsx",
+        fix: "The trigger draws the shared ring inset (-2px), inside the scroller's edge.",
+        render: () => (
+          <div class="flex h-6 w-[240px] items-center justify-between overflow-y-auto ps-2 pe-1 text-13-medium">
+            Recent
+            <IconButton
+              variant="ghost-muted"
+              size="small"
+              data-slot="recent-view-trigger"
+              class="focus-visible:-outline-offset-2"
+              aria-label="View options"
+              icon={<Icon name="sliders" />}
+            />
+          </div>
+        ),
+      },
+      {
+        name: "Find previous and next: a 1px ring on an outline that is always there",
+        failure: "Inconsistent",
+        target: "button",
+        keys: "Press ⌘F in a session, then Tab from the field to the arrows.",
+        sizing: "20px buttons inside the compact Find field.",
+        source: "app/src/session/timeline/search-bar.tsx",
+        fix: "No outline at rest; the shared ring inset (-2px) with a 4px radius on keyboard focus, as the close button beside them does.",
+        render: () => (
+          <div class="flex items-center gap-0.5">
+            <For each={["Previous match", "Next match"]}>
+              {(label, index) => (
+                <button
+                  type="button"
+                  aria-label={label}
+                  class="flex size-5 items-center justify-center rounded-[4px] text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover focus-visible:-outline-offset-2"
+                >
+                  <Icon name="chevron-down" classList={{ "rotate-180": index() === 0 }} />
+                </button>
+              )}
+            </For>
+          </div>
+        ),
+      },
+      {
+        name: "Navigation mode: the selected card looks focused",
+        failure: "Inconsistent",
+        target: "input",
+        keys: "In Settings › General with Consolidated on, look at the Tabs and List cards, then Tab onto one.",
+        sizing: "The selected card had a focus-blue border and a focus-blue inset shadow.",
+        source: "app/src/settings/general/interface-mode.css",
+        fix: "As with the layout cards: a 2px neutral border, a check outside the corner and a faded sketch on the other card. Blue is only the keyboard ring.",
+        render: () => <ModeCards group="navigation" />,
+      },
+      {
+        name: "Home sessions: Shift+Tab hides the row under the sticky date header",
+        failure: "Occluded",
+        target: '[data-component="home-session-row"]',
+        keys: "Scroll Home down, then Shift+Tab up through the sessions.",
+        sizing:
+          "The sticky search (68, 84 or 108px) and the 28px date header now stay at the top while the list scrolls.",
+        source: "app/src/home/sessions/view.css",
+        fix: "Rows take a top scroll-margin of 100, 116 or 140px, so focus scrolls them clear of both.",
+        render: () => (
+          <button
+            type="button"
+            data-component="home-session-row"
+            class="flex h-10 w-[420px] items-center rounded-[6px] px-3 text-start"
+          >
+            Refactor the session store
+          </button>
+        ),
+      },
+    ],
+    also: [
+      "Rebased onto origin/dev, which retired the Projects sidebar (sidebar-organized.tsx) and added Consolidated navigation, Home's sticky date headers and Find's previous and next buttons. The Home project scope trigger it added also takes the ring and createOverlayFocus.",
+    ],
+  },
+  {
+    name: "Focus after removal",
+    cases: [
+      {
+        name: "Tab strip: closing a background tab drops focus on the page",
+        failure: "Lost",
+        target: '[aria-label="Close Draft"]',
+        keys: "Tab to a tab's close button and press Enter. Focus moves to the next tab, or the previous one after the last.",
+        sizing: "Titlebar and sidebar tab strips. The right panel's Kobalte tabs select themselves on focus, so rescue stays out of them.",
+        source: "ui/src/context/focus-rescue.tsx, app/src/shell/titlebar/tab-strip.tsx",
+        fix: "Chromium leaves focus on <body> when the focused element goes, with no event. focus-rescue watches what had focus and, inside a [data-focus-scope], moves it to the next item, or the previous one after the last. The tab strips, the sidebar, the titlebar and the right panel are scopes.",
+        render: () => <RemovalTabs />,
+      },
+      {
+        name: "Settings rows: deleting a row from its confirm dialog drops focus",
+        failure: "Lost",
+        target: '[data-component="settings-row"]:nth-child(2) [data-component="button-v2"]',
+        keys: "Tab to a row's Delete, press Enter, then confirm. Focus moves to the next row's Delete.",
+        sizing:
+          "Worktrees, providers, servers and every SettingsList. The dialog returns focus to the row before the row goes.",
+        source: "ui/src/context/focus-rescue.tsx, app/src/settings/list.tsx, ui/src/context/dialog.tsx",
+        fix: "SettingsList and the settings screen are scopes. When the dialog's opener is gone, focus moves from where that row was.",
+        render: () => <RemovalSettingsRows />,
+      },
+      {
+        name: "Row menu: removing a row from its own menu drops focus",
+        failure: "Lost",
+        target: '[aria-label="More for Website"]',
+        keys: "Tab to a row's ⋯, press Enter, then choose Remove. Focus moves to the next row's ⋯.",
+        sizing: "Home projects and sessions, servers, sidebar rows, line comments and queued messages.",
+        source: "ui/src/context/focus-rescue.tsx, ui/src/navigation/menu/menu.tsx",
+        fix: "The menu returns focus to its trigger, which went with the row. Focus rescue walks back past the menu's items to that trigger and moves focus from where its row was.",
+        render: () => <RemovalRowMenu />,
+      },
+      {
+        name: "Composer chips: removing the last chip drops focus",
+        failure: "Lost",
+        target: '[aria-label="Remove notes.md"]',
+        keys: "Tab to a chip's remove button and press Enter. Focus moves to the next chip, and to the prompt after the last.",
+        sizing: "Attachments, context files, comments and quotes above the prompt; the queue and the docks below it.",
+        source:
+          "ui/src/context/focus-rescue.tsx, app/src/composer/editor/editor.tsx, session/composer/session-composer-region.tsx",
+        fix: "The chip row is a scope inside the composer dock's scope. With no chip left, focus widens to the dock and takes the next control after the row: the prompt.",
+        render: () => <RemovalChips />,
+      },
+      {
+        name: "Toasts: dismissing the only toast drops focus",
+        failure: "Lost",
+        target: '[aria-label="Dismiss"]',
+        keys: "Press Show toast, Tab to the toast's Dismiss and press Enter. Focus returns to Show toast.",
+        sizing: "Any toast with an action or dismiss button.",
+        source: "ui/src/context/focus-rescue.tsx, ui/src/feedback/toast/toast.tsx",
+        fix: "The toast region is a scope. Dismissing a toast moves focus to the next toast; when none is left, focus goes back to what had it before.",
+        render: () => <RemovalToast />,
+      },
+      {
+        name: "Inline rename: Enter ends the edit and drops focus",
+        failure: "Lost",
+        target: '[contenteditable="true"]',
+        keys: "Edit the title, then press Enter. Focus returns to the tab.",
+        sizing: "Titlebar tab titles, terminal tabs.",
+        source: "ui/src/context/focus-rescue.tsx, app/src/shell/titlebar/tab-nav.tsx",
+        fix: "A field that stops being editable stays in place. Focus moves to the control around it, here the tab link.",
+        render: () => <RemovalRename />,
+      },
+      {
+        name: "Reset: the button disables itself and drops focus",
+        failure: "Lost",
+        target: '[data-action="reset"]',
+        keys: "Tab to Reset and press Enter. Focus moves to the next control.",
+        sizing: "Settings › Shortcuts Reset, and any button disabled by its own action.",
+        source: "ui/src/context/focus-rescue.tsx, app/src/settings/keybinds/keybinds.tsx",
+        fix: "A focused control that becomes disabled counts as gone. Focus moves to the next control in its scope.",
+        render: () => <RemovalReset />,
+      },
+    ],
+    also: [
+      "The same rule covers: Home sessions and projects, the sidebar's Inbox, Recent and pinned rows, the queue, the question and permission docks, banners above the composer, line comments, the review panel, the timeline's message menus, Show more buttons, and inline confirms in dialogs.",
+      "An item inside an overlay (a menu item, a dialog button) leaves its overlay to return focus. Focus rescue steps in only when the overlay's opener is gone too, from where that opener was.",
+    ],
+  },
+  {
     name: "Overlay focus return",
     cases: [
       {
@@ -1207,7 +1600,8 @@ const surfaces: Surface[] = [
         failure: "Inconsistent",
         target: '[data-component="select-v2"]',
         keys: "Click the select, press Escape: no ring. Tab to it, press ArrowDown, then Escape or Enter: the ring returns.",
-        sizing: "Any select. Kobalte returns focus with a plain focus(), and Chromium rings it because Escape is a key press.",
+        sizing:
+          "Any select. Kobalte returns focus with a plain focus(), and Chromium rings it because Escape is a key press.",
         source: "ui/src/forms/select/select.tsx, ui/src/context/overlay-focus.tsx",
         fix: "The wrapper records how the list opened (createOverlayFocus) and restores the trigger with that ring: none after a pointer open, the ring after a keyboard open, however it closed.",
         render: () => (
@@ -1578,6 +1972,31 @@ const surfaces: Surface[] = [
         render: () => <WaitingButton>Waiting for the browser…</WaitingButton>,
       },
       {
+        name: "Accordion rows: the next row covers the bottom of the ring",
+        failure: "Clipped",
+        target: '[data-slot="accordion-trigger"]',
+        keys: "Open the Context tab in the right panel and Tab through Raw messages.",
+        sizing: "Rows overlap by 1px so their borders merge, and each sticky header has the same z-index.",
+        source: "ui/src/data-display/accordion/accordion.css, ui/src/components/sticky-accordion-header.css",
+        fix: "The header holding the focused trigger is raised above its neighbours, so the whole inset ring shows. Sticky headers rise above the other sticky headers.",
+        render: () => (
+          <div class="w-[420px]">
+            <Accordion multiple>
+              <For each={["user", "assistant", "idle"]}>
+                {(role) => (
+                  <Accordion.Item value={role}>
+                    <StickyAccordionHeader>
+                      <Accordion.Trigger>{role}</Accordion.Trigger>
+                    </StickyAccordionHeader>
+                    <Accordion.Content>Message</Accordion.Content>
+                  </Accordion.Item>
+                )}
+              </For>
+            </Accordion>
+          </div>
+        ),
+      },
+      {
         name: "Small controls: 2.5px and 1px offsets",
         failure: "Inconsistent",
         target: '[data-component="button-v2"]',
@@ -1600,6 +2019,8 @@ const surfaces: Surface[] = [
 ]
 
 function FocusVisibility(props: VisibilityArgs) {
+  onMount(() => onCleanup(installFocusRescue()))
+
   createEffect(() => {
     if (!props.forced) return
 
@@ -2113,5 +2534,262 @@ function OverlayPopover(props: { component: string; label: string; width?: strin
         </Popover.Content>
       </Popover.Portal>
     </Popover>
+  )
+}
+
+function RemovalTabs() {
+  const [tabs, setTabs] = createSignal(["Refactor store", "Draft", "Fix tests", "Release notes"])
+
+  return (
+    <div class="flex flex-col items-start gap-3">
+      <div data-focus-scope class="flex items-center gap-1 rounded-[8px] bg-v2-background-bg-deep p-1">
+        <For each={tabs()}>
+          {(tab) => (
+            <div class="flex h-7 items-center rounded-[6px] bg-v2-background-bg-base ps-2">
+              <a href="#" class="rounded-[4px] text-13-regular" onClick={(event) => event.preventDefault()}>
+                {tab}
+              </a>
+              <IconButton
+                variant="ghost-muted"
+                icon={<Icon name="close-small" />}
+                aria-label={`Close ${tab}`}
+                onClick={() => setTabs((list) => list.filter((item) => item !== tab))}
+              />
+            </div>
+          )}
+        </For>
+      </div>
+      <Button
+        size="small"
+        variant="ghost"
+        onClick={() => setTabs(["Refactor store", "Draft", "Fix tests", "Release notes"])}
+      >
+        Restore tabs
+      </Button>
+    </div>
+  )
+}
+
+function RemovalSettingsRows() {
+  const dialog = useDialog()
+
+  const initial = ["main", "focus-rings", "session-store"]
+
+  const [rows, setRows] = createSignal(initial)
+
+  const confirm = (name: string) =>
+    dialog.show(() => (
+      <Dialog>
+        <DialogHeader>
+          <DialogTitle>Delete {name}?</DialogTitle>
+        </DialogHeader>
+        <DialogBody>The worktree and its changes are removed.</DialogBody>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => dialog.close()}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => {
+              dialog.close()
+              // The row goes once the request returns, after the dialog has returned focus to it.
+              setTimeout(() => setRows((list) => list.filter((item) => item !== name)), 300)
+            }}
+          >
+            Delete
+          </Button>
+        </DialogFooter>
+      </Dialog>
+    ))
+
+  return (
+    <div class="flex w-[420px] flex-col items-start gap-3">
+      <SettingsList>
+        <For each={rows()}>
+          {(name) => (
+            <SettingsRow title={name} description="Worktree">
+              <Button size="small" onClick={() => confirm(name)}>
+                Delete
+              </Button>
+            </SettingsRow>
+          )}
+        </For>
+      </SettingsList>
+      <Button size="small" variant="ghost" onClick={() => setRows(initial)}>
+        Restore rows
+      </Button>
+    </div>
+  )
+}
+
+function RemovalChips() {
+  const initial = ["notes.md", "store.ts", "plan.md"]
+
+  const [chips, setChips] = createSignal(initial)
+
+  return (
+    <div data-focus-scope class="flex w-[420px] flex-col gap-2 rounded-[12px] border border-v2-border-border-base p-2">
+      <div data-focus-scope class="flex gap-1.5">
+        <For each={chips()}>
+          {(chip) => (
+            <span class="flex h-6 items-center gap-1 rounded-[6px] bg-v2-background-bg-layer-02 ps-2 text-12-regular">
+              {chip}
+              <IconButton
+                variant="ghost-muted"
+                size="small"
+                icon={<Icon name="close-small" />}
+                aria-label={`Remove ${chip}`}
+                onClick={() => setChips((list) => list.filter((item) => item !== chip))}
+              />
+            </span>
+          )}
+        </For>
+      </div>
+      <textarea
+        aria-label="Prompt"
+        class="h-12 resize-none bg-transparent px-2 text-13-regular"
+        placeholder="Ask anything"
+      />
+      <Button size="small" variant="ghost" class="self-start" onClick={() => setChips(initial)}>
+        Restore chips
+      </Button>
+    </div>
+  )
+}
+
+function RemovalToast() {
+  const [shown, setShown] = createSignal(true)
+
+  return (
+    <div class="flex items-start gap-4">
+      <Button size="small" onClick={() => setShown(true)}>
+        Show toast
+      </Button>
+      <div data-focus-scope class="w-[280px]">
+        <Show when={shown()}>
+          <div
+            tabindex="0"
+            class="flex items-center justify-between gap-2 rounded-[10px] bg-v2-background-bg-base p-3 text-13-regular shadow-[var(--v2-elevation-floating)]"
+          >
+            Session archived
+            <IconButton
+              variant="ghost-muted"
+              icon={<Icon name="close-small" />}
+              aria-label="Dismiss"
+              onClick={() => setShown(false)}
+            />
+          </div>
+        </Show>
+      </div>
+    </div>
+  )
+}
+
+function RemovalRename() {
+  const [editing, setEditing] = createSignal(true)
+
+  return (
+    <div data-focus-scope class="flex items-center gap-2">
+      <a
+        href="#"
+        class="flex h-7 items-center rounded-[6px] bg-v2-background-bg-base px-2 text-13-regular"
+        onClick={(event) => event.preventDefault()}
+      >
+        <span
+          contenteditable={editing() ? "true" : undefined}
+          class="outline-none"
+          onKeyDown={(event) => {
+            if (event.key !== "Enter") return
+            event.preventDefault()
+            setEditing(false)
+          }}
+        >
+          Refactor store
+        </span>
+      </a>
+      <Button size="small" variant="ghost" onClick={() => setEditing(true)}>
+        Rename
+      </Button>
+    </div>
+  )
+}
+
+function RemovalReset() {
+  const [changed, setChanged] = createSignal(true)
+
+  return (
+    <div data-focus-scope class="flex items-center gap-2">
+      <Button size="small" data-action="reset" disabled={!changed()} onClick={() => setChanged(false)}>
+        Reset
+      </Button>
+      <Button size="small" variant="ghost" onClick={() => setChanged(true)}>
+        Change a shortcut
+      </Button>
+    </div>
+  )
+}
+
+function RemovalRowMenu() {
+  const initial = ["Desktop", "Website", "Docs"]
+
+  const [rows, setRows] = createSignal(initial)
+
+  return (
+    <div class="flex w-[320px] flex-col items-start gap-3">
+      <div data-focus-scope class="flex w-full flex-col">
+        <For each={rows()}>
+          {(row) => (
+            <div class="flex h-8 items-center justify-between rounded-[6px] ps-2 text-13-regular">
+              {row}
+              <Menu gutter={4} placement="bottom-end">
+                <Menu.Trigger
+                  as={IconButton}
+                  variant="ghost-muted"
+                  icon={<Icon name="outline-dots" />}
+                  aria-label={`More for ${row}`}
+                />
+                <Menu.Portal>
+                  <Menu.Content>
+                    <Menu.Item>Rename</Menu.Item>
+                    <Menu.Item onSelect={() => setRows((list) => list.filter((item) => item !== row))}>
+                      Remove
+                    </Menu.Item>
+                  </Menu.Content>
+                </Menu.Portal>
+              </Menu>
+            </div>
+          )}
+        </For>
+      </div>
+      <Button size="small" variant="ghost" onClick={() => setRows(initial)}>
+        Restore rows
+      </Button>
+    </div>
+  )
+}
+
+// The selected style both card groups in Settings › General share: a 2px neutral border and a check at the corner.
+function ModeCards(props: { group: "interface" | "navigation" }) {
+  const name = createUniqueId()
+
+  const labels = props.group === "interface" ? ["Top tabs", "Side tabs", "Inbox"] : ["Tabs", "List"]
+
+  return (
+    <fieldset data-component={props.group === "interface" ? "interface-mode" : "navigation-mode"}>
+      <For each={labels}>
+        {(label, index) => (
+          <label data-slot={`${props.group}-mode-option`} data-checked={index() === 0 ? "" : undefined}>
+            <input type="radio" name={name} checked={index() === 0} />
+            <span data-slot={`${props.group}-mode-sketch`} aria-hidden="true" />
+            <span data-slot={`${props.group}-mode-name`}>{label}</span>
+            <Show when={index() === 0}>
+              <span data-slot="mode-option-check" aria-hidden="true">
+                <Icon name="check" size="small" />
+              </span>
+            </Show>
+          </label>
+        )}
+      </For>
+    </fieldset>
   )
 }

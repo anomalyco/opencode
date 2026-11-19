@@ -792,7 +792,7 @@ function ComposerAttachments(props: {
         (props.files?.length ?? 0) > 0
       }
     >
-      <div data-component="composer-attachments" data-slot="composer-attachments" class="relative">
+      <div data-component="composer-attachments" data-slot="composer-attachments" data-focus-scope class="relative">
         <div
           data-slot="composer-attachments-scroll"
           class="flex flex-nowrap gap-2 overflow-x-auto no-scrollbar px-2 pt-2 pb-1"

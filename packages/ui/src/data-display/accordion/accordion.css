@@ -24,6 +24,13 @@
       margin: 0;
       padding: 0;
 
+      /* Items overlap by a pixel, so the next item would paint over the bottom of this one's inset ring. Sticky
+         headers are raised in sticky-accordion-header.css. */
+      &:not([data-component="sticky-accordion-header"]):has(> [data-slot="accordion-trigger"]:focus-visible) {
+        position: relative;
+        z-index: 1;
+      }
+
       [data-slot="accordion-trigger"] {
         width: 100%;
         display: flex;

@@ -1181,6 +1181,7 @@ export function createTimelineVirtualizer(input: Input) {
         </Show>
         <ScrollView
           data-slot="session-timeline-scroll"
+          data-focus-scope
           viewportRef={bindListRoot}
           thumbContainer={visibleArea()}
           thumbHoverTarget={viewRoot()}

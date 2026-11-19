@@ -101,6 +101,7 @@ export function NewSessionView(props: {
       <div
         ref={panel}
         data-component="new-session"
+        data-focus-scope
         class="relative isolate flex-1 min-h-0 overflow-hidden rounded-[10px] bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]"
       >
         <ComposerDropzone
