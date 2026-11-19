@@ -213,31 +213,48 @@ test("trims external dependencies without excluding runtime files", () => {
   }
 })
 
+// The loader finds its binding beside it or, as an isolated install may lay it out, nested under it.
 test.each([
-  ["darwin", "arm64", "darwin-arm64"], ["darwin", "x64", "darwin-x64"],
-  ["win32", "arm64", "win32-arm64-msvc"], ["win32", "x64", "win32-x64-msvc"],
-  ["linux", "arm64", "linux-arm64-gnu"], ["linux", "x64", "linux-x64-gnu"],
-] as const)("packaging %s/%s requires its unpacked preview addon", async (platform, arch, binding) => {
+  ["darwin", "arm64", "darwin-arm64", "beside"], ["darwin", "x64", "darwin-x64", "beside"],
+  ["win32", "arm64", "win32-arm64-msvc", "beside"], ["win32", "x64", "win32-x64-msvc", "beside"],
+  ["win32", "x64", "win32-x64-msvc", "nested"], ["darwin", "arm64", "darwin-arm64", "nested"],
+] as const)("packaging %s/%s requires its unpacked preview addon, %s the loader", async (platform, arch, binding, layout) => {
   const resources = await realpath(await mkdtemp(path.join(os.tmpdir(), "preview-pack-")))
   const modules = path.join(resources, "app.asar.unpacked/node_modules")
-  const pkg = path.join(modules, `@yuuang/ffi-rs-${binding}`)
+  const name = `@yuuang/ffi-rs-${binding}`
+  const pkg = path.join(layout === "nested" ? path.join(modules, "ffi-rs/node_modules") : modules, name)
   const addon = `ffi-rs.${binding}.node`
 
   try {
-    await Bun.write(path.join(modules, "ffi-rs/package.json"), JSON.stringify({ main: "index.js" }))
+    await Bun.write(path.join(modules, "ffi-rs/package.json"), JSON.stringify({ main: "index.js", optionalDependencies: { [name]: "1.3.7" } }))
     await Bun.write(path.join(modules, "ffi-rs/index.js"), "module.exports = {}")
-    await Bun.write(path.join(pkg, "package.json"), JSON.stringify({ main: addon }))
+    await Bun.write(path.join(pkg, "package.json"), JSON.stringify({ main: addon, version: "1.3.7" }))
 
     if (platform === process.platform && arch === process.arch) {
-      const source = createRequire(import.meta.resolve("ffi-rs")).resolve(`@yuuang/ffi-rs-${binding}`)
+      const source = createRequire(import.meta.resolve("ffi-rs")).resolve(name)
       await cp(source, path.join(pkg, addon))
       await verifyPreviewBinding(resources, platform, arch)
+      // A binding of another version than the loader declares is not the one it was built against.
+      await Bun.write(path.join(pkg, "package.json"), JSON.stringify({ main: addon, version: "1.3.2" }))
+      await expect(verifyPreviewBinding(resources, platform, arch)).rejects.toThrow(addon)
+      await Bun.write(path.join(pkg, "package.json"), JSON.stringify({ main: addon, version: "1.3.7" }))
       await rm(path.join(pkg, addon))
     }
 
     await expect(verifyPreviewBinding(resources, platform, arch)).rejects.toThrow(addon)
     await Bun.write(path.join(pkg, addon), "not a native library")
     await expect(verifyPreviewBinding(resources, platform, arch)).rejects.toThrow(addon)
+  } finally {
+    await rm(resources, { recursive: true, force: true })
+  }
+})
+
+// Linux names an open file through /proc, so a Linux package loads no binding and needs none.
+test.each(["arm64", "x64"] as const)("packaging linux/%s needs no preview addon", async (arch) => {
+  const resources = await realpath(await mkdtemp(path.join(os.tmpdir(), "preview-pack-")))
+
+  try {
+    await verifyPreviewBinding(resources, "linux", arch)
   } finally {
     await rm(resources, { recursive: true, force: true })
   }
