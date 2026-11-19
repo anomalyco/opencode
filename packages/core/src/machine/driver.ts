@@ -215,14 +215,13 @@ export const make = (id: Environment.ID): Interface => {
         })
       }
       // Stopped like a local process when the scope that spawned it closes, but never waiting for a machine that is
-      // away. Added before the start is sent, so a start still unanswered is covered.
+      // away: a process still there is forgotten, so nothing collects output no one will read. Added before the start
+      // is sent, so a start still unanswered is covered.
       yield* Effect.addFinalizer(() =>
-        Effect.ignore(
-          stop(
-            { killSignal, forceKillAfter: options.forceKillAfter ?? CrossSpawnSpawner.RELEASE_FORCE_KILL_AFTER },
-            false,
-          ),
-        ),
+        stop(
+          { killSignal, forceKillAfter: options.forceKillAfter ?? CrossSpawnSpawner.RELEASE_FORCE_KILL_AFTER },
+          false,
+        ).pipe(Effect.ignore, Effect.ensuring(Effect.sync(() => processes.delete(processID)))),
       )
       live.send({
         type: "start",

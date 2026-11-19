@@ -241,6 +241,19 @@ describe("machine driver", () => {
     }),
   )
 
+  it.effect("forgets a process whose scope closed while the machine was away", () =>
+    Effect.gen(function* () {
+      const { worker, environment } = yield* connected
+      const scope = yield* Scope.make()
+      yield* environment.spawner.spawn(command).pipe(Scope.provide(scope))
+      yield* worker.cut
+      yield* Scope.close(scope, Exit.void)
+      yield* worker.restore
+      expect(count(worker.received, "attach")).toBe(0)
+      expect(count(worker.received, "kill")).toBe(0)
+    }),
+  )
+
   it.effect("returns from kill at once when the process already exited, even offline", () =>
     Effect.gen(function* () {
       const { worker, environment } = yield* connected
