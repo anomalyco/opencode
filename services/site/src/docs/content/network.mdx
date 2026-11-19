@@ -65,12 +65,15 @@ export NODE_EXTRA_CA_CERTS=/etc/company/ca.pem
 opencode --standalone
 ```
 
-Persist the file path for the background service, then restart it:
+For the background service, run both commands from a terminal. The first command stops any running service and saves
+the path. The second starts the service with the CA file configured in its startup environment.
 
 ```bash
 opencode service set env NODE_EXTRA_CA_CERTS /etc/company/ca.pem
 opencode service start
 ```
+
+If you use Desktop, run these commands with the matching CLI version before opening the app.
 
 ## Antivirus and HTTPS inspection
 
