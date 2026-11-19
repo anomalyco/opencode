@@ -16,6 +16,7 @@ import { PortOwner } from "../src/services/port-owner"
 import { ServiceConfig } from "../src/services/service-config"
 import { ServiceRegistration } from "../src/services/service-registration"
 import { isolatedEnv, transpilerCache } from "./fixture/environment"
+import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "../../core/test/lib/effect"
 
 const it = testEffect(NodeFileSystem.layer)
@@ -60,6 +61,23 @@ test("service disabled accepts only booleans without changing configuration on i
   } finally {
     await fs.rm(root, { recursive: true, force: true })
   }
+})
+
+test("service set password keeps the password out of the CLI log", async () => {
+  await using root = await tmpdir()
+  const child = Bun.spawn(
+    [process.execPath, path.join(import.meta.dir, "../src/index.ts"), "service", "set", "password", "not-in-log"],
+    { env: isolatedEnv(root.path), stdout: "pipe", stderr: "pipe" },
+  )
+  expect(await new Response(child.stderr).text()).toBe("")
+  expect(await child.exited).toBe(0)
+  expect((await Bun.file(path.join(root.path, "config", "service-local.json")).json()).password).toBe("not-in-log")
+  const directory = path.join(root.path, "data", "opencode", "log")
+  const log = (
+    await Promise.all((await fs.readdir(directory)).map((file) => Bun.file(path.join(directory, file)).text()))
+  ).join("")
+  expect(log).toContain(`args="[\\"service\\",\\"set\\",\\"password\\",\\"<redacted>\\"]"`)
+  expect(log).not.toContain("not-in-log")
 })
 
 // Enabling remote creates a real tunnel, so only the paths that stay local are covered here.

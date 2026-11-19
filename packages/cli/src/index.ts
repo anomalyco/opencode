@@ -41,6 +41,17 @@ if (process.env.OPENCODE_SSH_ASKPASS_PORT) {
 
 let terminated = false
 
+// `service set password <value>` carries the secret itself; keep it out of the logged arguments.
+const args = process.argv.slice(2)
+const positional = args.flatMap((arg, index) => (arg.startsWith("-") ? [] : [index]))
+const loggedArgs =
+  positional
+    .slice(0, 3)
+    .map((index) => args[index])
+    .join(" ") === "service set password"
+    ? args.map((arg, index) => (index > positional[2] ? "<redacted>" : arg))
+    : args
+
 const Handlers = Runtime.handlers(Commands, {
   $: () => import("./commands/handlers/default"),
   upgrade: () => import("./commands/handlers/upgrade"),
@@ -125,14 +136,14 @@ Effect.gen(function* () {
     version: OPENCODE_VERSION,
     channel: OPENCODE_CHANNEL,
     local: OPENCODE_LOCAL,
-    args: process.argv.slice(2),
+    args: loggedArgs,
   })
   return yield* Runtime.run(Commands, Handlers, { version: OPENCODE_VERSION })
 }).pipe(
   Effect.catchCause((cause) =>
     Effect.logError("cli process failed", {
       cause,
-      args: process.argv.slice(2),
+      args: loggedArgs,
     }).pipe(Effect.andThen(Effect.failCause(cause))),
   ),
   Effect.annotateLogs({ role: "cli" }),
