@@ -294,12 +294,7 @@ function sanitizeMessage(message: SessionMessage.Info): SessionMessage.Info {
           ? undefined
           : redact("synthetic-description", message.id, message.description),
     }
-  if (message.type === "system")
-    return {
-      ...message,
-      metadata: meta,
-      text: redact("system", message.id, message.text),
-    }
+  if (message.type === "system") return { ...message, metadata: meta, text: redact("system", message.id, message.text) }
   if (message.type === "skill") return { ...message, metadata: meta, text: redact("skill", message.id, message.text) }
   if (message.type === "shell")
     return {
