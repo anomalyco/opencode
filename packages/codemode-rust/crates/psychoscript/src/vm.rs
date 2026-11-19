@@ -422,8 +422,11 @@ impl Vm {
     #[inline]
     pub fn alloc(&mut self, obj: Obj) -> Id {
         #[cfg(feature = "gc-incremental")]
-        if self.heap.len() >= self.gc.obj_limit {
-            return self.gc_alloc(obj);
+        if self.heap.len() >= self.gc.obj_limit
+            && let Some(id) = self.gc_alloc()
+        {
+            self.heap.put(id as usize, obj);
+            return id;
         }
         #[cfg(not(feature = "gc-incremental"))]
         if self.heap.len() >= MAX_OBJECTS {

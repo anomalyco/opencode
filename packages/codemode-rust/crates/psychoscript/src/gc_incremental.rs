@@ -29,7 +29,7 @@
 //! - Snapshots need nothing of their own: a freed object saves as an empty object, a freed string as "" and a freed
 //!   cell as undefined, which a resumed run collects again.
 
-use std::ops::{Deref, Index, IndexMut};
+use std::ops::{Deref, DerefMut, Index, IndexMut};
 use std::slice::SliceIndex;
 
 use crate::object::{Kind, Obj};
@@ -89,12 +89,10 @@ pub(crate) fn first_limit() -> usize {
 
 /// The run's objects. The first write to an object while marking traces it first: every `heap[id]` that may write
 /// goes through `IndexMut`.
-// Only what the hot paths read is inline: with the colours inline too, the dispatch loop ran about 3% more
-// instructions on loops that never touch the heap.
 pub struct Heap {
     objs: Vec<Obj>,
     pub(crate) marking: bool,
-    marks: Box<Marks>,
+    marks: Marks,
 }
 
 #[derive(Default)]
@@ -113,20 +111,28 @@ impl Heap {
         Heap {
             objs: Vec::with_capacity(n),
             marking: false,
-            marks: Box::default(),
+            marks: Marks::default(),
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn push(&mut self, o: Obj) {
         self.objs.push(o);
+    }
+
+    /// Fills freed slot `i`, past the barrier: a reused slot is black or white already. The sweep left an empty
+    /// object there, which owns no memory, so it is forgotten rather than dropped: that keeps drop code out of every
+    /// `alloc`.
+    #[inline(always)]
+    pub(crate) fn put(&mut self, i: usize, o: Obj) {
+        std::mem::forget(std::mem::replace(&mut self.objs[i], o));
     }
 
     /// Traces object `i` as it is, before a write, unless it is black already.
     #[cold]
     #[inline(never)]
     fn barrier(&mut self, i: usize) {
-        let m = &mut *self.marks;
+        let m = &mut self.marks;
         if !matches!(m.color.get(i), Some(&WHITE | &GREY)) {
             return;
         }
@@ -169,7 +175,7 @@ impl Visit for Shade<'_> {
 impl Deref for Heap {
     type Target = Vec<Obj>;
 
-    #[inline]
+    #[inline(always)]
     fn deref(&self) -> &Vec<Obj> {
         &self.objs
     }
@@ -178,14 +184,14 @@ impl Deref for Heap {
 impl<I: SliceIndex<[Obj]>> Index<I> for Heap {
     type Output = I::Output;
 
-    #[inline]
+    #[inline(always)]
     fn index(&self, i: I) -> &I::Output {
         &self.objs[i]
     }
 }
 
 impl IndexMut<usize> for Heap {
-    #[inline]
+    #[inline(always)]
     fn index_mut(&mut self, i: usize) -> &mut Obj {
         if self.marking {
             self.barrier(i);
@@ -248,6 +254,27 @@ impl Gc {
     }
 }
 
+/// The collector's state for strings, made on the first write to it, which comes once a run passes its first
+/// threshold: a short run allocates none. Until then it reads as an idle collector's.
+#[derive(Default)]
+pub struct LazyStrGc(Option<Box<StrGc>>);
+
+static IDLE: StrGc = StrGc::new();
+
+impl Deref for LazyStrGc {
+    type Target = StrGc;
+
+    fn deref(&self) -> &StrGc {
+        self.0.as_deref().unwrap_or(&IDLE)
+    }
+}
+
+impl DerefMut for LazyStrGc {
+    fn deref_mut(&mut self) -> &mut StrGc {
+        self.0.get_or_insert_with(|| Box::new(StrGc::new()))
+    }
+}
+
 /// The collector's state for strings, kept in `Strings` so its allocation paths can reach it.
 pub struct StrGc {
     phase: Phase,
@@ -271,7 +298,7 @@ pub struct StrGc {
 }
 
 impl StrGc {
-    pub fn new() -> StrGc {
+    const fn new() -> StrGc {
         StrGc {
             phase: Phase::Idle,
             free: Vec::new(),
@@ -300,25 +327,22 @@ impl StrGc {
 }
 
 impl Strings {
-    /// `push` past the limit: reuses a freed slot, colours it for the cycle in progress and counts the debt.
+    /// `push` past the limit: counts the debt, and gives a freed slot for a string whose text is in shared buffer
+    /// `grow`, coloured for the cycle in progress, or `None` to push it at the end.
     #[cold]
     #[inline(never)]
-    pub(crate) fn push_slow(&mut self, entry: StrBuf) -> StrId {
+    pub(crate) fn push_slow(&mut self, grow: u32) -> Option<StrId> {
         let gc = &mut self.gc;
         gc.debt += 1;
         gc.wanted = true;
         if gc.phase != Phase::Idle
-            && let Some(l) = gc.grow_live.get_mut(entry.grow as usize)
+            && let Some(l) = gc.grow_live.get_mut(grow as usize)
         {
             *l = true;
         }
-        let Some(id) = gc.free.pop() else {
-            self.bufs.push(entry);
-            return (self.bufs.len() - 1) as StrId;
-        };
+        let id = gc.free.pop()?;
         gc.color[id as usize] = reused_color(gc.phase, id as usize, gc.sweep.0, BLACK);
-        self.bufs[id as usize] = entry;
-        id
+        Some(id)
     }
 
     /// Frees string `i`, or keeps it for the next cycle, copying it out of a retired buffer. Returns the work done.
@@ -445,7 +469,7 @@ fn reused_color(phase: Phase, id: usize, swept_to: usize, marked: u8) -> u8 {
 /// Traces from roots and grey objects, with the colours taken out of the VM so the VM can be read meanwhile.
 struct Marker<'v> {
     vm: &'v Vm,
-    marks: Box<Marks>,
+    marks: Marks,
     cells: Vec<u8>,
     strs: Vec<u8>,
     grow_live: Vec<bool>,
@@ -455,7 +479,7 @@ struct Marker<'v> {
 impl Visit for Marker<'_> {
     fn id(&mut self, id: Id) {
         self.work += 1;
-        let m = &mut *self.marks;
+        let m = &mut self.marks;
         if let Some(c) = m.color.get_mut(id as usize)
             && *c == WHITE
         {
@@ -593,33 +617,32 @@ fn bulk_len(o: &Obj) -> usize {
 }
 
 impl Vm {
-    /// `alloc` at its limit: a reused slot, or a new one, coloured for the cycle in progress.
+    /// `alloc` at its limit: a freed slot for the object, coloured for the cycle in progress, or `None` to push it
+    /// at the end. The object stays with `alloc`: passing it to this out-of-line function made every allocation build
+    /// it in memory first.
     #[cold]
     #[inline(never)]
-    pub(crate) fn gc_alloc(&mut self, obj: Obj) -> Id {
+    pub(crate) fn gc_alloc(&mut self) -> Option<Id> {
         self.gc.debt += 1;
         let phase = self.gc.phase;
-        let id = match self.gc.free.pop() {
+        let id = self.gc.free.pop();
+        match id {
             Some(id) => {
-                self.heap.objs[id as usize] = obj;
                 self.heap.marks.color[id as usize] =
                     reused_color(phase, id as usize, self.gc.obj_sweep.0, BLACK);
-                id
             }
             None => {
                 if self.heap.len() >= MAX_OBJECTS {
                     self.out_of_memory();
                 }
-                self.heap.objs.push(obj);
                 // Past the sweep's end, so the sweep never sees it.
                 match phase {
                     Phase::Mark => self.heap.marks.color.push(BLACK),
                     Phase::Sweep => self.heap.marks.color.push(WHITE),
                     Phase::Idle => {}
                 }
-                (self.heap.len() - 1) as Id
             }
-        };
+        }
         self.gc_poll();
         id
     }

@@ -196,11 +196,12 @@ pub struct Strings {
     atom_str: Vec<StrId>,
     atom_index: Vec<u32>,
     /// A new string at this many takes the collector's path (`push_slow`); the rest of its state is boxed, as only
-    /// this is read on every allocation.
+    /// this is read on every allocation, and a larger `Strings` moves the VM's fields after it out of the dispatch
+    /// loop's short addressing.
     #[cfg(feature = "gc-incremental")]
     pub(crate) gc_limit: usize,
     #[cfg(feature = "gc-incremental")]
-    pub(crate) gc: Box<crate::gc_incremental::StrGc>,
+    pub(crate) gc: crate::gc_incremental::LazyStrGc,
 }
 
 /// A borrowed string with its ASCII flag and, for a carrier, its code units, for code-unit arithmetic.
@@ -224,7 +225,7 @@ impl Strings {
             #[cfg(feature = "gc-incremental")]
             gc_limit: crate::gc_incremental::first_limit(),
             #[cfg(feature = "gc-incremental")]
-            gc: Box::new(crate::gc_incremental::StrGc::new()),
+            gc: Default::default(),
         };
         for name in ["Symbol(Symbol.iterator)", "Symbol(Symbol.asyncIterator)"] {
             let id = s.alloc_static(name);
@@ -300,8 +301,12 @@ impl Strings {
     #[inline]
     fn push_entry(&mut self, entry: StrBuf) -> StrId {
         #[cfg(feature = "gc-incremental")]
-        if self.bufs.len() >= self.gc_limit {
-            return self.push_slow(entry);
+        if self.bufs.len() >= self.gc_limit
+            && let Some(id) = self.push_slow(entry.grow)
+        {
+            // A freed slot holds `StrBuf::empty()`, which owns nothing: see `Heap::put`.
+            std::mem::forget(std::mem::replace(&mut self.bufs[id as usize], entry));
+            return id;
         }
         self.bufs.push(entry);
         (self.bufs.len() - 1) as StrId
@@ -311,7 +316,9 @@ impl Strings {
     #[inline]
     fn new_grow(&mut self, s: String) -> usize {
         #[cfg(feature = "gc-incremental")]
-        if let Some(g) = self.gc.grow_free.pop() {
+        // Looked at before popping, which would make the collector's state that a short run never needs.
+        if !self.gc.grow_free.is_empty() {
+            let g = self.gc.grow_free.pop().unwrap_or_default();
             self.grow[g] = s;
             self.gc.grow_made(g);
             return g;
