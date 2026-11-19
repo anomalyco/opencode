@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test"
 import { createRequire } from "node:module"
+import os from "node:os"
 import path from "node:path"
-import { mkdir, rename, symlink } from "node:fs/promises"
+import { mkdir, mkdtemp, rename, rm, symlink } from "node:fs/promises"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { Host } from "@opencode/plugin/host"
 import "../src/plugin/runtime-plugin-support.bun"
@@ -11,6 +12,21 @@ import { createSignal } from "solid-js"
 import { Effect, Option, Schema } from "effect"
 import { Plugin } from "@opencode/plugin/tui"
 import { tmpdir } from "./fixture/fixture"
+
+// File symlinks need elevated privileges on Windows, where plain checkouts run tests unelevated.
+const fileSymlinksPermitted = await (async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "opencode-tui-symlink-probe-"))
+  try {
+    await Bun.write(path.join(root, "target.ts"), "")
+    await symlink(path.join(root, "target.ts"), path.join(root, "link.ts"), "file")
+    return true
+  } catch {
+    return false
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})()
+const withFileSymlinks = test.skipIf(!fileSymlinksPermitted)
 
 test("a fresh local plugin generation observes edited helper exports", async () => {
   await using sources = await fixture()
@@ -281,7 +297,7 @@ test("literal dynamic imports and JSON join the source graph", async () => {
   expect((await sources.read(entry.href)).module).toMatchObject({ default: 2 })
 })
 
-test("real watchers observe atomic saves to nested, outside-root, and symlinked helpers", async () => {
+withFileSymlinks("real watchers observe atomic saves to nested, outside-root, and symlinked helpers", async () => {
   let changes = 0
   const watcher = createSourceWatcher(() => {
     changes++
