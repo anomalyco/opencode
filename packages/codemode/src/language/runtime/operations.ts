@@ -367,13 +367,18 @@ export const assignToReference = (
 ): Callable | undefined => {
   let written: boolean | Callable
   try {
-    // An accessor decides what a write stores (or refuses it), so only a data write can make a cycle.
-    if (next instanceof Obj && !isAccessor(lookup(target, key))) {
-      rejectCircularInsertion(
-        target,
-        next,
-        target instanceof Arr ? "Array assignment result" : "Object assignment result",
-      )
+    // An accessor decides what a write stores (or refuses it), so only a data write can make a cycle. The cycle check
+    // goes first: the lookup is only needed in the rare case it fails.
+    if (next instanceof Obj) {
+      try {
+        rejectCircularInsertion(
+          target,
+          next,
+          target instanceof Arr ? "Array assignment result" : "Object assignment result",
+        )
+      } catch (error) {
+        if (!isAccessor(lookup(target, key))) throw error
+      }
     }
     written = set(target, key, next)
   } catch (error) {
