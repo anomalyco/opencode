@@ -1,4 +1,5 @@
 use base64::Engine;
+use opentui::input::decode_paste_bytes;
 use opentui::native::ClipboardOutcome;
 
 /// The clipboard as `clipboard.read` returns it.
@@ -33,12 +34,6 @@ pub fn content(outcome: ClipboardOutcome) -> Result<Option<Content>, String> {
         }
         _ => Ok(None),
     }
-}
-
-/// `decodePasteBytes`: `TextDecoder` without `fatal`, which also drops a leading BOM.
-pub fn decode_paste_bytes(bytes: &[u8]) -> String {
-    let text = String::from_utf8_lossy(bytes);
-    text.strip_prefix('\u{feff}').unwrap_or(&text).to_owned()
 }
 
 #[cfg(test)]
