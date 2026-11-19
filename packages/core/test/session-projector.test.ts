@@ -2599,6 +2599,173 @@ describe("SessionProjector", () => {
         if (row.type === "assistant") expect(row.data).toMatchObject({ content: [] })
     }),
   )
+
+  it.effect("preserves fully-streamed tool arguments when the call fails", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const assistantMessageID = SessionMessage.ID.make("msg_failed_full_input")
+      yield* db.insert(SessionMessageTable).values(assistantRow(assistantMessageID, 0)).run().pipe(Effect.orDie)
+      const service = yield* Bus.Service
+      yield* service.publish(SessionEvent.Tool.Input.Started, {
+        sessionID,
+        assistantMessageID,
+        id: "call_shell",
+        name: "shell",
+      })
+      yield* service.publish(SessionEvent.Tool.Input.Ended, {
+        sessionID,
+        assistantMessageID,
+        id: "call_shell",
+        text: '{"command":"rm -rf build && make release","description":"Rebuild release"}',
+      })
+      yield* service.publish(SessionEvent.Tool.Failed, {
+        sessionID,
+        assistantMessageID,
+        id: "call_shell",
+        error: { type: "aborted", message: "Tool execution interrupted" },
+        executed: false,
+      })
+      const row = yield* db
+        .select()
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.id, assistantMessageID))
+        .get()
+        .pipe(Effect.orDie)
+      expect(yield* SessionHistory.loadMessageRow(db, row!)).toMatchObject({
+        content: [
+          {
+            id: "call_shell",
+            state: {
+              status: "error",
+              input: { command: "rm -rf build && make release", description: "Rebuild release" },
+            },
+          },
+        ],
+      })
+    }).pipe(Effect.provide(partRows)),
+  )
+
+  it.effect("falls back to empty input when streamed arguments are not valid JSON", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const assistantMessageID = SessionMessage.ID.make("msg_failed_partial_input")
+      yield* db.insert(SessionMessageTable).values(assistantRow(assistantMessageID, 0)).run().pipe(Effect.orDie)
+      const service = yield* Bus.Service
+      yield* service.publish(SessionEvent.Tool.Input.Started, {
+        sessionID,
+        assistantMessageID,
+        id: "call_write",
+        name: "write",
+      })
+      yield* service.publish(SessionEvent.Tool.Input.Ended, {
+        sessionID,
+        assistantMessageID,
+        id: "call_write",
+        text: '{"path":"notes.txt","content":',
+      })
+      yield* service.publish(SessionEvent.Tool.Failed, {
+        sessionID,
+        assistantMessageID,
+        id: "call_write",
+        error: { type: "aborted", message: "Tool execution interrupted" },
+        executed: false,
+      })
+      const row = yield* db
+        .select()
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.id, assistantMessageID))
+        .get()
+        .pipe(Effect.orDie)
+      const loaded = yield* SessionHistory.loadMessageRow(db, row!)
+      expect(loaded).toMatchObject({
+        content: [{ id: "call_write", state: { status: "error" } }],
+      })
+      const writeErrorState = (
+        loaded as unknown as { content: Array<{ state: { input: unknown } }> }
+      ).content[0].state
+      expect(writeErrorState.input).toEqual({})
+    }).pipe(Effect.provide(partRows)),
+  )
+
+  it.effect("falls back to empty input when streamed arguments are a JSON array", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const assistantMessageID = SessionMessage.ID.make("msg_failed_array_input")
+      yield* db.insert(SessionMessageTable).values(assistantRow(assistantMessageID, 0)).run().pipe(Effect.orDie)
+      const service = yield* Bus.Service
+      yield* service.publish(SessionEvent.Tool.Input.Started, {
+        sessionID,
+        assistantMessageID,
+        id: "call_list",
+        name: "list",
+      })
+      yield* service.publish(SessionEvent.Tool.Input.Ended, {
+        sessionID,
+        assistantMessageID,
+        id: "call_list",
+        text: "[1,2,3]",
+      })
+      yield* service.publish(SessionEvent.Tool.Failed, {
+        sessionID,
+        assistantMessageID,
+        id: "call_list",
+        error: { type: "aborted", message: "Tool execution interrupted" },
+        executed: false,
+      })
+      const row = yield* db
+        .select()
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.id, assistantMessageID))
+        .get()
+        .pipe(Effect.orDie)
+      const loaded = yield* SessionHistory.loadMessageRow(db, row!)
+      expect(loaded).toMatchObject({
+        content: [{ id: "call_list", state: { status: "error" } }],
+      })
+      const listErrorState = (
+        loaded as unknown as { content: Array<{ state: { input: unknown } }> }
+      ).content[0].state
+      expect(listErrorState.input).toEqual({})
+    }).pipe(Effect.provide(partRows)),
+  )
+
+  it.effect("preserves already-decoded tool input when a running call fails", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const assistantMessageID = SessionMessage.ID.make("msg_failed_running")
+      yield* db.insert(SessionMessageTable).values(assistantRow(assistantMessageID, 0)).run().pipe(Effect.orDie)
+      const service = yield* Bus.Service
+      yield* service.publish(SessionEvent.Tool.Input.Started, {
+        sessionID,
+        assistantMessageID,
+        id: "call_read",
+        name: "read",
+      })
+      yield* service.publish(SessionEvent.Tool.Called, {
+        sessionID,
+        assistantMessageID,
+        id: "call_read",
+        input: { path: "src/index.ts" },
+        executed: true,
+      })
+      yield* service.publish(SessionEvent.Tool.Failed, {
+        sessionID,
+        assistantMessageID,
+        id: "call_read",
+        error: { type: "tool.execution", message: "permission denied" },
+        executed: true,
+      })
+      const row = yield* db
+        .select()
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.id, assistantMessageID))
+        .get()
+        .pipe(Effect.orDie)
+      expect(yield* SessionHistory.loadMessageRow(db, row!)).toMatchObject({
+        content: [{ id: "call_read", state: { status: "error", input: { path: "src/index.ts" } } }],
+      })
+    }).pipe(Effect.provide(partRows)),
+  )
 })
 
 /** Two assistant steps, the first with reasoning, text and a tool call. Event `index` is projected with part rows on when `partRowsAt(index)`. */

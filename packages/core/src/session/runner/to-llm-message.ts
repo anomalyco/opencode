@@ -89,7 +89,7 @@ const userAttachmentContent = (files: readonly FileAttachment[]) => {
   })
 }
 
-const decodeToolInput = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
+export const decodeToolInput = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 const decodeNativeWindow = Schema.decodeUnknownSync(SessionHistory.NativeWindow)
 
 const providerMetadata = (
