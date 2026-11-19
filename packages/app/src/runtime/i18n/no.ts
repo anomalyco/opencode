@@ -1211,7 +1211,6 @@ export const dict = {
   "session.activity.shells.other": "{{count}} shell",
   "session.activity.scripts.one": "{{count}} skript",
   "session.activity.scripts.other": "{{count}} skript",
-  "session.activity.background": "Bakgrunnsarbeid",
   "session.activity.shell.back": "Tilbake til bakgrunnsarbeid",
   "session.activity.shell.stop": "Stopp",
   "session.activity.shell.stopping": "Stopper …",

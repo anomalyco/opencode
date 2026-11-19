@@ -1223,7 +1223,6 @@ export const dict = {
   "session.activity.shells.other": "{{count}} kabuk",
   "session.activity.scripts.one": "{{count}} betik",
   "session.activity.scripts.other": "{{count}} betik",
-  "session.activity.background": "Arka plan işi",
   "session.activity.shell.back": "Arka plan işlerine dön",
   "session.activity.shell.stop": "Durdur",
   "session.activity.shell.stopping": "Durduruluyor…",

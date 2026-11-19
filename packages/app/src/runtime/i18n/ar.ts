@@ -1206,7 +1206,6 @@ export const dict = {
   "session.activity.scripts.few": "{{count}} نصوص برمجية",
   "session.activity.scripts.many": "{{count}} نصًا برمجيًا",
   "session.activity.scripts.other": "{{count}} نص برمجي",
-  "session.activity.background": "العمل في الخلفية",
   "session.activity.shell.back": "العودة إلى العمل في الخلفية",
   "session.activity.shell.stop": "إيقاف",
   "session.activity.shell.stopping": "جارٍ الإيقاف…",

@@ -1238,7 +1238,6 @@ export const dict = {
   "session.activity.subagents.other": "{{count}} subagentes",
   "session.activity.shells.one": "{{count}} shell",
   "session.activity.shells.other": "{{count}} shells",
-  "session.activity.background": "Trabajo en segundo plano",
   "session.activity.shell.back": "Volver al trabajo en segundo plano",
   "session.activity.shell.stop": "Detener",
   "session.activity.shell.stopping": "Deteniendo…",

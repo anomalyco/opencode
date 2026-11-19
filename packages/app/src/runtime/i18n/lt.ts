@@ -1188,7 +1188,6 @@ export const dict = {
   "session.activity.scripts.few": "{{count}} scenarijai",
   "session.activity.scripts.many": "{{count}} scenarijaus",
   "session.activity.scripts.other": "{{count}} scenarijų",
-  "session.activity.background": "Foninis darbas",
   "session.activity.shell.back": "Atgal į foninį darbą",
   "session.activity.shell.stop": "Stabdyti",
   "session.activity.shell.stopping": "Stabdoma…",

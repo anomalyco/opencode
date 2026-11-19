@@ -1213,7 +1213,6 @@ export const dict = {
   "session.activity.shells.other": "{{count}} shell",
   "session.activity.scripts.one": "{{count}} skrip",
   "session.activity.scripts.other": "{{count}} skrip",
-  "session.activity.background": "Pekerjaan latar belakang",
   "session.activity.shell.back": "Kembali ke pekerjaan latar belakang",
   "session.activity.shell.stop": "Hentikan",
   "session.activity.shell.stopping": "Menghentikan…",

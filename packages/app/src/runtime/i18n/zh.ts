@@ -1158,7 +1158,6 @@ export const dict = {
   "session.activity.shells.other": "{{count}} 个 Shell",
   "session.activity.scripts.one": "{{count}} 个脚本",
   "session.activity.scripts.other": "{{count}} 个脚本",
-  "session.activity.background": "后台工作",
   "session.activity.shell.back": "返回后台任务",
   "session.activity.shell.stop": "停止",
   "session.activity.shell.stopping": "正在停止…",

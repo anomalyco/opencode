@@ -1142,7 +1142,6 @@ export const dict = {
   "session.activity.shells.other": "⁨{{count}}⁩ پوسته",
   "session.activity.scripts.one": "⁨{{count}}⁩ اسکریپت",
   "session.activity.scripts.other": "⁨{{count}}⁩ اسکریپت",
-  "session.activity.background": "کار پس‌زمینه",
   "session.activity.shell.back": "بازگشت به کارهای پس‌زمینه",
   "session.activity.shell.stop": "توقف",
   "session.activity.shell.stopping": "در حال توقف…",

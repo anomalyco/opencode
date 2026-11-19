@@ -1252,7 +1252,6 @@ export const dict = {
   "session.activity.scripts.few": "{{count}} скрипти",
   "session.activity.scripts.many": "{{count}} скриптів",
   "session.activity.scripts.other": "{{count}} скрипта",
-  "session.activity.background": "Фонова робота",
   "session.activity.shell.back": "Назад до фонової роботи",
   "session.activity.shell.stop": "Зупинити",
   "session.activity.shell.stopping": "Зупинення…",
