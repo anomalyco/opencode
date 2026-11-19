@@ -699,8 +699,7 @@ Nothing is exposed unless a host provides it; extension calls are not tool calls
       `    at fn (<program>:line:col)` lines. `new Error()` lists up to 10 program frames, innermost first (built-in
       frames are skipped, and top-level code is a bare `at <program>:line:col`); a built-in or tool failure has at most one line
       at the expression that raised it or the `await` that observed it. A host Error's own `stack` never crosses, so
-      no host path appears. A frame name longer than 200 characters is cut with `…`, and the whole `stack` is cut to
-      the longest string a program may hold.
+      no host path appears.
 - [ ] `Error.captureStackTrace`, `Error.stackTraceLimit`, and `at async` frames across an `await`.
 - [x] `instanceof` against any constructor with a `prototype`, including every built-in and `Function`.
 - [x] Derived error constructors extend `Error` itself: `Object.getPrototypeOf(TypeError) === Error`, so

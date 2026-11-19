@@ -1,4 +1,3 @@
-import { MAX_STRING_LENGTH } from "./limits.js"
 import { define, hidden, Native, Arr, ErrorObj, Obj, type Value } from "./objects.js"
 
 export const errorTypes = [
@@ -52,15 +51,11 @@ const builtins = [
  */
 export type Builtins = Readonly<Record<(typeof builtins)[number] | ErrorType, Obj>>
 
-/**
- * A new error; its `stack` is `name: message` followed by `trace`, the `    at` lines where it was made, cut to the
- * longest string a program may hold.
- */
+/** A new error; its `stack` is `name: message` followed by `trace`, the `    at` lines where it was made. */
 export const createErrorValue = (prototype: Obj, message: string | undefined, trace = ""): ErrorObj => {
   const value = new ErrorObj(prototype)
   if (message !== undefined) define(value, "message", message, hidden)
-  const stack = value.toString() + trace
-  define(value, "stack", stack.length > MAX_STRING_LENGTH ? stack.slice(0, MAX_STRING_LENGTH) : stack, hidden)
+  define(value, "stack", value.toString() + trace, hidden)
   return value
 }
 
