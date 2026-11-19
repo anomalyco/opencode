@@ -317,6 +317,13 @@
           }
         }
       }
+    },
+    "@composer": {
+      "background": {
+        "raised": {
+          "high": "$hue.neutral.700"
+        }
+      }
     }
   },
   "dark": {

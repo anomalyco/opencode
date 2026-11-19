@@ -13,6 +13,7 @@ export function expandTheme<Definition extends ModeDefinition>(definition: Defin
     ...definition,
     ...expandTokens(definition),
     ...(definition["@dialog"] ? { "@dialog": expandDialog(definition["@dialog"]) } : {}),
+    ...(definition["@composer"] ? { "@composer": expandTokens(definition["@composer"]) } : {}),
   }
 }
 

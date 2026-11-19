@@ -208,6 +208,7 @@ export function Prompt(props: PromptProps) {
   const args = useArgs()
   const config = useConfig().data
   const cursorStyle = useCursorStyle()
+  const newDesigns = useNewDesigns()
   const dialog = useDialog()
   const toast = useToast()
   const status = createMemo(() => data.session.status(props.sessionID ?? ""))
@@ -1672,7 +1673,11 @@ export function Prompt(props: PromptProps) {
   })
   const maxHeight = createMemo(() => Math.max(6, Math.floor(dimensions().height / 3)))
 
-  const promptBg = createMemo(() => theme.decrease(theme.background.raised.base))
+  const promptBg = createMemo(() =>
+    newDesigns()
+      ? theme.surface("composer").background.raised.high
+      : theme.decrease(theme.background.raised.base),
+  )
 
   return (
     <>

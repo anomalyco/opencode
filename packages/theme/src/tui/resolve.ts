@@ -82,7 +82,10 @@ function resolveExpandedTheme(definition: ThemeDefinition): ResolvedTheme {
   // The footer override layers on the dialog surface, so footers keep every dialog token they don't override.
   const footer = dialog?.["@footer"]
   views["dialog.footer"] = footer ? view(contextualize(dialogTokens, footer)) : views.dialog
-  return view(base)
+  const composer = definition["@composer"]
+  const current = view(base)
+  views.composer = composer ? view(contextualize(base, tokens(composer))) : current
+  return current
 }
 
 function tokens(definition: ThemeTokensDefinition): ThemeTokensDefinition {
