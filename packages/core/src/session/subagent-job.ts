@@ -8,6 +8,12 @@ import { SessionExecution } from "./execution.js"
 
 type Recovery = Extract<Job.Recovery, { kind: "subagent" }>
 
+/** Opens a new child's first prompt. */
+export const preamble = [
+  "You are a subagent spawned by another session.",
+  "When only background work is left, such as a shell command or Code Mode script, end your turn and say what is still running instead of polling or sleeping for it: its result wakes you in this session, and the parent receives your report again after that work.",
+].join("\n")
+
 export interface Interface {
   readonly start: (recovery: Recovery) => Effect.Effect<Job.Info>
 }

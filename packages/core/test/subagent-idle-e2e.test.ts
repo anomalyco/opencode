@@ -9,6 +9,7 @@ import { Bus } from "@opencode/core/bus"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode/core/effect/app-node-platform"
+import { CodeModeJob } from "@opencode/core/codemode/job"
 import { Job } from "@opencode/core/job"
 import { JobTable } from "@opencode/core/job/sql"
 import { KV } from "@opencode/core/kv"
@@ -43,7 +44,21 @@ import { ShellSelect } from "@opencode/core/shell/select"
 import { makeGlobalNode, makeLocationNode } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
-import { Context, Deferred, Effect, Exit, Fiber, Layer, Logger, Ref, Schedule, Schema, Scope, Stream } from "effect"
+import {
+  Context,
+  Deferred,
+  Duration,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Logger,
+  Ref,
+  Schedule,
+  Schema,
+  Scope,
+  Stream,
+} from "effect"
 import { TestClock } from "effect/testing"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
@@ -355,7 +370,7 @@ describe("Code Mode session jobs", () => {
       Effect.gen(function* () {
         const s = yield* launch(enabled)
         if (!enabled) {
-          yield* TestClock.adjust("11 seconds")
+          yield* TestClock.adjust(Duration.sum(CodeModeJob.FOREGROUND, Duration.seconds(1)))
           expect(yield* s.state).toMatchObject({ state: { status: "running" } })
         }
         yield* s.release
@@ -371,16 +386,14 @@ describe("Code Mode session jobs", () => {
   e2e.effect("a slow script returns a receipt, then wakes its session with the result", () =>
     Effect.gen(function* () {
       const s = yield* launch(true)
-      yield* TestClock.adjust("10 seconds")
+      yield* TestClock.adjust(CodeModeJob.FOREGROUND)
       yield* s.idle
       const [job] = yield* s.h.jobs.pendingBackground
       expect(job).toMatchObject({ status: "running", recovery: { kind: "codemode", sessionID: s.h.parent.id } })
       expect(yield* s.state).toMatchObject({
         state: {
           status: "completed",
-          content: [
-            { type: "text", text: `Script ${job.id} is still running; its result will arrive in this session.` },
-          ],
+          content: [{ type: "text", text: CodeModeJob.receipt(job.id) }],
         },
       })
       const delivered = yield* Context.get(s.h.context, Bus.Service)

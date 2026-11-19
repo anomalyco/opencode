@@ -194,10 +194,7 @@ export const Plugin = {
               yield* sessions
                 .prompt({
                   sessionID: child.id,
-                  text:
-                    existing === undefined
-                      ? ["You are a subagent spawned by another session.", input.prompt].join("\n")
-                      : input.prompt,
+                  text: existing === undefined ? [SubagentJob.preamble, input.prompt].join("\n") : input.prompt,
                   ...(running ? {} : { resume: false }),
                 })
                 .pipe(

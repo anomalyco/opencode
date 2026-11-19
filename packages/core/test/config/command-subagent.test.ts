@@ -14,6 +14,7 @@ import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
+import { SubagentJob } from "@opencode/core/session/subagent-job"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
 import { tempGlobalLayer } from "../fixture/global"
@@ -95,7 +96,7 @@ describe("command subagents", () => {
         expect(yield* sessions.context(parent.id)).toEqual([])
         expect(yield* llm.requests()).toHaveLength(1)
         expect((yield* sessions.context(child.id)).filter((message) => message.type === "user")).toMatchObject([
-          { text: "You are a subagent spawned by another session.\nReview changes: ready" },
+          { text: [SubagentJob.preamble, "Review changes: ready"].join("\n") },
         ])
         yield* gate.release
         yield* llm.wait(2)

@@ -13,7 +13,7 @@ import type {
 } from "@opencode/schema/tool"
 import { Identifier } from "@opencode/schema/identifier"
 import { CallID } from "@opencode/schema/tool"
-import { Clock, Context, Effect, Ref, Schema, Scope, Semaphore } from "effect"
+import { Clock, Context, Duration, Effect, Ref, Schema, Scope, Semaphore } from "effect"
 import { toSessionError } from "../session/to-session-error.js"
 import { definition, normalizedName } from "../tool/runtime.js"
 import { FileAccess } from "../file-access.js"
@@ -25,6 +25,7 @@ import { CodeModeBun } from "./bun.js"
 import { CodeModeCatalog } from "./catalog.js"
 import { CodeModeExecution } from "./execution.js"
 import { CodeModeFetch } from "./fetch.js"
+import { CodeModeJob } from "./job.js"
 import { CodeModePath } from "./path.js"
 
 const ExecuteFile = Schema.Struct({
@@ -101,6 +102,11 @@ const description = (full: boolean) =>
     'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
     "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
     "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.allSettled`.",
+    ...(full
+      ? [
+          `A script still running after ${Duration.toMinutes(CodeModeJob.FOREGROUND)} minutes moves to the background and its result arrives later in this session as a message, so do not poll, sleep or rerun it to wait: continue with other work or end your turn.`,
+        ]
+      : []),
   ].join("\n")
 
 export const create = (
