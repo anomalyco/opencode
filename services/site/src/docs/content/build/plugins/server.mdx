@@ -1762,9 +1762,37 @@ Permission hooks follow these rules:
 - A hook may change `effect` to `allow`, `ask`, or `deny`.
 - `message` appears in an escalated permission request or becomes the denial reason.
 
+#### Rules (experimental)
+
+Add deny rules for an agent in a session. The hook runs whenever OpenCode builds that agent's rules, for every
+permission check, every step's list of tools, skills, and MCP servers, and every unattended automation run.
+
+```ts
+await ctx.permission.hook("experimental.rules", (event) => {
+  if (event.agent === "plan") event.deny({ action: "webfetch", resource: "*" })
+})
+```
+
+The `experimental.rules` hook follows these rules:
+
+- `event.deny({ action, resource })` adds a `deny` after the agent's and the session's rules, so it wins over any
+  configured `allow` or `ask`.
+- A hook can only deny. `event.rules` and `event.session` are frozen copies, and a hook cannot remove another hook's
+  deny.
+- A tool, skill, or MCP server that a deny covers entirely is not listed for the step.
+- `evaluate` hooks do not run for a request that a deny refuses.
+- A deny that is not two strings, or a hook that throws, fails the permission check or step.
+- Plugins load asynchronously. Until a plugin registers the hook, rules are built without its denies.
+- The hook name and event shape may change without compatibility guarantees.
+
 #### Reference
 
 ```ts
+interface PermissionHooks {
+  evaluate: PermissionEvaluation
+  "experimental.rules": PermissionRules
+}
+
 interface PermissionEvaluation {
   readonly sessionID: string
   readonly agent?: string
@@ -1774,6 +1802,20 @@ interface PermissionEvaluation {
   readonly source?: { type: "tool"; messageID: string; id: string }
   effect: "allow" | "ask" | "deny"
   message?: string
+}
+
+interface PermissionRule {
+  readonly action: string
+  readonly resource: string
+  readonly effect: "allow" | "ask" | "deny"
+}
+
+interface PermissionRules {
+  readonly sessionID: string
+  readonly agent: string
+  readonly rules: readonly PermissionRule[]
+  readonly session: readonly PermissionRule[]
+  readonly deny: (rule: { readonly action: string; readonly resource: string }) => void
 }
 ```
 
