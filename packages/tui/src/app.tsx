@@ -4,7 +4,7 @@ import { render, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import "./component/spinner-renderable"
 import { Effect, Latch } from "effect"
 import { Service, type Endpoint } from "@opencode/client/effect/service"
-import { OpenCode, type SessionInfo } from "@opencode/client"
+import { isLocationNotFoundError, OpenCode, type SessionInfo } from "@opencode/client"
 import { Global } from "@opencode/util/global"
 import { noTimeoutFetch } from "@opencode/util/no-timeout-fetch"
 import { ClipboardProvider, useClipboard } from "./context/clipboard"
@@ -30,6 +30,7 @@ import {
   createMemo,
   ErrorBoundary,
   createSignal,
+  on,
   onMount,
   onCleanup,
   batch,
@@ -516,6 +517,58 @@ function App() {
   const plugins = usePlugin()
   const clipboard = useClipboard()
   const terminalEnvironment = useTuiTerminalEnvironment()
+  const autoacceptSessionIDs = createMemo(() => {
+    if (local.permission.mode !== "autoaccept") return []
+    const roots = new Set(sessionTabs.enabled() ? sessionTabs.tabs().map((tab) => tab.sessionID) : [])
+    if (route.data.type === "session" && route.data.sessionID !== "dummy")
+      roots.add(data.session.root(route.data.sessionID))
+    return Array.from(new Set(Array.from(roots).flatMap((id) => [id, ...data.session.family(id)])))
+  })
+  // Permission replies must outlive the displayed SessionFrame, including while another tab is selected.
+  const autoApproved = new Set<string>()
+  createEffect(() => {
+    autoacceptSessionIDs().forEach((sessionID) => {
+      data.session.permission.list(sessionID)?.forEach((request) => {
+        if (autoApproved.has(request.id)) return
+        autoApproved.add(request.id)
+        void data.session.permission
+          .reply({ sessionID: request.sessionID, decision: "once", requestID: request.id })
+          .catch((error) => {
+            autoApproved.delete(request.id)
+            toast.error(error)
+          })
+      })
+    })
+  })
+  createEffect(
+    on([autoacceptSessionIDs, () => client.connection.status()], ([sessionIDs, status]) => {
+      if (status !== "connected") return
+      let stale = false
+      let attempt = 0
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const hydrate = async () => {
+        const results = await Promise.allSettled(
+          sessionIDs.map(async (sessionID) => {
+            // Discover each level so idle ancestors do not hide nested background requests after reconnect.
+            await data.session.sync(sessionID, { children: true })
+            await data.session.permission.sync(sessionID)
+          }),
+        )
+        // Historical children can outlive their worktrees; their recovery view owns this expected error.
+        const failures = results
+          .filter((result) => result.status === "rejected")
+          .filter((result) => !isLocationNotFoundError(result.reason))
+        if (stale || failures.length === 0) return
+        if (attempt === 3) return toast.error(failures[0].reason)
+        timer = setTimeout(hydrate, 250 * 2 ** attempt++)
+      }
+      void hydrate()
+      onCleanup(() => {
+        stale = true
+        clearTimeout(timer)
+      })
+    }),
+  )
   let paletteTimer: ReturnType<typeof setTimeout> | undefined
   let disposed = false
   // OpenTUI draws Markdown prose natively, so the first thought or code fence would start the tree-sitter worker
