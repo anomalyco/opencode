@@ -1,10 +1,10 @@
 //! Transcript messages, notices, errors, retries, and interaction with their rows.
 
-use crate::support::{self, Fake, Harness, Log, WAIT, deref_harness};
+use crate::support::{self, Fake, Harness, Log, WAIT, deref_harness, user};
 
 use std::sync::Arc;
 
-use opencode_api::generated::{SessionMessageInfo, V2Event};
+use opencode_api::generated::SessionMessageInfo;
 use opencode_local::cli_config::{Info, Session, Verbosity};
 use opencode_tui::{Deps, Route};
 use serde_json::{Value, json};
@@ -46,10 +46,6 @@ fn session(extra: Value) -> Value {
     support::merge(support::merge(support::session(ID, "Messages"), json!({ "agent": "build" })), extra)
 }
 
-fn user(id: &str, created: u64, text: &str) -> Value {
-    json!({ "id": id, "type": "user", "text": text, "time": { "created": created } })
-}
-
 fn assistant(id: &str, created: u64, content: Value) -> Value {
     json!({
         "id": id, "type": "assistant", "agent": "build",
@@ -84,13 +80,7 @@ fn open(height: u16, session: Value, messages: Vec<Value>, inbox: Vec<Value>, in
 
 impl Screen {
     fn apply(&self, kind: &str, seq: u64, data: Value) {
-        let event: V2Event = serde_json::from_value(json!({
-            "id": format!("evt_{seq}"), "created": 10_000 + seq, "type": kind,
-            "durable": { "aggregateID": ID, "seq": seq, "version": 1 },
-            "data": data,
-        }))
-        .unwrap();
-        self.tui.data.apply(&[event]);
+        self.tui.data.apply(&[support::event(ID, kind, seq, data)]);
     }
 
     fn row(&self, text: &str) -> u16 {

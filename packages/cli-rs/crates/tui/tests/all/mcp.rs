@@ -13,7 +13,8 @@ const QUERY: &str = "location%5Bdirectory%5D=%2Ftmp%2Fopencode%2Fapp";
 
 type Logged = (String, String, Value);
 
-fn servers() -> Value {
+/// One MCP server in each status.
+pub(crate) fn servers() -> Value {
     json!([
         { "name": "linear", "status": { "status": "failed", "error": "MCP error -32000: Connection closed" } },
         { "name": "github", "status": { "status": "connected" } },

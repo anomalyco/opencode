@@ -173,16 +173,6 @@ fn location() -> Value {
     json!({ "directory": DIRECTORY, "project": { "id": "proj_app", "directory": DIRECTORY, "canonical": DIRECTORY } })
 }
 
-fn servers() -> Value {
-    json!([
-        { "name": "linear", "status": { "status": "failed", "error": "MCP error -32000: Connection closed" } },
-        { "name": "github", "status": { "status": "connected" } },
-        { "name": "sentry", "status": { "status": "needs_auth", "error": "Authentication required" } },
-        { "name": "docs", "status": { "status": "disabled" } },
-        { "name": "figma", "status": { "status": "pending" } },
-    ])
-}
-
 fn mcp(list: Value) -> Answer {
     Box::new(move |_, path, _| match path {
         "/api/location" => Some((200, location())),
@@ -194,7 +184,7 @@ fn mcp(list: Value) -> Answer {
 #[test]
 fn status_matches_typescript() {
     let app = TestApp::new(80, 30);
-    let mounted = mount_with(&app, support::component_info(json!({})), mcp(servers()));
+    let mounted = mount_with(&app, support::component_info(json!({})), mcp(crate::mcp::servers()));
     mounted.tui.keymap.dispatch("opencode.status", None);
     wait_for(&app, "5 MCP servers");
     assert_dialog(&app, "E.18b/status", "Status");

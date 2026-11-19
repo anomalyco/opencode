@@ -8,7 +8,6 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
-use opencode_api::generated::V2Event;
 use opencode_plugin::abi::{self, v2};
 use opencode_plugin::reconcile;
 use opencode_plugin::surface::{self, Ledger};
@@ -476,15 +475,6 @@ fn parts(setup: &mut abi::Setup) -> Result<(), String> {
     Ok(())
 }
 
-fn tool_event(kind: &str, seq: u64, data: serde_json::Value) -> V2Event {
-    let event = serde_json::json!({
-        "id": format!("evt_{seq}"), "created": 10_000 + seq, "type": kind,
-        "durable": { "aggregateID": "ses_p", "seq": seq, "version": 1 },
-        "data": data,
-    });
-    serde_json::from_value(event).unwrap()
-}
-
 #[test]
 fn a_part_output_shows_the_transcripts_own_text() {
     for (root, carrier) in [(false, Carrier::Linked), (true, Carrier::Linked), (true, Carrier::Abi)] {
@@ -521,7 +511,7 @@ fn output(text: &str) -> serde_json::Value {
 
 fn call_2(harness: &Harness, kind: &str, seq: u64, extra: serde_json::Value) {
     let ids = serde_json::json!({ "sessionID": "ses_p", "assistantMessageID": "msg_3", "id": "call_2" });
-    harness.tui.data.apply(&[tool_event(kind, seq, support::merge(ids, extra))]);
+    harness.tui.data.apply(&[support::event("ses_p", kind, seq, support::merge(ids, extra))]);
     settle(harness);
 }
 

@@ -5,7 +5,6 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use opencode_api::generated::V2Event;
 use opencode_plugin::claim::mounted;
 use opencode_plugin::pipe::{Config, Tamper};
 use opencode_tui::plugins::host::{External, external_with};
@@ -84,14 +83,8 @@ impl Fences {
         let seq = self.seq.get() + 1;
         self.seq.set(seq);
         let ids = json!({ "sessionID": SESSION, "assistantMessageID": "msg_2" });
-        let event: V2Event = serde_json::from_value(json!({
-            "id": format!("evt_{seq}"), "created": 10_000 + seq, "type": kind,
-            "durable": { "aggregateID": SESSION, "seq": seq, "version": 1 },
-            "data": support::merge(ids, data),
-        }))
-        .unwrap();
         let tui = &self.pipe.harness.tui;
-        tui.data.apply(&[event]);
+        tui.data.apply(&[support::event(SESSION, kind, seq, support::merge(ids, data))]);
         assert!(self.pipe.harness.app.wait_until(support::WAIT, || tui.synced()), "the views never took the event");
     }
 

@@ -1,6 +1,6 @@
 //! Interact with queued prompts through the dock and message dialogs.
 
-use crate::support::{self, Fake, Harness, Log, WAIT, deref_harness};
+use crate::support::{self, Fake, Harness, Log, WAIT, deref_harness, user};
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -54,10 +54,6 @@ fn session(id: &str) -> Value {
         "time": { "created": 1_772_539_200_000_u64, "updated": 1_772_542_800_000_u64 },
         "location": { "directory": LOCATION },
     })
-}
-
-fn user(id: &str, created: u64, text: &str) -> Value {
-    json!({ "id": id, "type": "user", "text": text, "time": { "created": created } })
 }
 
 fn turns() -> Vec<Value> {

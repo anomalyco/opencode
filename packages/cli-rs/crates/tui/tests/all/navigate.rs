@@ -1,4 +1,4 @@
-use crate::support::{self, Fake, Harness, WAIT, deref_harness};
+use crate::support::{self, Fake, Harness, WAIT, deref_harness, user};
 
 use std::rc::Rc;
 use std::sync::Arc;
@@ -44,10 +44,6 @@ fn fake(messages: Vec<Value>, older: Arc<AtomicUsize>, failing: Arc<AtomicBool>)
 
 fn info(id: &str) -> Value {
     support::merge(support::session(id, "Navigation"), json!({ "agent": "build" }))
-}
-
-fn user(id: &str, created: u64, text: &str) -> Value {
-    json!({ "id": id, "type": "user", "text": text, "time": { "created": created } })
 }
 
 fn assistant(id: &str, created: u64, content: Value) -> Value {
