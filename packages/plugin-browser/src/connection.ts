@@ -16,9 +16,39 @@ type Attachment = {
 
 export type Connection = Effect.Success<ReturnType<typeof make>>
 
+/**
+ * A crash or SIGKILL skips the attachment finalizer, so the session keeps the allow rules while the
+ * in-memory attachment is gone. Reconcile only this plugin instance's location, before registering
+ * its RPC handlers. Running this in the background could revoke a newly attached browser's grants.
+ */
+export const reconcileStaleGrants = Effect.fn("BrowserConnection.reconcileStaleGrants")(function* (
+  ctx: Pick<Context, "session" | "location">,
+) {
+  const revoke = (session: Session.Info) => {
+    // The list filter scopes the directory, but does not support workspace identity.
+    if (session.location.workspaceID !== ctx.location.workspaceID) return Effect.void
+    const permissions = BrowserMachine.reconcileBrowserPermissions(session.permissions, false)
+    if (!permissions) return Effect.void
+    return ctx.session.update({ sessionID: session.id, permissions }).pipe(Effect.ignore)
+  }
+  const page = (cursor?: Session.ListCursor): Effect.Effect<void> =>
+    ctx.session.list(cursor === undefined ? { directory: ctx.location.directory } : { cursor }).pipe(
+      Effect.flatMap((result) =>
+        Effect.gen(function* () {
+          yield* Effect.forEach(result.data, revoke, { discard: true })
+          if (result.cursor.next !== undefined) yield* page(result.cursor.next)
+        }),
+      ),
+      Effect.ignore,
+    )
+
+  yield* page()
+})
+
 export const make = Effect.fn("BrowserConnection.make")(function* (
   ctx: Pick<Context, "agent" | "rpc" | "session" | "location" | "event">,
 ) {
+  yield* reconcileStaleGrants(ctx)
   // Appended after config, so every agent hides the browser until an attachment allows it.
   yield* ctx.agent.transform((editor) =>
     editor
