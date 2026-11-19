@@ -227,7 +227,9 @@ const executes: Array<Entry> = [
   { code: `refuse()` },
   { code: `try { refuse() } catch (e) { return [e.name, e.message] }` },
   {
-    code: `const out = []; for (const k in api) out.push(k); return [out, api.issues === api.issues, String(api.issues)]`,
+    // Not `api.issues === api.issues`: each read is a new reference in the reference, while the Rust port keeps one per
+    // path, as it has no garbage collector (see the README's known differences).
+    code: `const out = []; for (const k in api) out.push(k); return [out, String(api.issues)]`,
   },
   // run.metadata is the result's.
   { code: `count(); count(); return count()` },

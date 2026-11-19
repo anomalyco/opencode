@@ -21,7 +21,7 @@
     {"code":"try { api.nope() } catch (e) { return [e.name, e.message, e instanceof Error] }","runId":"run","outcome":{"ok":true,"value":["Error","No api.nope",true],"metadata":null},"log":[]},
     {"code":"refuse()","runId":"run","outcome":{"ok":false,"error":{"kind":"Refused","message":"Not today","suggestions":["Ask again."]},"metadata":null},"log":[]},
     {"code":"try { refuse() } catch (e) { return [e.name, e.message] }","runId":"run","outcome":{"ok":true,"value":["Error","Not today"],"metadata":null},"log":[]},
-    {"code":"const out = []; for (const k in api) out.push(k); return [out, api.issues === api.issues, String(api.issues)]","runId":"run","outcome":{"ok":true,"value":[["issues"],false,"[object Object]"],"metadata":null},"log":[]},
+    {"code":"const out = []; for (const k in api) out.push(k); return [out, String(api.issues)]","runId":"run","outcome":{"ok":true,"value":[["issues"],"[object Object]"],"metadata":null},"log":[]},
     {"code":"count(); count(); return count()","runId":"run","outcome":{"ok":true,"value":3,"metadata":{"count":3}},"log":[]},
     {"code":"return 1","runId":"run","outcome":{"ok":true,"value":1,"metadata":null},"log":[]},
     {"code":"count(); throw new Error(\"after\")","runId":"run","outcome":{"ok":false,"error":{"kind":"ExecutionFailure","message":"Error: after"},"metadata":{"count":1}},"log":[]},
