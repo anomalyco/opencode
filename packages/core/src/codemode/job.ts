@@ -1,7 +1,7 @@
 export * as CodeModeJob from "./job.js"
 
 import { Identifier } from "@opencode/schema/identifier"
-import { Cause, Context, Deferred, Effect, Exit, Option, type Scope, Semaphore } from "effect"
+import { Cause, Context, Deferred, Duration, Effect, Exit, Option, type Scope, Semaphore } from "effect"
 import { extension } from "mime-types"
 import { Flag } from "../flag.js"
 import { Job } from "../job.js"
@@ -18,6 +18,9 @@ export function notice(job: Pick<Job.Info, "id" | "status" | "output" | "error">
     metadata: { source: "codemode", jobID: job.id, state },
   }
 }
+
+/** How long `execute` waits for a script before moving it to the background; the same as a foreground shell. */
+export const FOREGROUND = Duration.minutes(2)
 
 /** Answers a script still running after the foreground wait, which moves it to the background. */
 export const receipt = (id: string) =>
@@ -82,7 +85,7 @@ export const make = Effect.fnUntraced(function* (
             return body
           }),
         })
-        const blocked = yield* restore(jobs.block({ id, sessionID }).pipe(Effect.timeoutOption("10 seconds"))).pipe(
+        const blocked = yield* restore(jobs.block({ id, sessionID }).pipe(Effect.timeoutOption(FOREGROUND))).pipe(
           Effect.onInterrupt(() => jobs.cancel(id)),
         )
         if (Option.isSome(blocked) && blocked.value?.type === "finished") return yield* Deferred.await(result)
