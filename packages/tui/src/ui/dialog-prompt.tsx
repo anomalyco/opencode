@@ -1,10 +1,10 @@
 import { TextareaRenderable } from "@opentui/core"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
-import { DialogFooter, DialogHeader, DialogLayout, useDialog, type DialogSize } from "./dialog"
+import { DialogButtons, DialogFooter, DialogHeader, DialogLayout, useDialog, type DialogSize } from "./dialog"
 import { Show, createEffect, createSignal, onMount, type JSX } from "solid-js"
 import { Spinner } from "../component/spinner"
-import { useCursorStyle } from "../config"
+import { useCursorStyle, useNewDesigns } from "../config"
 import { useRenderer } from "@opentui/solid"
 
 export type DialogPromptAction = {
@@ -36,6 +36,9 @@ export function DialogPrompt(props: DialogPromptProps) {
   const renderer = useRenderer()
   const theme = useTheme().surface("dialog")
   const cursorStyle = useCursorStyle()
+  const newDesigns = useNewDesigns()
+  // Under new designs the prompt ends in Cancel / Submit buttons; enter runs the active one.
+  const [active, setActive] = createSignal(1)
   const [textareaTarget, setTextareaTarget] = createSignal<TextareaRenderable>()
   let textarea: TextareaRenderable
 
@@ -43,6 +46,16 @@ export function DialogPrompt(props: DialogPromptProps) {
     if (props.busy) return
     props.onConfirm?.(textarea.plainText)
   }
+
+  function cancel() {
+    if (props.busy) return
+    ;(props.onCancel ?? dialog.clear)()
+  }
+
+  const buttons = () => [
+    { label: "Cancel", run: cancel },
+    { label: "Submit", run: confirm },
+  ]
 
   const handle = {
     setValue(value: string) {
@@ -70,8 +83,24 @@ export function DialogPrompt(props: DialogPromptProps) {
         id: "dialog.prompt.submit",
         title: "Submit dialog prompt",
         group: "Dialog",
-        run: confirm,
+        run: () => (newDesigns() ? buttons()[active()]?.run() : confirm()),
       },
+      ...(newDesigns()
+        ? [
+            {
+              bind: "tab",
+              title: "Next dialog button",
+              group: "Dialog",
+              run: () => void setActive((i) => (i + 1) % 2),
+            },
+            {
+              bind: "shift+tab",
+              title: "Previous dialog button",
+              group: "Dialog",
+              run: () => void setActive((i) => (i + 1) % 2),
+            },
+          ]
+        : []),
       ...(props.actions ?? []).map((action) => ({
         id: action.command,
         title: action.commandTitle ?? action.title,
@@ -138,14 +167,11 @@ export function DialogPrompt(props: DialogPromptProps) {
           }}
         />
       }
-      footer={{
-        actions: {
-          primary: [
-            ...extraActions(),
-            { title: "submit", command: "dialog.prompt.submit", disabled: props.busy, onTrigger: confirm },
-          ],
-        },
-      }}
+      buttons={
+        newDesigns() ? (
+          <DialogButtons buttons={buttons()} active={active()} onActive={setActive} hints={extraActions()} />
+        ) : undefined
+      }
       legacyFooter={
         <Show when={!props.busy} fallback={<text fg={theme.text.muted}>processing…</text>}>
           <DialogFooter

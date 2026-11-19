@@ -30,6 +30,8 @@ export interface DialogSelectProps<T> {
   description?: string
   /** Blank rows above the footer under the "new-designs" experiment. Defaults to 1. */
   footerGap?: number
+  /** A `DialogButtons` row, shown in place of the footer. */
+  buttons?: JSX.Element
   placeholder?: string
   footer?: JSX.Element
   emptyView?: JSX.Element
@@ -678,6 +680,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   return (
     <DialogLayout
       footerGap={props.footerGap}
+      buttons={props.buttons}
       header={
         // Rows reserve a gutter, so the header and footer line up with the list's inset rather than the layout's.
         <box paddingLeft={DIALOG_LIST_INSET - DIALOG_INSET} paddingRight={DIALOG_LIST_INSET - DIALOG_INSET}>

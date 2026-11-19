@@ -1,7 +1,7 @@
 import { Keymap } from "../context/keymap"
 import { useNewDesigns } from "../config"
 import { useTheme } from "../context/theme"
-import { DialogHeader, DialogLayout, type DialogContext } from "./dialog"
+import { DialogButtons, DialogHeader, DialogLayout, useDialog, type DialogContext } from "./dialog"
 import { DialogSelect, DialogSelectChoice } from "./dialog-select"
 import { createStore } from "solid-js/store"
 import { createMemo, createSignal, For, Show } from "solid-js"
@@ -45,6 +45,9 @@ function DialogExportOptionsList(props: DialogExportOptionsProps) {
     sanitize: false,
   })
   const [selected, setSelected] = createSignal<Row>("format")
+  const dialog = useDialog()
+  // Cancel / Save to file buttons; enter runs the active one.
+  const [active, setActive] = createSignal(1)
 
   const confirm = (action: "copy" | "export") =>
     props.onConfirm?.({
@@ -61,6 +64,17 @@ function DialogExportOptionsList(props: DialogExportOptionsProps) {
     if (row === "location") return setStore("location", store.location === "project" ? "temp" : "project")
     setStore(row, !store[row])
   }
+
+  const buttons = () => [
+    {
+      label: "Cancel",
+      run: () => {
+        props.onCancel?.()
+        dialog.clear()
+      },
+    },
+    { label: "Save to file", run: () => confirm("export") },
+  ]
 
   const include = (value: boolean) => (value ? "include" : "exclude")
   const options = createMemo(() => [
@@ -125,12 +139,26 @@ function DialogExportOptionsList(props: DialogExportOptionsProps) {
           onTrigger: () => confirm("copy"),
         },
       ]}
-      footerHints={[{ title: "save to file", label: "enter", group: "primary" }]}
+      buttons={
+        <DialogButtons
+          buttons={buttons()}
+          active={active()}
+          onActive={setActive}
+          hints={[{ title: "copy", key: "c", onTrigger: () => confirm("copy") }]}
+        />
+      }
       bindings={[
+        { bind: "tab", title: "Next dialog button", group: "Dialog", run: () => void setActive((i) => (i + 1) % 2) },
+        {
+          bind: "shift+tab",
+          title: "Previous dialog button",
+          group: "Dialog",
+          run: () => void setActive((i) => (i + 1) % 2),
+        },
         { bind: "left", title: "Previous value", group: "Dialog", run: () => change(selected()) },
         { bind: "right", title: "Next value", group: "Dialog", run: () => change(selected()) },
         { bind: "space", title: "Change export option", group: "Dialog", run: () => change(selected()) },
-        { bind: "return", title: "Save to file", group: "Dialog", run: () => confirm("export") },
+        { bind: "return", title: "Run the active button", group: "Dialog", run: () => buttons()[active()]?.run() },
       ]}
     />
   )
