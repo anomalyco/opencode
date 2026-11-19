@@ -6,9 +6,10 @@ use opentui::style::Color;
 use serde_json::{Map, Value};
 
 use super::color::{from_hex, is_hex};
-use super::document::{STATES, STEPS, VARIANTS, expand_theme, merge, select, truthy};
+use super::document::{STATES, STEPS, VARIANTS, expand_theme, merge, select};
 use super::tokens::Tokens;
 use super::{Scale, ThemeMode, Views};
+use opencode_api_types::js::truthy;
 
 const SECTIONS: [&str; 7] = ["text", "background", "border", "scrollbar", "diff", "syntax", "markdown"];
 

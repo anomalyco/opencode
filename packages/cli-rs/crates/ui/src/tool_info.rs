@@ -1,6 +1,6 @@
 //! One-line tool summaries shared by `run`, mini and the full TUI.
 
-use opencode_api_types::js::js_string;
+use opencode_api_types::js::{js_string, truthy};
 use opencode_api_types::{SessionMessageAssistantTool, SessionMessageAssistantToolState, ToolContent};
 use opencode_util::json_object;
 use serde_json::{Map, Value};
@@ -297,7 +297,7 @@ impl<'a> Frame<'a> {
 
     /// `displayPath(p, value)`: `None` where the TS would throw on a value that is not a string.
     fn path(&self, value: Option<&Value>) -> Option<String> {
-        if !truthy(value) {
+        if !value.is_some_and(truthy) {
             return Some(String::new());
         }
         Some(tool_path(value?.as_str()?, self.directory, None))
@@ -376,7 +376,7 @@ fn run_grep(frame: &Frame) -> Option<ToolInline> {
 
 fn search(frame: &Frame, label: &str, metadata: &str) -> Option<ToolInline> {
     let root = frame.input.get("path").filter(|root| !root.is_null());
-    let suffix = if truthy(root) { format!("in {}", frame.path(root)?) } else { String::new() };
+    let suffix = if root.is_some_and(truthy) { format!("in {}", frame.path(root)?) } else { String::new() };
     let description = match frame.meta.get(metadata) {
         None => suffix,
         Some(matches) => {
@@ -410,7 +410,7 @@ fn run_write(frame: &Frame) -> Option<ToolInline> {
 
 fn run_webfetch(frame: &Frame) -> Option<ToolInline> {
     let url = frame.input.get("url");
-    if !truthy(url) {
+    if !url.is_some_and(truthy) {
         return Some(inline("%", "WebFetch".to_owned()));
     }
     Some(inline("%", format!("WebFetch {}", or_empty(url))))
@@ -427,7 +427,7 @@ fn run_edit(frame: &Frame) -> Option<ToolInline> {
 fn run_web_search(frame: &Frame) -> Option<ToolInline> {
     let title = web_search_provider_label(frame.meta.get("provider").unwrap_or(&Value::Null));
     let query = frame.input.get("query");
-    if !truthy(query) {
+    if !query.is_some_and(truthy) {
         return Some(inline("◈", title));
     }
     Some(inline("◈", format!("{title} \"{}\"", or_empty(query))))
@@ -435,14 +435,14 @@ fn run_web_search(frame: &Frame) -> Option<ToolInline> {
 
 fn run_task(frame: &Frame) -> Option<ToolInline> {
     let agent = frame.input.get("agent");
-    let kind = titlecase(if truthy(agent) { agent?.as_str()? } else { "unknown" });
+    let kind = titlecase(if agent.is_some_and(truthy) { agent?.as_str()? } else { "unknown" });
     let icon = match frame.status {
         "error" => "✗",
         "running" => "•",
         _ => "✓",
     };
     let description = frame.input.get("description");
-    if !truthy(description) {
+    if !description.is_some_and(truthy) {
         return Some(inline(icon, format!("{kind} Subagent")));
     }
     Some(ToolInline { description: Some(format!("{kind} Agent")), ..inline(icon, or_empty(description)) })
@@ -493,7 +493,7 @@ fn run_batch(frame: &Frame) -> Option<ToolInline> {
 
 fn run_lsp(frame: &Frame) -> Option<ToolInline> {
     let operation = frame.input.get("operation");
-    let operation = if truthy(operation) { or_empty(operation) } else { "request".to_owned() };
+    let operation = if operation.is_some_and(truthy) { or_empty(operation) } else { "request".to_owned() };
     let file = frame.path(frame.input.get("path"))?;
     if file.is_empty() {
         return Some(inline("→", format!("LSP {operation}")));
@@ -508,7 +508,7 @@ fn run_lsp(frame: &Frame) -> Option<ToolInline> {
 
 fn run_shell(frame: &Frame) -> Option<ToolInline> {
     let command = frame.input.get("command");
-    let title = if truthy(command) { or_empty(command) } else { String::new() };
+    let title = if command.is_some_and(truthy) { or_empty(command) } else { String::new() };
     let body = (frame.status == "completed").then(|| frame.output.trim().to_owned());
     Some(block("$", title, body))
 }
@@ -539,17 +539,6 @@ fn text(value: Option<&Value>) -> &str {
 
 fn list_len(value: Option<&Value>) -> usize {
     value.and_then(Value::as_array).map_or(0, Vec::len)
-}
-
-/// JavaScript truthiness.
-fn truthy(value: Option<&Value>) -> bool {
-    match value {
-        None | Some(Value::Null) => false,
-        Some(Value::Bool(value)) => *value,
-        Some(Value::Number(number)) => number.as_f64().is_some_and(|number| number != 0.0),
-        Some(Value::String(text)) => !text.is_empty(),
-        Some(Value::Array(_) | Value::Object(_)) => true,
-    }
 }
 
 /// `${value ?? ""}` in a template literal.

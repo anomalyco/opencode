@@ -5,6 +5,7 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
+use opencode_api_types::js::truthy;
 use serde_json::{Map, Value};
 
 use crate::cli_config::{self, Cursor, Decode, PositiveInt, SCHEMA_URL, section};
@@ -338,7 +339,7 @@ pub fn migrate_v1(legacy: Option<&V1>, kv: &Map<String, Value>) -> Map<String, V
     let diff_view = nullish(kv("diff_viewer_view"), stacked.then(|| Value::String("unified".into())));
     let thinking = nullish(
         kv("thinking_mode"),
-        kv("thinking_visibility").map(|v| Value::String(if cli_config::truthy(&v) { "show" } else { "hide" }.into())),
+        kv("thinking_visibility").map(|v| Value::String(if truthy(&v) { "show" } else { "hide" }.into())),
     );
     let keybinds = legacy.keybinds.as_ref().map(|keybinds| {
         let map: Map<String, Value> = keybinds
@@ -389,8 +390,7 @@ pub fn migrate_v1(legacy: Option<&V1>, kv: &Map<String, Value>) -> Map<String, V
         ("editor", kv("file_context_enabled")),
         (
             "paste",
-            kv("paste_summary_enabled")
-                .map(|v| Value::String(if cli_config::truthy(&v) { "compact" } else { "full" }.into())),
+            kv("paste_summary_enabled").map(|v| Value::String(if truthy(&v) { "compact" } else { "full" }.into())),
         ),
     ];
     if prompt.iter().any(|(_, v)| v.is_some()) {
@@ -402,8 +402,7 @@ pub fn migrate_v1(legacy: Option<&V1>, kv: &Map<String, Value>) -> Map<String, V
         ("thinking", thinking),
         (
             "grouping",
-            kv("exploration_grouping")
-                .map(|v| Value::String(if cli_config::truthy(&v) { "auto" } else { "none" }.into())),
+            kv("exploration_grouping").map(|v| Value::String(if truthy(&v) { "auto" } else { "none" }.into())),
         ),
     ];
     if session.iter().any(|(_, v)| v.is_some()) {

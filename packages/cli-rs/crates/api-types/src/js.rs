@@ -69,6 +69,17 @@ pub fn number_to_string(value: f64) -> String {
     }
 }
 
+/// `Boolean(value)` for a JSON value. A JSON number is never `NaN`.
+pub fn truthy(value: &serde_json::Value) -> bool {
+    use serde_json::Value;
+    match value {
+        Value::Null | Value::Bool(false) => false,
+        Value::Number(number) => number.as_f64().is_some_and(|number| number != 0.0),
+        Value::String(text) => !text.is_empty(),
+        _ => true,
+    }
+}
+
 /// `String(value)` for a JSON value.
 pub fn js_string(value: &serde_json::Value) -> String {
     use serde_json::Value;

@@ -7,7 +7,8 @@ use opentui::theme::ThemeMode;
 use serde_json::{Map, Value, json};
 
 use super::color::{Oklch, ansi, from_hex, hex, hex_ints, luminance, oklch_to_hex, to_oklch};
-use super::document::{STEPS, truthy};
+use super::document::STEPS;
+use opencode_api_types::js::truthy;
 
 pub(crate) const CHROMATIC: [&str; 7] = ["red", "orange", "yellow", "green", "cyan", "blue", "purple"];
 pub(crate) const CATEGORICAL: [&str; 7] = ["secondary", "accent", "success", "warning", "primary", "error", "info"];

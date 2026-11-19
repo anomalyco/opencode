@@ -12,6 +12,7 @@ use futures_util::stream::LocalBoxStream;
 use opencode_api::client::{Call, Client};
 use opencode_api::error::Error as ApiError;
 use opencode_api::generated::*;
+use opencode_api::js::truthy;
 use opencode_api::transport::SseResponse;
 use opencode_ui::terminal_text;
 use opencode_ui::tool_info::{tool_inline_info, tool_output_text};
@@ -1095,15 +1096,6 @@ fn or(a: &Value, b: &Value) -> Value {
 /// A field that is neither missing nor null.
 fn present(value: Option<&Value>) -> Option<Value> {
     value.filter(|value| !value.is_null()).cloned()
-}
-
-fn truthy(value: &Value) -> bool {
-    match value {
-        Value::Null | Value::Bool(false) => false,
-        Value::String(value) => !value.is_empty(),
-        Value::Number(number) => number.as_f64().is_some_and(|number| number != 0.0),
-        _ => true,
-    }
 }
 
 fn event_time(event: &Value) -> Value {

@@ -1,5 +1,6 @@
 //! Validates, expands and selects a mode from V2 theme documents.
 
+use opencode_api_types::js::truthy;
 use opencode_util::json_object;
 use serde_json::{Map, Value};
 
@@ -157,17 +158,6 @@ fn expand_states(value: &Value, path: &str) -> Value {
 
 fn reference(path: &str) -> Value {
     Value::String(format!("${path}"))
-}
-
-/// JavaScript truthiness of a JSON value.
-pub(crate) fn truthy(value: &Value) -> bool {
-    match value {
-        Value::Null => false,
-        Value::Bool(value) => *value,
-        Value::Number(number) => number.as_f64().is_some_and(|number| number != 0.0),
-        Value::String(text) => !text.is_empty(),
-        Value::Array(_) | Value::Object(_) => true,
-    }
 }
 
 /// Why a document failed the schema, as far as the theme-error message shows it.
