@@ -1,10 +1,10 @@
 import { describe, expect } from "bun:test"
-import { Effect } from "effect"
+import { Deferred, Effect, Fiber, Stream } from "effect"
 import { ai, isRetryable } from "../../src/effect.js"
 import { Google } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { it } from "../lib/effect.js"
-import { fixedResponse } from "../lib/http.js"
+import { dynamicResponse, fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 
 const model = Google.configure({ apiKey: "test", baseURL: "https://generativelanguage.test/v1beta" }).interactions(
@@ -127,8 +127,7 @@ describe("Google Interactions", () => {
           message: `Stream rejected: ${code}`,
           body: JSON.stringify(streamEvent),
         })
-        if (fromError.reason._tag === "InvalidProviderOutput")
-          expect(fromError.reason.classification).toBeUndefined()
+        if (fromError.reason._tag === "InvalidProviderOutput") expect(fromError.reason.classification).toBeUndefined()
         expect(isRetryable(fromError)).toBe(false)
       }
     }),
@@ -193,6 +192,268 @@ describe("Google Interactions", () => {
         })
         expect(isRetryable(fromError)).toBe(false)
       }
+    }),
+  )
+})
+
+describe("Google Interactions response continuation", () => {
+  const request = ai.request({
+    model,
+    prompt: "Count.",
+    maxTokens: 66000,
+    tools: [{ name: "lookup", description: "Lookup", inputSchema: { type: "object" } }],
+  })
+  const scripted = (...responses: ReadonlyArray<string | ReadableStream<Uint8Array>>) => {
+    const bodies: Array<Record<string, unknown>> = []
+    const layer = dynamicResponse((input) =>
+      Effect.sync(() => {
+        const response = responses[Math.min(bodies.length, responses.length - 1)]
+        bodies.push(JSON.parse(input.text))
+        return input.respond(response, { headers: { "content-type": "text/event-stream" } })
+      }),
+    )
+    return { bodies, layer }
+  }
+  const startText = (index: number) => ({ event_type: "step.start", index, step: { type: "model_output" } })
+  const text = (index: number, value: string) => ({
+    event_type: "step.delta",
+    index,
+    delta: { type: "text", text: value },
+  })
+  const checkpoint = (token: string, usage?: Record<string, number>) => ({
+    event_type: "interaction.status_update",
+    status: "in_progress",
+    continuation_token: token,
+    usage,
+  })
+  const completed = (interaction: Record<string, unknown> = {}) => ({
+    event_type: "interaction.completed",
+    interaction: { status: "completed", ...interaction },
+  })
+
+  it.effect("joins two hops into one response with signatures, tool calls, and combined usage", () =>
+    Effect.gen(function* () {
+      const server = scripted(
+        sseEvents(
+          {
+            event_type: "step.start",
+            index: 0,
+            step: { type: "thought", summary: [{ type: "text", text: "Plan." }], signature: "signed-thought" },
+          },
+          { event_type: "step.stop", index: 0 },
+          startText(1),
+          text(1, "One"),
+          checkpoint("older-checkpoint", { total_input_tokens: 7, total_output_tokens: 1 }),
+          text(1, ", two"),
+          completed({
+            status: "requires_continuation",
+            continuation_token: "next-hop",
+            usage: {
+              total_input_tokens: 10,
+              total_cached_tokens: 3,
+              total_output_tokens: 3,
+              total_thought_tokens: 4,
+              total_tokens: 17,
+            },
+          }),
+        ),
+        sseEvents(
+          startText(1),
+          text(1, ", three."),
+          { event_type: "step.stop", index: 1 },
+          {
+            event_type: "step.start",
+            index: 2,
+            step: { type: "function_call", id: "call_1", name: "lookup", arguments: { count: 3 } },
+          },
+          {
+            event_type: "step.delta",
+            index: 2,
+            delta: { type: "thought_signature", signature: "signed-tool" },
+          },
+          { event_type: "step.stop", index: 2 },
+          completed({
+            id: "final-hop",
+            usage: {
+              total_input_tokens: 17,
+              total_cached_tokens: 10,
+              total_output_tokens: 4,
+              total_thought_tokens: 2,
+              total_tokens: 23,
+            },
+          }),
+        ),
+      )
+      const result = yield* LLMClient.generate(request).pipe(Effect.provide(server.layer))
+
+      expect(server.bodies).toHaveLength(2)
+      expect(server.bodies[0]).toMatchObject({ store: false, generation_config: { max_output_tokens: 66000 } })
+      expect(server.bodies[1]).toEqual({ ...server.bodies[0], continuation_token: "next-hop" })
+      expect(result.text).toBe("One, two, three.")
+      expect(result.reasoning).toBe("Plan.")
+      expect(result.events.find((event) => event.type === "reasoning-end")).toMatchObject({
+        providerMetadata: { google: { interactionSignature: "signed-thought" } },
+      })
+      expect(result.toolCalls).toMatchObject([
+        {
+          id: "call_1",
+          input: { count: 3 },
+          providerMetadata: { google: { interactionSignature: "signed-tool" } },
+        },
+      ])
+      expect(result.events.filter((event) => event.type === "finish")).toHaveLength(1)
+      expect(result.events.filter((event) => event.type === "step-start")).toHaveLength(1)
+      expect(result.finishReason).toEqual({ normalized: "tool-calls", raw: "completed" })
+      expect(result.events.find((event) => event.type === "finish")).toMatchObject({
+        providerMetadata: { google: { interactionId: "final-hop" } },
+      })
+      expect(result.usage).toMatchObject({
+        inputTokens: 10,
+        nonCachedInputTokens: 7,
+        cacheReadInputTokens: 3,
+        outputTokens: 13,
+        reasoningTokens: 6,
+        totalTokens: 23,
+        providerMetadata: {
+          google: {
+            total_input_tokens: 27,
+            total_cached_tokens: 13,
+            total_output_tokens: 7,
+            total_thought_tokens: 6,
+            total_tokens: 40,
+            requests: 2,
+          },
+        },
+      })
+    }),
+  )
+
+  it.effect("resumes a broken connection at a checkpoint with no later output", () =>
+    Effect.gen(function* () {
+      const frames = sseEvents(
+        startText(0),
+        text(0, "One"),
+        checkpoint("resume", { total_input_tokens: 10, total_output_tokens: 1 }),
+        { event_type: "step.stop", index: 0 },
+      )
+      let sent = false
+      const server = scripted(
+        new ReadableStream({
+          pull(controller) {
+            if (sent) return controller.error(new Error("connection reset"))
+            sent = true
+            controller.enqueue(new TextEncoder().encode(frames))
+          },
+        }),
+        sseEvents(
+          startText(0),
+          text(0, ", two."),
+          completed({ usage: { total_input_tokens: 11, total_output_tokens: 2 } }),
+        ),
+      )
+      const result = yield* LLMClient.generate(request).pipe(Effect.provide(server.layer))
+
+      expect(server.bodies).toHaveLength(2)
+      expect(server.bodies[1]).toEqual({ ...server.bodies[0], continuation_token: "resume" })
+      expect(result.text).toBe("One, two.")
+      expect(result.usage).toMatchObject({ inputTokens: 10, outputTokens: 3 })
+    }),
+  )
+
+  it.effect("does not replay visible output emitted after a checkpoint", () =>
+    Effect.gen(function* () {
+      const server = scripted(
+        sseEvents(startText(0), text(0, "One"), checkpoint("stale"), text(0, ", two"), checkpoint("stale")),
+      )
+      const error = yield* LLMClient.generate(request).pipe(Effect.provide(server.layer), Effect.flip)
+
+      expect(server.bodies).toHaveLength(1)
+      expect(error.partial?.text).toBe("One, two")
+      expect(error.reason).toMatchObject({ _tag: "InvalidProviderOutput", classification: "incomplete-stream" })
+      expect(isRetryable(error)).toBe(true)
+    }),
+  )
+
+  it.effect("does not resume a tool call whose arguments or completion can be replayed", () =>
+    Effect.gen(function* () {
+      const server = scripted(
+        sseEvents(
+          {
+            event_type: "step.start",
+            index: 0,
+            step: { type: "function_call", id: "call_1", name: "lookup", arguments: {} },
+          },
+          checkpoint("stale"),
+          { event_type: "step.delta", index: 0, delta: { type: "arguments_delta", arguments: "{}" } },
+        ),
+      )
+      const error = yield* LLMClient.generate(request).pipe(Effect.provide(server.layer), Effect.flip)
+
+      expect(server.bodies).toHaveLength(1)
+      expect(error.reason).toMatchObject({ _tag: "InvalidProviderOutput", classification: "incomplete-stream" })
+    }),
+  )
+
+  it.effect("continues from a status update owned by a stored interaction", () =>
+    Effect.gen(function* () {
+      const server = scripted(
+        sseEvents(
+          { ...checkpoint("stored-token"), interaction_id: "hop-owner", status: "requires_continuation" },
+          completed({ status: "requires_continuation" }),
+        ),
+        sseEvents(completed()),
+      )
+      yield* LLMClient.generate({ ...request, providerOptions: { store: true } }).pipe(Effect.provide(server.layer))
+
+      expect(server.bodies).toHaveLength(2)
+      expect(server.bodies[1]).not.toHaveProperty("input")
+      expect(server.bodies[1]).toMatchObject({
+        store: true,
+        continuation_token: "stored-token",
+        previous_interaction_id: "hop-owner",
+      })
+    }),
+  )
+
+  it.effect("cancels a continued response without reconnecting from its checkpoint", () =>
+    Effect.gen(function* () {
+      const checkpointRead = yield* Deferred.make<void>()
+      const server = scripted(
+        sseEvents(completed({ status: "requires_continuation", continuation_token: "next-hop" })),
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(sseEvents(checkpoint("resume"))))
+          },
+        }),
+      )
+      const fiber = yield* LLMClient.stream({ ...request, includeRaw: true }).pipe(
+        Stream.tap((event) =>
+          event.type === "raw" && JSON.stringify(event.data).includes('"continuation_token":"resume"')
+            ? Deferred.succeed(checkpointRead, undefined)
+            : Effect.void,
+        ),
+        Stream.runDrain,
+        Effect.provide(server.layer),
+        Effect.forkChild({ startImmediately: true }),
+      )
+      yield* Deferred.await(checkpointRead)
+      yield* Fiber.interrupt(fiber)
+
+      expect(server.bodies).toHaveLength(2)
+    }),
+  )
+
+  it.effect("caps a response that keeps asking for another request", () =>
+    Effect.gen(function* () {
+      const server = scripted(sseEvents(completed({ status: "requires_continuation", continuation_token: "repeat" })))
+      const error = yield* LLMClient.generate(request).pipe(Effect.provide(server.layer), Effect.flip)
+
+      expect(server.bodies).toHaveLength(21)
+      expect(error.reason).toMatchObject({
+        _tag: "InvalidProviderOutput",
+        message: "Google Interactions exceeded the continuation limit",
+      })
+      expect(isRetryable(error)).toBe(false)
     }),
   )
 })
