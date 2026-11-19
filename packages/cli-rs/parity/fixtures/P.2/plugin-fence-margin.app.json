@@ -20,7 +20,7 @@
   {"path":"/api/session/ses_f/inbox","json":{"data":[]}}
  ],
  "steps": [
-  {"checkpoint":"open","until":"fence: four","deviation":[{"file":"F16-plugin-fence-margin","cells":138}],"fixture":"P.2/plugin-fence-margin/open"}
+  {"checkpoint":"open","until":"fence: four","fixture":"P.2/plugin-fence-margin/open"}
  ],
  "requests": {
   "writes": [],

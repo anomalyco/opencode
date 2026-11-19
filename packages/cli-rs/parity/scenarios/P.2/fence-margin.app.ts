@@ -1,7 +1,7 @@
 // The rows around the built-in LaTeX and Mermaid fences in the transcript: a paragraph then a formula, a formula then
 // a paragraph, two formulas in a row, a list then a diagram, and a diagram that ends the text. TS's renderers set one
-// row of top margin, which Core's top-level Markdown keeps above them; the Rust Markdown puts that row between blocks
-// itself. A fence that opens a message differs (`parity/deviations/F13-latex-leading-row.md`), so none does here.
+// row of top margin on top of Core 0.9.4's row between blocks, so TS has two blank rows above each fence that follows
+// a block and Rust one (`parity/deviations/F16-plugin-fence-margin.md`). A fence that opens a message differs (`parity/deviations/F13-latex-leading-row.md`), so none does here.
 import { assistant, defineApp, session, user } from "../../lib/app"
 
 const text = [
@@ -29,8 +29,11 @@ export default defineApp({
     {
       checkpoint: "open",
       until: "render",
-      // opentui-tex's radical: `√ x` where TS draws `╰╯x`.
-      deviation: [{ file: "P2-latex-opentui-tex", cells: 2 }],
+      // opentui-tex's radical: `√ x` where TS draws `╰╯x`. TS's second blank row above each of the five fences.
+      deviation: [
+        { file: "P2-latex-opentui-tex", cells: 2 },
+        { file: "F16-plugin-fence-margin", cells: 175 },
+      ],
     },
   ],
 })

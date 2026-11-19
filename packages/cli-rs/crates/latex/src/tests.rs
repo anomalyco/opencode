@@ -137,12 +137,13 @@ fn markdown(app: &TestApp, theme: &Theme, streaming: bool) -> Markdown {
     opencode_ui::markdown::view(app, theme, &syntax, &renderers, true, streaming)
 }
 
-/// The radical and matrix layouts have known differences; all other fixtures match cell for cell.
+/// The radical and matrix layouts have known differences, and TS draws two blank rows above a formula after a block
+/// (`parity/deviations/F16-plugin-fence-margin.md`); `invalid` has no formula after a block and matches cell for cell.
 #[test]
 fn transcript_fences_match_typescript() {
     let corpus: Value = serde_json::from_str(include_str!("../../../parity/fixtures/P.2/corpus.json")).unwrap();
     for (name, width, height, differ) in
-        [("structures", 60, 30, 125), ("adapter", 60, 36, ADAPTER_DIFFERS), ("wide", 30, 8, 0), ("invalid", 60, 20, 0)]
+        [("structures", 60, 30, 236), ("adapter", 60, 36, ADAPTER_DIFFERS), ("wide", 30, 8, 62), ("invalid", 60, 20, 0)]
     {
         let (app, theme) = app(width, height);
         let text = markdown(&app, &theme, false).set_markdown(corpus[name].as_str().unwrap().trim());
@@ -159,7 +160,7 @@ fn transcript_fences_match_typescript() {
     }
 }
 
-const ADAPTER_DIFFERS: usize = 197;
+const ADAPTER_DIFFERS: usize = 344;
 
 fn frame(source: &str, width: u16) -> String {
     let (app, theme) = app(width, 16);

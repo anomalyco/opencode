@@ -30,9 +30,9 @@ const answer = [
   "",
 ].join("\n")
 
-// The blank row a boxed fence has: above the box in Rust (opentui-rust's Markdown spaces every block, O-89); in TS
-// inside it, under the label, where the default render's own margin puts it. About 116 cells a box.
-const margin = (boxes: number) => [{ file: "F16-plugin-fence-margin", cells: 117 * boxes }]
+// TS 0.9.4's default code view paints its glyphs on the page color inside the plugin's box; Rust keeps the box's
+// background (`parity/deviations/F16-plugin-fence-margin.md`). Color only.
+const margin = (cells: number) => [{ file: "F16-plugin-fence-margin", cells }]
 
 const delta = (seq: number, text: string) => ({
   event: {
@@ -63,20 +63,22 @@ export default defineApp({
     { path: `/api/session/${id}/inbox`, json: { data: [] } },
   ],
   steps: [
-    { checkpoint: "settled", until: "E = mc^2", deviation: margin(2) },
+    { checkpoint: "settled", until: "E = mc^2", deviation: margin(44) },
     // A fence that streams: its code follows in the frame; its box comes with the JS host's answer.
     delta(1, "\nOne more:\n\n```py\nprint('streaming')\n"),
-    { checkpoint: "streaming", until: "print('streaming')", deviation: margin(3) },
+    { checkpoint: "streaming", until: "print('streaming')", deviation: margin(44) },
     delta(2, "print('done')\n```\n\nThat is all.\n"),
-    { checkpoint: "streamed", until: "That is all.", deviation: margin(3) },
+    { checkpoint: "streamed", until: "That is all.", deviation: margin(44) },
     // The theme changes: Markdown builds each fence again, which the plugin draws in the new theme.
     { type: "/themes" },
+    // defineApp wants the completion to list a typed command before Enter in a scenario that loads a plugin.
+    { checkpoint: "slash", until: "Switch theme", deviation: margin(44) },
     { keys: ["enter"] },
     { wait: 500 },
     { type: "tokyonight" },
     { wait: 500 },
     { keys: ["enter"] },
     { wait: 1000 },
-    { checkpoint: "themed", until: "That is all.", deviation: margin(3) },
+    { checkpoint: "themed", until: "That is all.", deviation: margin(75) },
   ],
 })

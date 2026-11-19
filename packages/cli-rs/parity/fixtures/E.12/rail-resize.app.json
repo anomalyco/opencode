@@ -26,7 +26,7 @@
   {"drag":[[41,10],[30,10]]},
   {"checkpoint":"resized","until":"The notes are written.","fixture":"E.12/rail-resize/resized"},
   {"drag":[[30,10],[8,10]]},
-  {"checkpoint":"compact","until":"The notes are written.","fixture":"E.12/rail-resize/compact"}
+  {"checkpoint":"compact","until":"The notes are written.","deviation":[{"file":"OT094-blank-row-fg","cells":8}],"fixture":"E.12/rail-resize/compact"}
  ],
  "requests": {
   "writes": [],

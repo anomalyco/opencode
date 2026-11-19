@@ -1,7 +1,6 @@
 // A plugin's fences with no margin of their own (parity/plugins/fence-margin): after a paragraph, after another fence
-// and after a list, TS draws them on the next row, with no blank row between; a paragraph after one gets its blank
-// row. The Rust TUI puts one blank row before each, as between any two blocks
-// (`parity/deviations/F16-plugin-fence-margin.md`): four rows, and what is below them moves down.
+// and after a list. Both clients put one blank row before each, as between any two blocks (Core 0.9.4's Markdown gap;
+// `parity/deviations/F16-plugin-fence-margin.md` has the history).
 import { assistant, defineApp, session, user } from "../../lib/app"
 
 const text = [
@@ -28,11 +27,6 @@ export default defineApp({
     { path: "/api/session/ses_f/inbox", json: { data: [] } },
   ],
   steps: [
-    {
-      checkpoint: "open",
-      until: "fence: four",
-      // Without the four rows, rows 0 to 17 are equal cell for cell.
-      deviation: [{ file: "F16-plugin-fence-margin", cells: 138 }],
-    },
+    { checkpoint: "open", until: "fence: four" },
   ],
 })
