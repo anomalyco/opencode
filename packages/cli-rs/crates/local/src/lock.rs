@@ -9,6 +9,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
+use opencode_util::busy;
 use serde::{Deserialize, Serialize};
 use sha1::{Digest, Sha1};
 
@@ -256,28 +257,15 @@ fn gone(err: &io::Error) -> bool {
     matches!(err.kind(), io::ErrorKind::NotFound | io::ErrorKind::NotADirectory)
 }
 
-/// Whether Windows answers for a path another owner is opening or deleting, where Unix would say what the path is:
-/// a lock directory a releasing owner marks for deletion rather than removes at once, and the heartbeat or metadata a
-/// contender is opening as that happens. The path answers `ERROR_ACCESS_DENIED` ("Access is denied") until the handle
-/// that deletes it closes, so the operation is worth trying again rather than reporting an error.
-fn busy(err: &io::Error) -> bool {
-    cfg!(windows) && err.kind() == io::ErrorKind::PermissionDenied
-}
-
-/// How many times an operation on a lock path is tried past the first when Windows reports it busy, and how long each
-/// wait lasts: the read a contender makes lasts an instant, and a release deletes the directory at once.
+/// How many times an operation on a lock path is tried past the first when Windows reports it busy: a lock directory a
+/// releasing owner marks for deletion rather than removes at once answers `ERROR_ACCESS_DENIED` to a contender opening
+/// its heartbeat or metadata until the handle that deletes it closes. The read a contender makes lasts an instant, and a
+/// release deletes the directory at once.
 const BUSY_TRIES: u32 = 50;
-const BUSY_WAIT: Duration = Duration::from_millis(10);
 
 /// Runs `f`, again while Windows reports the path busy, [`BUSY_TRIES`] times at most.
-fn retry_busy<T>(mut f: impl FnMut() -> io::Result<T>) -> io::Result<T> {
-    for _ in 0..BUSY_TRIES {
-        match f() {
-            Err(err) if busy(&err) => thread::sleep(BUSY_WAIT),
-            result => return result,
-        }
-    }
-    f()
+fn retry_busy<T>(f: impl FnMut() -> io::Result<T>) -> io::Result<T> {
+    busy::retry(BUSY_TRIES, f)
 }
 
 fn mkdir(path: &Path) -> io::Result<()> {
@@ -441,19 +429,7 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
-    fn a_busy_path_is_tried_again_until_it_is_free() {
-        let mut calls = 0;
-        let result = retry_busy(|| {
-            calls += 1;
-            (calls < 3).then_some(()).ok_or_else(|| io::Error::from_raw_os_error(5))
-        });
-        assert!(result.is_ok());
-        assert_eq!(calls, 3);
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn a_path_that_stays_busy_fails_after_the_bound() {
+    fn a_lock_path_that_stays_busy_fails_after_the_bound() {
         let mut calls = 0;
         let result = retry_busy(|| {
             calls += 1;

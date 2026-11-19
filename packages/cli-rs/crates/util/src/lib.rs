@@ -1,6 +1,7 @@
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 pub mod bundle;
+pub mod busy;
 pub mod dl;
 pub mod error;
 #[cfg(feature = "ring")]

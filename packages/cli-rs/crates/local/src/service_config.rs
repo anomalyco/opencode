@@ -5,7 +5,6 @@ use std::fmt;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 
 use base64::Engine;
 use indexmap::IndexMap;
@@ -353,16 +352,7 @@ impl ServiceConfig {
         let body = serde_json::to_string_pretty(map).expect("config serializes") + "\n";
         io::Write::write_all(&mut options.open(&temp)?, body.as_bytes())?;
         // Windows fails a rename onto a file another process has open; retry as TypeScript does.
-        let mut attempt = 0;
-        loop {
-            match fs::rename(&temp, &self.file) {
-                Err(_) if attempt < 20 => {
-                    attempt += 1;
-                    std::thread::sleep(Duration::from_millis(10));
-                }
-                other => return other,
-            }
-        }
+        opencode_util::busy::rename(&temp, &self.file)
     }
 
     /// The private credential, created once and kept across restarts; `Some` replaces it.

@@ -563,7 +563,7 @@ fn update(file: &Path, change: impl FnOnce(&mut Vec<Value>) -> Result<(), String
     let written = create_private(&temp).and_then(|mut handle| {
         std::io::Write::write_all(&mut handle, &text)?;
         handle.sync_all()?;
-        std::fs::rename(&temp, file)
+        opencode_util::busy::rename(&temp, file)
     });
     written.map_err(|error| {
         let _ = std::fs::remove_file(&temp);

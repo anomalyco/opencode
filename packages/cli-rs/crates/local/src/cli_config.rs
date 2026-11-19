@@ -597,7 +597,7 @@ impl CliConfig {
     }
 }
 
-/// Writes `text` to `temp` with mode 0600, then renames it over `file`.
+/// Writes `text` to `temp` with mode 0600, then renames it over `file`, again while Windows reports it busy.
 pub(crate) fn write_private(file: &Path, temp: &Path, text: &str) -> io::Result<()> {
     if let Some(dir) = file.parent() {
         fs::create_dir_all(dir)?;
@@ -607,7 +607,7 @@ pub(crate) fn write_private(file: &Path, temp: &Path, text: &str) -> io::Result<
     #[cfg(unix)]
     std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
     io::Write::write_all(&mut options.open(temp)?, text.as_bytes())?;
-    fs::rename(temp, file)
+    opencode_util::busy::rename(temp, file)
 }
 
 /// `Config.Resolved`: the config with the TUI's defaults.

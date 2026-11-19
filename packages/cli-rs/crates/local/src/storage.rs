@@ -4,6 +4,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use opencode_util::busy;
 use serde_json::Value;
 
 use crate::jsonc;
@@ -119,8 +120,8 @@ fn segment(value: &str) -> Result<&str, Error> {
     if valid { Ok(value) } else { Err(Error::Segment(value.to_string())) }
 }
 
-/// `writeJsonAtomic`: compact `JSON.stringify` to `<file>.<pid>.<uuid>.tmp`, then a rename. The
-/// temporary file is removed when either step fails.
+/// `writeJsonAtomic`: compact `JSON.stringify` to `<file>.<pid>.<uuid>.tmp`, then a rename, tried again while Windows
+/// reports the file busy (another TUI reloading it). The temporary file is removed when either step fails.
 pub fn write_json_atomic(file: &Path, value: &Value) -> io::Result<()> {
     write_text_atomic(file, &jsonc::stringify(value))
 }
@@ -131,7 +132,7 @@ pub fn write_text_atomic(file: &Path, text: &str) -> io::Result<()> {
         fs::create_dir_all(dir)?;
     }
     let temp = PathBuf::from(format!("{}.{}.{}.tmp", file.display(), std::process::id(), crate::id::v4()));
-    fs::write(&temp, text).and_then(|()| fs::rename(&temp, file)).inspect_err(|_| {
+    fs::write(&temp, text).and_then(|()| busy::rename(&temp, file)).inspect_err(|_| {
         let _ = fs::remove_file(&temp);
     })
 }
@@ -185,6 +186,76 @@ mod tests {
             thread.join().unwrap();
         }
         assert_eq!(storage.load("count", &json!({})).unwrap(), json!({ "count": 40 }));
+    }
+
+    // One TUI replaces a key while others reload it (#64875). A reader holds the file open as it reads, on Windows
+    // without delete sharing as Bun does, so a rename onto it answers "Access is denied" until the reader closes it and
+    // the write tries again. Every write lands, every read sees a whole value no older than the one before, and no
+    // temporary file stays behind.
+    #[test]
+    fn writers_replace_a_key_other_tuis_are_reading() {
+        use std::io::Read;
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::time::Duration;
+
+        let state = opencode_util::temp::tempdir().unwrap();
+        let storage = Storage::new(state.path(), "dev").unwrap();
+        storage.update("count", &json!({ "count": 0 }), |_| ()).unwrap();
+        let file = storage.file("count").unwrap();
+        let done = Arc::new(AtomicBool::new(false));
+        let readers: Vec<_> = (0..2)
+            .map(|_| {
+                let (file, done) = (file.clone(), done.clone());
+                std::thread::spawn(move || {
+                    let (mut reads, mut last) = (0, 0);
+                    while !done.load(Ordering::SeqCst) {
+                        let mut options = fs::OpenOptions::new();
+                        options.read(true);
+                        // FILE_SHARE_READ | FILE_SHARE_WRITE: no FILE_SHARE_DELETE, so a rename onto it is refused.
+                        #[cfg(windows)]
+                        std::os::windows::fs::OpenOptionsExt::share_mode(&mut options, 0x1 | 0x2);
+                        let mut handle = match options.open(&file) {
+                            Err(error) if busy::busy(&error) => continue,
+                            handle => handle.unwrap(),
+                        };
+                        let mut text = String::new();
+                        handle.read_to_string(&mut text).unwrap();
+                        std::thread::sleep(Duration::from_millis(1));
+                        drop(handle);
+                        let count = serde_json::from_str::<Value>(&text).unwrap()["count"].as_u64().unwrap();
+                        assert!(count >= last, "read {count} after {last}");
+                        (reads, last) = (reads + 1, count);
+                        std::thread::sleep(Duration::from_millis(3));
+                    }
+                    reads
+                })
+            })
+            .collect();
+        let writers: Vec<_> = (0..2)
+            .map(|_| {
+                let storage = storage.clone();
+                std::thread::spawn(move || {
+                    for _ in 0..25 {
+                        storage
+                            .update("count", &json!({}), |value| {
+                                value["count"] = json!(value["count"].as_u64().unwrap() + 1);
+                            })
+                            .unwrap();
+                    }
+                })
+            })
+            .collect();
+        for writer in writers {
+            writer.join().unwrap();
+        }
+        done.store(true, Ordering::SeqCst);
+        for reader in readers {
+            assert!(reader.join().unwrap() > 0);
+        }
+        assert_eq!(storage.load("count", &json!({})).unwrap(), json!({ "count": 50 }));
+        let left: Vec<_> = fs::read_dir(storage.directory()).unwrap().map(|entry| entry.unwrap().file_name()).collect();
+        assert_eq!(left, ["count.json"]);
     }
 
     // Expected (re-review final pass, the storage bound): a bounded update is measured on what the change makes of the

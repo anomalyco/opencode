@@ -441,7 +441,7 @@ impl Host for Tui {
             let temporary = themes.join(format!(".{file}.tmp"));
             let written = std::fs::create_dir_all(&themes)
                 .and_then(|()| std::fs::write(&temporary, serde_json::to_vec_pretty(&theme).unwrap_or_default()))
-                .and_then(|()| std::fs::rename(&temporary, themes.join(&file)));
+                .and_then(|()| opencode_util::busy::rename(&temporary, &themes.join(&file)));
             if let Err(error) = written {
                 let _ = std::fs::remove_file(&temporary);
                 log::error!("Failed to install theme {file}: {error}");
