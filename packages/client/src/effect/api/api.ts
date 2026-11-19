@@ -1434,6 +1434,34 @@ export type ExperimentalSessionLogOutput =
             readonly content: ReadonlyArray<SessionMessage.AssistantContentEncoded>
           }
         }
+      | {
+          readonly id: Event.ID
+          readonly created: number
+          readonly metadata?: { readonly [x: string]: unknown } | undefined
+          readonly type: "session.tools.updated"
+          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
+          readonly location?:
+            | { readonly directory: AbsolutePath; readonly workspaceID?: Workspace.ID | undefined }
+            | undefined
+          readonly data: {
+            readonly sessionID: Session.ID
+            readonly add: ReadonlyArray<{
+              readonly name: string
+              readonly description: string
+              readonly inputSchema: { readonly [x: string]: unknown }
+              readonly freeform?:
+                | (
+                    | { readonly type: "text" }
+                    | { readonly type: "regex"; readonly pattern: string }
+                    | { readonly type: "lark"; readonly grammar: string }
+                  )
+                | undefined
+              readonly native?: { readonly [x: string]: unknown } | undefined
+            }>
+            readonly remove: ReadonlyArray<string>
+            readonly model?: Model.Ref | undefined
+          }
+        }
     )
   | EventLog.Synced
 export type ExperimentalSessionLogOperation<E = never> = (

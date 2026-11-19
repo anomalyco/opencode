@@ -61,7 +61,9 @@ const layer = Layer.effect(
       export: Effect.fn("SessionTransfer.export")(function* (input) {
         const data = {
           info: yield* sessions.get(input.sessionID),
-          messages: (yield* sessions.messages({ sessionID: input.sessionID, order: "asc" })).filter(isSettled),
+          messages: (yield* sessions.messages({ sessionID: input.sessionID, order: "asc", toolChanges: true })).filter(
+            isSettled,
+          ),
         }
         return input.sanitize ? sanitize(data) : data
       }),
@@ -240,7 +242,11 @@ function sanitize(data: Data): Data {
           }
         : undefined,
     },
-    messages: data.messages.map(sanitizeMessage),
+    // Recorded tool changes are left out: redacted definitions would be sent to the provider as real tools, and
+    // without them the next step records a fresh baseline.
+    messages: data.messages
+      .filter((message) => message.type !== "system" || message.tools === undefined)
+      .map(sanitizeMessage),
   }
 }
 

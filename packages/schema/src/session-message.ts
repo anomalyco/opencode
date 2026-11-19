@@ -2,7 +2,7 @@ export * as SessionMessage from "./session-message.js"
 
 import { Schema } from "effect"
 import { optional } from "./schema.js"
-import { Content } from "./tool.js"
+import { Content, Tool } from "./tool.js"
 import { Location } from "./location.js"
 import { Model } from "./model.js"
 import { Project } from "./project.js"
@@ -106,6 +106,11 @@ export const System = Schema.Struct({
   text: Schema.String,
   /** A short human-readable summary for transcript display. */
   description: Schema.String.pipe(optional),
+  /**
+   * A change to the tools the model is offered, recorded where it happened; `text` is empty. With `model`, `add` is
+   * the whole set offered to that model from here on. Model context only, not shown in transcripts.
+   */
+  tools: Schema.Struct({ ...Tool.Changes.fields, model: Model.Ref.pipe(optional) }).pipe(optional),
 }).annotate({ identifier: "Session.Message.System" })
 
 export interface Skill extends Schema.Schema.Type<typeof Skill> {}

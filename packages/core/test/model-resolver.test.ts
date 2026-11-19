@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import { castDraft } from "immer"
 import { ai, LanguageModel, Message } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { compileRequest } from "@opencode/ai/testing"
@@ -35,7 +36,7 @@ function model(packageName: string | undefined, options: RequestOptions = {}) {
     providerID: options.providerID ?? Provider.ID.make("test-provider"),
     canonical: options.canonical,
     name: "Test model",
-    compatibility: options.compatibility,
+    compatibility: castDraft(options.compatibility),
     package: packageName,
     settings: options.settings ?? {},
     headers: options.headers ?? { "x-test": "header" },

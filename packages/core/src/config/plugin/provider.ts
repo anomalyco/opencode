@@ -225,7 +225,14 @@ function overlay(
     if (config.name) model.name = config.name
     if (config.modelID !== undefined) model.modelID = config.modelID
     if (config.releaseDate !== undefined) model.time = { released: Date.parse(config.releaseDate) }
-    if (config.compatibility !== undefined) model.compatibility = { ...model.compatibility, ...config.compatibility }
+    if (config.compatibility !== undefined) {
+      const { supportsToolUpdates, ...compatibility } = config.compatibility
+      model.compatibility = {
+        ...model.compatibility,
+        ...compatibility,
+        ...(supportsToolUpdates === undefined ? {} : { supportsToolUpdates: [...supportsToolUpdates] }),
+      }
+    }
     if (config.package !== undefined) model.package = config.package
     if (config.settings !== undefined) model.settings = Provider.mergeOverlay(model.settings, config.settings)
     if (config.headers !== undefined) model.headers = Provider.mergeHeaders(model.headers, config.headers)

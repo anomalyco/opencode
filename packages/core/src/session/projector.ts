@@ -1075,6 +1075,7 @@ const layer = Layer.effectDiscard(
       }),
     )
     yield* bus.project(SessionEvent.Synthetic, (event) => run(db, event))
+    yield* bus.project(SessionEvent.ToolsUpdated, (event) => run(db, event))
     yield* bus.project(SessionEvent.Skill.Activated, (event) => run(db, event))
     yield* bus.project(SessionEvent.Shell.Started, (event) => run(db, event))
     yield* bus.project(SessionEvent.Shell.Ended, (event) => run(db, event))

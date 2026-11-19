@@ -2091,9 +2091,7 @@ describe("SessionRunnerLLM", () => {
     expect(userTexts(last)).toEqual(["First", "Fourth"])
     expect(last.system.map((part) => part.text).join("\n")).not.toContain("Entered mode")
     // Clients still see every message; only the model context hides the stale update.
-    expect((yield* s.messages).filter((message) => message.type === "system")).toMatchObject([
-      { text: "Entered mode" },
-    ])
+    expect((yield* s.messages).filter((message) => message.type === "system")).toMatchObject([{ text: "Entered mode" }])
   })
 
   scenario("uses the selected model family prompt when the agent does not override it", function* (s) {
@@ -2569,6 +2567,313 @@ describe("SessionRunnerLLM", () => {
     expect(
       (yield* s.session.context(fork.id)).flatMap((message) => (message.type === "system" ? [message.text] : [])),
     ).toEqual(["Replacement context"])
+  })
+
+  describe("tool changes", () => {
+    // Anthropic sends system messages mid-conversation only to models that accept them.
+    const trackedModel = (id = "claude-opus-5-5") =>
+      LanguageModel.make({
+        id,
+        provider: "fake",
+        route: AnthropicMessages.route,
+        capabilities: { tools: { updates: ["add", "remove", "replace"] } },
+      })
+    const markers = (request: LLMRequest | undefined) =>
+      (request?.messages ?? []).flatMap((message) =>
+        message.role === "system" && message.tools ? [message.tools] : [],
+      )
+    const toolNames = (request: LLMRequest | undefined) => request?.tools.map((tool) => tool.name)
+    const names = (tools: {
+      readonly add: ReadonlyArray<{ readonly name: string }>
+      readonly remove: ReadonlyArray<string>
+    }) => ({
+      add: tools.add.map((tool) => tool.name),
+      remove: tools.remove,
+    })
+    const toolEvents = Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      return (yield* db
+        .select({ data: EventTable.data })
+        .from(EventTable)
+        .where(and(eq(EventTable.aggregate_id, sessionID), eq(EventTable.type, "session.tools.updated.1")))
+        .orderBy(asc(EventTable.seq))
+        .all()
+        .pipe(Effect.orDie)).map(
+        (row) =>
+          row.data as {
+            readonly add: ReadonlyArray<{ readonly name: string }>
+            readonly remove: ReadonlyArray<string>
+            readonly model?: { readonly providerID: string; readonly id: string }
+          },
+      )
+    })
+    const tool = (name: string, description: string, run?: () => void): ToolInfo => ({
+      name,
+      description,
+      input: Schema.Struct({}),
+      output: Schema.Struct({ value: Schema.String }),
+      execute: () => Effect.sync(() => run?.()).pipe(Effect.as({ output: { value: name } })),
+    })
+    // Offers `lookup` for the first step, then swaps it for `fresh`, as when an MCP server reconnects with new tools.
+    const swapTools = (s: Scenario, executions: string[] = []) =>
+      Effect.gen(function* () {
+        const registry = yield* Tool.Service
+        const scope = yield* Scope.make()
+        yield* transformTools(
+          registry,
+          { lookup: tool("lookup", "Look something up", () => executions.push("lookup")) },
+          { codemode: false },
+        ).pipe(Scope.provide(scope))
+        yield* s.runPrompt("First")
+        yield* Scope.close(scope, Exit.void)
+        yield* transformTools(
+          registry,
+          { fresh: tool("fresh", "A tool that connected later", () => executions.push("fresh")) },
+          { codemode: false },
+        )
+      })
+    const starting = ["defect", "echo", "lookup", "storefail"]
+    const current = ["defect", "echo", "fresh", "storefail"]
+
+    scenario("sends the same tools as before on models without tool updates", function* (s) {
+      yield* swapTools(s)
+      yield* s.runPrompt("Second")
+
+      expect(s.requests.map(toolNames)).toEqual([starting, current])
+      expect(s.requests.map(markers)).toEqual([[], []])
+      expect(yield* toolEvents).toEqual([])
+      expect((yield* s.messages).filter((message) => message.type === "system")).toEqual([])
+    })
+
+    scenario("keeps the starting tools and sends a later change in place", function* (s) {
+      s.currentModel = trackedModel()
+      yield* swapTools(s)
+      yield* s.runPrompt("Second")
+      yield* s.runPrompt("Third")
+
+      expect(s.requests.map(toolNames)).toEqual([starting, starting, starting])
+      expect(markers(s.requests[0])).toEqual([])
+      expect(markers(s.requests[1]).map(names)).toEqual([{ add: ["fresh"], remove: ["lookup"] }])
+      expect(s.requests[1]?.messages.at(-1)?.role).toBe("system")
+      // The recorded change replays where it was sent, so the next request extends the same prefix.
+      const sent = s.requests[1]!.messages
+      expect(s.requests[2]?.messages.slice(0, sent.length)).toEqual([...sent])
+      expect(markers(s.requests[2])).toEqual(markers(s.requests[1]))
+      expect(s.requests[2]?.system).toEqual(s.requests[0]?.system)
+      const [first, second, third] = yield* Effect.forEach(s.requests, (request) => compileRequest(request))
+      expect(second?.body).toMatchObject({
+        tools: starting.map((name) => ({ name })),
+        messages: expect.arrayContaining([
+          {
+            role: "system",
+            content: [
+              expect.objectContaining({ type: "tool_addition" }),
+              expect.objectContaining({ type: "tool_removal" }),
+            ],
+          },
+        ]),
+      })
+      expect((third?.body as { tools: unknown }).tools).toEqual((first?.body as { tools: unknown }).tools)
+
+      const events = yield* toolEvents
+      expect(events.map((event) => [names(event), event.model])).toEqual([
+        // The request log leaves out the Code Mode tool; the recorded baseline keeps it.
+        [
+          { add: [...starting, "execute"], remove: [] },
+          { providerID: "fake", id: "claude-opus-5-5" },
+        ],
+        [{ add: ["fresh"], remove: ["lookup"] }, undefined],
+      ])
+      // The changes are hidden history: the model context holds them with no text, the message listing leaves them
+      // out, and replaying the events restores them.
+      const recorded = (yield* s.context).filter((message) => message.type === "system")
+      expect(recorded.map((message) => message.type === "system" && message.text)).toEqual(["", ""])
+      expect((yield* s.messages).filter((message) => message.type === "system")).toEqual([])
+      yield* replaySessionProjection(sessionID)
+      expect((yield* s.context).filter((message) => message.type === "system")).toEqual(recorded)
+    })
+
+    scenario("keeps the system prompt's tool guidance from the start of the epoch", function* (s) {
+      const withEdit = Effect.gen(function* () {
+        const registry = yield* Tool.Service
+        const scope = yield* Scope.make()
+        yield* transformTools(registry, { edit: tool("edit", "Edit a file") }, { codemode: false }).pipe(
+          Scope.provide(scope),
+        )
+        yield* s.runPrompt("First")
+        yield* Scope.close(scope, Exit.void)
+        yield* s.runPrompt("Second")
+      })
+      s.currentModel = trackedModel()
+      yield* withEdit
+      const [first, second] = s.requests
+      expect(first?.system[0]?.text).toContain("Use the edit tool")
+      // Removing edit is a recorded change, so the cached system prompt stays as it was.
+      expect(second?.system).toEqual(first?.system)
+      expect(markers(second).map(names)).toEqual([{ add: [], remove: ["edit"] }])
+    })
+
+    scenario("updates the tool guidance on models without tool updates", function* (s) {
+      const registry = yield* Tool.Service
+      const scope = yield* Scope.make()
+      yield* transformTools(registry, { edit: tool("edit", "Edit a file") }, { codemode: false }).pipe(
+        Scope.provide(scope),
+      )
+      yield* s.runPrompt("First")
+      yield* Scope.close(scope, Exit.void)
+      yield* s.runPrompt("Second")
+      const [first, second] = s.requests
+      expect(first?.system[0]?.text).toContain("Use the edit tool")
+      expect(second?.system[0]?.text).not.toContain("Use the edit tool")
+    })
+
+    scenario("places a change after a step a crash cut short, where it replays", function* (s) {
+      s.currentModel = trackedModel()
+      yield* swapTools(s)
+      // A prior process died while streaming the next step: the input was promoted and partial text was stored.
+      yield* s.admit("Second")
+      yield* SessionInbox.promote(s.db, s.bus, sessionID, "steer")
+      const assistantMessageID = SessionMessage.ID.create()
+      yield* s.bus.publish(SessionEvent.Step.Started, {
+        sessionID,
+        assistantMessageID,
+        agent: Agent.ID.make("build"),
+        model: { id: ID.make("claude-opus-5-5"), providerID: Provider.ID.make("fake") },
+        started: 0,
+      })
+      yield* s.bus.publish(SessionEvent.Text.Started, { sessionID, assistantMessageID, ordinal: 0 })
+      yield* s.bus.publish(SessionEvent.Text.Ended, { sessionID, assistantMessageID, ordinal: 0, text: "partial" })
+      yield* s.llm.push(TestLLM.text("Done", "text-resumed"))
+      yield* s.resume
+      yield* s.runPrompt("Third")
+
+      const [, resumed, next] = s.requests
+      // The change goes after the cut-short step in both requests, so the next one extends the one before it.
+      expect(resumed?.messages.at(-1)).toMatchObject({ role: "system", tools: expect.anything() })
+      expect(next?.messages.slice(0, resumed?.messages.length)).toEqual([...(resumed?.messages ?? [])])
+      expect(markers(next).map(names)).toEqual([{ add: ["fresh"], remove: ["lookup"] }])
+      expect(toolNames(next)).toEqual(toolNames(s.requests[0]))
+    })
+
+    scenario("runs an added tool and refuses a removed one", function* (s) {
+      s.currentModel = trackedModel()
+      const executions: string[] = []
+      yield* swapTools(s, executions)
+      yield* s.admit("Second")
+      yield* s.llm.push(
+        TestLLM.toolCall("call-lookup", "lookup", {}),
+        TestLLM.toolCall("call-fresh", "fresh", {}),
+        TestLLM.text("Done", "text-done"),
+      )
+      yield* s.resume
+
+      expect(executions).toEqual(["fresh"])
+      const calls = (yield* s.context).flatMap((message) =>
+        message.type === "assistant" ? message.content.filter((part) => part.type === "tool") : [],
+      )
+      expect(calls.map((call) => [call.name, call.state.status])).toEqual([
+        ["lookup", "error"],
+        ["fresh", "completed"],
+      ])
+    })
+
+    scenario("declares the current tools again after a compaction", function* (s) {
+      s.currentModel = trackedModel()
+      yield* swapTools(s)
+      yield* s.runPrompt("Second")
+      yield* s.llm.push(TestLLM.text("## Objective\n- summary", "tools-summary"))
+      yield* s.session.compact({ sessionID })
+      yield* s.resume
+      yield* s.runPrompt("Third")
+
+      // The summary request continues the epoch it summarizes.
+      expect(toolNames(s.requests[2])).toEqual(starting)
+      expect(markers(s.requests[2]).map(names)).toEqual([{ add: ["fresh"], remove: ["lookup"] }])
+      // Provider checkpoints don't keep tools added mid-conversation, so the next request starts over from them.
+      expect(toolNames(s.requests[3])).toEqual(current)
+      expect(markers(s.requests[3])).toEqual([])
+      expect((yield* toolEvents).map((event) => event.model !== undefined)).toEqual([true, false, true])
+    })
+
+    scenario("starts over for another model but not for a variant", function* (s) {
+      s.currentModel = trackedModel()
+      yield* swapTools(s)
+      yield* s.runPrompt("Second")
+      yield* s.bus.publish(SessionEvent.ModelSelected, {
+        sessionID,
+        model: {
+          id: ID.make("claude-opus-5-5"),
+          providerID: Provider.ID.make("fake"),
+          variant: Model.VariantID.make("high"),
+        },
+      })
+      yield* s.runPrompt("Third")
+      s.currentModel = trackedModel("claude-sonnet-5-5")
+      yield* s.runPrompt("Fourth")
+      s.currentModel = trackedModel()
+      yield* s.runPrompt("Fifth")
+
+      expect(s.requests.slice(0, 3).map(toolNames)).toEqual([starting, starting, starting])
+      expect(markers(s.requests[2])).toEqual(markers(s.requests[1]))
+      expect(toolNames(s.requests[3])).toEqual(current)
+      expect(markers(s.requests[3])).toEqual([])
+      // Coming back starts another epoch: the latest one was shaped for the other model.
+      expect(toolNames(s.requests[4])).toEqual(current)
+      expect(markers(s.requests[4])).toEqual([])
+      expect((yield* toolEvents).map((event) => event.model?.id)).toEqual([
+        "claude-opus-5-5",
+        undefined,
+        "claude-sonnet-5-5",
+        "claude-opus-5-5",
+      ])
+    })
+
+    scenario("drops the changes for a model without tool updates and resumes them after", function* (s) {
+      s.currentModel = trackedModel()
+      yield* swapTools(s)
+      yield* s.runPrompt("Second")
+      s.currentModel = model
+      yield* s.runPrompt("Third")
+      s.currentModel = trackedModel()
+      yield* s.runPrompt("Fourth")
+
+      expect(toolNames(s.requests[2])).toEqual(current)
+      expect(markers(s.requests[2])).toEqual([])
+      expect(toolNames(s.requests[3])).toEqual(starting)
+      expect(markers(s.requests[3]).map(names)).toEqual([{ add: ["fresh"], remove: ["lookup"] }])
+      expect(yield* toolEvents).toHaveLength(2)
+    })
+
+    scenario("replays only the changes a revert keeps", function* (s) {
+      s.currentModel = trackedModel()
+      yield* swapTools(s)
+      const second = yield* s.runPrompt("Second")
+      yield* s.bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: second.id })
+      yield* s.runPrompt("Again")
+      const first = (yield* s.session.messages({ sessionID, order: "asc" })).find((message) => message.type === "user")!
+      yield* s.bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: first.id })
+      yield* s.runPrompt("Over")
+
+      // The reverted change is gone, so the same change is recorded again over the kept baseline.
+      expect(toolNames(s.requests[2])).toEqual(starting)
+      expect(markers(s.requests[2]).map(names)).toEqual([{ add: ["fresh"], remove: ["lookup"] }])
+      // Reverting past the baseline starts over from the tools offered then.
+      expect(toolNames(s.requests[3])).toEqual(current)
+      expect(markers(s.requests[3])).toEqual([])
+      expect((yield* toolEvents).map((event) => event.model !== undefined)).toEqual([true, false, false, true])
+    })
+
+    scenario("carries the parent's tool changes into a fork", function* (s) {
+      s.currentModel = trackedModel()
+      yield* swapTools(s)
+      yield* s.runPrompt("Second")
+      const forked = yield* s.session.fork({ sessionID })
+      yield* s.session.prompt({ sessionID: forked.id, text: "Forked", resume: false })
+      yield* s.session.resume(forked.id)
+
+      expect(toolNames(s.requests.at(-1))).toEqual(starting)
+      expect(markers(s.requests.at(-1))).toEqual(markers(s.requests[1]))
+    })
   })
 
   for (const order of ["before", "between", "after"] as const) {

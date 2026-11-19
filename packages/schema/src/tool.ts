@@ -5,6 +5,7 @@ import type { StandardSchemaV1 } from "@standard-schema/spec"
 import type { Agent } from "./agent.js"
 import type { Session } from "./session.js"
 import type { SessionMessage } from "./session-message.js"
+import { optional } from "./schema.js"
 
 export type Metadata = Readonly<Record<string, any>>
 
@@ -19,6 +20,23 @@ export type Freeform = typeof Freeform.Type
 export const FreeformFormat = Schema.Literals(Freeform.members.map((member) => member.fields.type.literal)).annotate({
   identifier: "Tool.FreeformFormat",
 })
+
+/** A tool as a model request declares it. */
+export const Definition = Schema.Struct({
+  name: Schema.String,
+  description: Schema.String,
+  inputSchema: Schema.Record(Schema.String, Schema.Unknown),
+  freeform: Freeform.pipe(optional),
+  native: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
+}).annotate({ identifier: "Tool.Definition" })
+export interface Definition extends Schema.Schema.Type<typeof Definition> {}
+
+/** A change to the tools a model is offered: tools added or redefined in full, and names withdrawn. */
+export const Changes = Schema.Struct({
+  add: Schema.Array(Definition),
+  remove: Schema.Array(Schema.String),
+}).annotate({ identifier: "Tool.Changes" })
+export interface Changes extends Schema.Schema.Type<typeof Changes> {}
 
 export const CallID = Schema.String.pipe(Schema.brand("Tool.CallID"))
 export type CallID = typeof CallID.Type

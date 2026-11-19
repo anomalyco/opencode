@@ -276,6 +276,8 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
     case "skill":
       return [Message.make({ id: message.id, role: "user", content: message.text })]
     case "system":
+      // Tool changes replay through `SessionToolChanges`, which knows the epoch they belong to.
+      if (message.tools) return []
       return [Message.system(message.text)]
     case "shell":
       // Background shell results enter context once, through their completion inbox item.

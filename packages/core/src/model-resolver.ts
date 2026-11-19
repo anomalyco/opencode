@@ -274,7 +274,12 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
 })
 
 // Config `compatibility` keys the AI package reads as model capabilities.
-const CAPABILITY_KEYS = ["supportsPromptCacheKey", "streamUsage", "supportsEffortUpdates"] as const
+const CAPABILITY_KEYS = [
+  "supportsPromptCacheKey",
+  "streamUsage",
+  "supportsEffortUpdates",
+  "supportsToolUpdates",
+] as const
 
 const capabilities = (base: LanguageModel["capabilities"], compatibility: Compatibility) => ({
   ...base,
@@ -282,6 +287,9 @@ const capabilities = (base: LanguageModel["capabilities"], compatibility: Compat
   ...("streamUsage" in compatibility ? { streamUsage: compatibility.streamUsage } : {}),
   ...("supportsEffortUpdates" in compatibility
     ? { reasoning: { ...base?.reasoning, updates: compatibility.supportsEffortUpdates } }
+    : {}),
+  ...("supportsToolUpdates" in compatibility
+    ? { tools: { ...base?.tools, updates: compatibility.supportsToolUpdates } }
     : {}),
 })
 

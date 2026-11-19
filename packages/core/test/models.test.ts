@@ -9,6 +9,7 @@ import { Bus } from "@opencode/core/bus"
 import { KV } from "@opencode/core/kv"
 import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
+import { ModelResolver } from "@opencode/core/model-resolver"
 import { bodyDigest, ModelsDev } from "@opencode/core/models-dev"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -345,6 +346,76 @@ describe("ModelsDev Service", () => {
         baseURL: "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/anthropic/v1",
         provider: "azure",
       })
+    }),
+  )
+
+  it.live("reads the tool changes the selected API takes in place and gives them to the runtime model", () =>
+    Effect.gen(function* () {
+      const cache = makeCache()
+      const messages = (capabilities?: object) => ({
+        messages: {
+          base_url: "https://claude.acme.test/v1",
+          sdk: { aisdk: "@ai-sdk/anthropic", opencodeai: "@opencode/ai/providers/anthropic" },
+          ...(capabilities ? { capabilities } : {}),
+        },
+      })
+      writeCache(cache, {
+        acme: {
+          ...fixture.acme,
+          models: {
+            "claude-all": sourceModel("claude-all", {
+              api: messages({ tools: { updates: ["add", "future-change", "remove", "replace"] } }),
+            }),
+            "claude-none": sourceModel("claude-none", { api: messages({ tools: { updates: [] } }) }),
+            "claude-boolean": sourceModel("claude-boolean", { api: messages({ tools: { updates: true } }) }),
+            "claude-plain": sourceModel("claude-plain", { api: messages() }),
+            "acme-responses": sourceModel("acme-responses", {
+              api: {
+                responses: {
+                  base_url: "https://api.acme.test/v1",
+                  sdk: { aisdk: "@ai-sdk/openai", opencodeai: "@opencode/ai/providers/openai/responses" },
+                },
+                "chat-completions": {
+                  base_url: "https://other.acme.test/v1",
+                  sdk: { aisdk: "@ai-sdk/openai" },
+                  capabilities: { tools: { updates: ["add"] } },
+                },
+              },
+            }),
+          },
+        },
+      })
+      const state = yield* Ref.make(initialState)
+      const [acme] = yield* provided(
+        state,
+        cache,
+        ModelsDev.Service.use((service) => service.get()),
+      )
+      const find = (id: string) => {
+        const model = acme?.models.find((item) => item.id === id)
+        if (!model) throw new Error(`Missing model ${id}`)
+        return model
+      }
+      expect(find("claude-all").compatibility).toEqual({ supportsToolUpdates: ["add", "remove", "replace"] })
+      expect(find("claude-none").compatibility).toBeUndefined()
+      expect(find("claude-plain").compatibility).toBeUndefined()
+      expect(find("claude-boolean").compatibility).toBeUndefined()
+      // Only the API the model resolves to counts.
+      expect(find("acme-responses").compatibility).toBeUndefined()
+
+      const updates = (id: string) =>
+        ModelResolver.fromCatalogModel({ ...find(id), package: "@opencode/ai/providers/anthropic" }).pipe(
+          Effect.map((model) => model.capabilities?.tools?.updates),
+        )
+      expect(yield* updates("claude-all")).toEqual(["add", "remove", "replace"])
+      expect(yield* updates("claude-plain")).toBeUndefined()
+      // Config compatibility overrides the catalog, as it does for other capabilities.
+      const overridden = yield* ModelResolver.fromCatalogModel({
+        ...find("claude-all"),
+        package: "@opencode/ai/providers/anthropic",
+        compatibility: { supportsToolUpdates: [] },
+      })
+      expect(overridden.capabilities?.tools?.updates).toEqual([])
     }),
   )
 

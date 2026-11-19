@@ -280,6 +280,37 @@ describe("SessionStore", () => {
     }),
   )
 
+  it.effect("leaves recorded tool changes out of the message listing unless asked for them", () =>
+    Effect.gen(function* () {
+      const sessionID = Session.ID.make("ses_tool_changes")
+      const bus = yield* seedSessions([{ id: sessionID, updated: 0 }])
+      const store = yield* SessionStore.Service
+      yield* bus.publish(SessionEvent.Synthetic, { sessionID, text: "before" }, { id: Event.ID.make("evt_before") })
+      yield* bus.publish(
+        SessionEvent.ToolsUpdated,
+        { sessionID, add: [{ name: "read", description: "Read a file.", inputSchema: {} }], remove: [] },
+        { id: Event.ID.make("evt_tools") },
+      )
+      yield* bus.publish(SessionEvent.Synthetic, { sessionID, text: "after" }, { id: Event.ID.make("evt_after") })
+
+      expect((yield* store.messages({ sessionID, order: "asc" })).map((message) => String(message.id))).toEqual([
+        "msg_before",
+        "msg_after",
+      ])
+      expect(
+        (yield* store.messages({
+          sessionID,
+          order: "asc",
+          limit: 1,
+          cursor: { id: SessionMessage.ID.make("msg_before"), direction: "next" },
+        })).map((message) => String(message.id)),
+      ).toEqual(["msg_after"])
+      expect(
+        (yield* store.messages({ sessionID, order: "asc", toolChanges: true })).map((message) => String(message.id)),
+      ).toEqual(["msg_before", "msg_tools", "msg_after"])
+    }),
+  )
+
   it.effect("hydrates and settles assistant messages across session_part rows and legacy inline content rows", () =>
     Effect.gen(function* () {
       const sessionID = Session.ID.make("ses_dual_read")

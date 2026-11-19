@@ -22,6 +22,10 @@ export type MediaInput = typeof MediaInput.Type
 export const CacheFormat = Schema.Literals(["anthropic", "alibaba"]).annotate({ identifier: "Model.CacheFormat" })
 export type CacheFormat = typeof CacheFormat.Type
 
+/** A tool change a model accepts in place, from models.dev `capabilities.tools.updates`. */
+export const ToolUpdate = Schema.Literals(["add", "remove", "replace"]).annotate({ identifier: "Model.ToolUpdate" })
+export type ToolUpdate = typeof ToolUpdate.Type
+
 export interface Compatibility extends Schema.Schema.Type<typeof Compatibility> {}
 export const Compatibility = Schema.Struct({
   /** OpenAI Chat: assistant-message field that carries reasoning. Unset uses the streamed field, else `reasoning_content`. */
@@ -44,6 +48,8 @@ export const Compatibility = Schema.Struct({
   supportsThinkingBlockBinding: Schema.Boolean.pipe(optional),
   /** Anthropic Messages and OpenAI Responses: supports per-message effort updates. Overrides model-ID detection. */
   supportsEffortUpdates: Schema.Boolean.pipe(optional),
+  /** Anthropic Messages and OpenAI Responses: tool changes the model accepts mid-conversation without resending its tools. Empty sends every change as a new tool list. */
+  supportsToolUpdates: Schema.Array(ToolUpdate).pipe(optional),
   /** System One: where the decision host reads media. Unset keeps the route default. */
   mediaInput: MediaInput.pipe(optional),
 }).annotate({ identifier: "Model.Compatibility" })
@@ -51,5 +57,5 @@ export const Compatibility = Schema.Struct({
 // Provider defaults inherited by its models. Model-version features stay model-only.
 export interface ProviderCompatibility extends Schema.Schema.Type<typeof ProviderCompatibility> {}
 export const ProviderCompatibility = Schema.Struct(
-  Struct.omit(Compatibility.fields, ["supportsThinkingBlockBinding", "supportsEffortUpdates"]),
+  Struct.omit(Compatibility.fields, ["supportsThinkingBlockBinding", "supportsEffortUpdates", "supportsToolUpdates"]),
 ).annotate({ identifier: "Provider.Compatibility" })

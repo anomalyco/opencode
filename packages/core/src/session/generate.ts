@@ -58,6 +58,7 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
       agent: selection.agent.id,
       model,
       tools: selection.tools,
+      toolEpoch: transcript.toolEpoch,
       system: transcript.system,
       messages: [
         ...transcript.messages,

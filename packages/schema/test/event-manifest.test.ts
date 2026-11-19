@@ -127,6 +127,7 @@ describe("public event manifest", () => {
         "session.unarchived.1",
         "session.message.content.updated.1",
         "session.usage.recorded.1",
+        "session.tools.updated.1",
         "session.forked.2",
         "session.inbox.delivered.1",
         "session.inbox.enqueued.1",
@@ -169,7 +170,10 @@ describe("public event manifest", () => {
       ...SessionEvent.Definitions.filter((definition) => definition.durability === "durable"),
       SessionEvent.UsageRecorded,
       SessionEvent.MessageContentUpdated,
+      SessionEvent.ToolsUpdated,
     ])
+    expect(EventManifest.Durable.get("session.tools.updated.1")).toBe(SessionEvent.ToolsUpdated)
+    expect(EventManifest.ServerDefinitions).not.toContain(SessionEvent.ToolsUpdated)
     expect(SessionEvent.UsageRecorded.durability).toBe("durable")
     expect(EventManifest.Durable.get("session.usage.recorded.1")).toBe(SessionEvent.UsageRecorded)
     expect(SessionEvent.Definitions).not.toContain(SessionEvent.UsageRecorded)

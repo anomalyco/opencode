@@ -21575,6 +21575,12 @@
           "supportsEffortUpdates": {
             "type": "boolean"
           },
+          "supportsToolUpdates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Model.ToolUpdate"
+            }
+          },
           "mediaInput": {
             "$ref": "#/components/schemas/Model.MediaInput"
           }
@@ -21789,6 +21795,10 @@
             "additionalProperties": {}
           }
         ]
+      },
+      "Model.ToolUpdate": {
+        "type": "string",
+        "enum": ["add", "remove", "replace"]
       },
       "Model.Type": {
         "anyOf": [
@@ -23560,6 +23570,9 @@
           },
           {
             "$ref": "#/components/schemas/session.message.content.updated"
+          },
+          {
+            "$ref": "#/components/schemas/session.tools.updated"
           }
         ]
       },
@@ -24745,6 +24758,28 @@
           },
           "description": {
             "type": "string"
+          },
+          "tools": {
+            "type": "object",
+            "properties": {
+              "add": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Tool.Definition"
+                }
+              },
+              "remove": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "model": {
+                "$ref": "#/components/schemas/Model.Ref"
+              }
+            },
+            "required": ["add", "remove"],
+            "additionalProperties": false
           }
         },
         "required": ["id", "time", "type", "text"],
@@ -25647,6 +25682,28 @@
           }
         ]
       },
+      "Tool.Definition": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "inputSchema": {
+            "type": "object"
+          },
+          "freeform": {
+            "$ref": "#/components/schemas/Tool.Freeform"
+          },
+          "native": {
+            "type": "object"
+          }
+        },
+        "required": ["name", "description", "inputSchema"],
+        "additionalProperties": false
+      },
       "Tool.FileContent": {
         "type": "object",
         "properties": {
@@ -25673,6 +25730,49 @@
         },
         "required": ["type", "uri", "mime"],
         "additionalProperties": false
+      },
+      "Tool.Freeform": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["text"]
+              }
+            },
+            "required": ["type"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["regex"]
+              },
+              "pattern": {
+                "type": "string"
+              }
+            },
+            "required": ["type", "pattern"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["lark"]
+              },
+              "grammar": {
+                "type": "string"
+              }
+            },
+            "required": ["type", "grammar"],
+            "additionalProperties": false
+          }
+        ]
       },
       "Tool.FreeformFormat": {
         "type": "string",
@@ -30811,6 +30911,70 @@
               }
             },
             "required": ["sessionID", "assistantMessageID", "id", "content", "executed"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "durable", "data"],
+        "additionalProperties": false
+      },
+      "session.tools.updated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.tools.updated"]
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "$ref": "#/components/schemas/Event.Seq"
+              },
+              "version": {
+                "$ref": "#/components/schemas/Event.VersionEncoded_c77c5abcb68d"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "$ref": "#/components/schemas/Session.ID"
+              },
+              "add": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Tool.Definition"
+                }
+              },
+              "remove": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "model": {
+                "$ref": "#/components/schemas/Model.Ref"
+              }
+            },
+            "required": ["sessionID", "add", "remove"],
             "additionalProperties": false
           }
         },
