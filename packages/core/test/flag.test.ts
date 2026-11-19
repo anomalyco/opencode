@@ -26,7 +26,11 @@ const document = (experimental?: ConstructorParameters<typeof ConfigExperimental
     info: new Info(experimental === undefined ? {} : { experimental: new ConfigExperimental.Info(experimental) }),
   })
 
-const every = (state: Flag.State) => Record.map(ConfigFlag.registry, () => state)
+// todo is opt-in only, so the build defaults and both wildcards leave it off.
+const every = (state: Flag.State): Record<Flag.Key, Flag.State> => ({
+  ...Record.map(ConfigFlag.registry, () => state),
+  todo: { enabled: false, source: "default" },
+})
 
 describe("Flag.resolve", () => {
   test.each([
@@ -38,6 +42,21 @@ describe("Flag.resolve", () => {
     ["unknown", false],
   ] as const)("applies %s build defaults", (channel, enabled) => {
     expect(Flag.resolve({ entries: [], channel })).toEqual(every({ enabled, source: "default" }))
+  })
+
+  test("todo is opt-in only: on only when named in OPENCODE_FLAGS or experimental.todo", () => {
+    expect(Flag.resolve({ entries: [], channel: "dev", overrides: "all" }).todo).toEqual({
+      enabled: false,
+      source: "default",
+    })
+    expect(Flag.resolve({ entries: [], channel: "latest", overrides: "todo" }).todo).toEqual({
+      enabled: true,
+      source: "env",
+    })
+    expect(Flag.resolve({ entries: [document({ todo: true })], channel: "latest" }).todo).toEqual({
+      enabled: true,
+      source: "config",
+    })
   })
 
   test("full_codemode defaults to on in local and dev builds, off in releases, and follows overrides and wildcards", () => {
