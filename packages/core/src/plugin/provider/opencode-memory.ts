@@ -342,8 +342,8 @@ export const make = Effect.fnUntraced(function* (
 
   /**
    * Refuses a write whose `paths` name a repository path that isn't there. Only clear paths (with a `/`) are checked:
-   * globs, dotted module names and root files are taken as given, and git-ignored or generated files pass, as the
-   * publish audit's anchor gate refused all of those wrongly.
+   * globs, dotted module names and root files are taken as given, and git-ignored or generated files pass: a stricter
+   * check refuses good entries that name a lockfile, a virtual environment or a module.
    */
   const resolved = (tool: string, paths: ReadonlyArray<string> | undefined) =>
     Effect.gen(function* () {

@@ -2630,6 +2630,7 @@ export type ConfigEntry =
           video_generate?: boolean
           console_watches?: boolean
           console_memory?: boolean
+          memory_capture?: boolean
           mcp_events?: boolean
           full_codemode?: boolean
           schedules?: boolean

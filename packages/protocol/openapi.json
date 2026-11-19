@@ -17346,6 +17346,9 @@
               "console_memory": {
                 "type": "boolean"
               },
+              "memory_capture": {
+                "type": "boolean"
+              },
               "mcp_events": {
                 "type": "boolean"
               },

@@ -102,7 +102,7 @@ export interface Context {
 export interface Policy {
   /**
    * The injection to ask Console for at `moment`, or undefined for none. `limit`, `minScore` and `maxTokens` left out
-   * use Console's own, which the retrieval benchmark sets.
+   * use Console's own retrieval defaults.
    */
   readonly inject: (
     moment: Moment,
@@ -144,7 +144,7 @@ export interface Policy {
   ) => { readonly text?: string; readonly shown: ReadonlyArray<Standing>; readonly dropped: ReadonlyArray<Standing> }
 }
 
-// Placeholders until the retrieval benchmark and the correction study set them.
+// At most this many failure-time injections per session: later failures are usually the same problem again.
 const FAILURE_INJECTIONS = 2
 // Console keeps the first 1,000 characters of a query in its delivery log.
 const MAX_QUERY = 1000
@@ -215,9 +215,10 @@ export const initial: Policy = {
   },
   test: (command) => TEST.test(command),
   corrective: (message) => CORRECTION.test(message),
-  // The delivery benchmark's arm A12 (console-server bench/library/delivery/HANDOFF-plugin.md): the repository's
-  // verified conventions, whole, as one labelled system part, at most 5 entries and 2,000 tokens, oldest id first so the
-  // block is byte-stable; over the cap the most recently verified stay.
+  // The repository's verified conventions, whole, as one labelled system part: house rules score too low against task
+  // text for task-start injection to find them, so they stand in every request instead. At most 5 entries and 2,000
+  // tokens, oldest id first so the block is byte-stable and the cached prefix holds; over the cap the most recently
+  // verified stay.
   standing: (entries, repo) => {
     const applies = entries.filter(
       (entry) =>
@@ -293,7 +294,7 @@ function within(context: Context): Context {
   }
 }
 
-/** Test and build runs, as the publish audit counted them, and the other common runners. */
+/** Test and build runs of the common toolchains: the commands whose outcome says whether a fix worked. */
 const TEST =
   /\b(?:pytest|unittest|cargo (?:test|build)|vitest|jest|bun (?:run )?test|(?:npm|pnpm|yarn)(?: run)? test|go test|tox|make |uv run|python3? -m|mvn test|gradle test)/
 
