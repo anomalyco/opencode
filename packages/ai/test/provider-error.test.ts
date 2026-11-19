@@ -205,6 +205,20 @@ describe("provider error classification", () => {
     ).toEqual(["ContentPolicy", "ContentPolicy", "ContentPolicy"])
   })
 
+  test("classifies OpenAI cyber policy refusals before and during a stream", () => {
+    const message =
+      "This content was flagged for possible cybersecurity risk. If this seems wrong, try rephrasing your request."
+    const http = { error: { message, type: "invalid_request_error", param: null, code: "cyber_policy" } }
+    const frame = { type: "error", sequence_number: 1, code: "cyber_policy", message, param: null }
+
+    expect(
+      [
+        classifyProviderFailure({ message, status: 400, rawBody: JSON.stringify(http) }),
+        classifyProviderFailure({ message: `cyber_policy: ${message}`, rawBody: JSON.stringify(frame) }),
+      ].map((failure) => failure._tag),
+    ).toEqual(["ContentPolicy", "ContentPolicy"])
+  })
+
   test("classifies Alibaba Model Studio data inspection failures", () => {
     const alibaba = {
       request_id: "1537ecc9-6873-93f7-9865-6fe4eb1d7851",
