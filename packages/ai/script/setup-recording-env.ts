@@ -105,17 +105,6 @@ const PROVIDERS: ReadonlyArray<Provider> = [
     validate: (env) => validateBearer("https://api.x.ai/v1/models", Redacted.make(env.XAI_API_KEY)),
   },
   {
-    id: "runway",
-    label: "Runway",
-    tier: "canary",
-    note: "Runway task video recorded tests",
-    vars: [{ name: "RUNWAYML_API_SECRET" }],
-    validate: (env) =>
-      validateBearer("https://api.dev.runwayml.com/v1/organization", Redacted.make(env.RUNWAYML_API_SECRET), {
-        "X-Runway-Version": "2024-11-06",
-      }),
-  },
-  {
     id: "elevenlabs",
     label: "ElevenLabs",
     tier: "canary",

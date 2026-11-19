@@ -310,6 +310,36 @@ describe("Npm.add", () => {
     expect(result.current).toBeFalse()
   }, 30_000)
 
+  test("rejects only the newest installed version, keeping its files for what still runs it", async () => {
+    await using tmp = await tmpdir()
+    const fixture = await createGitFixture(tmp.path)
+    const mutable = `git+${pathToFileURL(fixture.repository).href}#fixture-branch`
+
+    const result = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      const first = yield* npm.add(mutable)
+      const alone = yield* npm.reject(mutable, first.version ?? "")
+      yield* Effect.promise(async () => {
+        await Bun.write(path.join(fixture.repository, "index.js"), 'export default { root: "second" }\n')
+        await Bun.$`git -C ${fixture.repository} add .`
+        await Bun.$`git -C ${fixture.repository} -c user.name=fixture -c user.email=fixture@example.com commit -qm second`
+      })
+      const second = yield* npm.update(mutable)
+      const other = yield* npm.reject(mutable, first.version ?? "")
+      const rejected = yield* npm.reject(mutable, second.version ?? "")
+      const current = yield* npm.resolve(mutable)
+      return {
+        alone,
+        other,
+        rejected,
+        current: yield* Effect.promise(() => Bun.file(path.join(current.directory, "index.js")).text()),
+        kept: yield* Effect.promise(() => Bun.file(path.join(second.directory, "index.js")).exists()),
+      }
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(path.join(tmp.path, "cache"))), Effect.runPromise)
+    expect(result).toMatchObject({ alone: false, other: false, rejected: true, kept: true })
+    expect(result.current).toContain("root: true")
+  }, 30_000)
+
   test("reports Git's own error when a Git package cannot be fetched", async () => {
     await using tmp = await tmpdir()
     const spec = `git+${pathToFileURL(path.join(tmp.path, "missing")).href}`

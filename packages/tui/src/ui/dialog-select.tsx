@@ -2,7 +2,7 @@ import { CliRenderEvents, InputRenderable, RGBA, ScrollBoxRenderable, TextAttrib
 import { Keymap, type KeymapCommand } from "../context/keymap"
 import { useTheme } from "../context/theme"
 import { entries, filter, flatMap, groupBy, pipe } from "remeda"
-import { batch, createEffect, createMemo, createSignal, For, Show, type JSX, on, onCleanup, onMount } from "solid-js"
+import { batch, createEffect, createMemo, For, Show, type JSX, on, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import * as fuzzysort from "fuzzysort"
@@ -261,21 +261,12 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   const dimensions = useTerminalDimensions()
   const limit = createMemo(() => Math.floor(dimensions().height / 2) - 6)
-  // Under new designs an overflowing list gives its last row to a "…" indicator.
-  const overflows = createMemo(() => newDesigns() && rows() > limit())
   // Computed once here so per-row details do not each call useTerminalDimensions(),
   // which registers one renderer resize listener per mounted row.
   const detailsWidth = createMemo(() =>
     dialogSelectContentWidth(Math.min(dialogWidth(dialog.size), dimensions().width)),
   )
-  const [moreBelow, setMoreBelow] = createSignal(false)
-  // At the bottom of the list the "…" row hands its row back to the list, so the dialog keeps its height.
-  const ellipsis = () => overflows() && moreBelow()
-  const height = createMemo(() => Math.min(rows(), limit()) - (ellipsis() ? 1 : 0))
-  function updateMoreBelow() {
-    if (!scroll || scroll.isDestroyed) return
-    setMoreBelow(scroll.scrollTop + scroll.viewport.height < scroll.scrollHeight)
-  }
+  const height = createMemo(() => Math.min(rows(), limit()))
 
   const selected = createMemo(() => flat()[store.selected])
   const detailView = () => {
@@ -654,12 +645,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   const searchInTitle = () => newDesigns() && props.searchInTitle === true && props.renderFilter !== false
 
-  // Terminals paint the glyph under a block cursor in their own color, so a near-white cursor hides the
-  // placeholder's first letter. Until the user types, match the highlighted row so that letter shows through.
-  const searchCursorColor = () => {
-    if (!newDesigns()) return theme.text.formfield.focused
-    return store.filter.length > 0 ? theme.text.base : theme.background.action.primary.focused
-  }
+  const searchCursorColor = () => (newDesigns() ? theme.text.base : theme.text.formfield.focused)
 
   const searchInput = () => (
     <input
@@ -770,9 +756,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
             scrollAcceleration={scrollAcceleration()}
             ref={(r: ScrollBoxRenderable) => {
               scroll = r
-              r.verticalScrollBar.on("change", updateMoreBelow)
-              r.content.on("resize", updateMoreBelow)
-              r.viewport.on("resize", updateMoreBelow)
             }}
             maxHeight={height()}
           >
@@ -835,11 +818,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
               )}
             </For>
           </scrollbox>
-          <Show when={ellipsis()}>
-            <box paddingLeft={DIALOG_LIST_INSET} flexShrink={0}>
-              <text fg={theme.text.muted}>…</text>
-            </box>
-          </Show>
           {/* Reserved whenever any option has a detail, so the dialog does not resize as the selection moves. */}
           <Show when={newDesigns() && flat().some((option) => option.detail !== undefined)}>
             <box paddingTop={1} paddingLeft={DIALOG_LIST_INSET} paddingRight={DIALOG_LIST_INSET} flexShrink={0}>
@@ -949,7 +927,6 @@ function DialogSelectRow(props: {
         attributes={props.active && !newDesigns() ? TextAttributes.BOLD : undefined}
         overflow="hidden"
         wrapMode="none"
-        paddingLeft={3}
       >
         {props.titleView ??
           (props.truncateTitle === false
@@ -972,7 +949,8 @@ function DialogSelectRow(props: {
   return (
     <Show when={newDesigns()} fallback={row()}>
       <box flexDirection="row">
-        <text width={1} flexShrink={0} fg={theme.text.formfield.focused}>
+        {/* A row with its own background, like a destructive confirmation, draws its bar in that color. */}
+        <text width={1} flexShrink={0} fg={props.activeBackground ?? theme.text.formfield.focused}>
           {props.active ? "┃" : " "}
         </text>
         {row()}

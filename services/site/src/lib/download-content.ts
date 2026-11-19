@@ -1,7 +1,5 @@
 import {
-  acpDocs,
   androidSoon,
-  extensions,
   installs,
   mobileStores,
   sdkDocs,
@@ -94,27 +92,13 @@ export function productDownloads(slug: PageSlug, route: (path: string) => string
         ? { ...none, commands: installs }
         : slug === "sdk"
           ? { ...none, commands: sdkInstalls, more: { label: "Read the SDK docs", href: route(sdkDocs) } }
-          : slug === "ide"
+          : slug === "mini"
             ? {
                 ...none,
-                lead: "Run opencode in your editor's integrated terminal and the extension installs itself, or install it yourself.",
-                links: [
-                  { label: "VS Code Marketplace", href: extensions.href, external: true },
-                  {
-                    label: "Open VSX (Cursor, Windsurf, VSCodium)",
-                    href: "https://open-vsx.org/extension/sst-dev/opencode",
-                    external: true,
-                  },
-                ],
-                more: { label: "Set up Zed, JetBrains IDEs and other ACP editors", href: route(acpDocs) },
+                lead: "Mini comes with the OpenCode CLI. Install it with any of these, then run opencode mini.",
+                commands: [...installs, { id: "run", command: "opencode mini" }],
               }
-            : slug === "mini"
-              ? {
-                  ...none,
-                  lead: "Mini comes with the OpenCode CLI. Install it with any of these, then run opencode mini.",
-                  commands: [...installs, { id: "run", command: "opencode mini" }],
-                }
-              : none
+            : none
   return result
 }
 

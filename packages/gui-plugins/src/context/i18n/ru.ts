@@ -28,4 +28,5 @@ export default {
   "export.success.description": "Сессия сохранена в файл {{filename}}",
   "export.failed.title": "Не удалось экспортировать сессию",
   "export.failed.description": "Произошла ошибка при экспорте сессии",
+  "usage.toggle": "Переключить контекст сессии",
 }

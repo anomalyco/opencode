@@ -1,6 +1,8 @@
 import "./docs-lockup.css"
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { Portal } from "solid-js/web"
+import { useI18n } from "~/context/i18n"
+import type { I18n } from "~/context/i18n-context"
 import { docsProducts } from "~/lib/docs-content"
 import { docsUrl, v1DocsUrl } from "~/lib/docs"
 import { Chevron, ExternalArrow } from "./icons"
@@ -15,6 +17,13 @@ export const docsVersions = [
 ] as const
 
 export type DocsVersion = (typeof docsVersions)[number]["id"]
+
+/** A docs section's name in the page's language: "Docs" and "Build" translate, the product names don't. */
+export function docsSectionName(i18n: I18n, section: string) {
+  if (section === "Docs") return i18n.t("nav.docs")
+  if (section === "Build") return i18n.t("docs.section.build")
+  return section
+}
 
 type Item = {
   id: string
@@ -31,8 +40,8 @@ type Item = {
 /**
  * Settings › Docs switcher › lockup: the docs section word after the site's logo, like the Data and
  * Console headers (public/nav-demo/switcher.js). One button opens a menu of the docs sections, where
- * "Docs" has a submenu of versions. On an older version, "/ V1" after the word shows it and switches
- * back. The menus are always in the page, hidden while closed, so pages that never hydrate (the docs)
+ * "Docs" has a submenu of versions. On the V1 docs the word reads "V1 docs" and the same menu marks V1
+ * under "Docs". The menus are always in the page, hidden while closed, so pages that never hydrate (the docs)
  * can open them from a delegated listener (src/docs/client.ts).
  */
 export function DocsLockup(props: {
@@ -46,27 +55,45 @@ export function DocsLockup(props: {
   /** Demo only: link the sections elsewhere and switch them in place instead of navigating. */
   href?: (label: string) => string
   onSelect?: (label: string) => void
-  /** Demo only: the docs versions. */
+  /** The docs versions: this page in each (the docs, and the /docs demo). */
   version?: {
     current: DocsVersion
     href: (id: DocsVersion) => string
     onSelect: (id: DocsVersion) => void
   }
 }) {
-  const name = (label: string) => (label === "Docs" ? label : `${label} docs`)
+  const i18n = useI18n()
+  // On the V1 docs the product name says so: "V1 docs", with the same chevron and menu as the latest docs.
+  const v1 = () => props.version?.current === "v1"
+  const name = (label: string) =>
+    v1()
+      ? i18n.t("docs.lockup.sectionDocs", { section: "V1" })
+      : label === "Docs"
+        ? docsSectionName(i18n, label)
+        : i18n.t("docs.lockup.sectionDocs", { section: docsSectionName(i18n, label) })
+  // The sections menu names each section's docs: "CLI docs", "API docs". The main docs are about OpenCode
+  // itself, so they're "OpenCode docs" rather than "Docs docs".
+  const menuName = (label: string) =>
+    i18n.t("docs.lockup.sectionDocs", { section: label === "Docs" ? "OpenCode" : docsSectionName(i18n, label) })
   // V1 is a version, not a section: "Docs" has a submenu of versions, V2 (these docs) and V1 (the old
   // docs site). The /docs demo can pass its own (?version= switches in place).
   const sections = () => docsProducts.filter((product) => product.label !== "V1")
   const defaultVersions: Item[] = [
-    { id: "latest", label: "V2", meta: "(latest)", ariaLabel: "Latest docs", href: docsUrl() },
-    { id: "v1", label: "V1", ariaLabel: "V1 docs", href: v1DocsUrl() },
+    {
+      id: "latest",
+      label: "V2",
+      meta: i18n.t("docs.version.latest"),
+      ariaLabel: i18n.t("docs.version.latestDocs"),
+      href: docsUrl(),
+    },
+    { id: "v1", label: "V1", ariaLabel: i18n.t("docs.version.v1Docs"), href: v1DocsUrl() },
   ]
   const versionItems = (version: NonNullable<typeof props.version>) =>
     docsVersions.map((item) => ({
       id: item.id,
       label: item.label,
-      meta: "meta" in item ? item.meta : undefined,
-      ariaLabel: item.id === "latest" ? "Latest docs" : "V1 docs",
+      meta: "meta" in item ? i18n.t("docs.version.latest") : undefined,
+      ariaLabel: item.id === "latest" ? i18n.t("docs.version.latestDocs") : i18n.t("docs.version.v1Docs"),
       href: version.href(item.id),
     }))
   // The lockup lives beside the logo: in the sidebar, so it scrolls away with it at the end of the
@@ -91,50 +118,30 @@ export function DocsLockup(props: {
     <div data-component="docs-lockup" data-host={props.inline}>
       <Dropdown
         id={`docs-lockup-menu${suffix}`}
-        menuLabel="Docs"
+        menuLabel={i18n.t("nav.docs")}
         trigger={(label) => name(label)}
-        triggerLabel={(label) => `${name(label)}, switch docs`}
+        triggerLabel={(label) => i18n.t("docs.lockup.switchLabel", { name: name(label) })}
         items={sections().map((product) => ({
           id: product.label,
-          label: product.label,
-          ariaLabel: name(product.label),
+          label: menuName(product.label),
+          ariaLabel: menuName(product.label),
           href: props.href?.(product.label) ?? product.href,
           sub:
             product.label !== "Docs"
               ? undefined
               : props.version
                 ? {
-                    label: "Docs version",
+                    label: i18n.t("docs.version.label"),
                     items: versionItems(props.version),
                     current: props.version.current,
                     onSelect: (id: string) => props.version?.onSelect(id as DocsVersion),
                   }
-                : { label: "Docs version", items: defaultVersions, current: "latest" },
+                : { label: i18n.t("docs.version.label"), items: defaultVersions, current: "latest" },
         }))}
         current={props.current}
         onSelect={props.onSelect}
-        split={{ label: "Switch docs", onSelect: props.onSelect }}
+        split={{ label: i18n.t("docs.lockup.switch"), onSelect: props.onSelect, href: v1() ? v1DocsUrl() : undefined }}
       />
-      {/* Only the main docs have versions, and only an older one shows here. */}
-      <Show when={props.current === "Docs" && props.version?.current !== "latest" && props.version}>
-        {(version) => (
-          <>
-            <span data-slot="separator" aria-hidden="true">
-              |
-            </span>
-            <Dropdown
-              id={`docs-version-menu${suffix}`}
-              variant="version"
-              menuLabel="Docs version"
-              trigger={(id) => docsVersions.find((item) => item.id === id)!.label}
-              triggerLabel={(id) => `${docsVersions.find((item) => item.id === id)!.label}, switch docs version`}
-              items={versionItems(version())}
-              current={version().current}
-              onSelect={(id) => version().onSelect(id as DocsVersion)}
-            />
-          </>
-        )}
-      </Show>
     </div>
   )
   if (props.inline) return lockup()
@@ -165,19 +172,22 @@ function Dropdown(props: {
   items: Item[]
   current: string
   onSelect?: (id: string) => void
-  /** Settings › Docs nav › split: the word links to the section's home; `label` names the chevron. */
-  split?: { label: string; onSelect?: (id: string) => void }
+  /**
+   * Settings › Docs nav › split: the word links to the section's home (or `href`, the V1 docs' home);
+   * `label` names the chevron.
+   */
+  split?: { label: string; onSelect?: (id: string) => void; href?: string }
 }) {
+  const i18n = useI18n()
   const [open, setOpen] = createSignal(false)
   const [subOpen, setSubOpen] = createSignal(false)
-  // On phones the menu is a full-width sheet; its labels are indented to the trigger's text.
-  const [textX, setTextX] = createSignal(0)
+  // On phones the labels start at the bar's logo mark and the "›" centres on its menu button (docs-lockup.css).
+  const [edges, setEdges] = createSignal<{ "--menu-label"?: string; "--menu-chevron"?: string }>({})
   const items: HTMLAnchorElement[] = []
   const subItems: HTMLAnchorElement[] = []
   let root: HTMLDivElement | undefined
   let menu: HTMLDivElement | undefined
   let combined: HTMLButtonElement | undefined
-  let word: HTMLAnchorElement | undefined
   let toggleButton: HTMLButtonElement | undefined
   // Both forms render; Settings › Docs nav shows one (docs-lockup.css), so use whichever is shown.
   const splitShown = () => !!toggleButton && toggleButton.offsetParent !== null
@@ -189,11 +199,21 @@ function Dropdown(props: {
     )
 
   const show = (focus?: number) => {
-    // The trigger's text start from the window's inline-start edge: its left, or right to left the
-    // distance from its right edge to the window's.
-    const trigger = splitShown() ? word : combined
-    const box = trigger?.getBoundingClientRect()
-    setTextX((box && trigger ? (isRtl(trigger) ? document.documentElement.clientWidth - box.right : box.left) : 0) + 6)
+    const logo = document
+      .querySelector("[data-component=topbar] [data-slot=logo] [data-slot=icon]")
+      ?.getBoundingClientRect()
+    const button = document.querySelector("[data-component=menu-toggle]")?.getBoundingClientRect()
+    const width = document.documentElement.clientWidth
+    const rtl = !!menu && isRtl(menu)
+    const centre = button ? button.left + button.width / 2 : 0
+    setEdges(
+      logo?.width && button?.width
+        ? {
+            "--menu-label": `${rtl ? width - logo.right : logo.left}px`,
+            "--menu-chevron": `${rtl ? centre : width - centre}px`,
+          }
+        : {},
+    )
     setNested(
       siteSettings.docsSubmenu === "nested" ||
         window.matchMedia("(max-width: 60rem), (hover: none), (pointer: coarse)").matches,
@@ -290,11 +310,10 @@ function Dropdown(props: {
         {(split) => (
           <>
             <a
-              ref={word}
               data-slot="word"
               data-design="docsNav sectionMenuStyle menuActive menuColor menuAlign docsSubmenu"
-              href={props.items[currentIndex()].href}
-              aria-label={`${props.trigger(props.items[currentIndex()].id)} home`}
+              href={split().href ?? props.items[currentIndex()].href}
+              aria-label={i18n.t("docs.lockup.home", { name: props.trigger(props.items[currentIndex()].id) })}
               onClick={(event) => {
                 close()
                 if (!split().onSelect) return
@@ -328,7 +347,7 @@ function Dropdown(props: {
         role="menu"
         aria-label={props.menuLabel}
         data-submenu={nested() ? "nested" : "flyout"}
-        style={{ "--menu-text": `${textX()}px` }}
+        style={edges()}
         onKeyDown={(event) => {
           // Nested versions are rows of this menu, so the arrows walk through them in place.
           const rows = nested()
@@ -404,7 +423,13 @@ function Dropdown(props: {
                     onClick={() => (subOpen() && nested() ? setSubOpen(false) : openSub(sub(), false))}
                   >
                     <svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                      <path d="M4.5 3L7.5 6L4.5 9" stroke="currentColor" stroke-width="1.25" stroke-linecap="square" />
+                      <path
+                        d="M4.5 3L7.5 6L4.5 9"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                        stroke-linecap="square"
+                        vector-effect="non-scaling-stroke"
+                      />
                     </svg>
                   </button>
                   <div

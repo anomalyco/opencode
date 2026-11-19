@@ -104,7 +104,13 @@ export function NewTab() {
 export function Chevron() {
   return (
     <svg data-slot="chevron" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-      <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="square" />
+      <path
+        d="M3 4.5L6 7.5L9 4.5"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="square"
+        vector-effect="non-scaling-stroke"
+      />
     </svg>
   )
 }
@@ -121,12 +127,28 @@ export function ChevronRight() {
   )
 }
 
-/** A magnifying glass for search buttons, a 1.5px stroke in a 16px box. */
+/**
+ * A magnifying glass for search buttons, a 1.5px stroke at any size: a lens and a short handle in a 16px ink box,
+ * the width of the menu lines, so it sits with them and the chevrons. search-palette.tsx draws the same.
+ */
 export function SearchIcon() {
   return (
     <svg data-slot="search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <circle cx="7" cy="7" r="4.75" stroke="currentColor" stroke-width="1.5" />
-      <path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" />
+      <circle
+        cx="7.43"
+        cy="7.43"
+        r="5.06"
+        stroke="currentColor"
+        stroke-width="1.5"
+        vector-effect="non-scaling-stroke"
+      />
+      <path
+        d="M11 11L13.33 13.33"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="square"
+        vector-effect="non-scaling-stroke"
+      />
     </svg>
   )
 }

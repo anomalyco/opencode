@@ -1,4 +1,5 @@
-import { productDetails, products, type ProductSlug } from "~/component/site/product-data"
+import { products, type ProductSlug } from "~/component/site/product-data"
+import { productDetails } from "~/component/site/product-details"
 import { config } from "~/config"
 import type { Translate } from "~/i18n"
 import { brandAssets } from "~/lib/media"
@@ -62,6 +63,7 @@ export function pressContent(t: Translate, route: (path: string) => string) {
     },
     about: {
       title: "About OpenCode",
+      body: "Descriptions of OpenCode and its products in long and short versions, ready to copy.",
       // Both versions name the products in the site's order (products in product-data.ts): desktop,
       // terminal, mobile, SDK.
       boilerplate: {
@@ -315,7 +317,7 @@ export function pressReleases(releases: ChangelogRelease[], route: (path: string
 }
 
 // Longer than the carousel copy in product-data.ts, and tuned to wrap to exactly three lines at
-// 1280 and 1440 wide (378 and 330px columns); re-measure after changing it. Sources: productDetails in product-data.ts
+// 1280 and 1440 wide (378 and 330px columns); re-measure after changing it. Sources: productDetails in product-details.ts
 // (desktop tabs, diffs and built-in browser; terminal shells, remote servers and permissions; mobile
 // voice calls and approvals; SDK typed client, sessions, prompts and event stream).
 const productPress: Record<ProductSlug, string> = {
@@ -337,6 +339,7 @@ export function pressMarkdown(context: MarkdownContext) {
     `# ${content.hero.title}`,
     content.hero.body,
     `## ${content.about.title}`,
+    content.about.body,
     ...[{ name: "OpenCode", ...content.about.boilerplate }, ...content.about.products].flatMap((product) => [
       `### ${product.name}`,
       "#### Long version",

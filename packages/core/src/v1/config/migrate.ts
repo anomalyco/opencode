@@ -125,7 +125,11 @@ function migrateStandardProvider(info: ConfigProviderV1.Info) {
     env: info.env,
     package: info.npm ? packageSpecifier(info.npm) : undefined,
     compatibility: setCacheKey === undefined ? undefined : { supportsPromptCacheKey: setCacheKey },
-    settings: info.api ? { ...options.settings, baseURL: info.api } : info.options ? options.settings : undefined,
+    settings: info.api
+      ? { ...options.settings, baseURL: options.settings.baseURL || info.api }
+      : info.options
+        ? options.settings
+        : undefined,
     headers: info.options && options.headers,
     body: info.options && options.body,
     models:
@@ -226,14 +230,9 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type, npm: string | un
         ]
       : []),
   ]
-  const defaults = Model.Capabilities.default()
   const capabilities =
     info.tool_call !== undefined || info.modalities?.input !== undefined || info.modalities?.output !== undefined
-      ? {
-          tools: info.tool_call ?? defaults.tools,
-          input: info.modalities?.input ?? defaults.input,
-          output: info.modalities?.output ?? defaults.output,
-        }
+      ? { tools: info.tool_call, input: info.modalities?.input, output: info.modalities?.output }
       : undefined
   return {
     modelID: info.id,

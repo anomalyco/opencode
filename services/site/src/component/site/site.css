@@ -5,11 +5,13 @@
 }
 
 /* The page behind the site (seen when you pull past the top or bottom) follows the site's
-   theme, not the system one. */
+   theme, not the system one. The page step of the scale (--grey-1), written out because the tokens
+   live on [data-site], inside this element. grey-ok: outside the tokens' scope */
 html:has([data-site]) {
   color-scheme: light dark;
-  background-color: light-dark(#fff, #0c0c0c);
+  background-color: light-dark(#fbfbfb, #0c0c0c);
 }
+/* grey-ok-end */
 
 html:has([data-site][data-theme="light"]) {
   color-scheme: light;
@@ -51,37 +53,81 @@ html:has([data-site][data-theme="dark"]) {
 
   /* Dark matches the Console landing page (#0c0c0c). */
   /* Light follows Settings › Light background (pure white unless set). */
-  --bg: light-dark(#fff, #0c0c0c);
-  --bg-weak: light-dark(hsl(0, 0%, 96%), hsl(0, 0%, 10%));
+  /* The shared neutral scale (script/check-greys.ts keeps every stylesheet on it). A step is a
+     role, and the same step does the same job in light and dark: 1 page, 2 raised surfaces, 3 subtle
+     fills, 4 hover, 5 borders and press, 6 strong borders and decoration, 7 marks at 3:1, 8 muted
+     text at 4.5:1 on steps 1 to 4, 9 body text, 10 emphasis, 11 ink. Data, Console and Status use
+     the same values. Components use the role tokens below, never a step or a raw grey. */
+  --grey-1: light-dark(#fbfbfb, #0c0c0c);
+  --grey-2: light-dark(#ffffff, #161616);
+  --grey-3: light-dark(#f5f5f5, #1a1a1a);
+  --grey-4: light-dark(#eeeeee, #242424);
+  --grey-5: light-dark(#e0e0e0, #2e2e2e);
+  --grey-6: light-dark(#d2d2d2, #4b4b4b);
+  --grey-7: light-dark(#888888, #6a6a6a);
+  --grey-8: light-dark(#6b6b6b, #8f8f8f);
+  --grey-9: light-dark(#5c5c5c, #aeaeae);
+  --grey-10: light-dark(#3a3a3a, #dbdbdb);
+  --grey-11: light-dark(#161616, #fafafa);
+  /* Surfaces that keep one look in both themes: the dark and light tiles behind logos, media and
+     terminals, pure black behind video (letterboxing must match the frames), and white text on the
+     link blue or on images. */
+  --fixed-dark: #0c0c0c;
+  --fixed-dark-raised: #161616;
+  --fixed-dark-hover: #242424;
+  --fixed-dark-line: #2e2e2e;
+  --fixed-dark-line-strong: #4b4b4b;
+  --fixed-dark-weak: #8f8f8f;
+  --fixed-dark-muted: #aeaeae;
+  --fixed-dark-text: #fafafa;
+  --fixed-light: #f5f5f5;
+  --fixed-light-press: #d2d2d2;
+  --fixed-white: #ffffff;
+  --fixed-ink: #161616;
+  --media-black: #000000;
+  --on-accent: #ffffff;
+
+  --bg: var(--grey-1);
+  --bg-weak: var(--grey-3);
+  /* A pressed full-width row on phones (the docs' sticky rows, the Contents list, the DOCS menu): a
+     subtle surface tint, lighter than the chevrons' and menus' press fills. */
+  --row-press: var(--bg-weak);
   /* The product cards' media backdrop (products.css), which their covers and reels are graded to in
      both themes. */
-  --card-media-bg: #161616;
-  /* The home Console band (routes/index.css), dark in both themes: the panel grey in light, and in
-     dark #121212, a muted step above the #0c0c0c page so it reads as a band, not a slab. A registered
-     colour, so light-dark() resolves in the page's scheme here and not in the band's own forced-dark
-     one. */
-  --console-band-bg: light-dark(hsl(0, 0%, 10%), #121212);
-  --bg-weaker: light-dark(hsl(0, 0%, 92%), hsl(0, 0%, 14%));
-  --bg-strong: light-dark(hsl(0, 0%, 8%), hsl(0, 0%, 95%));
-  --bg-strong-hover: light-dark(hsl(0, 0%, 20%), hsl(0, 0%, 82%));
-  --text-strong: light-dark(hsl(0, 0%, 8%), hsl(0, 0%, 95%));
-  --text: light-dark(hsl(0, 0%, 32%), hsl(0, 0%, 72%));
+  --card-media-bg: var(--fixed-dark-raised);
+  /* The document rows' model (doc-list.css, and the product lists in product-list.css): a row's text
+     on the content edge with this padding outside it, so the hover fill and the bar at its start
+     edge bleed past the edge. */
+  --doc-row-pad: 1rem;
+  --doc-row-fill: var(--bg-weak);
+  --doc-row-bar: var(--grey-7);
+  /* The home Console band (routes/index.css), dark in both themes: the subtle fill's dark step in
+     both, a step above the dark page so it reads as a band, not a slab. A registered colour, so
+     light-dark() resolves in the page's scheme here and not in the band's own forced-dark one. */
+  --console-band-bg: #1a1a1a;
+  --bg-weaker: var(--grey-4);
+  --bg-strong: var(--grey-11);
+  --bg-strong-hover: var(--grey-10);
+  --text-strong: var(--grey-11);
+  --text: var(--grey-9);
   /* At least 4.5:1 on --bg-weaker too, so secondary text passes WCAG AA on raised surfaces. */
-  --text-weak: light-dark(hsl(0, 0%, 40%), hsl(0, 0%, 56%));
-  /* Muted labels that still carry meaning: the lightest grey with 4.5:1 on every light page
-     background (#fbfbfb to #ffffff) and on dark. --text-weaker and below are for decoration only. */
-  --text-muted: light-dark(hsl(0, 0%, 45%), hsl(0, 0%, 49%));
+  --text-weak: var(--grey-8);
+  /* Muted labels that still carry meaning: 4.5:1 on every page background and on hover fills, in
+     light and dark. The same step as --text-weak. --text-weaker and below are for decoration only. */
+  --text-muted: var(--grey-8);
   /* Quiet marks that still need to be seen, like the nav's [01] shortcuts: 3:1 on the light page
      backgrounds and on dark (WCAG 1.4.11). */
-  --text-faint: light-dark(hsl(0, 0%, 55%), hsl(0, 0%, 38%));
+  --text-faint: var(--grey-7);
+  /* Switched-off controls and items: about 3:1, legible though WCAG exempts it. */
+  --text-disabled: var(--grey-7);
   /* The nav's markers: the sidebar's "[1]" shortcuts and the footer's "[ ]" boxes share it, so they
      always match. */
   --nav-marker: var(--text-faint);
-  --text-weaker: light-dark(hsl(0, 0%, 72%), hsl(0, 0%, 32%));
-  --text-weakest: light-dark(hsl(0, 0%, 83%), hsl(0, 0%, 23%));
-  --text-inverted: light-dark(hsl(0, 0%, 100%), #0c0c0c);
-  --border: light-dark(hsl(0, 0%, 88%), hsl(0, 0%, 18%));
-  --border-strong: light-dark(hsl(0, 0%, 78%), hsl(0, 0%, 28%));
+  --text-weaker: var(--grey-6);
+  --text-weakest: var(--grey-6);
+  --text-inverted: light-dark(#ffffff, #0c0c0c);
+  --border: var(--grey-5);
+  --border-strong: var(--grey-6);
   /* The OpenCode Console accent blue; dark mode uses a lighter blue from Settings › Dark blue. */
   --link-dark: #4f8bff;
   --link: light-dark(#3b5cf6, var(--link-dark));
@@ -89,15 +135,26 @@ html:has([data-site][data-theme="dark"]) {
   --status-degraded: light-dark(hsl(38, 92%, 48%), hsl(40, 90%, 58%));
   --status-outage: light-dark(hsl(0, 72%, 50%), hsl(0, 80%, 64%));
   --link-visited: light-dark(#6a4fd6, var(--link-dark));
-  --popover-bg: light-dark(hsl(0, 0%, 100%), hsl(0, 0%, 10%));
+  --popover-bg: var(--grey-2);
   /* Secondary text in pop-ups: at least 5.5:1 on the pop-up background (WCAG AA is 4.5:1). */
-  --popover-text-weak: light-dark(hsl(0, 0%, 40%), hsl(0, 0%, 64%));
+  --popover-text-weak: var(--grey-9);
   /* A 1px ring instead of a border, plus tight layered shadows. */
   --popover-shadow:
     0 0 0 1px light-dark(rgb(0 0 0 / 0.1), rgb(255 255 255 / 0.1)),
     0 1px 1px light-dark(rgb(0 0 0 / 0.04), rgb(0 0 0 / 0.3)),
     0 2px 4px -1px light-dark(rgb(0 0 0 / 0.06), rgb(0 0 0 / 0.35)),
     0 6px 12px -4px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.45));
+  /* Cards fanned out with no panel (the section menus' fan style, the press gallery's fan): like the
+     icons in a macOS Dock stack, each casts only a small, soft shadow close to itself, and a hairline
+     ring carries the edge, which matters most in the dark theme. Lifted while one drops. */
+  --fan-shadow:
+    0 0 0 1px light-dark(rgb(0 0 0 / 0.08), rgb(255 255 255 / 0.1)),
+    0 1px 2px light-dark(rgb(0 0 0 / 0.1), rgb(0 0 0 / 0.4)),
+    0 2px 5px -2px light-dark(rgb(0 0 0 / 0.1), rgb(0 0 0 / 0.4));
+  --fan-shadow-lifted:
+    0 0 0 1px light-dark(rgb(0 0 0 / 0.08), rgb(255 255 255 / 0.1)),
+    0 2px 4px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.4)),
+    0 4px 8px -4px light-dark(rgb(0 0 0 / 0.14), rgb(0 0 0 / 0.5));
   /* The brand greys: the logo ink at 20% / 70% on white (light) and 28% / 72% on #0b0b0b (dark). */
   --logo-inner: light-dark(#d2d2d2, #4b4b4b);
   --logo-open: light-dark(#626262, #aeaeae);
@@ -582,6 +639,17 @@ html:has([data-site][data-theme="dark"]) {
     flex-direction: column;
   }
 
+  /* The page stays mounted under the Markdown view (markdown-view.tsx, whose styles load with it), so
+     its state survives a round trip. It's hidden while the view shows, and on a reload in the view
+     until the view has loaded (site.tsx). */
+  [data-component="content"] > [data-slot="page"] {
+    display: contents;
+  }
+
+  &:is([data-markdown], [data-markdown-boot]) [data-component="content"] > [data-slot="page"] {
+    display: none;
+  }
+
   [data-component="site-button"] {
     display: inline-flex;
     align-items: center;
@@ -647,10 +715,15 @@ html:has([data-site][data-theme="dark"]) {
 
   /* A leading icon carries visual weight, so trim the left padding to keep the button optically
      centered. The gap to the label matches the space left of the icon (the artwork sits about
-     1.3px inside its box), so both read as about 13px. */
+     1.3px inside its box), so both read as about 13px. The menus such a button opens set their row
+     icons with the same inset and gap (--icon-inset, --icon-gap; the store rows below), so each row's
+     icon and label start line up with the button's. */
+  --icon-inset: 0.75rem;
+  --icon-gap: 0.75rem;
+
   [data-component="site-button"]:has(> [data-slot="platform-icon"]:first-child) {
-    padding-inline-start: 0.75rem;
-    gap: 0.75rem;
+    padding-inline-start: var(--icon-inset);
+    gap: var(--icon-gap);
   }
 
   /* A trailing chevron sits midway between the label and the button's right edge: the gap and the
@@ -692,8 +765,8 @@ html:has([data-site][data-theme="dark"]) {
      specific. aria-disabled buttons stay focusable, so they keep the keyboard focus ring (WCAG 2.4.7),
      and their click handlers must check aria-disabled themselves. */
   [data-component="site-button"]:is(:disabled, [aria-disabled="true"]) {
-    --button-disabled-text: light-dark(hsl(0, 0%, 60%), hsl(0, 0%, 36%));
-    --button-disabled-line: light-dark(hsl(0, 0%, 84%), hsl(0, 0%, 22%));
+    --button-disabled-text: var(--text-disabled);
+    --button-disabled-line: var(--grey-6);
     background: transparent !important;
     color: var(--button-disabled-text) !important;
     box-shadow: inset 0 0 0 1px var(--button-disabled-line);
@@ -809,6 +882,11 @@ html:has([data-site][data-theme="dark"]) {
       transform-origin: bottom var(--x-start, left);
       animation: menu-in 160ms var(--ease-out);
 
+      /* Closed: in the page (site-menu.tsx), but not shown. */
+      &[hidden] {
+        display: none;
+      }
+
       [data-slot="install"],
       [data-slot="store"],
       [data-slot="item"] {
@@ -851,9 +929,12 @@ html:has([data-site][data-theme="dark"]) {
       }
     }
 
+    /* Rows with a platform icon: the menu starts at the button's edge, so the button's icon inset
+       and gap (above) put each row's icon and label exactly under the button's. */
     [data-slot="menu"] [data-slot="store"] {
       grid-template-columns: 14px auto auto;
-      column-gap: 0.625rem;
+      column-gap: var(--icon-gap);
+      padding-inline-start: var(--icon-inset);
       color: var(--text-strong);
 
       [data-slot="platform-icon"] {
@@ -1052,10 +1133,6 @@ html:has([data-site][data-theme="dark"]) {
       font-size: var(--fs-large);
 
       /* Draw the icon with two bars so the vertical one can collapse into a minus. */
-      svg {
-        display: none;
-      }
-
       &::before,
       &::after {
         content: "";
@@ -1355,7 +1432,7 @@ html:has([data-site][data-theme="dark"]) {
   }
 
   /* The label (Design mode can swap in longer wording) stays on one line beside the bars. */
-  [data-component="status"] [data-design-copy] {
+  [data-component="status"] [data-slot="status-label"] {
     white-space: nowrap;
   }
 
@@ -1567,11 +1644,11 @@ html:has([data-site][data-theme="dark"]) {
      menu; the active bar stays clearly darker than the hover bar (light 40% vs 66%, dark 62% vs
      34%), and text on the tint keeps well over 4.5:1. "blue" swaps the tints and the hover bar for
      the link blue. Unregistered, so light-dark() resolves in each pop-up's own scheme. */
-  --menu-hover: light-dark(hsl(0, 0%, 94.5%), hsl(0, 0%, 13.5%));
-  --menu-press: light-dark(hsl(0, 0%, 91%), hsl(0, 0%, 17%));
+  --menu-hover: var(--grey-4);
+  --menu-press: var(--grey-5);
   --menu-open: var(--menu-hover);
-  --menu-hint: light-dark(hsl(0, 0%, 66%), hsl(0, 0%, 34%));
-  --menu-bar: light-dark(hsl(0, 0%, 40%), hsl(0, 0%, 62%));
+  --menu-hint: var(--grey-7);
+  --menu-bar: var(--grey-9);
 
   &[data-menu-color="blue"] {
     /* Dark pop-ups need a stronger mix for the wash to read as blue rather than navy. */
@@ -1585,22 +1662,6 @@ html:has([data-site][data-theme="dark"]) {
     );
     --menu-open: var(--menu-hover);
     --menu-hint: var(--link);
-  }
-
-  /* In blue, a hovered current row (or one whose submenu is open) is treated like any other: its
-     active bar turns the hover bar's blue. */
-  &[data-menu-color="blue"][data-menu-active="bar"]
-    :is(
-      [data-component="language-picker"] [data-slot="item"][data-selected="true"],
-      [data-component="docs-lockup"] [role="menuitem"][aria-current="page"]
-    ):is(
-      :hover:not(:is([data-slot="menu"], [data-slot="dropdown"]):has(:focus-visible:not(:hover)) *),
-      [data-open]:not(
-          [data-slot="menu"]:has(:is([role="menuitem"]:hover, :focus-visible):not([data-slot="parent"] *)) *
-        )
-        > *
-    )::before {
-    background: var(--menu-hint);
   }
 
   /* Every menu's rows span it edge to edge, with a square tint on hover. */
@@ -2744,7 +2805,7 @@ html:has([data-site][data-theme="dark"]) {
    keeping its own colour. */
 [data-site] ::selection {
   background: var(--link);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 [data-site][data-selection="muted"] ::selection {
@@ -3313,11 +3374,95 @@ html:has([data-site][data-theme="dark"]) {
   }
 }
 
+/* The two blue bars, the announcement banner above and the footer's letters bar, share
+   one look: a highlight in solid white ("NEW", "Like letters?") and a body at 92% white (the message
+   or the font line, with its chevron, and the banner's ×), 4.5:1 on the blue. Hover and keyboard
+   focus bring the body to full white in 150ms and nudge the chevron 2px right; focus adds a white
+   ring inset in the bar; a press dims the blue a little. Here in the shell, not in site-banner.css,
+   which production leaves out while the banner is off. */
+:is([data-component="letters-bar"], [data-component="announcement-banner"]) {
+  --bar-highlight: #fff;
+  --bar-body: rgb(255 255 255 / 0.92);
+
+  a {
+    color: var(--bar-highlight);
+  }
+
+  [data-slot="body"] {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    min-width: 0;
+    color: var(--bar-body);
+    transition: color 150ms ease;
+  }
+
+  /* The home announcement's light chevron (icons.tsx), drawn for 13px text, scaled to the 15px
+     text (10/13 em) with its stroke kept at 1px. */
+  [data-slot="chevron-right"] {
+    flex-shrink: 0;
+    width: calc(1em * 10 / 13);
+    height: calc(1em * 10 / 13);
+    transition: translate 150ms var(--ease-out, ease-out);
+
+    path {
+      vector-effect: non-scaling-stroke;
+    }
+  }
+
+  [data-slot="dismiss"] {
+    color: var(--bar-body);
+    transition: color 150ms ease;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    a:hover [data-slot="body"],
+    [data-slot="dismiss"]:hover {
+      color: var(--bar-highlight);
+    }
+
+    a:hover [data-slot="chevron-right"] {
+      translate: calc(2px * var(--x-dir, 1)) 0;
+    }
+  }
+
+  a:focus-visible [data-slot="body"],
+  [data-slot="dismiss"]:focus-visible {
+    color: var(--bar-highlight);
+  }
+
+  a:focus-visible [data-slot="chevron-right"] {
+    translate: calc(2px * var(--x-dir, 1)) 0;
+  }
+
+  a:focus-visible {
+    outline: 2px solid var(--bar-highlight);
+    outline-offset: -6px;
+  }
+
+  [data-slot="dismiss"]:focus-visible {
+    outline: 2px solid var(--bar-highlight);
+    outline-offset: -8px;
+  }
+
+  a:active {
+    background-color: color-mix(in srgb, var(--bar-blue) 90%, #000);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-slot="body"],
+    [data-slot="chevron-right"],
+    [data-slot="dismiss"] {
+      transition: none;
+    }
+  }
+}
+
 /* "Like letters?": a full-width blue bar at the very end of the page (after the footer, in the flow),
    which grows open and pushes the page up while the wordmark's letters are out of order. */
 [data-site] {
   --letters-bar-height: 3.25rem;
-  /* The blue bars' shared look (site-banner.css): the link blue, the same as the blue buttons and
+  /* The blue bars' shared look (above): the link blue, the same as the blue buttons and
      the announcement banner (dark mode keeps the deeper light-mode blue, so white keeps 4.5:1). */
   --bar-blue: light-dark(var(--link), #3b5cf6);
 }
@@ -3358,36 +3503,53 @@ html:has([data-site][data-theme="dark"]) {
     overflow: hidden;
   }
 
-  /* The link slides up into the bar as it opens, and back down as it closes. */
+  /* The bar's room in the page, which the opening grows to and the page moves up with. */
   [data-slot="slide"] {
-    position: relative;
+    height: calc(var(--letters-bar-height) + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* The label slides up into the bar as it opens, and back down as it closes. */
+  a > span {
     opacity: 0;
-    translate: 0 100%;
+    translate: 0 calc(var(--letters-bar-height) + env(safe-area-inset-bottom, 0px));
     transition:
       translate 300ms var(--ease-out),
       opacity 200ms ease;
   }
 
   a {
+    position: relative;
+    overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 0.25rem;
     height: calc(var(--letters-bar-height) + env(safe-area-inset-bottom, 0px));
     padding-bottom: env(safe-area-inset-bottom, 0px);
-    /* The blue bars' shared look (--bar-blue above, site-banner.css): a highlight and a 92% body. */
+    /* The blue bars' shared look (--bar-blue and the shared rules above): a highlight and a 92% body. */
     background: var(--bar-blue);
     font-family: var(--font-sans);
     font-size: var(--fs-ui);
     font-weight: 500;
     text-decoration: none;
-    transition: background-color 150ms ease;
+    /* Hidden once the bar has closed. iOS Safari keeps tinting its bottom toolbar from the blue
+       link it last pinned to the bottom edge for as long as the link is drawn, even unpinned and
+       clipped to nothing, so the toolbar would stay blue after the bar has gone. */
+    visibility: hidden;
+    transition:
+      background-color 150ms ease,
+      visibility 0s 300ms;
   }
 
   &[data-shown] {
     grid-template-rows: 1fr;
 
-    [data-slot="slide"] {
+    a {
+      visibility: visible;
+      transition: background-color 150ms ease;
+    }
+
+    a > span {
       opacity: 1;
       translate: 0;
     }
@@ -3399,14 +3561,38 @@ html:has([data-site][data-theme="dark"]) {
       transition: none;
     }
 
+    a {
+      transition: background-color 150ms ease;
+    }
+
     /* Important, past the page-wide reduced-motion rule that zeroes every transition on small
        screens: a fade is the reduced form of this motion, not none. */
-    [data-slot="slide"] {
+    a > span {
       translate: 0;
       transition: opacity 200ms ease;
       transition-duration: 200ms !important;
     }
   }
+}
+
+/* Development only (site.tsx, ?letters-bar=instant): the bar appears at once, pushing the page up,
+   with the bottom's blue. */
+[data-site][data-letters-motion="instant"] [data-component="letters-bar"] {
+  &,
+  a,
+  a > span {
+    transition: none;
+  }
+}
+
+/* While the bar fills the bottom of the screen (site.tsx), the whole bar is pinned to the bottom
+   edge, so it is blue at full height in the same frame as iOS Safari's bottom toolbar area, while
+   its room in the page grows and the page moves up behind it. Once open it is exactly where the
+   page puts it. */
+[data-site][data-letters-end] [data-component="letters-bar"] a {
+  position: fixed;
+  inset: auto 0 0;
+  z-index: 1;
 }
 
 /* Settings › Footer › columns: the sidebar column stays empty. Under the link columns, a bar across
@@ -3721,14 +3907,15 @@ html:has([data-site][data-theme="dark"]) {
   }
 }
 
-/* Settings › Light background: the off-white options. Pure white is the default. The page behind
-   the site follows, so pulling past the top or bottom shows the same colour. */
-[data-site][data-light-bg="fbfbfb"] {
-  --bg: light-dark(#fbfbfb, #0c0c0c);
+/* Settings › Light background: the other light page colours. The default is the scale's page step
+   (--grey-1). The page behind the site follows, so pulling past the top or bottom shows the same
+   colour. grey-ok: Settings options, a development tool */
+[data-site][data-light-bg="ffffff"] {
+  --bg: light-dark(#ffffff, #0c0c0c);
 }
 
-html:has([data-site][data-light-bg="fbfbfb"]) {
-  background-color: light-dark(#fbfbfb, #0c0c0c);
+html:has([data-site][data-light-bg="ffffff"]) {
+  background-color: light-dark(#ffffff, #0c0c0c);
 }
 
 [data-site][data-light-bg="fcfcfc"] {
@@ -3754,6 +3941,7 @@ html:has([data-site][data-light-bg="fdfdfd"]) {
 html:has([data-site][data-light-bg="fefefe"]) {
   background-color: light-dark(#fefefe, #0c0c0c);
 }
+/* grey-ok-end */
 
 /* Footer links that leave the site (Community) get the nav's corner arrow, revealed on hover. */
 [data-site] [data-component="footer-columns"] a:has([data-slot="external"]) {
@@ -4015,7 +4203,7 @@ html [data-site][data-nav-numbers="1"][data-status-bars="6"] {
   [data-site]:is([data-button-hover="blue"], [data-button-hover="blue-ring"])
     [data-component="site-button"]:not([data-variant="neutral"]):hover {
     background: var(--link);
-    color: #fff;
+    color: var(--on-accent);
   }
 
   [data-site][data-button-hover="blue"] [data-component="site-button"]:hover {
@@ -4035,7 +4223,7 @@ html [data-site][data-nav-numbers="1"][data-status-bars="6"] {
 [data-site]:is([data-button-hover="blue"], [data-button-hover="blue-ring"])
   [data-component="site-button"][aria-expanded="true"]:not([data-variant="neutral"]) {
   background: var(--link);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 [data-site][data-button-hover="blue"] [data-component="site-button"][aria-expanded="true"]:not(:focus-visible) {
@@ -4075,7 +4263,7 @@ html [data-site][data-nav-numbers="1"][data-status-bars="6"] {
   [data-site]:is([data-button-hover="blue"], [data-button-hover="blue-ring"])
     &[data-slot="split-toggle"][aria-expanded="true"] {
     background: var(--link);
-    color: #fff;
+    color: var(--on-accent);
   }
 
   @media (hover: hover) and (pointer: fine) {
@@ -4156,4 +4344,54 @@ html [data-site][data-nav-numbers="1"][data-status-bars="6"] {
    untouched. Approved by David (5 Nov). */
 :where([data-site]) :is(h2, h3) {
   text-wrap: pretty;
+}
+
+/* The logo, and the docs lockup beside it, stay fixed in the top-left corner on every page. On most
+   pages the whole sidebar is fixed; in the docs layout (the docs, Press and Brand) it sticks while
+   you read and leaves with the article at the page's end, but the logo and lockup stay. Out of the
+   flow, the sidebar's top padding keeps their place for the nav (the content line, --content-top).
+   While the sidebar is on its way out (Site sets data-under), a strip of the page colour behind the
+   logo row hides what passes under it, ending in the docs nav's 2.5rem fade (docs.css). */
+@media (min-width: 60.0625rem) {
+  [data-site][data-layout="docs"] [data-component="sidebar"] {
+    padding-top: var(--content-top);
+
+    > [data-slot="logo"] {
+      position: fixed;
+      top: calc(var(--banner-offset, 0px) + var(--top));
+      inset-inline-start: calc(var(--page-offset) + var(--edge) - var(--bracket-bearing));
+      z-index: 3;
+
+      &::after {
+        content: "";
+        position: absolute;
+        z-index: -1;
+        top: calc(-1 * var(--top));
+        inset-inline-start: calc(var(--bracket-bearing) - var(--edge));
+        width: var(--sidebar-width);
+        height: var(--content-top);
+        background: var(--bg);
+        mask-image: linear-gradient(to bottom, #000 calc(100% - 2.5rem), transparent);
+        opacity: 0;
+        pointer-events: none;
+      }
+    }
+
+    &[data-under] > [data-slot="logo"]::after {
+      opacity: 1;
+    }
+
+    /* A link reached with Tab scrolls into view below the logo row, never under its strip. */
+    a {
+      scroll-margin-top: var(--content-top);
+    }
+
+    > [data-component="docs-lockup"] {
+      position: fixed;
+      top: calc(var(--banner-offset, 0px) + var(--top));
+      inset-inline-start: calc(var(--page-offset) + var(--edge) + var(--lockup-logo) + 12px - 6px);
+      /* Over the logo's strip, so the lockup and its menus show above it. */
+      z-index: 4;
+    }
+  }
 }

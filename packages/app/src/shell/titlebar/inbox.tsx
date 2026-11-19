@@ -29,7 +29,10 @@ import { Persist, persisted } from "@/runtime/persistence/storage"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import type { LocalProject } from "@/shell/state/layout"
 import { sessionTabTitle } from "./tab-title"
-import { sessionTitle } from "@/session/title"
+import { sessionLabel, sessionTitle } from "@/session/title"
+import { createSessionExporter } from "@/session/commands/export-session"
+import { SessionReadMenuItem } from "@/session/session-read-menu-item"
+import { RenameDialog } from "./project-session-row"
 import { createSessionInbox, inboxArchived, type InboxEntry, type InboxStatus } from "./inbox-model"
 import { compareWorking, workingSince } from "./inbox-working"
 
@@ -48,6 +51,8 @@ export function SidebarInbox() {
   const dialog = useDialog()
   const servers = useServers()
   const inbox = createSessionInbox({ archived: true })
+
+  const exporter = createSessionExporter()
 
   const [state, setState, , ready] = persisted(Persist.global("sidebar.inbox"), InboxState, {
     workingExpanded: true,
@@ -177,6 +182,32 @@ export function SidebarInbox() {
               branch={inbox.branch(entry())}
               worktree={inbox.inWorktree(entry())}
               archived={inboxArchived(entry())}
+              actions={
+                <>
+                  <Menu.Item
+                    onSelect={() => {
+                      const current = entry()
+
+                      void dialog.show(() => (
+                        <RenameDialog
+                          title={sessionLabel(current.session)}
+                          onRename={(title) => inbox.rename(current, title)}
+                        />
+                      ))
+                    }}
+                  >
+                    {language.t("common.rename")}
+                  </Menu.Item>
+                  <Menu.Item
+                    disabled={exporter.exporting({ server: entry().server, sessionID: entry().session.id })}
+                    onSelect={() => exporter.export({ server: entry().server, sessionID: entry().session.id })}
+                  >
+                    {language.t("common.export")}…
+                  </Menu.Item>
+                  <SessionReadMenuItem server={entry().server} session={entry().session} />
+                  <Menu.Separator />
+                </>
+              }
               onOpen={() => inbox.open(entry())}
               onArchive={() => void inbox.archive(entry())}
               onUnarchive={() => void inbox.unarchive(entry())}
@@ -230,7 +261,7 @@ export function SidebarInbox() {
           <Button
             variant="ghost-muted"
             size="normal"
-            class="w-full justify-start px-2"
+            class="w-full justify-start px-2 focus-visible:-outline-offset-2"
             aria-expanded={state.recentExpanded}
             onClick={() => setState("recentExpanded", !state.recentExpanded)}
           >
@@ -355,6 +386,7 @@ export function InboxSessionList(props: {
       <div
         ref={container}
         data-slot="sidebar-inbox"
+        data-focus-scope
         aria-busy={props.loading}
         class="flex min-h-0 flex-1 flex-col"
         onFocusIn={(event) => {
@@ -444,7 +476,7 @@ export function InboxSessionList(props: {
                 <Button
                   variant="ghost-muted"
                   size="normal"
-                  class="w-full justify-start px-2"
+                  class="w-full justify-start px-2 focus-visible:-outline-offset-2"
                   onClick={props.onArchived}
                 >
                   {language.t("sidebar.inbox.section.archived")}
@@ -505,7 +537,6 @@ function SectionHeader(props: {
       <Show when={props.onToggle}>
         <Icon
           name="fill-triangle-down"
-          size="small"
           class="shrink-0 transition-transform"
           classList={{ "-rotate-90 rtl:rotate-90": !props.expanded }}
         />
@@ -530,7 +561,7 @@ function SectionHeader(props: {
           id={props.id}
           type="button"
           aria-expanded={props.expanded}
-          class="flex h-6 w-full shrink-0 items-center gap-1.5 rounded-[6px] px-2 text-start text-[13px] leading-4 font-medium text-v2-text-text-muted hover:text-v2-text-text-base focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover"
+          class="flex h-6 w-full shrink-0 items-center gap-1.5 rounded-[6px] px-2 text-start text-[13px] leading-4 font-medium text-v2-text-text-muted hover:text-v2-text-text-base focus-visible:-outline-offset-2"
           onClick={toggle()}
         >
           {content()}
@@ -556,6 +587,7 @@ export function InboxSessionCard(props: {
   onArchive: () => void
   onUnarchive: () => void
   onDelete: () => void
+  actions?: JSX.Element
 }) {
   const language = useLanguage()
   const navigation = useContext(InboxNavigation)
@@ -595,7 +627,7 @@ export function InboxSessionCard(props: {
         data-slot="sidebar-inbox-item"
         data-status={status()}
         data-state={props.selected ? "active" : undefined}
-        class="group flex h-[54px] w-full shrink-0 flex-col gap-1.5 rounded-[6px] p-2 text-start hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none focus-visible:bg-v2-overlay-simple-overlay-hover data-[state=active]:bg-v2-overlay-simple-overlay-pressed"
+        class="group flex h-[54px] w-full shrink-0 flex-col gap-1.5 rounded-[6px] p-2 text-start hover:bg-v2-overlay-simple-overlay-hover focus-visible:-outline-offset-2 data-[state=active]:bg-v2-overlay-simple-overlay-pressed"
         classList={{
           "transition-opacity hover:opacity-100 focus-visible:opacity-100": !props.selected,
           "opacity-50": props.archived && !props.selected,
@@ -671,6 +703,7 @@ export function InboxSessionCard(props: {
       </Menu.Context.Trigger>
       <Menu.Context.Portal>
         <Menu.Context.Content>
+          {props.actions}
           <Show
             when={props.archived}
             fallback={<Menu.Item onSelect={props.onArchive}>{language.t("common.archive")}</Menu.Item>}

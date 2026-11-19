@@ -14,4 +14,13 @@ export default {
   noChanges: "Nema izmjena",
   "settings.wrapLines.title": "Prelamaj retke",
   "settings.wrapLines.description": "Umotajte dugačke redove u mobilne razlike umjesto horizontalnog pomicanja",
+  "menu.count.one": "{{count}} izmijenjena datoteka",
+  "menu.count.few": "{{count}} izmijenjene datoteke",
+  "menu.count.other": "{{count}} izmijenjenih datoteka",
+  "folder.more": "{{count}} · ostalo nije prikazano",
+  "folder.failed": "Učitavanje promjena nije uspjelo",
+  "command.open": "Otvori pregled",
+  "load.failed": "Učitavanje promjena nije uspjelo",
+  "load.timeout": "Server je predugo odgovarao",
+  offline: "Nije moguće pristupiti ovom serveru",
 }

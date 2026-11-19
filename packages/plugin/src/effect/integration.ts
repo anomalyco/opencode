@@ -55,6 +55,11 @@ export type IntegrationOAuthAuthorization = {
   | {
       readonly mode: "auto"
       readonly callback: Effect.Effect<Credential.OAuth, unknown>
+      /**
+       * Accepts the redirect URL a user pasted when the browser could not reach this machine, and settles `callback`
+       * with it. Check the URL's `state` as the browser path does; a failure rejects only this paste.
+       */
+      readonly submit?: (redirect: string) => Effect.Effect<void, unknown>
     }
   | {
       readonly mode: "code"

@@ -43,9 +43,13 @@ for (const direction of ["ltr", "rtl"] as const) {
 
     expect(heights).toEqual([28, 28, 28, 28, 28, 28])
 
+    const rename = header.getByRole("heading").getByRole("button", { name: fixture.expected.targetTitle, exact: true })
+
     for (const editing of [false, true]) {
       if (editing) {
-        await header.getByRole("heading").click()
+        await project.press("Tab")
+        await expect(rename).toBeFocused()
+        await page.keyboard.press("Enter")
         await expect(header.getByRole("textbox")).toHaveValue(fixture.expected.targetTitle)
         await expect(header.getByRole("textbox")).toBeFocused()
       }
@@ -77,6 +81,13 @@ for (const direction of ["ltr", "rtl"] as const) {
 
     await header.getByRole("textbox").press("Escape")
     await expect(header.getByRole("heading")).toHaveText(fixture.expected.targetTitle)
+    await expect(rename).toBeFocused()
+    await page.keyboard.press("Shift+Tab")
+    await expect(project).toBeFocused()
+    await details.press("Tab")
+    await expect(review).toBeFocused()
+    await page.keyboard.press("Shift+Tab")
+    await expect(details).toBeFocused()
 
     // The header stays one row at every width.
     for (const width of [900, 1440]) {
@@ -254,7 +265,12 @@ test.describe("location", () => {
       await expect(usageMenu).toBeVisible({ visible: !state.usage })
       await expect(header.locator(".session-location-worktree-icon")).toBeVisible()
       await expect
-        .poll(() => header.getByRole("heading").evaluate((element) => element.scrollWidth > element.clientWidth))
+        .poll(() =>
+          header
+            .getByRole("heading")
+            .getByRole("button")
+            .evaluate((element) => element.scrollWidth > element.clientWidth),
+        )
         .toBe(state.truncated)
       await expect(header.getByRole("button", { name: "More options", exact: true })).toBeInViewport()
       await header.getByRole("heading").hover()
@@ -512,7 +528,6 @@ test.describe("location", () => {
 
   test("an app launch that never answers releases the Open in controls", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.clock.install()
 
     const mock = await mockWorkspace(page, {
       ...workspace,
@@ -534,6 +549,8 @@ test.describe("location", () => {
     await expectSessionTitle(page, "Location session")
     await page.getByRole("button", { name: "Toggle review", exact: true }).click()
     await expect(page.getByRole("complementary", { name: "Review and files", exact: true })).toBeFocused()
+    // Control the launch timeout, not the page's initial focus and panel animation.
+    await page.clock.install()
     const open = page.getByRole("button", { name: "Open in VS Code", exact: true })
     await open.click()
     await expect(page.getByLabel("Opened paths")).toContainText("Visual Studio Code")

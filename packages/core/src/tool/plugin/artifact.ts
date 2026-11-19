@@ -62,8 +62,8 @@ export const Plugin = {
       Effect.forkScoped({ startImmediately: true }),
     )
 
-    const flags = yield* Flag.resolver
-    const enabled = () => flags(loaded.entries).artifacts.enabled
+    const flags = yield* Flag.Service
+    const enabled = () => flags.resolve(loaded.entries).artifacts.enabled
     const failure = (error: { readonly message: string }) => new ToolFailure({ message: error.message, error })
 
     yield* ctx.tool

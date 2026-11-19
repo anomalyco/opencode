@@ -37,6 +37,48 @@ test("review toggle shows its tooltip with the side panel open or closed", async
   await expect(tooltip).toBeVisible()
 })
 
+test("review rings stay visible on the mode trigger, file tree, and diff", async ({ page }) => {
+  await openSession(page, {
+    name: "ReviewModeFocus",
+    vcsDiff: [fileDiff("alpha.ts"), fileDiff("beta.ts")],
+  })
+  await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+
+  const panel = page.getByRole("complementary", { name: "Review and files" })
+
+  await openReviewLauncher(panel)
+
+  const tree = panel.getByRole("button", { name: "Toggle file tree", exact: true })
+
+  const mode = panel.getByRole("button", { name: "Git changes", exact: true })
+
+  await expect(mode).toBeVisible()
+  await tree.press("Tab")
+  await expect(mode).toBeFocused()
+  await expect(mode).toHaveCSS("outline-offset", "-2px")
+
+  const alpha = panel.getByRole("treeitem", { name: "alpha.ts", exact: true })
+
+  const beta = panel.getByRole("treeitem", { name: "beta.ts", exact: true })
+
+  await alpha.press("ArrowDown")
+  await expect(beta).toHaveCSS("outline-style", "solid")
+  await expect(beta).toHaveCSS("outline-offset", "-2px")
+
+  await tree.click()
+  await expect(tree).toHaveAttribute("aria-expanded", "false")
+  await tree.press("Tab")
+  await expect(mode).toBeFocused()
+  await expect(mode).toHaveCSS("outline-offset", "-2px")
+
+  const diff = panel.locator('[data-component="file"][data-mode="diff"]')
+
+  await diff.press("Shift+Tab")
+  await page.keyboard.press("Tab")
+  await expect(diff).toBeFocused()
+  await expect.poll(() => diff.evaluate((element) => getComputedStyle(element, "::after").outlineOffset)).toBe("-2px")
+})
+
 for (const view of ["desktop", "mobile"] as const) {
   test(`offers Git initialization for a project without VCS (${view})`, async ({ page }) => {
     if (view === "mobile") await page.setViewportSize({ width: 390, height: 844 })
@@ -459,7 +501,7 @@ test("context closes the side region only when its button opened it", async ({ p
   await expect(panel.locator("#session-side-panel-review-tab")).toHaveAttribute("aria-selected", "true")
 })
 
-test("context hides free-model cost but keeps paid-model zero cost", async ({ page }) => {
+test("context hides zero cost for Go and free models but keeps paid-model cost", async ({ page }) => {
   const cases = [
     { id: "ses_context_free", title: "Free model", model: "free", cost: 0, usage: false, text: "0" },
     { id: "ses_context_paid", title: "Paid model", model: "paid", cost: 0, usage: false, text: "0·$0.00" },
@@ -468,24 +510,48 @@ test("context hides free-model cost but keeps paid-model zero cost", async ({ pa
     { id: "ses_context_mixed", title: "Previously paid", model: "free", cost: 1.25, usage: true, text: "2k·$1.25" },
     { id: "ses_context_unknown", title: "Unknown pricing", model: "missing", cost: 0, usage: false, text: "0·$0.00" },
     { id: "ses_context_output", title: "Output pricing", model: "output", cost: 0, usage: false, text: "0·$0.00" },
+    {
+      id: "ses_context_go",
+      title: "Covered by Go",
+      providerID: "opencode-go",
+      model: "paid",
+      cost: 0,
+      usage: true,
+      text: "2k",
+    },
+    {
+      id: "ses_context_go_spend",
+      title: "Go with charges",
+      providerID: "opencode-go",
+      model: "paid",
+      cost: 0.38,
+      usage: true,
+      text: "2k·$0.38",
+    },
     // The root's model is free, but its subagent spent on a paid model: the family total shows.
     { id: "ses_context_family", title: "Paid subagent", model: "free", cost: 0, usage: true, text: "2k·$1.25" },
     // A completed compaction resets the context until the next reply reports usage, as in the TUI.
     { id: "ses_context_compacted", title: "Compacted", model: "paid", cost: 1.25, usage: true, text: "0·$1.25" },
   ]
 
+  const catalog = provider(
+    { id: "free", name: "Free", cost: { input: 0, output: 0 } },
+    { id: "paid", name: "Paid", cost: { input: 1, output: 3 } },
+    { id: "output", name: "Output", cost: { input: 0, output: 1 } },
+  )
+
   await openSession(page, {
     name: "ContextPricing",
-    provider: provider(
-      { id: "free", name: "Free", cost: { input: 0, output: 0 } },
-      { id: "paid", name: "Paid", cost: { input: 1, output: 3 } },
-      { id: "output", name: "Output", cost: { input: 0, output: 1 } },
-    ),
+    provider: {
+      ...catalog,
+      all: [...catalog.all, { ...catalog.all[0], id: "opencode-go", name: "OpenCode Go" }],
+      connected: [...catalog.connected, "opencode-go"],
+    },
     sessions: [
       ...cases.map((item) => ({
         id: item.id,
         title: item.title,
-        model: { id: item.model, providerID: "opencode" },
+        model: { id: item.model, providerID: item.providerID ?? "opencode" },
         cost: item.cost,
       })),
       {
@@ -504,7 +570,7 @@ test("context hides free-model cost but keeps paid-model zero cost", async ({ pa
                 id: `msg_${item.id}`,
                 type: "assistant",
                 agent: "build",
-                model: { id: item.model, providerID: "opencode" },
+                model: { id: item.model, providerID: item.providerID ?? "opencode" },
                 tokens: { input: 1500, output: 500, reasoning: 0, cache: { read: 0, write: 0 } },
                 content: [{ type: "text", text: "Done." }],
                 time: { created: 1, completed: 2 },
@@ -533,6 +599,15 @@ test("context hides free-model cost but keeps paid-model zero cost", async ({ pa
     await page.locator("[data-titlebar-tab-slot]", { hasText: item.title }).click()
     await expectSessionTitle(page, item.title)
     await expect(button).toHaveText(item.text)
+
+    if (item.providerID === "opencode-go") {
+      await button.click()
+      const panel = page.locator('[data-slot="session-usage-content"]')
+
+      await expect(panel.getByText("OpenCode Go", { exact: true })).toBeVisible()
+      await expect(panel.getByText("Total Cost", { exact: true })).toBeVisible({ visible: item.cost > 0 })
+      await button.click()
+    }
   }
 })
 
@@ -923,6 +998,12 @@ test("artifact actions copy and download content, switch source, and follow the 
   const table = 'name,role\n"Jensen, Oliver",Researcher\nIsabella,Support'
   const broken = '<svg xmlns="http://www.w3.org/2000/svg"><rect'
 
+  const code = "export function greet(name: string) {\n  return `Hello, ${name}!`\n}\n"
+
+  // Chromium writes CRLF to the Windows clipboard.
+  const clipboardText = () =>
+    page.evaluate(() => navigator.clipboard.readText()).then((text) => text.replace(/\r\n/g, "\n"))
+
   const notes = [
     "---",
     "description: Release checklist",
@@ -958,6 +1039,8 @@ test("artifact actions copy and download content, switch source, and follow the 
 
       if (path === "broken.svg") return { content: broken }
 
+      if (path === "src/greet.ts") return { content: code }
+
       return { type: "binary", content: "AAEC", encoding: "base64" }
     },
     pageMessages: () => ({
@@ -970,7 +1053,7 @@ test("artifact actions copy and download content, switch source, and follow the 
           content: [
             {
               type: "text",
-              text: "---\ndescription: Chat heading\n---\n\n[Vector](vector.svg) [Table](data.csv) [Notes](notes.md) [Binary](sample.bin) [Broken](broken.svg)",
+              text: "---\ndescription: Chat heading\n---\n\n[Vector](vector.svg) [Table](data.csv) [Notes](notes.md) [Binary](sample.bin) [Broken](broken.svg) [Code](src/greet.ts)",
             },
           ],
           time: { created: 1, completed: 2 },
@@ -1087,10 +1170,7 @@ test("artifact actions copy and download content, switch source, and follow the 
   expect(surface.y - bar.y - bar.height).toBe(1)
   await expect(panel.getByRole("group", { name: "Preview controls", exact: true })).toHaveCount(0)
   await copy.click()
-  // Chromium writes CRLF to the Windows clipboard.
-  await expect
-    .poll(() => page.evaluate(() => navigator.clipboard.readText()).then((text) => text.replace(/\r\n/g, "\n")))
-    .toBe(notes)
+  await expect.poll(clipboardText).toBe(notes)
   await page.getByRole("button", { name: "Dismiss", exact: true }).click()
   await sourceAction.click()
   await expect(paper).toHaveCount(0)
@@ -1113,6 +1193,15 @@ test("artifact actions copy and download content, switch source, and follow the 
   await expect(panel.getByText("Couldn't load this file.", { exact: true })).toBeVisible()
   await toolbar.getByRole("button", { name: "View source", exact: true }).click()
   await expect(panel.locator("diffs-container")).toContainText(broken)
+
+  await page.getByRole("link", { name: "Code", exact: true }).click()
+  await expect(panel.locator('diffs-container [data-line="2"]')).toHaveText("return `Hello, ${name}!`")
+  await expect(toolbar.getByText("greet.ts", { exact: true })).toBeVisible()
+  await expect(toolbar.getByRole("button", { name: /^View (source|preview)$/ })).toHaveCount(0)
+  await copy.click()
+  await expect.poll(clipboardText).toBe(code)
+  await actions.click()
+  await expect(page.getByRole("menu").getByRole("menuitem")).toHaveText(["Download", "Copy path"])
 })
 
 test("Markdown and DOCX sheets stay aligned when switching at wide and narrow preview widths", async ({ page }) => {

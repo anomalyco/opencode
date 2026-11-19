@@ -1,6 +1,6 @@
 # Benchmarks
 
-The app's benchmarks run with [strobe](https://github.com/Hona/strobe). Each compares two builds in pairs of fresh
+The app's benchmarks run with [strobe](https://github.com/anomalyco/strobe). Each compares two builds in pairs of fresh
 launches (A B, B A, …) at normal speed, decides one primary metric per case with an interval, and refuses setups it
 cannot defend (a hidden window, a software GPU, a throttled CPU, a busy machine). The web cases run the production
 build on the e2e mock server, so they need no backend.

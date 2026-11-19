@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { CodeMode } from "./lib/index.js"
+import { CodeMode } from "../src/index.js"
 
 // Runs a CodeMode program with no host tools and returns the CodeMode.Result. These tests pin the
 // JS-parity behaviors for the "99% of ordinary defensive JavaScript just works" goal: cases where
@@ -419,7 +419,7 @@ describe("Error values and instanceof", () => {
       true,
     ])
     expect(await value(`try { tools + 1 } catch (e) { return e.name }`)).toBe("TypeError")
-    expect(await value(`try { class A {} } catch (e) { return [e.name, e instanceof SyntaxError] }`)).toEqual([
+    expect(await value(`try { class A { #x } } catch (e) { return [e.name, e instanceof SyntaxError] }`)).toEqual([
       "SyntaxError",
       true,
     ])
@@ -1395,12 +1395,10 @@ describe("Object.getPrototypeOf and Object.create", () => {
     ).toEqual([true, ["name"], false, 1, "hi x", true, null, ["name", "greet", "a"]])
   })
 
-  test("Object.create rejects non-object prototypes and property descriptors", async () => {
+  test("Object.create rejects non-object prototypes and defines properties from descriptors", async () => {
     expect((await error(`Object.create(1)`)).message).toContain("Object prototype may only be an Object or null")
     expect((await error(`Object.create()`)).message).toContain("Object prototype may only be an Object or null")
-    expect((await error(`Object.create(null, { a: { value: 1 } })`)).message).toContain(
-      "Object.create property descriptors are not supported",
-    )
+    expect(await value(`return Object.create(null, { a: { value: 1, enumerable: true } }).a`)).toBe(1)
     expect(await value(`return Object.keys(Object.create({}, undefined))`)).toEqual([])
   })
 })

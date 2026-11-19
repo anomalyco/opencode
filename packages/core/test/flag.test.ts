@@ -5,8 +5,20 @@ import { Flag } from "@opencode/core/flag"
 import { Document, Info } from "@opencode/schema/config"
 import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { ConfigFlag } from "@opencode/schema/config/flag"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Effect, Layer, Record } from "effect"
 import { testEffect } from "./lib/effect"
+
+const typeGuards = () => {
+  // @ts-expect-error Flag.enabled requires Flag.Service in context
+  Flag.enabled("full_codemode") satisfies Effect.Effect<boolean, never, never>
+  // @ts-expect-error Flag.all requires Flag.Service in context
+  Flag.all satisfies Effect.Effect<Record<Flag.Key, Flag.State>, never, never>
+  // @ts-expect-error A location node using App.Service must declare App.node in deps
+  makeLocationNode({ service: App.Service, layer: Layer.effect(App.Service, App.Service), deps: [] })
+  makeLocationNode({ service: App.Service, layer: Layer.effect(App.Service, App.Service), deps: [App.node] })
+}
+void typeGuards
 
 const document = (experimental?: ConstructorParameters<typeof ConfigExperimental.Info>[0]) =>
   new Document({
@@ -14,35 +26,86 @@ const document = (experimental?: ConstructorParameters<typeof ConfigExperimental
     info: new Info(experimental === undefined ? {} : { experimental: new ConfigExperimental.Info(experimental) }),
   })
 
-const every = (state: Flag.State) => Record.map(ConfigFlag.registry, () => state)
+// todo is opt-in only, so the build defaults and both wildcards leave it off.
+const every = (state: Flag.State): Record<Flag.Key, Flag.State> => ({
+  ...Record.map(ConfigFlag.registry, () => state),
+  todo: { enabled: false, source: "default" },
+})
 
 describe("Flag.resolve", () => {
-  test("turns flags on by default only in local and dev builds", () => {
-    const table = ["local", "dev", "beta", "latest", "my-branch", "unknown"].map((channel) => [
-      channel,
-      Flag.resolve({ entries: [], channel }).todo.enabled,
-    ])
-    expect(Object.fromEntries(table)).toEqual({
-      local: true,
-      dev: true,
-      beta: false,
-      latest: false,
-      "my-branch": false,
-      unknown: false,
+  test.each([
+    ["local", true],
+    ["dev", true],
+    ["beta", false],
+    ["latest", false],
+    ["my-branch", false],
+    ["unknown", false],
+  ] as const)("applies %s build defaults", (channel, enabled) => {
+    expect(Flag.resolve({ entries: [], channel })).toEqual(every({ enabled, source: "default" }))
+  })
+
+  test("todo is opt-in only: on only when named in OPENCODE_FLAGS or experimental.todo", () => {
+    expect(Flag.resolve({ entries: [], channel: "dev", overrides: "all" }).todo).toEqual({
+      enabled: false,
+      source: "default",
+    })
+    expect(Flag.resolve({ entries: [], channel: "latest", overrides: "todo" }).todo).toEqual({
+      enabled: true,
+      source: "env",
+    })
+    expect(Flag.resolve({ entries: [document({ todo: true })], channel: "latest" }).todo).toEqual({
+      enabled: true,
+      source: "config",
     })
   })
 
-  test("every registered flag, including codemode_vm, is off in a latest release build", () => {
-    expect(Flag.resolve({ entries: [], channel: "latest" })).toEqual(every({ enabled: false, source: "default" }))
-    expect(Flag.resolve({ entries: [], channel: "latest" }).codemode_vm.enabled).toBe(false)
-    expect(Flag.resolve({ entries: [], channel: "dev" }).codemode_vm.enabled).toBe(true)
+  test("full_codemode defaults to on in local and dev builds, off in releases, and follows overrides and wildcards", () => {
+    expect(Flag.resolve({ entries: [], channel: "local" }).full_codemode).toEqual({
+      enabled: true,
+      source: "default",
+    })
+    expect(Flag.resolve({ entries: [], channel: "dev" }).full_codemode).toEqual({
+      enabled: true,
+      source: "default",
+    })
+    expect(Flag.resolve({ entries: [], channel: "latest" }).full_codemode).toEqual({
+      enabled: false,
+      source: "default",
+    })
+    expect(Flag.resolve({ entries: [], channel: "latest", overrides: "full_codemode" }).full_codemode).toEqual({
+      enabled: true,
+      source: "env",
+    })
+    expect(Flag.resolve({ entries: [document({ full_codemode: true })], channel: "latest" }).full_codemode).toEqual({
+      enabled: true,
+      source: "config",
+    })
+    expect(Flag.resolve({ entries: [document({ full_codemode: false })], channel: "dev" }).full_codemode).toEqual({
+      enabled: false,
+      source: "config",
+    })
+    expect(Flag.resolve({ entries: [], channel: "dev", overrides: "-full_codemode" }).full_codemode).toEqual({
+      enabled: false,
+      source: "env",
+    })
+    expect(
+      Flag.resolve({ entries: [document({ full_codemode: false })], channel: "latest", overrides: "all" })
+        .full_codemode,
+    ).toEqual({ enabled: true, source: "env" })
+    expect(Flag.resolve({ entries: [document({ all_flags: true })], channel: "latest" }).full_codemode).toEqual({
+      enabled: true,
+      source: "config",
+    })
   })
 
   test("config overrides the default and OPENCODE_FLAGS overrides config", () => {
-    const entries = [document({ todo: true, schedules: false })]
-    const flags = Flag.resolve({ entries, channel: "dev", overrides: " media_blob , -todo,unknown_flag" })
+    const entries = [document({ full_codemode: true, automations: false })]
+    const flags = Flag.resolve({ entries, channel: "dev", overrides: " media_blob , -full_codemode,unknown_flag" })
     expect(
-      [flags.todo, flags.schedules, flags.media_blob, flags.artifacts].map((flag) => [flag.enabled, flag.source]),
+      [flags.full_codemode, flags.automations, flags.media_blob, flags.artifacts].map((flag) => [
+        flag.enabled,
+        flag.source,
+      ]),
     ).toEqual([
       [false, "env"],
       [false, "config"],
@@ -51,12 +114,31 @@ describe("Flag.resolve", () => {
     ])
   })
 
+  test("a flag given settings is on", () => {
+    const entries = [document({ video_generate: {} })]
+    expect(Flag.resolve({ entries, channel: "latest" }).video_generate).toEqual({ enabled: true, source: "config" })
+  })
+
+  test("reads the old schedules key for automations, below the new key", () => {
+    expect(Flag.resolve({ entries: [document({ schedules: true })], channel: "latest" }).automations).toEqual({
+      enabled: true,
+      source: "config",
+    })
+    expect(
+      Flag.resolve({ entries: [document({ schedules: true, automations: false })], channel: "latest" }).automations,
+    ).toEqual({ enabled: false, source: "config" })
+    expect(Flag.resolve({ entries: [], channel: "latest", overrides: "schedules" }).automations).toEqual({
+      enabled: true,
+      source: "env",
+    })
+  })
+
   test("reads experimental from the highest-priority document that sets it, as before", () => {
     const flags = Flag.resolve({
-      entries: [document({ todo: true }), document({ subagent_depth: 2 }), document()],
+      entries: [document({ full_codemode: true }), document({ subagent_depth: 2 }), document()],
       channel: "latest",
     })
-    expect([flags.todo.enabled, flags.todo.source]).toEqual([false, "default"])
+    expect([flags.full_codemode.enabled, flags.full_codemode.source]).toEqual([false, "default"])
   })
 
   test("OPENCODE_FLAGS=all turns every flag on, and a -key in the same list still wins", () => {
@@ -94,8 +176,8 @@ describe("Flag.resolve", () => {
   test("a global all_flags survives a project experimental block, and a project all_flags: false stops it", () => {
     const global = document({ all_flags: true })
     expect(
-      Flag.resolve({ entries: [global, document({ subagent_depth: 2, todo: false })], channel: "latest" }),
-    ).toEqual({ ...every({ enabled: true, source: "config" }), todo: { enabled: false, source: "config" } })
+      Flag.resolve({ entries: [global, document({ subagent_depth: 2, full_codemode: false })], channel: "latest" }),
+    ).toEqual({ ...every({ enabled: true, source: "config" }), full_codemode: { enabled: false, source: "config" } })
     expect(Flag.resolve({ entries: [global, document({ all_flags: false })], channel: "latest" })).toEqual(
       every({ enabled: false, source: "default" }),
     )
@@ -103,20 +185,24 @@ describe("Flag.resolve", () => {
 })
 
 const it = testEffect(
-  Layer.mergeAll(
-    Config.testLayer([document({ artifacts: true })]),
-    App.layer({ channel: "latest" }),
-    Layer.succeed(Flag.Overrides, "schedules"),
-  ),
+  Flag.testLayer([document({ artifacts: true })], {
+    app: { channel: "latest" },
+    overrides: "automations",
+  }),
 )
 
 describe("Flag.enabled", () => {
-  it.effect("reads the Config, channel and OPENCODE_FLAGS in scope", () =>
+  it.effect("reads the Config, channel and OPENCODE_FLAGS in scope and follows config updates", () =>
     Effect.gen(function* () {
+      const config = yield* Config.Test
       expect(yield* Flag.enabled("artifacts")).toBe(true)
-      expect(yield* Flag.enabled("schedules")).toBe(true)
-      expect(yield* Flag.enabled("todo")).toBe(false)
-      expect((yield* Flag.all).schedules).toEqual({ enabled: true, source: "env" })
+      expect(yield* Flag.enabled("automations")).toBe(true)
+      expect(yield* Flag.enabled("full_codemode")).toBe(false)
+      expect((yield* Flag.all).automations).toEqual({ enabled: true, source: "env" })
+
+      yield* config.setEntries([document({ artifacts: false, full_codemode: true })])
+      expect(yield* Flag.enabled("artifacts")).toBe(false)
+      expect(yield* Flag.enabled("full_codemode")).toBe(true)
     }),
   )
 })

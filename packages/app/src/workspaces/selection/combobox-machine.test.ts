@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import {
   createPickerComboboxState,
+  ownsPickerEscape,
   pickerComboboxView,
   transitionPickerCombobox,
   type PickerComboboxContext,
@@ -17,6 +18,7 @@ const context: PickerComboboxContext = {
   root: "/projects",
   fallback: "/home/luke",
   locationDirectory: "/projects",
+  committed: "",
 }
 
 const key = (name: string, options: { shiftKey?: boolean; composing?: boolean } = {}): PickerComboboxEvent => ({
@@ -74,7 +76,6 @@ test("results of an earlier search never open the list for later input", () => {
   const late = run([{ type: "search.resolved", attempt: attempt(first.state), items: [directory("/x")] }], second.state)
 
   expect(second.effects).toEqual([
-    { type: "selection.clear" },
     { type: "search.start", attempt: attempt(first.state) + 1, query: "/projects/new", timeoutMs: 10_000 },
   ])
   expect(late.state).toBe(second.state)
@@ -121,18 +122,24 @@ test("arrow keys wrap through the list and reopen a closed list after a search",
   expect(pickerComboboxView(resolved.state).active).toBe(1)
 })
 
-test("Escape closes an open list without reaching the dialog, and otherwise passes through", () => {
+test("Escape closes an open list, then drops the draft, without reaching the dialog, and otherwise passes through", () => {
   const state = opened("~/op", [directory("/home/luke/a")])
   const escaped = run([key("Escape")], state)
-  const passed = run([key("Escape")], escaped.state)
+  const reverted = run([key("Escape")], escaped.state)
+  const passed = run([key("Escape")], reverted.state)
 
   expect(escaped).toMatchObject({
     state: { status: "closed", input: "~/op" },
     preventDefault: true,
     stopPropagation: true,
   })
+  expect(reverted).toMatchObject({
+    state: { status: "closed", input: "" },
+    preventDefault: true,
+    stopPropagation: true,
+  })
   expect(passed).toMatchObject({ preventDefault: false, stopPropagation: false })
-  expect(passed.state).toBe(escaped.state)
+  expect(passed.state).toBe(reverted.state)
 })
 
 test("Shift+Tab and IME Enter pass through", () => {
@@ -187,7 +194,7 @@ test("input typed before the location resolves searches once the location arrive
   const located = run([{ type: "context.changed" }], typed.state)
 
   expect(typed.state).toMatchObject({ status: "open", input: "~/op", items: [] })
-  expect(typed.effects).toEqual([{ type: "selection.clear" }])
+  expect(typed.effects).toEqual([])
   expect(located.state).toMatchObject({ status: "loading", input: "~/op" })
   expect(located.effects).toEqual([
     { type: "search.start", attempt: attempt(typed.state) + 1, query: "~/op", timeoutMs: 10_000 },
@@ -221,5 +228,59 @@ test("input equal to the open root has nothing to suggest", () => {
   const typed = run([{ type: "input.changed", value: "/projects/" }])
 
   expect(typed.state).toMatchObject({ status: "open", items: [] })
-  expect(typed.effects).toEqual([{ type: "selection.clear" }])
+  expect(typed.effects).toEqual([])
+})
+
+const selected = { ...context, committed: "/projects/acme/" }
+
+test("a draft never clears the selection, survives a selection that settles while typing, and Escape reverts it", () => {
+  const synced = run([{ type: "synced" }], createPickerComboboxState(), selected)
+  const edited = run([{ type: "input.changed", value: "/projects/ac" }], synced.state, selected)
+  const cleared = run([{ type: "cleared" }], synced.state, selected)
+
+  expect(synced.state).toEqual({ status: "closed", attempt: 0, input: "/projects/acme/" })
+  expect(edited.effects.map((effect) => effect.type)).toEqual(["search.start"])
+  expect(cleared.effects).toEqual([])
+
+  for (const draft of [edited.state, cleared.state]) {
+    const reverted = run([key("Escape")], draft, selected)
+
+    expect(reverted.state).toMatchObject({ status: "closed", input: "/projects/acme/" })
+    expect(reverted.effects).toEqual(draft.status === "loading" ? [{ type: "search.cancel" }] : [])
+  }
+
+  const moved = { ...selected, committed: "/projects/billing/" }
+
+  expect(run([{ type: "synced" }], edited.state, moved).state).toBe(edited.state)
+  expect(run([{ type: "synced" }], cleared.state, moved).state).toMatchObject({ input: "/projects/billing/" })
+
+  expect(ownsPickerEscape(edited.state, selected.committed)).toBeTrue()
+  expect(ownsPickerEscape(cleared.state, selected.committed)).toBeTrue()
+  expect(ownsPickerEscape(synced.state, selected.committed)).toBeFalse()
+
+  const escaped = run([key("Escape")], synced.state, selected)
+
+  expect(escaped).toMatchObject({ preventDefault: false, stopPropagation: false })
+  expect(escaped.state).toBe(synced.state)
+})
+
+test("confirming submits the selection, or commits a draft first and submits once it is selected", () => {
+  const synced = run([{ type: "synced" }], createPickerComboboxState(), selected).state
+  const typed = run([{ type: "input.changed", value: "/projects/billing" }], synced, selected).state
+
+  const listed = run(
+    [{ type: "search.resolved", attempt: attempt(typed), items: [directory("/projects/billing-service")] }],
+    typed,
+    selected,
+  ).state
+
+  expect(run([{ type: "submitted" }], synced, selected).effects).toEqual([{ type: "submit" }])
+  expect(run([{ type: "submitted" }], createPickerComboboxState(), selected).effects).toEqual([{ type: "submit" }])
+  expect(run([{ type: "submitted" }], typed, selected).effects).toEqual([
+    { type: "search.cancel" },
+    { type: "choose.directory", path: "/projects/billing", submit: true },
+  ])
+  expect(run([{ type: "submitted" }], listed, selected).effects).toEqual([
+    { type: "choose.directory", path: "/projects/billing-service", submit: true },
+  ])
 })

@@ -2,8 +2,8 @@
 // Reads the git history of each legal document's source files and writes the versions whose text
 // changed to src/lib/legal/history.ts, which the History list, "What changed" and the legal feed read.
 // Commits that only move or reformat the text (no sentence added or removed) are left out.
-// Needs the full history (not a shallow clone). Run from packages/console/app after a legal change
-// is committed: bun script/legal-history.ts
+// Needs the full history (not a shallow clone). Run from services/site after a legal change is
+// committed: bun script/legal-history.ts
 import { createHash } from "crypto"
 import { dirname, join } from "path"
 import { fileURLToPath } from "url"
@@ -12,13 +12,16 @@ const app = join(dirname(fileURLToPath(import.meta.url)), "..")
 const repo = "https://github.com/anomalyco/opencode"
 
 // Every file that has held a document's text, newest first. The text moved from the route files to
-// src/lib/legal, so a version is the text of all of them at that commit.
+// src/lib/legal, then to this service, and two copies existed for a day, so a version is the text of
+// the newest of them that existed at that commit.
 const documents = {
   "/legal/privacy-policy": [
+    "services/site/src/lib/legal/privacy-policy.ts",
     "packages/console/app/src/lib/legal/privacy-policy.ts",
     "packages/console/app/src/routes/legal/privacy-policy/index.tsx",
   ],
   "/legal/terms-of-service": [
+    "services/site/src/lib/legal/terms-of-service.ts",
     "packages/console/app/src/lib/legal/terms-of-service.ts",
     "packages/console/app/src/routes/legal/terms-of-service/index.tsx",
   ],
@@ -109,7 +112,7 @@ console.log(
     .join("\n"),
 )
 
-/** The document's source files at a commit, joined, and which of them existed. */
+/** The newest of the document's source files that existed at a commit. */
 async function source(sha: string, files: string[]) {
   const contents = await Promise.all(
     files.map(async (file) => {
@@ -117,7 +120,7 @@ async function source(sha: string, files: string[]) {
       return result.exitCode === 0 ? { file, text: result.stdout.toString() } : undefined
     }),
   )
-  const found = contents.filter((content) => content !== undefined)
+  const found = contents.filter((content) => content !== undefined).slice(0, 1)
   return { files: found.map((content) => content.file), text: found.map((content) => content.text).join("\n"), found }
 }
 

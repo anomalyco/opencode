@@ -79,8 +79,6 @@ export const {
     peekMedia?: PeekMediaUrlFn
     onNavigateToSession?: NavigateToSessionFn
     onSessionHref?: SessionHrefFn
-    /** Whether `experimental.background_compaction` is on for this location; automatic compactions then show quietly. */
-    backgroundCompaction?: boolean
   }) => {
     return {
       get store() {
@@ -94,9 +92,6 @@ export const {
       },
       get agents() {
         return props.agents ?? true
-      },
-      get backgroundCompaction() {
-        return props.backgroundCompaction === true
       },
       navigateToSession: props.onNavigateToSession,
       sessionHref: props.onSessionHref,

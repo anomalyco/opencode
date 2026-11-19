@@ -13,16 +13,19 @@ const newSession = '[data-component="new-session"] [data-component="composer-edi
 const typed = " Keep the existing error handling and add coverage."
 
 export default bench({
+  // What a launch sets up: the large draft, or the prompt history. Cases with the same one share a launch.
+  setupKey: (ctx) => (ctx.case.includes("history") ? "history" : "draft"),
+
   targets: {
     web: web({
       expect: { title: "OpenCode" },
       viewport: { width: 1440, height: 900 },
       async prepare(ctx) {
-        const { case: name, url } = ctx
+        const { setupKey, url } = ctx
         const server = new URL(url).origin
         const page = cached(ctx)
 
-        if (!name.includes("history")) {
+        if (setupKey === "draft") {
           await countDraftEncodes(page)
 
           return mockLargeDraft(page, server)
@@ -38,8 +41,8 @@ export default bench({
     }),
   },
 
-  async setup({ case: name, page }) {
-    if (name.includes("history")) {
+  async setup({ setupKey, page }) {
+    if (setupKey === "history") {
       await page.eval(seedHistory)
       await page.goto("/", { until: '[data-action="home-new-session"]', timeout: 60_000 })
       await page.idle()

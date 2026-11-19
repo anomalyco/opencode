@@ -33,6 +33,7 @@ export type BranchPickerEvent =
   /** A pointer, focus, blur or Escape outside the trigger while the popover waits for branches. */
   | { readonly type: "pending.dismiss" }
   | { readonly type: "interact.outside" }
+  | { readonly type: "checkout.selected" }
   | { readonly type: "branch.selected"; readonly branch: string }
   | { readonly type: "branches.loaded"; readonly attempt: number; readonly items: string[] }
   | { readonly type: "branches.failed"; readonly attempt: number }
@@ -45,6 +46,7 @@ export type BranchPickerEffect =
   | { readonly type: "branches.fetch"; readonly attempt: number; readonly directory: string }
   | { readonly type: "branches.abort"; readonly attempt: number }
   | { readonly type: "branch.choose"; readonly branch: string }
+  | { readonly type: "checkout.use" }
   | { readonly type: "focus.composer" }
 
 export type BranchPickerTransition = {
@@ -103,10 +105,13 @@ export function transitionBranchPicker(state: BranchPickerState, event: BranchPi
   if (event.type === "interact.outside")
     return state.popover === "open" ? { state: { ...state, popover: "outside" }, effects: NONE } : unchanged(state)
 
-  if (event.type === "branch.selected") {
+  if (event.type === "branch.selected" || event.type === "checkout.selected") {
     if (state.popover === "closed") return unchanged(state)
 
-    return closed(state, [{ type: "branch.choose", branch: event.branch }, FOCUS])
+    return closed(state, [
+      event.type === "checkout.selected" ? { type: "checkout.use" } : { type: "branch.choose", branch: event.branch },
+      FOCUS,
+    ])
   }
 
   if (event.directory !== state.directory) return unchanged(state)

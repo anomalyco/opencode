@@ -93,12 +93,11 @@ function SessionScreenContent(props: {
     closed: attachment.closed,
     open: (key) => attachment.openTab(key, props.view()),
     side: () => session.layout.view().side,
-    // Closing the last tab closes the side region, which opens with a new tab next time. The user's own hand closed
-    // it, so it goes at once.
+    // Closing the last tab closes the side region, which opens with a new tab next time. It slides shut as the toggle
+    // closes it.
     onEmptied: () => {
       if (!session.layout.view().side.opened()) return
       session.layout.view().side.toggle()
-      sideMotion.sync(false)
     },
     settled: (run) => sideMotion.whenSettled(run),
   })
@@ -302,6 +301,7 @@ function SessionScreenContent(props: {
             actions={actions}
             scroll={timeline.scroll}
             onResumeScroll={timeline.actions.resume}
+            focusComposer={composer.quote.focus}
             setScrollRef={timeline.view.setScrollRef}
             onScheduleScrollState={timeline.view.scheduleScrollState}
             follow={timeline.follow}
@@ -309,12 +309,29 @@ function SessionScreenContent(props: {
             onHistoryScroll={timeline.view.onHistoryScroll}
             centered={screen.centered()}
             reserveReviewToggle={!sideVisible()}
+            reviewToggle={
+              <div
+                data-slot="session-review-toggle"
+                onPointerDown={(event) => {
+                  event.stopPropagation()
+                  hideTimelineScrollbar()
+                }}
+                onClick={hideTimelineScrollbar}
+              >
+                <SessionReviewToggle
+                  onToggle={region.toggle}
+                  glyph={(fill) => {
+                    sideGlyph = fill
+                    paintSideGlyph(sideMotion.closed())
+                  }}
+                />
+              </div>
+            }
             onContentResize={timeline.view.contentResized}
             bottomInset={timeline.inset()}
             setVisibleRef={timeline.view.setVisibleRef}
             anchor={timeline.view.anchor}
             setRevealMessage={timeline.view.setRevealMessage}
-            setRevealPart={timeline.view.setRevealPart}
             reveal={timeline.view.reveal}
             setScrollToEnd={timeline.view.setScrollToEnd}
             setPage={timeline.view.setPage}
@@ -440,7 +457,6 @@ function SessionScreenContent(props: {
               screen={props.screen}
               model={model}
               suggestionBoundary={timeline.visible}
-              onReveal={timeline.actions.revealPart}
             />
           )}
         </Show>
@@ -453,23 +469,6 @@ function SessionScreenContent(props: {
     <>
       <div class="flex-1 min-h-0 flex flex-col gap-2 px-[var(--shell-inline-inset,8px)] pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
         <div ref={screen.panel.ref} data-pane-row class="relative flex-1 min-h-0 flex flex-col md:flex-row gap-2">
-          {/* Keep the control outside panel animations. */}
-          <Show when={isDesktop() && messagesReady() && session.identity.params.id}>
-            <div
-              class="absolute end-[var(--session-header-inset-end,12px)] top-0 z-30 h-12 flex items-center"
-              data-slot="session-review-toggle"
-              onPointerDown={hideTimelineScrollbar}
-              onClick={hideTimelineScrollbar}
-            >
-              <SessionReviewToggle
-                onToggle={region.toggle}
-                glyph={(fill) => {
-                  sideGlyph = fill
-                  paintSideGlyph(sideMotion.closed())
-                }}
-              />
-            </div>
-          </Show>
           <div
             ref={chat}
             class="relative z-10 min-w-0 shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none"

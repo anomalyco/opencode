@@ -330,6 +330,102 @@ story("shows a stable GitHub mark without changing link text or other sites", as
   }
 })
 
+for (const mode of ["cached", "streamed"] as const) {
+  story(`keeps the whole label of a link that contains inline code (${mode})`, async ({ page }) => {
+    await page.evaluate(
+      async ({ fixture, mode }) => {
+        const { mountMarkdown } = await import(fixture)
+        await mountMarkdown({
+          text: [
+            "Console [removes `providerCost` from managed standard and Go events](https://github.com/anomalyco/opencode/pull/1) **before** [writing them to the log queue](https://github.com/anomalyco/opencode/pull/2).",
+            "[`providerCost`](https://github.com/anomalyco/opencode/pull/3) and [`https://example.com/code`](https://example.com/target)",
+          ].join("\n\n"),
+          cached: mode === "cached",
+          streaming: mode === "streamed",
+        })
+      },
+      { fixture, mode },
+    )
+
+    const harness = page.getByTestId("markdown-fixture")
+    const markdown = harness.locator('[data-component="markdown"]')
+
+    if (mode === "streamed") await harness.getByLabel("Streaming").uncheck()
+    await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+
+    const mixed = markdown.getByRole("link", { name: "removes providerCost from managed standard and Go events" })
+    await expect(mixed).toHaveAttribute("href", "https://github.com/anomalyco/opencode/pull/1")
+    await expect(mixed.locator("code")).toHaveText("providerCost")
+    await expect(mixed.locator(".markdown-link-favicon[data-github]")).toHaveCount(1)
+    await expect(markdown.getByRole("link", { name: "writing them to the log queue" })).toHaveAttribute(
+      "href",
+      "https://github.com/anomalyco/opencode/pull/2",
+    )
+    await expect(markdown.locator("p").first()).toHaveText(
+      "Console removes providerCost from managed standard and Go events before writing them to the log queue.",
+    )
+
+    const code = markdown.getByRole("link", { name: "providerCost", exact: true })
+    await expect(code).toHaveAttribute("href", "https://github.com/anomalyco/opencode/pull/3")
+    await expect(code.locator("code")).toHaveText("providerCost")
+    await expect(markdown.getByRole("link", { name: "https://example.com/code" })).toHaveAttribute(
+      "href",
+      "https://example.com/target",
+    )
+  })
+}
+
+for (const theme of ["light", "dark"]) {
+  story(`styles inline code inside a link like the link label in ${theme}`, async ({ mount, page }) => {
+    await mount("components-markdown--complete-response", { globals: { theme } })
+    await expect(page.locator("html")).toHaveClass(new RegExp(theme))
+    await page.evaluate(async (fixture) => {
+      const { mountMarkdown } = await import(fixture)
+      await mountMarkdown({
+        text: "[removes `providerCost` from events](https://github.com/anomalyco/opencode/pull/1) and `plainCode`",
+        cached: true,
+      })
+    }, fixture)
+
+    const markdown = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+    await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+    const link = markdown.getByRole("link", { name: "removes providerCost from events" })
+    const code = link.locator("code")
+
+    const style = () =>
+      code.evaluate((code) => {
+        const style = getComputedStyle(code)
+
+        return {
+          color: style.color,
+          background: style.backgroundColor,
+          padding: style.padding,
+          font: style.fontFamily,
+        }
+      })
+
+    const plain = await markdown.locator("code", { hasText: "plainCode" }).evaluate((code) => {
+      const style = getComputedStyle(code)
+
+      return { color: style.color, backgroundColor: style.backgroundColor, fontFamily: style.fontFamily }
+    })
+
+    expect(await style()).toEqual({
+      color: await resolvedColor(page, "--v2-text-text-accent"),
+      background: "rgba(0, 0, 0, 0)",
+      padding: "0px",
+      font: plain.fontFamily,
+    })
+    expect(plain.backgroundColor).not.toBe("rgba(0, 0, 0, 0)")
+    expect(plain.color).not.toBe(await resolvedColor(page, "--v2-text-text-accent"))
+
+    await link.hover()
+    await expect(link).toHaveCSS("text-decoration-line", "underline")
+    const hover = await resolvedColor(page, "--v2-text-text-accent-hover")
+    await expect.poll(async () => (await style()).color).toBe(hover)
+  })
+}
+
 story("keeps favicon space stable across loading and failure without fetching private hosts", async ({ page }) => {
   const requested: string[] = []
   let release: () => void = () => undefined
@@ -454,7 +550,7 @@ story("selects the whole paragraph on triple click across link icons", async ({ 
   await page.evaluate(async (fixture) => {
     const { mountMarkdown } = await import(fixture)
     await mountMarkdown({
-      text: "The release is running ([run 41750815701](https://github.com/Hona/strobe/actions/runs/41750815701)), see [MDN](https://developer.mozilla.org/docs) for more.",
+      text: "The release is running ([run 41750815701](https://github.com/anomalyco/strobe/actions/runs/41750815701)), see [MDN](https://developer.mozilla.org/docs) for more.",
       cached: true,
     })
   }, fixture)

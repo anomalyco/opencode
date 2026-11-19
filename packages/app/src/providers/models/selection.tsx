@@ -5,7 +5,7 @@ import { batch, createEffect, createMemo, createRoot, createSignal, onCleanup, u
 import { Predicate, Schema, SchemaGetter } from "effect"
 import { useModels } from "@/providers/models/models"
 import { useSettings } from "@/settings/model"
-import { syncWhileBooting, useProviders } from "@/providers/catalog/providers"
+import { useProviders } from "@/providers/catalog/providers"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { usePlatform, type Platform } from "@/runtime/platform/platform"
@@ -331,7 +331,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const directory = sdk().directory
 
       if (!directory) return
-      void syncWhileBooting(() => data.location.agent.sync({ directory })).catch(() => undefined)
+      void data.location.agent.sync({ directory }).catch(() => undefined)
     })
 
     const agentsVisible = createMemo(() => settings.visibility.customAgents() || hasCustomAgent(list()))

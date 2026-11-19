@@ -1,4 +1,4 @@
-import "./products-order.css"
+import "./products-order.dev.css"
 import { createEffect, createSignal, onCleanup, onMount } from "solid-js"
 import { designMode } from "./design-copy"
 import { productPages, type PageSlug } from "./product-data"

@@ -7,7 +7,7 @@
       {
         "id": "privacy-policy-table-of-contents",
         "title": "Privacy Policy Table of Contents",
-        "body": " What this Privacy Policy CoversPersonal DataCategories of Personal Data We CollectOur Commercial or Business Purposes for Collecting Personal DataOther Permitted Purposes for Processing Personal DataCategories of Sources of Personal DataHow We Disclose Your Personal DataTracking Tools and Opt-OutProduct Analytics on opencode.aiData SecurityPersonal Data of ChildrenCalifornia Resident Rights (\"CCPA\")Colorado Resident Rights (\"CPA\")Connecticut Resident Rights (\"CTDPA\")Delaware Resident Rights (\"DPDPA\")Iowa Resident Rights (\"ICDPA\")Montana Resident Rights (\"MCDPA\")Nebraska Resident Rights (\"NDPA",
+        "body": " What this Privacy Policy CoversPersonal DataCategories of Personal Data We CollectOur Commercial or Business Purposes for Collecting Personal DataOther Permitted Purposes for Processing Personal DataCategories of Sources of Personal DataHow We Disclose Your Personal DataIntegrations with Third-Party ServicesTracking Tools and Opt-OutProduct Analytics on opencode.aiData SecurityPersonal Data of ChildrenCalifornia Resident Rights (\"CCPA\")Colorado Resident Rights (\"CPA\")Connecticut Resident Rights (\"CTDPA\")Delaware Resident Rights (\"DPDPA\")Iowa Resident Rights (\"ICDPA\")Montana Resident Rights (\"",
         "path": "/legal/privacy-policy",
         "document": "Privacy Policy"
       },
@@ -99,6 +99,13 @@
         "id": "data-that-is-not-personal-data",
         "title": "Data that is Not Personal Data",
         "body": " We may create aggregated, de-identified or anonymized data from the Personal Data we collect, including by removing information that makes the data personally identifiable to a particular user. We may use such aggregated, de-identified or anonymized data and disclose it with third parties for our lawful business purposes, including to analyze, build and improve the Services and promote our business, provided that we will not disclose such data in a manner that could identify you.",
+        "path": "/legal/privacy-policy",
+        "document": "Privacy Policy"
+      },
+      {
+        "id": "integrations",
+        "title": "Integrations with Third-Party Services",
+        "body": " OpenCode Console lets a workspace connect third-party services (\"Connected Services\"), such as Slack, Zoom, HubSpot, GitHub, Google Workspace and Microsoft 365, so that its members' OpenCode agents can use them. This section explains how we handle data from Connected Services. It supplements the rest of this Privacy Policy and controls where they conflict. What we receive and store. To connect a Connected Service, you sign in with that service and authorize OpenCode Console, or you or a workspace administrator enter an API key. We encrypt and store the access and refresh tokens or API keys, a",
         "path": "/legal/privacy-policy",
         "document": "Privacy Policy"
       },

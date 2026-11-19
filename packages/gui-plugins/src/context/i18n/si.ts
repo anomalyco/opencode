@@ -28,4 +28,5 @@ export default {
   "export.success.description": "සැසිය {{filename}} වෙත සුරකින ලදී",
   "export.failed.title": "සැසිය අපනයනය කිරීමට අසමත් විය",
   "export.failed.description": "සැසිය නිර්යාත කිරීමේදී දෝෂයක් ඇති විය",
+  "usage.toggle": "සැසි සන්දර්භය ටොගල් කරන්න",
 }

@@ -21,7 +21,9 @@ import { SubagentBar } from "./subagent-bar"
 type DockArgs = {
   question: boolean
   permission: boolean
+  responding: boolean
   websearch: boolean
+  providers: "ready" | "loading" | "loadFailed" | "empty"
   queue: number
   subagent: boolean
 }
@@ -64,16 +66,25 @@ function ComposerDocksPreview(props: DockArgs) {
 
   const dequeue = (id: string) => setState("rows", (rows) => rows.filter((index) => `queued_${index}` !== id))
 
+  // Keep a dismissed request closed when an unrelated inspector field changes.
+  for (const key of ["question", "permission", "websearch", "subagent"] as const) {
+    createEffect(
+      on(
+        () => props[key],
+        (value) => setState(key, value),
+        { defer: true },
+      ),
+    )
+  }
+
   createEffect(
     on(
-      () => [props.question, props.permission, props.websearch, props.queue, props.subagent] as const,
-      ([question, permission, websearch, queue, subagent]) => {
-        setState({ question, permission, websearch, subagent })
-        queueTo(queue)
-      },
+      () => props.providers,
+      (value) => setState("providers", value),
       { defer: true },
     ),
   )
+  createEffect(on(() => props.queue, queueTo, { defer: true }))
 
   const replay = (id: string, label: string, run: () => void) =>
     onCleanup(motionTuning.action({ id: `docks.${id}`, label, group: "Composer", subsection: "Docks", run }))
@@ -115,25 +126,28 @@ function ComposerDocksPreview(props: DockArgs) {
         state.question ? { ...activeQuestionRequest, id: `${activeQuestionRequest.id}:${state.revision}` } : undefined,
       websearch: {
         request: () => (state.websearch ? websearchRequest : undefined),
-        options: () => [
-          { value: "exa", label: "Exa" },
-          { value: "parallel", label: "Parallel" },
-        ],
+        options: () =>
+          state.providers !== "ready"
+            ? []
+            : [
+                { value: "exa", label: "Exa" },
+                { value: "parallel", label: "Parallel" },
+              ],
         selected: () => state.searchProvider,
         specific: () => false,
-        loading: () => false,
-        loadFailed: () => false,
+        loading: () => state.providers === "loading",
+        loadFailed: () => state.providers === "loadFailed",
         failed: () => false,
         optionUnavailable: () => false,
         sending: () => false,
         connected: () => true,
         select: (value) => setState("searchProvider", value),
-        retry() {},
+        retry: () => setState("providers", "ready"),
         submit: async () => void setState("websearch", false),
       } satisfies WebSearchRequestModel,
       elicitationRequest: () => undefined,
-    permissionRequest: () => (state.permission ? activePermissionRequest : undefined),
-      permissionResponding: () => false,
+      permissionRequest: () => (state.permission ? activePermissionRequest : undefined),
+      permissionResponding: () => props.responding,
       decide: () => {
         deciding = true
         setState("permission", false)
@@ -217,8 +231,17 @@ export default {
   },
   argTypes: {
     queue: { control: { type: "range", min: 0, max: 4, step: 1 } },
+    providers: { options: ["ready", "loading", "loadFailed", "empty"] },
   },
-  args: { question: false, permission: false, websearch: false, queue: 0, subagent: false } satisfies DockArgs,
+  args: {
+    question: false,
+    permission: false,
+    responding: false,
+    websearch: false,
+    providers: "ready",
+    queue: 0,
+    subagent: false,
+  } satisfies DockArgs,
   render: (args: DockArgs) => <ComposerDocksPreview {...args} />,
 }
 
@@ -233,6 +256,10 @@ export const Question = { args: { question: true } }
 export const QuestionAndPermission = { args: { question: true, permission: true } }
 
 export const WebSearch = { args: { websearch: true } }
+
+export const WebSearchRetry = { args: { websearch: true, providers: "loadFailed" } }
+
+export const PermissionResponding = { args: { permission: true, responding: true } }
 
 export const Subagent = { args: { subagent: true } }
 

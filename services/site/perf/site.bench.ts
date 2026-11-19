@@ -1,4 +1,4 @@
-// Main-thread work on the site's pages and interactions, for strobe (https://github.com/Hona/strobe).
+// Main-thread work on the site's pages and interactions, for strobe (https://github.com/anomalyco/strobe).
 // Each variant is the production build (script/build.ts) served in workerd by perf/serve.ts.
 //
 //   strobe bench services/site/perf/site.bench.ts --base origin/dev --head . --headless

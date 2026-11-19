@@ -34,14 +34,15 @@
   unicode-bidi: isolate;
 }
 
-/* Menu rows that end in an ellipsis: the cut goes at the end of the label's own text (Latin platform
-   names and commands end on the right), while the row stays against the menu's start edge. */
-[dir="rtl"] [data-slot="menu"] [data-slot="label"] {
+/* Menu and phone sheet rows that end in an ellipsis: the cut goes at the end of the label's own text
+   (Latin platform names and commands end on the right), while the row stays against the menu's
+   start edge. */
+[dir="rtl"] :is([data-slot="menu"], [data-component="sheet"]) [data-slot="label"] {
   unicode-bidi: plaintext;
   text-align: right;
 }
 
-[dir="rtl"] [data-slot="menu"] [data-slot="command"] {
+[dir="rtl"] :is([data-slot="menu"], [data-component="sheet"]) [data-slot="command"] {
   direction: ltr;
   unicode-bidi: isolate;
   text-align: right;

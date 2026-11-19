@@ -28,4 +28,5 @@ export default {
   "export.success.description": "Η συνεδρία αποθηκεύτηκε στο {{filename}}",
   "export.failed.title": "Αποτυχία εξαγωγής συνεδρίας",
   "export.failed.description": "Παρουσιάστηκε σφάλμα κατά την εξαγωγή της συνεδρίας",
+  "usage.toggle": "Εναλλαγή περιβάλλοντος συνεδρίας",
 }

@@ -1,4 +1,4 @@
-import { createEffect, createSignal, on, onCleanup, type JSX } from "solid-js"
+import { createEffect, createSignal, createUniqueId, on, onCleanup, type JSX } from "solid-js"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { useCommand, type CommandOption } from "@/shell/commands/command"
 import { adjacentTabKey } from "@/shell/titlebar/tab-order"
@@ -19,6 +19,7 @@ import type { SessionRevert } from "@/session/revert"
 import { usePluginClaims, usePluginScoped } from "@/runtime/plugin/commands"
 import type { Region } from "@/runtime/plugin/panels"
 import { sideTabShortcuts } from "@/runtime/plugin/closed-tabs"
+import { useTabs } from "@/shell/tabs/tabs"
 import {
   createCloseTabGuardState,
   createSessionCommandsState,
@@ -53,6 +54,7 @@ export type SessionCommandContext = {
     move: () => Promise<void>
   }
   navigateMessageByOffset: (offset: number) => void
+  jumpToMessage: (id: string) => void
   revert: Pick<SessionRevert, "undo" | "redo" | "canUndo" | "canRedo">
   focusInput: () => void
   // The composer's model, which a compaction runs with.
@@ -67,7 +69,13 @@ const withCategory = (category: string) => {
 }
 
 // Loads a dialog's chunk and returns its renderer.
-async function loadDialog(kind: SessionDialogKind): Promise<() => JSX.Element> {
+async function loadDialog(kind: SessionDialogKind, context: SessionCommandContext): Promise<() => JSX.Element> {
+  if (kind === "jump") {
+    const { DialogJumpToMessage } = await import("./dialog-jump-to-message")
+
+    return () => <DialogJumpToMessage session={context.session} onJump={context.jumpToMessage} />
+  }
+
   if (kind === "fork") {
     const { DialogFork } = await import("@/session/commands/fork-dialog")
 
@@ -99,6 +107,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const exporter = useSessionExporter()
   const pluginScoped = usePluginScoped()
   const pluginClaims = usePluginClaims()
+  const tabs = useTabs()
 
   // The file the selected side tab shows; other tabs have no line selection.
   const activeFile = () => actions.region.selected()?.tab.file
@@ -113,18 +122,44 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const inSide = actions.region.focus
-  // ⌘T and ⌘W inside the side region open and close its tabs, unless the focused panel binds the key itself there.
+  // ⌘T inside the side region opens one of its tabs, unless the focused panel binds the key itself there.
   const sideKey = (event: KeyboardEvent) => inSide(event) && !pluginClaims(event)
+
+  // As in a browser, ⌘⇧T reopens whichever tab closed last, side or session.
+  const reopensSideTab = () => {
+    const side = actions.region.lastClosedTime()
+
+    if (side === undefined) return false
+    const session = tabs.lastClosedTime()
+
+    return session === undefined || side >= session
+  }
+
   // ⌘W on the side panel's last tab, or on a panel with nothing left to close, closes the panel and moves focus out of
   // it, where one press too many would close the session tab; the guard swallows that press.
   const [closeGuard, setCloseGuard] = createSignal(createCloseTabGuardState())
   let settleFrame: number | undefined
+  let quietTimer: ReturnType<typeof setTimeout> | undefined
 
   const dispatchCloseGuard = (event: CloseTabGuardEvent) => {
     const next = transitionCloseTabGuard(closeGuard(), event)
 
     if (next.state !== closeGuard()) setCloseGuard(next.state)
     next.effects.forEach((effect) => {
+      if (effect.type === "quiet.schedule" || effect.type === "quiet.cancel") {
+        clearTimeout(quietTimer)
+        quietTimer = undefined
+
+        if (effect.type === "quiet.cancel") return
+        const attempt = effect.attempt
+        quietTimer = setTimeout(() => {
+          quietTimer = undefined
+          dispatchCloseGuard({ type: "quiet.elapsed", attempt })
+        }, effect.timeoutMs)
+
+        return
+      }
+
       if (settleFrame !== undefined) cancelAnimationFrame(settleFrame)
       settleFrame = undefined
 
@@ -199,6 +234,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const permissionsCommand = withCategory(language.t("command.category.permissions"))
 
   const [commandsState, setCommandsState] = createSignal(createSessionCommandsState())
+  const jumpDialog = createUniqueId()
+  onCleanup(() => dialog.close(jumpDialog))
   // Renders each dialog once its chunk has loaded.
   const dialogs: Partial<Record<SessionDialogKind, () => JSX.Element>> = {}
   let dialogTimer: ReturnType<typeof setTimeout> | undefined
@@ -228,7 +265,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       const kind = effect.kind
       clearTimeout(dialogTimer)
       dialogTimer = setTimeout(() => dispatchCommands({ type: "dialog.timed-out", attempt }), effect.timeoutMs)
-      loadDialog(kind).then(
+      loadDialog(kind, actions).then(
         (render) => {
           dialogs[kind] = render
           dispatchCommands({ type: "dialog.loaded", attempt })
@@ -249,7 +286,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     if (effect.type === "dialog.show") {
       const render = dialogs[effect.kind]
 
-      if (render) dialog.show(render)
+      if (render) dialog.show(render, undefined, effect.kind === "jump" ? jumpDialog : undefined)
 
       return
     }
@@ -526,7 +563,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         keybind: "mod+w",
         follows: "tab.close",
         hidden: !tab,
-        when: (event) => (side ? sideKey(event) : selectCloseTabSwallowed(closeGuard())),
+        // While the side region is open, ⌘W closes its tabs wherever focus is.
+        when: (event) => (side ? !pluginClaims(event) : selectCloseTabSwallowed(closeGuard())),
         onSelect: (source) => {
           if (!side) return
           closeTab()
@@ -547,13 +585,12 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
           when: sideKey,
           onSelect: openSideTab,
         }),
-      // As in a browser: in the side panel, ⌘⇧T reopens a side tab rather than a session tab.
       fileCommand({
         id: "file.tab.reopen",
         title: "",
         keybind: settings.keybinds.get("tab.reopenClosed") ?? "mod+shift+t",
         hidden: true,
-        when: inSide,
+        when: (event) => reopensSideTab() && !pluginClaims(event),
         onSelect: () => actions.region.reopen(),
       }),
       cycle &&
@@ -634,6 +671,14 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   ]
 
   const messageCmds = () => [
+    sessionCommand({
+      id: "session.jumpToMessage",
+      title: language.t("dialog.jump.title"),
+      description: language.t("command.session.jumpToMessage.description"),
+      keybind: "mod+alt+g",
+      disabled: !actions.session.identity.params.id,
+      onSelect: () => openDialog("jump"),
+    }),
     sessionCommand({
       id: "message.previous",
       title: language.t("command.message.previous"),

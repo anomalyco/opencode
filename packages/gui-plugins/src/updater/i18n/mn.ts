@@ -29,4 +29,12 @@ export default {
   "releaseNotes.action.next": "Дараа нь",
   "releaseNotes.action.hideFuture": "Ирээдүйд эдгээрийг бүү харуул",
   "releaseNotes.media.alt": "Хувилбарыг урьдчилан үзэх",
+  "action.reload": "Шинэчлэхийн тулд дахин ачаалах",
+  "action.reloading": "Дахин ачаалж байна…",
+  "web.ready.title": "Шинэчлэлт бэлэн",
+  "web.ready.message": "OpenCode-ийн шинэ хувилбар бэлэн боллоо. Нээлттэй бүх цонхонд ашиглахын тулд дахин ачаална уу.",
+  "web.reload": "Дахин ачаалах",
+  "web.reset.title": "Серверээс дахин ачаалах",
+  "web.reset.description": "Аппын хадгалсан хуулбарыг цэвэрлэж, серверийн одоогийн хувилбарыг ачаалах",
+  "web.reset.action": "Серверээс дахин ачаалах",
 }

@@ -74,7 +74,7 @@ export function RecentlyClosedTabsMenu(props: {
         if (!ctx) return []
 
         return ctx.data.session
-          .apply(mergeHomeSessionIndex(sessions[index]?.data?.() ?? [], ctx.data.session.list()))
+          .apply(mergeHomeSessionIndex(sessions[index]?.data?.() ?? [], ctx.data.session.known()))
           .filter((session) => !sessionIDHasOpenTab(tabs.store, server, session.id))
           .filter(
             (session) => !recent().some((entry) => entry.tab.server === server && entry.tab.sessionId === session.id),
@@ -141,9 +141,9 @@ export function RecentlyClosedTabsMenu(props: {
                 ref={search}
                 type="search"
                 dir="auto"
-                leadingIcon={<Icon name="magnifying-glass" size="small" />}
+                leadingIcon={<Icon name="magnifying-glass" />}
                 showClearButton
-                clearIcon="circle-xmark"
+                clearIcon="close"
                 onClearClick={() => {
                   setState("query", "")
                   search?.focus()

@@ -33,9 +33,9 @@
     outline: none;
   }
 
-  [data-component="button-v2"]:is(:focus-visible, [data-state="focus"]):not(:disabled):not([data-variant="loading"]) {
+  [data-component="button-v2"]:is(:focus-visible, [data-state="focus"]):not(:disabled) {
     outline: 2px solid var(--v2-border-border-focus);
-    outline-offset: 2.5px;
+    outline-offset: 2px;
   }
 
   [data-component="button-v2"][data-size="normal"] {
@@ -83,7 +83,9 @@
       linear-gradient(90deg, var(--v2-background-bg-button-neutral) 0%, var(--v2-background-bg-button-neutral) 100%);
   }
 
-  [data-component="button-v2"][data-variant="neutral"]:is(:active, [data-state="pressed"]):not(:disabled) {
+  [data-component="button-v2"][data-variant="neutral"]:is(:active, [data-state="pressed"], [data-expanded]):not(
+      :disabled
+    ) {
     background-image:
       linear-gradient(
         90deg,

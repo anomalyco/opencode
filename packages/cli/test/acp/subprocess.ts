@@ -37,6 +37,7 @@ type AcpProcess = {
   readonly pid: number
   readonly exited: Promise<number>
   readonly request: <T>(method: string, params?: unknown) => Promise<JsonRpcResponse<T>>
+  readonly waitForMessage: (predicate: Waiter["predicate"], description: string) => Promise<JsonRpcMessage>
   readonly close: () => Promise<number>
   readonly stderr: () => string
   readonly [Symbol.asyncDispose]: () => Promise<void>
@@ -96,14 +97,25 @@ export async function createAcpFixture(
         [...processes].map((process) => process.close().catch(() => process[Symbol.asyncDispose]())),
       )
       const serverResults = await Promise.allSettled([llm.stop(true)])
-      const directoryResults = await Promise.allSettled([
-        fs.rm(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }),
-      ])
+      const directoryResults = await Promise.allSettled([removeRoot(root)])
       const failure = [...processResults, ...serverResults, ...directoryResults].find(
         (result): result is PromiseRejectedResult => result.status === "rejected",
       )
       if (failure) throw failure.reason
     },
+  }
+}
+
+// ACP exits without waiting for its standalone server, which holds files under root until its own teardown ends.
+// On Windows removal fails with EBUSY until then, which can outlast fs.rm's own retries, so retry for longer.
+async function removeRoot(root: string, deadline = Date.now() + 15_000): Promise<void> {
+  try {
+    await fs.rm(root, { recursive: true, force: true })
+  } catch (error) {
+    const busy = !!error && typeof error === "object" && "code" in error && error.code === "EBUSY"
+    if (!busy || Date.now() >= deadline) throw error
+    await Bun.sleep(100)
+    return removeRoot(root, deadline)
   }
 }
 
@@ -294,6 +306,7 @@ function spawnAcp(input: { readonly env: Record<string, string | undefined> }): 
     pid: child.pid,
     exited: child.exited,
     request,
+    waitForMessage: (predicate, description) => take(predicate, 10_000, description),
     async close() {
       if (!inputClosed) {
         inputClosed = true

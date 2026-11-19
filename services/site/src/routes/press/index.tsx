@@ -4,7 +4,6 @@ import { Marked } from "~/component/site/marked"
 import "~/component/site/doc-list.css"
 import "./index.css"
 import { Title, Meta } from "@solidjs/meta"
-import { createAsync } from "@solidjs/router"
 import { Dynamic } from "solid-js/web"
 import { createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch, type JSX } from "solid-js"
 import { LocaleLinks } from "~/component/locale-links"
@@ -27,6 +26,7 @@ import { Faq } from "~/component/faq"
 import { ContentsMenu, OnThisPage, SectionHeading, slug } from "~/component/site/on-this-page"
 import { AgentRulesButton } from "~/component/site/agent-rules-button"
 import { useI18n } from "~/context/i18n"
+import { pageData } from "~/lib/page-data"
 import { useLanguage } from "~/context/language"
 import { englishText, localize } from "~/i18n/content"
 import { pressSource } from "~/i18n/content/areas/press"
@@ -36,6 +36,7 @@ import { pressContent, pressMarkdown, pressReleases } from "~/lib/press-content"
 import { MediaGallery } from "./media-gallery"
 import { PageTitle } from "~/component/site/sticky-title"
 import { ExternalArrow } from "~/component/site/icons"
+import { checkPath, copyPath } from "~/component/site/icon-paths"
 // The product list styles (product-list.css). This page used to get them only once the product
 // page's code had loaded in the background; pages now load other pages' code on intent.
 import "~/component/site/product-list.css"
@@ -57,12 +58,13 @@ export default function Press() {
   // Heading ids stay English in every locale, so links to /press#contact keep working.
   const english = createMemo(() => englishText(content(), pressSource))
   const anchor = (text: string) => slug(english().get(text) ?? text)
-  const data = createAsync(() => changelog())
+  const data = pageData(() => changelog())
   const releases = createMemo(() => pressReleases(data() ?? [], language.route, language.tag(language.locale())))
   const markdown = useMarkdown("/press", pressMarkdown, { releases: () => data() ?? [] })
   const [copied, setCopied] = createSignal<string>()
   // The boilerplate accordion: OpenCode open from the server render. Rows animate only once someone
-  // has toggled one, so the first paint never runs the opening animation.
+  // has toggled one, so the first paint never runs the opening animation. The static page drives the
+  // same markup from src/client/islands/press.ts.
   const [openProducts, setOpenProducts] = createSignal(["OpenCode"])
   const [accordionReady, setAccordionReady] = createSignal(false)
   onMount(() => {
@@ -249,6 +251,7 @@ export default function Press() {
       </Show>
 
       <Section title={content().about.title} design="pressBoilerplate pressCopyStyle">
+        <p data-slot="text">{content().about.body}</p>
         {/* OpenCode first, then the company's other products, each a row of the site's FAQ accordion
             with its long and short text. OpenCode starts open; any number of rows can be open. */}
         <ul data-component="faq" data-slot="boilerplate-accordion" data-ready={accordionReady() ? "" : undefined}>
@@ -696,10 +699,11 @@ function DownloadIcon() {
   )
 }
 
+// The check the static page's script draws over the copy icon's path (src/client/copy.ts).
 function CheckIcon() {
   return (
     <svg data-slot="download-icon" width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-      <path d="M4.5 10.5L8.25 14.25L15.5 6" stroke="currentColor" stroke-width="1.5" />
+      <path d={checkPath} stroke="currentColor" stroke-width="1.5" stroke-linecap="square" />
     </svg>
   )
 }
@@ -707,7 +711,7 @@ function CheckIcon() {
 function CopyIcon() {
   return (
     <svg data-slot="download-icon" width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-      <path d="M7.5 7.5V3.75H16.25V12.5H12.5M3.75 7.5H12.5V16.25H3.75V7.5Z" stroke="currentColor" stroke-width="1.5" />
+      <path d={copyPath} stroke="currentColor" stroke-width="1.5" />
     </svg>
   )
 }

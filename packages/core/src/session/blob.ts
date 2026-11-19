@@ -6,8 +6,6 @@ import { Cause, Context, Effect, Option, Schema } from "effect"
 import { map } from "effect/Array"
 import type { Attachment, FileAttachment } from "@opencode/schema/prompt"
 import type { Tool } from "@opencode/schema/tool"
-import { App } from "../app.js"
-import { Config } from "../config.js"
 import { DatabaseBatch } from "../database/batch.js"
 import type { Database } from "../database/database.js"
 import { Flag } from "../flag.js"
@@ -259,21 +257,19 @@ export interface Owner {
 type Pending = Map<string, typeof BlobTable.$inferInsert>
 type AssistantPart = SessionMessage.Assistant["content"][number]
 
-/** Reads the `media_blob` flag from the Config in scope on every call; without one, it is off. */
+/** Reads the `media_blob` flag from the Flag.Service in scope on every call; without one, it is off. */
 export const enabled = Effect.gen(function* () {
-  const config = yield* Effect.serviceOption(Config.Service)
-  if (Option.isNone(config)) return false
-  return yield* Flag.enabled("media_blob")
+  const flag = yield* Effect.serviceOption(Flag.Service)
+  if (Option.isNone(flag)) return false
+  return yield* flag.value.enabled("media_blob")
 })
 
 /**
- * {@link enabled} as `session`'s location configures it, where its media is written, for the build channel in `app`
- * (location services don't carry it). Off when that location can't boot or load its config, which surfaces as
- * defects too, so a broken location never fails the caller.
+ * {@link Flag.enabled} for `media_blob` as `session`'s location configures it, where its media is written. Off when
+ * that location can't boot or load its config, which surfaces as defects too, so a broken location never fails the caller.
  */
-export const enabledFor = (instances: Instance.Interface, app: App.Info, session: SessionSchema.Info) =>
-  enabled.pipe(
-    Effect.provideService(App.Metadata, app),
+export const enabledFor = (instances: Instance.Interface, session: SessionSchema.Info): Effect.Effect<boolean> =>
+  Flag.enabled("media_blob").pipe(
     instances.provide(session),
     Effect.catchCause((cause) =>
       Cause.hasInterrupts(cause)
