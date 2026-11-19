@@ -15,6 +15,7 @@ The provider is called "Claude Agent", with the ID `claude-agent`. The SDK's [br
 ### Login
 
 - opencode runs the user's own `claude`, found on `PATH` or set with `OPENCODE_CLAUDE_PATH`. It only uses the public SDK. It never sits between Claude Code and Anthropic or changes Claude Code's requests.
+- On Windows, npm installs `claude` as a batch file, which cannot start without a shell. opencode runs that launcher through `cmd.exe`, so the installed copy works, including the one Claude Code updates itself.
 - opencode never reads Claude Code's saved login. Users sign in with `claude` in their terminal. `/connect` only records that they chose this login method.
 - Any existing login works: a subscription, an API key or a cloud account.
 
