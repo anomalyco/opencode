@@ -3,12 +3,13 @@ export * as OpencodeMemoryCapture from "./opencode-memory-capture.js"
 import { Option, Schema } from "effect"
 
 /**
- * One thing a session did, as the harness saw it: recorded every turn, mechanically, without a model. `prompt` is the
- * user's message, `shell` a finished command, `edit` and `read` the files a tool changed or read, `commit` a commit
+ * One thing a session did, as the harness saw it: recorded every turn, mechanically, without a model. `prompt` is a
+ * message the session was given, `user` when a person typed it (not a subagent's task from its parent, a command's
+ * template or an automation), `shell` a finished command, `edit` and `read` the files a tool changed or read, `commit` a commit
  * the session made, `subtask` a subagent finishing, `compaction` the conversation being compacted.
  */
 export type Event =
-  | { readonly type: "prompt"; readonly text: string; readonly correction: boolean }
+  | { readonly type: "prompt"; readonly text: string; readonly correction: boolean; readonly user: boolean }
   | {
       readonly type: "shell"
       readonly command: string
@@ -29,10 +30,10 @@ export type Boundary = "task" | "commit" | "test" | "correction" | "rule" | "sub
 
 /**
  * A user's message that states a standing team rule or decision rather than asking for this task's work. Narrow on
- * purpose: each one is a distillation of its own.
+ * purpose: each one is a distillation of its own, so a phrase ordinary task requests use ("in this repo") isn't one.
  */
 const STATED =
-  /\b(?:from now on|going forward|in this repo(?:sitory)?|(?:we|our team|the team) (?:always|never|use|prefer|don'?t|do not)|our (?:convention|rule|policy|style)|team (?:rule|convention|decision|policy))\b/i
+  /\b(?:from now on|going forward|(?:we|our team|the team) (?:always|never|use|prefer|don'?t|do not)|our (?:convention|rule|policy|style)|team (?:rule|convention|decision|policy))\b/i
 
 /**
  * The boundary `event` closes after `segment`, the events since the last one, or undefined. A new task message, a
@@ -42,7 +43,7 @@ const STATED =
  * run, no file changed): a message that reads as a correction corrects work.
  */
 export function boundary(segment: ReadonlyArray<Event>, event: Event): Boundary | undefined {
-  if (event.type === "prompt" && STATED.test(event.text)) return "rule"
+  if (event.type === "prompt" && event.user && STATED.test(event.text)) return "rule"
   const worked = segment.some((item) => item.type === "shell" || item.type === "edit")
   if (event.type === "commit") return "commit"
   if (event.type === "shell" && event.test && !event.failed)
@@ -60,7 +61,8 @@ const MAX_LOG = 16_000
 export function render(segment: ReadonlyArray<Event>) {
   const lines = segment.map((event, index) => {
     const at = `#${index + 1}`
-    if (event.type === "prompt") return `${at} user${event.correction ? " (correcting)" : ""}: ${event.text}`
+    if (event.type === "prompt")
+      return `${at} ${event.user ? "user" : "given task"}${event.correction ? " (correcting)" : ""}: ${event.text}`
     if (event.type === "shell")
       return `${at} ran \`${event.command}\` → exit ${event.exit}${event.failed ? " FAILED" : ""}\n${event.tail}`
     if (event.type === "edit") return `${at} changed ${event.files.join(", ")}`
@@ -138,7 +140,7 @@ const MIN_QUOTE = 12
 
 /**
  * Whether the user's own words back a candidate: `confirmed` when it says the user stated it and quotes, word for word,
- * a message of theirs in the segment that reads as a rule, decision or correction (the user's confirmation, which
+ * a message a person typed in the segment that reads as a rule, decision or correction (the user's confirmation, which
  * Console promotes on); `observed` for a candidate from the work itself; `dropped` for a claimed user statement that
  * isn't one: a misquote, or a task request, which holds for that task only.
  */
@@ -146,7 +148,9 @@ export function backing(candidate: Candidate, segment: ReadonlyArray<Event>): "c
   if (candidate.basis !== "user") return "observed"
   const quote = flat(candidate.quote ?? "")
   if (quote.length < MIN_QUOTE || !RULE.test(quote)) return "dropped"
-  return segment.some((event) => event.type === "prompt" && flat(event.text).includes(quote)) ? "confirmed" : "dropped"
+  return segment.some((event) => event.type === "prompt" && event.user && flat(event.text).includes(quote))
+    ? "confirmed"
+    : "dropped"
 }
 
 function flat(text: string) {

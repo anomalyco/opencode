@@ -175,24 +175,31 @@ type Answer = { readonly status: number; readonly limited: boolean; readonly rep
  * and which of the repositories Console lists the reader can read, with the reader's own credential. Only numeric ids
  * leave the machine, and nothing computed with one credential is reused for another.
  */
-export const make = (
+export const make = Effect.fnUntraced(function* (
   http: HttpClient.HttpClient,
   processes: AppProcess.Interface,
   options: { readonly api: string; readonly env: Readonly<Record<string, string | undefined>> },
-) => {
+) {
   // Per credential and repository: when GitHub last said the reader can read it, if it did since, and when it was asked.
   const checked = new Map<string, { readonly readable: number | undefined; readonly asked: number }>()
   const fresh = (readable: number | undefined, now: number) =>
     readable !== undefined && now - readable < REACHABLE_MAX_AGE
 
-  // The credential the agent's own `gh` uses; none when there's no way to ask GitHub as the reader.
-  const token = Effect.gen(function* () {
+  // What the agent's own `gh` is signed in with, asked again after a minute so a new sign-in takes effect, and given
+  // a few seconds before going without.
+  const signedIn = yield* Effect.cachedWithTTL(
+    processes.run(ChildProcess.make("gh", ["auth", "token"], { stdin: "ignore" })).pipe(
+      Effect.map((result) => (result.exitCode === 0 ? result.stdout.toString().trim() : "") || undefined),
+      Effect.timeout("5 seconds"),
+      Effect.catchCause(() => Effect.succeed(undefined)),
+    ),
+    RECHECK_AFTER,
+  )
+  // The credential the reader's GitHub requests use; none when there's no way to ask GitHub as the reader.
+  const token = Effect.suspend(() => {
     const fromEnv = options.env.GH_TOKEN || options.env.GITHUB_TOKEN
-    if (fromEnv) return fromEnv
-    const result = yield* processes.run(ChildProcess.make("gh", ["auth", "token"], { stdin: "ignore" }))
-    const value = result.exitCode === 0 ? result.stdout.toString().trim() : ""
-    return value === "" ? undefined : value
-  }).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
+    return fromEnv ? Effect.succeed(fromEnv) : signedIn
+  })
 
   const get = (path: string, credential?: string) =>
     HttpClient.withScope(http)
@@ -282,4 +289,4 @@ export const make = (
   })
 
   return { anchor, reachable }
-}
+})

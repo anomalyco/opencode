@@ -6,6 +6,7 @@ import path from "path"
 import { fileURLToPath } from "url"
 import { Message, SystemPart, ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
+import { Agent } from "@opencode/schema/agent"
 import type { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Hash } from "@opencode/util/hash"
@@ -14,8 +15,8 @@ import { Clock, Effect, Exit, Fiber, Option, Schema, Scope, Stream } from "effec
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { ChildProcess } from "effect/process"
 import { Git } from "../../git.js"
-import { AbsolutePath } from "../../schema.js"
-import { normalizeContent } from "../../tool/runtime.js"
+import { AbsolutePath, RelativePath } from "../../schema.js"
+import { normalizeContent, normalizedName } from "../../tool/runtime.js"
 import { Flag } from "../../flag.js"
 import { OpencodeMemoryAccess } from "./opencode-memory-access.js"
 import { OpencodeMemoryCapture } from "./opencode-memory-capture.js"
@@ -31,7 +32,7 @@ const MAX_FILES = 20
 /** Entries a session was given that a correction may name, and how much of each is kept to match it. */
 const MAX_GIVEN = 10
 const MAX_GIVEN_TEXT = 2000
-/** Events kept in memory since a session's last boundary; the log keeps them all. */
+/** Events kept since a session's last boundary, newest kept. */
 const MAX_SEGMENT = 200
 /**
  * Distillations a user turn allows for the boundaries inside it (a test that starts passing, a commit, a finished
@@ -45,6 +46,19 @@ const MAX_TAIL = 1500
 const ANCHORS_MAX_AGE = 60 * 1000
 /** The most repositories a reader's reachable set names, as Console takes it. */
 const MAX_REACHABLE = 1000
+/** Commits a session made that it attaches to what it publishes, newest kept. */
+const MAX_COMMITS = 10
+/**
+ * The hidden agent whose model distils candidates; set `agent.memory-writer.model` in config to choose it. Without one,
+ * a cheap DeepSeek flash model is used when one is listed, else OpenCode's default model.
+ */
+const WRITER = Agent.ID.make("memory-writer")
+/** The session instruction entries memory keeps: entries again after a compaction, and a correction reminder. */
+const DELIVERED = "memory.delivered"
+const CORRECTION = "memory.correction"
+/** Per-session state that outlives the process, removed with the session. */
+const standingKey = (sessionID: string) => `memory-standing:${sessionID}`
+const taintedKey = (sessionID: string) => `memory-tainted:${sessionID}`
 
 // Console's answers, read leniently: only what the tools show.
 const Kind = Schema.Literals(["bug", "convention", "procedure", "gotcha", "decision", "failed-approach"])
@@ -157,16 +171,21 @@ const Paths = Schema.Array(Schema.String).annotate({
 const Errors = Schema.Array(Schema.String).annotate({
   description: "Error messages or signatures it answers, as they appear",
 })
-const Evidence = Schema.Array(
-  Schema.Struct({ kind: Schema.Literals(["commit", "pr", "test", "command", "ci"]), ref: Schema.String }),
-)
+// Only what the agent can cite: commits are attached by the harness, which saw them made, and CI isn't checked here.
+const Evidence = Schema.Array(Schema.Struct({ kind: Schema.Literals(["pr", "test", "command"]), ref: Schema.String }))
   .check(Schema.isMaxLength(10))
   .annotate({
     description:
-      "What shows it holds: a test or command you ran and saw pass, a commit, PR or CI run. A teammate's evidence makes a provisional entry live",
+      "What shows it holds: a test or command you ran and saw pass, or a PR. Recorded with the entry; it doesn't make an entry live by itself",
   })
 /** A session that read this has taken in outside input: the web, issue text or other repositories. */
 const OUTSIDE = /\b(?:curl|wget|gh (?:issue|pr|api|repo clone)|git clone)\b/
+/** Tools whose results are outside input; MCP servers' tools are too. */
+const OUTSIDE_TOOLS = new Set(["webfetch", "websearch", "opencode_read_mcp_resource"])
+/** `git commit`, after any global options, as its own command. */
+const COMMIT = /(?:^|[;&|(]\s*)git(?:\s+(?:-[Cc]\s+\S+|--?[\w-]+(?:=\S+)?))*\s+commit\b/m
+/** Metadata a prompt carries when no person typed it: an automation's, a command's or a plugin's. */
+const GENERATED = ["automation", "command", "source"]
 const KindInput = Kind.annotate({
   description:
     "bug: symptom, cause, fix. convention: how this code does it. procedure: build, test, CI, release. gotcha: an API or tool pitfall. decision: what and why, with commits. failed-approach: what didn't work and why",
@@ -187,24 +206,23 @@ type Tracked = {
   /** Entries injected into the session, whole, to deliver once more after a compaction drops them. */
   readonly delivered: Map<string, OpencodeMemoryPolicy.Injected>
   compactions: number
-  /** A compaction ended since the delivered entries were last given. */
-  redeliver?: boolean
-  /** The session's standing block, built at its first request and never again: "" when none applies. */
+  /** The session's standing block as stored at its first request: "" when none applies. */
   standing?: string
-  /** The session's events since its last work boundary, and where they start in its log. */
+  /** The session's events since its last work boundary. */
   readonly segment: Array<OpencodeMemoryCapture.Event>
-  from: number
-  /** The next position in the session's event log, read from storage on its first event in this process. */
-  next?: number
   /** What the current user turn still allows for boundaries inside it. */
   allowance: number
-  /** The session took in outside input, so what it publishes is marked tainted and never promoted. */
+  /** Commits the session made, as the harness saw them: evidence for what it publishes. */
+  readonly commits: string[]
+  /** The session took in outside input, so what it writes is marked tainted and never promoted; also stored. */
   tainted?: boolean
+  /** The entry the session's correction reminder names, until it's written or a compaction ends. */
+  correcting?: string
+  /** Its injected entries are in its instructions since a compaction. */
+  restated?: boolean
   /** The repository (`host/owner/name`) of each entry the session read, unless it holds anywhere (tagged general). */
   readonly about: Map<string, string>
   task?: string
-  /** A given entry the user's latest message may correct, for the next request to point out. */
-  nudge?: { readonly entry: OpencodeMemoryPolicy.Given; readonly messageID: string }
   /** An injection started at a moment, waiting for the model request that follows it. */
   pending?: Fiber.Fiber<
     | { readonly entries: ReadonlyArray<OpencodeMemoryPolicy.Injected>; readonly moment: OpencodeMemoryPolicy.Moment }
@@ -229,7 +247,7 @@ export const make = Effect.fnUntraced(function* (
   const flags = yield* Flag.Service
   const known = (state: Tracked) =>
     [...state.given.values()].map((entry) => ({ id: entry.id, title: entry.title, text: entry.text }))
-  const github = OpencodeMemoryAccess.make(http, processes, yield* OpencodeMemoryAccess.GitHub)
+  const github = yield* OpencodeMemoryAccess.make(http, processes, yield* OpencodeMemoryAccess.GitHub)
   let current: { console: OpencodeWatches.Console; readonly lease: Scope.Closeable } | undefined
   const sessions = new Map<string, Tracked>()
   const tracked = (sessionID: string): Tracked => {
@@ -242,8 +260,8 @@ export const make = Effect.fnUntraced(function* (
       delivered: new Map(),
       compactions: 0,
       segment: [],
-      from: 0,
       allowance: DISTILLATIONS_PER_TURN,
+      commits: [],
       about: new Map(),
     }
     sessions.delete(sessionID)
@@ -291,6 +309,35 @@ export const make = Effect.fnUntraced(function* (
     const next = sessions.get(sessionID)?.revisions.get(id)?.get(revision)
     return next === undefined || next <= revision ? revision : based(sessionID, id, next)
   }
+  /**
+   * Marks a session as having taken in outside input, in storage too so it outlives the process, and the sessions
+   * that spawned it: what a subagent read reaches its parent with its report.
+   */
+  const taint = (sessionID: Session.ID): Effect.Effect<void> =>
+    Effect.gen(function* () {
+      const state = tracked(sessionID)
+      if (state.tainted) return
+      state.tainted = true
+      yield* ctx.storage.set(taintedKey(sessionID), true)
+      const session = yield* ctx.session.get({ sessionID }).pipe(Effect.option)
+      const parent = Option.getOrUndefined(session)?.parentID
+      if (parent !== undefined) yield* taint(parent)
+    })
+  const tainted = (sessionID: Session.ID) =>
+    Effect.gen(function* () {
+      const state = tracked(sessionID)
+      state.tainted ??= (yield* ctx.storage.get(taintedKey(sessionID))) === true || undefined
+      return state.tainted === true
+    })
+  // A correction reminder stays in the session's instructions until the entry it names is written or a compaction
+  // ends: it concerns the user's message, and a compacted conversation is restated without it.
+  const settle = (sessionID: Session.ID, id?: string) =>
+    Effect.gen(function* () {
+      const state = tracked(sessionID)
+      if (state.correcting === undefined || (id !== undefined && state.correcting !== id)) return
+      state.correcting = undefined
+      yield* ctx.session.instructions.entry.remove({ sessionID, key: CORRECTION })
+    }).pipe(Effect.catchCause((cause) => Effect.logDebug("failed to settle a memory correction", { cause })))
 
   // The checkout as it is now: its remote names the repository, without any credentials the URL holds.
   const checkout = Effect.gen(function* () {
@@ -315,11 +362,10 @@ export const make = Effect.fnUntraced(function* (
   }).pipe(Effect.catchCause(() => Effect.succeed({})))
   // Moments and searches only need which repository and branch; reading them once per Location keeps Git off them.
   const repository = yield* Effect.cached(checkout)
+  const discovered = yield* Effect.cached(git.repo.discover(AbsolutePath.make(ctx.location.directory)))
   // Where this machine's paths start, to make what a write says about them shareable.
-  const roots = yield* Effect.cached(
-    git.repo
-      .discover(AbsolutePath.make(ctx.location.directory))
-      .pipe(Effect.map((found) => ({ checkout: found?.worktree ?? ctx.location.directory, home: os.homedir() }))),
+  const roots = discovered.pipe(
+    Effect.map((found) => ({ checkout: found?.worktree ?? ctx.location.directory, home: os.homedir() })),
   )
   // A write's fields with this machine's paths made relative, or a refusal before anything is sent when one holds a
   // secret, naming the field and the kind but never the value.
@@ -332,13 +378,11 @@ export const make = Effect.fnUntraced(function* (
       })
     })
 
-  // The checkout's current commit, after the session committed.
-  const head = Effect.gen(function* () {
-    const result = yield* processes.run(
-      ChildProcess.make("git", ["rev-parse", "HEAD"], { cwd: (yield* roots).checkout, stdin: "ignore" }),
-    )
-    return result.exitCode === 0 ? result.stdout.toString().trim() : undefined
-  }).pipe(Effect.orElseSucceed(() => undefined))
+  // The checkout's current commit.
+  const head = discovered.pipe(
+    Effect.flatMap((found) => (found ? git.history.head(found) : Effect.succeed(undefined))),
+    Effect.orElseSucceed(() => undefined),
+  )
 
   /**
    * Refuses a write whose `paths` name a repository path that isn't there. Only clear paths (with a `/`) are checked:
@@ -348,29 +392,26 @@ export const make = Effect.fnUntraced(function* (
   const resolved = (tool: string, paths: ReadonlyArray<string> | undefined) =>
     Effect.gen(function* () {
       const checkout = (yield* roots).checkout
-      const missing = yield* Effect.filter(
+      const absent = yield* Effect.filter(
         (paths ?? []).filter((item) => item.includes("/") && !/[*?[\]{}]/.test(item)),
         (item) =>
-          Effect.gen(function* () {
-            const file = path.join(checkout, item)
-            if (
-              yield* Effect.promise(() =>
-                fs.stat(file).then(
-                  () => true,
-                  () => false,
-                ),
-              )
-            )
-              return false
-            const ignored = yield* processes
-              .run(ChildProcess.make("git", ["check-ignore", "-q", item], { cwd: checkout, stdin: "ignore" }))
-              .pipe(
-                Effect.map((result) => result.exitCode === 0),
-                Effect.orElseSucceed(() => false),
-              )
-            return !ignored
-          }),
+          Effect.promise(() =>
+            fs.stat(path.join(checkout, item)).then(
+              () => false,
+              () => true,
+            ),
+          ),
       )
+      if (absent.length === 0) return
+      const found = yield* discovered
+      const ignored = new Set<string>(
+        found
+          ? yield* git.index
+              .ignored({ repository: found, paths: absent.map((item) => RelativePath.make(item.replace(/\/$/, ""))) })
+              .pipe(Effect.orElseSucceed(() => []))
+          : [],
+      )
+      const missing = absent.filter((item) => !ignored.has(item.replace(/\/$/, "")))
       if (missing.length === 0) return
       return yield* new ToolFailure({
         message: `Nothing was sent: paths name ${missing.map((item) => `"${item}"`).join(", ")}, which ${missing.length === 1 ? "isn't" : "aren't"} in the repository. Fix ${missing.length === 1 ? "it" : "them"} to a file or directory that exists, or leave ${missing.length === 1 ? "it" : "them"} out, then call ${namespace}.${tool} again.`,
@@ -378,9 +419,9 @@ export const make = Effect.fnUntraced(function* (
     })
 
   /**
-   * Refuses a write whose text names a file this checkout added and hasn't committed: no teammate has it, and agents
-   * have recorded their own uncommitted setup (a bunfig.toml) as how the repository works. `oldText` and structured
-   * evidence are left out: one must match the stored body, the other is the author's own record.
+   * Refuses a write whose text names a file this checkout added and hasn't committed: no teammate has it, so it says
+   * nothing about how the repository works. `oldText` and structured evidence are left out: one must match the stored
+   * body, the other is the author's own record.
    */
   const committed = (tool: string, fields: Record<string, unknown>) =>
     Effect.gen(function* () {
@@ -398,7 +439,8 @@ export const make = Effect.fnUntraced(function* (
         )
       const added = status
         .split("\n")
-        .filter((line) => line.startsWith("?? ") || line.startsWith("A "))
+        // Untracked, or added in the index or the worktree (`A `, `AM`, `AD`, ` A`).
+        .filter((line) => line.startsWith("??") || line[0] === "A" || line[1] === "A")
         .map((line) => line.slice(3).trim().replace(/^"|"$/g, ""))
       if (added.length === 0) return
       const text = JSON.stringify(fields, (key, value) => (key === "oldText" || key === "evidence" ? undefined : value))
@@ -435,7 +477,7 @@ export const make = Effect.fnUntraced(function* (
   // A new revision of an entry, answered with its number and diff; the repository, branch and commit are recorded.
   const write = (
     tool: "edit" | "append" | "rewrite" | "retire",
-    sessionID: string,
+    sessionID: Session.ID,
     id: string,
     revision: number,
     change: Record<string, unknown>,
@@ -447,7 +489,7 @@ export const make = Effect.fnUntraced(function* (
           message: `Nothing was sent: ${tool} acts on the whole of ${id}, so it starts from text you were shown, and this session hasn't been shown r${revision} whole${state.compactions > 0 ? " since the conversation was compacted" : ""}. Call ${namespace}.read with id "${id}", then call ${namespace}.${tool} again with the revision it shows.`,
         })
       // An entry about another repository holds or not there, which this checkout can't show: it isn't replaced or
-      // retired from here (an agent once retired another repository's procedure because this one didn't need it).
+      // retired from here, whatever this repository needs.
       const about = state.about.get(id)
       const source = yield* repository
       const here = "repo" in source && source.repo ? repoName(source.repo) : undefined
@@ -466,9 +508,17 @@ export const make = Effect.fnUntraced(function* (
         // Console's retire takes no provenance.
         tool === "retire"
           ? { expectedRevision, ...fields, ...(yield* reader) }
-          : { expectedRevision, ...fields, source: { ...(yield* checkout), sessionID }, ...(yield* reader) },
+          : {
+              expectedRevision,
+              ...fields,
+              source: { ...(yield* checkout), sessionID },
+              // A revision from a session that took in outside input is marked as one, as its publishes are.
+              ...((yield* tainted(sessionID)) ? { tainted: true } : {}),
+              ...(yield* reader),
+            },
       )
       wrote(sessionID, id, expectedRevision, written)
+      yield* settle(sessionID, id)
       return written
     }).pipe(Effect.mapError(failure))
   // The restricted repositories the workspace has entries for, by workspace: the same list for every member.
@@ -485,6 +535,7 @@ export const make = Effect.fnUntraced(function* (
       known && now - known.at < ANCHORS_MAX_AGE
         ? known.anchors
         : yield* call(Schema.Struct({ anchors: Schema.Array(Schema.String) }), "GET", "/api/memory/anchors").pipe(
+            Effect.timeout("10 seconds"),
             Effect.map((answer) => answer.anchors),
             Effect.tap((anchors) => Effect.sync(() => listed.set(key, { at: now, anchors }))),
           )
@@ -525,21 +576,42 @@ export const make = Effect.fnUntraced(function* (
     ...(input.errors === undefined ? {} : { errors: input.errors }),
   })
 
-  // The models distillation may run on, in order: the DeepSeek flash models listed (a cheap, capable writer), paid
-  // before free, since a free route may refuse a signed-in caller; OpenCode's default model comes after them.
-  const distillers = yield* Effect.cached(
-    ctx.model.list({ types: ["chat"] }).pipe(
-      Effect.map((models) =>
-        models.data
-          .filter((model) => /deepseek/i.test(model.id) && /flash/i.test(model.id))
-          .toSorted((a, b) => Number(/free/i.test(a.id)) - Number(/free/i.test(b.id)))
+  // The models listed for distillation when config names none: the DeepSeek flash models (a cheap, capable writer),
+  // paid before free, since a free route may refuse a signed-in caller, then OpenCode's default model.
+  const cheap = yield* Effect.cached(
+    Effect.all([
+      ctx.model.list({ types: ["chat"] }).pipe(
+        Effect.map((models) =>
+          models.data
+            .filter((model) => /deepseek/i.test(model.id) && /flash/i.test(model.id))
+            .toSorted((a, b) => Number(/free/i.test(a.id)) - Number(/free/i.test(b.id))),
+        ),
+        Effect.orElseSucceed(() => []),
+      ),
+      ctx.model.default().pipe(
+        Effect.map((answer) => (answer.data === undefined ? [] : [answer.data])),
+        Effect.orElseSucceed(() => []),
+      ),
+    ]).pipe(
+      Effect.map((groups) =>
+        groups
+          .flat()
+          .filter(
+            (model, index, all) =>
+              all.findIndex((other) => other.id === model.id && other.providerID === model.providerID) === index,
+          )
           .map((model) => ({ id: model.id, providerID: model.providerID })),
       ),
-      Effect.orElseSucceed(() => []),
     ),
   )
-  // The first of them that answered, tried first from then on.
-  let answering: number | undefined
+  // The memory writer agent's model when config sets one, and only it; otherwise the listed ones.
+  const distillers = ctx.agent.get({ agentID: WRITER }).pipe(
+    Effect.map((answer) => answer.data.model),
+    Effect.orElseSucceed(() => undefined),
+    Effect.flatMap((configured) => (configured === undefined ? cheap : Effect.succeed([configured]))),
+  )
+  // The model that last answered, tried first from then on.
+  let answering: string | undefined
 
   /**
    * Distils the segment a boundary closed into candidate entries, out of band (a stateless generation, nothing in the
@@ -551,24 +623,27 @@ export const make = Effect.fnUntraced(function* (
     sessionID: Session.ID,
     segment: ReadonlyArray<OpencodeMemoryCapture.Event>,
     boundary: OpencodeMemoryCapture.Boundary,
-    events: { readonly from: number; readonly to: number },
   ) =>
     Effect.gen(function* () {
       const models = yield* distillers
       const state = tracked(sessionID)
       const prompt = OpencodeMemoryCapture.prompt({ segment, boundary, known: known(state) })
-      const order = [...(answering === undefined ? [] : [answering]), ...models.keys()].filter(
-        (index, at, all) => all.indexOf(index) === at,
+      const name = (model: { readonly id: string; readonly providerID: string }) => `${model.providerID}/${model.id}`
+      // A model can still refuse the request: the next one is tried. With none listed, OpenCode picks its own.
+      const answer = yield* Effect.firstSuccessOf(
+        models.length === 0
+          ? [ctx.experimental.generate.text({ prompt }).pipe(Effect.map((result) => ({ text: result.text })))]
+          : models
+              .toSorted((a, b) => Number(name(b) === answering) - Number(name(a) === answering))
+              .map((model) =>
+                ctx.experimental.generate.text({ prompt, model }).pipe(
+                  Effect.map((result) => ({ text: result.text, model: name(model) })),
+                  Effect.tap((result) => Effect.sync(() => (answering = result.model))),
+                ),
+              ),
       )
-      // A listed model can still refuse the request; OpenCode's default model is the last try.
-      const answer = yield* Effect.firstSuccessOf([
-        ...order.map((index) =>
-          ctx.experimental.generate
-            .text({ prompt, model: models[index]! })
-            .pipe(Effect.tap(() => Effect.sync(() => (answering = index)))),
-        ),
-        ctx.experimental.generate.text({ prompt }),
-      ])
+      // The model that wrote a candidate, beside where it was written from.
+      const writer = "model" in answer ? { model: answer.model } : {}
       const found = OpencodeMemoryCapture.candidates(answer.text)
       if (found.length === 0) return
       const source = yield* checkout
@@ -618,11 +693,12 @@ export const make = Effect.fnUntraced(function* (
           const published = yield* call(Written, "POST", "/api/memory/entries", {
             ...fields,
             ...(supersedes.length === 0 ? {} : { supersedes }),
-            source: { ...source, sessionID },
+            source: { ...source, sessionID, ...writer },
             ...(anchor === undefined ? {} : { anchor }),
-            ...(tracked(sessionID).tainted ? { tainted: true } : {}),
+            ...((yield* tainted(sessionID)) ? { tainted: true } : {}),
             ...set,
-            idempotencyKey: `${sessionID}:${boundary}:${events.from}:${index}`.slice(0, 128),
+            // Keyed by what was distilled: no two distillations share a key, before a restart or after it.
+            idempotencyKey: `${sessionID}:${boundary}:${Hash.sha256(prompt).slice(0, 16)}:${index}`.slice(0, 128),
           }).pipe(
             Effect.catch((cause) => {
               const existing = duplicateOf(cause)
@@ -630,7 +706,7 @@ export const make = Effect.fnUntraced(function* (
               if (existing === undefined || confirmation.length === 0) return Effect.fail(cause)
               return call(Schema.Unknown, "POST", `/api/memory/entries/${encodeURIComponent(existing)}/evidence`, {
                 evidence: confirmation,
-                source: { ...source, sessionID },
+                source: { ...source, sessionID, ...writer },
                 ...set,
               }).pipe(Effect.as(undefined))
             }),
@@ -651,20 +727,24 @@ export const make = Effect.fnUntraced(function* (
   const start = Effect.fnUntraced(function* () {
     const lease = yield* Scope.Scope
     const capturing = yield* flags.enabled("memory_capture")
+    // The agent whose model distillation runs on, which config may set.
+    yield* ctx.agent.transform((editor) =>
+      editor.update(WRITER, (agent) => {
+        agent.name = Agent.Name.make("Memory writer")
+        agent.description =
+          "Distils what coding sessions learned into candidate entries for the workspace's shared memory. Set its model to choose the one that writes them."
+        agent.mode = "primary"
+        agent.hidden = true
+      }),
+    )
     /**
-     * Appends `event` to the session's event log, which only this plugin writes and nothing ever rewrites, and, when it
-     * closes a work boundary, distils what happened since the last one in the background.
+     * Adds `event` to the session's segment and, when it closes a work boundary, distils the segment in the background.
+     * Kept in memory only: a restart loses the open segment, never anything published.
      */
     const record = (sessionID: Session.ID, event: OpencodeMemoryCapture.Event) =>
       Effect.gen(function* () {
         if (!capturing) return
         const state = tracked(sessionID)
-        const head = `memory-log-head:${sessionID}`
-        const at =
-          state.next ?? Option.getOrElse(Schema.decodeUnknownOption(Schema.Int)(yield* ctx.storage.get(head)), () => 0)
-        state.next = at + 1
-        yield* ctx.storage.set(`memory-log:${sessionID}:${String(at).padStart(10, "0")}`, event)
-        yield* ctx.storage.set(head, at + 1)
         const found = OpencodeMemoryCapture.boundary(state.segment, event)
         // A user message closes the turn before it and opens a new one, with a full allowance. A boundary inside the
         // turn past its allowance isn't one: its events stay in the segment for the turn's closing distillation.
@@ -672,23 +752,30 @@ export const make = Effect.fnUntraced(function* (
         if (event.type === "prompt") state.allowance = DISTILLATIONS_PER_TURN
         const boundary = found !== undefined && !closing && state.allowance <= 0 ? undefined : found
         if (boundary !== undefined && !closing) state.allowance--
-        // A new task message starts the next segment; every other boundary event ends the one it closes.
-        const closes = event.type === "prompt" && boundary === "task" ? [] : [event]
         if (boundary === undefined) {
-          if (state.segment.length === 0) state.from = at
           state.segment.push(event)
           if (state.segment.length > MAX_SEGMENT) state.segment.splice(0, state.segment.length - MAX_SEGMENT)
           return
         }
-        const segment = [...state.segment, ...closes]
-        const events = { from: state.from, to: closes.length === 0 ? at - 1 : at }
-        state.segment.splice(0, state.segment.length, ...(closes.length === 0 ? [event] : []))
-        state.from = closes.length === 0 ? at : at + 1
-        yield* distill(sessionID, segment, boundary, events).pipe(Effect.forkIn(lease, { startImmediately: true }))
-      }).pipe(Effect.catch((cause) => Effect.logDebug("failed to record a session event", { cause })))
+        // A new task message starts the next segment; every other boundary event ends the one it closes.
+        const opens = event.type === "prompt" && boundary === "task"
+        const segment = opens ? [...state.segment] : [...state.segment, event]
+        state.segment.splice(0, state.segment.length, ...(opens ? [event] : []))
+        yield* distill(sessionID, segment, boundary).pipe(Effect.forkIn(lease, { startImmediately: true }))
+      })
     // Read now, so the first moment doesn't wait on Git or GitHub.
     yield* repository.pipe(Effect.forkIn(lease, { startImmediately: true }))
     yield* reachable.pipe(Effect.forkIn(lease, { startImmediately: true }))
+    // The prefixes of MCP servers' tools, whose results are outside input.
+    const servers = yield* Effect.cachedWithTTL(
+      ctx.mcp.list().pipe(
+        Effect.map((answer) => answer.data.map((server) => `${normalizedName({ name: server.name })}_`)),
+        Effect.orElseSucceed(() => new Array<string>()),
+      ),
+      "1 minute",
+    )
+    // HEAD when a `git commit` started, by tool call, to tell whether it made one.
+    const heads = new Map<string, string | undefined>()
     // The entries Console gives for a moment the policy picks, within its timeout; none when it picks none or fails.
     const ask = (sessionID: Session.ID, moment: OpencodeMemoryPolicy.Moment) =>
       Effect.gen(function* () {
@@ -705,7 +792,6 @@ export const make = Effect.fnUntraced(function* (
           session,
         )
         if (!inject) return undefined
-        state.injected[moment.type]++
         const answer = yield* reader.pipe(
           Effect.flatMap((set) =>
             call(Schema.Struct({ entries: Schema.Array(Injected) }), "POST", "/api/memory/inject", {
@@ -730,18 +816,35 @@ export const make = Effect.fnUntraced(function* (
           Effect.forkIn(lease, { startImmediately: true }),
         )
       })
+    // Points out the given entry the user's message may correct, as a session instruction: the next request carries
+    // it as an instruction update, recorded with the session, and the cached prefix holds.
+    const remind = (sessionID: Session.ID, given: OpencodeMemoryPolicy.Given) =>
+      Effect.gen(function* () {
+        const state = tracked(sessionID)
+        const entry = state.given.get(given.id) ?? given
+        yield* ctx.session.instructions.entry.put({ sessionID, key: CORRECTION, value: policy.nudge(entry) })
+        state.correcting = entry.id
+      }).pipe(Effect.catchCause((cause) => Effect.logDebug("failed to point out a memory correction", { cause })))
 
     yield* ctx.session.hook("prompt", (event) =>
       Effect.gen(function* () {
         const state = tracked(event.sessionID)
         state.task ??= event.prompt.text
-        const corrected = policy.correction(event.prompt.text, [...state.given.values()])
-        if (corrected) state.nudge = { entry: corrected, messageID: event.messageID }
+        // Only what a person typed is the user's word: a subagent's task comes from its parent's model, and commands,
+        // automations and plugins write theirs from templates. Only it confirms an entry or reads as a correction.
+        const session = yield* ctx.session.get({ sessionID: event.sessionID }).pipe(Effect.option)
+        const user =
+          Option.isSome(session) &&
+          session.value.parentID === undefined &&
+          !GENERATED.some((key) => event.metadata?.[key] !== undefined)
+        const corrected = user ? policy.correction(event.prompt.text, [...state.given.values()]) : undefined
         yield* record(event.sessionID, {
           type: "prompt",
           text: event.prompt.text.slice(0, MAX_TAIL),
-          correction: corrected !== undefined || policy.corrective(event.prompt.text),
+          correction: user && (corrected !== undefined || policy.corrective(event.prompt.text)),
+          user,
         })
+        if (corrected) yield* remind(event.sessionID, corrected)
         yield* begin(event.sessionID, {
           type: "prompt",
           text: event.prompt.text,
@@ -751,73 +854,70 @@ export const make = Effect.fnUntraced(function* (
         })
       }),
     )
-    // Models carry other editors' names for an edit's texts; they mean these.
-    yield* ctx.tool.hook("execute.before", (event) => {
-      if (event.tool !== `${namespace}_edit` || typeof event.input !== "object" || event.input === null)
-        return Effect.void
-      event.input = aliased(event.input)
-      return Effect.void
-    })
-    yield* ctx.tool.hook("execute.after", (event) => {
-      if (event.status !== "completed") return Effect.void
-      const files = touched(event.tool, event.input).map((file) => relative(ctx.location.directory, file))
-      const recorded =
-        files.length > 0
-          ? record(event.sessionID, { type: event.tool === "read" ? "read" : "edit", files })
-          : event.tool === "subagent"
-            ? record(event.sessionID, { type: "subtask" })
-            : Effect.void
-      if (
-        event.tool === "webfetch" ||
-        event.tool === "websearch" ||
-        (event.tool === "read" && files.some((file) => path.isAbsolute(file)))
-      )
-        tracked(event.sessionID).tainted = true
-      if (files.length > 0) {
-        const state = tracked(event.sessionID)
-        files.forEach((file) => {
-          if (state.files.includes(file)) state.files.splice(state.files.indexOf(file), 1)
-          state.files.push(file)
+    yield* ctx.tool.hook("execute.before", (event) =>
+      Effect.gen(function* () {
+        // Models carry other editors' names for an edit's texts; they mean these.
+        if (event.tool === `${namespace}_edit` && typeof event.input === "object" && event.input !== null)
+          event.input = aliased(event.input)
+        if (event.tool !== "shell") return
+        const shell = Schema.decodeUnknownOption(ShellInput)(event.input)
+        if (Option.isSome(shell) && COMMIT.test(shell.value.command)) heads.set(event.id, yield* head)
+      }),
+    )
+    yield* ctx.tool.hook("execute.after", (event) =>
+      Effect.gen(function* () {
+        const committing = heads.has(event.id)
+        const before = heads.get(event.id)
+        heads.delete(event.id)
+        if (event.status !== "completed") return
+        const files = touched(event.tool, event.input).map((file) => relative(ctx.location.directory, file))
+        if (files.length > 0) yield* record(event.sessionID, { type: event.tool === "read" ? "read" : "edit", files })
+        if (event.tool === "subagent") yield* record(event.sessionID, { type: "subtask" })
+        if (
+          OUTSIDE_TOOLS.has(event.tool) ||
+          (event.tool === "read" && files.some((file) => path.isAbsolute(file))) ||
+          (yield* servers).some((prefix) => event.tool.startsWith(prefix))
+        )
+          yield* taint(event.sessionID)
+        if (files.length > 0) {
+          const state = tracked(event.sessionID)
+          files.forEach((file) => {
+            if (state.files.includes(file)) state.files.splice(state.files.indexOf(file), 1)
+            state.files.push(file)
+          })
+          state.files.splice(0, Math.max(0, state.files.length - MAX_FILES))
+        }
+        if (event.tool !== "shell") return
+        const shell = Option.all({
+          input: Schema.decodeUnknownOption(ShellInput)(event.input),
+          output: Schema.decodeUnknownOption(ShellOutput)(event.result.output),
         })
-        state.files.splice(0, Math.max(0, state.files.length - MAX_FILES))
-      }
-      if (event.tool !== "shell") return recorded
-      const shell = Option.all({
-        input: Schema.decodeUnknownOption(ShellInput)(event.input),
-        output: Schema.decodeUnknownOption(ShellOutput)(event.result.output),
-      })
-      // A command still running in the background, or one a signal ended, has no exit code yet.
-      if (Option.isNone(shell) || shell.value.output.exitCode === null) return Effect.void
-      const command = shell.value.input.command
-      const exitCode = shell.value.output.exitCode
-      if (OUTSIDE.test(command)) tracked(event.sessionID).tainted = true
-      const failed = policy.failed(command, shell.value.output.output, exitCode)
-      const ran = record(event.sessionID, {
-        type: "shell",
-        command: command.slice(0, MAX_TAIL),
-        exit: exitCode,
-        failed,
-        test: policy.test(command),
-        tail: shell.value.output.output.slice(-MAX_TAIL),
-      }).pipe(
-        // A commit the session made is a boundary of its own, with its hash as evidence.
-        Effect.andThen(
-          exitCode === 0 && /\bgit\b[^|;&]*\bcommit\b/.test(command)
-            ? head.pipe(Effect.flatMap((sha) => (sha ? record(event.sessionID, { type: "commit", sha }) : Effect.void)))
-            : Effect.void,
-        ),
-      )
-      if (!failed) return ran
-      const moment = {
-        type: "failure" as const,
-        command: shell.value.input.command,
-        output: shell.value.output.output,
-        exitCode: shell.value.output.exitCode,
-      }
-      // Appended to the failing command's own result, where the agent reads the failure, so it's in the next request
-      // without a message of its own. The command's result waits for Console at most the policy's timeout.
-      return Effect.gen(function* () {
-        yield* ran
+        // A command still running in the background, or one a signal ended, has no exit code yet.
+        if (Option.isNone(shell) || shell.value.output.exitCode === null) return
+        const command = shell.value.input.command
+        const exitCode = shell.value.output.exitCode
+        if (OUTSIDE.test(command)) yield* taint(event.sessionID)
+        const failed = policy.failed(command, shell.value.output.output, exitCode)
+        yield* record(event.sessionID, {
+          type: "shell",
+          command: command.slice(0, MAX_TAIL),
+          exit: exitCode,
+          failed,
+          test: policy.test(command),
+          tail: shell.value.output.output.slice(-MAX_TAIL),
+        })
+        // A commit the session made, when `git commit` moved HEAD, is a boundary of its own with its hash as evidence.
+        const sha = committing && exitCode === 0 ? yield* head : undefined
+        if (sha !== undefined && sha !== before) {
+          const state = tracked(event.sessionID)
+          state.commits.push(sha)
+          state.commits.splice(0, Math.max(0, state.commits.length - MAX_COMMITS))
+          yield* record(event.sessionID, { type: "commit", sha })
+        }
+        if (!failed) return
+        const moment = { type: "failure" as const, command, output: shell.value.output.output, exitCode }
+        // Appended to the failing command's own result, where the agent reads the failure, so it's in the next request
+        // without a message of its own. The command's result waits for Console at most the policy's timeout.
         const entries = yield* ask(event.sessionID, moment)
         if (entries === undefined || entries.length === 0) return
         const ids = entries.map((entry) => `${entry.id}@${entry.revision}`)
@@ -829,27 +929,40 @@ export const make = Effect.fnUntraced(function* (
           ],
           metadata: { ...event.result.metadata, memory: { source: "console.memory", moment: "failure", entries: ids } },
         }
-        deliver(tracked(event.sessionID), entries)
-      })
-    })
-    // A compaction drops what was injected from the conversation, and the agent's view of entries with it.
+        const state = tracked(event.sessionID)
+        state.injected.failure++
+        deliver(state, entries)
+      }).pipe(Effect.catchCause((cause) => Effect.logDebug("memory missed a tool call", { cause }))),
+    )
+    // A compaction drops what was injected from the conversation, and the agent's view of entries with it. The injected
+    // entries go into the session's instructions, which a compacted conversation is restated with.
     yield* ctx.event.subscribe({ types: ["session.compaction.ended"] }).pipe(
       Stream.runForEach((event) =>
         Effect.gen(function* () {
-          const state = sessions.get(event.data.sessionID)
+          const sessionID = event.data.sessionID
+          const state = sessions.get(sessionID)
           if (!state) return
           state.compactions++
           state.shown.clear()
-          if (state.delivered.size > 0) state.redeliver = true
-          yield* record(event.data.sessionID, { type: "compaction" })
-        }),
+          yield* settle(sessionID)
+          yield* record(sessionID, { type: "compaction" })
+          if (state.delivered.size === 0) {
+            if (state.restated) yield* ctx.session.instructions.entry.remove({ sessionID, key: DELIVERED })
+            state.restated = false
+            return
+          }
+          const again = [...state.delivered.values()]
+          yield* ctx.session.instructions.entry.put({
+            sessionID,
+            key: DELIVERED,
+            value: policy.render(again, { type: "prompt", text: state.task ?? "", files: [] }),
+          })
+          state.restated = true
+          again.forEach((entry) => see(state, entry.id, entry.revision))
+        }).pipe(Effect.catchCause((cause) => Effect.logDebug("failed to restate memory entries", { cause }))),
       ),
       Effect.forkIn(lease, { startImmediately: true }),
     )
-    // The request after a task's first prompt waits for its injection, at most the policy's timeout; the request after a
-    // correcting message points out the entry it may correct; the request after a compaction gets the injected entries
-    // once more. Other requests find none. They're persisted so later requests keep them, and land after this step, so
-    // this request gets them at the end, which keeps the cached prefix.
     /**
      * The session's standing block: its repository's live conventions from Console, chosen and rendered by the policy.
      * Its entries count as given, so injections don't send them again; Console logs the delivery with the session.
@@ -859,11 +972,15 @@ export const make = Effect.fnUntraced(function* (
         const source = yield* repository
         const name = "repo" in source && source.repo ? repoName(source.repo) : undefined
         if (name === undefined || !("repo" in source) || !source.repo) return ""
-        const keys = yield* reachable
-        const answer = yield* call(Schema.Struct({ entries: Schema.Array(Standing) }), "POST", "/api/memory/standing", {
-          repo: source.repo,
-          sessionID,
-          ...(keys.length === 0 ? {} : { reachable: keys }),
+        const repo = source.repo
+        // The reader's set and Console's answer together wait at most the policy's timeout.
+        const answer = yield* Effect.gen(function* () {
+          const keys = yield* reachable
+          return yield* call(Schema.Struct({ entries: Schema.Array(Standing) }), "POST", "/api/memory/standing", {
+            repo,
+            sessionID,
+            ...(keys.length === 0 ? {} : { reachable: keys }),
+          })
         }).pipe(Effect.timeout(policy.timeout))
         const block = policy.standing(answer.entries, name)
         if (block.dropped.length > 0)
@@ -877,67 +994,52 @@ export const make = Effect.fnUntraced(function* (
         )
         return block.text
       }).pipe(Effect.catch((cause) => Effect.logDebug("no memory standing block", { cause }).pipe(Effect.as(""))))
+    /**
+     * The block a session carries: built at its first request and stored, then the same bytes in every request after
+     * it, across restarts and reconnects, so the cached prefix stays intact. A session that already ran without one
+     * never gets one: adding it later would change every later request's prefix.
+     */
+    const carried = (sessionID: Session.ID, messages: ReadonlyArray<{ readonly role: string }>) =>
+      Effect.gen(function* () {
+        const state = tracked(sessionID)
+        if (state.standing !== undefined) return state.standing
+        const stored = yield* ctx.storage.get(standingKey(sessionID))
+        if (typeof stored === "string") return (state.standing = stored)
+        const text = messages.some((message) => message.role === "assistant") ? "" : yield* standing(sessionID)
+        yield* ctx.storage.set(standingKey(sessionID), text)
+        return (state.standing = text)
+      })
 
     yield* ctx.session.hook("context", (event) =>
       Effect.gen(function* () {
-        // Built at the session's first request and carried byte-identical by every request after it, as a system part
-        // (never a user message), so the cached prefix stays intact.
-        const own = tracked(event.sessionID)
-        own.standing ??= yield* standing(event.sessionID)
-        if (own.standing) event.system.push(SystemPart.make(own.standing))
+        // A system part, never a user message.
+        const block = yield* carried(event.sessionID, event.messages)
+        if (block) event.system.push(SystemPart.make(block))
+        // The request after a task's first prompt waits for its injection, at most the policy's timeout. It's persisted
+        // so later requests keep it, and lands after this step, so this request gets it at the end, which keeps the
+        // cached prefix.
         const state = sessions.get(event.sessionID)
-        if (!state || (!state.pending && !state.nudge && !state.redeliver)) return
-        const pending = state.pending
-        const nudge = state.nudge
+        const pending = state?.pending
+        if (!state || !pending) return
         state.pending = undefined
-        state.nudge = undefined
-        if (state.redeliver) {
-          state.redeliver = false
-          const again = [...state.delivered.values()]
-          const text = policy.render(again, { type: "prompt", text: state.task ?? "", files: [] })
-          const ids = again.map((entry) => `${entry.id}@${entry.revision}`)
-          yield* ctx.session.synthetic({
-            sessionID: event.sessionID,
-            id: messageID(event.sessionID, `compaction:${state.compactions}`),
-            text,
-            description: `${ids.length === 1 ? "1 memory entry" : `${ids.length} memory entries`} again after compaction`,
-            metadata: { source: "console.memory", moment: "compaction", entries: ids },
-            resume: false,
-          })
-          event.messages.push(Message.user(text))
-          again.forEach((entry) => see(state, entry.id, entry.revision))
-        }
-        const delivery = pending ? yield* Fiber.join(pending) : undefined
+        const delivery = yield* Fiber.join(pending)
         // A failure's delivery may have given an entry since Console answered.
         const entries =
           delivery?.entries.filter((entry) => (state.given.get(entry.id)?.revision ?? 0) < entry.revision) ?? []
-        if (delivery && entries.length > 0) {
-          const text = policy.render(entries, delivery.moment)
-          const ids = entries.map((entry) => `${entry.id}@${entry.revision}`)
-          yield* ctx.session.synthetic({
-            sessionID: event.sessionID,
-            id: messageID(event.sessionID, ids.join(",")),
-            text,
-            description: `${ids.length === 1 ? "1 memory entry" : `${ids.length} memory entries`} for this ${delivery.moment.type === "prompt" ? "task" : "failure"}`,
-            metadata: { source: "console.memory", moment: delivery.moment.type, entries: ids },
-            resume: false,
-          })
-          event.messages.push(Message.user(text))
-          deliver(state, entries)
-        }
-        if (!nudge) return
-        const entry = state.given.get(nudge.entry.id) ?? nudge.entry
-        const text = policy.nudge(entry)
-        // Recorded with the entry it names, so whether an edit to it followed can be counted.
+        if (!delivery || entries.length === 0) return
+        const text = policy.render(entries, delivery.moment)
+        const ids = entries.map((entry) => `${entry.id}@${entry.revision}`)
         yield* ctx.session.synthetic({
           sessionID: event.sessionID,
-          id: messageID(event.sessionID, `correction:${nudge.messageID}`),
+          id: messageID(event.sessionID, ids.join(",")),
           text,
-          description: `Memory entry ${entry.id} may need a correction`,
-          metadata: { source: "console.memory", kind: "correction", entry: entry.id, revision: entry.revision },
+          description: `${ids.length === 1 ? "1 memory entry" : `${ids.length} memory entries`} for this ${delivery.moment.type === "prompt" ? "task" : "failure"}`,
+          metadata: { source: "console.memory", moment: delivery.moment.type, entries: ids },
           resume: false,
         })
         event.messages.push(Message.user(text))
+        state.injected[delivery.moment.type]++
+        deliver(state, entries)
       }).pipe(Effect.catch((cause) => Effect.logWarning("failed to deliver memory entries", { cause }))),
     )
   })
@@ -1063,10 +1165,15 @@ export const make = Effect.fnUntraced(function* (
           Effect.gen(function* () {
             // The key is the tool call's own: Console answers a retry of this call with what it saved, while an
             // agent's re-issue is a new call that Console's duplicate check catches as this session's own entry.
+            // With the commits the session made, as the harness saw them.
+            const evidence = [
+              ...(input.evidence ?? []),
+              ...tracked(context.sessionID).commits.map((sha) => ({ kind: "commit" as const, ref: sha })),
+            ]
             const fields = yield* shared("publish", {
               ...metadata(input),
               body: input.body,
-              ...(input.evidence === undefined ? {} : { evidence: input.evidence }),
+              ...(evidence.length === 0 ? {} : { evidence }),
             })
             yield* resolved("publish", Schema.decodeUnknownOption(Paths)(fields.paths).pipe(Option.getOrUndefined))
             yield* committed("publish", fields)
@@ -1079,8 +1186,8 @@ export const make = Effect.fnUntraced(function* (
               ...(input.distinctFrom === undefined ? {} : { distinctFrom: input.distinctFrom }),
               source: { ...source, sessionID: context.sessionID },
               ...(anchor === undefined ? {} : { anchor }),
-              // Its session read the web, issue text or another repository: Console never promotes it.
-              ...(tracked(context.sessionID).tainted ? { tainted: true } : {}),
+              // Its session read the web, issue text, an MCP server or another repository: Console never promotes it.
+              ...((yield* tainted(context.sessionID)) ? { tainted: true } : {}),
               ...(yield* reader),
               idempotencyKey: `${context.sessionID}:${context.id}`.slice(0, 128),
             })
@@ -1100,7 +1207,7 @@ export const make = Effect.fnUntraced(function* (
       editor.add({
         name: "edit",
         description:
-          'Change part of an entry: a fix, a correction, an outdated detail. Copy oldText exactly from the entry\'s current body (no line numbers), unique in it; newText "" deletes it. For several changes pass edits: each oldText is matched against the revision you read, not after the others, and all apply or none. Also changes kind, title, tags, paths or errors, and adds evidence: when you checked that an entry holds, add what you ran and saw pass, which makes a teammate\'s provisional entry live. Pass the revision you read. Fix an entry right away when the user corrects what it says; record what holds for the repository as committed, not your uncommitted changes. Example: {"id":"mem_01","revision":3,"oldText":"npm test","newText":"bun test"}',
+          'Change part of an entry: a fix, a correction, an outdated detail. Copy oldText exactly from the entry\'s current body (no line numbers), unique in it; newText "" deletes it. For several changes pass edits: each oldText is matched against the revision you read, not after the others, and all apply or none. Also changes kind, title, tags, paths or errors, and adds evidence: when you checked that an entry holds, add what you ran and saw pass; it\'s recorded with the entry, and doesn\'t make a provisional one live by itself. Pass the revision you read. Fix an entry right away when the user corrects what it says; record what holds for the repository as committed, not your uncommitted changes. Example: {"id":"mem_01","revision":3,"oldText":"npm test","newText":"bun test"}',
         input: Schema.Struct({
           id: Schema.String,
           revision: Schema.Int,
@@ -1196,6 +1303,18 @@ export const make = Effect.fnUntraced(function* (
       })
     })
     .pipe(Effect.orDie)
+
+  // What memory keeps for a session goes when the session is deleted; an archived one may be resumed, so it stays.
+  yield* ctx.event.subscribe({ types: ["session.deleted"] }).pipe(
+    Stream.runForEach((event) =>
+      Effect.gen(function* () {
+        sessions.delete(event.data.sessionID)
+        yield* ctx.storage.remove(standingKey(event.data.sessionID))
+        yield* ctx.storage.remove(taintedKey(event.data.sessionID))
+      }),
+    ),
+    Effect.forkIn(scope, { startImmediately: true }),
+  )
 
   /** Connects to `next`, or disconnects when it is undefined; another workspace replaces the old one. */
   const sync = Effect.fnUntraced(function* (next: OpencodeWatches.Console | undefined) {

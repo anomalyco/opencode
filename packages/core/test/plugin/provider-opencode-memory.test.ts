@@ -6,7 +6,7 @@ import { Message, SystemPart } from "@opencode/ai/effect"
 import type { Plugin as PluginContext } from "@opencode/plugin/effect"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Model } from "@opencode/schema/model"
-import { Effect, Layer, Queue, Stream } from "effect"
+import { Effect, Exit, Fiber, Layer, Queue, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Agent } from "@opencode/core/agent"
 import { Credential } from "@opencode/core/credential"
@@ -24,7 +24,9 @@ import { Provider } from "@opencode/core/provider"
 import { Session } from "@opencode/core/session"
 import { SessionMessage } from "@opencode/core/session/message"
 import { Tool } from "@opencode/core/tool"
+import { execute } from "@opencode/core/tool/runtime"
 import { initGit } from "../fixture/git"
+import { advance, drain } from "../lib/clock"
 import { eventually, waitUntil } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
 import { Generate } from "@opencode/core/generate"
@@ -34,14 +36,15 @@ import { makePluginTestLayer, PluginTestLayer } from "./fixture"
 const withFlags = (overrides: string) =>
   testEffect(PluginTestLayer.pipe(Layer.provide(Layer.succeed(Flag.Overrides, overrides))))
 const it = withFlags("console_memory")
-/** What the stand-in model answers a distillation, and the prompts it was given. */
-const distiller = { reply: "", prompts: new Array<string>() }
+/** What the stand-in model answers a distillation, the prompts it was given, and the model each named. */
+const distiller = { reply: "", prompts: new Array<string>(), models: new Array<string | undefined>() }
 const generating = Layer.succeed(
   Generate.Service,
   Generate.Service.of({
     text: (input) =>
       Effect.sync(() => {
         distiller.prompts.push(input.prompt)
+        distiller.models.push(input.model && `${input.model.providerID}/${input.model.id}`)
         return distiller.reply
       }),
     image: () => Effect.die("unused"),
@@ -99,10 +102,7 @@ const injected = (id: string, score: number, revision = 1) => ({
   deliveryID: `mdl_${id}`,
 })
 
-/**
- * Console's memory routes and config, in-process, with the request and response shapes and error tags of Console's
- * contract (`docs/plans/org-library.md`, server commits a902a4fea and 1695a6575).
- */
+/** Console's memory routes and config, in-process, with the request and response shapes and error tags Console uses. */
 function fakeConsole() {
   const state = {
     memory: true,
@@ -122,6 +122,8 @@ function fakeConsole() {
     requests: new Array<{ method: string; path: string; body?: unknown; authorization: string | null }>(),
     /** The restricted repositories Console lists, as `host/id`. */
     anchors: new Array<string>(),
+    /** Console never answers for the list, as when it's slow. */
+    stalled: false,
     /** GitHub, served here too: repositories by `owner/name`, and which ids the reader's credential can read. */
     repositories: new Map<string, { id: number; visibility: string }>(),
     readable: new Set<number>(),
@@ -145,7 +147,8 @@ function fakeConsole() {
         return Response.json({ message: "Not Found" }, { status: 404 })
       }
       // The list the reachable set is checked against, which the plugin keeps fresh on its own: not logged.
-      if (url.pathname === "/api/memory/anchors") return Response.json({ anchors: state.anchors })
+      if (url.pathname === "/api/memory/anchors")
+        return state.stalled ? new Promise<Response>(() => {}) : Response.json({ anchors: state.anchors })
       if (url.pathname === "/api/v2/config")
         return Response.json({}, { headers: state.memory ? { [OpencodeMemory.header]: "1" } : {} })
       const body = (request.method === "GET" ? undefined : await request.json()) as Record<string, unknown> | undefined
@@ -158,7 +161,6 @@ function fakeConsole() {
       if (url.pathname === "/api/memory/search")
         return Response.json({ status: state.hits.length === 0 ? "no_reliable_entry" : "ok", results: state.hits })
       if (url.pathname === "/api/memory/inject") return Response.json({ entries: state.injected })
-      if (url.pathname === "/api/memory/candidates") return Response.json({ id: "cand_1", status: "pending" })
       if (url.pathname === "/api/memory/standing")
         return state.standing === undefined
           ? Response.json({ _tag: "NotFound" }, { status: 404 })
@@ -257,8 +259,14 @@ function fakeConsole() {
 const withConsole = <A, E, R>(use: (console: ReturnType<typeof fakeConsole>) => Effect.Effect<A, E, R>) =>
   Effect.acquireUseRelease(Effect.sync(fakeConsole), use, (console) => Effect.promise(() => console.server.stop(true)))
 
-/** Signs in to the fake Console and starts the plugin, recording each synthetic message it admits. */
-const start = Effect.fnUntraced(function* (console: ReturnType<typeof fakeConsole>) {
+/**
+ * Signs in to the fake Console and starts the plugin, recording each synthetic message it admits. `servers` are the MCP
+ * servers it lists.
+ */
+const start = Effect.fnUntraced(function* (
+  console: ReturnType<typeof fakeConsole>,
+  servers: ReadonlyArray<string> = [],
+) {
   const credentials = yield* Credential.Service
   yield* credentials.create({
     integrationID: Integration.ID.make("opencode"),
@@ -280,6 +288,16 @@ const start = Effect.fnUntraced(function* (console: ReturnType<typeof fakeConsol
   const host: PluginContext.Context = {
     ...real,
     event: { ...real.event, subscribe },
+    mcp: {
+      ...real.mcp,
+      list: () =>
+        real.mcp.list().pipe(
+          Effect.map((answer) => ({
+            ...answer,
+            data: servers.map((name) => ({ name }) as (typeof answer.data)[number]),
+          })),
+        ),
+    },
     session: {
       ...real.session,
       synthetic: (input) => {
@@ -333,13 +351,14 @@ const request = (sessionID: Session.ID, text: string): SessionHooks["context"] =
   options: {},
 })
 
-const prompt = (sessionID: Session.ID, text: string) =>
+const prompt = (sessionID: Session.ID, text: string, metadata?: Record<string, unknown>) =>
   Effect.gen(function* () {
     const hooks = yield* PluginHooks.Service
     yield* hooks.trigger("session", "prompt", {
       sessionID,
       messageID: SessionMessage.ID.create(),
       prompt: { text },
+      ...(metadata === undefined ? {} : { metadata }),
       delivery: "steer",
     })
   })
@@ -360,6 +379,32 @@ const ran = (sessionID: Session.ID, tool: string, input: unknown, output?: unkno
     }
     yield* hooks.trigger("tool", "execute.after", event)
     return event.result
+  })
+
+/** A shell call as the tool hooks see it, before and after `run` does what the command does. */
+const shell = <E, R>(
+  sessionID: Session.ID,
+  command: string,
+  run: Effect.Effect<number, E, R>,
+  call = `call_${command.length}_${Math.random().toString(36).slice(2)}`,
+) =>
+  Effect.gen(function* () {
+    const hooks = yield* PluginHooks.Service
+    const base = {
+      tool: "shell",
+      sessionID,
+      agent: Agent.ID.make("build"),
+      messageID: SessionMessage.ID.create(),
+      id: Tool.CallID.make(call),
+    }
+    yield* hooks.trigger("tool", "execute.before", { ...base, input: { command } })
+    const exitCode = yield* run
+    yield* hooks.trigger("tool", "execute.after", {
+      ...base,
+      input: { command },
+      status: "completed" as const,
+      result: { output: { exitCode, output: "done" } } as Tool.Result,
+    })
   })
 
 /** A tool result's text as the model gets it. */
@@ -851,7 +896,7 @@ describe("OpencodePlugin memory", () => {
     ),
   )
 
-  it.effect("delivers injected entries once more after a compaction, and rewrites start from what's shown since", () =>
+  it.effect("restates injected entries in the session's instructions after a compaction, never as a message", () =>
     withConsole((console) =>
       Effect.gen(function* () {
         const { host, synthetic, compacted } = yield* start(console)
@@ -862,36 +907,46 @@ describe("OpencodePlugin memory", () => {
         yield* hooks.trigger("session", "context", request(session.id, "Fix the deploy"))
         console.state.injected = [injected("mem_fix", 0.9)]
         yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 1, output: "TypeError: boom" })
+        yield* (yield* memoryTool("read")).execute({ id: "mem_read" }, context(session.id))
         expect(synthetic).toHaveLength(1)
 
         yield* compacted(session.id)
-        // The summary dropped what the agent was shown: a rewrite from it waits for the entry to be shown again.
-        const rewrite = yield* memoryTool("rewrite")
-        const stale = yield* rewrite
-          .execute({ id: "mem_a", revision: 1, body: "Short" }, context(session.id))
-          .pipe(Effect.flip)
-        expect(stale.message).toContain("hasn't been shown r1 whole since the conversation was compacted.")
-
-        const next = request(session.id, "Go on")
-        yield* hooks.trigger("session", "context", next)
         const again = OpencodeMemoryPolicy.initial.render([injected("mem_a", 0.95), injected("mem_fix", 0.9)], {
           type: "prompt",
           text: "Fix the deploy",
           files: [],
         })
-        expect(texts(next)).toEqual(["Go on", again])
-        expect(synthetic.at(-1)).toMatchObject({
-          text: again,
-          description: "2 memory entries again after compaction",
-          metadata: { source: "console.memory", moment: "compaction", entries: ["mem_a@1", "mem_fix@1"] },
-          resume: false,
-        })
-        // Once: the request after it gets nothing more.
-        const later = request(session.id, "Go on")
-        yield* hooks.trigger("session", "context", later)
-        expect(texts(later)).toEqual(["Go on"])
+        // An instruction entry, which the compacted conversation is restated with; no message, no request change.
+        yield* eventually(host.session.instructions.entry.list({ sessionID: session.id }), (entries) =>
+          entries.some((entry) => entry.key === "memory.delivered"),
+        )
+        expect(yield* host.session.instructions.entry.list({ sessionID: session.id })).toEqual([
+          { key: "memory.delivered", value: again },
+        ])
+        const next = request(session.id, "Go on")
+        yield* hooks.trigger("session", "context", next)
+        expect(texts(next)).toEqual(["Go on"])
+        expect(synthetic).toHaveLength(1)
+
+        // What it restated is shown again, so a rewrite may start from it; an entry only read before isn't.
+        const rewrite = yield* memoryTool("rewrite")
+        const stale = yield* rewrite
+          .execute({ id: "mem_read", revision: 1, body: "Short" }, context(session.id))
+          .pipe(Effect.flip)
+        expect(stale.message).toContain("hasn't been shown r1 whole since the conversation was compacted.")
         yield* rewrite.execute({ id: "mem_a", revision: 1, body: "Short" }, context(session.id))
         expect(console.state.requests.at(-1)?.body).toMatchObject({ expectedRevision: 1, body: "Short" })
+
+        // Once the session rewrote what was restated, the next compaction restates only what still holds.
+        yield* compacted(session.id)
+        const rest = OpencodeMemoryPolicy.initial.render([injected("mem_fix", 0.9)], {
+          type: "prompt",
+          text: "Fix the deploy",
+          files: [],
+        })
+        yield* eventually(host.session.instructions.entry.list({ sessionID: session.id }), (entries) =>
+          entries.some((entry) => entry.value === rest),
+        )
       }),
     ),
   )
@@ -957,9 +1012,14 @@ describe("OpencodePlugin memory", () => {
           await initGit(directory, "-b", "main")
           await fs.mkdir(path.join(directory, "test"), { recursive: true })
           await fs.writeFile(path.join(directory, "test/setup.ts"), "globalThis.DB = {}\n")
-          await $`git add test/setup.ts && git commit -qm setup`.cwd(directory).quiet()
+          await fs.writeFile(path.join(directory, ".gitignore"), "build/\n")
+          await $`git add test/setup.ts .gitignore && git commit -qm setup`.cwd(directory).quiet()
           // The agent's own, uncommitted fix for running tests.
           await fs.writeFile(path.join(directory, "bunfig.toml"), '[test]\npreload = ["./test/setup.ts"]\n')
+          // Staged, then changed again: added all the same.
+          await fs.writeFile(path.join(directory, "seed.sql"), "insert 1;\n")
+          await $`git add seed.sql`.cwd(directory).quiet()
+          await fs.writeFile(path.join(directory, "seed.sql"), "insert 2;\n")
         })
         const { host } = yield* start(console)
         const session = yield* host.session.create({})
@@ -985,6 +1045,21 @@ describe("OpencodePlugin memory", () => {
           )
           .pipe(Effect.flip)
         expect(edit.message).toContain("names bunfig.toml")
+        const staged = yield* publish
+          .execute(
+            { kind: "procedure", title: "Seed first", body: "Run seed.sql before the tests." },
+            context(session.id),
+          )
+          .pipe(Effect.flip)
+        expect(staged.message).toContain("names seed.sql")
+        // A path nobody commits (git-ignored) passes; one that isn't there and isn't ignored doesn't.
+        const gone = yield* publish
+          .execute(
+            { kind: "procedure", title: "Build", body: "Builds go to build/.", paths: ["build/out/", "lib/gone/"] },
+            context(session.id),
+          )
+          .pipe(Effect.flip)
+        expect(gone.message).toContain('paths name "lib/gone/", which isn\'t in the repository')
         expect(console.state.requests.length).toBe(asked)
 
         // The committed file, and the uncommitted one as structured evidence, pass.
@@ -1103,12 +1178,17 @@ describe("OpencodePlugin memory", () => {
         expect(texts(after)).toEqual(["Fix the deploy"])
         expect(synthetic).toEqual([])
 
+        // Only deliveries count: a failure Console has nothing new for doesn't use one up.
         yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 1, output: "TypeError: again" })
-        yield* hooks.trigger("session", "context", request(session.id, "Fix the deploy"))
-        yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 1, output: "TypeError: third" })
-        yield* hooks.trigger("session", "context", request(session.id, "Fix the deploy"))
+        console.state.injected = [injected("mem_other", 0.9)]
+        const second = yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 1, output: "TypeError: 2" })
+        expect(resultText(second)).toContain("## mem_other r1 bug: Entry mem_other")
+        console.state.injected = [injected("mem_third", 0.9)]
+        const third = yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 1, output: "TypeError: 3" })
+        expect(resultText(third)).not.toContain("workspace-memory")
         expect(console.state.requests.map((item) => (item.body as { moment: string }).moment)).toEqual([
           "prompt",
+          "failure",
           "failure",
           "failure",
         ])
@@ -1116,54 +1196,49 @@ describe("OpencodePlugin memory", () => {
     ),
   )
 
-  it.effect("points out a given entry when the user's message corrects it, with the revision to edit", () =>
-    withConsole((console) =>
-      Effect.gen(function* () {
-        const { host, synthetic } = yield* start(console)
-        const hooks = yield* PluginHooks.Service
-        const session = yield* host.session.create({})
-        console.state.injected = [injected("mem_deploy", 0.9)]
-        yield* prompt(session.id, "Deploy the worker")
-        yield* hooks.trigger("session", "context", request(session.id, "Deploy the worker"))
+  it.effect(
+    "points out a given entry the user's message corrects in the session's instructions, until it's fixed",
+    () =>
+      withConsole((console) =>
+        Effect.gen(function* () {
+          const { host, synthetic } = yield* start(console)
+          const hooks = yield* PluginHooks.Service
+          const session = yield* host.session.create({})
+          const instructions = host.session.instructions.entry.list({ sessionID: session.id })
+          console.state.injected = [injected("mem_deploy", 0.9)]
+          yield* prompt(session.id, "Deploy the worker")
+          yield* hooks.trigger("session", "context", request(session.id, "Deploy the worker"))
 
-        // Not a correction: no nudge.
-        yield* prompt(session.id, "Thanks, go ahead with mem_deploy body")
-        const plain = request(session.id, "Thanks")
-        yield* hooks.trigger("session", "context", plain)
-        expect(texts(plain)).toEqual(["Thanks"])
+          // Not a correction: no reminder.
+          yield* prompt(session.id, "Thanks, go ahead with mem_deploy body")
+          expect(yield* instructions).toEqual([])
 
-        // The injected entry's body reads "Body of mem_deploy"; the user says otherwise.
-        yield* prompt(session.id, "No, that body of mem_deploy is wrong, deploy with wrangler instead")
-        const corrected = request(session.id, "No, ...")
-        yield* hooks.trigger("session", "context", corrected)
-        const nudge = OpencodeMemoryPolicy.initial.nudge({
-          id: "mem_deploy",
-          revision: 1,
-          title: "Entry mem_deploy",
-          text: "",
-        })
-        expect(texts(corrected).at(-1)).toBe(nudge)
-        expect(nudge).toContain("mem_deploy r1")
-        expect(synthetic.at(-1)).toMatchObject({
-          text: nudge,
-          metadata: { source: "console.memory", kind: "correction", entry: "mem_deploy", revision: 1 },
-          resume: false,
-        })
+          // The injected entry's body reads "Body of mem_deploy"; the user says otherwise.
+          yield* prompt(session.id, "No, that body of mem_deploy is wrong, deploy with wrangler instead")
+          const nudge = OpencodeMemoryPolicy.initial.nudge({
+            id: "mem_deploy",
+            revision: 1,
+            title: "Entry mem_deploy",
+            text: "",
+          })
+          expect(nudge).toContain("mem_deploy r1")
+          expect(yield* instructions).toEqual([{ key: "memory.correction", value: nudge }])
+          // Never a message: the requests go on as they were.
+          const corrected = request(session.id, "No, ...")
+          yield* hooks.trigger("session", "context", corrected)
+          expect(texts(corrected)).toEqual(["No, ..."])
+          expect(synthetic).toHaveLength(1)
 
-        // After the agent's edit, a later nudge names the new revision; the request after it gets nothing more.
-        yield* (yield* memoryTool("edit")).execute(
-          { id: "mem_deploy", revision: 1, oldText: "More", newText: "wrangler deploy" },
-          context(session.id),
-        )
-        yield* prompt(session.id, "Actually the body of mem_deploy should say wrangler, not npm")
-        const again = request(session.id, "Actually ...")
-        yield* hooks.trigger("session", "context", again)
-        expect(texts(again).at(-1)).toContain("mem_deploy r2")
-        const after = request(session.id, "Actually ...")
-        yield* hooks.trigger("session", "context", after)
-        expect(texts(after)).toEqual(["Actually ..."])
-      }),
-    ),
+          // The agent's edit settles it; a later correction names the new revision.
+          yield* (yield* memoryTool("edit")).execute(
+            { id: "mem_deploy", revision: 1, oldText: "More", newText: "wrangler deploy" },
+            context(session.id),
+          )
+          expect(yield* instructions).toEqual([])
+          yield* prompt(session.id, "Actually the body of mem_deploy should say wrangler, not npm")
+          expect((yield* instructions)[0]?.value).toContain("mem_deploy r2")
+        }),
+      ),
   )
 
   it.effect("doesn't inject a revision the session already read, but does inject its correction", () =>
@@ -1243,6 +1318,114 @@ describe("OpencodePlugin memory", () => {
           expect(JSON.stringify([console.state.requests, console.state.github])).not.toContain("ghp_secret")
         }),
       ),
+  )
+})
+
+describe("OpencodePlugin memory evidence and taint", () => {
+  it.effect("attaches the commits the session made, and takes no commit or CI evidence from the agent", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        const directory = (yield* Location.Service).directory
+        const git = (command: string) =>
+          Effect.promise(() =>
+            $`sh -c ${command}`
+              .cwd(directory)
+              .quiet()
+              .nothrow()
+              .then((result) => result.exitCode),
+          )
+        yield* Effect.promise(async () => {
+          await initGit(directory, "-b", "main")
+          await $`git commit --allow-empty -qm root`.cwd(directory).quiet()
+        })
+        const { host } = yield* start(console)
+        const session = yield* host.session.create({})
+        const publish = yield* memoryTool("publish")
+        const entry = { kind: "gotcha", title: "Dates are UTC", body: "Use toISOString" }
+
+        // As the registry runs the tool: its input is checked first.
+        const claimed = yield* execute(
+          publish,
+          { ...entry, evidence: [{ kind: "ci", ref: "run 1" }] },
+          context(session.id),
+        ).pipe(Effect.flip)
+        expect(claimed.message).toContain("evidence")
+        const asserted = yield* execute(
+          publish,
+          { ...entry, evidence: [{ kind: "commit", ref: "abc1234" }] },
+          context(session.id),
+        ).pipe(Effect.flip)
+        expect(asserted.message).toContain("evidence")
+        expect(console.state.requests.filter((item) => item.path === "/api/memory/entries")).toEqual([])
+
+        // Commands that only name a commit, a commit that fails, and one that makes nothing new aren't commits.
+        yield* shell(session.id, "git log --grep commit", git("git log --grep commit"))
+        yield* shell(session.id, "git show commit", git("git show HEAD"))
+        yield* shell(session.id, "git commit -qm nothing", git("git commit -qm nothing"))
+        yield* shell(session.id, "git commit -qm nothing || true", git("true"))
+        // HEAD moved, but not by a commit of the session's own.
+        yield* shell(session.id, "git merge --no-commit feature", git("git commit --allow-empty -qm merged"))
+        yield* shell(
+          session.id,
+          "git -c user.name=x commit --allow-empty -qm one",
+          git("git commit --allow-empty -qm one"),
+        )
+        const sha = (yield* Effect.promise(() => $`git rev-parse HEAD`.cwd(directory).text())).trim()
+
+        const evidence = [{ kind: "test", ref: "bun test" }]
+        yield* publish.execute({ ...entry, evidence }, context(session.id, "call_ok"))
+        expect(console.state.requests.at(-1)?.body).toMatchObject({
+          evidence: [...evidence, { kind: "commit", ref: sha }],
+        })
+      }),
+    ),
+  )
+
+  it.effect("taints a session that used an MCP server or a tainted subagent, across a restart and on edits too", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        const plugin = yield* Scope.make()
+        const first = yield* start(console, ["Issue Tracker"]).pipe(Scope.provide(plugin))
+        const publish = yield* memoryTool("publish")
+        const entry = { kind: "gotcha", title: "Dates are UTC", body: "Use toISOString" }
+        const published = () => console.state.requests.filter((item) => item.path === "/api/memory/entries").at(-1)
+
+        const tool = yield* first.host.session.create({})
+        yield* ran(tool.id, "Issue_Tracker_get_issue", { id: 7 }, { text: "issue body" })
+        yield* publish.execute(entry, context(tool.id, "call_tool"))
+        expect(published()?.body).toMatchObject({ tainted: true })
+
+        const resource = yield* first.host.session.create({})
+        yield* ran(resource.id, "opencode_read_mcp_resource", { uri: "x://1" }, { text: "doc" })
+        yield* publish.execute(entry, context(resource.id, "call_resource"))
+        expect(published()?.body).toMatchObject({ tainted: true })
+
+        // What a subagent took in reaches the session that spawned it.
+        const parent = yield* first.host.session.create({})
+        const child = yield* first.host.session.create({ parentID: parent.id })
+        yield* ran(child.id, "webfetch", { url: "https://example.com" }, { output: "page" })
+        const clean = yield* first.host.session.create({})
+        yield* Scope.close(plugin, Exit.void)
+
+        // A new process remembers.
+        const { host } = yield* start(console)
+        const after = yield* memoryTool("publish")
+        yield* after.execute(entry, context(parent.id, "call_parent"))
+        expect(published()?.body).toMatchObject({ tainted: true })
+        yield* after.execute(entry, context(clean.id, "call_clean"))
+        expect(published()?.body).not.toHaveProperty("tainted")
+        yield* (yield* memoryTool("edit")).execute(
+          { id: "mem_1", revision: 1, oldText: "More", newText: "Less" },
+          context(parent.id),
+        )
+        expect(console.state.requests.at(-1)?.body).toMatchObject({ expectedRevision: 1, tainted: true })
+
+        // Deleting a session takes what memory kept for it.
+        expect(yield* host.storage.get(`memory-tainted:${parent.id}`)).toBe(true)
+        yield* host.session.remove({ sessionID: parent.id })
+        yield* eventually(host.storage.get(`memory-tainted:${parent.id}`), (value) => value === undefined)
+      }),
+    ),
   )
 })
 
@@ -1343,6 +1526,65 @@ describe("OpencodePlugin memory standing block", () => {
     ),
   )
 
+  it.effect("keeps a session's block byte-identical across a restart, and never adds one to a session that ran", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        yield* inRepo
+        console.state.standing = [convention("mem_a")]
+        const plugin = yield* Scope.make()
+        const first = yield* start(console).pipe(Scope.provide(plugin))
+        const hooks = yield* PluginHooks.Service
+        const session = yield* first.host.session.create({})
+        const before = request(session.id, "Add a feature")
+        yield* hooks.trigger("session", "context", before)
+        const block = before.system.at(-1)?.text ?? ""
+        expect(block).toContain("## mem_a r2 convention: Rule mem_a")
+        // A session that ran before memory was connected.
+        const ran = yield* first.host.session.create({})
+        yield* Scope.close(plugin, Exit.void)
+
+        // Console's conventions changed while the process was down: the session keeps the bytes it started with.
+        console.state.standing = [convention("mem_a"), convention("mem_b")]
+        yield* start(console)
+        const asked = console.state.requests.filter((item) => item.path === "/api/memory/standing").length
+        const after = request(session.id, "Go on")
+        yield* hooks.trigger("session", "context", after)
+        expect(after.system.map((part) => part.text)).toEqual(["Agent prompt", block])
+
+        const running = request(ran.id, "Go on")
+        running.messages.unshift(Message.user("Start"), Message.assistant([{ type: "text", text: "Done" }]))
+        yield* hooks.trigger("session", "context", running)
+        expect(running.system.map((part) => part.text)).toEqual(["Agent prompt"])
+        expect(console.state.requests.filter((item) => item.path === "/api/memory/standing")).toHaveLength(asked)
+      }),
+    ),
+  )
+
+  it.effect("holds a session's first request no longer than the policy's timeout while Console is slow", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        yield* inRepo
+        console.state.standing = [convention("mem_a")]
+        console.state.stalled = true
+        const { host } = yield* start(console)
+        const hooks = yield* PluginHooks.Service
+        const session = yield* host.session.create({})
+        const first = request(session.id, "Add a feature")
+        const fiber = yield* hooks
+          .trigger("session", "context", first)
+          .pipe(Effect.forkChild({ startImmediately: true }))
+        yield* advance(() => fiber.pollUnsafe() !== undefined)
+        yield* Fiber.join(fiber)
+        expect(first.system.map((part) => part.text)).toEqual(["Agent prompt"])
+        // Without the block it started with none, so it keeps none.
+        console.state.stalled = false
+        const later = request(session.id, "Go on")
+        yield* hooks.trigger("session", "context", later)
+        expect(later.system.map((part) => part.text)).toEqual(["Agent prompt"])
+      }),
+    ),
+  )
+
   it.effect("has no block when Console has none to give, and doesn't ask again", () =>
     withConsole((console) =>
       Effect.gen(function* () {
@@ -1363,7 +1605,7 @@ describe("OpencodePlugin memory standing block", () => {
 
 describe("OpencodePlugin memory capture", () => {
   capturing("console_memory,memory_capture").effect(
-    "logs every turn, distils at a boundary out of band, and publishes what it finds with the segment's evidence",
+    "follows every turn, distils at a boundary out of band, and publishes what it finds with the segment's evidence",
     () =>
       withConsole((console) =>
         Effect.gen(function* () {
@@ -1417,19 +1659,11 @@ describe("OpencodePlugin memory capture", () => {
             errors: ["Error: ACME_DB_URL is not set"],
             evidence: [{ kind: "test", ref: "ACME_DB_URL=memory://test bun test" }],
             source: { sessionID: session.id },
-            idempotencyKey: `${session.id}:test:0:0`,
+            idempotencyKey: expect.stringMatching(new RegExp(`^${session.id}:test:[0-9a-f]{16}:0$`)),
           })
-          // The coding session got no message from any of it.
+          // The coding session got no message from any of it, and nothing of the turns was stored.
           expect(synthetic).toEqual([])
-
-          // Every event is in the plugin's own log, in order.
-          const log = yield* host.storage.scan({ prefix: `memory-log:${session.id}:`, limit: 50 })
-          expect(log.entries.map((item) => (item.value as { type: string }).type)).toEqual([
-            "prompt",
-            "shell",
-            "edit",
-            "shell",
-          ])
+          expect((yield* host.storage.scan({ prefix: "memory-log", limit: 50 })).entries).toEqual([])
 
           // No reminder when the session would go idle.
           yield* hooks.trigger("session", "experimental.idle", { sessionID: session.id, background: [] } as never)
@@ -1506,19 +1740,20 @@ describe("OpencodePlugin memory capture", () => {
             yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 1, output: " 1 fail" })
             yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 0, output: " 1 pass" })
           })
+          const boundaries = () => distiller.prompts.map((item) => item.match(/The boundary: (\w+)/)?.[1])
           yield* prompt(session.id, "Fix the tests")
           yield* fixed
           yield* fixed
-          const settled = Effect.promise(() => Bun.sleep(300))
-          const boundaries = () => distiller.prompts.map((item) => item.match(/The boundary: (\w+)/)?.[1])
-          yield* settled
-          expect(boundaries()).toEqual(["test", "test"])
+          yield* advance(() => boundaries().length >= 2)
           // A third in the same turn is over the turn's allowance.
           yield* fixed
+          yield* drain
+          expect(boundaries()).toEqual(["test", "test"])
           // The next message closes the turn (always distilled) and refills the allowance.
           yield* prompt(session.id, "Now the docs")
           yield* fixed
-          yield* settled
+          yield* advance(() => boundaries().length >= 4)
+          yield* drain
           expect(boundaries()).toEqual(["test", "test", "task", "test"])
         }),
       ),
@@ -1560,6 +1795,80 @@ describe("OpencodePlugin memory capture", () => {
       ),
   )
 
+  capturing("console_memory,memory_capture").effect(
+    "takes only what a person typed as the user's word, not a subagent's task, a command or an automation",
+    () =>
+      withConsole((console) =>
+        Effect.gen(function* () {
+          distiller.prompts.length = 0
+          const rule = "From now on we always put the issue number in the commit message"
+          distiller.reply = JSON.stringify({
+            candidates: [
+              {
+                kind: "convention",
+                title: "Commit messages name the issue",
+                body: "Claim: x\nApplies when: x\nAction: x\nVerify: x\nAnchors: x\nEvidence: the user said so",
+                basis: "user",
+                quote: rule,
+              },
+            ],
+          })
+          const { host } = yield* start(console)
+          const parent = yield* host.session.create({})
+          const child = yield* host.session.create({ parentID: parent.id })
+          yield* prompt(child.id, rule)
+          const scheduled = yield* host.session.create({})
+          yield* prompt(scheduled.id, rule, { automation: { id: "aut_1" } })
+          // A command's prompt carries its name, as core records it.
+          const commanded = yield* host.session.create({})
+          yield* prompt(commanded.id, rule, { command: { name: "house" } })
+          yield* drain
+          expect(console.state.requests.filter((item) => item.path === "/api/memory/entries")).toEqual([])
+
+          // The same words typed by the user confirm it.
+          yield* prompt(parent.id, rule)
+          yield* waitUntil(
+            Effect.sync(() => console.state.requests.some((item) => item.path === "/api/memory/entries")),
+          )
+          expect(console.state.requests.find((item) => item.path === "/api/memory/entries")?.body).toMatchObject({
+            evidence: [{ kind: "confirmation", ref: rule }],
+          })
+        }),
+      ),
+  )
+
+  capturing("console_memory,memory_capture").effect(
+    "distils with the memory writer's configured model and records it with what it publishes",
+    () =>
+      withConsole((console) =>
+        Effect.gen(function* () {
+          distiller.models.length = 0
+          distiller.reply = JSON.stringify({
+            candidates: [{ kind: "gotcha", title: "T", body: "Claim: x\nApplies when: x\nAction: x" }],
+          })
+          const { host } = yield* start(console)
+          yield* host.agent.transform((editor) =>
+            editor.update("memory-writer", (agent) => {
+              agent.model = Model.Ref.make({ providerID: Provider.ID.make("cheap"), id: Model.ID.make("writer") })
+            }),
+          )
+          const writer = yield* host.agent.get({ agentID: Agent.ID.make("memory-writer") })
+          expect(writer.data).toMatchObject({ hidden: true, model: { providerID: "cheap", id: "writer" } })
+          const session = yield* host.session.create({})
+          yield* prompt(session.id, "Fix the tests")
+          yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 1, output: " 1 fail" })
+          yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 0, output: " 1 pass" })
+          yield* waitUntil(
+            Effect.sync(() => console.state.requests.some((item) => item.path === "/api/memory/entries")),
+          )
+          expect(distiller.models).toEqual(["cheap/writer"])
+          expect(console.state.requests.find((item) => item.path === "/api/memory/entries")?.body).toMatchObject({
+            source: { sessionID: session.id, model: "cheap/writer" },
+          })
+        }),
+      ),
+  )
+
   capturing("console_memory,-memory_capture").effect("records and distils nothing with the switch off", () =>
     withConsole((console) =>
       Effect.gen(function* () {
@@ -1568,8 +1877,7 @@ describe("OpencodePlugin memory capture", () => {
         const session = yield* host.session.create({})
         yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 1, output: " 1 fail" })
         yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 0, output: " 1 pass" })
-        const log = yield* host.storage.scan({ prefix: `memory-log:${session.id}:`, limit: 50 })
-        expect(log.entries).toEqual([])
+        yield* drain
         expect(distiller.prompts).toEqual([])
       }),
     ),
@@ -1586,7 +1894,12 @@ describe("OpencodeMemoryCapture", () => {
     tail: "",
   })
   const edit: OpencodeMemoryCapture.Event = { type: "edit", files: ["src/a.ts"] }
-  const ask = (text: string, correction = false): OpencodeMemoryCapture.Event => ({ type: "prompt", text, correction })
+  const ask = (text: string, correction = false, user = true): OpencodeMemoryCapture.Event => ({
+    type: "prompt",
+    text,
+    correction,
+    user,
+  })
 
   test("finds the work boundaries the harness sees", () => {
     const boundary = OpencodeMemoryCapture.boundary
@@ -1599,6 +1912,11 @@ describe("OpencodeMemoryCapture", () => {
     expect(boundary([], ask("From now on we always name money parameters with a Cents suffix"))).toBe("rule")
     expect(boundary([edit], ask("Our convention is one test file per module"))).toBe("rule")
     expect(boundary([], ask("Add refund(); it must never return more than the original"))).toBeUndefined()
+    // An ordinary task that names the repository isn't a rule, and only what a person typed states one.
+    expect(boundary([], ask("Fix the flaky date test in this repo"))).toBeUndefined()
+    expect(boundary([], ask("From now on we always name money parameters with a Cents suffix", false, false))).toBe(
+      undefined,
+    )
     expect(boundary([edit], { type: "subtask" })).toBe("subtask")
     expect(boundary([edit], { type: "compaction" })).toBe("compaction")
     // Without work in between: no task, correction, subtask or compaction boundary.
@@ -1616,6 +1934,9 @@ describe("OpencodeMemoryCapture", () => {
     expect(OpencodeMemoryCapture.backing(candidate("we never stub the network in tests"), segment)).toBe("dropped")
     expect(OpencodeMemoryCapture.backing(candidate(), segment)).toBe("dropped")
     expect(OpencodeMemoryCapture.backing(candidate(undefined, "observed"), segment)).toBe("observed")
+    // The same words in a message no person typed (a subagent's task, a command's template) aren't the user's.
+    const given = [ask("Add isWeekend. From now on we never mock the clock in tests.", false, false)]
+    expect(OpencodeMemoryCapture.backing(candidate("From now on we never mock the clock"), given)).toBe("dropped")
   })
 
   test("links commits and passing runs after failures as evidence, and keeps only well-formed candidates", () => {

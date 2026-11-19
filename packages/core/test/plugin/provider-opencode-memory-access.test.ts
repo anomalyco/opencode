@@ -4,6 +4,10 @@ import { HttpClient } from "effect/http"
 import { TestClock } from "effect/testing"
 import { AppProcess } from "@opencode/util/process"
 import { OpencodeMemoryAccess } from "@opencode/core/plugin/provider/opencode-memory-access"
+import fs from "fs/promises"
+import path from "path"
+import { withEnv } from "../fixture/env"
+import { tmpdirScoped } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -160,11 +164,11 @@ function fakeGitHub() {
 const withGitHub = <A, E, R>(use: (github: ReturnType<typeof fakeGitHub>) => Effect.Effect<A, E, R>) =>
   Effect.acquireUseRelease(Effect.sync(fakeGitHub), use, (github) => Effect.promise(() => github.server.stop(true)))
 
-const access = (github: ReturnType<typeof fakeGitHub>) =>
+const access = (github: ReturnType<typeof fakeGitHub>, env: Record<string, string> = { GH_TOKEN: "reader-token" }) =>
   Effect.gen(function* () {
-    return OpencodeMemoryAccess.make(yield* HttpClient.HttpClient, yield* AppProcess.Service, {
+    return yield* OpencodeMemoryAccess.make(yield* HttpClient.HttpClient, yield* AppProcess.Service, {
       api: github.server.url.origin,
-      env: { GH_TOKEN: "reader-token" },
+      env,
     })
   })
 
@@ -204,6 +208,37 @@ describe("OpencodeMemoryAccess.make", () => {
           })
         }),
       ),
+  )
+
+  it.effect("asks the reader's gh for its token at most once a minute", () =>
+    withGitHub((github) =>
+      Effect.gen(function* () {
+        const bin = (yield* tmpdirScoped()).path
+        const calls = path.join(bin, "calls")
+        yield* Effect.promise(async () => {
+          await fs.writeFile(path.join(bin, "gh"), `#!/bin/sh\necho x >> "${calls}"\necho reader-token\n`)
+          await fs.chmod(path.join(bin, "gh"), 0o755)
+        })
+        const asked = Effect.promise(() =>
+          fs.readFile(calls, "utf8").then(
+            (text) => text.split("\n").filter(Boolean).length,
+            () => 0,
+          ),
+        )
+        github.state.repositories.set("acme/api", { id: 202, visibility: "private", public: false })
+        yield* withEnv({ PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}` }, () =>
+          Effect.gen(function* () {
+            const { anchor } = yield* access(github, {})
+            expect((yield* anchor("github.com/acme/api")).repoId).toBe(202)
+            yield* anchor("github.com/acme/api")
+            expect(yield* asked).toBe(1)
+            yield* TestClock.adjust("2 minutes")
+            yield* anchor("github.com/acme/api")
+            expect(yield* asked).toBe(2)
+          }),
+        )
+      }),
+    ),
   )
 
   it.effect(
