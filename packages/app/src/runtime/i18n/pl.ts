@@ -1198,7 +1198,6 @@ export const dict = {
   "session.activity.scripts.few": "{{count}} skrypty",
   "session.activity.scripts.many": "{{count}} skryptów",
   "session.activity.scripts.other": "{{count}} skryptu",
-  "session.activity.background": "Praca w tle",
   "session.activity.shell.back": "Wróć do pracy w tle",
   "session.activity.shell.stop": "Zatrzymaj",
   "session.activity.shell.stopping": "Zatrzymywanie…",

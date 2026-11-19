@@ -589,7 +589,8 @@ with a hint to encode as text first (`TextDecoder`, `toBase64`, `toHex`).
 
 - [x] `new Uint8Array(length | array | iterable | Uint8Array)`, `Uint8Array.from`, `Uint8Array.of`, `fromBase64`,
       and `fromHex`. Lengths are capped like arrays. The `Uint8Array.from` mapper and `thisArg` see the original
-      values, so `Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))` decodes base64.
+      values, so `Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))` decodes base64. `BYTES_PER_ELEMENT` is 1 on
+      the constructor, its instances, and `Buffer`.
 - [x] Index reads and writes with JS byte semantics: values wrap modulo 256, out-of-range writes are ignored, indexes
       cannot be deleted. `length` is a prototype accessor, so `Object.keys` lists only indexes.
 - [x] `at`, `slice`, `subarray` (a view on the same bytes), `set`, `fill`, `reverse`, `indexOf`, `lastIndexOf`,

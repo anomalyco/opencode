@@ -289,8 +289,15 @@ const METHOD_ICON = {
   external: "server",
 } as const satisfies Record<ProviderConnectMethod["type"], string>
 
-// The TUI's integration groups and order, with connected integrations pulled up into their own group first.
-const POPULAR = ["opencode", "opencode-go", "openai", "github-copilot", "anthropic", "google"]
+// The TUI's integration groups, with connected integrations pulled up into their own group first. Unlike the TUI,
+// Go comes before Console here.
+const POPULAR = ["opencode-go", "opencode", "openai", "github-copilot", "anthropic", "google"]
+
+const providerNote = (id: string) => {
+  if (id === "opencode-go") return "dialog.provider.opencodeGo.tagline" as const
+
+  if (id === "opencode") return "dialog.provider.opencode.note" as const
+}
 
 function ProviderPicker(props: { directory?: string; onSelect: (provider: string) => void; onPrepare?: () => void }) {
   const integrations = useIntegrations(() => props.directory)
@@ -442,6 +449,13 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
                             <span class="min-w-0 truncate font-[440] text-v2-text-text-faint">
                               {language.t("dialog.provider.environmentOnly")}
                             </span>
+                          </Show>
+                          <Show when={!disabled(provider) && !account() && providerNote(provider.id)}>
+                            {(key) => (
+                              <span class="min-w-0 shrink-[999] truncate font-[440] text-v2-text-text-muted">
+                                {language.t(key())}
+                              </span>
+                            )}
                           </Show>
                           <Show when={account()}>
                             {(label) => (
