@@ -618,9 +618,16 @@ const make = Effect.gen(function* () {
       yield* Effect.logInfo("update check skipped", { reason: "policy-disabled" })
       return undefined
     }
+    // Distro packages and other unmanaged copies update through whatever installed them, so offering an update here
+    // would only lead to a failed install. Volta and mise copies still notify: applying explains their command.
+    const detected = yield* method()
+    if (!detected && !installedOwner) {
+      yield* Effect.logInfo("update check skipped", { reason: "unknown-install-method" })
+      return undefined
+    }
 
     const current = yield* Ref.get(installedVersion)
-    const version = yield* latest()
+    const version = yield* latest(detected)
     yield* Effect.logInfo("update check", {
       current,
       latest: version,
