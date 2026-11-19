@@ -2,7 +2,7 @@ import { pageLetter } from "./keys"
 
 // Who a key pressed in the app window belongs to while a page prompt (alert, confirm, prompt, "Leave site?", a
 // sign-in) is open in the pane. The prompt is modal for its tab: while the keyboard is inside it, the app's command
-// keybinds and the native menu's key equivalents do not run (the prompt registers itself with `ownKeyboard`), and the
+// keybinds and the native menu's key equivalents do not run (the prompt is a modal alert dialog), and the
 // prompt cancels what the window itself would do behind it. Keys outside the prompt are the app's.
 
 export type PromptKey = Pick<

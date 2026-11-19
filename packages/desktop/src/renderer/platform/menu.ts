@@ -1,5 +1,4 @@
 import type { Platform } from "@opencode/app/desktop"
-import { keyboardOwned } from "@opencode/ui/hooks"
 import type { ElectronAPI } from "../api-types"
 import { resetZoom, zoomIn, zoomOut } from "../window/zoom"
 import {
@@ -26,13 +25,13 @@ function dispatch(event: MenuRouterEvent) {
 
 /**
  * Commands that arrive before the app interface binds run once it does. A key equivalent the page left unhandled runs
- * nothing while the keyboard is in a surface that owns it, such as a page's prompt: macOS offers the menu every key
- * the focused element does not consume, as Control+` or Option+Down on a prompt's button.
+ * nothing while the keyboard is in a modal alert dialog, such as a page's prompt: macOS offers the menu every key the
+ * focused element does not consume, as Control+` or Option+Down on a prompt's button.
  */
 export function startDesktopMenu(api: ElectronAPI) {
   api.onMenuCommand((id, accelerator) => {
     // A minimized or unfocused window keeps its active element: only a window with the keyboard drops the command.
-    if (accelerator && document.hasFocus() && keyboardOwned(document.activeElement)) return
+    if (accelerator && document.hasFocus() && document.activeElement?.closest('[role="alertdialog"][aria-modal="true"]')) return
     dispatch({ type: "command.received", id })
   })
 }

@@ -2,7 +2,6 @@ import { Button } from "@opencode/ui/button"
 import { Checkbox } from "@opencode/ui/checkbox"
 import { DialogBody, DialogFooter } from "@opencode/ui/dialog"
 import { Icon } from "@opencode/ui/icon"
-import { ownKeyboard } from "@opencode/ui/hooks"
 import { IconButton } from "@opencode/ui/icon-button"
 import { TextInput } from "@opencode/ui/text-input"
 import { Tooltip } from "@opencode/ui/tooltip"
@@ -80,8 +79,6 @@ export function PromptDialog(props: {
     if (!box) return
     guard = guardActivation(box, () => !!props.held)
     onCleanup(guard.dispose)
-    // The command layer and the native menu run no shortcut while the keyboard is here.
-    onCleanup(ownKeyboard(box))
     // A listener on the dialog itself, not Solid's on the document, so the dialog's keys stop here.
     const root = box
     root.addEventListener("keydown", keyDown)
@@ -100,7 +97,7 @@ export function PromptDialog(props: {
   })
 
   // The dialog's keys are its own (prompt-keys.ts): the command layer and the native menu run no shortcut while the
-  // keyboard is inside it (`ownKeyboard`), no other handler of the window sees them, and what the window would do
+  // keyboard is inside it (a modal alert dialog), no other handler of the window sees them, and what the window would do
   // behind it, as its own reload or zoom, is cancelled. Tab and Shift+Tab cycle inside the dialog; the page behind it is
   // a still.
   const keyDown = (event: KeyboardEvent) => {
