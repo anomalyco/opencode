@@ -8,6 +8,7 @@ use opencode_api::js::number_to_string;
 use opencode_store::State;
 use opencode_store::forms::{Form, GLOBAL};
 use opencode_store::location::Location;
+use opentui::input::strip_ansi_sequences;
 
 use crate::prelude::*;
 
@@ -724,7 +725,7 @@ impl Inner {
         let Some(tui) = self.tui.upgrade() else { return };
         tui.app.read_clipboard(bind!(self, |inner, _, content| {
             let Some(content) = content else { return };
-            let value = content.replace("\r\n", "\n").replace('\r', "\n");
+            let value = strip_ansi_sequences(&content).replace("\r\n", "\n").replace('\r', "\n");
             if inner.draft.borrow().editing || inner.is_textual() {
                 if let Some((_, textarea)) = inner.editor.borrow().as_ref() {
                     textarea.insert(&value);
@@ -768,7 +769,7 @@ impl Inner {
             if !inner.is_live() {
                 return;
             }
-            let value = text.replace("\r\n", "\n").replace('\r', "\n");
+            let value = strip_ansi_sequences(text).replace("\r\n", "\n").replace('\r', "\n");
             if inner.paste_custom(&value) {
                 inner.changed();
             }
