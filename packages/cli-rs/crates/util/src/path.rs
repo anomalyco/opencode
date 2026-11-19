@@ -3,6 +3,7 @@
 //! runs on any host, except that [`Flavor::resolve`] on Windows reads the working directory's drive.
 
 use std::borrow::Cow;
+use std::path::{Path, PathBuf};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Flavor {
@@ -272,6 +273,15 @@ pub fn windows_path(flavor: Flavor, path: &str) -> Cow<'_, str> {
         return Cow::Owned(format!("{}:/{tail}", drive.to_ascii_uppercase()));
     }
     Cow::Borrowed(path)
+}
+
+/// `fs.realpathSync`: `canonicalize` without the verbatim prefix Windows adds ([`strip_verbatim`]).
+pub fn realpath(path: &Path) -> Option<PathBuf> {
+    let real = std::fs::canonicalize(path).ok()?;
+    Some(match real.to_str() {
+        Some(text) => PathBuf::from(strip_verbatim(text).as_ref()),
+        None => real,
+    })
 }
 
 /// The path `realpath` gives, from what `std::fs::canonicalize` gives: Windows returns a verbatim path, so
