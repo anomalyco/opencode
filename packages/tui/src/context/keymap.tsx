@@ -25,6 +25,7 @@ import {
 } from "solid-js"
 import { useConfig } from "../config"
 import { TuiKeybind } from "../config/keybind"
+import { CtrlBackspace } from "../util/ctrl-backspace"
 import { resolveInteractivity, useInteractivity } from "./interactivity"
 
 declare module "@opentui/keymap" {
@@ -66,6 +67,8 @@ function Provider(props: ParentProps<{ config?: KeymapConfig }>) {
   const keymap = createDefaultOpenTuiKeymap(renderer)
   const mode = createMode(keymap)
   let invocation: { readonly id: string; readonly input?: string } | undefined
+  // Decided on the first ^H, which may need to ask the terminal for its erase character
+  let controlH: boolean | undefined
   const dispatch = (id: string, input?: string) => {
     const previous = invocation
     invocation = { id, input }
@@ -87,6 +90,15 @@ function Provider(props: ParentProps<{ config?: KeymapConfig }>) {
       return [{ key, displays: context.displays }]
     }),
     registerBaseLayoutFallback(keymap),
+    // Without an extended keyboard protocol, terminals send ^H for Ctrl+Backspace and DEL for Backspace, and
+    // OpenTUI reads both as backspace. Where ^H means Ctrl+Backspace, prefer a ctrl+backspace binding for it, still
+    // falling back to backspace.
+    keymap.prependEventMatchResolver((event, ctx) => {
+      if (event.raw !== "\b") return
+      controlH ??= CtrlBackspace.fromControlH()
+      if (!controlH) return
+      return [ctx.resolveKey({ name: "backspace", ctrl: true, shift: false, meta: false })]
+    }),
     registerEscapeClearsPendingSequence(keymap),
     registerBackspacePopsPendingSequence(keymap),
     registerManagedTextareaLayer(keymap, renderer, {
