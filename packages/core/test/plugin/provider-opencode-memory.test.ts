@@ -1040,9 +1040,14 @@ describe("OpencodePlugin memory", () => {
   it.effect("checks paths exist, marks a session that took in outside input as tainted, and passes on evidence", () =>
     withConsole((console) =>
       Effect.gen(function* () {
-        const { host } = yield* start(console)
         const directory = (yield* Location.Service).directory
-        yield* Effect.promise(() => fs.mkdir(path.join(directory, "src"), { recursive: true }))
+        yield* Effect.promise(async () => {
+          await initGit(directory, "-b", "main")
+          await fs.mkdir(path.join(directory, "src"), { recursive: true })
+          await fs.writeFile(path.join(directory, "src/dates.ts"), "export {}\n")
+          await $`git add src/dates.ts && git commit -qm dates`.cwd(directory).quiet()
+        })
+        const { host } = yield* start(console)
         const publish = yield* memoryTool("publish")
         const session = yield* host.session.create({})
         const entry = { kind: "gotcha", title: "Dates are UTC", body: "Use toISOString" }
@@ -1068,9 +1073,10 @@ describe("OpencodePlugin memory", () => {
         expect(console.state.requests.at(-1)?.body).toMatchObject({ evidence })
         expect(console.state.requests.at(-1)?.body).not.toHaveProperty("tainted")
 
-        // Reading the checkout, its root included, isn't outside input; a file elsewhere is.
+        // Reading the checkout's tracked files, its root included, isn't outside input; a file elsewhere is.
         yield* ran(session.id, "read", { path: directory })
         yield* ran(session.id, "read", { path: path.join(directory, "src") })
+        yield* ran(session.id, "read", { path: path.join(directory, "src/dates.ts") })
         yield* publish.execute(entry, context(session.id, "call_root"))
         expect(console.state.requests.at(-1)?.body).not.toHaveProperty("tainted")
         const outside = yield* host.session.create({})
@@ -1083,15 +1089,26 @@ describe("OpencodePlugin memory", () => {
         yield* ran(browsing.id, "webfetch", { url: "https://example.com" }, { output: "page" })
         yield* publish.execute(entry, context(browsing.id, "call_web"))
         expect(console.state.requests.at(-1)?.body).toMatchObject({ tainted: true })
-        const cloned = yield* host.session.create({})
+        // What a command printed is local output, whatever the command; a file it downloaded that the repository doesn't
+        // track is outside input once read. A file the session wrote itself isn't.
+        const fetched = yield* host.session.create({})
         yield* ran(
-          cloned.id,
+          fetched.id,
           "shell",
-          { command: "git clone https://github.com/x/y /tmp/y" },
+          { command: "curl -o data.json https://example.com/data.json" },
           { exitCode: 0, output: "ok" },
         )
-        yield* publish.execute(entry, context(cloned.id, "call_clone"))
+        yield* publish.execute(entry, context(fetched.id, "call_curl"))
+        expect(console.state.requests.at(-1)?.body).not.toHaveProperty("tainted")
+        yield* Effect.promise(() => fs.writeFile(path.join(directory, "data.json"), "{}\n"))
+        yield* ran(fetched.id, "read", { path: "data.json" })
+        yield* publish.execute(entry, context(fetched.id, "call_download"))
         expect(console.state.requests.at(-1)?.body).toMatchObject({ tainted: true })
+        const writing = yield* host.session.create({})
+        yield* ran(writing.id, "write", { path: "notes.md" })
+        yield* ran(writing.id, "read", { path: "notes.md" })
+        yield* publish.execute(entry, context(writing.id, "call_own"))
+        expect(console.state.requests.at(-1)?.body).not.toHaveProperty("tainted")
 
         // A teammate who checked an entry backs it with evidence through edit.
         yield* (yield* memoryTool("edit")).execute({ id: "mem_1", revision: 1, evidence }, context(session.id))
@@ -1508,9 +1525,18 @@ describe("OpencodePlugin memory evidence and taint", () => {
         yield* publish.execute(entry, context(tasks.id, "call_tasks"))
         expect(published()?.body).not.toHaveProperty("tainted")
 
+        // Its resources too; another server's are outside input.
+        yield* ran(tasks.id, "opencode_read_mcp_resource", { server: "opencode_console", uri: "task://tsk_1" })
+        yield* publish.execute(entry, context(tasks.id, "call_resource"))
+        expect(published()?.body).not.toHaveProperty("tainted")
+
         const issues = yield* host.session.create({})
         yield* ran(issues.id, "linear_get_issue", { id: 7 }, { text: "issue body" })
         yield* publish.execute(entry, context(issues.id, "call_issues"))
+        expect(published()?.body).toMatchObject({ tainted: true })
+        const resource = yield* host.session.create({})
+        yield* ran(resource.id, "opencode_read_mcp_resource", { server: "linear", uri: "issue://7" })
+        yield* publish.execute(entry, context(resource.id, "call_issue_resource"))
         expect(published()?.body).toMatchObject({ tainted: true })
 
         // A server of the user's own under the Console's name is outside input like any other.
@@ -1933,6 +1959,105 @@ describe("OpencodePlugin memory capture", () => {
     console.state.requests.filter((item) => item.method === "PATCH" && item.path === "/api/memory/entries/mem_1")
   const publishes = (console: ReturnType<typeof fakeConsole>) =>
     console.state.requests.filter((item) => item.path === "/api/memory/entries")
+
+  capturing("console_memory,memory_capture").effect(
+    "sends a rule the user stated without the session's taint, while what it observed stays tainted",
+    () =>
+      withConsole((console) =>
+        Effect.gen(function* () {
+          const rule = "From now on we always put the issue number in the commit message"
+          const claim = (title: string, extra: Record<string, unknown>) => ({
+            kind: "convention",
+            title,
+            body: "Claim: x\nApplies when: x\nAction: x\nVerify: x\nAnchors: x\nEvidence: x",
+            ...extra,
+          })
+          distiller.reply = JSON.stringify({
+            candidates: [
+              claim("Commit messages name the issue", { basis: "user", quote: rule }),
+              claim("The changelog is generated", { basis: "observed" }),
+            ],
+          })
+          const { host } = yield* start(console)
+          const session = yield* host.session.create({})
+          // The session read the web, so what it observed rests on outside input; the user's own words don't.
+          yield* ran(session.id, "webfetch", { url: "https://example.com" }, { output: "page" })
+          yield* prompt(session.id, rule)
+          yield* waitUntil(Effect.sync(() => publishes(console).length === 2))
+          const sent = (title: string) =>
+            publishes(console).find((item) => (item.body as { title?: string }).title === title)?.body
+          expect(sent("Commit messages name the issue")).toMatchObject({
+            evidence: [{ kind: "confirmation", ref: rule }],
+          })
+          expect(sent("Commit messages name the issue")).not.toHaveProperty("tainted")
+          expect(sent("The changelog is generated")).toMatchObject({ tainted: true })
+        }),
+      ),
+  )
+
+  capturing("console_memory,memory_capture").effect(
+    "backs an observed fix with evidence once its test fails before the turn's commit and passes at it",
+    () =>
+      withConsole((console) =>
+        Effect.gen(function* () {
+          const directory = (yield* Location.Service).directory
+          const run = (command: string) =>
+            Effect.promise(() =>
+              $`sh -c ${command}`
+                .cwd(directory)
+                .quiet()
+                .nothrow()
+                .then((result) => result.exitCode),
+            )
+          yield* Effect.promise(async () => {
+            await initGit(directory, "-b", "main")
+            await fs.mkdir(path.join(directory, "src"), { recursive: true })
+            await fs.writeFile(path.join(directory, "src/value.txt"), "broken\n")
+            await $`git add -A && git commit -qm broken`.cwd(directory).quiet()
+          })
+          distiller.reply = JSON.stringify({
+            candidates: [
+              {
+                kind: "bug",
+                title: "The value must read fixed",
+                body: "Claim: x\nApplies when: x\nAction: x\nVerify: x\nAnchors: x\nEvidence: x",
+                paths: ["src/value.txt"],
+              },
+            ],
+          })
+          const { host } = yield* start(console)
+          const session = yield* host.session.create({})
+          const test = "bun test test/value.test.ts"
+          // The turn: the test fails, the fix and its test are written, the test passes, and the session commits.
+          yield* prompt(session.id, "Fix the value")
+          yield* shell(session.id, test, Effect.succeed(1))
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(directory, "test"), { recursive: true })
+            await fs.writeFile(
+              path.join(directory, "test/value.test.ts"),
+              'import { expect, test } from "bun:test"\nimport fs from "fs"\ntest("value", () => expect(fs.readFileSync("src/value.txt", "utf8").trim()).toBe("fixed"))\n',
+            )
+            await fs.writeFile(path.join(directory, "src/value.txt"), "fixed\n")
+          })
+          yield* shell(session.id, test, Effect.succeed(0))
+          yield* shell(session.id, "git add -A && git commit -qm fix", run("git add -A && git commit -qm fix"))
+          const sha = (yield* Effect.promise(() => $`git rev-parse HEAD`.cwd(directory).text())).trim()
+          // Re-run in the background, before the commit and at it; the fix holds, so its entry gets the evidence.
+          const verified = () =>
+            console.state.requests.filter(
+              (item) =>
+                item.path === "/api/memory/entries/mem_new0/evidence" &&
+                JSON.stringify(item.body).includes("verified-fix"),
+            )
+          yield* waitUntil(Effect.sync(() => verified().length > 0))
+          expect(verified()[0]?.body).toMatchObject({
+            evidence: [{ kind: "verified-fix", ref: sha }],
+            revision: 1,
+            source: expect.objectContaining({ sessionID: session.id }),
+          })
+        }),
+      ),
+  )
 
   capturing("console_memory,memory_capture").effect(
     "corrects an entry the session holds as a new revision of it, from its whole text, instead of superseding it",

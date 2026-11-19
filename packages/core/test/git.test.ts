@@ -32,6 +32,32 @@ describe("Git", () => {
     }),
   )
 
+  it.live("tells which paths the index tracks, a directory by the files under it", () =>
+    Effect.gen(function* () {
+      const root = yield* tmpdirScoped()
+      yield* Effect.promise(async () => {
+        await initGit(root.path)
+        await fs.mkdir(path.join(root.path, "src"), { recursive: true })
+        await Promise.all([
+          Bun.write(path.join(root.path, "src", "a.ts"), "a"),
+          Bun.write(path.join(root.path, "src", "b.ts"), "b"),
+          Bun.write(path.join(root.path, "notes.txt"), "n"),
+        ])
+        await $`git add src/a.ts`.cwd(root.path).quiet()
+      })
+      const git = yield* Git.Service
+      const repository = yield* git.repo.discover(
+        AbsolutePath.make(yield* Effect.promise(() => fs.realpath(root.path))),
+      )
+      const paths = ["src/a.ts", "src/b.ts", "notes.txt", "src", "src/", "gone.ts"].map((item) =>
+        RelativePath.make(item),
+      )
+      expect(yield* git.index.tracked({ repository: repository!, paths })).toEqual(
+        new Set(["src/a.ts", "src", "src/"].map((item) => RelativePath.make(item))),
+      )
+    }),
+  )
+
   it.live("clones a remote and reads checkout metadata", () =>
     withRemote((fixture) =>
       Effect.gen(function* () {

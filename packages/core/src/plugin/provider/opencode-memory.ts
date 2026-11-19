@@ -22,9 +22,12 @@ import { Integration } from "../../integration.js"
 import { AbsolutePath, RelativePath } from "../../schema.js"
 import { normalizeContent, normalizedName } from "../../tool/runtime.js"
 import { Flag } from "../../flag.js"
+import { SessionEnvironment } from "../../session/environment.js"
+import { ShellSelect } from "../../shell/select.js"
 import { OpencodeMemoryAccess } from "./opencode-memory-access.js"
 import { OpencodeMemoryCapture } from "./opencode-memory-capture.js"
 import { OpencodeMemoryPolicy } from "./opencode-memory-policy.js"
+import { OpencodeMemoryVerify } from "./opencode-memory-verify.js"
 import { OpencodeWatches } from "./opencode-watches.js"
 
 /** The `GET /api/v2/config` response header Console sends while the caller may use the workspace's memory. */
@@ -65,6 +68,8 @@ const WRITER = Agent.ID.make("memory-writer")
  * from, so what its tools answer isn't outside input.
  */
 const CONSOLE_MCP = "opencode_console"
+/** The evidence a fix the plugin re-ran itself carries, with the commit's hash. */
+const VERIFIED = "verified-fix"
 /** The session instruction entries memory keeps: entries again after a compaction, and a correction reminder. */
 const DELIVERED = "memory.delivered"
 const CORRECTION = "memory.correction"
@@ -200,10 +205,8 @@ const Evidence = Schema.Array(Schema.Struct({ kind: Schema.Literals(["pr", "test
     description:
       "What shows it holds: a test or command you ran and saw pass, or a PR. Recorded with the entry; it doesn't make an entry live by itself",
   })
-/** A session that read this has taken in outside input: the web, issue text or other repositories. */
-const OUTSIDE = /\b(?:curl|wget|gh (?:issue|pr|api|repo clone)|git clone)\b/
-/** Tools whose results are outside input; MCP servers' tools are too. */
-const OUTSIDE_TOOLS = new Set(["webfetch", "websearch", "opencode_read_mcp_resource"])
+/** What reading an MCP resource names: the server it comes from. */
+const ResourceInput = Schema.Struct({ server: Schema.String })
 /** `git commit`, after any global options, as its own command. */
 const COMMIT = /(?:^|[;&|(]\s*)git(?:\s+(?:-[Cc]\s+\S+|--?[\w-]+(?:=\S+)?))*\s+commit\b/m
 const KindInput = Kind.annotate({
@@ -236,6 +239,14 @@ type Tracked = {
   allowance: number
   /** Commits the session made, as the harness saw them: evidence for what it publishes. */
   readonly commits: string[]
+  /** Files the session wrote with its own edit tools, which aren't outside input when it reads them back. */
+  readonly wrote: Set<string>
+  /** The current user turn: its commits and test runs, and the observed entries published in it, still unverified. */
+  turn: OpencodeMemoryVerify.Turn & {
+    readonly commits: string[]
+    readonly tests: Array<{ readonly command: string; readonly failed: boolean }>
+    readonly pending: Array<{ readonly id: string; readonly revision: number; readonly paths: ReadonlyArray<string> }>
+  }
   /** The session took in outside input, so what it writes is marked tainted and never promoted; also stored. */
   tainted?: boolean
   /** The entry the session's correction reminder names, until it's written or a compaction ends. */
@@ -268,6 +279,9 @@ export const make = Effect.fnUntraced(function* (
   const processes = yield* AppProcess.Service
   const flags = yield* Flag.Service
   const config = yield* Config.Service
+  const environments = yield* SessionEnvironment.Service
+  const shells = yield* ShellSelect.Service
+  const verify = OpencodeMemoryVerify.make({ git, processes, shell: shells.resolve({ priority: "config" }) })
   const github = yield* OpencodeMemoryAccess.make(http, processes, yield* OpencodeMemoryAccess.GitHub)
   let current: { console: OpencodeWatches.Console; readonly lease: Scope.Closeable } | undefined
   const sessions = new Map<string, Tracked>()
@@ -284,6 +298,8 @@ export const make = Effect.fnUntraced(function* (
       segment: [],
       allowance: DISTILLATIONS_PER_TURN,
       commits: [],
+      wrote: new Set(),
+      turn: { commits: [], tests: [], pending: [] },
       about: new Map(),
     }
     sessions.delete(sessionID)
@@ -506,6 +522,8 @@ export const make = Effect.fnUntraced(function* (
     id: string,
     revision: number,
     change: Record<string, unknown>,
+    // "user" when the change rests only on the user's own words, which outside input the session took in doesn't touch.
+    basis: "session" | "user" = "session",
   ) =>
     Effect.gen(function* () {
       const state = tracked(sessionID)
@@ -538,7 +556,7 @@ export const make = Effect.fnUntraced(function* (
               ...fields,
               source: { ...(yield* checkout), sessionID },
               // A revision from a session that took in outside input is marked as one, as its publishes are.
-              ...((yield* tainted(sessionID)) ? { tainted: true } : {}),
+              ...(basis === "session" && (yield* tainted(sessionID)) ? { tainted: true } : {}),
               ...(yield* reader),
             },
       )
@@ -648,6 +666,7 @@ export const make = Effect.fnUntraced(function* (
     sessionID: Session.ID,
     segment: ReadonlyArray<OpencodeMemoryCapture.Event>,
     boundary: OpencodeMemoryCapture.Boundary,
+    turn: Tracked["turn"],
   ) =>
     Effect.gen(function* () {
       const models = yield* distillers
@@ -734,7 +753,8 @@ export const make = Effect.fnUntraced(function* (
             ...(remaining.length === 0 ? {} : { supersedes: remaining }),
             source: { ...source, sessionID, ...writer },
             ...(anchor === undefined ? {} : { anchor }),
-            ...((yield* tainted(sessionID)) ? { tainted: true } : {}),
+            // A rule the user confirmed in their own words rests on them, not on what else the session read.
+            ...(backing !== "confirmed" && (yield* tainted(sessionID)) ? { tainted: true } : {}),
             ...set,
             // Keyed by what was distilled: no two distillations share a key, before a restart or after it.
             idempotencyKey: `${sessionID}:${boundary}:${Hash.sha256(prompt).slice(0, 16)}:${index}`.slice(0, 128),
@@ -750,6 +770,13 @@ export const make = Effect.fnUntraced(function* (
               }).pipe(Effect.as(undefined))
             }),
           )
+          // An observed claim the session can back itself waits for this turn's commit and test to be re-run.
+          if (published?.id !== undefined && backing === "observed")
+            turn.pending.push({
+              id: published.id,
+              revision: published.revision ?? 1,
+              paths: Option.getOrElse(Schema.decodeUnknownOption(Paths)(fields.paths), () => []),
+            })
           // The session knows what it published: a later correction can reverse it.
           if (published?.id !== undefined)
             give(state, {
@@ -790,8 +817,8 @@ export const make = Effect.fnUntraced(function* (
       const retitled = title !== entry.title && title !== "" ? { title } : {}
       return yield* (
         edits.length > 0
-          ? write("edit", sessionID, id, entry.revision, { edits, ...retitled, evidence })
-          : write("rewrite", sessionID, id, entry.revision, { body: candidate.body, evidence })
+          ? write("edit", sessionID, id, entry.revision, { edits, ...retitled, evidence }, "user")
+          : write("rewrite", sessionID, id, entry.revision, { body: candidate.body, evidence }, "user")
       ).pipe(
         Effect.as(true),
         Effect.catch((cause) =>
@@ -852,13 +879,45 @@ export const make = Effect.fnUntraced(function* (
         const opens = event.type === "prompt" && boundary === "task"
         const segment = opens ? [...state.segment] : [...state.segment, event]
         state.segment.splice(0, state.segment.length, ...(opens ? [event] : []))
-        yield* distill(sessionID, segment, boundary).pipe(Effect.forkIn(lease, { startImmediately: true }))
+        const turn = state.turn
+        yield* distill(sessionID, segment, boundary, turn).pipe(
+          Effect.andThen(attempt(sessionID, turn)),
+          Effect.forkIn(lease, { startImmediately: true }),
+        )
       })
+    /**
+     * Re-runs, in the background, the fix behind each observed entry the session published this turn, once the turn
+     * shows a commit that changed its files and a test that failed, then passed; one that holds gets the evidence,
+     * which Console promotes on. Never for a session that took in outside input.
+     */
+    const attempt = (sessionID: Session.ID, turn: Tracked["turn"]) =>
+      Effect.gen(function* () {
+        const found = yield* discovered
+        if (turn.pending.length === 0 || !found || (yield* tainted(sessionID))) return
+        const env = (yield* environments.get(sessionID)) ?? process.env
+        yield* Effect.forEach(
+          [...turn.pending],
+          (entry) =>
+            Effect.gen(function* () {
+              const sha = yield* verify({ repository: found, turn, paths: entry.paths, env })
+              if (sha === undefined) return
+              turn.pending.splice(turn.pending.indexOf(entry), 1)
+              if (sha === false) return
+              yield* call(Schema.Unknown, "POST", `/api/memory/entries/${encodeURIComponent(entry.id)}/evidence`, {
+                evidence: [{ kind: VERIFIED, ref: sha }],
+                revision: entry.revision,
+                source: { ...(yield* checkout), sessionID },
+                ...(yield* reader),
+              })
+            }),
+          { discard: true },
+        )
+      }).pipe(Effect.catchCause((cause) => Effect.logDebug("memory fix not verified", { cause })))
     // Read now, so the first moment doesn't wait on Git or GitHub.
     yield* repository.pipe(Effect.forkIn(lease, { startImmediately: true }))
     yield* reachable.pipe(Effect.forkIn(lease, { startImmediately: true }))
-    // The prefixes of MCP servers' tools, whose results are outside input: all but the Console's own, while the server
-    // config ends up with under its name is the one the Console delivered rather than one of the user's.
+    // The MCP servers whose tools and resources are outside input, by tool prefix and name: all but the Console's own,
+    // while the server config ends up with under its name is the one the Console delivered rather than one of the user's.
     const servers = yield* Effect.cachedWithTTL(
       Effect.all([ctx.mcp.list(), config.entries()]).pipe(
         Effect.map(([answer, entries]) => {
@@ -872,12 +931,43 @@ export const make = Effect.fnUntraced(function* (
           return answer.data
             .map((server) => normalizedName({ name: server.name }))
             .filter((name) => !(own && name === CONSOLE_MCP))
-            .map((name) => `${name}_`)
         }),
         Effect.orElseSucceed(() => new Array<string>()),
       ),
       "1 minute",
     )
+    /**
+     * Whether a completed tool call took in outside input: the web, an MCP server other than the Console's own, or a
+     * read past the checkout or of a file the repository doesn't track that the session didn't write itself, such as a
+     * download. What a command printed is local output and never is.
+     */
+    const outside = (event: { tool: string; input: unknown; sessionID: Session.ID }, files: ReadonlyArray<string>) =>
+      Effect.gen(function* () {
+        const outsiders = yield* servers
+        if (event.tool === "webfetch" || event.tool === "websearch") return true
+        if (outsiders.some((name) => event.tool.startsWith(`${name}_`))) return true
+        if (event.tool === "opencode_read_mcp_resource")
+          return Option.match(Schema.decodeUnknownOption(ResourceInput)(event.input), {
+            onNone: () => true,
+            onSome: (input) =>
+              normalizedName({ name: input.server }) !== CONSOLE_MCP || outsiders.includes(CONSOLE_MCP),
+          })
+        if (event.tool !== "read") return false
+        if (files.some((file) => path.isAbsolute(file))) return true
+        const state = tracked(event.sessionID)
+        const found = yield* discovered
+        const unwritten = files.filter((file) => !state.wrote.has(file))
+        if (!found || unwritten.length === 0) return false
+        const paths = unwritten.map((file) =>
+          RelativePath.make(
+            path.relative(found.worktree, path.join(ctx.location.directory, file)).split(path.sep).join("/"),
+          ),
+        )
+        const known = yield* git.index
+          .tracked({ repository: found, paths })
+          .pipe(Effect.orElseSucceed(() => new Set(paths)))
+        return paths.some((item) => !known.has(item))
+      })
     // HEAD when a `git commit` started, by tool call, to tell whether it made one.
     const heads = new Map<string, string | undefined>()
     // The entries Console gives for a moment the policy picks, within its timeout; none when it picks none or fails.
@@ -947,6 +1037,8 @@ export const make = Effect.fnUntraced(function* (
           correction: user && (corrected !== undefined || policy.corrective(event.prompt.text)),
           user,
         })
+        // The distillation this message started has the turn it closed; a new one begins.
+        state.turn = { commits: [], tests: [], pending: [] }
         if (corrected) yield* remind(event.sessionID, corrected)
         yield* begin(event.sessionID, {
           type: "prompt",
@@ -979,12 +1071,8 @@ export const make = Effect.fnUntraced(function* (
           .filter((file) => file !== ".")
         if (files.length > 0) yield* record(event.sessionID, { type: event.tool === "read" ? "read" : "edit", files })
         if (event.tool === "subagent") yield* record(event.sessionID, { type: "subtask" })
-        if (
-          OUTSIDE_TOOLS.has(event.tool) ||
-          (event.tool === "read" && files.some((file) => path.isAbsolute(file))) ||
-          (yield* servers).some((prefix) => event.tool.startsWith(prefix))
-        )
-          yield* taint(event.sessionID)
+        if (event.tool !== "read") files.forEach((file) => tracked(event.sessionID).wrote.add(file))
+        if (yield* outside(event, files)) yield* taint(event.sessionID)
         if (files.length > 0) {
           const state = tracked(event.sessionID)
           files.forEach((file) => {
@@ -1002,8 +1090,8 @@ export const make = Effect.fnUntraced(function* (
         if (Option.isNone(shell) || shell.value.output.exitCode === null) return
         const command = shell.value.input.command
         const exitCode = shell.value.output.exitCode
-        if (OUTSIDE.test(command)) yield* taint(event.sessionID)
         const failed = policy.failed(command, shell.value.output.output, exitCode)
+        if (policy.test(command)) tracked(event.sessionID).turn.tests.push({ command, failed })
         yield* record(event.sessionID, {
           type: "shell",
           command: command.slice(0, MAX_TAIL),
@@ -1018,7 +1106,9 @@ export const make = Effect.fnUntraced(function* (
           const state = tracked(event.sessionID)
           state.commits.push(sha)
           state.commits.splice(0, Math.max(0, state.commits.length - MAX_COMMITS))
+          state.turn.commits.push(sha)
           yield* record(event.sessionID, { type: "commit", sha })
+          yield* attempt(event.sessionID, state.turn).pipe(Effect.forkIn(lease, { startImmediately: true }))
         }
         if (!failed) return
         const moment = { type: "failure" as const, command, output: shell.value.output.output, exitCode }

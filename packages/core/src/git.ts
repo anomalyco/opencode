@@ -169,6 +169,11 @@ export interface Interface {
       repository: Repository
       paths: readonly RelativePath[]
     }) => Effect.Effect<ReadonlySet<RelativePath>, OperationError>
+    /** Of `paths`, the files and directories the index tracks: a directory when it tracks a file under it. */
+    readonly tracked: (input: {
+      repository: Repository
+      paths: readonly RelativePath[]
+    }) => Effect.Effect<ReadonlySet<RelativePath>, OperationError>
   }
   readonly tree: {
     readonly capture: (input: CaptureInput) => Effect.Effect<TreeID, OperationError>
@@ -639,6 +644,32 @@ const layer = Layer.effect(
           message: result.stderr.toString("utf8").trim() || "Failed to check ignored paths",
         })
       return new Set(nuls(result.stdout.toString("utf8")).map((file) => RelativePath.make(file)))
+    })
+
+    const tracked = Effect.fn("Git.index.tracked")(function* (input: {
+      repository: Repository
+      paths: readonly RelativePath[]
+    }) {
+      if (!input.paths.length) return new Set<RelativePath>()
+      const result = yield* repositoryRun("list_files", input.repository, [
+        "ls-files",
+        "-z",
+        "--cached",
+        "--",
+        ...input.paths.map(literalPathspec),
+      ])
+      if (result.exitCode !== 0)
+        return yield* new OperationError({
+          operation: "list_files",
+          directory: input.repository.worktree,
+          message: result.stderr.toString("utf8").trim() || "Failed to list tracked paths",
+        })
+      const files = nuls(result.stdout.toString("utf8"))
+      return new Set(
+        input.paths.filter((item) =>
+          files.some((file) => file === item || file.startsWith(`${item.replace(/\/$/, "")}/`)),
+        ),
+      )
     })
 
     const writeTree = Effect.fn("Git.tree.write")(function* (repository: Repository, index?: string) {
@@ -1458,7 +1489,7 @@ const layer = Layer.effect(
       history: { head, branch, defaultRemoteBranch: remoteHead, rootCommits: roots },
       sync: { fetchRemotes: fetch, fetchBranch, checkoutRemoteBranch: checkout, resetHard: reset },
       worktree: { create: worktreeCreate, remove: worktreeRemove, list: worktreeList },
-      index: { refresh, ignored },
+      index: { refresh, ignored, tracked },
       tree: {
         capture: captureTree,
         write: (repository) => writeTree(repository),

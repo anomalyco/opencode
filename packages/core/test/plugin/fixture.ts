@@ -19,6 +19,8 @@ import { Global } from "@opencode/util/global"
 import { Form } from "@opencode/core/form"
 import { Generate } from "@opencode/core/generate"
 import { Git } from "@opencode/core/git"
+import { SessionEnvironment } from "@opencode/core/session/environment"
+import { ShellSelect } from "@opencode/core/shell/select"
 import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { Integration } from "@opencode/core/integration"
 import { Job } from "@opencode/core/job"
@@ -129,6 +131,8 @@ export const makePluginTestLayer = (permission = permissionLayer, generate = gen
       KV.node,
       Mcp.node,
       Session.node,
+      SessionEnvironment.node,
+      ShellSelect.node,
       SharedCache.node,
       InstructionEntry.node,
       PersistentPty.node,

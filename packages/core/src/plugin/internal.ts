@@ -67,6 +67,7 @@ import { Ripgrep } from "../ripgrep.js"
 import { Automation } from "../automation.js"
 import { Session } from "../session.js"
 import { SessionCompaction } from "../session/compaction.js"
+import { SessionEnvironment } from "../session/environment.js"
 import { SessionInstructions } from "../session/instructions.js"
 import { SubagentJob } from "../session/subagent-job.js"
 import { SharedCache } from "../shared-cache.js"
@@ -166,6 +167,7 @@ const services = [
   Automation.Service,
   Session.Service,
   SessionCompaction.Service,
+  SessionEnvironment.Service,
   SessionInstructions.Service,
   SubagentJob.Service,
   SharedCache.Service,
@@ -229,6 +231,7 @@ export const requirements = LayerNode.group([
   Automation.node,
   Session.node,
   SessionCompaction.node,
+  SessionEnvironment.node,
   SessionInstructions.node,
   SubagentJob.node,
   SharedCache.node,

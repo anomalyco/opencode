@@ -23,6 +23,8 @@ import { SkillFile } from "../../config/plugin/skill-file.js"
 import { ConsoleAccess } from "../../console-access.js"
 import { Credential } from "../../credential.js"
 import { Flag } from "../../flag.js"
+import { SessionEnvironment } from "../../session/environment.js"
+import { ShellSelect } from "../../shell/select.js"
 import { Git } from "../../git.js"
 import { InstructionDiscovery } from "../../instruction-discovery.js"
 import { Integration } from "../../integration.js"
@@ -191,7 +193,9 @@ export const OpencodePlugin = define<
   | Flag.Service
   | Git.Service
   | InstructionDiscovery.Service
+  | SessionEnvironment.Service
   | SharedCache.Service
+  | ShellSelect.Service
   | Skill.Service
   | Scope.Scope
 >({
