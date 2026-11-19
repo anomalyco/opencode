@@ -12,14 +12,17 @@ export function SidebarOnboarding(props: { context: Plugin.Context; sessionID: s
     initial: { dismissed: false },
   })
   const session = createMemo(() => props.context.data.session.get(props.sessionID))
+  const location = createMemo(() => session()?.location ?? props.context.location)
   const integrations = createMemo(() =>
-    props.context.data.location.integration.list(session()?.location ?? props.context.location),
+    props.context.data.location.integration.list(location()),
   )
+  const providers = createMemo(() => props.context.data.location.provider?.list?.(location()) ?? [])
+  const models = createMemo(() => props.context.data.location.model?.list?.(location()) ?? [])
   const showOnboarding = createMemo(() => {
     if (dimensions().height < 22) return false
     const list = integrations()
     if (!list) return false
-    return !onboarding.dismissed && !hasConnectedProvider(list)
+    return !onboarding.dismissed && !hasConnectedProvider(list, providers(), models())
   })
 
   return (
