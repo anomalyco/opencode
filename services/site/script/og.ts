@@ -194,11 +194,14 @@ const cards: Card[] = [
   },
 ]
 
+// The site's files (script/openmono.py). Satori keeps one face per family name and weight, so each
+// file has a family name of its own, and a title names all three: Latin first, the others for
+// anything it lacks.
+const mono = { latin: "OpenMono", cyrillic: "OpenMono Cyrillic", rest: "OpenMono Rest" }
 const fonts = [
-  // The site's files (script/openmono.py): Latin first, the others for anything it lacks.
   ...(await Promise.all(
-    ["latin", "cyrillic", "rest"].map(async (group) => ({
-      name: "OpenMono",
+    Object.entries(mono).map(async ([group, name]) => ({
+      name,
       data: exact(await decompress(await read(`src/asset/fonts/openmono-regular-${group}.woff2`))),
       weight: 400 as const,
     })),
@@ -310,7 +313,13 @@ function plate(card: Card, image: string) {
       },
       el(
         "div",
-        { fontFamily: "OpenMono", fontSize: size, lineHeight: 1, letterSpacing: -0.035 * size, color: INK },
+        {
+          fontFamily: Object.values(mono).join(", "),
+          fontSize: size,
+          lineHeight: 1,
+          letterSpacing: -0.035 * size,
+          color: INK,
+        },
         card.title,
       ),
       description(card.description),
