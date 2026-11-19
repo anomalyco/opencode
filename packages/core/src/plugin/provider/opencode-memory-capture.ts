@@ -38,22 +38,6 @@ export type Event =
 export type Boundary = "task" | "commit" | "test" | "correction" | "rule" | "subtask" | "compaction"
 
 /**
- * Without a decision, whether a user's message states a standing team rule or decision: narrow on purpose, so it misses
- * most rules rather than taking a task request for one.
- */
-const STATED =
-  /\b(?:from now on|going forward|(?:we|our team|the team) (?:always|never|use|prefer|don'?t|do not)|our (?:convention|rule|policy|style)|team (?:rule|convention|decision|policy))\b/i
-/** Without a decision, whether a user's message reads as correcting the agent. */
-const CORRECTION =
-  /\b(?:instead|rather|actually|wrong|incorrect|outdated|deprecated|obsolete|no longer|not anymore|stop|don'?t|do not|never|shouldn'?t|should not|isn'?t|is not|doesn'?t|does not|not \w+ but)\b|^\s*no\b/i
-
-/** What a message is taken for when no decision can be had: the stricter reading, never a more permissive one. */
-export const fallback = {
-  lasting: (text: string) => STATED.test(text),
-  correcting: (text: string) => CORRECTION.test(text),
-}
-
-/**
  * The boundary `event` closes after `segment`, the events since the last one, or undefined. A new task message, a
  * commit, a test-like run passing after one failed, a user's correction, a subagent finishing, and compaction as a
  * backstop. A message stating a team rule is a boundary of its own, so a rule the user states in a session's last turn

@@ -140,9 +140,13 @@ describe("OpencodeMemoryDecide", () => {
     Effect.gen(function* () {
       const fake = generation(() => Effect.succeed([predicate("lasting", 0.5)]))
       const clef = Model.Ref.make({ providerID: Provider.ID.make("cloudflare-workers-ai"), id: Model.ID.make("clef") })
-      yield* OpencodeMemoryDecide.make({ decisions: fake.decisions, model: Effect.succeed(clef) }).lasting("hi")
+      const on = OpencodeMemoryDecide.make({ decisions: fake.decisions, model: Effect.succeed(clef) })
+      expect(yield* on.available).toBe(true)
+      yield* on.lasting("hi")
       expect(fake.asked.map((request) => request.model)).toEqual([clef])
+      // Without a model the judgements are off, and the caller can tell before asking.
       const off = OpencodeMemoryDecide.make({ decisions: fake.decisions, model: Effect.succeed(undefined) })
+      expect(yield* off.available).toBe(false)
       expect(yield* off.lasting("hi")).toBeUndefined()
       expect(fake.asked).toHaveLength(1)
     }),
@@ -188,6 +192,8 @@ describe("OpencodeMemoryDecide", () => {
       expect(yield* decide.lasting("refused")).toBeUndefined()
       expect(yield* decide.lasting("down")).toBeUndefined()
       expect(yield* decide.corrects("down", given)).toBeUndefined()
+      // Only a rate limit is waited out: every other failure is asked once.
+      expect(fake.asked).toHaveLength(4)
     }),
   )
 

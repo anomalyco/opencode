@@ -21,7 +21,7 @@ export class Settings extends Schema.Class<Settings>("ConfigConsoleMemory.Settin
     .pipe(optional)
     .annotate({
       description:
-        'The decision model memory asks which messages state lasting rules, which entries they correct, which lessons last and which entries apply, as "provider/model" (default: opencode/jev-1.13); false answers without one',
+        'The decision model memory asks which messages state lasting rules, which entries they correct, which lessons last and which entries apply, as "provider/model" (default: opencode/jev-1.13); false turns decisions off, and with them capture, correction reminders and the delivery check, leaving delivery to the Console scoring alone',
     }),
 }) {}
 

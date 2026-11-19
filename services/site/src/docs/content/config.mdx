@@ -433,7 +433,7 @@ switch, and a change applies without a restart.
 Memory asks a decision model which messages state lasting team rules, which
 entries a message corrects, which lessons last, and which entries apply to a
 task. It uses `opencode/jev-1.13` with your OpenCode sign-in. Name another
-decision model from your providers, or set `false` to decide without one.
+decision model from your providers, or set `false` to turn decisions off.
 
 ```jsonc
 {
@@ -443,9 +443,16 @@ decision model from your providers, or set `false` to decide without one.
 }
 ```
 
-Without a decision model, memory takes the stricter reading. Only explicit team
-rules count as rules, no correction reminder is shown, and entries are
-delivered only above Console's own relevance bar.
+Without a decision model, either turned off or not offered by any provider, the
+features that need one are off.
+
+- No rules, corrections or lessons are captured from sessions.
+- No correction reminders are shown.
+- Entries are delivered as Console's own scoring picks them.
+- The memory tools and the standing block work as usual.
+
+A decision call that fails or times out counts as a no for that item. Nothing is
+captured, reminded or delivered because of it.
 
 To use a memory endpoint of your own instead of the workspace's, give
 `console_memory` its URL, and headers if it needs a credential. Memory then

@@ -66,9 +66,9 @@ const slots = Semaphore.makeUnsafe(4)
 
 /**
  * The plugin's judgements, asked of a decision model through OpenCode's own decision generation, with the user's
- * credentials for its provider: `model` names it, or undefined when config turns decisions off. Each answers undefined
- * when it can't be had (no such model, a refusal, a rate limit that outlasts the deadline, or the deadline itself), and
- * the caller then does what it did without one.
+ * credentials for its provider: `model` names it, or undefined when there's none, and then the judgements are off
+ * (`available` says which). Each answers undefined when it can't be had (a refusal, a rate limit that outlasts the
+ * deadline, the deadline itself or any other failure), which the caller takes as a no for that item.
  */
 export const make = (input: {
   readonly decisions: Context["experimental"]["generate"]["decisions"]
@@ -107,10 +107,12 @@ export const make = (input: {
     extra: Record<string, unknown> = {},
   ) =>
     probability === undefined
-      ? Effect.logDebug("memory decision unavailable", { question, ms })
+      ? Effect.logDebug("memory decision failed, taken as no", { question, ms, ...extra })
       : Effect.logDebug("memory decision", { question, probability, ms, ...extra })
 
   return {
+    /** Whether a decision model resolves, so the judgements that need one are on. */
+    available: input.model.pipe(Effect.map((model) => model !== undefined)),
     /** D1: the probability that a user's message states a lasting team rule, decision or correction. */
     lasting: (message: string) =>
       Effect.gen(function* () {
@@ -156,7 +158,9 @@ export const make = (input: {
                 .reduce<{
                   id?: string
                   p: number
-                }>((top, item) => (item.probability > top.p ? { id: String(item.value), p: item.probability } : top), { p: 0 })
+                }>((top, item) => (item.probability > top.p ? { id: String(item.value), p: item.probability } : top), {
+                  p: 0,
+                })
             : undefined
         yield* logged("D2.z0", result.ms, best?.p, best?.id === undefined ? {} : { entry: best.id })
         return best

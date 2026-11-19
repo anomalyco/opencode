@@ -78,8 +78,6 @@ const CONSOLE_MCP = "opencode_console"
 const CANDIDATES = { limit: 10, minScore: 0, maxTokens: 20_000 }
 /** The most entries one injection delivers, as Console does. */
 const MAX_DELIVERED = 3
-/** Without a decision, Console's own bar for an injected entry's score. */
-const FALLBACK_SCORE = 0.75
 /** The evidence a fix the plugin re-ran itself carries, with the commit's hash. */
 const VERIFIED = "verified-fix"
 /** The session instruction entries memory keeps: entries again after a compaction, and a correction reminder. */
@@ -298,22 +296,28 @@ export const make = Effect.fnUntraced(function* (
   const environments = yield* SessionEnvironment.Service
   const shells = yield* ShellSelect.Service
   const verify = OpencodeMemoryVerify.make({ git, processes, shell: shells.resolve({ priority: "config" }) })
-  // The decision model config names under console_memory, the bench's by default; none when config turns decisions off.
+  // The decision model config names under console_memory, the bench's by default, when OpenCode offers it as one; none
+  // when config turns decisions off or no provider offers it, and then the judgements that need one are off.
   const decide = OpencodeMemoryDecide.make({
     decisions: ctx.experimental.generate.decisions,
-    model: config.entries().pipe(
-      Effect.map((entries) => {
-        const setting = Config.latest(entries, "console_memory")
-        const chosen = typeof setting === "object" ? setting.decisions : undefined
-        if (chosen === false) return undefined
-        if (chosen === undefined) return OpencodeMemoryDecide.MODEL
-        return Model.Ref.make({
-          providerID: Provider.ID.make(chosen.providerID),
-          id: Model.ID.make(chosen.model),
-          ...(chosen.variant === undefined ? {} : { variant: Model.VariantID.make(chosen.variant) }),
-        })
-      }),
-    ),
+    model: Effect.gen(function* () {
+      const setting = Config.latest(yield* config.entries(), "console_memory")
+      const chosen = typeof setting === "object" ? setting.decisions : undefined
+      if (chosen === false) return undefined
+      const model =
+        chosen === undefined
+          ? OpencodeMemoryDecide.MODEL
+          : Model.Ref.make({
+              providerID: Provider.ID.make(chosen.providerID),
+              id: Model.ID.make(chosen.model),
+              ...(chosen.variant === undefined ? {} : { variant: Model.VariantID.make(chosen.variant) }),
+            })
+      const offered = yield* ctx.model.list({ types: ["decision"] }).pipe(
+        Effect.map((answer) => answer.data),
+        Effect.orElseSucceed(() => []),
+      )
+      return offered.some((item) => item.providerID === model.providerID && item.id === model.id) ? model : undefined
+    }),
   })
   const github = yield* OpencodeMemoryAccess.make(http, processes, yield* OpencodeMemoryAccess.GitHub)
   let current: { console: OpencodeWatches.Console; readonly lease: Scope.Closeable } | undefined
@@ -703,6 +707,8 @@ export const make = Effect.fnUntraced(function* (
     turn: Tracked["turn"],
   ) =>
     Effect.gen(function* () {
+      // Without a decision model, nothing is captured: no rule, correction or lesson can be judged.
+      if (!(yield* decide.available)) return
       const models = yield* distillers
       const state = tracked(sessionID)
       // The entries as the distiller is shown them, which a correction's edits are matched against.
@@ -741,15 +747,15 @@ export const make = Effect.fnUntraced(function* (
             return yield* Effect.logDebug("memory candidate dropped: not a rule the user stated", {
               title: candidate.title,
             })
-          // A lesson the work showed goes out only when it's durable, not a note about this one task; a rule the user
-          // confirmed is the user's to keep.
+          // A lesson the work showed goes out only when it's judged durable, not a note about this one task (a decision
+          // that fails is a no); a rule the user confirmed is the user's to keep.
           if (backing === "observed") {
             const durable = yield* decide.durable(
               candidate,
               ("repo" in source && source.repo ? repoName(source.repo) : undefined) ??
                 path.basename(ctx.location.directory),
             )
-            if (durable !== undefined && durable < OpencodeMemoryDecide.DURABLE)
+            if ((durable ?? 0) < OpencodeMemoryDecide.DURABLE)
               return yield* Effect.logDebug("memory candidate dropped: task-specific", { title: candidate.title })
           }
           const evidence = [
@@ -1033,8 +1039,9 @@ export const make = Effect.fnUntraced(function* (
           session,
         )
         if (!inject) return undefined
-        // Console's candidates, each judged on whether it applies to this task or failure; without any decision,
-        // Console's own bar on their scores.
+        // With a decision model, Console's candidates, each delivered only when judged to apply to this task or failure
+        // (a decision that fails is a no); without one, what Console's own scoring hands out.
+        const gated = yield* decide.available
         const task = moment.type === "prompt" ? moment.text : (state.task ?? moment.command)
         const delivered = yield* reader.pipe(
           Effect.flatMap((set) =>
@@ -1042,25 +1049,26 @@ export const make = Effect.fnUntraced(function* (
               sessionID,
               moment: moment.type,
               ...inject,
-              ...CANDIDATES,
+              ...(gated ? CANDIDATES : {}),
               ...set,
             }),
           ),
           Effect.flatMap((answer) =>
-            Effect.forEach(
-              answer.entries,
-              (entry) =>
-                decide.applies(moment, task, entry).pipe(Effect.map((probability) => ({ entry, probability }))),
-              { concurrency: 4 },
-            ),
-          ),
-          Effect.map((judged) =>
-            judged.every((item) => item.probability === undefined)
-              ? judged.filter((item) => item.entry.score >= FALLBACK_SCORE).map((item) => item.entry)
-              : judged
-                  .filter((item) => (item.probability ?? 0) >= OpencodeMemoryDecide.APPLIES)
-                  .toSorted((a, b) => (b.probability ?? 0) - (a.probability ?? 0))
-                  .map((item) => item.entry),
+            gated
+              ? Effect.forEach(
+                  answer.entries,
+                  (entry) =>
+                    decide.applies(moment, task, entry).pipe(Effect.map((probability) => ({ entry, probability }))),
+                  { concurrency: 4 },
+                ).pipe(
+                  Effect.map((judged) =>
+                    judged
+                      .filter((item) => (item.probability ?? 0) >= OpencodeMemoryDecide.APPLIES)
+                      .toSorted((a, b) => (b.probability ?? 0) - (a.probability ?? 0))
+                      .map((item) => item.entry),
+                  ),
+                )
+              : Effect.succeed(answer.entries),
           ),
           Effect.timeout(policy.timeout),
         )
@@ -1104,33 +1112,33 @@ export const make = Effect.fnUntraced(function* (
         // The distillation this message starts has the turn it closes; a new one begins.
         const closed = state.turn
         state.turn = { commits: [], tests: [], pending: [] }
-        // Judged off the prompt's path: whether it states a lasting rule, and which given entry it corrects. The
-        // session's later events wait for it, so the segment keeps their order. Without a decision, the stricter reading.
+        // Judged off the prompt's path, when a decision model resolves: whether it states a lasting rule, and which given
+        // entry it corrects. A decision that fails is a no. The session's later events wait for it, so the segment keeps
+        // their order.
         yield* state.order
           .withPermit(
             Effect.gen(function* () {
-              const [lasting, corrected] = user
-                ? yield* Effect.all(
-                    [decide.lasting(text), given.length > 0 ? decide.corrects(text, given) : Effect.succeed(undefined)],
-                    { concurrency: 2 },
-                  )
-                : [undefined, undefined]
-              const rule =
-                user &&
-                (lasting === undefined
-                  ? OpencodeMemoryCapture.fallback.lasting(text)
-                  : lasting >= OpencodeMemoryDecide.LASTING)
+              const [lasting, corrected] =
+                user && (yield* decide.available)
+                  ? yield* Effect.all(
+                      [
+                        decide.lasting(text),
+                        given.length > 0 ? decide.corrects(text, given) : Effect.succeed(undefined),
+                      ],
+                      { concurrency: 2 },
+                    )
+                  : [undefined, undefined]
+              const rule = (lasting ?? 0) >= OpencodeMemoryDecide.LASTING
               const entry =
                 corrected?.id !== undefined && corrected.p >= OpencodeMemoryDecide.CORRECTS
                   ? given.find((item) => item.id === corrected.id)
                   : undefined
-              const correcting = lasting === undefined ? OpencodeMemoryCapture.fallback.correcting(text) : rule
               yield* recorded(
                 event.sessionID,
                 {
                   type: "prompt",
                   text: text.slice(0, MAX_TAIL),
-                  correction: user && (entry !== undefined || correcting),
+                  correction: entry !== undefined || rule,
                   user,
                   lasting: rule,
                 },

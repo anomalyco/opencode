@@ -41,15 +41,25 @@ import { OpencodeMemoryCapture } from "@opencode/core/plugin/provider/opencode-m
 import { makePluginTestLayer } from "./fixture"
 
 /**
- * How OpenCode's decision generation answers: by question name, a predicate's probability or a choice's probabilities
- * by value, or the status a provider fails with; unset, no decision model resolves. Reset when a test's Console closes.
+ * OpenCode's decision generation: the decision models it offers, and how it answers, by question name, a predicate's
+ * probability or a choice's probabilities by value, or the status a provider fails with. Unset, the stand-in model takes
+ * an explicit team rule ("From now on", "Our convention") for a lasting one, corrects nothing, finds every lesson durable
+ * and every entry applicable. Reset when a test's Console closes.
  */
 const judge = {
+  models: ["opencode/jev-1.13"],
   answer: undefined as
     | ((asked: Asked) => Record<string, number | Record<string, number> | undefined> | number)
     | undefined,
   asked: new Array<Asked>(),
 }
+const stand = (asked: Asked): Record<string, number | Record<string, number>> => ({
+  lasting: /from now on|our convention/i.test(asked.state) ? 0.92 : 0.05,
+  corrects: { none: 1 },
+  durable: 0.9,
+  fix_record: 0.05,
+  applies: 1,
+})
 /** A decision request, its evidence as one text and its questions by name. */
 type Asked = {
   readonly model: string
@@ -83,11 +93,11 @@ const generating = Layer.succeed(
           questions: Object.fromEntries(input.questions.map((question) => [question.name, question])),
         }
         judge.asked.push(asked)
-        if (judge.answer === undefined)
+        if (!judge.models.includes(asked.model))
           return Effect.fail(
             new ModelNotFoundError({ providerID: input.model.providerID, modelID: input.model.id, message: "unknown" }),
           )
-        const answers = judge.answer(asked)
+        const answers = (judge.answer ?? stand)(asked)
         if (typeof answers === "number")
           return Effect.fail(
             new ProviderRequestError({ providerID: "opencode", reason: "provider", message: "no", status: answers }),
@@ -363,6 +373,7 @@ const withConsole = <A, E, R>(use: (console: ReturnType<typeof fakeConsole>) => 
     Effect.promise(() => console.server.stop(true)).pipe(
       Effect.andThen(
         Effect.sync(() => {
+          judge.models = ["opencode/jev-1.13"]
           judge.answer = undefined
           judge.asked.length = 0
         }),
@@ -401,6 +412,27 @@ const start = Effect.fnUntraced(function* (
   const host: PluginContext.Context = {
     ...real,
     event: { ...real.event, subscribe },
+    // The decision models OpenCode offers are the stand-in's.
+    model: {
+      ...real.model,
+      list: ((input) =>
+        real.model.list(input).pipe(
+          Effect.map((answer) =>
+            input?.types?.includes("decision")
+              ? {
+                  ...answer,
+                  data: [
+                    ...answer.data,
+                    ...judge.models.map((ref) => {
+                      const [providerID, id] = ref.split("/")
+                      return { providerID, id, type: "decision" } as (typeof answer.data)[number]
+                    }),
+                  ],
+                }
+              : answer,
+          ),
+        )) as PluginContext.Context["model"]["list"],
+    },
     mcp: {
       ...real.mcp,
       list: () =>
@@ -723,7 +755,7 @@ describe("OpencodePlugin memory", () => {
     ),
   )
 
-  it.effect("asks the decision model config names, and none when config turns decisions off", () =>
+  it.effect("asks the decision model config names, and none when config turns decisions off or none is offered", () =>
     withConsole((console) =>
       Effect.gen(function* () {
         const config = yield* Config.Test
@@ -734,6 +766,7 @@ describe("OpencodePlugin memory", () => {
               info: new Info({ console_memory: new ConfigConsoleMemory.Settings({ decisions }) }),
             }),
           ])
+        judge.models = ["opencode/jev-1.13", "lmstudio/clef"]
         judge.answer = () => ({ lasting: 0.1 })
         yield* set({ providerID: Provider.ID.make("lmstudio"), model: Model.ID.make("clef") })
         const { host } = yield* start(console)
@@ -742,9 +775,13 @@ describe("OpencodePlugin memory", () => {
         yield* judged(session.id)
         expect(judge.asked.map((item) => item.model)).toEqual(["lmstudio/clef"])
 
-        // Off: no decision is asked, and memory reads messages the stricter way.
+        // Off, or a model no provider offers: no decision is asked, and the judgements that need one are off, while the
+        // memory tools stay.
         yield* set(false)
         yield* prompt(session.id, "Deploy it again")
+        yield* judged(session.id)
+        yield* set({ providerID: Provider.ID.make("lmstudio"), model: Model.ID.make("missing") })
+        yield* prompt(session.id, "And once more")
         yield* judged(session.id)
         expect(judge.asked).toHaveLength(1)
         expect(yield* memoryTools).toContain("search")
@@ -1663,18 +1700,44 @@ describe("OpencodePlugin memory", () => {
           ),
         )
 
-        // Without decisions, Console's own bar on the scores: only mem_a reaches it.
-        judge.answer = () => 503
-        const other = yield* host.session.create({})
-        yield* prompt(other.id, "Fix the deploy")
-        const fallback = request(other.id, "Fix the deploy")
-        yield* hooks.trigger("session", "context", fallback)
-        expect(texts(fallback)[1]).toBe(
-          OpencodeMemoryPolicy.initial.render([injected("mem_a", 0.95)], {
+        // A decision that fails is a no: of mem_a, whose decision fails, and mem_b, which applies, only mem_b is delivered.
+        judge.answer = (asked) =>
+          asked.state.includes("Entry mem_a") ? 503 : { applies: asked.state.includes("Entry mem_b") ? 0.9 : 0.1 }
+        const failing = yield* host.session.create({})
+        yield* prompt(failing.id, "Fix the deploy")
+        const partial = request(failing.id, "Fix the deploy")
+        yield* hooks.trigger("session", "context", partial)
+        expect(texts(partial)[1]).toBe(
+          OpencodeMemoryPolicy.initial.render([injected("mem_b", 0.5)], {
             type: "prompt",
             text: "Fix the deploy",
             files: [],
           }),
+        )
+
+        // Without a decision model, Console's own scoring decides: the injection asks as it always did, and what Console
+        // hands out is delivered.
+        judge.models = []
+        const asked = console.state.requests.length
+        const other = yield* host.session.create({})
+        yield* prompt(other.id, "Fix the deploy")
+        const plain = request(other.id, "Fix the deploy")
+        yield* hooks.trigger("session", "context", plain)
+        expect(console.state.requests.slice(asked).find((item) => item.path === "/api/memory/inject")?.body).toEqual({
+          sessionID: other.id,
+          moment: "prompt",
+          query: "Fix the deploy",
+          context: {},
+        })
+        expect(texts(plain)[1]).toBe(
+          OpencodeMemoryPolicy.initial.render(
+            [injected("mem_a", 0.95), injected("mem_b", 0.5), injected("mem_c", 0.4)],
+            {
+              type: "prompt",
+              text: "Fix the deploy",
+              files: [],
+            },
+          ),
         )
       }),
     ),
@@ -2288,8 +2351,7 @@ describe("OpencodePlugin memory capture", () => {
       withConsole((console) =>
         Effect.gen(function* () {
           const rule = "Money parameters carry a Cents suffix in this codebase"
-          // Wording alone wouldn't make it a rule; the decision does.
-          expect(OpencodeMemoryCapture.fallback.lasting(rule)).toBe(false)
+          // No rule wording: only the decision makes it one.
           judge.answer = (asked) =>
             asked.questions.lasting ? { lasting: yes(asked.state.includes("Cents suffix") ? 0.92 : 0.1) } : 503
           distiller.reply = JSON.stringify({
@@ -2314,6 +2376,45 @@ describe("OpencodePlugin memory capture", () => {
   )
 
   capturing("console_memory,memory_capture").effect(
+    "captures nothing without a decision model, and captures again once one is offered",
+    () =>
+      withConsole((console) =>
+        Effect.gen(function* () {
+          distiller.prompts.length = 0
+          distiller.reply = JSON.stringify({
+            candidates: [
+              {
+                kind: "gotcha",
+                title: "Tests need TZ=UTC",
+                body: "Claim: x\nApplies when: x\nAction: x\nVerify: x\nAnchors: x\nEvidence: x",
+              },
+            ],
+          })
+          const work = (sessionID: Session.ID) =>
+            Effect.gen(function* () {
+              yield* prompt(sessionID, "From now on we always run the tests with TZ=UTC")
+              yield* ran(sessionID, "shell", { command: "bun test" }, { exitCode: 1, output: " 1 fail" })
+              yield* ran(sessionID, "edit", { path: "src/dates.ts" })
+              yield* ran(sessionID, "shell", { command: "bun test" }, { exitCode: 0, output: " 1 pass" })
+            })
+          judge.models = []
+          const { host } = yield* start(console)
+          const off = yield* host.session.create({})
+          yield* work(off.id)
+          yield* drain
+          expect(distiller.prompts).toHaveLength(0)
+          expect(publishes(console)).toHaveLength(0)
+
+          // With one offered, the same work is distilled and published.
+          judge.models = ["opencode/jev-1.13"]
+          const on = yield* host.session.create({})
+          yield* work(on.id)
+          yield* waitUntil(Effect.sync(() => publishes(console).length > 0))
+        }),
+      ),
+  )
+
+  capturing("console_memory,memory_capture").effect(
     "publishes an observed lesson only when the decision finds it durable, not a note about this one task",
     () =>
       withConsole((console) =>
@@ -2330,7 +2431,9 @@ describe("OpencodePlugin memory capture", () => {
             asked.questions.durable
               ? asked.state.includes("Title: How this fix parses dates")
                 ? { durable: yes(0.9), fix_record: yes(0.9) }
-                : { durable: yes(0.95), fix_record: yes(0.05) }
+                : asked.state.includes("Title: Dates need a locale")
+                  ? 503
+                  : { durable: yes(0.95), fix_record: yes(0.05) }
               : 503
           const { host } = yield* start(console)
           const session = yield* host.session.create({})
@@ -2343,6 +2446,21 @@ describe("OpencodePlugin memory capture", () => {
           yield* drain
           expect(publishes(console).map((item) => (item.body as { title: string }).title)).toEqual([
             "Tests need TZ=UTC",
+          ])
+
+          // A lesson whose decision fails is a no: it isn't published either.
+          distiller.reply = JSON.stringify({
+            candidates: [lesson("Dates need a locale"), lesson("Builds need Node 22")],
+          })
+          yield* prompt(session.id, "Fix the locale handling")
+          yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 1, output: " 1 fail" })
+          yield* ran(session.id, "edit", { path: "src/locale.ts" })
+          yield* ran(session.id, "shell", { command: "bun test" }, { exitCode: 0, output: " 1 pass" })
+          yield* waitUntil(Effect.sync(() => publishes(console).length === 2))
+          yield* drain
+          expect(publishes(console).map((item) => (item.body as { title: string }).title)).toEqual([
+            "Tests need TZ=UTC",
+            "Builds need Node 22",
           ])
         }),
       ),
@@ -2383,7 +2501,8 @@ describe("OpencodePlugin memory capture", () => {
           // The distiller is shown which lines came from outside.
           expect(distiller.prompts.at(-1)).toContain(`#1 [outside] read ${elsewhere}`)
           expect(distiller.prompts.at(-1)).toContain("#2 [outside] a subtask finished")
-          expect(distiller.prompts.at(-1)).toContain(`#3 [user] user: ${rule}`)
+          // A lasting rule corrects a standing practice too, and is labelled so.
+          expect(distiller.prompts.at(-1)).toContain(`#3 [user] user (correcting): ${rule}`)
           const sent = (title: string) =>
             publishes(console).find((item) => (item.body as { title?: string }).title === title)?.body
           expect(sent("Commit messages name the issue")).toMatchObject({
@@ -2767,17 +2886,6 @@ describe("OpencodeMemoryCapture", () => {
     expect(backing(candidate("From now on we never mock the clock"), [ask(message, false, false, true)])).toBe(
       "dropped",
     )
-  })
-
-  test("reads a message the stricter way when no decision can be had", () => {
-    const fallback = OpencodeMemoryCapture.fallback
-    // Only an explicit team rule, never a task request that says "never" or names the repository.
-    expect(fallback.lasting("From now on we always name money parameters with a Cents suffix")).toBe(true)
-    expect(fallback.lasting("Our convention is one test file per module")).toBe(true)
-    expect(fallback.lasting("Add refund(); it must never return more than the original")).toBe(false)
-    expect(fallback.lasting("Fix the flaky date test in this repo")).toBe(false)
-    expect(fallback.correcting("No, don't change the config")).toBe(true)
-    expect(fallback.correcting("Add a test for isWeekend")).toBe(false)
   })
 
   test("applies a correction's edits to an entry's whole text, only when each matches exactly once", () => {
