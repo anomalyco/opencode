@@ -321,6 +321,42 @@ pub fn ts_root() -> Option<PathBuf> {
     present.then_some(root)
 }
 
+/// The parity oracle `parity/oracle/<name>`, or `None` without the TypeScript test dependencies.
+pub fn oracle(name: &str) -> Option<PathBuf> {
+    ts_root()?;
+    Some(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../parity/oracle").join(name))
+}
+
+/// Runs the TUI oracle `name` under Solid's preload with the checkout `root`, then `args`, `input` on its stdin.
+pub fn solid_oracle(name: &str, root: &Path, args: &[&Path], input: &Value) -> Value {
+    let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../parity/oracle").join(name);
+    bun_json(
+        std::process::Command::new("bun")
+            .arg("--cwd")
+            .arg(root.join("packages/tui"))
+            .args(["--preload", "@opentui/solid/preload"])
+            .arg(script)
+            .arg(root)
+            .args(args),
+        Some(input),
+    )
+}
+
+/// Runs a Bun oracle with `input` on its stdin and parses the last line it prints as JSON.
+pub fn bun_json(command: &mut std::process::Command, input: Option<&Value>) -> Value {
+    use std::io::Write;
+    use std::process::Stdio;
+    let mut child = command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    if let Some(input) = input {
+        stdin.write_all(input.to_string().as_bytes()).unwrap();
+    }
+    drop(stdin);
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    serde_json::from_str(String::from_utf8_lossy(&output.stdout).lines().last().unwrap_or_default()).unwrap()
+}
+
 pub fn component_info(extra: Value) -> Info {
     cli_config::merge(&[
         Some(json!({ "theme": { "name": "opencode", "mode": "dark" }, "animations": false })),
@@ -346,41 +382,21 @@ pub fn xdg_paths(home: &Path) -> Paths {
 
 /// Run one reference configuration operation in `home`, or return `None` without the TypeScript test dependencies.
 pub fn ts_config(home: &Path, op: Value) -> Option<Value> {
-    use std::io::Write;
-    use std::process::{Command, Stdio};
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..").canonicalize().unwrap();
-    if !root.join("node_modules").is_dir() || Command::new("bun").arg("--version").output().is_err() {
-        assert!(
-            std::env::var_os("OPENCODE_RS_REQUIRE_TS").is_none(),
-            "OPENCODE_RS_REQUIRE_TS is set, but skipped the TypeScript side: needs bun and node_modules"
-        );
-        eprintln!("skipped the TypeScript side: needs bun and node_modules");
-        return None;
-    }
-    let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../parity/oracle/F.5-config.ts");
-    let mut command = Command::new("bun");
-    command
-        .arg("--cwd")
-        .arg(root.join("packages/cli"))
-        .arg(script)
-        .arg(&root)
-        .arg("config")
-        .env_remove("OPENCODE_CLI_CONFIG_CONTENT")
-        .env_remove("OPENCODE_CONFIG_DIR")
-        .env("BUN_RUNTIME_TRANSPILER_CACHE_PATH", std::env::temp_dir().join("opencode-rs-f5-bun-cache"))
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    for (name, value) in xdg_env(home) {
-        command.env(name, value);
-    }
-    let mut child = command.spawn().unwrap();
-    child.stdin.take().unwrap().write_all(json!([op]).to_string().as_bytes()).unwrap();
-    let output = child.wait_with_output().unwrap();
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-    let stdout = String::from_utf8(output.stdout).unwrap();
-    let mut results: Vec<Value> = serde_json::from_str(stdout.lines().last().unwrap()).unwrap();
-    Some(results.remove(0))
+    let root = ts_root()?.canonicalize().unwrap();
+    let mut results = bun_json(
+        std::process::Command::new("bun")
+            .arg("--cwd")
+            .arg(root.join("packages/cli"))
+            .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../parity/oracle/F.5-config.ts"))
+            .arg(&root)
+            .arg("config")
+            .env_remove("OPENCODE_CLI_CONFIG_CONTENT")
+            .env_remove("OPENCODE_CONFIG_DIR")
+            .env("BUN_RUNTIME_TRANSPILER_CACHE_PATH", std::env::temp_dir().join("opencode-rs-f5-bun-cache"))
+            .envs(xdg_env(home)),
+        Some(&json!([op])),
+    );
+    Some(results[0].take())
 }
 
 pub struct Harness {

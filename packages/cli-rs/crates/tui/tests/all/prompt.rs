@@ -2,7 +2,6 @@
 
 use crate::support::{self, Harness, WAIT, deref_harness, list};
 
-use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -575,28 +574,6 @@ fn an_early_enter_is_dropped_when_the_text_changes_before_the_catalog_loads() {
     assert_eq!(setup.textarea().text(), "Reply with ok");
 }
 
-fn typescript_history(root: &Path, state: &Path, ops: Value) -> Value {
-    use std::io::Write;
-    let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../parity/oracle/E.2-history.ts");
-    let mut child = std::process::Command::new("bun")
-        .arg("--cwd")
-        .arg(root.join("packages/tui"))
-        .args(["--preload", "@opentui/solid/preload"])
-        .arg(script)
-        .arg(root)
-        .arg(state)
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .unwrap();
-    child.stdin.take().unwrap().write_all(ops.to_string().as_bytes()).unwrap();
-    let output = child.wait_with_output().unwrap();
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-    let stdout = String::from_utf8(output.stdout).unwrap();
-    serde_json::from_str(stdout.lines().last().unwrap_or_default()).unwrap()
-}
-
 /// Check history-file interoperability in both directions.
 #[test]
 fn history_file_is_shared_with_typescript() {
@@ -614,10 +591,11 @@ fn history_file_is_shared_with_typescript() {
 
     let entry =
         json!({ "text": "from typescript", "files": [], "agents": [], "skills": [], "pasted": [], "mode": "normal" });
-    let moves = typescript_history(
+    let moves = support::solid_oracle(
+        "E.2-history.ts",
         &root,
-        &state,
-        json!([
+        &[&state],
+        &json!([
             { "move": [-1, ""] },
             { "move": [-1, "second \"quoted\" ünïcode"] },
             { "move": [-1, "ls -la"] },

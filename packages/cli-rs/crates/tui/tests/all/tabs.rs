@@ -546,7 +546,7 @@ fn a_split_panel_shows_beside_the_session_and_resizes() {
 
 #[test]
 fn tabs_and_layout_are_shared_with_the_typescript_client() {
-    let Some(script) = oracle() else { return };
+    let Some(script) = support::oracle("E.12-tabs.ts") else { return };
     let h = mount(120, json!({ "animations": false, "tabs": { "layout": "vertical" } }));
     h.open("ses_b");
     h.wait_file("tabs", |file| file["cwd"][cwd()]["tabs"] == both_tabs());
@@ -564,29 +564,12 @@ fn tabs_and_layout_are_shared_with_the_typescript_client() {
     assert!(reloaded, "tabs {:?}, rail {}", h.ids(), h.tui.frame.rail_width(&h.tui));
 }
 
-fn oracle() -> Option<PathBuf> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let script = root.join("parity/oracle/E.12-tabs.ts");
-    let present = root.join("../../node_modules").is_dir() && Command::new("bun").arg("--version").output().is_ok();
-    if !present {
-        assert!(
-            std::env::var_os("OPENCODE_RS_REQUIRE_TS").is_none(),
-            "OPENCODE_RS_REQUIRE_TS is set, but skipped: needs bun and the workspace node_modules"
-        );
-        eprintln!("skipped: needs bun and the workspace node_modules");
-        return None;
-    }
-    Some(script)
-}
-
 fn run(script: &Path, args: &[&str]) -> Value {
-    let output = Command::new("bun")
+    let mut command = Command::new("bun");
+    command
         .current_dir(script.parent().unwrap().parent().unwrap())
         .arg(script)
         .args(args)
-        .env("BUN_RUNTIME_TRANSPILER_CACHE_PATH", std::env::temp_dir().join("opencode-rs-e12-bun-cache"))
-        .output()
-        .unwrap();
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-    serde_json::from_str(String::from_utf8(output.stdout).unwrap().lines().last().unwrap()).unwrap()
+        .env("BUN_RUNTIME_TRANSPILER_CACHE_PATH", std::env::temp_dir().join("opencode-rs-e12-bun-cache"));
+    support::bun_json(&mut command, None)
 }
