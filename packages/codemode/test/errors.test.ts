@@ -170,6 +170,34 @@ return [JSON.stringify(e), Object.keys(e), Object.getOwnPropertyDescriptor(e, "s
 return f(20).stack.split("\\n")`),
     ).toEqual(["Error: deep", "    at f (<program>:1:34)", ...Array(9).fill("    at f (<program>:1:54)")])
   })
+
+  test("cuts a long function name to 200 characters", async () => {
+    const [length, lines] = (await value(`const name = "m".repeat(2 ** 24)
+const o = { [name](n) { return n === 0 ? new Error("x") : this[name](n - 1) } }
+const stack = o[name](12).stack
+return [stack.length, stack.split("\\n")]`)) as [number, Array<string>]
+    expect(lines).toEqual([
+      "Error: x",
+      `    at ${"m".repeat(200)}… (<program>:2:42)`,
+      ...Array(9).fill(`    at ${"m".repeat(200)}… (<program>:2:59)`),
+    ])
+    expect(length).toBeLessThan(3_000)
+  })
+
+  test("keeps names up to the bound whole", async () => {
+    expect(
+      await value(`const name = "n".repeat(200)
+const o = { [name]() { return new Error("x") } }
+return o[name]().stack.split("\\n")[1]`),
+    ).toBe(`    at ${"n".repeat(200)} (<program>:2:31)`)
+  })
+
+  test("is never longer than the longest string", async () => {
+    expect(
+      await value(`function f() { return new Error("e".repeat(2 ** 24)) }
+return [new Error("e".repeat(2 ** 24)).stack.length, f().stack.length]`),
+    ).toEqual([2 ** 24, 2 ** 24])
+  })
 })
 
 describe("source locations", () => {

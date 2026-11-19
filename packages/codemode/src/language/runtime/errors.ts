@@ -146,6 +146,15 @@ export const materialize = <R>(ctx: Interpreter<R>, thrown: unknown, site?: AstN
   )
 }
 
+/** Longest function name a `stack` line shows; longer names end in an ellipsis. */
+export const MAX_FRAME_NAME_LENGTH = 200
+
+const frameName = (name: string): string => {
+  if (name.length <= MAX_FRAME_NAME_LENGTH) return name
+  const cut = name.charCodeAt(MAX_FRAME_NAME_LENGTH - 1)
+  return name.slice(0, cut >= 0xd800 && cut <= 0xdbff ? MAX_FRAME_NAME_LENGTH - 1 : MAX_FRAME_NAME_LENGTH) + "…"
+}
+
 /**
  * One V8-style `stack` line for a program site: `at name (<program>:line:col)`, or `at <program>:line:col` at top
  * level. The location is in the submitted source and never names a host file.
@@ -153,7 +162,7 @@ export const materialize = <R>(ctx: Interpreter<R>, thrown: unknown, site?: AstN
 export const stackFrame = (node: AstNode, name?: string): string => {
   const location = sourceLocation(node)
   const at = `<program>:${location.line}:${location.column}`
-  return `\n    at ${name === undefined ? at : `${name} (${at})`}`
+  return `\n    at ${name === undefined ? at : `${frameName(name)} (${at})`}`
 }
 
 /** Error.prototype.toString: `name: message`, omitting whichever side is empty. */
