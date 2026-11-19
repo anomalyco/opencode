@@ -1,6 +1,5 @@
 use std::fs;
 use std::path::Path;
-use std::process::Command;
 use std::rc::Rc;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
@@ -10,7 +9,7 @@ use opentui::keymap::RunResult;
 use opentui::testing::Capture;
 
 use super::*;
-use crate::loader::tests::{TestHost, dynamic, entry, host};
+use crate::loader::tests::{TestHost, build_example, cc, dynamic, entry, fence_view, host};
 use crate::loader::{Configured, Loader, entry_file};
 use crate::{Entry, Registry, SlotInput, Status, slot};
 
@@ -27,22 +26,6 @@ pub(crate) fn build(features: &str) -> Vec<u8> {
     library
 }
 
-pub(crate) fn build_example(example: &str, lib: &str, features: &str) -> Vec<u8> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let target = root.join("../../target/sample-plugin");
-    let status = Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
-        .args(["build", "--quiet", "--manifest-path"])
-        .arg(root.join("examples").join(example).join("Cargo.toml"))
-        .arg("--target-dir")
-        .arg(&target)
-        .args(["--features", features])
-        .status()
-        .unwrap();
-    assert!(status.success(), "{example} did not build");
-    let name = format!("{}{lib}{}", std::env::consts::DLL_PREFIX, std::env::consts::DLL_SUFFIX);
-    fs::read(target.join("debug").join(name)).unwrap()
-}
-
 /// The sample, loaded from `library` and active in a fresh registry.
 fn active(host: &Rc<TestHost>, library: &[u8]) -> Registry {
     let (definition, error) = Native.load(&dynamic(host), library, std::path::Path::new("plugin.so"), None).unwrap();
@@ -54,18 +37,7 @@ fn active(host: &Rc<TestHost>, library: &[u8]) -> Registry {
 
 /// The screen after a transcript-like Markdown view draws `markdown` with the registry's renderers.
 fn markdown(host: &Rc<TestHost>, registry: &Registry, text: &str) -> String {
-    let view = opencode_ui::markdown::view(
-        host.app(),
-        &host.theme(),
-        &opencode_ui::code::syntax_theme(&host.theme()),
-        &registry.code_blocks({
-            let theme = host.theme();
-            Rc::new(move || theme.clone())
-        }),
-        true,
-        false,
-    );
-    view.set_markdown(text);
+    let view = fence_view(&**host, registry, text);
     host.app().root().clear();
     host.app().root().add(&view);
     host.app.render();
@@ -2429,31 +2401,6 @@ fn a_result_the_host_refuses_has_no_effects() {
     assert!(!host.app.text().contains("a view"), "{}", host.app.text());
 }
 
-/// `examples/c/plugin.c` built with `defines`, symbols hidden by default as a careful C build hides them, so the entry
-/// must carry the header's `OPENCODE_EXPORT`; `None` without a C compiler.
-#[cfg(unix)]
-fn c_plugin(defines: &[&str]) -> Option<Vec<u8>> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let dir = opencode_util::temp::tempdir().unwrap();
-    let library = dir.path().join("plugin.so");
-    let built = Command::new(std::env::var("CC").unwrap_or_else(|_| "cc".to_owned()))
-        .args(["-shared", "-fPIC", "-fvisibility=hidden", "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror"])
-        .args(defines.iter().map(|define| format!("-D{define}")))
-        .arg("-I")
-        .arg(root.join("../plugin-abi/include"))
-        .arg("-o")
-        .arg(&library)
-        .arg(root.join("examples/c/plugin.c"))
-        .status();
-    let Ok(status) = built else {
-        assert!(std::env::var_os("OPENCODE_RS_REQUIRE_CC").is_none(), "OPENCODE_RS_REQUIRE_CC is set, but no cc");
-        eprintln!("skipped: no C compiler");
-        return None;
-    };
-    assert!(status.success(), "the C plugin did not build with {defines:?}");
-    Some(fs::read(library).unwrap())
-}
-
 /// The C plugin loaded with `options` into a fresh host and registry.
 #[cfg(unix)]
 fn c_active(library: &[u8], options: &str) -> (Rc<TestHost>, Registry) {
@@ -2484,7 +2431,7 @@ fn c_route(host: &Rc<TestHost>, registry: &Registry) -> Option<String> {
 #[cfg(unix)]
 #[test]
 fn a_plugin_written_in_c_against_the_header_runs() {
-    let Some(library) = c_plugin(&[]) else { return };
+    let Some(library) = cc("examples/c/plugin.c", &[]) else { return };
     assert_eq!(Native.inspect(&library).unwrap(), Inspected { major: 2, minor: 0, version: Some("0.1.0".to_owned()) });
     let (host, registry) = c_active(&library, "");
     assert_eq!(entry(&registry.entries(), "c.so").status, Status::Active);
@@ -2499,7 +2446,7 @@ fn a_plugin_written_in_c_against_the_header_runs() {
 #[cfg(unix)]
 #[test]
 fn a_1_x_library_is_refused_by_its_major() {
-    let Some(library) = c_plugin(&["OPENCODE_AS_V1"]) else { return };
+    let Some(library) = cc("examples/c/plugin.c", &["-DOPENCODE_AS_V1"]) else { return };
     let refused = "plugin ABI 1.x is not supported: this opencode-native loads ABI 2.x plugins (up to 2.0); rebuild \
                    the plugin against opencode-plugin-abi 2";
     assert_eq!(Native.inspect(&library).err().unwrap(), refused);
@@ -2510,7 +2457,7 @@ fn a_1_x_library_is_refused_by_its_major() {
 #[cfg(unix)]
 #[test]
 fn a_2_x_library_whose_describe_fails_is_refused() {
-    let Some(library) = c_plugin(&["OPENCODE_BAD_DESCRIBE"]) else { return };
+    let Some(library) = cc("examples/c/plugin.c", &["-DOPENCODE_BAD_DESCRIBE"]) else { return };
     let error = Native.load(&dynamic(&host()), &library, std::path::Path::new("plugin.so"), None).err().unwrap();
     assert!(error.starts_with("plugin describe failed: "), "{error}");
     assert!(Native.inspect(&library).err().unwrap().starts_with("plugin describe failed: "));
@@ -2519,7 +2466,7 @@ fn a_2_x_library_whose_describe_fails_is_refused() {
 #[cfg(unix)]
 #[test]
 fn a_c_plugin_gets_what_its_answers_ask_for() {
-    let Some(library) = c_plugin(&[]) else { return };
+    let Some(library) = cc("examples/c/plugin.c", &[]) else { return };
 
     let (host, registry) = c_active(&library, "view-toast");
     let screen = c_route(&host, &registry).unwrap();
@@ -2556,7 +2503,7 @@ fn a_c_plugin_gets_what_its_answers_ask_for() {
 #[cfg(unix)]
 #[test]
 fn a_c_plugin_draws_a_canvas() {
-    let Some(library) = c_plugin(&[]) else { return };
+    let Some(library) = cc("examples/c/plugin.c", &[]) else { return };
     let run = |options: &str| {
         let (host, registry) = c_active(&library, options);
         // The mount is kept, so the message's view and draw reach it.
@@ -2945,7 +2892,7 @@ fn c_claim(host: &Rc<TestHost>, registry: &Registry) -> Option<(bool, String)> {
 #[cfg(unix)]
 #[test]
 fn a_claim_in_a_c_library_draws_and_keeps_to_the_header() {
-    let Some(library) = c_plugin(&[]) else { return };
+    let Some(library) = cc("examples/c/plugin.c", &[]) else { return };
     let (host, registry) = c_active(&library, "");
     let (shows, screen) = c_claim(&host, &registry).unwrap();
     assert!(shows && screen.contains("claimed in C"), "{screen}");

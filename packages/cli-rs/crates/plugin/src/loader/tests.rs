@@ -2292,3 +2292,59 @@ fn a_build_without_luau_says_it_has_no_luau_plugin_support() {
     assert_eq!(entry(&registry.entries(), &project.global().to_string_lossy()).status, skipped);
     assert_eq!(entry(&registry.entries(), &native).status, Status::Pending);
 }
+
+/// `text` as the transcript draws Markdown: in the host's theme, with the registry's fence renderers.
+pub(crate) fn fence_view(host: &dyn Host, registry: &crate::Registry, text: &str) -> opentui::widget::Markdown {
+    let theme = host.theme();
+    let syntax = opencode_ui::code::syntax_theme(&theme);
+    let renderers = registry.code_blocks({
+        let theme = theme.clone();
+        Rc::new(move || theme.clone())
+    });
+    opencode_ui::markdown::view(host.app(), &theme, &syntax, &renderers, true, false).set_markdown(text)
+}
+
+/// Native example `example`, whose library is `lib`, built with `features` into the target directory every native
+/// example shares.
+pub(crate) fn build_example(example: &str, lib: &str, features: &str) -> Vec<u8> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let target = root.join("../../target/sample-plugin");
+    let status = std::process::Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
+        .args(["build", "--quiet", "--manifest-path"])
+        .arg(root.join("examples").join(example).join("Cargo.toml"))
+        .arg("--target-dir")
+        .arg(&target)
+        .args(["--features", features])
+        .status()
+        .unwrap();
+    assert!(status.success(), "{example} did not build");
+    let name = format!("{}{lib}{}", std::env::consts::DLL_PREFIX, std::env::consts::DLL_SUFFIX);
+    fs::read(target.join("debug").join(name)).unwrap()
+}
+
+/// `source`, a C plugin of this crate, built with `flags`, symbols hidden by default as a careful C build hides them (so
+/// the entry must carry the header's `OPENCODE_EXPORT`), optimized as a binding's author builds it (which runs the
+/// warnings that need the optimizer, such as `-Wformat-truncation`), and every warning an error; `None` without a C
+/// compiler, unless `OPENCODE_RS_REQUIRE_CC` asks for one.
+#[cfg(unix)]
+pub(crate) fn cc(source: &str, flags: &[&str]) -> Option<Vec<u8>> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let dir = opencode_util::temp::tempdir().unwrap();
+    let library = dir.path().join("plugin.so");
+    let built = std::process::Command::new(std::env::var("CC").unwrap_or_else(|_| "cc".to_owned()))
+        .args(["-shared", "-fPIC", "-fvisibility=hidden", "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror"])
+        .args(flags)
+        .arg("-I")
+        .arg(root.join("../plugin-abi/include"))
+        .arg("-o")
+        .arg(&library)
+        .arg(root.join(source))
+        .status();
+    let Ok(status) = built else {
+        assert!(std::env::var_os("OPENCODE_RS_REQUIRE_CC").is_none(), "OPENCODE_RS_REQUIRE_CC is set, but no cc");
+        eprintln!("skipped: no C compiler");
+        return None;
+    };
+    assert!(status.success(), "{source} did not build with {flags:?}");
+    Some(fs::read(library).unwrap())
+}

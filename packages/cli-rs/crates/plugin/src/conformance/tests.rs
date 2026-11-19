@@ -10,9 +10,7 @@ use std::cell::{Cell, RefCell};
 use std::ffi::c_void;
 use std::mem::size_of;
 use std::path::Path;
-use std::process::Command;
 use std::rc::Rc;
-use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use opencode_plugin_abi::{ABI_MAJOR, ABI_MINOR, Bytes, HostApi, Owned, PluginApi};
@@ -23,7 +21,7 @@ use serde_json::{Value, json};
 use super::*;
 use crate::loader::Backend;
 use crate::loader::native::{self, Native};
-use crate::loader::tests::{TestHost, dynamic, host, route_keys};
+use crate::loader::tests::{TestHost, build_example, cc, dynamic, fence_view, host, route_keys};
 use crate::{Host, Registry, RouteMount};
 
 #[path = "../../examples/conformance/src/conformance.rs"]
@@ -63,62 +61,6 @@ fn reference() -> PluginApi {
 }
 
 // The libraries.
-
-/// The reference built as a `cdylib`; built once per test run.
-fn rust_library() -> Vec<u8> {
-    static BUILT: Mutex<Option<Vec<u8>>> = Mutex::new(None);
-    let mut built = BUILT.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    if let Some(library) = &*built {
-        return library.clone();
-    }
-    let target = root().join("../../target/conformance-plugin-v2");
-    let status = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned()))
-        .args(["build", "--quiet", "--manifest-path"])
-        .arg(root().join("examples/conformance/Cargo.toml"))
-        .arg("--target-dir")
-        .arg(&target)
-        .status()
-        .unwrap();
-    assert!(status.success(), "the conformance plugin did not build");
-    let name = format!("{}opencode_conformance{}", std::env::consts::DLL_PREFIX, std::env::consts::DLL_SUFFIX);
-    let library = std::fs::read(target.join("debug").join(name)).unwrap();
-    *built = Some(library.clone());
-    library
-}
-
-/// `examples/conformance/plugin.c` built with symbols hidden, optimized as a binding's author builds it (which runs
-/// the warnings that need the optimizer, such as `-Wformat-truncation`), and every warning an error; `None` without a
-/// C compiler, unless `OPENCODE_RS_REQUIRE_CC` asks for one.
-#[cfg(unix)]
-fn c_library() -> Option<Vec<u8>> {
-    let dir = opencode_util::temp::tempdir().unwrap();
-    let library = dir.path().join("plugin.so");
-    let built = Command::new(std::env::var("CC").unwrap_or_else(|_| "cc".to_owned()))
-        .args([
-            "-shared",
-            "-fPIC",
-            "-fvisibility=hidden",
-            "-std=c11",
-            "-O2",
-            "-Wall",
-            "-Wextra",
-            "-Werror",
-            "-pedantic",
-        ])
-        .arg("-I")
-        .arg(root().join("../plugin-abi/include"))
-        .arg("-o")
-        .arg(&library)
-        .arg(root().join("examples/conformance/plugin.c"))
-        .status();
-    let Ok(status) = built else {
-        assert!(std::env::var_os("OPENCODE_RS_REQUIRE_CC").is_none(), "OPENCODE_RS_REQUIRE_CC is set, but no cc");
-        eprintln!("skipped: no C compiler");
-        return None;
-    };
-    assert!(status.success(), "the C conformance plugin did not build");
-    Some(std::fs::read(library).unwrap())
-}
 
 /// The table a library's bytes export, from a copy of its own that stays loaded.
 fn table(library: &[u8]) -> *const PluginApi {
@@ -226,14 +168,7 @@ fn run(header: &Header, load: &Load<'_>) -> Vec<Entry> {
                     Step::Markdown { text } => {
                         host.app().root().clear();
                         (route, claimed) = (None, None);
-                        let theme = host.theme();
-                        let renderers = registry.code_blocks({
-                            let theme = theme.clone();
-                            Rc::new(move || theme.clone())
-                        });
-                        let syntax = opencode_ui::code::syntax_theme(&theme);
-                        let view = opencode_ui::markdown::view(host.app(), &theme, &syntax, &renderers, true, false);
-                        view.set_markdown(text);
+                        let view = fence_view(&*host, &registry, text);
                         host.app().root().add(&view);
                         host.app.render();
                         shown = Some(view);
@@ -471,13 +406,13 @@ fn both_sides(name: &str, library: &[u8]) {
 
 #[test]
 fn the_reference_library_conforms() {
-    both_sides("the Rust library", &rust_library());
+    both_sides("the Rust library", &build_example("conformance", "opencode_conformance", ""));
 }
 
 #[cfg(unix)]
 #[test]
 fn the_c_library_conforms() {
-    let Some(library) = c_library() else { return };
+    let Some(library) = cc("examples/conformance/plugin.c", &["-pedantic"]) else { return };
     both_sides("the C library", &library);
 }
 
@@ -552,14 +487,7 @@ fn fenced_with(load: &Load<'_>, features: &'static [u8]) -> String {
     native::STATED.set(Some(features));
     let (definition, error) = load_plugin(&host, load, None).unwrap();
     registry.load(&dynamic(&host), definition.external(TARGET, error));
-    let theme = host.theme();
-    let renderers = registry.code_blocks({
-        let theme = theme.clone();
-        Rc::new(move || theme.clone())
-    });
-    let syntax = opencode_ui::code::syntax_theme(&theme);
-    let view = opencode_ui::markdown::view(host.app(), &theme, &syntax, &renderers, true, false);
-    view.set_markdown("```conf-fence\nhello\n```\n");
+    let view = fence_view(&*host, &registry, "```conf-fence\nhello\n```\n");
     host.app().root().add(&view);
     host.app.render();
     native::STATED.set(None);
@@ -591,7 +519,7 @@ fn a_library_reads_the_features_it_is_offered_as_json() {
     let escape = [92, b'u', b'0', b'0', b'6', b'6'];
     assert!(cases[1].0.windows(6).any(|window| window == escape), "the test data lost its escape");
     #[cfg(unix)]
-    let c = c_library();
+    let c = cc("examples/conformance/plugin.c", &["-pedantic"]);
     #[cfg(not(unix))]
     let c: Option<Vec<u8>> = None;
     for (features, drawn) in cases {
@@ -633,7 +561,7 @@ fn a_search_asks_for_nothing() {
     assert_eq!(seen.last().unwrap(), &&json!({ "toasts": [], "status": "Some(Active)" }));
 
     #[cfg(unix)]
-    if let Some(library) = c_library() {
+    if let Some(library) = cc("examples/conformance/plugin.c", &["-pedantic"]) {
         let host = host();
         let registry = Registry::define(Vec::new(), []);
         let (definition, error) =
