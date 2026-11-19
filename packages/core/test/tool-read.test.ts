@@ -75,19 +75,19 @@ const mediaResult = (name: string, mime: string, base64: string) => ({
   bytes: Buffer.from(base64, "base64"),
 })
 let readFailure: ReadToolFileSystem.ReadError | undefined
-let readOverride: ReadToolFileSystem.Interface["read"] | undefined
+let readOverride: ((input: AbsolutePath) => ReturnType<ReadToolFileSystem.Interface["read"]>) | undefined
 const reader = Layer.succeed(
   ReadToolFileSystem.Service,
   ReadToolFileSystem.Service.of({
-    list: (input) => {
+    list: (_files, input) => {
       listCalls.push(input)
       if (missingDirectories.includes(input)) return Effect.fail(new Environment.NotFound({ path: input }))
       return Effect.succeed(directoryEntryDetails)
     },
-    read: (input, resource, page = {}) => {
+    read: (_files, input, _resource, page = {}) => {
       readCalls.push({ input, page })
       if (readDefect !== undefined) return Effect.die(readDefect)
-      if (readOverride) return readOverride(input, resource, page)
+      if (readOverride) return readOverride(input)
       if (readFailure !== undefined) return Effect.fail(readFailure)
       return Effect.succeed(readResult)
     },
