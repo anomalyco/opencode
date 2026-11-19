@@ -2206,32 +2206,42 @@ impl Setup<'_> {
         let plugin: Rc<str> = Rc::from(self.id);
         let (monitor, slot) = (self.monitor.clone(), self.monitor.slot(&self.artifact()));
         let host_time: surface::HostTime = Rc::new(move |work| monitor.host(slot, work));
-        match surface.at.clone() {
+        let (at, overlay_key) = (surface.at.clone(), surface.name.clone());
+        // One mount of the surface, whose input owner `hold` places before the activation owns it.
+        let mount = move |host: &dyn Host,
+                          keys: (&str, &str),
+                          slot_input: &SlotInput,
+                          alive,
+                          hold: &dyn Fn(&interact::Owner)| {
+            let mounted = surface::Surface::new(
+                host,
+                owner.clone(),
+                plugin.clone(),
+                &surface,
+                keys,
+                slot_input,
+                alive,
+                viewer.clone(),
+                fail.clone(),
+                calls.clone(),
+                input.clone(),
+                host_time.clone(),
+            );
+            activation.track(Rc::downgrade(&mounted) as Weak<dyn Drawn>);
+            if let Some(holder) = mounted.holder() {
+                hold(&holder);
+                activation.own(&holder);
+            }
+            mounted
+        };
+        match at {
             abi::v2::Place::Route(name) => {
                 let key = name.clone();
                 self.route(name, move |host| {
                     // What the commands ask for ends with the mount; their layer is there before its first view.
                     let alive = Rc::new(());
                     let layer = route::layer(host, commands(&Rc::downgrade(&alive)));
-                    let mounted = surface::Surface::new(
-                        host,
-                        owner.clone(),
-                        plugin.clone(),
-                        &surface,
-                        (&key, ""),
-                        &SlotInput::default(),
-                        alive,
-                        viewer.clone(),
-                        fail.clone(),
-                        calls.clone(),
-                        input.clone(),
-                        host_time.clone(),
-                    );
-                    activation.track(Rc::downgrade(&mounted) as Weak<dyn Drawn>);
-                    if let Some(holder) = mounted.holder() {
-                        holder.hold_route();
-                        activation.own(&holder);
-                    }
+                    let mounted = mount(host, (&key, ""), &SlotInput::default(), alive, &interact::Owner::hold_route);
                     Box::new(route::View::fill(host, Box::new(mounted), layer))
                 });
             }
@@ -2240,51 +2250,16 @@ impl Setup<'_> {
                 self.slot(
                     slot::placement(&abi::SlotClaim { kind: at.kind, path: at.path, mount: false, size: false }),
                     move |host, slot_input| {
-                        let mounted = surface::Surface::new(
-                            host,
-                            owner.clone(),
-                            plugin.clone(),
-                            &surface,
-                            (&path, &path),
-                            slot_input,
-                            Rc::new(()),
-                            viewer.clone(),
-                            fail.clone(),
-                            calls.clone(),
-                            input.clone(),
-                            host_time.clone(),
-                        );
-                        activation.track(Rc::downgrade(&mounted) as Weak<dyn Drawn>);
-                        if let Some(holder) = mounted.holder() {
-                            holder.hold_root();
-                            activation.own(&holder);
-                        }
-                        Box::new(mounted)
+                        let hold = interact::Owner::hold_root;
+                        Box::new(mount(host, (&path, &path), slot_input, Rc::new(()), &hold))
                     },
                 );
             }
             abi::v2::Place::Panel(name) => {
                 let key = name.clone();
                 let panel: PanelRender = Rc::new(move |host: &dyn Host, parent: &View| {
-                    let mounted = surface::Surface::new(
-                        host,
-                        owner.clone(),
-                        plugin.clone(),
-                        &surface,
-                        (&key, ""),
-                        &SlotInput::default(),
-                        Rc::new(()),
-                        viewer.clone(),
-                        fail.clone(),
-                        calls.clone(),
-                        input.clone(),
-                        host_time.clone(),
-                    );
-                    activation.track(Rc::downgrade(&mounted) as Weak<dyn Drawn>);
-                    if let Some(holder) = mounted.holder() {
-                        holder.hold_in(parent.clone());
-                        activation.own(&holder);
-                    }
+                    let hold = |holder: &interact::Owner| holder.hold_in(parent.clone());
+                    let mounted = mount(host, (&key, ""), &SlotInput::default(), Rc::new(()), &hold);
                     parent.add(&mounted.root());
                     Box::new(mounted) as Box<dyn Claimed>
                 });
@@ -2293,25 +2268,8 @@ impl Setup<'_> {
             // A dialog surface mounts when the plugin shows it ([`abi::Dialog::Surface`]); its scope is the dialog on top.
             abi::v2::Place::Dialog(name) => {
                 let dialog: DialogRender = Rc::new(move |host: &dyn Host, body: &View, key: &str| {
-                    let mounted = surface::Surface::new(
-                        host,
-                        owner.clone(),
-                        plugin.clone(),
-                        &surface,
-                        (key, ""),
-                        &SlotInput::default(),
-                        Rc::new(()),
-                        viewer.clone(),
-                        fail.clone(),
-                        calls.clone(),
-                        input.clone(),
-                        host_time.clone(),
-                    );
-                    activation.track(Rc::downgrade(&mounted) as Weak<dyn Drawn>);
-                    if let Some(holder) = mounted.holder() {
-                        holder.hold_dialog(body.clone());
-                        activation.own(&holder);
-                    }
+                    let hold = |holder: &interact::Owner| holder.hold_dialog(body.clone());
+                    let mounted = mount(host, (key, ""), &SlotInput::default(), Rc::new(()), &hold);
                     body.add(&mounted.root());
                     Box::new(mounted) as Box<dyn Claimed>
                 });
@@ -2320,25 +2278,8 @@ impl Setup<'_> {
             // An overlay mounts when the plugin opens it ([`abi::Host::overlay`]).
             abi::v2::Place::Overlay(name) => {
                 let open: OverlayFn = Rc::new(move |host: &dyn Host, frame: &View| {
-                    let mounted = surface::Surface::new(
-                        host,
-                        owner.clone(),
-                        plugin.clone(),
-                        &surface,
-                        (&surface.name, ""),
-                        &SlotInput::default(),
-                        Rc::new(()),
-                        viewer.clone(),
-                        fail.clone(),
-                        calls.clone(),
-                        input.clone(),
-                        host_time.clone(),
-                    );
-                    activation.track(Rc::downgrade(&mounted) as Weak<dyn Drawn>);
-                    if let Some(holder) = mounted.holder() {
-                        holder.hold_in(frame.clone());
-                        activation.own(&holder);
-                    }
+                    let hold = |holder: &interact::Owner| holder.hold_in(frame.clone());
+                    let mounted = mount(host, (&overlay_key, ""), &SlotInput::default(), Rc::new(()), &hold);
                     frame.add(&mounted.root());
                     Some(Box::new(mounted) as Box<dyn Claimed>)
                 });
