@@ -271,7 +271,7 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
       <div
         data-slot="home-sessions-list"
         data-reveal={skeleton() || undefined}
-        class="relative -mr-3 min-h-[calc(100cqh-64px)] md:min-h-[calc(100cqh-72px)] lg:min-h-[calc(100cqh-96px)]"
+        class="relative -mr-3 min-h-[calc(100cqh-64px)] pb-[var(--home-tip-inset,0px)] md:min-h-[calc(100cqh-72px)] lg:min-h-[calc(100cqh-96px)]"
         aria-busy={props.listView.status === "loading"}
       >
         <Show when={skeleton()}>
