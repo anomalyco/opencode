@@ -212,7 +212,7 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
         ),
         Effect.catchDefect((defect) =>
           defect instanceof LifecycleConflict
-            ? find(db, request.id).pipe(
+            ? reconcile({ ...request, type: request.item.type, delivery: request.item.delivery }).pipe(
                 Effect.flatMap((stored) => (stored === undefined ? Effect.fail(defect) : Effect.succeed(stored))),
               )
             : Effect.die(defect),
