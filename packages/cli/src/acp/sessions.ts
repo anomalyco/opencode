@@ -38,6 +38,7 @@ type Entry = {
 }
 
 type SelectedEvent = Extract<OpenCodeEvent, { type: "session.model.selected" | "session.agent.selected" }>
+type RenamedEvent = Extract<OpenCodeEvent, { type: "session.renamed" }>
 
 export const make = Effect.fnUntraced(function* (input: {
   readonly client: OpenCodeClient
@@ -51,15 +52,35 @@ export const make = Effect.fnUntraced(function* (input: {
   const connected = yield* Deferred.make<void>()
 
   // Subscribe before any attach so a switch right after `sessions.set` reaches the session.
+  // Renames are forwarded here rather than per-turn because title generation runs in a detached
+  // fiber that can settle after the turn that triggered it has already ended.
   yield* input.client.event.subscribe().pipe(
     Stream.tap((event) => (event.type === "server.connected" ? Deferred.succeed(connected, undefined) : Effect.void)),
     Stream.filter(
-      (event): event is SelectedEvent =>
-        event.type === "session.model.selected" || event.type === "session.agent.selected",
+      (event): event is SelectedEvent | RenamedEvent =>
+        event.type === "session.model.selected" ||
+        event.type === "session.agent.selected" ||
+        event.type === "session.renamed",
     ),
     Stream.runForEach((event) => {
       const entry = sessions.get(event.data.sessionID)
       if (!entry) return Effect.void
+      if (event.type === "session.renamed") {
+        // Best-effort: one failed notification must not end the shared stream, which also
+        // carries selection changes for every attached session.
+        return input.connection
+          .sessionUpdate({
+            sessionId: event.data.sessionID,
+            update: { sessionUpdate: "session_info_update", title: event.data.title },
+          })
+          .pipe(
+            Effect.catchCause((cause) =>
+              Cause.hasInterruptsOnly(cause)
+                ? Effect.void
+                : Effect.logWarning("ACP session title update failed", cause),
+            ),
+          )
+      }
       return Queue.offer(
         entry.selected,
         event.type === "session.model.selected" ? { model: event.data.model } : { modeID: event.data.agent },
