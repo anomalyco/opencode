@@ -20,6 +20,8 @@ import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
+import { WorktreeTable } from "@opencode/core/worktree/sql"
+import { Worktree } from "@opencode/schema/worktree"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath, RelativePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
@@ -120,7 +122,8 @@ const logEvents = (session: Session.Interface, sessionID: Session.ID, follow?: b
 const assertCreateInputTypes = (session: Session.Interface) => {
   // @ts-expect-error location or parentID is required.
   session.create({})
-  // @ts-expect-error child sessions inherit their parent's location.
+  // Child sessions inherit their parent's location by default, but may be created in an
+  // explicitly validated location of the same project.
   session.create({ parentID: Session.ID.create(), location })
 }
 void assertCreateInputTypes
@@ -1332,6 +1335,187 @@ describe("Session.create", () => {
       ).toBe("Session.NotFoundError")
     }),
   )
+  liveIt.live("creates a child session in an explicitly validated same-project worktree location", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const main = AbsolutePath.make(path.join(directory, "repo"))
+        const wt = AbsolutePath.make(path.join(directory, "repo-wt"))
+        yield* Effect.promise(async () => {
+          await fs.mkdir(main, { recursive: true })
+          await initGit(main)
+          await $`git -c user.name=Test -c user.email=test@opencode.test -c commit.gpgsign=false commit --allow-empty -qm root`
+            .cwd(main)
+            .quiet()
+          await $`git worktree add ${wt} -b wt`.cwd(main).quiet()
+        })
+
+        const session = yield* Session.Service
+        const permissions = [{ action: "edit", resource: "README.md", effect: "deny" as const }]
+        const metadata = { source: "orchestrator" }
+        const parent = yield* session.create({
+          location: Location.Ref.make({ directory: main }),
+          permissions,
+          metadata,
+          title: "parent",
+        })
+        const child = yield* session.create({
+          parentID: parent.id,
+          location: Location.Ref.make({ directory: wt }),
+          title: "child",
+        })
+
+        expect(child).toMatchObject({
+          parentID: parent.id,
+          projectID: parent.projectID,
+          location: { directory: wt },
+          permissions,
+          metadata,
+        })
+        expect(child.subpath).toBeUndefined()
+        expect(child.location.workspaceID).toBeUndefined()
+        expect((yield* session.get(child.id)).location.directory).toBe(wt)
+      }),
+    ),
+  )
+
+  liveIt.live("creates two children in different known worktrees with independent effective locations and no root leakage", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const main = AbsolutePath.make(path.join(directory, "repo"))
+        const wtA = AbsolutePath.make(path.join(directory, "repo-wt-a"))
+        const wtB = AbsolutePath.make(path.join(directory, "repo-wt-b"))
+        yield* Effect.promise(async () => {
+          await fs.mkdir(main, { recursive: true })
+          await initGit(main)
+          await fs.writeFile(path.join(main, "root.txt"), "root")
+          await $`git -c user.name=Test -c user.email=test@opencode.test -c commit.gpgsign=false commit --allow-empty -qm root`
+            .cwd(main)
+            .quiet()
+          await $`git worktree add ${wtA} -b wt-a`.cwd(main).quiet()
+          await $`git worktree add ${wtB} -b wt-b`.cwd(main).quiet()
+          await fs.writeFile(path.join(wtA, "shared.txt"), "A")
+          await fs.writeFile(path.join(wtB, "shared.txt"), "B")
+        })
+
+        const session = yield* Session.Service
+        const { db } = yield* Database.Service
+        const permissions = [{ action: "edit", resource: "src/**", effect: "allow" as const }]
+        const metadata = { owner: "orch" }
+        const parent = yield* session.create({
+          location: Location.Ref.make({ directory: main }),
+          permissions,
+          metadata,
+          title: "parent",
+        })
+
+        // Register worktrees as known to OpenCode for this project.
+        yield* db
+          .insert(WorktreeTable)
+          .values([
+            { project_id: parent.projectID, directory: wtA, strategy: Worktree.StrategyID.make("git") },
+            { project_id: parent.projectID, directory: wtB, strategy: Worktree.StrategyID.make("git") },
+          ])
+          .run()
+          .pipe(Effect.orDie)
+
+        const childA = yield* session.create({
+          parentID: parent.id,
+          location: Location.Ref.make({ directory: wtA }),
+          title: "child-a",
+        })
+        const childB = yield* session.create({
+          parentID: parent.id,
+          location: Location.Ref.make({ directory: wtB }),
+          title: "child-b",
+        })
+
+        expect(childA).toMatchObject({
+          parentID: parent.id,
+          projectID: parent.projectID,
+          location: { directory: wtA },
+          permissions,
+          metadata,
+        })
+        expect(childB).toMatchObject({
+          parentID: parent.id,
+          projectID: parent.projectID,
+          location: { directory: wtB },
+          permissions,
+          metadata,
+        })
+        expect(childA.location.directory).not.toBe(childB.location.directory)
+        expect((yield* session.get(parent.id)).location.directory).toBe(main)
+
+        // Independent filesystem operations performed relative to each child's effective location
+        // (session/location isolation proof at filesystem level; actual tool-API read/write/edit/shell
+        // execution is covered in dedicated integration tests).
+        yield* Effect.promise(async () => {
+          await fs.mkdir(path.join(wtA, "src"), { recursive: true })
+          await fs.mkdir(path.join(wtB, "src"), { recursive: true })
+          await fs.writeFile(path.join(wtA, "src", "only-a.txt"), "from-a")
+          await fs.writeFile(path.join(wtB, "src", "only-b.txt"), "from-b")
+          await fs.writeFile(path.join(wtA, "edit.txt"), "a-old")
+          await fs.writeFile(path.join(wtB, "edit.txt"), "b-old")
+          await fs.writeFile(path.join(wtA, "edit.txt"), "a-new")
+          await fs.writeFile(path.join(wtB, "edit.txt"), "b-new")
+        })
+
+        expect(yield* Effect.promise(() => fs.readFile(path.join(wtA, "shared.txt"), "utf8"))).toBe("A")
+        expect(yield* Effect.promise(() => fs.readFile(path.join(wtB, "shared.txt"), "utf8"))).toBe("B")
+        expect(yield* Effect.promise(() => fs.readFile(path.join(wtA, "src", "only-a.txt"), "utf8"))).toBe("from-a")
+        expect(yield* Effect.promise(() => fs.readFile(path.join(wtB, "src", "only-b.txt"), "utf8"))).toBe("from-b")
+        expect(yield* Effect.promise(() => fs.readFile(path.join(wtA, "edit.txt"), "utf8"))).toBe("a-new")
+        expect(yield* Effect.promise(() => fs.readFile(path.join(wtB, "edit.txt"), "utf8"))).toBe("b-new")
+
+        // No relative child operation leaked into project root.
+        const exists = (file: string) =>
+          Effect.promise(async () => {
+            try {
+              await fs.access(file)
+              return true
+            } catch {
+              return false
+            }
+          })
+        expect(yield* exists(path.join(main, "src", "only-a.txt"))).toBe(false)
+        expect(yield* exists(path.join(main, "src", "only-b.txt"))).toBe(false)
+        expect(yield* exists(path.join(main, "only-a.txt"))).toBe(false)
+        expect(yield* exists(path.join(main, "only-b.txt"))).toBe(false)
+        expect(yield* exists(path.join(main, "edit.txt"))).toBe(false)
+        expect(yield* Effect.promise(() => fs.readFile(path.join(main, "root.txt"), "utf8"))).toBe("root")
+      }),
+    ),
+  )
+
+  liveIt.live("rejects explicit child location that does not exist without fallback or child creation", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const main = AbsolutePath.make(path.join(directory, "repo"))
+        const missing = AbsolutePath.make(path.join(directory, "repo-missing-wt"))
+        yield* Effect.promise(async () => {
+          await fs.mkdir(main, { recursive: true })
+          await initGit(main)
+          await $`git -c user.name=Test -c user.email=test@opencode.test -c commit.gpgsign=false commit --allow-empty -qm root`
+            .cwd(main)
+            .quiet()
+        })
+
+        const session = yield* Session.Service
+        const parent = yield* session.create({ location: Location.Ref.make({ directory: main }), title: "parent" })
+        const before = (yield* session.list({})).data.filter((s) => s.parentID === parent.id)
+
+        const exit = yield* session
+          .create({ parentID: parent.id, location: Location.Ref.make({ directory: missing }), title: "child" })
+          .pipe(Effect.exit)
+
+        expect(exit._tag).toBe("Failure")
+        expect((yield* session.get(parent.id)).location.directory).toBe(main)
+        const children = (yield* session.list({})).data.filter((s) => s.parentID === parent.id)
+        expect(children).toHaveLength(before.length)
+      }),
+    ),
+  )
+
 })
 
 describe("SessionTransfer", () => {
