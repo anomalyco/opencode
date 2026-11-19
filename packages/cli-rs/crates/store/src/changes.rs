@@ -41,6 +41,8 @@ pub struct Changes {
     pub projects: bool,
     /// Locations whose info, catalogs, or shells changed.
     pub locations: HashSet<Location>,
+    /// Sessions whose running jobs changed: a job's owner, and the child a subagent job runs.
+    pub jobs: HashSet<SessionID>,
 }
 
 impl Changes {
@@ -61,6 +63,7 @@ impl Changes {
             && self.forms.is_empty()
             && !self.projects
             && self.locations.is_empty()
+            && self.jobs.is_empty()
     }
 
     pub fn sessions(&self) -> bool {
@@ -110,6 +113,11 @@ impl Changes {
         self.all || self.locations.contains(location)
     }
 
+    /// Running jobs owned by `id` may have changed.
+    pub fn jobs(&self, id: &SessionID) -> bool {
+        self.all || self.jobs.contains(id)
+    }
+
     pub fn extend(&mut self, other: &Changes) {
         self.all |= other.all;
         self.sessions |= other.sessions;
@@ -127,6 +135,7 @@ impl Changes {
         self.forms.extend(other.forms.iter().cloned());
         self.projects |= other.projects;
         self.locations.extend(other.locations.iter().cloned());
+        self.jobs.extend(other.jobs.iter().cloned());
     }
 }
 
@@ -221,6 +230,10 @@ impl Log {
 
     pub(crate) fn location(&mut self, location: &Location) {
         self.current.locations.insert(location.clone());
+    }
+
+    pub(crate) fn jobs(&mut self, id: &SessionID) {
+        self.current.jobs.insert(id.clone());
     }
 }
 
