@@ -331,7 +331,7 @@ function architectRules(layout: ArchitectLayout, info: Facts, divider: Divider, 
 
 /**
  * Where text sits in a line box of `row` mm: the Inter value's baseline and cap height, and how far
- * the OpenTUI Mono label (at --mono-optical × the size) must move down to share that baseline. Measured
+ * the OpenMono label (at --mono-optical × the size) must move down to share that baseline. Measured
  * with the fonts the page has loaded, so the rules land where the text really is.
  */
 export function measureRow(size: number, row: number): RowMetrics {
@@ -349,7 +349,7 @@ export function measureRow(size: number, row: number): RowMetrics {
     }
   }
   const sans = baseline(`${px(size)}px Inter`)
-  const mono = baseline(`${px(size * 1.05)}px "OpenTUI Mono", "OpenTUI Mono Menlo", monospace`)
+  const mono = baseline(`${px(size * 1.05)}px "OpenMono", "OpenMono Menlo", monospace`)
   return { baseline: mm(sans.baseline), cap: mm(sans.cap), shift: mm(sans.baseline - mono.baseline) }
 }
 
@@ -577,7 +577,7 @@ function Colophon(props: {
           </div>
           <div>
             <dt>Type</dt>
-            <dd>Inter and OpenTUI Mono. Marks: the OpenCode logo, wordmark and font.</dd>
+            <dd>Inter and OpenMono. Marks: the OpenCode logo, wordmark and font.</dd>
           </div>
         </dl>
       </div>
@@ -653,7 +653,7 @@ function QrCode(props: { text: string }) {
  */
 function pageRules(style: LegalPrintStyle, info: Facts) {
   const text = (value: string) => JSON.stringify(value)
-  const mono = `font: 7pt "OpenTUI Mono", "OpenTUI Mono Menlo", ui-monospace, monospace; color: #000;`
+  const mono = `font: 7pt "OpenMono", "OpenMono Menlo", ui-monospace, monospace; color: #000;`
   const sans = `font: 7pt "Inter", ui-sans-serif, system-ui, sans-serif; color: #000;`
   const page = `counter(page) " / " counter(pages)`
   const boxes: Record<Exclude<LegalPrintStyle, "current">, { margin: string; boxes: string }> = {

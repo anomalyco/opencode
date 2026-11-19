@@ -195,11 +195,11 @@ const cards: Card[] = [
 ]
 
 const fonts = [
-  // The site's files (script/opentui-mono.py): Latin first, the rest for anything it lacks.
+  // The site's files (script/openmono.py): Latin first, the others for anything it lacks.
   ...(await Promise.all(
-    ["latin", "rest"].map(async (group) => ({
-      name: "OpenTUI Mono",
-      data: exact(await decompress(await read(`src/asset/fonts/opentui-mono-regular-${group}.woff2`))),
+    ["latin", "cyrillic", "rest"].map(async (group) => ({
+      name: "OpenMono",
+      data: exact(await decompress(await read(`src/asset/fonts/openmono-regular-${group}.woff2`))),
       weight: 400 as const,
     })),
   )),
@@ -310,7 +310,7 @@ function plate(card: Card, image: string) {
       },
       el(
         "div",
-        { fontFamily: "OpenTUI Mono", fontSize: size, lineHeight: 1, letterSpacing: -0.035 * size, color: INK },
+        { fontFamily: "OpenMono", fontSize: size, lineHeight: 1, letterSpacing: -0.035 * size, color: INK },
         card.title,
       ),
       description(card.description),
