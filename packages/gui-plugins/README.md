@@ -274,6 +274,7 @@ The goal plugin declares the glyphs of its composer pill, one for each goal stat
 <!-- source: src/goal/index.ts -->
 
 ```ts
+import { builtinCatalog } from "@opencode/plugin/gui/builtin"
 import { Plugin } from "@opencode/plugin/gui"
 import en from "./i18n/en"
 import active from "./icons/active.svg?raw"
@@ -282,7 +283,13 @@ import paused from "./icons/paused.svg?raw"
 
 // The pill's glyph of each goal status. Each is framed to its 14px ring, the size of a pill's icon, so it draws at
 // full size there.
-export default Plugin.define({ icons: { active, paused, complete }, i18n: { en } })
+export default Plugin.define({
+  icons: { active, paused, complete },
+  i18n: builtinCatalog({
+    en,
+    zh: () => import("./i18n/zh"),
+  }),
+})
 ```
 
 Its pill then names the glyph of the goal's status, and the host colors it by `tone`:
@@ -579,11 +586,18 @@ export const Pairing = Ipc.define({
 <!-- source: src/pairing/index.ts -->
 
 ```ts
+import { builtinCatalog } from "@opencode/plugin/gui/builtin"
 import { Plugin } from "@opencode/plugin/gui"
 import en from "./i18n/en"
 import pair from "./icons/pair.svg?raw"
 
-export default Plugin.define({ icons: { pair }, i18n: { en } })
+export default Plugin.define({
+  icons: { pair },
+  i18n: builtinCatalog({
+    en,
+    zh: () => import("./i18n/zh"),
+  }),
+})
 ```
 
 3. **Provide it from main.** Whether main keeps the display awake is a main store, read synchronously and imported once from the key the desktop kept it under before; a built-in names that older home through `builtinMainContext`. Remote access runs `opencode service` through `ctx.cli`, one command at a time through the machine in `main-machine.ts`, with the same `createDispatch` loop as the settings page: a read stops when its caller goes away, a change goes on when the window closes, and every command has a timeout, so a hung one never holds the queue. `ctx.onCleanup` disposes the machine, which releases the blocker.
