@@ -19,10 +19,10 @@ import {
   type Native,
   Arr,
   ErrorObj,
+  errorToString,
   Obj,
   coerceToString,
   type Value,
-  peek,
 } from "./objects.js"
 import type { Interpreter } from "./interpreter.js"
 import { Invoke } from "./signals.js"
@@ -120,13 +120,21 @@ export const locate = (error: unknown, node?: AstNode): unknown => {
   return error
 }
 
-/** The program value a handler receives for a failure; one failure always yields the same value. */
-export const materialize = <R>(ctx: Interpreter<R>, thrown: unknown): Value => {
+/**
+ * The program value a handler receives for a failure; one failure always yields the same value. A host failure has no
+ * site of its own, so its `stack` names `site`, where the handler observed it, when there is one.
+ */
+export const materialize = <R>(ctx: Interpreter<R>, thrown: unknown, site?: AstNode): Value => {
   if (thrown instanceof Throw) return thrown.value
   const builtins = ctx.builtins
   if (thrown instanceof PendingThrow) {
     if (thrown.value === undefined) {
-      thrown.value = createErrorValue(builtins[thrown.type], thrown.message)
+      const node = thrown.node
+      thrown.value = createErrorValue(
+        builtins[thrown.type],
+        thrown.message,
+        node?.loc && !inPrelude(node) ? stackFrame(node) : "",
+      )
       thrown.value.failure = thrown
     }
     return thrown.value
@@ -134,18 +142,18 @@ export const materialize = <R>(ctx: Interpreter<R>, thrown: unknown): Value => {
   return createErrorValue(
     builtins[thrown instanceof Error ? errorType(thrown) : "Error"],
     normalizeError(thrown).message,
+    site?.loc ? stackFrame(site) : "",
   )
 }
 
-/** Error.prototype.toString: `name: message`, omitting whichever side is empty. */
-const errorToString = (self: Obj, read: (target: Obj, key: string) => Value = peek): string => {
-  const name = read(self, "name")
-  const message = read(self, "message")
-  const shownName = name === undefined ? "Error" : coerceToString(name)
-  const shownMessage = message === undefined ? "" : coerceToString(message)
-  if (shownMessage === "") return shownName
-  if (shownName === "") return shownMessage
-  return `${shownName}: ${shownMessage}`
+/**
+ * One V8-style `stack` line for a program site: `at name (<program>:line:col)`, or `at <program>:line:col` at top
+ * level. The location is in the submitted source and never names a host file.
+ */
+export const stackFrame = (node: AstNode, name?: string): string => {
+  const location = sourceLocation(node)
+  const at = `<program>:${location.line}:${location.column}`
+  return `\n    at ${name === undefined ? at : `${name} (${at})`}`
 }
 
 export const createAggregateErrorValue = <R>(
@@ -179,7 +187,7 @@ export const errorGlobal = <R>(type: ErrorType, ctx: Interpreter<R>) => {
         ([text]) => {
           return withReads(() => {
             const created = withCause(
-              createErrorValue(proto, message === undefined ? "" : coerceToString(text)),
+              createErrorValue(proto, message === undefined ? "" : coerceToString(text), ctx.vm.stackTrace()),
               args[2],
             )
             return new Invoke(ctx.prelude.fn("aggregateError"), undefined, [created, args[0]], undefined)
@@ -194,7 +202,10 @@ export const errorGlobal = <R>(type: ErrorType, ctx: Interpreter<R>) => {
       message === undefined ? [] : [message],
       ([text]) =>
         withReads(() =>
-          withCause(createErrorValue(proto, message === undefined ? undefined : coerceToString(text)), args[1]),
+          withCause(
+            createErrorValue(proto, message === undefined ? undefined : coerceToString(text), ctx.vm.stackTrace()),
+            args[1],
+          ),
         ),
       true,
     )

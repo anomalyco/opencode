@@ -256,6 +256,54 @@ export class ErrorObj extends Obj {
   }
 }
 
+/** Error.prototype.toString: `name: message`, omitting whichever side is empty. */
+export const errorToString = (self: Obj, read: (target: Obj, key: string) => Value = peek): string => {
+  const name = read(self, "name")
+  const message = read(self, "message")
+  const shownName = name === undefined ? "Error" : coerceToString(name)
+  const shownMessage = message === undefined ? "" : coerceToString(message)
+  if (shownMessage === "") return shownName
+  if (shownName === "") return shownMessage
+  return `${shownName}: ${shownMessage}`
+}
+
+/**
+ * An error's own `stack` slot, a data property to every reader. Its `    at` lines are fixed when the error is made,
+ * and its `name: message` header when `value` is first read (a copy of the slot reads it too), as V8 formats on first
+ * access: a subclass constructor that sets `this.name` is in the header. The header reads `name` and `message` as
+ * display does, so a program getter there runs no code and reads as undefined.
+ */
+export class StackSlot {
+  writable = true
+  enumerable = false
+  configurable = true
+  declare value: Value
+  #trace: string | undefined
+  constructor(error: ErrorObj, trace: string) {
+    this.#trace = trace
+    let text: Value
+    // An own enumerable accessor, so a copy of the slot (`{ ...slot }`) reads it.
+    Object.defineProperty(this, "value", {
+      get: () => {
+        if (this.#trace !== undefined) {
+          text = errorToString(error) + this.#trace
+          this.#trace = undefined
+        }
+        return text
+      },
+      set: (value: Value) => {
+        this.#trace = undefined
+        text = value
+      },
+      enumerable: true,
+    })
+  }
+  /** The `    at` lines while the header is not formatted yet; `undefined` once `value` is fixed. */
+  get trace(): string | undefined {
+    return this.#trace
+  }
+}
+
 /** Interpreter machinery a program can hold but never inspect, serialize, or hand to the host. */
 export abstract class Opaque extends Obj {
   override inspect() {

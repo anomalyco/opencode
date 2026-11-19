@@ -1,4 +1,4 @@
-import { define, hidden, Native, Arr, ErrorObj, Obj, type Value } from "./objects.js"
+import { define, hidden, Native, Arr, ErrorObj, Obj, StackSlot, type Value } from "./objects.js"
 
 export const errorTypes = [
   "Error",
@@ -51,9 +51,11 @@ const builtins = [
  */
 export type Builtins = Readonly<Record<(typeof builtins)[number] | ErrorType, Obj>>
 
-export const createErrorValue = (prototype: Obj, message: string | undefined): ErrorObj => {
+/** A new error; its `stack` is `name: message` as of its first read, then `trace`, the `    at` lines where it was made. */
+export const createErrorValue = (prototype: Obj, message: string | undefined, trace = ""): ErrorObj => {
   const value = new ErrorObj(prototype)
   if (message !== undefined) define(value, "message", message, hidden)
+  value.props.set("stack", new StackSlot(value, trace))
   return value
 }
 

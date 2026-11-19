@@ -693,8 +693,17 @@ Nothing is exposed unless a host provides it; extension calls are not tool calls
 - [x] Error `name`/`message`, error inheritance through `instanceof`, and plain-data serialization. `message` is an own
       non-enumerable property and `name` is inherited, as in JS, so `Object.keys(err)` is `[]` for a plain error. The
       result boundary still emits `{ name, message, ...own enumerable }`, so a field such as `code` crosses. `cause` is
-      non-enumerable: an extension Error carries it, and this JSON form does not. Errors have no `stack`; the diagnostic
-      carries a 1-based line and column in the submitted source instead.
+      non-enumerable: an extension Error carries it, and this JSON form does not. An uncaught error's diagnostic
+      carries a 1-based line and column in the submitted source.
+- [x] Every Error has an own non-enumerable string `stack` in V8's format: `name: message`, then
+      `    at fn (<program>:line:col)` lines. As in V8, the frames are taken when the error is made and the header when
+      `stack` is first read, so a subclass constructor that sets `this.name` shows in it; the value is then fixed until
+      assigned. The header reads `name` and `message` as data: a program getter there is not run and reads as
+      `undefined`, as in Bun (Node runs it). `stack` is a data property, as in Bun (Node's is an accessor).
+      `new Error()` lists up to 10 program frames, innermost first (built-in frames are skipped, and top-level code is
+      a bare `at <program>:line:col`); a built-in or tool failure has at most one line at the expression that raised
+      it or the `await` that observed it. A host Error's own `stack` never crosses, so no host path appears.
+- [ ] `Error.captureStackTrace`, `Error.stackTraceLimit`, and `at async` frames across an `await`.
 - [x] `instanceof` against any constructor with a `prototype`, including every built-in and `Function`.
 - [x] Derived error constructors extend `Error` itself: `Object.getPrototypeOf(TypeError) === Error`, so
       `TypeError.isError` is inherited, and `TypeError.prototype` inherits from `Error.prototype`.

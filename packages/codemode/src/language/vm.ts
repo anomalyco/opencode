@@ -1,7 +1,7 @@
 import { parse, type Expression, type MemberExpression, type NewExpression } from "acorn"
 import type { Diagnostic } from "./runtime/model.js"
 import { conversions } from "./runtime/callback.js"
-import { locate, materialize } from "./runtime/errors.js"
+import { locate, materialize, stackFrame } from "./runtime/errors.js"
 import type { Interpreter } from "./runtime/interpreter.js"
 import { type Builtins, isErrorType } from "./runtime/intrinsics.js"
 import { checkArrayLength, checkStringLength } from "./runtime/limits.js"
@@ -510,6 +510,26 @@ export class Vm {
       if (f.origin !== undefined) return f.origin
     }
     return undefined
+  }
+
+  /** The program frames on the stack as `stack` lines, innermost first, at most 10 as V8's `Error.stackTraceLimit`. */
+  stackTrace(): string {
+    let trace = ""
+    let shown = 0
+    for (let i = this.frames.length - 1; i >= 0 && shown < 10; i--) {
+      const frame = this.frames[i]!
+      const code = frame.code
+      if ((code.flags & CodeFlags.INTERNAL) !== 0) continue
+      const site = code.siteAt(frame.pc)
+      if (!site?.loc) continue
+      const name = frame.fn ? peek(frame.fn, "name") : undefined
+      trace += stackFrame(
+        site,
+        (code.flags & CodeFlags.PROGRAM) !== 0 ? undefined : (typeof name === "string" && name) || "<anonymous>",
+      )
+      shown++
+    }
+    return trace
   }
 
   private exec(): number {
@@ -2290,7 +2310,11 @@ export class Vm {
           const target = handlers[i + 2]!
           const depth = handlers[i + 3]!
           const sp = fcode.locals + depth
-          frame.regs[sp] = materialize(this.ctx, error)
+          frame.regs[sp] = materialize(
+            this.ctx,
+            error,
+            (fcode.flags & CodeFlags.INTERNAL) === 0 ? fcode.siteAt(faultPc) : undefined,
+          )
           frame.sp = sp + 1
           frame.pc = target
           return true
