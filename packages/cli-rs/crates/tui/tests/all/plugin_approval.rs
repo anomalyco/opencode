@@ -3,6 +3,7 @@
 
 use crate::plugin_model::{BAD_TOAST, Call, Kind, LOADS, LOG, PROMPTING, TOKENS, Which, World, frame_diff, take_calls};
 use crate::support::model::{self, Failure, Model, Rng};
+use crate::support::{self, WAIT};
 
 use opencode_plugin::Status;
 use opencode_plugin::loader::approval::Decision;
@@ -529,13 +530,19 @@ fn the_manager_asks_before_a_project_plugin_runs() {
     tui.keymap.dispatch("plugins.list", None);
     world.settle();
     // A status the user must act on, in the warning color; a row shows it while another is selected, here an internal
-    // plugin's.
+    // plugin's. The rows scroll once they are laid out, so a frame can show the selection at the position it had before
+    // the scroll; the row's cell is read from the frame it was found in, rendered again until that frame is the one the
+    // scroll and the selection settle in.
     app.press("ctrl+a");
     app.press("up");
-    world.settle();
-    let (x, y) = world.harness.find("pending, local");
     let warning = tui.page().text.feedback.warning.base;
-    assert_eq!(app.render().cell(u32::from(x), u32::from(y)).unwrap().fg, warning, "{}", app.text());
+    let shown = app.wait_until(WAIT, || {
+        let capture = app.render();
+        support::at(&capture.text(), "pending, local")
+            .and_then(|(x, y)| capture.cell(u32::from(x), u32::from(y)))
+            .is_some_and(|cell| cell.fg == warning)
+    });
+    assert!(shown, "{}", app.text());
     app.press("ctrl+a");
     app.type_text("probe");
     world.settle();
