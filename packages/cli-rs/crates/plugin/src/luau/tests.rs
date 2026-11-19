@@ -1501,6 +1501,31 @@ fn a_node_tree_decodes_as_serde_reads_it() {
     assert_eq!(decodes_as_serde::<abi::v2::Node>(surfaces), "++--");
 }
 
+/// A decode borrows the strings it reads until it returns, so no call in it may step the GC
+/// ([`decode::Decode::decode`]): a call that steps it a few times over a 200-row tree is counted.
+#[test]
+fn a_decode_makes_no_gc_step() {
+    let lua = mlua::Lua::new();
+    let render: mlua::Value = lua
+        .load(
+            r#"
+            local rows = {}
+            for i = 1, 200 do
+                rows[i] = { type = "text", spans = { { text = "row " .. i, fg = "text.muted" },
+                    setmetatable({ text = tostring(i), bold = true }, { __mode = "kv" }) } }
+            end
+            return { type = "show", node = { type = "box", gap = 1, justify = "center", children = rows } }
+            "#,
+        )
+        .call(())
+        .unwrap();
+    let steps = decode::gc_steps(&lua, || {
+        decode::Decode::new().decode::<abi::Render>(&lua, &render).unwrap();
+        decode::Decode::new().decode::<serde_json::Value>(&lua, &render).unwrap();
+    });
+    assert_eq!(steps, 0);
+}
+
 #[test]
 fn each_refusal_of_the_decoder_names_its_cause() {
     let lua = mlua::Lua::new();
