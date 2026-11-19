@@ -1158,7 +1158,6 @@ export const dict = {
   "session.activity.shells.other": "Shell {{count}} ခု",
   "session.activity.scripts.one": "Script {{count}} ခု",
   "session.activity.scripts.other": "Script {{count}} ခု",
-  "session.activity.background": "နောက်ခံအလုပ်",
   "session.activity.shell.back": "နောက်ခံအလုပ်များသို့ ပြန်သွားရန်",
   "session.activity.shell.stop": "ရပ်ရန်",
   "session.activity.shell.stopping": "ရပ်နေသည်…",

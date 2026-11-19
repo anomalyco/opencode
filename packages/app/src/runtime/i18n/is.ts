@@ -1142,7 +1142,6 @@ export const dict = {
   "session.activity.shells.other": "{{count}} skeljar",
   "session.activity.scripts.one": "{{count}} skrifta",
   "session.activity.scripts.other": "{{count}} skriftur",
-  "session.activity.background": "Bakgrunnsvinna",
   "session.activity.shell.back": "Til baka í bakgrunnsvinnu",
   "session.activity.shell.stop": "Stöðva",
   "session.activity.shell.stopping": "Stöðvar…",

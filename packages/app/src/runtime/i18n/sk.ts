@@ -1186,7 +1186,6 @@ export const dict = {
   "session.activity.scripts.few": "{{count}} skripty",
   "session.activity.scripts.many": "{{count}} skriptu",
   "session.activity.scripts.other": "{{count}} skriptov",
-  "session.activity.background": "Práca na pozadí",
   "session.activity.shell.back": "Späť na prácu na pozadí",
   "session.activity.shell.stop": "Zastaviť",
   "session.activity.shell.stopping": "Zastavuje sa…",
