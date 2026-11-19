@@ -2,6 +2,7 @@ export * as ShellResult from "./result.js"
 
 import os from "os"
 import type { Shell } from "@opencode/schema/shell"
+import { SystemNotice } from "../session/system-notice.js"
 
 export type Result = {
   info: Shell.Info
@@ -81,7 +82,13 @@ export function notification(input: {
   output?: Output
 }) {
   return {
-    text: `<shell id="${input.jobID ?? input.shellID}" state="${input.state}" command="${input.command}">\n${input.text}\n</shell>`,
+    text: SystemNotice.render(
+      `Shell ${input.jobID ?? input.shellID} (${input.command.replace(/\s+/g, " ")}) ${status(input)}.`,
+      {
+        label: "Output",
+        text: input.text,
+      },
+    ),
     metadata: {
       source: "shell",
       shellID: input.shellID,
@@ -90,6 +97,13 @@ export function notification(input: {
       ...(input.output ? metadata(input.output) : {}),
     },
   }
+}
+
+function status(input: { state: "completed" | "cancelled" | "error"; output?: Output }) {
+  if (input.output?.timeout) return "timed out"
+  if (input.state === "completed" && (input.output?.exit !== undefined || input.output?.signal !== undefined))
+    return `finished with exit code ${exitCode(input.output)}`
+  return SystemNotice.outcome(input.state)
 }
 
 export function userNotification(result: Result) {

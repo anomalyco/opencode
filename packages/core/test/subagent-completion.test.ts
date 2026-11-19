@@ -96,32 +96,42 @@ describe("SubagentCompletion", () => {
       expect(sent).toHaveLength(4)
       expect(sent[0]?.text).toBe(
         [
-          '<subagent sessionID="ses_deliver_child" state="running" description="Deliver report">',
+          "<system-notice>",
+          'Subagent ses_deliver_child ("Deliver report") reported while its own background work is still running.',
+          "Report:",
           "All green",
           "",
           "Background work still running:",
           "- shell (shell_1): bun test",
-          "</subagent>",
+          "</system-notice>",
         ].join("\n"),
       )
       expect(sent[0]?.metadata?.state).toBe("completed")
       expect(sent[3]?.text).toBe(
-        ['<subagent sessionID="ses_deliver_child" state="completed" description="Deliver report">', "All done", "</subagent>"].join(
-          "\n",
-        ),
+        [
+          "<system-notice>",
+          'Subagent ses_deliver_child ("Deliver report") finished.',
+          "Report:",
+          "All done",
+          "</system-notice>",
+        ].join("\n"),
       )
       expect(sent[1]?.text).toBe(
         [
-          '<subagent sessionID="ses_deliver_child" state="error" description="Deliver report">',
+          "<system-notice>",
+          'Subagent ses_deliver_child ("Deliver report") failed.',
+          "Report:",
           "boom",
-          "</subagent>",
+          "</system-notice>",
         ].join("\n"),
       )
       expect(sent[2]?.text).toBe(
         [
-          '<subagent sessionID="ses_deliver_child" state="cancelled" description="Deliver report">',
+          "<system-notice>",
+          'Subagent ses_deliver_child ("Deliver report") was cancelled.',
+          "Report:",
           "Subagent cancelled",
-          "</subagent>",
+          "</system-notice>",
         ].join("\n"),
       )
       expect(completed).toEqual([notificationID])
@@ -151,16 +161,20 @@ describe("SubagentCompletion", () => {
 
       expect(sent[0]?.text).toBe(
         [
-          '<subagent sessionID="ses_deliver_child" state="cancelled" description="Deliver report">',
+          "<system-notice>",
+          'Subagent ses_deliver_child ("Deliver report") was cancelled.',
+          "Report:",
           output,
-          "</subagent>",
+          "</system-notice>",
         ].join("\n"),
       )
       expect(sent[1]?.text).toBe(
         [
-          '<subagent sessionID="ses_deliver_child" state="cancelled" description="Deliver report">',
+          "<system-notice>",
+          'Subagent ses_deliver_child ("Deliver report") was cancelled.',
+          "Report:",
           "Cancel failed",
-          "</subagent>",
+          "</system-notice>",
         ].join("\n"),
       )
     }),

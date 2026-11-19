@@ -1027,7 +1027,7 @@ describe("SessionRestart background recovery", () => {
         {
           type: "synthetic",
           payload: {
-            text: '<shell id="call-completed-shell" state="completed" command="exit 7">\nExited with code 7\n</shell>',
+            text: "<system-notice>\nShell call-completed-shell (exit 7) finished.\nOutput:\nExited with code 7\n</system-notice>",
           },
         },
       ])
@@ -1072,8 +1072,8 @@ describe("SessionRestart background recovery", () => {
 
       const inbox = yield* SessionInbox.list(database.db, sessionID)
       expect(inbox.map((item) => (item.type === "synthetic" ? item.payload.text : undefined)).toSorted()).toEqual([
-        '<image id="image_done" state="completed">\nImage request finished. Saved image: /tmp/done.png (test/painter).\n</image>',
-        '<image id="image_running" state="cancelled">\nImage request for /tmp/running.png was cancelled because the server restarted.\n</image>',
+        "<system-notice>\nImage job image_done finished.\nResult:\nImage request finished. Saved image: /tmp/done.png (test/painter).\n</system-notice>",
+        "<system-notice>\nImage job image_running was cancelled.\nResult:\nImage request for /tmp/running.png was cancelled because the server restarted.\n</system-notice>",
       ])
       expect(yield* restarted.pendingBackground).toEqual([])
     }),
@@ -1130,7 +1130,7 @@ describe("SessionRestart background recovery", () => {
         Effect.timeout("10 seconds"),
       )
       expect(texts).toEqual([
-        `<video id="${videoID}" state="completed">\nVideo request finished. Saved video: /tmp/running.mp4.\n</video>`,
+        `<system-notice>\nVideo job ${videoID} finished.\nResult:\nVideo request finished. Saved video: /tmp/running.mp4.\n</system-notice>`,
       ])
       expect(waited).toEqual([videoID])
       expect((yield* files.read("/tmp/running.mp4")).bytes).toEqual(Uint8Array.of(1, 2, 3))
@@ -1511,7 +1511,7 @@ describe("SessionRestart background recovery", () => {
       expect(yield* SessionInbox.list(database.db, parent)).toMatchObject([
         {
           payload: {
-            text: `<subagent sessionID="${child}" state="completed" description="Completed inspection">\n${output}\n</subagent>`,
+            text: `<system-notice>\nSubagent ${child} ("Completed inspection") finished.\nReport:\n${output}\n</system-notice>`,
             metadata: { state: "completed" },
           },
         },
@@ -1565,7 +1565,7 @@ describe("SessionRestart background recovery", () => {
         {
           type: "synthetic",
           payload: {
-            text: `<subagent sessionID="${child}" state="running" description="Outbox inspection">\nStarted tests\n\nBackground work still running:\n- shell (sh_1): bun test\n</subagent>`,
+            text: `<system-notice>\nSubagent ${child} ("Outbox inspection") reported while its own background work is still running.\nReport:\nStarted tests\n\nBackground work still running:\n- shell (sh_1): bun test\n</system-notice>`,
             metadata: { source: "subagent", childID: child, agent: "explore", state: "completed" },
           },
         },

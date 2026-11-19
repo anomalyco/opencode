@@ -1939,10 +1939,15 @@ describe("ShellTool", () => {
           // The timeout keeps its status but still records how the killed process exited.
           expect(timedOut.exit !== undefined || timedOut.signal !== undefined).toBe(true)
           if (!isWindows) expect(timedOut).toMatchObject({ signal: "SIGTERM" })
-          expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.item.payload).toMatchObject({
+          const completion = (yield* Fiber.join(admitted)).valueOrUndefined?.data.item
+          if (completion?.type !== "synthetic") return yield* Effect.die("Missing shell completion")
+          expect(completion.payload.text).toStartWith(
+            `<system-notice>\nShell ${shellID} (${idleCommand}) timed out.\nOutput:\n`,
+          )
+          expect(completion.payload).toMatchObject({
             text: expect.stringMatching(
               new RegExp(
-                `\\nCommand timed out after 0\\.05 seconds\\. If it needs longer and isn't waiting for input, rerun with a larger timeout\\.\\nExit code: ${timedOutExit}\\n</shell>$`,
+                `\\nCommand timed out after 0\\.05 seconds\\. If it needs longer and isn't waiting for input, rerun with a larger timeout\\.\\nExit code: ${timedOutExit}\\n</system-notice>$`,
               ),
             ),
             description: idleCommand,
@@ -1977,7 +1982,7 @@ describe("ShellTool", () => {
           const shellID = settled.metadata?.shellID
           expect(typeof shellID).toBe("string")
           expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.item.payload).toMatchObject({
-            text: expect.stringContaining("\nbody\n\nExit code: 7\n</shell>"),
+            text: `<system-notice>\nShell ${shellID} (${bodyExitCommand}) finished with exit code 7.\nOutput:\nbody\n\nExit code: 7\n</system-notice>`,
             description: bodyExitCommand,
             metadata: {
               source: "shell",

@@ -20,11 +20,12 @@ test("streams turns woken by background shells and keeps the session usable", as
   await using fixture = await createAcpFixture({
     respond(request) {
       const last = JSON.stringify(modelRequest(request).messages.at(-1))
-      if (last.includes("<shell") && last.includes("slow shell done")) {
+      if (last.includes("<system-notice>\\nShell ") && last.includes("Output:\\nslow shell done")) {
         woken.resolve()
         return "slow shell reaction"
       }
-      if (last.includes("<shell") && last.includes("fast shell done")) return "fast shell reaction"
+      if (last.includes("<system-notice>\\nShell ") && last.includes("Output:\\nfast shell done"))
+        return "fast shell reaction"
       if (last.includes("run the slow shell"))
         return toolCallStream("call_slow", "shell", { command: releasedCommand, description: "Slow", background: true })
       if (last.includes("run the fast shell"))
@@ -77,7 +78,7 @@ test("streams the parent's response to a subagent report after end_turn", async 
   await using fixture = await createAcpFixture({
     respond(request) {
       const last = JSON.stringify(modelRequest(request).messages.at(-1))
-      if (last.includes("<subagent") && last.includes("child result")) {
+      if (last.includes("<system-notice>\\nSubagent ") && last.includes("Report:\\nchild result")) {
         resumed.resolve()
         return "parent reaction"
       }

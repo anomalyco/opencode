@@ -18,6 +18,7 @@ import { Job } from "../../job.js"
 import { Model } from "../../model.js"
 import { Permission } from "../../permission.js"
 import { Session } from "../../session.js"
+import { SystemNotice } from "../../session/system-notice.js"
 import { SessionMessage } from "../../session/message.js"
 import { SessionSchema } from "../../session/schema.js"
 import { VideoGeneration } from "../../video-generation.js"
@@ -88,9 +89,12 @@ export const Output = Schema.Struct({
   model: Schema.String.annotate({ description: "providerID/modelID" }),
 })
 
-/** The completion notice for a background video job, tagged with its job ID like `<image id=…>` notices. */
+/** The completion notice for a background video job, naming its job ID like image notices do. */
 export function notice(input: { id: string; state: string; body: string }) {
-  return `<video id="${input.id}" state="${input.state}">\n${input.body}\n</video>`
+  return SystemNotice.render(`Video job ${input.id} ${SystemNotice.outcome(input.state)}.`, {
+    label: "Result",
+    text: input.body,
+  })
 }
 
 /** Where the job's `index`th video is saved: the path itself for the first, then `cat-1.mp4`, `cat-2.mp4`, … */
