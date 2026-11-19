@@ -15,6 +15,8 @@ export function createComposerTabs(input: { open: () => boolean; defaultTab: () 
   const [store, setStore] = createStore({
     tabs: {} as Record<string, ComposerTab>,
     active: "",
+    // Set once the user picks a tab, so a requested tab that registers late no longer takes over.
+    chosen: false,
   })
 
   const list = createMemo(() => Object.values(store.tabs).toSorted((a, b) => rank(a.id) - rank(b.id)))
@@ -29,6 +31,7 @@ export function createComposerTabs(input: { open: () => boolean; defaultTab: () 
     on(
       () => [input.open(), input.defaultTab()] as const,
       ([open]) => {
+        setStore("chosen", false)
         const tabs = untrack(list)
         if (open && tabs.length > 0) pick(tabs)
       },
@@ -37,14 +40,16 @@ export function createComposerTabs(input: { open: () => boolean; defaultTab: () 
 
   createEffect(() => {
     const tabs = list()
-    if (!input.open() || tabs.length === 0 || tabs.some((tab) => tab.id === store.active)) return
-    pick(tabs)
+    if (!input.open() || tabs.length === 0) return
+    const requested = input.defaultTab()
+    const late = !store.chosen && requested && requested !== store.active && tabs.some((tab) => tab.id === requested)
+    if (late || !tabs.some((tab) => tab.id === store.active)) pick(tabs)
   })
 
   return {
     list,
     active: () => store.active,
-    setActive: (id: string) => setStore("active", id),
+    setActive: (id: string) => setStore({ active: id, chosen: true }),
     register(tab: ComposerTab) {
       setStore("tabs", tab.id, tab)
       if (!store.active) setStore("active", tab.id)

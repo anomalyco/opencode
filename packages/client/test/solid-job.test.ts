@@ -13,7 +13,10 @@ const job = (id: string, status: JobInfo["status"] = "running", sessionID = "ses
 
 function setup() {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
-  const lists: PromiseWithResolvers<JobInfo[]>[] = []
+  // Each job list request waits on a deferred the test resolves; `request()` hands over the next one once it arrives.
+  const arrived: PromiseWithResolvers<JobInfo[]>[] = []
+  const waiting: ((list: PromiseWithResolvers<JobInfo[]>) => void)[] = []
+  let requests = 0
   const api = OpenCode.make({
     baseUrl: "http://opencode.local",
     fetch: async (input, init) => {
@@ -21,8 +24,11 @@ function setup() {
       if (!url.pathname.includes("/job")) return Response.json({ data: [] })
       expect(url.searchParams.get("sessionID")).toBe("ses_root")
       expect(url.searchParams.get("status")).toBe("running")
+      requests++
       const list = Promise.withResolvers<JobInfo[]>()
-      lists.push(list)
+      const waiter = waiting.shift()
+      if (waiter) waiter(list)
+      else arrived.push(list)
       return Response.json({ data: await list.promise })
     },
   })
@@ -40,16 +46,10 @@ function setup() {
     dispose,
   }))
   const ids = () => root.data.job.list("ses_root").map((item) => item.id)
-  // Resolves the next job list once its request is in flight.
-  const respond = async (data: JobInfo[]) => {
-    const started = Date.now()
-    while (lists.length === 0) {
-      if (Date.now() - started > 2_000) throw new Error("no job list request")
-      await Bun.sleep(1)
-    }
-    lists.shift()?.resolve(data)
-  }
-  return { ...root, emit, update, ids, respond, lists }
+  const request = () =>
+    arrived.shift() ?? new Promise<PromiseWithResolvers<JobInfo[]>>((resolve) => waiting.push(resolve))
+  const respond = async (data: JobInfo[]) => (await request()).resolve(data)
+  return { ...root, emit, update, ids, request, respond, requests: () => requests }
 }
 
 test("lists a tree's running jobs, including ones whose session isn't loaded, and follows job events", async () => {
@@ -72,13 +72,13 @@ test("lists a tree's running jobs, including ones whose session isn't loaded, an
 })
 
 test("applies job events that arrive while the list is in flight", async () => {
-  const { data, dispose, update, ids, respond } = setup()
+  const { data, dispose, update, ids, request } = setup()
   try {
     const synced = data.job.sync("ses_root")
-    await Bun.sleep(0)
+    const list = await request()
     update(job("job_started"))
     update(job("job_settled", "completed"))
-    await respond([job("job_settled")])
+    list.resolve([job("job_settled")])
     await synced
     expect(ids()).toEqual(["job_started"])
   } finally {
@@ -87,7 +87,7 @@ test("applies job events that arrive while the list is in flight", async () => {
 })
 
 test("re-lists on reconnect, pruning jobs that settled while away, and forgets a deleted tree", async () => {
-  const { data, dispose, emit, ids, respond, lists } = setup()
+  const { data, dispose, emit, ids, respond, requests } = setup()
   try {
     const synced = data.job.sync("ses_root")
     await respond([job("job_a"), job("job_b")])
@@ -96,12 +96,10 @@ test("re-lists on reconnect, pruning jobs that settled while away, and forgets a
 
     emit({ id: "evt_connected", created: 3, type: "server.connected", data: {} } as OpenCodeEvent)
     await respond([job("job_b")])
-    const started = Date.now()
-    while (ids().length !== 1) {
-      if (Date.now() - started > 2_000) throw new Error("reconnect did not prune")
-      await Bun.sleep(1)
-    }
+    // The reconnect's list is in flight, so this joins it instead of starting another.
+    await data.job.sync("ses_root")
     expect(ids()).toEqual(["job_b"])
+    expect(requests()).toBe(2)
 
     emit({
       id: "evt_deleted",
@@ -112,8 +110,9 @@ test("re-lists on reconnect, pruning jobs that settled while away, and forgets a
     } as OpenCodeEvent)
     expect(ids()).toEqual([])
     emit({ id: "evt_connected_2", created: 5, type: "server.connected", data: {} } as OpenCodeEvent)
-    await Bun.sleep(10)
-    expect(lists.length).toBe(0)
+    // The reconnect starts its reads together; once its VCS read settles, a job list would have been requested too.
+    await data.location.vcs.sync().catch(() => undefined)
+    expect(requests()).toBe(2)
   } finally {
     dispose()
   }

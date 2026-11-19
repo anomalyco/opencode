@@ -53,3 +53,21 @@ test("composer tabs open on the requested tab", async () => {
     app.renderer.destroy()
   }
 })
+
+test("composer tabs switch to the requested tab once it registers, until the user picks one", async () => {
+  const { app, tabs, setOpen } = await setup("shell")
+  try {
+    tabs.register({ id: "subagents", label: "Subagents" })
+    setOpen(true)
+    expect(tabs.active()).toBe("subagents")
+    tabs.register({ id: "shell", label: "Shell" })
+    expect(tabs.active()).toBe("shell")
+    tabs.register({ id: "scripts", label: "Scripts" })
+    expect(tabs.active()).toBe("shell")
+    tabs.setActive("subagents")
+    tabs.register({ id: "terminals", label: "Terminals" })
+    expect(tabs.active()).toBe("subagents")
+  } finally {
+    app.renderer.destroy()
+  }
+})
