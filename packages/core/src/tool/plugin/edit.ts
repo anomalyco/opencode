@@ -13,7 +13,6 @@ import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Flag } from "../../flag.js"
 import { toolFailure } from "../runtime.js"
-import { Environment } from "../../environment/index.js"
 import { FileMutation } from "../../file-mutation.js"
 import { Location } from "../../location.js"
 import { FileAccess } from "../../file-access.js"
@@ -263,7 +262,6 @@ export const Plugin = {
   effect: Effect.fn("EditTool.Plugin")(function* (ctx: Context) {
     const fileMutation = yield* FileMutation.Service
     const fileWrite = yield* FileWrite.Service
-    const environment = yield* Environment.Service
     const location = yield* Location.Service
     const permission = yield* Permission.Service
     const config = yield* Config.Service
@@ -303,7 +301,7 @@ export const Plugin = {
 
               const target = yield* fileWrite.target(input.path, context)
 
-              const original = yield* FileMutation.readText(environment.files, target.absolute).pipe(
+              const original = yield* FileMutation.readText(target.environment.files, target.absolute).pipe(
                 Effect.catchTag("Environment.NotFound", () =>
                   Effect.fail(new ToolFailure({ message: `File not found: ${input.path}` })),
                 ),
@@ -359,7 +357,7 @@ export const Plugin = {
               }
               const result = yield* fileWrite.commit(target, replaced)
               const formatted =
-                result.formatted ?? (yield* FileMutation.readText(environment.files, target.absolute)).text
+                result.formatted ?? (yield* FileMutation.readText(target.environment.files, target.absolute)).text
               return {
                 output: `Edited ${result.resource} (${replacements} replacement${replacements === 1 ? "" : "s"})`,
                 metadata: { files: [fileDiff(result.resource, source, formatted)] },

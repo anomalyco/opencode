@@ -51,7 +51,6 @@ export const Plugin = {
     const sessionInstructions = yield* SessionInstructions.Service
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
-    const environment = yield* Environment.Service
     const config = yield* Config.Service
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
     const flags = yield* Flag.Service
@@ -111,7 +110,7 @@ export const Plugin = {
               }
 
               const read = (target: FileAccess.Target) =>
-                reader.read(target.absolute, target.resource, {
+                reader.read(target.environment.files, target.absolute, target.resource, {
                   offset: input.offset,
                   limit: input.limit,
                 })
@@ -123,9 +122,7 @@ export const Plugin = {
                   (error) => error instanceof Environment.NotFound,
                   () =>
                     Effect.gen(function* () {
-                      const alternate = yield* alternatePath(requested.absolute).pipe(
-                        Effect.orElseSucceed(() => undefined),
-                      )
+                      const alternate = yield* alternatePath(requested).pipe(Effect.orElseSucceed(() => undefined))
                       if (!alternate) return yield* missing({ input: input.path, requested, context })
                       const target = yield* access.authorizeRead(alternate, context, { siblingOf: requested })
                       const content = yield* read(target).pipe(
@@ -202,18 +199,19 @@ export const Plugin = {
       )
       .pipe(Effect.orDie)
 
-    const alternatePath = Effect.fn("ReadTool.alternatePath")(function* (absolute: string) {
-      const base = canonical(basename(absolute))
-      const matches = (yield* reader.list(AbsolutePath.make(dirname(absolute)))).filter(
-        (entry) => entry.type === "file" && canonical(entry.name) === base,
-      )
+    const alternatePath = Effect.fn("ReadTool.alternatePath")(function* (target: FileAccess.Target) {
+      const base = canonical(basename(target.absolute))
+      const matches = (yield* reader.list(
+        target.environment.files,
+        AbsolutePath.make(dirname(target.absolute)),
+      )).filter((entry) => entry.type === "file" && canonical(entry.name) === base)
       if (matches.length !== 1) return
-      return join(dirname(absolute), matches[0].name)
+      return join(dirname(target.absolute), matches[0].name)
     })
 
-    // Lists through the session's environment, which may be a remote workspace rather than this host.
-    const listing = (path: string) =>
-      reader.list(AbsolutePath.make(path)).pipe(
+    // Lists through the requested target's environment, which may be a remote workspace rather than this host.
+    const listing = (files: Environment.Files, path: string) =>
+      reader.list(files, AbsolutePath.make(path)).pipe(
         Effect.map((entries) => ({ type: "found" as const, names: entries.map((entry) => entry.name) })),
         Effect.catchTag("Environment.NotFound", () => Effect.succeed({ type: "missing" as const })),
         Effect.orElseSucceed(() => ({ type: "unknown" as const })),
@@ -226,7 +224,7 @@ export const Plugin = {
       if (FSUtil.contains(root, miss.requested.absolute) || !FSUtil.contains(dirname(root), miss.requested.absolute))
         return []
       const target = yield* access.resolve({ path: join(root, relative(dirname(root), miss.requested.absolute)) })
-      if (!(yield* Environment.exists(environment.files, target.absolute))) return []
+      if (!(yield* Environment.exists(target.environment.files, target.absolute))) return []
       const readable = yield* permission.allows({
         action: "read",
         resources: [target.resource],
@@ -243,19 +241,19 @@ export const Plugin = {
     // A missing folder usually means a removed worktree, a moved directory, or a relative path
     // resolved from the wrong place, so name the first missing folder and its nearest existing parent.
     const missingFolder = Effect.fn("ReadTool.missingFolder")(function* (
-      input: string,
+      miss: Missing,
       folder: string,
       moved: string[],
     ) {
       let child = folder
       let parent = dirname(folder)
       while (parent !== child) {
-        const found = yield* listing(parent)
+        const found = yield* listing(miss.requested.environment.files, parent)
         if (found.type === "unknown") break
         if (found.type === "found") {
           const suggestions = [...moved, ...similar(found.names, basename(child)).map((entry) => join(parent, entry))]
           const message = [
-            `File not found: ${input}`,
+            `File not found: ${miss.input}`,
             `The folder ${child} does not exist. The nearest folder that does is ${parent}.`,
             ...didYouMean(suggestions),
           ].join("\n\n")
@@ -264,14 +262,16 @@ export const Plugin = {
         child = parent
         parent = dirname(parent)
       }
-      return yield* new ToolFailure({ message: [`File not found: ${input}`, ...didYouMean(moved)].join("\n\n") })
+      return yield* new ToolFailure({
+        message: [`File not found: ${miss.input}`, ...didYouMean(moved)].join("\n\n"),
+      })
     })
 
     const missing = Effect.fn("ReadTool.missing")(function* (miss: Missing) {
       const moved = yield* reroot(miss).pipe(Effect.orElseSucceed(() => []))
       const folder = dirname(miss.requested.absolute)
-      const found = yield* listing(folder)
-      if (found.type === "missing") return yield* missingFolder(miss.input, folder, moved)
+      const found = yield* listing(miss.requested.environment.files, folder)
+      if (found.type === "missing") return yield* missingFolder(miss, folder, moved)
       const suggestions = [
         ...moved,
         ...(found.type === "found"

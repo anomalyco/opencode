@@ -107,8 +107,9 @@ export type Output = typeof Output.Type
 export type Media = MediaContent & { readonly name: string; readonly bytes: Uint8Array }
 
 export interface Interface {
-  readonly list: (path: AbsolutePath) => ReturnType<Files["list"]>
+  readonly list: (files: Files, path: AbsolutePath) => ReturnType<Files["list"]>
   readonly read: (
+    files: Files,
     path: AbsolutePath,
     resource: string,
     page?: PageInput,
@@ -354,15 +355,6 @@ const list = (items: ReadonlyArray<Environment.DirEntry>, page: PageInput, sep =
 const clampLine = (line: string) =>
   line.length <= MAX_LINE_LENGTH ? line : TextBoundary.head(line, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX
 
-const layer = Layer.effect(
-  Service,
-  Effect.gen(function* () {
-    const environment = yield* Environment.Service
-    return Service.of({
-      list: environment.files.list,
-      read: (path, resource, page) => read(environment.files, path, resource, page),
-    })
-  }),
-)
+const layer = Layer.succeed(Service, Service.of({ list: (files, path) => files.list(path), read }))
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Environment.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [] })
