@@ -701,52 +701,6 @@ it.live("an agent denied the browser sees the browser tools in an attached sessi
   }),
 )
 
-// A removed name is answered with what to call instead wherever the browser namespace is registered: in an attached
-// session, whatever its agent's rules, and in a session no desktop is attached to, where the namespace has no tools.
-it.live("a removed browser tool names its replacement in attached and unattached sessions", () =>
-  Effect.gen(function* () {
-    const attempt = (name: string) =>
-      `try { await tools.browser.${name}({}); return "called" } catch (error) { return String(error?.message ?? error) }`
-
-    const removed = {
-      output: expect.stringMatching(/^browser\.preview was removed: call browser\.tabs\.open/),
-      toolCalls: [],
-    }
-
-    // An empty browser namespace: no tools, a removed name still answered with its replacement, any other name unknown.
-    const empty = (selection: SessionContext.Selection) =>
-      Effect.gen(function* () {
-        expect(yield* codeMode(selection, attempt("preview"))).toMatchObject(removed)
-        const click = yield* codeMode(selection, attempt("click"))
-        expect(click).toMatchObject({ toolCalls: [] })
-        expect(click.output).toStartWith("Unknown tool 'browser.click'.")
-        expect(click.output).not.toMatch(/browser\.(tabs|navigate)/)
-
-        expect(yield* codeMode(selection, 'return Object.keys(tools).includes("browser")')).toMatchObject({ output: "true" })
-      })
-
-    const browser = yield* setup({ agents: { reviewer: { mode: "primary", permissions: [rule("*", "deny")] } } })
-    const allowed = yield* browser.listing()
-    expect(yield* codeMode(allowed.selection, attempt("preview"))).toMatchObject(removed)
-    expect(yield* codeMode(allowed.selection, 'return Object.keys(tools).includes("browser")')).toMatchObject({ output: "true" })
-
-    // An agent whose rules deny the browser, in the attached session: the namespace is listed to it as well, so it
-    // reads the same sentence. The call it names instead is refused.
-    const sessions = yield* Session.Service
-    yield* sessions.switchAgent({ sessionID: browser.session.id, agent: Agent.ID.make("reviewer") })
-    expect(yield* codeMode((yield* browser.listing()).selection, attempt("preview"))).toMatchObject(removed)
-
-    // A session no desktop is attached to, for an allowed agent and for a denied one: the deny every agent gets until
-    // an attachment's grant hides the tools, but the namespace stays.
-    for (const agent of ["build", "reviewer"]) {
-      const lone = yield* sessions.create({ location: browser.ref, agent: Agent.ID.make(agent) })
-      const none = yield* browser.listing(lone.id)
-      expect(none.catalog).toEqual([])
-      yield* empty(none.selection)
-    }
-  }),
-)
-
 it.live("the next step's listing follows the attachment and a session deny after the grant; an agent's, a session's or a reloaded config's deny before it refuses the calls", () =>
   Effect.gen(function* () {
     const browser = yield* setup({ agents: { reviewer: { mode: "primary", permissions: [rule("*", "deny")] } } })

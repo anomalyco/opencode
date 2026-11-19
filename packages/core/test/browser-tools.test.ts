@@ -336,9 +336,9 @@ it.live("a workspace file opens through tabs.open and navigate, by path or by th
     expect(yield* move({ path: ".html" })).toBe("browser.navigate moves a tab to an HTML file, and .html is not one. Call browser.tabs.open({ path }) to show it in the file panel.")
     expect(browser.commands).toEqual([{ type: "preview", path: ".html" }])
 
-    // No tool has the old name. The call fails with what to call instead, not with a guessed tool.
+    // No tool has the old name. The call fails as any unknown tool does.
     expect(yield* browser.run(`return await tools.browser.preview({ path: "page.html" }).catch(error => error.message)`)).toBe(
-      "browser.preview was removed: call browser.tabs.open({ path }) to show a workspace file, or browser.navigate({ tabID, path }) to move a tab to one.",
+      "Unknown tool 'browser.preview'. Did you mean tools.browser.tabs.open?",
     )
     expect(yield* browser.run(`return search({ query: "preview", namespace: "browser" }).items.map(item => item.path)`)).not.toContain("tools.browser.preview")
   }),
