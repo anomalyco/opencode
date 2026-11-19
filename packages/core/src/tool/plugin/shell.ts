@@ -418,10 +418,18 @@ export const Plugin = {
                       Effect.forkChild({ startImmediately: true }),
                     )
                   : undefined
+                // Raced against the slow work that precedes the command, so a stop then ends the call at once.
+                const stoppedBeforeStart = Deferred.await(stopped).pipe(
+                  Effect.andThen(
+                    Effect.fail(new ToolFailure({ message: "Command interrupted by the user before it started." })),
+                  ),
+                )
                 return yield* Effect.gen(function* () {
                   // The same default `Shell.create` gives the hooks, so `prepare` can tell whether one moved it.
                   const cwd = input.workdir ?? location.directory
-                  const target = yield* restore(access.resolve({ path: cwd, kind: "directory" }))
+                  const target = yield* restore(
+                    Effect.raceFirst(access.resolve({ path: cwd, kind: "directory" }), stoppedBeforeStart),
+                  )
                   const info = yield* shell.create(
                     {
                       command: input.command,
@@ -447,16 +455,7 @@ export const Plugin = {
                         invocation.env.OPENCODE_SESSION_ID = context.sessionID
                         // Asking for permission can take a while; a stop then ends the call before any command starts.
                         finalTimeout = yield* restore(
-                          Effect.raceFirst(
-                            prepare(invocation, context, { cwd, target }),
-                            Deferred.await(stopped).pipe(
-                              Effect.andThen(
-                                Effect.fail(
-                                  new ToolFailure({ message: "Command interrupted by the user before it started." }),
-                                ),
-                              ),
-                            ),
-                          ),
+                          Effect.raceFirst(prepare(invocation, context, { cwd, target }), stoppedBeforeStart),
                         )
                         // A foreground timeout moves the command to the background instead of stopping it.
                         if (!background) invocation.timeout = 0
