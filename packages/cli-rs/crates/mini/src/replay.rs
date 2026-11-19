@@ -2153,24 +2153,8 @@ mod tests {
     /// the server's ordered messages.
     mod model {
         use super::*;
+        use opencode_util::rng::SplitMix64;
         use std::collections::VecDeque;
-
-        /// SplitMix64.
-        struct Rng(u64);
-
-        impl Rng {
-            fn next(&mut self) -> u64 {
-                self.0 = self.0.wrapping_add(0x9e37_79b9_7f4a_7c15);
-                let mut z = self.0;
-                z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-                z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-                z ^ (z >> 31)
-            }
-
-            fn below(&mut self, n: usize) -> usize {
-                (self.next() % n as u64) as usize
-            }
-        }
 
         fn env(name: &str, default: u64) -> u64 {
             std::env::var(name).ok().and_then(|value| value.parse().ok()).unwrap_or(default)
@@ -2199,7 +2183,7 @@ mod tests {
             Timer,
         }
 
-        fn command(rng: &mut Rng) -> Command {
+        fn command(rng: &mut SplitMix64) -> Command {
             match rng.below(21) {
                 20 => Command::Timer,
                 0..=1 => Command::User,
@@ -2208,8 +2192,8 @@ mod tests {
                 7 => Command::End,
                 8..=12 => Command::Deliver,
                 13..=14 => Command::Resize,
-                15..=17 => Command::Complete(rng.below(4)),
-                18 => Command::Fail(rng.below(4)),
+                15..=17 => Command::Complete(rng.below(4) as usize),
+                18 => Command::Fail(rng.below(4) as usize),
                 _ => Command::Drop,
             }
         }
@@ -2498,7 +2482,7 @@ mod tests {
             let seed = env("MODEL_SEED", 1);
             let cases = env("MODEL_CASES", 300);
             let len = env("MODEL_LEN", 40) as usize;
-            let mut rng = Rng(seed);
+            let mut rng = SplitMix64(seed);
             let mut overflows = 0;
             for case in 0..cases {
                 let commands: Vec<Command> = (0..len).map(|_| command(&mut rng)).collect();

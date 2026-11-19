@@ -21,6 +21,7 @@ use common::*;
 use futures_util::FutureExt;
 use opencode_api::generated::SessionID;
 use opencode_store::{Data, LoadMore, Location, Options, Task};
+use opencode_util::rng::SplitMix64;
 use serde_json::{Value, json};
 use tokio::sync::oneshot;
 
@@ -33,23 +34,6 @@ const PAGE: usize = 2;
 const BURST: u32 = 600;
 
 // The generator --------------------------------------------------------------------------------------------------
-
-/// SplitMix64: small, seedable, and good enough to pick commands.
-struct Rng(u64);
-
-impl Rng {
-    fn next(&mut self) -> u64 {
-        self.0 = self.0.wrapping_add(0x9e37_79b9_7f4a_7c15);
-        let mut z = self.0;
-        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-        z ^ (z >> 31)
-    }
-
-    fn below(&mut self, n: u64) -> u64 {
-        self.next() % n
-    }
-}
 
 /// A read the model can hold, by kind.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -124,7 +108,7 @@ const PROJECT: &str = "/project";
 /// Shells in one [`Op::ShellBurst`]: more than the store's 1,024-change overlay.
 const SHELL_BURST: u32 = 1_100;
 
-fn generate(rng: &mut Rng, mix: Mix, len: usize) -> Vec<Op> {
+fn generate(rng: &mut SplitMix64, mix: Mix, len: usize) -> Vec<Op> {
     let mut ops = Vec::with_capacity(len);
     let reads: Vec<Read> = [
         (mix.permissions, Read::Permissions),
@@ -1218,7 +1202,7 @@ fn search(mix: Mix, failing: &dyn Fn(&[Op]) -> Option<Failure>) -> Option<Found>
     let seed = env("MODEL_SEED", 1);
     let cases = env("MODEL_CASES", 200) as usize;
     let len = env("MODEL_LEN", 30) as usize;
-    let mut rng = Rng(seed);
+    let mut rng = SplitMix64(seed);
     for case in 0..cases {
         let ops = generate(&mut rng, mix, len);
         if failing(&ops).is_some() {
@@ -1285,7 +1269,7 @@ fn everything_together() {
 /// Every command is generated in a combined run, and reconnects and deletions land on both sides of held reads.
 #[test]
 fn the_generator_covers_every_command() {
-    let mut rng = Rng(env("MODEL_SEED", 1));
+    let mut rng = SplitMix64(env("MODEL_SEED", 1));
     let mut counts: HashMap<&'static str, usize> = HashMap::new();
     for _ in 0..200 {
         for op in generate(&mut rng, ALL, 30) {
@@ -1319,7 +1303,7 @@ fn the_generator_covers_every_command() {
 /// are off, so a run continues past an open defect.
 #[test]
 fn responses_land_on_each_side_of_deletes_and_replacements() {
-    let mut rng = Rng(env("MODEL_SEED", 1));
+    let mut rng = SplitMix64(env("MODEL_SEED", 1));
     let mut counts: HashMap<&'static str, usize> = HashMap::new();
     CHECKS.set(false);
     for _ in 0..RESPONSE_CASES {

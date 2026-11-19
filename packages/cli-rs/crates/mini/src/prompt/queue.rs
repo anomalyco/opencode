@@ -215,23 +215,7 @@ mod tests {
     mod model {
         use super::*;
         use crate::prompt::parts::Command as ServerCommand;
-
-        /// SplitMix64.
-        struct Rng(u64);
-
-        impl Rng {
-            fn next(&mut self) -> u64 {
-                self.0 = self.0.wrapping_add(0x9e37_79b9_7f4a_7c15);
-                let mut z = self.0;
-                z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-                z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-                z ^ (z >> 31)
-            }
-
-            fn below(&mut self, n: u64) -> u64 {
-                self.next() % n
-            }
-        }
+        use opencode_util::rng::SplitMix64;
 
         fn env(name: &str, default: u64) -> u64 {
             std::env::var(name).ok().and_then(|value| value.parse().ok()).unwrap_or(default)
@@ -261,7 +245,7 @@ mod tests {
             Ended,
         }
 
-        fn step(rng: &mut Rng) -> Step {
+        fn step(rng: &mut SplitMix64) -> Step {
             const KINDS: [Kind; 7] =
                 [Kind::Prompt, Kind::Steer, Kind::New, Kind::Compact, Kind::Shell, Kind::Command, Kind::Skill];
             match rng.below(10) {
@@ -499,7 +483,7 @@ mod tests {
             let seed = env("MODEL_SEED", 1);
             let cases = env("MODEL_CASES", 500);
             let len = env("MODEL_LEN", 40) as usize;
-            let mut rng = Rng(seed);
+            let mut rng = SplitMix64(seed);
             let (mut opened, mut admitted) = (0, 0);
             for case in 0..cases {
                 let steps: Vec<Step> = (0..len).map(|_| step(&mut rng)).collect();
