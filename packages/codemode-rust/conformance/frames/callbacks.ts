@@ -8,7 +8,8 @@ type Helpers = {
 // An iterable whose `next` returns `value` while `n`, which `value` increments, is below 2.
 const iterable = (value: string) =>
   `{ [Symbol.iterator]() { let n = 0; return { next: () => (n > 1 ? { done: true } : { done: false, value: ${value} }), return: () => ({}) } } }`
-const busy = "for (let i = 0; i < 200000000; i++) {}"
+// Spins for 250 ms of wall-clock time: see the busy loops in streaming.ts.
+const busy = "for (let end = Date.now() + 250; Date.now() < end; ) {}"
 
 export default ({ after, during, text }: Helpers) => ({
   holds: [

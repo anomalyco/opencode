@@ -334,8 +334,8 @@ export default ({ after, text }: Helpers) => ({
     `const r = []; for await (const x of { [Symbol.asyncIterator]() { return { next: async () => ({ done: false, value: 1 }), return() { r.push('closed ' + hold({ query: wait({}).then(() => 'echo') }).items.length); return { done: true } } } } }) { r.push(x); break } return r`,
     `const r = []; for await (const x of { [Symbol.iterator]() { return { next: () => ({ done: false, value: 1 }), return() { r.push('closed ' + hold({ query: wait({}).then(() => 'echo') }).items.length); return {} } } } }) { r.push(x); break } return r`,
     ...[
-      "const it = { n: 0, [Symbol.iterator]() { return this }, next() { if (this.n === 0) for (let i = 0; i < 200000000; i++) {} return { done: this.n > 1, value: ++this.n } } }; function* g() { yield* it } const r = []; for (const x of g()) r.push(x)",
-      "const r = []; function* inner() { try { yield 1 } finally { for (let i = 0; i < 200000000; i++) {} r.push('finally') } } function* g() { return yield* inner() } const a = g(); a.next(); r.push(a.return(5))",
+      "const it = { n: 0, [Symbol.iterator]() { return this }, next() { if (this.n === 0) for (let end = Date.now() + 250; Date.now() < end; ) {} return { done: this.n > 1, value: ++this.n } } }; function* g() { yield* it } const r = []; for (const x of g()) r.push(x)",
+      "const r = []; function* inner() { try { yield 1 } finally { for (let end = Date.now() + 250; Date.now() < end; ) {} r.push('finally') } } function* g() { return yield* inner() } const a = g(); a.next(); r.push(a.return(5))",
     ].map((work) => `const p = fetch(${JSON.stringify(text)}); ${work}; const res = await p; return [res.status, r]`),
   ],
 })

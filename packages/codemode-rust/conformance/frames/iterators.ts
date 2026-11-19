@@ -11,7 +11,8 @@ const logged = `const log = []
    const src = (n, fail = {}) => ({ i: 0, next() { log.push('next ' + this.i); if (fail.next === this.i) throw new Error('next ' + this.i); return this.i < n ? { done: false, value: this.i++ } : { done: true } }, return() { log.push('return'); if (fail.ret) throw new Error('return'); return fail.bad ? 5 : {} } })
    const H = Iterator.prototype
    const attempt = (f) => { try { return f() } catch (e) { return e.name + ': ' + e.message } }`
-const busy = "for (let i = 0; i < 200000000; i++) {}"
+// Spins for 250 ms of wall-clock time: see the busy loops in streaming.ts.
+const busy = "for (let end = Date.now() + 250; Date.now() < end; ) {}"
 
 export default ({ after, during, text }: Helpers) => ({
   // A `hold` call parked inside a helper's callback or the source's `next` it calls fails in the reference ("Iterator

@@ -629,11 +629,13 @@ const suspensions: Array<string> = [
    const body = await get(); await wait({}); return body.locked`,
   `async function get() { const r = await fetch(${JSON.stringify(text)}); return r.text }
    const text = await get(); await wait({}); return await text()`,
-  // Suspended while a response has arrived but the run has not taken it yet: a busy loop holds the run.
-  `const p = fetch(${JSON.stringify(text)}); for (let i = 0; i < 200000000; i++) {} const r = await p; return r.status`,
+  // Suspended while a response has arrived but the run has not taken it yet: a busy loop holds the run. Busy loops here
+  // and in frames/ spin for 250 ms of wall-clock time, so the suspend (50 ms after `fetch` here, 20 ms in the Rust
+  // replay) lands inside them on any machine, and the resumed run leaves them at once instead of spinning on.
+  `const p = fetch(${JSON.stringify(text)}); for (let end = Date.now() + 250; Date.now() < end; ) {} const r = await p; return r.status`,
   // The same inside a built-in's callback, whose frame the snapshot saves.
-  `const p = fetch(${JSON.stringify(text)}); const n = [1, 2].map((x) => { for (let i = 0; i < 200000000; i++) {} return x }); const r = await p; return [r.status, n]`,
-  `const p = fetch(${JSON.stringify(text)}); const n = await Promise.resolve(2).then((x) => { for (let i = 0; i < 200000000; i++) {} return x }); const r = await p; return [r.status, n]`,
+  `const p = fetch(${JSON.stringify(text)}); const n = [1, 2].map((x) => { for (let end = Date.now() + 250; Date.now() < end; ) {} return x }); const r = await p; return [r.status, n]`,
+  `const p = fetch(${JSON.stringify(text)}); const n = await Promise.resolve(2).then((x) => { for (let end = Date.now() + 250; Date.now() < end; ) {} return x }); const r = await p; return [r.status, n]`,
   // Suspended while a crossing awaits: a host call's arguments, the result, and a `hold` call that parked its frames.
   `const r = send({ a: 1, w: wait({}) }); return await r`,
   `return { a: 1, w: wait({}), b: [Promise.resolve(2)] }`,
