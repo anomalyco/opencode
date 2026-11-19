@@ -257,11 +257,12 @@ export default function Layout(props: ParentProps) {
             class="relative z-10 h-full min-h-0 shrink-0"
           >
             {/* Skipped rather than display: none or inert, so neither direction restyles the sidebar's contents and
-                  a reopen reuses their layout. */}
+                  a reopen reuses their layout. Style-only containment: layout or paint containment here makes Firefox
+                  composite this panel over portaled dialogs after a pointer move. */}
             <div
               ref={(element) => setState("tabsPanel", element)}
               data-slot="vertical-tabs-panel"
-              class="absolute inset-0 overflow-clip [contain:layout_style_paint] [overflow-clip-margin:var(--sidebar-divider-bleed,0px)]"
+              class="absolute inset-0 overflow-clip [contain:style] [overflow-clip-margin:var(--sidebar-divider-bleed,0px)]"
               classList={{
                 "z-20": organizedSidebar(),
                 "[content-visibility:hidden]": !sidebarMotion.present() && !peek.shown(),
