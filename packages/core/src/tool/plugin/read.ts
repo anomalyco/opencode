@@ -44,7 +44,6 @@ const description = (codemode: boolean) =>
 export const Plugin = {
   id: "opencode.tool.read",
   effect: Effect.fn("ReadTool.Plugin")(function* (ctx: Context) {
-    const reader = yield* ReadToolFileSystem.Service
     const access = yield* FileAccess.Service
     const permission = yield* Permission.Service
     const skills = yield* Skill.Service
@@ -110,7 +109,7 @@ export const Plugin = {
               }
 
               const read = (target: FileAccess.Target) =>
-                reader.read(target.environment.files, target.absolute, target.resource, {
+                ReadToolFileSystem.read(target.environment.files, target.absolute, target.resource, {
                   offset: input.offset,
                   limit: input.limit,
                 })
@@ -201,17 +200,16 @@ export const Plugin = {
 
     const alternatePath = Effect.fn("ReadTool.alternatePath")(function* (target: FileAccess.Target) {
       const base = canonical(basename(target.absolute))
-      const matches = (yield* reader.list(
-        target.environment.files,
-        AbsolutePath.make(dirname(target.absolute)),
-      )).filter((entry) => entry.type === "file" && canonical(entry.name) === base)
+      const matches = (yield* target.environment.files.list(AbsolutePath.make(dirname(target.absolute)))).filter(
+        (entry) => entry.type === "file" && canonical(entry.name) === base,
+      )
       if (matches.length !== 1) return
       return join(dirname(target.absolute), matches[0].name)
     })
 
     // Lists through the requested target's environment, which may be a remote workspace rather than this host.
     const listing = (files: Environment.Files, path: string) =>
-      reader.list(files, AbsolutePath.make(path)).pipe(
+      files.list(AbsolutePath.make(path)).pipe(
         Effect.map((entries) => ({ type: "found" as const, names: entries.map((entry) => entry.name) })),
         Effect.catchTag("Environment.NotFound", () => Effect.succeed({ type: "missing" as const })),
         Effect.orElseSucceed(() => ({ type: "unknown" as const })),
