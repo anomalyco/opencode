@@ -523,7 +523,7 @@ A built-in always runs, whatever setting is saved under its id, so Extensions â€
 - **The lint bans raw effects.** `createEffect`, `createRenderEffect` and `createComputed` may not be imported in `packages/gui-plugins/src`; the SDK (`packages/plugin/src/gui`) wraps them. An escape hatch needs an `oxlint-disable` comment with a reason.
 - **Suspense only on first load.** Wrap each `lazy()` component in its own `<Suspense>`, read async data through `.latest` or `createLatest`, and never read a refetching resource in render: it blanks the nearest boundary.
 - **Stable objects.** Return the same object from `Panel.list` and reactive contributions while nothing changed, so the host never remounts.
-- **No timeline work.** `session.header` is the only timeline surface, besides `CodeBlock` and `CodeBlockAction` content, which the host renders only for a complete fenced block of a language you list.
+- **No timeline work.** `session.header` is the only timeline/header surface, besides `CodeBlock` and `CodeBlockAction` content, which the host renders only for a complete fenced block of a language you list.
 - **No module state.** Keep state inside setup; module state survives a reload and leaks across windows.
 
 ## Testing

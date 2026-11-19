@@ -11,7 +11,7 @@ import { useComposerCommands } from "@/composer/commands"
 import { createMountedSession } from "@/runtime/plugin/mounted-session"
 import { createPanelSidebar, createRegion } from "@/runtime/plugin/panels"
 import { createPaneDrag } from "@/runtime/plugin/pane-drag"
-import { PluginLinks } from "@/runtime/plugin/render"
+import { PluginLinks, PluginSlot } from "@/runtime/plugin/render"
 import { SideRegion } from "@/runtime/plugin/side-region"
 import { usePluginAttachment } from "@/runtime/plugin/host-apis"
 import { createSessionScreenLayout } from "@/session/screen-layout"
@@ -171,7 +171,24 @@ export default function NewSessionPage(props: { draftId: string }) {
             <div class="relative min-w-0 shrink-0 h-full" style={{ width: screen.panel.width() }}>
               <NewSessionView composer={model} project={project} workspace={workspace} location={location} />
               <Show when={isDesktop()}>
-                <div class="absolute end-3 top-0 z-30 h-12 flex items-center" data-slot="session-review-toggle">
+                <div class="absolute end-3 top-0 z-30 h-12 flex items-center gap-2" data-slot="session-review-toggle">
+                  <PluginSlot
+                    at="session.header"
+                    input={{
+                      get session() {
+                        return mounted.view()
+                      },
+                      get screen() {
+                        return mounted.screen
+                      },
+                      get active() {
+                        return true
+                      },
+                      get compact() {
+                        return true
+                      },
+                    }}
+                  />
                   <SessionReviewToggle onToggle={region.toggle} />
                 </div>
               </Show>

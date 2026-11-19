@@ -31,7 +31,9 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     at: "session.header",
     order: 10,
     render: (input) => (
-      <SessionContextUsage session={input.session} active={input.active} placement="bottom" compact={input.compact} />
+      <Show when={!input.session.draft}>
+        <SessionContextUsage session={input.session} active={input.active} placement="bottom" compact={input.compact} />
+      </Show>
     ),
   })
 
