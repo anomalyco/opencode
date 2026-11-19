@@ -30,6 +30,7 @@ pub const SYM_ITERATOR: Atom = 0;
 /// The atom of `Symbol.asyncIterator`, unreachable from strings.
 pub const SYM_ASYNC_ITERATOR: Atom = 1;
 
+#[derive(Clone)]
 pub struct StrBuf {
     /// Built-in names borrow their static text, so setting up a run allocates little.
     pub s: Cow<'static, str>,
@@ -158,6 +159,7 @@ pub fn external_text(s: String) -> String {
 /// Concatenations shorter than this copy into a plain string.
 const GROW_MIN: usize = 64;
 
+#[derive(Clone)]
 pub struct Strings {
     pub bufs: Vec<StrBuf>,
     grow: Vec<String>,

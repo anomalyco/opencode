@@ -1,6 +1,5 @@
 //! Compiling a program, setting up its heap, built-ins and host globals, and copying its outcome out.
 
-use std::borrow::Cow;
 use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
 
@@ -31,7 +30,80 @@ pub const RUN_STACK_BUDGET: usize = 512 << 10;
 /// Room on a thread beyond what its work is measured to need.
 pub(crate) const THREAD_STACK_BASE: usize = 256 << 10;
 
-pub fn execute(rt: &Runtime, code: &str, options: &ProgramOptions) -> Outcome {
+/// A program compiled once to run many times: its bytecode and the strings it interned, which every run starts from
+/// a copy of, so a run of it is the same as a run of its source. Cheap to clone, and shared across threads.
+#[derive(Clone)]
+pub struct Compiled(Arc<CompiledProgram>);
+
+struct CompiledProgram {
+    code: Arc<str>,
+    program: Program,
+    atoms: Strings,
+}
+
+impl Compiled {
+    /// The program's source.
+    pub fn code(&self) -> &str {
+        &self.0.code
+    }
+}
+
+impl std::fmt::Debug for Compiled {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Compiled")
+            .field("bytes", &self.0.code.len())
+            .finish()
+    }
+}
+
+/// A program to run: its source, or the program [`Runtime::compile`] made of it.
+#[derive(Clone, Copy, Debug)]
+pub enum Code<'a> {
+    Source(&'a str),
+    Compiled(&'a Compiled),
+}
+
+impl<'a> From<&'a str> for Code<'a> {
+    fn from(code: &'a str) -> Self {
+        Code::Source(code)
+    }
+}
+
+impl<'a> From<&'a String> for Code<'a> {
+    fn from(code: &'a String) -> Self {
+        Code::Source(code)
+    }
+}
+
+impl<'a> From<&'a Compiled> for Code<'a> {
+    fn from(code: &'a Compiled) -> Self {
+        Code::Compiled(code)
+    }
+}
+
+/// Parses and compiles a program, or the diagnostic a run of it would fail with before running anything.
+pub fn compile_program(code: &str) -> Result<Compiled, Diagnostic> {
+    let mut atoms = Strings::new();
+    let program = compile(code, &mut atoms).map_err(|e| compile_diagnostic(code, e))?;
+    Ok(Compiled(Arc::new(CompiledProgram {
+        code: Arc::from(code),
+        program,
+        atoms,
+    })))
+}
+
+fn compile_diagnostic(code: &str, e: CompileError) -> Diagnostic {
+    let location = e.offset.map(|o| line_col(code, o));
+    let message = format!("{}{}", e.message, suffix(location));
+    Diagnostic {
+        kind: e.kind,
+        message: message.into(),
+        location,
+        suggestions: Vec::new(),
+    }
+}
+
+pub fn execute(rt: &Runtime, code: Code<'_>, options: &ProgramOptions) -> Outcome {
     let run = AssertUnwindSafe(|| settled(rt.program(code, options).run()));
     std::panic::catch_unwind(run).unwrap_or_else(|_| internal_error())
 }
@@ -86,23 +158,19 @@ fn failed(error: Diagnostic) -> Outcome {
 }
 
 /// Compiles a program and sets up its run, or the outcome when it does not compile.
-pub fn start<'a>(
-    rt: &'a Runtime,
-    code: Cow<'a, str>,
+pub fn start(
+    rt: &Runtime,
+    code: Code<'_>,
     options: &ProgramOptions,
 ) -> Result<Box<Running>, Box<Outcome>> {
-    let mut atoms = Strings::new();
-    let program = match compile(&code, &mut atoms) {
-        Ok(p) => p,
-        Err(e) => {
-            let location = e.offset.map(|o| line_col(&code, o));
-            let message = format!("{}{}", e.message, suffix(location));
-            return Err(Box::new(failed(Diagnostic {
-                kind: e.kind,
-                message: message.into(),
-                location,
-                suggestions: Vec::new(),
-            })));
+    let (code, program, atoms) = match code {
+        Code::Compiled(c) => (c.0.code.clone(), c.0.program.clone(), c.0.atoms.clone()),
+        Code::Source(code) => {
+            let mut atoms = Strings::new();
+            match compile(code, &mut atoms) {
+                Ok(p) => (Arc::from(code), p, atoms),
+                Err(e) => return Err(Box::new(failed(compile_diagnostic(code, e)))),
+            }
         }
     };
     let setup = rt.setup();
@@ -124,7 +192,7 @@ pub fn start<'a>(
         vm.global_map.insert(a, val);
     }
     vm.load(program);
-    Ok(Box::new(Running::new(vm, code.into_owned())))
+    Ok(Box::new(Running::new(vm, code)))
 }
 
 /// A fresh run for a saved program: compiled and set up with the saved limits and no bindings, ready to be filled in.
@@ -161,7 +229,7 @@ pub fn start_for_resume(
     vm.snapshot_base = crate::snapshot::Base::of(&vm);
     vm.load(program);
     Ok(Resumed {
-        running: Box::new(Running::new(vm, code)),
+        running: Box::new(Running::new(vm, Arc::from(code))),
         bytecode,
     })
 }
@@ -436,3 +504,9 @@ fn bound_output(mut outcome: Outcome, max: Option<usize>) -> Outcome {
     }
     outcome
 }
+
+// A compiled program is shared by runs on any thread.
+const _: () = {
+    const fn shared<T: Send + Sync>() {}
+    shared::<Compiled>()
+};

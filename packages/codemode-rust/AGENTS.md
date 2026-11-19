@@ -15,7 +15,7 @@ This package is a second way to run and embed the same language, not a replaceme
 The recordings are generated from the reference's language layer; never edit them by hand. CI regenerates them and fails on any difference. Each generator's top comment states the host globals and runtime options it uses, which the Rust replays define the same way (`conformance/reference.ts` and `conformance/reference.rs` share the `tools` namespace):
 
 - `conformance/cases/*.json` by `bun conformance/generate.ts`, replayed by `bench/tests/conformance.rs`.
-- `conformance/host.json` by `bun conformance/host.ts` (host functions: types, keys, idempotent and durable calls across a suspend, namespaces, failures, `run.metadata`, translation, limits), replayed by `crates/psychoscript/tests/host_recording.rs`.
+- `conformance/host.json` by `bun conformance/host.ts` (host functions: types, keys, idempotent and durable calls across a suspend, namespaces, failures, `run.metadata`, translation, limits, compiled programs), replayed by `crates/psychoscript/tests/host_recording.rs`.
 - `conformance/boundary.json` by `bun conformance/boundary.ts` (values crossing the host boundary, globals, module names and imports), replayed by `crates/psychoscript/tests/boundary.rs`.
 - `conformance/streaming.json` by `bun conformance/streaming.ts` (streaming responses, host-call arguments, fuel, suspensions), replayed by `crates/psychoscript/tests/streaming.rs`.
 - `crates/psychoscript/tests/host.rs` mirrors the reference's `test/language.test.ts`.

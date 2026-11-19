@@ -1,7 +1,7 @@
 //! Host functions against the reference's behaviour recorded in `conformance/host.json` by `bun conformance/host.ts`:
 //! call keys, sync, async and sync-thenable functions, constructible ones, functions that take functions, idempotent
-//! and durable calls across a suspend, failures, namespaces, run metadata, translation and limits. The globals are the
-//! generator's.
+//! and durable calls across a suspend, failures, namespaces, run metadata, translation, limits and compiled programs.
+//! The globals are the generator's.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -372,9 +372,29 @@ fn host_functions_match_the_reference() {
         let rt = runtime(entry, &state);
         let code = entry["code"].as_str().unwrap();
         let options = ProgramOptions::new().run_id(entry["runId"].as_str().unwrap());
-        let o = rt.execute_with(code, &options);
-        let actual = json!({ "outcome": result(&o), "log": *state.log.lock().unwrap() });
-        let expected = json!({ "outcome": entry["outcome"], "log": entry["log"] });
+        let mut actual = json!({});
+        if entry["compiled"] == json!(true) {
+            match rt.compile(code) {
+                Ok(compiled) => {
+                    actual["compile"] = json!({ "ok": true });
+                    actual["outcome"] = result(&rt.execute_with(&compiled, &options));
+                    actual["again"] = result(&rt.execute_with(&compiled, &options));
+                }
+                Err(d) => {
+                    actual["compile"] = json!({ "ok": false, "error": diagnostic(&d) });
+                    actual["outcome"] = result(&rt.execute_with(code, &options));
+                }
+            }
+        } else {
+            actual["outcome"] = result(&rt.execute_with(code, &options));
+        }
+        actual["log"] = json!(*state.log.lock().unwrap());
+        let mut expected = json!({});
+        for key in ["compile", "outcome", "again", "log"] {
+            if let Some(v) = entry.get(key) {
+                expected[key] = v.clone();
+            }
+        }
         if !same(&actual, &expected) {
             failures.push(format!(
                 "{code}\n  expected {expected}\n  actual   {actual}"
@@ -409,7 +429,11 @@ fn suspending_runs_that_call_host_functions_matches_the_reference() {
         let rt = runtime(entry, &state);
         let code = entry["code"].as_str().unwrap();
         let options = ProgramOptions::new().run_id(entry["runId"].as_str().unwrap());
-        let program = rt.program(code, &options);
+        let compiled = (entry["compiled"] == json!(true)).then(|| rt.compile(code).unwrap());
+        let program = match &compiled {
+            Some(c) => rt.program(c, &options),
+            None => rt.program(code, &options),
+        };
         let suspender = program.suspender();
         // This thread drives the run, as the reference's fiber; another suspends it once a call reached a point that
         // never settles before the resume. A failed suspend interrupts the run, which drops it.

@@ -1,7 +1,6 @@
 //! One run of a program, the counterpart of the reference's `runtime.program(...)`: nothing runs until it is driven,
 //! and it is driven to its end, or to a suspend, on the calling thread or as a future.
 
-use std::borrow::Cow;
 use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
@@ -14,7 +13,7 @@ use crate::run;
 use crate::runtime::ProgramOptions;
 use crate::snapshot::{self, Refusal, Snapshot};
 use crate::vm::Vm;
-use crate::{Interrupted, Outcome, Runtime};
+use crate::{Code, Interrupted, Outcome, Runtime};
 
 enum State {
     Running(Box<Running>),
@@ -27,7 +26,7 @@ enum State {
 
 pub(crate) struct Running {
     pub vm: Vm,
-    pub code: String,
+    pub code: Arc<str>,
     started: bool,
     timer_armed: bool,
     /// Active time earlier runs of the same execution used, before a resume.
@@ -238,8 +237,8 @@ pub struct Program<'a> {
 
 impl<'a> Program<'a> {
     /// Compiles the program and sets up its globals; nothing runs yet.
-    pub(crate) fn new(rt: &'a Runtime, code: &'a str, options: &ProgramOptions) -> Self {
-        let started = run::start(rt, Cow::Borrowed(code), options);
+    pub(crate) fn new(rt: &'a Runtime, code: Code<'_>, options: &ProgramOptions) -> Self {
+        let started = run::start(rt, code, options);
         let state = match started {
             Ok(r) => State::Running(r),
             Err(outcome) => State::Failed(outcome),
@@ -626,7 +625,7 @@ fn restore(rt: &Runtime, state: &Snapshot) -> Result<Box<Running>, snapshot::Sna
 }
 
 impl Running {
-    pub fn new(vm: Vm, code: String) -> Self {
+    pub fn new(vm: Vm, code: Arc<str>) -> Self {
         Self {
             vm,
             code,

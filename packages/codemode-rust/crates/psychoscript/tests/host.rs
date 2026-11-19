@@ -95,13 +95,14 @@ fn never() -> std::future::Pending<psychoscript::HostResult> {
 
 /// Runs `code` on another thread, waits until `reached` was reached, and suspends it: the suspend's answer, and what
 /// the run returned. When the suspend fails, `after` lets the run go on to its end.
-fn suspend_at(
+fn suspend_at<'c>(
     rt: &Runtime,
-    code: &str,
+    code: impl Into<psychoscript::Code<'c>>,
     options: &ProgramOptions,
     reached: &Latch,
     after: impl FnOnce(),
 ) -> (Result<RunOutcome, psychoscript::SuspendError>, RunOutcome) {
+    let code = code.into();
     std::thread::scope(|s| {
         let (tx, rx) = std::sync::mpsc::channel();
         let running = s.spawn(move || {
@@ -910,4 +911,104 @@ fn metadata_and_durable_data_keep_unpaired_surrogates_across_a_suspend() {
         *seen.lock().unwrap(),
         vec![psychoscript::Data::String(lone.clone()); 2]
     );
+}
+
+fn compiled(rt: &Runtime, code: &str) -> psychoscript::Compiled {
+    rt.compile(code)
+        .unwrap_or_else(|d| panic!("expected a compiled program, got {}", d.message))
+}
+
+fn twice_runtime() -> Runtime {
+    Runtime::make().globals(|_| {
+        [(
+            "twice",
+            HostFunction::new(|args, _| HostValue::Number(num(&args[0]) * 2.0)),
+        )]
+    })
+}
+
+/// A run's result and logs, to compare two runs.
+fn shown(o: &Outcome) -> String {
+    format!("{:?} {:?}", o.result, o.logs)
+}
+
+#[test]
+fn a_compiled_program_runs_as_its_source_does_again_and_at_once_with_each_runs_bindings() {
+    let rt = twice_runtime();
+    let code = "let n = 0; for (const x of xs) n += twice(x); return [n, typeof seen]";
+    let program = compiled(&rt, code);
+    let with = |xs: Json| ProgramOptions::new().bindings([("xs", xs)]);
+    let results: Vec<Json> = std::thread::scope(|s| {
+        let runs: Vec<_> = [json!([1]), json!([2, 3]), json!([4, 5, 6])]
+            .into_iter()
+            .map(|xs| {
+                let (rt, program, options) = (&rt, program.clone(), with(xs));
+                s.spawn(move || rt.execute_with(&program, &options).json().unwrap())
+            })
+            .collect();
+        runs.into_iter().map(|r| r.join().unwrap()).collect()
+    });
+    assert_eq!(
+        results,
+        vec![
+            json!([2, "undefined"]),
+            json!([10, "undefined"]),
+            json!([30, "undefined"])
+        ]
+    );
+    let options = with(json!([7]));
+    assert_eq!(
+        shown(&rt.execute_with(&program, &options)),
+        shown(&rt.execute_with(code, &options))
+    );
+}
+
+#[test]
+fn compiling_gives_the_diagnostic_a_run_would_fail_with_first_unsupported_syntax_still_fails_where_it_runs()
+ {
+    let rt = twice_runtime();
+    for code in ["  ", "return (", "export const x = 1"] {
+        let d = rt.compile(code).expect_err(code);
+        assert_eq!(
+            format!("{:?}", Err::<(), _>(d)),
+            format!("{:?}", rt.execute(code).result)
+        );
+    }
+    let unsupported = "const a = 1; class A {}";
+    assert_eq!(
+        shown(&rt.execute(&compiled(&rt, unsupported))),
+        shown(&rt.execute(unsupported))
+    );
+}
+
+#[test]
+fn a_state_saved_from_a_compiled_program_is_its_sources_and_resumes_like_it() {
+    let gate = Latch::default();
+    let g = gate.clone();
+    let rt = Runtime::make().globals(move |_| {
+        let g = g.clone();
+        [(
+            "wait",
+            HostFunction::new_async(move |_, _| {
+                let wait = g.wait();
+                async move { Ok(wait.await) }
+            })
+            .idempotent(),
+        )]
+    });
+    let code = "const a = 20; await wait(); return a + 22";
+    let program = compiled(&rt, code);
+    let options = ProgramOptions::new().run_id("c");
+    let (answer, ran) = suspend_at(&rt, &program, &options, &gate, || {});
+    answer.unwrap();
+    let state = suspended(ran).state;
+    assert_eq!(state.0["header"]["source"]["code"], json!(code));
+    gate.open(HostValue::Undefined);
+    let outcome = done(
+        rt.resume_bytes(&to_bytes(&state))
+            .unwrap()
+            .run_resumable()
+            .unwrap(),
+    );
+    assert_eq!(outcome.result.unwrap(), json!(42));
 }

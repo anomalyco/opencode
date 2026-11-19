@@ -304,6 +304,7 @@ pub enum Site {
     Key,
 }
 
+#[derive(Clone)]
 pub struct Program {
     pub protos: Vec<Arc<FuncProto>>,
     pub consts: Vec<crate::value::Value>,
@@ -314,6 +315,7 @@ pub struct Program {
 }
 
 /// A tagged template's text: each part cooked (`None` for an invalid escape) and raw, as string constants.
+#[derive(Clone)]
 pub struct TemplateSite {
     pub cooked: Vec<Option<crate::value::Value>>,
     pub raw: Vec<crate::value::Value>,

@@ -47,6 +47,7 @@ pub use host_function::{
     HostString, HostValue, Namespace, Resolved, Returned, SnapshotHooks,
 };
 pub use program::{Program, RunOutcome, RunningCall, SuspendError, Suspended, Suspender};
+pub use run::{Code, Compiled};
 pub use runtime::{
     Outcome, ProgramOptions, Run, Runtime, Translate, TranslateFunctions, TranslatePromises,
 };

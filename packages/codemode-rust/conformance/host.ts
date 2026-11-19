@@ -41,8 +41,11 @@
 //   `call.key` as its data; `wait(data, call)` logs `["job.wait", data, call.key, call.args.map(describe)]`, never
 //   settles until the entry resumed, then gives 41; `cancel(data, call)` logs `["job.cancel", data, call.key]`.
 //
-// host.json: `{ executes: [{ code, runId, translate?, limits?, outcome, log }], suspensions: [{ code, runId,
-// translate?, limits?, suspend, resume?, made, log }] }`.
+// host.json: `{ executes: [{ code, runId, translate?, limits?, compiled?, compile?, outcome, again?, log }],
+// suspensions: [{ code, runId, translate?, limits?, compiled?, suspend, resume?, made, log }] }`.
+// - An entry with `compiled: true` runs from `runtime.compile(code)` instead of its source. An execute records
+//   `compile` (`{ ok: true }`, or `{ ok: false, error }` with the diagnostic, when `outcome` is its source's run), and
+//   runs the compiled program twice in the same runtime: `outcome`, then `again`.
 // - `outcome` and `resume`: the run's `Result` as the reference gives it (`ok`, `value` or `error` with `kind`,
 //   `message` and `suggestions?`, `warnings?`, `logs?`, `truncated?`, `metadata`).
 // - A suspension runs the program until `never`, `grab`, `wait` or the durable `job`'s `wait` is first called,
@@ -64,7 +67,7 @@ const Fiber = ref.Fiber
 const Host = ref.Language.Host
 const Runtime = ref.Language.Runtime
 
-type Entry = { code: string; runId?: string; translate?: unknown; limits?: unknown }
+type Entry = { code: string; runId?: string; translate?: unknown; limits?: unknown; compiled?: boolean }
 
 const read = () => "called"
 
@@ -151,13 +154,32 @@ const named = (entry: Entry) => ({ ...entry, runId: entry.runId ?? "run" })
 
 const execute = async (entry: Entry) => {
   const made = make(entry)
-  const result = await Effect.runPromise(made.runtime.execute(entry.code, { runId: named(entry).runId }))
-  return { ...named(entry), outcome: result, log: made.log }
+  const options = { runId: named(entry).runId }
+  if (entry.compiled !== true) {
+    const result = await Effect.runPromise(made.runtime.execute(entry.code, options))
+    return { ...named(entry), outcome: result, log: made.log }
+  }
+  const compiled = made.runtime.compile(entry.code)
+  if (!compiled.ok) {
+    const result = await Effect.runPromise(made.runtime.execute(entry.code, options))
+    return { ...named(entry), compile: compiled, outcome: result, log: made.log }
+  }
+  const outcome = await Effect.runPromise(made.runtime.execute(compiled.compiled, options))
+  const again = await Effect.runPromise(made.runtime.execute(compiled.compiled, options))
+  return { ...named(entry), compile: { ok: true }, outcome, again, log: made.log }
+}
+
+// The program an entry runs: its source, or with `compiled`, what `runtime.compile` made of it.
+const code = (runtime: { compile: (code: string) => { ok: boolean; compiled?: unknown } }, entry: Entry) => {
+  if (entry.compiled !== true) return entry.code
+  const compiled = runtime.compile(entry.code)
+  if (!compiled.ok) throw new Error(`${entry.code} doesn't compile`)
+  return compiled.compiled
 }
 
 const suspend = async (entry: Entry) => {
   const made = make(entry)
-  const program = made.runtime.program(entry.code, { runId: named(entry).runId })
+  const program = made.runtime.program(code(made.runtime, entry), { runId: named(entry).runId })
   const fiber = Effect.runFork(program.run())
   await made.waiting
   const suspended = await Effect.runPromise(Effect.result(program.suspend()))
@@ -283,10 +305,19 @@ return [thrown instanceof RangeError, thrown.message, sent instanceof Promise, a
   // Durable functions: cancelled when the run ends with their work still running.
   { code: `job(1); return 1`, runId: "c" },
   { code: `const p = job({ a: 1 }); await null; throw new Error("ended")`, runId: "c" },
+  // Compiled once, run many times: the same as from source, each run with its own state.
+  { code: `note(count()); return double(await load(2)) + count()`, compiled: true },
+  { code: `job(1); return 1`, runId: "c", compiled: true },
+  { code: `note(1); class A {}`, compiled: true },
+  // Compiling gives the diagnostic a run of the source fails with first.
+  { code: `  `, compiled: true },
+  { code: `return (`, compiled: true },
+  { code: `export const x = 1`, compiled: true },
 ]
 const suspensions: Array<Entry> = [
   // run.metadata across a suspend; the globals are made again on resume.
   { code: `count(); count(); await wait(); return count()`, runId: "m" },
+  { code: `count(); count(); await wait(); return count()`, runId: "m", compiled: true },
   // An idempotent call in progress runs again on resume, under the same key.
   { code: `note(1); const a = await wait(); note(2); return [a, await wait()]`, runId: "i" },
   { code: `const ps = [wait(), load(1), wait()]; return await Promise.all(ps)`, runId: "i" },
@@ -297,6 +328,7 @@ const suspensions: Array<Entry> = [
   { code: `await grab({ n: 1 })`, runId: "s" },
   // A durable function keeps running across a suspend and is waited on again.
   { code: `return (await job()) + 1`, runId: "d" },
+  { code: `return (await job()) + 1`, runId: "d", compiled: true },
   { code: `const a = job(1, { b: [2] }); const b = job(); return [await a, await b, count()]`, runId: "d" },
   // promises: "await" keeps waiting across a suspend.
   { code: `return [note({ n: wait() }), await wait()]`, runId: "t", translate: wait },

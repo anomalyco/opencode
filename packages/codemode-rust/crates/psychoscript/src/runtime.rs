@@ -5,8 +5,8 @@ use std::sync::{Arc, Mutex};
 
 use crate::host::RunId;
 use crate::{
-    Data, Diagnostic, HostString, HostValue, Interrupted, Json, Limits, Program, Snapshot,
-    SnapshotError, from_bytes,
+    Code, Compiled, Data, Diagnostic, HostString, HostValue, Interrupted, Json, Limits, Program,
+    Snapshot, SnapshotError, from_bytes,
 };
 
 /// How a run ended: its value or failure, with what it logged and its metadata.
@@ -243,28 +243,36 @@ impl Runtime {
 
     /// Parses, compiles and runs `code` on the calling thread, blocking on asynchronous host work. An interrupted
     /// run ends with an `ExecutionFailure` saying so; [`Program::run`] tells the two apart.
-    pub fn execute(&self, code: &str) -> Outcome {
-        crate::run::execute(self, code, &ProgramOptions::default())
+    pub fn execute<'c>(&self, code: impl Into<Code<'c>>) -> Outcome {
+        crate::run::execute(self, code.into(), &ProgramOptions::default())
     }
 
     /// [`Runtime::execute`] with [`ProgramOptions`]: bindings, a run id.
-    pub fn execute_with(&self, code: &str, options: &ProgramOptions) -> Outcome {
-        crate::run::execute(self, code, options)
+    pub fn execute_with<'c>(&self, code: impl Into<Code<'c>>, options: &ProgramOptions) -> Outcome {
+        crate::run::execute(self, code.into(), options)
     }
 
     /// Runs `code` as a future on any executor. Dropping it interrupts the run and every host call in flight; a host
     /// call can interrupt it too, and then it ends with [`Interrupted`].
-    pub async fn execute_async(
+    pub async fn execute_async<'c>(
         &self,
-        code: &str,
+        code: impl Into<Code<'c>>,
         options: &ProgramOptions,
     ) -> Result<Outcome, Interrupted> {
         self.program(code, options).run_async().await
     }
 
-    /// A program ready to run once; nothing runs until [`Program::run`] or [`Program::run_async`].
-    pub fn program<'a>(&'a self, code: &'a str, options: &ProgramOptions) -> Program<'a> {
-        Program::new(self, code, options)
+    /// A program, from its source or [compiled](Runtime::compile), ready to run once; nothing runs until
+    /// [`Program::run`] or [`Program::run_async`].
+    pub fn program<'c>(&self, code: impl Into<Code<'c>>, options: &ProgramOptions) -> Program<'_> {
+        Program::new(self, code.into(), options)
+    }
+
+    /// Parses and compiles a program once, for [`Runtime::program`] and the `execute` methods to run many times
+    /// without doing it again; or the diagnostic a run of it would fail with first (an empty program, a syntax
+    /// error). Unsupported syntax still fails where it runs, as from source. A compiled program runs in any runtime.
+    pub fn compile(&self, code: &str) -> Result<Compiled, Diagnostic> {
+        crate::run::compile_program(code)
     }
 
     /// A program continuing a suspended run, from its state. It keeps the limits it was saved with, and its globals
