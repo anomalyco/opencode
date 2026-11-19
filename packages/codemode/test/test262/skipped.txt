@@ -2469,7 +2469,6 @@ language/expressions/class/dstr/meth-static-ary-init-iter-get-err-array-prototyp
 language/expressions/class/dstr/meth-static-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/expressions/class/dstr/meth-static-dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/expressions/class/dstr/meth-static-dflt-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
-language/expressions/class/elements/class-name-static-initializer-anonymous.js  # Expected SameValue(«""», «"C"») to be true
 language/expressions/class/elements/fields-run-once-on-double-super.js  # Expected a ReferenceError but got a SyntaxError
 language/expressions/class/restricted-properties.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/expressions/class/scope-name-lex-open-heritage.js  # TypeError: Class extends value a function is not a constructor or null.

@@ -254,6 +254,10 @@ describe("class inheritance", () => {
     expect(failure(`class A { f = Object.freeze(this); g = 1 }; new A()`)[0]).toBe("TypeError")
   })
 
+  test("an anonymous class has its name before its static fields run", () => {
+    expect(value(`const C = class { static n = this.name }; return C.n`)).toBe("C")
+  })
+
   test("arrows capture super and this", () => {
     expect(
       value(`

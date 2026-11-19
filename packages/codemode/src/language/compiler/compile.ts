@@ -727,7 +727,8 @@ const compileFunctionBody = (
   }
 
   // Leaves the class constructor on the stack.
-  const compileClass = (node: ClassNode): void => {
+  // `name` is an anonymous class's NamedEvaluation name, set before its static fields run.
+  const compileClass = (node: ClassNode, name?: string): void => {
     const unsupported = node.body.body.find((member) => !supportedClassMember(member))
     if (unsupported) return emitUnsupported(classSyntaxName(unsupported), unsupported)
     const scope = analysis.scopeOfNode.get(node)!
@@ -768,6 +769,7 @@ const compileFunctionBody = (
       builder.emit(Op.SET_FIELDS, 0, 0, idx(node), -1)
     }
     builder.emit(Op.POP, 0, 0, idx(node), -1)
+    if (name !== undefined) builder.emit(Op.SET_NAME, 0, builder.constant(name), idx(node), 0)
     if (node.id) {
       builder.emit(Op.DUP, 0, 0, idx(node), 1)
       emitStoreDecl(scope.decls.get(node.id.name)!, true, node)
@@ -1049,6 +1051,7 @@ const compileFunctionBody = (
   }
 
   const compileNamedExpression = (expr: Expression, targetName: string): void => {
+    if (expr.type === "ClassExpression" && !expr.id) return compileClass(expr, targetName)
     compileExpression(expr)
     if (isAnonymousFunction(expr)) builder.emit(Op.SET_NAME, 0, builder.constant(targetName), idx(expr), 0)
   }
@@ -1695,7 +1698,7 @@ const compileFunctionBody = (
     FunctionExpression: (expr) => builder.emit(Op.CLOSURE, 0, analysis.nodeToFunction.get(expr)!.index, idx(expr), 1),
     ArrowFunctionExpression: (expr) =>
       builder.emit(Op.CLOSURE, 0, analysis.nodeToFunction.get(expr)!.index, idx(expr), 1),
-    ClassExpression: compileClass,
+    ClassExpression: (expr) => compileClass(expr),
     ArrayExpression: compileArrayExpression,
     ObjectExpression: compileObjectExpression,
     TemplateLiteral: compileTemplateLiteral,
