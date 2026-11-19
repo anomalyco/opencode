@@ -591,7 +591,7 @@ impl Enc<'_, '_> {
             Kind::StrIter { s, pos } => json!(["si", s, pos]),
             Kind::Cross(c) => cross(c),
             Kind::ListIter { items, pos } => json!(["li", vals(items), pos]),
-            Kind::Namespace(ns) => json!(["t", ns.root.as_ref(), ns.keys]),
+            Kind::Namespace(ns) => json!(["t", (!ns.is_root()).then_some(ns.parent), ns.name]),
             Kind::Resolvers { promise, done } => json!(["r", promise, done]),
             Kind::Combinator(c) => {
                 let kind = match c.kind {
@@ -1665,15 +1665,13 @@ impl Dec<'_> {
                 items: self.vals(f(1)?)?.into(),
                 pos: u32_(f(2)?)?,
             },
-            "t" => Kind::Namespace(Rc::new(NsRef::new(
-                Rc::from(string(f(1)?)?.as_str()),
-                f(2)?
-                    .as_array()
-                    .ok_or_else(|| invalid("a namespace path is not a list."))?
-                    .iter()
-                    .map(string)
-                    .collect::<R<_>>()?,
-            ))),
+            "t" => Kind::Namespace(NsPath {
+                parent: match f(1)? {
+                    J::Null => NsPath::ROOT,
+                    p => self.id(p)?,
+                },
+                name: u32_(f(2)?)?,
+            }),
             "r" => Kind::Resolvers {
                 promise: self.id(f(1)?)?,
                 done: boolean(f(2)?)?,

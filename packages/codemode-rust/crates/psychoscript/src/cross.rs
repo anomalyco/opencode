@@ -1054,9 +1054,8 @@ fn resume_wait(vm: &mut Vm, state: Id, outcome: Result<Value, Value>) -> Result<
     let (callee, args) = (item(vm, 2), list(vm, item(vm, 3)));
     let r = match &vm.heap[callee.as_obj().unwrap_or(0) as usize].kind {
         // A namespace function is called through its namespace, which costs the reference nothing.
-        Kind::Namespace(ns) => {
-            let ns = ns.clone();
-            crate::host::call_namespace(vm, &ns, &args, callee)
+        Kind::Namespace(_) => {
+            crate::host::call_namespace(vm, callee.as_obj().unwrap_or(0), &args, callee)
         }
         _ => {
             let r = vm.call(&callee, Value::Undef, &args);
@@ -1115,8 +1114,8 @@ fn parks_with(vm: &mut Vm) -> Option<u32> {
 
 #[cold]
 fn cant_wait(vm: &mut Vm, callee: Value) -> Value {
-    let name = match callee.as_obj().map(|id| &vm.heap[id as usize].kind) {
-        Some(Kind::Namespace(ns)) => ns.label.clone(),
+    let name = match callee.as_obj() {
+        Some(id) if vm.is_namespace(id) => vm.ns_label(&vm.ns_path(id)),
         _ => crate::host::function_name(vm, &callee),
     };
     let msg = format!(

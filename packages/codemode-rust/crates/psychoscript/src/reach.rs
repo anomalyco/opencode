@@ -119,7 +119,6 @@ impl Walk<'_> {
         match &o.kind {
             Kind::Ordinary
             | Kind::Error(_)
-            | Kind::Namespace(_)
             | Kind::RegExp(_)
             | Kind::Date(_)
             | Kind::Bytes(_)
@@ -127,6 +126,11 @@ impl Walk<'_> {
             | Kind::Headers(_)
             | Kind::StrIter { .. }
             | Kind::Live(_) => {}
+            Kind::Namespace(ns) => {
+                if !ns.is_root() {
+                    self.id(ns.parent);
+                }
+            }
             Kind::Array(items) | Kind::Arguments(items) => self.vals(items.iter()),
             Kind::ListIter { items, .. } => self.vals(items.iter()),
             Kind::Closure(c) => self.val(&c.this),

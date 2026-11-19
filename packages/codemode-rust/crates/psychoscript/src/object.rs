@@ -102,50 +102,45 @@ impl Props {
     }
 }
 
-/// A path into a host namespace among the globals: the global it is under, and the names read below it.
-#[derive(Debug)]
+/// A path into a host namespace among the globals, as a small heap object: the path it was read from (`parent`) and
+/// the name read (`name`); a namespace global itself has no parent, and its name is the global's label. Each read makes
+/// a new one, as the reference's `HostNamespace` does; its whole path and label are built only when a call or a
+/// message needs them (`Vm::ns_path`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NsPath {
+    pub parent: u32,
+    pub name: crate::strings::Atom,
+}
+
+impl NsPath {
+    /// The `parent` of a namespace global.
+    pub const ROOT: u32 = u32::MAX;
+
+    pub fn is_root(&self) -> bool {
+        self.parent == Self::ROOT
+    }
+}
+
+/// A namespace path spelled out: the global it is under, by its label's atom, and the names below it.
 pub struct NsRef {
-    /// The global the namespace is, which names it in messages.
-    pub root: Rc<str>,
-    /// The names read below it, as the host's `keys` and `resolve` get them.
-    pub keys: Box<[String]>,
-    /// How the program names the path in errors, as the reference's `member` writes it: `api.issues.list`,
-    /// `api["x-y"]`.
-    pub label: String,
+    pub root: crate::strings::Atom,
+    pub keys: Vec<String>,
 }
 
-impl NsRef {
-    pub fn new(root: Rc<str>, keys: Box<[String]>) -> Self {
-        let label = keys
-            .iter()
-            .fold(root.to_string(), |at, key| member(&at, key));
-        Self { root, keys, label }
-    }
-
-    /// The path one name below this one.
-    pub fn child(&self, key: &str) -> Self {
-        let mut keys = Vec::with_capacity(self.keys.len() + 1);
-        keys.extend(self.keys.iter().cloned());
-        keys.push(key.to_owned());
-        Self {
-            root: self.root.clone(),
-            keys: keys.into(),
-            label: member(&self.label, key),
-        }
-    }
-}
-
-/// `base.key`, or `base["key"]` when the key is not an identifier, as the reference's `member` writes a label.
-pub fn member(base: &str, key: &str) -> String {
+/// Appends `.key`, or `["key"]` when the key is not an identifier, to a label, as the reference's `member` writes it.
+pub fn push_member(out: &mut String, key: &str) {
     let mut chars = key.chars();
     let ident = chars
         .next()
         .is_some_and(|c| c.is_ascii_alphabetic() || c == '_' || c == '$')
         && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$');
     if ident {
-        format!("{base}.{key}")
+        out.push('.');
+        out.push_str(key);
     } else {
-        format!("{base}[{}]", serde_json::Value::String(key.to_owned()))
+        out.push('[');
+        out.push_str(&serde_json::Value::String(key.to_owned()).to_string());
+        out.push(']');
     }
 }
 
@@ -359,7 +354,7 @@ pub enum Kind {
         pos: u32,
     },
     /// A path into a host namespace among the globals, the reference's `HostNamespace`.
-    Namespace(Rc<NsRef>),
+    Namespace(NsPath),
     /// Shared state of a promise's resolve/reject pair: the promise, and whether either already ran.
     Resolvers {
         promise: Id,
@@ -446,7 +441,7 @@ impl Obj {
     pub fn is_callable(&self) -> bool {
         match &self.kind {
             Kind::Closure(_) | Kind::Native { .. } | Kind::Bound(_) => true,
-            Kind::Namespace(n) => !n.keys.is_empty(),
+            Kind::Namespace(n) => !n.is_root(),
             _ => false,
         }
     }

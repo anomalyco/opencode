@@ -311,7 +311,8 @@ pub struct RunHost<'rt> {
     pub(crate) modules_loaded: FxHashMap<String, Value>,
     pub(crate) namespaces: FxHashMap<String, Value>,
     /// The host namespaces among the globals, by the label of the global they are, with where they are.
-    pub(crate) host_namespaces: FxHashMap<Rc<str>, (Namespace, Vec<String>)>,
+    /// The host namespaces among the globals, by the atom of the label of the global they are, with where they are.
+    pub(crate) host_namespaces: FxHashMap<Atom, (Namespace, Vec<String>)>,
     /// Counts the points where the reference hands queued calls to the host, for streaming responses.
     pub(crate) epoch: crate::streaming::Epoch,
     /// The VM's fuel counters, which it checks only when its step budget runs out.
@@ -716,9 +717,10 @@ fn failure_value(
 
 /// Calls the function a namespace path names, as the reference's `callNamespace`: `resolve` gives the function, or
 /// the failure the call throws.
-pub fn call_namespace(vm: &mut Vm, ns: &Rc<NsRef>, args: &[Value], callee: Value) -> Res {
+pub fn call_namespace(vm: &mut Vm, id: Id, args: &[Value], callee: Value) -> Res {
+    let ns = vm.ns_path(id);
     let Some((namespace, _)) = vm.host.host_namespaces.get(&ns.root) else {
-        let message = format!("The namespace {} is not available.", ns.root);
+        let message = format!("The namespace {} is not available.", vm.atoms.text(ns.root));
         return Err(vm.type_error(&message));
     };
     let resolve = namespace.resolve.clone();
@@ -744,7 +746,7 @@ pub fn call_namespace(vm: &mut Vm, ns: &Rc<NsRef>, args: &[Value], callee: Value
             .map(|(_, global)| global.iter().chain(ns.keys.iter()).cloned().collect()),
     };
     let target = Target {
-        label: ns.label.clone(),
+        label: vm.ns_label(&ns),
         path,
         owner: None,
     };
@@ -1440,11 +1442,14 @@ fn from_host(
         HostValue::Durable(f) => wrap(vm, Callee::Durable(f.clone()), label, place, None),
         HostValue::Namespace(ns) => match &place.global {
             Some(global) => {
-                let root: Rc<str> = Rc::from(label);
+                let name = vm.atoms.intern(label);
                 vm.host
                     .host_namespaces
-                    .insert(root.clone(), (ns.clone(), global.clone()));
-                vm.ns_ref(NsRef::new(root, Box::new([])))
+                    .insert(name, (ns.clone(), global.clone()));
+                vm.ns_ref(NsPath {
+                    parent: NsPath::ROOT,
+                    name,
+                })
             }
             None => {
                 let msg = format!("{label} produced a namespace, which the program cannot hold.");
@@ -2013,10 +2018,14 @@ fn import_native(vm: &mut Vm, _this: Value, args: &[Value], _callee: Id) -> Res 
 
 /// The names directly under a namespace path, as the reference's `namespaceKeys` lists them, or what listing them
 /// threw.
-pub(crate) fn namespace_keys(vm: &mut Vm, ns: &Rc<NsRef>) -> Result<Vec<String>, Value> {
+pub(crate) fn namespace_keys(vm: &mut Vm, id: Id) -> Result<Vec<String>, Value> {
+    let ns = vm.ns_path(id);
     let Some((namespace, _)) = vm.host.host_namespaces.get(&ns.root).cloned() else {
-        let message = format!("The namespace {} is not available.", ns.root);
+        let message = format!("The namespace {} is not available.", vm.atoms.text(ns.root));
         return Err(vm.type_error(&message));
     };
-    (namespace.keys)(&ns.keys).map_err(|thrown| thrown_value(vm, &thrown, &ns.label))
+    (namespace.keys)(&ns.keys).map_err(|thrown| {
+        let label = vm.ns_label(&ns);
+        thrown_value(vm, &thrown, &label)
+    })
 }

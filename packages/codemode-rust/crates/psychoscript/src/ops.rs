@@ -1,7 +1,5 @@
 //! Property access, conversions, operators and iteration on program values.
 
-use std::rc::Rc;
-
 use crate::builtins::exotic;
 use crate::bytecode::{ITER_FOR_OF, Site};
 use crate::iteration::{BY_CLOSE, BY_COUNTED, BY_RESUME, BY_UNCOUNTED};
@@ -168,13 +166,15 @@ impl<'rt> Vm<'rt> {
                 Kind::Map(m) | Kind::Set(m) if cur == id && key == self.names.size => {
                     return Value::Num(m.live as f64);
                 }
-                Kind::Namespace(ns) if cur == id => {
+                Kind::Namespace(_) if cur == id => {
                     // `then` is a path like any other; a namespace is never a thenable (`resolve_promise`).
                     if key <= SYM_ASYNC_ITERATOR {
                         return Value::Undef;
                     }
-                    let child = ns.child(self.atoms.text(key));
-                    return self.ns_ref(child);
+                    return self.ns_ref(NsPath {
+                        parent: id,
+                        name: key,
+                    });
                 }
                 // A Map's or Set's only own accessor is `size`, above.
                 Kind::Map(_) | Kind::Set(_) => {}
@@ -1135,19 +1135,17 @@ impl<'rt> Vm<'rt> {
 
     /// The names under a namespace path, for `Object.keys` and `for...in`, or what listing them threw.
     pub(crate) fn namespace_names(&mut self, id: Id) -> Result<Vec<Atom>, Value> {
-        let Kind::Namespace(ns) = &self.heap[id as usize].kind else {
+        if !self.is_namespace(id) {
             return Ok(Vec::new());
-        };
-        let names = crate::host::namespace_keys(self, &ns.clone())?;
+        }
+        let names = crate::host::namespace_keys(self, id)?;
         Ok(names.iter().map(|c| self.atoms.intern(c)).collect())
     }
 
     /// The global a namespace path is under, which names it in messages.
-    pub(crate) fn namespace_root(&self, id: Id) -> Rc<str> {
-        match &self.heap[id as usize].kind {
-            Kind::Namespace(ns) => ns.root.clone(),
-            _ => Rc::from(""),
-        }
+    pub(crate) fn namespace_root(&self, id: Id) -> String {
+        let root = self.ns_path(id).root;
+        self.atoms.text(root).to_owned()
     }
 
     #[inline(never)]

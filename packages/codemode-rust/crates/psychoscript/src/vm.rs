@@ -1010,13 +1010,12 @@ impl<'rt> Vm<'rt> {
                 all.extend_from_slice(args);
                 self.call(&target, bthis, &all)
             }
-            Kind::Namespace(ns) if ns.keys.is_empty() => {
-                let message = format!("{} is not a function.", ns.root);
+            Kind::Namespace(ns) if ns.is_root() => {
+                let message = format!("{} is not a function.", self.atoms.text(ns.name));
                 Err(self.type_error(&message))
             }
-            Kind::Namespace(ns) => {
-                let ns = ns.clone();
-                let r = crate::host::call_namespace(self, &ns, args, *f);
+            Kind::Namespace(_) => {
+                let r = crate::host::call_namespace(self, id, args, *f);
                 if self.entered {
                     return self.drive_entered(false);
                 }
@@ -1355,18 +1354,17 @@ impl<'rt> Vm<'rt> {
                 self.call_op(argc + n)
             }
             // The namespace itself is not a function.
-            Kind::Namespace(ns) if ns.keys.is_empty() => {
+            Kind::Namespace(ns) if ns.is_root() => {
                 self.stack.truncate(fpos);
-                let message = format!("{} is not a function.", ns.root);
+                let message = format!("{} is not a function.", self.atoms.text(ns.name));
                 let e = self.type_error(&message);
                 Err(self.at_site(e, crate::bytecode::Site::Object))
             }
-            Kind::Namespace(ns) => {
-                let ns = ns.clone();
+            Kind::Namespace(_) => {
                 let callee = self.stack[fpos].get();
                 let args: Vec<Value> = self.stack.drain(fpos + 2..).map(Slot::get).collect();
                 self.stack.truncate(fpos);
-                let r = crate::host::call_namespace(self, &ns, &args, callee)?;
+                let r = crate::host::call_namespace(self, id, &args, callee)?;
                 // A call that waits for promises in its arguments runs in a native frame (see `cross.rs`).
                 if std::mem::take(&mut self.entered) {
                     self.host.meter.bytecode = false;
@@ -1494,9 +1492,40 @@ impl<'rt> Vm<'rt> {
     }
 
     /// A namespace path as a value: a new reference each time the run reads one, as in the reference.
-    pub fn ns_ref(&mut self, path: crate::object::NsRef) -> Value {
+    pub fn ns_ref(&mut self, path: crate::object::NsPath) -> Value {
         let proto = self.realm.function_proto;
-        Value::Obj(self.alloc(Obj::new(Some(proto), Kind::Namespace(Rc::new(path)))))
+        Value::Obj(self.alloc(Obj::new(Some(proto), Kind::Namespace(path))))
+    }
+
+    /// The namespace path the reference `id` names, spelled out from its global down.
+    pub(crate) fn ns_path(&self, id: Id) -> crate::object::NsRef {
+        let mut keys = Vec::new();
+        let mut at = id;
+        let root = loop {
+            match &self.heap[at as usize].kind {
+                Kind::Namespace(ns) if ns.is_root() => break ns.name,
+                Kind::Namespace(ns) => {
+                    keys.push(self.atoms.text(ns.name).to_owned());
+                    at = ns.parent;
+                }
+                _ => break 0,
+            }
+        };
+        keys.reverse();
+        crate::object::NsRef { root, keys }
+    }
+
+    /// How the program names a namespace path in errors, as the reference's `member` writes it: `api.issues.list`,
+    /// `api["x-y"]`.
+    pub(crate) fn ns_label(&self, ns: &crate::object::NsRef) -> String {
+        let root = self.atoms.text(ns.root);
+        let mut out =
+            String::with_capacity(root.len() + ns.keys.iter().map(|k| k.len() + 1).sum::<usize>());
+        out.push_str(root);
+        for key in &ns.keys {
+            crate::object::push_member(&mut out, key);
+        }
+        out
     }
 
     // ---------- exceptions ----------
