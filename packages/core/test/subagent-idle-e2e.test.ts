@@ -9,6 +9,7 @@ import { Bus } from "@opencode/core/bus"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode/core/effect/app-node-platform"
+import { CodeModeJob } from "@opencode/core/codemode/job"
 import { Job } from "@opencode/core/job"
 import { JobTable } from "@opencode/core/job/sql"
 import { KV } from "@opencode/core/kv"
@@ -378,9 +379,7 @@ describe("Code Mode session jobs", () => {
       expect(yield* s.state).toMatchObject({
         state: {
           status: "completed",
-          content: [
-            { type: "text", text: `Script ${job.id} is still running; its result will arrive in this session.` },
-          ],
+          content: [{ type: "text", text: CodeModeJob.receipt(job.id) }],
         },
       })
       const delivered = yield* Context.get(s.h.context, Bus.Service)

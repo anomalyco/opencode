@@ -101,6 +101,11 @@ const description = (full: boolean) =>
     'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
     "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
     "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.allSettled`.",
+    ...(full
+      ? [
+          "A script still running after 10 seconds moves to the background and its result arrives later in this session as a message, so do not poll, sleep or rerun it to wait: continue with other work or end your turn.",
+        ]
+      : []),
   ].join("\n")
 
 export const create = (

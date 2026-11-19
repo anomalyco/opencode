@@ -19,6 +19,10 @@ export function notice(job: Pick<Job.Info, "id" | "status" | "output" | "error">
   }
 }
 
+/** Answers a script still running after the foreground wait, which moves it to the background. */
+export const receipt = (id: string) =>
+  `Script ${id} is still running in the background; its result will arrive in this session as a message. Do not poll, sleep or rerun it. Continue with other work, or end your turn: the result wakes this session.`
+
 type Execute = (context: Tool.Context) => Effect.Effect<Tool.NormalizedResult, Tool.Error>
 type Run = (context: Tool.Context, execute: Execute) => ReturnType<Execute>
 
@@ -112,7 +116,7 @@ export const make = Effect.fnUntraced(function* (
           )
           yield* jobs.completeBackground(notificationID)
         }).pipe(Effect.interruptible, Effect.forkIn(scope))
-        const text = `Script ${id} is still running; its result will arrive in this session.`
+        const text = receipt(id)
         return {
           content: [{ type: "text" as const, text }],
           output: { output: text, toolCalls: [], files: [] },
