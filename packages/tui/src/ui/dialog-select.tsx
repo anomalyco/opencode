@@ -966,7 +966,8 @@ function DialogSelectRow(props: {
   return (
     <Show when={newDesigns()} fallback={row()}>
       <box flexDirection="row">
-        <text width={1} flexShrink={0} fg={theme.text.formfield.focused}>
+        {/* A row with its own background, like a destructive confirmation, draws its bar in that color. */}
+        <text width={1} flexShrink={0} fg={props.activeBackground ?? theme.text.formfield.focused}>
           {props.active ? "┃" : " "}
         </text>
         {row()}
