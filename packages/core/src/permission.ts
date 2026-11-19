@@ -16,7 +16,7 @@ import { PluginHooks } from "./plugin/hooks.js"
 
 const PermissionEffect = Permission.Effect
 export { PermissionEffect as Effect }
-export { Rule, Ruleset, deniesAll } from "@opencode/schema/permission"
+export { Rule, Ruleset } from "@opencode/schema/permission"
 const missingAgentPermissions: Permission.Ruleset = [{ action: "*", resource: "*", effect: "deny" }]
 
 export const ID = Permission.ID

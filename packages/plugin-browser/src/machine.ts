@@ -3,9 +3,9 @@ export * as BrowserMachine from "./machine.js"
 import type { Permission } from "@opencode/schema/permission"
 import type { Session } from "@opencode/schema/session"
 import { Tool } from "@opencode/schema/tool"
-import { Wildcard } from "@opencode/schema/wildcard"
 import type { Browser } from "./rpc.js"
 import { BrowserSkill } from "./skill.js"
+import { Wildcard } from "./wildcard.js"
 
 /** How long one permission sync (`session.get` and, when needed, `session.update`) may take. The desktop waits 15 s. */
 export const PERMISSION_SYNC_TIMEOUT_MS = 10_000

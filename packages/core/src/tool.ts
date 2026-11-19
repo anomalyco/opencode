@@ -27,6 +27,7 @@ import {
   normalizedName,
   normalizeContent,
 } from "./tool/runtime.js"
+import { Wildcard } from "./util/wildcard.js"
 
 export class RegistrationError extends Schema.TaggedError<RegistrationError>()("Tool.RegistrationError", {
   name: Schema.String,
@@ -468,8 +469,10 @@ function commit(editor: Data, id: string, input: RegisteredTool) {
   editor.definitions.set(id, registered.success)
 }
 
-const whollyDisabled = (action: string, rules: Permission.Ruleset) =>
-  Permission.deniesAll(action, rules, process.platform === "win32")
+const whollyDisabled = (action: string, rules: Permission.Ruleset) => {
+  const rule = rules.findLast((rule) => Wildcard.match(action, rule.action))
+  return rule?.resource === "*" && rule.effect === "deny"
+}
 
 const CATALOG_CACHE_LIMIT = 5
 
