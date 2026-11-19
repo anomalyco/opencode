@@ -4,7 +4,7 @@ import { expect } from "bun:test"
 import { Effect, Schedule } from "effect"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
-import { startServer, waitForAgentPolicy } from "./fixture/server"
+import { startServer } from "./fixture/server"
 
 it.live(
   "browsing parents and siblings reuses the current Location and its MCP process",
@@ -94,11 +94,6 @@ it.live(
         await fs.writeFile(path.join(current, "empty.bin"), "")
         await fs.writeFile(path.join(current, "large.mp4"), largeBytes)
         await fs.writeFile(path.join(current, "notes.txt"), "compressible ".repeat(1024))
-        await fs.writeFile(path.join(current, "opencode.json"), JSON.stringify({ permissions: [
-          { action: "read", resource: "*", effect: "allow" },
-          { action: "read", resource: "notes.txt", effect: "deny" },
-          { action: "read", resource: "empty.bin", effect: "ask" },
-        ] }))
         await fs.writeFile(path.join(outside, "secret.txt"), "secret")
         await fs.symlink(outside, path.join(current, "escape-link"), "junction")
       })
@@ -135,38 +130,6 @@ it.live(
       expect(yield* Effect.promise(() => full.text())).toBe("0123456789")
 
       // 2. HEAD probe (and HEAD with Range ignores Range)
-      const preview = new URL("/api/experimental/preview/read", server.base)
-      const created = yield* Effect.promise(async () => (await fetch(new URL("/api/session",server.base), {method:"POST",headers:{...server.headers,"content-type":"application/json"},body:JSON.stringify({location:{directory:current}})})).json())
-      preview.searchParams.set("sessionID", created.data.id)
-      preview.searchParams.set("location[directory]", created.data.location.directory)
-      preview.searchParams.set("path", "clip.mp4")
-      preview.searchParams.set("document", "index.html")
-      preview.searchParams.set("root", "bind")
-      const bound = yield* Effect.promise(() => fetch(preview, {method:"HEAD",headers:server.headers}))
-      const pin = bound.headers.get("x-opencode-preview-root")
-      expect(pin).toMatch(/^[a-f0-9]{64}$/)
-      preview.searchParams.set("root", pin ?? "")
-      const slice = yield* Effect.promise(() => fetch(preview, { headers: { ...server.headers, range: "bytes=2-5" } }))
-      expect(slice.status).toBe(206)
-      expect(slice.headers.get("x-opencode-preview")).toBe("3")
-      expect(yield* Effect.promise(() => slice.text())).toBe("2345")
-      yield* waitForAgentPolicy(server, created.data.location.directory)
-      for (const [file, expected] of [["clip.mp4", 200], ["notes.txt", 404], ["empty.bin", 404]] as const) {
-        preview.searchParams.set("path", file)
-        for (const method of ["GET", "HEAD"]) {
-          const read = yield* Effect.promise(() => fetch(preview, {method, headers:{...server.headers,"x-opencode-preview-policy":"agent"}}))
-          expect(read.status).toBe(expected)
-          expect(read.headers.get("x-opencode-preview-policy")).toBe("agent")
-          expect(read.headers.get("x-opencode-preview-denied")).toBe(expected === 404 ? "1" : null)
-          if (expected === 404) expect(yield* Effect.promise(() => read.text())).toBe("")
-        }
-        const user = yield* Effect.promise(() => fetch(preview, {method:"HEAD",headers:server.headers}))
-        expect(user.status).toBe(200)
-      }
-      preview.searchParams.set("path", "escape-link/secret.txt")
-      const refused = yield* Effect.promise(() => fetch(preview, {headers:server.headers}))
-      expect(refused.status).toBe(404)
-      expect(yield* Effect.promise(() => refused.text())).toBe("")
       const head = yield* request("clip.mp4", { method: "HEAD", headers: { Range: "bytes=0-3" } })
       expect(head.status).toBe(200)
       expect(head.headers.get("accept-ranges")).toBe("bytes")

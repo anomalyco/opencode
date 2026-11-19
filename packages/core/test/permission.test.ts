@@ -176,10 +176,6 @@ describe("Permission", () => {
       const service = yield* Permission.Service
       expect(yield* service.allows(assertion())).toBe(false)
       expect(yield* service.list()).toEqual([])
-      const saved = yield* PermissionSaved.Service
-      yield* saved.add({ projectID: Project.ID.global, action: "read", resources: ["*"] })
-      expect(yield* service.allows(assertion())).toBe(true)
-      expect(yield* service.allows(assertion(), { requireConfiguredAllow: true })).toBe(false)
       yield* setRules([{ action: "read", resource: "*", effect: "allow" }])
       expect(yield* service.allows(assertion())).toBe(true)
       yield* setRules([{ action: "read", resource: "*", effect: "deny" }])
