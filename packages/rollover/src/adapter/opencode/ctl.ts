@@ -110,8 +110,10 @@ function statusFor(deps: CtlDeps, cfg: RolloverConfig, state: SessionState, sid:
   const messages = deps.lastMessages.get(sid) ?? []
   // The active render exists only while rollover runs (auto): in every other
   // mode nothing renders, so the card shows "—" instead of a packed preview
-  // (2026-11-17: render must not start before activation).
-  const packed = cfg.mode === "auto" ? packFor(cfg, state, lines, messages) : null
+  // (2026-11-17: render must not start before activation). Once a swap has
+  // happened, the card reports the FROZEN render the model actually receives;
+  // packFor's would-be render is only the pre-swap preview (v2).
+  const activeRenderText = cfg.mode === "auto" ? (state.rollover ? state.rollover.renderText : (packFor(cfg, state, lines, messages)?.text ?? null)) : null
   const context = contextInfoFor(state, messages)
   const threshold = effectiveThreshold({
     cfg,
@@ -129,7 +131,7 @@ function statusFor(deps: CtlDeps, cfg: RolloverConfig, state: SessionState, sid:
     summaryModel: cfg.extractionModel ?? deps.sessionModel?.(sid) ?? null,
     recordCount: activeRecords(lines).length,
     epoch: state.epoch,
-    renderTokens: packed ? estimateTokens(packed.text) : null,
+    renderTokens: activeRenderText === null ? null : estimateTokens(activeRenderText),
     renderBudgetTokens: cfg.renderBudgetTokens,
     lastRollover: state.lastRollover
       ? { before: state.lastRollover.before, after: state.lastRollover.after, at: state.lastRollover.at }
@@ -141,7 +143,11 @@ async function readShow(deps: CtlDeps, cfg: RolloverConfig, sid: string, raw: bo
   // Read-only: an inspection query must never materialize session state.
   const state = (await deps.store.readState(sid)) ?? defaultSessionState(sid)
   const lines = await deps.store.readLedger(sid)
-  const packed = packFor(cfg, state, lines, deps.lastMessages.get(sid) ?? [])
+  // v2: once a swap has happened, show reports the frozen render the model
+  // actually receives; packFor's would-be preview only runs pre-swap.
+  const packed = state.rollover
+    ? { text: state.rollover.renderText, truncated: state.rollover.renderTruncated ?? false }
+    : packFor(cfg, state, lines, deps.lastMessages.get(sid) ?? [])
   const counts: Record<string, number> = {}
   for (const record of activeRecords(lines)) counts[record.type] = (counts[record.type] ?? 0) + 1
   return showText({

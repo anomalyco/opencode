@@ -83,6 +83,8 @@ export interface RolloverRecord {
   tailMessageIds: string[]
   /** frozen render */
   renderText: string
+  /** true when pack/projection dropped content to fit the render budget */
+  renderTruncated?: boolean
   /** last assistant reply before cutoff (<= 1500 chars) */
   lastReply: string
   appliedAt: number

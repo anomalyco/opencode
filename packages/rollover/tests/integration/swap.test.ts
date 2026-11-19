@@ -216,6 +216,12 @@ describe("runTransform", () => {
     const trace: string[] = []
     deps.store = {
       ...store,
+      // v2: the swap writes through the lock-free raw variant (inside the
+      // session's critical section); persistence-before-proxy still holds.
+      writeStateRaw: async (sessionID: string, value: SessionState) => {
+        trace.push("writeState")
+        await store.writeStateRaw!(sessionID, value)
+      },
       writeState: async (sessionID: string, value: SessionState) => {
         trace.push("writeState")
         await store.writeState(sessionID, value)

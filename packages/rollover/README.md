@@ -6,7 +6,7 @@
 
 [![npm version](https://img.shields.io/npm/v/context-rollover.svg)](https://www.npmjs.com/package/context-rollover)
 [![license](https://img.shields.io/npm/l/context-rollover.svg)](https://www.npmjs.com/package/context-rollover)
-[![tests](https://img.shields.io/badge/tests-343%20passing-brightgreen.svg)]()
+[![tests](https://img.shields.io/badge/tests-275%20passing-brightgreen.svg)]()
 
 Keeps long sessions inside the model's context window by freezing history
 into a compact ledger summary — rendered as `<rollover_context>` — instead of
@@ -127,7 +127,7 @@ Per session, under the project's `.opencode/rollover/<sid>/`:
 git clone https://github.com/omeryasirkucuk/opencode.git
 cd opencode/packages/rollover
 bun install
-bun test          # 343 tests
+bun test          # 275 tests
 bun run typecheck
 ```
 

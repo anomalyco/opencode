@@ -13,7 +13,10 @@ export interface ViewPlan {
 // ── synthetic detection (D9: 2.x parts have no synthetic flag) ────────────
 
 export function isSyntheticWake(m: NMessage): boolean {
-  const text = m.parts.filter((p) => p.type === "text").map((p) => p.text ?? "").join("\n")
+  const text = m.parts
+    .filter((p) => p.type === "text")
+    .map((p) => p.text ?? "")
+    .join("\n")
   return text.trimStart().startsWith("<shell id=") || text.trimStart().startsWith("<subagent id=")
 }
 
@@ -21,7 +24,10 @@ export function isRealUserMessage(m: NMessage): boolean {
   if (m.role !== "user") return false
   if (m.synthetic) return false
   if (m.parts.some((p) => p.synthetic)) return false
-  const text = m.parts.filter((p) => p.type === "text").map((p) => p.text ?? "").join("\n")
+  const text = m.parts
+    .filter((p) => p.type === "text")
+    .map((p) => p.text ?? "")
+    .join("\n")
   if (text.trimStart().startsWith(ROLLOVER_CTX_PREFIX)) return false
   if (isSyntheticWake(m)) return false
   return true
@@ -65,16 +71,25 @@ export function freezeRollover(input: FreezeInput): RolloverRecord {
     // last assistant with a text part before the next real user message
     let nextUser = before
     for (let j = ui + 1; j < before; j++) {
-      if (isRealUserMessage(msgs[j])) { nextUser = j; break }
+      if (isRealUserMessage(msgs[j])) {
+        nextUser = j
+        break
+      }
     }
     let lastAssistantIdx = -1
     for (let j = nextUser - 1; j > ui; j--) {
-      if (msgs[j].role === "assistant" && hasTextPart(msgs[j])) { lastAssistantIdx = j; break }
+      if (msgs[j].role === "assistant" && hasTextPart(msgs[j])) {
+        lastAssistantIdx = j
+        break
+      }
     }
     if (lastAssistantIdx >= 0) {
       tailMessageIds.push(msgs[lastAssistantIdx].id)
       if (ui === tailUserIdxs[tailUserIdxs.length - 1]) {
-        tailLastReply = msgs[lastAssistantIdx].parts.filter((p) => p.type === "text").map((p) => p.text ?? "").join("\n")
+        tailLastReply = msgs[lastAssistantIdx].parts
+          .filter((p) => p.type === "text")
+          .map((p) => p.text ?? "")
+          .join("\n")
       }
     }
   }
@@ -83,7 +98,10 @@ export function freezeRollover(input: FreezeInput): RolloverRecord {
   let lastReply = ""
   for (let j = before - 1; j >= 0; j--) {
     if (msgs[j].role === "assistant") {
-      lastReply = msgs[j].parts.filter((p) => p.type === "text").map((p) => p.text ?? "").join("\n")
+      lastReply = msgs[j].parts
+        .filter((p) => p.type === "text")
+        .map((p) => p.text ?? "")
+        .join("\n")
       break
     }
   }
@@ -102,16 +120,26 @@ export function freezeRollover(input: FreezeInput): RolloverRecord {
   const tailTexts = tailMessageIds
     .map((id) => msgs.find((m) => m.id === id))
     .filter((m): m is NMessage => !!m)
-    .map((m) => m.parts.filter((p) => p.type === "text").map((p) => p.text ?? "").join("\n"))
+    .map((m) =>
+      m.parts
+        .filter((p) => p.type === "text")
+        .map((p) => p.text ?? "")
+        .join("\n"),
+    )
     .join("\n")
   const cutoffMsg = msgs[cutoffIdx >= 0 ? cutoffIdx : msgs.length - 1]
-  const cutoffText = cutoffMsg.parts.filter((p) => p.type === "text").map((p) => p.text ?? "").join("\n")
+  const cutoffText = cutoffMsg.parts
+    .filter((p) => p.type === "text")
+    .map((p) => p.text ?? "")
+    .join("\n")
 
   return {
     epochAtSwap: st.epoch,
     cutoffMessageId: userMessageId,
     tailMessageIds,
-    renderText: rendered.renderText,    lastReply,
+    renderText: rendered.renderText,
+    renderTruncated: rendered.truncated,
+    lastReply,
     appliedAt: Date.now(),
     tokensBefore: st.lastContextTokens,
     tokensAfter: estimateTokens(rendered.renderText) + estimateTokens(tailTexts) + estimateTokens(cutoffText),

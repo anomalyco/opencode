@@ -1,6 +1,19 @@
 # Rollover — Unified Implementation Specification (reference copy)
 
 > Bu dosya, oturumda verilmiş olan iki spec dokümanının birleştirilmiş referans kopyasıdır.
+
+> **v2 amendment (2026-11-19) — the deterministic swap.** Part A §8.3's
+> decision table is superseded on one point: the swap no longer contains an
+> LLM call in any path, and the safe-point's extraction condition
+> (`extractedUntilMessageId === son assistant mesajı` + not inflight) is
+> withdrawn — the swap fires from state alone. §8.5's render is superseded
+> by the mechanical projection (`core/projection.ts`: user prompts verbatim,
+> assistant first-lines, files touched, then the packer sections; ledger
+> records positionally scoped to the discarded region). §7.1's extraction
+> gate is withdrawn (idle extraction runs each turn; `ledger: false` = no
+> extraction). Consolidation's §7.5 semantics and the §1 behavior contract
+> survive unchanged. Implementation decisions: `docs/decisions.md` D11/D12;
+> rationale: `docs/2026-11-19-deterministic-swap-design.md`.
 > Plan (`docs/superpowers/plans/2026-11-15-rollover-opencode.md`) bu belgeye atıfta bulunur.
 > Not: Spec 1.x plugin API varsayımlarıyla yazılmıştır; plan, fork 2.3.0'daki karşılıklarla
 > birlikte uygulanır (bkz. plan bölümü "OpenCode fork 2.3.0 surface map").

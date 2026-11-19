@@ -3,7 +3,7 @@ import path from "node:path"
 import os from "node:os"
 import { Effect, Option } from "effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
-import type { NMessage, RolloverConfig, SessionState } from "../../core/types"
+import type { NMessage, RolloverConfig, SessionState, LedgerLine } from "../../core/types"
 import type { StorePort } from "../../core/ports"
 import { normalizeMessages } from "./normalize"
 import { applyPlan } from "./applyPlan"
@@ -19,7 +19,14 @@ import { createLlm } from "./llm"
 import { createStore } from "./store"
 
 export interface HookDeps {
-  store: StorePort & { withSessionLock: <T>(sid: string, fn: () => Promise<T>) => Promise<T> }
+  store: StorePort & {
+    withSessionLock: <T>(sid: string, fn: () => Promise<T>) => Promise<T>
+    /** Lock-free variants: only for use inside a withSessionLock critical section. */
+    readStateRaw?: (sid: string) => Promise<SessionState | null>
+    writeStateRaw?: (sid: string, s: SessionState) => Promise<void>
+    readLedgerRaw?: (sid: string) => Promise<LedgerLine[]>
+    appendLedgerRaw?: (sid: string, lines: LedgerLine[]) => Promise<void>
+  }
   dataDir: string
   homeConfigDir: string
   projectDir: string
@@ -116,12 +123,20 @@ export async function handleUsage(deps: HookDeps, ev: unknown): Promise<void> {
       st,
     )
     if (cfg.mode === "off") return
-    const current = st ?? (await ensureState(deps.store, sid))
-    await deps.store.writeState(sid, {
-      ...current,
-      lastContextTokens: tokens.input + (tokens.cache?.read ?? 0) + (tokens.cache?.write ?? 0),
-      lastContextSource: "usage",
-      lastContextAt: Date.now(),
+    if (!st) await ensureState(deps.store, sid)
+    // Read-merge-write inside one critical section: a concurrent swap or
+    // extraction commit must not be reverted by a stale snapshot (v2 runs
+    // usage tracking and swaps concurrently by design; spec B §3.3).
+    await deps.store.withSessionLock(sid, async () => {
+      const current = deps.store.readStateRaw ? await deps.store.readStateRaw(sid) : await deps.store.readState(sid)
+      const merged: SessionState = {
+        ...(current ?? st ?? defaultSessionState(sid)),
+        lastContextTokens: tokens.input + (tokens.cache?.read ?? 0) + (tokens.cache?.write ?? 0),
+        lastContextSource: "usage",
+        lastContextAt: Date.now(),
+      }
+      if (deps.store.writeStateRaw) await deps.store.writeStateRaw(sid, merged)
+      else await deps.store.writeState(sid, merged)
     })
   } catch (error) {
     // Fail-open (spec §1.3): a usage-tracking write must never disturb the
@@ -144,13 +159,23 @@ export async function trackTouchedFile(deps: HookDeps, ev: unknown): Promise<voi
     // bookkeeping, no state materialization (2026-11-17 bugfix).
     const st = await deps.store.readState(sid)
     if (!st) return
-    const cfg = withSessionSettings(loadConfig({ homeConfigDir: deps.homeConfigDir, projectDir: deps.projectDir, env: deps.env }), st)
+    const cfg = withSessionSettings(
+      loadConfig({ homeConfigDir: deps.homeConfigDir, projectDir: deps.projectDir, env: deps.env }),
+      st,
+    )
     if (cfg.mode === "off") return
     const rel = rawPath.startsWith(deps.projectDir) ? rawPath.slice(deps.projectDir.length + 1) : rawPath
-    const turn = Object.values(st.touchedFiles).reduce((a, v) => Math.max(a, v.turn), 0) + 1
-    await deps.store.writeState(sid, {
-      ...st,
-      touchedFiles: { ...st.touchedFiles, [rel]: { epoch: st.epoch, turn } },
+    // Read-merge-write inside one critical section (v2: touches race swaps).
+    await deps.store.withSessionLock(sid, async () => {
+      const current = deps.store.readStateRaw ? await deps.store.readStateRaw(sid) : await deps.store.readState(sid)
+      if (!current) return
+      const turn = Object.values(current.touchedFiles).reduce((a, v) => Math.max(a, v.turn), 0) + 1
+      const merged: SessionState = {
+        ...current,
+        touchedFiles: { ...current.touchedFiles, [rel]: { epoch: current.epoch, turn } },
+      }
+      if (deps.store.writeStateRaw) await deps.store.writeStateRaw(sid, merged)
+      else await deps.store.writeState(sid, merged)
     })
   } catch (error) {
     // Fail-open (spec §1.3): touched-file bookkeeping must never disturb the
@@ -198,7 +223,11 @@ export async function runTransform(deps: HookDeps, event: { messages: unknown[];
       const toolsOpen = hasOpenTools(msgs)
       const context = contextInfoFor(st, msgs)
 
-      const threshold = effectiveThreshold({ cfg, sessionOverride: st.settings.thresholdTokens, modelLimit: deps.modelLimits.get(sidResolved) })
+      const threshold = effectiveThreshold({
+        cfg,
+        sessionOverride: st.settings.thresholdTokens,
+        modelLimit: deps.modelLimits.get(sidResolved),
+      })
 
       // v2: the swap decision is fully deterministic — extraction state can no
       // longer gate it (a lagging ledger only means the frozen render carries
@@ -220,7 +249,10 @@ export async function runTransform(deps: HookDeps, event: { messages: unknown[];
         }
         await deps.store.writeState(sidResolved, updated)
       } else if (d.action === "defer") {
-        await deps.store.appendMetric(sidResolved, metricEvent("swap_deferred", sidResolved, st.epoch, { reason: d.reason }))
+        await deps.store.appendMetric(
+          sidResolved,
+          metricEvent("swap_deferred", sidResolved, st.epoch, { reason: d.reason }),
+        )
       }
     }
 
@@ -232,11 +264,16 @@ export async function runTransform(deps: HookDeps, event: { messages: unknown[];
       const plan = buildViewPlan(msgs, finalState.rollover)
       if (!plan) {
         await deps.store.writeState(sidResolved, { ...finalState, rollover: null })
-        await deps.store.appendMetric(sidResolved, metricEvent("cutoff_missing", sidResolved, finalState.epoch, {
-          nmsgs: msgs.length,
-          cutoff: finalState.rollover.cutoffMessageId,
-          hasRC: msgs.some((m) => m.parts.some((p) => p.type === "text" && (p.text ?? "").trimStart().startsWith("<rollover_context"))),
-        }))
+        await deps.store.appendMetric(
+          sidResolved,
+          metricEvent("cutoff_missing", sidResolved, finalState.epoch, {
+            nmsgs: msgs.length,
+            cutoff: finalState.rollover.cutoffMessageId,
+            hasRC: msgs.some((m) =>
+              m.parts.some((p) => p.type === "text" && (p.text ?? "").trimStart().startsWith("<rollover_context")),
+            ),
+          }),
+        )
         return
       }
       const next = applyPlan(raw, plan, { sessionID: sidResolved }) as unknown[]
@@ -245,7 +282,9 @@ export async function runTransform(deps: HookDeps, event: { messages: unknown[];
     }
   } catch (e) {
     const st = await deps.store.readState(sidResolved).catch(() => null)
-    await deps.store.appendMetric(sidResolved, metricEvent("rollover_error", sidResolved, st?.epoch, { detail: String(e) })).catch(() => {})
+    await deps.store
+      .appendMetric(sidResolved, metricEvent("rollover_error", sidResolved, st?.epoch, { detail: String(e) }))
+      .catch(() => {})
     // leave messages untouched
   }
 }
@@ -264,38 +303,70 @@ export async function executeSwap(
   userMessageId: string,
   t0: number,
 ): Promise<SessionState> {
-  const lines = await deps.store.readLedger(sid)
-  const decisionState = { ...st, lastContextTokens: context.tokens, lastContextSource: context.source }
-  const rec = freezeRollover({ msgs, st: decisionState, cfg, lines, userMessageId })
-  const newEpoch = st.epoch + 1
-  const renderTokens = estimateTokens(rec.renderText)
-  const tailTokens = estimateTokens(
-    msgs
-      .filter((m) => rec.tailMessageIds.includes(m.id))
-      .map((m) => m.parts.filter((p) => p.type === "text").map((p) => p.text ?? "").join("\n"))
-      .join("\n"),
-  )
-  const updated: SessionState = {
-    ...st,
-    rollover: rec,
-    epoch: newEpoch,
-    lastRollover: { at: Date.now(), before: rec.tokensBefore, after: rec.tokensAfter, epoch: newEpoch, renderTokens, tailTokens },
-    decidedUserMessageIds: [...st.decidedUserMessageIds, userMessageId].slice(-50),
-    lastContextTokens: rec.tokensAfter,
-    lastContextSource: context.source,
-  }
-  await deps.store.writeState(sid, updated)
-  await deps.store.appendMetric(
-    sid,
-    metricEvent("swap", sid, newEpoch, {
-      tokensBefore: rec.tokensBefore,
-      tokensAfter: rec.tokensAfter,
-      renderTokens,
-      tailTokens,
-      swapMs: Date.now() - t0,
-      contextSource: context.source,
-    }),
-  )
+  // The swap is one critical section: the frozen record, epoch, and decided
+  // commit must not interleave with a usage/touch/extraction write (spec B
+  // §3.3 "swap state persistence" under the same per-session lock).
+  const updated: SessionState = await deps.store.withSessionLock(sid, async () => {
+    const fresh = deps.store.readStateRaw ? await deps.store.readStateRaw(sid) : null
+    const base = fresh ?? st
+    const lines = deps.store.readLedgerRaw ? await deps.store.readLedgerRaw(sid) : await deps.store.readLedger(sid)
+    const decisionState = { ...base, lastContextTokens: context.tokens, lastContextSource: context.source }
+    const rec = freezeRollover({ msgs, st: decisionState, cfg, lines, userMessageId })
+    const newEpoch = base.epoch + 1
+    const renderTokens = estimateTokens(rec.renderText)
+    const tailTokens = estimateTokens(
+      msgs
+        .filter((m) => rec.tailMessageIds.includes(m.id))
+        .map((m) =>
+          m.parts
+            .filter((p) => p.type === "text")
+            .map((p) => p.text ?? "")
+            .join("\n"),
+        )
+        .join("\n"),
+    )
+    const next: SessionState = {
+      ...base,
+      rollover: rec,
+      epoch: newEpoch,
+      lastRollover: {
+        at: Date.now(),
+        before: rec.tokensBefore,
+        after: rec.tokensAfter,
+        epoch: newEpoch,
+        renderTokens,
+        tailTokens,
+      },
+      decidedUserMessageIds: [...base.decidedUserMessageIds, userMessageId].slice(-50),
+      lastContextTokens: rec.tokensAfter,
+      lastContextSource: context.source,
+    }
+    if (deps.store.writeStateRaw) await deps.store.writeStateRaw(sid, next)
+    else await deps.store.writeState(sid, next)
+    void deps.store
+      .appendMetric(
+        sid,
+        metricEvent("swap", sid, newEpoch, {
+          tokensBefore: rec.tokensBefore,
+          tokensAfter: rec.tokensAfter,
+          renderTokens,
+          tailTokens,
+          swapMs: Date.now() - t0,
+          contextSource: context.source,
+          ...(rec.renderTruncated ? { renderTruncated: true } : {}),
+        }),
+      )
+      .catch(() => {})
+    if (rec.renderTruncated) {
+      void deps.store
+        .appendMetric(
+          sid,
+          metricEvent("render_truncated", sid, newEpoch, { renderTokens, budget: cfg.renderBudgetTokens }),
+        )
+        .catch(() => {})
+    }
+    return next
+  })
   return updated
 }
 
@@ -318,7 +389,11 @@ export async function runImmediateSwap(
   const msgs = deps.lastMessages.get(sid)
   if (!msgs || msgs.length === 0) return ""
   const context = contextInfoFor(st, msgs)
-  const threshold = effectiveThreshold({ cfg, sessionOverride: st.settings.thresholdTokens, modelLimit: deps.modelLimits.get(sid) })
+  const threshold = effectiveThreshold({
+    cfg,
+    sessionOverride: st.settings.thresholdTokens,
+    modelLimit: deps.modelLimits.get(sid),
+  })
   if (context.tokens < threshold.value) return ""
 
   // Fire and forget: the command replies at once; the outcome arrives on its
@@ -345,7 +420,9 @@ export async function runImmediateSwap(
         ignoreDecided: true,
       })
       if (d.action !== "swap") {
-        await notify(`Rollover did not complete: ${d.action === "defer" ? d.reason : "conditions not met"}. The automatic mechanism will retry on later turns.`)
+        await notify(
+          `Rollover did not complete: ${d.action === "defer" ? d.reason : "conditions not met"}. The automatic mechanism will retry on later turns.`,
+        )
         return
       }
       const updated = await executeSwap(deps, sid, msgs2, st2, cfg, context, d.userMessageId, Date.now())

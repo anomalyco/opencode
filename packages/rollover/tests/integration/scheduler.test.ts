@@ -7,7 +7,12 @@ import path from "node:path"
 import type { NMessage, RolloverConfig, SessionState } from "../../src/core/types"
 import { DEFAULT_CONFIG } from "../../src/core/config"
 
-const cfg: RolloverConfig = { ...DEFAULT_CONFIG, mode: "auto", consolidateAfterRecords: 100, extractionDeltaMaxTokens: 12000 }
+const cfg: RolloverConfig = {
+  ...DEFAULT_CONFIG,
+  mode: "auto",
+  consolidateAfterRecords: 100,
+  extractionDeltaMaxTokens: 12000,
+}
 
 function msg(id: string, role: "user" | "assistant", text: string): NMessage {
   return { id, role, parts: [{ type: "text", text }], createdAt: 0 }
@@ -15,9 +20,18 @@ function msg(id: string, role: "user" | "assistant", text: string): NMessage {
 
 function state(sid: string): SessionState {
   return {
-    v: 1, sessionId: sid, settings: {}, epoch: 0, extractedUntilMessageId: null,
-    lastContextTokens: 0, lastContextSource: "estimate", lastContextAt: 0, rollover: null,
-    decidedUserMessageIds: [], consolidatedAtRecordCount: 0, touchedFiles: {},
+    v: 1,
+    sessionId: sid,
+    settings: {},
+    epoch: 0,
+    extractedUntilMessageId: null,
+    lastContextTokens: 0,
+    lastContextSource: "estimate",
+    lastContextAt: 0,
+    rollover: null,
+    decidedUserMessageIds: [],
+    consolidatedAtRecordCount: 0,
+    touchedFiles: {},
   }
 }
 
@@ -39,7 +53,12 @@ describe("scheduler", () => {
       createLlm: () => ({
         async complete() {
           llmCalls++
-          return { text: '{"records":[]}', usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, model: "m", latencyMs: 1 }
+          return {
+            text: '{"records":[]}',
+            usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            model: "m",
+            latencyMs: 1,
+          }
         },
       }),
       metric: async () => {},
@@ -56,7 +75,11 @@ describe("scheduler", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "sched-"))
     const store = createStore({ dataDir: dir })
     const sid = "s1"
-    const msgs = [msg("u1", "user", "which library?"), msg("a1", "assistant", "chose left-pad"), msg("u2", "user", "next prompt")]
+    const msgs = [
+      msg("u1", "user", "which library?"),
+      msg("a1", "assistant", "chose left-pad"),
+      msg("u2", "user", "next prompt"),
+    ]
     const base = state(sid)
     base.epoch = 1
     base.rollover = {
@@ -131,7 +154,12 @@ describe("scheduler", () => {
       createLlm: () => ({
         async complete() {
           llmCalls++
-          return { text: '{"records":[]}', usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, model: "m", latencyMs: 1 }
+          return {
+            text: '{"records":[]}',
+            usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            model: "m",
+            latencyMs: 1,
+          }
         },
       }),
       metric: async () => {},
@@ -151,7 +179,9 @@ describe("scheduler", () => {
     await store.writeState(sid, state(sid))
     let started = 0
     let release: (() => void) | null = null
-    const gate = new Promise<void>((r) => { release = r })
+    const gate = new Promise<void>((r) => {
+      release = r
+    })
     const sched = createScheduler({
       store: store as any,
       getConfig: async () => cfg,
@@ -164,7 +194,12 @@ describe("scheduler", () => {
         async complete() {
           started++
           if (started === 1) await gate
-          return { text: '{"records":[]}', usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, model: "m", latencyMs: 1 }
+          return {
+            text: '{"records":[]}',
+            usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            model: "m",
+            latencyMs: 1,
+          }
         },
       }),
       metric: async () => {},
@@ -174,7 +209,9 @@ describe("scheduler", () => {
     await new Promise((r) => setTimeout(r, 10))
     const second = sched.runNow(sid)
     let settled = false
-    void second.then(() => { settled = true })
+    void second.then(() => {
+      settled = true
+    })
     release!()
     await first
     await second
@@ -203,7 +240,12 @@ describe("scheduler", () => {
         async complete() {
           llmCalls++
           await new Promise((r) => setTimeout(r, 20))
-          return { text: '{"records":[{"type":"objective","text":"did hi"}]}', usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, model: "m", latencyMs: 1 }
+          return {
+            text: '{"records":[{"type":"objective","text":"did hi"}]}',
+            usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            model: "m",
+            latencyMs: 1,
+          }
         },
       }),
       metric: async () => {},
@@ -237,7 +279,12 @@ describe("scheduler", () => {
         async complete() {
           llmCalls++
           await new Promise((r) => setTimeout(r, 40))
-          return { text: '{"records":[{"type":"objective","text":"did hi"}]}', usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, model: "m", latencyMs: 1 }
+          return {
+            text: '{"records":[{"type":"objective","text":"did hi"}]}',
+            usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            model: "m",
+            latencyMs: 1,
+          }
         },
       }),
       metric: async () => {},

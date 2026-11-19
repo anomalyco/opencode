@@ -21,7 +21,10 @@ function midTruncate(s: string, cap: number): string {
 }
 
 function textOf(m: NMessage): string {
-  return m.parts.filter((p) => p.type === "text").map((p) => p.text ?? "").join("\n")
+  return m.parts
+    .filter((p) => p.type === "text")
+    .map((p) => p.text ?? "")
+    .join("\n")
 }
 
 /**
@@ -108,42 +111,70 @@ export function projectRollover(input: {
     lastReply = ""
   }
 
+  // Touched files: only touches from the discarded region render; post-swap
+  // edits carry epoch > epochAtSwap and stay verbatim-visible in the kept
+  // region (v2: the frozen render must not drift after the swap).
   const msgPaths = collectTouchedPaths(msgs, before)
-  const files = Object.entries({
-    ...Object.fromEntries(Object.entries(input.touchedFiles).map(([p, v]) => [p, v.turn])),
-    ...Object.fromEntries(Object.entries(msgPaths).map(([p, v]) => [p, v.order])),
-  })
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, MAX_FILES)
+  const statePaths = Object.entries(input.touchedFiles)
+    .filter(([, v]) => v.epoch <= input.epoch)
+    .sort((a, b) => b[1].turn - a[1].turn)
     .map(([p]) => p)
+  const msgOnlyNewestFirst = Object.keys(msgPaths).reverse()
+  const seenPaths = new Set<string>()
+  const files: string[] = [...statePaths, ...msgOnlyNewestFirst]
+    .filter((p) => {
+      if (seenPaths.has(p)) return false
+      seenPaths.add(p)
+      return true
+    })
+    .slice(0, MAX_FILES)
 
-  // budget enforcement: prompts (mandatory, capped per prompt) → reply →
-  // progress (newest kept first, oldest dropped) → files (newest first)
-  let used = prompts.reduce((a, p) => a + estimateTokens(`- [${p.id}] ${p.text}\n`), 0)
-  let replyFinal = ""
-  if (lastReply !== "") {
-    if (used + estimateTokens(lastReply) <= mechBudget) {
-      replyFinal = lastReply
-      used += estimateTokens(lastReply)
-    } else {
+  // Budget enforcement in the design's sacrifice order: drop oldest progress
+  // lines first, then files (oldest), then the reply, then prompts (oldest);
+  // last resort mid-truncates the single remaining prompt. truncated stays
+  // honest about every drop.
+  const lineCost = (id: string, text: string) => estimateTokens(`- [${id}] ${text}\n`)
+  const keptPromptList = [...prompts]
+  let keptReply = ""
+  if (lastReply !== "" && lastReply !== (input.tailLastReply ?? "")) keptReply = lastReply
+  const keptProgressList = [...progress]
+  const keptFiles = [...files]
+  const totalCost = () =>
+    keptPromptList.reduce((a, p) => a + lineCost(p.id, p.text), 0) +
+    keptProgressList.reduce((a, p) => a + lineCost(p.id, p.text), 0) +
+    keptFiles.reduce((a, f) => a + estimateTokens(`- ${f}\n`), 0) +
+    (keptReply !== "" ? estimateTokens(keptReply) : 0)
+  while (totalCost() > mechBudget) {
+    if (keptProgressList.length > 0) {
+      keptProgressList.shift()
       truncated = true
+      continue
     }
-  }
-  const keptProgress: typeof progress = []
-  for (let i = progress.length - 1; i >= 0; i--) {
-    const cost = estimateTokens(`- [${progress[i].id}] ${progress[i].text}\n`)
-    if (used + cost <= mechBudget) {
-      keptProgress.unshift(progress[i])
-      used += cost
-    } else {
+    if (keptFiles.length > 0) {
+      keptFiles.pop()
       truncated = true
+      continue
     }
-  }
-  while (files.length > 0) {
-    const fileCost = files.reduce((a, f) => a + estimateTokens(`- ${f}\n`), 0)
-    if (used + fileCost <= mechBudget) break
-    files.pop()
-    truncated = true
+    if (keptReply !== "") {
+      keptReply = ""
+      truncated = true
+      continue
+    }
+    if (keptPromptList.length > 1) {
+      keptPromptList.shift()
+      truncated = true
+      continue
+    }
+    if (keptPromptList.length === 1) {
+      const last = keptPromptList[0]
+      const fitted = Math.max(0, mechBudget * 4 - 10) // chars from token budget
+      const shrunk = midTruncate(last.text, Math.min(USER_CAP, Math.max(0, fitted)))
+      if (shrunk === last.text) break
+      keptPromptList[0] = { ...last, text: shrunk }
+      truncated = true
+      continue
+    }
+    break
   }
 
   const body: string[] = [rolloverShell(epoch), ""]
@@ -152,25 +183,25 @@ export function projectRollover(input: {
     body.push(`## ${s.title}`)
     for (const line of s.lines) body.push(line)
   }
-  if (prompts.length > 0) {
+  if (keptPromptList.length > 0) {
     sections.push("User prompts")
     body.push("## User prompts")
-    for (const p of prompts) body.push(`- [${p.id}] ${p.text}`)
+    for (const p of keptPromptList) body.push(`- [${p.id}] ${p.text}`)
   }
-  if (keptProgress.length > 0) {
+  if (keptProgressList.length > 0) {
     sections.push("Assistant progress")
     body.push("## Assistant progress")
-    for (const p of keptProgress) body.push(`- [${p.id}] ${p.text}`)
+    for (const p of keptProgressList) body.push(`- [${p.id}] ${p.text}`)
   }
-  if (files.length > 0) {
+  if (keptFiles.length > 0) {
     sections.push("Files touched")
     body.push("## Files touched")
-    for (const f of files) body.push(`- ${f}`)
+    for (const f of keptFiles) body.push(`- ${f}`)
   }
-  if (replyFinal !== "") {
+  if (keptReply !== "") {
     sections.push("Last assistant reply before this message")
     body.push("## Last assistant reply before this message")
-    body.push(replyFinal)
+    body.push(keptReply)
   }
   body.push(ROLLOVER_SHELL_CLOSE)
 
@@ -181,5 +212,7 @@ function isRealUser(m: NMessage): boolean {
   if (m.role !== "user" || m.synthetic) return false
   if (m.parts.some((p) => p.synthetic)) return false
   const text = textOf(m).trimStart()
-  return !text.startsWith("<rollover_context epoch='") && !text.startsWith("<shell id=") && !text.startsWith("<subagent id=")
+  return (
+    !text.startsWith("<rollover_context epoch='") && !text.startsWith("<shell id=") && !text.startsWith("<subagent id=")
+  )
 }
