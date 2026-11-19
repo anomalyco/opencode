@@ -364,6 +364,35 @@ describe("suspended while a getter waits on a host call", () => {
     }, 3000)
   }
 
+  for (const from of ["state", "bytes"] as const) {
+    test(`an iterator's next getter waiting on a host call, resumed on the same runtime (${from})`, async () => {
+      const code = `
+        const it = { [Symbol.iterator]() { let i = 0; return { get next() { const k = pick(slow(1)); return () => ({ done: i >= 2, value: i++ * k }) } } } }
+        return [...it]`
+      for (let attempt = 0; attempt < 50; attempt++) {
+        const gate = latch()
+        const first = hosting(gate.promise)
+        const program = first.runtime.program(code, { runId: "r" })
+        const fiber = Effect.runFork(program.run())
+        await first.started
+        for (let i = 0; i < attempt; i++) await new Promise((done) => setImmediate(done))
+        const suspended = await Effect.runPromise(program.suspend())
+        // The suspended run's host call settles before the resume.
+        gate.resolve()
+        await Effect.runPromise(Fiber.join(fiber))
+        if (suspended.ok !== "suspended") throw new Error(`expected a suspended run, got ${JSON.stringify(suspended)}`)
+        if (!frames(suspended.state).includes("$vmHostWait")) continue
+        expect(frames(suspended.state)).toEqual(expect.arrayContaining(["get next", "$vmRedo (redo)"]))
+        const resumed = await Effect.runPromise(
+          first.runtime.resume(from === "state" ? suspended.state : toBytes(suspended.state)).run(),
+        )
+        expect(resumed).toMatchObject({ ok: true, value: [0, 2] })
+        return
+      }
+      throw new Error("the run never parked on $vmHostWait while `slow` was in flight")
+    }, 3000)
+  }
+
   test("a getter inside an iterator op, resumed in another process", async () => {
     const code = `
       const it = { [Symbol.iterator]() { let i = 0; return { get next() { return () => ({ get done() { return pick(slow(i)) > 4 }, value: i++ }) } } } }
