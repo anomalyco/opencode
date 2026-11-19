@@ -53,7 +53,6 @@ type Prepared =
 export const Plugin = {
   id: "opencode.tool.patch",
   effect: Effect.fn("PatchTool.Plugin")(function* (ctx: Context) {
-    const environment = yield* Environment.Service
     const access = yield* FileAccess.Service
     const fileMutation = yield* FileMutation.Service
     const formatter = yield* Formatter.Service
@@ -142,7 +141,7 @@ export const Plugin = {
                     const before =
                       previous !== undefined
                         ? Bom.split(previous).text
-                        : (yield* FileMutation.readText(environment.files, target.absolute).pipe(
+                        : (yield* FileMutation.readText(target.environment.files, target.absolute).pipe(
                             Effect.mapError(
                               (error) =>
                                 new ToolFailure({
@@ -163,7 +162,7 @@ export const Plugin = {
                   const original =
                     previous ??
                     (yield* Effect.gen(function* () {
-                      const content = yield* FileMutation.readText(environment.files, target.absolute).pipe(
+                      const content = yield* FileMutation.readText(target.environment.files, target.absolute).pipe(
                         Effect.mapError(
                           (error) =>
                             new ToolFailure({
@@ -227,31 +226,30 @@ export const Plugin = {
                     const recased =
                       moveTarget !== undefined &&
                       moveTarget.absolute.toLowerCase() === change.target.absolute.toLowerCase() &&
-                      (yield* environment.files.stat(change.target.absolute).pipe(
+                      (yield* change.target.environment.files.stat(change.target.absolute).pipe(
                         Effect.map((info) => info.type === "file"),
                         Effect.orElseSucceed(() => false),
                       )) &&
-                      (yield* environment.files.stat(moveTarget.absolute).pipe(
+                      (yield* moveTarget.environment.files.stat(moveTarget.absolute).pipe(
                         Effect.as(true),
                         Effect.orElseSucceed(() => false),
                       ))
                     if (change.type === "delete")
-                      yield* environment.files
+                      yield* change.target.environment.files
                         .remove(change.target.absolute)
                         .pipe(Effect.mapError((error) => fail(`Failed to delete ${change.target.resource}`, error)))
-                    if (change.type !== "delete")
-                      yield* environment.files
-                        .write(
-                          recased ? change.target.absolute : target.absolute,
-                          new TextEncoder().encode(change.content),
-                        )
+                    if (change.type !== "delete") {
+                      const written = recased ? change.target : target
+                      yield* written.environment.files
+                        .write(written.absolute, new TextEncoder().encode(change.content))
                         .pipe(Effect.mapError((error) => fail(`Failed to write ${target.resource}`, error)))
+                    }
                     if (moveTarget && recased)
-                      yield* environment.files
+                      yield* change.target.environment.files
                         .move(change.target.absolute, moveTarget.absolute)
                         .pipe(Effect.mapError((error) => fail(`Failed to rename ${change.target.resource}`, error)))
                     if (moveTarget && !recased)
-                      yield* environment.files
+                      yield* change.target.environment.files
                         .remove(change.target.absolute)
                         .pipe(
                           Effect.mapError((error) =>
@@ -264,17 +262,19 @@ export const Plugin = {
               )
               const formatted = new Map<string, string>()
               yield* Effect.forEach(
-                [...updates.entries()].flatMap(([target, value]) => (value === null ? [] : [target])),
+                [...new Map(targets.map((target) => [target.absolute, target])).values()].filter(
+                  (target) => typeof updates.get(target.absolute) === "string",
+                ),
                 (target) =>
                   Effect.gen(function* () {
-                    const current = yield* FileMutation.readText(environment.files, target).pipe(
-                      Effect.mapError((error) => fail(`Failed to read ${target}`, error)),
+                    const current = yield* FileMutation.readText(target.environment.files, target.absolute).pipe(
+                      Effect.mapError((error) => fail(`Failed to read ${target.absolute}`, error)),
                     )
                     formatted.set(
-                      target,
-                      (yield* formatter.file(target))
-                        ? yield* FileMutation.syncTextBom(environment.files, target, current.bom).pipe(
-                            Effect.mapError((error) => fail(`Failed to sync ${target}`, error)),
+                      target.absolute,
+                      (yield* formatter.file(target.absolute))
+                        ? yield* FileMutation.syncTextBom(target.environment.files, target.absolute, current.bom).pipe(
+                            Effect.mapError((error) => fail(`Failed to sync ${target.absolute}`, error)),
                           )
                         : current.text,
                     )
