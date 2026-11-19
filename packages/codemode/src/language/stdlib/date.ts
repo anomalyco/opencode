@@ -3,6 +3,7 @@ import { rangeError, typeError } from "../runtime/model.js"
 import { Arr, DateObj, Obj, coerceToNumber, get, has, coerceToString, type Value } from "../runtime/objects.js"
 import { withPrimitives, withReads } from "../runtime/callback.js"
 import type { Interpreter } from "../runtime/interpreter.js"
+import { checkArrayLength } from "../runtime/limits.js"
 
 const constructDate = (args: Array<Value>, proto: Obj) => {
   if (args.length === 0) return new DateObj(proto, Date.now())
@@ -50,7 +51,7 @@ const dateTimeOptions = [
 const arrayLikeTags = (locales: Obj) => {
   const length = get(locales, "length")
   const count = length instanceof Obj ? 0 : Math.max(0, Math.floor(coerceToNumber(length)) || 0)
-  if (count > 1000) throw rangeError("Too many locales.")
+  checkArrayLength(count)
   return Array.from({ length: count }, (_, index) => index)
     .filter((index) => has(locales, String(index)))
     .map((index) => get(locales, String(index)))
