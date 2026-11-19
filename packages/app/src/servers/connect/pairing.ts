@@ -44,23 +44,27 @@ export function pairingLink(value: string) {
   const url = URL.parse(trimmed)
 
   if (!url || (url.protocol !== "http:" && url.protocol !== "https:")) return
-  const code = /^\/auth\/connect\/([^/]+)$/.exec(url.pathname)?.[1]
-  const address = serverAddress(url.origin)
+  // A server under a path prefix, such as `/opencode`, keeps it in front of `/auth/connect/<code>`.
+  const match = /^(.*)\/auth\/connect\/([^/]+)$/.exec(url.pathname)
 
-  if (!code || !CODE.test(code) || !address) return
+  if (!match || !CODE.test(match[2])) return
 
-  return { urls: [address], code }
+  const address = serverAddress(url.origin + match[1])
+
+  if (!address) return
+
+  return { urls: [address], code: match[2] }
 }
 
-// A server address typed where a pairing link was expected: a host with no path, so a bare code or a cut-off link
-// is not mistaken for a server. Paths stay allowed in the password form, where servers behind a proxy prefix live.
+// A server address typed where a pairing link was expected, such as `https://host` or `https://host/opencode` for a
+// server behind a path prefix. A path naming a pairing route is a cut-off link, not a server, so it is rejected.
 export function bareServerAddress(value: string) {
   const address = serverAddress(value)
 
   if (!address) return
   const url = new URL(address)
 
-  if (url.pathname !== "/") return
+  if (/(?:^|\/)(?:auth|connect)(?:\/|$)/.test(url.pathname)) return
 
   if (url.hostname !== "localhost" && !url.hostname.includes(".") && !url.hostname.startsWith("[") && !url.port) return
 
