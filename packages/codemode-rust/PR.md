@@ -66,6 +66,39 @@ recordings and fails on any difference.
 through the reference's language runtime with the same `tools` namespace. It covers per-case time, cold start,
 peak RSS, binary size and perturbed variants; the table states the command and machine.
 
+## Threading
+
+How a run uses threads changes how it runs, never what a program can do or see.
+
+- **Compiling.** Parsing and compiling recurse once per level of syntax, and the parser has no guard of its own. A
+  token scan (`nesting::bound`) gives an upper bound on a program's nesting without parsing it. It is conservative
+  by construction: where it can't tell how the parser reads a `/` (regex or division) or a byte, it counts that
+  line raw, every opening bracket and no closer, and source it can't tokenize counts raw to the end. A program
+  compiles on the caller's thread when its bound fits the 512 KB budget, however long it is. A deeper one compiles
+  on a thread sized to its bound: 1 KiB per unit in release builds and 16 KiB in debug builds, over the measured
+  worst of 819 B and 12.9 KB (`bench/examples/stack_probe.rs`). Every entry point compiles this way: `execute`,
+  `program`, `execute_async` and `resume`.
+- **Running.** Running needs no native stack for deep syntax, and built-in callbacks are VM frames: re-entrant calls
+  cost no native stack per level. A run therefore stays on the thread that drives it, with the same 512 KB budget
+  everywhere. Call depth matches the reference exactly: 10,000 levels at one program frame per level, 5,000 at two,
+  3,334 at three.
+- **Long runs as futures.** In `execute_async`, `run_async` and `run_resumable_async`, a stretch of compute longer than
+  1 ms stops at its next safe point (a loop back-edge or a job boundary). It finishes on a worker thread of the run's
+  own, so the executor's thread is free meanwhile. The next stretch starts on the executor again. Host code never
+  runs on the worker; each piece is handed back to the executor while the worker waits, so it runs on the same thread
+  and in the same order as without the worker:
+  - a host function's call, and the work a synchronous one blocks on;
+  - starting an async or durable function, and the first poll of its future;
+  - namespace `resolve` and `keys`;
+  - accessors such as a streaming body's `cancel`.
+
+  A handed-back call costs a few microseconds, which only stretches already past 1 ms pay. Dropping a run while it is
+  on its worker brings it back first, so its calls are cancelled on the executor. A suspend works the same either
+  way. Blocking `execute` and `Program::run` never use a worker: the caller waits either way.
+- **Cost.** To move between threads, a run's state is `Send` (`Arc` instead of `Rc`, byte buffers behind an
+  uncontended `Mutex`). The nine bench programs stay within 0.5% of the single-threaded instruction counts. The 3 KB
+  plugin event stops paying for a thread: 9% fewer instructions.
+
 ## Known differences
 
 - A saved state resumes only in the implementation and build that saved it: the snapshot formats differ, and

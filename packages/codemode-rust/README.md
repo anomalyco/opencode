@@ -59,7 +59,8 @@ The API is the Rust form of the reference's `Language` namespace:
 | `Json` a host passes or keeps (bindings, `run.metadata`, a durable function's data) | `Data`, which keeps unpaired surrogates; it converts from and to `serde_json::Value` |
 
 Host work is a `Future` instead of an Effect: `Runtime::execute` drives a run on the calling thread, and
-`execute_async` and `Program::run_async` run on any executor. Values cross the boundary as copies (`HostValue`); a
+`execute_async` and `Program::run_async` run on any executor. As a future, a stretch of compute longer than 1 ms continues on a worker
+thread of the run's own while every host call still runs on the executor; see `PR.md`'s Threading. Values cross the boundary as copies (`HostValue`); a
 string crosses as a `HostString`, which keeps a string with an unpaired surrogate exactly, so a host sees and returns
 what the program had. Every string the API hands over that can hold program text is one: values, object keys, error
 names and messages, RegExp sources, namespace paths, the result (`Data`), logs, diagnostics and failures, bindings,
