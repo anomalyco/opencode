@@ -150,7 +150,7 @@ fn publish(file: &Path, info: &Registration, handoff: Value) -> std::io::Result<
     #[cfg(unix)]
     std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
     let result = std::io::Write::write_all(&mut options.open(&temporary)?, text.as_bytes())
-        .and_then(|()| std::fs::rename(&temporary, sidecar(file)));
+        .and_then(|()| opencode_util::busy::rename(&temporary, &sidecar(file)));
     let _ = std::fs::remove_file(&temporary);
     result
 }
