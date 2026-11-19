@@ -1,4 +1,4 @@
-//! Maps V1 colors onto the `opencode2` hue steps for the TUI.
+//! Maps V1 colors onto the `opencode` theme's hue steps for the TUI.
 
 use opentui::style::Color;
 use opentui::theme::ThemeMode;
@@ -15,7 +15,7 @@ pub(crate) fn migrate(theme: &Value) -> Result<Value, String> {
     migrate_with(theme, migrate_mode, light_overrides)
 }
 
-/// Light dialogs sit a step below the page, like `opencode2`'s, so rows can hover above them.
+/// Light dialogs sit a step below the page, like the `opencode` theme's, so rows can hover above them.
 fn light_dialog() -> Value {
     json!({
         "background": {
@@ -102,7 +102,7 @@ fn migrate_mode(theme: &V1, mode: ThemeMode) -> Map<String, Value> {
     reference_hues(splice_palette(definition))
 }
 
-/// Step profiles measured from the `opencode2` theme; only lightness and chroma come from it.
+/// Step profiles measured from the `opencode` theme; only lightness and chroma come from it.
 struct Profile {
     /// Lightness of each surface step (900 to 400) above the page background.
     surface: [f64; 6],

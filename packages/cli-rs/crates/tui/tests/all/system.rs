@@ -104,7 +104,7 @@ fn theme_list_matches_typescript_and_previews_in_the_dialog() {
     assert_dialog(&app, "E.18b/themes", "Search themes");
 
     app.press("down");
-    app.wait_until(WAIT, || theme(&tui) == "opencode2");
+    app.wait_until(WAIT, || theme(&tui) == "opencode-classic");
     app.render();
     assert_dialog(&app, "E.18b/themes-down", "Search themes");
 
@@ -153,7 +153,7 @@ fn settings_theme_opens_the_list_and_comes_back() {
     wait_for(&app, "Search themes");
 
     app.press("down");
-    app.wait_until(WAIT, || theme(&tui) == "opencode2");
+    app.wait_until(WAIT, || theme(&tui) == "opencode-classic");
     app.press("escape");
     wait_for(&app, "Search settings");
     assert_eq!(theme(&tui), "opencode");
@@ -162,11 +162,11 @@ fn settings_theme_opens_the_list_and_comes_back() {
     app.press("enter");
     wait_for(&app, "Search themes");
     app.press("down");
-    app.wait_until(WAIT, || theme(&tui) == "opencode2");
+    app.wait_until(WAIT, || theme(&tui) == "opencode-classic");
     app.press("enter");
-    wait_for(&app, "opencode2 ↵");
-    assert_eq!(configured_theme(&tui).as_deref(), Some("opencode2"));
-    assert_eq!(theme(&tui), "opencode2");
+    wait_for(&app, "opencode-classic ↵");
+    assert_eq!(configured_theme(&tui).as_deref(), Some("opencode-classic"));
+    assert_eq!(theme(&tui), "opencode-classic");
 }
 
 fn location() -> Value {

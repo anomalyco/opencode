@@ -132,9 +132,10 @@ impl ThemeState {
         &self.current.theme
     }
 
-    /// The configured theme name, which may differ from the loaded one until a failed theme falls back.
+    /// The configured theme name, which may differ from the loaded one until a failed theme falls back. The old name
+    /// `opencode2` reads as `opencode`.
     pub fn selected(&self) -> &str {
-        &self.active
+        self.alias(&self.active)
     }
 
     /// The mode the current theme resolved in.
@@ -157,19 +158,25 @@ impl ThemeState {
     }
 
     pub fn has(&self, name: &str) -> bool {
-        self.catalog.has(name)
+        self.catalog.has(self.alias(name))
     }
 
     /// Switches to `name` and persists it; false when no such theme exists.
-    pub fn set(&mut self, name: &str) -> bool {
-        if !self.has(name) {
+    pub fn set(&mut self, requested: &str) -> bool {
+        if !self.has(requested) {
             return false;
         }
-        self.active = name.to_owned();
+        let name = self.alias(requested).to_owned();
+        self.active = name.clone();
         self.refresh_palette();
-        self.effects.push(Effect::PersistName(name.to_owned()));
+        self.effects.push(Effect::PersistName(name));
         self.reload();
         true
+    }
+
+    /// `opencode2` was the new theme's name before it became `opencode`; a custom theme of that name keeps it.
+    fn alias<'a>(&self, name: &'a str) -> &'a str {
+        if name == "opencode2" && !self.catalog.has(name) { "opencode" } else { name }
     }
 
     /// Locks `mode` (the current mode when `None`); false when the theme does not support it.
@@ -302,7 +309,7 @@ impl ThemeState {
 
     /// Loads the active theme, falling back to `opencode` with a [`ThemeError`] when it fails.
     fn reload(&mut self) {
-        let name = if self.has(&self.active) { self.active.clone() } else { "opencode".to_owned() };
+        let name = if self.has(&self.active) { self.alias(&self.active).to_owned() } else { "opencode".to_owned() };
         match self.catalog.load(&name, self.mode) {
             Ok(loaded) => self.current = loaded,
             Err(message) => {
@@ -434,9 +441,31 @@ mod tests {
         let names = state.names();
         assert_eq!(
             (names.first().map(String::as_str), names.last().map(String::as_str)),
-            (Some("opencode2"), Some("system"))
+            (Some("aura"), Some("system"))
         );
         assert_eq!(names.len(), 35);
+        let opencode = names.iter().position(|name| name == "opencode");
+        assert_eq!(names.get(opencode.unwrap() + 1).map(String::as_str), Some("opencode-classic"));
+    }
+
+    #[test]
+    fn opencode2_reads_as_opencode_unless_a_custom_theme_takes_the_name() {
+        let builtin = ThemeState::new(options());
+        let mut state = ThemeState::new(ThemeStateOptions { name: Some("opencode2".to_owned()), ..options() });
+        assert_eq!(state.selected(), "opencode");
+        assert_eq!(**state.theme(), **builtin.theme());
+        assert!(state.take_error().is_none());
+        assert!(state.has("opencode2"));
+        assert!(state.set("opencode2"));
+        assert_eq!(state.take_effects(), [Effect::PersistName("opencode".to_owned())]);
+
+        let Some(super::super::ThemeSource::Builtin(aura)) = Catalog::default().source("aura") else {
+            panic!("aura is built in");
+        };
+        state.config_name("opencode2");
+        state.custom_themes(IndexMap::from([("opencode2".to_owned(), aura.clone())]));
+        assert_eq!(state.selected(), "opencode2");
+        assert_eq!(state.modes(), [ThemeMode::Dark]);
     }
 
     #[test]

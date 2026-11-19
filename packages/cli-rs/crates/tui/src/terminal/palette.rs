@@ -37,7 +37,7 @@ fn terminal_hue(theme: &Theme, target: f64) -> &Color {
         .hues()
         .iter()
         .map(|(_, scale)| {
-            let color = &scale.0[1];
+            let color = &scale.0[3];
             let unit = |channel: u8| f64::from(channel) / 255.0;
             let (chroma, angle) = oklch_of(unit(color.r), unit(color.g), unit(color.b));
             (color, chroma, distance(angle, target))
@@ -47,7 +47,7 @@ fn terminal_hue(theme: &Theme, target: f64) -> &Color {
         .min_by(|first, second| first.2.total_cmp(&second.2));
     match nearest {
         Some((color, _, distance)) if distance <= 30.0 => color,
-        _ => &theme.accent().0[1],
+        _ => &theme.accent().0[3],
     }
 }
 

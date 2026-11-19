@@ -6,7 +6,7 @@
 // Colors are packed as 8 hex digits (rrggbbaa) in the order of `paths` (tokens) and `hues` (one 9-step scale per
 // named hue), so the fixture stays small. The Rust test unpacks them and reports mismatches by path.
 import { resolveThemeDocument, themeModes, type ResolvedTheme } from "../../../theme/src/tui/index.ts"
-import { allThemes, getOpenCode2Theme, parseTheme, type ThemeDocumentSource } from "../../../tui/src/theme/index.ts"
+import { allThemes, parseTheme, type ThemeDocumentSource } from "../../../tui/src/theme/index.ts"
 import { generateSystem, terminalMode } from "../../../tui/src/theme/system.ts"
 import { records } from "../lib/records"
 
@@ -85,10 +85,7 @@ function load(source: ThemeDocumentSource, name: string, mode: "dark" | "light")
 }
 
 const builtins: Record<string, ReturnType<typeof entry>> = {}
-const sources = [
-  ["opencode2", getOpenCode2Theme()] as const,
-  ...Object.entries(allThemes()).filter(([name]) => name !== "system"),
-]
+const sources = Object.entries(allThemes()).filter(([name]) => name !== "system")
 for (const [name, source] of sources) {
   for (const mode of themeModes(parse(source, name))) builtins[`${name}/${mode}`] = load(source, name, mode)
 }

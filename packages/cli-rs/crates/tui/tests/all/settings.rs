@@ -206,8 +206,11 @@ fn the_palette_lists_settings_while_filtering_and_opens_the_one_chosen() {
 fn experiments_toggle_and_new_designs_graduated() {
     let app = TestApp::new(80, 24);
     let tui = support::mount_empty(&app, support::component_info(json!({})), None);
-    // The new designs are the only ones: `opencode2` leads the theme list and the experiment is gone.
-    assert_eq!(tui.theme.borrow().names()[0], "opencode2");
+    // The new designs are the only ones: `opencode` is the new theme, `opencode-classic` the old one, and the
+    // experiment is gone.
+    let names = tui.theme.borrow().names();
+    assert!(!names.iter().any(|name| name == "opencode2"));
+    assert!(names.iter().any(|name| name == "opencode-classic"));
     experiments::show(&tui);
     wait_for(&app, "TUI tools");
     assert!(!app.text().contains("New designs"));

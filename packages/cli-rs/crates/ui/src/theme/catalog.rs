@@ -95,8 +95,8 @@ impl Catalog {
         self.system = source;
     }
 
-    /// Theme names in list order: the built-ins (`opencode2` first), custom themes not named like a built-in, then
-    /// `system`.
+    /// Theme names in list order: the built-ins (`opencode` and `opencode-classic` after the V1 defaults), custom themes
+    /// not named like a built-in, then `system`.
     pub fn names(&self) -> Vec<String> {
         let mut names = IndexSet::new();
         names.extend(BUILTINS.themes.iter().map(|theme| theme.name.to_owned()));
@@ -116,9 +116,6 @@ impl Catalog {
         }
         if let Some(custom) = self.custom.get(name) {
             return Some(ThemeSource::Custom(custom));
-        }
-        if self.mini && name == "opencode2" {
-            return None;
         }
         let builtin = BUILTINS.themes.iter().find(|theme| theme.name == name)?;
         Some(ThemeSource::Builtin(builtin.document(self.mini)))
