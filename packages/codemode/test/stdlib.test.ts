@@ -1163,6 +1163,35 @@ describe("Uint8Array", () => {
     expect(await error(`Uint8Array.fromHex("zz")`)).toMatchObject({ message: expect.stringContaining("SyntaxError") })
   })
 
+  test("base64 alphabet, omitPadding, and lastChunkHandling options", async () => {
+    expect(
+      await value(`
+      const bytes = new Uint8Array([251, 255])
+      let reads = 0
+      return [
+        bytes.toBase64({ alphabet: "base64url" }), bytes.toBase64({ omitPadding: true }),
+        bytes.toBase64({ alphabet: "base64url", omitPadding: 1 }), bytes.toBase64({}),
+        bytes.toBase64({ get alphabet() { reads++; return "base64url" } }), reads,
+        [...Uint8Array.fromBase64("-_8=", { alphabet: "base64url" })], [...Uint8Array.fromBase64("+/8")],
+        [...Uint8Array.fromBase64("AQ", { lastChunkHandling: "stop-before-partial" })],
+        [...Uint8Array.fromBase64("AR==")],
+        Buffer.from([251, 255]).toString("base64url"), [...Buffer.from("-_8", "base64url")],
+      ]
+    `),
+    ).toEqual(["-_8=", "+/8", "-_8", "+/8=", "-_8=", 1, [251, 255], [251, 255], [], [1], "-_8", [251, 255]])
+    const message = async (code: string) => (await error(code)).message
+    expect(await message(`Uint8Array.fromBase64("-_8=")`)).toContain("SyntaxError")
+    expect(await message(`Uint8Array.fromBase64("AQ", { lastChunkHandling: "strict" })`)).toContain("SyntaxError")
+    expect(await message(`Uint8Array.fromBase64("AR==", { lastChunkHandling: "strict" })`)).toContain("SyntaxError")
+    expect(await message(`new Uint8Array(1).toBase64({ alphabet: "hex" })`)).toContain(
+      'TypeError: Uint8Array.prototype.toBase64 requires that alphabet be "base64" or "base64url"',
+    )
+    expect(await message(`new Uint8Array(1).toBase64(null)`)).toContain("requires that options be an object")
+    expect(await message(`Uint8Array.fromBase64("AQ", { lastChunkHandling: "partial" })`)).toContain(
+      "TypeError: Uint8Array.fromBase64 requires that lastChunkHandling be",
+    )
+  })
+
   test("coercion, console, JSON, and Object.prototype.toString", async () => {
     expect(
       await value(`

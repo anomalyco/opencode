@@ -587,14 +587,15 @@ reject }` object.
 The only binary type. Bytes stay inside the program or cross to extensions as copies; the tool boundary rejects them
 with a hint to encode as text first (`TextDecoder`, `toBase64`, `toHex`).
 
-- [x] `new Uint8Array(length | array | iterable | Uint8Array)`, `Uint8Array.from`, `Uint8Array.of`, `fromBase64`,
-      and `fromHex`. Lengths are capped like arrays. The `Uint8Array.from` mapper and `thisArg` see the original
-      values, so `Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))` decodes base64. `BYTES_PER_ELEMENT` is 1 on
-      the constructor, its instances, and `Buffer`.
+- [x] `new Uint8Array(length | array | iterable | Uint8Array)`, `Uint8Array.from`, `Uint8Array.of`, `fromBase64`
+      (with the `alphabet` and `lastChunkHandling` options), and `fromHex`. Lengths are capped like arrays. The
+      `Uint8Array.from` mapper and `thisArg` see the original values, so
+      `Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))` decodes base64. `BYTES_PER_ELEMENT` is 1 on the
+      constructor, its instances, and `Buffer`.
 - [x] Index reads and writes with JS byte semantics: values wrap modulo 256, out-of-range writes are ignored, indexes
       cannot be deleted. `length` is a prototype accessor, so `Object.keys` lists only indexes.
 - [x] `at`, `slice`, `subarray` (a view on the same bytes), `set`, `fill`, `reverse`, `indexOf`, `lastIndexOf`,
-      `includes`, `join`, `toString`, `toBase64`, `toHex`, and live `keys`, `values`, `entries`, and `[Symbol.iterator]`
+      `includes`, `join`, `toString`, `toBase64` (with `alphabet` and `omitPadding`), `toHex`, and live `keys`, `values`, `entries`, and `[Symbol.iterator]`
       iterators. Start indexes coerce as for arrays, search values do not (`bytes.includes("1")` is `false`), and
       `lastIndexOf(x, undefined)` searches from index 0 while `lastIndexOf(x)` searches from the end, as in JS.
 - [x] Spread, destructuring, `for...of`, `yield*`, `Array.from`, and `new Set(bytes)`. `Array.isArray` is false.
