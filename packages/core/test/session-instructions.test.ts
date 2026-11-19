@@ -84,7 +84,7 @@ const group = LayerNode.group([
   Image.node,
 ])
 
-const buildLayer = (locationLayer: Parameters<typeof Location.node.replace>[0]) =>
+const buildLayer = (locationLayer: Layer.Layer<Location.Service>) =>
   AppNodeBuilder.build(group, [
     Project.node.replace(globalProjectNode),
     SessionExecution.node.replace(SessionExecution.noopLayer),
