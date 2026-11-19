@@ -13,6 +13,8 @@ export type Signal = typeof Signal.Type
 const FileInfo = Schema.Struct({ type: FileType, size: Schema.Number, mtimeMs: Schema.Number })
 
 const exit = { type: Schema.Literal("exit"), id: Schema.String, bytes: Schema.Number }
+/** A file call and its reply carry the same `req`. */
+const fs = { type: Schema.Literal("fs"), req: Schema.Number }
 
 /** The first message of every connection, reconnects included. */
 export const Hello = Schema.Struct({
@@ -50,8 +52,7 @@ export const FromWorker = Schema.Union([
   Schema.Struct({ ...exit, code: Schema.Number }),
   Schema.Struct({ ...exit, code: Schema.Null, signal: Schema.String }),
   Schema.Struct({
-    type: Schema.Literal("fs"),
-    req: Schema.Number,
+    ...fs,
     ok: Schema.Literal(true),
     result: Schema.Union([
       Schema.Null,
@@ -61,8 +62,7 @@ export const FromWorker = Schema.Union([
     ]),
   }),
   Schema.Struct({
-    type: Schema.Literal("fs"),
-    req: Schema.Number,
+    ...fs,
     ok: Schema.Literal(false),
     error: Schema.Struct({
       kind: Schema.Literals(["not_found", "wrong_kind", "failed"]),
@@ -72,8 +72,6 @@ export const FromWorker = Schema.Union([
   }),
 ])
 export type FromWorker = typeof FromWorker.Type
-
-const fs = { type: Schema.Literal("fs"), req: Schema.Number }
 
 /** File calls, with the semantics of the environment's `Files`. */
 export const FileCall = Schema.Union([

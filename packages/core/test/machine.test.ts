@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect, Exit, Fiber, PlatformError, Schema, Scope, Stream } from "effect"
+import { Effect, Exit, Fiber, PlatformError, Queue, Scheduler, Schema, Scope, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { TestClock } from "effect/testing"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
@@ -21,6 +21,14 @@ const bytes = (value: string) => new TextEncoder().encode(value)
 const text = (stream: Stream.Stream<Uint8Array, PlatformError.PlatformError>) =>
   Stream.mkString(Stream.decodeText(stream))
 const cause = (error: PlatformError.PlatformError) => error.reason.cause
+const hello = (processes: Machine.Hello["processes"] = []): Machine.Hello => ({
+  type: "hello",
+  name: "gpu",
+  os: "linux",
+  arch: "x64",
+  instance: "a",
+  processes,
+})
 const count = (received: ReadonlyArray<Machine.ToWorker>, type: Machine.ToWorker["type"]) =>
   received.filter((message) => message.type === type).length
 
@@ -186,6 +194,78 @@ describe("machine driver", () => {
     }),
   )
 
+  it.effect("sends a start only on the newest connection, wherever the spawn is paused", () =>
+    Effect.forEach([0, 1, 2, 3], (pauses) =>
+      Effect.gen(function* () {
+        const machine = Machine.make(Environment.ID.make("gpu"))
+        const late: Machine.ToWorker[] = []
+        let replaced = false
+        const dial = (send: Machine.Connection["send"]) =>
+          Effect.forkChild(machine.connect({ hello: hello(), send, messages: Stream.never }), {
+            startImmediately: true,
+          })
+        yield* dial((message) => replaced && late.push(message))
+        // A scheduler that pauses the spawn every few steps, so the newer connection can arrive part-way through it.
+        yield* Effect.forkChild(Effect.scoped(machine.environment.spawner.spawn(command)), {
+          startImmediately: true,
+        }).pipe(Effect.provideService(Scheduler.MaxOpsBeforeYield, 6))
+        for (let index = 0; index < pauses; index++) yield* Effect.yieldNow
+        replaced = true
+        yield* dial(() => {})
+        for (let index = 0; index < 50; index++) yield* Effect.yieldNow
+        expect(late).toEqual([])
+      }),
+    ),
+  )
+
+  it.effect("ignores what a replaced connection still delivers, wherever its messages are paused", () =>
+    Effect.forEach(
+      Array.from({ length: 12 }, (_, index) => index),
+      (pauses) =>
+        Effect.gen(function* () {
+          const machine = Machine.make(Environment.ID.make("gpu"))
+          const messages = yield* Queue.unbounded<Exclude<Machine.FromWorker, Machine.Hello>>()
+          const late: Machine.ToWorker[] = []
+          let id = ""
+          let replaced = false
+          // A scheduler that pauses the connection every few steps, so the newer one can arrive between two messages.
+          yield* Effect.forkChild(
+            machine.connect({
+              hello: hello(),
+              send: (message) => {
+                if (message.type === "start") id = message.id
+                if (replaced) late.push(message)
+              },
+              messages: Stream.fromQueue(messages),
+            }),
+            { startImmediately: true },
+          ).pipe(Effect.provideService(Scheduler.MaxOpsBeforeYield, 6))
+          // Never closed, so the test's end does not wait for the process to stop.
+          yield* Effect.forkChild(machine.environment.spawner.spawn(command).pipe(Scope.provide(yield* Scope.make())), {
+            startImmediately: true,
+          })
+          // One chunk, long enough that the paused connection handles it in several steps.
+          Queue.offerAllUnsafe(messages, [
+            { type: "started", id, pid: 7 },
+            ...Array.from({ length: 30 }, (_, offset) => ({ type: "output" as const, id, offset, data: bytes("a") })),
+            { type: "exit", id, bytes: 30, code: 0 },
+          ])
+          for (let index = 0; index < pauses; index++) yield* Effect.yieldNow
+          replaced = true
+          yield* Effect.forkChild(
+            machine.connect({
+              hello: hello([{ id, pid: 7, state: "running", bytes: 0 }]),
+              send: () => {},
+              messages: Stream.never,
+            }),
+            { startImmediately: true },
+          )
+          for (let index = 0; index < 50; index++) yield* Effect.yieldNow
+          expect(late).toEqual([])
+        }),
+    ),
+  )
+
   it.effect("fails a running process as lost when the worker restarts", () =>
     Effect.gen(function* () {
       const { worker, environment } = yield* connected
@@ -291,7 +371,7 @@ describe("machine driver", () => {
       yield* worker.runs[0].exit(3)
       const killing = yield* Effect.forkChild(handle.kill(), { startImmediately: true })
       yield* Effect.yieldNow
-      expect(worker.received.filter((message) => message.type === "kill")).toHaveLength(1)
+      expect(count(worker.received, "kill")).toBe(1)
       yield* worker.cut
       yield* worker.restore
       yield* Fiber.join(killing)
@@ -364,7 +444,7 @@ describe("machine driver", () => {
       yield* worker.cut
       yield* handle.kill()
       yield* worker.restore
-      expect(worker.received.filter((message) => message.type === "kill")).toHaveLength(0)
+      expect(count(worker.received, "kill")).toBe(0)
     }),
   )
 
