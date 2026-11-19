@@ -1,7 +1,7 @@
 /** View planning + swap decision (spec Part A §8.3, §8.4). Pure functions. */
 import type { NMessage } from "./types"
 import type { SessionState, RolloverConfig, LedgerLine, RolloverRecord } from "./types"
-import { packLedger } from "./packer"
+import { projectRollover } from "./projection"
 import { estimateTokens } from "./tokens"
 import { ROLLOVER_CTX_PREFIX } from "./messages"
 
@@ -89,14 +89,15 @@ export function freezeRollover(input: FreezeInput): RolloverRecord {
   }
   lastReply = lastReply.slice(0, 1500)
 
-  const renderText = packLedger({
+  const rendered = projectRollover({
+    msgs,
+    cutoffId: userMessageId,
+    epoch: st.epoch,
+    cfg,
     lines,
-    epochAtSwap: st.epoch,
     touchedFiles: st.touchedFiles,
-    lastReply,
-    tailLastReply,
-    budgetTokens: cfg.renderBudgetTokens,
-  }).text
+    tailLastReply: tailLastReply,
+  })
 
   const tailTexts = tailMessageIds
     .map((id) => msgs.find((m) => m.id === id))
@@ -110,11 +111,10 @@ export function freezeRollover(input: FreezeInput): RolloverRecord {
     epochAtSwap: st.epoch,
     cutoffMessageId: userMessageId,
     tailMessageIds,
-    renderText,
-    lastReply,
+    renderText: rendered.renderText,    lastReply,
     appliedAt: Date.now(),
     tokensBefore: st.lastContextTokens,
-    tokensAfter: estimateTokens(renderText) + estimateTokens(tailTexts) + estimateTokens(cutoffText),
+    tokensAfter: estimateTokens(rendered.renderText) + estimateTokens(tailTexts) + estimateTokens(cutoffText),
   }
 }
 

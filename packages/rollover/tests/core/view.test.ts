@@ -100,6 +100,18 @@ describe("buildViewPlan", () => {
     expect(rec.tokensBefore).toBe(200000)
   })
 
+  test("freezeRollover renders the mechanical projection (prompts verbatim, no LLM)", () => {
+    const msgs = [
+      msg("u1", "user", [{ type: "text", text: "add settings endpoint" }]),
+      msg("a1", "assistant", [{ type: "text", text: "Done." }]),
+      msg("u2", "user", [{ type: "text", text: "also fix tests" }]),
+    ]
+    const rec = freezeRollover({ msgs, st: baseState(), cfg, lines: [], userMessageId: "u2" })
+    expect(rec.renderText).toContain("## User prompts")
+    expect(rec.renderText).toContain("- [u1] add settings endpoint")
+    expect(rec.renderText).toContain("<rollover_context epoch='0'>")
+  })
+
   test("tailN: 0 keeps no tail messages", () => {
     const msgs = [msg("u1", "user"), msg("a1", "assistant"), msg("u2", "user")]
     const rec = freezeRollover({ msgs, st: baseState({ settings: { tailN: 0 } }), cfg, lines: [], userMessageId: "u2" })
