@@ -648,6 +648,32 @@ describe("EditTool", () => {
     }),
   )
 
+  it.live("refuses to rewrite a file that is not valid UTF-8", () =>
+    withTempDir((tmp) => {
+      const edit = makeEditFixture()
+      const target = path.join(tmp.path, "Invoice.java")
+      // "// José" in Latin-1, far from the edited line.
+      const bytes = Buffer.concat([Buffer.from("// Jos\xe9\n", "latin1"), Buffer.from("int MAX = 10;\n")])
+      return Effect.promise(() => fs.writeFile(target, bytes)).pipe(
+        Effect.andThen(
+          withTool(tmp.path, edit, (registry) =>
+            executeTool(registry, call({ path: "Invoice.java", oldString: "MAX = 10", newString: "MAX = 25" })),
+          ),
+        ),
+        Effect.tap((settled) =>
+          Effect.promise(async () => {
+            expect(settled).toMatchObject({
+              status: "error",
+              error: { message: expect.stringContaining("Unable to edit Invoice.java: file is not valid UTF-8.") },
+            })
+            expect(edit.writes).toEqual([])
+            expect(await fs.readFile(target)).toEqual(bytes)
+          }),
+        ),
+      )
+    }),
+  )
+
   it.live("matches across mixed line endings and keeps each region's endings", () =>
     withTempDir((tmp) => {
       const edit = makeEditFixture()

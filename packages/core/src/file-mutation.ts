@@ -1,7 +1,8 @@
 export * as FileMutation from "./file-mutation.js"
 
+import { isUtf8 } from "node:buffer"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Bom } from "@opencode/util/bom"
@@ -48,8 +49,23 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/FileMutation") {}
 
+export class InvalidUtf8Error extends Schema.TaggedError<InvalidUtf8Error>()("FileMutation.InvalidUtf8Error", {
+  path: Schema.String,
+}) {
+  override get message() {
+    return "file is not valid UTF-8. It was left unchanged because rewriting it as text would replace every byte that is not UTF-8 with U+FFFD; change it with a tool that preserves its bytes, or convert it to UTF-8 first"
+  }
+}
+
 export const readText = Effect.fn("FileMutation.readText")(function* (files: Files, target: string) {
   return Bom.decodeBytes((yield* files.read(target)).bytes)
+})
+
+/** Read text that will be rewritten. Decoding replaces invalid bytes with U+FFFD, so such files are refused. */
+export const readEditableText = Effect.fn("FileMutation.readEditableText")(function* (files: Files, target: string) {
+  const bytes = (yield* files.read(target)).bytes
+  if (!isUtf8(bytes)) return yield* new InvalidUtf8Error({ path: target })
+  return Bom.decodeBytes(bytes)
 })
 
 export const readOptionalText = Effect.fn("FileMutation.readOptionalText")(function* (files: Files, target: string) {
