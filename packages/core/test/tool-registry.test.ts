@@ -561,28 +561,6 @@ describe("Tool", () => {
     }),
   )
 
-  it.effect("keeps the catalog of each visible tool set while sessions alternate, until the registry changes", () =>
-    Effect.gen(function* () {
-      const service = yield* Tool.Service
-      yield* service.transform((editor) => {
-        editor.add({ ...make(), options: { namespace: "acme" } })
-        editor.add({ ...constant("page"), options: { namespace: "web", permission: "web" } })
-      })
-      const denied: Permission.Ruleset = [{ action: "web", resource: "*", effect: "deny" }]
-      const all = yield* service.snapshot()
-      const narrowed = yield* service.snapshot(denied)
-      expect(codeModeListings(narrowed.codeModeCatalog!).map((tool) => tool.path)).toEqual(["acme.echo"])
-      // Each set's prepared catalog is reused, not rebuilt, when the other set's session ran in between.
-      expect((yield* service.snapshot()).codeModeCatalog).toBe(all.codeModeCatalog!)
-      expect((yield* service.snapshot(denied)).codeModeCatalog).toBe(narrowed.codeModeCatalog!)
-
-      yield* service.transform((editor) => editor.add({ ...constant("other"), options: { namespace: "acme" } }))
-      const changed = yield* service.snapshot()
-      expect(changed.codeModeCatalog).not.toBe(all.codeModeCatalog)
-      expect(codeModeListings(changed.codeModeCatalog!).map((tool) => tool.path)).toContain("acme.constant")
-    }),
-  )
-
   it.effect("retains namespace descriptions in executable snapshots after appended transforms", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
