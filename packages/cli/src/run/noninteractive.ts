@@ -69,7 +69,7 @@ export async function runNonInteractivePrompt(input: Input) {
   if ((await stream.next()).done) throw new Error("Event stream disconnected before prompt admission")
 
   const messageID = SessionMessage.ID.create()
-  const render = renderer(input)
+  const render = renderer(input, messageID)
   const state = {
     phase: "running" as "running" | "settled" | "cancelling",
     promoted: false,
@@ -359,7 +359,7 @@ async function projectedMessages(client: OpenCodeClient, sessionID: string, mess
   }
 }
 
-function renderer(input: Input) {
+function renderer(input: Input, promptID: string) {
   const starts = new Map<string, { id: string; timestamp: number }>()
   const tools = new Map<string, Tool>()
   const steps = new Map<string, "started" | "ended">()
@@ -555,9 +555,25 @@ function renderer(input: Input) {
       const time = "created" in event ? event.created : Date.now()
       if (event.type === "session.inbox.delivered") {
         const queued = synthetics.get(event.data.inboxID)
-        if (!queued) return
-        synthetics.delete(event.data.inboxID)
-        synthetic(partID(event.id), event.data.inboxID, queued, time)
+        if (queued) {
+          synthetics.delete(event.data.inboxID)
+          synthetic(partID(event.id), event.data.inboxID, queued, time)
+          return
+        }
+        if (input.format !== "json" || event.data.inboxID === promptID) return
+        const projected = await projectedMessages(input.client, input.sessionID, promptID).catch(() => undefined)
+        const match = projected?.messages.find((item) => item.id === event.data.inboxID)
+        if (match?.type !== "synthetic") return
+        synthetic(
+          partID(event.id),
+          match.id,
+          {
+            text: match.text,
+            description: match.description,
+            metadata: match.metadata,
+          },
+          time,
+        )
         return
       }
       if (event.type === "session.synthetic") {

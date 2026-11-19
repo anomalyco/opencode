@@ -1099,4 +1099,88 @@ describe("runNonInteractivePrompt", () => {
       },
     })
   })
+
+  test("streams an already-queued synthetic report before its woken reply on an existing session", async () => {
+    const reportText = '<subagent sessionID="ses_child" state="completed">\nPrior report\n</subagent>'
+    const reportMetadata = { source: "subagent", childID: "ses_child", agent: "explore", state: "completed" }
+    const output = await capture({
+      format: "json",
+      messages: (messageID) => [
+        idleMessage("succeeded", "msg_after_prior_report"),
+        {
+          id: "msg_woken_existing",
+          type: "assistant",
+          agent: "build",
+          model: { providerID: "test", id: "test-model" },
+          content: [{ type: "text", text: "Handled prior report." }],
+          finish: "stop",
+          time: { created: 4, completed: 5 },
+        },
+        {
+          id: "msg_prior_report",
+          type: "synthetic",
+          text: reportText,
+          description: "prior scan",
+          metadata: reportMetadata,
+          time: { created: 2 },
+        },
+        { id: messageID, type: "user", text: "hello", time: { created: 1 } },
+      ],
+      turn: (id) => [
+        prompted(id),
+        {
+          id: "evt_prior_report_delivered",
+          created: 2,
+          type: "session.inbox.delivered",
+          durable: { aggregateID: "ses_1", seq: 2, version: 1 },
+          data: {
+            sessionID: "ses_1",
+            inboxID: "msg_prior_report",
+          },
+        },
+        {
+          id: "evt_woken_existing_step",
+          created: 4,
+          type: "session.step.started",
+          durable: { aggregateID: "ses_1", seq: 3, version: 1 },
+          data: {
+            started: 4,
+            sessionID: "ses_1",
+            assistantMessageID: "msg_woken_existing",
+            agent: "build",
+            model: { providerID: "test", id: "test-model" },
+          },
+        },
+        {
+          id: "evt_woken_existing_text",
+          created: 4,
+          type: "session.text.ended",
+          durable: { aggregateID: "ses_1", seq: 4, version: 1 },
+          data: {
+            sessionID: "ses_1",
+            assistantMessageID: "msg_woken_existing",
+            ordinal: 0,
+            text: "Handled prior report.",
+          },
+        },
+        settled(),
+      ],
+    })
+
+    const events = jsonLines(output.stdout)
+    expect(events.map((event) => event.type)).toEqual(["synthetic", "step_start", "text"])
+    expect(events[0]).toMatchObject({
+      type: "synthetic",
+      sessionID: "ses_1",
+      part: {
+        id: "prt_prior_report_delivered",
+        sessionID: "ses_1",
+        messageID: "msg_prior_report",
+        type: "synthetic",
+        text: reportText,
+        description: "prior scan",
+        metadata: reportMetadata,
+      },
+    })
+  })
 })
