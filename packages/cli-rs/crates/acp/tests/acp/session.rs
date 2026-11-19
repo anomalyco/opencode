@@ -1,14 +1,6 @@
 use serde_json::{Value, json};
 
-use crate::wire::{RpcError, Wire, WireOptions, assert_matches, lock, make_session, start_wire};
-
-fn current_value(result: &Value, id: &str) -> Value {
-    result["configOptions"]
-        .as_array()
-        .and_then(|options| options.iter().find(|option| option["id"] == id))
-        .map(|option| option["currentValue"].clone())
-        .unwrap_or(Value::Null)
-}
+use crate::wire::{RpcError, Wire, WireOptions, assert_matches, current_value, lock, make_session, start_wire};
 
 fn error(result: Result<Value, RpcError>) -> Value {
     match result {

@@ -1045,6 +1045,15 @@ pub fn matches(actual: &Value, expected: &Value) -> bool {
     }
 }
 
+/// The `currentValue` of the config option `id` in a session result, or null.
+pub fn current_value(result: &Value, id: &str) -> Value {
+    result["configOptions"]
+        .as_array()
+        .and_then(|options| options.iter().find(|option| option["id"] == id))
+        .map(|option| option["currentValue"].clone())
+        .unwrap_or(Value::Null)
+}
+
 #[track_caller]
 pub fn assert_matches(actual: &Value, expected: &Value) {
     assert!(matches(actual, expected), "expected to match:\n  actual:   {actual}\n  expected: {expected}");

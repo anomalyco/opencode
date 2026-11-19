@@ -1,16 +1,8 @@
 use std::time::Duration;
 
-use serde_json::{Value, json};
+use serde_json::json;
 
-use crate::wire::{WireOptions, assert_matches, second_model, start_wire};
-
-fn current_value(result: &Value, id: &str) -> Value {
-    result["configOptions"]
-        .as_array()
-        .and_then(|options| options.iter().find(|option| option["id"] == id))
-        .map(|option| option["currentValue"].clone())
-        .unwrap_or(Value::Null)
-}
+use crate::wire::{WireOptions, assert_matches, current_value, second_model, start_wire};
 
 #[tokio::test]
 async fn switches_model_effort_and_mode_against_the_warm_catalog() {
