@@ -28,13 +28,14 @@ use serde_json::{Value as Json, json};
 #[path = "../src/counters.rs"]
 mod counters;
 
-const PROGRAMS: [&str; 6] = [
+const PROGRAMS: [&str; 7] = [
     "palette",
     "growing",
     "map-churn",
     "strings",
     "closures",
     "generators",
+    "large",
 ];
 const QUERIES: [&str; 8] = ["1", "12", "Com", "k3", "group2", "number 2", "x", "C"];
 
