@@ -227,7 +227,7 @@ fn spawn(
     // anything. PROC_THREAD_ATTRIBUTE_JOB_LIST would be atomic, but Windows
     // then refuses to add a Store app (Store PowerShell 7) to its package's
     // container job while another process of that package is running.
-    let job = job.and_then(|job| match job.assign(&created.process) {
+    let job = job.and_then(|job| match job.assign(created.process()) {
         Ok(()) => Some(job),
         Err(error) => {
             // An outer job with UI restrictions refuses new members. Run the
@@ -238,20 +238,14 @@ fn spawn(
             None
         }
     });
-    // SAFETY: the thread handle is live and uniquely owned.
-    if unsafe { ResumeThread(created.thread.as_raw_handle()) } == u32::MAX {
-        let error = io::Error::last_os_error();
-        // SAFETY: the process handle is live; the child never ran.
-        unsafe {
-            TerminateProcess(created.process.as_raw_handle(), 1);
-        }
-        return Err(error).context(format!("failed to start {}", request.program));
-    }
+    let (pid, process) = created
+        .resume()
+        .with_context(|| format!("failed to start {}", request.program))?;
     Ok(Process {
-        pid: created.pid,
+        pid,
         state: Mutex::new(State {
             handles: Some(Handles {
-                process: Arc::new(created.process),
+                process: Arc::new(process),
                 job,
             }),
             killed: None,
@@ -259,12 +253,76 @@ fn spawn(
     })
 }
 
-/// A created, still suspended process, before it is registered with its job
-/// and signal state.
+/// A created, still suspended process. Dropping it before [`Self::resume`]
+/// terminates it, so an early error or unwind never strands a suspended child
+/// holding the output pipe or working directory open.
 struct Spawned {
     pid: u32,
-    process: OwnedHandle,
-    thread: OwnedHandle,
+    process: Option<OwnedHandle>,
+    thread: Option<OwnedHandle>,
+}
+
+impl Spawned {
+    /// Adopts the handles returned by a successful `CreateProcessW`.
+    unsafe fn adopt(info: PROCESS_INFORMATION) -> io::Result<Self> {
+        let process = owned_handle(info.hProcess);
+        let thread = owned_handle(info.hThread);
+        let mut this = Self {
+            pid: info.dwProcessId,
+            process: None,
+            thread: None,
+        };
+        match (process, thread) {
+            (Ok(process), Ok(thread)) => {
+                this.process = Some(process);
+                this.thread = Some(thread);
+                Ok(this)
+            }
+            (Ok(process), Err(error)) => {
+                // Arm `Drop` so returning terminates the suspended process.
+                this.process = Some(process);
+                Err(error)
+            }
+            (Err(error), thread) => {
+                drop(thread);
+                Err(error)
+            }
+        }
+    }
+
+    fn process(&self) -> &OwnedHandle {
+        self.process
+            .as_ref()
+            .expect("process handle is live until resume")
+    }
+
+    fn resume(mut self) -> io::Result<(u32, OwnedHandle)> {
+        let thread = self
+            .thread
+            .as_ref()
+            .expect("thread handle is live until resume");
+        // SAFETY: the thread handle is live and uniquely owned.
+        if unsafe { ResumeThread(thread.as_raw_handle()) } == u32::MAX {
+            return Err(io::Error::last_os_error());
+        }
+        Ok((
+            self.pid,
+            self.process
+                .take()
+                .expect("process handle is live until resume"),
+        ))
+    }
+}
+
+impl Drop for Spawned {
+    fn drop(&mut self) {
+        if let Some(process) = &self.process {
+            // SAFETY: the process handle is live; the child never ran.
+            unsafe {
+                TerminateProcess(process.as_raw_handle(), 1);
+            }
+        }
+    }
 }
 
 fn create_process(request: &CreatePipe, client: &OwnedHandle) -> io::Result<Spawned> {
@@ -313,11 +371,7 @@ fn create_process(request: &CreatePipe, client: &OwnedHandle) -> io::Result<Spaw
         return Err(io::Error::last_os_error());
     }
     // SAFETY: CreateProcessW returned new, uniquely owned handles.
-    Ok(Spawned {
-        pid: info.dwProcessId,
-        process: owned_handle(info.hProcess)?,
-        thread: owned_handle(info.hThread)?,
-    })
+    unsafe { Spawned::adopt(info) }
 }
 
 /// Waits for the child to exit, then reports the exit code, or the signal the
@@ -1145,6 +1199,23 @@ mod tests {
 
     #[test]
     fn store_powershell_joins_its_job_while_another_instance_runs() {
+        struct Guarded {
+            process: Process,
+            _server: OwnedHandle,
+        }
+        impl Drop for Guarded {
+            fn drop(&mut self) {
+                self.process.kill();
+            }
+        }
+
+        struct TempGate(std::path::PathBuf);
+        impl Drop for TempGate {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_file(&self.0);
+            }
+        }
+
         // Only where PowerShell 7 is installed from the Microsoft Store.
         let Some(alias) = std::env::var_os("LOCALAPPDATA")
             .map(|dir| Path::new(&dir).join(r"Microsoft\WindowsApps\pwsh.exe"))
@@ -1153,28 +1224,56 @@ mod tests {
             return;
         };
         let alias = alias.to_str().unwrap();
-        let start = |id, command| {
-            let mut request = test_request(alias, &["-NoProfile", "-Command", command]);
-            request.env = std::env::vars().collect();
-            let OutputPipe { client, .. } = output_pipe().unwrap();
-            spawn(id, &request, Job::new(id), client).unwrap()
+        let gate = TempGate(std::env::temp_dir().join(format!(
+            "opencode-pty-store-pwsh-gate-{:032x}",
+            rand::random::<u128>()
+        )));
+        std::fs::write(&gate.0, "").unwrap();
+        let gate_arg = gate.0.display().to_string().replace('\'', "''");
+
+        let start = |id, command: &str| {
+            let request = test_request(
+                alias,
+                &[
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    command,
+                ],
+            );
+            let OutputPipe { server, client } = output_pipe().unwrap();
+            Guarded {
+                process: spawn(id, &request, Job::new(id), client).unwrap(),
+                _server: server,
+            }
         };
-        let in_job = |process: &Process| {
-            process
+        let in_job = |guarded: &Guarded| {
+            guarded
+                .process
                 .lock()
                 .handles
                 .as_ref()
                 .is_some_and(|handles| handles.job.is_some())
         };
+
         let running = start(3, "Start-Sleep 30");
-        let second = start(4, "exit 3");
+        let hold = format!(
+            "while ([System.IO.File]::Exists('{gate_arg}')) {{ Start-Sleep -Milliseconds 10 }}; exit 3"
+        );
+        let second = start(4, &hold);
         assert!(in_job(&running));
         assert!(in_job(&second), "the second instance must join its job");
-        assert!(matches!(wait_exit(&second).unwrap(), Exit::Code(3)));
-        running.kill();
+
+        // Kill the first while the second is still alive: our job must sit
+        // inside the Store container job, not the other way round.
+        running.process.kill();
         assert!(matches!(
-            wait_exit(&running).unwrap(),
+            wait_exit(&running.process).unwrap(),
             Exit::Signal(name) if name == "SIGKILL"
         ));
+
+        std::fs::remove_file(&gate.0).unwrap();
+        assert!(matches!(wait_exit(&second.process).unwrap(), Exit::Code(3)));
     }
 }
