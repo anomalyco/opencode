@@ -257,7 +257,11 @@ describe("ChatGPTPlugin", () => {
       yield* addPlugin()
       yield* addLegacyPlugin()
       const integrations = yield* Integration.Service
-      expect((yield* integrations.get(Integration.ID.make("openai")))?.methods.map((method) => method.type === "oauth" && method.id)).toEqual([
+      expect(
+        (yield* integrations.get(Integration.ID.make("openai")))?.methods.map(
+          (method) => method.type === "oauth" && method.id,
+        ),
+      ).toEqual([
         Integration.MethodID.make("chatgpt-token-sharing"),
         Integration.MethodID.make("chatgpt-browser"),
         Integration.MethodID.make("chatgpt-headless"),
@@ -466,6 +470,65 @@ describe("ChatGPTPlugin", () => {
       expect(url.searchParams.has("agent_name_hint")).toBe(false)
       expect(url.searchParams.get("ext_agent_host_id")).toBe(hostID)
       expect(new URL(url.searchParams.get("redirect_uri") ?? "").hostname).toBe("127.0.0.1")
+    }),
+  )
+
+  it.effect("reuses the last ChatGPT account's client after logout, with account hints", () =>
+    Effect.gen(function* () {
+      const kv = yield* KV.Service
+      const storage = PluginHost.storage(kv, ChatGPTPlugin.id)
+      yield* storage.set("chatgpt-profiles", {
+        oaiapp_issued: { subject: "user_1", email: "a@example.com", idToken: "id-token" },
+      })
+      yield* storage.set("chatgpt-last-client", "oaiapp_issued")
+      yield* addPlugin()
+      const url = yield* authorize()
+      expect(url.searchParams.get("client_id")).toBe("oaiapp_issued")
+      expect(url.searchParams.has("agent_name_hint")).toBe(false)
+      expect(url.searchParams.get("id_token_hint")).toBe("id-token")
+      expect(url.searchParams.get("login_hint")).toBe("a@example.com")
+
+      const integrations = yield* Integration.Service
+      const attempt = yield* integrations.oauth.connect({
+        integrationID: Integration.ID.make("openai"),
+        methodID: Integration.MethodID.make("chatgpt-token-sharing-new"),
+      })
+      yield* integrations.oauth.cancel({ integrationID: Integration.ID.make("openai"), attemptID: attempt.attemptID })
+      const fresh = new URL(attempt.url)
+      expect(fresh.searchParams.get("client_id")).toBe("dynamic_agent_client")
+      expect(fresh.searchParams.get("agent_name_hint")).toBe("OpenCode")
+      expect(fresh.searchParams.has("id_token_hint")).toBe(false)
+    }),
+  )
+
+  it.effect("offers a new-account sign-in only after an account is known", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const integrations = yield* Integration.Service
+      const ids = () =>
+        integrations
+          .get(Integration.ID.make("openai"))
+          .pipe(Effect.map((item) => item?.methods.map((method) => method.type === "oauth" && method.id)))
+      expect(yield* ids()).toEqual(["chatgpt-token-sharing"])
+      const credentials = yield* Credential.Service
+      yield* credentials.create({
+        integrationID: Integration.ID.make("openai"),
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("chatgpt-token-sharing"),
+          access: "chatgpt-token",
+          refresh: "refresh",
+          expires: Date.now() + 60 * 60_000,
+          metadata: { clientID: "oaiapp_issued" },
+        }),
+      })
+      yield* Effect.gen(function* () {
+        const found = yield* ids()
+        if (found?.length !== 2) return yield* Effect.fail("pending")
+      }).pipe(Effect.retry(Schedule.spaced("10 millis")), Effect.timeout("2 seconds"))
+      expect(yield* ids()).toEqual(["chatgpt-token-sharing", "chatgpt-token-sharing-new"])
+      const kv = yield* KV.Service
+      expect(yield* PluginHost.storage(kv, ChatGPTPlugin.id).get("chatgpt-last-client")).toBe("oaiapp_issued")
     }),
   )
 
@@ -815,7 +878,12 @@ describe("ChatGPTPlugin", () => {
         "gpt-4.99",
       ])
         expect(yield* models.get(Provider.ID.openai, Model.ID.make(id))).toBeUndefined()
-      expect((yield* models.available()).filter((model) => model.providerID === Provider.ID.openai).map((model) => model.id).sort()).toEqual(
+      expect(
+        (yield* models.available())
+          .filter((model) => model.providerID === Provider.ID.openai)
+          .map((model) => model.id)
+          .sort(),
+      ).toEqual(
         [
           "gpt-5.5",
           "gpt-5.5-fast",

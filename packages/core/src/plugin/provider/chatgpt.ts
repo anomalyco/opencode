@@ -29,6 +29,11 @@ const tokenSharingScope = "chatgpt.tokens.use.direct"
 const providerID = Provider.ID.openai
 const integrationID = Integration.ID.make("openai")
 const methodID = Integration.MethodID.make("chatgpt-token-sharing")
+const newAccountMethodID = Integration.MethodID.make("chatgpt-token-sharing-new")
+// Each issued client belongs to one ChatGPT account and workspace. Profiles outlive logout so signing in again reuses
+// the client instead of registering another app in the user's ChatGPT settings.
+const profilesKey = "chatgpt-profiles"
+const lastClientKey = "chatgpt-last-client"
 const modelCacheKey = (clientID: string) => `models:${clientID}`
 const fallbackModels = new Set([
   "gpt-5.5",
@@ -90,6 +95,9 @@ type RemoteModel = typeof RemoteModel.Type
 const RemoteModels = Schema.Struct({ models: Schema.Array(RemoteModel) })
 const decodeCachedModels = Schema.decodeUnknownOption(Schema.Array(RemoteModel))
 
+const Profile = Schema.Struct({ subject: Schema.String, email: Schema.optional(Schema.String), idToken: Schema.String })
+const decodeProfiles = Schema.decodeUnknownOption(Schema.Record(Schema.String, Profile))
+
 const decodeMetadata = Schema.decodeUnknownOption(
   Schema.Struct({
     clientID: Schema.String,
@@ -98,13 +106,18 @@ const decodeMetadata = Schema.decodeUnknownOption(
   }),
 )
 
-const signIn = (app: App.Info, savedClientID: () => string | undefined, storage: Context["storage"]) =>
+const signIn = (
+  app: App.Info,
+  savedClientID: () => string | undefined,
+  storage: Context["storage"],
+  newAccount = false,
+) =>
   ({
     integrationID,
     method: {
-      id: methodID,
+      id: newAccount ? newAccountMethodID : methodID,
       type: "oauth",
-      label: "Sign in with ChatGPT",
+      label: newAccount ? "Use a different ChatGPT account" : "Sign in with ChatGPT",
     },
     authorize: () =>
       Effect.gen(function* () {
@@ -114,7 +127,10 @@ const signIn = (app: App.Info, savedClientID: () => string | undefined, storage:
         const pkce = yield* Effect.promise(generatePKCE)
         const state = randomValue()
         const nonce = randomValue()
-        const savedID = savedClientID()
+        const profiles = Option.getOrUndefined(decodeProfiles(yield* storage.get(profilesKey)))
+        const last = yield* storage.get(lastClientKey)
+        const savedID = newAccount ? undefined : (savedClientID() ?? (typeof last === "string" ? last : undefined))
+        const profile = savedID ? profiles?.[savedID] : undefined
         // `response` is the browser's pending callback request; a pasted redirect has none.
         const received = yield* Deferred.make<{ code: string; clientID?: string; response?: ServerResponse }, Error>()
         // Lazy so runtimes without a loopback listener (workerd) never evaluate node:http.
@@ -158,7 +174,7 @@ const signIn = (app: App.Info, savedClientID: () => string | undefined, storage:
         const redirect = `http://127.0.0.1:${port}/auth/callback`
         return {
           mode: "auto" as const,
-          url: authorizeURL(redirect, pkce, state, nonce, savedID, hostID),
+          url: authorizeURL(redirect, pkce, state, nonce, savedID, hostID, profile),
           instructions: "Complete authorization in your browser. This window will close automatically.",
           callback: Effect.gen(function* () {
             const result = yield* Deferred.await(received)
@@ -189,7 +205,16 @@ const signIn = (app: App.Info, savedClientID: () => string | undefined, storage:
                   ),
                 )
               if (!tokens.id_token) return yield* Effect.fail(new Error("ChatGPT sign-in did not return an ID token."))
-              yield* verifyIDToken(tokens.id_token, clientID, nonce)
+              const identity = yield* verifyIDToken(tokens.id_token, clientID, nonce)
+              if (profile && identity.subject !== profile.subject)
+                return yield* Effect.fail(
+                  new Error(
+                    "ChatGPT signed in with a different account than this connection. Choose “Use a different ChatGPT account” instead.",
+                  ),
+                )
+              const saved = Option.getOrUndefined(decodeProfiles(yield* storage.get(profilesKey)))
+              yield* storage.set(profilesKey, { ...saved, [clientID]: { ...identity, idToken: tokens.id_token } })
+              yield* storage.set(lastClientKey, clientID)
               return credential(tokens, clientID)
             }).pipe(
               Effect.tap(() => respond()),
@@ -226,6 +251,8 @@ export const ChatGPTPlugin = define({
     const credentials = yield* Credential.Service
     const loading = Semaphore.makeUnsafe(1)
     let chatgpt: Credential.OAuth | undefined
+    // Offer a separate new-account sign-in once there is an account to switch away from.
+    let known = false
     // let available: ReadonlyArray<RemoteModel> | undefined
     let source: Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
 
@@ -235,6 +262,13 @@ export const ChatGPTPlugin = define({
       chatgpt = credential?.type === "oauth" && credential.methodID === methodID ? credential : undefined
       const previous = source
       source = chatgpt ? connection : undefined
+      // Connections made before profiles existed only know their client from the credential.
+      const clientID = Option.getOrUndefined(decodeMetadata(chatgpt?.metadata))?.clientID
+      if (clientID && (yield* ctx.storage.get(lastClientKey)) === undefined)
+        yield* ctx.storage.set(lastClientKey, clientID)
+      const wasKnown = known
+      known = chatgpt !== undefined || typeof (yield* ctx.storage.get(lastClientKey)) === "string"
+      if (known !== wasKnown) yield* ctx.integration.reload()
       // if (previous !== IntegrationConnection.key(source)) {
       //   const metadata = Option.getOrUndefined(decodeMetadata(chatgpt?.metadata))
       //   const stored = metadata ? yield* ctx.storage.get(modelCacheKey(metadata.clientID)) : undefined
@@ -243,10 +277,10 @@ export const ChatGPTPlugin = define({
       return !Equal.equals(previous, source)
     })
 
+    const activeClientID = () => Option.getOrUndefined(decodeMetadata(chatgpt?.metadata))?.clientID
     yield* ctx.integration.transform((editor) => {
-      editor.method.update(
-        signIn(ctx.app, () => Option.getOrUndefined(decodeMetadata(chatgpt?.metadata))?.clientID, ctx.storage),
-      )
+      editor.method.update(signIn(ctx.app, activeClientID, ctx.storage))
+      if (known) editor.method.update(signIn(ctx.app, activeClientID, ctx.storage, true))
     })
     yield* Effect.forEach(
       yield* credentials.list(Integration.ID.make("openai")),
@@ -485,6 +519,7 @@ export function verifyIDToken(
       })
       if (typeof payload.sub !== "string" || !payload.sub.trim()) throw new Error("ID token subject is missing")
       if (payload.nonce !== nonce) throw new Error("ID token nonce does not match this sign-in attempt")
+      return { subject: payload.sub, ...(typeof payload.email === "string" ? { email: payload.email } : {}) }
     },
     catch: (cause) => new Error("ChatGPT sign-in returned an invalid ID token.", { cause }),
   })
@@ -534,11 +569,15 @@ function authorizeURL(
   nonce: string,
   savedID: string | undefined,
   hostID: string,
+  profile?: typeof Profile.Type,
 ) {
   return `${issuer}/api/accounts/authorize?${new URLSearchParams({
     client_id: savedID ?? registrationClientID,
     ...(savedID ? {} : { agent_name_hint: agentName }),
     ext_agent_host_id: hostID,
+    // Preselect this connection's account on reauthorization.
+    ...(profile ? { id_token_hint: profile.idToken } : {}),
+    ...(profile?.email ? { login_hint: profile.email } : {}),
     // Enable only for user-requested consent retries after OpenAI confirms deployment;
     // ordinary sign-ins must not force reconsent.
     // force_reconsent: "true",
