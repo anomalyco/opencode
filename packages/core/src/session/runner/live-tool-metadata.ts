@@ -1,4 +1,7 @@
+export * as LiveToolMetadata from "./live-tool-metadata.js"
+
 import type { Tool } from "../../tool.js"
+import type { SessionMessage } from "../message.js"
 
 /**
  * Latest progress metadata of locally running tool calls, keyed by assistant message and call id.
@@ -21,20 +24,18 @@ export function clear(messageID: string, callID?: string) {
   if (calls.size === 0) live.delete(messageID)
 }
 
-type Readable = { readonly type: string; readonly id: string; readonly content?: ReadonlyArray<unknown> }
-
-export function overlay<T extends Readable>(message: T): T {
+export function overlay(message: SessionMessage.Info): SessionMessage.Info
+export function overlay(message: SessionMessage.MediaInfo): SessionMessage.MediaInfo
+export function overlay(message: SessionMessage.Info | SessionMessage.MediaInfo) {
   if (message.type !== "assistant") return message
   const calls = live.get(message.id)
-  if (!calls || !message.content) return message
-  let changed = false
-  const content = message.content.map((part) => {
-    const tool = part as { type?: string; id?: string; state?: { status?: string; metadata?: object } }
-    if (tool.type !== "tool" || tool.state?.status !== "running" || tool.id === undefined) return part
-    const metadata = calls.get(tool.id)
-    if (metadata === undefined) return part
-    changed = true
-    return { ...tool, state: { ...tool.state, metadata: { ...tool.state.metadata, ...metadata } } }
-  })
-  return changed ? { ...message, content } : message
+  if (!calls) return message
+  return { ...message, content: message.content.map((part) => overlayPart(part, calls)) }
+}
+
+function overlayPart(part: SessionMessage.AssistantContent, calls: Map<string, Tool.Metadata>) {
+  if (part.type !== "tool" || part.state.status !== "running") return part
+  const metadata = calls.get(part.id)
+  if (metadata === undefined) return part
+  return { ...part, state: { ...part.state, metadata: { ...part.state.metadata, ...metadata } } }
 }

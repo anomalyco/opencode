@@ -1,24 +1,43 @@
 import { describe, expect, test } from "bun:test"
-import * as LiveToolMetadata from "../src/session/runner/live-tool-metadata"
+import { Agent } from "@opencode/core/agent"
+import { Model } from "@opencode/core/model"
+import { Provider } from "@opencode/core/provider"
+import { SessionMessage } from "@opencode/core/session/message"
+import { LiveToolMetadata } from "@opencode/core/session/runner/live-tool-metadata"
+import { DateTime } from "effect"
 
-const message = (status: string) => ({
-  type: "assistant",
-  id: "msg_live",
-  content: [
-    { type: "text", id: "text" },
-    { type: "tool", id: "call_1", state: { status, metadata: {} } },
-  ],
-})
+const id = SessionMessage.ID.create()
+
+const message = (state: SessionMessage.ToolState) =>
+  SessionMessage.Assistant.make({
+    id,
+    type: "assistant",
+    agent: Agent.ID.make("build"),
+    model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
+    content: [
+      SessionMessage.AssistantTool.make({
+        type: "tool",
+        id: "call_1",
+        name: "execute",
+        state,
+        time: { created: DateTime.makeUnsafe(0) },
+      }),
+    ],
+    time: { created: DateTime.makeUnsafe(0) },
+  })
+
+const running = message({ status: "running", input: {}, metadata: {} })
+const completed = message({ status: "completed", input: {}, content: [{ type: "text", text: "done" }] })
 
 describe("LiveToolMetadata.overlay", () => {
   test("adds progress to running tool parts until the call settles", () => {
-    LiveToolMetadata.set("msg_live", "call_1", { background: true, toolCalls: [] })
-    expect(LiveToolMetadata.overlay(message("running")).content[1]).toMatchObject({
-      state: { status: "running", metadata: { background: true, toolCalls: [] } },
+    LiveToolMetadata.set(id, "call_1", { background: true, toolCalls: [] })
+    expect(LiveToolMetadata.overlay(running)).toMatchObject({
+      content: [{ state: { status: "running", metadata: { background: true, toolCalls: [] } } }],
     })
-    expect(LiveToolMetadata.overlay(message("completed")).content[1]).toEqual(message("completed").content[1])
+    expect(LiveToolMetadata.overlay(completed)).toEqual(completed)
 
-    LiveToolMetadata.clear("msg_live", "call_1")
-    expect(LiveToolMetadata.overlay(message("running"))).toEqual(message("running"))
+    LiveToolMetadata.clear(id, "call_1")
+    expect(LiveToolMetadata.overlay(running)).toEqual(running)
   })
 })

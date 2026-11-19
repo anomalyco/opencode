@@ -15,7 +15,7 @@ import { SessionError } from "@opencode/schema/session-error"
 import { Money } from "@opencode/schema/money"
 import { contentFilterError } from "../to-session-error.js"
 import type { Tool } from "../../tool.js"
-import * as LiveToolMetadata from "./live-tool-metadata.js"
+import { LiveToolMetadata } from "./live-tool-metadata.js"
 import { stringify } from "../../tool/runtime.js"
 
 type Input = {
