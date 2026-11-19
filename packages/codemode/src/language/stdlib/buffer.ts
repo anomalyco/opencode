@@ -1,4 +1,4 @@
-import { createErrorValue } from "../runtime/intrinsics.js"
+import { type Builtins, createErrorValue } from "../runtime/intrinsics.js"
 import { readsPending, withReads } from "../runtime/callback.js"
 import type { Interpreter } from "../runtime/interpreter.js"
 import { Throw, typeError } from "../runtime/model.js"
@@ -25,6 +25,9 @@ export class BufferObj extends Bytes {
   }
   override toHost() {
     return Buffer.from(this.bytes)
+  }
+  override derive(builtins: Builtins, bytes: Uint8Array) {
+    return new BufferObj(builtins.Buffer, bytes)
   }
   override inspect() {
     const shown = Array.from(this.bytes.subarray(0, 50), (byte) => byte.toString(16).padStart(2, "0")).join(" ")

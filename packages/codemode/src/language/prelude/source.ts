@@ -30,7 +30,7 @@ function Array$prototype$map(callback, thisArg = undefined) {
 }
 function Uint8Array$prototype$map(callback, thisArg = undefined) {
   const bytes = $Receiver(this, "Uint8Array", "Uint8Array.prototype.map")
-  return $Bytes(mapItems(bytes, callback, thisArg, "Uint8Array.map"), Uint8Array.prototype, 0)
+  return $DerivedBytes(mapItems(bytes, callback, thisArg, "Uint8Array.map"), bytes)
 }
 function mapItems(array, callback, thisArg, label) {
   $Callback(callback, label)
@@ -49,7 +49,7 @@ function Array$prototype$filter(callback, thisArg = undefined) {
 }
 function Uint8Array$prototype$filter(callback, thisArg = undefined) {
   const bytes = $Receiver(this, "Uint8Array", "Uint8Array.prototype.filter")
-  return $Bytes(filterItems(bytes, callback, thisArg, "Uint8Array.filter"), Uint8Array.prototype, 0)
+  return $DerivedBytes(filterItems(bytes, callback, thisArg, "Uint8Array.filter"), bytes)
 }
 function filterItems(array, callback, thisArg, label) {
   $Callback(callback, label)

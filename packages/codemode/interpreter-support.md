@@ -620,6 +620,8 @@ method works on it, and its text conversions default to UTF-8.
       `{ type: "Buffer", data }`, `slice` and `subarray` as Buffer views on the same bytes, `equals`, `compare`,
       `indexOf`, `lastIndexOf`, `includes`, `write`, `fill`, `copy`, and the `read`/`write` integer and float methods.
       `console.log` prints `<Buffer ..>`.
+- [x] The inherited `Uint8Array` methods that make new bytes (`map`, `filter`, `slice`, `subarray`, also called
+      through `Uint8Array.prototype`) make a Buffer from a Buffer, as JS's species does.
 - [x] A host Buffer crosses into the program as a Buffer, and a program Buffer crosses out as one; snapshots keep it.
 - [ ] The 64-bit `readBigInt64*`/`writeBigInt64*` methods, since programs have no BigInt.
 

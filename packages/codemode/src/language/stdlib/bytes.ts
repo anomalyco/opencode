@@ -98,13 +98,19 @@ export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
     [
       "slice",
       2,
-      (thisValue, args) => wrap(self(thisValue, "slice").bytes.slice(optNumber(args[0]), optNumber(args[1]))),
+      (thisValue, args) => {
+        const target = self(thisValue, "slice")
+        return target.derive(builtins, target.bytes.slice(optNumber(args[0]), optNumber(args[1])))
+      },
     ],
     // A view on the same bytes, as in JS: writes through one are visible through the other.
     [
       "subarray",
       2,
-      (thisValue, args) => wrap(self(thisValue, "subarray").bytes.subarray(optNumber(args[0]), optNumber(args[1]))),
+      (thisValue, args) => {
+        const target = self(thisValue, "subarray")
+        return target.derive(builtins, target.bytes.subarray(optNumber(args[0]), optNumber(args[1])))
+      },
     ],
     [
       "set",

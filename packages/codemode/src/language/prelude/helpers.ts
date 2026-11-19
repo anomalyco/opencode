@@ -134,6 +134,15 @@ export const helpers = (ctx: Interpreter<unknown>): Array<readonly [string, Valu
         return finishBytes(Uint8Array.from(items, coerceToNumber), into as Obj, offset as number)
       },
     ],
+    /** A Uint8Array of the values, of the same kind as the Uint8Array `source`: a Buffer's map makes a Buffer. */
+    $DerivedBytes: [
+      2,
+      ([values, source]) => {
+        const items = (values as Arr).items
+        checkArrayLength(items.length)
+        return (source as Bytes).derive(builtins, Uint8Array.from(items, coerceToNumber))
+      },
+    ],
     /** Headers or URLSearchParams from the pairs `readPairs` read, or from a record. */
     $Pairs: [
       4,

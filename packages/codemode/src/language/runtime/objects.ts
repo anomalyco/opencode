@@ -806,6 +806,10 @@ export class Bytes extends Wrapper {
   override iterator(builtins: Builtins) {
     return new Position(this, "values", builtins.Array)
   }
+  /** New bytes of this one's kind, as `slice`, `subarray`, `map` and `filter` make them (a Buffer's are a Buffer). */
+  derive(builtins: Builtins, bytes: Uint8Array): Bytes {
+    return new Bytes(builtins.Uint8Array, bytes)
+  }
 }
 
 /**
