@@ -26,8 +26,8 @@ export type Route = {
   delay?: number | ((entry: Logged, requests: Logged[]) => number)
   // Waits this long (ms) after answering before pushing `then`'s events.
   thenDelay?: number
-  // P-APP: answers only once a `{ release: path }` step names this route's path, so a checkpoint can see the client
-  // while it waits.
+  // Answers only once a `release` step names this route's path (P-APP's `{ release: path }`, P-PTY's
+  // `release: path`), so a scenario orders the answer after a state it observed.
   hold?: boolean
 }
 
@@ -61,6 +61,12 @@ export async function startFakeServer(options: Options = {}) {
   const events = options.fallback === "tui" ? createEventStream() : undefined
   const fallback = events ? createFetch(undefined, events).fetch : undefined
   const streams = new Set<ReadableStreamDefaultController<Uint8Array>>()
+  const released = new Set<string>()
+  const waiting: { path: string; go: () => void }[] = []
+  const release = (path: string) => {
+    released.add(path)
+    waiting.filter((held) => held.path === path).forEach((held) => held.go())
+  }
   const push = (events: unknown[]) =>
     events.forEach((event) => {
       if (event !== DROP) return streams.forEach((controller) => controller.enqueue(encode(event)))
@@ -81,6 +87,8 @@ export async function startFakeServer(options: Options = {}) {
           (route.query === undefined || Bun.deepEquals(route.query, entry.query)),
       )
       if (route) {
+        if (route.hold && !released.has(route.path))
+          await new Promise<void>((go) => waiting.push({ path: route.path, go }))
         const delay = typeof route.delay === "function" ? route.delay(entry, requests) : route.delay
         if (delay) await Bun.sleep(delay)
         const response = respond(route, streams, entry, requests)
@@ -104,9 +112,12 @@ export async function startFakeServer(options: Options = {}) {
     requests,
     // Pushes events to every open `events` stream, as a route's `then` does.
     push,
+    // Answers the held requests of the `hold` route with this path, and later ones at once.
+    release,
     // Pushes an event to the open `fallback: "tui"` stream.
     emit: (event: Parameters<NonNullable<typeof events>["emit"]>[0]) => events?.emit(event),
     async stop() {
+      waiting.forEach((held) => held.go())
       events?.disconnect()
       for (const controller of streams) controller.close()
       await server.stop(true)

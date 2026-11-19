@@ -2,12 +2,12 @@
 // The child's permission takes over; Allow once answers it under the child's session. The global form follows;
 // its answer goes to `session/global` with the location in a header, and the server's events take both away.
 //
-// The child's permission list is held 2 s, so both clients show the global form first (17 rows) and then shrink to
-// the permission (15). A split footer that shrinks keeps its top row and clears the freed rows below (Core 0.9.4 and
+// The child's permission list is held until each side has drawn the global form, so both show the form first (17
+// rows) and then shrink to the permission (15). A split footer that shrinks keeps its top row and clears the freed rows below (Core 0.9.4 and
 // OpenTUI's Rust crates). Without the hold, which comes first raced: a client that learned of the permission before
 // it drew the form never shrank, and its panel sat two rows lower.
 import { definePty } from "../../pty/run"
-import { config, leave, server } from "./fixture"
+import { CHILD_PERMISSIONS, config, leave, server } from "./fixture"
 
 const childPermission = {
   id: "per_child",
@@ -28,9 +28,16 @@ export default definePty({
   args: ["mini", "-s", "ses_mini"],
   cols: 80,
   rows: 24,
-  server: server({ childPermissions: [childPermission], childPermissionsDelay: 2000, globalForms: [globalForm] }),
+  server: server({ childPermissions: [childPermission], holdChildPermissions: true, globalForms: [globalForm] }),
   setup: (root) => config(root),
   steps: [
+    // The global form is drawn under the replayed transcript; then the child's permission list is answered.
+    {
+      until: { screen: /› check the tests[\s\S]*Connect the tracker/ },
+      settle: 800,
+      timeout: 30_000,
+      release: CHILD_PERMISSIONS,
+    },
     // The footer can show the permission before the replayed transcript is written, so wait for the transcript's
     // last row and the footer's.
     {
