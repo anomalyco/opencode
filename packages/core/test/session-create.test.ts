@@ -19,6 +19,7 @@ import { Instructions } from "@opencode/core/instructions/index"
 import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
 import { Project } from "@opencode/core/project"
+import { KV } from "@opencode/core/kv"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath, RelativePath } from "@opencode/core/schema"
@@ -100,7 +101,15 @@ const liveIt = testEffect(
 )
 const projectIt = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, Project.node, SessionProjector.node, SessionStore.node, Session.node]),
+    LayerNode.group([
+      Database.node,
+      Bus.node,
+      KV.node,
+      Project.node,
+      SessionProjector.node,
+      SessionStore.node,
+      Session.node,
+    ]),
     [
       Bus.node.replace(Bus.configured({ persist: true })),
       // Project adoption needs plain-prompt admission, not live plugin/provider startup.
@@ -305,7 +314,6 @@ describe("Session.create", () => {
       }),
     ),
   )
-
   ;["main", "main-copy"].forEach((renamed) =>
     projectIt.live(`keeps other clone sessions when ${renamed} changes origin`, () =>
       withTmp((directory) =>
@@ -359,23 +367,22 @@ describe("Session.create", () => {
     ),
   )
 
-  projectIt.live("keeps sessions when the origin changes without a cache marker", () =>
+  projectIt.live("recovers root-derived sessions without a marker or checkout record", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
         const session = yield* Session.Service
         const projects = yield* Project.Service
         const { db } = yield* Database.Service
         yield* Effect.promise(() => initRepo(directory))
-        yield* Effect.promise(() => $`git remote add origin git@github.com:owner/before.git`.cwd(directory).quiet())
-
         const before = yield* projects.resolve(AbsolutePath.make(directory))
         const created = yield* session.create({
           location: Location.Ref.make({ directory: AbsolutePath.make(directory) }),
           title: "Kept across origin change",
         })
-        // A checkout created before the marker writer existed has no cached project ID.
-        yield* Effect.promise(() => fs.rm(path.join(directory, ".git", "opencode"), { force: true }))
-        yield* Effect.promise(() => $`git remote set-url origin git@github.com:owner/after.git`.cwd(directory).quiet())
+        // Older installations only recorded the root-derived project, not its checkout identity.
+        const kv = yield* KV.Service
+        yield* kv.remove(`project.checkout:${before.directory}`)
+        yield* Effect.promise(() => $`git remote add origin git@github.com:owner/after.git`.cwd(directory).quiet())
 
         const after = yield* projects.resolve(AbsolutePath.make(directory))
         const adopted = yield* session.get(created.id)
@@ -391,12 +398,75 @@ describe("Session.create", () => {
           projectID: after.id,
           location: { directory: AbsolutePath.make(directory) },
         })
-        expect(yield* Effect.promise(() => Bun.file(path.join(directory, ".git", "opencode")).text())).toBe(after.id)
+        expect(yield* Effect.promise(() => Bun.file(path.join(directory, ".git", "opencode")).exists())).toBe(false)
         expect(emitted.filter((event) => event.type === "worktree.resolved.1")).toHaveLength(1)
 
         yield* projects.resolve(AbsolutePath.make(directory))
         expect(yield* session.get(created.id)).toMatchObject({ projectID: after.id })
       }),
+    ),
+  )
+
+  projectIt.live("recovers an origin change after rebuilding the project service", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => initRepo(directory))
+        yield* Effect.promise(() => $`git remote add origin git@github.com:owner/before.git`.cwd(directory).quiet())
+        const sessions = yield* Session.Service
+        const created = yield* sessions.create({
+          location: Location.Ref.make({ directory: AbsolutePath.make(directory) }),
+        })
+        const database = yield* Database.Service
+        const bus = yield* Bus.Service
+        yield* Effect.promise(() => $`git remote set-url origin git@github.com:owner/after.git`.cwd(directory).quiet())
+
+        const after = yield* Effect.gen(function* () {
+          const projects = yield* Project.Service
+          return yield* projects.resolve(AbsolutePath.make(directory))
+        }).pipe(
+          Effect.provide(
+            AppNodeBuilder.build(Project.node, [
+              Database.node.replace(Layer.succeed(Database.Service, database)),
+              Bus.node.replace(Layer.succeed(Bus.Service, bus)),
+            ]),
+          ),
+        )
+
+        expect(after.id).not.toBe(created.projectID)
+        expect(yield* sessions.get(created.id)).toMatchObject({ projectID: after.id })
+      }),
+    ),
+  )
+  ;[true, false].forEach((recorded) =>
+    projectIt.live(`does not adopt a replaced repository (checkout record: ${recorded})`, () =>
+      withTmp((directory) =>
+        Effect.gen(function* () {
+          const checkout = AbsolutePath.make(path.join(directory, "checkout"))
+          yield* Effect.promise(() => initRepo(checkout))
+          yield* Effect.promise(() => $`git remote add origin git@github.com:owner/before.git`.cwd(checkout).quiet())
+          const projects = yield* Project.Service
+          const sessions = yield* Session.Service
+          const created = yield* sessions.create({ location: Location.Ref.make({ directory: checkout }) })
+          const before = yield* projects.resolve(checkout)
+          const kv = yield* KV.Service
+          if (!recorded) yield* kv.remove(`project.checkout:${before.directory}`)
+
+          yield* Effect.promise(async () => {
+            await fs.rename(checkout, path.join(directory, "original"))
+            await initGit(checkout)
+            await $`git commit --allow-empty -m unrelated-root`.cwd(checkout).quiet()
+            await $`git remote add origin git@github.com:owner/unrelated.git`.cwd(checkout).quiet()
+          })
+          const after = yield* projects.resolve(checkout)
+          expect(after.id).not.toBe(before.id)
+          expect(yield* sessions.get(created.id)).toMatchObject({
+            projectID: before.id,
+            location: { directory: checkout },
+            time: { updated: created.time.updated },
+          })
+          expect((yield* sessions.list({ project: after.id })).data).toHaveLength(0)
+        }),
+      ),
     ),
   )
 

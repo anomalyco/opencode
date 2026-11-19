@@ -18,6 +18,7 @@ import { ProjectTable, upsertProject } from "./project/sql.js"
 import { ProjectIcon } from "./project/icon.js"
 import { WorktreeTable } from "./worktree/sql.js"
 import { SessionTable } from "./session/sql.js"
+import { KV } from "./kv.js"
 
 export const ID = ProjectSchema.ID
 export type ID = ProjectSchema.ID
@@ -40,6 +41,8 @@ export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Project.
 
 export interface Resolved {
   readonly previous?: ID
+  /** Git root commit used to verify checkout continuity during adoption. */
+  readonly root?: ID
   readonly id: ID
   readonly directory: AbsolutePath
   // This checkout's main directory; the stored project canonical may be another clone.
@@ -66,6 +69,7 @@ export const root = Effect.fn("Project.root")(
 
 export const ACTIVATE_INTERVAL = 60_000
 const SWEEP_INTERVAL = Duration.hours(1)
+const Checkout = Schema.Struct({ root: ID, projectID: ID })
 
 export interface Options {
   readonly now?: () => number
@@ -136,6 +140,7 @@ const layer = Layer.effect(
     const proc = yield* AppProcess.Service
     const bus = yield* Bus.Service
     const db = (yield* Database.Service).db
+    const kv = yield* KV.Service
     const scope = yield* Scope.Scope
 
     const announcing = new Set<string>()
@@ -193,11 +198,6 @@ const layer = Layer.effect(
         Effect.ignoreCause,
         Effect.forkIn(scope),
       )
-      // The marker is the durable link between a directory and the project ID it had
-      // before an origin change. Existing checkouts may predate the writer, so the
-      // directory history below is also used for adoption.
-      if (project.vcs && project.id !== ID.global && project.previous !== project.id)
-        yield* fs.writeFileString(path.join(project.vcs.store, "opencode"), project.id).pipe(Effect.ignore)
       if (!project.vcs) return project
       const directories: Array<{ projectID: ID; directory: AbsolutePath; strategy?: Worktree.StrategyID }> = [
         { projectID: project.id, directory: project.canonical },
@@ -224,87 +224,86 @@ const layer = Layer.effect(
             .where(and(eq(WorktreeTable.project_id, item.projectID), eq(WorktreeTable.directory, item.directory)))
             .get()
             .pipe(Effect.orDie)
-          const directory = AbsolutePath.make(yield* fs.resolve(item.directory))
-          // A directory keeps its sessions across origin changes. The marker is
-          // preferred, but checkouts created before the writer existed only have
-          // project/worktree rows to identify their previous IDs.
-          const history = yield* db
-            .select({ id: WorktreeTable.project_id })
-            .from(WorktreeTable)
-            .innerJoin(ProjectTable, eq(WorktreeTable.project_id, ProjectTable.id))
-            .where(
-              and(
-                eq(WorktreeTable.directory, directory),
-                isNotNull(ProjectTable.vcs),
-                isNull(ProjectTable.time_archived),
-              ),
-            )
-            .all()
-            .pipe(Effect.orDie)
-          const canonical = yield* db
-            .select({ id: ProjectTable.id })
-            .from(ProjectTable)
-            .where(
-              and(
-                eq(ProjectTable.worktree, directory),
-                isNotNull(ProjectTable.vcs),
-                isNull(ProjectTable.time_archived),
-              ),
-            )
-            .all()
-            .pipe(Effect.orDie)
-          const markerless = yield* db
-            .select({ id: ProjectTable.id, directory: ProjectTable.worktree })
-            .from(ProjectTable)
-            .where(
-              and(
-                isNull(ProjectTable.vcs),
-                gte(ProjectTable.worktree, directory),
-                lte(ProjectTable.worktree, AbsolutePath.make(directory + "\uffff")),
-              ),
-            )
-            .all()
-            .pipe(Effect.orDie)
-          const adopted = yield* Effect.filter(markerless, (candidate) =>
-            Effect.gen(function* () {
-              if (candidate.id === item.projectID) return false
-              if (!FSUtil.contains(directory, candidate.directory)) return false
-              const found = yield* fs
-                .up({ targets: [".git", ".hg"], start: candidate.directory, stop: directory, mode: "first" })
-                .pipe(Effect.orElseSucceed(() => []))
-              if (!found[0]) return false
-              return (yield* fs.resolve(path.dirname(found[0]))) === directory
-            }),
-          )
-          const adoptedIDs = [
-            ...new Set([
-              ...history.map((row) => row.id),
-              ...canonical.map((row) => row.id),
-              ...adopted.map((candidate) => candidate.id),
-            ]),
-          ].filter((id) => id !== item.projectID && id !== ID.global)
-          const candidates = [...new Set([project.previous ?? ID.global, ...adoptedIDs])].filter(
+          const key = `project.checkout:${item.directory}`
+          const value = project.root ? yield* kv.get(key) : undefined
+          const checkout = Schema.is(Checkout)(value) ? value : undefined
+          if (stored && checkout?.root === project.root && checkout?.projectID === item.projectID) return
+          // A path can be reused by an unrelated repository. Only a recorded
+          // matching root, or the root-derived ID itself, proves continuity.
+          const identities = project.root
+            ? [...new Set([project.root, ...(checkout?.root === project.root ? [checkout.projectID] : [])])].filter(
+                (id) => id !== item.projectID && id !== ID.global,
+              )
+            : []
+          const history = identities.length
+            ? yield* db
+                .select({ id: ProjectTable.id })
+                .from(ProjectTable)
+                .where(
+                  and(
+                    inArray(ProjectTable.id, identities),
+                    eq(ProjectTable.vcs, "git"),
+                    isNull(ProjectTable.time_archived),
+                  ),
+                )
+                .all()
+                .pipe(
+                  Effect.orDie,
+                  Effect.map((rows) => rows.map((row) => row.id)),
+                )
+            : []
+          const candidates = [...new Set([project.previous ?? ID.global, ...history])].filter(
             (id) => id !== item.projectID,
           )
-          if (stored && !(yield* hasSessionsToAdopt(candidates, directory))) return
-          yield* bus.publish(
-            Worktree.Event.Resolved,
-            {
-              projectID: item.projectID,
-              directory: item.directory,
-              previous: project.previous ?? ID.global,
-              ...(adoptedIDs.length ? { adopted: adoptedIDs } : {}),
-            },
-            {
-              commit: () =>
-                db
-                  .insert(WorktreeTable)
-                  .values({ project_id: item.projectID, directory: item.directory, strategy: item.strategy })
-                  .onConflictDoNothing()
-                  .run()
-                  .pipe(Effect.orDie, Effect.asVoid),
-            },
-          )
+          const changed = history.length > 0 || (project.previous !== undefined && project.previous !== item.projectID)
+          if (!stored || (changed && (yield* hasSessionsToAdopt(candidates, item.directory)))) {
+            const directory = AbsolutePath.make(yield* fs.resolve(item.directory))
+            const markerless = yield* db
+              .select({ id: ProjectTable.id, directory: ProjectTable.worktree })
+              .from(ProjectTable)
+              .where(
+                and(
+                  isNull(ProjectTable.vcs),
+                  gte(ProjectTable.worktree, directory),
+                  lte(ProjectTable.worktree, AbsolutePath.make(directory + "\uffff")),
+                ),
+              )
+              .all()
+              .pipe(Effect.orDie)
+            const adopted = yield* Effect.filter(markerless, (candidate) =>
+              Effect.gen(function* () {
+                if (candidate.id === item.projectID) return false
+                if (!FSUtil.contains(directory, candidate.directory)) return false
+                const found = yield* fs
+                  .up({ targets: [".git", ".hg"], start: candidate.directory, stop: directory, mode: "first" })
+                  .pipe(Effect.orElseSucceed(() => []))
+                if (!found[0]) return false
+                return (yield* fs.resolve(path.dirname(found[0]))) === directory
+              }),
+            )
+            const adoptedIDs = [...new Set([...history, ...adopted.map((candidate) => candidate.id)])].filter(
+              (id) => id !== item.projectID && id !== ID.global,
+            )
+            yield* bus.publish(
+              Worktree.Event.Resolved,
+              {
+                projectID: item.projectID,
+                directory: item.directory,
+                previous: project.previous ?? ID.global,
+                ...(adoptedIDs.length ? { adopted: adoptedIDs } : {}),
+              },
+              {
+                commit: () =>
+                  db
+                    .insert(WorktreeTable)
+                    .values({ project_id: item.projectID, directory: item.directory, strategy: item.strategy })
+                    .onConflictDoNothing()
+                    .run()
+                    .pipe(Effect.orDie, Effect.asVoid),
+              },
+            )
+          }
+          if (project.root) yield* kv.set(key, { root: project.root, projectID: item.projectID })
         }).pipe(Effect.ensuring(Effect.sync(() => announcing.delete(key))))
       }
       return project
@@ -424,10 +423,8 @@ const layer = Layer.effect(
           return value
         })
       const previous = yield* cached(repo.commonDirectory)
-      const id =
-        (yield* remote(repo).pipe(fallback(undefined))) ??
-        previous ??
-        (yield* rootCommit(repo).pipe(fallback(undefined)))
+      const root = yield* rootCommit(repo).pipe(fallback(undefined))
+      const id = (yield* remote(repo).pipe(fallback(undefined))) ?? previous ?? root
       const canonical =
         repo.gitDirectory === repo.commonDirectory
           ? repo.worktree
@@ -437,6 +434,7 @@ const layer = Layer.effect(
             )
       const resolved: Resolved = {
         previous,
+        root,
         id: id ?? ID.global,
         directory: repo.worktree,
         canonical,
@@ -575,7 +573,7 @@ export function configured(options?: Options) {
   return makeGlobalNode({
     service: Service,
     layer: options?.now ? layer.pipe(Layer.provide(Layer.succeed(Now, options.now))) : layer,
-    deps: [Bus.node, Database.node, FSUtil.node, Git.node, AppProcess.node],
+    deps: [Bus.node, Database.node, KV.node, FSUtil.node, Git.node, AppProcess.node],
   })
 }
 

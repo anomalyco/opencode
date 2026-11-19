@@ -3,6 +3,7 @@ import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
 import { Effect, Layer, Stream } from "effect"
+import { Statement } from "effect/sql"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
@@ -549,19 +550,34 @@ describe("Project.resolve", () => {
 
       expect(result.previous).toBe(Project.ID.make("old-id"))
       expect(result.id).toBe(remoteID("github.com/owner/repo"))
-      expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, ".git", "opencode")).text())).toBe(result.id)
     }),
   )
 
-  it.live("writes the resolved project id to the cache while resolving", () =>
+  it.live("does not write the cache while resolving", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped()
       yield* Effect.promise(() => initRepo(tmp.path, { commit: true, remote: "git@github.com:owner/repo.git" }))
       const project = yield* Project.Service
 
-      const result = yield* project.resolve(abs(tmp.path))
+      yield* project.resolve(abs(tmp.path))
 
-      expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, ".git", "opencode")).text())).toBe(result.id)
+      expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, ".git", "opencode")).exists())).toBe(false)
+    }),
+  )
+
+  it.live("returns to the root-derived identity after removing origin", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* Effect.promise(() => initRepo(tmp.path, { commit: true, remote: "git@github.com:owner/repo.git" }))
+      const project = yield* Project.Service
+      expect((yield* project.resolve(abs(tmp.path))).id).toBe(remoteID("github.com/owner/repo"))
+
+      yield* Effect.promise(() => $`git remote remove origin`.cwd(tmp.path).quiet())
+
+      expect((yield* project.resolve(abs(tmp.path))).id).toBe(
+        Project.ID.make(yield* Effect.promise(() => rootCommit(tmp.path))),
+      )
+      expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, ".git", "opencode")).exists())).toBe(false)
     }),
   )
 
@@ -711,10 +727,23 @@ describe("Project.resolve", () => {
         expect((yield* project.resolve(abs(nested))).id).toBe(rootSha)
         expect(spawns()).toBeGreaterThan(0)
 
-        // The first resolve writes .git/opencode, so the next lookup warms the new fingerprint.
-        expect((yield* project.resolve(abs(nested))).id).toBe(rootSha)
         const before = spawns()
-        expect((yield* project.resolve(abs(nested))).id).toBe(rootSha)
+        const queries: string[] = []
+        expect(
+          (yield* project.resolve(abs(nested)).pipe(
+            Effect.provideService(Statement.CurrentTransformer, (statement) => {
+              queries.push(statement.compile()[0])
+              return Effect.succeed(statement)
+            }),
+          )).id,
+        ).toBe(rootSha)
+        expect(queries.some((query) => query.includes('from "worktree"'))).toBe(true)
+        expect(
+          queries.some(
+            (query) =>
+              query.startsWith("select") && (query.includes('from "session_v2"') || query.includes('"vcs" is null')),
+          ),
+        ).toBe(false)
         expect((yield* project.resolve(abs(tmp.path))).id).toBe(rootSha)
         expect(spawns()).toBe(before)
 
