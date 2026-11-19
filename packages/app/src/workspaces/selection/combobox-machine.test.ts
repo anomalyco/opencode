@@ -27,6 +27,7 @@ const windows: PickerComboboxContext = {
   root: "C:\\Users\\luke\\src",
   fallback: "C:\\Users\\luke",
   locationDirectory: "C:\\Users\\luke\\src",
+  committed: "",
 }
 
 const key = (name: string, options: { shiftKey?: boolean; composing?: boolean } = {}): PickerComboboxEvent => ({
