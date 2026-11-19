@@ -112,6 +112,10 @@ impl Reasoning {
         let start = time.map_or(message.time.created, |time| time.created);
         self.0.markdown.conceal(cx.conceal);
         let mut state = self.0.state.borrow_mut();
+        // `ReasoningBody streaming={!isDone()}`: a finished thought's last line is final (#63989).
+        if state.content.is_empty() || state.done != done {
+            self.0.markdown.streaming(!done);
+        }
         if state.content != content {
             self.0.markdown.set_markdown(content.as_str());
             state.content = content;
