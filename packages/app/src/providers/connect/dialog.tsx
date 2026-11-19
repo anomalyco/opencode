@@ -289,7 +289,8 @@ const METHOD_ICON = {
   external: "server",
 } as const satisfies Record<ProviderConnectMethod["type"], string>
 
-// The TUI's integration groups and order, with connected integrations pulled up into their own group first.
+// The TUI's integration groups, with connected integrations pulled up into their own group first. Unlike the TUI,
+// Go comes before Console here.
 const POPULAR = ["opencode-go", "opencode", "openai", "github-copilot", "anthropic", "google"]
 
 const PROVIDER_NOTES: Record<string, "dialog.provider.opencodeGo.tagline" | "dialog.provider.opencode.note"> = {
@@ -450,7 +451,7 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
                           </Show>
                           <Show when={!disabled(provider) && !account() && PROVIDER_NOTES[provider.id]}>
                             {(key) => (
-                              <span class="min-w-0 truncate font-[440] text-v2-text-text-muted">
+                              <span class="min-w-0 shrink-[999] truncate font-[440] text-v2-text-text-muted">
                                 {language.t(key())}
                               </span>
                             )}
