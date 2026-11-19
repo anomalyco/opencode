@@ -822,19 +822,17 @@ fn recolor(mut syntax: SyntaxTheme, color: Color) -> SyntaxTheme {
     syntax
 }
 
-/// `getFittedSize`: the largest cell rectangle of the image's aspect within `width` by `height`, with cells twice
-/// as tall as wide.
+/// Core's `getFittedSize` for fit `"fit"`: the largest cell rectangle of the image's aspect within `width` by
+/// `height`. TS also clamps the target to the image's pixel size and takes the cell aspect from the terminal's pixel
+/// resolution. OpenTUI's Rust host keeps that resolution in the native session and exposes none, so this is what TS
+/// does without one: no clamp, and cells twice as tall as wide.
 pub fn fit_image(pixels_wide: u32, pixels_high: u32, width: u32, height: u32) -> (u32, u32) {
     if pixels_wide == 0 || pixels_high == 0 || width == 0 || height == 0 {
         return (0, 0);
     }
-    let aspect = f64::from(pixels_high) / f64::from(pixels_wide) / 2.0;
-    let lines = (f64::from(width) * aspect).round().max(1.0);
-    if lines <= f64::from(height) {
-        return (width, lines as u32);
-    }
-    let cells = (f64::from(height) / aspect).round().clamp(1.0, f64::from(width));
-    (cells as u32, height)
+    let aspect = f64::from(pixels_wide) / f64::from(pixels_high) * 2.0;
+    let scale = (f64::from(width) / aspect).min(f64::from(height));
+    ((aspect * scale).round().max(1.0) as u32, scale.round().max(1.0) as u32)
 }
 
 /// `staticBody`: a completed tool's output already spaced from its title drops its leading newline.
@@ -1016,6 +1014,8 @@ mod tests {
         assert_eq!(fit_image(200, 100, 40, 30), (40, 10));
         assert_eq!(fit_image(100, 400, 40, 30), (15, 30));
         assert_eq!(fit_image(0, 10, 40, 30), (0, 0));
+        // 40 columns would take 10.4 rows, more than the 10 left, so the rows bound it and it narrows, as in Core.
+        assert_eq!(fit_image(100, 52, 40, 10), (38, 10));
     }
 
     #[test]
