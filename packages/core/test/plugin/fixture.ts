@@ -35,6 +35,7 @@ import { SharedCache } from "@opencode/core/shared-cache"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
+import { LocationPin } from "@opencode/core/location-pin"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Permission } from "@opencode/core/permission"
 import { Reference } from "@opencode/core/reference"
@@ -136,6 +137,7 @@ export const makePluginTestLayer = (permission = permissionLayer, generate = gen
       InstructionEntry.node,
       PersistentPty.node,
       LocationServiceMap.node,
+      LocationPin.node,
       Permission.node,
       PluginHooks.node,
       Reference.node,

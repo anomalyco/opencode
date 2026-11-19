@@ -8,6 +8,8 @@ import { Config } from "@opencode/core/config"
 import { Credential } from "@opencode/core/credential"
 import { Flag } from "@opencode/core/flag"
 import { Integration } from "@opencode/core/integration"
+import { Location } from "@opencode/core/location"
+import { LocationPin } from "@opencode/core/location-pin"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginHost } from "@opencode/core/plugin/host"
@@ -151,10 +153,16 @@ describe("OpencodePlugin task claims", () => {
         const host = yield* start(console)
         const claiming = yield* host.session.create({})
         const other = yield* host.session.create({})
+        const pins = yield* LocationPin.Service
+        const location = yield* Location.Service
+        const here = { directory: location.directory, workspaceID: location.workspaceID }
         console.state.lease = 5
+        expect(yield* pins.pinned(here)).toBe(false)
         yield* claim(claiming.id)
         // Only Console's own claim tool counts.
         yield* claim(other.id, "linear_claim_task")
+        // Pinned while a claim is held, so idle eviction or a restart doesn't stop the renewals.
+        expect(yield* pins.pinned(here)).toBe(true)
 
         yield* until(console, 1)
         expect(console.state.requests).toEqual([
@@ -164,6 +172,7 @@ describe("OpencodePlugin task claims", () => {
         yield* until(console, 2)
         yield* pass(console, 6)
         expect(sent(console, OpencodeTasks.RENEW_PATH)).toEqual([claiming.id, claiming.id])
+        expect(yield* pins.pinned(here)).toBe(false)
       }),
     ),
   )

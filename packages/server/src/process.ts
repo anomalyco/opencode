@@ -3,6 +3,7 @@ export * as ServerProcess from "./process"
 import { NodeHttpServer } from "@effect/platform-node"
 import { Bus } from "@opencode/core/bus"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
+import { LocationActivity } from "@opencode/core/location-activity"
 import { Automation } from "@opencode/core/automation"
 import { InstallationEvent } from "@opencode/schema/installation-event"
 import { hasPtyConnectTicketURL } from "@opencode/protocol/groups/pty"
@@ -111,7 +112,10 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
       applicationScope,
     )
     if (lifecycle) {
-      yield* installRestartContinuity(Context.get(context, SessionRestart.Service)).pipe(
+      yield* installRestartContinuity(
+        Context.get(context, SessionRestart.Service),
+        Context.get(context, LocationActivity.Service),
+      ).pipe(
         Effect.provideService(Scope.Scope, applicationScope),
       )
     }
@@ -247,6 +251,11 @@ function unavailable(status: Status.State) {
  * never released. Claims are written when execution starts (see SessionExecution), so recovery covers
  * graceful restarts and unclean deaths alike — no shutdown hook participates.
  */
-const installRestartContinuity = Effect.fnUntraced(function* (restart: SessionRestart.Interface) {
+const installRestartContinuity = Effect.fnUntraced(function* (
+  restart: SessionRestart.Interface,
+  activity: LocationActivity.Service["Service"],
+) {
   yield* Effect.forkScoped(restart.resumeSuspendedSessions)
+  // Locations whose plugins keep background work going, such as Console task claims, load without a request.
+  yield* Effect.forkScoped(activity.resumePinned)
 })

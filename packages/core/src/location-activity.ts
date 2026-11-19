@@ -7,6 +7,7 @@ import { Config } from "./config.js"
 import { Job } from "./job.js"
 import { Location } from "./location.js"
 import { LocationLifecycle } from "./location-lifecycle.js"
+import { LocationPin } from "./location-pin.js"
 import { LocationServiceMap } from "./location-service-map.js"
 import { SessionEvent } from "./session/event.js"
 import { SessionExecution } from "./session/execution.js"
@@ -15,7 +16,17 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 
 const isSessionEvent = Schema.is(SessionEvent.Durable)
 
-export class Service extends Context.Service<Service, {}>()("@opencode/LocationActivity") {}
+export class Service extends Context.Service<
+  Service,
+  {
+    /**
+     * Loads every pinned Location (`LocationPin`), so its plugins start as on a client's first request, without waiting
+     * for them. Inert until called: the managed server calls it at boot, beside restart continuity; embedders may call
+     * it from their own start-up.
+     */
+    readonly resumePinned: Effect.Effect<void>
+  }
+>()("@opencode/LocationActivity") {}
 
 export function layer(options: { readonly timeToLive?: Duration.Input; readonly sweepInterval?: Duration.Input } = {}) {
   return Layer.effect(
@@ -27,6 +38,7 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
       const execution = yield* SessionExecution.Service
       const jobs = yield* Job.Service
       const sessions = yield* SessionStore.Service
+      const pins = yield* LocationPin.Service
       const timeToLive = Duration.fromInputUnsafe(options.timeToLive ?? "60 minutes")
       const entries = new Map<string, { readonly ref: Location.Ref; touchedAt: number }>()
       const key = (ref: Location.Ref) => `${LocationServiceMap.canonical(ref).directory}\0${ref.workspaceID ?? ""}`
@@ -106,7 +118,9 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
           expired,
           (entry) =>
             Effect.gen(function* () {
-              if (occupied.has(key(entry.ref)) || (yield* retained(entry.ref))) return yield* touch(entry.ref)
+              // A pinned Location keeps background work going for sessions nobody is looking at.
+              if (occupied.has(key(entry.ref)) || (yield* retained(entry.ref)) || (yield* pins.pinned(entry.ref)))
+                return yield* touch(entry.ref)
               entries.delete(key(entry.ref))
               yield* Effect.logInfo("location services evicted", {
                 directory: entry.ref.directory,
@@ -118,7 +132,24 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
         )
       }).pipe(Effect.forever, Effect.forkScoped)
 
-      return Service.of({})
+      return Service.of({
+        resumePinned: Effect.gen(function* () {
+          yield* Effect.forEach(
+            yield* pins.list,
+            (ref) =>
+              Effect.scoped(locations.contextEffect(ref)).pipe(
+                Effect.tap(() => Effect.logInfo("pinned location loaded", { directory: ref.directory })),
+                Effect.catch((error) =>
+                  Effect.logWarning("failed to load a pinned location", { directory: ref.directory, error }),
+                ),
+                Effect.catchDefect((defect) =>
+                  Effect.logWarning("failed to load a pinned location", { directory: ref.directory, defect }),
+                ),
+              ),
+            { concurrency: 4, discard: true },
+          )
+        }),
+      })
     }),
   )
 }
@@ -126,5 +157,5 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
 export const node = makeGlobalNode({
   service: Service,
   layer: layer(),
-  deps: [Bus.node, Job.node, LocationServiceMap.node, SessionExecution.node, SessionStore.node],
+  deps: [Bus.node, Job.node, LocationPin.node, LocationServiceMap.node, SessionExecution.node, SessionStore.node],
 })

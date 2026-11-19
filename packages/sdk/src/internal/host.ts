@@ -3,6 +3,7 @@ export * as EmbeddedHost from "./host"
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
 import type { Plugin } from "@opencode/plugin/effect/plugin"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
+import { LocationActivity } from "@opencode/core/location-activity"
 import { Session } from "@opencode/core/session"
 import { Workspace } from "@opencode/core/workspace"
 import { WorkspaceDriver } from "@opencode/core/workspace/driver"
@@ -54,6 +55,7 @@ export const create = Effect.fn("EmbeddedHost.create")(function* <R = never>(
     // The sweep is a no-op when nothing is suspended. ManagedRuntime owns the
     // fiber so recovery never delays startup but still stops with the host.
     runtime.runFork(Context.get(services, SessionRestart.Service).resumeSuspendedSessions)
+    runtime.runFork(Context.get(services, LocationActivity.Service).resumePinned)
     const handler = HttpEffect.toWebHandlerWith<never, HttpServerRequest.HttpServerRequest | Scope.Scope>(
       context(services),
     )(Context.get(services, HttpRouter.HttpRouter).asHttpEffect())

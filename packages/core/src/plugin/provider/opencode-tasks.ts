@@ -4,6 +4,7 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import { Session } from "@opencode/schema/session"
 import { Duration, Effect, Exit, FiberHandle, Option, Predicate, Random, Schema, Scope, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
+import type { LocationPin } from "../../location-pin.js"
 import type { OpencodeWatches } from "./opencode-watches.js"
 
 /** Console's config names its own MCP server `opencode_console`; its `claim_task` claims a task for the calling session. */
@@ -19,6 +20,8 @@ export const MAX_INTERVAL = Duration.minutes(10)
 const RETRY = Duration.seconds(30)
 const TIMEOUT = Duration.seconds(10)
 const prefix = "task-claims:"
+/** Pins this Location while its sessions hold claims. */
+export const PIN_OWNER = "opencode.console-tasks"
 const Stored = Schema.Struct({ console: Schema.String })
 const decodeStored = Schema.decodeUnknownOption(Stored)
 const Renewed = Schema.Struct({ renewed: Schema.Number, leaseMinutes: Schema.Number })
@@ -41,14 +44,21 @@ export const interval = (leaseMinutes: number) =>
 /**
  * Keeps the Console task claims of this Location's sessions alive: while a session that claimed a task exists and isn't
  * archived, its claims are renewed in the background, and archiving or deleting it releases them. It never reaches the
- * model. Claims are remembered across restarts, so a session left idle keeps its tasks.
+ * model. Claims are remembered across restarts, so a session left idle keeps its tasks: while it holds claims its
+ * Location stays pinned, so idle eviction doesn't stop the renewals and the server loads it again at boot.
  */
-export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.HttpClient) {
+export const make = Effect.fnUntraced(function* (
+  ctx: Context,
+  http: HttpClient.HttpClient,
+  pins: LocationPin.Interface,
+) {
   const scope = yield* Scope.Scope
   let current: { console: OpencodeWatches.Console; readonly lease: Scope.Closeable } | undefined
   // The sessions that may hold claims; Console's answer to a renewal says when one no longer does.
   const claimed = new Set<string>()
   let leaseMinutes = MIN_LEASE_MINUTES
+  const here = { directory: ctx.location.directory, workspaceID: ctx.location.workspaceID }
+  const pinning = Effect.suspend(() => (claimed.size > 0 ? pins.pin(PIN_OWNER, here) : pins.unpin(PIN_OWNER, here)))
 
   const call = (path: string, sessionID: string) =>
     Effect.gen(function* () {
@@ -65,6 +75,7 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
     Effect.gen(function* () {
       claimed.delete(sessionID)
       yield* ctx.storage.remove(prefix + sessionID)
+      yield* pinning
     })
 
   // A 404 is a workspace with Tasks off, and a 403 a sign-in that keeps no list: neither has claims to release.
@@ -147,12 +158,15 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
       )
     })
     owned.filter((sessionID) => sessionID !== undefined).forEach((sessionID) => claimed.add(sessionID))
+    yield* pinning
     if (claimed.size > 0) yield* round.pipe(Effect.andThen(ensure), Effect.forkIn(lease, { startImmediately: true }))
 
     yield* ctx.tool.hook("execute.after", (event) => {
       if (event.status !== "completed" || event.tool !== CLAIM_TOOL) return Effect.void
       claimed.add(event.sessionID)
-      return ctx.storage.set(prefix + event.sessionID, { console: key }).pipe(Effect.andThen(ensure), Effect.asVoid)
+      return ctx.storage
+        .set(prefix + event.sessionID, { console: key })
+        .pipe(Effect.andThen(pinning), Effect.andThen(ensure), Effect.asVoid)
     })
     // Every Location hears every archive and deletion; only the one whose session claimed releases.
     yield* ctx.event.subscribe({ types: ["session.archived", "session.deleted"] }).pipe(
@@ -180,6 +194,7 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
       yield* Scope.close(current.lease, Exit.void)
       current = undefined
       claimed.clear()
+      yield* pinning
     }
     if (!next) return
     const lease = yield* Scope.fork(scope)

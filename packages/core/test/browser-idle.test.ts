@@ -10,6 +10,7 @@ import { Database } from "@opencode/core/database/database"
 import { Location } from "@opencode/core/location"
 import { Job } from "@opencode/core/job"
 import { LocationActivity } from "@opencode/core/location-activity"
+import { LocationPin } from "@opencode/core/location-pin"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { Plugin } from "@opencode/core/plugin"
 import { Rpc } from "@opencode/core/rpc"
@@ -50,7 +51,7 @@ const it = testEffect(
           layer: LocationActivity.layer({ timeToLive, sweepInterval: "100 millis" }).pipe(
             Layer.provide(Layer.succeed(Clock.Clock, activityClock)),
           ),
-          deps: [Bus.node, Job.node, LocationServiceMap.node, SessionExecution.node, SessionStore.node],
+          deps: [Bus.node, Job.node, LocationPin.node, LocationServiceMap.node, SessionExecution.node, SessionStore.node],
         }),
       ),
     ],

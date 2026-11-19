@@ -12,6 +12,7 @@ import { Form } from "@opencode/core/form"
 import { Job } from "@opencode/core/job"
 import { Location } from "@opencode/core/location"
 import { LocationActivity } from "@opencode/core/location-activity"
+import { LocationPin } from "@opencode/core/location-pin"
 import { LocationServiceMap, type LocationServices } from "@opencode/core/location-services"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
@@ -110,6 +111,7 @@ const it = testEffect(
       LocationServiceMap.node,
       SessionExecution.node,
       LocationActivity.node,
+      LocationPin.node,
     ]),
     [
       LocationServiceMap.node.replace(
@@ -286,6 +288,26 @@ describe("LocationActivity eviction", () => {
         )
       }),
     )
+
+  it.effect("keeps a pinned location loaded however long it idles, and lets it go once unpinned", () =>
+    Effect.gen(function* () {
+      const map = yield* LocationServiceMap.Service
+      const pins = yield* LocationPin.Service
+      const pinned = Location.Ref.make({ directory: AbsolutePath.make("/pinned") })
+      const idle = Location.Ref.make({ directory: AbsolutePath.make("/idle") })
+      yield* Location.Service.pipe(Effect.provide(map.get(pinned)), Effect.scoped)
+      yield* Location.Service.pipe(Effect.provide(map.get(idle)), Effect.scoped)
+      yield* pins.pin("test", pinned)
+
+      yield* TestClock.adjust("1 minute")
+      yield* TestClock.adjust("3 hours")
+      expect(Array.from(yield* RcMap.keys(map.rcMap))).toEqual([pinned])
+
+      yield* pins.unpin("test", pinned)
+      yield* TestClock.adjust("62 minutes")
+      expect(Array.from(yield* RcMap.keys(map.rcMap))).toEqual([])
+    }),
+  )
 
   it.effect("refreshes inactivity deadline for session events with non-canonical location refs", () =>
     Effect.gen(function* () {

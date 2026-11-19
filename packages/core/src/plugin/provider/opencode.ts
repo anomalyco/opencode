@@ -23,6 +23,7 @@ import { Credential } from "../../credential.js"
 import { Flag } from "../../flag.js"
 import { InstructionDiscovery } from "../../instruction-discovery.js"
 import { Integration } from "../../integration.js"
+import { LocationPin } from "../../location-pin.js"
 import { IntegrationConnection } from "../../integration/connection.js"
 import { Provider } from "../../provider.js"
 import { AbsolutePath } from "../../schema.js"
@@ -188,6 +189,7 @@ export const OpencodePlugin = define<
   | Config.Service
   | Flag.Service
   | InstructionDiscovery.Service
+  | LocationPin.Service
   | SharedCache.Service
   | Skill.Service
   | Scope.Scope
@@ -225,7 +227,7 @@ export const OpencodePlugin = define<
     let explainers: Effect.Success<ReturnType<typeof ctx.session.hook>>[] = []
     const watches = yield* OpencodeWatches.make(ctx, http)
     const artifacts = yield* OpencodeArtifacts.make(ctx, http)
-    const tasks = yield* OpencodeTasks.make(ctx, http)
+    const tasks = yield* OpencodeTasks.make(ctx, http, yield* LocationPin.Service)
     // `console_tasks: false` in this installation's config keeps the Console's task list away: no task tools, no claim
     // renewals. Console's own document never decides it; the member's choice in Console is Console's to apply.
     const tasksSetting = config.entries().pipe(

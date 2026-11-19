@@ -57,6 +57,7 @@ import { InstructionDiscovery } from "../instruction-discovery.js"
 import { Integration } from "../integration.js"
 import { Job } from "../job.js"
 import { KV } from "../kv.js"
+import { LocationPin } from "../location-pin.js"
 import { Location } from "../location.js"
 import { ModelsDev } from "../models-dev.js"
 import { Mcp } from "../mcp/index.js"
@@ -153,6 +154,7 @@ const services = [
   Integration.Service,
   Job.Service,
   KV.Service,
+  LocationPin.Service,
   LLMClient.Service,
   Location.Service,
   ModelsDev.Service,
@@ -216,6 +218,7 @@ export const requirements = LayerNode.group([
   Job.node,
   Shell.daemonNode,
   KV.node,
+  LocationPin.node,
   llmClient,
   Location.node,
   ModelsDev.node,
