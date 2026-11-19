@@ -213,9 +213,9 @@ jobs:
         working-directory: packages/codemode-rust
         run: |
           bun conformance/generate.ts
-          bun conformance/catalog.ts
+          bun conformance/boundary.ts
           bun conformance/streaming.ts
-          bun conformance/tools.ts
+          bun conformance/host.ts
           git status --porcelain -- conformance
           git diff --exit-code -- conformance
           test -z "$(git status --porcelain -- conformance)"
