@@ -6,7 +6,6 @@ import { Effect, Schema } from "effect"
 import path from "path"
 import { toolFailure } from "../runtime.js"
 import { ToolSearch } from "../search.js"
-import { Environment } from "../../environment/index.js"
 import { FileSystem } from "../../filesystem.js"
 import { Location } from "../../location.js"
 import { FileAccess } from "../../file-access.js"
@@ -47,7 +46,6 @@ export const toModelContent = (entries: EncodedOutput, truncated = false) => {
 export const Plugin = {
   id: "opencode.tool.glob",
   effect: Effect.fn("GlobTool.Plugin")(function* (ctx: Context) {
-    const environment = yield* Environment.Service
     const ripgrep = yield* Ripgrep.Service
     const location = yield* Location.Service
     const access = yield* FileAccess.Service
@@ -78,14 +76,20 @@ export const Plugin = {
                 },
                 ...Permission.invocation(context),
               })
-              const type = yield* ToolSearch.pathType(environment.files, target.absolute, searchPath ?? ".")
+              const type = yield* ToolSearch.pathType(target.environment.files, target.absolute, searchPath ?? ".")
               if (type !== "directory")
                 return yield* Effect.fail(
                   new ToolFailure({ message: `Search path is not a directory: ${searchPath ?? "."}` }),
                 )
               const root = target.absolute
               const result = yield* ToolSearch.bounded(input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT, (limit) =>
-                ripgrep.glob({ cwd: root, pattern: input.pattern, hidden: input.hidden, limit }),
+                ripgrep.glob({
+                  environment: target.environment,
+                  cwd: root,
+                  pattern: input.pattern,
+                  hidden: input.hidden,
+                  limit,
+                }),
               )
               return {
                 entries: result.items.map((entry) =>
