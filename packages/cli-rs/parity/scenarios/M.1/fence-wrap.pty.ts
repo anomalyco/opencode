@@ -12,7 +12,6 @@ const rest = String.raw`\n\s*\S*json OPENCODE_STORY=transcript-fences bun run de
 const wrapped = new RegExp(String.raw`${rest}[\s\S]*${rest}[\s\S]*Done\.`)
 
 // The reply is cut where Core 0.8.4 cuts it; TS loses the blank row there, before `Done.`, and Rust keeps it.
-const deviation = (lines: number) => ({ file: "M06-mini-dropped-blank-row", lines })
 
 const messages = [user("msg_u1", "show the story command", 10), assistant("msg_a1", [{ type: "text", text }], 11)]
 
@@ -30,10 +29,9 @@ export default definePty({
       timeout: 30_000,
       checkpoint: "replayed",
       scrollback: 30,
-      deviation: deviation(12),
     },
     { keys: "\x03", settle: 200 },
-    { keys: "\x03", settle: 400, checkpoint: "exited", deviation: deviation(2) },
+    { keys: "\x03", settle: 400, checkpoint: "exited" },
   ],
   exits: true,
   masks: [statusMask],

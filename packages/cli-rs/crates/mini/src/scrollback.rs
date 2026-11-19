@@ -394,8 +394,8 @@ impl Active {
     /// Core calls stable ([`stable_prefix`]) and commits those.
     ///
     /// A Markdown part before the end ends its last row, so the next part starts below it and a blank row at the
-    /// boundary stays: the committed rows equal the reply rendered whole. TS leaves the row open, and the next part
-    /// continues it, so the blank row there is lost.
+    /// boundary stays: the committed rows equal the reply rendered whole, as TS's since #63989 (`trailingNewline:
+    /// true` before the end).
     fn commit(&mut self, done: bool, trailing_newline: bool) -> Result<Option<(u32, Option<SplitSnapshot>)>> {
         let (target, whole_rows) = match &self.widget {
             Stream::Text(text) => {

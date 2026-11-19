@@ -1,6 +1,6 @@
 # OT2049: Markdown on OpenTUI's native engine
 
-TypeScript: the TUI and mini render Markdown with `@opentui/core` 0.8.4's `MarkdownRenderable` (marked). A setext
+TypeScript (before #63989): the TUI and mini rendered Markdown with `@opentui/core` 0.8.4's `MarkdownRenderable` (marked). Since #63989 TS runs Core 0.9.4, which renders through the native engine too; the setext-heading item below was not measured again. A setext
 heading (`Title` over `=====` or `---`) is drawn as plain text in the Markdown color, underline row included. While a
 message streams, a closing fence closes its block as soon as the three backticks arrive, with or without a line
 ending.
@@ -14,13 +14,9 @@ and `- - -` is a rule. Two differences remain:
   bold; level 1 also underlined), as an ATX heading does in both clients. Seen by rendering `Title` / `=====`,
   `Sub` / `---` and two rules through both clients' `TextPart` setup (the U.4c harness): every character equal, the
   heading cells differ in color and attributes only.
-- While streaming, the engine holds a last line that has no line ending, because the next bytes can still change
-  what it is. Both clients pass the message text trimmed (`TextPart`, `assistant.rs`), so a closing fence at the
-  end of the text so far stays open until more text or the end of the stream arrives. In
-  `parity/scenarios/OT/held-fence.sim.ts` a reply streams a LaTeX fence whose `x^2` renders, then
-  ` + \unsupported{x}` and the closing fence without its newline, and pauses: TS shows the source
-  `x^2 + \unsupported{x}`, Rust still shows the last formula, `x²`. Once the reply goes on (`Done.`), both show the
-  source.
+- (Resolved by #63989.) While streaming, the engine holds a last line that has no line ending. TS on Core 0.9.4 runs
+  the same engine and holds it too: `parity/scenarios/OT/held-fence.sim.ts` shows the formula in both until more text
+  arrives, and differs only by `F16-plugin-fence-margin.md`'s row.
 
 Reason: the engine follows CommonMark, and Core's newer releases render through it as well. Mini commits only
 closed blocks to scrollback (`stable_prefix` includes the closing blank line), so no held line is committed. The

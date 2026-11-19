@@ -97,6 +97,9 @@ export type PtyCase = {
   // Compare the Kitty keyboard sequences the program writes too (`keyboardLog`): all of them, and those written
   // up to each checkpoint as `<name>:keyboard`.
   keyboard?: boolean
+  // A `parity/deviations/<file>.md` that lets the whole run's keyboard log differ between the sides in at most
+  // `lines` entries; a checkpoint's own `:keyboard` record follows that checkpoint's `deviation`.
+  keyboardDeviation?: { file: string; lines: number }
   // Record the terminal cursor at each checkpoint too, as `<name>:cursor` (`x,y`, 0-based, or `hidden`).
   cursor?: boolean
   // Written to the emulator before the program starts, as a shell's earlier output.
@@ -306,7 +309,20 @@ function allowDeviations(value: PtyCase, left: Record<string, unknown>, right: R
     notes.push(`${step.checkpoint}: ${differing} lines differ, allowed by ${file}`)
     keys.forEach((key) => (theirs[key] = ours[key]))
   }
-  return [{ ...right, checkpoints: theirs }, notes] as const
+  const keyboard = value.keyboardDeviation
+  if (!keyboard || !existsSync(path.join(parityRoot, "deviations", `${keyboard.file}.md`)))
+    return [{ ...right, checkpoints: theirs }, notes] as const
+  const a = (left.keyboard ?? []) as string[]
+  const b = (right.keyboard ?? []) as string[]
+  const differing = Array.from({ length: Math.max(a.length, b.length) }, (_, index) => a[index] !== b[index]).filter(
+    Boolean,
+  ).length
+  if (differing === 0) notes.push(`keyboard: equal; remove the deviation ${keyboard.file}`)
+  else if (differing > keyboard.lines)
+    notes.push(`keyboard: ${differing} entries differ, beyond the ${keyboard.lines} ${keyboard.file} allows`)
+  else notes.push(`keyboard: ${differing} entries differ, allowed by ${keyboard.file}`)
+  const allowed = differing > 0 && differing <= keyboard.lines
+  return [{ ...right, checkpoints: theirs, ...(allowed ? { keyboard: a } : {}) }, notes] as const
 }
 
 // OSC sequences in the order the program wrote them: ESC ] … terminated by BEL or ESC \.
