@@ -8,19 +8,31 @@ import type { OpencodeWatches } from "./opencode-watches.js"
 
 /** Console's config names its own MCP server `opencode_console`; its `claim_task` claims a task for the calling session. */
 export const CLAIM_TOOL = "opencode_console_claim_task"
-/** Renews every claim one session holds on the member's list, answering how many it renewed. */
-export const HEARTBEAT_PATH = "/api/tasks/heartbeat"
-/** Releases every claim one session holds on the member's list. */
-export const RELEASE_PATH = "/api/tasks/release"
-/** Well inside Console's 30-minute claim lease, jittered so a member's machines don't beat together. */
-export const INTERVAL = Duration.minutes(5)
-const JITTER = Duration.minutes(1)
+/** Renews every claim one session holds on the member's list: `{ renewed, leaseExpiresAt, leaseMinutes }`. */
+export const RENEW_PATH = "/api/task-claims/renew"
+/** Releases every claim one session holds on the member's list: `{ released }`. */
+export const RELEASE_PATH = "/api/task-claims/release"
+/** The shortest lease a member may choose, assumed until Console names theirs (30 minutes unless they changed it). */
+export const MIN_LEASE_MINUTES = 5
+/** The longest wait between renewals, however long the member's lease. */
+export const MAX_INTERVAL = Duration.minutes(10)
 const RETRY = Duration.seconds(30)
 const TIMEOUT = Duration.seconds(10)
 const prefix = "task-claims:"
 const Stored = Schema.Struct({ console: Schema.String })
 const decodeStored = Schema.decodeUnknownOption(Stored)
-const Renewed = Schema.Struct({ renewed: Schema.Number })
+const Renewed = Schema.Struct({ renewed: Schema.Number, leaseMinutes: Schema.Number })
+
+/**
+ * The wait before the next renewal: a third of the lease, so a renewal that fails twice still lands inside it, jittered
+ * by a tenth so a member's machines don't renew together. Renewing within a third of the lease in force also keeps a
+ * claim when the member shortens their lease: the shorter one applies from that renewal on.
+ */
+export const interval = (leaseMinutes: number) =>
+  Duration.times(
+    Duration.min(Duration.minutes(Math.max(leaseMinutes, MIN_LEASE_MINUTES) / 3), MAX_INTERVAL),
+    0.9 + 0.2 * Math.random(),
+  )
 
 /**
  * Keeps the Console task claims of this Location's sessions alive: while a session that claimed a task exists and isn't
@@ -30,8 +42,9 @@ const Renewed = Schema.Struct({ renewed: Schema.Number })
 export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.HttpClient) {
   const scope = yield* Scope.Scope
   let current: { console: OpencodeWatches.Console; readonly lease: Scope.Closeable } | undefined
-  // The sessions that may hold claims; Console's answer to a heartbeat says when one no longer does.
+  // The sessions that may hold claims; Console's answer to a renewal says when one no longer does.
   const claimed = new Set<string>()
+  let leaseMinutes = MIN_LEASE_MINUTES
 
   const call = (path: string, sessionID: string) =>
     Effect.gen(function* () {
@@ -50,11 +63,11 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
       yield* ctx.storage.remove(prefix + sessionID)
     })
 
-  // A 404 is a workspace with Tasks off, which keeps no claims to release.
+  // A 404 is a workspace with Tasks off, and a 403 a sign-in that keeps no list: neither has claims to release.
   const release = (sessionID: string) =>
     call(RELEASE_PATH, sessionID).pipe(
       Effect.flatMap((response) =>
-        response.status === 404 ? Effect.void : HttpClientResponse.filterStatusOk(response).pipe(Effect.asVoid),
+        refused(response) ? Effect.void : HttpClientResponse.filterStatusOk(response).pipe(Effect.asVoid),
       ),
       Effect.scoped,
       Effect.andThen(forget(sessionID)),
@@ -68,14 +81,16 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
         Effect.catchIf(Predicate.isTagged("Session.NotFoundError"), () => Effect.succeedNone),
       )
       if (Option.isNone(session) || session.value.time.archived !== undefined) return yield* release(sessionID)
-      const response = yield* call(HEARTBEAT_PATH, sessionID)
-      if (response.status === 404) return yield* Effect.forEach([...claimed], forget, { discard: true })
+      const response = yield* call(RENEW_PATH, sessionID)
+      if (refused(response)) return yield* Effect.forEach([...claimed], forget, { discard: true })
       const body = yield* HttpClientResponse.filterStatusOk(response).pipe(
         Effect.flatMap((ok) => ok.json),
         Effect.map(Schema.decodeUnknownOption(Renewed)),
       )
-      // Released on the page, taken over, closed or lapsed: nothing is left to renew.
-      if (Option.isSome(body) && body.value.renewed === 0) yield* forget(sessionID)
+      if (Option.isNone(body)) return
+      leaseMinutes = body.value.leaseMinutes
+      // Released on the page, taken over, closed or taken while stale: nothing is left to renew.
+      if (body.value.renewed === 0) yield* forget(sessionID)
     }).pipe(Effect.scoped)
 
   // Whether every session's claims were renewed or released; any failure is retried sooner.
@@ -97,11 +112,8 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
   const loop = Effect.gen(function* () {
     let failures = 0
     while (true) {
-      yield* Effect.sleep(
-        failures === 0
-          ? Duration.sum(Duration.subtract(INTERVAL, JITTER), Duration.times(JITTER, 2 * Math.random()))
-          : Duration.min(Duration.times(RETRY, 2 ** (failures - 1)), INTERVAL),
-      )
+      const next = interval(leaseMinutes)
+      yield* Effect.sleep(failures === 0 ? next : Duration.min(Duration.times(RETRY, 2 ** (failures - 1)), next))
       failures = (yield* round) ? 0 : failures + 1
     }
   })
@@ -110,6 +122,28 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
     const lease = yield* Scope.Scope
     const beating = yield* FiberHandle.make<void, never>()
     const ensure = FiberHandle.run(beating, loop, { onlyIfMissing: true })
+
+    // Claims remembered from before a restart, for this workspace's sessions in this Location, read before any new
+    // claim is, and renewed at once in the background: their lease may be close to its end.
+    const stored = yield* ctx.storage.scan({ prefix, limit: 1000 })
+    const owned = yield* Effect.forEach(stored.entries, (entry) => {
+      const sessionID = entry.key.slice(prefix.length)
+      if (Option.getOrUndefined(decodeStored(entry.value))?.console !== key) return Effect.succeed(undefined)
+      return ctx.session.get({ sessionID: Session.ID.make(sessionID) }).pipe(
+        Effect.map((session) =>
+          session.location.directory === ctx.location.directory &&
+          session.location.workspaceID === ctx.location.workspaceID
+            ? sessionID
+            : undefined,
+        ),
+        // Deleted while OpenCode was down: its claims are released now, by every Location that reads it, which
+        // Console takes as one.
+        Effect.catchIf(Predicate.isTagged("Session.NotFoundError"), () => Effect.succeed(sessionID)),
+        Effect.catch(() => Effect.succeed(undefined)),
+      )
+    })
+    owned.filter((sessionID) => sessionID !== undefined).forEach((sessionID) => claimed.add(sessionID))
+    if (claimed.size > 0) yield* round.pipe(Effect.andThen(ensure), Effect.forkIn(lease, { startImmediately: true }))
 
     yield* ctx.tool.hook("execute.after", (event) => {
       if (event.status !== "completed" || event.tool !== CLAIM_TOOL) return Effect.void
@@ -130,30 +164,6 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
       ),
       Effect.forkIn(lease, { startImmediately: true }),
     )
-
-    // Claims remembered from before a restart, for this workspace's sessions in this Location, are renewed at once,
-    // in the background: their lease may be close to its end.
-    yield* Effect.gen(function* () {
-      const stored = yield* ctx.storage.scan({ prefix, limit: 1000 })
-      const owned = yield* Effect.forEach(stored.entries, (entry) => {
-        const sessionID = entry.key.slice(prefix.length)
-        if (Option.getOrUndefined(decodeStored(entry.value))?.console !== key) return Effect.succeed(undefined)
-        return ctx.session.get({ sessionID: Session.ID.make(sessionID) }).pipe(
-          Effect.map((session) =>
-            session.location.directory === ctx.location.directory &&
-            session.location.workspaceID === ctx.location.workspaceID
-              ? sessionID
-              : undefined,
-          ),
-          // Deleted while OpenCode was down: its claims are released now, by every Location that reads it, which
-          // Console takes as one.
-          Effect.catchIf(Predicate.isTagged("Session.NotFoundError"), () => Effect.succeed(sessionID)),
-          Effect.catch(() => Effect.succeed(undefined)),
-        )
-      })
-      owned.filter((sessionID) => sessionID !== undefined).forEach((sessionID) => claimed.add(sessionID))
-      if (claimed.size > 0) yield* round.pipe(Effect.andThen(ensure))
-    }).pipe(Effect.forkIn(lease, { startImmediately: true }))
   })
 
   /** Keeps claims alive for `next`, or stops when it is undefined; a new workspace replaces the old one. */
@@ -175,3 +185,8 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
 
   return { sync }
 })
+
+/** Tasks are off in the workspace (404), or the sign-in is a service account, which keeps no list (403). */
+function refused(response: HttpClientResponse.HttpClientResponse) {
+  return response.status === 404 || response.status === 403
+}
