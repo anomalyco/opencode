@@ -34,6 +34,7 @@ export {
   CompactionPart,
   EffortPart,
   ContentPart,
+  ToolChanges,
   Message,
   SystemMessage,
   UserMessage,
@@ -188,6 +189,7 @@ export type {
 export type {
   ExecutableTool,
   Tool,
+  ToolChangesInput,
   ToolExecute,
   ToolExecuteContext,
   ToolInput,

@@ -11,6 +11,8 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, anyhow, bail};
 use crossbeam_channel::{Receiver, Sender, bounded};
+#[cfg(unix)]
+use crossbeam_utils::sync::WaitGroup;
 use portable_pty::{ChildKiller, CommandBuilder, MasterPty, PtySize, native_pty_system};
 use serde::{Deserialize, Serialize};
 
@@ -284,6 +286,9 @@ pub struct CreatePipe {
 
 pub struct TerminalService {
     terminals: Mutex<HashMap<TerminalId, Arc<TerminalHandle>>>,
+    /// Failed-command escalation outlives record deletion. Shutdown waits for it.
+    #[cfg(unix)]
+    escalations: WaitGroup,
     created: AtomicU64,
     replay_capacity: usize,
 }
@@ -298,6 +303,8 @@ impl TerminalService {
     pub fn new(replay_capacity: usize) -> Self {
         Self {
             terminals: Mutex::new(HashMap::new()),
+            #[cfg(unix)]
+            escalations: WaitGroup::new(),
             created: AtomicU64::new(0),
             replay_capacity,
         }
@@ -322,7 +329,15 @@ impl TerminalService {
             bail!("output_path must be absolute");
         }
         validate_metadata(&request.metadata)?;
-        self.insert(|id, order| TerminalHandle::spawn_pipe(id, order, request))
+        self.insert(|id, order| {
+            TerminalHandle::spawn_pipe(
+                id,
+                order,
+                request,
+                #[cfg(unix)]
+                self.escalations.clone(),
+            )
+        })
     }
 
     fn insert(
@@ -393,7 +408,7 @@ impl TerminalService {
     }
 
     /// Signals a pipe process and its process group. The process stays
-    /// listed; signalling one that already exited is allowed.
+    /// listed; signalling one that already exited is a no-op.
     pub fn signal(&self, id: TerminalId, signal: ProcessSignal) -> Result<()> {
         self.pipe(id)?
             .process
@@ -615,6 +630,8 @@ impl TerminalService {
 impl Drop for TerminalService {
     fn drop(&mut self) {
         self.shutdown();
+        #[cfg(unix)]
+        std::mem::take(&mut self.escalations).wait();
     }
 }
 
@@ -630,8 +647,6 @@ struct TerminalHandle {
     /// Dropped at shutdown, before the joins, to cancel a pipe reader that a
     /// surviving descendant would otherwise keep blocked.
     cancel: Mutex<Option<Box<dyn Send>>>,
-    /// Runs after the joins; reaps a pipe process kept as a zombie until now.
-    reap: Mutex<Option<Box<dyn FnOnce() + Send>>>,
     /// Pipe only: the child, for `signal`.
     process: Option<Arc<pipe::Process>>,
     info: Arc<RwLock<ProcessInfo>>,
@@ -867,7 +882,6 @@ impl TerminalHandle {
             shutdown_tx: Mutex::new(Some(actor.shutdown_tx)),
             killer: Mutex::new(killer),
             cancel: Mutex::new(None),
-            reap: Mutex::new(None),
             process: None,
             info,
             joins: Mutex::new(Some(vec![
@@ -928,14 +942,6 @@ impl TerminalHandle {
             .take();
         for join in handles {
             let _ = join.join();
-        }
-        if let Some(reap) = self
-            .reap
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .take()
-        {
-            reap();
         }
         Ok(())
     }
@@ -2270,7 +2276,6 @@ mod tests {
                 shutdown_tx: Mutex::new(Some(shutdown_tx)),
                 killer: Mutex::new(Box::new(TestKiller)),
                 cancel: Mutex::new(None),
-                reap: Mutex::new(None),
                 process: None,
                 info,
                 joins: Mutex::new(Some(vec![

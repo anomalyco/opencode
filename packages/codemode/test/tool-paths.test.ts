@@ -369,6 +369,46 @@ describe("tools.search alias", () => {
   })
 })
 
+describe("search with a plain string query", () => {
+  const runtime = CodeMode.make({
+    tools: { api: { list: echo("List things", "listed") }, notes: { add: echo("Add a note", "added") } },
+  })
+
+  test("search(query) returns what search({ query }) returns, however search is reached", async () => {
+    const expected = await value(runtime, `return search({ query: "notes" })`)
+    expect(expected).toMatchObject({ items: [{ path: "tools.notes.add" }] })
+    expect(await value(runtime, `return search("notes")`)).toStrictEqual(expected)
+    expect(await value(runtime, `return await search("notes")`)).toStrictEqual(expected)
+    expect(await value(runtime, `return await search("notes").then((result) => result)`)).toStrictEqual(expected)
+    expect(await value(runtime, `return await tools.search("notes")`)).toStrictEqual(expected)
+  })
+
+  test("an empty string browses like an empty query", async () => {
+    expect(await value(runtime, `return search("")`)).toStrictEqual(
+      await value(runtime, `return search({ query: "" })`),
+    )
+  })
+
+  test("the object form is unchanged", async () => {
+    expect(await value(runtime, `return search({ query: "", namespace: "api", limit: 1, offset: 0 })`)).toStrictEqual({
+      items: [{ path: "tools.api.list", description: "List things", signature: "tools.api.list(): Promise<string>" }],
+      remaining: 0,
+      next: null,
+    })
+  })
+
+  test("other inputs still fail with a clear error", async () => {
+    for (const input of ["42", "null", "true", `["notes"]`, `"notes", {}`]) {
+      const diagnostic = await failure(runtime, `return search(${input})`)
+      expect(diagnostic.kind).toBe("InvalidToolInput")
+      expect(diagnostic.message).toContain("'search'")
+    }
+    expect((await failure(runtime, `return search(42)`)).suggestions).toEqual([
+      'Pass search a query string or an object, such as search("issues") or search({ namespace: "github" }).',
+    ])
+  })
+})
+
 describe("search results used like a Promise", () => {
   const runtime = CodeMode.make({ tools: { api: { list: echo("List things", "listed") } } })
 
@@ -439,5 +479,51 @@ describe("tool references under ==", () => {
          return [o == tools.probe, tools == { a: 1 }, tools.probe == null, calls]`,
       ),
     ).toEqual([false, false, false, 0])
+  })
+})
+
+describe("unknown tool calls reject their promise", () => {
+  const runtime = CodeMode.make({ tools: { shop: { show: echo("Show", "shown"), list: echo("List", "listed") } } })
+
+  test("try/await catches the rejection", async () => {
+    expect(
+      await value(runtime, `try { await tools.shop.nope({}) } catch (error) { return error.message }`),
+    ).toBe("Unknown tool 'shop.nope'.")
+  })
+
+  test(".catch on the call sees the rejection", async () => {
+    expect(await value(runtime, `return await tools.shop.nope({}).catch((error) => error.message)`)).toBe(
+      "Unknown tool 'shop.nope'.",
+    )
+  })
+
+  test("Promise.allSettled settles an unknown tool as rejected", async () => {
+    expect(
+      await value(
+        runtime,
+        `const settled = await Promise.allSettled([tools.shop.show({}), tools.shop.nope({})])
+         return settled.map((result) => result.status)`,
+      ),
+    ).toEqual(["fulfilled", "rejected"])
+  })
+
+  test("calling a namespace rejects too", async () => {
+    expect(await value(runtime, `return await tools.shop({}).catch((error) => error.message)`)).toBe(
+      "Tool 'shop' is not callable, it is a namespace. Did you mean tools.shop.list or tools.shop.show?",
+    )
+  })
+
+  test("an unhandled rejection keeps its diagnostic", async () => {
+    const unknown = await failure(runtime, `return await tools.shop.shows({})`)
+    expect(unknown.kind).toBe("UnknownTool")
+    expect(unknown.message).toBe("Unknown tool 'shop.shows'. Did you mean tools.shop.show?")
+    expect(unknown.suggestions).toEqual(["Use search to find available tools."])
+  })
+
+  test("reading an unknown path is unchanged", async () => {
+    expect(await value(runtime, `return [typeof tools.shop.nope, Object.keys(tools.shop)]`)).toEqual([
+      "function",
+      ["show", "list"],
+    ])
   })
 })

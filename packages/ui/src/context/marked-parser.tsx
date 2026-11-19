@@ -5,7 +5,7 @@ import { createMarkdownBase } from "./marked-base"
 import { OpenCodeTheme } from "./highlight-theme"
 
 export function createMarkdownParser() {
-  return createMarkdownBase().use(markdownMath, markdownCode)
+  return createMarkdownBase().use(markdownCode, markdownMath)
 }
 
 const decoder = new TextDecoder()
@@ -41,7 +41,26 @@ function renderMath(token: Tokens.Generic) {
   return katex.renderToString(token.text, { throwOnError: false, displayMode: token.displayMode })
 }
 
+const mathFenceLanguages = new Set(["latex", "math"])
+
+/** Whether a fence's info string names display math, as ```` ```latex ```` and ```` ```math ```` do in the TUI. */
+export function isMathFence(lang: string | undefined) {
+  return mathFenceLanguages.has(lang?.match(/^\S*/)?.[0].toLowerCase() ?? "")
+}
+
 export const markdownMath: MarkedExtension = {
+  renderer: {
+    // A math fence KaTeX cannot parse, such as one cut off mid-formula, stays highlighted code.
+    code(token) {
+      if (!isMathFence(token.lang) || !token.text.trim()) return false
+
+      try {
+        return katex.renderToString(token.text, { throwOnError: true, displayMode: true }) + "\n"
+      } catch {
+        return false
+      }
+    },
+  },
   extensions: [
     {
       name: "inlineDollarKatex",

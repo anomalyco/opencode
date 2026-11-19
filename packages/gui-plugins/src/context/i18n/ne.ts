@@ -28,4 +28,5 @@ export default {
   "export.success.description": "सत्र {{filename}} मा सुरक्षित गरियो",
   "export.failed.title": "सत्र निर्यात गर्न असफल भयो",
   "export.failed.description": "सत्र निर्यात गर्दा त्रुटि भयो",
+  "usage.toggle": "सत्र सन्दर्भ टगल गर्नुहोस्",
 }

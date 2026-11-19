@@ -39,4 +39,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "サーバーを追加",
   "menu.delete": "削除",
+  "error.unavailable": "SSHを利用できません",
 }
