@@ -33,6 +33,7 @@ import { emptyCredentialNode, emptyWellknownNode } from "../fixture/config-nodes
 import { withEnv } from "../fixture/env"
 import { location } from "../fixture/location"
 import { tmpdir, withTempDir } from "../fixture/tmpdir"
+import { eventually } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(Layer.empty)
@@ -2412,6 +2413,13 @@ describe("Config.update", () => {
               const update = yield* Effect.fromNullishOr(config.update)
               yield* update({ console_tasks: false })
               expect(yield* read).toBe('{ // kept "shell": "/bin/zsh", "console_tasks": false }')
+              // Loaded back as config, as the plugin reads it.
+              expect(
+                yield* eventually(
+                  config.entries().pipe(Effect.map((entries) => Config.latest(entries, "console_tasks"))),
+                  (value) => value === false,
+                ),
+              ).toBe(false)
               yield* update({ console_tasks: null })
               expect(yield* read).toBe('{ // kept "shell": "/bin/zsh" }')
               // The comment went with the last key it sat above.
