@@ -427,9 +427,11 @@ function groupedElapsedTime(
 
     return start === undefined ? [] : [start]
   })
+
   if (starts.length === 0) return undefined
 
   const start = Math.min(...starts)
+
   if (running) return { created: start, ran: start }
 
   const ends = times.flatMap((time) => (time?.completed === undefined ? [] : [time.completed]))
@@ -1863,13 +1865,16 @@ ToolRegistry.register({
     // Track the child session instead: tick while it runs, freeze when it settles.
     const start = createMemo(() => props.time?.ran ?? props.time?.created)
     const endAt = createMemo((previous?: number) => (view().running ? undefined : (previous ?? Date.now())))
+
     const liveTime = createMemo(() => {
       const begin = start()
 
       if (begin === undefined) return undefined
+
       if (view().running) return { created: begin, ran: begin }
 
       const realEnd = props.time?.completed
+
       if (realEnd !== undefined && realEnd > begin) return { created: begin, ran: begin, completed: realEnd }
 
       return { created: begin, ran: begin, completed: endAt() }

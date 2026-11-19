@@ -11,6 +11,7 @@ export const RunningAndFinished = {
   render: () => {
     const started = Date.now() - 2000
     const [state, setState] = createStore<{ completed?: number }>({})
+
     const tools = () => [
       {
         ...storyTool("elapsed_shell", "shell", state.completed === undefined ? "running" : "completed", {
@@ -45,14 +46,16 @@ export const RunningAndFinished = {
       },
       { ...storyTool("elapsed_pending", "plugin_tool", "streaming", {}), time: { created: started } },
     ]
+
     const message = (): SessionMessageAssistant => ({
       id: "msg_elapsed",
       type: "assistant",
       agent: "build",
-      model: { providerID: "test", modelID: "test" },
+      model: { providerID: "test", id: "test" },
       content: tools(),
       time: { created: started },
     })
+
     return (
       <section class="mx-auto max-w-[720px] p-6 flex flex-col gap-4">
         <button onClick={() => setState("completed", Date.now())}>Complete tools</button>

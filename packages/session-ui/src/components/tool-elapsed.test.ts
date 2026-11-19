@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { SessionMessageInfo } from "@opencode/client/promise"
 import { anchorElapsedStart } from "./tool-elapsed"
 
+// SAFETY: the fixture sets every field a user message reads, so it is a complete SessionMessageInfo.
 const user = (id: string, created: number): SessionMessageInfo =>
   ({ id, type: "user", text: "hello", time: { created } }) as SessionMessageInfo
 
@@ -19,6 +20,7 @@ describe("anchorElapsedStart", () => {
   test("ignores non-user messages and older prompts", () => {
     const messages: SessionMessageInfo[] = [
       user("msg_1", 1000),
+      // SAFETY: only type and time are read, which this non-user fixture supplies.
       {
         id: "msg_2",
         type: "synthetic",
