@@ -1257,7 +1257,11 @@ const onContentBlockStart = (
       block.signature === undefined
         ? undefined
         : providerMetadata(state.providerMetadataKey, { signature: block.signature })
-    const lifecycle = Lifecycle.reasoningStart(state.lifecycle, events, id, metadata)
+    const closed = [...state.lifecycle.reasoning].reduce(
+      (lifecycle, openId) => Lifecycle.reasoningEnd(lifecycle, events, openId),
+      state.lifecycle,
+    )
+    const lifecycle = Lifecycle.reasoningStart(closed, events, id, metadata)
     return [
       {
         ...state,
