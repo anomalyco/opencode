@@ -28,7 +28,7 @@ type Message = Exclude<Machine.FromWorker, Machine.Hello>
 interface Link {
   open: boolean
   readonly queue: Queue.Queue<Message, Cause.Done>
-  fiber?: Fiber.Fiber<void>
+  fiber?: Fiber.Fiber<void, unknown>
 }
 
 type Direction = "home" | "worker"
@@ -38,7 +38,10 @@ type Direction = "home" | "worker"
  * cut, restore and redial the connection, drop the next message of a type heading either way, and restart. Its
  * connections are served in the caller's scope.
  */
-export const makeWorker = (machine: Machine.Interface) =>
+export const makeWorker = (host: {
+  readonly environment: { readonly id: Environment.ID }
+  readonly connect: (connection: Machine.Connection) => Effect.Effect<void, unknown>
+}) =>
   Effect.gen(function* () {
     const scope = yield* Effect.scope
     const files = Environment.makeMemoryDriver()
@@ -197,7 +200,7 @@ export const makeWorker = (machine: Machine.Interface) =>
       const current: Link = { open: true, queue: yield* Queue.unbounded<Message, Cause.Done>() }
       const hello: Machine.Hello = {
         type: "hello",
-        name: machine.environment.id,
+        name: host.environment.id,
         os: "linux",
         arch: "x64",
         instance,
@@ -213,7 +216,7 @@ export const makeWorker = (machine: Machine.Interface) =>
       // Live before the machine sees the hello, so what it sends while handling the hello is answered.
       link = current
       current.fiber = yield* Effect.forkIn(
-        machine.connect({
+        host.connect({
           hello,
           send: (message) => {
             if (current.open) receive(message)
