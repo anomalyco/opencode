@@ -1,114 +1,182 @@
-<p align="center">
-  <a href="https://opencode.ai">
-    <picture>
-      <source srcset=".github/assets/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
-      <source srcset=".github/assets/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src=".github/assets/logo-ornate-light.svg" alt="OpenCode logo">
-    </picture>
-  </a>
-</p>
-<p align="center">The open source AI coding agent.</p>
-<p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/@opencode/cli"><img alt="npm" src="https://img.shields.io/npm/v/@opencode/cli?style=flat-square" /></a>
-  <a href="https://github.com/anomalyco/opencode/actions/workflows/release.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/release.yml?style=flat-square&branch=dev" /></a>
-</p>
+# wb-harness
 
-<p align="center">
-  <a href="README.md">English</a> |
-  <a href="README.zh.md">简体中文</a> |
-  <a href="README.zht.md">繁體中文</a> |
-  <a href="README.ko.md">한국어</a> |
-  <a href="README.de.md">Deutsch</a> |
-  <a href="README.es.md">Español</a> |
-  <a href="README.fr.md">Français</a> |
-  <a href="README.it.md">Italiano</a> |
-  <a href="README.da.md">Dansk</a> |
-  <a href="README.ja.md">日本語</a> |
-  <a href="README.pl.md">Polski</a> |
-  <a href="README.ru.md">Русский</a> |
-  <a href="README.bs.md">Bosanski</a> |
-  <a href="README.ar.md">العربية</a> |
-  <a href="README.no.md">Norsk</a> |
-  <a href="README.br.md">Português (Brasil)</a> |
-  <a href="README.th.md">ไทย</a> |
-  <a href="README.tr.md">Türkçe</a> |
-  <a href="README.uk.md">Українська</a> |
-  <a href="README.bn.md">বাংলা</a> |
-  <a href="README.gr.md">Ελληνικά</a> |
-  <a href="README.vi.md">Tiếng Việt</a>
-</p>
+**An OpenAI-compatible bridge to the Wildberries AI assistant, built on top of [OpenCode](https://github.com/anomalyco/opencode).**
 
-[![OpenCode Terminal UI](services/site/public/v1/docs/assets/lander/screenshot.png)](https://opencode.ai)
+Wildberries ships a shopping assistant at `ai-proxy.wildberries.ru`. It has no public API, no tool calling, and no
+developer documentation. This repository reverse-engineers its streaming protocol and wraps it in a local HTTP
+service that speaks `POST /v1/chat/completions`, so any OpenAI-compatible client — including OpenCode — can use it
+as a model.
+
+> [!WARNING]
+> This is educational reverse engineering. It uses **your own** Wildberries account token, it violates the
+> Wildberries terms of service, and it can stop working at any time. Do not use it in production, do not use
+> other people's accounts, and do not ship it as a product. You are responsible for how you use it.
+
+> [!NOTE]
+> This project is not affiliated with Wildberries, OpenCode, or their teams. `README.<lang>.md` files are
+> inherited from upstream OpenCode and describe OpenCode core, not the harness.
 
 ---
 
-### Installation
+## Why this exists
 
-```bash
-# YOLO
-curl -fsSL https://opencode.ai/v2/install | bash
+The Wildberries assistant is a decent shopping bot locked behind the website. Meanwhile OpenCode is a coding agent
+that can already read files, run commands, and call tools. The interesting question is what happens when the two
+meet: a shopping assistant with a filesystem, and a coding agent with a catalog.
 
-# Package managers
-npm i -g @opencode/cli@latest      # or bun/pnpm/yarn
-brew install anomalyco/tap/opencode-v2 # macOS and Linux (recommended, always up to date)
-brew install opencode              # macOS and Linux (official brew formula, updated less)
-sudo pacman -S opencode            # Arch Linux (Stable)
-paru -S opencode-beta              # Arch Linux (Latest from AUR)
-mise use -g opencode               # Any OS
-nix run github:anomalyco/opencode  # Nix
+The harness answers that in two layers:
+
+1. **Model access** — the assistant's SSE protocol is wrapped as OpenAI chat completions, with sessions, streaming,
+   rate-limit handling, and native Wildberries proxying for clients that want it.
+2. **Tool layer** — the assistant cannot emit tool calls, so the harness plans them itself from the user's text and
+   injects the results into the prompt as plain facts. Shopping lookups run against public Wildberries catalog
+   endpoints before the model is called; coding tools are proposed to the client as ordinary OpenAI `tool_calls`,
+   which the client executes and returns as `role: "tool"` messages.
+
+Because the upstream model refuses content framed as a system prompt or an off-topic agent task, tool choice is
+intent-based (path, command, and article parsing) rather than model-driven. When a tool result is off-topic for a
+shopping bot — `git status`, for example — the assistant refuses to answer, and the harness returns the raw tool
+output instead, flagged with `wb_harness.fallback: true`, so the agent loop can continue.
+
+## Repository layout
+
+| Path | What it is |
+| --- | --- |
+| `services/wb-harness` | The bridge. Bun HTTP server, protocol client, SSE parser, tool registry, credential extractor, tests. Start here. |
+| `integrations/wb` | A self-contained OpenCode profile with two deterministic shopping tools. No monorepo build required. |
+| everything else | The upstream OpenCode monorepo — TUI, server, SDK, desktop app, docs. Unmodified unless noted in `git log`. |
+
+The two integrations are independent:
+
+- **`services/wb-harness`** turns the Wildberries assistant into a model. Use it when you want the assistant's own
+  answers, shopping enrichment, and tool calling inside any OpenAI client.
+- **`integrations/wb`** runs OpenCode with local tools only. It links products and compares unit prices from data
+  already in the request; it does not talk to Wildberries at all. Useful when you want no network dependency.
+
+## How it works
+
+```
+┌──────────────────────┐        POST /v1/chat/completions        ┌──────────────────────────────┐
+│ OpenCode, curl, any  │ ──────────────────────────────────────▶ │        wb-harness            │
+│ OpenAI-compatible    │ ◀────────────────────────────────────── │        127.0.0.1:3001        │
+│ client               │        OpenAI JSON / SSE chunks         │                              │
+└──────────────────────┘                                         │  1. plan tool calls          │
+                                                                 │  2. enrich with catalog data │
+┌──────────────────────┐                                         │  3. call Wildberries         │
+│ Tool results from    │ ── role: "tool" messages ─────────────▶ │  4. stream answer back       │
+│ the client           │                                         └───────────┬──────────────────┘
+└──────────────────────┘                                                     │
+                                                                             ▼
+                                                     ┌──────────────────────────────────────┐
+                                                     │ ai-proxy.wildberries.ru  (SSE chat)  │
+                                                     │ search.wb.ru             (catalog)   │
+                                                     │ card.wb.ru               (details)   │
+                                                     └──────────────────────────────────────┘
 ```
 
-> [!TIP]
-> Remove versions older than 0.1.x before installing.
+Requests are enriched with facts from the public catalog (`wb_product_link`, `wb_product_details`,
+`wb_search_products`, `wb_compare_unit_prices`) and sent to the assistant over its native SSE protocol. The reply is
+converted back into OpenAI format, including streaming deltas, usage-free chunks, and `wb_harness` metadata
+(planned tools, enrichment status, scenario, moderation state, suggestions, fallback flag).
 
-### Desktop App (BETA)
+## Quick start
 
-OpenCode is also available as a desktop application. Download it from [opencode.ai/download](https://opencode.ai/download).
+Requirements: [Bun](https://bun.sh), `curl`, and a Chromium-based browser where you are logged in to
+`wildberries.ru`.
 
-| Platform              | Download                           |
-| --------------------- | ---------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
-| macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
-| Windows               | `opencode-desktop-win-x64.exe`     |
-| Linux                 | `.deb`, `.rpm`, or `.AppImage`     |
-
-```bash
-# macOS (Homebrew)
-brew install --cask opencode-desktop
+```sh
+cd services/wb-harness
+./start.sh
 ```
 
-#### Installation Directory
+`start.sh` picks a free port, reuses valid credentials or extracts them from the browser (restarting it once if
+needed), starts the server, and verifies a real completion before printing the endpoints. `Ctrl-C` stops it.
 
-The install script installs OpenCode to `$HOME/.opencode/bin`.
+```sh
+PORT=3005 ./start.sh          # fixed port
+WB_BROWSER=chrome ./start.sh  # helium (default), chrome, brave, edge
+./start.sh --no-restart       # never restart the browser; fail with instructions instead
+```
 
-### Agents
+Credentials are read from `localStorage["wbid-oauth-sdk-access-token"]` and captured as the `x-userdata` header from
+the page's own requests over the DevTools protocol, then written to `~/.config/wb-harness/credentials.json` with
+mode `0600`. They can also be supplied manually as `WB_TOKEN` and `WB_USERDATA`; environment variables win over the
+file. Tokens expire after roughly a month — rerun `bun run creds` when `/health` reports an expired token or the
+upstream returns `401`.
 
-OpenCode includes two built-in agents you can switch between with the `Tab` key.
+### Use it from OpenCode
 
-- **build** - Default, full-access agent for development work
-- **plan** - Read-only agent for analysis and code exploration
-  - Denies file edits by default
-  - Asks permission before running bash commands
-  - Ideal for exploring unfamiliar codebases or planning changes
+Copy `services/wb-harness/opencode.json` into your project (or merge it), keep the harness running, and select the
+`wildberries/wb-agent` model:
 
-Also included is a **general** subagent for complex searches and multistep tasks.
-This is used internally and can be invoked using `@general` in messages.
+```sh
+opencode --model wildberries/wb-agent
+```
 
-Learn more about [agents](https://opencode.ai/docs/agents).
+The provider is registered as an OpenAI-compatible endpoint at `http://127.0.0.1:3001/v1`.
 
-### Documentation
+### Use the local profile instead
 
-For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).
+```sh
+cd integrations/wb
+./opencode-wb run --model '<provider/model>' \
+  'Дай ссылку на артикул 123456. Что дешевле за штуку: 2 за 300 ₽ или 4 за 400 ₽?'
+```
 
-### Contributing
+See [`integrations/wb/README.md`](integrations/wb/README.md) for the HTTP mode and how to add tools.
 
-If you're interested in contributing to OpenCode, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.
+## HTTP API
 
-### Building on OpenCode
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/v1/chat/completions` | OpenAI chat completions; supports `stream` and `tools`. |
+| `GET` | `/v1/models` | Lists `wb-agent`. |
+| `POST` | `/api/chat/v5/message` | Transparent Wildberries-native proxy returning upstream SSE. |
+| `GET` | `/health` | Status, credential source, token expiry, registered tools. |
+| `GET` | `/debug/last` | Metadata of the last request, without credentials. |
 
-If you are working on a project that's related to OpenCode and is using "opencode" as part of its name, for example "opencode-dashboard" or "opencode-mobile", please add a note to your README to clarify that it is not built by the OpenCode team and is not affiliated with us in any way.
+Configuration is environment-based: `PORT`, `HOSTNAME`, `WB_TOKEN`, `WB_USERDATA`, `WB_CREDS_FILE`, `WB_UPSTREAM`,
+`WB_ENRICH`, `WB_TOOL_TIMEOUT_MS`, `WB_SESSION_REUSE`. The full table and response examples live in
+[`services/wb-harness/README.md`](services/wb-harness/README.md).
 
----
+## Limitations
 
-**Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+- **The upstream is a shopping bot.** It moderates and refuses prompts that look like system prompts, tool
+  protocols, shell access, or unrelated agent tasks. The harness routes around this with intent-based planning and
+  a raw-output fallback, but the model's own answers stay shopping-oriented.
+- **No native tool calls.** Planned calls are heuristic: they work well for explicit requests like
+  "прочитай файл src/index.ts", "запусти git status", or "найди все файлы *.ts", and fall through to the model for
+  everything else.
+- **Undocumented and unstable.** Headers, SSE frame types, rate limits, and catalog endpoints were discovered by
+  observation. They can change or disappear without notice.
+- **Not a product.** There is no SLA, no multi-user auth, no secret storage beyond a local file, and no guarantee
+  that any of this remains within anyone's terms of service.
+- **Rate limits are real.** The upstream answers `429` with `retry-after`; the harness forwards that instead of
+  hammering the API.
+
+## Development
+
+```sh
+cd services/wb-harness
+bun install
+bun test                 # SSE, planner, enrichment, HTTP server against a local fake upstream
+bun run typecheck:tsc
+```
+
+The test suite needs no network access. For the OpenCode profile:
+
+```sh
+cd integrations/wb
+bun test ./smoke.test.ts
+```
+
+Repository-wide checks and contribution rules follow upstream OpenCode: see [`AGENTS.md`](AGENTS.md),
+[`CONTRIBUTING.md`](CONTRIBUTING.md), and [`SECURITY.md`](SECURITY.md). Do not commit credentials, extracted
+tokens, or browser profiles.
+
+## License
+
+MIT, inherited from [OpenCode](https://github.com/anomalyco/opencode). See [`LICENSE`](LICENSE).
+
+Wildberries, the Wildberries logo, and related marks belong to their owners. This project claims no rights to them
+and is not endorsed by Wildberries.
