@@ -389,53 +389,25 @@ pub fn add(
             if *row {
                 view.row();
             }
-            if *gap > 0 {
-                view.gap(*gap);
-            }
-            match padding_sides {
-                Some(edges) => {
-                    for (edge, cells) in edges_of(edges) {
-                        view.padding_edge(edge, cells.max(0));
-                    }
-                }
-                None => {
-                    if padding.0 > 0 {
-                        view.padding_x(padding.0);
-                    }
-                    if padding.1 > 0 {
-                        view.padding_y(padding.1);
-                    }
-                }
-            }
-            if let Some(border) = border {
-                bordered(&view, theme, border);
-            }
-            if *wrap {
-                view.flex_wrap(Wrap::Wrap);
-            }
-            if *overflow == abi::Overflow::Hidden {
-                view.overflow(Overflow::Hidden);
-            }
-            match justify {
-                abi::Justify::Start => {}
-                abi::Justify::End => drop(view.justify(Justify::End)),
-                abi::Justify::Center => drop(view.justify(Justify::Center)),
-                abi::Justify::SpaceBetween => drop(view.justify(Justify::SpaceBetween)),
-                abi::Justify::SpaceAround => drop(view.justify(Justify::SpaceAround)),
-            }
-            match align {
-                abi::Align::Stretch => {}
-                abi::Align::Start => drop(view.align_items(Align::Start)),
-                abi::Align::Center => drop(view.align_items(Align::Center)),
-                abi::Align::End => drop(view.align_items(Align::End)),
-            }
-            if let Some(bg) = color(theme, bg.as_ref()) {
-                view.bg(bg);
-            }
+            style_box(
+                &view,
+                theme,
+                *gap,
+                *padding,
+                padding_sides.as_ref(),
+                border.as_deref(),
+                *wrap,
+                *overflow,
+                *justify,
+                *align,
+                bg.as_ref(),
+            );
             for child in children {
                 add(app, theme, &view, child, act, hovers, markdown, slot);
             }
-            clickable(&view, on_click.as_ref(), act);
+            if let Some(click) = on_click {
+                clickable(&view, click.clone(), act);
+            }
             parent.add(&lay_out(&view, layout));
         }
         abi::Node::Text { spans, fg, wrap, truncate, selectable, hover_fg, layout, on_click } => {
@@ -443,11 +415,7 @@ pub fn add(
             // Spans without a color of their own take the text's, which a hover changes.
             let text = Text::new(app, spans.iter().map(|span| styled(theme, span, None)).collect::<Vec<_>>())
                 .fg(fg)
-                .wrap(match wrap {
-                    abi::Wrap::Word => WrapMode::Word,
-                    abi::Wrap::Char => WrapMode::Char,
-                    abi::Wrap::None => WrapMode::None,
-                })
+                .wrap(wrap_mode(*wrap))
                 .truncate(*truncate)
                 .selectable(*selectable);
             if let Some(hover) = color(theme, hover_fg.as_ref()) {
@@ -462,17 +430,21 @@ pub fn add(
                     }
                 });
             }
-            clickable(&text, on_click.as_ref(), act);
+            if let Some(click) = on_click {
+                clickable(&text, click.clone(), act);
+            }
             parent.add(&lay_out(&text, layout));
         }
     }
 }
 
-/// Shows the hand over `widget` and runs `click` on the press or the release of the left button.
-fn clickable(widget: &impl Widget, click: Option<&abi::Click>, act: &Act) {
-    let Some(click) = click.cloned() else { return };
-    let act = act.clone();
+/// Shows the hand over `widget` and runs the click in the cell it returns on the press or the release of the left
+/// button; writing the cell changes the click in place.
+pub(crate) fn clickable(widget: &impl Widget, click: abi::Click, act: &Act) -> Rc<RefCell<abi::Click>> {
+    let cell = Rc::new(RefCell::new(click));
+    let (held, act) = (cell.clone(), act.clone());
     widget.mouse_pointer(MousePointer::POINTER).on_mouse(move |_, event| {
+        let click = held.borrow().clone();
         let hit = match event.kind {
             MouseEventKind::Down(MouseButton::Left) => click.on == abi::Press::Down,
             MouseEventKind::Up(MouseButton::Left) => click.on == abi::Press::Up,
@@ -482,6 +454,77 @@ fn clickable(widget: &impl Widget, click: Option<&abi::Click>, act: &Act) {
             act(&click.action);
         }
     });
+    cell
+}
+
+/// OpenTUI's wrap of `wrap`.
+pub(crate) fn wrap_mode(wrap: abi::Wrap) -> WrapMode {
+    match wrap {
+        abi::Wrap::Word => WrapMode::Word,
+        abi::Wrap::Char => WrapMode::Char,
+        abi::Wrap::None => WrapMode::None,
+    }
+}
+
+/// Styles box `view`: its gap and padding (`padding_sides` instead of `padding`, a negative side as 0), border,
+/// wrap, overflow, how its children sit, and background.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn style_box(
+    view: &View,
+    theme: &Theme,
+    gap: u16,
+    padding: (u16, u16),
+    padding_sides: Option<&abi::Edges>,
+    border: Option<&abi::Border>,
+    wrap: bool,
+    overflow: abi::Overflow,
+    justify: abi::Justify,
+    align: abi::Align,
+    bg: Option<&abi::Color>,
+) {
+    if gap > 0 {
+        view.gap(gap);
+    }
+    match padding_sides {
+        Some(edges) => {
+            for (edge, cells) in edges_of(edges) {
+                view.padding_edge(edge, cells.max(0));
+            }
+        }
+        None => {
+            if padding.0 > 0 {
+                view.padding_x(padding.0);
+            }
+            if padding.1 > 0 {
+                view.padding_y(padding.1);
+            }
+        }
+    }
+    if let Some(border) = border {
+        bordered(view, theme, border);
+    }
+    if wrap {
+        view.flex_wrap(Wrap::Wrap);
+    }
+    if overflow == abi::Overflow::Hidden {
+        view.overflow(Overflow::Hidden);
+    }
+    match justify {
+        abi::Justify::Start => {}
+        abi::Justify::End => drop(view.justify(Justify::End)),
+        abi::Justify::Center => drop(view.justify(Justify::Center)),
+        abi::Justify::SpaceBetween => drop(view.justify(Justify::SpaceBetween)),
+        abi::Justify::SpaceAround => drop(view.justify(Justify::SpaceAround)),
+    }
+    match align {
+        abi::Align::Stretch => {}
+        abi::Align::Start => drop(view.align_items(Align::Start)),
+        abi::Align::Center => drop(view.align_items(Align::Center)),
+        abi::Align::End => drop(view.align_items(Align::End)),
+    }
+    if let Some(bg) = color(theme, bg) {
+        view.bg(bg);
+    }
 }
 
 /// Whether OpenTUI can lay out `node`: it nests no deeper than [`reconcile::MAX_DEPTH`] levels and its sizes in
