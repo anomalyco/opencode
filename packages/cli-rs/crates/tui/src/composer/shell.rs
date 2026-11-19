@@ -45,19 +45,8 @@ pub(super) fn update(inner: &Rc<Inner>, tui: &Tui) {
 }
 
 pub(super) fn commands(inner: &Rc<Inner>) -> Vec<TuiCommand> {
-    let command = |id: &str, title: &str, run: fn(&Rc<Inner>, &Tui)| {
-        TuiCommand::new(
-            id,
-            bind!(inner, |inner, _, _| {
-                let Some(tui) = inner.tui.upgrade() else { return };
-                run(&inner, &tui);
-            }),
-        )
-        .title(title)
-        .group("Composer")
-    };
     vec![
-        command("composer.shell.up", "Previous shell", |inner, tui| {
+        inner.command("composer.shell.up", "Previous shell", |inner, tui| {
             {
                 let mut state = inner.shell.borrow_mut();
                 if state.selected == 0 {
@@ -70,7 +59,7 @@ pub(super) fn commands(inner: &Rc<Inner>) -> Vec<TuiCommand> {
             }
             inner.refresh(tui);
         }),
-        command("composer.shell.down", "Next shell", |inner, tui| {
+        inner.command("composer.shell.down", "Next shell", |inner, tui| {
             {
                 let mut state = inner.shell.borrow_mut();
                 if state.entries.is_empty() {
@@ -81,8 +70,8 @@ pub(super) fn commands(inner: &Rc<Inner>) -> Vec<TuiCommand> {
             }
             inner.refresh(tui);
         }),
-        command("composer.shell.select", "View shell output", |inner, tui| open(inner, tui)),
-        command("composer.shell.kill", "Kill shell command", |inner, tui| {
+        inner.command("composer.shell.select", "View shell output", |inner, tui| open(inner, tui)),
+        inner.command("composer.shell.kill", "Kill shell command", |inner, tui| {
             let Some(shell) = selected(inner) else { return };
             let client = tui.data.client().clone();
             tui.app.runtime().spawn(async move {

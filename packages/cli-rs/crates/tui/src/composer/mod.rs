@@ -166,12 +166,6 @@ impl Inner {
 
     fn register(self: &Rc<Self>, tui: &Tui) {
         let open = self.condition(|inner| inner.open.get());
-        let run = |action: fn(&Rc<Inner>, &Tui)| {
-            bind!(self, |inner, _: Option<&str>, _: Option<&KeyEvent>| {
-                let Some(tui) = inner.tui.upgrade() else { return };
-                action(&inner, &tui);
-            })
-        };
         let tab = |tab: Tab, commands: Vec<TuiCommand>| {
             KeymapLayer::new(commands)
                 .mode(MODE)
@@ -191,12 +185,14 @@ impl Inner {
         .palette();
         let layers = [
             KeymapLayer::new(vec![
-                TuiCommand::inline("left", run(|inner, tui| inner.switch(tui, -1)))
+                TuiCommand::inline("left", self.run(|inner, tui| inner.switch(tui, -1)))
                     .title("Previous tab")
                     .group("Composer"),
-                TuiCommand::inline("right", run(|inner, tui| inner.switch(tui, 1))).title("Next tab").group("Composer"),
-                TuiCommand::inline("escape", run(Inner::close)).title("Close composer").group("Composer"),
-                TuiCommand::inline("ctrl+c", run(Inner::close)).title("Close composer").group("Composer"),
+                TuiCommand::inline("right", self.run(|inner, tui| inner.switch(tui, 1)))
+                    .title("Next tab")
+                    .group("Composer"),
+                TuiCommand::inline("escape", self.run(Inner::close)).title("Close composer").group("Composer"),
+                TuiCommand::inline("ctrl+c", self.run(Inner::close)).title("Close composer").group("Composer"),
             ])
             .mode(MODE)
             .enabled(open)
@@ -213,6 +209,19 @@ impl Inner {
                 Err(error) => log::error!("composer keymap layer: {error}"),
             }
         }
+    }
+
+    /// A command body that runs `action` while the TUI lives.
+    fn run(self: &Rc<Self>, action: fn(&Rc<Inner>, &Tui)) -> impl Fn(Option<&str>, Option<&KeyEvent>) + 'static {
+        bind!(self, |inner, _: Option<&str>, _: Option<&KeyEvent>| {
+            let Some(tui) = inner.tui.upgrade() else { return };
+            action(&inner, &tui);
+        })
+    }
+
+    /// A named command of one composer tab.
+    fn command(self: &Rc<Self>, id: &str, title: &str, action: fn(&Rc<Inner>, &Tui)) -> TuiCommand {
+        TuiCommand::new(id, self.run(action)).title(title).group("Composer")
     }
 
     /// A keymap condition on the composer's own cells: conditions must not lock the store.

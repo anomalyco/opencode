@@ -36,19 +36,8 @@ pub(super) fn update(inner: &Rc<Inner>, tui: &Tui) {
 }
 
 pub(super) fn commands(inner: &Rc<Inner>) -> Vec<TuiCommand> {
-    let command = |id: &str, title: &str, run: fn(&Rc<Inner>, &Tui)| {
-        TuiCommand::new(
-            id,
-            bind!(inner, |inner, _, _| {
-                let Some(tui) = inner.tui.upgrade() else { return };
-                run(&inner, &tui);
-            }),
-        )
-        .title(title)
-        .group("Composer")
-    };
     vec![
-        command("composer.terminal.up", "Previous terminal", |inner, tui| {
+        inner.command("composer.terminal.up", "Previous terminal", |inner, tui| {
             {
                 let mut state = inner.terminals.borrow_mut();
                 let len = state.entries.len();
@@ -56,7 +45,7 @@ pub(super) fn commands(inner: &Rc<Inner>) -> Vec<TuiCommand> {
             }
             inner.refresh(tui);
         }),
-        command("composer.terminal.down", "Next terminal", |inner, tui| {
+        inner.command("composer.terminal.down", "Next terminal", |inner, tui| {
             {
                 let mut state = inner.terminals.borrow_mut();
                 let len = state.entries.len();
@@ -64,7 +53,7 @@ pub(super) fn commands(inner: &Rc<Inner>) -> Vec<TuiCommand> {
             }
             inner.refresh(tui);
         }),
-        command("composer.terminal.select", "Select terminal", select),
+        inner.command("composer.terminal.select", "Select terminal", select),
     ]
 }
 
