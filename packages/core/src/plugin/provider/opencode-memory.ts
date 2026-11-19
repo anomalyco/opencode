@@ -29,9 +29,12 @@ const namespace = "memory"
 /** Sessions whose files and injections are remembered; the least recently active is forgotten first. */
 const MAX_SESSIONS = 500
 const MAX_FILES = 20
-/** Entries a session was given that a correction may name, and how much of each is kept to match it. */
+/**
+ * Entries a session was given that a correction may name, and how much of each is kept: Console's 8 KiB body limit, so
+ * an entry is corrected from its whole text.
+ */
 const MAX_GIVEN = 10
-const MAX_GIVEN_TEXT = 2000
+const MAX_GIVEN_TEXT = 8192
 /** Events kept since a session's last boundary, newest kept. */
 const MAX_SEGMENT = 200
 /**
@@ -196,6 +199,8 @@ type Tracked = {
   readonly given: Map<string, OpencodeMemoryPolicy.Given>
   /** Per entry, each revision this session wrote over the one before it, by that one: its own edits aren't news to it. */
   readonly revisions: Map<string, Map<number, number>>
+  /** Entries this session wrote a revision of. */
+  readonly edited: Set<string>
   /**
    * Per entry, the revisions this session was shown whole since its last compaction: read, injected or written by it.
    * A rewrite or retire replaces what the entry says, so it starts from one of these.
@@ -243,8 +248,6 @@ export const make = Effect.fnUntraced(function* (
   const git = yield* Git.Service
   const processes = yield* AppProcess.Service
   const flags = yield* Flag.Service
-  const known = (state: Tracked) =>
-    [...state.given.values()].map((entry) => ({ id: entry.id, title: entry.title, text: entry.text }))
   const github = yield* OpencodeMemoryAccess.make(http, processes, yield* OpencodeMemoryAccess.GitHub)
   let current: { console: OpencodeWatches.Console; readonly lease: Scope.Closeable } | undefined
   const sessions = new Map<string, Tracked>()
@@ -254,6 +257,7 @@ export const make = Effect.fnUntraced(function* (
       injected: { prompt: 0, failure: 0 },
       given: new Map(),
       revisions: new Map(),
+      edited: new Set(),
       shown: new Map(),
       delivered: new Map(),
       compactions: 0,
@@ -290,6 +294,7 @@ export const make = Effect.fnUntraced(function* (
     const state = tracked(sessionID)
     const given = state.given.get(id)
     if (written.revision === undefined) return
+    state.edited.add(id)
     if (given) give(state, { ...given, revision: written.revision })
     see(state, id, written.revision)
     // What was injected no longer says what the entry does; it isn't delivered again.
@@ -625,7 +630,9 @@ export const make = Effect.fnUntraced(function* (
     Effect.gen(function* () {
       const models = yield* distillers
       const state = tracked(sessionID)
-      const prompt = OpencodeMemoryCapture.prompt({ segment, boundary, known: known(state) })
+      // The entries as the distiller is shown them, which a correction's edits are matched against.
+      const shown = [...state.given.values()]
+      const prompt = OpencodeMemoryCapture.prompt({ segment, boundary, known: shown })
       const name = (model: { readonly id: string; readonly providerID: string }) => `${model.providerID}/${model.id}`
       // A model can still refuse the request: the next one is tried. With none listed, OpenCode picks its own.
       const answer = yield* Effect.firstSuccessOf(
@@ -678,9 +685,19 @@ export const make = Effect.fnUntraced(function* (
                       state.about.get(id)?.toLowerCase() === here),
                 )
               : []
+          // A correction of an entry the session holds goes in as a new revision of it, its history kept; one the
+          // session edited itself keeps that edit. Only the rest are superseded, by the entry as the correction leaves it.
+          const remaining = yield* Effect.filter(supersedes, (id) =>
+            correct(sessionID, shown, id, candidate, evidence).pipe(Effect.map((done) => !done)),
+          )
+          if (supersedes.length > 0 && remaining.length === 0) return
+          const original = remaining.length === 1 ? shown.find((entry) => entry.id === remaining[0]) : undefined
+          const body =
+            (original && candidate.edits && OpencodeMemoryCapture.corrected(original.text, candidate.edits)) ??
+            candidate.body
           const fields = yield* shared("publish", {
             ...metadata(candidate),
-            body: candidate.body,
+            body,
             ...(evidence.length === 0 ? {} : { evidence }),
           })
           yield* resolved("publish", Schema.decodeUnknownOption(Paths)(fields.paths).pipe(Option.getOrUndefined))
@@ -690,7 +707,7 @@ export const make = Effect.fnUntraced(function* (
           // entry that already says it, such as one the agent published itself when the user stated the rule.
           const published = yield* call(Written, "POST", "/api/memory/entries", {
             ...fields,
-            ...(supersedes.length === 0 ? {} : { supersedes }),
+            ...(remaining.length === 0 ? {} : { supersedes: remaining }),
             source: { ...source, sessionID, ...writer },
             ...(anchor === undefined ? {} : { anchor }),
             ...((yield* tainted(sessionID)) ? { tainted: true } : {}),
@@ -715,12 +732,42 @@ export const make = Effect.fnUntraced(function* (
               id: published.id,
               revision: published.revision ?? 1,
               title: candidate.title,
-              text: candidate.body,
+              text: body,
             })
-          supersedes.forEach((id) => state.given.delete(id))
+          remaining.forEach((id) => state.given.delete(id))
         }).pipe(Effect.catch((cause) => Effect.logDebug("memory candidate not sent", { cause }))),
       )
     }).pipe(Effect.catch((cause) => Effect.logDebug("memory distillation failed", { cause })))
+
+  /**
+   * Applies a correction the user confirmed to entry `id` as a new revision of it, from the revision the distiller was
+   * shown: true when it's in, or when the session already edited the entry itself (that edit stands), false when the
+   * entry has to be superseded instead.
+   */
+  const correct = (
+    sessionID: Session.ID,
+    shown: ReadonlyArray<OpencodeMemoryPolicy.Given>,
+    id: string,
+    candidate: OpencodeMemoryCapture.Candidate,
+    evidence: ReadonlyArray<{ readonly kind: string; readonly ref: string }>,
+  ) =>
+    Effect.gen(function* () {
+      const entry = shown.find((item) => item.id === id)
+      if (entry === undefined) return false
+      const edits = candidate.edits ?? []
+      return yield* (
+        edits.length > 0
+          ? write("edit", sessionID, id, entry.revision, { edits, evidence })
+          : write("rewrite", sessionID, id, entry.revision, { body: candidate.body, evidence })
+      ).pipe(
+        Effect.as(true),
+        Effect.catch((cause) =>
+          Effect.logDebug("memory correction not applied as an edit", { id, cause }).pipe(
+            Effect.as(tracked(sessionID).edited.has(id)),
+          ),
+        ),
+      )
+    })
 
   const start = Effect.fnUntraced(function* () {
     const lease = yield* Scope.Scope

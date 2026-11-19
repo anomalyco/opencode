@@ -98,12 +98,24 @@ export function prompt(input: {
     'Answer only JSON: {"candidates": [{"kind": "bug|convention|procedure|gotcha|decision|failed-approach", "title": "...", "body": "...", "paths": ["repository-relative paths"], "errors": ["exact error messages"], "basis": "user|observed", "quote": "the user\'s exact words, for basis user"}]}, at most 2. Each body has these lines: Claim: / Applies when: / Action: / Verify: (or Avoid:) / Anchors: / Evidence:.',
     ...((input.known ?? []).length === 0
       ? []
-      : [
-          'Entries already in the shared memory that this session knows. When the user\'s correction reverses or replaces one of them, name it in "supersedes": ["<id>"] on the new candidate; never propose a candidate that repeats one.',
-          (input.known ?? [])
-            .map((entry) => `- ${entry.id}: ${entry.title} — ${entry.text.split("\n")[0]?.slice(0, 200) ?? ""}`)
-            .join("\n"),
-        ]),
+      : // Only the user's word corrects an entry, so only a record with it shows them whole: a correction rewritten from
+        // a summary narrows what the entry covered.
+        input.segment.some((event) => event.type === "prompt" && event.user)
+        ? [
+            'Entries already in the shared memory that this session knows, whole. When the user\'s correction changes one of them, propose it as a correction of that entry: name it in "supersedes": ["<id>"], give "edits": [{"oldText": "text copied exactly from that entry, once in it", "newText": "the corrected text"}] that change only what the user corrected, and make "body" that entry with those edits applied, keeping its scope, framing and every other line as they are. Never propose a candidate that repeats one.',
+            (input.known ?? [])
+              .map(
+                (entry) =>
+                  `<entry id="${entry.id}" title="${entry.title.replaceAll(`"`, "'")}">\n${entry.text.trim()}\n</entry>`,
+              )
+              .join("\n"),
+          ]
+        : [
+            "Entries already in the shared memory that this session knows; never propose a candidate that repeats one.",
+            (input.known ?? [])
+              .map((entry) => `- ${entry.id}: ${entry.title} — ${entry.text.split("\n")[0]?.slice(0, 200) ?? ""}`)
+              .join("\n"),
+          ]),
     `The boundary: ${input.boundary}.`,
     "The record:",
     render(input.segment),
@@ -119,6 +131,8 @@ const Candidate = Schema.Struct({
   basis: Schema.optional(Schema.Literals(["user", "observed"])),
   quote: Schema.optional(Schema.String),
   supersedes: Schema.optional(Schema.Array(Schema.String)),
+  /** For a correction of an entry it supersedes: what changes in that entry's text, and nothing else. */
+  edits: Schema.optional(Schema.Array(Schema.Struct({ oldText: Schema.String, newText: Schema.String }))),
 })
 export type Candidate = typeof Candidate.Type
 const Distilled = Schema.Struct({ candidates: Schema.Array(Schema.Unknown) })
@@ -151,6 +165,16 @@ export function backing(candidate: Candidate, segment: ReadonlyArray<Event>): "c
   return segment.some((event) => event.type === "prompt" && event.user && flat(event.text).includes(quote))
     ? "confirmed"
     : "dropped"
+}
+
+/**
+ * `text` with each edit's `oldText` replaced by its `newText`, every one matched exactly once in the original, or
+ * undefined when one isn't: the entry as the correction leaves it, the rest of it as it was.
+ */
+export function corrected(text: string, edits: ReadonlyArray<{ readonly oldText: string; readonly newText: string }>) {
+  if (edits.length === 0) return undefined
+  if (edits.some((edit) => edit.oldText === "" || text.split(edit.oldText).length !== 2)) return undefined
+  return edits.reduce((current, edit) => current.replace(edit.oldText, () => edit.newText), text)
 }
 
 function flat(text: string) {

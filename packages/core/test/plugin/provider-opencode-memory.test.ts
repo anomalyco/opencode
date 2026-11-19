@@ -1799,35 +1799,93 @@ describe("OpencodePlugin memory capture", () => {
       ),
   )
 
+  // The distiller's answer to a user's correction of mem_1, whose body is "Body of mem_1\nMore": an edit of the line it
+  // changes, and a body narrower than the entry, which a superseding publish mustn't take.
+  const correction = "From now on we never write More in log messages, write Less"
+  const correcting = (oldText: string) =>
+    JSON.stringify({
+      candidates: [
+        {
+          kind: "convention",
+          title: "Log messages say Less",
+          body: "Claim: say Less\nApplies when: x\nAction: x\nAvoid: x\nAnchors: x\nEvidence: the user said so",
+          basis: "user",
+          quote: correction,
+          supersedes: ["mem_1", "mem_unknown"],
+          edits: [{ oldText, newText: "Less" }],
+        },
+      ],
+    })
+  const patches = (console: ReturnType<typeof fakeConsole>) =>
+    console.state.requests.filter((item) => item.method === "PATCH" && item.path === "/api/memory/entries/mem_1")
+  const publishes = (console: ReturnType<typeof fakeConsole>) =>
+    console.state.requests.filter((item) => item.path === "/api/memory/entries")
+
   capturing("console_memory,memory_capture").effect(
-    "retires the entry a user-confirmed correction reverses, in the same publish",
+    "corrects an entry the session holds as a new revision of it, from its whole text, instead of superseding it",
     () =>
       withConsole((console) =>
         Effect.gen(function* () {
-          const correction = "From now on we never add a trailing period to log messages"
-          distiller.reply = JSON.stringify({
-            candidates: [
-              {
-                kind: "convention",
-                title: "Log messages end without a period",
-                body: "Claim: x\nApplies when: x\nAction: x\nAvoid: x\nAnchors: x\nEvidence: the user said so",
-                basis: "user",
-                quote: correction,
-                supersedes: ["mem_1", "mem_unknown"],
-              },
-            ],
-          })
+          distiller.reply = correcting("More")
           const { host } = yield* start(console)
           const session = yield* host.session.create({})
           yield* (yield* memoryTool("read")).execute({ id: "mem_1" }, context(session.id))
           yield* prompt(session.id, correction)
-          yield* waitUntil(
-            Effect.sync(() => console.state.requests.some((item) => item.path === "/api/memory/entries")),
+          yield* waitUntil(Effect.sync(() => patches(console).length > 0))
+          // The distiller sees the entry whole, so its correction can keep everything the user didn't change.
+          expect(distiller.prompts.at(-1)).toContain(
+            '<entry id="mem_1" title="Entry mem_1">\nBody of mem_1\nMore\n</entry>',
           )
-          expect(distiller.prompts.at(-1)).toContain("- mem_1: Entry mem_1 — Body of mem_1")
-          // Only what the session knows is retired.
-          expect(console.state.requests.find((item) => item.path === "/api/memory/entries")?.body).toMatchObject({
-            title: "Log messages end without a period",
+          expect(patches(console)[0]?.body).toMatchObject({
+            expectedRevision: 1,
+            edits: [{ oldText: "More", newText: "Less" }],
+            evidence: [{ kind: "confirmation", ref: correction }],
+          })
+          // The entry keeps its history; nothing replaces or retires it.
+          yield* drain
+          expect(publishes(console)).toEqual([])
+        }),
+      ),
+  )
+
+  capturing("console_memory,memory_capture").effect(
+    "keeps the session's own edit of an entry when the distiller's correction no longer applies, and supersedes nothing",
+    () =>
+      withConsole((console) =>
+        Effect.gen(function* () {
+          distiller.reply = correcting("More, as before")
+          const { host } = yield* start(console)
+          const session = yield* host.session.create({})
+          yield* (yield* memoryTool("read")).execute({ id: "mem_1" }, context(session.id))
+          yield* (yield* memoryTool("edit")).execute(
+            { id: "mem_1", revision: 1, oldText: "More", newText: "Less, in every log message" },
+            context(session.id, "call_edit"),
+          )
+          yield* prompt(session.id, correction)
+          yield* waitUntil(Effect.sync(() => patches(console).length > 1))
+          yield* drain
+          expect(patches(console)[1]?.body).toMatchObject({ expectedRevision: 2 })
+          expect(publishes(console)).toEqual([])
+        }),
+      ),
+  )
+
+  capturing("console_memory,memory_capture").effect(
+    "supersedes an entry that changed since the session read it with that entry as the correction leaves it",
+    () =>
+      withConsole((console) =>
+        Effect.gen(function* () {
+          distiller.reply = correcting("More")
+          const { host } = yield* start(console)
+          const session = yield* host.session.create({})
+          yield* (yield* memoryTool("read")).execute({ id: "mem_1" }, context(session.id))
+          // A teammate wrote r2 since, over the line the correction changes: the edit can't go in.
+          console.state.revisions.set("mem_1", 2)
+          yield* prompt(session.id, correction)
+          yield* waitUntil(Effect.sync(() => publishes(console).length > 0))
+          // The reversed rule doesn't stay live beside its correction, and the replacement keeps what the entry said.
+          expect(publishes(console)[0]?.body).toMatchObject({
+            body: "Body of mem_1\nLess",
             supersedes: ["mem_1"],
             evidence: [{ kind: "confirmation", ref: correction }],
           })
@@ -1993,6 +2051,16 @@ describe("OpencodeMemoryCapture", () => {
     // The same words in a message that isn't the user's (a subagent's task, an automation's) aren't their confirmation.
     const given = [ask("Add isWeekend. From now on we never mock the clock in tests.", false, false)]
     expect(OpencodeMemoryCapture.backing(candidate("From now on we never mock the clock"), given)).toBe("dropped")
+  })
+
+  test("applies a correction's edits to an entry's whole text, only when each matches exactly once", () => {
+    const text = "Claim: amounts are cents\nApplies when: src/billing/ and src/refunds/\nAction: name them amountCents"
+    expect(OpencodeMemoryCapture.corrected(text, [{ oldText: "amountCents", newText: "amountMinor" }])).toBe(
+      "Claim: amounts are cents\nApplies when: src/billing/ and src/refunds/\nAction: name them amountMinor",
+    )
+    expect(OpencodeMemoryCapture.corrected(text, [{ oldText: "src/payments/", newText: "x" }])).toBeUndefined()
+    expect(OpencodeMemoryCapture.corrected(text, [{ oldText: "src/", newText: "lib/" }])).toBeUndefined()
+    expect(OpencodeMemoryCapture.corrected(text, [])).toBeUndefined()
   })
 
   test("links commits and passing runs after failures as evidence, and keeps only well-formed candidates", () => {
