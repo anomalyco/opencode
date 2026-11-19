@@ -29,8 +29,11 @@ export function todoMarker(status: TodoStatus, ascii = false) {
   return "[ ]"
 }
 
-/** The current list is the input of the latest completed `todowrite` call before the revert boundary. */
-export function sessionTodos(messages: ReadonlyArray<SessionMessageInfo>, boundary?: string): Todo[] {
+/**
+ * The current list is the input of the latest completed `todowrite` call before the revert boundary, or undefined when
+ * none of the messages holds one.
+ */
+export function sessionTodos(messages: ReadonlyArray<SessionMessageInfo>, boundary?: string): Todo[] | undefined {
   const boundaryIndex = boundary ? messages.findIndex((message) => message.id === boundary) : -1
   const tool = messages
     .slice(0, boundaryIndex === -1 ? messages.length : boundaryIndex)
@@ -39,5 +42,5 @@ export function sessionTodos(messages: ReadonlyArray<SessionMessageInfo>, bounda
       (item): item is SessionMessageAssistantTool & { state: SessionMessageToolStateCompleted } =>
         item.type === "tool" && item.name === "todowrite" && item.state.status === "completed",
     )
-  return parseTodos(tool?.state.input.todos)
+  return tool && parseTodos(tool.state.input.todos)
 }
