@@ -31,6 +31,8 @@ pub(crate) struct Running<'a> {
     pub active_before: Duration,
     /// Back-edges until the next round trip, in the round-trip test mode.
     round_trip_every: u32,
+    /// Round trips still to skip after one that saved a large state.
+    skip: u32,
 }
 
 /// How a run ended: with its outcome, or suspended with its saved state.
@@ -417,6 +419,10 @@ impl<'a> Program<'a> {
         // The reference hands queued calls to its driver at every stop, before anyone can suspend the run.
         crate::host::launch(&mut r.vm);
         let request = self.shared.take_request();
+        if request.is_none() && r.skip > 0 {
+            r.skip -= 1;
+            return None;
+        }
         let start = r.vm.start;
         let active_ms = start.elapsed().max(r.active_before).as_millis() as u64;
         let captured = snapshot::capture(
@@ -477,6 +483,11 @@ impl<'a> Program<'a> {
                     return None;
                 }
                 let bytes = snapshot::to_bytes(&state);
+                // A large state skips the next round trips in proportion to its size, as the reference's round-trip
+                // mode does (at a quarter of its rate, to keep more points): a deep or heavy run still round-trips
+                // its large states without paying for it at every point.
+                let saved = r.vm.heap.len().saturating_sub(r.vm.snapshot_base.heap);
+                let skip = (saved / 800 + bytes.len() / 400_000) as u32;
                 let state = snapshot::from_bytes(&bytes).ok()?;
                 match restore(self.rt, &state) {
                     Ok(mut fresh) => {
@@ -487,6 +498,7 @@ impl<'a> Program<'a> {
                         // Twice as long each time, so a long loop takes a few round trips, not thousands.
                         fresh.round_trip_every =
                             r.round_trip_every.saturating_mul(2).min(ROUNDTRIP_MAX);
+                        fresh.skip = skip;
                         self.detach();
                         self.state = State::Running(fresh);
                         None
@@ -553,6 +565,7 @@ impl<'a> Running<'a> {
             timer_armed: false,
             active_before: Duration::ZERO,
             round_trip_every: ROUNDTRIP_TICKS,
+            skip: 0,
         }
     }
 
