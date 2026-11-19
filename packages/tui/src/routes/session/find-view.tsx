@@ -126,6 +126,7 @@ export function useFindHighlight(part: () => FindPart) {
   // OpenTUI calls these as methods of each block. Prose blocks keep the session links' chunks.
   async function prose(this: CodeRenderable, chunks: TextChunk[], context: ChunkRenderContext) {
     const linked = (await links?.call(this, chunks, context)) ?? chunks
+    if (!ctx.find.pattern()) return linked
     // A session link label replaces its ID, so the source no longer lines up with the text.
     if (linked.map((chunk) => chunk.text).join("") !== chunks.map((chunk) => chunk.text).join("")) return linked
     return paint(this, linked, context)
@@ -135,11 +136,13 @@ export function useFindHighlight(part: () => FindPart) {
   }
 
   function paint(block: CodeRenderable, chunks: TextChunk[], context: ChunkRenderContext) {
-    const pattern = ctx.find.pattern()
-    const start = markdown && sourceStart(markdown, part().text, block)
-    if (!pattern || start === undefined) return chunks
+    // Cheap checks first: this runs for every block on every highlight, streaming included.
+    const matches = findRanges(part().text, ctx.find.pattern())
+    if (matches.length === 0 || !markdown) return chunks
+    const start = sourceStart(markdown, part().text, block)
+    if (start === undefined) return chunks
     const end = start + context.content.length
-    const ranges = findRanges(part().text, pattern).flatMap((range, occurrence) =>
+    const ranges = matches.flatMap((range, occurrence) =>
       range.start >= start && range.end <= end
         ? [{ start: range.start - start, end: range.end - start, current: occurrence === current() }]
         : [],
