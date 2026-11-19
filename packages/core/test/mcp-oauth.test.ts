@@ -241,25 +241,28 @@ describe("MCP OAuth", () => {
     expect(tokenRequests.map((request) => request.get("code"))).toEqual(["accepted"])
   })
 
-  test("ends the login with the authorization server's error when no code follows", async () => {
-    const exit = await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const { authorization, url: authorizationUrl } = yield* start(authServer, { client_id: "client" })
-          const callback = new URL(authorizationUrl.searchParams.get("redirect_uri") ?? "")
-          callback.searchParams.set("state", authorizationUrl.searchParams.get("state") ?? "")
-          callback.searchParams.set("error", "access_denied")
-          callback.searchParams.set("error_description", "The user denied the request")
-          expect((yield* Effect.promise(() => fetch(callback))).status).toBe(400)
-          yield* TestClock.withLive(Effect.sleep("10 millis"))
-          yield* TestClock.adjust("10 seconds")
-          return yield* Effect.exit(authorization.callback)
-        }).pipe(Effect.provide(TestClock.layer())),
-      ),
-    )
+  test.each([true, false])(
+    "ends the login with the authorization server's error when no code follows (state: %p)",
+    async (withState) => {
+      const exit = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const { authorization, url: authorizationUrl } = yield* start(authServer, { client_id: "client" })
+            const callback = new URL(authorizationUrl.searchParams.get("redirect_uri") ?? "")
+            if (withState) callback.searchParams.set("state", authorizationUrl.searchParams.get("state") ?? "")
+            callback.searchParams.set("error", "access_denied")
+            callback.searchParams.set("error_description", "The user denied the request")
+            expect((yield* Effect.promise(() => fetch(callback))).status).toBe(400)
+            yield* TestClock.withLive(Effect.sleep("10 millis"))
+            yield* TestClock.adjust("10 seconds")
+            return yield* Effect.exit(authorization.callback)
+          }).pipe(Effect.provide(TestClock.layer())),
+        ),
+      )
 
-    expect(Exit.isFailure(exit) && Cause.squash(exit.cause)).toEqual(new Error("The user denied the request"))
-  })
+      expect(Exit.isFailure(exit) && Cause.squash(exit.cause)).toEqual(new Error("The user denied the request"))
+    },
+  )
 
   test("completes from a pasted redirect URL and keeps waiting after a wrong paste", async () => {
     const tokenRequests: URLSearchParams[] = []

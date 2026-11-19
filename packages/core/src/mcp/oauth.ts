@@ -475,15 +475,16 @@ export const authorize = (input: {
           .end(OauthCallbackPage.error("Missing authorization code", { provider: input.name }))
         return
       }
-      // Any local program can request the callback, so one for another sign-in must not end this one.
-      if (returned !== state) return reject("OAuth state mismatch", "state_mismatch")
       // Programs that replay the browser's requests without its cookies (macOS link previews) make an authorization
       // server that uses single-use verifiers redirect here with an error while the browser still brings the code,
-      // so an error ends the login only if no code follows within DENIAL_GRACE.
-      if (error) {
+      // so an error ends the login only if no code follows within DENIAL_GRACE. Some servers leave state out of
+      // error redirects, so those count for this sign-in.
+      if (error && (returned === null || returned === state)) {
         Effect.runSync(Deferred.fail(denied, new Error(error)))
         return reject(error, "authorization_error")
       }
+      // Any local program can request the callback, so one for another sign-in must not end this one.
+      if (returned !== state) return reject("OAuth state mismatch", "state_mismatch")
       if (!value) {
         Effect.runSync(Deferred.fail(code, new Error("Missing authorization code")))
         return reject("Missing authorization code", "missing_code")
