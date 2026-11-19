@@ -175,11 +175,14 @@ export function createSessionRequestModel() {
       if (info.status === "running") return new Map(previous).set(info.id, info)
 
       if (!previous.has(info.id)) return previous
+
       const next = new Map(previous)
       next.delete(info.id)
+
       return next
     })
   })
+
   onCleanup(stopJobs)
 
   createEffect(() => {

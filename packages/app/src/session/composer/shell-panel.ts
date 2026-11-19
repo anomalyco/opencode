@@ -36,6 +36,7 @@ export function createShellPanel(input: {
     shells: input.shells(),
     scripts: input.scripts?.() ?? [],
   })
+
   const initial = untrack(work)
 
   const [panelState, setPanelState] = createSignal(

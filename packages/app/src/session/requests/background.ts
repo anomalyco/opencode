@@ -158,32 +158,36 @@ export function createSessionBackground(input: {
     // The latest call for a child names it; its own session or its tree's jobs decide whether it still runs.
     return sessions.flatMap((info): Subagent[] => {
       if (!descends(info.id, id)) return []
+
       const owned = jobs.filter((job) => {
         const owner = job.kind === "subagent" ? job.childSessionID : job.sessionID
 
         return owner === info.id || descends(owner, info.id)
       })
+
       const running = input.status(info.id) === "running"
 
       if (!running && owned.length === 0) return []
+
       const latest = current.calls.get(info.id)
+
       const count = (kind: JobInfo["kind"]) =>
         owned.filter((job) => job.kind === kind && !(job.kind === "subagent" && job.childSessionID === info.id)).length
 
-      return [
-        {
-          id: info.id,
-          type: "subagent",
-          sessionID: info.id,
-          label: latest?.label ?? info.title ?? info.id,
-          agent: latest?.agent,
-          started: latest?.started ?? info.time.created,
-          ...(running
-            ? {}
-            : { idle: { subagents: count("subagent"), scripts: count("codemode"), shells: count("shell") } }),
-          ...(owned.length > 0 ? { jobs: owned.map((job) => job.id) } : {}),
-        },
-      ]
+      const item: Subagent = {
+        id: info.id,
+        type: "subagent",
+        sessionID: info.id,
+        label: latest?.label ?? info.title ?? info.id,
+        agent: latest?.agent,
+        started: latest?.started ?? info.time.created,
+      }
+
+      if (!running) item.idle = { subagents: count("subagent"), scripts: count("codemode"), shells: count("shell") }
+
+      if (owned.length > 0) item.jobs = owned.map((job) => job.id)
+
+      return [item]
     })
   })
 

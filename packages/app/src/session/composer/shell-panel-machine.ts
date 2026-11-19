@@ -188,11 +188,13 @@ export function selectShellPanelView(state: ShellPanelState, work: ShellPanelWor
   const shell = state.status === "shell" ? state : undefined
   // A shell that ended while its panel is open still counts until the menu closes.
   const held = shell && !running(work, shell.item) ? 1 : 0
+
   const counts = {
     subagents: work.subagents.length,
     scripts: work.scripts?.length ?? 0,
     shells: work.shells.length + held,
   }
+
   const phase = shell?.phase.status
   const stoppingKeys = state.status === "disposed" ? NO_STOPS : state.stopping
   const stopping = !!shell && stoppingKeys[shell.item.key] !== undefined

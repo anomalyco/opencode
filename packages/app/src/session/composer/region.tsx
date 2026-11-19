@@ -5,6 +5,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner } from "@opencode/ui/scroll-view"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useNavigate } from "@solidjs/router"
+import { Match } from "effect"
 import { createEffect, createMemo, on, onCleanup, onMount, Show, type Accessor } from "solid-js"
 import { Composer } from "@/composer/composer"
 import { VoiceComposer } from "@/voice/composer"
@@ -488,21 +489,25 @@ export function ActiveSessionComposerRegion(props: {
 
   const stop = (item: SessionActivityItem) => {
     const background = props.model.region.state.background
+
     // A subagent stops with everything its tree still runs.
-    const request =
-      item.type === "subagent"
-        ? Promise.all([
-            ...(data.session.status(item.sessionID) === "running"
-              ? [server.api.session.interrupt({ sessionID: item.sessionID })]
-              : []),
-            ...(item.jobs ?? []).map(background.cancelJob),
-          ])
-        : item.type === "script"
-          ? background.cancelJob(item.target)
-          : server.api.shell.remove({
-              id: item.target,
-              location: { directory: data.shell.get(item.target)?.location.directory ?? location().directory },
-            })
+    const request: Promise<unknown> = Match.value(item).pipe(
+      Match.when({ type: "subagent" }, (subagent) =>
+        Promise.all([
+          ...(data.session.status(subagent.sessionID) === "running"
+            ? [server.api.session.interrupt({ sessionID: subagent.sessionID })]
+            : []),
+          ...(subagent.jobs ?? []).map(background.cancelJob),
+        ]),
+      ),
+      Match.when({ type: "script" }, (script) => background.cancelJob(script.target)),
+      Match.orElse((shell) =>
+        server.api.shell.remove({
+          id: shell.target,
+          location: { directory: data.shell.get(shell.target)?.location.directory ?? location().directory },
+        }),
+      ),
+    )
 
     return request.then(
       () => true,

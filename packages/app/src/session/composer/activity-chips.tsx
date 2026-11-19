@@ -6,6 +6,7 @@ import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
 import type { ShellOutputInput, ShellOutputOutput } from "@opencode/client/promise"
 import { stripAnsi } from "@opencode/session-ui/tools/ansi"
+import { Match } from "effect"
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
@@ -165,11 +166,11 @@ export function SessionActivityChips(props: {
         data-slot="session-activity-stop"
         icon={rowStopping(item) ? <Loader /> : <Icon name="close" />}
         aria-label={language.t(
-          item.type === "shell"
-            ? "session.running.stop.shell"
-            : item.type === "script"
-              ? "session.running.stop.script"
-              : "session.running.stop.subagent",
+          Match.value(item.type).pipe(
+            Match.when("shell", () => "session.running.stop.shell" as const),
+            Match.when("script", () => "session.running.stop.script" as const),
+            Match.orElse(() => "session.running.stop.subagent" as const),
+          ),
         )}
         aria-disabled={rowStopping(item) || undefined}
         aria-busy={rowStopping(item) || undefined}
