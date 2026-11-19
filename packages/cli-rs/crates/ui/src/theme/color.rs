@@ -11,24 +11,12 @@ pub(crate) struct Oklch {
 
 /// Whether `value` is a theme hex color: `#` and 3, 4, 6, or 8 hex digits.
 pub(crate) fn is_hex(value: &str) -> bool {
-    value
-        .strip_prefix('#')
-        .is_some_and(|digits| matches!(digits.len(), 3 | 4 | 6 | 8) && digits.bytes().all(|b| b.is_ascii_hexdigit()))
+    value.starts_with('#') && Color::parse(value).is_some()
 }
 
-/// Core's `RGBA.fromHex`: an optional `#`, 3, 4, 6, or 8 digits; anything else is magenta.
+/// Core's `RGBA.fromHex`: OpenTUI's [`Color::parse`], and magenta for anything it rejects.
 pub fn from_hex(value: &str) -> Color {
-    let digits = value.strip_prefix('#').unwrap_or(value);
-    let expanded: String = match digits.len() {
-        3 | 4 => digits.chars().flat_map(|c| [c, c]).collect(),
-        _ => digits.to_owned(),
-    };
-    if !matches!(expanded.len(), 6 | 8) || !expanded.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return Color::rgba(255, 0, 255, 255);
-    }
-    let byte = |index: usize| u8::from_str_radix(&expanded[index..index + 2], 16).unwrap_or(0);
-    let alpha = if expanded.len() == 8 { byte(6) } else { 255 };
-    Color::rgba(byte(0), byte(2), byte(4), alpha)
+    Color::parse(value).unwrap_or(Color::rgba(255, 0, 255, 255))
 }
 
 /// `#rrggbb`, with `aa` appended when the color is not opaque.
