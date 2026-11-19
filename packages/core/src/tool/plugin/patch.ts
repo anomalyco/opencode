@@ -273,7 +273,7 @@ export const Plugin = {
                     )
                     formatted.set(
                       target.absolute,
-                      (yield* formatter.file(target.absolute))
+                      (yield* formatter.file(target))
                         ? yield* FileMutation.syncTextBom(target.environment.files, target.absolute, current.bom).pipe(
                             Effect.mapError((error) => fail(`Failed to sync ${target.absolute}`, error)),
                           )
