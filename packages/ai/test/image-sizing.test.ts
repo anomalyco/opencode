@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test"
+import { Effect, Exit, Schema } from "effect"
+import { Media } from "../src/media.js"
 import { ImageSizing } from "../src/protocols/utils/image-sizing.js"
+import { MediaProtocol } from "../src/route/media-protocol.js"
+
+const route = MediaProtocol.identity({ id: "image-sizing", name: "Image sizing", provider: "test" })
 
 const GPT_IMAGE_2 = { multiple: 16, maxEdge: 3840, minPixels: 655_360, maxPixels: 8_294_400, maxRatio: 3 }
 const STANDARD = [
@@ -32,6 +37,29 @@ describe("ImageSizing", () => {
       width: 1824,
       height: 1024,
     })
+  })
+
+  test("keeps a snapped size inside the ratio limit", () => {
+    const size = ImageSizing.fit({ aspect: "1:3", resolution: "1.5K" }, GPT_IMAGE_2)
+    expect(Math.max(size.width, size.height) / Math.min(size.width, size.height)).toBeLessThanOrEqual(3)
+    expect(size.width % 16).toBe(0)
+    expect(size.height % 16).toBe(0)
+    expect(size.width * size.height).toBeGreaterThanOrEqual(GPT_IMAGE_2.minPixels)
+    expect(size.width * size.height).toBeLessThanOrEqual(GPT_IMAGE_2.maxPixels)
+  })
+
+  test("rejects zero-sided aspect ratios at the schema boundary", () => {
+    const decode = Schema.decodeUnknownSync(Media.AspectRatio)
+    expect(decode("16:9")).toBe("16:9")
+    expect(() => decode("0:0")).toThrow()
+    expect(() => decode("1:0")).toThrow()
+  })
+
+  test("ignores non-positive resolution tiers instead of producing NaN", () => {
+    expect(ImageSizing.fit({ resolution: "0K" }, { multiple: 16 })).toEqual({ width: 1024, height: 1024 })
+    expect(Exit.isFailure(Effect.runSync(Effect.exit(ImageSizing.exact(route, { resolution: "0K" }, { multiple: 16 }))))).toBe(
+      true,
+    )
   })
 
   test("picks the nearest listed size by aspect, then by pixel count", () => {

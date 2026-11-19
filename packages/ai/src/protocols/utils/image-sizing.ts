@@ -28,7 +28,9 @@ export const isRequested = (shape: Shape) => shape.aspect !== undefined || shape
 /** `1K` is 1, `2K` is 2, `0.5K` is 0.5; anything else is not a tier. */
 export const tier = (resolution: string) => {
   const match = /^(\d+(?:\.\d+)?)k$/i.exec(resolution)
-  return match === null ? undefined : Number(match[1])
+  if (match === null) return undefined
+  const value = Number(match[1])
+  return value > 0 && Number.isFinite(value) ? value : undefined
 }
 
 /** Free width and height: the tier sets the pixel count (`1K` is about 1024²), the aspect sets the proportions. */
@@ -51,7 +53,42 @@ export const fit = (shape: Shape, limits: Limits): Size => {
       limits.multiple,
       round(Number(((edge * scaled * Math.min(1, down)) / limits.multiple).toFixed(6))) * limits.multiple,
     )
-  return { width: snap(width), height: snap(height) }
+  const size = { width: snap(width), height: snap(height) }
+  if (!Number.isFinite(maxRatio) || withinRatio(size, maxRatio)) return size
+  return repairRatio(size, width, height, limits, maxRatio) ?? size
+}
+
+const withinRatio = (size: Size, maxRatio: number) =>
+  Math.max(size.width, size.height) <= Math.min(size.width, size.height) * maxRatio
+
+/** Whether a snapped size still honors every limit, including the ratio the snap can push over. */
+const validSize = (size: Size, limits: Limits, maxRatio: number) => {
+  if (!Number.isFinite(size.width) || !Number.isFinite(size.height)) return false
+  if (size.width < limits.multiple || size.height < limits.multiple) return false
+  if (size.width % limits.multiple !== 0 || size.height % limits.multiple !== 0) return false
+  const long = Math.max(size.width, size.height)
+  const short = Math.min(size.width, size.height)
+  if (limits.minEdge !== undefined && short < limits.minEdge) return false
+  if (limits.maxEdge !== undefined && long > limits.maxEdge) return false
+  if (limits.minPixels !== undefined && size.width * size.height < limits.minPixels) return false
+  if (limits.maxPixels !== undefined && size.width * size.height > limits.maxPixels) return false
+  return withinRatio(size, maxRatio)
+}
+
+/**
+ * Snapping each edge independently can push the shorter edge below the ratio the requested aspect reached.
+ * Search the nearest multiples on both axes for a size that keeps the ratio without crossing another limit.
+ */
+const repairRatio = (size: Size, width: number, height: number, limits: Limits, maxRatio: number) => {
+  const offsets = [-2, -1, 0, 1, 2].map((offset) => offset * limits.multiple)
+  const distance = (candidate: Size) => Math.abs(candidate.width - width) + Math.abs(candidate.height - height)
+  return offsets
+    .flatMap((dx) => offsets.map((dy) => ({ width: size.width + dx, height: size.height + dy })))
+    .filter((candidate) => validSize(candidate, limits, maxRatio))
+    .reduce<Size | undefined>(
+      (best, candidate) => (best === undefined || distance(candidate) < distance(best) ? candidate : best),
+      undefined,
+    )
 }
 
 /** The listed size closest to the shape: nearest aspect ratio first, then nearest pixel count. */
