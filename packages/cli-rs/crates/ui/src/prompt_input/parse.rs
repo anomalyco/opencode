@@ -1,16 +1,14 @@
 //! Parses mention triggers, line ranges and slash commands.
 
-use unicode_width::UnicodeWidthStr;
+use opentui::App;
 
 use crate::path::Flavor;
 
-/// The cursor offset at the end of `text` that no textarea holds (`measureEditText`): display columns, one per line
-/// break, and a tab as OpenTUI's default tab width. Text in a textarea is measured by its buffer
-/// ([`super::offset_at`]).
-pub fn measure(text: &str) -> u32 {
-    let line =
-        |line: &str| line.split('\t').map(UnicodeWidthStr::width).sum::<usize>() + 2 * line.matches('\t').count();
-    text.split('\n').map(|text| line(text) + 1).sum::<usize>() as u32 - 1
+/// The cursor offset at the end of `text` that no textarea holds, as Core's `measureEditText` with the renderer's
+/// width method gives it. Text in a textarea is measured by its buffer ([`super::offset_at`]).
+pub fn measure(app: &App, text: &str) -> u32 {
+    // Fails only for a text over 4 GiB.
+    app.session().context().measure_edit_text(text, app.width_method(), 0).unwrap_or_default()
 }
 
 /// `mentionTriggerIndex`: the byte index of the last `@` that starts a word with no whitespace after it.
@@ -308,9 +306,10 @@ mod tests {
     // The editor's cells at OpenTUI's defaults: a tab is two, a wide character two, a line break one.
     #[test]
     fn measure_counts_as_a_default_buffer() {
-        assert_eq!(measure("ab\tcd"), 6);
-        assert_eq!(measure("\t\nX"), 4);
-        assert_eq!(measure("日本\n\nx"), 7);
-        assert_eq!(measure(""), 0);
+        let app = opentui::testing::TestApp::new(10, 2);
+        assert_eq!(measure(&app, "ab\tcd"), 6);
+        assert_eq!(measure(&app, "\t\nX"), 4);
+        assert_eq!(measure(&app, "日本\n\nx"), 7);
+        assert_eq!(measure(&app, ""), 0);
     }
 }

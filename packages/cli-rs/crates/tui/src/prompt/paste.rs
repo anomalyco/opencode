@@ -361,7 +361,7 @@ fn expand_placeholders(text: &str, pasted: &[Value]) -> String {
 /// `expandPromptInputPastedText`: the prompt with its pastes' text in place, and the mentions after
 /// each paste moved by the length it gained, for the external editor. `index` gives the byte index of an offset in
 /// the prompt's text, from the buffer that shows it; the pasted text is in no buffer, so [`measure`] counts it.
-pub fn expand_prompt(prompt: &Value, index: impl Fn(u32) -> usize) -> Value {
+pub fn expand_prompt(app: &App, prompt: &Value, index: impl Fn(u32) -> usize) -> Value {
     let ranges: Vec<(u32, u32, String)> = prompt["pasted"]
         .as_array()
         .map(Vec::as_slice)
@@ -380,7 +380,7 @@ pub fn expand_prompt(prompt: &Value, index: impl Fn(u32) -> usize) -> Value {
             let shift: i64 = ranges
                 .iter()
                 .filter(|(_, end, _)| f64::from(*end) <= start)
-                .map(|(start, end, text)| i64::from(measure(text)) - i64::from(end - start))
+                .map(|(start, end, text)| i64::from(measure(app, text)) - i64::from(end - start))
                 .sum();
             for edge in ["start", "end"] {
                 if let Some(value) = part["mention"][edge].as_f64() {
@@ -434,7 +434,7 @@ mod tests {
             "files": [{ "uri": "file:///a.ts", "mention": { "start": 22, "end": 27, "text": "@a.ts" } }],
             "agents": [],
         });
-        let expanded = expand_prompt(&prompt, |offset| offset as usize);
+        let expanded = expand_prompt(&opentui::testing::TestApp::new(10, 2), &prompt, |offset| offset as usize);
         assert_eq!(expanded["text"], "x\ny\nz see @a.ts");
         assert_eq!(expanded["files"][0]["mention"]["start"], 10);
         assert_eq!(expanded["files"][0]["mention"]["end"], 15);
