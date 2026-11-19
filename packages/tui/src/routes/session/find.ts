@@ -88,10 +88,10 @@ export function displayRanges<Range extends FindRange>(
 }
 
 /** Splits chunks at the ranges, offsets into their joined text, and paints each covered piece. */
-export function paintChunks<Range extends FindRange>(
-  chunks: readonly TextChunk[],
+export function paintChunks<Chunk extends { text: string }, Range extends FindRange>(
+  chunks: readonly Chunk[],
   ranges: readonly Range[],
-  paint: (chunk: TextChunk, range: Range) => TextChunk,
+  paint: (chunk: Chunk, range: Range) => Chunk,
 ) {
   let offset = 0
   return chunks.flatMap((chunk) => {

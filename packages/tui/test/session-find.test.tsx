@@ -132,7 +132,7 @@ test("Find highlights prompts and markdown, moves between matches, and clears on
       model,
       finish: "stop",
       time: { created: 2, completed: 3 },
-      content: [{ type: "text", text: "The **Needle** is in the code:\n\n```ts\nconst needle = 1\n```" }],
+      content: [{ type: "text", text: "The **Needle** is in the code:\n\n```ts\nconst needle = 1\n```\n\n| a | b |\n|---|---|\n| hay | needle |" }],
     },
     ...filler,
     { id: "message-99", type: "user", text: "Last needle here", time: { created: 99 } },
@@ -192,15 +192,15 @@ test("Find highlights prompts and markdown, moves between matches, and clears on
   )
   await app.mockInput.typeText("needle")
   // The first match is the oldest, so the transcript scrolls up to it.
-  await app.waitForFrame((frame) => frame.includes("1/4") && frame.includes("Where is the needle?"))
-  await app.waitFor(() => painted().length === 3)
-  expect(painted()).toEqual(["needle", "Needle", "needle"])
+  await app.waitForFrame((frame) => frame.includes("1/5") && frame.includes("Where is the needle?"))
+  await app.waitFor(() => painted().length === 4)
+  expect(painted()).toEqual(["needle", "Needle", "needle", "needle"])
 
   app.mockInput.pressEnter()
-  await app.waitForFrame((frame) => frame.includes("2/4"))
+  await app.waitForFrame((frame) => frame.includes("2/5"))
   app.mockInput.pressArrow("up")
   app.mockInput.pressArrow("up")
-  await app.waitForFrame((frame) => frame.includes("4/4") && frame.includes("Last needle here"))
+  await app.waitForFrame((frame) => frame.includes("5/5") && frame.includes("Last needle here"))
 
   app.mockInput.pressEscape()
   await app.waitForFrame((frame) => !frame.includes("shift+enter previous") && frame.includes("Demo Model"))

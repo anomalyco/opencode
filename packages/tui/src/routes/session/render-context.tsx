@@ -41,7 +41,7 @@ export const context = createContext<{
     pattern: () => RegExp | undefined
     current: () => FindMatch | undefined
     /** A part reports where it rendered the current match, so a pending seek can reach its row. */
-    located: (match: FindMatch, node: TextBufferRenderable, offset: number) => void
+    located: (match: FindMatch, node: () => TextBufferRenderable | undefined, offset: number) => void
   }
 }>()
 

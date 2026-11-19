@@ -1,12 +1,13 @@
 import {
   CodeRenderable,
+  TextRenderable,
   type ChunkRenderContext,
   type InputRenderable,
+  type MarkdownInlineHook,
   type MarkdownRenderable,
-  type OnChunksCallback,
   type Renderable,
+  type RGBA,
   type TextChunk,
-  type TextRenderable,
 } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import { createEffect, createMemo, For, on, onCleanup, Show, untrack } from "solid-js"
@@ -130,37 +131,50 @@ export function FindBar(props: {
 
 /**
  * Returns a `<markdown>` ref, applied after `useSessionLinks()`, that paints the part's Find
- * matches into every prose and code block. Matches are counted on the part's markdown source, so
- * each block maps the ones inside its own source onto its displayed chunks; matches in tables
- * are counted but not painted.
+ * matches into its paragraphs, headings, table cells and code blocks. Matches are counted on the
+ * part's markdown source, so each block marks the ones inside its own source.
  */
 export function useFindHighlight(part: () => FindPart) {
   const ctx = use()
   const theme = useTheme()
   let markdown: MarkdownRenderable | undefined
-  let links: OnChunksCallback | undefined
+  let links: MarkdownInlineHook | undefined
+  let filter: readonly string[] | undefined
   const current = createMemo(() => {
     const match = ctx.find.current()
     return match?.messageID === part().messageID && match.partID === part().partID ? match.occurrence : -1
   })
+  const paint = <Chunk extends { fg?: RGBA; bg?: RGBA }>(chunk: Chunk, range: { current: boolean }) =>
+    range.current
+      ? { ...chunk, fg: theme.find.text.current, bg: theme.find.background.current }
+      : { ...chunk, bg: theme.find.background.match }
 
-  // OpenTUI calls these as methods of each block. Prose blocks keep the session links' chunks.
-  async function prose(this: CodeRenderable, chunks: TextChunk[], context: ChunkRenderContext) {
-    const linked = (await links?.call(this, chunks, context)) ?? chunks
-    if (!ctx.find.pattern()) return linked
-    // A session link label replaces its ID, so the source no longer lines up with the text.
-    if (linked.map((chunk) => chunk.text).join("") !== chunks.map((chunk) => chunk.text).join("")) return linked
-    return paint(this, linked, context)
+  // Prose shows no source offsets, so its matches are found in the text it shows, after session
+  // links, and numbered from the first match in its source.
+  const prose: MarkdownInlineHook = (spans, context) => {
+    const linked = links ? links(spans, context) : spans
+    const matches = findRanges(part().text, ctx.find.pattern())
+    if (matches.length === 0) return linked
+    const start = part().text.indexOf(context.source)
+    const end = start + context.source.length
+    const first = matches.findIndex((range) => range.start >= start && range.end <= end)
+    const text = linked.map((span) => span.text).join("")
+    const shown = findRanges(text, ctx.find.pattern()).map((range, index) => ({
+      ...range,
+      current: start !== -1 && first !== -1 && first + index === current() && matches[first + index]!.end <= end,
+    }))
+    const target = shown.find((range) => range.current)
+    // Table cells have no text node to scroll to; the reveal falls back to the part.
+    if (target && !context.tableCell)
+      ctx.find.located({ ...part(), occurrence: current() }, () => proseNode(text), target.start)
+    return paintChunks(linked, shown, paint)
   }
+
+  // Fenced code keeps OpenTUI's per-chunk source ranges, so it maps the source matches exactly.
   function code(this: CodeRenderable, chunks: TextChunk[], context: ChunkRenderContext) {
-    return paint(this, chunks, context)
-  }
-
-  function paint(block: CodeRenderable, chunks: TextChunk[], context: ChunkRenderContext) {
-    // Cheap checks first: this runs for every block on every highlight, streaming included.
     const matches = findRanges(part().text, ctx.find.pattern())
     if (matches.length === 0 || !markdown) return chunks
-    const start = sourceStart(markdown, part().text, block)
+    const start = sourceStart(markdown, part().text, this)
     if (start === undefined) return chunks
     const end = start + context.content.length
     const ranges = matches.flatMap((range, occurrence) =>
@@ -170,47 +184,49 @@ export function useFindHighlight(part: () => FindPart) {
     )
     const shown = displayRanges(chunks, context.sourceRanges ?? [], ranges)
     const target = shown.find((range) => range.current)
-    if (target) ctx.find.located({ ...part(), occurrence: current() }, block, target.start)
-    return paintChunks(chunks, shown, (chunk, range) =>
-      range.current
-        ? { ...chunk, fg: theme.find.text.current, bg: theme.find.background.current }
-        : { ...chunk, bg: theme.find.background.match },
-    )
+    if (target) ctx.find.located({ ...part(), occurrence: current() }, () => this, target.start)
+    return paintChunks(chunks, shown, paint)
   }
 
-  // Re-highlights the blocks of a part whose matches changed. Fenced code blocks have no chunk
-  // callback until a query reaches them.
+  function proseNode(text: string) {
+    return markdown?.blocks.flatMap((block) =>
+      block.renderable instanceof TextRenderable && block.renderable.plainText === text ? [block.renderable] : [],
+    )[0]
+  }
+
+  // Code blocks have no chunk callback until a query reaches them.
   function refresh(node: Renderable) {
     if (node instanceof CodeRenderable) {
       const callback = node.onChunks
-      if (callback === prose || callback === code) {
+      if (callback === code) {
         node.onChunks = undefined
         node.onChunks = callback
       }
-      if (!callback && node.filetype !== "markdown") node.onChunks = code
+      if (!callback) node.onChunks = code
     }
     node.getChildren().forEach(refresh)
   }
 
+  // Not deferred: a part that mounts while Find is open paints its matches right away.
   createEffect(
-    on(
-      [ctx.find.pattern, current],
-      ([pattern], previous) => {
-        const text = part().text
-        if (!markdown || (!findRanges(text, pattern).length && !findRanges(text, previous?.[0]).length)) return
-        untrack(() => refresh(markdown!))
-      },
-      { defer: true },
-    ),
+    on([ctx.find.pattern, current], ([pattern], previous) => {
+      const text = part().text
+      const found = findRanges(text, pattern).length > 0
+      if (!markdown || (!found && !findRanges(text, previous?.[0]).length)) return
+      untrack(() => {
+        // The hook filter matches exact text, so every block reaches the hook while the part has matches.
+        markdown!.inlineHookFilter = found ? undefined : filter
+        markdown!.rerunInlineHook(() => true)
+        refresh(markdown!)
+      })
+    }),
   )
 
-  // Solid calls refs before setting content, so every prose block markdown creates picks up `prose`.
   return (renderable: MarkdownRenderable) => {
     markdown = renderable
-    // oxlint-disable-next-line no-restricted-globals -- OpenTUI has no public option for the markdown chunk callback.
-    links = Reflect.get(renderable, "_linkifyMarkdownChunks")
-    // oxlint-disable-next-line no-restricted-globals -- OpenTUI has no public option for the markdown chunk callback.
-    Reflect.set(renderable, "_linkifyMarkdownChunks", prose)
+    links = renderable.inlineHook
+    filter = renderable.inlineHookFilter
+    renderable.inlineHook = prose
   }
 }
 
@@ -252,7 +268,7 @@ export function FindText(props: { part: FindPart; fg: TextRenderable["fg"] }) {
   createEffect(() => {
     const occurrence = current()
     const range = ranges()[occurrence]
-    if (node && range) ctx.find.located({ ...props.part, occurrence }, node, range.start)
+    if (node && range) ctx.find.located({ ...props.part, occurrence }, () => node, range.start)
   })
 
   return (

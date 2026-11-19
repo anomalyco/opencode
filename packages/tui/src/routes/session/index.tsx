@@ -923,7 +923,9 @@ export function Session(props: {
   const findCurrent = () => findList()[findIndex()]
   // The match a reveal is waiting for, and where a part last rendered the current match.
   let findSeek: FindMatch | undefined
-  let findSpot: { match: FindMatch; pattern: RegExp; node: TextBufferRenderable; offset: number } | undefined
+  let findSpot:
+    | { match: FindMatch; pattern: RegExp; node: () => TextBufferRenderable | undefined; offset: number }
+    | undefined
 
   const revealFind = (match: FindMatch | undefined) => {
     findSeek = match
@@ -932,9 +934,10 @@ export function Session(props: {
   const locateFind = (match: FindMatch) => {
     if (findSeek !== match || !scroll || scroll.isDestroyed) return
     const spot = findSpot
-    if (spot && sameFindMatch(spot.match, match) && spot.pattern === findActivePattern() && !spot.node.isDestroyed) {
+    const node = spot && sameFindMatch(spot.match, match) && spot.pattern === findActivePattern() ? spot.node() : undefined
+    if (node && !node.isDestroyed) {
       findSeek = undefined
-      centerFind(match.messageID, spot.node.y + offsetRow(spot.node.lineInfo, spot.node.plainText, spot.offset))
+      centerFind(match.messageID, node.y + offsetRow(node.lineInfo, node.plainText, spot!.offset))
       return
     }
     // Until the match's block paints and reports its row, bring the part on screen.

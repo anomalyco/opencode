@@ -1,5 +1,5 @@
 import { createMemo, createSignal, Match, Show, Switch } from "solid-js"
-import { RGBA, TextAttributes, type MarkdownRenderable, type MouseEvent } from "@opentui/core"
+import { RGBA, TextAttributes, type MouseEvent } from "@opentui/core"
 import { useRenderer, type JSX } from "@opentui/solid"
 import type {
   SessionMessageAssistant,
@@ -17,7 +17,6 @@ import { generateThinkingSyntax } from "./thinking-syntax"
 import { canonicalToolName } from "../../util/tool-display"
 import { useSessionLinks } from "../../ui/session-link"
 import { useFindHighlight } from "./find-view"
-import { useSessionFindExperiment } from "../../config"
 
 export const INLINE_TOOL_ICON_WIDTH = 2
 
@@ -210,36 +209,29 @@ export function TextPart(props: {
   const { currentSyntax: syntax } = useThemes()
   const plugins = usePlugin()
   const links = useSessionLinks()
-  const findEnabled = useSessionFindExperiment()
   const find = useFindHighlight(() => ({
     messageID: props.message.id,
     partID: props.partID,
     text: props.part.text.trim(),
   }))
-  // Configure custom nodes before parsing; apply content before streaming so completion keeps the final tokens.
-  const view = (ref: (renderable: MarkdownRenderable) => void) => (
-    <markdown
-      ref={ref}
-      syntaxStyle={syntax()}
-      renderBlock={plugins.markdown()}
-      content={props.part.text.trim()}
-      streaming={props.message.time.completed === undefined}
-      tableOptions={{ style: "grid", cellPaddingX: 1 }}
-      conceal={ctx.markdownMode() === "rendered"}
-      fg={theme.markdown.text}
-      bg={theme.background.base}
-    />
-  )
   return (
     <Show when={props.part.text.trim()}>
       <box paddingLeft={3} flexShrink={0}>
-        {/* Find's ref replaces a private OpenTUI callback, so only the experiment installs it. Toggling remounts. */}
-        <Show when={findEnabled()} fallback={view(links)}>
-          {view((renderable) => {
+        {/* Configure custom nodes before parsing; apply content before streaming so completion keeps the final tokens. */}
+        <markdown
+          ref={(renderable) => {
             links(renderable)
             find(renderable)
-          })}
-        </Show>
+          }}
+          syntaxStyle={syntax()}
+          renderBlock={plugins.markdown()}
+          content={props.part.text.trim()}
+          streaming={props.message.time.completed === undefined}
+          tableOptions={{ style: "grid", cellPaddingX: 1 }}
+          conceal={ctx.markdownMode() === "rendered"}
+          fg={theme.markdown.text}
+          bg={theme.background.base}
+        />
       </box>
     </Show>
   )
