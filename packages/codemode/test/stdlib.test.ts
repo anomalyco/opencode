@@ -969,6 +969,13 @@ describe("Map", () => {
 })
 
 describe("Set", () => {
+  test("keys is the same function as values", async () => {
+    expect(await value(`return [Set.prototype.keys === Set.prototype.values, Set.prototype.keys.name]`)).toEqual([
+      true,
+      "values",
+    ])
+  })
+
   test("forEach is live on Map and Set: deleted entries are skipped and added ones visited", async () => {
     expect(
       await value(`
@@ -1562,7 +1569,18 @@ describe("built-in iterators", () => {
     ])
     const logged = await run(`console.log([1].keys()); return null`)
     expect(logged.logs?.[0]).toBe("[opaque reference]")
-    expect((await error(`return [1].keys() + ""`)).message).toContain("Binary operators require data values")
+    expect(
+      await value(
+        `return [[1].keys(), "a"[Symbol.iterator](), new Map().entries(), new Set().values(), new Headers().keys(), new URLSearchParams().keys()].map(String)`,
+      ),
+    ).toEqual([
+      "[object Array Iterator]",
+      "[object String Iterator]",
+      "[object Map Iterator]",
+      "[object Set Iterator]",
+      "[object Headers Iterator]",
+      "[object URLSearchParams Iterator]",
+    ])
     expect((await error(`return [1].keys().next.call({})`)).message).toContain(
       "Iterator.prototype.next called on incompatible receiver a data object",
     )
@@ -1587,7 +1605,7 @@ describe("Object.prototype.toString", () => {
       "[object Set]",
       "[object Headers]",
       "[object Promise]",
-      "[object Iterator]",
+      "[object Array Iterator]",
       "[object Object]",
       "[object Map]",
       "[object Promise]",

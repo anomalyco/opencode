@@ -1,0 +1,14 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "null TypeError",
+    "null TypeError",
+    "throws RangeError",
+    "throws RangeError",
+    "ok quiet",
+    "ok quiet"
+  ],
+  "logs": [],
+  "metadata": null
+}

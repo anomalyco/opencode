@@ -1,0 +1,98 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      "1"
+    ],
+    1,
+    [
+      ""
+    ],
+    4,
+    [
+      "a"
+    ],
+    1,
+    "SyntaxError",
+    "String.match received the string \"(\", wh",
+    "TypeError",
+    "3",
+    "a[object Promise]c",
+    [
+      "",
+      "",
+      "",
+      ""
+    ],
+    [
+      "a",
+      "b"
+    ],
+    [
+      "a",
+      "b",
+      "c"
+    ],
+    [
+      "a",
+      "b",
+      "c"
+    ],
+    [
+      "He",
+      "l",
+      "",
+      "l",
+      "o"
+    ],
+    "[]",
+    "aa|cc",
+    "abb0$2c",
+    "abbc",
+    "a$1c",
+    [
+      "a",
+      "a",
+      "a"
+    ],
+    0,
+    2,
+    1,
+    "baa",
+    0,
+    "g",
+    "i",
+    "ab",
+    "SyntaxError",
+    "RegExp flags must be a string of flag characters (e.g. \"g\", \"gi\"), not number.",
+    "SyntaxError",
+    "new RegExp(...) received invalid flags \"gg\" (Invalid flags supplied to RegExp constructor.). Valid flags are d, g, i, m, s, u, v, and y.",
+    "[/]",
+    "\\/",
+    "/x/g",
+    "/x/",
+    [
+      "b",
+      null,
+      "b"
+    ],
+    [
+      "1",
+      1,
+      "22",
+      4,
+      "333",
+      8
+    ],
+    "-a-b-",
+    "-😀-",
+    5,
+    true,
+    false,
+    false,
+    true
+  ],
+  "logs": [],
+  "metadata": null
+}

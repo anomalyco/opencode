@@ -1,0 +1,55 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "TypeError",
+    "caught x",
+    "waiting",
+    "caught y",
+    "RangeError",
+    "closed",
+    "default failed",
+    [
+      "bottom"
+    ],
+    {
+      "value": "from finally",
+      "done": false
+    },
+    {
+      "value": 5,
+      "done": true
+    },
+    {
+      "done": true
+    },
+    {
+      "done": true
+    },
+    [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    [
+      1,
+      2,
+      3,
+      4,
+      {
+        "value": [
+          "p-q",
+          {
+            "a": 10,
+            "b": 20
+          }
+        ],
+        "done": true
+      }
+    ]
+  ],
+  "logs": [],
+  "metadata": null
+}

@@ -1,0 +1,224 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      1,
+      2,
+      44,
+      255,
+      1
+    ],
+    5,
+    44,
+    null,
+    [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4"
+    ],
+    "{\"0\":1,\"1\":2,\"2\":44,\"3\":255,\"4\":1}",
+    "1,2,44,255,1",
+    false,
+    true,
+    "object",
+    [
+      1,
+      2,
+      44,
+      255,
+      1
+    ],
+    5,
+    true,
+    false,
+    true,
+    false,
+    "TypeError",
+    "0-0-0",
+    0,
+    2,
+    0,
+    "1,0,3",
+    "10,21",
+    "1,2",
+    "5,6",
+    [
+      "RangeError",
+      "Invalid typed array length: -1"
+    ],
+    [
+      "RangeError",
+      "Invalid typed array length: 1.5"
+    ],
+    [
+      "TypeError",
+      "Constructor Uint8Array requires 'new'."
+    ],
+    [
+      "TypeError",
+      "new Uint8Array(...) expects a Uint8Array, an array, or an iterable of numbers, received a data object."
+    ],
+    [
+      "SyntaxError",
+      "Uint8Array.fromHex: the string is not valid hex."
+    ],
+    [
+      "SyntaxError",
+      "Uint8Array.fromBase64: the string is not valid base64."
+    ],
+    [
+      "TypeError",
+      "Uint8Array.fromBase64 expects a string."
+    ],
+    [
+      "RangeError",
+      "Uint8Array.set: the source does not fit at that offset."
+    ],
+    0,
+    [
+      "TypeError",
+      "Uint8Array.reduce of an empty array with no initial value."
+    ],
+    [
+      "TypeError",
+      "Uint8Array.map expects a function callback."
+    ],
+    3,
+    "9,1",
+    "2,3",
+    1,
+    -1,
+    2,
+    -1,
+    true,
+    true,
+    [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "0,10|1,9|2,1|3,2|4,3",
+    "0a09010203",
+    "CgkBAgM=",
+    "10,99,1,2,3",
+    2,
+    "10,99,1,7,8",
+    "4,99,1,7,8",
+    "4,1,1,7,8",
+    "8,7,1,1,4",
+    "1,9,10",
+    "3,2,1",
+    "32,188,100,100,144",
+    "8,7",
+    8,
+    -1,
+    7,
+    1,
+    true,
+    true,
+    21,
+    ",4,1,1,7,8",
+    [
+      [
+        8,
+        0,
+        true
+      ],
+      [
+        7,
+        1,
+        true
+      ],
+      [
+        1,
+        2,
+        true
+      ],
+      [
+        1,
+        3,
+        true
+      ],
+      [
+        4,
+        4,
+        true
+      ]
+    ],
+    "255,0,161",
+    "104,101,108,108,111",
+    "104,101,108,108,111",
+    "hello",
+    "hi",
+    "aGk=",
+    "hi",
+    "/w==",
+    [
+      "TypeError",
+      "The string contains invalid characters."
+    ],
+    [
+      "TypeError",
+      "The string contains invalid characters."
+    ],
+    [
+      "TypeError",
+      "atob requires 1 argument (a string)"
+    ],
+    "utf-8",
+    [
+      104,
+      195,
+      169,
+      226,
+      130,
+      172,
+      240,
+      159,
+      152,
+      128
+    ],
+    0,
+    [
+      49,
+      50
+    ],
+    "utf-8",
+    false,
+    false,
+    "h�i",
+    2,
+    "",
+    "",
+    "€",
+    "",
+    [
+      "RangeError",
+      "The \"latin1\" encoding is not supported; only UTF-8 is."
+    ],
+    [
+      "TypeError",
+      "TextDecoder.decode: the input is not valid utf-8."
+    ],
+    [
+      "TypeError",
+      "TextDecoder.decode expects a Uint8Array, received an array."
+    ],
+    [
+      "TypeError",
+      "Constructor TextDecoder requires 'new'."
+    ],
+    "utf-8",
+    "[object Uint8Array]",
+    "1,2"
+  ],
+  "logs": [
+    "Uint8Array(2) [1,2] [Uint8Array(0) []]"
+  ],
+  "metadata": null
+}

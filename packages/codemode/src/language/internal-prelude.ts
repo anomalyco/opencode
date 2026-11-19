@@ -48,8 +48,9 @@ export class VmIntrinsic {
 }
 
 export const INTERNAL_SOURCE = String.raw`
+// A promise stays as it is, so that the operator or built-in it reaches rejects it as an un-awaited value.
 function $vmToPrimitive(v, hint) {
-  if (!$IsDataObj(v)) return v
+  if (!$IsObj(v) || $IsPromise(v)) return v
   const first = hint === "string" || (hint === "default" && $IsDate(v)) ? "toString" : "valueOf"
   const second = first === "toString" ? "valueOf" : "toString"
   const m1 = v[first]
@@ -97,6 +98,11 @@ function $vmBinary(op, lhs, rhs) {
   const l = $vmToPrimitive(lhs, hint)
   const r = $vmToPrimitive(rhs, hint)
   return $ApplyBinary(op, l, r)
+}
+
+function $vmSetLength(o, v) {
+  o.length = $vmToPrimitive(v, "number")
+  return v
 }
 
 // A write that reached a program setter: the assignment's value is what was assigned, not what the setter returns.
@@ -324,7 +330,6 @@ export const registerVmIntrinsics = (map: Map<string, unknown>, vm: Vm): void =>
   }
 
   add("$IsObj", ([v]) => v instanceof Obj)
-  add("$IsDataObj", ([v]) => v instanceof Obj && !isOpaque(v))
   add("$IsDate", ([v]) => v instanceof DateObj)
   add("$IsPromise", ([v]) => v instanceof PromiseObj)
   add("$IsArray", ([v]) => v instanceof Arr)

@@ -1,0 +1,129 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": {
+    "sorted": [
+      4,
+      true,
+      true,
+      false,
+      1,
+      3
+    ],
+    "compared": [
+      [
+        1,
+        2,
+        null,
+        null
+      ],
+      true,
+      false
+    ],
+    "toSorted": [
+      1,
+      3,
+      null
+    ],
+    "slice": [
+      false,
+      false,
+      false
+    ],
+    "reverse": [
+      false
+    ],
+    "copies": [
+      [
+        true
+      ],
+      [
+        true
+      ],
+      [
+        true
+      ]
+    ],
+    "flat": [
+      1,
+      3,
+      4
+    ],
+    "splice": [
+      [
+        false
+      ],
+      [
+        3,
+        4
+      ]
+    ],
+    "copyWithin": [
+      false
+    ],
+    "fill": [
+      true
+    ],
+    "pop": [
+      true,
+      2
+    ],
+    "shift": [
+      [
+        false
+      ],
+      2
+    ],
+    "unshift": [
+      false
+    ],
+    "at": true,
+    "frozen": "TypeError: Cannot add property 1, object is not extensible.",
+    "inherited": {
+      "read": [
+        "inherited",
+        true,
+        false,
+        true,
+        "1,,3"
+      ],
+      "search": [
+        -1,
+        false
+      ],
+      "visited": [
+        1,
+        "inherited",
+        3
+      ],
+      "map": [
+        1,
+        "inherited",
+        3
+      ],
+      "find": "inherited",
+      "filter": [
+        1,
+        "inherited",
+        3
+      ],
+      "locale": "1,inherited,3",
+      "flat": [
+        1,
+        3
+      ],
+      "flatMap": [
+        1,
+        "inherited",
+        3
+      ],
+      "json": "[1,null,3]",
+      "pastEnd": [
+        "inherited",
+        "inherited"
+      ]
+    }
+  },
+  "logs": [],
+  "metadata": null
+}

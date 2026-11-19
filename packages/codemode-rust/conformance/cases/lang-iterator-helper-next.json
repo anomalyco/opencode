@@ -1,0 +1,25 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": {
+    "from": "TypeError: Iterator.from is not a function.",
+    "fromIterable": "TypeError: Iterator.from is not a function.",
+    "kept": [
+      "TypeError: Iterator.from is not a function.",
+      [],
+      {
+        "done": true
+      }
+    ],
+    "helper": "TypeError: helpers.map.call is not a function.",
+    "eager": [
+      "TypeError: helpers.toArray.call is not a function.",
+      "TypeError: helpers.some.call is not a function."
+    ],
+    "inner": "TypeError: The called value is not a function.",
+    "aliased": "TypeError: make is not a function.",
+    "nextResult": "TypeError: Iterator next() result must be an object."
+  },
+  "logs": [],
+  "metadata": null
+}

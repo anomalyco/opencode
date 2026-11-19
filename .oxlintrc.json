@@ -216,6 +216,7 @@
     "**/*.d.ts",
     "**/sdk.gen.ts",
     "packages/plugins/figma/skills/**",
+    "packages/codemode-rust/conformance/cases/**",
     ".agent/**",
     ".agents/**",
     ".claude/**",

@@ -1,0 +1,128 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      "SyntaxError",
+      "JSON.parse received invalid JSON: JSON Parse error: Unexpected identifier \"a\""
+    ],
+    [
+      "SyntaxError",
+      "JSON.parse received invalid JSON: JSON Parse error: Unexpected EOF"
+    ],
+    [
+      "SyntaxError",
+      "JSON.parse received invalid JSON: JSON Parse error: Expected '}'"
+    ],
+    [
+      "SyntaxError",
+      "JSON.parse received invalid JSON: JSON Parse error: Unexpected comma at the end of array expression"
+    ],
+    [
+      "SyntaxError",
+      "JSON.parse received invalid JSON: JSON Parse error: Unexpected token '}'"
+    ],
+    [
+      "SyntaxError",
+      "JSON.parse received invalid JSON: JSON Parse error: Expected ']'"
+    ],
+    [
+      "SyntaxError",
+      "JSON.parse received invalid JSON: JSON Parse error: Unexpected identifier \"tru\""
+    ],
+    [
+      "SyntaxError",
+      "JSON.parse received invalid JSON: JSON Parse error: Unterminated string"
+    ],
+    [
+      "SyntaxError",
+      "JSON.parse received invalid JSON: JSON Parse error: Unable to parse JSON string"
+    ],
+    [
+      "SyntaxError",
+      "JSON.parse received invalid JSON: JSON Parse error: Unable to parse JSON string"
+    ],
+    [
+      "SyntaxError",
+      "JSON.parse received invalid JSON: JSON Parse error: Expected '}'"
+    ],
+    [
+      "SyntaxError",
+      "JSON.parse received invalid JSON: JSON Parse error: Unable to parse JSON string"
+    ],
+    [
+      "SyntaxError",
+      "JSON.parse received invalid JSON: JSON Parse error: Unexpected EOF"
+    ],
+    [
+      "SyntaxError",
+      "JSON.parse received invalid JSON: JSON Parse error: Unexpected identifier \"nul\""
+    ],
+    [
+      "SyntaxError",
+      "JSON.parse received invalid JSON: JSON Parse error: Invalid escape character x"
+    ],
+    [
+      "SyntaxError",
+      "JSON.parse received invalid JSON: JSON Parse error: Invalid number"
+    ],
+    [
+      "SyntaxError",
+      "JSON.parse received invalid JSON: JSON Parse error: Expected ':' before value in object property definition"
+    ],
+    [
+      "SyntaxError",
+      "JSON.parse received invalid JSON: JSON Parse error: Unexpected EOF"
+    ],
+    [
+      "SyntaxError",
+      "JSON.parse received invalid JSON: JSON Parse error: Property name must be a string literal"
+    ],
+    [
+      "SyntaxError",
+      "JSON.parse received invalid JSON: JSON Parse error: Unterminated string"
+    ],
+    [
+      "SyntaxError",
+      "JSON.parse received invalid JSON: JSON Parse error: Invalid digits after decimal point"
+    ],
+    [
+      "SyntaxError",
+      "JSON.parse received invalid JSON: JSON Parse error: Unexpected token '.'"
+    ],
+    [
+      "SyntaxError",
+      "JSON.parse received invalid JSON: JSON Parse error: Unexpected token ','"
+    ],
+    [
+      "SyntaxError",
+      "JSON.parse received invalid JSON: JSON Parse error: Expected '}'"
+    ],
+    [
+      "SyntaxError",
+      "JSON.parse received invalid JSON: JSON Parse error: \\u must be followed by 4 hex digits"
+    ],
+    [
+      "SyntaxError",
+      "JSON.parse received invalid JSON: JSON Parse error: Unexpected identifier \"Infinity\""
+    ],
+    [
+      "SyntaxError",
+      "JSON.parse received invalid JSON: JSON Parse error: Unexpected identifier \"NaN\""
+    ],
+    [
+      "SyntaxError",
+      "JSON.parse received invalid JSON: JSON Parse error: Unable to parse JSON string"
+    ],
+    [
+      "SyntaxError",
+      "JSON.parse received invalid JSON: JSON Parse error: Unable to parse JSON string"
+    ],
+    [
+      "SyntaxError",
+      "JSON.parse received invalid JSON: JSON Parse error: Unrecognized token '/'"
+    ]
+  ],
+  "logs": [],
+  "metadata": null
+}

@@ -1,0 +1,19 @@
+{
+  "bindings": {
+    "event": {
+      "type": "tick",
+      "at": 5
+    },
+    "state": {
+      "runs": 7
+    }
+  },
+  "ok": true,
+  "value": {
+    "state": {
+      "runs": 7
+    }
+  },
+  "logs": [],
+  "metadata": null
+}

@@ -142,9 +142,8 @@ const formatOperand = (c: Code, op: number, a: number, bx: number, sbx: number):
     case Op.PICK:
     case Op.ROT:
     case Op.CALL:
-      return String(a)
     case Op.NEW:
-      return a === 255 ? "check" : String(a)
+      return String(a)
     case Op.GET_LOCAL:
     case Op.HOLE_LOCAL:
     case Op.COPY_CELL:
@@ -195,7 +194,9 @@ const formatOperand = (c: Code, op: number, a: number, bx: number, sbx: number):
           ? `.writeProp ${JSON.stringify(c.consts[bx])}`
           : a === CheckBaseKind.WRITE_ELEM
             ? ".writeElem"
-            : ".destructure"
+            : a === CheckBaseKind.ASSIGN_PROP
+              ? `.assignProp ${JSON.stringify(c.consts[bx])}`
+              : ".destructure"
     case Op.BINOP:
       return BinOpSymbols[a] ?? String(a)
     case Op.UNARY:

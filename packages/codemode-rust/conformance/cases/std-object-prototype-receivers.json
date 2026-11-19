@@ -1,0 +1,310 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      "hasOwnProperty",
+      "TypeError",
+      "Object.prototype.hasOwnProperty called on incompatible receiver undefined."
+    ],
+    [
+      "hasOwnProperty",
+      "TypeError",
+      "Object.prototype.hasOwnProperty called on incompatible receiver null."
+    ],
+    [
+      "hasOwnProperty",
+      "TypeError",
+      "Object.prototype.hasOwnProperty called on incompatible receiver a string."
+    ],
+    [
+      "hasOwnProperty",
+      "TypeError",
+      "Object.prototype.hasOwnProperty called on incompatible receiver a number."
+    ],
+    [
+      "hasOwnProperty",
+      "TypeError",
+      "Object.prototype.hasOwnProperty called on incompatible receiver a boolean."
+    ],
+    [
+      "hasOwnProperty",
+      false
+    ],
+    [
+      "hasOwnProperty",
+      true
+    ],
+    [
+      "hasOwnProperty",
+      false
+    ],
+    [
+      "hasOwnProperty",
+      false
+    ],
+    [
+      "hasOwnProperty",
+      "TypeError",
+      "Object.prototype.hasOwnProperty called on incompatible receiver a namespace reference."
+    ],
+    [
+      "isPrototypeOf",
+      "TypeError",
+      "Object.prototype.isPrototypeOf called on incompatible receiver undefined."
+    ],
+    [
+      "isPrototypeOf",
+      "TypeError",
+      "Object.prototype.isPrototypeOf called on incompatible receiver null."
+    ],
+    [
+      "isPrototypeOf",
+      "TypeError",
+      "Object.prototype.isPrototypeOf called on incompatible receiver a string."
+    ],
+    [
+      "isPrototypeOf",
+      "TypeError",
+      "Object.prototype.isPrototypeOf called on incompatible receiver a number."
+    ],
+    [
+      "isPrototypeOf",
+      "TypeError",
+      "Object.prototype.isPrototypeOf called on incompatible receiver a boolean."
+    ],
+    [
+      "isPrototypeOf",
+      false
+    ],
+    [
+      "isPrototypeOf",
+      false
+    ],
+    [
+      "isPrototypeOf",
+      false
+    ],
+    [
+      "isPrototypeOf",
+      false
+    ],
+    [
+      "isPrototypeOf",
+      "TypeError",
+      "Object.prototype.isPrototypeOf called on incompatible receiver a namespace reference."
+    ],
+    [
+      "propertyIsEnumerable",
+      "TypeError",
+      "Object.prototype.propertyIsEnumerable called on incompatible receiver undefined."
+    ],
+    [
+      "propertyIsEnumerable",
+      "TypeError",
+      "Object.prototype.propertyIsEnumerable called on incompatible receiver null."
+    ],
+    [
+      "propertyIsEnumerable",
+      "TypeError",
+      "Object.prototype.propertyIsEnumerable called on incompatible receiver a string."
+    ],
+    [
+      "propertyIsEnumerable",
+      "TypeError",
+      "Object.prototype.propertyIsEnumerable called on incompatible receiver a number."
+    ],
+    [
+      "propertyIsEnumerable",
+      "TypeError",
+      "Object.prototype.propertyIsEnumerable called on incompatible receiver a boolean."
+    ],
+    [
+      "propertyIsEnumerable",
+      false
+    ],
+    [
+      "propertyIsEnumerable",
+      true
+    ],
+    [
+      "propertyIsEnumerable",
+      false
+    ],
+    [
+      "propertyIsEnumerable",
+      false
+    ],
+    [
+      "propertyIsEnumerable",
+      "TypeError",
+      "Object.prototype.propertyIsEnumerable called on incompatible receiver a namespace reference."
+    ],
+    [
+      "toString",
+      "[object Undefined]"
+    ],
+    [
+      "toString",
+      "[object Null]"
+    ],
+    [
+      "toString",
+      "[object String]"
+    ],
+    [
+      "toString",
+      "[object Number]"
+    ],
+    [
+      "toString",
+      "[object Boolean]"
+    ],
+    [
+      "toString",
+      "[object Array]"
+    ],
+    [
+      "toString",
+      "[object Object]"
+    ],
+    [
+      "toString",
+      "[object Function]"
+    ],
+    [
+      "toString",
+      "[object Map]"
+    ],
+    [
+      "toString",
+      "[object Object]"
+    ],
+    [
+      "toLocaleString",
+      "TypeError",
+      "Object.prototype.toLocaleString called on null or undefined."
+    ],
+    [
+      "toLocaleString",
+      "TypeError",
+      "Object.prototype.toLocaleString called on null or undefined."
+    ],
+    [
+      "toLocaleString",
+      "abc"
+    ],
+    [
+      "toLocaleString",
+      "5"
+    ],
+    [
+      "toLocaleString",
+      "true"
+    ],
+    [
+      "toLocaleString",
+      "1"
+    ],
+    [
+      "toLocaleString",
+      "[object Object]"
+    ],
+    [
+      "toLocaleString",
+      "[object Function]"
+    ],
+    [
+      "toLocaleString",
+      "[object Map]"
+    ],
+    [
+      "toLocaleString",
+      "TypeError",
+      "Object.prototype.toLocaleString called on null or undefined."
+    ],
+    [
+      "valueOf",
+      "TypeError",
+      "Object.prototype.valueOf called on null or undefined."
+    ],
+    [
+      "valueOf",
+      "TypeError",
+      "Object.prototype.valueOf called on null or undefined."
+    ],
+    [
+      "valueOf",
+      "abc"
+    ],
+    [
+      "valueOf",
+      5
+    ],
+    [
+      "valueOf",
+      true
+    ],
+    [
+      "valueOf",
+      "object"
+    ],
+    [
+      "valueOf",
+      "object"
+    ],
+    [
+      "valueOf",
+      null
+    ],
+    [
+      "valueOf",
+      "object"
+    ],
+    [
+      "valueOf",
+      "object"
+    ],
+    true,
+    true,
+    true,
+    "TypeError",
+    "Object.prototype.isPrototypeOf called on incompatible receiver undefined.",
+    "TypeError",
+    "Object.prototype.isPrototypeOf called on incompatible receiver null.",
+    "[object Object]",
+    [
+      "TypeError",
+      "Object.prototype.toLocaleString called on null or undefined."
+    ],
+    "object",
+    "[object Object]",
+    [
+      "TypeError",
+      "Object.prototype.toLocaleString called on null or undefined."
+    ],
+    "function",
+    "[object Object]",
+    [
+      "TypeError",
+      "Object.prototype.toLocaleString called on null or undefined."
+    ],
+    "function",
+    [
+      "TypeError",
+      "Object.prototype.hasOwnProperty called on incompatible receiver a string."
+    ],
+    [
+      "TypeError",
+      "Object.prototype.propertyIsEnumerable called on incompatible receiver a number."
+    ],
+    [
+      "TypeError",
+      "Object.prototype.hasOwnProperty called on incompatible receiver undefined."
+    ],
+    false,
+    false
+  ],
+  "logs": [],
+  "metadata": null
+}

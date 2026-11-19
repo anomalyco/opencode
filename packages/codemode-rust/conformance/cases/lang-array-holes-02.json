@@ -1,0 +1,70 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": {
+    "visits": [
+      0,
+      2
+    ],
+    "map": [
+      [
+        2,
+        null,
+        6
+      ],
+      false,
+      [
+        null,
+        null
+      ]
+    ],
+    "filter": [
+      1,
+      3
+    ],
+    "someEvery": [
+      true,
+      false
+    ],
+    "reduce": [
+      4,
+      "31"
+    ],
+    "reduceEmpty": "TypeError: Array.reduce of an empty array with no initial value.",
+    "reduceRightEmpty": "TypeError: Array.reduceRight of an empty array with no initial value.",
+    "found": [
+      1,
+      "hole",
+      3
+    ],
+    "findIndex": [
+      0,
+      null
+    ],
+    "flatMap": [
+      1,
+      1,
+      3,
+      3
+    ],
+    "search": [
+      -1,
+      true,
+      -1,
+      false,
+      -1
+    ],
+    "big": [
+      101,
+      false,
+      -1,
+      1
+    ],
+    "seenShrinking": [
+      1,
+      2
+    ]
+  },
+  "logs": [],
+  "metadata": null
+}

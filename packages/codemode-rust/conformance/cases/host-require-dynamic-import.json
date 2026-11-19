@@ -1,0 +1,11 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "Cannot import \"fs\": this runtime doesn't provide it.",
+    "Cannot import \"child_process\": this runtime doesn't provide it.",
+    "TypeError"
+  ],
+  "logs": [],
+  "metadata": null
+}

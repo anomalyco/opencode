@@ -1,0 +1,23 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      true,
+      true,
+      true
+    ],
+    [
+      1
+    ],
+    [
+      {
+        "status": "rejected",
+        "reason": "no"
+      }
+    ],
+    2
+  ],
+  "logs": [],
+  "metadata": null
+}

@@ -1,0 +1,39 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": {
+    "identifier": "TypeError: nothing is not a function.",
+    "member": "TypeError: o.missing is not a function.",
+    "nested": "TypeError: o.nested.x is not a function.",
+    "literalKey": "TypeError: o.a is not a function.",
+    "variableKey": "TypeError: The called value is not a function.",
+    "index": "TypeError: The called value is not a function.",
+    "callResult": "TypeError: The called value is not a function.",
+    "optional": "TypeError: o.a is not a function.",
+    "spread": "TypeError: o.a is not a function.",
+    "tagged": "TypeError: The called value is not a function.",
+    "onThis": "TypeError: The called value is not a function.",
+    "builtin": "TypeError: Math.nope is not a function.",
+    "newValue": "TypeError: o.a is not a constructor.",
+    "newArrow": "TypeError: The called value cannot be constructed: user-defined constructors and classes are not supported. Call it as a function that returns a plain object instead.",
+    "newBuiltin": "TypeError: new Math.max(...) is not supported; call Math.max(...) without new instead.",
+    "receivers": [
+      "TypeError: Function.prototype.call called on incompatible receiver a number.",
+      "TypeError: Function.prototype.apply called on incompatible receiver a data object.",
+      "TypeError: Function.prototype.bind called on incompatible receiver a string."
+    ],
+    "callbacks": [
+      "TypeError: Array.map expects a function callback.",
+      "TypeError: Array.reduceRight expects a function callback.",
+      "TypeError: Array.sort expects a function callback.",
+      "TypeError: Array.from expects a function callback.",
+      "TypeError: Map.forEach expects a function callback.",
+      "TypeError: Set.forEach expects a function callback.",
+      "TypeError: new Promise(...) expects an executor function (e.g. new Promise((resolve, reject) => { ... })).",
+      "TypeError: Promise.try expects a function, received a number.",
+      "TypeError: Uint8Array.sort expects a function callback."
+    ]
+  },
+  "logs": [],
+  "metadata": null
+}

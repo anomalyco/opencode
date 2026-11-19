@@ -1,0 +1,79 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      {
+        "value": 1,
+        "done": false
+      },
+      {
+        "value": 2,
+        "done": false
+      },
+      {
+        "value": "caught x",
+        "done": false
+      },
+      {
+        "value": "stop!",
+        "done": true
+      },
+      {
+        "value": 1,
+        "done": false
+      },
+      {
+        "value": 2,
+        "done": false
+      },
+      {
+        "value": "caught y",
+        "done": false
+      }
+    ],
+    [
+      [
+        "sync",
+        "next",
+        1,
+        null
+      ],
+      [
+        "sync",
+        "next",
+        1,
+        2
+      ],
+      [
+        "sync",
+        "throw",
+        "x"
+      ],
+      [
+        "sync",
+        "return",
+        "stop"
+      ],
+      [
+        "async",
+        "next",
+        1,
+        null
+      ],
+      [
+        "async",
+        "next",
+        1,
+        3
+      ],
+      [
+        "async",
+        "throw",
+        "y"
+      ]
+    ]
+  ],
+  "logs": [],
+  "metadata": null
+}

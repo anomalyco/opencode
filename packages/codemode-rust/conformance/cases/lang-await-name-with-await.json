@@ -1,0 +1,17 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    5,
+    1,
+    [
+      1,
+      1,
+      "number"
+    ],
+    7,
+    3
+  ],
+  "logs": [],
+  "metadata": null
+}

@@ -1,0 +1,15 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "function",
+    [
+      "TypeError",
+      "Promise.race([]) would never settle; provide at least one promise or value."
+    ],
+    "Promise.race([]) would never settle; provide at least one promise or value.",
+    1
+  ],
+  "logs": [],
+  "metadata": null
+}

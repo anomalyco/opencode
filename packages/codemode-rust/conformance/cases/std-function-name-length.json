@@ -1,0 +1,21 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "native | true | true | true | false | 0 | true | false | \"\" | E Cannot assign to read only property 'length'. | ",
+    "uri | true | true | true | false | 0 | true | false | \"\" | E Cannot assign to read only property 'length'. | ",
+    "closure | true | true | true | false | 0 | true | false | \"\" | E Cannot assign to read only property 'length'. | ",
+    "arrow | true | true | true | false | 0 | true | false | \"\" | E Cannot assign to read only property 'length'. | ",
+    "bound | true | true | true | false | 0 | true | false | \"\" | E Cannot assign to read only property 'length'. | ",
+    "ctor | true | true | true | false | 0 | true | false | \"\" | E Cannot assign to read only property 'length'. | ",
+    2,
+    "bound g3",
+    0,
+    "bound bound g3",
+    2,
+    "bound max",
+    "bound "
+  ],
+  "logs": [],
+  "metadata": null
+}

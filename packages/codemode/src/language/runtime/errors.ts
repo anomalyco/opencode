@@ -179,7 +179,7 @@ export const errorGlobal = <R>(type: ErrorType, ctx: Interpreter<R>) => {
         ([text]) => {
           return withReads(() => {
             const created = withCause(
-              createErrorValue(proto, message === undefined ? "" : coerceToString(text)),
+              createErrorValue(proto, message === undefined ? undefined : coerceToString(text)),
               args[2],
             )
             return new Invoke(ctx.prelude.fn("aggregateError"), undefined, [created, args[0]], undefined)

@@ -1,0 +1,30 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": {
+    "map": [
+      "TypeError: new Map(...) expects [key, value] pairs as entry objects.",
+      "TypeError: new Map(...) expects [key, value] pairs as entry objects.",
+      "TypeError: new Map(...) expects [key, value] pairs as entry objects.",
+      [
+        "closed"
+      ]
+    ],
+    "weakMap": "TypeError: new WeakMap(...) expects [key, value] pairs as entry objects.",
+    "fromEntries": [
+      "TypeError: Object.fromEntries expects [key, value] entry objects.",
+      "TypeError: Object.fromEntries expects [key, value] entry objects.",
+      "TypeError: Object.fromEntries expects [key, value] entry objects.",
+      "TypeError: Object.fromEntries expects [key, value] entry objects.",
+      "TypeError: Object.fromEntries expects [key, value] entry objects.",
+      [
+        "closed"
+      ]
+    ],
+    "fine": {
+      "b": 2
+    }
+  },
+  "logs": [],
+  "metadata": null
+}

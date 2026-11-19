@@ -1,0 +1,29 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "Å",
+    2,
+    "fi",
+    "fi",
+    "abc",
+    "RangeError",
+    "String.normalize expects the form \"NFC\", \"NFD\", \"NFKC\", or \"NFKD\" (got \"nope\").",
+    true,
+    "abc",
+    "x1yz",
+    "p!q",
+    "TypeError",
+    "String.raw expects a template object with a raw array.",
+    "RangeError",
+    "String.repeat expects a finite non-negative count.",
+    "RangeError",
+    "Invalid string length",
+    [],
+    [
+      "a"
+    ]
+  ],
+  "logs": [],
+  "metadata": null
+}

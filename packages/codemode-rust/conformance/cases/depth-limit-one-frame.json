@@ -1,0 +1,43 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": {
+    "plain": [
+      10000,
+      "RangeError",
+      "Maximum call stack size exceeded"
+    ],
+    "method": [
+      10000,
+      "RangeError",
+      "Maximum call stack size exceeded"
+    ],
+    "call": [
+      10000,
+      "RangeError",
+      "Maximum call stack size exceeded"
+    ],
+    "apply": [
+      10000,
+      "RangeError",
+      "Maximum call stack size exceeded"
+    ],
+    "generator": [
+      10000,
+      "RangeError",
+      "Maximum call stack size exceeded"
+    ],
+    "asyncFn": [
+      10000,
+      "RangeError",
+      "Maximum call stack size exceeded"
+    ],
+    "limit": 1,
+    "over": [
+      "RangeError",
+      "Maximum call stack size exceeded"
+    ]
+  },
+  "logs": [],
+  "metadata": null
+}

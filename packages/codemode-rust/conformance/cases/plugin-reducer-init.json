@@ -1,0 +1,22 @@
+{
+  "bindings": {
+    "event": {
+      "type": "init"
+    },
+    "state": null
+  },
+  "ok": true,
+  "value": {
+    "state": {
+      "runs": 0
+    },
+    "commands": [
+      {
+        "name": "git.status",
+        "key": "ctrl+g"
+      }
+    ]
+  },
+  "logs": [],
+  "metadata": null
+}

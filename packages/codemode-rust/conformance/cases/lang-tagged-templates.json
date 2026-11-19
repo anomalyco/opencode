@@ -1,0 +1,39 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      [
+        "changed",
+        "b\n",
+        null
+      ],
+      [
+        1,
+        2
+      ],
+      true,
+      true,
+      [
+        "0",
+        "1",
+        "2"
+      ],
+      [
+        "z",
+        "b\\n",
+        "\\unicode"
+      ],
+      true,
+      3
+    ],
+    true,
+    true,
+    "Cannot assign to read only property 'raw'.",
+    "z",
+    "changed",
+    "[\"changed\",\"b\\n\",null]"
+  ],
+  "logs": [],
+  "metadata": null
+}

@@ -1,0 +1,155 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      "TypeError",
+      "String.indexOf expects argument 1 to be a data value."
+    ],
+    [
+      "TypeError",
+      "String.indexOf expects argument 2 to be a data value."
+    ],
+    [
+      "TypeError",
+      "String.lastIndexOf expects argument 1 to be a data value."
+    ],
+    [
+      "TypeError",
+      "String.includes expects argument 1 to be a data value."
+    ],
+    [
+      "TypeError",
+      "String.startsWith expects argument 2 to be a data value."
+    ],
+    [
+      "TypeError",
+      "String.endsWith expects argument 1 to be a data value."
+    ],
+    [
+      "TypeError",
+      "String.at expects argument 1 to be a data value."
+    ],
+    [
+      "TypeError",
+      "String.charAt expects argument 1 to be a data value."
+    ],
+    [
+      "TypeError",
+      "String.charCodeAt expects argument 1 to be a data value."
+    ],
+    [
+      "TypeError",
+      "String.codePointAt expects argument 1 to be a data value."
+    ],
+    [
+      "TypeError",
+      "String.slice expects argument 2 to be a data value."
+    ],
+    [
+      "TypeError",
+      "String.substring expects argument 1 to be a data value."
+    ],
+    [
+      "TypeError",
+      "String.substr expects argument 1 to be a data value."
+    ],
+    [
+      "TypeError",
+      "String.padStart expects argument 1 to be a data value."
+    ],
+    [
+      "TypeError",
+      "String.padStart expects argument 2 to be a data value."
+    ],
+    [
+      "RangeError",
+      "Invalid string length"
+    ],
+    [
+      "TypeError",
+      "String.padEnd expects argument 2 to be a data value."
+    ],
+    [
+      "TypeError",
+      "String.repeat expects argument 1 to be a data value."
+    ],
+    [
+      "TypeError",
+      "String.split expects argument 1 to be a data value."
+    ],
+    [
+      "TypeError",
+      "String.split expects argument 2 to be a data value."
+    ],
+    [
+      "TypeError",
+      "String.split expects argument 2 to be a data value."
+    ],
+    [
+      "TypeError",
+      "String.replace expects argument 1 to be a data value."
+    ],
+    [
+      "TypeError",
+      "String.replace expects argument 2 to be a data value."
+    ],
+    [
+      "TypeError",
+      "String.replaceAll expects argument 2 to be a data value."
+    ],
+    [
+      "TypeError",
+      "String.replaceAll expects argument 2 to be a data value."
+    ],
+    [
+      "TypeError",
+      "String.replace expects argument 1 to be a data value."
+    ],
+    [
+      "TypeError",
+      "String.concat expects argument 2 to be a data value."
+    ],
+    [
+      "TypeError",
+      "String.concat expects argument 1 to be a data value."
+    ],
+    [
+      "TypeError",
+      "String.localeCompare expects argument 1 to be a data value."
+    ],
+    [
+      "TypeError",
+      "String.normalize expects argument 1 to be a data value."
+    ],
+    "ABCA",
+    "a",
+    -1,
+    "abca[object Function][object Object]!",
+    false,
+    "[",
+    "ct]",
+    [
+      "Error",
+      "first"
+    ],
+    [
+      "TypeError",
+      "String.prototype.trim called on null or undefined."
+    ],
+    [
+      "TypeError",
+      "String.prototype.toLocaleUpperCase called on null or undefined."
+    ],
+    [
+      "TypeError",
+      "String.prototype.[Symbol.iterator] called on null or undefined."
+    ],
+    [
+      "TypeError",
+      "String.prototype.padEnd called on null or undefined."
+    ]
+  ],
+  "logs": [],
+  "metadata": null
+}

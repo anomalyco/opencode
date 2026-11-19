@@ -1,0 +1,278 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      [
+        "TypeError",
+        "Cannot read properties of null (reading 'a')."
+      ],
+      [
+        "TypeError",
+        "Cannot read properties of null (reading 'b')."
+      ],
+      [
+        "TypeError",
+        "Cannot read properties of null (reading 'c')."
+      ],
+      [
+        "TypeError",
+        "The 'in' operator requires a data object on the right-hand side."
+      ],
+      false,
+      false,
+      [
+        "TypeError",
+        "The right-hand side of 'instanceof' is not callable."
+      ],
+      [
+        "TypeError",
+        "Cannot read properties of null (reading 'd')."
+      ],
+      null
+    ],
+    [
+      [
+        "TypeError",
+        "Cannot read properties of undefined (reading 'a')."
+      ],
+      [
+        "TypeError",
+        "Cannot read properties of undefined (reading 'b')."
+      ],
+      [
+        "TypeError",
+        "Cannot read properties of undefined (reading 'c')."
+      ],
+      [
+        "TypeError",
+        "The 'in' operator requires a data object on the right-hand side."
+      ],
+      false,
+      false,
+      [
+        "TypeError",
+        "The right-hand side of 'instanceof' is not callable."
+      ],
+      [
+        "TypeError",
+        "Cannot read properties of undefined (reading 'd')."
+      ],
+      null
+    ],
+    [
+      [
+        "TypeError",
+        "Cannot create property 'a' on string 'ab'."
+      ],
+      [
+        "TypeError",
+        "Cannot create property 'b' on string 'ab'."
+      ],
+      true,
+      [
+        "TypeError",
+        "The 'in' operator requires a data object on the right-hand side."
+      ],
+      false,
+      false,
+      [
+        "TypeError",
+        "The right-hand side of 'instanceof' is not callable."
+      ],
+      null,
+      null
+    ],
+    [
+      [
+        "TypeError",
+        "Cannot create property 'a' on number '5'."
+      ],
+      [
+        "TypeError",
+        "Cannot create property 'b' on number '5'."
+      ],
+      true,
+      [
+        "TypeError",
+        "The 'in' operator requires a data object on the right-hand side."
+      ],
+      false,
+      false,
+      [
+        "TypeError",
+        "The right-hand side of 'instanceof' is not callable."
+      ],
+      null,
+      null
+    ],
+    [
+      [
+        "TypeError",
+        "Cannot create property 'a' on boolean 'true'."
+      ],
+      [
+        "TypeError",
+        "Cannot create property 'b' on boolean 'true'."
+      ],
+      true,
+      [
+        "TypeError",
+        "The 'in' operator requires a data object on the right-hand side."
+      ],
+      false,
+      false,
+      [
+        "TypeError",
+        "The right-hand side of 'instanceof' is not callable."
+      ],
+      null,
+      null
+    ],
+    [
+      [
+        "TypeError",
+        "Cannot access a property on a non-object value."
+      ],
+      [
+        "TypeError",
+        "Cannot access a property on a non-object value."
+      ],
+      [
+        "TypeError",
+        "Cannot access a property on a non-object value."
+      ],
+      [
+        "TypeError",
+        "The 'in' operator requires a data object on the right-hand side."
+      ],
+      false,
+      false,
+      [
+        "TypeError",
+        "The right-hand side of 'instanceof' is not callable."
+      ],
+      [
+        "TypeError",
+        "Cannot access a property on a non-object value."
+      ],
+      [
+        "TypeError",
+        "Cannot access a property on a non-object value."
+      ]
+    ],
+    [
+      [
+        "TypeError",
+        "This value is an un-awaited Promise; await it first - e.g. `const result = await load(...)`."
+      ],
+      [
+        "TypeError",
+        "This value is an un-awaited Promise; await it first - e.g. `const result = await load(...)`."
+      ],
+      true,
+      false,
+      false,
+      true,
+      [
+        "TypeError",
+        "The right-hand side of 'instanceof' is not callable."
+      ],
+      [
+        "TypeError",
+        "This value is an un-awaited Promise; await it first - e.g. `const result = await load(...)`."
+      ],
+      [
+        "TypeError",
+        "This value is an un-awaited Promise; await it first - e.g. `const result = await load(...)`."
+      ]
+    ],
+    [
+      [
+        "TypeError",
+        "Only data fields may be assigned."
+      ],
+      [
+        "TypeError",
+        "Only data fields may be assigned."
+      ],
+      [
+        "TypeError",
+        "Only data fields may be deleted."
+      ],
+      [
+        "TypeError",
+        "Binary operators require data values."
+      ],
+      [
+        "TypeError",
+        "Binary operators require data values."
+      ],
+      false,
+      [
+        "TypeError",
+        "The right-hand side of 'instanceof' is not callable."
+      ],
+      null,
+      null
+    ],
+    [
+      [
+        "TypeError",
+        "Only data fields may be assigned."
+      ],
+      [
+        "TypeError",
+        "Only data fields may be assigned."
+      ],
+      [
+        "TypeError",
+        "Only data fields may be deleted."
+      ],
+      [
+        "TypeError",
+        "Binary operators require data values."
+      ],
+      [
+        "TypeError",
+        "Binary operators require data values."
+      ],
+      false,
+      [
+        "TypeError",
+        "The right-hand side of 'instanceof' is not callable."
+      ],
+      null,
+      null
+    ],
+    [
+      1,
+      2,
+      true,
+      true,
+      false,
+      true,
+      [
+        "TypeError",
+        "The right-hand side of 'instanceof' has no 'prototype' object."
+      ],
+      null,
+      null
+    ],
+    "converted",
+    [
+      "TypeError",
+      "The 'in' operator requires a data object on the right-hand side."
+    ],
+    true,
+    true,
+    true,
+    [
+      "[object Promise]",
+      "[object Object]"
+    ],
+    1
+  ],
+  "logs": [],
+  "metadata": null
+}

@@ -1,0 +1,113 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": {
+    "pairs": [
+      0,
+      1,
+      10,
+      11,
+      20,
+      21
+    ],
+    "spread": [
+      0,
+      0,
+      1,
+      2,
+      9
+    ],
+    "first": 0,
+    "rest": [
+      1,
+      2,
+      3
+    ],
+    "p": 0,
+    "q": 1,
+    "fromAll": [
+      0,
+      1
+    ],
+    "set": [
+      0,
+      1,
+      2
+    ],
+    "args": 5,
+    "steps": [
+      {
+        "value": 0,
+        "done": false
+      },
+      {
+        "value": 1,
+        "done": false
+      },
+      {
+        "value": 2,
+        "done": false
+      },
+      {
+        "value": "done",
+        "done": true
+      },
+      {
+        "done": true
+      },
+      {
+        "value": 7,
+        "done": true
+      }
+    ],
+    "returned": {
+      "value": "early",
+      "done": true
+    },
+    "delegated": [
+      0,
+      1,
+      "inner returned done",
+      7,
+      8
+    ],
+    "caught": "bad",
+    "after": {
+      "done": true
+    },
+    "viaCallbacks": [
+      "2+4",
+      "4+6",
+      "6+8"
+    ],
+    "nesting": [
+      2,
+      100,
+      101
+    ],
+    "e1": "default",
+    "log": [
+      "cleanup 2",
+      "cleanup 2",
+      "cleanup 2",
+      "cleanup 3",
+      "cleanup 5",
+      "cleanup 3",
+      "cleanup 4",
+      "cleanup 10",
+      "cleanup 2",
+      "cleanup 3",
+      "cleanup 6",
+      "sent a",
+      "sent b",
+      "cleanup 3",
+      "cleanup 3",
+      "cleanup 2",
+      "got 1",
+      "cleanup 2",
+      "cleanup 2"
+    ]
+  },
+  "logs": [],
+  "metadata": null
+}

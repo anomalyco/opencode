@@ -1,0 +1,383 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      [
+        "TypeError",
+        "Object.keys(...) cannot convert null to an object."
+      ],
+      [
+        "TypeError",
+        "Object.values(...) cannot convert null to an object."
+      ],
+      [
+        "TypeError",
+        "Object.entries(...) cannot convert null to an object."
+      ],
+      {},
+      [
+        "TypeError",
+        "Object.assign expects a data object or array target, received null."
+      ],
+      [
+        "TypeError",
+        "Object.hasOwn(...) cannot convert null to an object."
+      ],
+      [],
+      {},
+      [
+        "TypeError",
+        "Cannot destructure null as it is null."
+      ],
+      [
+        "TypeError",
+        "Cannot destructure null as it is null."
+      ],
+      [
+        "TypeError",
+        "Object.getPrototypeOf cannot convert null to an object."
+      ],
+      true
+    ],
+    [
+      [
+        "TypeError",
+        "Object.keys(...) cannot convert undefined to an object."
+      ],
+      [
+        "TypeError",
+        "Object.values(...) cannot convert undefined to an object."
+      ],
+      [
+        "TypeError",
+        "Object.entries(...) cannot convert undefined to an object."
+      ],
+      {},
+      [
+        "TypeError",
+        "Object.assign expects a data object or array target, received undefined."
+      ],
+      [
+        "TypeError",
+        "Object.hasOwn(...) cannot convert undefined to an object."
+      ],
+      [],
+      {},
+      [
+        "TypeError",
+        "Cannot destructure undefined as it is undefined."
+      ],
+      [
+        "TypeError",
+        "Cannot destructure undefined as it is undefined."
+      ],
+      [
+        "TypeError",
+        "Object.getPrototypeOf cannot convert undefined to an object."
+      ],
+      [
+        "TypeError",
+        "Object prototype may only be an Object or null."
+      ]
+    ],
+    [
+      [
+        "TypeError",
+        "Object.keys(...) received an un-awaited Promise; await it before inspecting the result."
+      ],
+      [
+        "TypeError",
+        "Object.values(...) received an un-awaited Promise; await it before inspecting the result."
+      ],
+      [
+        "TypeError",
+        "Object.entries(...) received an un-awaited Promise; await it before inspecting the result."
+      ],
+      [
+        "TypeError",
+        "Object.assign(...) received an un-awaited Promise; await it before inspecting the result."
+      ],
+      true,
+      [
+        "TypeError",
+        "Object.hasOwn(...) received an un-awaited Promise; await it before inspecting the result."
+      ],
+      [
+        "TypeError",
+        "for...in received an un-awaited Promise; await it before inspecting the result."
+      ],
+      [
+        "TypeError",
+        "Object spread received an un-awaited Promise; await it before inspecting the result."
+      ],
+      [
+        "TypeError",
+        "Object destructuring received an un-awaited Promise; await it before inspecting the result."
+      ],
+      [
+        "TypeError",
+        "Object destructuring received an un-awaited Promise; await it before inspecting the result."
+      ],
+      false,
+      true
+    ],
+    [
+      [
+        "echo",
+        "fail",
+        "git"
+      ],
+      [
+        "TypeError",
+        "Object.values(...) cannot read tools: it is a namespace of host functions, not plain data. Use Object.keys(tools) for its names."
+      ],
+      [
+        "TypeError",
+        "Object.entries(...) cannot read tools: it is a namespace of host functions, not plain data. Use Object.keys(tools) for its names."
+      ],
+      [
+        "TypeError",
+        "Object.assign(...) cannot read tools: it is a namespace of host functions, not plain data. Use Object.keys(tools) for its names."
+      ],
+      [
+        "TypeError",
+        "Object.assign expects a data object or array target, received a namespace reference."
+      ],
+      [
+        "TypeError",
+        "Object.hasOwn(...) cannot read tools: it is a namespace of host functions, not plain data. Use Object.keys(tools) for its names."
+      ],
+      [
+        "echo",
+        "fail",
+        "git"
+      ],
+      [
+        "TypeError",
+        "Object spread cannot read tools: it is a namespace of host functions, not plain data. Use Object.keys(tools) for its names."
+      ],
+      [
+        "TypeError",
+        "Object destructuring cannot read tools: it is a namespace of host functions, not plain data. Use Object.keys(tools) for its names."
+      ],
+      [
+        "TypeError",
+        "Object destructuring cannot read tools: it is a namespace of host functions, not plain data. Use Object.keys(tools) for its names."
+      ],
+      [
+        "TypeError",
+        "Object.getPrototypeOf cannot convert a namespace reference to an object."
+      ],
+      [
+        "TypeError",
+        "Object prototype may only be an Object or null."
+      ]
+    ],
+    [
+      [
+        "status"
+      ],
+      [
+        "TypeError",
+        "Object.values(...) cannot read tools: it is a namespace of host functions, not plain data. Use Object.keys(tools) for its names."
+      ],
+      [
+        "TypeError",
+        "Object.entries(...) cannot read tools: it is a namespace of host functions, not plain data. Use Object.keys(tools) for its names."
+      ],
+      [
+        "TypeError",
+        "Object.assign(...) cannot read tools: it is a namespace of host functions, not plain data. Use Object.keys(tools) for its names."
+      ],
+      [
+        "TypeError",
+        "Object.assign expects a data object or array target, received a namespace reference."
+      ],
+      [
+        "TypeError",
+        "Object.hasOwn(...) cannot read tools: it is a namespace of host functions, not plain data. Use Object.keys(tools) for its names."
+      ],
+      [
+        "status"
+      ],
+      [
+        "TypeError",
+        "Object spread cannot read tools: it is a namespace of host functions, not plain data. Use Object.keys(tools) for its names."
+      ],
+      [
+        "TypeError",
+        "Object destructuring cannot read tools: it is a namespace of host functions, not plain data. Use Object.keys(tools) for its names."
+      ],
+      [
+        "TypeError",
+        "Object destructuring cannot read tools: it is a namespace of host functions, not plain data. Use Object.keys(tools) for its names."
+      ],
+      [
+        "TypeError",
+        "Object.getPrototypeOf cannot convert a namespace reference to an object."
+      ],
+      [
+        "TypeError",
+        "Object prototype may only be an Object or null."
+      ]
+    ],
+    [
+      [],
+      [
+        "TypeError",
+        "Object.values(...) cannot read tools: it is a namespace of host functions, not plain data. Use Object.keys(tools) for its names."
+      ],
+      [
+        "TypeError",
+        "Object.entries(...) cannot read tools: it is a namespace of host functions, not plain data. Use Object.keys(tools) for its names."
+      ],
+      [
+        "TypeError",
+        "Object.assign(...) cannot read tools: it is a namespace of host functions, not plain data. Use Object.keys(tools) for its names."
+      ],
+      [
+        "TypeError",
+        "Object.assign expects a data object or array target, received a namespace reference."
+      ],
+      [
+        "TypeError",
+        "Object.hasOwn(...) cannot read tools: it is a namespace of host functions, not plain data. Use Object.keys(tools) for its names."
+      ],
+      [],
+      [
+        "TypeError",
+        "Object spread cannot read tools: it is a namespace of host functions, not plain data. Use Object.keys(tools) for its names."
+      ],
+      [
+        "TypeError",
+        "Object destructuring cannot read tools: it is a namespace of host functions, not plain data. Use Object.keys(tools) for its names."
+      ],
+      [
+        "TypeError",
+        "Object destructuring cannot read tools: it is a namespace of host functions, not plain data. Use Object.keys(tools) for its names."
+      ],
+      [
+        "TypeError",
+        "Object.getPrototypeOf cannot convert a namespace reference to an object."
+      ],
+      [
+        "TypeError",
+        "Object prototype may only be an Object or null."
+      ]
+    ],
+    [
+      [
+        "0",
+        "1"
+      ],
+      [
+        "a",
+        "b"
+      ],
+      [
+        [
+          "0",
+          "a"
+        ],
+        [
+          "1",
+          "b"
+        ]
+      ],
+      {
+        "0": "a",
+        "1": "b"
+      },
+      [
+        "TypeError",
+        "Object.assign expects a data object or array target, received a string."
+      ],
+      true,
+      [
+        "0",
+        "1"
+      ],
+      {
+        "0": "a",
+        "1": "b"
+      },
+      {
+        "0": "a",
+        "1": "b"
+      },
+      {
+        "0": "a",
+        "1": "b"
+      },
+      false,
+      [
+        "TypeError",
+        "Object prototype may only be an Object or null."
+      ]
+    ],
+    [
+      [],
+      [],
+      [],
+      {},
+      [
+        "TypeError",
+        "Object.assign expects a data object or array target, received a number."
+      ],
+      false,
+      [],
+      {},
+      {},
+      {},
+      false,
+      [
+        "TypeError",
+        "Object prototype may only be an Object or null."
+      ]
+    ],
+    [
+      [],
+      [],
+      [],
+      {},
+      [
+        "TypeError",
+        "Object.assign expects a data object or array target, received a boolean."
+      ],
+      false,
+      [],
+      {},
+      {},
+      {},
+      false,
+      [
+        "TypeError",
+        "Object prototype may only be an Object or null."
+      ]
+    ],
+    [
+      [],
+      [],
+      [],
+      {},
+      true,
+      true,
+      [
+        "a"
+      ],
+      {
+        "a": 1
+      },
+      {
+        "a": 1
+      },
+      {},
+      false,
+      true
+    ],
+    {}
+  ],
+  "logs": [],
+  "metadata": null
+}

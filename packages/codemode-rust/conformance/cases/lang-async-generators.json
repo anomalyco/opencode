@@ -1,0 +1,90 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": {
+    "seen": [
+      0,
+      1,
+      2
+    ],
+    "queued": [
+      {
+        "value": 0,
+        "done": false
+      },
+      {
+        "value": 1,
+        "done": false
+      },
+      {
+        "value": "stop",
+        "done": true
+      },
+      {
+        "done": true
+      }
+    ],
+    "thrown": [
+      {
+        "value": "caught x",
+        "done": false
+      },
+      {
+        "value": "ready",
+        "done": false
+      }
+    ],
+    "delegated": [
+      0,
+      1,
+      "inner returned end",
+      "p",
+      "q"
+    ],
+    "mixed": [
+      1,
+      2,
+      3
+    ],
+    "rejected": "bad",
+    "fromCustom": [
+      10,
+      20
+    ],
+    "failed": [
+      {
+        "value": 1,
+        "done": false
+      },
+      "TypeError",
+      {
+        "done": true
+      }
+    ],
+    "notIterable": "TypeError",
+    "shape": [
+      "function",
+      true,
+      true,
+      true
+    ],
+    "order": [
+      "start",
+      "resumed",
+      "job",
+      "first 1",
+      "second true"
+    ],
+    "log": [
+      "cleanup 3",
+      "sent a",
+      "cleanup 5",
+      "cleanup 2",
+      "cleanup 10",
+      "got 1",
+      "custom return"
+    ]
+  },
+  "logs": [],
+  "metadata": null
+}

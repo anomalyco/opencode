@@ -1,0 +1,41 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    193,
+    [
+      "RangeError",
+      "Value exceeds the maximum depth of 32."
+    ],
+    194,
+    [
+      "RangeError",
+      "Value exceeds the maximum depth of 32."
+    ],
+    65,
+    [
+      "RangeError",
+      "Value exceeds the maximum depth of 32."
+    ],
+    [
+      "RangeError",
+      "Value exceeds the maximum depth of 32."
+    ],
+    601,
+    [
+      "RangeError",
+      "Value exceeds the maximum depth of 100."
+    ],
+    [
+      "RangeError",
+      "Value exceeds the maximum depth of 32."
+    ],
+    [
+      "RangeError",
+      "Value exceeds the maximum depth of 32."
+    ],
+    365
+  ],
+  "logs": [],
+  "metadata": null
+}

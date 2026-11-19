@@ -1,0 +1,19 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "number",
+    "string",
+    "boolean",
+    "undefined",
+    "object",
+    "object",
+    "object",
+    "function",
+    "function",
+    "undefined",
+    "function"
+  ],
+  "logs": [],
+  "metadata": null
+}

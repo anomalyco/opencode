@@ -1,0 +1,109 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      "TypeError",
+      "RegExp.prototype.source called on incompatible receiver a data object."
+    ],
+    [
+      "TypeError",
+      "RegExp.prototype.flags called on incompatible receiver a data object."
+    ],
+    [
+      "TypeError",
+      "RegExp.prototype.lastIndex called on incompatible receiver a data object."
+    ],
+    [
+      "TypeError",
+      "RegExp.prototype.global called on incompatible receiver a data object."
+    ],
+    [
+      "TypeError",
+      "RegExp.prototype.ignoreCase called on incompatible receiver a data object."
+    ],
+    [
+      "TypeError",
+      "RegExp.prototype.multiline called on incompatible receiver a data object."
+    ],
+    [
+      "TypeError",
+      "RegExp.prototype.dotAll called on incompatible receiver a data object."
+    ],
+    [
+      "TypeError",
+      "RegExp.prototype.unicode called on incompatible receiver a data object."
+    ],
+    [
+      "TypeError",
+      "RegExp.prototype.unicodeSets called on incompatible receiver a data object."
+    ],
+    [
+      "TypeError",
+      "RegExp.prototype.sticky called on incompatible receiver a data object."
+    ],
+    [
+      "TypeError",
+      "RegExp.prototype.hasIndices called on incompatible receiver a data object."
+    ],
+    [
+      "TypeError",
+      "Uint8Array.prototype.length called on incompatible receiver a data object."
+    ],
+    [
+      "TypeError",
+      "Map.prototype.size called on incompatible receiver a data object."
+    ],
+    [
+      "TypeError",
+      "Set.prototype.size called on incompatible receiver a data object."
+    ],
+    [
+      "TypeError",
+      "URLSearchParams.prototype.size called on incompatible receiver a data object."
+    ],
+    [
+      "TypeError",
+      "URL.prototype.href called on incompatible receiver a data object."
+    ],
+    [
+      "TypeError",
+      "URL.prototype.searchParams called on incompatible receiver a data object."
+    ],
+    [
+      "TypeError",
+      "TextDecoder.prototype.encoding called on incompatible receiver a data object."
+    ],
+    "utf-8",
+    [
+      "TypeError",
+      "RegExp.prototype.global called on incompatible receiver a data object."
+    ],
+    [
+      "TypeError",
+      "Map.prototype.size called on incompatible receiver a data object."
+    ],
+    [
+      true,
+      "a",
+      1,
+      3,
+      true,
+      true,
+      [],
+      "y",
+      "https://a.test/",
+      "utf-8"
+    ],
+    [
+      "TypeError",
+      "Cannot set property 'global' of a data object which has only a getter."
+    ],
+    [
+      3,
+      false
+    ]
+  ],
+  "logs": [],
+  "metadata": null
+}

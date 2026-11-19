@@ -1,0 +1,11 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "before",
+    "body 1",
+    "body 2"
+  ],
+  "logs": [],
+  "metadata": null
+}

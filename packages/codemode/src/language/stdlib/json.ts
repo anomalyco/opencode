@@ -1,5 +1,5 @@
 import { methods } from "../runtime/native.js"
-import { requireCallback } from "../runtime/callback.js"
+import { requireCallback, withPrimitives } from "../runtime/callback.js"
 import type { Interpreter } from "../runtime/interpreter.js"
 import { syntaxError } from "../runtime/model.js"
 import { typeofValue } from "../runtime/references.js"
@@ -16,9 +16,11 @@ export const jsonGlobal = <R>(ctx: Interpreter<R>) => {
   return json
 }
 
-const parse = <R>(ctx: Interpreter<R>, args: Array<Value>) => {
-  const text = coerceToString(args[0])
+// The text converts through its own toString first, as ToString does.
+const parse = <R>(ctx: Interpreter<R>, args: Array<Value>) =>
+  withPrimitives("string", [args[0]], ([text]) => parseText(ctx, coerceToString(text), args[1]))
 
+const parseText = <R>(ctx: Interpreter<R>, text: string, reviverArg: Value) => {
   const parsed = (() => {
     try {
       return fromJson(ctx, JSON.parse(text))
@@ -26,8 +28,8 @@ const parse = <R>(ctx: Interpreter<R>, args: Array<Value>) => {
       throw syntaxError(`JSON.parse received invalid JSON: ${error instanceof Error ? error.message : String(error)}`)
     }
   })()
-  if (typeofValue(args[1]) !== "function") return parsed
-  const reviver = requireCallback(args[1], "JSON.parse")
+  if (typeofValue(reviverArg) !== "function") return parsed
+  const reviver = requireCallback(reviverArg, "JSON.parse")
   return new Invoke(
     ctx.prelude.fn("revive"),
     undefined,

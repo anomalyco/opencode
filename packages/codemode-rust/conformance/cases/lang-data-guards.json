@@ -1,0 +1,102 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      "TypeError",
+      "Binary operators require data values."
+    ],
+    true,
+    true,
+    true,
+    [
+      "TypeError",
+      "Binary operators require data values."
+    ],
+    [
+      "TypeError",
+      "Binary operators require data values."
+    ],
+    [
+      "TypeError",
+      "Binary operators require data values."
+    ],
+    [
+      "TypeError",
+      "Unary operators require data values."
+    ],
+    [
+      "TypeError",
+      "Unary operators require data values."
+    ],
+    [
+      "TypeError",
+      "Unary operators require data values."
+    ],
+    [
+      "TypeError",
+      "'++' requires a data value."
+    ],
+    [
+      "TypeError",
+      "Binary operators require data values."
+    ],
+    "[object Promise]",
+    "[object Promise]",
+    "function",
+    [
+      "TypeError",
+      "This value is an un-awaited Promise; await it first - e.g. `const result = await load(...)`."
+    ],
+    [
+      "TypeError",
+      "This value is an un-awaited Promise; await it first - e.g. `const result = await load(...)`."
+    ],
+    [
+      "TypeError",
+      "This value is an un-awaited Promise; await it first - e.g. `const result = await load(...)`."
+    ],
+    "number",
+    false,
+    "[object Generator]1",
+    "[object Function]",
+    [
+      "TypeError",
+      "Binary operators require data values."
+    ],
+    [
+      "TypeError",
+      "for...in received an un-awaited Promise; await it before inspecting the result."
+    ],
+    [
+      "TypeError",
+      "for...of requires an iterable value, received a data object."
+    ],
+    [
+      "TypeError",
+      "for...of requires an iterable value, received a number."
+    ],
+    [
+      "TypeError",
+      "for...of requires an iterable value, received a function."
+    ],
+    [
+      "TypeError",
+      "Array destructuring requires a supported iterable value."
+    ],
+    [
+      "TypeError",
+      "Spread requires a synchronous iterable."
+    ],
+    [
+      "TypeError",
+      "Spread requires a synchronous iterable."
+    ],
+    [
+      "TypeError",
+      "yield* requires a compatible iterable value."
+    ]
+  ],
+  "logs": [],
+  "metadata": null
+}

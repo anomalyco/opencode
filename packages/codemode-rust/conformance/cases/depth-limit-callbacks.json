@@ -1,0 +1,53 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": {
+    "map": [
+      10000,
+      "RangeError",
+      "Maximum call stack size exceeded"
+    ],
+    "forEach": [
+      10000,
+      "RangeError",
+      "Maximum call stack size exceeded"
+    ],
+    "toString": [
+      10000,
+      "RangeError",
+      "Maximum call stack size exceeded"
+    ],
+    "replace": [
+      10000,
+      "RangeError",
+      "Maximum call stack size exceeded"
+    ],
+    "toJSON": [
+      10000,
+      "RangeError",
+      "Maximum call stack size exceeded"
+    ],
+    "arrayFrom": [
+      10000,
+      "RangeError",
+      "Maximum call stack size exceeded"
+    ],
+    "reduce": [
+      10000,
+      "RangeError",
+      "Maximum call stack size exceeded"
+    ],
+    "sort": [
+      10000,
+      "RangeError",
+      "Maximum call stack size exceeded"
+    ],
+    "limit": 1,
+    "over": [
+      "RangeError",
+      "Maximum call stack size exceeded"
+    ]
+  },
+  "logs": [],
+  "metadata": null
+}

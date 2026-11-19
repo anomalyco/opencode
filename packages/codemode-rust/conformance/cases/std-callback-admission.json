@@ -1,0 +1,597 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      "map",
+      "abs",
+      [
+        1
+      ]
+    ],
+    [
+      "map",
+      "string",
+      [
+        "1"
+      ]
+    ],
+    [
+      "map",
+      "bound",
+      [
+        1
+      ]
+    ],
+    [
+      "map",
+      "arrow",
+      [
+        1
+      ]
+    ],
+    [
+      "map",
+      "resolve",
+      "TypeError",
+      "Array.map cannot use this callable as a callback; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "map",
+      "all",
+      "TypeError",
+      "Array.map cannot use this callable as a callback; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "map",
+      "withResolvers",
+      "TypeError",
+      "Array.map cannot use this callable as a callback; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "map",
+      "symbol",
+      "TypeError",
+      "Array.map cannot use this callable as a callback; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "map",
+      "tool",
+      "TypeError",
+      "Array.map cannot use this callable as a callback; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "map",
+      "nested",
+      "TypeError",
+      "Array.map cannot use this callable as a callback; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "map",
+      "number",
+      "TypeError",
+      "Array.map expects a function callback."
+    ],
+    [
+      "sort",
+      "abs",
+      [
+        1,
+        2
+      ]
+    ],
+    [
+      "sort",
+      "string",
+      [
+        1,
+        2
+      ]
+    ],
+    [
+      "sort",
+      "bound",
+      [
+        1,
+        2
+      ]
+    ],
+    [
+      "sort",
+      "arrow",
+      [
+        1,
+        2
+      ]
+    ],
+    [
+      "sort",
+      "resolve",
+      "TypeError",
+      "Array.sort cannot use this callable as a callback; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "sort",
+      "all",
+      "TypeError",
+      "Array.sort cannot use this callable as a callback; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "sort",
+      "withResolvers",
+      "TypeError",
+      "Array.sort cannot use this callable as a callback; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "sort",
+      "symbol",
+      "TypeError",
+      "Array.sort cannot use this callable as a callback; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "sort",
+      "tool",
+      "TypeError",
+      "Array.sort cannot use this callable as a callback; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "sort",
+      "nested",
+      "TypeError",
+      "Array.sort cannot use this callable as a callback; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "sort",
+      "number",
+      "TypeError",
+      "Array.sort expects a function callback."
+    ],
+    [
+      "then",
+      "abs",
+      "promise"
+    ],
+    [
+      "then",
+      "string",
+      "promise"
+    ],
+    [
+      "then",
+      "bound",
+      "promise"
+    ],
+    [
+      "then",
+      "arrow",
+      "promise"
+    ],
+    [
+      "then",
+      "resolve",
+      "TypeError",
+      "Promise.prototype.then cannot use this callable as a handler; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "then",
+      "all",
+      "TypeError",
+      "Promise.prototype.then cannot use this callable as a handler; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "then",
+      "withResolvers",
+      "TypeError",
+      "Promise.prototype.then cannot use this callable as a handler; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "then",
+      "symbol",
+      "TypeError",
+      "Promise.prototype.then cannot use this callable as a handler; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "then",
+      "tool",
+      "TypeError",
+      "Promise.prototype.then cannot use this callable as a handler; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "then",
+      "nested",
+      "TypeError",
+      "Promise.prototype.then cannot use this callable as a handler; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "then",
+      "number",
+      "promise"
+    ],
+    [
+      "catch",
+      "abs",
+      "promise"
+    ],
+    [
+      "catch",
+      "string",
+      "promise"
+    ],
+    [
+      "catch",
+      "bound",
+      "promise"
+    ],
+    [
+      "catch",
+      "arrow",
+      "promise"
+    ],
+    [
+      "catch",
+      "resolve",
+      "TypeError",
+      "Promise.prototype.catch cannot use this callable as a handler; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "catch",
+      "all",
+      "TypeError",
+      "Promise.prototype.catch cannot use this callable as a handler; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "catch",
+      "withResolvers",
+      "TypeError",
+      "Promise.prototype.catch cannot use this callable as a handler; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "catch",
+      "symbol",
+      "TypeError",
+      "Promise.prototype.catch cannot use this callable as a handler; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "catch",
+      "tool",
+      "TypeError",
+      "Promise.prototype.catch cannot use this callable as a handler; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "catch",
+      "nested",
+      "TypeError",
+      "Promise.prototype.catch cannot use this callable as a handler; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "catch",
+      "number",
+      "promise"
+    ],
+    [
+      "finally",
+      "abs",
+      "promise"
+    ],
+    [
+      "finally",
+      "string",
+      "promise"
+    ],
+    [
+      "finally",
+      "bound",
+      "promise"
+    ],
+    [
+      "finally",
+      "arrow",
+      "promise"
+    ],
+    [
+      "finally",
+      "resolve",
+      "TypeError",
+      "Promise.prototype.finally cannot use this callable as a handler; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "finally",
+      "all",
+      "TypeError",
+      "Promise.prototype.finally cannot use this callable as a handler; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "finally",
+      "withResolvers",
+      "TypeError",
+      "Promise.prototype.finally cannot use this callable as a handler; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "finally",
+      "symbol",
+      "TypeError",
+      "Promise.prototype.finally cannot use this callable as a handler; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "finally",
+      "tool",
+      "TypeError",
+      "Promise.prototype.finally cannot use this callable as a handler; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "finally",
+      "nested",
+      "TypeError",
+      "Promise.prototype.finally cannot use this callable as a handler; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "finally",
+      "number",
+      "promise"
+    ],
+    [
+      "replace",
+      "abs",
+      "NaN"
+    ],
+    [
+      "replace",
+      "string",
+      "a"
+    ],
+    [
+      "replace",
+      "bound",
+      "a"
+    ],
+    [
+      "replace",
+      "arrow",
+      "a"
+    ],
+    [
+      "replace",
+      "resolve",
+      "TypeError",
+      "String.replace cannot use this callable as a replacer; wrap it in an arrow function, e.g. (match) => fn(match)."
+    ],
+    [
+      "replace",
+      "all",
+      "TypeError",
+      "String.replace cannot use this callable as a replacer; wrap it in an arrow function, e.g. (match) => fn(match)."
+    ],
+    [
+      "replace",
+      "withResolvers",
+      "TypeError",
+      "String.replace cannot use this callable as a replacer; wrap it in an arrow function, e.g. (match) => fn(match)."
+    ],
+    [
+      "replace",
+      "symbol",
+      "TypeError",
+      "String.replace cannot use this callable as a replacer; wrap it in an arrow function, e.g. (match) => fn(match)."
+    ],
+    [
+      "replace",
+      "tool",
+      "TypeError",
+      "String.replace cannot use this callable as a replacer; wrap it in an arrow function, e.g. (match) => fn(match)."
+    ],
+    [
+      "replace",
+      "nested",
+      "TypeError",
+      "String.replace cannot use this callable as a replacer; wrap it in an arrow function, e.g. (match) => fn(match)."
+    ],
+    [
+      "replace",
+      "number",
+      "5"
+    ],
+    [
+      "replaceAll",
+      "abs",
+      "NaN"
+    ],
+    [
+      "replaceAll",
+      "string",
+      "a"
+    ],
+    [
+      "replaceAll",
+      "bound",
+      "a"
+    ],
+    [
+      "replaceAll",
+      "arrow",
+      "a"
+    ],
+    [
+      "replaceAll",
+      "resolve",
+      "TypeError",
+      "String.replaceAll cannot use this callable as a replacer; wrap it in an arrow function, e.g. (match) => fn(match)."
+    ],
+    [
+      "replaceAll",
+      "all",
+      "TypeError",
+      "String.replaceAll cannot use this callable as a replacer; wrap it in an arrow function, e.g. (match) => fn(match)."
+    ],
+    [
+      "replaceAll",
+      "withResolvers",
+      "TypeError",
+      "String.replaceAll cannot use this callable as a replacer; wrap it in an arrow function, e.g. (match) => fn(match)."
+    ],
+    [
+      "replaceAll",
+      "symbol",
+      "TypeError",
+      "String.replaceAll cannot use this callable as a replacer; wrap it in an arrow function, e.g. (match) => fn(match)."
+    ],
+    [
+      "replaceAll",
+      "tool",
+      "TypeError",
+      "String.replaceAll cannot use this callable as a replacer; wrap it in an arrow function, e.g. (match) => fn(match)."
+    ],
+    [
+      "replaceAll",
+      "nested",
+      "TypeError",
+      "String.replaceAll cannot use this callable as a replacer; wrap it in an arrow function, e.g. (match) => fn(match)."
+    ],
+    [
+      "replaceAll",
+      "number",
+      "5"
+    ],
+    [
+      "parse",
+      "abs",
+      0
+    ],
+    [
+      "parse",
+      "string",
+      ""
+    ],
+    [
+      "parse",
+      "bound",
+      ""
+    ],
+    [
+      "parse",
+      "arrow",
+      ""
+    ],
+    [
+      "parse",
+      "resolve",
+      "TypeError",
+      "JSON.parse cannot use this callable as a callback; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "parse",
+      "all",
+      "TypeError",
+      "JSON.parse cannot use this callable as a callback; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "parse",
+      "withResolvers",
+      "TypeError",
+      "JSON.parse cannot use this callable as a callback; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "parse",
+      "symbol",
+      "TypeError",
+      "JSON.parse cannot use this callable as a callback; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "parse",
+      "tool",
+      "TypeError",
+      "JSON.parse cannot use this callable as a callback; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "parse",
+      "nested",
+      "TypeError",
+      "JSON.parse cannot use this callable as a callback; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "parse",
+      "number",
+      [
+        1
+      ]
+    ],
+    [
+      "stringify",
+      "abs",
+      "0"
+    ],
+    [
+      "stringify",
+      "string",
+      "\"\""
+    ],
+    [
+      "stringify",
+      "bound",
+      "\"\""
+    ],
+    [
+      "stringify",
+      "arrow",
+      "\"\""
+    ],
+    [
+      "stringify",
+      "resolve",
+      "TypeError",
+      "JSON.stringify cannot use this callable as a callback; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "stringify",
+      "all",
+      "TypeError",
+      "JSON.stringify cannot use this callable as a callback; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "stringify",
+      "withResolvers",
+      "TypeError",
+      "JSON.stringify cannot use this callable as a callback; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "stringify",
+      "symbol",
+      "TypeError",
+      "JSON.stringify cannot use this callable as a callback; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "stringify",
+      "tool",
+      "TypeError",
+      "JSON.stringify cannot use this callable as a callback; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "stringify",
+      "nested",
+      "TypeError",
+      "JSON.stringify cannot use this callable as a callback; wrap it in an arrow function, e.g. (value) => fn(value)."
+    ],
+    [
+      "stringify",
+      "number",
+      "[1]"
+    ],
+    [
+      "TypeError",
+      "Symbol is not callable; only Symbol.asyncIterator and Symbol.iterator are available."
+    ],
+    [
+      "TypeError",
+      "new Symbol(...) is not supported; call Symbol(...) without new instead."
+    ],
+    [
+      "TypeError",
+      "Only data fields may be assigned."
+    ],
+    [
+      "TypeError",
+      "Only data fields may be assigned."
+    ]
+  ],
+  "logs": [],
+  "metadata": null
+}

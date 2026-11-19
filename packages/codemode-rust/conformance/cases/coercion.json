@@ -1,0 +1,20 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "a1",
+    "12",
+    "33",
+    12,
+    "1,2",
+    "[object Object]",
+    2,
+    1,
+    3,
+    7,
+    0,
+    false
+  ],
+  "logs": [],
+  "metadata": null
+}

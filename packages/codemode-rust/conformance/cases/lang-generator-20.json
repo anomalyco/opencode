@@ -1,0 +1,21 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    {
+      "value": 7,
+      "done": true
+    },
+    {
+      "done": true
+    },
+    "start",
+    {
+      "done": true
+    },
+    "completed",
+    []
+  ],
+  "logs": [],
+  "metadata": null
+}

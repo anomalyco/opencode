@@ -98,9 +98,20 @@ describe("error identity", () => {
   })
 })
 
+describe("AggregateError", () => {
+  test("has an own message only when one is given", async () => {
+    expect(
+      await value(`
+        const own = (error) => Object.hasOwn(error, "message")
+        return [own(new AggregateError([])), own(new AggregateError([], undefined)), own(new AggregateError([], "m")), new AggregateError([]).message]
+      `),
+    ).toEqual([false, false, true, ""])
+  })
+})
+
 describe("rethrown interpreter failures", () => {
   test("keep their diagnostic kind and source location", async () => {
-    const failure = await error(`try { Symbol + 1 } catch (e) { throw e }`)
+    const failure = await error(`try { Promise.resolve(1) + 1 } catch (e) { throw e }`)
     expect(failure.kind).toBe("InvalidDataValue")
     expect(failure.message).toStartWith("TypeError: Binary operators require data values. (line ")
     expect(failure.location).toBeDefined()

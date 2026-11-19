@@ -1,0 +1,28 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "xx|x|undefined {\"a\":\"x\"}",
+    "yy|undefined|y {\"a\":\"y\"}",
+    "null",
+    "YY|undefined|Y {\"a\":\"Y\"}",
+    "y|undefined|y {\"a\":\"y\"}",
+    "y|undefined|y {\"a\":\"y\"}",
+    "xxyy|undefined|y {\"a\":\"y\"}",
+    "null",
+    "z|undefined|y {\"a\":\"y\"}",
+    "z|x|undefined {\"a\":\"x\"}",
+    "SyntaxError",
+    "y)y|undefined|y {\"a\":\"y\"}",
+    "yzy|undefined|y {\"a\":\"y\"}",
+    "yy|undefined|y {\"a\":\"y\"}",
+    "yy0|undefined|y {\"a\":\"y\"}",
+    "qyyq|q|undefined|y {\"a\":\"y\"}",
+    "xx|x {\"a\":\"x\"}",
+    "SyntaxError",
+    "SyntaxError",
+    "x[y]x"
+  ],
+  "logs": [],
+  "metadata": null
+}

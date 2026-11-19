@@ -1,0 +1,24 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      "sync",
+      0
+    ],
+    [
+      "sync",
+      0
+    ],
+    [
+      "async",
+      0
+    ],
+    [
+      "async",
+      0
+    ]
+  ],
+  "logs": [],
+  "metadata": null
+}

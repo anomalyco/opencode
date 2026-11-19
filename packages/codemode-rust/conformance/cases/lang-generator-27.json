@@ -1,0 +1,36 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      "first return",
+      {
+        "value": 1,
+        "done": false
+      }
+    ],
+    [
+      "return",
+      {
+        "value": 42,
+        "done": true
+      }
+    ],
+    [
+      "first throw",
+      {
+        "value": 2,
+        "done": false
+      }
+    ],
+    [
+      "throw",
+      "boom"
+    ],
+    "first",
+    "second",
+    "third"
+  ],
+  "logs": [],
+  "metadata": null
+}

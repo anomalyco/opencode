@@ -1,0 +1,28 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      "TypeError",
+      "tools is not a function."
+    ],
+    [
+      "TypeError",
+      "tools paths must use string property names."
+    ],
+    [
+      "TypeError",
+      "tools paths must use string property names."
+    ],
+    [
+      "TypeError",
+      "Only data fields may be deleted."
+    ],
+    [
+      "TypeError",
+      "Only data fields may be deleted."
+    ]
+  ],
+  "logs": [],
+  "metadata": null
+}

@@ -1,0 +1,1 @@
+return new tools.echo()

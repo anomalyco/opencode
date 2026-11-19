@@ -1,0 +1,16 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "TypeError: Cannot assign to constant 'undefined'.",
+    "TypeError: Cannot assign to constant 'undefined'.",
+    "TypeError: Cannot assign to constant 'undefined'.",
+    "TypeError: Cannot assign to constant 'undefined'.",
+    "TypeError: Cannot assign to constant 'NaN'.",
+    "TypeError: Cannot assign to constant 'Math'.",
+    "ReferenceError: Unknown identifier 'unknownName'.",
+    4
+  ],
+  "logs": [],
+  "metadata": null
+}

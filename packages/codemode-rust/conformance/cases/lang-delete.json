@@ -1,0 +1,78 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": {
+    "plain": [
+      true,
+      false,
+      true
+    ],
+    "optional": [
+      true,
+      {},
+      true,
+      true
+    ],
+    "parenthesized": [
+      true,
+      false
+    ],
+    "identifier": "TypeError: Only data fields may be deleted.",
+    "global": "TypeError: Only data fields may be deleted.",
+    "other": [
+      true,
+      true
+    ],
+    "constants": [
+      "TypeError: Cannot delete property 'PI'.",
+      "TypeError: Cannot delete property 'MAX_VALUE'.",
+      "TypeError: Cannot delete property 'prototype'."
+    ],
+    "configurable": [
+      true,
+      "undefined"
+    ],
+    "frozen": [
+      "TypeError: Cannot delete property 'a'.",
+      "TypeError: Cannot delete property '0'."
+    ],
+    "arrayLength": "TypeError: Cannot delete property 'length'.",
+    "strings": [
+      "TypeError: Cannot delete property 'length' of \"abc\".",
+      "TypeError: Cannot delete property '0' of \"abc\".",
+      true,
+      true
+    ],
+    "primitives": [
+      true,
+      "TypeError: Cannot read properties of null (reading 'a')."
+    ],
+    "bytes": [
+      "TypeError: Cannot delete property '0'.",
+      true
+    ],
+    "functionKeys": [
+      [
+        "g",
+        2
+      ],
+      [
+        true,
+        true
+      ],
+      "",
+      0,
+      false,
+      true
+    ],
+    "nativeKeys": [
+      true,
+      true,
+      "",
+      0
+    ],
+    "tools": "TypeError: Only data fields may be deleted."
+  },
+  "logs": [],
+  "metadata": null
+}

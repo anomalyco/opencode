@@ -1,0 +1,169 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      6,
+      "héllo",
+      "héllo",
+      "héllo",
+      "68c3a96c6c6f",
+      "aMOpbGxv",
+      "hi",
+      "hi",
+      2
+    ],
+    [
+      true,
+      true,
+      false,
+      [
+        1,
+        2,
+        3
+      ],
+      2,
+      "[object Uint8Array]"
+    ],
+    [
+      "axcd",
+      "xc",
+      true,
+      -1,
+      true,
+      2,
+      "010101",
+      "abab"
+    ],
+    [
+      4660,
+      13330,
+      -1,
+      "1234ff00"
+    ],
+    [
+      "{\"type\":\"Buffer\",\"data\":[104,105]}",
+      [
+        "TypeError",
+        "ERR_UNKNOWN_ENCODING",
+        "Unknown encoding: nope"
+      ]
+    ],
+    4,
+    8,
+    16,
+    3735928559,
+    -2,
+    1.5,
+    15711917,
+    -1,
+    3,
+    1193046,
+    4,
+    2.5,
+    [
+      "RangeError",
+      "ERR_OUT_OF_RANGE",
+      "The value of \"offset\" is out of range. It must be >= 0 and <= 15. Received 16"
+    ],
+    [
+      "RangeError",
+      "ERR_OUT_OF_RANGE",
+      "The value of \"offset\" is out of range. It must be >= 0 and <= 15. Received -1"
+    ],
+    [
+      "RangeError",
+      "ERR_OUT_OF_RANGE",
+      "The value of \"offset\" is out of range. It must be an integer. Received 1.5"
+    ],
+    [
+      "TypeError",
+      "ERR_INVALID_ARG_TYPE",
+      "The \"offset\" argument must be of type number. Received type string ('1')"
+    ],
+    [
+      "RangeError",
+      "ERR_OUT_OF_RANGE",
+      "The value of \"value\" is out of range. It must be >= 0 and <= 255. Received 256"
+    ],
+    [
+      "RangeError",
+      "ERR_OUT_OF_RANGE",
+      "The value of \"value\" is out of range. It must be >= -32768 and <= 32767. Received 40000"
+    ],
+    [
+      "RangeError",
+      "ERR_OUT_OF_RANGE",
+      "The value of \"byteLength\" is out of range. It must be >= 1 and <= 6. Received 7"
+    ],
+    [
+      "RangeError",
+      "ERR_OUT_OF_RANGE",
+      "The argument 'size' is invalid. Received -1"
+    ],
+    [
+      "TypeError",
+      "ERR_INVALID_ARG_TYPE",
+      "The first argument must be of type string or an instance of Buffer, Uint8Array, or Array or an Array-like Object. Received a data object"
+    ],
+    [
+      "TypeError",
+      null,
+      "The \"otherBuffer\" argument must be an instance of Buffer or Uint8Array. Received a string"
+    ],
+    "world",
+    "hello",
+    "world",
+    7,
+    7,
+    6,
+    4,
+    false,
+    -1,
+    4,
+    3,
+    2,
+    0,
+    "61626300007a7a00",
+    1,
+    "axc\u0000\u0000zz\u0000",
+    "ac",
+    "68006900",
+    "楨",
+    "ÿ",
+    "C)\u0000",
+    "ffef",
+    "__4",
+    0,
+    3,
+    "0061626300",
+    "axxd",
+    "00000000",
+    "02010403",
+    1,
+    0,
+    true,
+    false,
+    8192,
+    2,
+    3,
+    "y",
+    "AB",
+    "CD",
+    "hey",
+    "hey",
+    2,
+    true,
+    true,
+    {
+      "type": "Buffer",
+      "data": [
+        97
+      ]
+    }
+  ],
+  "logs": [
+    "<Buffer 68 69> <Buffer> <Buffer 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 ... 2 more bytes>"
+  ],
+  "metadata": null
+}

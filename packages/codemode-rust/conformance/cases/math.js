@@ -1,0 +1,1 @@
+return [Math.floor(-1.5), Math.ceil(1.2), Math.round(2.5), Math.round(-2.5), Math.max(1, 9, 3), Math.min(), Math.abs(-3), Math.pow(2, 8), Math.sqrt(16), Math.trunc(-4.7), Math.sign(-3), Math.PI.toFixed(5), Math.max()]

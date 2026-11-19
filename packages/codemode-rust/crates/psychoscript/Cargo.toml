@@ -1,0 +1,35 @@
+[package]
+name = "psychoscript"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Embeddable Rust implementation of the PsychoScript language layer"
+
+[features]
+# The test262 harness globals, for the parity runner in test262/ only.
+test262 = []
+# Per-run heap counts and collection pauses through `Run::heap_stats`, for the memory benchmarks in bench/ only.
+gc-stats = []
+
+[dependencies]
+icu_collator = { version = "2.4", default-features = false, features = ["compiled_data"] }
+idna_adapter = "~1.1"
+oxc_allocator = "0.159"
+oxc_ast = "0.159"
+oxc_ast_visit = "0.159"
+oxc_diagnostics = "0.159"
+oxc_parser = { version = "0.159", default-features = false }
+oxc_semantic = "0.159"
+oxc_span = "0.159"
+oxc_str = "0.159"
+oxc_syntax = "0.159"
+regress = { version = "0.12.0", default-features = false, features = ["std", "utf16"] }
+rustc-hash = "2"
+serde_json = { version = "1", features = ["preserve_order"] }
+tz-rs = "0.7"
+unicode-normalization = "0.1"
+url = "2.5"
+
+# The crate's own tests read `Run::heap_stats` (tests/gc.rs), so they build it with `gc-stats`; normal builds don't.
+[dev-dependencies]
+psychoscript = { path = ".", features = ["gc-stats"] }

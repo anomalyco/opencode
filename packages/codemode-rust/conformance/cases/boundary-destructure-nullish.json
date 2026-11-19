@@ -1,0 +1,92 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      [
+        "TypeError",
+        "Cannot destructure null as it is null."
+      ],
+      [
+        "TypeError",
+        "Cannot destructure null as it is null."
+      ],
+      [
+        "TypeError",
+        "Cannot destructure null as it is null."
+      ],
+      [
+        "TypeError",
+        "Cannot destructure null as it is null."
+      ],
+      [
+        "TypeError",
+        "Cannot destructure null as it is null."
+      ],
+      [
+        "TypeError",
+        "Cannot destructure null as it is null."
+      ],
+      [
+        "TypeError",
+        "Cannot destructure null as it is null."
+      ],
+      [
+        "TypeError",
+        "Cannot destructure null as it is null."
+      ],
+      [
+        "TypeError",
+        "Array destructuring requires a supported iterable value."
+      ],
+      [
+        "TypeError",
+        "Array destructuring requires a supported iterable value."
+      ]
+    ],
+    [
+      [
+        "TypeError",
+        "Cannot destructure undefined as it is undefined."
+      ],
+      [
+        "TypeError",
+        "Cannot destructure undefined as it is undefined."
+      ],
+      [
+        "TypeError",
+        "Cannot destructure undefined as it is undefined."
+      ],
+      [
+        "TypeError",
+        "Cannot destructure undefined as it is undefined."
+      ],
+      [
+        "TypeError",
+        "Cannot destructure undefined as it is undefined."
+      ],
+      [
+        "TypeError",
+        "Cannot destructure undefined as it is undefined."
+      ],
+      [
+        "TypeError",
+        "Cannot destructure undefined as it is undefined."
+      ],
+      [
+        "TypeError",
+        "Cannot destructure undefined as it is undefined."
+      ],
+      [
+        "TypeError",
+        "Array destructuring requires a supported iterable value."
+      ],
+      [
+        "TypeError",
+        "Array destructuring requires a supported iterable value."
+      ]
+    ]
+  ],
+  "logs": [],
+  "metadata": null
+}

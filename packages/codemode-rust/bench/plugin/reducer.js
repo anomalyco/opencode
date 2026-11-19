@@ -1,0 +1,2 @@
+if (event.type === "command" && event.name === "git.status") { const s = await tools.git.status(); return { state: { runs: state.runs + 1 }, slots: { statusbar: { text: s.branch + (s.dirty ? " *" : "") } } } }
+return { state }

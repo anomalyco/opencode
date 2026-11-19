@@ -1,0 +1,494 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      [
+        "TypeError",
+        "Number.prototype.toFixed requires that 'this' be a Number."
+      ],
+      [
+        "TypeError",
+        "Number.prototype.valueOf requires that 'this' be a Number."
+      ],
+      [
+        "TypeError",
+        "Number.prototype.toLocaleString requires that 'this' be a Number."
+      ],
+      [
+        "TypeError",
+        "Set.union expects a Set-like object."
+      ],
+      [
+        "TypeError",
+        "Set.isSubsetOf expects a Set-like object."
+      ],
+      [
+        "TypeError",
+        "Object.prototype.toLocaleString called on null or undefined."
+      ],
+      [
+        "TypeError",
+        "Function.prototype.call called on incompatible receiver a namespace reference."
+      ],
+      [
+        "TypeError",
+        "Function.prototype.bind called on incompatible receiver a namespace reference."
+      ],
+      [
+        "TypeError",
+        "Function.prototype.apply expects an array-like argument list."
+      ],
+      "undef",
+      [
+        "TypeError",
+        "Headers.set requires 2 arguments."
+      ],
+      [
+        "TypeError",
+        "URLSearchParams.append requires 2 arguments."
+      ],
+      [
+        "TypeError",
+        "Headers.get requires 1 argument."
+      ],
+      [
+        "TypeError",
+        "URLSearchParams.has requires 1 argument."
+      ]
+    ],
+    [
+      [
+        "TypeError",
+        "Number.prototype.toFixed requires that 'this' be a Number."
+      ],
+      [
+        "TypeError",
+        "Number.prototype.valueOf requires that 'this' be a Number."
+      ],
+      [
+        "TypeError",
+        "Number.prototype.toLocaleString requires that 'this' be a Number."
+      ],
+      [
+        "TypeError",
+        "Set.union expects a Set-like object."
+      ],
+      [
+        "TypeError",
+        "Set.isSubsetOf expects a Set-like object."
+      ],
+      [
+        "TypeError",
+        "Object.prototype.toLocaleString called on null or undefined."
+      ],
+      [
+        "TypeError",
+        "Function.prototype.call called on incompatible receiver a namespace reference."
+      ],
+      [
+        "TypeError",
+        "Function.prototype.bind called on incompatible receiver a namespace reference."
+      ],
+      [
+        "TypeError",
+        "Function.prototype.apply expects an array-like argument list."
+      ],
+      "undef",
+      [
+        "TypeError",
+        "Headers.set requires 2 arguments."
+      ],
+      [
+        "TypeError",
+        "URLSearchParams.append requires 2 arguments."
+      ],
+      [
+        "TypeError",
+        "Headers.get requires 1 argument."
+      ],
+      [
+        "TypeError",
+        "URLSearchParams.has requires 1 argument."
+      ]
+    ],
+    [
+      [
+        "TypeError",
+        "Number.prototype.toFixed requires that 'this' be a Number."
+      ],
+      [
+        "TypeError",
+        "Number.prototype.valueOf requires that 'this' be a Number."
+      ],
+      [
+        "TypeError",
+        "Number.prototype.toLocaleString requires that 'this' be a Number."
+      ],
+      [
+        "TypeError",
+        "This value is an un-awaited Promise; await it first - e.g. `const result = await load(...)`."
+      ],
+      [
+        "TypeError",
+        "This value is an un-awaited Promise; await it first - e.g. `const result = await load(...)`."
+      ],
+      "[object Promise]",
+      [
+        "TypeError",
+        "Function.prototype.call called on incompatible receiver an un-awaited Promise."
+      ],
+      [
+        "TypeError",
+        "Function.prototype.bind called on incompatible receiver an un-awaited Promise."
+      ],
+      [
+        false,
+        null
+      ],
+      "undef",
+      [
+        "TypeError",
+        "Headers.set requires 2 arguments."
+      ],
+      [
+        "TypeError",
+        "URLSearchParams.append requires 2 arguments."
+      ],
+      [
+        "TypeError",
+        "Headers.get requires 1 argument."
+      ],
+      [
+        "TypeError",
+        "URLSearchParams.has requires 1 argument."
+      ]
+    ],
+    [
+      [
+        "TypeError",
+        "Number.prototype.toFixed requires that 'this' be a Number."
+      ],
+      [
+        "TypeError",
+        "Number.prototype.valueOf requires that 'this' be a Number."
+      ],
+      [
+        "TypeError",
+        "Number.prototype.toLocaleString requires that 'this' be a Number."
+      ],
+      [
+        "TypeError",
+        "Set.union received a Set-like object with an invalid size."
+      ],
+      [
+        "TypeError",
+        "Set.isSubsetOf received a Set-like object with an invalid size."
+      ],
+      "[object Function]",
+      1,
+      null,
+      [
+        false,
+        null
+      ],
+      "undef",
+      [
+        "TypeError",
+        "Headers.set requires 2 arguments."
+      ],
+      [
+        "TypeError",
+        "URLSearchParams.append requires 2 arguments."
+      ],
+      [
+        "TypeError",
+        "Headers.get requires 1 argument."
+      ],
+      [
+        "TypeError",
+        "URLSearchParams.has requires 1 argument."
+      ]
+    ],
+    [
+      [
+        "TypeError",
+        "Number.prototype.toFixed requires that 'this' be a Number."
+      ],
+      [
+        "TypeError",
+        "Number.prototype.valueOf requires that 'this' be a Number."
+      ],
+      [
+        "TypeError",
+        "Number.prototype.toLocaleString requires that 'this' be a Number."
+      ],
+      [
+        "TypeError",
+        "Set.union expects a Set-like object."
+      ],
+      [
+        "TypeError",
+        "Set.isSubsetOf expects a Set-like object."
+      ],
+      [
+        "TypeError",
+        "Object.prototype.toLocaleString called on null or undefined."
+      ],
+      [
+        "TypeError",
+        "Function.prototype.call called on incompatible receiver null."
+      ],
+      [
+        "TypeError",
+        "Function.prototype.bind called on incompatible receiver null."
+      ],
+      [
+        false,
+        null
+      ],
+      "undef",
+      [
+        "TypeError",
+        "Headers.set requires 2 arguments."
+      ],
+      [
+        "TypeError",
+        "URLSearchParams.append requires 2 arguments."
+      ],
+      [
+        "TypeError",
+        "Headers.get requires 1 argument."
+      ],
+      [
+        "TypeError",
+        "URLSearchParams.has requires 1 argument."
+      ]
+    ],
+    [
+      [
+        "TypeError",
+        "Number.prototype.toFixed requires that 'this' be a Number."
+      ],
+      [
+        "TypeError",
+        "Number.prototype.valueOf requires that 'this' be a Number."
+      ],
+      [
+        "TypeError",
+        "Number.prototype.toLocaleString requires that 'this' be a Number."
+      ],
+      [
+        "TypeError",
+        "Set.union expects a Set-like object."
+      ],
+      [
+        "TypeError",
+        "Set.isSubsetOf expects a Set-like object."
+      ],
+      [
+        "TypeError",
+        "Object.prototype.toLocaleString called on null or undefined."
+      ],
+      [
+        "TypeError",
+        "Function.prototype.call called on incompatible receiver undefined."
+      ],
+      [
+        "TypeError",
+        "Function.prototype.bind called on incompatible receiver undefined."
+      ],
+      [
+        false,
+        null
+      ],
+      "undef",
+      [
+        "TypeError",
+        "Headers.set requires 2 arguments."
+      ],
+      [
+        "TypeError",
+        "URLSearchParams.append requires 2 arguments."
+      ],
+      [
+        "TypeError",
+        "Headers.get requires 1 argument."
+      ],
+      [
+        "TypeError",
+        "URLSearchParams.has requires 1 argument."
+      ]
+    ],
+    [
+      [
+        "TypeError",
+        "Number.prototype.toFixed requires that 'this' be a Number."
+      ],
+      [
+        "TypeError",
+        "Number.prototype.valueOf requires that 'this' be a Number."
+      ],
+      [
+        "TypeError",
+        "Number.prototype.toLocaleString requires that 'this' be a Number."
+      ],
+      [
+        "TypeError",
+        "Set.union expects a Set-like object."
+      ],
+      [
+        "TypeError",
+        "Set.isSubsetOf expects a Set-like object."
+      ],
+      [
+        "TypeError",
+        "Object.prototype.toLocaleString called on null or undefined."
+      ],
+      [
+        "TypeError",
+        "Function.prototype.call called on incompatible receiver a symbol."
+      ],
+      [
+        "TypeError",
+        "Function.prototype.bind called on incompatible receiver a symbol."
+      ],
+      [
+        "TypeError",
+        "Function.prototype.apply expects an array-like argument list."
+      ],
+      [
+        "TypeError",
+        "Cannot convert a symbol to a number"
+      ],
+      [
+        "TypeError",
+        "Headers.set requires 2 arguments."
+      ],
+      [
+        "TypeError",
+        "URLSearchParams.append requires 2 arguments."
+      ],
+      [
+        "TypeError",
+        "Headers.get requires 1 argument."
+      ],
+      [
+        "TypeError",
+        "URLSearchParams.has requires 1 argument."
+      ]
+    ],
+    [
+      "5.0",
+      5,
+      "5",
+      [
+        "TypeError",
+        "Set.union expects a Set-like object."
+      ],
+      [
+        "TypeError",
+        "Set.isSubsetOf expects a Set-like object."
+      ],
+      "5",
+      [
+        "TypeError",
+        "Function.prototype.call called on incompatible receiver a number."
+      ],
+      [
+        "TypeError",
+        "Function.prototype.bind called on incompatible receiver a number."
+      ],
+      [
+        "TypeError",
+        "Function.prototype.apply expects an array-like argument list."
+      ],
+      [
+        "RangeError",
+        "Uint8Array.set: the source does not fit at that offset."
+      ],
+      [
+        "TypeError",
+        "Headers.set requires 2 arguments."
+      ],
+      [
+        "TypeError",
+        "URLSearchParams.append requires 2 arguments."
+      ],
+      [
+        "TypeError",
+        "Headers.get requires 1 argument."
+      ],
+      [
+        "TypeError",
+        "URLSearchParams.has requires 1 argument."
+      ]
+    ],
+    [
+      [
+        "TypeError",
+        "Number.prototype.toFixed requires that 'this' be a Number."
+      ],
+      [
+        "TypeError",
+        "Number.prototype.valueOf requires that 'this' be a Number."
+      ],
+      [
+        "TypeError",
+        "Number.prototype.toLocaleString requires that 'this' be a Number."
+      ],
+      [
+        "TypeError",
+        "Set.union expects a Set-like object."
+      ],
+      [
+        "TypeError",
+        "Set.isSubsetOf expects a Set-like object."
+      ],
+      "ab",
+      [
+        "TypeError",
+        "Function.prototype.call called on incompatible receiver a string."
+      ],
+      [
+        "TypeError",
+        "Function.prototype.bind called on incompatible receiver a string."
+      ],
+      [
+        "TypeError",
+        "Function.prototype.apply expects an array-like argument list."
+      ],
+      "undef",
+      [
+        "TypeError",
+        "Headers.set requires 2 arguments."
+      ],
+      [
+        "TypeError",
+        "URLSearchParams.append requires 2 arguments."
+      ],
+      [
+        "TypeError",
+        "Headers.get requires 1 argument."
+      ],
+      [
+        "TypeError",
+        "URLSearchParams.has requires 1 argument."
+      ]
+    ],
+    [
+      "RangeError",
+      "Array.with index is out of range."
+    ],
+    [
+      "RangeError",
+      "Array.with index is out of range."
+    ],
+    [
+      "TypeError",
+      "Number.prototype.toString requires that 'this' be a Number."
+    ]
+  ],
+  "logs": [],
+  "metadata": null
+}

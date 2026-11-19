@@ -1,0 +1,38 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "[object Object]",
+    "[object Object]",
+    "[object Object]",
+    "1[object Object]2",
+    "[object Object],[object Object]",
+    null,
+    null,
+    null,
+    null,
+    true,
+    1,
+    "Invalid Date",
+    "[object Object]",
+    "%5Bobject%20Object%5D",
+    1,
+    [],
+    "\u0000A",
+    {
+      "[object Object]": 1
+    },
+    2,
+    "[object Object]",
+    [
+      "TypeError",
+      "Binary operators require data values."
+    ],
+    [
+      "TypeError",
+      "Unary operators require data values."
+    ]
+  ],
+  "logs": [],
+  "metadata": null
+}

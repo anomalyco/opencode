@@ -1,0 +1,115 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "Symbol(codemode.iterator)",
+    "Symbol(codemode.async-iterator)",
+    "Symbol(codemode.iterator),Symbol(codemode.async-iterator)",
+    "1Symbol(codemode.iterator)2",
+    "Symbol(codemode.iterator)",
+    [
+      "TypeError",
+      "Cannot convert a symbol to a string"
+    ],
+    [
+      "TypeError",
+      "Cannot convert a symbol to a number"
+    ],
+    [
+      "TypeError",
+      "Cannot convert a symbol to a number"
+    ],
+    [
+      "TypeError",
+      "Cannot convert a symbol to a number"
+    ],
+    [
+      "TypeError",
+      "Cannot convert a symbol to a number"
+    ],
+    [
+      "TypeError",
+      "Cannot convert a symbol to a number"
+    ],
+    null,
+    null,
+    [
+      "TypeError",
+      "Cannot convert a symbol to a number"
+    ],
+    [
+      "TypeError",
+      "Cannot convert a symbol to a number"
+    ],
+    "Symbol(codemode.iterator)",
+    "Symbol(codemode.iterator)",
+    [
+      "abca"
+    ],
+    "Symbol(codemode.iterator)bca",
+    "abSymbol(codemode.iterator)",
+    "SYMBOL(CODEMODE.ITERATOR)",
+    -1,
+    [
+      "TypeError",
+      "Cannot access a property on a non-object value."
+    ],
+    [
+      "TypeError",
+      "Cannot access a property on a non-object value."
+    ],
+    [
+      "TypeError",
+      "Cannot access a property on a non-object value."
+    ],
+    [
+      "TypeError",
+      "Cannot access a property on a non-object value."
+    ],
+    [
+      "TypeError",
+      "Cannot access a property on a non-object value."
+    ],
+    [
+      "TypeError",
+      "The 'in' operator requires a data object on the right-hand side."
+    ],
+    "[object Object]",
+    "{}",
+    "{\"s\":{},\"n\":[{}]}",
+    "[\n {}\n]",
+    1,
+    [],
+    {},
+    [
+      "TypeError",
+      "Cannot read properties of undefined (reading 'Symbol(codemode.iterator)')."
+    ],
+    [
+      "TypeError",
+      "Cannot read properties of null (reading 'Symbol(codemode.iterator)')."
+    ],
+    [
+      "TypeError",
+      "new URLSearchParams(...) expects a query string, data object, iterable pairs, or URLSearchParams."
+    ],
+    [
+      "TypeError",
+      "Object(symbol) wrapper objects are not supported; use the primitive value directly."
+    ],
+    [
+      "TypeError",
+      "Object.getPrototypeOf cannot convert a symbol to an object."
+    ],
+    true,
+    true,
+    {},
+    [
+      {}
+    ]
+  ],
+  "logs": [
+    "Symbol(codemode.iterator) [Symbol(codemode.async-iterator)] {\"k\":Symbol(codemode.iterator)}"
+  ],
+  "metadata": null
+}

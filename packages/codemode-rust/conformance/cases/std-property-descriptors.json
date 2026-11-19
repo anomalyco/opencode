@@ -1,0 +1,157 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      [
+        "a",
+        "c"
+      ],
+      2,
+      3,
+      [
+        "a",
+        "b",
+        "c"
+      ]
+    ],
+    {
+      "a": {
+        "value": 1,
+        "writable": true,
+        "enumerable": true,
+        "configurable": true
+      },
+      "b": {
+        "value": 2,
+        "writable": false,
+        "enumerable": false,
+        "configurable": false
+      },
+      "c": {
+        "enumerable": true,
+        "configurable": true
+      }
+    },
+    [
+      "TypeError",
+      "Cannot redefine property: b"
+    ],
+    true,
+    {
+      "value": 4,
+      "writable": false,
+      "enumerable": true,
+      "configurable": true
+    },
+    [
+      "TypeError",
+      "Invalid property descriptor. Cannot both specify accessors and a value or writable attribute."
+    ],
+    [
+      "TypeError",
+      "Getter must be a function: a number"
+    ],
+    [
+      "TypeError",
+      "Object.defineProperty called on non-object"
+    ],
+    [
+      1,
+      2,
+      [
+        "x"
+      ]
+    ],
+    [
+      2,
+      [
+        "a"
+      ]
+    ],
+    [
+      5,
+      2
+    ],
+    [
+      "TypeError",
+      "Accessor properties are not supported on array elements; store the value or use a plain object."
+    ],
+    [
+      "TypeError",
+      "Array elements share their attributes; only writable, enumerable and configurable equal to the array's are supported."
+    ],
+    [
+      1
+    ],
+    [
+      "TypeError",
+      "Making an array's length read-only is not supported; use Object.freeze."
+    ],
+    [
+      [
+        "length",
+        "name"
+      ],
+      {
+        "value": "f",
+        "writable": false,
+        "enumerable": false,
+        "configurable": true
+      }
+    ],
+    [
+      {
+        "value": "b",
+        "writable": false,
+        "enumerable": true,
+        "configurable": false
+      },
+      [
+        "0",
+        "1",
+        "length"
+      ],
+      {
+        "value": 3.141592653589793,
+        "writable": false,
+        "enumerable": false,
+        "configurable": false
+      }
+    ],
+    [
+      "get size",
+      null,
+      1
+    ],
+    [
+      "TypeError",
+      "Map.prototype.size called on incompatible receiver a Set."
+    ],
+    [
+      true,
+      true
+    ],
+    [
+      true,
+      true
+    ],
+    [
+      "TypeError",
+      "Cannot define property a, object is not extensible"
+    ],
+    [
+      "TypeError",
+      "Object.getOwnPropertyDescriptor cannot convert undefined to an object."
+    ],
+    [
+      42,
+      2,
+      [
+        "a"
+      ]
+    ]
+  ],
+  "logs": [],
+  "metadata": null
+}

@@ -1,0 +1,25 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "Cannot delete property 'length'.",
+    "Cannot delete property 'name'.",
+    true,
+    "",
+    false,
+    true,
+    true,
+    true,
+    true,
+    "Cannot delete property 'a'.",
+    "Cannot delete property '0'.",
+    "Cannot delete property 'length'.",
+    "Cannot delete property '0'.",
+    true,
+    true
+  ],
+  "logs": [
+    "[opaque reference] [[opaque reference]] {\"g\":[opaque reference]}"
+  ],
+  "metadata": null
+}

@@ -1,0 +1,16 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "loop",
+    "yield",
+    "throw",
+    [
+      "loop close",
+      "yield close",
+      "throw close"
+    ]
+  ],
+  "logs": [],
+  "metadata": null
+}

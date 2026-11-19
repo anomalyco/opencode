@@ -1,0 +1,33 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    {
+      "status": "rejected",
+      "reason": {
+        "name": "Error",
+        "message": "No function at tools.host.echo."
+      }
+    },
+    {
+      "status": "rejected",
+      "reason": {
+        "name": "Error",
+        "message": "No function at tools.host.fail."
+      }
+    },
+    {
+      "status": "fulfilled",
+      "value": "plain"
+    },
+    {
+      "status": "rejected",
+      "reason": {
+        "name": "Error",
+        "message": "boom"
+      }
+    }
+  ],
+  "logs": [],
+  "metadata": null
+}

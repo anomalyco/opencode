@@ -1,0 +1,32 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    {
+      "value": "next",
+      "done": false
+    },
+    {
+      "value": "return pending",
+      "done": false
+    },
+    {
+      "value": "second",
+      "done": true
+    },
+    {
+      "value": "next",
+      "done": false
+    },
+    {
+      "value": "throw pending",
+      "done": false
+    },
+    {
+      "value": "second",
+      "done": true
+    }
+  ],
+  "logs": [],
+  "metadata": null
+}

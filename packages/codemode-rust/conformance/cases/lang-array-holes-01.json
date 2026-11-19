@@ -1,0 +1,146 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": {
+    "lens": [
+      3,
+      3,
+      4,
+      4,
+      4,
+      2
+    ],
+    "has": [
+      true,
+      false,
+      false,
+      false
+    ],
+    "keys": [
+      [
+        "0",
+        "2"
+      ],
+      [
+        "0",
+        "2",
+        "3"
+      ],
+      [
+        [
+          "3",
+          4
+        ]
+      ],
+      [
+        1,
+        3
+      ],
+      [
+        "0",
+        "2"
+      ]
+    ],
+    "spread": [
+      [
+        1,
+        null,
+        3
+      ],
+      {
+        "0": 1,
+        "2": 3
+      },
+      {
+        "0": 1,
+        "2": 3
+      },
+      [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          null
+        ],
+        [
+          2,
+          3
+        ]
+      ]
+    ],
+    "destructure": [
+      1,
+      "default",
+      3
+    ],
+    "text": [
+      "1,,3",
+      "1--3",
+      ",,,4",
+      ",,,1"
+    ],
+    "replaced": "[1,null,3]",
+    "seen": [
+      ":object",
+      "0:number",
+      "1:undefined",
+      "2:number"
+    ],
+    "from": [
+      [
+        1,
+        null,
+        3
+      ],
+      [
+        null,
+        null
+      ],
+      true
+    ],
+    "clone": [
+      false,
+      3
+    ],
+    "apply": [
+      3,
+      true
+    ],
+    "bytes": [
+      1,
+      0,
+      3
+    ],
+    "awaited": [
+      1,
+      null,
+      3
+    ],
+    "result": [
+      [
+        1,
+        null,
+        3
+      ],
+      [
+        null,
+        "x",
+        null
+      ],
+      [
+        null,
+        null,
+        null,
+        4
+      ]
+    ]
+  },
+  "logs": [
+    "[1,,3] [,\"x\",] [1,,3,4] [,,,4] [1,2,,]",
+    "[1,null,null,,2] {\"a\":[,1]}",
+    "[[1,null,3],[null,\"x\",null]] ,1 1,"
+  ],
+  "metadata": null
+}

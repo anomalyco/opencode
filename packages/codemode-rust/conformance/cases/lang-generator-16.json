@@ -1,0 +1,26 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    {
+      "value": 1,
+      "done": false
+    },
+    {
+      "value": "recovered",
+      "done": false
+    },
+    [
+      "caught bad"
+    ],
+    {
+      "done": true
+    },
+    [
+      "caught bad",
+      "finally"
+    ]
+  ],
+  "logs": [],
+  "metadata": null
+}

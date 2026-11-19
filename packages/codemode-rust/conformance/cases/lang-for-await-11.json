@@ -1,0 +1,13 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "pre",
+    "tick 1",
+    "loop",
+    "tick 2",
+    "post"
+  ],
+  "logs": [],
+  "metadata": null
+}

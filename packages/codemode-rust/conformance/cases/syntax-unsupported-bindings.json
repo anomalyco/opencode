@@ -1,0 +1,20 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "function",
+    "undefined",
+    1,
+    "ReferenceError",
+    1,
+    2,
+    "Cannot assign to constant 'u'.",
+    "undefined",
+    [
+      "SyntaxError",
+      "An import declaration may only appear at the top level of the program."
+    ]
+  ],
+  "logs": [],
+  "metadata": null
+}

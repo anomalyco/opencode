@@ -3,7 +3,10 @@ export * as Runtime from "./runtime.js"
 import { Deferred, Effect, Exit } from "effect"
 import type { Json } from "./data.js"
 import type { DurableFn, Fn, Namespace } from "./host-function.js"
+import type { Diagnostic } from "./runtime/model.js"
 import {
+  Compiled,
+  compileProgram,
   finishExecution,
   type Outcome,
   type Result,
@@ -17,7 +20,7 @@ import {
 } from "./runtime/execute.js"
 import type { SnapshotError } from "./snapshot/snapshot.js"
 
-export { SuspendError }
+export { Compiled, SuspendError }
 export type { Outcome, Result, Run, Suspended }
 
 /** Budgets enforced on each run. Time counts active time only, across every resume of a run. */
@@ -79,10 +82,17 @@ export type SuspendOptions = {
 
 /** A reusable confined runtime over host globals. */
 export type Runtime<R = never> = {
-  /** Runs a program to its end. */
-  readonly execute: (code: string, options?: ProgramOptions) => Effect.Effect<Result, never, R>
-  /** A program ready to run once; nothing runs until `program.run()`. */
-  readonly program: (code: string, options?: ProgramOptions) => Program<R>
+  /** Runs a program, from its source or compiled, to its end. */
+  readonly execute: (code: string | Compiled, options?: ProgramOptions) => Effect.Effect<Result, never, R>
+  /** A program, from its source or compiled, ready to run once; nothing runs until `program.run()`. */
+  readonly program: (code: string | Compiled, options?: ProgramOptions) => Program<R>
+  /**
+   * Parses and compiles a program once, for `program` and `execute` to run many times without doing it again; or the
+   * diagnostic a run of it would fail with first (an empty program, a syntax error).
+   */
+  readonly compile: (
+    code: string,
+  ) => { readonly ok: true; readonly compiled: Compiled } | { readonly ok: false; readonly error: Diagnostic }
   /**
    * A suspended run (its `state`, or that state as bytes) as a program to continue in this runtime, which must be the
    * same build with the same host globals. The state is checked when it runs: `run()` fails with a `SnapshotError`
@@ -132,11 +142,12 @@ export const make = <const G extends Globals = {}>(options: Options<G> = {}): Ru
       promises: options.translate?.promises ?? "error",
     },
   }
-  const program = (code: string, programOptions?: ProgramOptions) =>
+  const program = (code: string | Compiled, programOptions?: ProgramOptions) =>
     makeProgram(() => Effect.succeed(startProgram(setup, code, programOptions?.bindings, programOptions?.runId)))
   return {
     execute: (code, programOptions) => Effect.suspend(() => finishExecution(program(code, programOptions).run())),
     program,
+    compile: compileProgram,
     resume: (state) => makeProgram(() => resumeProgram(setup, state)),
   }
 }

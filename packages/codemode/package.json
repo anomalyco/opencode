@@ -28,7 +28,7 @@
     "test:roundtrip": "CODEMODE_ROUNDTRIP=1 bun test"
   },
   "dependencies": {
-    "acorn": "8.15.0",
+    "acorn": "8.16.0",
     "effect": "catalog:"
   },
   "devDependencies": {

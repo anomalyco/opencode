@@ -120,8 +120,10 @@ export const setGlobal = <R>(ctx: Interpreter<R>) => {
         return undefined
       },
     ],
-    ...iteratorMethods(builtins, self),
+    // Set.prototype.keys is the same function as values.
+    ...iteratorMethods(builtins, self).filter(([name]) => name !== "keys"),
   ])
+  define(proto, "keys", get(proto, "values"), hidden)
   define(proto, IteratorSymbol, get(proto, "values"), hidden)
   return set
 }

@@ -1,0 +1,57 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "https://ex.test/a%20b?q=1&r=%C3%A9%E2%82%AC%F0%9F%98%80#h;/,+",
+    "https%3A%2F%2Fex.test%2Fa%20b%3Fq%3D1%26r%3D%C3%A9%E2%82%AC%F0%9F%98%80%23h%3B%2F%2C%2B",
+    "https://ex.test/a b?q=1&r=é€😀#h;/,+",
+    "https://ex.test/a b?q=1&r=é€😀#h;/,+",
+    "%3B%2F%3fA%23",
+    ";/?A#",
+    "-_.!~*'()",
+    "1",
+    "undefined",
+    "%5Bobject%20Object%5D",
+    [
+      "URIError",
+      "decodeURIComponent received malformed URI data: URI error",
+      true
+    ],
+    [
+      "URIError",
+      "decodeURI received malformed URI data: URI error",
+      true
+    ],
+    [
+      "URIError",
+      "decodeURI received malformed URI data: URI error",
+      true
+    ],
+    [
+      "URIError",
+      "decodeURI received malformed URI data: URI error",
+      true
+    ],
+    [
+      "URIError",
+      "decodeURI received malformed URI data: URI error",
+      true
+    ],
+    [
+      "URIError",
+      "decodeURIComponent received malformed URI data: URI error",
+      true
+    ],
+    [
+      "URIError",
+      "decodeURIComponent received malformed URI data: URI error",
+      true
+    ],
+    [
+      "a%20b",
+      "c%2Fd"
+    ]
+  ],
+  "logs": [],
+  "metadata": null
+}

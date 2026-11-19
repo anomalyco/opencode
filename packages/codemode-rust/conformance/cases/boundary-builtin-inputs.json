@@ -1,0 +1,809 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      [
+        [
+          "TypeError",
+          "Array.from expects an iterable or array-like value, received a namespace reference."
+        ],
+        [
+          "TypeError",
+          "Object(object) wrapper objects are not supported; use the primitive value directly."
+        ],
+        [
+          "TypeError",
+          "Object(object) wrapper objects are not supported; use the primitive value directly."
+        ],
+        [
+          true,
+          true,
+          false
+        ],
+        [
+          "TypeError",
+          "Iterator.from expects an iterable or iterator, received a namespace reference."
+        ],
+        [
+          "TypeError",
+          "String.raw expects a template object with a raw array."
+        ],
+        [
+          "RangeError",
+          "Arguments contain a value that is out of range of code points"
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a namespace reference."
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a namespace reference."
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a namespace reference."
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a namespace reference."
+        ],
+        [
+          "TypeError",
+          "new Number(...) is not supported; call Number(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new String(...) is not supported; call String(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new Boolean(...) is not supported; call Boolean(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new Promise(...) expects an executor function (e.g. new Promise((resolve, reject) => { ... }))."
+        ]
+      ],
+      [
+        [
+          "TypeError",
+          "Array.from expects an iterable or array-like value, received a namespace reference."
+        ],
+        [
+          "TypeError",
+          "Object(object) wrapper objects are not supported; use the primitive value directly."
+        ],
+        [
+          "TypeError",
+          "Object(object) wrapper objects are not supported; use the primitive value directly."
+        ],
+        [
+          true,
+          true,
+          false
+        ],
+        [
+          "TypeError",
+          "Iterator.from expects an iterable or iterator, received a namespace reference."
+        ],
+        [
+          "TypeError",
+          "String.raw expects a template object with a raw array."
+        ],
+        [
+          "RangeError",
+          "Arguments contain a value that is out of range of code points"
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a namespace reference."
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a namespace reference."
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a namespace reference."
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a namespace reference."
+        ],
+        [
+          "TypeError",
+          "new Number(...) is not supported; call Number(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new String(...) is not supported; call String(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new Boolean(...) is not supported; call Boolean(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new Promise(...) expects an executor function (e.g. new Promise((resolve, reject) => { ... }))."
+        ]
+      ],
+      [
+        [
+          "TypeError",
+          "Array.from expects an iterable or array-like value, received a namespace reference."
+        ],
+        [
+          "TypeError",
+          "Object(object) wrapper objects are not supported; use the primitive value directly."
+        ],
+        [
+          "TypeError",
+          "Object(object) wrapper objects are not supported; use the primitive value directly."
+        ],
+        [
+          true,
+          true,
+          false
+        ],
+        [
+          "TypeError",
+          "Iterator.from expects an iterable or iterator, received a namespace reference."
+        ],
+        [
+          "TypeError",
+          "String.raw expects a template object with a raw array."
+        ],
+        [
+          "RangeError",
+          "Arguments contain a value that is out of range of code points"
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a namespace reference."
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a namespace reference."
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a namespace reference."
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a namespace reference."
+        ],
+        [
+          "TypeError",
+          "new Number(...) is not supported; call Number(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new String(...) is not supported; call String(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new Boolean(...) is not supported; call Boolean(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new Promise(...) expects an executor function (e.g. new Promise((resolve, reject) => { ... }))."
+        ]
+      ],
+      [
+        [
+          "TypeError",
+          "Array.from expects an iterable or array-like value, received an un-awaited Promise."
+        ],
+        true,
+        true,
+        [
+          false,
+          false,
+          true
+        ],
+        [
+          "TypeError",
+          "This value is an un-awaited Promise; await it first - e.g. `const result = await load(...)`."
+        ],
+        [
+          "TypeError",
+          "String.raw expects a template object with a raw array."
+        ],
+        [
+          "RangeError",
+          "Arguments contain a value that is out of range of code points"
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received an un-awaited Promise."
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received an un-awaited Promise."
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received an un-awaited Promise."
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received an un-awaited Promise."
+        ],
+        [
+          "TypeError",
+          "new Number(...) is not supported; call Number(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new String(...) is not supported; call String(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new Boolean(...) is not supported; call Boolean(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new Promise(...) expects an executor function (e.g. new Promise((resolve, reject) => { ... }))."
+        ]
+      ],
+      [
+        [],
+        true,
+        true,
+        [
+          false,
+          false,
+          true
+        ],
+        [
+          "TypeError",
+          "Iterator.from is not a function."
+        ],
+        [
+          "TypeError",
+          "String.raw expects a template object with a raw array."
+        ],
+        [
+          "RangeError",
+          "Arguments contain a value that is out of range of code points"
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a function."
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a function."
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a function."
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a function."
+        ],
+        [
+          "TypeError",
+          "new Number(...) is not supported; call Number(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new String(...) is not supported; call String(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new Boolean(...) is not supported; call Boolean(...) without new instead."
+        ],
+        "object"
+      ],
+      [
+        [
+          "TypeError",
+          "Array.from expects an iterable or array-like value, received a number."
+        ],
+        [
+          "TypeError",
+          "Object(number) wrapper objects are not supported; use the primitive value directly."
+        ],
+        [
+          "TypeError",
+          "Object(number) wrapper objects are not supported; use the primitive value directly."
+        ],
+        [
+          true,
+          true,
+          false
+        ],
+        [
+          "TypeError",
+          "Iterator.from expects an iterable or iterator, received a number."
+        ],
+        [
+          "TypeError",
+          "String.raw expects a template object with a raw array."
+        ],
+        "\u0005",
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a number."
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a number."
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a number."
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a number."
+        ],
+        [
+          "TypeError",
+          "new Number(...) is not supported; call Number(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new String(...) is not supported; call String(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new Boolean(...) is not supported; call Boolean(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new Promise(...) expects an executor function (e.g. new Promise((resolve, reject) => { ... }))."
+        ]
+      ],
+      [
+        [
+          "a",
+          "b"
+        ],
+        [
+          "TypeError",
+          "Object(string) wrapper objects are not supported; use the primitive value directly."
+        ],
+        [
+          "TypeError",
+          "Object(string) wrapper objects are not supported; use the primitive value directly."
+        ],
+        [
+          true,
+          true,
+          false
+        ],
+        [
+          "a",
+          "b"
+        ],
+        [
+          "TypeError",
+          "String.raw expects a template object with a raw array."
+        ],
+        [
+          "RangeError",
+          "Arguments contain a value that is out of range of code points"
+        ],
+        [
+          "TypeError",
+          "new Map(...) expects [key, value] pairs as entry objects."
+        ],
+        2,
+        [
+          "TypeError",
+          "Invalid value used in weak set: a string cannot be held weakly."
+        ],
+        {
+          "a": [
+            "a"
+          ],
+          "b": [
+            "b"
+          ]
+        },
+        [
+          "TypeError",
+          "new Number(...) is not supported; call Number(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new String(...) is not supported; call String(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new Boolean(...) is not supported; call Boolean(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new Promise(...) expects an executor function (e.g. new Promise((resolve, reject) => { ... }))."
+        ]
+      ],
+      [
+        [
+          "TypeError",
+          "Array.from expects an iterable or array-like value, received null."
+        ],
+        false,
+        false,
+        [
+          true,
+          true,
+          false
+        ],
+        [
+          "TypeError",
+          "Iterator.from expects an iterable or iterator, received null."
+        ],
+        [
+          "TypeError",
+          "String.raw expects a template object with a raw array."
+        ],
+        "\u0000",
+        0,
+        0,
+        {},
+        [
+          "TypeError",
+          "Object.groupBy expects an iterable collection."
+        ],
+        [
+          "TypeError",
+          "new Number(...) is not supported; call Number(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new String(...) is not supported; call String(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new Boolean(...) is not supported; call Boolean(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new Promise(...) expects an executor function (e.g. new Promise((resolve, reject) => { ... }))."
+        ]
+      ],
+      [
+        [
+          "TypeError",
+          "Array.from expects an iterable or array-like value, received undefined."
+        ],
+        false,
+        false,
+        [
+          true,
+          true,
+          false
+        ],
+        [
+          "TypeError",
+          "Iterator.from expects an iterable or iterator, received undefined."
+        ],
+        [
+          "TypeError",
+          "String.raw expects a template object with a raw array."
+        ],
+        [
+          "RangeError",
+          "Arguments contain a value that is out of range of code points"
+        ],
+        0,
+        0,
+        {},
+        [
+          "TypeError",
+          "Object.groupBy expects an iterable collection."
+        ],
+        [
+          "TypeError",
+          "new Number(...) is not supported; call Number(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new String(...) is not supported; call String(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new Boolean(...) is not supported; call Boolean(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new Promise(...) expects an executor function (e.g. new Promise((resolve, reject) => { ... }))."
+        ]
+      ],
+      [
+        [],
+        true,
+        true,
+        [
+          false,
+          false,
+          true
+        ],
+        [
+          "TypeError",
+          "Iterator.from is not a function."
+        ],
+        [
+          "TypeError",
+          "String.raw expects a template object with a raw array."
+        ],
+        "\u0000",
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a Date."
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a Date."
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a Date."
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a Date."
+        ],
+        [
+          "TypeError",
+          "new Number(...) is not supported; call Number(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new String(...) is not supported; call String(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new Boolean(...) is not supported; call Boolean(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new Promise(...) expects an executor function (e.g. new Promise((resolve, reject) => { ... }))."
+        ]
+      ],
+      [
+        [],
+        true,
+        true,
+        [
+          false,
+          false,
+          true
+        ],
+        [
+          "TypeError",
+          "Iterator.from is not a function."
+        ],
+        [
+          "TypeError",
+          "String.raw expects a template object with a raw array."
+        ],
+        [
+          "RangeError",
+          "Arguments contain a value that is out of range of code points"
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a RegExp."
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a RegExp."
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a RegExp."
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a RegExp."
+        ],
+        [
+          "TypeError",
+          "new Number(...) is not supported; call Number(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new String(...) is not supported; call String(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new Boolean(...) is not supported; call Boolean(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new Promise(...) expects an executor function (e.g. new Promise((resolve, reject) => { ... }))."
+        ]
+      ],
+      [
+        [],
+        true,
+        true,
+        [
+          false,
+          false,
+          true
+        ],
+        [
+          "TypeError",
+          "Iterator.from is not a function."
+        ],
+        [
+          "TypeError",
+          "String.raw expects a template object with a raw array."
+        ],
+        [
+          "RangeError",
+          "Arguments contain a value that is out of range of code points"
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a data object."
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a data object."
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a data object."
+        ],
+        [
+          "TypeError",
+          "for...of requires an iterable value, received a data object."
+        ],
+        [
+          "TypeError",
+          "new Number(...) is not supported; call Number(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new String(...) is not supported; call String(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new Boolean(...) is not supported; call Boolean(...) without new instead."
+        ],
+        [
+          "TypeError",
+          "new Promise(...) expects an executor function (e.g. new Promise((resolve, reject) => { ... }))."
+        ]
+      ]
+    ],
+    [
+      [
+        "TypeError",
+        "Promise.all expects a synchronous iterable, received a namespace reference."
+      ],
+      [
+        "TypeError",
+        "Promise.race expects a synchronous iterable, received a namespace reference."
+      ],
+      [
+        "TypeError",
+        "Promise.allSettled expects a synchronous iterable, received a namespace reference."
+      ],
+      [
+        "TypeError",
+        "Promise.any expects a synchronous iterable, received a namespace reference."
+      ],
+      [
+        "TypeError",
+        "Promise.all expects a synchronous iterable, received an un-awaited Promise."
+      ],
+      [
+        "TypeError",
+        "Promise.race expects a synchronous iterable, received an un-awaited Promise."
+      ],
+      [
+        "TypeError",
+        "Promise.allSettled expects a synchronous iterable, received an un-awaited Promise."
+      ],
+      [
+        "TypeError",
+        "Promise.any expects a synchronous iterable, received an un-awaited Promise."
+      ],
+      [
+        "TypeError",
+        "Promise.all expects a synchronous iterable, received a number."
+      ],
+      [
+        "TypeError",
+        "Promise.race expects a synchronous iterable, received a number."
+      ],
+      [
+        "TypeError",
+        "Promise.allSettled expects a synchronous iterable, received a number."
+      ],
+      [
+        "TypeError",
+        "Promise.any expects a synchronous iterable, received a number."
+      ],
+      [
+        "TypeError",
+        "Promise.all expects a synchronous iterable, received null."
+      ],
+      [
+        "TypeError",
+        "Promise.race expects a synchronous iterable, received null."
+      ],
+      [
+        "TypeError",
+        "Promise.allSettled expects a synchronous iterable, received null."
+      ],
+      [
+        "TypeError",
+        "Promise.any expects a synchronous iterable, received null."
+      ],
+      [
+        "TypeError",
+        "Promise.all expects a synchronous iterable, received a Date."
+      ],
+      [
+        "TypeError",
+        "Promise.race expects a synchronous iterable, received a Date."
+      ],
+      [
+        "TypeError",
+        "Promise.allSettled expects a synchronous iterable, received a Date."
+      ],
+      [
+        "TypeError",
+        "Promise.any expects a synchronous iterable, received a Date."
+      ],
+      [
+        "ok",
+        []
+      ],
+      [
+        "TypeError",
+        "Promise.race([]) would never settle; provide at least one promise or value."
+      ],
+      [
+        "ok",
+        []
+      ],
+      [
+        "AggregateError",
+        "All promises were rejected"
+      ],
+      [
+        "ok",
+        []
+      ],
+      [
+        "TypeError",
+        "Promise.race([]) would never settle; provide at least one promise or value."
+      ],
+      [
+        "ok",
+        []
+      ],
+      [
+        "AggregateError",
+        "All promises were rejected"
+      ]
+    ],
+    [
+      "RangeError",
+      "Arguments contain a value that is out of range of code points"
+    ],
+    [
+      "RangeError",
+      "Arguments contain a value that is out of range of code points"
+    ],
+    [
+      "RangeError",
+      "Arguments contain a value that is out of range of code points"
+    ]
+  ],
+  "logs": [],
+  "metadata": null
+}

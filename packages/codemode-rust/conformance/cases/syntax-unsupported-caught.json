@@ -1,0 +1,40 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      "SyntaxError",
+      true,
+      "Syntax 'ClassDeclaration' is not supported"
+    ],
+    [
+      "SyntaxError",
+      true,
+      "Syntax 'WithStatement' is not supported"
+    ],
+    [
+      "SyntaxError",
+      true,
+      "Syntax 'DebuggerStatement' is not supported"
+    ],
+    [
+      "SyntaxError",
+      true,
+      "Syntax 'MetaProperty' is not supported"
+    ],
+    [
+      "SyntaxError",
+      true,
+      "Syntax 'ClassExpression' is not supported"
+    ],
+    [
+      "SyntaxError",
+      true,
+      "Syntax 'Super' is not supported"
+    ]
+  ],
+  "logs": [
+    "done"
+  ],
+  "metadata": null
+}

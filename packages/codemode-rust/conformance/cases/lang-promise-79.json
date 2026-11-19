@@ -1,0 +1,17 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      "ran",
+      "after"
+    ],
+    true,
+    3,
+    "RangeError",
+    5,
+    "thenable"
+  ],
+  "logs": [],
+  "metadata": null
+}

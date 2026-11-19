@@ -1,0 +1,13 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "AggregateError",
+    [
+      "No function at tools.host.fail.",
+      "plain"
+    ]
+  ],
+  "logs": [],
+  "metadata": null
+}

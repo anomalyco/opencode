@@ -1,0 +1,34 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "Array.map expects a function callback.",
+    "Array.forEach expects a function callback.",
+    "Array.find expects a function callback.",
+    "Array.reduce expects a function callback.",
+    "Array.sort expects a function callback.",
+    "Array.flatMap expects a function callback.",
+    "Array.filter expects a function callback.",
+    "Array.every expects a function callback.",
+    "Array.findLastIndex expects a function callback.",
+    "Map.forEach expects a function callback.",
+    "Set.forEach expects a function callback.",
+    "ok",
+    "ok",
+    "Array.toSorted expects a function callback.",
+    "Uint8Array.sort expects a function callback.",
+    "Uint8Array.map expects a function callback.",
+    "Array.sort expects a function callback.",
+    "URLSearchParams.forEach expects a function callback.",
+    "Array.sort expects a function callback.",
+    "[5,3,4,1,2]",
+    "cmp",
+    "[5,3,4,1,2]",
+    "cmp",
+    "[20,19,18,17,16,15,14,13,12,11,10,9,8,7,6,5,4,3,2,1]"
+  ],
+  "logs": [
+    "1 0 [1]"
+  ],
+  "metadata": null
+}

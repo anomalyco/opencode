@@ -1,0 +1,336 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "https://user:pw@example.com:8080/p/a?x=1#h",
+    "https://example.com:8080",
+    "https:",
+    "user",
+    "pw",
+    "example.com:8080",
+    "example.com",
+    "8080",
+    "/p/a",
+    "?x=1",
+    "#h",
+    "http://user:pw@foo:99/a%20b?a%20b#x%20y",
+    "",
+    "http://user:pw@foo:99/a%20b?a+b=&k=v+w#x%20y",
+    "?a+b=&k=v+w",
+    0,
+    "http://user:pw@foo:99/a%20b#x%20y",
+    "{\"u\":\"http://user:pw@foo:99/a%20b#x%20y\"}",
+    "http://user:pw@foo:99/a%20b#x%20y",
+    true,
+    "[object URL]",
+    [],
+    "http://a/b/x?y#z",
+    "http://example.com/b",
+    "http://[::1]/",
+    "file:///C:/a",
+    "x@y",
+    "xn--bcher-kva.de",
+    "https://a.com",
+    "https://z.test/q",
+    false,
+    true,
+    null,
+    "/b",
+    [
+      "TypeError",
+      "new URL(...) received an invalid URL."
+    ],
+    [
+      "TypeError",
+      "new URL(...) received an invalid URL or base URL."
+    ],
+    [
+      "TypeError",
+      "new URL(...) requires a URL string and an optional base URL."
+    ],
+    [
+      "TypeError",
+      "Constructor URL requires 'new'."
+    ],
+    [
+      "TypeError",
+      "URL.href received an invalid value."
+    ],
+    [
+      "TypeError",
+      "Cannot set property 'origin' of a URL which has only a getter."
+    ],
+    [
+      "TypeError",
+      "Cannot set property 'searchParams' of a URL which has only a getter."
+    ],
+    "http://user:pw@foo:99/a%20b#x%20y",
+    "a=1&b=2&a=3&c=++d",
+    "  d",
+    [
+      "1",
+      "3"
+    ],
+    4,
+    true,
+    false,
+    null,
+    "a=1&a=3&b=2&c=++d",
+    "a=3&b=9&c=++d&e=x%2Fy+%C3%A9",
+    [
+      "a",
+      "b",
+      "c",
+      "e"
+    ],
+    [
+      "3",
+      "9",
+      "  d",
+      "x/y é"
+    ],
+    [
+      [
+        "a",
+        "3"
+      ],
+      [
+        "b",
+        "9"
+      ],
+      [
+        "c",
+        "  d"
+      ],
+      [
+        "e",
+        "x/y é"
+      ]
+    ],
+    4,
+    {
+      "a": "3",
+      "b": "9",
+      "c": "  d",
+      "e": "x/y é"
+    },
+    [
+      "a=3true",
+      "b=9true",
+      "c=  dtrue",
+      "e=x/y étrue"
+    ],
+    "x=1&y=1%2C2",
+    "a=1&b=t",
+    "m=n",
+    "a=3&b=9&c=++d&e=x%2Fy+%C3%A9",
+    "null=",
+    "5=",
+    0,
+    [
+      "TypeError",
+      "new URLSearchParams(...) expects iterable [name, value] pairs."
+    ],
+    [
+      "TypeError",
+      "new URLSearchParams(...) expects a query string, data object, or synchronous iterable pairs."
+    ],
+    [
+      "TypeError",
+      "URLSearchParams.append requires 2 arguments."
+    ],
+    [
+      "TypeError",
+      "URLSearchParams.get requires 1 argument."
+    ],
+    [
+      "TypeError",
+      "Constructor URLSearchParams requires 'new'."
+    ],
+    "text/plain",
+    null,
+    "text/html, application/json",
+    true,
+    false,
+    "a=1, b=2",
+    [
+      "a=1",
+      "b=2"
+    ],
+    [
+      [
+        "accept",
+        "text/html, application/json"
+      ],
+      [
+        "content-type",
+        "text/plain"
+      ],
+      [
+        "x-count",
+        "2"
+      ],
+      [
+        "set-cookie",
+        "a=1"
+      ],
+      [
+        "set-cookie",
+        "b=2"
+      ]
+    ],
+    [
+      "accept",
+      "content-type",
+      "x-count",
+      "set-cookie",
+      "set-cookie"
+    ],
+    [
+      "text/html, application/json",
+      "text/plain",
+      "2",
+      "a=1",
+      "b=2"
+    ],
+    "{\"accept\":\"text/html, application/json\",\"content-type\":\"text/plain\",\"x-count\":\"2\",\"set-cookie\":\"b=2\"}",
+    "[object Headers]",
+    {
+      "accept": "text/html, application/json",
+      "content-type": "text/plain",
+      "x-count": "2",
+      "set-cookie": "b=2"
+    },
+    "text/html, application/json",
+    "b",
+    [
+      "accept",
+      "content-type",
+      "x-count",
+      "set-cookie",
+      "set-cookie"
+    ],
+    [
+      "TypeError",
+      "Invalid header name: 'a b'"
+    ],
+    [
+      "TypeError",
+      "Header 'a' has invalid value"
+    ],
+    [
+      "TypeError",
+      "Invalid header name: 'a b'"
+    ],
+    [
+      "TypeError",
+      "Invalid header name: ''"
+    ],
+    [
+      "TypeError",
+      "new Headers(...) expects a record of names to values, iterable [name, value] pairs, or Headers."
+    ],
+    [
+      "TypeError",
+      "new Headers(...) expects a record of names to values, iterable [name, value] pairs, or Headers."
+    ],
+    [
+      "TypeError",
+      "new Headers(...) expects a record of names to values, iterable [name, value] pairs, or Headers."
+    ],
+    [
+      "TypeError",
+      "new Headers(...) expects a record of names to values, iterable [name, value] pairs, or Headers."
+    ],
+    [
+      "TypeError",
+      "new Headers(...) expects iterable [name, value] pairs."
+    ],
+    [
+      "TypeError",
+      "Constructor Headers requires 'new'."
+    ],
+    [
+      "TypeError",
+      "Headers.append requires 2 arguments."
+    ],
+    true,
+    true,
+    3,
+    "e",
+    0,
+    true,
+    [
+      "x"
+    ],
+    "/x/gi",
+    0,
+    [
+      1,
+      2
+    ],
+    true,
+    "bad",
+    {
+      "c": 1
+    },
+    [],
+    false,
+    true,
+    false,
+    [
+      "TypeError",
+      "DataCloneError: a function could not be cloned."
+    ],
+    [
+      "TypeError",
+      "DataCloneError: an un-awaited Promise could not be cloned."
+    ],
+    [
+      "TypeError",
+      "DataCloneError: a URL could not be cloned."
+    ],
+    [
+      "TypeError",
+      "DataCloneError: a Headers could not be cloned."
+    ],
+    [
+      "TypeError",
+      "DataCloneError: a URLSearchParams could not be cloned."
+    ],
+    [
+      "TypeError",
+      "DataCloneError: a WeakMap could not be cloned."
+    ],
+    [
+      "TypeError",
+      "DataCloneError: an iterator could not be cloned."
+    ],
+    [
+      "TypeError",
+      "DataCloneError: a namespace reference could not be cloned."
+    ],
+    [
+      "TypeError",
+      "DataCloneError: a symbol could not be cloned."
+    ],
+    [
+      "TypeError",
+      "structuredClone requires 1 argument"
+    ],
+    5,
+    "s",
+    null,
+    null,
+    true,
+    4,
+    [
+      "TypeError",
+      "crypto.getRandomValues expects a Uint8Array, received an array."
+    ]
+  ],
+  "logs": [
+    "http://user:pw@foo:99/a%20b#x%20y a=3&b=9&c=++d&e=x%2Fy+%C3%A9 Headers {\"accept\":\"text/html, application/json\",\"content-type\":\"text/plain\",\"x-count\":\"2\",\"set-cookie\":\"b=2\"} Headers {}"
+  ],
+  "metadata": null
+}

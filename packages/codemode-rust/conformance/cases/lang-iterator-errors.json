@@ -1,0 +1,22 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": {
+    "method": "TypeError: Iterator method must be a function.",
+    "methodResult": "TypeError: Iterator method result must be an object.",
+    "next": "TypeError: Iterator next must be a function.",
+    "nextResult": "TypeError: Iterator next() result must be an object.",
+    "returnMethod": "TypeError: Iterator return must be a function.",
+    "returnResult": "TypeError: Iterator return() result must be an object.",
+    "bodyErrorWins": "Error: body",
+    "delegateReturn": "TypeError: Iterator return() result must be an object.",
+    "delegateThrow": "TypeError: Iterator throw must be a function.",
+    "asyncDelegate": "TypeError: yield* requires a compatible iterable value.",
+    "asyncMethod": "TypeError: Iterator method must be a function.",
+    "asyncNextResult": "TypeError: Iterator next() result must be an object.",
+    "asyncReturn": "TypeError: Iterator return must be a function.",
+    "asyncReturnResult": "TypeError: Iterator return() result must be an object."
+  },
+  "logs": [],
+  "metadata": null
+}

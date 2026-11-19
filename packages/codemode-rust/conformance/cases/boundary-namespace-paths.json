@@ -1,0 +1,80 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      "TypeError",
+      "tools paths must use string property names."
+    ],
+    [
+      "TypeError",
+      "tools paths must use string property names."
+    ],
+    [
+      "TypeError",
+      "tools paths must use string property names."
+    ],
+    [
+      "TypeError",
+      "tools paths must use string property names."
+    ],
+    "function",
+    "function",
+    "function",
+    [
+      "Error",
+      "No namespace at tools.nope."
+    ],
+    [
+      "Error",
+      "No namespace at tools.git.nope."
+    ],
+    [
+      "Error",
+      "No namespace at tools.git.status.x."
+    ],
+    [],
+    [
+      "status"
+    ],
+    [
+      "echo",
+      "fail",
+      "git"
+    ],
+    [
+      "TypeError",
+      "Promise.prototype.then called on incompatible receiver a data object."
+    ],
+    [
+      "TypeError",
+      "Promise.prototype.catch called on incompatible receiver a number."
+    ],
+    [
+      "TypeError",
+      "Promise.prototype.finally called on incompatible receiver a namespace reference."
+    ],
+    [
+      "TypeError",
+      "Promise.prototype.then called on incompatible receiver null."
+    ],
+    [
+      "TypeError",
+      "new URLSearchParams(...) expects a query string, data object, iterable pairs, or URLSearchParams."
+    ],
+    [
+      "TypeError",
+      "new URLSearchParams(...) expects a query string, data object, or synchronous iterable pairs."
+    ],
+    [
+      "Cannot read properties of null (reading '[object Object]').",
+      0
+    ],
+    [
+      "TypeError",
+      "Cannot read properties of undefined (reading '1,2')."
+    ]
+  ],
+  "logs": [],
+  "metadata": null
+}

@@ -1,0 +1,16 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      "promise",
+      "resolve",
+      "reject"
+    ],
+    true,
+    "adopted",
+    "no"
+  ],
+  "logs": [],
+  "metadata": null
+}

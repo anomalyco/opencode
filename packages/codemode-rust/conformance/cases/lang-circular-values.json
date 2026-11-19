@@ -1,0 +1,68 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": {
+    "out": [
+      [
+        "TypeError",
+        "Array assignment result contains a circular value."
+      ],
+      [
+        "TypeError",
+        "Object assignment result contains a circular value."
+      ],
+      [
+        "TypeError",
+        "Object assignment result contains a circular value."
+      ],
+      [
+        "TypeError",
+        "Object assignment result contains a circular value."
+      ],
+      [
+        "TypeError",
+        "Array.push result contains a circular value."
+      ],
+      [
+        "TypeError",
+        "Array.unshift result contains a circular value."
+      ],
+      [
+        "TypeError",
+        "Array.splice result contains a circular value."
+      ],
+      [
+        "TypeError",
+        "Array.fill result contains a circular value."
+      ],
+      [
+        "TypeError",
+        "Object.assign result contains a circular value."
+      ],
+      [
+        "TypeError",
+        "Object assignment result contains a circular value."
+      ],
+      "ok",
+      [
+        "TypeError",
+        "Object assignment result contains a circular value."
+      ],
+      "ok",
+      [
+        "TypeError",
+        "Object assignment result contains a circular value."
+      ],
+      "ok",
+      "ok"
+    ],
+    "keys": [
+      "map",
+      "p",
+      "n"
+    ],
+    "len": 2
+  },
+  "logs": [],
+  "metadata": null
+}

@@ -1,0 +1,13 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "liar",
+    1,
+    "ReferenceError",
+    true,
+    "smeagol"
+  ],
+  "logs": [],
+  "metadata": null
+}

@@ -1,0 +1,14 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "next reaction",
+    "next catch",
+    "result reaction",
+    "result catch",
+    "return reaction",
+    "return catch"
+  ],
+  "logs": [],
+  "metadata": null
+}

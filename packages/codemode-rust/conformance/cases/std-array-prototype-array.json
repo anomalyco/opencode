@@ -1,0 +1,32 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    true,
+    0,
+    "[]",
+    0,
+    "",
+    "function",
+    "proto",
+    0,
+    1,
+    2,
+    "p",
+    true,
+    -1,
+    false,
+    "[0,null,2]",
+    "0,p,2",
+    3,
+    0,
+    "1p",
+    4,
+    null,
+    false
+  ],
+  "logs": [
+    "[]"
+  ],
+  "metadata": null
+}

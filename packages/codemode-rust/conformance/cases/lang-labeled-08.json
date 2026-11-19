@@ -1,0 +1,12 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": {
+    "while": 2,
+    "doWhile": 2,
+    "forOf": 3,
+    "forIn": 2
+  },
+  "logs": [],
+  "metadata": null
+}

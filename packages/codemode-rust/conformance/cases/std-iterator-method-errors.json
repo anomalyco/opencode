@@ -1,0 +1,28 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "Iterator method result must be an object.",
+    "Iterator method result must be an object.",
+    "Iterator method result must be an object.",
+    "Iterator method result must be an object.",
+    "Iterator method result must be an object.",
+    "Iterator method must be a function.",
+    "Iterator method must be a function.",
+    "Iterator method must be a function.",
+    "Iterator method must be a function.",
+    "Iterator method must be a function.",
+    "a",
+    "b",
+    2,
+    2,
+    "a",
+    2,
+    [
+      "a",
+      "b"
+    ]
+  ],
+  "logs": [],
+  "metadata": null
+}

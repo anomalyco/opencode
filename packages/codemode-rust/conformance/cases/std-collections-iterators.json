@@ -1,0 +1,316 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      [
+        "a",
+        [
+          1,
+          2
+        ]
+      ]
+    ],
+    "b!",
+    "b!",
+    1,
+    true,
+    "outer",
+    "outer",
+    "TypeError",
+    "Map.getOrInsertComputed expects a function callback.",
+    "TypeError",
+    "Map.prototype.get called on incompatible receiver a Set.",
+    "TypeError",
+    "Set.prototype.add called on incompatible receiver a Map.",
+    {
+      "odd": [
+        1,
+        3
+      ],
+      "even": [
+        2,
+        4
+      ]
+    },
+    null,
+    {
+      "a": [
+        "a",
+        "a"
+      ],
+      "b": [
+        "b"
+      ],
+      "c": [
+        "c"
+      ]
+    },
+    [
+      [
+        false,
+        [
+          1
+        ]
+      ],
+      [
+        true,
+        [
+          2,
+          3
+        ]
+      ]
+    ],
+    {
+      "1": [
+        1.5
+      ],
+      "2": [
+        2.5
+      ]
+    },
+    "TypeError",
+    "TypeError",
+    "TypeError",
+    [
+      1,
+      2,
+      3,
+      4
+    ],
+    [
+      2,
+      3
+    ],
+    [
+      1
+    ],
+    [
+      1,
+      4
+    ],
+    false,
+    true,
+    true,
+    true,
+    [
+      1,
+      2,
+      3,
+      7
+    ],
+    [
+      "TypeError",
+      "Set.union expects a Set-like object."
+    ],
+    [
+      "TypeError",
+      "Set.union received a Set-like object with an invalid size."
+    ],
+    [
+      "RangeError",
+      "Set.union received a Set-like object with a negative size."
+    ],
+    [
+      "TypeError",
+      "Set.union expects callable 'has' and 'keys' methods."
+    ],
+    1,
+    false,
+    true,
+    2,
+    true,
+    false,
+    null,
+    false,
+    false,
+    5,
+    6,
+    true,
+    false,
+    true,
+    true,
+    true,
+    false,
+    false,
+    "[object WeakMap]",
+    "[object WeakSet]",
+    "{\"wm\":{},\"ws\":{}}",
+    "undefined",
+    true,
+    [
+      "TypeError",
+      "Invalid value used as weak map key: a number cannot be held weakly."
+    ],
+    [
+      "TypeError",
+      "Invalid value used in weak set: a string cannot be held weakly."
+    ],
+    [
+      "TypeError",
+      "Constructor WeakMap requires 'new'."
+    ],
+    [
+      "TypeError",
+      "new WeakMap(...) expects [key, value] pairs as entry objects."
+    ],
+    [
+      "TypeError",
+      "Invalid value used in weak set: a number cannot be held weakly."
+    ],
+    [
+      "TypeError",
+      "WeakMap.prototype.get called on incompatible receiver a Map."
+    ],
+    [
+      "TypeError",
+      "Invalid value used as weak map key: a number cannot be held weakly."
+    ],
+    {
+      "value": 4,
+      "done": false
+    },
+    [
+      16,
+      36
+    ],
+    {
+      "done": true
+    },
+    [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+    ],
+    [
+      10,
+      21
+    ],
+    [
+      1,
+      [
+        1
+      ],
+      2,
+      [
+        2
+      ]
+    ],
+    [
+      3
+    ],
+    [
+      [
+        1,
+        0
+      ],
+      [
+        2,
+        1
+      ],
+      [
+        3,
+        2
+      ]
+    ],
+    6,
+    16,
+    true,
+    false,
+    2,
+    null,
+    [
+      "each",
+      "r",
+      "r2",
+      "some",
+      "every",
+      "find",
+      "miss",
+      "throw",
+      "return",
+      "loop"
+    ],
+    "boom",
+    {
+      "done": true
+    },
+    {
+      "done": true
+    },
+    {
+      "done": true
+    },
+    [
+      "each",
+      "r",
+      "r2",
+      "some",
+      "every",
+      "find",
+      "miss",
+      "throw",
+      "return",
+      "loop"
+    ],
+    {
+      "done": true
+    },
+    "return",
+    "loop",
+    "undefined",
+    true,
+    3,
+    "function",
+    true,
+    [
+      "a",
+      "b"
+    ],
+    [
+      2,
+      4
+    ],
+    [
+      0,
+      1
+    ],
+    true,
+    "[object Array Iterator]",
+    [
+      "TypeError",
+      "Constructor Iterator requires 'new'."
+    ],
+    [
+      "TypeError",
+      "Iterator is abstract; use Iterator.from(...) or a built-in iterator."
+    ],
+    [
+      "TypeError",
+      "Iterator.from expects an iterable or iterator, received a number."
+    ],
+    [
+      "RangeError",
+      "Iterator.prototype.take expects a non-negative count, received -1."
+    ],
+    [
+      "TypeError",
+      "Iterator.prototype.map expects a function callback."
+    ],
+    [
+      "TypeError",
+      "Iterator.prototype.next called on incompatible receiver a data object."
+    ],
+    {
+      "done": true
+    }
+  ],
+  "logs": [
+    "WeakMap { <items unknown> } WeakSet { <items unknown> }"
+  ],
+  "metadata": null
+}

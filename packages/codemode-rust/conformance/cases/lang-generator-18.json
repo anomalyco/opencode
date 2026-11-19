@@ -1,0 +1,13 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    [
+      1,
+      2
+    ],
+    "TypeError"
+  ],
+  "logs": [],
+  "metadata": null
+}

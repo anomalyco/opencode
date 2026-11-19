@@ -1,0 +1,5 @@
+command: cd packages/codemode && bun run script/bench.ts --iterations 11
+reference: anomalyco/opencode a9a35b4b4ce35573d71207e246e770cfa26ff0e1
+bun: 1.4.4
+cpu: AMD EPYC 9554P 64-Core Processor, 8 cores
+date: 2026-11-17

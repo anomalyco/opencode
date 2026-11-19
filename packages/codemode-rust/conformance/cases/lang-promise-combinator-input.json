@@ -1,0 +1,124 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": {
+    "all": [
+      [
+        "rejected",
+        "TypeError: Promise.all expects a synchronous iterable, received a number."
+      ],
+      [
+        "rejected",
+        "TypeError: Promise.all expects a synchronous iterable, received null."
+      ],
+      [
+        "rejected",
+        "TypeError: Promise.all expects a synchronous iterable, received a data object."
+      ],
+      [
+        "fulfilled",
+        [
+          "a",
+          "b"
+        ]
+      ],
+      [
+        "rejected",
+        "Error: open"
+      ],
+      [
+        "rejected",
+        "Error: next"
+      ]
+    ],
+    "allSettled": [
+      [
+        "rejected",
+        "TypeError: Promise.allSettled expects a synchronous iterable, received a number."
+      ],
+      [
+        "rejected",
+        "TypeError: Promise.allSettled expects a synchronous iterable, received null."
+      ],
+      [
+        "rejected",
+        "TypeError: Promise.allSettled expects a synchronous iterable, received a data object."
+      ],
+      [
+        "fulfilled",
+        [
+          {
+            "status": "fulfilled",
+            "value": "a"
+          },
+          {
+            "status": "fulfilled",
+            "value": "b"
+          }
+        ]
+      ],
+      [
+        "rejected",
+        "Error: open"
+      ],
+      [
+        "rejected",
+        "Error: next"
+      ]
+    ],
+    "any": [
+      [
+        "rejected",
+        "TypeError: Promise.any expects a synchronous iterable, received a number."
+      ],
+      [
+        "rejected",
+        "TypeError: Promise.any expects a synchronous iterable, received null."
+      ],
+      [
+        "rejected",
+        "TypeError: Promise.any expects a synchronous iterable, received a data object."
+      ],
+      [
+        "fulfilled",
+        "a"
+      ],
+      [
+        "rejected",
+        "Error: open"
+      ],
+      [
+        "rejected",
+        "Error: next"
+      ]
+    ],
+    "race": [
+      [
+        "rejected",
+        "TypeError: Promise.race expects a synchronous iterable, received a number."
+      ],
+      [
+        "rejected",
+        "TypeError: Promise.race expects a synchronous iterable, received null."
+      ],
+      [
+        "rejected",
+        "TypeError: Promise.race expects a synchronous iterable, received a data object."
+      ],
+      [
+        "fulfilled",
+        "a"
+      ],
+      [
+        "rejected",
+        "Error: open"
+      ],
+      [
+        "rejected",
+        "Error: next"
+      ]
+    ]
+  },
+  "logs": [],
+  "metadata": null
+}

@@ -183,8 +183,10 @@ export const verifyCode = (c: Code): Array<string> => {
       case Op.FOR_IN:
       case Op.ITER_INIT:
       case Op.GENERATOR_START:
-        if (op === Op.CHECK_BASE && a === CheckBaseKind.READ && d < 2) {
-          errors.push(`${label}: CHECK_BASE.read at depth ${d} (pc ${pc})`)
+        if (op === Op.CHECK_BASE && (a === CheckBaseKind.READ || a === CheckBaseKind.ASSIGN_PROP) && d < 2) {
+          errors.push(
+            `${label}: CHECK_BASE.${a === CheckBaseKind.READ ? "read" : "assignProp"} at depth ${d} (pc ${pc})`,
+          )
         }
         next(0)
         break
@@ -266,13 +268,8 @@ export const verifyCode = (c: Code): Array<string> => {
         next(-(a + 1))
         break
       case Op.NEW:
-        if (a === 255) {
-          if (d < 1) errors.push(`${label}: NEW.check at depth ${d} (pc ${pc})`)
-          next(0)
-        } else {
-          if (d < a + 1) errors.push(`${label}: NEW ${a} at depth ${d} (pc ${pc})`)
-          next(-a)
-        }
+        if (d < a + 1) errors.push(`${label}: NEW ${a} at depth ${d} (pc ${pc})`)
+        next(-a)
         break
       case Op.ITER_OPEN: {
         const jumpPc = pc + stride

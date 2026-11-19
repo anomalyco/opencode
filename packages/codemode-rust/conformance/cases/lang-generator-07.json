@@ -1,0 +1,35 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    {
+      "value": "one",
+      "done": false
+    },
+    {
+      "value": "recovered",
+      "done": false
+    },
+    {
+      "value": "stop!",
+      "done": true
+    },
+    [
+      [
+        "next",
+        1,
+        null
+      ],
+      [
+        "throw",
+        "x"
+      ],
+      [
+        "return",
+        "stop"
+      ]
+    ]
+  ],
+  "logs": [],
+  "metadata": null
+}

@@ -1,0 +1,22 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": 1,
+  "logs": [
+    "(index)\ta\tb\tc\tValue\n0\t1\tx\t\t\n1\t\t2\t[1,2]\t\n2\t\t\t\t5\n3\t\t\t\ts\n4\t\t\t\t[1,2]",
+    "(index)\tx\ty\tValue\nr1\t1\t\t\nr2\t\t{\"z\":1}\t\nr3\t\t\tnull",
+    "(index)\tb\ta\tzz\n0\t2\t1\t\n1\t\t3\t",
+    "(index)\tValue\n0\t5",
+    "(index)\tValue\n0\tstr",
+    "undefined",
+    "undefined",
+    "[opaque reference]",
+    "(index)",
+    "(index)\t1\t2\tb\t10\n0\tone\ttwo\tb\t\n1\t\t\t\tten",
+    "(index)\tValue\n0\t\n1\t\n2\tnull\n3\t\n4\ttrue",
+    "[opaque reference]",
+    "undefined",
+    "1"
+  ],
+  "metadata": null
+}

@@ -1,0 +1,48 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": {
+    "f": {
+      "deleted": true,
+      "afterDelete": [
+        "undefined",
+        false,
+        3
+      ],
+      "keys": [
+        "0",
+        "2",
+        "extra"
+      ],
+      "spread": [
+        1,
+        3,
+        "x"
+      ],
+      "json": "{\"0\":1,\"2\":3,\"extra\":\"x\"}",
+      "tag": "[object Arguments]"
+    },
+    "g": {
+      "lengthWritten": [
+        "two",
+        true,
+        3
+      ],
+      "applied": [
+        1
+      ],
+      "deleted": true
+    },
+    "h": [
+      1,
+      "arrow",
+      "arrow"
+    ],
+    "frozen": [
+      "TypeError: Cannot assign to read only property '0'.",
+      1
+    ]
+  },
+  "logs": [],
+  "metadata": null
+}

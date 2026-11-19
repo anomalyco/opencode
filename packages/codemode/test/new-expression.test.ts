@@ -58,6 +58,18 @@ describe("new on a non-constructible callee", () => {
     )
   })
 
+  test("the arguments are evaluated before the callee is checked", async () => {
+    expect(
+      await value(`
+        let x = 1
+        const seen = []
+        try { new x(x = Date, seen.push("argument")) } catch (error) { seen.push(error.name) }
+        try { new Number(...missing) } catch (error) { seen.push(error.name) }
+        return [seen, x === Date]
+      `),
+    ).toEqual([["argument", "TypeError", "ReferenceError"], true])
+  })
+
   test("the failure is a catchable TypeError", async () => {
     expect(
       await value(`

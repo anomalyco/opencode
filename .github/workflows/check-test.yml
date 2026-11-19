@@ -97,6 +97,23 @@ jobs:
           # Pull requests diff against the merge's first parent; pushes diff against the previous dev head.
           fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
 
+      # The Rust port of codemode is checked in this job, on Linux, only when it or its TypeScript reference changed.
+      # Runs without a base to diff against (manual runs, the release gate, a new branch) check it always.
+      - name: Decide whether the codemode Rust checks run
+        id: codemode-rust
+        if: runner.os == 'Linux'
+        run: |
+          paths=(packages/codemode packages/codemode-rust .github/workflows/check-test.yml)
+          if [ "$AFFECTED" != "true" ] || ! git cat-file -e "${TURBO_SCM_BASE}^{commit}" 2>/dev/null; then
+            run=true
+          elif git diff --quiet "$TURBO_SCM_BASE" "$TURBO_SCM_HEAD" -- "${paths[@]}"; then
+            run=false
+          else
+            run=true
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "codemode Rust checks: $run"
+
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
@@ -154,6 +171,93 @@ jobs:
         if: runner.os == 'Linux'
         working-directory: packages/protocol
         run: bun run check:generated
+
+      # The toolchain, profile and components come from packages/codemode-rust/rust-toolchain.toml.
+      - name: Install Rust for codemode
+        if: runner.os == 'Linux' && steps.codemode-rust.outputs.run == 'true'
+        working-directory: packages/codemode-rust
+        run: rustup toolchain install --no-self-update
+
+      # One cache for the debug and release builds below.
+      - name: Cache codemode Rust builds
+        if: runner.os == 'Linux' && steps.codemode-rust.outputs.run == 'true'
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          shared-key: codemode-rust
+          key: ${{ hashFiles('packages/codemode-rust/rust-toolchain.toml') }}
+          workspaces: packages/codemode-rust -> target
+
+      - name: Check codemode Rust formatting, Clippy and tests
+        if: runner.os == 'Linux' && steps.codemode-rust.outputs.run == 'true'
+        timeout-minutes: 15
+        working-directory: packages/codemode-rust
+        run: |
+          cargo fmt --check
+          cargo clippy --locked --workspace --all-targets -- -D warnings
+          # Includes bench/tests/conformance.rs, which checks every conformance case against the reference outcome.
+          cargo test --locked --workspace
+
+      # Saves and restores every run at each host stop and after 64, 128, 256, ... loop iterations; outcomes must not
+      # change. Reuses the debug build of the step before and takes seconds.
+      - name: Check codemode Rust conformance in round-trip mode
+        if: runner.os == 'Linux' && steps.codemode-rust.outputs.run == 'true'
+        timeout-minutes: 5
+        working-directory: packages/codemode-rust
+        env:
+          PSYCHOSCRIPT_ROUNDTRIP: "1"
+        run: cargo test --locked -p psychoscript-bench --test conformance
+
+      # A change to the reference fails here until the Rust side is updated and the expectations regenerated.
+      - name: Check codemode Rust conformance expectations match the reference
+        if: runner.os == 'Linux' && steps.codemode-rust.outputs.run == 'true'
+        working-directory: packages/codemode-rust
+        run: |
+          bun conformance/generate.ts
+          bun conformance/boundary.ts
+          bun conformance/streaming.ts
+          bun conformance/host.ts
+          git status --porcelain -- conformance
+          git diff --exit-code -- conformance
+          test -z "$(git status --porcelain -- conformance)"
+
+      - name: Read the pinned test262 revision
+        id: test262
+        if: runner.os == 'Linux' && steps.codemode-rust.outputs.run == 'true'
+        run: |
+          revision=$(jq -r .revision packages/codemode/test/test262/manifest.json)
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+          echo "checkout=$HOME/.cache/test262-$revision" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the test262 checkout
+        if: runner.os == 'Linux' && steps.codemode-rust.outputs.run == 'true'
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ steps.test262.outputs.checkout }}
+          key: test262-${{ steps.test262.outputs.revision }}
+
+      # Parity both ways, against test262/rust-skipped.txt and test262/reference-gaps.txt; see test262/README.md.
+      - name: Check codemode Rust test262 parity
+        if: runner.os == 'Linux' && steps.codemode-rust.outputs.run == 'true'
+        timeout-minutes: 10
+        working-directory: packages/codemode-rust
+        env:
+          TEST262_CHECKOUT: ${{ steps.test262.outputs.checkout }}
+        run: bash test262/run.sh
+
+      # Shared runners are too noisy for a performance gate; the numbers go to the job summary only.
+      - name: Benchmark codemode Rust against the reference (informational)
+        if: runner.os == 'Linux' && steps.codemode-rust.outputs.run == 'true'
+        continue-on-error: true
+        timeout-minutes: 10
+        working-directory: packages/codemode-rust
+        env:
+          ITERATIONS: "5"
+          COLD_RUNS: "5"
+          PLUGIN_RUNS: "2000"
+        run: |
+          [ -x /usr/bin/time ] || (sudo apt-get update && sudo apt-get install -y time)
+          bash bench/compare.sh
+          cat bench/RESULTS.md >> "$GITHUB_STEP_SUMMARY"
 
   build:
     name: build (${{ matrix.settings.name }})

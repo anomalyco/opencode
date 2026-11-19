@@ -1,0 +1,22 @@
+{
+  "bindings": {},
+  "ok": true,
+  "value": [
+    "cleanup",
+    "cleanup 2",
+    "tick 0",
+    "tick 1",
+    "tick 2",
+    "after 1",
+    "caught 2",
+    "after 3",
+    "tick 3",
+    "tick 4",
+    "tick 5",
+    "tick 6",
+    "tick 7",
+    "end"
+  ],
+  "logs": [],
+  "metadata": null
+}

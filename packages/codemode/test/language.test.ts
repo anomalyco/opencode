@@ -363,3 +363,62 @@ describe("translate", () => {
     expect(calls).toEqual([[{ n: 7 }]])
   })
 })
+
+describe("runtime.compile", () => {
+  const runtime = Runtime.make({ globals: () => ({ twice: Host.fn((args) => Number(args[0]) * 2) }) })
+  const compiled = (code: string) => {
+    const result = runtime.compile(code)
+    if (!result.ok) throw new Error(`expected a compiled program, got ${result.error.message}`)
+    return result.compiled
+  }
+
+  test("a compiled program runs as its source does, again and at once, with each run's bindings", async () => {
+    const code = `let n = 0; for (const x of xs) n += twice(x); return [n, typeof seen]`
+    const program = compiled(code)
+    const runs = [[1], [2, 3], [4, 5, 6]].map((xs) => runtime.execute(program, { bindings: { xs } }))
+    const results = await Promise.all(runs.map((run) => Effect.runPromise(run)))
+    expect(results.map((result) => (result.ok ? result.value : result.error))).toEqual([
+      [2, "undefined"],
+      [10, "undefined"],
+      [30, "undefined"],
+    ])
+    expect(await Effect.runPromise(runtime.execute(program, { bindings: { xs: [7] } }))).toEqual(
+      await Effect.runPromise(runtime.execute(code, { bindings: { xs: [7] } })),
+    )
+  })
+
+  test("compiling gives the diagnostic a run would fail with first; unsupported syntax still fails where it runs", async () => {
+    for (const code of ["  ", "return (", "export const x = 1"]) {
+      const result = runtime.compile(code)
+      if (result.ok) throw new Error(`expected ${JSON.stringify(code)} not to compile`)
+      expect(await run(runtime, code)).toEqual({ ok: false, error: result.error, metadata: null })
+    }
+    const unsupported = `const a = 1; class A {}`
+    expect(await Effect.runPromise(runtime.execute(compiled(unsupported)))).toEqual(await run(runtime, unsupported))
+  })
+
+  test("a state saved from a compiled program is its source's, and resumes like it", async () => {
+    const gate = latch()
+    const waiting = latch()
+    const durable = Runtime.make({
+      globals: () => ({
+        wait: Host.fn(
+          () => Effect.andThen(Effect.sync(waiting.resolve), Effect.promise(() => gate.promise)),
+          { type: "async", idempotent: true },
+        ),
+      }),
+    })
+    const code = `const a = 20; await wait(); return a + 22`
+    const result = durable.compile(code)
+    if (!result.ok) throw new Error(result.error.message)
+    const program = durable.program(result.compiled, { runId: "c" })
+    const fiber = Effect.runFork(program.run())
+    await waiting.promise
+    const suspended = await Effect.runPromise(program.suspend())
+    if (suspended.ok !== "suspended") throw new Error("expected a suspended run")
+    await Effect.runPromise(Fiber.join(fiber))
+    expect(suspended.state.header.sources.map((source) => source.code)).toEqual([code])
+    gate.resolve()
+    expect(await Effect.runPromise(durable.resume(toBytes(suspended.state)).run())).toMatchObject({ ok: true, value: 42 })
+  })
+})
