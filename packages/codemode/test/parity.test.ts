@@ -572,6 +572,39 @@ describe("CodeMode-specific string behavior", () => {
     ).toEqual(["RangeError", "RangeError", "TypeError", "TypeError"])
   })
 
+  test("localeCompare caps its locale list before reading it, and each tag's length", async () => {
+    expect(
+      await value(`
+        const attempt = (f) => { try { return f() } catch (e) { return [e.name, e.message] } }
+        const tags = (n) => Array.from({ length: n }, (_, i) => "en-x-t" + i)
+        let reads = 0
+        const counted = { length: 101, get 0() { reads++; return "en" } }
+        const long = "en-x-" + "abcdefg-".repeat(32).slice(0, 251)
+        return [
+          attempt(() => "a".localeCompare("b", tags(100))),
+          attempt(() => "a".localeCompare("b", Object.assign({ length: 100 }, tags(100)))),
+          attempt(() => "a".localeCompare("b", tags(101))),
+          attempt(() => "a".localeCompare("b", counted)),
+          reads,
+          attempt(() => "a".localeCompare("b", { length: 2 ** 32 })),
+          attempt(() => "a".localeCompare("b", long)),
+          attempt(() => "a".localeCompare("b", long + "h")),
+          attempt(() => "a".localeCompare("b", ["en", { toString: () => long + "h" }])),
+        ]
+      `),
+    ).toEqual([
+      -1,
+      -1,
+      ["RangeError", "Too many locales: at most 100 are supported"],
+      ["RangeError", "Too many locales: at most 100 are supported"],
+      0,
+      ["RangeError", "Too many locales: at most 100 are supported"],
+      -1,
+      ["RangeError", "Locale tag is too long: at most 256 characters are supported"],
+      ["RangeError", "Locale tag is too long: at most 256 characters are supported"],
+    ])
+  })
+
   test("an invalid normalize form is a clear catchable error", async () => {
     expect(await value(`try { "x".normalize("nope"); return "no" } catch (e) { return e.message }`)).toContain('"NFC"')
   })

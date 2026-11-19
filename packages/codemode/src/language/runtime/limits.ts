@@ -19,3 +19,19 @@ export const checkStringLength = (length: number): void => {
 export const checkArrayLength = (length: number): void => {
   if (length > MAX_ARRAY_LENGTH) throw rangeError("Invalid array length")
 }
+
+/** Most locales one Intl call may take; the host canonicalizes them in one call the timeout cannot interrupt. */
+export const MAX_LOCALES = 100
+/** Longest locale tag one Intl call may take; the host's tag parsing grows faster than linearly with length. */
+export const MAX_LOCALE_LENGTH = 256
+
+// Checked before a locale list's elements are read.
+export const checkLocaleCount = (count: number): void => {
+  if (count > MAX_LOCALES) throw rangeError(`Too many locales: at most ${MAX_LOCALES} are supported`)
+}
+
+export const checkLocaleTag = (tag: unknown): void => {
+  if (typeof tag === "string" && tag.length > MAX_LOCALE_LENGTH) {
+    throw rangeError(`Locale tag is too long: at most ${MAX_LOCALE_LENGTH} characters are supported`)
+  }
+}
