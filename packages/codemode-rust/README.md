@@ -54,9 +54,12 @@ The API is the Rust form of the reference's `Language` namespace:
 | `StreamingResponse` | `StreamingResponse` over an `HttpBody` |
 | `globalNames` | `global_names()` |
 | `Diagnostic`, `DiagnosticKind`, `Json` | `Diagnostic`, `DiagnosticKind`, `Json` (`serde_json::Value`) |
+| a JavaScript string crossing as a host value | `HostString`: lossless, including unpaired surrogates; `as_str`, `to_utf16`, `to_string_lossy` |
 
 Host work is a `Future` instead of an Effect: `Runtime::execute` drives a run on the calling thread, and
-`execute_async` and `Program::run_async` run on any executor. Values cross the boundary as copies (`HostValue`).
+`execute_async` and `Program::run_async` run on any executor. Values cross the boundary as copies (`HostValue`); a
+string crosses as a `HostString`, which keeps a string with an unpaired surrogate exactly, so a host sees and returns
+what the program had.
 
 ## Parity
 
@@ -76,11 +79,9 @@ Its expectations are recorded from the reference's language layer, never written
 
 ### Known differences
 
-- A namespace path read twice is the same object in Rust (`api.x === api.x` is `true`) and a new one each time in the
-  reference. The Rust VM has no garbage collector, so it keeps one reference per path instead of allocating one per
-  read.
-- Strings crossing to the host are Rust `String`s, so a lone surrogate reaches the host as U+FFFD.
 - A saved state resumes only in the implementation and build that saved it: the snapshot formats differ.
+- The program's result (`Outcome::result`, JSON) and its logs are Rust strings, so an unpaired surrogate in them
+  becomes U+FFFD; the reference keeps it. Host values don't have this difference (see `HostString`).
 
 ## Layout
 

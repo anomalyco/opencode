@@ -23,6 +23,8 @@ reference export to its Rust counterpart.
   - a sync function returns its value now, or work that stays pending (`Returned::Pending`, the reference's
     Promise), or work the program waits for (`Returned::Block`, the reference's Effect).
 - `DurableFunction` (`Host.durableFn`), `Namespace` (`Host.namespace`), `Failure` (`Host.fail`, `Host.missing`).
+- `HostValue`, the values that cross, with `HostString` for strings: it keeps an unpaired surrogate, so a host sees
+  and returns exactly what the program had, and converts to a Rust `String` lossily only when asked.
 - `Run`, with its id and metadata.
 - `execute`, `execute_with` and `execute_async`; `program`; `Program::run`, `run_resumable` and `run_async`;
   `Suspender::suspend`; `resume` and `resume_bytes`.
@@ -42,7 +44,7 @@ recordings and fails on any difference.
 |---|---|---|---|
 | `conformance/cases/*.json` | `generate.ts` | `bench/tests/conformance.rs` (also in round-trip mode) | 383 programs |
 | `conformance/host.json` | `host.ts` | `tests/host_recording.rs` | 53 runs, 11 suspensions |
-| `conformance/boundary.json` | `boundary.ts` | `tests/boundary.rs` | 31 crossing programs, 38 runtime configurations |
+| `conformance/boundary.json` | `boundary.ts` | `tests/boundary.rs` | 36 crossing programs, 38 runtime configurations |
 | `conformance/streaming.json` | `streaming.ts` | `tests/streaming.rs` | 693 programs, 59 suspensions |
 
 - Each generator states, at its top, the host globals and runtime options it uses. The Rust replays define the same
@@ -63,11 +65,10 @@ peak RSS, binary size and perturbed variants; the table states the command and m
 
 ## Known differences
 
-- A namespace path read twice is the same object in Rust (`api.x === api.x` is `true`), and a new one each time in
-  TypeScript. The Rust VM has no garbage collector, so it keeps one reference per path instead of one per read.
-  `host.json` doesn't compare this.
-- Strings crossing to the host are Rust `String`s, so a lone surrogate reaches the host as U+FFFD.
-- A saved state resumes only in the implementation and build that saved it: the snapshot formats differ.
+- A saved state resumes only in the implementation and build that saved it: the snapshot formats differ, and
+  TypeScript also resumes only on the build that saved a state.
+- The program's result (JSON) and its logs are Rust strings, so an unpaired surrogate in them becomes U+FFFD;
+  TypeScript keeps it. Strings crossing as host values are lossless (`HostString`), and `boundary.json` records them.
 
 ## Observations on the TypeScript language layer
 
