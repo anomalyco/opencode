@@ -59,13 +59,16 @@ fn the_luau_quick_start_draws_and_sends_what_its_rust_source_does() {
     assert_eq!(shown(&luau), shown(&rust));
 }
 
+// The session and its reads are served: a fixture 404 for them sends the TUI home with an error toast, which lands at
+// any time and, after the confirm, replaces the plugin's toast (the Windows preview run 44610300253).
 #[test]
 fn the_counter_asks_before_it_resets_and_its_answer_comes_back() {
-    let h = support::mount(
-        100,
-        30,
-        Deps { route: support::session_route("ses_1"), ..support::deps(Arc::new(support::empty())) },
-    );
+    let server = support::Fake::new(|seen| match seen.path.as_str() {
+        "/api/session/ses_a/inbox" => (200, serde_json::json!({ "data": [] })),
+        _ => support::base(seen, support::DIRECTORY),
+    });
+    let h = support::mount(100, 30, support::deps(Arc::new(server)));
+    h.wait_for("Fix the parser");
     opencode_tui::plugins::host::add(&h.tui, example("counter"));
     for _ in 0..3 {
         _ = h.tui.keymap.dispatch("counter.count", None);
