@@ -40,7 +40,7 @@ const toLocaleString = (value: number, locales: Value, options: Value): NativeRe
   // The host's own message for null quotes host source, so this one is thrown here.
   if (locales === null || options === null) throw typeError("Cannot convert undefined or null to object.")
   return withReads(() => {
-    const length = locales instanceof Obj ? coerceToInteger(get(locales, "length")) : 0
+    const length = locales instanceof Obj ? Math.max(0, coerceToInteger(get(locales, "length"))) : 0
     checkLocaleCount(length)
     const list = Array.from({ length }, (_, index) => get(locales as Obj, index))
     const read = options instanceof Obj ? numberFormatOptions : []

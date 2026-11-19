@@ -1719,6 +1719,17 @@ describe("toLocaleString", () => {
     ).toEqual(["Cannot convert undefined or null to object.", "Cannot convert undefined or null to object."])
   })
 
+  test("a negative array-like length is an empty locale list", async () => {
+    expect(
+      await value(`
+      return [
+        (1234.5).toLocaleString({ length: -1 }, { style: "percent" }),
+        (1234.5).toLocaleString({ length: -5, 0: "de" }, { maximumFractionDigits: 0 }),
+      ]
+    `),
+    ).toEqual(["123,450%", "1,235"])
+  })
+
   test("numbers cap their locale list before reading it, and each tag's length", async () => {
     expect(
       await value(`
