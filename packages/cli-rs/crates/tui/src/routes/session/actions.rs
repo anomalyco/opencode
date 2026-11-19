@@ -184,8 +184,10 @@ impl Inner {
         let client = tui.data.client().clone();
         let session = self.session.clone();
         let target = self.session.clone();
-        let prompt =
-            projected(&message.text, message.files.as_deref(), message.agents.as_deref(), message.skills.as_deref());
+        let prompt = restored(
+            &tui.app,
+            projected(&message.text, message.files.as_deref(), message.agents.as_deref(), message.skills.as_deref()),
+        );
         let SessionMessageUser { id, .. } = message;
         if pending {
             tui.app.spawn(
@@ -424,6 +426,40 @@ fn append(prompt: &Value, following: Value, end: u32) -> Value {
     merged
 }
 
+/// `promptMentionsToCells`, as `usePromptRestore` reads a sent prompt back: the web composer stores mention ranges
+/// as string indexes (UTF-16 units) and the TUI as cells, which differ after a tab or a wide character. A range that
+/// does not cover its text in cells but does as string indexes becomes cells.
+pub(crate) fn restored(app: &App, mut prompt: Value) -> Value {
+    let units: Vec<u16> = prompt["text"].as_str().unwrap_or_default().encode_utf16().collect();
+    let cells =
+        |index: usize| opencode_ui::prompt_input::parse::measure(app, &String::from_utf16_lossy(&units[..index]));
+    for key in ["files", "agents", "skills"] {
+        let Some(list) = prompt.get_mut(key).and_then(Value::as_array_mut) else { continue };
+        for part in list {
+            let mention = &part["mention"];
+            let (Some(start), Some(end), Some(text)) =
+                (mention["start"].as_u64(), mention["end"].as_u64(), mention["text"].as_str())
+            else {
+                continue;
+            };
+            let (start, end) = (start as usize, end as usize);
+            let needle: Vec<u16> = text.encode_utf16().collect();
+            if needle.is_empty() || start > end || end > units.len() || units[start..end] != needle[..] {
+                continue;
+            }
+            let found = (0..=units.len() - needle.len())
+                .any(|at| units[at..].starts_with(&needle) && cells(at) as usize == start);
+            if found {
+                continue;
+            }
+            let (start, end) = (cells(start), cells(end));
+            part["mention"]["start"] = start.into();
+            part["mention"]["end"] = end.into();
+        }
+    }
+    prompt
+}
+
 /// Reconstruct the sent prompt with its files and mentions; the message already holds the file bytes.
 pub(crate) fn projected(
     text: &str,
@@ -585,6 +621,26 @@ mod tests {
 
     fn messages(values: Value) -> Vec<SessionMessageInfo> {
         serde_json::from_value(values).unwrap()
+    }
+
+    // The cases of TS's `promptMentionsToCells` test (`test/prompt/mention.test.ts`): in "\t中 @f x" the string
+    // indexes of `@f` are 3..5 and its cells 5..7.
+    #[test]
+    fn restored_mentions_come_back_in_cells() {
+        let app = opentui::testing::TestApp::new(40, 4);
+        for (text, label, start, end, cell_start, cell_end) in [
+            ("\t中 @f x", "@f", 3, 5, 5, 7),
+            ("\t中 @f x", "@f", 5, 7, 5, 7),
+            ("see @f x", "@f", 4, 6, 4, 6),
+            ("\t@@@", "@@", 2, 4, 2, 4),
+            ("\t中 @f x", "@f", 0, 2, 0, 2),
+        ] {
+            let mention = json!({ "start": start, "end": end, "text": label });
+            let prompt = json!({ "text": text, "files": [{ "uri": "file:///f", "mention": mention }], "agents": [{ "name": "f", "mention": mention }] });
+            let cells = json!({ "start": cell_start, "end": cell_end, "text": label });
+            let expected = json!({ "text": text, "files": [{ "uri": "file:///f", "mention": cells }], "agents": [{ "name": "f", "mention": cells }] });
+            assert_eq!(restored(&app, prompt), expected, "{text:?} {start}..{end}");
+        }
     }
 
     #[test]
