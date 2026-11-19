@@ -22,6 +22,7 @@ import type {
   SlotMap,
   SlotPath,
   Toast,
+  ToolRender,
 } from "@opencode/plugin/tui/context"
 import type { Placement, PlacementKind } from "./structure"
 import { infoStringToFiletype, type MarkdownCodeBlockRenderer } from "@opentui/core"
@@ -65,11 +66,12 @@ const placements = ["prepend", "append", "before", "after", "replace"] as const 
 // route/slot registration lands there, but ordering and lifecycle stay owned
 // by the provider.
 export type Registry = {
-  has(kind: "routes" | "slots" | "markdown", name: string): boolean
+  has(kind: "routes" | "slots" | "markdown" | "tools", name: string): boolean
   set(kind: "routes", name: string, page: Page): void
   set(kind: "slots", name: string, claim: RegisteredSlot): void
   set(kind: "markdown", name: string, render: MarkdownCodeBlockRenderer): void
-  remove(kind: "routes" | "slots" | "markdown", name: string): void
+  set(kind: "tools", name: string, render: ToolRender): void
+  remove(kind: "routes" | "slots" | "markdown" | "tools", name: string): void
   active(): boolean
 }
 
@@ -148,9 +150,9 @@ export function createPluginContext(input: {
       })
     },
   }
-  // Unregistering after deactivation is a no-op: deactivate already resets
-  // the registration's routes and slots wholesale.
-  const registration = (kind: "routes" | "slots" | "markdown", name: string) => {
+  // Unregistering after deactivation is a no-op: deactivate already clears
+  // every contribution the registration made.
+  const registration = (kind: "routes" | "slots" | "markdown" | "tools", name: string) => {
     let registered = true
     const unregister = () => {
       if (!registered) return
@@ -220,6 +222,14 @@ export function createPluginContext(input: {
       memory: (key, options) => host.storage.memory(`plugin.${input.id}.${key}`, options),
     },
     ui: {
+      tool: {
+        register(name, render) {
+          if (name.trim().length === 0) throw new Error("Tool name is required")
+          if (input.registry.has("tools", name)) throw new Error(`Tool renderer already registered: ${name}`)
+          input.registry.set("tools", name, (value) => provide(() => render(value)))
+          return registration("tools", name)
+        },
+      },
       dialog: dialogApi,
       toast: toastApi,
       format: {

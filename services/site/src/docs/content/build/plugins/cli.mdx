@@ -278,6 +278,17 @@ const unregister = context.markdown.registerCodeBlockRenderer("acme", (_token, r
 return unregister
 ```
 
+## Tool renderers
+
+Replace the built-in view for a tool with `context.ui.tool.register(name, render)`; the returned function unregisters it, and disabling the plugin clears it too. The renderer mounts as a component whose `part` and `sessionID` props update as the call progresses, so read them reactively. Registering `generic` replaces the fallback for every unrecognized tool.
+
+```tsx
+const unregister = context.ui.tool.register("AgentSwarm", (input) => (
+  <text>{input.part.state.status}</text>
+))
+return unregister
+```
+
 ## Commands and keymaps
 
 Register palette, slash, and keyboard commands in a reactive keymap layer.

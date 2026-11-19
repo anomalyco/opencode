@@ -33,6 +33,7 @@ import { discoverPluginTargets, localSource, mergePluginTargets } from "./discov
 import { createPluginSources } from "./source"
 import { isMissingPath } from "../util/config-directories"
 import { createMarkdownRenderer } from "./markdown"
+import type { ToolRender } from "@opencode/plugin/tui/context"
 import { useLog, type LogTags } from "../context/log"
 
 export interface PackageSource {
@@ -62,6 +63,7 @@ type Value = {
     readonly resolved: () => ReturnType<typeof resolveSlots<SlotRender>>
   }
   readonly markdown: () => MarkdownOptions["renderNode"]
+  readonly tool: (name: string) => { id: string; render: ToolRender } | undefined
   readonly activate: (id: string) => Promise<boolean>
   readonly deactivate: (id: string) => Promise<boolean>
 }
@@ -76,6 +78,7 @@ type Registration = {
   routes: Record<string, Page>
   slots: Record<string, RegisteredSlot>
   markdown: Record<string, MarkdownCodeBlockRenderer>
+  tools: Record<string, ToolRender>
   cleanups: Dispose[]
 }
 
@@ -145,6 +148,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
     setStore("registrations", id, "routes", reconcileStore({}))
     setStore("registrations", id, "slots", reconcileStore({}))
     setStore("registrations", id, "markdown", reconcileStore({}))
+    setStore("registrations", id, "tools", reconcileStore({}))
   }
 
   const activate = async (id: string) => {
@@ -164,9 +168,9 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
       registry: {
         has: (kind, name) => Boolean(store.registrations[id]?.[kind][name]),
         set: (
-          kind: "routes" | "slots" | "markdown",
+          kind: "routes" | "slots" | "markdown" | "tools",
           name: string,
-          value: Page | RegisteredSlot | MarkdownCodeBlockRenderer,
+          value: Page | RegisteredSlot | MarkdownCodeBlockRenderer | ToolRender,
         ) => setStore("registrations", id, kind, name, () => value),
         remove: (kind, name) =>
           setStore(
@@ -608,6 +612,14 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
         route: (id, name) => store.registrations[id]?.routes[name]?.render,
         slots: { register: registerSlot, resolved },
         markdown,
+        tool: (name) => {
+          for (const [id, registration] of Object.entries(store.registrations)) {
+            if (!registration.active) continue
+            const render = registration.tools?.[name]
+            if (render !== undefined) return { id, render }
+          }
+          return undefined
+        },
         // Manual dialog toggles join the same chain as reconciles so a
         // toggle mid-reload cannot mix registrations across generations.
         activate: (id) => enqueue(() => activate(id)),
@@ -708,6 +720,7 @@ function toRegistration(item: Desired): Registration {
     routes: {},
     slots: {},
     markdown: {},
+    tools: {},
     cleanups: [],
   }
 }
