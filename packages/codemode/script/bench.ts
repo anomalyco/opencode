@@ -84,6 +84,14 @@ for (const r of rows) {
 }
 return sum + JSON.stringify(rows.slice(0, 3000)).length`,
   ],
+  [
+    "accessors",
+    `const o = { _v: 1, get v() { return this._v }, set v(x) { this._v = x } }
+const p = Object.create(o)
+let sum = 0
+for (let i = 0; i < 100000; i++) { p.v = i; sum += p.v + o.v }
+return sum + JSON.stringify(Array.from({ length: 2000 }, () => o)).length`,
+  ],
 ]
 
 const argument = (flag: string) => {
