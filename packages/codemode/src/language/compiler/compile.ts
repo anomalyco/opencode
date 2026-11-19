@@ -144,7 +144,7 @@ type ControlEntry =
 const idx = (node: AstNode | undefined | null): number => (node ? (nodeId(node)?.index ?? -1) : -1)
 
 /** Bump when the compiler emits different bytecode for the same source; it is part of the snapshot build id. */
-export const COMPILER_VERSION = 1
+export const COMPILER_VERSION = 2
 
 const compileCache = new Map<string, ReadonlyArray<Code>>()
 const MAX_CACHE_SIZE = 64
@@ -1027,7 +1027,20 @@ const compileFunctionBody = (
         compileExpression(prop.argument)
         builder.emit(Op.COPY_DATA_PROPS, 0, 0, idx(prop), -1)
       } else if (prop.kind !== "init") {
-        emitThrowError({ type: "TypeError", message: "Only init object properties are supported." }, prop)
+        const setter = prop.kind === "set" ? 2 : 0
+        if (prop.computed) {
+          compileExpression(prop.key as Expression)
+          builder.emit(Op.TO_KEY, 0, 0, idx(prop.key), 0)
+          compileExpression(prop.value as Expression)
+          builder.emit(Op.SET_NAME, setter === 0 ? 2 : 3, 0, idx(prop.value), 0)
+          builder.emit(Op.DEFINE_ACCESSOR, 1 | setter, 0, idx(prop), -2)
+        } else {
+          const bigint = prop.key.type === "Literal" && typeof prop.key.value === "bigint"
+          if (bigint) emitThrowError({ type: "TypeError", message: "BigInt literals are not supported." }, prop.key)
+          const name = bigint ? "" : keyName(prop.key)
+          compileNamedExpression(prop.value as Expression, `${prop.kind} ${name}`)
+          builder.emit(Op.DEFINE_ACCESSOR, setter, builder.constant(name), idx(prop), -1)
+        }
       } else if (prop.computed) {
         compileExpression(prop.key as Expression)
         builder.emit(Op.TO_KEY, 0, 0, idx(prop.key), 0)

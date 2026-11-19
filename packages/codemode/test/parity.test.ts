@@ -1395,12 +1395,10 @@ describe("Object.getPrototypeOf and Object.create", () => {
     ).toEqual([true, ["name"], false, 1, "hi x", true, null, ["name", "greet", "a"]])
   })
 
-  test("Object.create rejects non-object prototypes and property descriptors", async () => {
+  test("Object.create rejects non-object prototypes and defines properties from descriptors", async () => {
     expect((await error(`Object.create(1)`)).message).toContain("Object prototype may only be an Object or null")
     expect((await error(`Object.create()`)).message).toContain("Object prototype may only be an Object or null")
-    expect((await error(`Object.create(null, { a: { value: 1 } })`)).message).toContain(
-      "Object.create property descriptors are not supported",
-    )
+    expect(await value(`return Object.create(null, { a: { value: 1, enumerable: true } }).a`)).toBe(1)
     expect(await value(`return Object.keys(Object.create({}, undefined))`)).toEqual([])
   })
 })

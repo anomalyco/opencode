@@ -116,8 +116,9 @@ global rejects its promise, and a synchronous global throws.
 Tool arguments cross into the host the way extension arguments do, as copies (plain data, `Date`, `Map`, `Set`, `URL`,
 `Headers`, errors), and Code Mode then turns them into JSON next to the tool's schema: a `Date` is its ISO string, a
 `Set` its items, a `URLSearchParams` its query string, an `Error` `{ name, message, ...own fields }`, and `Map` and
-`RegExp` values `{}`. A `Uint8Array` asks to be encoded as text first. A program's own `toJSON` is not called, and a
-promise or function inside an argument fails the call: await it, or pass its data.
+`RegExp` values `{}`. A `Uint8Array` asks to be encoded as text first. A program's own `toJSON` is not called, but its
+getters are: each runs once, before the host function does, and its value crosses as data; a property with only a setter
+is left out. A promise or function inside an argument fails the call: await it, or pass its data.
 
 ### Suspending and resuming a run
 
@@ -262,8 +263,8 @@ const web = Extension.make({
 const result = yield* CodeMode.make({ extensions: [web] }).execute(code).pipe(Effect.provideService(Session, session))
 ```
 
-Every value crossing in either direction is converted, never shared: arguments come in as copies, results go out as
-copies, and a function inside a result is callable the same way. When the program passes such a function back to an
+Every value crossing in either direction is converted, never shared: arguments come in as copies (a program getter runs
+and crosses as its value; a setter-only property is left out), results go out as copies, and a function inside a result is callable the same way. When the program passes such a function back to an
 extension, it arrives as the host function itself, so `copy(dest, file(src))` can tell what it was given. Globals and
 the program's own functions never cross back: they are left out, as in tool arguments. A global that shadows a
 built-in or another extension throws at `CodeMode.make`.

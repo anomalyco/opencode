@@ -3,11 +3,15 @@ import { normalizeError, locate } from "./runtime/errors.js"
 import { MAX_PENDING_PROMISES } from "./runtime/limits.js"
 import { type AstNode, IteratorSymbol, rangeError, typeError } from "./runtime/model.js"
 import {
+  access,
   Arr,
   BoundFn,
   type Callable,
   Fn,
-  get,
+  GetterCall,
+  isProgramAccessor,
+  lookup,
+  peek,
   iteratorResult,
   Obj,
   Position,
@@ -148,7 +152,12 @@ export class VmScheduler {
       this.settle(promise, normal(resolution))
       return
     }
-    const then = get(resolution, "then")
+    const then = access(resolution, "then")
+    // A program `then` getter is program code, so it runs in a job of its own (`$vmThenableGet`).
+    if (then instanceof GetterCall) {
+      this.enqueue({ kind: "thenable-get", promise, thenable: resolution })
+      return
+    }
     if (typeofValue(then) !== "function") {
       this.settle(promise, normal(resolution))
       return
@@ -220,6 +229,18 @@ export class VmScheduler {
 
   beginJob(job: Job): void {
     const vm = this.vm
+    if (job.kind === "thenable-get") {
+      const resolving = this.resolving(job.promise)
+      const proto = vm.ctx.builtins.Function
+      vm.pushInternal(
+        internalCode("$vmThenableGet"),
+        [job.thenable, new Resolver(proto, "", resolving, "resolve"), new Resolver(proto, "", resolving, "reject")],
+        undefined,
+        Mode.REJECT_ONLY,
+        resolving,
+      )
+      return
+    }
     if (job.kind === "thenable") {
       const call = adoptThenable(vm.ctx, job.promise, job.thenable, job.then)
       if (call === undefined || call.kind !== "thenable") return
@@ -415,9 +436,10 @@ export const registerAsyncIntrinsics = (map: Map<string, unknown>, vm: Vm): void
 
   add("$CombineStart", ([nameVal, items]) => {
     const name = nameVal as Combination["name"]
-    const isIter =
-      builtinCursor(builtins, items) !== undefined ||
-      (items instanceof Obj && get(items, IteratorSymbol) !== undefined && get(items, IteratorSymbol) !== null)
+    // Only whether there is a method: `$vmCombine`'s for...of reads it (a getter too) in program code.
+    const slot = items instanceof Obj ? lookup(items, IteratorSymbol) : undefined
+    const method = slot === undefined || isProgramAccessor(slot) ? slot : peek(items as Obj, IteratorSymbol)
+    const isIter = builtinCursor(builtins, items) !== undefined || (method !== undefined && method !== null)
     if (!isIter) {
       throw typeError(`Promise.${name} expects a synchronous iterable, received ${describeValue(items)}.`)
     }

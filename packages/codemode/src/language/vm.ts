@@ -19,10 +19,14 @@ import {
 import {
   Arguments,
   Arr,
-  assign,
   BoundFn,
   Builtin,
   type Callable,
+  copyDataProperties,
+  defineAccessorHalf,
+  peek,
+  GetterCall,
+  lookup,
   coerceToNumber,
   coerceToString,
   define,
@@ -44,10 +48,11 @@ import {
   type Value,
 } from "./runtime/objects.js"
 import {
+  accessProperty,
   applyBinaryOperator,
   assignToReference,
   builtinCursor,
-  destructuredProperty,
+  failedAssignment,
   forInKeys,
   instanceofValue,
   isThenable,
@@ -55,11 +60,10 @@ import {
   notConstructible,
   operatorConversion,
   propertyKey,
-  readProperty,
-  readReference,
   requireIteratorMethod,
   requireIteratorObject,
   requireMemberBase,
+  requirePromiseProperty,
   resolveProperty,
   writableReference,
 } from "./runtime/operations.js"
@@ -70,6 +74,7 @@ import {
   type Completion,
   Convert,
   type GeneratorRequest,
+  Prefetch,
   Interruption,
   Invoke,
   MAX_CALL_DEPTH,
@@ -152,6 +157,11 @@ export const Mode = {
   REJECT_ONLY: 4,
   PROGRAM: 5,
   BOUNDARY_OUT: 6,
+  /**
+   * Runs a program getter an iterator op met (`$vmRedo`), then runs the op again from its first word: its `target` is
+   * `[pc, ...values the op had read]`, and the op replays those and the getter's value in order (see `redoRead`).
+   */
+  REDO: 7,
 } as const
 
 export type FrameMode = (typeof Mode)[keyof typeof Mode]
@@ -245,6 +255,13 @@ export class Vm {
   outcome: Completion | undefined = undefined
   /** Round-trip test mode (task C): slice after this many fuel ticks, so the run is saved and restored all through. */
   tripEvery = 0
+  /**
+   * The reads an iterator op replays while it runs again after a getter (`Mode.REDO`). It never outlives the
+   * `exec` turn the getter returned in, so it is never saved.
+   */
+  redo:
+    | { readonly frame: Frame; readonly pc: number; readonly values: ReadonlyArray<Value>; next: number }
+    | undefined = undefined
 
   constructor(readonly ctx: Interpreter<unknown>) {
     this.scheduler = new VmScheduler(this)
@@ -703,6 +720,10 @@ export class Vm {
             frame.pc = pc
             frame.sp = sp
             sp = this.execGetProp(frame, o, key, mode, pc, sp)
+            if (sp < 0) {
+              if (sp === GETTER_ENTERED) continue outer
+              return sp === GETTER_FUEL ? 1 : 2
+            }
             pc++
             continue
           }
@@ -726,8 +747,11 @@ export class Vm {
             }
             frame.pc = pc
             frame.sp = sp
-            if (this.execGetElem(frame, o, keyVal, mode, pc, sp)) continue outer
-            sp = frame.sp
+            sp = this.execGetElem(frame, o, keyVal, mode, pc, sp)
+            if (sp < 0) {
+              if (sp === GETTER_ENTERED) continue outer
+              return sp === GETTER_FUEL ? 1 : 2
+            }
             pc++
             continue
           }
@@ -737,7 +761,7 @@ export class Vm {
             const o = regs[sp - 1] as Value
             frame.pc = pc
             frame.sp = sp
-            this.execPutProp(fcode, o, consts[w >>> 16] as string, v, pc)
+            if (this.execPutProp(frame, o, consts[w >>> 16] as string, v, pc, sp)) continue outer
             regs[sp - 1] = v
             pc++
             continue
@@ -757,14 +781,15 @@ export class Vm {
               o.extensible
             ) {
               const items = o.items
-              if (keyVal < items.length) {
+              // A hole or a new element looks at the prototypes first, which may hold a program setter there.
+              if (keyVal < items.length && (keyVal in items || this.plainArrayChain(o))) {
                 if (keyVal === 0) items[0] = ""
                 items[keyVal] = v
                 regs[sp - 1] = v
                 pc++
                 continue
               }
-              if (keyVal === items.length && keyVal < 10_000_000) {
+              if (keyVal === items.length && keyVal < 10_000_000 && this.plainArrayChain(o)) {
                 items.push(v)
                 regs[sp - 1] = v
                 pc++
@@ -773,7 +798,7 @@ export class Vm {
             }
             frame.pc = pc
             frame.sp = sp
-            this.execPutElem(fcode, o, keyVal, v, pc)
+            if (this.execPutProp(frame, o, propertyKey(keyVal), v, pc, sp)) continue outer
             regs[sp - 1] = v
             pc++
             continue
@@ -830,7 +855,7 @@ export class Vm {
             const rhs = regs[--sp] as Value
             frame.pc = pc
             frame.sp = sp
-            regs[sp - 1] = this.execInstanceof(fcode, regs[sp - 1] as Value, rhs, pc)
+            if (this.execInstanceof(frame, regs[sp - 1] as Value, rhs, pc, sp)) continue outer
             pc++
             continue
           }
@@ -855,13 +880,14 @@ export class Vm {
           case 39: // Op.COPY_DATA_PROPS
             frame.pc = pc
             frame.sp = --sp
-            this.execCopyDataProps(fcode, regs[sp - 1] as Obj, regs[sp] as Value, pc)
+            if (this.execCopyDataProps(frame, regs[sp - 1] as Obj, regs[sp] as Value, pc, sp)) continue outer
             pc++
             continue
           case 40: // Op.COPY_REST
             frame.pc = pc
             frame.sp = sp
-            sp = this.execCopyRest(fcode, regs, w >>> 16, pc, sp)
+            sp = this.execCopyRest(frame, regs, w >>> 16, pc, sp)
+            if (sp < 0) continue outer
             pc++
             continue
           case 41: // Op.TEMPLATE
@@ -1271,12 +1297,13 @@ export class Vm {
             frame.pc = pc
             frame.sp = sp
             pc = this.execIterOpen(frame, (w >>> 8) & 0xff, pc, sp)
+            if (pc < 0) continue outer
             sp = frame.sp
             continue
           case 75: // Op.ITER_INIT
             frame.pc = pc
             frame.sp = sp
-            this.execIterInit(frame, (w >>> 8) & 0xff, pc, sp)
+            if (this.execIterInit(frame, (w >>> 8) & 0xff, pc, sp)) continue outer
             pc++
             continue
           case 76: {
@@ -1299,10 +1326,12 @@ export class Vm {
           }
           case 77: // Op.ITER_RESULT
             pc = this.execIterResult(frame, (w >>> 8) & 0xff, w >>> 16, pc, sp)
+            if (pc < 0) continue outer
             sp = frame.sp
             continue
           case 78: // Op.ITER_CLOSE
             pc = this.execIterClose(frame, (w >>> 8) & 0xff, w >>> 16, pc, sp)
+            if (pc < 0) continue outer
             sp = frame.sp
             continue
           case 79: // Op.ITER_APPEND_ALL
@@ -1338,13 +1367,19 @@ export class Vm {
             frame.pc = pc
             frame.sp = sp
             pc = this.onYstar(frame, (w >>> 8) & 0xff, w >>> 16, pc, sp)
+            if (pc < 0) continue outer
             sp = frame.sp
             continue
           case 86: // Op.YSTAR_RESULT
             frame.pc = pc
             frame.sp = sp
             pc = this.onYstarResult(frame, (w >>> 8) & 0xff, w >>> 16, pc, sp)
+            if (pc < 0) continue outer
             sp = frame.sp
+            continue
+          case 88: // Op.DEFINE_ACCESSOR
+            sp = this.execDefineAccessor(regs, consts, (w >>> 8) & 0xff, w >>> 16, sp)
+            pc++
             continue
           default:
             this.failOpcode(w & 0xff)
@@ -1367,8 +1402,25 @@ export class Vm {
     checkStringLength(len)
   }
 
-  private execInstanceof(fcode: Code, lhs: Value, rhs: Value, pc: number): boolean {
-    return instanceofValue(lhs, rhs, fcode.siteAt(pc)!)
+  // `lhs instanceof rhs` into the stack at `sp - 1`; true when a program `prototype` getter runs first.
+  private execInstanceof(frame: Frame, lhs: Value, rhs: Value, pc: number, sp: number): boolean {
+    const site = frame.code.siteAt(pc)!
+    const result = instanceofValue(lhs, rhs, site)
+    if (!(result instanceof GetterCall)) {
+      frame.regs[sp - 1] = result
+      return false
+    }
+    frame.sp = sp - 1
+    this.pushInternalCall("$vmInstanceof", [lhs, rhs], site)
+    return true
+  }
+
+  // Whether an array's chain is the built-in one with no program accessors, so a hole or append can skip it.
+  private plainArrayChain(o: Arr): boolean {
+    const proto = o.proto
+    return (
+      proto === this.ctx.builtins.Array && !proto.hasProgramAccessors && !this.ctx.builtins.Object.hasProgramAccessors
+    )
   }
 
   private execBinopSlow(frame: Frame, sub: number, a: Value, b: Value, pc: number, sp: number): boolean {
@@ -1402,11 +1454,11 @@ export class Vm {
   }
 
   private onYstar(frame: Frame, slot: number, bx: number, pc: number, sp: number): number {
-    return execYstar(frame, slot, bx, pc, sp)
+    return execYstar(this, frame, slot, bx, pc, sp)
   }
 
   private onYstarResult(frame: Frame, slot: number, bx: number, pc: number, sp: number): number {
-    return execYstarResult(frame, slot, bx, pc, sp)
+    return execYstarResult(this, frame, slot, bx, pc, sp)
   }
 
   private failOpcode(op: number): never {
@@ -1453,7 +1505,11 @@ export class Vm {
   }
 
   private execArgs(frame: Frame, kind: number, bx: number): unknown {
-    if (kind === 0) return new Arguments(this.ctx.builtins.Object, frame.args ?? [])
+    if (kind === 0) {
+      const made = new Arguments(this.ctx.builtins.Object, frame.args ?? [])
+      define(made, IteratorSymbol, this.ctx.prelude.fn("argumentsValues"), hidden)
+      return made
+    }
     if (kind === 1) return new Arr(this.ctx.builtins.Array, (frame.args ?? []).slice(bx))
     if (kind === 2) return frame.fn
     if (kind === 3) return frame.thisValue
@@ -1480,7 +1536,8 @@ export class Vm {
         : key === AsyncIteratorSymbol
           ? "[Symbol.asyncIterator]"
           : String(key)
-    define(fn, "name", name, readonly)
+    // Modes 2 and 3 name an accessor's function: `get x`, `set x`.
+    define(fn, "name", mode === 2 ? `get ${name}` : mode === 3 ? `set ${name}` : name, readonly)
   }
 
   private execToKey(frame: Frame, v: Value, pc: number, sp: number): boolean {
@@ -1543,22 +1600,50 @@ export class Vm {
     return sp
   }
 
-  private execCopyDataProps(fcode: Code, o: Obj, src: Value, pc: number): void {
-    if (src !== null && src !== undefined) {
-      assign(o, enumerableSource(this.ctx, "Object spread", src, fcode.siteAt(pc)!))
-    }
+  // An object literal's getter or setter: `[o, fn]`, or `[o, key, fn]` computed, leaves `[o]`.
+  private execDefineAccessor(
+    regs: Array<unknown>,
+    consts: ReadonlyArray<ConstValue>,
+    a: number,
+    bx: number,
+    sp: number,
+  ): number {
+    const fn = regs[--sp] as Fn
+    const key = (a & 1) !== 0 ? (regs[--sp] as PropertyKey) : (consts[bx] as string)
+    defineAccessorHalf(regs[sp - 1] as Obj, key, (a & 2) !== 0 ? "set" : "get", fn)
+    return sp
   }
 
-  private execCopyRest(fcode: Code, regs: Array<unknown>, n: number, pc: number, sp: number): number {
+  // `{ ...src }` into `o` (at `sp - 1`, `src` popped): true when a source with program getters is copied in the prelude.
+  private execCopyDataProps(frame: Frame, o: Obj, src: Value, pc: number, sp: number): boolean {
+    if (src === null || src === undefined) return false
+    const source = enumerableSource(this.ctx, "Object spread", src, frame.code.siteAt(pc)!)
+    if (!source.hasProgramAccessors) {
+      copyDataProperties(o, source)
+      return false
+    }
+    frame.sp = sp - 1
+    this.pushInternalCall("$vmCopyDataProps", [o, source, undefined], callSiteOf(frame, pc))
+    return true
+  }
+
+  // `{ ...rest } = src`, less the `n` keys on the stack: the new sp, or -1 when the copy runs in the prelude.
+  private execCopyRest(frame: Frame, regs: Array<unknown>, n: number, pc: number, sp: number): number {
     const consumed = new Set<PropertyKey>()
     for (let i = sp - n; i < sp; i++) {
       const k = regs[i] as PropertyKey
       consumed.add(typeof k === "symbol" ? k : String(k))
     }
     sp -= n
-    const src = regs[sp - 1] as Value
     const rest = new Obj(this.ctx.builtins.Object)
-    assign(rest, enumerableSource(this.ctx, "Object destructuring", src, fcode.siteAt(pc)!), consumed)
+    const source = enumerableSource(this.ctx, "Object destructuring", regs[sp - 1] as Value, frame.code.siteAt(pc)!)
+    if (source.hasProgramAccessors) {
+      frame.sp = sp - 1
+      const excluded = new Arr(this.ctx.builtins.Array, [...consumed] as Array<Value>)
+      this.pushInternalCall("$vmCopyDataProps", [rest, source, excluded], callSiteOf(frame, pc))
+      return -1
+    }
+    copyDataProperties(rest, source, consumed)
     regs[sp - 1] = rest
     return sp
   }
@@ -1695,6 +1780,15 @@ export class Vm {
       frame.sp = sp
       return this.finishProgram(frame, v)
     }
+    if (frame.mode === Mode.REDO) {
+      frames.pop()
+      const saved = (frame.target as Arr).items
+      const caller = frames[frames.length - 1]!
+      caller.pc = saved[0] as number
+      this.redo = { frame: caller, pc: caller.pc, values: [...saved.slice(1), v], next: 0 }
+      this.release(frame)
+      return true
+    }
     frames.pop()
     this.release(frame)
     return true
@@ -1765,33 +1859,40 @@ export class Vm {
     return false
   }
 
+  // Returns the next pc, or REDO_ENTERED (here and in the other ops that read through `redoRead`).
   private execIterResult(frame: Frame, slot: number, bx: number, pc: number, sp: number): number {
     const regs = frame.regs
-    const res = regs[--sp] as Value
+    const res = regs[sp - 1] as Value
     frame.pc = pc
-    frame.sp = sp
+    frame.sp = sp - 1
     if (!(res instanceof Obj)) {
       throw typeError("Iterator next() result must be an object.", frame.code.siteAt(pc))
     }
-    const done = Boolean(this.readObjProp(res, "done", frame.code, pc))
+    const reads: Array<Value> = []
+    const done = this.redoRead(frame, res, "done", res, pc, sp, reads)
+    if (done === REDO) return REDO_ENTERED
     if (done) return bx
     ;(regs[slot] as CustomIter).done = false
-    regs[sp] = this.readObjProp(res, "value", frame.code, pc)
-    frame.sp = sp + 1
+    const value = this.redoRead(frame, res, "value", res, pc, sp, reads)
+    if (value === REDO) return REDO_ENTERED
+    regs[sp - 1] = value
+    frame.sp = sp
     return pc + 1
   }
 
   private execIterClose(frame: Frame, slot: number, bx: number, pc: number, sp: number): number {
     const regs = frame.regs
     const rec = regs[slot]
-    if (!(rec instanceof CustomIter) || rec.done) {
+    // Running again after a `return` getter, the record is already closed.
+    if (!(rec instanceof CustomIter) || (rec.done && !this.replaying(frame, pc))) {
       frame.sp = sp
       return bx
     }
     frame.pc = pc
     frame.sp = sp
     rec.done = true
-    const ret = this.readObjProp(rec.iterator, "return", frame.code, pc)
+    const ret = this.redoRead(frame, rec.iterator, "return", rec.iterator, pc, sp, [])
+    if (ret === REDO) return REDO_ENTERED
     if (ret === undefined || ret === null) return bx
     const method = requireIteratorMethod(ret, "Iterator return", frame.code.siteAt(pc))
     regs[sp++] = rec.iterator
@@ -1813,15 +1914,18 @@ export class Vm {
     return pc + 1
   }
 
-  private readObjProp(target: Obj, key: string | symbol, fcode: Code, pc: number): Value {
+  // A named property read for an op: the value, or a program getter for the op to enter with `receiver`.
+  private readObjProp(target: Obj, key: string | symbol, receiver: Value, fcode: Code, pc: number): Value | GetterCall {
     for (let cur: Obj | null = target; cur !== null; cur = cur.proto) {
       if (cur.props.size === 0) continue
       const slot = cur.props.get(key)
       if (slot !== undefined) {
         if ("value" in slot) return slot.value
-        if (slot.get === undefined) return undefined
+        const getter = slot.get
+        if (getter === undefined) return undefined
+        if (typeof getter !== "function") return new GetterCall(getter)
         try {
-          return slot.get(target)
+          return getter(receiver)
         } catch (err) {
           throw locate(err, fcode.siteAt(pc))
         }
@@ -1830,11 +1934,77 @@ export class Vm {
     return undefined
   }
 
+  /**
+   * One property read of an iterator op that may meet a program getter: the value, or REDO once the getter is entered
+   * (`Mode.REDO`), with the op's stack back as it found it (`sp0`) so it can run again from its first word. `reads` is
+   * the op's reads so far this run; each value read is added to it. Running again, the op's reads replay in order.
+   */
+  redoRead(
+    frame: Frame,
+    target: Obj,
+    key: string | symbol,
+    receiver: Value,
+    pc: number,
+    sp0: number,
+    reads: Array<Value>,
+  ): Value | typeof REDO {
+    const start = instructionStart(frame.code.code, pc)
+    const redo = this.redo
+    if (redo !== undefined && redo.frame === frame && redo.pc === start && redo.next < redo.values.length) {
+      const replayed = redo.values[redo.next++]
+      reads.push(replayed)
+      return replayed
+    }
+    const v = this.readObjProp(target, key, receiver, frame.code, pc)
+    if (!(v instanceof GetterCall)) {
+      reads.push(v)
+      return v
+    }
+    this.redo = undefined
+    frame.pc = start
+    frame.sp = sp0
+    this.pushInternal(
+      internalCode("$vmRedo"),
+      [v.getter, receiver],
+      callSiteOf(frame, pc),
+      Mode.REDO,
+      new Arr(this.ctx.builtins.Array, [start, ...reads]),
+    )
+    return REDO
+  }
+
+  // Whether the op at `pc` is running again after a getter, with reads left to replay.
+  private replaying(frame: Frame, pc: number): boolean {
+    const redo = this.redo
+    return (
+      redo !== undefined &&
+      redo.frame === frame &&
+      redo.pc === instructionStart(frame.code.code, pc) &&
+      redo.next < redo.values.length
+    )
+  }
+
+  /**
+   * Enters the program getter of a member read whose result goes at `at` (a method read keeps the receiver there and the
+   * value above it), as a call from the instruction at `pc`. Returns the new sp when the getter answered at once, or
+   * `GETTER_ENTERED`, `GETTER_FUEL` (entered, and the slice is over) or `GETTER_BLOCKED`.
+   */
+  private enterGetter(frame: Frame, getter: Callable, receiver: Value, at: number, mode: number, pc: number): number {
+    if (mode === 1) frame.regs[at++] = receiver
+    frame.sp = at
+    frame.pc = pc
+    const called = this.invokeCallable(frame, getter, receiver, [], callSiteOf(frame, pc), pc)
+    if (called === 0) return frame.sp
+    if (called === 2) return GETTER_BLOCKED
+    return this.fuel <= 0 ? GETTER_FUEL : GETTER_ENTERED
+  }
+
   unwind(rawError: unknown): boolean {
     // An interruption skips every handler, but still completes each frame by its mode: a frame that settles a
     // promise rejects it, so whatever awaits that promise is interrupted in turn.
     const interrupted = rawError instanceof Interruption
     const error = interrupted ? rawError : locate(rawError, this.currentSite())
+    this.redo = undefined
 
     if (this.frames.length === 0) {
       this.outcome = abrupt(error)
@@ -1862,7 +2032,7 @@ export class Vm {
 
       this.frames.pop()
       const mode = frame.mode
-      if (mode === Mode.CALLER) {
+      if (mode === Mode.CALLER || mode === Mode.REDO) {
         this.release(frame)
         continue
       }
@@ -1981,33 +2151,37 @@ export class Vm {
     return sp + 1
   }
 
+  // A named member read (`o.key`; mode 1 a method read, 2 a destructured property): the new sp, or a getter code.
   private execGetProp(frame: Frame, o: Value, key: string, mode: number, pc: number, sp: number): number {
     const regs = frame.regs
     if (mode !== 2 && o instanceof Obj && !(o instanceof PromiseObj)) {
-      const v = key === "length" && o instanceof Arr ? o.items.length : this.readObjProp(o, key, frame.code, pc)
+      const v = key === "length" && o instanceof Arr ? o.items.length : this.readObjProp(o, key, o, frame.code, pc)
+      if (v instanceof GetterCall) return this.enterGetter(frame, v.getter, o, sp - 1, mode, pc)
       return writeRead(regs, sp - 1, mode, o, v)
     }
     if (mode !== 2 && typeof o === "string") {
-      const v = key === "length" ? o.length : this.readObjProp(this.ctx.builtins.String, key, frame.code, pc)
+      const v = key === "length" ? o.length : this.readObjProp(this.ctx.builtins.String, key, o, frame.code, pc)
+      if (v instanceof GetterCall) return this.enterGetter(frame, v.getter, o, sp - 1, mode, pc)
       return writeRead(regs, sp - 1, mode, o, v)
     }
     if (o instanceof HostNamespace) {
       return writeRead(regs, sp - 1, mode, undefined, new HostNamespace(o.root, [...o.path, key]))
     }
-    const site = frame.code.siteAt(pc)!
-    if (mode === 2) {
-      regs[sp - 1] = destructuredProperty(this.ctx.builtins, o, key, site)
-      return sp
-    }
-    return this.readMember(regs, sp - 1, mode, o, key, site)
+    return this.readMember(frame, sp - 1, mode, o, key, frame.code.siteAt(pc)!, pc)
   }
 
-  private execGetElem(frame: Frame, o: Value, keyVal: Value, mode: number, pc: number, sp: number): boolean {
+  // A computed member read (`o[key]`), as `execGetProp`; `GETTER_ENTERED` also when the key converts in the prelude.
+  private execGetElem(frame: Frame, o: Value, keyVal: Value, mode: number, pc: number, sp: number): number {
     if (mode === 0) {
-      if (typeof o === "string" && typeof keyVal === "number" && keyVal >= 0 && (keyVal | 0) === keyVal) {
+      if (
+        typeof o === "string" &&
+        typeof keyVal === "number" &&
+        keyVal >= 0 &&
+        keyVal < o.length &&
+        (keyVal | 0) === keyVal
+      ) {
         frame.regs[sp - 2] = o[keyVal]
-        frame.sp = sp - 1
-        return false
+        return sp - 1
       }
       if (o instanceof Obj && !(o instanceof PromiseObj)) {
         if (typeof keyVal === "number" && !(o instanceof Arr)) {
@@ -2018,14 +2192,14 @@ export class Vm {
             o.proto.intrinsic > 0
           ) {
             frame.regs[sp - 2] = undefined
-            frame.sp = sp - 1
-            return false
+            return sp - 1
           }
         }
         if (typeof keyVal === "string" && o.constructor === Obj) {
-          frame.regs[sp - 2] = this.readObjProp(o, keyVal, frame.code, pc)
-          frame.sp = sp - 1
-          return false
+          const v = this.readObjProp(o, keyVal, o, frame.code, pc)
+          if (v instanceof GetterCall) return this.enterGetter(frame, v.getter, o, sp - 2, 0, pc)
+          frame.regs[sp - 2] = v
+          return sp - 1
         }
       }
     }
@@ -2035,31 +2209,22 @@ export class Vm {
     if (keyVal instanceof Obj && !isOpaque(keyVal)) {
       frame.sp = sp - 2
       this.pushInternalCall("$vmGetElem", [o, keyVal], memberNode.property ?? site)
-      return true
+      return GETTER_ENTERED
     }
-    const key = propertyKey(keyVal)
-    if (mode === 2) {
-      frame.regs[sp - 2] = destructuredProperty(this.ctx.builtins, o, key, site)
-      frame.sp = sp - 1
-      return false
-    }
-    frame.sp = this.readMember(frame.regs, sp - 2, mode, o, key, site)
-    return false
+    return this.readMember(frame, sp - 2, mode, o, propertyKey(keyVal), site, pc)
   }
 
-  // Reads `o[key]` for the member expression at `site` into `regs` at `at`; see `writeRead`.
-  private readMember(
-    regs: Array<unknown>,
-    at: number,
-    mode: number,
-    o: Value,
-    key: PropertyKey,
-    site: AstNode,
-  ): number {
+  // Reads `o[key]` for the member expression (or destructured property, mode 2) at `site` into the stack at `at`; see
+  // `writeRead`. A destructured promise is read as is; a member read of one must name a property it has.
+  private readMember(frame: Frame, at: number, mode: number, o: Value, key: PropertyKey, site: AstNode, pc: number) {
+    const regs = frame.regs
     const ref = this.resolveMember(o, key, site)
     if (ref instanceof HostNamespace) return writeRead(regs, at, mode, undefined, ref)
     if ("value" in ref) return writeRead(regs, at, mode, undefined, ref.value)
-    return writeRead(regs, at, mode, ref.receiver, readReference(ref, site as MemberExpression))
+    if (mode !== 2) requirePromiseProperty(ref, site)
+    const v = accessProperty(ref.target, ref.key, site, ref.receiver)
+    if (v instanceof GetterCall) return this.enterGetter(frame, v.getter, ref.receiver, at, mode, pc)
+    return writeRead(regs, at, mode, ref.receiver, v)
   }
 
   // The reference `o[key]` that the member expression at `site` names.
@@ -2068,22 +2233,41 @@ export class Vm {
     return resolveProperty(this.ctx.builtins, o, key, member.object ?? site, member.property ?? site)
   }
 
-  private execPutProp(fcode: Code, o: Value, key: PropertyKey, v: Value, pc: number): void {
-    if (!(o instanceof Obj)) {
-      const site = fcode.siteAt(pc)!
-      const ref = resolveProperty(this.ctx.builtins, o, key, site, site)
-      writableReference(ref, site as MemberExpression)
-      return
-    }
+  // `o[key] = v`, with `v` popped and `o` at `sp - 1`. True when a program setter runs (`$vmSet` answers `v`).
+  private execPutProp(frame: Frame, o: Value, key: PropertyKey, v: Value, pc: number, sp: number): boolean {
+    const fcode = frame.code
+    let setter: Callable | undefined
     try {
-      assignToReference(o, key, v, undefined!)
+      setter = o instanceof Obj ? assignToReference(o, key, v, undefined) : this.primitiveSetter(fcode, o, key, v, pc)
     } catch (err) {
       throw locate(err, fcode.siteAt(pc))
     }
+    if (setter === undefined) return false
+    frame.sp = sp - 1
+    this.pushInternalCall("$vmSet", [setter, o, v], callSiteOf(frame, pc))
+    return true
   }
 
-  private execPutElem(fcode: Code, o: Value, keyVal: Value, v: Value, pc: number): void {
-    this.execPutProp(fcode, o, propertyKey(keyVal), v, pc)
+  // A write to a primitive's property: only an inherited setter can take it (with the primitive as `this`).
+  private primitiveSetter(fcode: Code, o: Value, key: PropertyKey, v: Value, pc: number): Callable | undefined {
+    const site = fcode.siteAt(pc)!
+    const ref = resolveProperty(this.ctx.builtins, o, key, site, site)
+    if (!(ref instanceof HostNamespace) && !("value" in ref)) {
+      const slot = lookup(ref.target, ref.key)
+      if (slot !== undefined && !("value" in slot)) {
+        const setter = slot.set
+        if (setter === undefined) throw failedAssignment(o, ref.key, site)
+        if (typeof setter !== "function") return setter
+        try {
+          setter(o, v)
+        } catch (err) {
+          throw locate(err, site)
+        }
+        return undefined
+      }
+    }
+    writableReference(ref, site as MemberExpression)
+    return undefined
   }
 
   private execDeleteProp(fcode: Code, o: Value, key: PropertyKey, pc: number): boolean {
@@ -2125,7 +2309,13 @@ export class Vm {
       return
     }
     const key = kind === CheckBaseKind.WRITE_PROP ? (fcode.consts[bx] as string) : propertyKey(regs[sp - 1] as Value)
-    readReference(writableReference(this.resolveMember(base, key, site), memberNode), memberNode)
+    const ref = this.resolveMember(base, key, site)
+    // A primitive's inherited accessor takes the write (see `primitiveSetter`); the base is all that's checked here.
+    if (!(ref instanceof HostNamespace) && !("value" in ref) && ref.receiver !== ref.target) {
+      const slot = lookup(ref.target, ref.key)
+      if (slot !== undefined && !("value" in slot)) return
+    }
+    requirePromiseProperty(writableReference(ref, memberNode), memberNode)
   }
 
   private execBinarySlow(frame: Frame, op: string, a: Value, b: Value, pc: number, sp: number): boolean {
@@ -2185,7 +2375,11 @@ export class Vm {
       const site = callee.callback && callee.call.length < 3 ? undefined : callSiteOf(frame, pc)
       const res = callee.call(thisVal, args, site)
       if (this.tripEvery === 0) this.fuel -= NATIVE_FUEL
-      if ((res as unknown) !== BLOCK && (res as unknown) !== ENTERED && (res === null || typeof res !== "object" || res instanceof Obj)) {
+      if (
+        (res as unknown) !== BLOCK &&
+        (res as unknown) !== ENTERED &&
+        (res === null || typeof res !== "object" || res instanceof Obj)
+      ) {
         normalizeItems(res)
         regs[base - 2] = res
         frame.sp = base - 1
@@ -2223,7 +2417,8 @@ export class Vm {
       } catch (err) {
         throw locate(err, site ?? this.currentSite())
       }
-      if (res instanceof Convert) {
+      // `$Replay` hands a built-in's next request back to `$vmReplay`'s loop.
+      if ((res instanceof Convert || res instanceof Prefetch) && callee.name === "$Replay") {
         callerFrame.regs[callerFrame.sp++] = res as unknown as Value
         return 0
       }
@@ -2273,7 +2468,11 @@ export class Vm {
         const callNode = site as { readonly callee?: Expression } | undefined
         throw typeError(`${callee.root} is not a function.`, callNode?.callee ?? site)
       }
-      return this.hostResult(callerFrame, this.ctx.callNamespace(callee, args, site ?? this.currentSite()))
+      const result = this.ctx.callNamespace(callee, args, site ?? this.currentSite())
+      if (result instanceof Prefetch) {
+        return this.settleNativeResult(callerFrame, result, callee, undefined, args, false, site, pc)
+      }
+      return this.hostResult(callerFrame, result)
     }
 
     const callNode = site as { readonly callee?: Expression } | undefined
@@ -2294,7 +2493,7 @@ export class Vm {
   private settleNativeResult(
     callerFrame: Frame,
     res: NativeResult,
-    callable: Builtin | undefined,
+    callable: Builtin | HostNamespace | undefined,
     thisOrNewTarget: Value,
     args: Array<Value>,
     constructing: boolean,
@@ -2312,15 +2511,16 @@ export class Vm {
     }
     if ((res as unknown) === BLOCK) return 2
     if ((res as unknown) === ENTERED) return 1
-    if (res instanceof Convert) {
+    if (res instanceof Convert || res instanceof Prefetch) {
       const builtins = this.ctx.builtins
       this.pushInternalCall(
-        "$vmConvert",
+        "$vmReplay",
         [
           callable!,
           thisOrNewTarget,
           new Arr(builtins.Array, args),
           constructing,
+          new Arr(builtins.Array, []),
           new Arr(builtins.Array, []),
           res as unknown as Value,
         ],
@@ -2368,7 +2568,7 @@ export class Vm {
 
   // A host operation's answer, by `invokeCallable`'s convention: a value is pushed (0), a frame entered (1), or the job
   // blocks (2).
-  private hostResult(callerFrame: Frame, result: HostResult): number {
+  private hostResult(callerFrame: Frame, result: Exclude<HostResult, Prefetch>): number {
     if (result === ENTERED) return 1
     if (result === BLOCK) return 2
     callerFrame.regs[callerFrame.sp++] = result
@@ -2458,16 +2658,21 @@ export class Vm {
       }
     }
     const site = fcode.siteAt(pc) ?? frame.origin
+    const reads: Array<Value> = []
     if (context === IterContext.FOR_AWAIT || context === IterContext.ASYNC_DELEGATE) {
-      if (this.openWithMethod(frame, v, AsyncIteratorSymbol, site, sp)) return pc + 1
+      const opened = this.openWithMethod(frame, v, AsyncIteratorSymbol, site, pc, sp, reads)
+      if (opened !== false) return opened === REDO ? REDO_ENTERED : pc + 1
       const cursor = builtinCursor(this.ctx.builtins, v)
       if (cursor !== undefined) {
         const adapter = new AsyncFromSyncIterator(this.ctx.builtins.AsyncFromSyncIterator, cursor, site!)
-        frame.regs[sp - 1] = new CustomIter(adapter, get(adapter, "next"))
+        const next = this.redoRead(frame, adapter, "next", adapter, pc, sp, reads)
+        if (next === REDO) return REDO_ENTERED
+        frame.regs[sp - 1] = new CustomIter(adapter, next)
         return skipJump(fcode.code, pc)
       }
       if (v instanceof Obj) {
-        const syncMethod = readProperty(v, IteratorSymbol, site)
+        const syncMethod = this.redoRead(frame, v, IteratorSymbol, v, pc, sp, reads)
+        if (syncMethod === REDO) return REDO_ENTERED
         if (syncMethod !== undefined && syncMethod !== null) {
           const callable = requireIteratorMethod(syncMethod, "Iterator method", site)
           const openCode = internalCode("$vmOpenSyncForAsync")
@@ -2484,18 +2689,22 @@ export class Vm {
     }
 
     if (context === IterContext.DELEGATE) {
-      if (this.openWithMethod(frame, v, IteratorSymbol, site, sp)) return pc + 1
+      const opened = this.openWithMethod(frame, v, IteratorSymbol, site, pc, sp, reads)
+      if (opened !== false) return opened === REDO ? REDO_ENTERED : pc + 1
       const cursor = builtinCursor(this.ctx.builtins, v)
       if (cursor !== undefined) {
         const iterObj =
           cursor instanceof Position ? new IteratorObj(this.ctx.builtins.Iterator, cursor) : cursor.iterator
-        frame.regs[sp - 1] = new CustomIter(iterObj, get(iterObj, "next"))
+        const next = this.redoRead(frame, iterObj, "next", iterObj, pc, sp, reads)
+        if (next === REDO) return REDO_ENTERED
+        frame.regs[sp - 1] = new CustomIter(iterObj, next)
         return skipJump(fcode.code, pc)
       }
       throw typeError("yield* requires a compatible iterable value.", site)
     }
 
-    if (this.openWithMethod(frame, v, IteratorSymbol, site, sp)) return pc + 1
+    const opened = this.openWithMethod(frame, v, IteratorSymbol, site, pc, sp, reads)
+    if (opened !== false) return opened === REDO ? REDO_ENTERED : pc + 1
     if (context === IterContext.FOR_OF) {
       throw invalidData(`for...of requires an iterable value, received ${describeValue(v)}.`, site)
     }
@@ -2510,22 +2719,34 @@ export class Vm {
     )
   }
 
-  private execIterInit(frame: Frame, context: number, pc: number, sp: number): void {
+  // True when a `next` getter is entered first.
+  private execIterInit(frame: Frame, context: number, pc: number, sp: number): boolean {
     const site = frame.code.siteAt(pc) ?? frame.origin
     const v = frame.regs[sp - 1] as Value
     if (context === IterContext.CHECK_OBJECT) {
       requireIteratorObject(v, "Iterator return() result", site)
-      return
+      return false
     }
     const obj = requireIteratorObject(v, "Iterator method result", site)
-    const next = requireIteratorMethod(readProperty(obj, "next", site), "Iterator next", site)
-    frame.regs[sp - 1] = this.customIter(obj, next)
+    const read = this.redoRead(frame, obj, "next", obj, pc, sp, [])
+    if (read === REDO) return true
+    frame.regs[sp - 1] = this.customIter(obj, requireIteratorMethod(read, "Iterator next", site))
+    return false
   }
 
-  // Opens `v` with its own `symbol` method, when it has one: the next instruction calls it.
-  private openWithMethod(frame: Frame, v: Value, symbol: symbol, site: AstNode | undefined, sp: number): boolean {
+  // Opens `v` with its own `symbol` method, when it has one (true): the next instruction calls it.
+  private openWithMethod(
+    frame: Frame,
+    v: Value,
+    symbol: symbol,
+    site: AstNode | undefined,
+    pc: number,
+    sp: number,
+    reads: Array<Value>,
+  ): boolean | typeof REDO {
     if (!(v instanceof Obj)) return false
-    const method = readProperty(v, symbol, site)
+    const method = this.redoRead(frame, v, symbol, v, pc, sp, reads)
+    if (method === REDO) return REDO
     if (method === undefined || method === null) return false
     frame.regs[sp - 1] = v
     frame.regs[sp] = requireIteratorMethod(method, "Iterator method", site)
@@ -2540,7 +2761,7 @@ export class Vm {
     custom.rawGen =
       iterator instanceof GeneratorObj &&
       !iterator.asynchronous &&
-      (next === get(builtins.Generator, "next") || next === get(builtins.IteratorHelper, "next"))
+      (next === peek(builtins.Generator, "next") || next === peek(builtins.IteratorHelper, "next"))
     return custom
   }
 
@@ -2673,15 +2894,19 @@ export class Vm {
         frame.sp = this.execImport(frame, a, bx, pc, sp)
         return pc + 1
       case Op.GET_PROP:
-        frame.sp = this.execGetProp(frame, regs[sp - 1] as Value, consts[bx] as string, a, pc, sp)
+      case Op.GET_ELEM: {
+        const r =
+          op === Op.GET_PROP
+            ? this.execGetProp(frame, regs[sp - 1] as Value, consts[bx] as string, a, pc, sp)
+            : this.execGetElem(frame, regs[sp - 2] as Value, regs[sp - 1] as Value, a, pc, sp)
+        if (r < 0) return r === GETTER_ENTERED ? -1 : r === GETTER_FUEL ? -3 : -4
+        frame.sp = r
         return pc + 1
-      case Op.GET_ELEM:
-        if (this.execGetElem(frame, regs[sp - 2] as Value, regs[sp - 1] as Value, a, pc, sp)) return -1
-        return pc + 1
+      }
       case Op.PUT_PROP: {
         const v = regs[--sp] as Value
         frame.sp = sp
-        this.execPutProp(fcode, regs[sp - 1] as Value, consts[bx] as string, v, pc)
+        if (this.execPutProp(frame, regs[sp - 1] as Value, consts[bx] as string, v, pc, sp)) return -1
         regs[sp - 1] = v
         return pc + 1
       }
@@ -2689,7 +2914,7 @@ export class Vm {
         const v = regs[--sp] as Value
         const keyVal = regs[--sp] as Value
         frame.sp = sp
-        this.execPutElem(fcode, regs[sp - 1] as Value, keyVal, v, pc)
+        if (this.execPutProp(frame, regs[sp - 1] as Value, propertyKey(keyVal), v, pc, sp)) return -1
         regs[sp - 1] = v
         return pc + 1
       }
@@ -2721,7 +2946,7 @@ export class Vm {
       case Op.INSTANCEOF: {
         const rhs = regs[--sp] as Value
         frame.sp = sp
-        regs[sp - 1] = this.execInstanceof(fcode, regs[sp - 1] as Value, rhs, pc)
+        if (this.execInstanceof(frame, regs[sp - 1] as Value, rhs, pc, sp)) return -1
         return pc + 1
       }
       case Op.NEW_OBJECT:
@@ -2739,11 +2964,14 @@ export class Vm {
         return pc + 1
       case Op.COPY_DATA_PROPS:
         frame.sp = --sp
-        this.execCopyDataProps(fcode, regs[sp - 1] as Obj, regs[sp] as Value, pc)
+        if (this.execCopyDataProps(frame, regs[sp - 1] as Obj, regs[sp] as Value, pc, sp)) return -1
         return pc + 1
-      case Op.COPY_REST:
-        frame.sp = this.execCopyRest(fcode, regs, bx, pc, sp)
+      case Op.COPY_REST: {
+        const r = this.execCopyRest(frame, regs, bx, pc, sp)
+        if (r < 0) return -1
+        frame.sp = r
         return pc + 1
+      }
       case Op.TEMPLATE:
         regs[sp++] = this.getTemplateObject(fcode, consts[bx] as TemplateSite)
         frame.sp = sp
@@ -2928,7 +3156,7 @@ export class Vm {
       case Op.ITER_OPEN:
         return this.execIterOpen(frame, a, pc, sp)
       case Op.ITER_INIT:
-        this.execIterInit(frame, a, pc, sp)
+        if (this.execIterInit(frame, a, pc, sp)) return -1
         return pc + 1
       case Op.ITER_STEP: {
         const rec = regs[a]
@@ -2965,13 +3193,33 @@ export class Vm {
         execAwait(this, frame, a, pc, sp)
         return -1
       case Op.YSTAR:
-        return execYstar(frame, a, bx, pc, sp)
+        return execYstar(this, frame, a, bx, pc, sp)
       case Op.YSTAR_RESULT:
-        return execYstarResult(frame, a, bx, pc, sp)
+        return execYstarResult(this, frame, a, bx, pc, sp)
+      case Op.DEFINE_ACCESSOR:
+        frame.sp = this.execDefineAccessor(regs, consts, a, bx, sp)
+        return pc + 1
       default:
         throw new Error(`Unexpected wide op ${op}`)
     }
   }
+}
+
+// What `execGetProp` / `execGetElem` return in place of a stack pointer once they enter a frame (a getter, say): it runs
+// now (`continue outer`), the slice is over, or the job blocks on the host call the getter made.
+const GETTER_ENTERED = -1
+const GETTER_FUEL = -2
+const GETTER_BLOCKED = -3
+
+// `redoRead`'s answer once it entered a getter, and the iterator ops' (a negative pc, so `continue outer`).
+export const REDO: unique symbol = Symbol("vm.redo")
+export const REDO_ENTERED = -1
+
+// The first word of the instruction whose opcode word is at `pc`: before its `EXTRA` prefix words, if any.
+const instructionStart = (code: Int32Array, pc: number): number => {
+  if (pc > 0 && (code[pc - 1]! & 0xff) === Op.EXTRA)
+    return pc > 1 && (code[pc - 2]! & 0xff) === Op.EXTRA ? pc - 2 : pc - 1
+  return pc
 }
 
 // Skips the `JUMP slow` instruction following a test-and-skip `ITER_OPEN` or `ITER_STEP`.

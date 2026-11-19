@@ -1,4 +1,5 @@
 import { fn, methods } from "../runtime/native.js"
+import { withReads } from "../runtime/callback.js"
 import { typeError } from "../runtime/model.js"
 import {
   define,
@@ -95,7 +96,10 @@ export const structuredCloneGlobal = <R>(ctx: Interpreter<R>) =>
       for (const [key, item] of entries(value)) define(copy, key, clone(item))
       return copy
     }
-    return clone(args[0])
+    return withReads(() => {
+      memo.clear()
+      return clone(args[0])
+    })
   })
 
 export const cryptoGlobal = <R>(ctx: Interpreter<R>) => {

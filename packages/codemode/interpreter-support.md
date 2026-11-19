@@ -70,7 +70,21 @@ the ultimate source of truth. Upstream test262 files run verbatim from `test/tes
 - [ ] BigInt literals and in-interpreter BigInt arithmetic; BigInt remains invalid at JSON-like host boundaries.
 - [ ] Arbitrary Symbol primitive values and symbol-keyed properties. The confined `Symbol.iterator` and
       `Symbol.asyncIterator` keys are available only for the iterator protocols.
-- [ ] Getter and setter definitions in object literals.
+- [x] Getter and setter definitions in object literals (`get x() {}`, `set x(v) {}`, computed and symbol keys), named
+      `get x` / `set x`. Every read and write honours program accessors: member and computed reads, method calls,
+      destructuring, `=`, compound and logical assignment, `++`/`--`, inherited setters (with a primitive as `this`
+      through a wrapper prototype), and `instanceof`'s `prototype`. Spread, rest, `Object.assign`, `entries` and
+      `values` call getters in key order (and `assign` runs the target's setters); `JSON.stringify`, `structuredClone`
+      and the program's result call getters and leave setter-only properties out; the iterator protocol's `next`,
+      `done`, `value`, `return` and `[Symbol.iterator]` may be getters. `console.log` and `console.table` never call
+      them and show `[Getter]`, `[Setter]` or `[Getter/Setter]`; `Object.keys`, `for...in`, `in` and
+      `hasOwnProperty` never call them either. A suspended run resumes inside a getter or setter.
+- [ ] Getters and setters in classes (classes are unsupported), `__defineGetter__` and friends.
+- [ ] Built-ins that read program getters ahead (`Array.from` on an array-like, `apply`, `structuredClone`,
+      `String.raw`, `Buffer.from`, `TextDecoder` options, `Headers`/`URLSearchParams` records, `new Error`'s
+      `cause`, `defineProperties`, host arguments) call each getter once per receiver and key per call, in rounds:
+      a value reached twice in one call reuses the first read, and the order across rounds can differ from JS's
+      interleaving. `Array.from` on an iterable reads a `[Symbol.iterator]` getter twice.
 
 ## Bindings and destructuring
 
@@ -310,8 +324,8 @@ reject }` object.
       thenable is adopted.
 - [x] Recursive assimilation of objects with an own callable `then` field across `Promise.resolve`, combinators,
       constructors, reactions, `finally`, `await`, and async returns. Thenable methods run deferred, receive
-      first-call-wins resolve/reject functions, and ignore throws after settlement. Inherited/accessor `then` fields
-      remain outside the supported object model.
+      first-call-wins resolve/reject functions, and ignore throws after settlement. Inherited and accessor `then`
+      fields are supported; an accessor `then` is read in a job of its own, one microtask after JS would read it.
 - [x] Dotted tool names are canonicalized into namespace paths; a path can be both callable and a namespace, and the
       last tool supplied for a canonical path wins.
 - [x] Tool path segments may be named `constructor`, `prototype`, or `__proto__` because paths use inert Map keys.
@@ -350,8 +364,14 @@ reject }` object.
 - [x] `Object.create(proto)` with an object or `null` prototype; any other prototype is a `TypeError`
       (`Object prototype may only be an Object or null`). Inherited reads, `in`, `hasOwnProperty`, own-only
       `Object.keys`, and `for...in` follow the chain as in JS. A second `properties`
-      argument other than `undefined` throws a `TypeError`: property descriptors are not supported (there is no
-      `Object.defineProperty` either).
+      argument defines properties from descriptors, as `Object.defineProperties` does.
+- [x] `Object.defineProperty`, `defineProperties`, `getOwnPropertyDescriptor(s)` and `getOwnPropertyNames`, with the
+      spec's validation (non-configurable and non-writable rules, `SameValue`, extensibility) and descriptor objects
+      read through getters and the prototype chain. Built-in accessors (`Map.prototype.size`, `URL.prototype.href`, …)
+      show as callable functions and can be redefined, one half at a time.
+- [ ] Array elements share one set of attributes, so `defineProperty` on an index takes only the array's own
+      attributes (new elements must say `writable`, `enumerable` and `configurable` true), never an accessor, and an
+      array's `length` can't be made read-only on its own (use `Object.freeze`).
 - [x] `Object.freeze`, `Object.seal`, and `Object.preventExtensions`, with `isFrozen`, `isSealed`, and `isExtensible`.
       Each returns its argument and passes primitives through (`Object.freeze(1) === 1`, `Object.isFrozen(1)`).
       Programs run as strict code, so violations throw `TypeError`: `Cannot assign to read only property 'a'`,

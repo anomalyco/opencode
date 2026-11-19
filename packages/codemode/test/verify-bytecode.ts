@@ -201,6 +201,9 @@ export const verifyCode = (c: Code): Array<string> => {
       case Op.DEFINE_FIELD:
         next(a === 0 ? -1 : -2)
         break
+      case Op.DEFINE_ACCESSOR:
+        next((a & 1) === 0 ? -1 : -2)
+        break
       case Op.NEW_ARRAY:
       case Op.CONCAT:
         next(1 - bx)
