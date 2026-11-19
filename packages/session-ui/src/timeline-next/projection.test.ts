@@ -3,7 +3,9 @@ import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageUser } 
 import { Predicate } from "effect"
 import { createRoot } from "solid-js"
 import { subagentReport } from "../storybook/current-session-fixtures"
+import { commentaryRuns } from "../timeline/commentary.fixture"
 import { timelinePresets, type TimelineDetail } from "../timeline/detail"
+import type { TimelineRow } from "../timeline/timeline-row"
 import { createNextTimelineProjection, workedDuration } from "./projection"
 import { replayScript, scenarios } from "./stories/session-replay"
 
@@ -226,6 +228,59 @@ describe("New timeline projection", () => {
     }
 
     expect(groups([...launched, report], messagesOnly)).toEqual([])
+  })
+
+  test.each(["grouped", "hidden"] as const)("%s commentary keeps the answer of each run", (placement) => {
+    const runs = commentaryRuns()
+    const detail = { ...timelinePresets[2].value, commentary: { placement } }
+
+    const rows = (messages: SessionMessageInfo[], type: "idle" | "busy") =>
+      createRoot((dispose) => {
+        const projection = createNextTimelineProjection({
+          sessionMessages: () => messages,
+          status: () => ({ type }),
+          timelineDetail: () => detail,
+        })
+
+        const result = projection.rows()
+        dispose()
+
+        return result
+      })
+
+    const groups = (rows: TimelineRow.TimelineRow[]) =>
+      rows.flatMap((row) => {
+        if (!Predicate.isTagged(row, "AssistantPart")) return []
+
+        if (row.group.type === "part") return [`part:${row.group.ref.partID}`]
+
+        return [`${row.group.type}:${row.group.refs.map((ref) => ref.partID).join("+")}`]
+      })
+
+    expect(groups(rows(runs.complete, "idle"))).toEqual([
+      "part:reply:text:0",
+      ...[1, 2, 3].flatMap((index) => [
+        placement === "grouped"
+          ? `context:notice-${index}+work-${index}:text:0+tool-${index}`
+          : `context:notice-${index}+tool-${index}`,
+        `part:reply-${index}:text:0`,
+      ]),
+    ])
+
+    const live = [
+      "part:prior:text:0",
+      placement === "grouped" ? "context:wake+working:text:0+running" : "context:wake+running",
+    ]
+
+    expect(groups(rows(runs.busy, "busy"))).toEqual(live)
+    expect(groups(rows(runs.failed, "busy"))).toEqual(live)
+
+    const withoutIdle = runs.complete.filter((message) => message.type !== "idle").slice(0, 5)
+
+    expect(groups(rows(withoutIdle, "idle"))).toEqual([
+      placement === "grouped" ? "context:reply:text:0+notice-1+work-1:text:0+tool-1" : "context:notice-1+tool-1",
+      "part:reply-1:text:0",
+    ])
   })
 
   test("a move shows only when it changes where the session is", () => {

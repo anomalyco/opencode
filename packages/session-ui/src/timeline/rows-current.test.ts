@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Predicate } from "effect"
 import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client/promise"
 import { storyDocument, storyTool } from "../storybook/current-session-scenarios"
+import { commentaryRuns } from "./commentary.fixture"
 import { timelinePresets } from "./detail"
 import { createTimelineProjection, Timeline, TimelineRow } from "./projection"
 
@@ -668,6 +669,42 @@ describe("current session timeline rows", () => {
       "assistant-part:part:part:msg_a3:msg_a3:text:0",
       "assistant-part:context:context:msg_a3:tool_grep",
     ])
+  })
+
+  test.each(["grouped", "hidden"] as const)("%s commentary keeps the answer of each run", (placement) => {
+    const runs = commentaryRuns()
+    const detail = { ...timelinePresets[2].value, commentary: { placement } }
+
+    const rows = (sessionMessages: SessionMessageInfo[], type: "idle" | "busy") =>
+      createTimelineProjection({ sessionMessages, status: { type }, timelineDetail: detail, reasoningMode: "compact" })
+        .rows
+
+    const groups = (rows: TimelineRow.TimelineRow[]) =>
+      rows.flatMap((row) => {
+        if (!Predicate.isTagged(row, "AssistantPart")) return []
+
+        if (row.group.type === "part") return [`part:${row.group.ref.partID}`]
+
+        return [`${row.group.type}:${row.group.refs.map((ref) => ref.partID).join("+")}`]
+      })
+
+    expect(groups(rows(runs.complete, "idle"))).toEqual([
+      "part:reply:text:0",
+      ...[1, 2, 3].flatMap((index) => [
+        placement === "grouped"
+          ? `context:notice-${index}+work-${index}:text:0+tool-${index}`
+          : `context:notice-${index}+tool-${index}`,
+        `part:reply-${index}:text:0`,
+      ]),
+    ])
+
+    const live = [
+      "part:prior:text:0",
+      placement === "grouped" ? "context:wake+working:text:0+running" : "context:wake+running",
+    ]
+
+    expect(groups(rows(runs.busy, "busy"))).toEqual(live)
+    expect(groups(rows(runs.failed, "busy"))).toEqual(live)
   })
 
   test("keeps assistant errors and retries before later notices", () => {
