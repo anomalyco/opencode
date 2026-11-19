@@ -13,10 +13,11 @@ import ranges from "../../asset/fonts/openmono.json"
 
 // OpenMono, Anomaly's font (SIL OFL 1.1, src/asset/fonts/OpenMono-OFL.txt), is the site's
 // monospace face for every visitor (--font-mono in site.css). script/openmono.py builds each
-// style's files from the app build of OpenMono 1.000, the files OpenCode Desktop bundles (no
-// ligatures, every character one cell wide): "latin" (Latin, punctuation, arrows, shapes, box
-// drawing), "cyrillic" (regular and bold only) and "rest" (the font's other characters), each
-// fetched only when a page uses one of its characters. Every character advances 0.6 em.
+// style's files from the app build of OpenMono 1.000, the build OpenCode Desktop takes its files
+// from (no ligatures, every character one cell wide): "latin" (Latin, punctuation, arrows, shapes,
+// box drawing), "cyrillic" (regular and bold only, with the stress marks) and "rest" (the font's
+// other characters), each fetched only when a page uses one of its characters. Every character
+// advances 0.6 em.
 export const monoFontLatin = regularLatin
 
 // Settings › Mono font (development only): the family ahead of the stack. IBM Plex Mono loads from
