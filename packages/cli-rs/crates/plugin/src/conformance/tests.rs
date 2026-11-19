@@ -21,7 +21,9 @@ use serde_json::{Value, json};
 use super::*;
 use crate::loader::Backend;
 use crate::loader::native::{self, Native};
-use crate::loader::tests::{TestHost, build_example, cc, dynamic, fence_view, host, route_keys};
+#[cfg(unix)]
+use crate::loader::tests::cc;
+use crate::loader::tests::{TestHost, build_example, dynamic, fence_view, host, route_keys};
 use crate::{Host, Registry, RouteMount};
 
 #[path = "../../examples/conformance/src/conformance.rs"]

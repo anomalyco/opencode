@@ -9,7 +9,9 @@ use opentui::keymap::RunResult;
 use opentui::testing::Capture;
 
 use super::*;
-use crate::loader::tests::{TestHost, build_example, cc, dynamic, entry, fence_view, host};
+#[cfg(unix)]
+use crate::loader::tests::cc;
+use crate::loader::tests::{TestHost, build_example, dynamic, entry, fence_view, host};
 use crate::loader::{Configured, Loader, entry_file};
 use crate::{Entry, Registry, SlotInput, Status, slot};
 
