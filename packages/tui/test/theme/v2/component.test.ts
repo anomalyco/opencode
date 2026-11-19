@@ -3,10 +3,10 @@ import { createSignal } from "solid-js"
 import { RGBA } from "@opentui/core"
 import { resolveTheme, selectTheme } from "@opencode/theme/tui"
 import { createComponentTheme } from "../../../src/theme/component"
-import { getOpenCodeTheme } from "../../../src/theme"
+import { getOpenCodeClassicTheme } from "../../../src/theme"
 
 test("provides reactive properties, states, surfaces, and color operations", () => {
-  const [resolved, setResolved] = createSignal(resolveTheme(selectTheme(getOpenCodeTheme(), "light")))
+  const [resolved, setResolved] = createSignal(resolveTheme(selectTheme(getOpenCodeClassicTheme(), "light")))
   const theme = createComponentTheme(resolved)
   const current = theme.surface("dialog")
 
@@ -79,7 +79,7 @@ test("provides reactive properties, states, surfaces, and color operations", () 
   expect(current.background.action.primary.hovered).toBe(resolved().background.raised.high)
   expect(current.background.formfield.selected).toBe(resolved().surface("dialog").background.formfield.selected)
 
-  setResolved(resolveTheme(selectTheme(getOpenCodeTheme(), "dark")))
+  setResolved(resolveTheme(selectTheme(getOpenCodeClassicTheme(), "dark")))
   expect(current.text.base).toBe(resolved().surface("dialog").text.base)
   expect(current.background.base).toBe(resolved().background.raised.base)
   expect(current.decrease(current.background.raised.base, 1)).toBe(resolved().hue.neutral[600])

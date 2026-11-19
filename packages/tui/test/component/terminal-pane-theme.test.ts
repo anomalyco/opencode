@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test"
 import { resolveThemeDocument, type HueScale, type ResolvedTheme } from "@opencode/theme/tui"
 import { terminalPalette } from "../../src/component/terminal-pane"
-import { getOpenCodeTheme } from "../../src/theme"
+import { getOpenCodeClassicTheme } from "../../src/theme"
 
 test.each(["light", "dark"] as const)("builds the %s ANSI palette from semantic colors", (mode) => {
-  const theme = resolveThemeDocument(getOpenCodeTheme(), mode)
+  const theme = resolveThemeDocument(getOpenCodeClassicTheme(), mode)
   const hues = allHues(theme)
   const black = theme.hue.neutral[mode === "dark" ? 800 : 200]
   const white = theme.hue.neutral[mode === "dark" ? 200 : 800]
@@ -38,7 +38,7 @@ test.each(["light", "dark"] as const)("builds the %s ANSI palette from semantic 
 })
 
 test("falls back to accent when no hue is confidently blue or magenta", () => {
-  const resolved = resolveThemeDocument(getOpenCodeTheme(), "dark")
+  const resolved = resolveThemeDocument(getOpenCodeClassicTheme(), "dark")
   const hues = allHues(resolved)
   const hue = {
     ...Object.fromEntries(Object.keys(hues).map((name) => [name, hues.red])),
