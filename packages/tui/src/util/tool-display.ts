@@ -1,3 +1,11 @@
+import type { SessionMessageAssistantTool } from "@opencode/client/promise"
+import { Locale } from "./locale"
+import { isRecord } from "./record"
+import { stringWidth } from "./string-width"
+
+const MAX_SUMMARY_VALUE_WIDTH = 40
+const MAX_SUMMARY_WIDTH = 120
+
 export function canonicalToolName(name: string) {
   if (name === "bash") return "shell"
   if (name === "task") return "subagent"
@@ -10,13 +18,37 @@ export function finiteNumber(value: unknown): number | undefined {
   return value
 }
 
-export function primitiveInputSummary(input: Record<string, unknown>, omit: readonly string[] = []) {
+export function primitiveInputSummary(
+  input: Record<string, unknown>,
+  omit: readonly string[] = [],
+  maxWidth = MAX_SUMMARY_WIDTH,
+) {
+  if (maxWidth <= 0) return ""
   const entries = Object.entries(input).filter(([key, value]) => {
     if (omit.includes(key)) return false
     return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
   })
   if (entries.length === 0) return ""
-  return `[${entries.map(([key, value]) => `${key}=${String(value)}`).join(", ")}]`
+  const body = entries
+    .map(([key, value]) => {
+      const normalized = typeof value === "string" ? value.replace(/\s+/g, " ") : String(value)
+      return `${key.replace(/\s+/g, " ")}=${Locale.truncateWidth(normalized, MAX_SUMMARY_VALUE_WIDTH)}`
+    })
+    .join(", ")
+  if (maxWidth <= 2) return Locale.truncateWidth(`[${body}]`, maxWidth)
+  return `[${Locale.truncateWidth(body, maxWidth - 2)}]`
+}
+
+export function genericToolSummary(tool: string, input: Record<string, unknown>, maxWidth = MAX_SUMMARY_WIDTH) {
+  if (maxWidth <= 0) return ""
+  const name = tool.replace(/\s+/g, " ")
+  const nameWidth = stringWidth(name)
+  if (nameWidth >= maxWidth) return Locale.truncateWidth(name, maxWidth)
+  const remaining = maxWidth - nameWidth - 1
+  const args = primitiveInputSummary(input, [], remaining >= 3 ? remaining : MAX_SUMMARY_WIDTH)
+  if (!args) return name
+  if (remaining < 3) return Locale.truncateWidth(`${name} ${args}`, maxWidth)
+  return `${name} ${args}`
 }
 
 export type ExecuteCall = { tool: string; status: "running" | "completed" | "error"; input?: Record<string, unknown> }
@@ -32,9 +64,8 @@ export function executeCalls(value: unknown): ExecuteCall[] {
   })
 }
 
-export function executeCallSummary(call: ExecuteCall) {
-  const args = primitiveInputSummary(call.input ?? {}).replace(/\s+/g, " ")
-  return `${call.tool}${args ? ` ${args}` : ""}`
+export function executeCallSummary(call: ExecuteCall, maxWidth = MAX_SUMMARY_WIDTH) {
+  return genericToolSummary(call.tool, call.input ?? {}, maxWidth)
 }
 
 export function webSearchProviderName(provider: unknown) {
@@ -66,5 +97,3 @@ export function nonEmptyToolContent<T>(content: ReadonlyArray<T> | undefined): [
   const [first, ...rest] = content
   return first === undefined ? undefined : [first, ...rest]
 }
-import type { SessionMessageAssistantTool } from "@opencode/client/promise"
-import { isRecord } from "./record"
