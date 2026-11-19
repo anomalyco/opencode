@@ -19,7 +19,7 @@ written unchanged; `false` has no effect.
 User decision: "designs should fit that and only that". Since #64988 a release starts with the new designs in both
 clients, so only a config that turns the experiment off, or the Experiments dialog, shows the difference. Every P-COMP
 and P-APP fixture is recorded from the TS TUI with the experiment on (`parity/lib/app.ts` `withNewDesigns`, which
-also names the default theme because TS's test fixtures now pick `opencode-classic`), and
+also names a theme, since TS's test fixtures now default to `opencode-classic` with the experiment off), and
 `parity/component/E.18a-settings.tsx` records the Experiments dialog with the same registry as Rust, without the
-`new-designs` entry. `parity/scenarios/D131/designs.pty.ts` and `D131/plugins-release.pty.ts` run with the config a
-release starts with and are equal.
+`new-designs` entry. `parity/scenarios/D131/designs.pty.ts` runs with the config a release starts with and is
+equal.

@@ -1,4 +1,4 @@
-// `/plugins` with more server plugins than the list has rows for (`plugins.pty.ts`, `plugins-release.pty.ts`).
+// `/plugins` with more server plugins than the list has rows for (`plugins.pty.ts`).
 import type { PtyCase } from "../../pty/run"
 
 const location = { directory: "/work", project: { id: "proj_test", directory: "/work", canonical: "/work" } }
