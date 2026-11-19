@@ -18,10 +18,21 @@ import {
   set,
   coerceToString,
   type Value,
+  accessorFunction,
+  Callable,
+  define,
+  defineOwnProperty,
+  type Descriptor,
+  get,
+  has,
+  parseArrayIndex,
+  record,
+  type Slot,
 } from "../runtime/objects.js"
-import { primitivePrototype } from "../runtime/intrinsics.js"
+import { type Builtins, primitivePrototype } from "../runtime/intrinsics.js"
 import { describeValue, rejectCircularInsertion } from "../runtime/references.js"
-import { invokeMethod } from "../runtime/callback.js"
+import { invokeMethod, readsPending, withPrimitives, withReads } from "../runtime/callback.js"
+import { Invoke } from "../runtime/signals.js"
 import type { Interpreter } from "../runtime/interpreter.js"
 
 // ToObject for enumeration.
@@ -43,24 +54,42 @@ export const enumerableSource = <R>(ctx: Interpreter<R>, label: string, value: V
   return new Obj(ctx.builtins.Object)
 }
 
-export const objectAssign = <R>(ctx: Interpreter<R>, args: Array<Value>): Value => {
+export const objectAssign = <R>(ctx: Interpreter<R>, args: Array<Value>): Value | Invoke => {
   const target = args[0]
   // JS would box a primitive target; wrappers and primitives cannot hold fields here.
   if (!(target instanceof Obj)) {
     throw typeError(`Object.assign expects a data object or array target, received ${describeValue(target)}.`)
   }
+  const sources = args
+    .slice(1)
+    .filter((source) => source !== null && source !== undefined)
+    .map((source) => enumerableSource(ctx, "Object.assign(...)", source))
+  // Program getters on a source or setters on the target's chain run in the prelude, Get then Set per key.
+  if (sources.some((from) => from.hasProgramAccessors) || accessorsOnChain(target)) {
+    return new Invoke(
+      ctx.prelude.fn("objectAssign"),
+      undefined,
+      [target, new Arr(ctx.builtins.Array, sources)],
+      undefined,
+    )
+  }
   const seen = new Set<object>()
-  for (const source of args.slice(1)) {
-    if (source === null || source === undefined) continue
-    const from = enumerableSource(ctx, "Object.assign(...)", source)
+  for (const from of sources) {
     for (const key of enumerableKeys(from)) {
       rejectCircularInsertion(target, getOwn(from, key), "Object.assign result", seen)
-      if (!set(target, key, getOwn(from, key))) {
+      if (set(target, key, getOwn(from, key)) !== true) {
         throw typeError(`Cannot assign to read only property '${String(key)}'.`)
       }
     }
   }
   return target
+}
+
+const accessorsOnChain = (target: Obj): boolean => {
+  for (let current: Obj | null = target; current !== null; current = current.proto) {
+    if (current.hasProgramAccessors) return true
+  }
+  return false
 }
 
 const classTag = (value: Value): string => {
@@ -105,6 +134,96 @@ const integrity = (value: Value, frozen: boolean): boolean => {
   })
 }
 
+// ToPropertyDescriptor, under `withReads`: each field through the chain, in the spec's order.
+const toPropertyDescriptor = (value: Value): Descriptor => {
+  if (!(value instanceof Obj)) throw typeError(`Property description must be an object: ${describeValue(value)}`)
+  const desc: Descriptor = {}
+  if (has(value, "enumerable")) desc.enumerable = Boolean(get(value, "enumerable"))
+  if (has(value, "configurable")) desc.configurable = Boolean(get(value, "configurable"))
+  if (has(value, "value")) desc.value = get(value, "value")
+  if (has(value, "writable")) desc.writable = Boolean(get(value, "writable"))
+  for (const half of ["get", "set"] as const) {
+    if (!has(value, half)) continue
+    const fn = get(value, half)
+    if (fn !== undefined && !(fn instanceof Callable)) {
+      throw typeError(`${half === "get" ? "Getter" : "Setter"} must be a function: ${describeValue(fn)}`)
+    }
+    desc[half] = fn
+  }
+  if (("get" in desc || "set" in desc) && ("value" in desc || "writable" in desc)) {
+    throw typeError("Invalid property descriptor. Cannot both specify accessors and a value or writable attribute.")
+  }
+  return desc
+}
+
+// DefinePropertyOrThrow.
+const defineOrThrow = (target: Obj, key: PropertyKey, desc: Descriptor): void => {
+  if (desc.value instanceof Obj) {
+    rejectCircularInsertion(
+      target,
+      desc.value,
+      target instanceof Arr ? "Array assignment result" : "Object assignment result",
+    )
+  }
+  if (defineOwnProperty(target, key, desc)) return
+  if (!target.extensible && own(target, key) === undefined) {
+    throw typeError(`Cannot define property ${String(key)}, object is not extensible`)
+  }
+  throw typeError(`Cannot redefine property: ${String(key)}`)
+}
+
+const requireTarget = (value: Value, name: string): Obj => {
+  if (value instanceof Obj) return value
+  throw typeError(`Object.${name} called on non-object`)
+}
+
+// ObjectDefineProperties: every descriptor is read (getters included) before the first one is defined.
+const defineProperties = (target: Obj, props: Value): Obj => {
+  if (props === null || props === undefined) throw typeError(`Cannot convert ${props} to object`)
+  // ToObject: a string's indexes are its only own enumerable properties; other primitives have none.
+  const descriptors =
+    props instanceof Obj
+      ? ownKeys(props)
+          .filter((key) => own(props, key)?.enumerable === true)
+          .map((key) => [key, toPropertyDescriptor(get(props, key))] as const)
+      : typeof props === "string"
+        ? [...props].map((char, index) => [String(index), toPropertyDescriptor(char)] as const)
+        : []
+  if (readsPending()) return target
+  for (const [key, desc] of descriptors) defineOrThrow(target, key, desc)
+  return target
+}
+
+// FromPropertyDescriptor: a native accessor half shows as its companion function.
+const fromSlot = (builtins: Builtins, slot: Slot | undefined): Value => {
+  if (slot === undefined) return undefined
+  const fields: Record<string, Value> =
+    "value" in slot
+      ? { value: slot.value, writable: slot.writable }
+      : { get: accessorFunction(slot.get), set: accessorFunction(slot.set) }
+  return record(builtins.Object, { ...fields, enumerable: slot.enumerable, configurable: slot.configurable })
+}
+
+// The own properties a primitive has after ToObject, which only a string's are: its indexes and `length`.
+const primitiveSlot = (value: Value, key: PropertyKey): Slot | undefined => {
+  if (typeof value !== "string") return undefined
+  if (key === "length") return { value: value.length, writable: false, enumerable: false, configurable: false }
+  const at = typeof key === "symbol" ? undefined : parseArrayIndex(key)
+  return at !== undefined && at < value.length
+    ? { value: value[at], writable: false, enumerable: true, configurable: false }
+    : undefined
+}
+
+const primitiveKeys = (value: Value): Array<string> =>
+  typeof value === "string" ? [...Object.keys(value), "length"] : []
+
+const requireObjectCoercible = (value: Value, name: string): void => {
+  if (value === null || value === undefined) throw typeError(`Object.${name} cannot convert ${value} to an object.`)
+  if (value instanceof HostNamespace) {
+    throw typeError(`Object.${name} cannot read ${value.root}: it is a namespace of host functions, not an object.`)
+  }
+}
+
 // Object constructs identically with or without new, like JS. Only `keys` copies its result into the
 // program; `values`, `entries`, `assign`, and `fromEntries` hand back the program's own values.
 export const objectGlobal = <R>(ctx: Interpreter<R>) => {
@@ -136,20 +255,28 @@ export const objectGlobal = <R>(ctx: Interpreter<R>) => {
     [
       "values",
       1,
-      (_, args) =>
-        new Arr(
+      (_, args) => {
+        const source = enumerableSource(ctx, "Object.values(...)", args[0])
+        if (source.hasProgramAccessors)
+          return new Invoke(ctx.prelude.fn("objectEntries"), undefined, [source, true], undefined)
+        return new Arr(
           builtins.Array,
-          entries(enumerableSource(ctx, "Object.values(...)", args[0])).map((entry) => entry[1]),
-        ),
+          entries(source).map((entry) => entry[1]),
+        )
+      },
     ],
     [
       "entries",
       1,
-      (_, args) =>
-        new Arr(
+      (_, args) => {
+        const source = enumerableSource(ctx, "Object.entries(...)", args[0])
+        if (source.hasProgramAccessors)
+          return new Invoke(ctx.prelude.fn("objectEntries"), undefined, [source, false], undefined)
+        return new Arr(
           builtins.Array,
-          entries(enumerableSource(ctx, "Object.entries(...)", args[0])).map((entry) => new Arr(builtins.Array, entry)),
-        ),
+          entries(source).map((entry) => new Arr(builtins.Array, entry)),
+        )
+      },
     ],
     ["hasOwn", 2, (_, args) => hasOwn(enumerableSource(ctx, "Object.hasOwn(...)", args[0]), propertyKey(args[1]))],
     ["is", 2, (_, args) => Object.is(args[0], args[1])],
@@ -176,15 +303,72 @@ export const objectGlobal = <R>(ctx: Interpreter<R>) => {
       "create",
       2,
       (_, args) => {
-        if (args[0] !== null && !(args[0] instanceof Obj)) {
+        const proto = args[0]
+        if (proto !== null && !(proto instanceof Obj)) {
           throw typeError("Object prototype may only be an Object or null.")
         }
-        if (args[1] !== undefined) {
-          throw typeError(
-            "Object.create property descriptors are not supported; assign the fields after creating the object.",
-          )
-        }
-        return new Obj(args[0])
+        if (args[1] === undefined) return new Obj(proto)
+        return withReads(() => defineProperties(new Obj(proto), args[1]))
+      },
+    ],
+    [
+      "defineProperty",
+      3,
+      (_, args) => {
+        const target = requireTarget(args[0], "defineProperty")
+        return withPrimitives("string", [args[1]], ([key]) =>
+          withReads(() => {
+            const desc = toPropertyDescriptor(args[2])
+            if (readsPending()) return target
+            defineOrThrow(target, propertyKey(key), desc)
+            return target
+          }),
+        )
+      },
+    ],
+    [
+      "defineProperties",
+      2,
+      (_, args) => {
+        const target = requireTarget(args[0], "defineProperties")
+        return withReads(() => defineProperties(target, args[1]))
+      },
+    ],
+    [
+      "getOwnPropertyDescriptor",
+      2,
+      (_, args) => {
+        const value = args[0]
+        requireObjectCoercible(value, "getOwnPropertyDescriptor")
+        return withPrimitives("string", [args[1]], ([raw]) => {
+          const key = propertyKey(raw)
+          return fromSlot(builtins, value instanceof Obj ? own(value, key) : primitiveSlot(value, key))
+        })
+      },
+    ],
+    [
+      "getOwnPropertyDescriptors",
+      1,
+      (_, args) => {
+        const value = args[0]
+        requireObjectCoercible(value, "getOwnPropertyDescriptors")
+        const result = new Obj(builtins.Object)
+        if (value instanceof Obj)
+          for (const key of ownKeys(value)) define(result, key, fromSlot(builtins, own(value, key)))
+        else for (const key of primitiveKeys(value)) define(result, key, fromSlot(builtins, primitiveSlot(value, key)))
+        return result
+      },
+    ],
+    [
+      "getOwnPropertyNames",
+      1,
+      (_, args) => {
+        const value = args[0]
+        if (value instanceof HostNamespace) return new Arr(builtins.Array, [...ctx.namespaceKeys(value)])
+        requireObjectCoercible(value, "getOwnPropertyNames")
+        const names =
+          value instanceof Obj ? ownKeys(value).filter((key) => typeof key === "string") : primitiveKeys(value)
+        return new Arr(builtins.Array, names)
       },
     ],
   ])
@@ -210,7 +394,8 @@ export const objectGlobal = <R>(ctx: Interpreter<R>) => {
     [
       "toLocaleString",
       0,
-      (thisValue) => invokeMethod(ctx.builtins, thisValue, "toString", "Object.prototype.toLocaleString"),
+      (thisValue) =>
+        withReads(() => invokeMethod(ctx.builtins, thisValue, "toString", "Object.prototype.toLocaleString")),
     ],
     [
       "valueOf",

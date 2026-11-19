@@ -219,6 +219,13 @@ export const dict = {
   "provider.connect.chatgptUsageLimit.description": "Check your usage and limits in ChatGPT settings.",
   "provider.connect.chatgptUsageLimit.manage": "Manage usage",
   "provider.connect.chatgptUsageLimit.close": "Close",
+  "provider.connect.chatgptUsageLimit.workspaceDescription":
+    "You've reached your workspace's limit for using your ChatGPT plan in other apps. Copy a message below to ask your workspace admin for increased usage limits.",
+  "provider.connect.chatgptUsageLimit.copyRequest": "Copy request for admin",
+  "provider.connect.chatgptUsageLimit.requestCopied": "Request copied. Send it to your workspace admin.",
+  "provider.connect.chatgptUsageLimit.requestCopyFailed": "Couldn't copy. Send this to your workspace admin:",
+  "provider.connect.chatgptUsageLimit.request":
+    "I've reached the limit for using my ChatGPT plan in OpenCode. Could you increase our workspace's usage limits so I can continue?\n\nGo to admin.openai.com → Workspace → Usage limits. Thank you!",
   "provider.connect.console.refreshFailed":
     "Your account is connected, but we couldn't load your models. Try again to refresh them.",
   "provider.connect.console.connected": "OpenCode connected",
@@ -684,6 +691,7 @@ export const dict = {
   "session.timeline.status.working": "Working",
   "session.running.stop.subagent": "Interrupt subagent",
   "session.running.stop.shell": "Kill shell command",
+  "session.running.stop.script": "Cancel script",
 
   "session.files.selectToOpen": "Select a file to open",
 
@@ -693,6 +701,9 @@ export const dict = {
   "session.activity.subagents.other": "{{count}} subagents",
   "session.activity.shells.one": "{{count}} shell",
   "session.activity.shells.other": "{{count}} shells",
+  "session.activity.scripts.one": "{{count}} script",
+  "session.activity.scripts.other": "{{count}} scripts",
+  "session.activity.background": "Background work",
   "session.activity.shell.back": "Back to background work",
   "session.activity.shell.stop": "Stop",
   "session.activity.shell.stopping": "Stopping…",

@@ -71,6 +71,8 @@ type CreateInput = Shell.CreateInput & {
   // A call waits on the command. A server that takes the command over moves it to the background, which clears
   // its timeout, so its deadline is not kept for a restart.
   waited?: boolean
+  // Where the working directory lives, and so where the command runs. The Location's own environment when unset.
+  environment?: Environment.Interface
 }
 
 // What a server needs to take a daemon-run command back after a restart, kept in the daemon's metadata.
@@ -143,8 +145,8 @@ type Ended = {
  * here; callers (e.g. `ShellTool`) own that association and store the shell ID.
  *
  * Local commands run in the process daemon when it is available (`Daemon`), so they outlive a planned server
- * restart: the next server takes them back. Remote workspaces and an unavailable daemon keep spawning them from
- * the server.
+ * restart: the next server takes them back. Remote workspaces, a working directory in another environment and an
+ * unavailable daemon keep spawning them from the server.
  */
 export interface Interface {
   readonly create: <E = never, R = never>(
@@ -886,10 +888,13 @@ const layer = () =>
         before?: (input: ShellCreateBefore) => Effect.Effect<void, E, R>,
       ) {
         const sessionID = input.metadata?.sessionID
-        const baseEnv =
-          location.workspaceID !== undefined
-            ? undefined
-            : ((Schema.is(SessionSchema.ID)(sessionID) ? yield* environments.get(sessionID) : undefined) ?? process.env)
+        const target = input.environment ?? environment
+        // Local only on this server's own machine: the Location's environment, outside a workspace. A command anywhere
+        // else takes none of this machine's variables, keeps its cwd as given and is spawned from the server.
+        const local = location.workspaceID === undefined && target === environment
+        const baseEnv = local
+          ? ((Schema.is(SessionSchema.ID)(sessionID) ? yield* environments.get(sessionID) : undefined) ?? process.env)
+          : undefined
         const invocation: ShellCreateBefore = {
           command: input.command,
           cwd: input.cwd ?? location.directory,
@@ -904,7 +909,7 @@ const layer = () =>
         yield* hooks.trigger("shell", "create.before", invocation)
         if (before) yield* before(invocation)
         // Absolute for local commands, so the command reports the same cwd wherever it runs.
-        if (location.workspaceID === undefined) invocation.cwd = path.resolve(location.directory, invocation.cwd)
+        if (local) invocation.cwd = path.resolve(location.directory, invocation.cwd)
 
         // Created per command: the directory can be removed while the Location stays open.
         yield* fs
@@ -927,7 +932,7 @@ const layer = () =>
         }
         yield* annotate(info)
 
-        if (runs) {
+        if (runs && local) {
           const created = yield* runs
             .create({
               info,
@@ -962,7 +967,7 @@ const layer = () =>
         runFork(
           Effect.scoped(
             Effect.gen(function* () {
-              const handle = yield* environment.spawner
+              const handle = yield* target.spawner
                 .spawn(
                   ChildProcess.make(invocation.shell, args, {
                     cwd: invocation.cwd,

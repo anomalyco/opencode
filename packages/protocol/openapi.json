@@ -10355,6 +10355,7 @@
                     "shell.created",
                     "shell.exited",
                     "shell.deleted",
+                    "experimental.job.updated",
                     "form.created",
                     "form.replied",
                     "form.cancelled",
@@ -10466,6 +10467,7 @@
                           "shell.created",
                           "shell.exited",
                           "shell.deleted",
+                          "experimental.job.updated",
                           "form.created",
                           "form.replied",
                           "form.cancelled",
@@ -13746,6 +13748,50 @@
         },
         "description": "List active and unconsumed background jobs, optionally filtered by owning session, descendants, or kind. Experimental: may change without compatibility guarantees.",
         "summary": "List background jobs"
+      }
+    },
+    "/api/experimental/job/{id}/cancel": {
+      "post": {
+        "tags": ["experimental"],
+        "operationId": "experimental.job.cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Cancel a running background job, interrupting the work it started. Cancelling a job that already finished does nothing. Experimental: may change without compatibility guarantees.",
+        "summary": "Cancel background job"
       }
     },
     "/api/shell": {
@@ -26104,6 +26150,9 @@
             "$ref": "#/components/schemas/shell.deleted"
           },
           {
+            "$ref": "#/components/schemas/experimental.job.updated"
+          },
+          {
             "$ref": "#/components/schemas/form.created"
           },
           {
@@ -26877,6 +26926,39 @@
               }
             },
             "required": ["integrationID", "credentialID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "data"],
+        "additionalProperties": false
+      },
+      "experimental.job.updated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["experimental.job.updated"]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "info": {
+                "$ref": "#/components/schemas/Job.Info"
+              }
+            },
+            "required": ["info"],
             "additionalProperties": false
           }
         },

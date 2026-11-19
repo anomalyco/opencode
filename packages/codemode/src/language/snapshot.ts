@@ -1,7 +1,7 @@
 import packageJson from "../../package.json" with { type: "json" }
 import type { Interruption } from "./runtime/signals.js"
 import { staticNames, unchanged } from "./runtime/intrinsic-names.js"
-import { Fn, Obj } from "./runtime/objects.js"
+import { Arr, Fn, Obj } from "./runtime/objects.js"
 import { nodeId, type Source } from "./runtime/source.js"
 import { type ClassSpec, codecShape, decode, encode, type Json, SnapshotError } from "./snapshot/codec.js"
 import { FORMAT, type Header, hash, hostsId, type Snapshot, validate } from "./snapshot/snapshot.js"
@@ -50,7 +50,7 @@ const vmSpecs = (): ReadonlyArray<ClassSpec> =>
       ctor: Vm,
       anchor: "vm",
       fields: ["frames", "templates", "scheduler", "hosts", "depth", "sliced", "outcome"],
-      skip: ["ctx", "pool", "sourceCodes", "intrinsics", "fuel", "sliceStart", "tripEvery"],
+      skip: ["ctx", "pool", "sourceCodes", "intrinsics", "fuel", "sliceStart", "tripEvery", "redo"],
       reset: restoreStack,
     },
     {
@@ -102,6 +102,30 @@ const vmSpecs = (): ReadonlyArray<ClassSpec> =>
     { name: "Cell", ctor: Cell, fields: ["v"] },
     { name: "CustomIter", ctor: CustomIter, fields: ["done", "rawGen", "iterator", "next"] },
   ])
+
+/**
+ * For tests: the frames a saved state holds (the job stack, parked awaits, suspended generators), each as its
+ * function's name or the internal helper it runs, with " (redo)" for a getter an iterator op is running (`Mode.REDO`).
+ * It reads the Frame and Fn records as `vmSpecs` writes them, so it changes with the format.
+ */
+export const savedFrames = (snapshot: Snapshot): Array<string> => {
+  const fields = vmSpecs().find((spec) => spec.name === "Frame")!.fields
+  const records = snapshot.records as ReadonlyArray<
+    { t?: string; f?: ReadonlyArray<unknown>; o?: ReadonlyArray<unknown> } | undefined
+  >
+  return records.flatMap((record) => {
+    if (record?.t !== "Frame") return []
+    const fn = record.f![fields.indexOf("fn")]
+    const redo = record.f![fields.indexOf("mode")] === Mode.REDO ? " (redo)" : ""
+    if (Array.isArray(fn) && fn[0] === "r") {
+      const props = records[fn[1] as number]!.o!
+      return [`${String(props[props.indexOf("name") + 1])}${redo}`]
+    }
+    const [, source, index] = (record.f![fields.indexOf("code")] as [string, [string, string, number]])[1]
+    const codes = source === "@vm-internal" ? getInternalPrelude().codes : compiledPrelude().codes
+    return [`${codes[index]!.name}${redo}`]
+  })
+}
 
 let build: string | undefined
 
@@ -302,6 +326,11 @@ function restoreFrame(frame: Frame): void {
     invalid("a frame's mode does not fit its code.")
   const settles = frame.mode !== Mode.CALLER && frame.mode !== Mode.PROGRAM && frame.mode !== Mode.BOUNDARY_OUT
   if (!settles && frame.target !== undefined) invalid("a frame that settles nothing has a target.")
+  if (frame.mode === Mode.REDO) {
+    const target = frame.target
+    if (!(target instanceof Arr) || !Number.isSafeInteger(target.items[0]) || (target.items[0] as number) < 0)
+      invalid("a getter frame does not say where its op starts.")
+  }
   const fn = frame.fn as unknown
   if (fn !== null && !(fn instanceof Fn)) invalid("a frame's function is not a function.")
   if (fn instanceof Fn && fn.code !== code) invalid("a frame's function does not run its code.")
@@ -318,8 +347,15 @@ function restoreStack(vm: Vm): void {
     invalid("the job stack is not frames.")
   vm.frames.forEach((frame, at) => {
     const bottomOnly = frame.mode === Mode.PROGRAM || frame.mode === Mode.BOUNDARY_OUT
-    if ((at === 0 && frame.mode === Mode.CALLER) || (at > 0 && bottomOnly))
-      invalid("a frame is out of place on the job stack.")
+    const above = frame.mode === Mode.CALLER || frame.mode === Mode.REDO
+    if ((at === 0 && above) || (at > 0 && bottomOnly)) invalid("a frame is out of place on the job stack.")
+    // A getter frame's op runs again in the frame under it.
+    if (
+      frame.mode === Mode.REDO &&
+      at > 0 &&
+      ((frame.target as Arr).items[0] as number) >= vm.frames[at - 1]!.code.code.length
+    )
+      invalid("a getter frame's op is outside its caller's code.")
   })
   if (!Number.isSafeInteger(vm.depth) || vm.depth < 0) invalid("the call depth is not a count.")
 }

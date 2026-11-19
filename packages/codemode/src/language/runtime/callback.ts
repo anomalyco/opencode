@@ -1,8 +1,8 @@
 import { type Builtins, primitivePrototype } from "./intrinsics.js"
 import { typeError } from "./model.js"
-import { Callable, get, Builtin, Obj, type NativeResult, type Value } from "./objects.js"
+import { Callable, get, Builtin, Obj, type NativeResult, reads, type Value } from "./objects.js"
 import { typeofValue } from "./references.js"
-import { Convert, type Hints, Invoke } from "./signals.js"
+import { Convert, type Hints, Invoke, Prefetch } from "./signals.js"
 
 /** Invoke(value, name), as the call to make: the method the value would find through its prototype. */
 export const invokeMethod = (builtins: Builtins, value: Value, name: string, label: string): Invoke => {
@@ -40,6 +40,32 @@ export const withPrimitives = (
   if (!values.some((value) => value instanceof Obj)) return body(values)
   return new Convert(hints, values, ordinal, coerce)
 }
+
+/**
+ * Runs a native body whose [[Get]]s may meet program getters. A getter not read yet gives `undefined` and is
+ * recorded; if any were, the body's result (or failure, which a placeholder may have caused) is dropped for a
+ * `Prefetch`: the VM runs those getters in program code, then the built-in again from the start, and the getters'
+ * values are read from the table this time. So the body must be repeatable until it returns: it reads, checks and
+ * allocates, but changes nothing it does not own. A body whose path depends on a read stops at `readsPending()`.
+ */
+export const withReads = (body: () => NativeResult): NativeResult => {
+  const outer = reads.missing
+  reads.missing = undefined
+  reads.depth++
+  try {
+    const result = body()
+    return reads.missing === undefined ? result : new Prefetch(reads.missing)
+  } catch (error) {
+    if (reads.missing !== undefined) return new Prefetch(reads.missing)
+    throw error
+  } finally {
+    reads.depth--
+    reads.missing = outer
+  }
+}
+
+/** Whether a read in this `withReads` round met a getter not read yet, so what it gave is only a placeholder. */
+export const readsPending = (): boolean => reads.missing !== undefined
 
 /** Checks a callback argument: the callable it is, or the TypeError for one a callback site does not admit. */
 export const requireCallback = (callback: Value, name: string): Callable => {

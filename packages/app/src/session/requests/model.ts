@@ -1,5 +1,10 @@
 import { createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
-import { isPermissionNotFoundError, type FormInfo, type PermissionRequest } from "@opencode/client/promise"
+import {
+  isPermissionNotFoundError,
+  type FormInfo,
+  type JobInfo,
+  type PermissionRequest,
+} from "@opencode/client/promise"
 import { abort } from "@opencode/util/abort"
 import { useParams } from "@solidjs/router"
 import { showToast } from "@/shell/notifications/toast"
@@ -158,17 +163,55 @@ export function createSessionRequestModel() {
     return !!id && !data.session.get(id)?.parentID
   }
 
+  // Running jobs in the session's tree: listed once when the session opens or the connection returns, then kept by
+  // job.updated events.
+  const [jobs, setJobs] = createSignal<ReadonlyMap<string, JobInfo>>(new Map())
+  const runningJobs = createMemo(() => [...jobs().values()])
+
+  const stopJobs = serverSDK.event.on("experimental.job.updated", (event) => {
+    const info = event.data.info
+
+    setJobs((previous) => {
+      if (info.status === "running") return new Map(previous).set(info.id, info)
+
+      if (!previous.has(info.id)) return previous
+
+      const next = new Map(previous)
+      next.delete(info.id)
+
+      return next
+    })
+  })
+
+  onCleanup(stopJobs)
+
+  createEffect(() => {
+    const sessionID = params.id
+
+    if (!sessionID || serverSDK.connection.status() !== "connected") return
+    void serverSDK.api.experimental.job
+      .list({ sessionID, descendants: true, status: "running" })
+      .then((list) => {
+        if (params.id === sessionID) setJobs(new Map(list.map((job) => [job.id, job])))
+      })
+      .catch(() => undefined)
+  })
+
   const running = createSessionBackground({
     sessionID: () => params.id,
     messages: data.session.message.list,
     sessions: data.session.list,
     status: data.session.status,
     shells: () => data.shell.list({ directory: sdk().directory }),
+    jobs: runningJobs,
   })
 
   // Moving to the background and the plugins' background list stay with the primary session's own work.
   const blocking = createMemo(() => (primary() ? running.blocking() : []))
   const tasks = createMemo(() => (primary() ? running.tasks() : []))
+  const scripts = createMemo(() => (primary() ? running.scripts() : []))
+
+  const cancelJob = (id: string) => serverSDK.api.experimental.job.cancel({ id })
 
   const moveToBackground = async () => {
     if (!primary()) return
@@ -268,6 +311,8 @@ export function createSessionRequestModel() {
     background: {
       blocking,
       tasks,
+      scripts,
+      cancelJob,
       move: moveToBackground,
       steer,
     },

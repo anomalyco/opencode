@@ -5,7 +5,7 @@ import type { Builtins } from "./intrinsics.js"
 import { IntrinsicNames } from "./intrinsic-names.js"
 import { type AstNode, type Binding, PendingThrow } from "./model.js"
 import { isRuntimeModule, moduleName, resolveModule } from "./modules.js"
-import { define, entries, type HostNamespace, makingIntrinsics, nativeRule, Obj, type Value } from "./objects.js"
+import { define, type HostNamespace, keys, peek, makingIntrinsics, nativeRule, Obj, type Value } from "./objects.js"
 import type { HostResult } from "../host.js"
 import { Prelude } from "../prelude/prelude.js"
 import type { NodeId, Source } from "./source.js"
@@ -56,7 +56,7 @@ export class Interpreter<R> {
     // Program code has no receiver: top-level `this` is undefined, as in a module.
     this.globalScope = new Map<string, Binding>([["this", { value: undefined }]])
     // Everything made from here to the host globals is an intrinsic, with a static id (see `IntrinsicNames`).
-    const [[intrinsics, prelude], made] = makingIntrinsics(Object.values(this.builtins), () => {
+    const [[intrinsics, prelude], made] = makingIntrinsics(Object.values(this.builtins), this.builtins.Function, () => {
       const intrinsics = globals(this)
       return [intrinsics, new Prelude(this as Interpreter<unknown>, intrinsics)] as const
     })
@@ -103,7 +103,8 @@ export class Interpreter<R> {
     const cached = this.namespaces.get(name)
     if (cached) return cached
     const namespace = new Obj(null)
-    if (module instanceof Obj) for (const [key, value] of entries(module)) define(namespace, key, value)
+    // Data only: making a namespace runs no program getter.
+    if (module instanceof Obj) for (const key of keys(module)) define(namespace, key, peek(module, key))
     define(namespace, "default", module)
     this.namespaces.set(name, namespace)
     return namespace

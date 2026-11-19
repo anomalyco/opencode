@@ -3,9 +3,9 @@ import { DurableFn, Fn } from "./host-function.js"
 import type { Interpreter } from "./runtime/interpreter.js"
 import type { AstNode, Diagnostic } from "./runtime/model.js"
 import { internalCode } from "./internal-prelude.js"
-import { Arr, type PromiseObj, type Value } from "./runtime/objects.js"
+import { Arr, type PromiseObj, reads, type Value } from "./runtime/objects.js"
 import { promiseLike } from "./runtime/promises.js"
-import type { Completion } from "./runtime/signals.js"
+import { type Completion, Prefetch } from "./runtime/signals.js"
 import { HostCall, type HostPolicy, Resolving } from "./scheduler.js"
 import { type FrameMode, Mode } from "./vm.js"
 
@@ -25,7 +25,8 @@ export const BLOCK: unique symbol = Symbol("vm.block")
 /** A host operation pushed an internal frame that produces its result. */
 export const ENTERED: unique symbol = Symbol("vm.entered")
 
-export type HostResult = Value | typeof BLOCK | typeof ENTERED
+/** A `Prefetch`: the arguments hold program getters to run first, and then the call is made again (`$vmReplay`). */
+export type HostResult = Value | typeof BLOCK | typeof ENTERED | Prefetch
 
 /** What the VM gives host operations: its runtime, and a way to run an internal prelude function at the call. */
 export type HostVm = {
@@ -99,23 +100,28 @@ export class HostCalls {
     const waiting: Array<PromiseObj> = []
     // The host functions that cross back among the arguments, when the function takes them.
     const back: Array<Function> | undefined = fn instanceof Fn && fn.takesFunctions ? [] : undefined
-    if (fn instanceof DurableFn || fn.type === "async") {
+    // Program getters in the arguments run first, as program code, before anything else happens for the call: no
+    // promise, no call id.
+    const crossed = this.cross(values, target.label, waiting, back)
+    const async = fn instanceof DurableFn || fn.type === "async"
+    // An async call reads its getters in a frame that settles its promise, so a getter that throws rejects it.
+    if (crossed instanceof Prefetch && async && reads.list === undefined) return this.read(crossed, callee, values, site)
+    if (crossed instanceof Prefetch) return crossed
+    if (async) {
       const resolving = this.promises.resolving(this.promises.newPromise(), site)
-      let args: ReadonlyArray<unknown>
-      try {
-        args = hosts.toHost(values, target.label, waiting, back)
-      } catch (error) {
-        resolving.reject(error)
+      if (!crossed.ok) {
+        resolving.reject(crossed.error)
         return resolving.promise
       }
       if (waiting.length > 0) return this.wait(waiting, callee, values, site, resolving)
       const policy = fn instanceof DurableFn ? "durable" : fn.idempotent ? "idempotent" : "async"
-      const call = this.queue(target, policy, args, false, resolving, site)
+      const call = this.queue(target, policy, crossed.args, false, resolving, site)
       call.fn = fn
       call.holdsFunctions = back !== undefined && back.length > 0
       return resolving.promise
     }
-    const args = hosts.toHost(values, target.label, waiting, back)
+    if (!crossed.ok) throw crossed.error
+    const args = crossed.args
     if (waiting.length > 0) return this.wait(waiting, callee, values, site)
     const id = this.nextID++
     const result = hosts.invoke(fn, args, `${this.runId}:${id}`, target.label)
@@ -131,8 +137,34 @@ export class HostCalls {
     return BLOCK
   }
 
+  // Copies the arguments to the host, reading program getters ahead (see `withReads`): a Prefetch while some are
+  // still to run, else the copy or why it failed.
+  private cross(
+    values: Array<Value>,
+    label: string,
+    waiting: Array<PromiseObj>,
+    back: Array<Function> | undefined,
+  ):
+    | { readonly ok: true; readonly args: ReadonlyArray<unknown> }
+    | { readonly ok: false; readonly error: unknown }
+    | Prefetch {
+    const outer = reads.missing
+    reads.missing = undefined
+    reads.depth++
+    try {
+      const args = this.ctx.hosts!.toHost(values, label, waiting, back)
+      return reads.missing !== undefined ? new Prefetch(reads.missing) : { ok: true, args }
+    } catch (error) {
+      return reads.missing !== undefined ? new Prefetch(reads.missing) : { ok: false, error }
+    } finally {
+      reads.depth--
+      reads.missing = outer
+    }
+  }
+
   // Waits in the program for the promises, then calls `callee` again with the same arguments, which cross with their
-  // values now. A sync function's call waits where it is, as an `await` would; an async one's settles `resolving`.
+  // values now, and the getter values read so far. A sync function's call waits where it is, as an `await` would; an
+  // async one's settles `resolving`.
   private wait(
     promises: Array<PromiseObj>,
     callee: Value,
@@ -143,11 +175,39 @@ export class HostCalls {
     const builtins = this.ctx.builtins
     this.ctx.vm.pushInternal(
       internalCode("$vmHostWait"),
-      [new Arr(builtins.Array, promises), callee, new Arr(builtins.Array, values)],
+      [
+        new Arr(builtins.Array, promises),
+        callee,
+        new Arr(builtins.Array, values),
+        reads.list ?? new Arr(builtins.Array, []),
+      ],
       site,
       resolving === undefined ? Mode.CALLER : Mode.ASYNC,
       resolving,
       resolving?.promise,
+    )
+    return ENTERED
+  }
+
+  // Runs an async call's program getters, then the call again (`$vmReplay`), in a frame that settles the call's promise.
+  private read(prefetch: Prefetch, callee: Value, values: Array<Value>, site: AstNode | undefined): HostResult {
+    const builtins = this.ctx.builtins
+    const resolving = this.promises.resolving(this.promises.newPromise(), site)
+    this.ctx.vm.pushInternal(
+      internalCode("$vmReplay"),
+      [
+        callee,
+        undefined,
+        new Arr(builtins.Array, values),
+        false,
+        new Arr(builtins.Array, []),
+        new Arr(builtins.Array, []),
+        prefetch as unknown as Value,
+      ],
+      site,
+      Mode.ASYNC,
+      resolving,
+      resolving.promise,
     )
     return ENTERED
   }
