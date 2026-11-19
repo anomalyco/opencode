@@ -218,7 +218,7 @@ test("the session context menu renames, exports, and deletes a Home session", as
   await renamedRow.click()
   await expect(page).toHaveURL(new RegExp(`/session/${fixture.targetID}$`))
   await expect(page.locator('[data-slot="titlebar-tabs"] a').filter({ hasText: "Renamed from Home" })).toBeVisible()
-  await page.getByRole("button", { name: "Home" }).click()
+  await page.getByRole("button", { name: "Home", exact: true }).click()
   await expect(page).toHaveURL("/")
 
   await renamedRow.click({ button: "right" })

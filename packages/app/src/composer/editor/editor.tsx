@@ -175,6 +175,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
     })
   })
   let sync = INITIAL_EDITOR_SYNC_STATE
+  let firstFocus = true
 
   const updateCursor = () => {
     const cursor = editor && getCursorPosition(editor)
@@ -437,6 +438,10 @@ export function ComposerEditor(props: ComposerEditorProps) {
               onBlur={keyboardFocus.leave}
               onFocus={(event) => {
                 keyboardFocus.enter(event.currentTarget)
+
+                // A request dock can replace the editor. Keyboard focus on the new editor must keep the draft's caret.
+                if (firstFocus && keyboardFocus.visible()) props.controller.restoreCaret()
+                firstFocus = false
                 props.controller.dispatch({ type: "focus.editor" })
               }}
             />
