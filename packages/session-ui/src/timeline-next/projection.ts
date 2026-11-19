@@ -253,7 +253,7 @@ export function contentEntries(message: SessionMessageAssistant) {
 }
 
 function constructRows(input: Input) {
-  const { turns, leading } = constructTurns(input)
+  const { turns, leading, openRun } = constructTurns(input)
 
   const activeMessageID =
     turns.findLast(
@@ -277,6 +277,7 @@ function constructRows(input: Input) {
       ? turns.flatMap((turn) =>
           turnCommentary(
             turn.entries.filter((entry) => entry.type === "assistant"),
+            openRun,
             viewTurnPhase(phaseOf(turn)).settled,
             input.shows,
           ),
@@ -354,7 +355,7 @@ function constructTurns(input: Input) {
   const leading: Notice[] = []
   const turnByUserID = new Map<string, Turn>()
   let current: Turn | undefined
-  let run = 0
+  let openRun = 0
   let execution: { opener: string; turn: Turn; files: Set<string> } | undefined
 
   const appendIdle = (message: SessionMessageIdle) => {
@@ -422,7 +423,7 @@ function constructTurns(input: Input) {
 
     if (message.type === "idle") {
       appendIdle(message)
-      run++
+      openRun++
 
       // The summary follows the turn's last prompt, after any failure the marker reports.
       // Sorted like the diff route's git order, so the list keeps its order when the diffs arrive.
@@ -442,17 +443,17 @@ function constructTurns(input: Input) {
     message.snapshot?.files?.forEach((file) => execution?.files.add(file))
 
     if (current && !current.shell) {
-      current.entries.push({ type: "assistant", message, run })
+      current.entries.push({ type: "assistant", message, run: openRun })
 
       return
     }
 
-    const turn: Turn = { id: message.id, time: message.time, entries: [{ type: "assistant", message, run }] }
+    const turn: Turn = { id: message.id, time: message.time, entries: [{ type: "assistant", message, run: openRun }] }
     turns.push(turn)
     current = turn
   })
 
-  return { turns, leading }
+  return { turns, leading, openRun }
 }
 
 function turnRows(

@@ -285,7 +285,7 @@ export namespace Timeline {
     const turnByUserID = new Map<string, Turn>()
     const leading: Notice[] = []
     let current: Turn | undefined
-    let run = 0
+    let openRun = 0
     // Everything since the last idle marker is one turn, including prompts steered in meanwhile.
     let execution: { opener: string; turn: Turn; files: Set<string> } | undefined
 
@@ -322,7 +322,7 @@ export namespace Timeline {
 
       if (message.type === "idle") {
         appendIdle(message)
-        run++
+        openRun++
 
         // The summary follows the turn's last prompt, after any failure the marker reports.
         // Sorted like the diff route's git order, so the list keeps its order when the diffs arrive.
@@ -343,19 +343,19 @@ export namespace Timeline {
       const existing = current?.user ? current : undefined
 
       if (existing?.user) {
-        existing.entries.push({ type: "assistant", message, run })
+        existing.entries.push({ type: "assistant", message, run: openRun })
         current = existing
 
         return
       }
 
       if (current && !current.user && !current.shell) {
-        current.entries.push({ type: "assistant", message, run })
+        current.entries.push({ type: "assistant", message, run: openRun })
 
         return
       }
 
-      const turn: Turn = { id: message.id, time: message.time, entries: [{ type: "assistant", message, run }] }
+      const turn: Turn = { id: message.id, time: message.time, entries: [{ type: "assistant", message, run: openRun }] }
       turns.push(turn)
       current = turn
     })
@@ -405,6 +405,7 @@ export namespace Timeline {
         ? turns.flatMap((turn) =>
             turnCommentary(
               turn.entries.filter((entry) => entry.type === "assistant"),
+              openRun,
               viewTurnPhase(phaseOf(turn)).settled,
               (content) => isRenderable(content, showReasoning, detail),
             ),

@@ -2,25 +2,25 @@ import type { SessionMessageAssistant } from "@opencode/client/promise"
 
 type Content = SessionMessageAssistant["content"][number]
 
+// A user message starts a new turn, but wake-ups from watches, subagents and jobs add idle-bounded runs to the same turn.
 export function turnCommentary(
   steps: readonly { message: SessionMessageAssistant; run: number }[],
+  openRun: number,
   settled: boolean,
   visible: (content: Content) => boolean,
 ) {
-  const runs = new Map<number, Content[]>()
-
-  for (const step of steps) {
+  const runs = steps.reduce((runs, step) => {
     const contents = runs.get(step.run) ?? []
     contents.push(...step.message.content)
-    runs.set(step.run, contents)
-  }
 
-  return [...runs.values()].flatMap((contents, index) =>
-    runCommentary(contents, index < runs.size - 1 || settled, visible),
-  )
+    return runs.set(step.run, contents)
+  }, new Map<number, Content[]>())
+
+  return [...runs].flatMap(([run, contents]) => runCommentary(contents, run < openRun || settled, visible))
 }
 
-// Provider phase labels take precedence over tool order. A settled run with no answer keeps its last visible text.
+// Provider phase labels take precedence over tool order. A settled run with no answer keeps its last visible text
+// so an interrupted or tool-ending run still leaves something to read.
 function runCommentary(contents: Content[], settled: boolean, visible: (content: Content) => boolean) {
   const lastTool = contents.findLastIndex((content) => content.type === "tool")
 

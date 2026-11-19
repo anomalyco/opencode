@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { Predicate } from "effect"
 import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client/promise"
+import { commentaryRuns } from "../storybook/current-session-fixtures"
 import { storyDocument, storyTool } from "../storybook/current-session-scenarios"
-import { commentaryRuns } from "./commentary.fixture"
 import { timelinePresets } from "./detail"
 import { createTimelineProjection, Timeline, TimelineRow } from "./projection"
 
@@ -688,7 +688,7 @@ describe("current session timeline rows", () => {
         return [`${row.group.type}:${row.group.refs.map((ref) => ref.partID).join("+")}`]
       })
 
-    expect(groups(rows(runs.complete, "idle"))).toEqual([
+    const complete = [
       "part:reply:text:0",
       ...[1, 2, 3].flatMap((index) => [
         placement === "grouped"
@@ -696,7 +696,10 @@ describe("current session timeline rows", () => {
           : `context:notice-${index}+tool-${index}`,
         `part:reply-${index}:text:0`,
       ]),
-    ])
+    ]
+
+    expect(groups(rows(runs.complete, "idle"))).toEqual(complete)
+    expect(groups(rows(runs.toolOnly, "busy"))).toEqual([...complete, "context:tool-only-notice+tool-only-call"])
 
     const live = [
       "part:prior:text:0",
@@ -705,6 +708,14 @@ describe("current session timeline rows", () => {
 
     expect(groups(rows(runs.busy, "busy"))).toEqual(live)
     expect(groups(rows(runs.failed, "busy"))).toEqual(live)
+
+    expect({
+      justClosed: groups(rows(runs.busy.slice(0, -2), "busy")),
+      beforeStep: groups(rows(runs.busy.slice(0, -1), "busy")),
+    }).toEqual({
+      justClosed: ["part:prior:text:0"],
+      beforeStep: ["part:prior:text:0", "context:wake"],
+    })
   })
 
   test("keeps assistant errors and retries before later notices", () => {
