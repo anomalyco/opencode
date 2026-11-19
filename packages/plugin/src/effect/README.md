@@ -152,6 +152,22 @@ restart recovery and the hook keeps running. Persist your own state if the loop 
 fails, fails the execution like any other session hook, so handle errors from slow or remote work such as a judge model
 call.
 
+When the Session then goes idle, the `experimental.attention` hook runs with the finished assistant message's
+`messageID`. It is experimental. `event.attention` starts empty; the entries left in it replace the Session's plugin
+attention from earlier responses, so leaving it empty clears it. Clients read them with pending permissions and forms
+from `client.experimental.attention.list`, and `session.attention.updated` reports changes. A hook cannot change
+pending permissions or forms. The Session stays busy until the hook returns, so a slow classifier delays idle:
+
+```ts
+yield *
+  ctx.session.hook("experimental.attention", (event) =>
+    Effect.gen(function* () {
+      const result = yield* classify(event.sessionID, event.messageID)
+      if (result.needsReply) event.attention.push({ reason: result.reason })
+    }),
+  )
+```
+
 ## Reloading A Domain
 
 When data captured by a transform changes, reload the affected domain:

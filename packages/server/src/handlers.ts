@@ -24,6 +24,7 @@ import { LocationHandler } from "./handlers/location"
 import { IntegrationHandler } from "./handlers/integration"
 import { WebSearchHandler } from "./handlers/websearch"
 import { UsageHandler } from "./handlers/usage"
+import { AttentionHandler } from "./handlers/attention"
 import { McpHandler } from "./handlers/mcp"
 import { CredentialHandler } from "./handlers/credential"
 import { ProjectHandler } from "./handlers/project"
@@ -49,6 +50,7 @@ export const handlers = Layer.mergeAll(
   IntegrationHandler,
   WebSearchHandler,
   UsageHandler,
+  AttentionHandler,
   McpHandler,
   CredentialHandler,
   ProjectHandler,
