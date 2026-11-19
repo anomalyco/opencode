@@ -159,6 +159,19 @@ mod tests {
     const NEW: &str = "http://127.0.0.1:5000/api/info";
     const HEALTH: &str = r#"{"version":"2.0.0","pid":9,"urls":[],"paths":{"tmp":"/tmp"}}"#;
 
+    /// Paths in a fresh home, with its state directory; the directory lasts as long as the guard.
+    fn home() -> (opencode_util::temp::TempDir, Paths) {
+        let dir = opencode_util::temp::tempdir().unwrap();
+        let paths = Paths::from_vars(|name| match name {
+            "HOME" => Some(OsString::from(dir.path())),
+            "XDG_STATE_HOME" => Some(dir.path().join("state").into()),
+            _ => None,
+        })
+        .unwrap();
+        std::fs::create_dir_all(&paths.state).unwrap();
+        (dir, paths)
+    }
+
     fn register(paths: &Paths, port: u16, password: &str) {
         std::fs::write(
             paths.state.join("service-oc-x.json"),
@@ -173,15 +186,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_managed_client_follows_a_restarted_service() {
-        let dir = opencode_util::temp::tempdir().unwrap();
-        let paths = Paths::from_vars(|name| match name {
-            "HOME" => Some(OsString::from(dir.path())),
-            "XDG_STATE_HOME" => Some(dir.path().join("state").into()),
-            "XDG_CONFIG_HOME" => Some(dir.path().join("config").into()),
-            _ => None,
-        })
-        .unwrap();
-        std::fs::create_dir_all(&paths.state).unwrap();
+        let (_dir, paths) = home();
         register(&paths, 4096, "old");
         // The old service answers discovery, then is gone; the new one answers from the start.
         let server = Arc::new(
@@ -219,14 +224,7 @@ mod tests {
     async fn a_terminal_socket_follows_a_restarted_service() {
         const OLD_TOKEN: &str = "http://127.0.0.1:4096/api/experimental/persistent-pty/pty_1/connect-token";
         const NEW_TOKEN: &str = "http://127.0.0.1:5000/api/experimental/persistent-pty/pty_1/connect-token";
-        let dir = opencode_util::temp::tempdir().unwrap();
-        let paths = Paths::from_vars(|name| match name {
-            "HOME" => Some(OsString::from(dir.path())),
-            "XDG_STATE_HOME" => Some(dir.path().join("state").into()),
-            _ => None,
-        })
-        .unwrap();
-        std::fs::create_dir_all(&paths.state).unwrap();
+        let (_dir, paths) = home();
         register(&paths, 4096, "old");
         let server = Arc::new(
             Server::default()
@@ -263,14 +261,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_socket_endpoint_follows_a_restarted_service() {
-        let dir = opencode_util::temp::tempdir().unwrap();
-        let paths = Paths::from_vars(|name| match name {
-            "HOME" => Some(OsString::from(dir.path())),
-            "XDG_STATE_HOME" => Some(dir.path().join("state").into()),
-            _ => None,
-        })
-        .unwrap();
-        std::fs::create_dir_all(&paths.state).unwrap();
+        let (_dir, paths) = home();
         register(&paths, 4096, "old");
         let server = Arc::new(
             Server::default()
@@ -306,8 +297,7 @@ mod tests {
             source: Source::Server,
             warning: None,
         };
-        let dir = opencode_util::temp::tempdir().unwrap();
-        let paths = Paths::from_vars(|name| (name == "HOME").then(|| dir.path().into())).unwrap();
+        let (_dir, paths) = home();
         let client = client(server.clone(), &connection, &paths, &Env::default()).unwrap();
         assert!(client.server_info().await.is_err());
         // Only the request itself: no discovery ran.
@@ -317,13 +307,7 @@ mod tests {
     #[tokio::test]
     async fn a_registered_url_with_a_non_ascii_host_is_an_error() {
         let url = "https://Bücher.example";
-        let dir = opencode_util::temp::tempdir().unwrap();
-        let paths = Paths::from_vars(|name| match name {
-            "HOME" => Some(OsString::from(dir.path())),
-            "XDG_STATE_HOME" => Some(dir.path().join("state").into()),
-            _ => None,
-        })
-        .unwrap();
+        let (_dir, paths) = home();
         let file = paths.state.join("service-oc-x.json");
         let server = Arc::new(Server::default());
         let registration = opencode_local::registration::Registration {
