@@ -1335,7 +1335,7 @@ describe("OpencodePlugin memory standing block", () => {
 
 describe("OpencodePlugin memory capture", () => {
   capturing("console_memory,memory_capture").effect(
-    "logs every turn, distils at a boundary out of band, and sends what it finds as a pending candidate",
+    "logs every turn, distils at a boundary out of band, and publishes what it finds with the segment's evidence",
     () =>
       withConsole((console) =>
         Effect.gen(function* () {
@@ -1374,24 +1374,31 @@ describe("OpencodePlugin memory capture", () => {
 
           // A test that passes after one failed closes the segment: one distillation, in the background.
           yield* waitUntil(
-            Effect.sync(() => console.state.requests.some((item) => item.path === "/api/memory/candidates")),
+            Effect.sync(() => console.state.requests.some((item) => item.path === "/api/memory/entries")),
           )
           expect(distiller.prompts).toHaveLength(1)
           expect(distiller.prompts[0]).toContain("The boundary: test.")
           expect(distiller.prompts[0]).toContain("#2 ran `bun test` → exit 1 FAILED\nError: ACME_DB_URL is not set")
-          const sent = console.state.requests.filter((item) => item.path === "/api/memory/candidates")
+          // Published like any entry, so Console holds it provisional: a passing run is weak evidence, never enough.
+          const sent = console.state.requests.filter((item) => item.path === "/api/memory/entries")
           expect(sent).toHaveLength(1)
           expect(sent[0]?.body).toEqual({
-            sessionID: session.id,
-            boundary: "test",
             kind: "procedure",
             title: "Tests need ACME_DB_URL",
             body: expect.stringMatching(/^Claim: plain bun test fails/),
             errors: ["Error: ACME_DB_URL is not set"],
             evidence: [{ kind: "test", ref: "ACME_DB_URL=memory://test bun test" }],
-            events: { from: 0, to: 3 },
             source: { sessionID: session.id },
-            idempotencyKey: `${session.id}:0:0`,
+            idempotencyKey: `${session.id}:test:0:0`,
+          })
+          // What the writer cost the session, where a benchmark or the user can read it.
+          expect(yield* host.storage.get(`memory-writer:${session.id}`)).toEqual({
+            calls: 1,
+            inputTokens: Math.ceil(distiller.prompts[0]!.length / 4),
+            outputTokens: Math.ceil(distiller.reply.length / 4),
+            costUSD: 0,
+            unpriced: 1,
+            estimated: true,
           })
           // The coding session got no message from any of it.
           expect(synthetic).toEqual([])
@@ -1408,6 +1415,46 @@ describe("OpencodePlugin memory capture", () => {
           // No reminder when the session would go idle.
           yield* hooks.trigger("session", "experimental.idle", { sessionID: session.id, background: [] } as never)
           expect(synthetic).toEqual([])
+        }),
+      ),
+  )
+
+  capturing("console_memory,memory_capture").effect(
+    "publishes a rule the user stated with their confirmation, and drops task requests passed off as one",
+    () =>
+      withConsole((console) =>
+        Effect.gen(function* () {
+          const rule = "From now on we always put the issue number in the commit message"
+          distiller.reply = JSON.stringify({
+            candidates: [
+              {
+                kind: "convention",
+                title: "Commit messages name the issue",
+                body: "Claim: x\nApplies when: x\nAction: x\nVerify: x\nAnchors: x\nEvidence: the user said so",
+                basis: "user",
+                quote: rule,
+              },
+              {
+                kind: "convention",
+                title: "isWeekend lives in dates.ts",
+                body: "Claim: y",
+                basis: "user",
+                quote: "Add isWeekend to src/dates.ts",
+              },
+            ],
+          })
+          const { host } = yield* start(console)
+          const session = yield* host.session.create({})
+          yield* prompt(session.id, "Add isWeekend to src/dates.ts")
+          yield* ran(session.id, "edit", { path: "src/dates.ts", oldString: "a", newString: "b" })
+          // The user's correction closes the segment.
+          yield* prompt(session.id, `No, wait. ${rule}, please.`)
+          yield* waitUntil(
+            Effect.sync(() => console.state.requests.some((item) => item.path === "/api/memory/entries")),
+          )
+          const sent = console.state.requests.filter((item) => item.path === "/api/memory/entries")
+          expect(sent.map((item) => (item.body as { title: string }).title)).toEqual(["Commit messages name the issue"])
+          expect(sent[0]?.body).toMatchObject({ evidence: [{ kind: "confirmation", ref: rule }] })
         }),
       ),
   )
@@ -1452,6 +1499,18 @@ describe("OpencodeMemoryCapture", () => {
     // Without work in between: no task, correction, subtask or compaction boundary.
     expect(boundary([ask("Hi")], ask("Don't do that", true))).toBeUndefined()
     expect(boundary([{ type: "read", files: ["a"] }], { type: "compaction" })).toBeUndefined()
+  })
+
+  test("backs a candidate with the user's words only when they quote a rule the user stated", () => {
+    const segment = [ask("Add isWeekend. From now on we never mock the clock in tests.")]
+    const candidate = (quote?: string, basis: "user" | "observed" = "user") =>
+      ({ kind: "convention", title: "T", body: "B", basis, ...(quote === undefined ? {} : { quote }) }) as const
+    expect(OpencodeMemoryCapture.backing(candidate("From now on we never mock the clock"), segment)).toBe("confirmed")
+    // A task request, a misquote, or no quote: not the user's confirmation, and not worth keeping as one.
+    expect(OpencodeMemoryCapture.backing(candidate("Add isWeekend."), segment)).toBe("dropped")
+    expect(OpencodeMemoryCapture.backing(candidate("we never stub the network in tests"), segment)).toBe("dropped")
+    expect(OpencodeMemoryCapture.backing(candidate(), segment)).toBe("dropped")
+    expect(OpencodeMemoryCapture.backing(candidate(undefined, "observed"), segment)).toBe("observed")
   })
 
   test("links commits and passing runs after failures as evidence, and keeps only well-formed candidates", () => {

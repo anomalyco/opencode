@@ -193,6 +193,8 @@ type Tracked = {
   /** The next position in the session's event log, read from storage on its first event in this process. */
   next?: number
   distillations: number
+  /** What the session's distillations cost: calls, estimated tokens, and USD at list price for those with one. */
+  readonly writer: { calls: number; inputTokens: number; outputTokens: number; costUSD: number; unpriced: number }
   /** The session took in outside input, so what it publishes is marked tainted and never promoted. */
   tainted?: boolean
   task?: string
@@ -235,6 +237,7 @@ export const make = Effect.fnUntraced(function* (
       segment: [],
       from: 0,
       distillations: 0,
+      writer: { calls: 0, inputTokens: 0, outputTokens: 0, costUSD: 0, unpriced: 0 },
     }
     sessions.delete(sessionID)
     sessions.set(sessionID, found)
@@ -513,15 +516,48 @@ export const make = Effect.fnUntraced(function* (
       Effect.map((models) => {
         const flash = models.data.filter((model) => /deepseek/i.test(model.id) && /flash/i.test(model.id))
         const found = flash.find((model) => !/free/i.test(model.id)) ?? flash[0]
-        return found === undefined ? undefined : { id: found.id, providerID: found.providerID }
+        const price = found?.cost.find((tier) => tier.tier === undefined) ?? found?.cost[0]
+        return found === undefined
+          ? undefined
+          : {
+              ref: { id: found.id, providerID: found.providerID },
+              price: price === undefined ? undefined : { input: Number(price.input), output: Number(price.output) },
+            }
       }),
       Effect.orElseSucceed(() => undefined),
     ),
   )
 
   /**
+   * Adds a distillation to the session's writer totals, kept in plugin storage (`memory-writer:<session>`) and logged:
+   * calls, tokens estimated at characters ÷ 4 (the generation reports no usage), and their cost at the model's list
+   * price, with the calls whose price isn't known counted apart.
+   */
+  const spent = (
+    sessionID: Session.ID,
+    prompt: string,
+    text: string,
+    price: { readonly input: number; readonly output: number } | undefined,
+  ) =>
+    Effect.gen(function* () {
+      const state = tracked(sessionID)
+      const input = Math.ceil(prompt.length / 4)
+      const output = Math.ceil(text.length / 4)
+      const writer = state.writer
+      writer.calls++
+      writer.inputTokens += input
+      writer.outputTokens += output
+      if (price === undefined) writer.unpriced++
+      else writer.costUSD += (input * price.input + output * price.output) / 1_000_000
+      yield* ctx.storage.set(`memory-writer:${sessionID}`, { ...writer, estimated: true })
+      yield* Effect.logInfo("memory writer", { sessionID, ...writer })
+    })
+
+  /**
    * Distils the segment a boundary closed into candidate entries, out of band (a stateless generation, nothing in the
-   * coding session), and sends each that passes the write checks to Console as pending, with the segment's evidence.
+   * coding session), and publishes each that passes the write checks with the segment's evidence. Console holds them
+   * provisional until outside evidence backs them; a rule or correction the user stated, in their own words, goes with
+   * their confirmation, which makes it live.
    */
   const distill = (
     sessionID: Session.ID,
@@ -532,14 +568,20 @@ export const make = Effect.fnUntraced(function* (
     Effect.gen(function* () {
       const model = yield* distiller
       const prompt = OpencodeMemoryCapture.prompt({ segment, boundary })
-      // A listed model can still refuse the request; OpenCode's default model is the fallback.
+      // A listed model can still refuse the request; OpenCode's default model is the fallback, at a price not known here.
       const answer = yield* ctx.experimental.generate
-        .text({ prompt, ...(model === undefined ? {} : { model }) })
+        .text({ prompt, ...(model === undefined ? {} : { model: model.ref }) })
         .pipe(
+          Effect.map((result) => ({ ...result, price: model?.price })),
           Effect.catch((cause) =>
-            model === undefined ? Effect.fail(cause) : ctx.experimental.generate.text({ prompt }),
+            model === undefined
+              ? Effect.fail(cause)
+              : ctx.experimental.generate
+                  .text({ prompt })
+                  .pipe(Effect.map((result) => ({ ...result, price: undefined }))),
           ),
         )
+      yield* spent(sessionID, prompt, answer.text, answer.price)
       const found = OpencodeMemoryCapture.candidates(answer.text)
       if (found.length === 0) return
       const source = yield* checkout
@@ -549,23 +591,35 @@ export const make = Effect.fnUntraced(function* (
           : undefined
       // Without its repository's id, who may read a candidate from a repository can't be recorded: none is sent.
       if ("repo" in source && source.repo && anchor === undefined) return
-      const evidence = OpencodeMemoryCapture.evidence(segment)
+      const observed = OpencodeMemoryCapture.evidence(segment)
       yield* Effect.forEach(found, (candidate, index) =>
         Effect.gen(function* () {
-          const fields = yield* shared("publish", { ...metadata(candidate), body: candidate.body })
+          const backing = OpencodeMemoryCapture.backing(candidate, segment)
+          if (backing === "dropped")
+            return yield* Effect.logDebug("memory candidate dropped: not a rule the user stated", {
+              title: candidate.title,
+            })
+          const evidence = [
+            ...observed,
+            ...(backing === "confirmed"
+              ? [{ kind: "confirmation" as const, ref: (candidate.quote ?? "").trim().slice(0, 500) }]
+              : []),
+          ]
+          const fields = yield* shared("publish", {
+            ...metadata(candidate),
+            body: candidate.body,
+            ...(evidence.length === 0 ? {} : { evidence }),
+          })
           yield* resolved("publish", Schema.decodeUnknownOption(Paths)(fields.paths).pipe(Option.getOrUndefined))
           yield* committed("publish", fields)
-          yield* call(Schema.Struct({ id: Schema.optional(Schema.String) }), "POST", "/api/memory/candidates", {
-            sessionID,
-            boundary,
+          // A duplicate refusal is fine: Console records this session as having found the same lesson.
+          yield* call(Schema.Struct({ id: Schema.optional(Schema.String) }), "POST", "/api/memory/entries", {
             ...fields,
-            ...(evidence.length === 0 ? {} : { evidence }),
-            events,
             source: { ...source, sessionID },
             ...(anchor === undefined ? {} : { anchor }),
             ...(tracked(sessionID).tainted ? { tainted: true } : {}),
             ...(yield* reader),
-            idempotencyKey: `${sessionID}:${events.from}:${index}`.slice(0, 128),
+            idempotencyKey: `${sessionID}:${boundary}:${events.from}:${index}`.slice(0, 128),
           })
         }).pipe(Effect.catch((cause) => Effect.logDebug("memory candidate not sent", { cause }))),
       )

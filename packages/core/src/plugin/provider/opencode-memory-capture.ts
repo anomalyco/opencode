@@ -71,8 +71,9 @@ export function render(segment: ReadonlyArray<Event>) {
 export function prompt(input: { readonly segment: ReadonlyArray<Event>; readonly boundary: Boundary }) {
   return [
     "You read the record of a coding agent's work since its last work boundary and propose lessons for the team's shared memory. Most records yield nothing: then answer {\"candidates\": []}.",
-    "Propose only a verified, non-obvious finding that an agent on a DIFFERENT task in this repository would need, as it holds for the repository as committed: a cause found behind a failure, a dead end and why, a command or setting the repository needs, a correction the user made. Use only what the record shows; never guess. Never: task status or a summary of the change, what the code or docs already say, facts about this machine, files the agent added and didn't commit, secrets.",
-    'Answer only JSON: {"candidates": [{"kind": "bug|convention|procedure|gotcha|decision|failed-approach", "title": "...", "body": "...", "paths": ["repository-relative paths"], "errors": ["exact error messages"]}]}, at most 2. Each body has these lines: Claim: / Applies when: / Action: / Verify: (or Avoid:) / Anchors: / Evidence:.',
+    "Propose only a verified, non-obvious finding that an agent on a DIFFERENT task in this repository would need, as it holds for the repository as committed: a cause found behind a failure, a dead end and why, a command or setting the repository needs, a team rule, decision or correction the user stated. Use only what the record shows; never guess. Never: task status or a summary of the change, what the code or docs already say, facts about this machine, files the agent added and didn't commit, secrets.",
+    'The user\'s task requests are not lessons: what they asked for in this task (add this, fix that, make the tests pass, commit your change) and what this task required hold for this task only; never record them. basis "user" is only for a durable team rule, decision or correction the user stated, one that holds for future work in this repository, with their exact words in quote. Everything else is basis "observed".',
+    'Answer only JSON: {"candidates": [{"kind": "bug|convention|procedure|gotcha|decision|failed-approach", "title": "...", "body": "...", "paths": ["repository-relative paths"], "errors": ["exact error messages"], "basis": "user|observed", "quote": "the user\'s exact words, for basis user"}]}, at most 2. Each body has these lines: Claim: / Applies when: / Action: / Verify: (or Avoid:) / Anchors: / Evidence:.',
     `The boundary: ${input.boundary}.`,
     "The record:",
     render(input.segment),
@@ -85,6 +86,8 @@ const Candidate = Schema.Struct({
   body: Schema.String.check(Schema.isNonEmpty()),
   paths: Schema.optional(Schema.Array(Schema.String)),
   errors: Schema.optional(Schema.Array(Schema.String)),
+  basis: Schema.optional(Schema.Literals(["user", "observed"])),
+  quote: Schema.optional(Schema.String),
 })
 export type Candidate = typeof Candidate.Type
 const Distilled = Schema.Struct({ candidates: Schema.Array(Schema.Unknown) })
@@ -97,6 +100,28 @@ export function candidates(text: string): ReadonlyArray<Candidate> {
     onSome: (answer) =>
       answer.candidates.flatMap((item) => Option.toArray(Schema.decodeUnknownOption(Candidate)(item))),
   }).slice(0, 2)
+}
+
+/** Words that make a sentence a rule, a decision or a correction rather than a request for this task. */
+const RULE =
+  /\b(?:always|never|must|should(?:n'?t)?|don'?t|do not|avoid|instead|from now on|going forward|in this repo(?:sitory)?|we (?:use|prefer|always|never|don'?t)|our|convention|rule|policy|prefer(?:red)?|required?|no longer|not anymore|actually|wrong)\b/i
+const MIN_QUOTE = 12
+
+/**
+ * Whether the user's own words back a candidate: `confirmed` when it says the user stated it and quotes, word for word,
+ * a message of theirs in the segment that reads as a rule, decision or correction (the user's confirmation, which
+ * Console promotes on); `observed` for a candidate from the work itself; `dropped` for a claimed user statement that
+ * isn't one: a misquote, or a task request, which holds for that task only.
+ */
+export function backing(candidate: Candidate, segment: ReadonlyArray<Event>): "confirmed" | "observed" | "dropped" {
+  if (candidate.basis !== "user") return "observed"
+  const quote = flat(candidate.quote ?? "")
+  if (quote.length < MIN_QUOTE || !RULE.test(quote)) return "dropped"
+  return segment.some((event) => event.type === "prompt" && flat(event.text).includes(quote)) ? "confirmed" : "dropped"
+}
+
+function flat(text: string) {
+  return text.replace(/\s+/g, " ").trim().toLowerCase()
 }
 
 /**
