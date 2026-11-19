@@ -1,12 +1,16 @@
 # Known limitations
 
-Measured/verified as of 2026-11-16 (suite: 245 tests, 244 pass / 1 gated skip; benchmark + perf runs documented in `bench/reports/`).
+Measured/verified as of 2026-11-19, v2 (suite: 273 tests, all pass / 1 skip; live smoke for the deterministic contract documented in `bench/seed/B6.json` + `bench/hidden/B6.json`).
 
-## Token cost in short conversations (measured)
+## Token cost in short conversations (measured, v1 benchmark)
+
+> The numbers below are v1 measurements; the v2 default (`mode: "off"`,
+> per-session opt-in) and the `ledger: false` switch bound this cost, and the
+> swap itself adds no LLM call at all.
 
 - Extraction runs at idle after **every** turn — regardless of whether a swap ever happens. In the benchmark's short scripted scenarios, cumulative experimental input was **159.6% higher** than baseline: the per-turn extraction call plus the render prepend cost more than truncation saves at that scale.
 - The idle hook **awaits** extraction (Ruling #8; debounced scheduling raced short-lived `opencode run` processes), so the end of each turn waits for the extraction LLM call — a small wall-clock cost per turn.
-- Mitigations: `small_model` for extraction (cheap calls), high/`null` threshold (default computes from the model limit, so short sessions never swap), or `mode: "off"`. Cumulative savings turn positive when history is long enough that the ~98% per-request reduction after a swap outweighs extraction overhead.
+- Mitigations: `ledger: false` (swap-only pipeline), `extractionModel` for a cheap model, high/`null` threshold (default computes from the model limit, so short sessions never swap), or `mode: "off"`. Cumulative savings turn positive when history is long enough that the ~98% per-request reduction after a swap outweighs extraction overhead.
 
 ## Benchmark coverage
 
@@ -18,7 +22,7 @@ Measured/verified as of 2026-11-16 (suite: 245 tests, 244 pass / 1 gated skip; b
 ## Retention scorer
 
 - Token-Jaccard ≥ 0.4 cannot match single-token facts (e.g. B2's file fact `deploy.ts`), which drags measured recall (B2: 0.67) even though all flags (critical omissions, wrong invalidations, unresolved open items, false claims) were none. It is a measurement floor, not observed ledger loss.
-- B1 (no rollover by design) and B6 (extraction scripted to fail) are excluded from retention scoring; their facts survive in intact history, which the scorer does not read.
+- B1 (no rollover by design) and B6 (extraction scripted to fail) are excluded from retention scoring. In v2 B6's deterministic swap fires anyway — its mechanical projection carries the discarded turns, so the removed "in intact history" escape no longer exists; the render itself must be readable (verified by the B6 smoke).
 
 ## Behavior trade-offs (rulings)
 
