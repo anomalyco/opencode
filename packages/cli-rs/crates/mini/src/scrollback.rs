@@ -607,19 +607,17 @@ impl Writer {
             .column()
             .width(Length::Percent(100.0))
             .child(&Text::new(&app, text).wrap(WrapMode::Word).fg(fg).attributes(attributes).shrink(0.0));
-        if let Some(image) = image
-            && let Ok(info) = image.info()
-        {
+        if image.is_some() {
+            // TS also clamps the size to the image's pixels with the terminal's pixel resolution, which OpenTUI's
+            // Rust host does not expose; without one TS applies no clamp either.
+            let view = opentui::widget::ImageView::new(&app)
+                .image(image)
+                .protocol(opentui::native::ImageProtocol::Blocks)
+                .shrink(0.0);
             let available = u32::from(rows).saturating_sub(u32::from(self.footer.renderer_size().1) + caption_rows);
-            let (cells, lines) = fit_image(info.width, info.height, u32::from(width), available);
+            let (cells, lines) = view.fitted_size(u32::from(width), available, view.cell_aspect());
             if cells > 0 && lines > 0 {
-                let view = opentui::widget::ImageView::new(&app)
-                    .image(Some(image))
-                    .protocol(opentui::native::ImageProtocol::Blocks)
-                    .width(cells)
-                    .height(lines)
-                    .shrink(0.0);
-                column.add(&view);
+                column.add(&view.width(cells).height(lines));
             }
         }
         let rows = separator_rows(self.rendered.as_ref(), commit, &body);
@@ -822,19 +820,6 @@ fn recolor(mut syntax: SyntaxTheme, color: Color) -> SyntaxTheme {
     syntax
 }
 
-/// Core's `getFittedSize` for fit `"fit"`: the largest cell rectangle of the image's aspect within `width` by
-/// `height`. TS also clamps the target to the image's pixel size and takes the cell aspect from the terminal's pixel
-/// resolution. OpenTUI's Rust host keeps that resolution in the native session and exposes none, so this is what TS
-/// does without one: no clamp, and cells twice as tall as wide.
-pub fn fit_image(pixels_wide: u32, pixels_high: u32, width: u32, height: u32) -> (u32, u32) {
-    if pixels_wide == 0 || pixels_high == 0 || width == 0 || height == 0 {
-        return (0, 0);
-    }
-    let aspect = f64::from(pixels_wide) / f64::from(pixels_high) * 2.0;
-    let scale = (f64::from(width) / aspect).min(f64::from(height));
-    ((aspect * scale).round().max(1.0) as u32, scale.round().max(1.0) as u32)
-}
-
 /// `staticBody`: a completed tool's output already spaced from its title drops its leading newline.
 fn static_body(commit: &Commit, body: Body, spaced: u32) -> Body {
     match body {
@@ -1011,11 +996,19 @@ mod tests {
 
     #[test]
     fn images_fit_the_width_or_the_rows_left() {
-        assert_eq!(fit_image(200, 100, 40, 30), (40, 10));
-        assert_eq!(fit_image(100, 400, 40, 30), (15, 30));
-        assert_eq!(fit_image(0, 10, 40, 30), (0, 0));
+        let app = opentui::testing::TestApp::new(10, 2);
+        let fit = |pixels: Option<(u32, u32)>, width: u32, height: u32| {
+            let image = pixels.map(|(wide, high)| {
+                let rgba = vec![0; (wide * high * 4) as usize];
+                opentui::native::Image::from_rgba(app.session().context(), wide, high, &rgba).unwrap()
+            });
+            opentui::widget::ImageView::new(&app).image(image).fitted_size(width, height, 2.0)
+        };
+        assert_eq!(fit(Some((200, 100)), 40, 30), (40, 10));
+        assert_eq!(fit(Some((100, 400)), 40, 30), (15, 30));
+        assert_eq!(fit(None, 40, 30), (0, 0));
         // 40 columns would take 10.4 rows, more than the 10 left, so the rows bound it and it narrows, as in Core.
-        assert_eq!(fit_image(100, 52, 40, 10), (38, 10));
+        assert_eq!(fit(Some((100, 52)), 40, 10), (38, 10));
     }
 
     #[test]
