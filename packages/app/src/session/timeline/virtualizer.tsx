@@ -111,6 +111,7 @@ type Input = {
   follow: TimelineFollow
   scroll: Accessor<{ overflow: boolean; jump: boolean }>
   onResumeScroll: (behavior?: ScrollBehavior) => void
+  focusComposer?: () => void
   setScrollRef: (element: HTMLDivElement | undefined) => void
   /** The rows' content changed height. */
   onContentResize: () => void
@@ -1161,7 +1162,12 @@ export function createTimelineVirtualizer(input: Input) {
               "background-color": "color-mix(in srgb, var(--v2-background-bg-base) 92%, transparent)",
               "box-shadow": "var(--v2-elevation-raised), 0px 2px 8px var(--v2-background-bg-base)",
             }}
-            onClick={() => input.onResumeScroll(prefersReducedMotion() ? "auto" : "smooth")}
+            onClick={(event) => {
+              input.onResumeScroll(prefersReducedMotion() ? "auto" : "smooth")
+
+              // From the keyboard, the button hides under its own focus; the prompt is where the session continues.
+              if (event.detail === 0) input.focusComposer?.()
+            }}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path

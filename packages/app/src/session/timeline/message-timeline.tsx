@@ -84,6 +84,7 @@ type MessageTimelineProps = {
   actions?: SessionUserActions
   scroll: { overflow: boolean; jump: boolean }
   onResumeScroll: (behavior?: ScrollBehavior) => void
+  focusComposer?: () => void
   setScrollRef: (el: HTMLDivElement | undefined) => void
   onScheduleScrollState: (el: HTMLDivElement) => void
   follow: TimelineFollow
@@ -209,6 +210,7 @@ function MessageTimelineView(
     follow: props.follow,
     scroll: () => props.scroll,
     onResumeScroll: props.onResumeScroll,
+    focusComposer: props.focusComposer,
     setScrollRef: props.setScrollRef,
     onContentResize: props.onContentResize,
     bottomInset: () => props.bottomInset ?? 0,

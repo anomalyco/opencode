@@ -301,6 +301,7 @@ function SessionScreenContent(props: {
             actions={actions}
             scroll={timeline.scroll}
             onResumeScroll={timeline.actions.resume}
+            focusComposer={composer.quote.focus}
             setScrollRef={timeline.view.setScrollRef}
             onScheduleScrollState={timeline.view.scheduleScrollState}
             follow={timeline.follow}
