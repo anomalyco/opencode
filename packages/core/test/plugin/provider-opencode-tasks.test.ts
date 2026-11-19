@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test"
-import { Duration, Effect, Exit, Layer, Scope } from "effect"
+import { describe, expect } from "bun:test"
+import { Duration, Effect, Exit, Layer, Random, Scope } from "effect"
 import { HttpClient } from "effect/http"
 import { TestClock } from "effect/testing"
 import { Agent } from "@opencode/core/agent"
@@ -188,16 +188,23 @@ describe("OpencodePlugin task claims", () => {
     ),
   )
 
-  test("waits a third of the member's lease between renewals, at most 10 minutes, give or take a tenth", () => {
-    const minutes = (lease: number) => Duration.toMillis(OpencodeTasks.interval(lease)) / 60_000
-    Array.from({ length: 50 }).forEach(() => {
-      expect(minutes(30)).toBeWithin(9, 11.0001)
-      expect(minutes(9)).toBeWithin(2.7, 3.3001)
-      expect(minutes(1440)).toBeWithin(9, 11.0001)
+  it.effect("waits a third of the member's lease between renewals, at most 10 minutes, jittered by a tenth", () =>
+    Effect.gen(function* () {
+      // Effect's Random decides the jitter: 0 is a tenth early, 0.5 on time, 1 a tenth late.
+      const minutes = (lease: number, random: number) =>
+        OpencodeTasks.interval(lease).pipe(
+          Effect.provideService(Random.Random, { nextDoubleUnsafe: () => random, nextIntUnsafe: () => 0 }),
+          Effect.map((wait) => Duration.toMillis(wait) / 60_000),
+        )
+      expect(yield* minutes(30, 0.5)).toBeCloseTo(10)
+      expect(yield* minutes(30, 0)).toBeCloseTo(9)
+      expect(yield* minutes(30, 1)).toBeCloseTo(11)
+      expect(yield* minutes(9, 0.5)).toBeCloseTo(3)
+      expect(yield* minutes(1440, 0.5)).toBeCloseTo(10)
       // Shorter than a member may choose: the shortest, 5 minutes, which is also what's assumed before Console answers.
-      expect(minutes(1)).toBeWithin(1.5, 1.8334)
-    })
-  })
+      expect(yield* minutes(1, 0.5)).toBeCloseTo(5 / 3)
+    }),
+  )
 
   it.effect("renews on the member's lease once Console names it, after assuming the shortest", () =>
     withConsole((console) =>

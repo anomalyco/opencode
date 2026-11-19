@@ -2,7 +2,7 @@ export * as OpencodeTasks from "./opencode-tasks.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { Session } from "@opencode/schema/session"
-import { Duration, Effect, Exit, FiberHandle, Option, Predicate, Schema, Scope, Stream } from "effect"
+import { Duration, Effect, Exit, FiberHandle, Option, Predicate, Random, Schema, Scope, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import type { OpencodeWatches } from "./opencode-watches.js"
 
@@ -29,9 +29,13 @@ const Renewed = Schema.Struct({ renewed: Schema.Number, leaseMinutes: Schema.Num
  * claim when the member shortens their lease: the shorter one applies from that renewal on.
  */
 export const interval = (leaseMinutes: number) =>
-  Duration.times(
-    Duration.min(Duration.minutes(Math.max(leaseMinutes, MIN_LEASE_MINUTES) / 3), MAX_INTERVAL),
-    0.9 + 0.2 * Math.random(),
+  Random.next.pipe(
+    Effect.map((random) =>
+      Duration.times(
+        Duration.min(Duration.minutes(Math.max(leaseMinutes, MIN_LEASE_MINUTES) / 3), MAX_INTERVAL),
+        0.9 + 0.2 * random,
+      ),
+    ),
   )
 
 /**
@@ -112,7 +116,7 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
   const loop = Effect.gen(function* () {
     let failures = 0
     while (true) {
-      const next = interval(leaseMinutes)
+      const next = yield* interval(leaseMinutes)
       yield* Effect.sleep(failures === 0 ? next : Duration.min(Duration.times(RETRY, 2 ** (failures - 1)), next))
       failures = (yield* round) ? 0 : failures + 1
     }
