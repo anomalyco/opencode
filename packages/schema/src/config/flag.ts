@@ -17,8 +17,6 @@ export const registry = {
     "Enable experimental video generation: the HTTP API that starts a video job and stores the result, and the agent tool that saves the videos into the workspace.",
   console_watches:
     "Watch Slack threads, GitHub pull requests, issues, commits and Actions runs, and the workspace's MCP servers' events through OpenCode Console, and wake sessions when they change.",
-  console_tasks:
-    "Keep the OpenCode Console task claims of live sessions from lapsing: renew them in the background and release them when a session is archived or deleted.",
   mcp_events:
     "Enable experimental MCP Events, a draft MCP extension: declare support to MCP servers and read the events of servers that offer them.",
   full_codemode: "Enable the full Code Mode work in progress.",

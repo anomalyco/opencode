@@ -1,10 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { Duration, Effect, Exit, Layer, Scope } from "effect"
+import { Duration, Effect, Exit, Scope } from "effect"
 import { HttpClient } from "effect/http"
 import { TestClock } from "effect/testing"
 import { Agent } from "@opencode/core/agent"
 import { Credential } from "@opencode/core/credential"
-import { Flag } from "@opencode/core/flag"
 import { Integration } from "@opencode/core/integration"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
@@ -17,10 +16,7 @@ import { Tool } from "@opencode/core/tool"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
-const withFlags = (overrides: string) =>
-  testEffect(PluginTestLayer.pipe(Layer.provide(Layer.succeed(Flag.Overrides, overrides))))
-const it = withFlags("console_tasks")
-const released = withFlags("-console_tasks")
+const it = testEffect(PluginTestLayer)
 
 /** Console's claim renewal and release, in-process, as `/api/task-claims` answers: each for one session. */
 function fakeConsole() {
@@ -294,10 +290,9 @@ describe("OpencodePlugin task claims", () => {
     ),
   )
 
-  released.effect("does nothing while the console_tasks flag is off", () =>
+  it.effect("does nothing without a Console sign-in", () =>
     withConsole((console) =>
       Effect.gen(function* () {
-        yield* signIn(console)
         const host = yield* start(console)
         const session = yield* host.session.create({})
         yield* claim(session.id)

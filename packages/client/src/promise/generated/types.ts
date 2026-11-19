@@ -2639,7 +2639,6 @@ export type ConfigEntry =
           artifacts?: boolean
           video_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           console_watches?: boolean
-          console_tasks?: boolean
           mcp_events?: boolean
           full_codemode?: boolean
           schedules?: boolean

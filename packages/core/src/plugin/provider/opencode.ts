@@ -342,12 +342,11 @@ export const OpencodePlugin = define<
       yield* syncInstructionsAndSkills(next, allowed)
       const watching = allowed && next.remote?.watches === true && (yield* flags.enabled("console_watches"))
       // Claims are only ever made through the Console's MCP, which offers its task tools only while Tasks are on.
-      const claiming = allowed && (yield* flags.enabled("console_tasks"))
-      yield* syncConsole(next.connection, watching, claiming)
+      yield* syncConsole(next.connection, watching, allowed)
       yield* artifacts.sync(allowed && next.remote?.artifacts === true ? next.connection : undefined, watching)
     })
     // Watching starts when the console_watches flag is on and the Console's config says the workspace has event watches,
-    // and stops when either no longer holds. Task claims are kept alive while the console_tasks flag is on.
+    // and stops when either no longer holds. Task claims are kept alive while the Console integration is allowed.
     const syncConsole = Effect.fnUntraced(
       function* (connection: ActiveConnection, watching: boolean, claiming: boolean) {
         const credential = connection && (yield* ctx.integration.connection.resolve(connection))
