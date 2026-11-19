@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdout, Command, Stdio};
+use std::process::{Child, ChildStdout};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
@@ -11,46 +11,18 @@ use std::time::Duration;
 
 use opencode_local::{jsonl, pins};
 use serde_json::{Value, json};
+use support::available;
+
+mod support;
 
 const WRITES: usize = 20;
-
-fn ts_root() -> PathBuf {
-    std::env::var_os("OPENCODE_TS_ROOT")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..").canonicalize().unwrap())
-}
-
-fn available() -> bool {
-    let present = ts_root().join("node_modules").is_dir() && Command::new("bun").arg("--version").output().is_ok();
-    if !present {
-        assert!(
-            std::env::var_os("OPENCODE_RS_REQUIRE_TS").is_none(),
-            "OPENCODE_RS_REQUIRE_TS is set, but skipped: needs bun and {}/node_modules; set OPENCODE_TS_ROOT",
-            ts_root().display()
-        );
-        eprintln!("skipped: needs bun and {}/node_modules; set OPENCODE_TS_ROOT", ts_root().display());
-    }
-    present
-}
 
 /// A running oracle and its output.
 struct Oracle(Child, BufReader<ChildStdout>);
 
 /// Starts the oracle; a writing command waits for [`Oracle::go`].
 fn typescript(args: &[&str]) -> Oracle {
-    let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../parity/oracle/MS1-files.ts");
-    let mut child = Command::new("bun")
-        .arg("--cwd")
-        .arg(ts_root().join("packages/cli"))
-        .arg(script)
-        .arg(ts_root())
-        .args(args)
-        .env("BUN_RUNTIME_TRANSPILER_CACHE_PATH", std::env::temp_dir().join("opencode-rs-f5-bun-cache"))
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
+    let mut child = support::bun("MS1-files.ts", args).spawn().unwrap();
     let stdout = BufReader::new(child.stdout.take().unwrap());
     Oracle(child, stdout)
 }

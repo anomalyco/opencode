@@ -6,7 +6,7 @@
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Command};
 use std::thread;
 use std::time::Duration;
 
@@ -19,42 +19,13 @@ use opencode_local::paths::Paths;
 use opencode_local::storage::Storage;
 use opencode_local::{jsonl, lock::Options};
 use serde_json::{Map, Value, json};
+use support::available;
 
-fn ts_root() -> PathBuf {
-    std::env::var_os("OPENCODE_TS_ROOT")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..").canonicalize().unwrap())
-}
-
-fn available() -> bool {
-    let present = ts_root().join("node_modules").is_dir() && Command::new("bun").arg("--version").output().is_ok();
-    if !present {
-        assert!(
-            std::env::var_os("OPENCODE_RS_REQUIRE_TS").is_none(),
-            "OPENCODE_RS_REQUIRE_TS is set, but skipped: needs bun and {}/node_modules; set OPENCODE_TS_ROOT",
-            ts_root().display()
-        );
-        eprintln!("skipped: needs bun and {}/node_modules; set OPENCODE_TS_ROOT", ts_root().display());
-    }
-    present
-}
+mod support;
 
 fn command(args: &[&str], home: Option<&Path>) -> Command {
-    let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../parity/oracle/F.5-config.ts");
-    let mut command = Command::new("bun");
-    command
-        .arg("--cwd")
-        .arg(ts_root().join("packages/cli"))
-        .arg(script)
-        .arg(ts_root())
-        .args(args)
-        .env_remove("OPENCODE_CLI_CONFIG_CONTENT")
-        .env_remove("OPENCODE_CONFIG_DIR")
-        // Keep Bun's transpiler cache out of the temporary homes and warm across runs.
-        .env("BUN_RUNTIME_TRANSPILER_CACHE_PATH", bun_cache())
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    let mut command = support::bun("F.5-config.ts", args);
+    command.env_remove("OPENCODE_CLI_CONFIG_CONTENT").env_remove("OPENCODE_CONFIG_DIR");
     if let Some(home) = home {
         for (name, value) in env(home) {
             command.env(name, value);
@@ -79,10 +50,6 @@ fn finish(child: Child) -> Vec<Value> {
 
 fn oracle(args: &[&str], home: Option<&Path>, input: &Value) -> Vec<Value> {
     finish(spawn(args, home, input))
-}
-
-fn bun_cache() -> PathBuf {
-    std::env::temp_dir().join("opencode-rs-f5-bun-cache")
 }
 
 fn env(home: &Path) -> Vec<(&'static str, PathBuf)> {
