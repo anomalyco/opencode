@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect, Fiber, PlatformError, Schema, Stream } from "effect"
+import { Effect, Exit, Fiber, PlatformError, Schema, Scope, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { TestClock } from "effect/testing"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
@@ -11,7 +11,7 @@ import { it } from "./lib/effect"
 
 const connected = Effect.gen(function* () {
   const machine = Machine.make(Environment.ID.make("gpu"))
-  const worker = makeWorker(machine)
+  const worker = yield* makeWorker(machine)
   yield* worker.restore
   return { worker, environment: machine.environment }
 })
@@ -21,6 +21,8 @@ const bytes = (value: string) => new TextEncoder().encode(value)
 const text = (stream: Stream.Stream<Uint8Array, PlatformError.PlatformError>) =>
   Stream.mkString(Stream.decodeText(stream))
 const cause = (error: PlatformError.PlatformError) => error.reason.cause
+const count = (received: ReadonlyArray<Machine.ToWorker>, type: Machine.ToWorker["type"]) =>
+  received.filter((message) => message.type === type).length
 
 describe("machine driver", () => {
   it.effect("runs a command and reports its output and exit code", () =>
@@ -65,6 +67,7 @@ describe("machine driver", () => {
       yield* run.exit(2)
       expect(yield* text(handle.all)).toBe("abcd")
       expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(2))
+      expect(count(worker.received, "start")).toBe(1)
     }),
   )
 
@@ -80,6 +83,7 @@ describe("machine driver", () => {
       yield* worker.restore
       expect(yield* text(handle.all)).toBe("before during")
       expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(7))
+      expect(count(worker.received, "start")).toBe(1)
     }),
   )
 
@@ -121,6 +125,7 @@ describe("machine driver", () => {
       yield* worker.restore
       expect(cause(yield* Fiber.join(spawn).pipe(Effect.flip))).toBeInstanceOf(Machine.NotSent)
       expect(worker.runs).toHaveLength(0)
+      expect(count(worker.received, "start")).toBe(0)
     }),
   )
 
@@ -157,6 +162,27 @@ describe("machine driver", () => {
       yield* run.exit(0)
       expect(yield* text(handle.all)).toBe("ok")
       expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(0))
+      expect(count(worker.received, "start")).toBe(1)
+    }),
+  )
+
+  it.effect("keeps the newest of two quick connections, with a start sent between them", () =>
+    Effect.gen(function* () {
+      const { worker, environment } = yield* connected
+      const closeFirst = yield* worker.redial
+      worker.drop("home", "started")
+      const spawn = yield* Effect.forkChild(environment.spawner.spawn(command), { startImmediately: true })
+      const closeSecond = yield* worker.redial
+      const handle = yield* Fiber.join(spawn)
+      yield* closeFirst
+      yield* closeSecond
+      const run = worker.runs[0]
+      yield* run.print("ok")
+      yield* run.exit(0)
+      expect(yield* text(handle.all)).toBe("ok")
+      expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(0))
+      yield* environment.files.write("/work/newest.txt", bytes("newest"))
+      expect(count(worker.received, "start")).toBe(1)
     }),
   )
 
@@ -168,6 +194,7 @@ describe("machine driver", () => {
       yield* worker.restart
       expect(cause(yield* handle.exitCode.pipe(Effect.flip))).toBeInstanceOf(Machine.WorkerRestarted)
       expect(cause(yield* Stream.runDrain(handle.all).pipe(Effect.flip))).toBeInstanceOf(Machine.WorkerRestarted)
+      expect(count(worker.received, "start")).toBe(1)
     }),
   )
 
@@ -180,6 +207,37 @@ describe("machine driver", () => {
       const killed = cause(yield* handle.exitCode.pipe(Effect.flip))
       expect(killed).toBeInstanceOf(CrossSpawnSpawner.KilledBySignal)
       expect(killed instanceof CrossSpawnSpawner.KilledBySignal && killed.signal).toBe("SIGTERM")
+    }),
+  )
+
+  it.effect("sends a lost kill again on the next connection", () =>
+    Effect.gen(function* () {
+      const { worker, environment } = yield* connected
+      const handle = yield* environment.spawner.spawn(command)
+      worker.drop("worker", "kill")
+      const killing = yield* Effect.forkChild(handle.kill(), { startImmediately: true })
+      yield* worker.cut
+      yield* worker.restore
+      yield* Fiber.join(killing)
+      expect(cause(yield* handle.exitCode.pipe(Effect.flip))).toBeInstanceOf(CrossSpawnSpawner.KilledBySignal)
+      expect(count(worker.received, "start")).toBe(1)
+    }),
+  )
+
+  it.effect("stops a process that ignores the first signal when its scope closes", () =>
+    Effect.gen(function* () {
+      const { worker, environment } = yield* connected
+      const scope = yield* Scope.make()
+      yield* environment.spawner
+        .spawn(ChildProcess.make("/bin/sh", ["-c", "make"], { cwd: "/work", forceKillAfter: "3 seconds" }))
+        .pipe(Scope.provide(scope))
+      worker.runs[0].traps.add("SIGTERM")
+      const closing = yield* Effect.forkChild(Scope.close(scope, Exit.void), { startImmediately: true })
+      yield* Effect.yieldNow
+      yield* TestClock.adjust("3 seconds")
+      yield* Fiber.join(closing)
+      const signals = worker.received.flatMap((message) => (message.type === "kill" ? [message.signal] : []))
+      expect(signals).toEqual(["SIGTERM", "SIGKILL"])
     }),
   )
 
@@ -215,6 +273,7 @@ describe("machine driver", () => {
       expect(yield* text(handle.all)).toBe("abc")
       expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(0))
       expect(new TextDecoder().decode((yield* environment.files.read("/work/on-new.txt")).bytes)).toBe("new")
+      expect([count(worker.received, "start"), count(worker.received, "fs")]).toEqual([1, 3])
     }),
   )
 
@@ -277,14 +336,15 @@ describe("machine wire", () => {
 
 environmentConformance("machine environment", () =>
   Effect.gen(function* () {
+    const scope = yield* Scope.make()
     const machine = Machine.make(Environment.ID.make("gpu"))
-    const worker = makeWorker(machine)
+    const worker = yield* makeWorker(machine).pipe(Scope.provide(scope))
     yield* worker.restore
     return {
       files: machine.environment.files,
       root: `/workspace-${crypto.randomUUID()}`,
       symlink: worker.files.symlink,
-      dispose: worker.cut,
+      dispose: Scope.close(scope, Exit.void),
     }
   }),
 )

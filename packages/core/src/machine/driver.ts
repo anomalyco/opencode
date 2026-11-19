@@ -31,7 +31,8 @@ export class WorkerRestarted extends Schema.TaggedError<WorkerRestarted>()("Mach
 /** One connection from the worker, as the endpoint that accepted it hands it over. */
 export interface Connection {
   readonly hello: Hello
-  readonly send: (message: ToWorker) => Effect.Effect<void>
+  /** Queues the message and returns. A message queued on a connection that is lost is dropped. */
+  readonly send: (message: ToWorker) => void
   /** The messages after `hello`. Ends when the connection is lost. */
   readonly messages: Stream.Stream<Exclude<FromWorker, Hello>>
 }
@@ -57,7 +58,7 @@ interface Process {
   readonly instance: string
   readonly started: Deferred.Deferred<number, Error>
   readonly output: Queue.Queue<Uint8Array, PlatformError.PlatformError | Cause.Done>
-  readonly exited: Deferred.Deferred<Extract<FromWorker, { type: "exit" }>, WorkerRestarted>
+  readonly exited: Deferred.Deferred<Extract<FromWorker, { type: "exit" }>, Error>
   delivered: number
 }
 
@@ -82,8 +83,16 @@ export const make = (id: Environment.ID): Interface => {
     current.calls.forEach((call) => Deferred.doneUnsafe(call, Effect.fail(new Unknown({ machine: id }))))
   }
 
+  // The process will not be heard from again: whoever waits on it gets `error`.
+  const gone = (processID: string, process: Process, error: Error) => {
+    processes.delete(processID)
+    Deferred.doneUnsafe(process.started, Effect.fail(error))
+    Deferred.doneUnsafe(process.exited, Effect.fail(error))
+    Queue.failCauseUnsafe(process.output, Cause.fail(platform("output")(error)))
+  }
+
   const connect = (connection: Connection) =>
-    Effect.gen(function* () {
+    Effect.suspend(() => {
       if (link) lose(link)
       const current: Link = {
         instance: connection.hello.instance,
@@ -97,63 +106,62 @@ export const make = (id: Environment.ID): Interface => {
         if (entry && process.instance === current.instance) {
           // Settles a start whose reply was lost with the last connection.
           Deferred.doneUnsafe(process.started, Effect.succeed(entry.pid))
-          yield* current.send({ type: "attach", id: processID, from: process.delivered })
+          current.send({ type: "attach", id: processID, from: process.delivered })
           continue
         }
-        processes.delete(processID)
         // A start the same worker does not list never reached it, so a retry is safe. A new worker lost everything.
-        Deferred.doneUnsafe(
-          process.started,
-          Effect.fail(
-            process.instance === current.instance ? new NotSent({ machine: id }) : new Unknown({ machine: id }),
-          ),
+        gone(
+          processID,
+          process,
+          Deferred.isDoneUnsafe(process.started)
+            ? new WorkerRestarted({ machine: id })
+            : process.instance === current.instance
+              ? new NotSent({ machine: id })
+              : new Unknown({ machine: id }),
         )
-        Deferred.doneUnsafe(process.exited, Effect.fail(new WorkerRestarted({ machine: id })))
-        yield* Queue.fail(process.output, platform("output")(new WorkerRestarted({ machine: id })))
       }
       link = current
       Deferred.doneUnsafe(next, Effect.succeed(current))
       next = Deferred.makeUnsafe()
-      yield* connection.messages.pipe(
+      return connection.messages.pipe(
         Stream.interruptWhen(Deferred.await(current.lost)),
-        Stream.runForEach((message) => receive(current, message)),
+        Stream.runForEach((message) => Effect.sync(() => receive(current, message))),
         Effect.ensuring(Effect.sync(() => lose(current))),
       )
     })
 
-  const receive = (current: Link, message: Exclude<FromWorker, Hello>) =>
-    Effect.gen(function* () {
-      if (message.type === "fs") {
-        const call = current.calls.get(message.req)
-        if (call) Deferred.doneUnsafe(call, Effect.succeed(message))
+  const receive = (current: Link, message: Exclude<FromWorker, Hello>) => {
+    if (message.type === "fs") {
+      const call = current.calls.get(message.req)
+      if (call) Deferred.doneUnsafe(call, Effect.succeed(message))
+      return
+    }
+    const process = processes.get(message.id)
+    if (!process) return
+    switch (message.type) {
+      case "started":
+        Deferred.doneUnsafe(process.started, Effect.succeed(message.pid))
+        return
+      case "failed":
+        // A refused start never ran. Once started, a failed attach or kill changes nothing the handle reports.
+        if (!Deferred.isDoneUnsafe(process.started)) gone(message.id, process, new Error(message.message))
+        return
+      case "output": {
+        // A chunk past what was delivered follows a lost one; the exit's byte count attaches again from the gap.
+        if (message.offset > process.delivered) return
+        const fresh = message.data.subarray(process.delivered - message.offset)
+        process.delivered += fresh.length
+        if (fresh.length > 0) Queue.offerUnsafe(process.output, fresh)
         return
       }
-      const process = processes.get(message.id)
-      if (!process) return
-      switch (message.type) {
-        case "started":
-          Deferred.doneUnsafe(process.started, Effect.succeed(message.pid))
-          return
-        case "failed":
-          // Once started, a failed attach or kill changes nothing the handle reports.
-          Deferred.doneUnsafe(process.started, Effect.fail(new Error(message.message)))
-          return
-        case "output": {
-          // A chunk past what was delivered follows a lost one; the exit's byte count attaches again from the gap.
-          if (message.offset > process.delivered) return
-          const fresh = message.data.subarray(process.delivered - message.offset)
-          process.delivered += fresh.length
-          if (fresh.length > 0) yield* Queue.offer(process.output, fresh)
-          return
-        }
-        case "exit":
-          if (message.bytes > process.delivered)
-            return yield* current.send({ type: "attach", id: message.id, from: process.delivered })
-          processes.delete(message.id)
-          Deferred.doneUnsafe(process.exited, Effect.succeed(message))
-          yield* Queue.end(process.output)
-      }
-    })
+      case "exit":
+        if (message.bytes > process.delivered)
+          return current.send({ type: "attach", id: message.id, from: process.delivered })
+        processes.delete(message.id)
+        Deferred.doneUnsafe(process.exited, Effect.succeed(message))
+        Queue.endUnsafe(process.output)
+    }
+  }
 
   const spawner = ChildProcessSpawner.make((command) =>
     Effect.gen(function* () {
@@ -177,15 +185,46 @@ export const make = (id: Environment.ID): Interface => {
         delivered: 0,
       }
       processes.set(processID, process)
-      // Like a local process, one that outlives the scope that spawned it is killed, here at best effort.
+
+      const deliver = (current: Link, signal: Signal) => {
+        current.send({ type: "kill", id: processID, signal })
+        return Deferred.await(current.lost)
+      }
+      // Until the process is gone, sends the signal on each connection as it becomes active, as a kill is safe to
+      // repeat. Without `persist` only on the current one, giving up when there is none or it is lost.
+      const terminate = (signal: Signal, persist: boolean) =>
+        Effect.suspend(() =>
+          Deferred.isDoneUnsafe(process.exited)
+            ? Effect.void
+            : Effect.raceFirst(
+                Effect.ignore(Deferred.await(process.exited)),
+                persist
+                  ? Effect.forever(Effect.flatMap(online, (current) => deliver(current, signal)))
+                  : link
+                    ? deliver(link, signal)
+                    : Effect.void,
+              ),
+        )
+      const stop = (stopOptions: ChildProcess.KillOptions | undefined, persist: boolean) => {
+        const signal = stopOptions?.killSignal ?? killSignal
+        if (!Schema.is(Signal)(signal)) return Effect.fail(unsupported(`${signal} is`))
+        if (stopOptions?.forceKillAfter === undefined) return terminate(signal, persist)
+        return Effect.timeoutOrElse(terminate(signal, persist), {
+          duration: stopOptions.forceKillAfter,
+          orElse: () => terminate("SIGKILL", persist),
+        })
+      }
+      // Stopped like a local process when the scope that spawned it closes, but never waiting for a machine that is
+      // away. Added before the start is sent, so a start still unanswered is covered.
       yield* Effect.addFinalizer(() =>
-        Effect.suspend(() => {
-          // Still listed: running, or its start is unanswered.
-          if (!processes.delete(processID) || !link) return Effect.void
-          return link.send({ type: "kill", id: processID, signal: killSignal })
-        }),
+        Effect.ignore(
+          stop(
+            { killSignal, forceKillAfter: options.forceKillAfter ?? CrossSpawnSpawner.RELEASE_FORCE_KILL_AFTER },
+            false,
+          ),
+        ),
       )
-      yield* live.send({
+      live.send({
         type: "start",
         id: processID,
         argv: [command.command, ...command.args.map(reveal)],
@@ -204,22 +243,10 @@ export const make = (id: Environment.ID): Interface => {
             Effect.andThen(Effect.fail(new Unknown({ machine: id }))),
           ),
         ),
-        Effect.tapError(() => Effect.sync(() => processes.delete(processID))),
+        Effect.tapError((error) => Effect.sync(() => gone(processID, process, error))),
         Effect.mapError(platform("spawn")),
       )
 
-      // Done once the process is gone. Until then it waits for a connection rather than failing without one, so a
-      // stop asked for while the machine is away still reaches the process once it is back.
-      const terminate = (signal: ChildProcess.Signal) =>
-        Schema.is(Signal)(signal)
-          ? Effect.raceFirst(
-              Effect.ignore(Deferred.await(process.exited)),
-              online.pipe(
-                Effect.flatMap((current) => current.send({ type: "kill", id: processID, signal })),
-                Effect.andThen(Effect.never),
-              ),
-            )
-          : Effect.fail(unsupported(`${signal} is`))
       const all = Stream.fromQueue(process.output)
       return ChildProcessSpawner.makeHandle({
         pid: ChildProcessSpawner.ProcessId(pid),
@@ -232,13 +259,7 @@ export const make = (id: Environment.ID): Interface => {
           ),
         ),
         isRunning: Effect.map(Deferred.isDone(process.exited), (done) => !done),
-        kill: (options) =>
-          options?.forceKillAfter === undefined
-            ? terminate(options?.killSignal ?? killSignal)
-            : Effect.timeoutOrElse(terminate(options.killSignal ?? killSignal), {
-                duration: options.forceKillAfter,
-                orElse: () => terminate("SIGKILL"),
-              }),
+        kill: (killOptions) => stop(killOptions, true),
         stdin: Sink.fail(unsupported("stdin is")),
         stdout: all,
         stderr: Stream.empty,
@@ -258,8 +279,8 @@ export const make = (id: Environment.ID): Interface => {
       const callID = ++req
       const reply = Deferred.makeUnsafe<Extract<FromWorker, { type: "fs" }>, Unknown>()
       current.calls.set(callID, reply)
-      return current.send({ type: "fs", req: callID, ...request }).pipe(
-        Effect.andThen(Deferred.await(reply)),
+      current.send({ type: "fs", req: callID, ...request })
+      return Deferred.await(reply).pipe(
         Effect.ensuring(Effect.sync(() => current.calls.delete(callID))),
         Effect.mapError((cause) => new Failed({ path, cause })),
       )
