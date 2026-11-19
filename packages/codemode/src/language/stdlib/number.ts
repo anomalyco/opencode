@@ -1,9 +1,9 @@
 import { constructor, constants, type Method, methods } from "../runtime/native.js"
-import { coerceToInteger, coerceToNumber, get, type NativeResult, Obj, type Value } from "../runtime/objects.js"
+import { coerceToNumber, get, type NativeResult, Obj, type Value } from "../runtime/objects.js"
 import { typeError } from "../runtime/model.js"
 import type { Interpreter } from "../runtime/interpreter.js"
 import { withPrimitives, withReads } from "../runtime/callback.js"
-import { checkArrayLength } from "../runtime/limits.js"
+import { arrayLikeTags } from "./date.js"
 import { coerce } from "./value.js"
 
 // Intl.NumberFormat's options, each with the hint its value converts by.
@@ -40,9 +40,12 @@ const toLocaleString = (value: number, locales: Value, options: Value): NativeRe
   // The host's own message for null quotes host source, so this one is thrown here.
   if (locales === null || options === null) throw typeError("Cannot convert undefined or null to object.")
   return withReads(() => {
-    const length = locales instanceof Obj ? Math.max(0, coerceToInteger(get(locales, "length"))) : 0
-    checkArrayLength(length)
-    const list = Array.from({ length }, (_, index) => get(locales as Obj, index))
+    const list = locales instanceof Obj ? arrayLikeTags(locales) : []
+    // CanonicalizeLocaleList: an element that is neither a string nor an object is a TypeError, not an invalid tag.
+    if (list.some((tag) => typeof tag !== "string" && !(tag instanceof Obj))) {
+      throw typeError("Number.prototype.toLocaleString: a locale must be a string or an object.")
+    }
+    const length = list.length
     const read = options instanceof Obj ? numberFormatOptions : []
     return withPrimitives(
       [...list.map(() => "string" as const), ...read.map(([, hint]) => hint)],
@@ -50,7 +53,12 @@ const toLocaleString = (value: number, locales: Value, options: Value): NativeRe
       (primitives) => {
         // Intl reads a primitive other than a string as an empty list. The host canonicalizes the tags itself; doing it
         // here too would canonicalize twice, which breaks some valid tags.
-        const tags = locales instanceof Obj ? primitives.slice(0, length) : typeof locales === "string" ? [locales] : []
+        const tags =
+          locales instanceof Obj
+            ? primitives.slice(0, length).map((tag) => (typeof tag === "symbol" ? tag : String(tag)))
+            : typeof locales === "string"
+              ? [locales]
+              : []
         return value.toLocaleString(
           (tags.length === 0 ? "en-US" : tags) as string | Array<string>,
           (options instanceof Obj

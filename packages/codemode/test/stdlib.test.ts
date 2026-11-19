@@ -1748,6 +1748,27 @@ describe("toLocaleString", () => {
     ).toEqual(["123,450%", "1,235"])
   })
 
+  test("number locale lists follow CanonicalizeLocaleList", async () => {
+    expect(
+      await value(`
+      const caught = (f) => { try { return f() } catch (e) { return e.name } }
+      const holey = ["de-DE"]
+      holey[2] = "en-US"
+      return [
+        caught(() => (1).toLocaleString([5])),
+        caught(() => (1).toLocaleString(["en-US", null])),
+        caught(() => (1).toLocaleString({ length: 1, 0: true })),
+        caught(() => (1).toLocaleString([{ toString: () => 5 }])),
+        caught(() => (1234.5).toLocaleString([{ toString: () => "de-DE" }])),
+        caught(() => (1234.5).toLocaleString(holey)),
+        caught(() => (1234.5).toLocaleString({ length: 2, 1: "de-DE" })),
+        caught(() => (1234.5).toLocaleString(["de-DE", "de-DE"])),
+        caught(() => (1234.5).toLocaleString(true)),
+      ]
+    `),
+    ).toEqual(["TypeError", "TypeError", "TypeError", "RangeError", "1.234,5", "1.234,5", "1.234,5", "1.234,5", "1,234.5"])
+  })
+
   test("arrays join each element's toLocaleString, skipping holes and nullish elements", async () => {
     expect(
       await value(`

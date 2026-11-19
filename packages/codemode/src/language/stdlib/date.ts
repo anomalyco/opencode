@@ -48,7 +48,7 @@ const dateTimeOptions = [
   "timeStyle",
 ]
 
-const arrayLikeTags = (locales: Obj) => {
+export const arrayLikeTags = (locales: Obj) => {
   const length = get(locales, "length")
   const count = length instanceof Obj ? 0 : Math.max(0, Math.floor(coerceToNumber(length)) || 0)
   checkArrayLength(count)
