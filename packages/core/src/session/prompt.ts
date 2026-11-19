@@ -9,6 +9,7 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Effect, Option, Schema } from "effect"
 import path from "path"
 import { fileURLToPath } from "url"
+import { Command } from "../command.js"
 import { Database } from "../database/database.js"
 import { Image } from "../image.js"
 import { Mime } from "../mime.js"
@@ -39,6 +40,7 @@ export const prepare = Effect.fn("SessionPrompt.prepare")(function* (request: {
   const fs = yield* FSUtil.Service
   yield* Plugin.awaitActivation
   const hooks = yield* PluginHooks.Service
+  const command = yield* Command.Running
   const event = yield* hooks.trigger("session", "prompt", {
     sessionID: request.session.id,
     messageID: request.messageID,
@@ -48,13 +50,13 @@ export const prepare = Effect.fn("SessionPrompt.prepare")(function* (request: {
       agents: request.input.agents?.slice(),
       skills: request.input.skills?.slice(),
     }),
-    metadata: structuredClone(request.input.metadata),
+    metadata: structuredClone(
+      command === undefined ? request.input.metadata : { ...request.input.metadata, command: { name: command } },
+    ),
     delivery: request.input.delivery ?? "steer",
   })
   const input = event.prompt
-  const files = input.files
-    ? yield* Effect.forEach(input.files, materializeAttachment, { concurrency: 8 })
-    : undefined
+  const files = input.files ? yield* Effect.forEach(input.files, materializeAttachment, { concurrency: 8 }) : undefined
   const requested = input.skills
   const selected = yield* Effect.gen(function* () {
     if (!requested?.length) return undefined

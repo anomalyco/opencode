@@ -8,6 +8,7 @@ import { Money } from "@opencode/schema/money"
 import { Shell } from "@opencode/schema/shell"
 import { Skill } from "@opencode/schema/skill"
 import { Agent } from "@opencode/core/agent"
+import { Command } from "@opencode/core/command"
 import { and, asc, eq } from "drizzle-orm"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -609,6 +610,22 @@ describe("Session.create", () => {
 
       expect(page.data.map((item) => item.id)).toEqual([nested.id])
       expect(page.data.map((item) => item.id)).not.toContain(root.id)
+    }),
+  )
+
+  it.effect("records the command that admitted a prompt with its metadata", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const created = yield* session.create({ location })
+      const typed = yield* session.prompt({ sessionID: created.id, text: "Typed", resume: false })
+      const commanded = yield* session
+        .prompt({ sessionID: created.id, text: "Template", metadata: { displayText: "/review" }, resume: false })
+        .pipe(Effect.provideService(Command.Running, "review"))
+      expect(typed.type === "user" && typed.payload.metadata).toBeUndefined()
+      expect(commanded.type === "user" && commanded.payload.metadata).toEqual({
+        displayText: "/review",
+        command: { name: "review" },
+      })
     }),
   )
 

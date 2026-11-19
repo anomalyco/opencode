@@ -25,6 +25,14 @@ export interface Definition {
   readonly execute: (input: Invocation) => Effect.Effect<void, unknown>
 }
 
+/**
+ * The command running in this fiber, if any: a prompt it admits records the command's name in its metadata
+ * (`metadata.command`), so what a user typed can be told from a command's template.
+ */
+export const Running = Context.Reference<string | undefined>("@opencode/Command/Running", {
+  defaultValue: () => undefined,
+})
+
 export type Editor = {
   add: (definition: Definition) => void
 }
@@ -86,6 +94,7 @@ export const layer = Layer.effect(
         if (!definition)
           return yield* new NotFoundError({ command: input.name, message: `Command not found: ${input.name}` })
         return yield* definition.execute(input.invocation).pipe(
+          Effect.provideService(Running, input.name),
           Effect.tapError((error) => Effect.logError("command execution failed", { command: input.name, error })),
           Effect.mapError((error) => new ExecutionError({ command: input.name, message: errorMessage(error) })),
         )
