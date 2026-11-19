@@ -1,6 +1,6 @@
 import { type Hint, Invoke } from "../runtime/signals.js"
 import { constructor, fn, type Method, methods } from "../runtime/native.js"
-import { checkArrayLength, checkLocaleCount, checkLocaleTag, checkStringLength } from "../runtime/limits.js"
+import { checkArrayLength, checkStringLength } from "../runtime/limits.js"
 import { invalidData, IteratorSymbol, rangeError, typeError } from "../runtime/model.js"
 import {
   define,
@@ -248,7 +248,7 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
       return withReads(() => {
         // The host collator reads a locale list and these options; objects among them convert to strings first.
         const length = locales instanceof Obj ? Math.max(0, coerceToInteger(get(locales, "length"))) : 0
-        checkLocaleCount(length)
+        checkArrayLength(length)
         const list = locales instanceof Obj ? Array.from({ length }, (_, index) => get(locales, index)) : undefined
         const read = options instanceof Obj ? collatorOptions.map((key) => get(options, key)) : []
         const flags = read.map((option, index) =>
@@ -256,7 +256,6 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
         )
         return withPrimitives("string", [...(list ?? []), ...flags], (primitives) => {
           const hostLocales = list === undefined ? locales : primitives.slice(0, list.length)
-          for (const tag of Array.isArray(hostLocales) ? hostLocales : [hostLocales]) checkLocaleTag(tag)
           const hostOptions =
             options instanceof Obj
               ? Object.fromEntries(collatorOptions.map((key, index) => [key, primitives[(list?.length ?? 0) + index]]))
