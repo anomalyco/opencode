@@ -1598,7 +1598,7 @@ describe("console.log of errors", () => {
 })
 
 describe("toLocaleString", () => {
-  test("numbers and dates format as en-US in UTC; everything else falls back to toString", async () => {
+  test("numbers format as en-US and dates as en-US in the local timezone; everything else falls back to toString", async () => {
     expect(
       await value(`
       return [
@@ -1609,9 +1609,9 @@ describe("toLocaleString", () => {
     `),
     ).toEqual([
       "1,234,567.891",
-      "1/1/1970, 12:00:00 AM",
-      "1/1/1970",
-      "12:00:00 AM",
+      new Date(0).toLocaleString("en-US"),
+      new Date(0).toLocaleDateString("en-US"),
+      new Date(0).toLocaleTimeString("en-US"),
       "a",
       "true",
       "[object Object]",
@@ -1627,10 +1627,72 @@ describe("toLocaleString", () => {
       const item = { toLocaleString() { calls++; return "o" } }
       return [[1234.5, "x", null, undefined, item, new Date(0)].toLocaleString(), [, item, , item].toLocaleString(), calls]
     `),
-    ).toEqual(["1,234.5,x,,,o,1/1/1970, 12:00:00 AM", ",o,,o", 3])
+    ).toEqual([`1,234.5,x,,,o,${new Date(0).toLocaleString("en-US")}`, ",o,,o", 3])
     expect((await error(`const f = ({}).toLocaleString; f()`)).message).toContain(
       "Object.prototype.toLocaleString called on null or undefined",
     )
+  })
+
+  test("dates honor the locale and options, through Intl", async () => {
+    expect(
+      await value(`
+      const d = new Date(Date.UTC(2024, 0, 15, 13, 5, 9))
+      return [
+        d.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }),
+        d.toLocaleDateString(undefined, { weekday: "long", timeZone: "UTC" }),
+        d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }),
+        d.toLocaleString("de-DE", { timeZone: "UTC" }),
+        d.toLocaleString("en-GB", { timeZone: "UTC" }),
+        d.toLocaleString(["fr-FR"], { timeZone: "UTC", dateStyle: "full", timeStyle: "short" }),
+        d.toLocaleTimeString("en-US", { timeZone: "America/New_York", timeZoneName: "short", hour: "2-digit", minute: "2-digit" }),
+        d.toLocaleString("en-US", { timeZone: "UTC", hour12: false }),
+        new Date(NaN).toLocaleString("en-US", { timeZone: "UTC" }),
+      ]
+    `),
+    ).toEqual([
+      "1/15/2024, 10:05:09 PM",
+      "Monday",
+      "Jan 15",
+      "15.1.2024, 13:05:09",
+      "15/01/2024, 13:05:09",
+      "lundi 15 janvier 2024 à 13:05",
+      "08:05 AM EST",
+      "1/15/2024, 13:05:09",
+      "Invalid Date",
+    ])
+  })
+
+  test("date formatting without a timeZone uses the local time, like getHours", async () => {
+    expect(
+      await value(`
+      const d = new Date(Date.UTC(2024, 0, 15, 13, 5, 9))
+      return [d.toLocaleString(), Number(d.toLocaleTimeString("en-US", { hour: "numeric", hour12: false })) === d.getHours()]
+    `),
+    ).toEqual([new Date(Date.UTC(2024, 0, 15, 13, 5, 9)).toLocaleString("en-US"), true])
+  })
+
+  test("date options are read once, through getters and conversions", async () => {
+    expect(
+      await value(`
+      let calls = 0
+      const options = { get timeZone() { calls++; return { toString: () => "Asia/Tokyo" } }, hour: "numeric", hour12: false }
+      return [new Date(Date.UTC(2024, 0, 15, 13)).toLocaleTimeString([{ toString: () => "en-US" }], options), calls]
+    `),
+    ).toEqual(["22", 1])
+  })
+
+  test("invalid date options throw like Intl", async () => {
+    expect(
+      await value(`
+      const d = new Date(0)
+      return [
+        () => d.toLocaleString("en-US", { timeZone: "Nope" }),
+        () => d.toLocaleTimeString("en-US", { dateStyle: "short" }),
+        () => d.toLocaleString("en-US", null),
+        () => d.toLocaleString("!!"),
+      ].map((f) => { try { return f() } catch (e) { return e.name } })
+    `),
+    ).toEqual(["RangeError", "TypeError", "TypeError", "RangeError"])
   })
 
   test("toLocaleLowerCase and toLocaleUpperCase ignore the locale argument", async () => {

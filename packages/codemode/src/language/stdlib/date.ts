@@ -1,7 +1,7 @@
 import { constructor, type Method, methods, prototypeFrom, receiver } from "../runtime/native.js"
-import { rangeError } from "../runtime/model.js"
-import { DateObj, Obj, coerceToNumber, coerceToString, type Value } from "../runtime/objects.js"
-import { withPrimitives } from "../runtime/callback.js"
+import { rangeError, typeError } from "../runtime/model.js"
+import { Arr, DateObj, Obj, coerceToNumber, get, coerceToString, type Value } from "../runtime/objects.js"
+import { withPrimitives, withReads } from "../runtime/callback.js"
 import type { Interpreter } from "../runtime/interpreter.js"
 
 const constructDate = (args: Array<Value>, proto: Obj) => {
@@ -22,6 +22,30 @@ const constructDate = (args: Array<Value>, proto: Obj) => {
 // ToNumber on each value in turn, so a symbol throws before any later value's conversion runs program code.
 const toNumbers = (values: Array<Value>, body: (numbers: Array<number>) => Value) =>
   withPrimitives("number", values, (primitives) => body(primitives.map(coerceToNumber)), true)
+
+// The options Intl.DateTimeFormat reads.
+const dateTimeOptions = [
+  "localeMatcher",
+  "calendar",
+  "numberingSystem",
+  "hour12",
+  "hourCycle",
+  "timeZone",
+  "weekday",
+  "era",
+  "year",
+  "month",
+  "day",
+  "dayPeriod",
+  "hour",
+  "minute",
+  "second",
+  "fractionalSecondDigits",
+  "timeZoneName",
+  "formatMatcher",
+  "dateStyle",
+  "timeStyle",
+]
 
 type Getter = keyof {
   [K in keyof Date as Date[K] extends () => number ? K : never]: never
@@ -115,7 +139,41 @@ export const dateGlobal = <R>(ctx: Interpreter<R>) => {
       (name): Method => [
         name,
         0,
-        (thisValue) => new Date(self(thisValue, name).time)[name]("en-US", { timeZone: "UTC" }),
+        (thisValue, args) => {
+          const time = self(thisValue, name).time
+          const [locales, options] = args
+          if (options === null) throw typeError("Cannot convert undefined or null to object.")
+          // Bun's default locale is en-US whatever the environment says; pinning it keeps output off the host's.
+          const tags =
+            locales === undefined ? ["en-US"] : locales instanceof Arr ? locales.items.filter(() => true) : [locales]
+          return withReads(() => {
+            const entries =
+              options instanceof Obj
+                ? dateTimeOptions.flatMap((key) => {
+                    const value = get(options, key)
+                    if (value === undefined) return []
+                    return [[key, key === "hour12" ? Boolean(value) : value] as const]
+                  })
+                : []
+            // The host's Intl formats; program objects among the arguments are converted first, as Intl's ToString would.
+            return withPrimitives(
+              [
+                ...tags.map(() => "string" as const),
+                ...entries.map((entry) =>
+                  entry[0] === "fractionalSecondDigits" ? ("number" as const) : ("string" as const),
+                ),
+              ],
+              [...tags, ...entries.map((entry) => entry[1])],
+              (primitives) =>
+                new Date(time)[name](
+                  (locales instanceof Arr ? primitives.slice(0, tags.length) : primitives[0]) as Intl.LocalesArgument,
+                  options instanceof Obj
+                    ? Object.fromEntries(entries.map((entry, at) => [entry[0], primitives[tags.length + at]]))
+                    : (options as Intl.DateTimeFormatOptions | undefined),
+                ),
+            )
+          })
+        },
       ],
     ),
     ...getters.map((name): Method => [name, 0, (thisValue) => new Date(self(thisValue, name).time)[name]()]),
