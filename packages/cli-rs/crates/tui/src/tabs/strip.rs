@@ -7,6 +7,7 @@ use opentui::app::{AnimationTick, Tick};
 use opentui::input::{MouseButton, MouseEvent, MouseEventKind};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
+use super::marquee::{self, Marquee};
 use super::model::{self, NEW_SESSION_TAB_TITLE, Tab};
 use super::pulse::{self, Pulse};
 use super::{Attention, Status, Unread};
@@ -38,6 +39,10 @@ pub struct Strip {
     /// The strip's ticks while a spinner shows and while a pulse moves.
     spin: RefCell<Option<AnimationTick>>,
     pulse: RefCell<Option<AnimationTick>>,
+    /// The hovered tab's scrolling title.
+    marquee: Marquee,
+    /// Per painted tab: its title and the cells it has while hovered.
+    titles: RefCell<HashMap<String, (String, usize)>>,
 }
 
 pub fn new(app: &App, tui: Weak<Tui>) -> Custom<Strip> {
@@ -60,6 +65,8 @@ pub fn new(app: &App, tui: Weak<Tui>) -> Custom<Strip> {
             spins: RefCell::default(),
             spin: RefCell::default(),
             pulse: RefCell::default(),
+            marquee: Marquee::default(),
+            titles: RefCell::default(),
         },
     )
     .height(1)
@@ -76,8 +83,9 @@ pub fn new(app: &App, tui: Weak<Tui>) -> Custom<Strip> {
     })
 }
 
-pub fn leave(strip: &Custom<Strip>) {
+pub fn leave(app: &App, strip: &Custom<Strip>) {
     strip.update(|strip| {
+        strip.marquee.reset(app);
         strip.hovered = None;
         strip.close_hovered = false;
         strip.plus_hovered = false;
@@ -304,6 +312,22 @@ fn char_width(character: char) -> usize {
 }
 
 impl Strip {
+    /// `onMouseOver` of the tab under the pointer, or `onMouseOut` of the one it left.
+    fn hover_marquee(&self, app: &App, session: Option<&str>) {
+        let Some(tui) = self.tui.upgrade() else { return };
+        match session.and_then(|session| self.titles.borrow().get(session).cloned().map(|title| (session, title))) {
+            Some((session, (title, width))) => {
+                let animations = opencode_ui::motion::enabled(tui.config().info.animations);
+                self.marquee.enter(app, session, &title, width, animations);
+            }
+            None => {
+                if let Some(left) = &self.hovered {
+                    self.marquee.leave(app, left);
+                }
+            }
+        }
+    }
+
     fn items(&self, tui: &Tui) -> (Vec<Tab>, bool) {
         let tabs = tui.tabs.tabs(tui);
         let ordered = match &self.preview {
@@ -381,6 +405,12 @@ impl Component for Strip {
             x += model::overflow_width(layout.before);
         }
         let number_width = items.len().to_string().len().max(2);
+        // A marquee whose tab left the strip ends.
+        if self.marquee.active().is_some_and(|active| !items.iter().any(|tab| tab.session_id == active)) {
+            self.marquee.reset(&tui.app);
+        }
+        let marquee_session = self.marquee.active();
+        let mut marquee_titles = HashMap::new();
         let mut slots = Vec::new();
         let mut pulses = self.pulses.borrow_mut();
         let mut markers = self.fades.borrow_mut();
@@ -483,8 +513,16 @@ impl Component for Strip {
             let resting = tab_width.saturating_sub(1 + number_width).max(1);
             let available = if hovered { resting.saturating_sub(2).max(1) } else { resting };
             let title = &titles[offset];
-            let visible = take_width(title, available);
-            let fades = title.width() > available && available > FADE_WIDTH;
+            marquee_titles.insert(session.to_owned(), (title.clone(), resting.saturating_sub(2).max(1)));
+            let scrolling = marquee_session.as_deref() == Some(session);
+            let parts = if scrolling {
+                marquee::text_parts(title, available, self.marquee.offset())
+            } else {
+                take_width(title, available).into_iter().map(|character| (character, false)).collect()
+            };
+            let visible: Vec<char> = parts.iter().map(|(character, _)| *character).collect();
+            let leading = if scrolling { self.marquee.leading(now) } else { 0.0 };
+            let fades = marquee::overflows(title, available) && available > FADE_WIDTH;
             let length = visible.len();
             draw_chars(painter, left + number_width as i32 + 1, 0, &visible, |character| {
                 let color = if glows {
@@ -496,7 +534,8 @@ impl Component for Strip {
                 } else {
                     foreground
                 };
-                let color = if fades { fade(color, background, character, length, 0.0) } else { color };
+                let color = if fades { fade(color, background, character, length, leading) } else { color };
+                let color = if parts[character].1 { tint(color, background, 0.55) } else { color };
                 let style = Style::new().fg(color);
                 if bold { style.bold() } else { style }
             });
@@ -553,6 +592,7 @@ impl Component for Strip {
             self.plus.set(Some(x));
         }
         *self.slots.borrow_mut() = slots;
+        *self.titles.borrow_mut() = marquee_titles;
     }
 
     fn mouse(&mut self, cx: &mut Cx<'_>, event: &MouseEvent, local: (i32, i32)) -> bool {
@@ -570,6 +610,9 @@ impl Component for Strip {
         };
         match event.kind {
             MouseEventKind::Moved => {
+                if slot != self.hovered {
+                    self.hover_marquee(cx.app(), slot.as_deref());
+                }
                 self.hovered = slot.clone();
                 self.close_hovered = slot.as_deref().is_some_and(|session| close(session, &self.slots.borrow()));
                 self.plus_hovered = on_plus;
@@ -586,6 +629,7 @@ impl Component for Strip {
                 self.plus_pressed = on_plus;
                 self.pressed = slot.clone();
                 if slot.is_some() {
+                    self.hover_marquee(cx.app(), slot.as_deref());
                     self.hovered = slot;
                 }
                 true

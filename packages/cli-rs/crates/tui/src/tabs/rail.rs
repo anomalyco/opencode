@@ -6,6 +6,7 @@ use opentui::app::{AnimationTick, Tick};
 use opentui::input::{MouseButton, MouseEvent, MouseEventKind};
 use unicode_width::UnicodeWidthStr;
 
+use super::marquee::{self, Marquee};
 use super::model::{self, NEW_SESSION_TAB_TITLE, Tab};
 use super::pulse::{self, Pulse};
 use super::strip::{
@@ -35,6 +36,12 @@ pub struct Rail {
     /// The rail's ticks while a spinner shows and while a pulse moves.
     spin: RefCell<Option<AnimationTick>>,
     pulse: RefCell<Option<AnimationTick>>,
+    /// The hovered tab's scrolling title.
+    marquee: Marquee,
+    /// Per painted tab: its title and the cells it has while hovered, unbounded in compact mode, which shows none.
+    titles: RefCell<HashMap<String, (String, usize)>>,
+    /// The mode of the last paint: switching it ends the marquee.
+    was_compact: Cell<Option<bool>>,
 }
 
 pub fn new(app: &App, tui: Weak<Tui>) -> Custom<Rail> {
@@ -58,6 +65,9 @@ pub fn new(app: &App, tui: Weak<Tui>) -> Custom<Rail> {
             spins: RefCell::default(),
             spin: RefCell::default(),
             pulse: RefCell::default(),
+            marquee: Marquee::default(),
+            titles: RefCell::default(),
+            was_compact: Cell::new(None),
         },
     )
     .shrink(0.0)
@@ -75,8 +85,9 @@ pub fn new(app: &App, tui: Weak<Tui>) -> Custom<Rail> {
     })
 }
 
-pub fn leave(rail: &Custom<Rail>) {
+pub fn leave(app: &App, rail: &Custom<Rail>) {
     rail.update(|rail| {
+        rail.marquee.reset(app);
         rail.hovered = None;
         rail.close_hovered = false;
         rail.add_hovered = false;
@@ -177,6 +188,21 @@ impl Rail {
         })
     }
 
+    /// `onMouseOver` of the tab under the pointer, or `onMouseOut` of the one it left.
+    fn hover_marquee(&self, app: &App, tui: &Tui, session: Option<&str>) {
+        match session.and_then(|session| self.titles.borrow().get(session).cloned().map(|title| (session, title))) {
+            Some((session, (title, width))) => {
+                let animations = opencode_ui::motion::enabled(tui.config().info.animations);
+                self.marquee.enter(app, session, &title, width, animations);
+            }
+            None => {
+                if let Some(left) = &self.hovered {
+                    self.marquee.leave(app, left);
+                }
+            }
+        }
+    }
+
     fn row_at(&self, y: i32) -> Option<Option<String>> {
         self.rows
             .borrow()
@@ -207,6 +233,13 @@ impl Component for Rail {
 
         let items = self.items(&tui);
         let new_tab = tui.tabs.new_tab();
+        let marquee_session = self.marquee.active();
+        if self.was_compact.replace(Some(compact)).is_some_and(|was| was != compact)
+            || marquee_session.as_ref().is_some_and(|active| !items.iter().any(|item| item.tab.session_id == *active))
+        {
+            self.marquee.reset(&tui.app);
+        }
+        let marquee_session = self.marquee.active();
         let stride = self.stride(compact);
         let top = self.top(compact);
         let viewport = (height - top).max(1);
@@ -269,9 +302,13 @@ impl Component for Rail {
             painter.text(0, 2, &glyph.repeat(width as usize), Style::new().fg(highlight).bg(bg));
         }
 
+        let mut titles = HashMap::new();
         for (index, item) in items.iter().enumerate() {
             let y = offset + index as i32 * stride;
             let session = item.tab.session_id.as_str();
+            // `hoveredTitleWidth`; compact mode enters with `Infinity`, so nothing scrolls there.
+            let hovered_width = (width as usize).saturating_sub(prefix + 1).max(1).saturating_sub(1).max(1);
+            titles.insert(session.to_owned(), (item.title.clone(), if compact { usize::MAX } else { hovered_width }));
             let hovered = self.hovered.as_deref() == Some(session);
             let dragged = self.dragged && self.pressed.as_deref() == Some(session);
             let status = item.status;
@@ -479,8 +516,15 @@ impl Component for Rail {
             painter.text(number_width as i32 - glyph.width() as i32, y, &glyph, style);
             let resting = (width as usize).saturating_sub(prefix + 1).max(1);
             let title_width = if hovered { resting.saturating_sub(1).max(1) } else { resting };
-            let visible = take_width(&item.title, title_width);
-            let fades = item.title.width() > title_width && title_width > FADE_WIDTH;
+            let scrolling = marquee_session.as_deref() == Some(session);
+            let parts = if scrolling {
+                marquee::text_parts(&item.title, title_width, self.marquee.offset())
+            } else {
+                take_width(&item.title, title_width).into_iter().map(|character| (character, false)).collect()
+            };
+            let visible: Vec<char> = parts.iter().map(|(character, _)| *character).collect();
+            let leading = if scrolling { self.marquee.leading(now) } else { 0.0 };
+            let fades = marquee::overflows(&item.title, title_width) && title_width > FADE_WIDTH;
             let length = visible.len();
             let glow_text = f64::from(u8::from(item.glows));
             draw_chars(painter, prefix as i32, y, &visible, |character| {
@@ -493,7 +537,8 @@ impl Component for Rail {
                         0.12 * pulse::unread_glow_intensity(1 + number_width + character, width as usize) * glow_text,
                     )
                 };
-                let color = if fades { fade(color, pulse_bg, character, length, 0.0) } else { color };
+                let color = if fades { fade(color, pulse_bg, character, length, leading) } else { color };
+                let color = if parts[character].1 { tint(color, pulse_bg, 0.55) } else { color };
                 let style = Style::new().fg(color);
                 if item.selected { style.bold() } else { style }
             });
@@ -589,6 +634,7 @@ impl Component for Rail {
         }
         rows.push((y, 1, None));
         *self.rows.borrow_mut() = rows;
+        *self.titles.borrow_mut() = titles;
     }
 
     fn mouse(&mut self, cx: &mut Cx<'_>, event: &MouseEvent, local: (i32, i32)) -> bool {
@@ -604,7 +650,11 @@ impl Component for Rail {
         match event.kind {
             MouseEventKind::Moved => {
                 self.search_hovered = compact && y == 1;
-                self.hovered = row.clone().flatten();
+                let hovered = row.clone().flatten();
+                if hovered != self.hovered {
+                    self.hover_marquee(cx.app(), &tui, hovered.as_deref());
+                }
+                self.hovered = hovered;
                 self.add_hovered = row.as_ref().is_some_and(Option::is_none);
                 self.close_hovered = self.hovered.is_some() && on_close;
                 true
@@ -625,6 +675,7 @@ impl Component for Rail {
                 self.add_pressed = row.as_ref().is_some_and(Option::is_none);
                 self.pressed = row.flatten();
                 if self.pressed.is_some() {
+                    self.hover_marquee(cx.app(), &tui, self.pressed.as_deref());
                     self.hovered = self.pressed.clone();
                 }
                 true

@@ -573,3 +573,47 @@ fn run(script: &Path, args: &[&str]) -> Value {
         .env("BUN_RUNTIME_TRANSPILER_CACHE_PATH", std::env::temp_dir().join("opencode-rs-e12-bun-cache"));
     support::bun_json(&mut command, None)
 }
+
+#[test]
+fn a_hovered_tab_scrolls_its_overflowing_title_and_resets_when_left() {
+    let title = "Trace the flaky marquee across every terminal";
+    let mut routes = routes();
+    routes.splice(0..0, support::session_routes(&support::test_session("ses_m", title)));
+    let home = opencode_util::temp::tempdir().unwrap();
+    let paths = support::home_paths(home.path());
+    let config = json!({ "session": { "sidebar": "hide" }, "tabs": { "layout": "vertical" } });
+    let deps = Deps {
+        config: support::config(support::decode(&config.to_string())),
+        roots: support::roots(paths, CHANNEL),
+        ..support::deps(Arc::new(Memory::new(routes)))
+    };
+    let h = support::mount(120, 30, deps);
+    h.tui.navigate(support::session_route("ses_m"));
+    h.wait_for("Trace the");
+    // The rail's row of the tab: the title starts at its text.
+    let row = |h: &Harness| {
+        let text = h.app.render().text();
+        let (y, line) = text
+            .lines()
+            .enumerate()
+            .find(|(_, line)| line.contains("Trace the"))
+            .map(|(y, line)| (y, line.to_owned()))
+            .unwrap();
+        (y as u16, line)
+    };
+    let (y, resting) = row(&h);
+    let x = resting[..resting.find("Trace").unwrap()].chars().count() as u16;
+    h.app.hover(x, y);
+    // Not before the delay: the hovered title only loses the cell the close mark takes.
+    h.app.advance(std::time::Duration::from_millis(500));
+    assert!(h.app.render().text().lines().nth(y as usize).unwrap().contains("Trace the"));
+    h.app.advance(std::time::Duration::from_millis(100 + 80 * 5));
+    let scrolled = h.app.render().text().lines().nth(y as usize).unwrap().to_owned();
+    assert!(!scrolled.contains("Trace") && scrolled.contains("the flaky"), "not scrolled:\n{scrolled}");
+
+    h.app.hover(80, 20);
+    let left = h.app.render().text().lines().nth(y as usize).unwrap().to_owned();
+    assert!(left.contains("Trace the"), "not reset:\n{left}");
+    h.app.advance(std::time::Duration::from_millis(1000));
+    assert!(h.app.render().text().lines().nth(y as usize).unwrap().contains("Trace the"));
+}
