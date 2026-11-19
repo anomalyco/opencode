@@ -56,13 +56,15 @@ export default Runtime.handler(
     if (input.remote || Option.isSome(input.url)) return
     const url = new URL(endpoint.url)
     if (!["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) return
+    // The registration URL is normalized to loopback for wildcard binds; only suggest
+    // changing hostname if the service is not already listening on all interfaces.
+    const isWildcardBind = config.hostname === "0.0.0.0" || config.hostname === "::"
     process.stderr.write(
       [
         `  Over SSH? Forward the port, then open the link on your machine:`,
         `  ssh -L ${url.port}:${url.hostname}:${url.port} <host>`,
         `  If port ${url.port} is busy locally, forward another port and use it in the link.`,
-        "",
-        "  To connect from other devices, run `opencode service set hostname 0.0.0.0`.",
+        ...(isWildcardBind ? [] : ["", '  To connect from other devices, run `opencode service set hostname 0.0.0.0`.']),
         "",
       ].join(EOL) + EOL,
     )

@@ -8,6 +8,14 @@ import path from "path"
 import { selfCommand } from "../util/process"
 import { RemoteTunnel } from "./remote-tunnel"
 
+// Normalize wildcard bind addresses to their loopback equivalents.
+// `0.0.0.0` and `::` are bind-only sentinels — not routable client destinations.
+export function normalizeLoopback(ip: string) {
+  if (ip === "0.0.0.0") return "127.0.0.1"
+  if (ip === "::") return "::1"
+  return ip
+}
+
 // The CLI's service configuration file, plus the Service.EnsureOptions binding that
 // points the client package's service operations at this CLI: which
 // registration file (by channel), which version, and how to spawn opencode.
