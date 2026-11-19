@@ -1658,7 +1658,7 @@ impl Dec<'_> {
                     .as_array()
                     .ok_or_else(|| invalid("a namespace path is not a list."))?
                     .iter()
-                    .map(|k| string(k).map(|k| Rc::from(k.as_str())))
+                    .map(string)
                     .collect::<R<_>>()?,
             ))),
             "r" => Kind::Resolvers {
@@ -1935,13 +1935,6 @@ pub fn restore(vm: &mut Vm, snapshot: &Snapshot, program_hash: &str) -> R<()> {
     }
     for (i, o) in rest.iter().enumerate() {
         vm.heap[base.heap + i] = dec.obj(vm, o)?;
-    }
-    vm.ns_refs.clear();
-    for (i, o) in vm.heap.iter().enumerate() {
-        if let Kind::Namespace(ns) = &o.kind {
-            vm.ns_refs
-                .insert((ns.root.clone(), ns.path.clone()), i as Id);
-        }
     }
 
     let cells = field_list(st, "cells")?;

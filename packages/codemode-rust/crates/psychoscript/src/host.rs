@@ -1456,7 +1456,7 @@ fn from_host(
                 vm.host
                     .host_namespaces
                     .insert(root.clone(), (ns.clone(), global.clone()));
-                vm.ns_ref(root, Box::new([]))
+                vm.ns_ref(NsRef::new(root, Box::new([])))
             }
             None => {
                 let msg = format!("{label} produced a namespace, which the program cannot hold.");

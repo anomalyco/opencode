@@ -16,8 +16,6 @@ use crate::{DiagnosticKind, Limits};
 
 pub type Res = Result<Value, Value>;
 
-/// A namespace path by its root and names: see `Vm::ns_ref`.
-pub type NsKey = (Rc<str>, Box<[Rc<str>]>);
 pub type NativeFn = fn(&mut Vm, Value, &[Value], Id) -> Res;
 
 pub const MAX_DEPTH: usize = 10_000;
@@ -251,8 +249,6 @@ pub struct Vm<'rt> {
     pub coroutines: Vec<Coroutine>,
     pub logs: Vec<String>,
     pub host: crate::host::RunHost<'rt>,
-    /// The namespace paths the run made, so each path is one object.
-    pub ns_refs: FxHashMap<NsKey, Id>,
     pub limits: Limits,
     pub start: Instant,
     /// Steps left before `budget_out`: the nearer of the reference's fuel and this VM's own check of the clock and of
@@ -359,7 +355,6 @@ impl<'rt> Vm<'rt> {
             coroutines: Vec::new(),
             logs: Vec::new(),
             host,
-            ns_refs: FxHashMap::default(),
             limits,
             start: Instant::now(),
             budget: HANDOVER_FUEL,
@@ -1015,7 +1010,7 @@ impl<'rt> Vm<'rt> {
                 all.extend_from_slice(args);
                 self.call(&target, bthis, &all)
             }
-            Kind::Namespace(ns) if ns.path.is_empty() => {
+            Kind::Namespace(ns) if ns.keys.is_empty() => {
                 let message = format!("{} is not a function.", ns.root);
                 Err(self.type_error(&message))
             }
@@ -1360,7 +1355,7 @@ impl<'rt> Vm<'rt> {
                 self.call_op(argc + n)
             }
             // The namespace itself is not a function.
-            Kind::Namespace(ns) if ns.path.is_empty() => {
+            Kind::Namespace(ns) if ns.keys.is_empty() => {
                 self.stack.truncate(fpos);
                 let message = format!("{} is not a function.", ns.root);
                 let e = self.type_error(&message);
@@ -1498,17 +1493,10 @@ impl<'rt> Vm<'rt> {
         }
     }
 
-    /// The namespace path `root`.`path`: the same object each time the run reads it.
-    pub fn ns_ref(&mut self, root: Rc<str>, path: Box<[Rc<str>]>) -> Value {
-        let key = (root, path);
-        if let Some(id) = self.ns_refs.get(&key) {
-            return Value::Obj(*id);
-        }
+    /// A namespace path as a value: a new reference each time the run reads one, as in the reference.
+    pub fn ns_ref(&mut self, path: crate::object::NsRef) -> Value {
         let proto = self.realm.function_proto;
-        let made = Rc::new(crate::object::NsRef::new(key.0.clone(), key.1.clone()));
-        let id = self.alloc(Obj::new(Some(proto), Kind::Namespace(made)));
-        self.ns_refs.insert(key, id);
-        Value::Obj(id)
+        Value::Obj(self.alloc(Obj::new(Some(proto), Kind::Namespace(Rc::new(path)))))
     }
 
     // ---------- exceptions ----------

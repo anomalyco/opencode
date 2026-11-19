@@ -245,9 +245,6 @@ pub fn reachable(vm: &Vm) -> Vec<bool> {
             w.id(p);
         }
     }
-    for id in vm.ns_refs.values() {
-        w.id(*id);
-    }
     let h = &vm.host;
     for call in &h.calls {
         w.id(call.promise);

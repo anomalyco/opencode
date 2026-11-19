@@ -173,14 +173,8 @@ impl<'rt> Vm<'rt> {
                     if key <= SYM_ASYNC_ITERATOR {
                         return Value::Undef;
                     }
-                    let root = ns.root.clone();
-                    let path: Box<[Rc<str>]> = ns
-                        .path
-                        .iter()
-                        .cloned()
-                        .chain(std::iter::once(Rc::from(self.atoms.text(key))))
-                        .collect();
-                    return self.ns_ref(root, path);
+                    let child = ns.child(self.atoms.text(key));
+                    return self.ns_ref(child);
                 }
                 // A Map's or Set's only own accessor is `size`, above.
                 Kind::Map(_) | Kind::Set(_) => {}

@@ -107,25 +107,30 @@ impl Props {
 pub struct NsRef {
     /// The global the namespace is, which names it in messages.
     pub root: Rc<str>,
-    pub path: Box<[Rc<str>]>,
+    /// The names read below it, as the host's `keys` and `resolve` get them.
+    pub keys: Box<[String]>,
     /// How the program names the path in errors, as the reference's `member` writes it: `api.issues.list`,
     /// `api["x-y"]`.
     pub label: String,
-    /// The path as the host's `keys` and `resolve` get it.
-    pub keys: Box<[String]>,
 }
 
 impl NsRef {
-    pub fn new(root: Rc<str>, path: Box<[Rc<str>]>) -> Self {
-        let label = path
+    pub fn new(root: Rc<str>, keys: Box<[String]>) -> Self {
+        let label = keys
             .iter()
             .fold(root.to_string(), |at, key| member(&at, key));
-        let keys = path.iter().map(|k| k.to_string()).collect();
+        Self { root, keys, label }
+    }
+
+    /// The path one name below this one.
+    pub fn child(&self, key: &str) -> Self {
+        let mut keys = Vec::with_capacity(self.keys.len() + 1);
+        keys.extend(self.keys.iter().cloned());
+        keys.push(key.to_owned());
         Self {
-            root,
-            path,
-            label,
-            keys,
+            root: self.root.clone(),
+            keys: keys.into(),
+            label: member(&self.label, key),
         }
     }
 }
@@ -441,7 +446,7 @@ impl Obj {
     pub fn is_callable(&self) -> bool {
         match &self.kind {
             Kind::Closure(_) | Kind::Native { .. } | Kind::Bound(_) => true,
-            Kind::Namespace(n) => !n.path.is_empty(),
+            Kind::Namespace(n) => !n.keys.is_empty(),
             _ => false,
         }
     }
