@@ -47,8 +47,8 @@ const child = (session: string) => [
 type Script = Parameters<typeof base>[0] & {
   // Requests the children wait on when mini opens the session.
   childPermissions?: unknown[]
-  // Holds the child's permission list this long, so a client shows the global form before the permission.
-  childPermissionsDelay?: number
+  // Holds the child's permission list until a `release` step names its path (`CHILD_PERMISSIONS`).
+  holdChildPermissions?: boolean
   globalForms?: unknown[]
 }
 
@@ -57,19 +57,21 @@ const listed = (entry: Logged, all: unknown[]) =>
 
 const location = { directory }
 
+export const CHILD_PERMISSIONS = "/api/session/ses_run/permission"
+
 export function server(script: Script = {}): Options {
   const options = base({ messages, ...script })
-  const reads = (session: string, permissions: unknown[] = [], delay?: number): Route[] => [
+  const reads = (session: string, permissions: unknown[] = [], hold?: boolean): Route[] => [
     { path: `/api/session/${session}/message`, json: (entry: Logged) => listed(entry, child(session)) },
     { path: `/api/session/${session}/inbox`, json: { data: [] } },
-    { path: `/api/session/${session}/permission`, json: { data: permissions }, delay },
+    { path: `/api/session/${session}/permission`, json: { data: permissions }, hold },
     { path: `/api/session/${session}/form`, json: { data: [] } },
   ]
   const routes: Route[] = [
     { path: "/api/session/active", json: { data: { ses_run: { type: "busy" } } } },
     { path: "/api/session", json: { data: [], cursor: {} } },
     { path: "/api/form", json: { location, data: script.globalForms ?? [] } },
-    ...reads("ses_run", script.childPermissions, script.childPermissionsDelay),
+    ...reads("ses_run", script.childPermissions, script.holdChildPermissions),
     ...reads("ses_done"),
     { method: "POST", path: "/api/session/ses_run/interrupt", json: { interrupted: true } },
     {

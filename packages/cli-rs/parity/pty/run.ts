@@ -51,6 +51,8 @@ export type PtyStep = {
   }
   // Once `until` holds and the screen settled: the screen must not contain this.
   absent?: string
+  // Once `until` holds: the fake server answers the requests of its `hold` route with this path.
+  release?: string
   // Waits until the screen has not changed for this long.
   settle?: number
   // Records the screen under this name.
@@ -216,6 +218,7 @@ export async function runPty(side: Side, value: PtyCase) {
       failures.push(failure)
       break
     }
+    if (step.release) server?.release(step.release)
     if (step.checkpoint) checkpoints[step.checkpoint] = await screen()
     if (step.checkpoint && value.keyboard) checkpoints[`${step.checkpoint}:keyboard`] = keyboardLog(output.text)
     if (step.checkpoint && value.cursor) {
